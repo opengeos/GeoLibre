@@ -1109,3 +1109,47 @@ it("stamps attribute-only edits without changing geometry or creation metadata",
     touched: "2026-11-19T00:00:00.000Z",
   });
 });
+
+it("stamps property-only Sketches edits while preserving creation metadata", () => {
+  const previous: FeatureCollection = {
+    type: "FeatureCollection",
+    features: [
+      point("a", {
+        name: "A",
+        created_by: "bob",
+        created_at: "original",
+        edited_by: "bob",
+        edited_at: "old",
+      }),
+    ],
+  };
+  const next: FeatureCollection = {
+    type: "FeatureCollection",
+    features: [point("a", { name: "B", __gm_shape: "marker" })],
+  };
+  const result = applySyncedEditorTracking(next, previous, (f) => String(f.id), {
+    config: { enabled: true },
+    userIdentity: "ada",
+    timestamp: "new",
+  });
+  assert.deepEqual(result.features[0].properties, {
+    name: "B",
+    __gm_shape: "marker",
+    created_by: "bob",
+    created_at: "original",
+    edited_by: "ada",
+    edited_at: "new",
+  });
+  const again = applySyncedEditorTracking(
+    { ...next, features: [point("a", { __gm_shape: "point", name: "B" })] },
+    result,
+    (f) => String(f.id),
+    {
+      config: { enabled: true },
+      userIdentity: "other",
+      timestamp: "later",
+    },
+  );
+  assert.equal(again.features[0].properties?.edited_at, "new");
+  assert.equal(again.features[0].properties?.edited_by, "ada");
+});

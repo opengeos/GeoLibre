@@ -23,7 +23,7 @@ function customProperties(feature: Feature): Record<string, unknown> {
 }
 
 /** Compare JSON records without depending on object key order; array order and numbers remain exact. */
-function jsonEqual(left: unknown, right: unknown): boolean {
+export function jsonEqual(left: unknown, right: unknown): boolean {
   if (left === right) return true;
   if (Array.isArray(left) || Array.isArray(right)) {
     return (
@@ -78,4 +78,23 @@ export function planSketchAttributeUpdates(
     }
   }
   return updates;
+}
+
+/** Preserve untouched blank/missing values and decode the form's nullable booleans. */
+export function normalizeEditorFormProperties(
+  fields: ReadonlyArray<{ name: string; type: string }>,
+  previous: Record<string, unknown> | null,
+  submitted: Record<string, unknown> | null,
+): Record<string, unknown> {
+  const normalized = { ...submitted };
+  for (const field of fields) {
+    const value = normalized[field.name];
+    if (value === null) {
+      if (!Object.hasOwn(previous ?? {}, field.name)) delete normalized[field.name];
+      else if (previous?.[field.name] === "") normalized[field.name] = "";
+    } else if (field.type === "select" && (value === "true" || value === "false")) {
+      normalized[field.name] = value === "true";
+    }
+  }
+  return normalized;
 }

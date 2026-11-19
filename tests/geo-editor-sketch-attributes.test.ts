@@ -75,3 +75,24 @@ it("treats reordered geometry and shape-property keys as the same target", () =>
     { id: "feature-1", properties: { obsolete: true, name: "After" } },
   ]);
 });
+
+it("preserves untouched empty strings and missing form fields while allowing explicit clears", async () => {
+  const { normalizeEditorFormProperties } =
+    await import("../packages/plugins/src/plugins/geo-editor-sketch-attributes");
+  const fields = [
+    { name: "empty", type: "string" },
+    { name: "missing", type: "number" },
+    { name: "cleared", type: "textarea" },
+    { name: "active", type: "select" },
+  ];
+  const previous = { empty: "", cleared: "Before", active: null, count: 1 };
+  const result = normalizeEditorFormProperties(fields, previous, {
+    empty: null,
+    missing: null,
+    cleared: null,
+    active: null,
+    count: 2,
+  });
+  assert.deepEqual(result, { empty: "", cleared: null, active: null, count: 2 });
+  assert.deepEqual(previous, { empty: "", cleared: "Before", active: null, count: 1 });
+});

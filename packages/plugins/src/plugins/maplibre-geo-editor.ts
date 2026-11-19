@@ -1,4 +1,7 @@
-import { planSketchAttributeUpdates } from "./geo-editor-sketch-attributes";
+import {
+  planSketchAttributeUpdates,
+  normalizeEditorFormProperties,
+} from "./geo-editor-sketch-attributes";
 import {
   normalizeGeoEditorSettings,
   isGeoEditorFieldName,
@@ -564,31 +567,32 @@ export function getGeoEditorOptions(mapboxGl: MapboxGl | null): GeoEditorOptions
       }
     },
     onAttributeChange: (event) => {
-      // The control's checkbox coerces an untouched null into false. Boolean
-      // fields use a nullable select instead; decode its wire strings before
-      // either the editor or the store serializes them. The control has already
-      // copied its form values into Geoman, so update that copy as well.
+      // The control serializes every widget before this callback. Preserve
+      // untouched blanks/missing fields and decode nullable boolean selects in
+      // both the event feature and the copy already written into Geoman.
+      const fields: Array<{ name: string; type: string }> = Object.values(
+        geoEditorAttributeSchema(),
+      ).flat();
+      const submitted = event.newProperties;
+      const normalized = normalizeEditorFormProperties(fields, event.previousProperties, submitted);
       const decoded: Record<string, unknown> = {};
-      for (const fields of Object.values(geoEditorAttributeSchema())) {
-        for (const field of fields) {
-          if (field.type !== "select") continue;
-          const value = event.newProperties?.[field.name];
-          if (value === "true" || value === "false") {
-            event.newProperties![field.name] = value === "true";
-            decoded[field.name] = value === "true";
-          } else if (value === null && !Object.hasOwn(event.previousProperties ?? {}, field.name)) {
-            delete event.newProperties![field.name];
-            decoded[field.name] = undefined;
-          }
+      for (const field of fields) {
+        if (
+          normalized[field.name] !== submitted?.[field.name] ||
+          Object.hasOwn(normalized, field.name) !== Object.hasOwn(submitted ?? {}, field.name)
+        ) {
+          decoded[field.name] = normalized[field.name];
         }
       }
+      event.newProperties = normalized;
+      event.feature.properties = normalized;
       if (geomanInstance && Object.keys(decoded).length) {
         const id = event.feature.properties?.__gm_id ?? event.feature.id;
         if (typeof id === "string" || typeof id === "number") {
           void geomanInstance.features
             .get(geomanInstance.features.defaultSourceName, id)
             ?.updateProperties(decoded)
-            .catch((error) => console.warn("GeoEditor: decoding boolean properties failed", error));
+            .catch((error) => console.warn("GeoEditor: normalizing form properties failed", error));
         }
       }
       syncSketchesToStore();

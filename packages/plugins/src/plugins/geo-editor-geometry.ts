@@ -1,3 +1,5 @@
+import { jsonEqual } from "./geo-editor-sketch-attributes";
+import { isInternalEditorProperty } from "./geo-editor-view-import";
 import {
   editorTrackingFieldNames,
   isDuckDBQueryLayer,
@@ -617,7 +619,19 @@ export function applySyncedEditorTracking(
       }
 
       const carried = carryForwardTrackingFields(feature.properties, prior.properties, fields);
-      if (canonicalGeometryKey(feature.geometry) === canonicalGeometryKey(prior.geometry)) {
+      const publicProperties = (properties: Feature["properties"]) =>
+        Object.fromEntries(
+          Object.entries(properties ?? {}).filter(
+            ([name]) =>
+              !fields.includes(name) &&
+              !isInternalEditorProperty(name) &&
+              name !== GEOMETRY_EDIT_FID_PROPERTY,
+          ),
+        );
+      if (
+        canonicalGeometryKey(feature.geometry) === canonicalGeometryKey(prior.geometry) &&
+        jsonEqual(publicProperties(feature.properties), publicProperties(prior.properties))
+      ) {
         // Untouched: keep whatever it was already stamped with.
         return carried === feature.properties ? feature : { ...feature, properties: carried };
       }
