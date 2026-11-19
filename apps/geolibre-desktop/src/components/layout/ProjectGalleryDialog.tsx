@@ -93,8 +93,8 @@ interface ProjectGalleryDialogProps {
   /**
    * Load a project from its raw `.geolibre.json` URL into the app. `authToken`
    * is passed for the user's own (unlisted/private) projects so the share host
-   * authorizes the fetch. Resolves on success and rejects with a descriptive
-   * error the dialog surfaces inline.
+   * authorizes the fetch. Resolves on success (false when nothing was loaded)
+   * and rejects with a descriptive error the dialog surfaces inline.
    */
   onOpenProject: (
     rawJsonUrl: string,
@@ -111,7 +111,7 @@ interface ProjectGalleryDialogProps {
         oauthSessionRevision?: number;
       };
     },
-  ) => Promise<void>;
+  ) => Promise<boolean | void>;
 }
 
 // Page size for each listing request. The endpoint paginates by limit + offset.
@@ -501,7 +501,7 @@ export function ProjectGalleryDialog({
         isProtected || (!asCopy && project.canEdit)
           ? await resolveShareRequestToken(trimmedToken)
           : "";
-      await onOpenProject(project.rawJsonUrl, projectOpenToken(project, token), {
+      const loaded = await onOpenProject(project.rawJsonUrl, projectOpenToken(project, token), {
         asCopy,
         oauthSessionRevision:
           oauthIssuer && token !== trimmedToken ? oauthSessionRevision : undefined,
@@ -519,6 +519,8 @@ export function ProjectGalleryDialog({
                 oauthIssuer && token !== trimmedToken ? oauthSessionRevision : undefined,
             },
       });
+      // False when the user kept the current session (pending attribute drafts).
+      if (loaded === false) return;
       onOpenChange(false);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;

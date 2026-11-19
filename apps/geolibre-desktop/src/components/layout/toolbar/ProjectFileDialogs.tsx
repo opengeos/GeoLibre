@@ -446,7 +446,8 @@ function SharedProjectVersionsDialog({
 }: {
   target: RemoteSharedProjectTarget | null;
   onClose: () => void;
-  onOpenVersion: (rawUrl: string, token: string) => Promise<void>;
+  /** Resolves false when nothing was loaded (the user kept pending attribute drafts). */
+  onOpenVersion: (rawUrl: string, token: string) => Promise<boolean | void>;
 }) {
   const { t } = useTranslation();
   const [versions, setVersions] = useState<SharedProjectVersion[]>([]);
@@ -536,7 +537,9 @@ function SharedProjectVersionsDialog({
                     if (!target) return;
                     void resolveShareRequestToken(target.token, target.baseUrl)
                       .then((token) => onOpenVersion(version.rawUrl, token))
-                      .then(handleClose)
+                      .then((loaded) => {
+                        if (loaded !== false) handleClose();
+                      })
                       .catch((caught) => setError(historyErrorMessage(caught, t)));
                   }}
                 >

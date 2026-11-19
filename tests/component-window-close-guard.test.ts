@@ -205,4 +205,47 @@ describe("useWindowCloseGuard", () => {
       useAppStore.getState().removeLayer(layerId);
     }
   });
+
+  it("asks about drafts on a dirty project only once the close is decided", async () => {
+    const layerId = useAppStore.getState().addGeoJsonLayer("Cities", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: { name: "A" },
+        },
+      ],
+    });
+    useAppStore.getState().setAttributeTableDrafts(layerId, { "0": { name: "B" } });
+    useAppStore.setState({ isDirty: true });
+    let asked = 0;
+    let answer = false;
+    const originalConfirm = window.confirm;
+    window.confirm = () => {
+      asked += 1;
+      return answer;
+    };
+    try {
+      const guard = renderGuard(async () => true);
+      await requestClose();
+      // The project prompt comes first; cancelling it keeps the drafts unasked.
+      assert.equal(guard.current.windowClosePromptOpen, true);
+      assert.equal(asked, 0);
+      await act(() => guard.current.resolveWindowClosePrompt("cancel"));
+      assert.equal(asked, 0);
+      await requestClose();
+      await act(() => guard.current.resolveWindowClosePrompt("discard"));
+      assert.equal(asked, 1);
+      assert.ok(!destroyed());
+      answer = true;
+      await requestClose();
+      await act(() => guard.current.resolveWindowClosePrompt("discard"));
+      assert.equal(asked, 2);
+      assert.ok(destroyed());
+    } finally {
+      window.confirm = originalConfirm;
+      useAppStore.getState().removeLayer(layerId);
+    }
+  });
 });

@@ -113,7 +113,8 @@ interface NewProjectDialogProps {
    * from URL path). Rejects on failure so the dialog can show the error inline.
    * When omitted, the Examples section is hidden.
    */
-  onOpenExample?: (projectUrl: string, signal: AbortSignal) => Promise<void>;
+  /** Resolves false (or rejects) when the project was not loaded. */
+  onOpenExample?: (projectUrl: string, signal: AbortSignal) => Promise<boolean | void>;
   /**
    * Open with the Examples section expanded and scrolled into view (the
    * "Open Starter Examples" command). Read when the section mounts.
@@ -325,13 +326,15 @@ export function NewProjectDialog({
     exampleAbortRef.current?.abort();
     const controller = new AbortController();
     exampleAbortRef.current = controller;
+    let loaded: boolean | void;
     try {
-      await onOpenExample(projectUrl, controller.signal);
+      loaded = await onOpenExample(projectUrl, controller.signal);
     } catch (error) {
       if (controller.signal.aborted) return false;
       throw error;
     }
-    return !controller.signal.aborted;
+    // False when the user kept the current session (pending attribute drafts).
+    return loaded !== false && !controller.signal.aborted;
   };
 
   const handleExampleOpened = () => {
