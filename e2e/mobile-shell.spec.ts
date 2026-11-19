@@ -36,6 +36,7 @@ test("renders the touch mobile shell with bottom navigation and draggable sheets
   for (const selector of [
     '[data-testid="mobile-top-bar"] button',
     '[data-testid="mobile-bottom-nav"] button',
+    '[data-testid="mobile-status-pill"] button',
   ]) {
     const boxes = await page.locator(selector).evaluateAll((els) =>
       els.map((el) => {

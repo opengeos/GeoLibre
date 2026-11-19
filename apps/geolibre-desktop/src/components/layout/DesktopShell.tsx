@@ -386,7 +386,7 @@ export function DesktopShell({
     compact: layoutOptions.compact,
     panelsHidden: layoutOptions.panelsHidden,
   });
-  useApplyTouchUiAttribute(touchUi);
+  useApplyTouchUiAttribute(touchUi && !layoutOptions.compact && !layoutOptions.panelsHidden);
   const mobile = useMobileShellState(mobileShell);
   const { openMobileTab } = mobile;
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
