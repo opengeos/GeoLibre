@@ -592,3 +592,31 @@ describe("draft target edge cases", () => {
     );
   });
 });
+
+describe("GeoEditor Sketches attributes (#3534)", () => {
+  it("adds a styling field and saves edits on the sketches layer", () => {
+    renderTable(cities, { metadata: { sourceKind: "geoeditor-sketches" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+    const dialog = screen.getByRole("dialog", { name: "Add field" });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Field name" }), {
+      target: { value: "stroke" },
+    });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Default value" }), {
+      target: { value: "#ff0000" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add field" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit attribute values" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Edit stroke for feature 1" }), {
+      target: { value: "#00ff00" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save attribute edits" }));
+    const layer = useAppStore.getState().layers[0];
+    assert.equal(layer.geojson?.features[0].properties?.stroke, "#00ff00");
+    assert.equal(layer.geojson?.features[1].properties?.stroke, "#ff0000");
+    assert.deepEqual(
+      layer.geojson?.features.map((f) => f.geometry),
+      cities.features.map((f) => f.geometry),
+    );
+    assert.equal(layer.metadata.sourceKind, "geoeditor-sketches");
+  });
+});

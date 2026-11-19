@@ -102,6 +102,14 @@ describe("canEditAttributeValues (#2932)", () => {
   it("allows an in-memory geojson layer", () => {
     assert.equal(canEditAttributeValues(plain(), null), true);
   });
+  it("allows GeoEditor Sketches attributes and honors an explicit update restriction", () => {
+    const sketches = { ...plain(), metadata: { sourceKind: "geoeditor-sketches" } };
+    assert.equal(canEditAttributeValues(sketches, null), true);
+    assert.equal(
+      canEditAttributeValues({ ...sketches, capabilities: { update: false } }, null),
+      false,
+    );
+  });
   it("refuses read-only, capability-locked, and geometry-edited layers", () => {
     assert.equal(canEditAttributeValues(tiledLayer(), null), false);
     assert.equal(

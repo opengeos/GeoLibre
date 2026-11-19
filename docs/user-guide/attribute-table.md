@@ -272,6 +272,10 @@ instead.
 
 ## Editing values
 
+GeoEditor's **Sketches** layer supports editing attributes and adding fields
+such as `stroke`, `fill`, and `marker-color`. Create and delete sketch features
+with GeoEditor.
+
 Click **Edit** to turn the cells into inputs. Changed cells are highlighted;
 **Save** commits them and the reset button discards every unsaved edit.
 
