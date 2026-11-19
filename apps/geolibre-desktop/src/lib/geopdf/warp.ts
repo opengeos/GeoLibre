@@ -125,6 +125,9 @@ export function planMercatorWarp(
   }
   const spanX = maxX - minX;
   const spanY = maxY - minY;
+  if (!(spanX > 0) || !(spanY > 0) || !Number.isFinite(spanX) || !Number.isFinite(spanY)) {
+    throw new Error("The frame's corners fall outside the map");
+  }
   // Keep about the source's pixel count, capped by maxSide.
   const sourceSide = Math.max(width, height);
   const scale = Math.min(maxSide, sourceSide) / Math.max(spanX, spanY);

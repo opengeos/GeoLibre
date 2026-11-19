@@ -61,13 +61,14 @@ export function useAddDataDialogState(viewer: boolean): AddDataDialogState {
   });
   const [addDataTargetGroupId, setAddDataTargetGroupId] = useState<string | null>(null);
   const addDataInitialLayerIdsRef = useRef<Set<string>>(new Set());
+  // A dropped PDF opens this dialog at the GeoPDF form (GH #3523); the viewer
+  // layout never opens it, so it does not claim PDFs there.
+  useEffect(() => (viewer ? undefined : registerFileHandler(GEOPDF_FILE_HANDLER)), [viewer]);
   // Every path that opens the dialog outside the OPEN_ADD_DATA_EVENT listener
   // (the Add Data menu, the command palette, the 3D-model button) is ungrouped,
   // so it must drop any group target a previous open left behind — otherwise
   // this session's layers would be swept into that stale, unrelated group when
   // the dialog closes. Only the listener sets a target, and it sets both.
-  // A dropped PDF opens this dialog at the GeoPDF form (GH #3523).
-  useEffect(() => registerFileHandler(GEOPDF_FILE_HANDLER), []);
   const openAddDataKind = useCallback((kind: AddDataKind) => {
     setAddDataTargetGroupId(null);
     setAddDataKind(kind);

@@ -98,17 +98,19 @@ const WASM_URLS: Record<string, () => Promise<{ default: string }>> = {
  * The predefined CMaps (CJK character encodings) a PDF may name without
  * embedding, emitted as separate assets and fetched only when a PDF asks.
  */
-const CMAP_URLS = import.meta.glob<string>("/node_modules/pdfjs-dist/cmaps/*.bcmap", {
+const CMAP_URLS = import.meta.glob<string>("../../../../../node_modules/pdfjs-dist/cmaps/*.bcmap", {
   query: "?url",
   import: "default",
 });
+
+/** The glob keys' directory prefix: pdfjs-dist is hoisted to the repo root. */
+const CMAP_DIR = "../../../../../node_modules/pdfjs-dist/cmaps/";
 
 class BundledBinaryDataFactory {
   async fetch({ kind, filename }: { kind: string; filename: string }): Promise<Uint8Array> {
     let url: string | undefined;
     if (kind === "wasmUrl") url = (await WASM_URLS[filename]?.())?.default;
-    else if (kind === "cMapUrl")
-      url = await CMAP_URLS[`/node_modules/pdfjs-dist/cmaps/${filename}`]?.();
+    else if (kind === "cMapUrl") url = await CMAP_URLS[`${CMAP_DIR}${filename}`]?.();
     if (!url) throw new Error(`No bundled ${kind} data named ${filename}`);
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Could not load ${filename} (${response.status})`);

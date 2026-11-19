@@ -88,10 +88,12 @@ export async function geoPdfCrsConverters(
       const makeProj = (proj4 as unknown as { Proj: ProjFactory }).Proj;
       const parsed = makeProj(definition);
       const geographic = datumGeographicProj(parsed, makeProj);
+      // Without a known ellipsoid GPTS cannot be read on the CRS's datum, and
+      // reading them as WGS 84 could shift the map silently: try the next
+      // description of the CRS instead.
+      if (!geographic) continue;
       // proj4 accepts parsed projection objects as well as definitions.
-      const fromDatum = geographic
-        ? proj4(geographic as unknown as string, parsed as unknown as string)
-        : toWgs84;
+      const fromDatum = proj4(geographic as unknown as string, parsed as unknown as string);
       return {
         label,
         latLonToCrs: (lat, lon) => fromDatum.forward([lon, lat]) as [number, number],

@@ -75,7 +75,8 @@ function decodeTextString(bytes: number[]): string {
   if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
     return new TextDecoder().decode(new Uint8Array(bytes.slice(3)));
   }
-  return String.fromCharCode(...bytes);
+  // Chunked: spreading a long string's bytes overflows the call stack.
+  return latin1(new Uint8Array(bytes));
 }
 
 /** Tokenizes and parses PDF objects from a byte buffer. */
@@ -550,6 +551,19 @@ export class PdfDocument {
     while ((match = re.exec(text))) {
       const offset = match.index + match[0].indexOf(match[1]);
       this.xref.set(Number(match[1]), { type: 1, offset });
+    }
+    // In a PDF 1.5 file the catalog and page tree usually sit inside object
+    // streams, which the header scan cannot see: index their members too.
+    for (const num of [...this.xref.keys()]) {
+      const value = this.tryGet(new PdfRef(num, 0));
+      if (!(value instanceof PdfStream) || nameOf(value.dict.get("Type")) !== "ObjStm") continue;
+      try {
+        for (const [index, member] of [...this.objectStream(num).offsets.keys()].entries()) {
+          if (!this.xref.has(member)) this.xref.set(member, { type: 2, stream: num, index });
+        }
+      } catch {
+        // A damaged object stream: its members stay unknown.
+      }
     }
     // The last trailer dictionary, or any catalog found by type.
     const trailerAt = text.lastIndexOf("trailer");

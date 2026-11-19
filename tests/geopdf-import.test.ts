@@ -324,6 +324,18 @@ describe("PdfDocument hardening", () => {
     assertFrame(encoder.encode(withMarker));
   });
 
+  it("recovers an object-stream PDF whose startxref is wrong", () => {
+    const bytes = objectStreamPdf(viewportEntry());
+    const text = new TextDecoder("latin1").decode(bytes);
+    const at = text.lastIndexOf("startxref\n") + "startxref\n".length;
+    const broken = new Uint8Array(bytes);
+    // Point startxref at offset 1 (inside the header): the chain fails, and
+    // recovery must find the catalog inside the object stream.
+    const digits = text.slice(at, text.indexOf("\n", at));
+    broken.set(new TextEncoder().encode("1".padStart(digits.length, "0")), at);
+    assertFrame(broken);
+  });
+
   it("recovers when the trailer parses but its offsets are stale", () => {
     const text = new TextDecoder().decode(classicPdf(viewportEntry()));
     // Shift every object by padding after the header; the xref table is left as is.

@@ -11,7 +11,7 @@
  *
  * Kept free of pdf.js and of the DOM, so it is unit tested under node.
  */
-import { nameOf, numberArray, PdfDocument, PdfReadError, type PdfDict } from "./pdf-objects";
+import { nameOf, numberArray, PdfDocument, type PdfDict } from "./pdf-objects";
 
 /** The CRS a GeoPDF viewport is georeferenced in, as written in `/GCS`. */
 export interface GeoPdfCrs {
@@ -313,5 +313,3 @@ function solve3(m: number[][], r: number[]): [number, number, number] | null {
 export function applyUserToCrs(t: UserToCrs, u: number, v: number): [number, number] {
   return [t[0] + t[1] * u + t[2] * v, t[3] + t[4] * u + t[5] * v];
 }
-
-export { PdfReadError };
