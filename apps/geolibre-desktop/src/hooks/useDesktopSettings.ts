@@ -37,6 +37,14 @@ import {
 } from "../lib/s3-connections";
 import { ASSISTANT_PROVIDER_IDS } from "../lib/assistant/provider";
 import type { AssistantProfile } from "../lib/assistant/provider";
+import {
+  DEFAULT_TOUCH_UI_MODE,
+  isTouchUiMode,
+  TOUCH_UI_MODES,
+  type TouchUiMode,
+} from "../lib/touch-ui";
+
+export { DEFAULT_TOUCH_UI_MODE, TOUCH_UI_MODES, type TouchUiMode };
 
 /** Notification-granularity options, in order. Single source of truth. */
 export const UPDATE_NOTIFICATION_LEVELS: readonly UpdateNotificationLevel[] = [
@@ -235,6 +243,12 @@ export interface DesktopLayoutSettings {
   showProjectInfo: boolean;
   stylePanelVisible: boolean;
   toolbarLabels: boolean;
+  /**
+   * Touch interface mode: `"auto"` enables touch sizing on coarse-pointer /
+   * mobile devices and activates the mobile shell on phones, `"touch"` forces
+   * touch UI on any device, and `"desktop"` forces classic desktop chrome.
+   */
+  touchUiMode: TouchUiMode;
 }
 
 /** Experience-level presets offered by the onboarding wizard and Settings. */
@@ -307,6 +321,7 @@ export const DEFAULT_DESKTOP_LAYOUT_SETTINGS: DesktopLayoutSettings = {
   showProjectInfo: true,
   stylePanelVisible: true,
   toolbarLabels: true,
+  touchUiMode: DEFAULT_TOUCH_UI_MODE,
 };
 
 export const DEFAULT_UI_PROFILE_SETTINGS: UiProfileSettings = {
@@ -643,6 +658,9 @@ function normalizeDesktopLayoutSettings(layout: unknown): DesktopLayoutSettings 
       typeof candidate.toolbarLabels === "boolean"
         ? candidate.toolbarLabels
         : DEFAULT_DESKTOP_LAYOUT_SETTINGS.toolbarLabels,
+    touchUiMode: isTouchUiMode(candidate.touchUiMode)
+      ? candidate.touchUiMode
+      : DEFAULT_DESKTOP_LAYOUT_SETTINGS.touchUiMode,
   };
 }
 

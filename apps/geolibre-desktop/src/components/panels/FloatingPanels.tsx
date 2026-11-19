@@ -1,6 +1,6 @@
 import { closeFloatingPanel, focusFloatingPanel, getFloatingPanel } from "@geolibre/plugins";
 import { notifyPanelRenderFailed } from "../../lib/panel-render-failure";
-import { Button } from "@geolibre/ui";
+import { BottomSheet, Button } from "@geolibre/ui";
 import { GripVertical, X } from "lucide-react";
 import {
   type CSSProperties,
@@ -240,6 +240,51 @@ function FloatingPanelCard({ id, initialOffset }: { id: string; initialOffset: n
   );
 }
 
+function MobileFloatingPanelSheet({ id }: { id: string }) {
+  const { t } = useTranslation();
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const panel = getFloatingPanel(id);
+
+  useEffect(() => {
+    const container = contentRef.current;
+    if (!container || !panel) return;
+    let cleanup: void | (() => void);
+    try {
+      cleanup = panel.render(container);
+    } catch (error) {
+      console.error(`Floating panel "${id}" render() threw.`, error);
+      notifyPanelRenderFailed(id, panel.title, error);
+    }
+    return () => {
+      try {
+        cleanup?.();
+      } catch (error) {
+        console.error(`Floating panel "${id}" cleanup threw.`, error);
+      }
+      container.replaceChildren();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, panel?.render]);
+
+  if (!panel) return null;
+
+  return (
+    <BottomSheet
+      open
+      onOpenChange={(open) => {
+        if (!open) closeFloatingPanel(id);
+      }}
+      defaultDetent="half"
+      title={panel.title || t("mobileShell.sheet.floatingTitle")}
+      closeLabel={t("pluginPanel.close")}
+      dragHandleLabel={t("mobileShell.resizeSheet")}
+      data-testid="mobile-floating-panel-sheet"
+    >
+      <div ref={contentRef} className="min-h-0 flex-1 overflow-auto p-1" />
+    </BottomSheet>
+  );
+}
+
 /**
  * Overlays plugin-owned floating panels on the map's top-left corner. Each open
  * panel (registered via `app.registerFloatingPanel` and shown with
@@ -247,11 +292,18 @@ function FloatingPanelCard({ id, initialOffset }: { id: string; initialOffset: n
  * order. Renders nothing when no floating panel is open. Mounted inside the map
  * area so the cards float over the map without shrinking it.
  *
+ * When `mobileSheet` is true (phone touch shell), renders the active floating
+ * panel inside a draggable {@link BottomSheet} instead of a desktop card.
+ *
  * @returns The floating-panel overlay, or null when none are open.
  */
-export function FloatingPanels() {
+export function FloatingPanels({ mobileSheet = false }: { mobileSheet?: boolean }) {
   const { openIds } = useFloatingPanels();
   if (openIds.length === 0) return null;
+  if (mobileSheet) {
+    const activeId = openIds[openIds.length - 1];
+    return <MobileFloatingPanelSheet key={activeId} id={activeId} />;
+  }
   return (
     <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
       {openIds.map((id, index) => (

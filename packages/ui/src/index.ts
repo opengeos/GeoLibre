@@ -47,6 +47,22 @@ export {
   DropdownMenuTrigger,
 } from "./components/dropdown-menu";
 export {
+  BottomSheet,
+  type BottomSheetProps,
+  type BottomSheetDetent,
+} from "./components/bottom-sheet";
+export {
+  BOTTOM_SHEET_DETENT_ORDER,
+  BOTTOM_SHEET_DETENT_RATIOS,
+  BOTTOM_SHEET_DISMISS_RATIO,
+  BOTTOM_SHEET_FLICK_VELOCITY_PX_PER_MS,
+  clampSheetHeight,
+  detentToHeightPx,
+  resolveNextDetent,
+  sortDetents,
+  stepDetent,
+} from "./lib/bottom-sheet-snap";
+export {
   ErrorBoundary,
   type ErrorBoundaryProps,
   type ErrorBoundaryFallbackProps,

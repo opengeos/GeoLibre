@@ -6291,3 +6291,109 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   ) {
   filter: url(#geolibre-cvd-achromatopsia);
 }
+
+/* ---------------------------------------------------------------------------
+ * Touch UI ergonomics (GeoLibre#3537).
+ *
+ * Scoped to `html[data-touch-ui="true"]`, set by `useApplyTouchUiAttribute`
+ * whenever Touch mode is enabled or auto-detected on a coarse-pointer / mobile
+ * device. Keeping every rule under this attribute leaves desktop mouse layouts
+ * completely untouched while letting both the shell and body-portaled Radix
+ * dialogs/menus inherit 44px targets and 16px form inputs.
+ * ------------------------------------------------------------------------- */
+html[data-touch-ui="true"] {
+  --touch-target: 2.75rem;
+}
+
+/* Prevent iOS Safari / WKWebView from zooming the page when a text input or
+   select receives focus (WebKit auto-zooms any form control below 16px). */
+html[data-touch-ui="true"]
+  :is(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]),
+    select,
+    textarea
+  ) {
+  font-size: max(1rem, 16px);
+}
+
+/* Enlarge Radix dialog close buttons to a comfortable 44x44px hit target. */
+html[data-touch-ui="true"] [data-dialog-close] {
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+  inset-block-start: 0.25rem;
+  inset-inline-end: 0.25rem;
+}
+
+/* Enlarge Radix dropdown items for finger taps. */
+html[data-touch-ui="true"]
+  :is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]) {
+  min-height: var(--touch-target);
+  padding-block: 0.625rem;
+}
+
+/* Enlarge slider thumbs visually (22px) and give them a 44x44px hit area via
+   an invisible pseudo-element so dragging opacity/range sliders works with a
+   finger without distorting surrounding row spacing. */
+html[data-touch-ui="true"] [data-slider-thumb] {
+  width: 1.375rem;
+  height: 1.375rem;
+}
+
+html[data-touch-ui="true"] [data-slider-thumb]::before {
+  content: "";
+  position: absolute;
+  inset: -0.6875rem;
+}
+
+/* Enlarge MapLibre / Mapbox corner control buttons from 29px to 44px on touch. */
+html[data-touch-ui="true"] :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group) > button {
+  width: 44px;
+  height: 44px;
+}
+
+html[data-touch-ui="true"]
+  :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group)
+  > button
+  .maplibregl-ctrl-icon {
+  background-size: 24px 24px;
+}
+
+/* Enlarge LayerRow interactive targets in touch mode. */
+html[data-touch-ui="true"] [data-testid="layer-row"] > div:first-child {
+  min-height: var(--touch-target);
+}
+
+html[data-touch-ui="true"] [data-testid="layer-row"] button,
+html[data-touch-ui="true"] [data-testid="layer-row"] [role="button"] {
+  min-height: 2.5rem;
+}
+
+/* Panels hosted inside the mobile BottomSheet fill the sheet height directly
+   instead of applying desktop inline pixel heights, absolute mobile overlay
+   caps, or resize grips. */
+[data-mobile-bottom-sheet] .geolibre-bottom-panel {
+  height: 100% !important;
+  min-height: 0 !important;
+  border-top: 0;
+}
+
+[data-mobile-bottom-sheet] .geolibre-attribute-table-resize-handle {
+  display: none;
+}
+
+[data-mobile-bottom-sheet] aside {
+  position: relative !important;
+  inset: auto !important;
+  z-index: auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Lift toast notifications above the 56px MobileBottomNav when the phone
+   mobile shell is active so toasts never overlap bottom navigation tabs. */
+body:has([data-mobile-shell="true"]) [data-testid="notification-region"] {
+  bottom: calc(4.25rem + env(safe-area-inset-bottom));
+}
