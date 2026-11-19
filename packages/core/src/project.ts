@@ -1,3 +1,4 @@
+import { normalizeGeoEditorSettings } from "./geo-editor-settings";
 import { normalizeArcgisWkid } from "./arcgis-projection";
 import { normalizeMapCrs } from "./map-crs";
 import { normalizeCesiumBasemap } from "./cesium-imagery";
@@ -1552,6 +1553,13 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
   return {
     map: {
       ...DEFAULT_PROJECT_PREFERENCES.map,
+      ...((map as Partial<ProjectPreferences["map"]>).geoEditor !== undefined
+        ? {
+            geoEditor: normalizeGeoEditorSettings(
+              (map as Partial<ProjectPreferences["map"]>).geoEditor,
+            ),
+          }
+        : {}),
       bounds: normalizeBounds((map as Partial<ProjectPreferences["map"]>).bounds),
       minZoom: normalizeNumber(
         (map as Partial<ProjectPreferences["map"]>).minZoom,

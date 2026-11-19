@@ -622,7 +622,7 @@ export function tagViewFeaturesForImport(
 // ---------------------------------------------------------------------------
 
 /** Whether a property key is an editor-internal tag that must not be exported. */
-function isInternalProperty(key: string): boolean {
+export function isInternalEditorProperty(key: string): boolean {
   return key.startsWith("__gm_") || key === VIEW_IMPORT_ID_PROPERTY;
 }
 
@@ -632,7 +632,7 @@ export function stripEditorProperties(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(properties ?? {})) {
-    if (!isInternalProperty(key)) out[key] = value;
+    if (!isInternalEditorProperty(key)) out[key] = value;
   }
   return out;
 }

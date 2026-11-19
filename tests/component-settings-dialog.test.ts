@@ -52,6 +52,7 @@ function layoutSettings() {
 const SECTION_TITLE_KEYS: Record<Section, string> = {
   language: "settings.languagePack.title",
   map: "settings.map.constraintsTitle",
+  geoEditor: "settings.geoEditor.title",
   layout: "settings.layout.title",
   appearance: "settings.appearance.title",
   interface: "settings.interface.title",
@@ -185,4 +186,60 @@ describe("SettingsDialog", () => {
       delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
     }
   });
+});
+
+describe("GeoEditor settings form", () => {
+  it("saves the popup toggle and custom fields with the project", () => {
+    renderSettings();
+    const dialog = openAt("geoEditor");
+    fireEvent.click(checkbox(dialog, "Open feature properties after drawing"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add field" }));
+    const fields = within(dialog).getAllByRole("textbox", { name: "Property name" });
+    fireEvent.change(fields[1], { target: { value: "category" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save settings" }));
+    const settings = useAppStore.getState().preferences.map.geoEditor;
+    assert.equal(settings?.showAfterDraw, false);
+    assert.equal(settings?.fields[1].name, "category");
+    assert.equal(settings?.fields[1].geometry, "all");
+  });
+  it("discards popup and field changes on Cancel", () => {
+    renderSettings();
+    const before = useAppStore.getState().preferences.map.geoEditor;
+    const dialog = openAt("geoEditor");
+    fireEvent.click(checkbox(dialog, "Open feature properties after drawing"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add field" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    assert.deepEqual(useAppStore.getState().preferences.map.geoEditor, before);
+  });
+});
+
+it("keeps queued GeoEditor field additions instead of overwriting a pending update", () => {
+  renderSettings();
+  const dialog = openAt("geoEditor");
+  const add = within(dialog).getByRole("button", { name: "Add field" });
+  act(() => {
+    fireEvent.click(add);
+    fireEvent.click(add);
+  });
+  assert.deepEqual(
+    within(dialog)
+      .getAllByRole("textbox", { name: "Property name" })
+      .map((input) => (input as HTMLInputElement).value),
+    ["height", "attribute", "attribute_1"],
+  );
+});
+
+it("uses normalized names when finding a free GeoEditor field name", () => {
+  renderSettings();
+  const dialog = openAt("geoEditor");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Add field" }));
+  fireEvent.change(within(dialog).getAllByRole("textbox", { name: "Property name" })[1], {
+    target: { value: " attribute " },
+  });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Add field" }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "Save settings" }));
+  assert.deepEqual(
+    useAppStore.getState().preferences.map.geoEditor?.fields.map((field) => field.name),
+    ["height", "attribute", "attribute_1"],
+  );
 });

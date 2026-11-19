@@ -1,3 +1,4 @@
+import type { GeoEditorSettings } from "./geo-editor-settings";
 import type { FeatureCollection } from "geojson";
 import type { GeoArrowBatch } from "./geoarrow";
 export type { GeoArrowBatch };
@@ -1888,6 +1889,8 @@ export type MapProjection = "globe" | "mercator";
 export type MapScaleUnit = "metric" | "imperial" | "nautical";
 
 export interface MapPreferences {
+  /** Project-specific GeoEditor form fields and automatic popup preference. */
+  geoEditor?: GeoEditorSettings;
   restrictBounds: boolean;
   bounds: [number, number, number, number];
   minZoom: number;

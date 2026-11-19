@@ -8,6 +8,7 @@
 import { migrateMapboxTokenSettings } from "../../../lib/mapbox-token-settings";
 import {
   DEFAULT_PROJECT_PREFERENCES,
+  normalizeGeoEditorSettings,
   normalizeGeocodingLocator,
   normalizeGeocodingProviderId,
   type MapPreferences,
@@ -269,6 +270,9 @@ export function normalizePreferences(preferences: ProjectPreferences): ProjectPr
   return {
     map: {
       ...preferences.map,
+      ...(preferences.map.geoEditor !== undefined
+        ? { geoEditor: normalizeGeoEditorSettings(preferences.map.geoEditor) }
+        : {}),
       bounds: normalizeBounds(preferences.map.bounds),
       minZoom,
       maxZoom,

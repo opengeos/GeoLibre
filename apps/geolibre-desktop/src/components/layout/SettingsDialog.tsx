@@ -83,6 +83,7 @@ import { GeocodingSection } from "./settings/GeocodingSection";
 import { InterfaceSection } from "./settings/InterfaceSection";
 import { LanguageSection } from "./settings/LanguageSection";
 import { LayoutSection } from "./settings/LayoutSection";
+import { GeoEditorSection } from "./settings/GeoEditorSection";
 import { MapSection } from "./settings/MapSection";
 import { StartupSection } from "./settings/StartupSection";
 import { UpdatesSection } from "./settings/UpdatesSection";
@@ -108,6 +109,7 @@ import {
 export type SettingsSection =
   | "language"
   | "map"
+  | "geoEditor"
   | "layout"
   | "appearance"
   | "interface"
@@ -171,6 +173,7 @@ const SECTION_ITEMS: Array<{
 }> = [
   { id: "language", labelKey: "settings.section.language", icon: Languages },
   { id: "map", labelKey: "settings.section.map", icon: MapPinned },
+  { id: "geoEditor", labelKey: "settings.section.geoEditor", icon: SlidersHorizontal },
   { id: "layout", labelKey: "settings.section.layout", icon: LayoutPanelTop },
   {
     id: "appearance",
@@ -203,6 +206,7 @@ const SECTION_ITEMS: Array<{
 // stays reachable.
 const SECTION_GATE: Partial<Record<SettingsSection, string>> = {
   map: "settings.mapPreferences",
+  geoEditor: "settings.mapPreferences",
   geocoding: "settings.geocoding",
   environment: "settings.environment",
   cloudStorage: "settings.cloudStorage",
@@ -663,6 +667,17 @@ export function SettingsDialog({
               {t("settings.menu.mapPreferences")}
             </DropdownMenuItem>
           )}
+          {showSettingsItem("settings.mapPreferences") && (
+            <DropdownMenuItem
+              onSelect={() => {
+                setSection("geoEditor");
+                setOpen(true);
+              }}
+            >
+              <SlidersHorizontal className="me-2 h-3.5 w-3.5" />
+              {t("settings.section.geoEditor")}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
               <LayoutPanelTop className="h-3.5 w-3.5" />
@@ -967,6 +982,7 @@ export function SettingsDialog({
                 {effectiveSection === "map" ? (
                   <MapSection mapControllerRef={mapControllerRef} liveProjection={liveProjection} />
                 ) : null}
+                {effectiveSection === "geoEditor" ? <GeoEditorSection /> : null}
                 {effectiveSection === "layout" ? <LayoutSection /> : null}
                 {effectiveSection === "appearance" ? (
                   <AppearanceSection

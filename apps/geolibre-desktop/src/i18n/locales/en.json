@@ -2949,7 +2949,8 @@
       "environment": "Environment",
       "cloudStorage": "Cloud storage",
       "updates": "Updates",
-      "startup": "Startup"
+      "startup": "Startup",
+      "geoEditor": "GeoEditor"
     },
     "cloudStorage": {
       "title": "S3 connections",
@@ -3496,6 +3497,33 @@
         "usage": "Usage and connected apps",
         "revokeUnconfirmed": "Signed out here, but OpenAI didn't confirm ending the session. Disconnect GeoLibre in your ChatGPT settings to be sure.",
         "desktopOnly": "Sign in with ChatGPT is available in the GeoLibre desktop app."
+      }
+    },
+    "geoEditor": {
+      "title": "GeoEditor",
+      "description": "Choose additional fields and customize field labels and types. Existing layer attributes are included automatically. These settings are saved with the project.",
+      "showAfterDraw": "Open feature properties after drawing",
+      "field": "Field {{number}}",
+      "name": "Property name",
+      "label": "Display label",
+      "type": "Field type",
+      "geometry": "Geometry",
+      "remove": "Remove field",
+      "add": "Add field",
+      "namesHelp": "Use unique property names without quotes, backslashes, or control characters. Invalid, duplicate, and reserved names are omitted when saving.",
+      "types": {
+        "string": "Text",
+        "number": "Number",
+        "boolean": "Checkbox",
+        "color": "Color",
+        "date": "Date",
+        "textarea": "Multiline text"
+      },
+      "geometries": {
+        "all": "All geometries",
+        "polygon": "Polygons",
+        "line": "Lines",
+        "point": "Points"
       }
     }
   },
@@ -8783,7 +8811,8 @@
     "calcCouldNotApply": "Could not apply the calculation to this layer.",
     "calcAppliedWithErrors": "Applied, but {{errors}} of {{evaluated}} feature(s) errored and were written as null.",
     "exportFailed": "Could not export the selected layer.",
-    "saveTitleFormErrors": "Fix attribute form violations before saving"
+    "saveTitleFormErrors": "Fix attribute form violations before saving",
+    "fieldReserved": "This field name is reserved for GeoEditor."
   },
   "styleManager": {
     "title": "Style manager",

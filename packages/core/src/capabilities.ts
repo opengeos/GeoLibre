@@ -13,6 +13,7 @@ import type {
  * - `query`: true for all valid layers.
  * - `create`, `update`, `delete`: true for in-memory or editable GeoJSON vector layers,
  *   false for derived queries (DuckDB/SQL), read-only vector tiles, and raster layers.
+ *   Sketches allow attribute updates; GeoEditor owns feature creation and deletion.
  * - `export`: true by default.
  */
 export function inferLayerCapabilities(layer: GeoLibreLayer): Required<LayerCapabilities> {
@@ -25,13 +26,15 @@ export function inferLayerCapabilities(layer: GeoLibreLayer): Required<LayerCapa
   const isSqlQuery = layer.metadata?.sourceKind === "sql-query";
 
   const isReadOnlyVector = isExternalNative && layer.metadata?.sourceKind !== "maplibre-gl-vector";
-  const isEditable = isVector && !isDuckDB && !isReadOnlyVector && !isSketches && !isSqlQuery;
+  const isEditable = isVector && !isDuckDB && !isReadOnlyVector && !isSqlQuery;
 
   return {
     query: true,
-    create: isEditable,
+    // Sketches attribute updates are reconciled into the editor by its store
+    // subscription. Creating/deleting sketch features stays with GeoEditor.
+    create: isEditable && !isSketches,
     update: isEditable,
-    delete: isEditable,
+    delete: isEditable && !isSketches,
     export: true,
   };
 }

@@ -592,3 +592,159 @@ describe("draft target edge cases", () => {
     );
   });
 });
+
+describe("GeoEditor Sketches attributes (#3534)", () => {
+  it("adds a styling field and saves edits on the sketches layer", () => {
+    renderTable(cities, { metadata: { sourceKind: "geoeditor-sketches" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+    const dialog = screen.getByRole("dialog", { name: "Add field" });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Field name" }), {
+      target: { value: "stroke" },
+    });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Default value" }), {
+      target: { value: "#ff0000" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add field" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit attribute values" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Edit stroke for feature 1" }), {
+      target: { value: "#00ff00" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save attribute edits" }));
+    const layer = useAppStore.getState().layers[0];
+    assert.equal(layer.geojson?.features[0].properties?.stroke, "#00ff00");
+    assert.equal(layer.geojson?.features[1].properties?.stroke, "#ff0000");
+    assert.deepEqual(
+      layer.geojson?.features.map((f) => f.geometry),
+      cities.features.map((f) => f.geometry),
+    );
+    assert.equal(layer.metadata.sourceKind, "geoeditor-sketches");
+  });
+});
+
+describe("Sketches internal properties", () => {
+  it("hides Geoman columns without stripping the metadata needed to edit shapes", () => {
+    const collection: FeatureCollection = {
+      ...cities,
+      features: [
+        {
+          ...cities.features[0],
+          properties: {
+            name: "Rectangle",
+            __gm_id: "feature-1",
+            __gm_shape: "rectangle",
+            __gm_width: 100,
+            __gm_height: 50,
+          },
+        },
+      ],
+    };
+    renderTable(collection, { metadata: { sourceKind: "geoeditor-sketches" } });
+    assert.deepEqual(headers(), ["#", "name"]);
+    fireEvent.click(screen.getByRole("button", { name: "Edit attribute values" }));
+    assert.equal(screen.queryByRole("textbox", { name: "Edit __gm_width for feature 1" }), null);
+    fireEvent.change(screen.getByRole("textbox", { name: "Edit name for feature 1" }), {
+      target: { value: "Renamed rectangle" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save attribute edits" }));
+    assert.deepEqual(useAppStore.getState().layers[0].geojson?.features[0].properties, {
+      name: "Renamed rectangle",
+      __gm_id: "feature-1",
+      __gm_shape: "rectangle",
+      __gm_width: 100,
+      __gm_height: 50,
+    });
+  });
+  it("keeps similarly named user columns on ordinary data layers", () => {
+    renderTable({
+      ...cities,
+      features: [{ ...cities.features[0], properties: { __gm_width: 100 } }],
+    });
+    assert.deepEqual(headers(), ["#", "__gm_width"]);
+  });
+});
+
+describe("protect hidden Sketches fields", () => {
+  const sketch: FeatureCollection = {
+    ...cities,
+    features: [
+      { ...cities.features[0], properties: { name: "Rectangle", __gm_shape: "rectangle" } },
+    ],
+  };
+  it("rejects existing and new internal names when adding a field while allowing stroke", () => {
+    renderTable(sketch, { metadata: { sourceKind: "geoeditor-sketches" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+    const dialog = screen.getByRole("dialog", { name: "Add field" });
+    const name = within(dialog).getByRole("textbox", { name: "Field name" });
+    for (const value of ["__gm_shape", "__gm_custom"]) {
+      fireEvent.change(name, { target: { value } });
+      assert.equal(
+        (within(dialog).getByRole("button", { name: "Add field" }) as HTMLButtonElement).disabled,
+        true,
+      );
+    }
+    fireEvent.change(name, { target: { value: "stroke" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add field" }));
+    assert.equal(
+      useAppStore.getState().layers[0].geojson?.features[0].properties?.__gm_shape,
+      "rectangle",
+    );
+    assert.ok(
+      Object.hasOwn(useAppStore.getState().layers[0].geojson!.features[0].properties!, "stroke"),
+    );
+  });
+  it("rejects internal calculator targets while allowing ordinary fields", () => {
+    renderTable(sketch, { metadata: { sourceKind: "geoeditor-sketches" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Calculate field values from an expression" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Field calculator" });
+    fireEvent.change(dialog.querySelector("#calc-target-mode")!, { target: { value: "create" } });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Expression" }), {
+      target: { value: "1" },
+    });
+    for (const value of ["__gm_shape", "__gm_custom"]) {
+      fireEvent.change(within(dialog).getByRole("textbox", { name: "Target field" }), {
+        target: { value },
+      });
+      assert.equal(
+        (within(dialog).getByRole("button", { name: "Calculate" }) as HTMLButtonElement).disabled,
+        true,
+      );
+    }
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Target field" }), {
+      target: { value: "stroke" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Calculate" }));
+    assert.equal(
+      useAppStore.getState().layers[0].geojson?.features[0].properties?.__gm_shape,
+      "rectangle",
+    );
+    assert.equal(useAppStore.getState().layers[0].geojson?.features[0].properties?.stroke, 1);
+  });
+});
+
+it("rejects renaming a Sketches field to existing or new internal names", () => {
+  renderTable(
+    {
+      ...cities,
+      features: [
+        { ...cities.features[0], properties: { name: "Rectangle", __gm_shape: "rectangle" } },
+      ],
+    },
+    { metadata: { sourceKind: "geoeditor-sketches" } },
+  );
+  for (const nextName of ["__gm_shape", "__gm_custom", "stroke"]) {
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Manage field name" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename field" }));
+    const input = screen.getByRole("textbox", { name: "Rename field name" });
+    fireEvent.change(input, { target: { value: nextName } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    const properties = useAppStore.getState().layers[0].geojson?.features[0].properties;
+    assert.equal(properties?.__gm_shape, "rectangle");
+    assert.equal(properties?.[nextName === "stroke" ? "stroke" : "name"], "Rectangle");
+  }
+});

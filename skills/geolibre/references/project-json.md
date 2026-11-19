@@ -151,3 +151,34 @@ Map().load_project("my.geolibre.json")   # raises ValueError on a bad project
 
 Or in TypeScript, from `@geolibre/core`: `parseProject`, `serializeProject`,
 `createEmptyProject`, `redactCredentials`.
+
+## GeoEditor feature properties
+
+Set optional `preferences.map.geoEditor` to customize the properties form:
+
+```json
+{
+  "showAfterDraw": false,
+  "fields": [
+    { "name": "height", "label": "Height (m)", "type": "number", "geometry": "polygon" },
+    { "name": "name", "label": "Site name", "type": "string", "geometry": "all" }
+  ]
+}
+```
+
+`showAfterDraw` defaults to `true`. `fields` defaults to a polygon-only numeric
+`height` field; an empty array removes configured fields. Existing public text,
+number, and boolean attributes are discovered automatically. Configure an
+existing property by its exact name to override its label, type, or scope.
+Supported types are `string`, `number`, `boolean`, `color`, `date`, and `textarea`;
+geometry scopes are `all`, `polygon`, `line`, and `point`. Use unique names without
+quotes, backslashes, control characters, `__` prefixes, or Object prototype names.
+Invalid entries are omitted on load. Nested or mixed-type attributes and derived
+or editor-tracking fields remain read-only.
+
+The UI edits these options in **Settings → GeoEditor**. Turning off the automatic
+popup still allows selecting an existing feature to edit its properties. In an
+existing vector-layer session, the layer's **Save** commits both geometry and
+properties; **Cancel** discards both. Edited source-backed layers use the existing
+`metadata.geometryEdited` marker for either kind of change so project save can
+embed their changed features rather than reload the original source.

@@ -1,4 +1,12 @@
 import {
+  planSketchAttributeUpdates,
+  normalizeEditorFormProperties,
+  protectEditorImportAttributes,
+  editorImportAttributes,
+} from "./geo-editor-sketch-attributes";
+import {
+  normalizeGeoEditorSettings,
+  isGeoEditorFieldName,
   currentEditorIdentity,
   editorTrackingFieldNames,
   lineWidthValue,
@@ -15,8 +23,9 @@ import {
 } from "@geolibre/map/style-layer-ids";
 import type { Feature, FeatureCollection, MultiLineString, Position } from "geojson";
 import type * as maplibregl from "maplibre-gl";
-import type { GeoEditor, GeoEditorOptions } from "maplibre-gl-geo-editor";
+import type { AttributeSchema, GeoEditor, GeoEditorOptions } from "maplibre-gl-geo-editor";
 import {
+  GEOMETRY_EDIT_FID_PROPERTY,
   type EditedFeatureIds,
   type EditedFeatureProperties,
   type GeometryEditTrackingOptions,
@@ -235,8 +244,6 @@ let geomanEditSyncMap: maplibregl.Map | null = null;
  * the Sketches layer (see `activeEditableLayer`).
  */
 let editTargetLayerId: string | null = null;
-/** Sketches stashed out of the editor for the duration of an edit session. */
-let savedSketchesCollection: FeatureCollection | null = null;
 /** The live Geoman instance backing the editor, used for clean teardown. */
 let geomanInstance: Geoman | null = null;
 /** Target layer's store visibility captured at session start, restored on end. */
@@ -412,6 +419,109 @@ function activateGeoEditor(app: GeoLibreAppAPI): false | undefined {
   return undefined;
 }
 
+/** Build the active project's form using the control's supported field schema. */
+const geoEditorFieldTypeCache = new WeakMap<FeatureCollection, Map<string, Set<string>>>();
+
+/** Discover every field so sparse columns and unsafe mixed values are accounted for. */
+function geoEditorFieldTypes(collection?: FeatureCollection): Map<string, Set<string>> {
+  if (!collection) return new Map();
+  const cached = geoEditorFieldTypeCache.get(collection);
+  if (cached) return cached;
+  const candidates = new Map<string, Set<string>>();
+  for (const feature of collection.features) {
+    for (const [name, value] of Object.entries(feature.properties ?? {})) {
+      if (!isGeoEditorFieldName(name)) continue;
+      const types = candidates.get(name) ?? new Set<string>();
+      if (value != null) types.add(typeof value);
+      candidates.set(name, types);
+    }
+  }
+  geoEditorFieldTypeCache.set(collection, candidates);
+  return candidates;
+}
+
+function geoEditorAttributeSchema(extraFeature?: Feature): AttributeSchema {
+  const schema: AttributeSchema = { common: [], polygon: [], line: [], point: [] };
+  const settings = normalizeGeoEditorSettings(useAppStore.getState().preferences.map.geoEditor);
+  const layers = useAppStore.getState().layers;
+  const layer = editTargetLayerId
+    ? layers.find((candidate) => candidate.id === editTargetLayerId)
+    : findSketchesLayer(layers);
+  const readOnly = new Set([
+    ...(editorTrackingFieldNames(layer?.editorTracking) ?? []),
+    ...(layer?.joins ?? []).flatMap((join) => join.addedFields ?? []),
+    ...(layer?.virtualFields ?? []).flatMap((field) =>
+      field.addedField ? [field.addedField] : [],
+    ),
+  ]);
+  const baseline = geoEditorFieldTypes(layer?.geojson);
+  const candidates = extraFeature
+    ? new Map(Array.from(baseline, ([name, types]) => [name, new Set(types)]))
+    : baseline;
+  if (extraFeature) {
+    for (const [name, value] of Object.entries(extraFeature.properties ?? {})) {
+      if (!isGeoEditorFieldName(name)) continue;
+      const types = candidates.get(name) ?? new Set<string>();
+      if (value != null) types.add(typeof value);
+      candidates.set(name, types);
+    }
+  }
+  const unsafeValue = (name: string) => {
+    const types = candidates.get(name);
+    return (
+      !!types &&
+      (types.size > 1 ||
+        Array.from(types).some((type) => !["string", "number", "boolean"].includes(type)))
+    );
+  };
+  for (const field of settings.fields) {
+    if (readOnly.has(field.name) || unsafeValue(field.name)) continue;
+    const scope = field.geometry === "all" ? "common" : field.geometry;
+    schema[scope]!.push({
+      name: field.name,
+      label:
+        field.label ??
+        (field.name === "height" && field.type === "number"
+          ? geoEditorLabels.massingHeight
+          : field.name),
+      ...(field.type === "boolean"
+        ? {
+            type: "select" as const,
+            options: [
+              { value: "true", label: "true" },
+              { value: "false", label: "false" },
+            ],
+          }
+        : { type: field.type }),
+      ...(field.name === "height" && field.type === "number" ? { min: 0, step: 0.5 } : {}),
+    });
+  }
+  // Public table fields should be editable without first duplicating every
+  // column in Settings. Explicit configuration wins for labels, types and scope.
+  const configured = new Set(settings.fields.map((field) => field.name));
+  for (const [name, types] of candidates) {
+    if (configured.has(name) || readOnly.has(name) || unsafeValue(name)) continue;
+    const type = types.values().next().value ?? "string";
+    // Nested and mixed-type values stay in Other Properties as read-only,
+    // since a text widget would otherwise turn their data into strings.
+    if (type !== "string" && type !== "number" && type !== "boolean") continue;
+    schema.common!.push({
+      name,
+      label: name,
+      ...(type === "boolean"
+        ? {
+            type: "select" as const,
+            options: [
+              { value: "true", label: "true" },
+              { value: "false", label: "false" },
+            ],
+          }
+        : { type }),
+    });
+  }
+  return schema;
+}
+
 export function getGeoEditorOptions(mapboxGl: MapboxGl | null): GeoEditorOptions {
   return {
     ...GEO_EDITOR_OPTIONS,
@@ -426,28 +536,23 @@ export function getGeoEditorOptions(mapboxGl: MapboxGl | null): GeoEditorOptions
       : {}),
     position: geoEditorPosition,
     attributePanelTitle: geoEditorLabels.attributePanelTitle,
-    attributeSchema: {
-      polygon: [
-        {
-          name: "height",
-          label: geoEditorLabels.massingHeight,
-          type: "number",
-          min: 0,
-          step: 0.5,
-        },
-      ],
-    },
+    attributeSchema: geoEditorAttributeSchema(),
     onFeatureCreate: (feature) => {
+      geoEditorControl?.setAttributeSchema(geoEditorAttributeSchema(feature));
       unionSketchesWithStoreOnNextSync = true;
-      // GeoEditor opens the attribute panel synchronously after this callback
-      // returns, so a geometry-edit session closes it in the same deferred pass.
-      const isGeometryEditSession = Boolean(editTargetLayerId);
+      // GeoEditor opens the attribute panel synchronously after this callback.
+      // Apply the automatic-popup preference in the same deferred pass.
       // Geoman's callback payload is authoritative even if the collection read
       // still reflects the pre-create snapshot.
       queueMicrotask(() => {
         syncSketchesToStore(feature);
         applySketchesMapDisplay();
-        if (isGeometryEditSession) geoEditorControl?.closeAttributeEditor();
+        if (
+          !normalizeGeoEditorSettings(useAppStore.getState().preferences.map.geoEditor)
+            .showAfterDraw
+        ) {
+          geoEditorControl?.closeAttributeEditor();
+        }
       });
     },
     onFeatureEdit: () => {
@@ -463,10 +568,52 @@ export function getGeoEditorOptions(mapboxGl: MapboxGl | null): GeoEditorOptions
         syncSketchesToStore();
       }
     },
-    onAttributeChange: () => syncSketchesToStore(),
+    onAttributeChange: (event) => {
+      // The control serializes every widget before this callback. Preserve
+      // untouched blanks/missing fields and decode nullable boolean selects in
+      // both the event feature and the copy already written into Geoman.
+      const fields: Array<{ name: string; type: string }> = Object.values(
+        geoEditorAttributeSchema(),
+      ).flat();
+      const submitted = event.newProperties;
+      const normalized = normalizeEditorFormProperties(fields, event.previousProperties, submitted);
+      const decoded: Record<string, unknown> = {};
+      for (const field of fields) {
+        if (
+          normalized[field.name] !== submitted?.[field.name] ||
+          Object.hasOwn(normalized, field.name) !== Object.hasOwn(submitted ?? {}, field.name)
+        ) {
+          decoded[field.name] = normalized[field.name];
+        }
+      }
+      event.newProperties = normalized;
+      event.feature.properties = normalized;
+      if (geomanInstance && Object.keys(decoded).length) {
+        const id = event.feature.properties?.__gm_id ?? event.feature.id;
+        if (typeof id === "string" || typeof id === "number") {
+          void geomanInstance.features
+            .get(geomanInstance.features.defaultSourceName, id)
+            ?.updateProperties(decoded)
+            .catch((error) => console.warn("GeoEditor: normalizing form properties failed", error));
+        }
+      }
+      syncSketchesToStore();
+    },
     onHistoryChange: () => syncSketchesToStore(),
     onModeChange: () => applySketchesMapDisplay(),
-    onSelectionChange: () => applySketchesMapDisplay(),
+    onSelectionChange: (features) => {
+      // Geoman renames reserved user columns on import. Restore their public
+      // values before the form reads them, retaining any edits already saved
+      // into the editor during this session.
+      if (editTargetLayerId) {
+        for (const feature of features) {
+          const tag = feature.properties?.[GEOMETRY_EDIT_FID_PROPERTY];
+          const original = tag == null ? undefined : editTargetOriginalProperties?.get(String(tag));
+          if (original) feature.properties = { ...original, ...feature.properties };
+        }
+      }
+      applySketchesMapDisplay();
+    },
   };
 }
 
@@ -1035,8 +1182,8 @@ export function hasViewImportBaseline(): boolean {
 /**
  * Load features queried from a map layer in the current view into the shared
  * editor, so they become editable "Sketches". Features are normalized and tagged
- * (see `tagViewFeaturesForImport`); the editor's `loadGeoJson` fires the sketches
- * sync, so they also appear as the Sketches store layer. A baseline is captured
+ * (see `tagViewFeaturesForImport`). Public attributes are preserved through the
+ * import, then synchronized to the Sketches store layer. A baseline is captured
  * from the post-import geometry for later "changed only" export.
  *
  * @param features Plain features from `queryViewLayerFeatures`.
@@ -1079,10 +1226,9 @@ export async function loadViewFeaturesIntoEditor(
     };
   }
 
-  // loadGeoJson replaces the editor's collection and fires onGeoJsonLoad, which
-  // (the restore guard being off here) syncs the loaded features to the Sketches
-  // store layer so they render and stay editable.
-  await geoEditorControl.loadGeoJson(collectionToLoad, SKETCHES_SOURCE_PATH);
+  // Import without letting Geoman claim public columns as shape parameters,
+  // then sync the restored attributes to the Sketches store layer.
+  await loadEditorCollection(collectionToLoad);
 
   // Capture the baseline from the post-import geometry: Geoman normalizes
   // coordinates on load, so comparing against the loaded values (not the raw
@@ -1226,6 +1372,11 @@ function syncEditTargetToStore(): boolean {
     editTargetOriginalProperties ?? undefined,
     geometryEditTracking(layer),
     {
+      editableFields: new Set(
+        Object.values(geoEditorAttributeSchema()).flatMap((fields) =>
+          fields.map((field: { name: string }) => field.name),
+        ),
+      ),
       originalIds: editTargetOriginalIds ?? undefined,
       originalGeometries: editTargetOriginalGeometries ?? undefined,
       prepareNewFeature: newFeaturePreparer(layer),
@@ -1236,7 +1387,13 @@ function syncEditTargetToStore(): boolean {
   try {
     store.updateLayer(editTargetLayerId, {
       geojson: edited,
-      metadata: geometryEditMetadata(layer, tagged, editTargetOriginalGeometries ?? new Map()),
+      metadata: edited.features.some(
+        (feature, index) =>
+          JSON.stringify(feature.properties) !==
+          JSON.stringify(layer.geojson?.features[index]?.properties),
+      )
+        ? { ...layer.metadata, geometryEdited: true }
+        : geometryEditMetadata(layer, tagged, editTargetOriginalGeometries ?? new Map()),
     });
   } finally {
     pushingSketchesToStore = false;
@@ -1395,7 +1552,6 @@ export async function startLayerGeometryEdit(
   // Sketches store layer's normal rendering (it stays visible as a plain layer
   // during the target edit).
   syncSketchesToStore();
-  savedSketchesCollection = cloneFeatureCollection(geoEditorControl.getAllFeatureCollection());
   await clearSketchesFromEditor();
   setSketchesMapLayerSuppressed(false);
 
@@ -1419,13 +1575,13 @@ export async function startLayerGeometryEdit(
     const source = cloneFeatureCollection(layer.geojson);
     const tagged = tagFeatureKeys(source);
     // Snapshot the attributes before Geoman sees them: it renames any column
-    // whose name it reserves (see GEOMAN_SHAPE_PROPERTIES), and this session only
-    // edits geometry, so these values are what must come back out. Read from the
+    // whose name it reserves (see GEOMAN_SHAPE_PROPERTIES). Keep untouched and
+    // read-only values intact on save. Read from the
     // pre-tag `source` so a feature with null properties stays null.
     editTargetOriginalProperties = captureEditedProperties(tagged, source);
     editTargetOriginalGeometries = captureEditedGeometries(tagged);
     editTargetOriginalIds = captureEditedFeatureIds(tagged, source);
-    await geoEditorControl.loadGeoJson(tagged, SKETCHES_SOURCE_PATH);
+    await loadEditorCollection(tagged);
     loaded = true;
   } catch (error) {
     // A "Missing source" failure means Geoman is not ready yet (handled by the
@@ -1457,6 +1613,8 @@ export async function startLayerGeometryEdit(
     return false;
   }
 
+  geoEditorControl.setAttributeSchema(geoEditorAttributeSchema());
+  geoEditorControl.enableSelectMode();
   applySketchesMapDisplay();
   notifyGeometryEdit();
   return true;
@@ -1465,8 +1623,8 @@ export async function startLayerGeometryEdit(
 /**
  * Select one feature of the active geometry-edit session in the editor, so the
  * session opened from an Identify result starts on the feature the user picked
- * (#2932). Select mode stays off: in it the editor would open its attribute
- * panel, and a geometry session discards attribute changes on save.
+ * (#2932). Select mode opens its attribute panel so the session can edit both
+ * geometry and public properties.
  *
  * @param featureId The feature's id in the attribute table's scheme.
  * @returns True when the feature was found and selected.
@@ -1475,6 +1633,7 @@ export function selectGeometryEditFeature(featureId: string): boolean {
   if (!pluginActive || !geoEditorControl || !editTargetLayerId) return false;
   const match = findGeometryEditFeature(geoEditorControl.getAllFeatureCollection(), featureId);
   if (!match) return false;
+  geoEditorControl.enableSelectMode();
   geoEditorControl.selectFeatures([match]);
   return true;
 }
@@ -1594,18 +1753,20 @@ function restoreSketchesAfterSession(): Promise<void> {
   return restore;
 }
 
-/** Clear the editor and reload the sketches stashed at session start. */
+/** Reload current stored Sketches, including table edits made during the session. */
 async function restoreSketchesNow(): Promise<void> {
   if (!geoEditorControl) {
-    savedSketchesCollection = null;
     return;
   }
   disableActiveEditModes();
+  geoEditorControl.closeAttributeEditor();
+  geoEditorControl.setAttributeSchema(geoEditorAttributeSchema());
   await clearSketchesFromEditor();
-  if (savedSketchesCollection?.features.length) {
+  const sketches = findSketchesLayer(useAppStore.getState().layers)?.geojson;
+  if (sketches?.features.length) {
     restoringSketchesToEditor = true;
     try {
-      await geoEditorControl.loadGeoJson(savedSketchesCollection, SKETCHES_SOURCE_PATH);
+      await loadEditorCollection(sketches);
     } catch (error) {
       // Geoman may not be ready; the store subscription will re-restore.
       warnUnlessGeomanNotReady("restoring sketches after an edit session", error);
@@ -1613,7 +1774,6 @@ async function restoreSketchesNow(): Promise<void> {
       restoringSketchesToEditor = false;
     }
   }
-  savedSketchesCollection = null;
 }
 
 async function restoreSketchesLayerToEditor(): Promise<void> {
@@ -1641,12 +1801,46 @@ async function restoreSketchesLayerToEditor(): Promise<void> {
     // Geoman may not be ready yet.
   }
 
+  // Attribute edits must not delete/reimport the collection: doing so can
+  // discard an unfinished drawing. Update existing Geoman records in place,
+  // preserving temporary geometry, selection, shape parameters and history.
+  if (geomanInstance?.loaded) {
+    const updates = planSketchAttributeUpdates(
+      geoEditorControl.getAllFeatureCollection(),
+      storeCollection,
+    );
+    if (updates !== null) {
+      const manager = geomanInstance.features;
+      const targets = updates.map((update) => ({
+        update,
+        feature: manager.get(manager.defaultSourceName, update.id),
+      }));
+      if (targets.every((target) => target.feature)) {
+        // Match a reload's dismissal of stale form values without touching
+        // the current draw mode or Geoman's temporary features.
+        if (updates.length > 0) geoEditorControl.closeAttributeEditor();
+        restoringSketchesToEditor = true;
+        try {
+          await Promise.all(
+            targets.map(({ feature, update }) => feature!.setProperties(update.properties)),
+          );
+        } catch (error) {
+          warnUnlessGeomanNotReady("updating Sketches attributes", error);
+        } finally {
+          restoringSketchesToEditor = false;
+        }
+        scheduleApplySketchesMapDisplay();
+        return;
+      }
+    }
+  }
+
   // `loadGeoJson` is async, so the guard is awaited through the load: it stays
   // set while Geoman imports and fires onGeoJsonLoad, then is cleared in
   // `finally`, preventing `syncSketchesToStore` from looping.
   restoringSketchesToEditor = true;
   try {
-    await geoEditorControl.loadGeoJson(storeCollection, SKETCHES_SOURCE_PATH);
+    await loadEditorCollection(storeCollection);
   } catch (error) {
     // Geoman may not be ready until the map style finishes loading.
     warnUnlessGeomanNotReady("loading the Sketches layer into the editor", error);
@@ -1654,6 +1848,29 @@ async function restoreSketchesLayerToEditor(): Promise<void> {
     restoringSketchesToEditor = false;
   }
   scheduleApplySketchesMapDisplay();
+}
+
+/** Import without renaming public columns into Geoman's internal shape keys. */
+async function loadEditorCollection(collection: FeatureCollection): Promise<void> {
+  if (!geoEditorControl || !geomanInstance) throw new Error("Geoman not initialized");
+  const wasRestoring = restoringSketchesToEditor;
+  restoringSketchesToEditor = true;
+  try {
+    const protectedCollection = protectEditorImportAttributes(cloneFeatureCollection(collection));
+    await geoEditorControl.loadGeoJson(protectedCollection, SKETCHES_SOURCE_PATH);
+    const updates: Promise<void>[] = [];
+    // setProperties assigns synchronously before awaiting its source update.
+    // Unwrap every feature before yielding, so transient envelopes cannot be
+    // exported or synced by another browser event between individual updates.
+    geomanInstance.features.forEach((feature) => {
+      const properties = editorImportAttributes(feature.getGeoJson());
+      if (properties) updates.push(feature.setProperties(properties));
+    });
+    await Promise.all(updates);
+  } finally {
+    restoringSketchesToEditor = wasRestoring;
+  }
+  if (!wasRestoring) syncSketchesToStore();
 }
 
 async function clearSketchesFromEditor(): Promise<void> {
@@ -1677,6 +1894,12 @@ async function clearSketchesFromEditor(): Promise<void> {
 function bindSketchesStoreSync(): void {
   geoEditorStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     if (!pluginActive) return;
+    if (state.preferences.map.geoEditor !== previous.preferences.map.geoEditor) {
+      geoEditorControl?.setAttributeSchema(geoEditorAttributeSchema());
+      if (!normalizeGeoEditorSettings(state.preferences.map.geoEditor).showAfterDraw) {
+        geoEditorControl?.closeAttributeEditor();
+      }
+    }
 
     // During a geometry-edit session the editor holds the target layer's
     // features, not sketches. Skip the Sketches reconciliation entirely and
@@ -1707,6 +1930,9 @@ function bindSketchesStoreSync(): void {
 
     const sketches = findSketchesLayer(state.layers);
     const previousSketches = findSketchesLayer(previous.layers);
+    if (sketches?.geojson !== previousSketches?.geojson) {
+      geoEditorControl?.setAttributeSchema(geoEditorAttributeSchema());
+    }
 
     if (previousSketches && !sketches) {
       sketchesLayerId = null;
