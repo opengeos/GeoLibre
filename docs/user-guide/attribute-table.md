@@ -292,7 +292,13 @@ applied, including when the table is unmounted. Open this layer's attribute
 table to save, correct, or cancel its drafts, then retry the export or write.
 
 While geometry editing is active, attribute drafts are paused. Finish or cancel
-the geometry edit to resume editing and saving the attribute values.
+the geometry edit to resume attribute editing. Drafts on features with stable
+IDs can then be saved. For a feature without an ID, a geometry change also
+makes its positional target uncertain, even if its attributes did not change.
+Saving and exporting stay blocked after the geometry session ends; the draft
+remains available. Restore the original geometry to save it, or cancel the
+draft and re-enter it against the edited feature. This conservative rule also
+prevents applying a draft to another feature after a reorder.
 
 - Joined, virtual, and editor-tracking fields are read-only.
 - **Edit** is unavailable while you are editing geometry, and for Add Vector

@@ -282,6 +282,11 @@ function isInvalidObjectDraft(draft: string, previousValue: unknown): boolean {
   }
 }
 
+/** Look up a row by its literal feature ID without inheriting Object members. */
+function getAttributeDraftRow(drafts: AttributeDrafts, featureId: string) {
+  return Object.hasOwn(drafts, featureId) ? drafts[featureId] : undefined;
+}
+
 function hasDraftEdits(drafts: AttributeDrafts): boolean {
   return Object.values(drafts).some((columns) => Object.keys(columns).length > 0);
 }
@@ -426,7 +431,7 @@ function applyDraftsToFeatures(
   const columnTypes = inferColumnTypes(features.map((feature) => feature.properties));
   return features.map((feature, index) => {
     const featureId = String(feature.id ?? index);
-    const rowDrafts = drafts[featureId];
+    const rowDrafts = getAttributeDraftRow(drafts, featureId);
     if (!rowDrafts) return feature;
 
     let properties = draftCandidate(
@@ -769,8 +774,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const isReadOnlyVectorLayer = isReadOnlyAttributeLayer(layer);
   // While this layer's geometry is being edited in place, attribute edits would
   // race the editor's geometry write-back, so the inline editor is disabled.
-  // Drafts stay in the session and resume when geometry editing finishes;
-  // the user can finish/cancel geometry editing without discarding attributes.
+  // Drafts stay in the session when geometry editing finishes. Stable-ID rows
+  // can resume saving; changed positional targets still need reconciliation.
   const geometryEditLayerId = useSyncExternalStore(
     subscribeGeometryEdit,
     getGeometryEditTargetLayerId,
@@ -829,29 +834,42 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const hasEdits = hasDraftEdits(drafts);
   // Never partially save missing targets or apply a positional draft to a
   // different feature after refresh/undo/sync. Keep the drafts for recovery.
-  const hasUnsafeDraftTargets = useMemo(() => {
-    const rowIds = new Set(attributeRows.map((row) => row.featureId));
-    const currentFeatures = new Map(
-      features.map((feature, index) => [String(feature.id ?? index), feature]),
-    );
-    return Object.entries(drafts).some(([featureId, row]) => {
-      if (Object.keys(row).length === 0) return false;
-      if (!rowIds.has(featureId)) return true;
-      if (isDuckDBLayer) return false;
-      const original = draftSession?.targets[featureId];
-      const current = currentFeatures.get(featureId);
-      if (!original || !current) return true;
-      // Stable IDs follow reorders. Positional IDs require the original row,
-      // allowing an equivalent source reload that creates new object instances.
-      return (
-        (original.id == null || current.id == null) &&
-        original !== current &&
-        JSON.stringify(original) !== JSON.stringify(current)
-      );
-    });
-  }, [attributeRows, features, drafts, draftSession, isDuckDBLayer]);
+  const rowIds = useMemo(() => new Set(attributeRows.map((row) => row.featureId)), [attributeRows]);
+  const currentFeatures = useMemo(
+    () => new Map(features.map((feature, index) => [String(feature.id ?? index), feature])),
+    [features],
+  );
+  const draftTargets = draftSession?.targets;
+  const unsafeTargetIds = useMemo(
+    () =>
+      new Set(
+        Object.entries(draftTargets ?? {})
+          .filter(([featureId, original]) => {
+            const current = currentFeatures.get(featureId);
+            if (!current) return true;
+            // IDs follow reorders. Without IDs, even a geometry-only change cannot
+            // be distinguished from a different row occupying the same position.
+            return (
+              (original.id == null || current.id == null) &&
+              original !== current &&
+              JSON.stringify(original) !== JSON.stringify(current)
+            );
+          })
+          .map(([featureId]) => featureId),
+      ),
+    [currentFeatures, draftTargets],
+  );
+  const hasUnsafeDraftTargets = Object.entries(drafts).some(
+    ([featureId, row]) =>
+      Object.keys(row).length > 0 &&
+      (!rowIds.has(featureId) ||
+        (!isDuckDBLayer &&
+          (!draftTargets ||
+            !Object.hasOwn(draftTargets, featureId) ||
+            unsafeTargetIds.has(featureId)))),
+  );
   const hasInvalidDrafts = attributeRows.some((row) => {
-    const rowDrafts = drafts[row.featureId];
+    const rowDrafts = getAttributeDraftRow(drafts, row.featureId);
     if (!rowDrafts) return false;
     return Object.entries(rowDrafts).some(([column, draft]) =>
       isInvalidObjectDraft(draft, row.properties[column]),
@@ -1345,8 +1363,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     previousValue: unknown,
   ) => {
     setDrafts((current) => {
-      const next = { ...current };
-      const row = { ...(next[featureId] ?? {}) };
+      const row = { ...getAttributeDraftRow(current, featureId) };
 
       if (value === formatAttributeValue(previousValue)) {
         delete row[column];
@@ -1354,13 +1371,9 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
         row[column] = value;
       }
 
-      if (Object.keys(row).length === 0) {
-        delete next[featureId];
-      } else {
-        next[featureId] = row;
-      }
-
-      return next;
+      const rows = Object.entries(current).filter(([id]) => id !== featureId);
+      if (Object.keys(row).length > 0) rows.push([featureId, row]);
+      return Object.fromEntries(rows);
     });
   };
 
@@ -2500,7 +2513,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                 {virtualRows.map((virtualRow) => {
                   const { featureId, properties } = sorted[virtualRow.index];
                   const selected = selectedIdSet.has(featureId);
-                  const rowDrafts = drafts[featureId];
+                  const rowDrafts = getAttributeDraftRow(drafts, featureId);
                   // Follows a drafted type/subtype, so dependent dropdowns
                   // and bounds update as soon as the selector changes.
                   const drafted = rowDrafts
@@ -2534,7 +2547,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                       </TableCell>
                       {columns.map((col) => {
                         const value = properties[col];
-                        const draft = drafts[featureId]?.[col];
+                        const draft = rowDrafts?.[col];
                         const changed = draft !== undefined;
                         const formError = formDraftErrors[featureId]?.[col];
                         const invalid =

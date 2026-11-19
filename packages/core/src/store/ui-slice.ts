@@ -335,16 +335,30 @@ export const createUiSlice: SliceCreator<UiSlice> = (set) => ({
       const attributeTableDrafts = { ...s.ui.attributeTableDrafts };
       if (Object.values(drafts).some((row) => Object.keys(row).length > 0)) {
         const previousTargets = attributeTableDrafts[layerId]?.targets ?? {};
-        const features = new Map(
-          layer.geojson?.features.map((feature, index) => [String(feature.id ?? index), feature]),
-        );
-        const targets: Record<string, Feature> = {};
+        let features: Map<string, Feature> | undefined;
+        const entries: [string, Feature][] = [];
+        let targetsChanged = false;
         for (const [featureId, row] of Object.entries(drafts)) {
           if (Object.keys(row).length === 0) continue;
-          // Keep the first target across source replacement and panel remounts.
-          const target = previousTargets[featureId] ?? features.get(featureId);
-          if (target) targets[featureId] = target;
+          // The usual keystroke reuses the first target without scanning the
+          // source. Own keys also allow IDs such as "constructor" or "toString".
+          if (Object.hasOwn(previousTargets, featureId)) {
+            entries.push([featureId, previousTargets[featureId]]);
+            continue;
+          }
+          targetsChanged = true;
+          features ??= new Map(
+            layer.geojson?.features.map((feature, index) => [String(feature.id ?? index), feature]),
+          );
+          const target = features.get(featureId);
+          if (target) entries.push([featureId, target]);
         }
+        // Preserve this reference while only cell text changes, so the table's
+        // target-safety memo does not repeat feature comparisons on keystrokes.
+        const targets =
+          !targetsChanged && entries.length === Object.keys(previousTargets).length
+            ? previousTargets
+            : Object.fromEntries(entries);
         attributeTableDrafts[layerId] = { values: drafts, targets };
       } else {
         delete attributeTableDrafts[layerId];

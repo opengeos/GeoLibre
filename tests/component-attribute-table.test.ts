@@ -511,3 +511,69 @@ describe("attribute draft targets after external data changes", () => {
     );
   });
 });
+
+describe("draft target edge cases", () => {
+  for (const id of ["constructor", "toString", "__proto__"]) {
+    it(`saves a draft for the literal feature ID ${id}`, () => {
+      renderTable({ ...cities, features: [{ ...cities.features[0], id }] });
+      fireEvent.click(screen.getByRole("button", { name: "Edit attribute values" }));
+      const input = screen.getByRole("textbox", { name: `Edit name for feature ${id}` });
+      assert.equal((input as HTMLInputElement).value, "Oslo");
+      fireEvent.change(input, { target: { value: "Updated Oslo" } });
+      act(() => assert.equal(commitPendingAttributeDrafts("cities"), "committed"));
+      assert.equal(
+        useAppStore.getState().layers[0].geojson?.features[0].properties?.name,
+        "Updated Oslo",
+      );
+    });
+  }
+
+  it("reuses captured targets without rereading features on subsequent keystrokes", () => {
+    let idReads = 0;
+    const feature = { ...cities.features[0] };
+    Object.defineProperty(feature, "id", {
+      get: () => {
+        idReads++;
+        return 1;
+      },
+    });
+    useAppStore.setState({
+      layers: [geojsonLayer({ id: "cities", geojson: { ...cities, features: [feature] } })],
+    });
+    useAppStore.getState().setAttributeTableDrafts("cities", { "1": { name: "First" } });
+    assert.ok(idReads > 0);
+    const targets = useAppStore.getState().ui.attributeTableDrafts.cities.targets;
+    idReads = 0;
+    useAppStore.getState().setAttributeTableDrafts("cities", { "1": { name: "Second" } });
+    assert.equal(idReads, 0);
+    assert.equal(useAppStore.getState().ui.attributeTableDrafts.cities.targets, targets);
+    assert.equal(targets["1"], feature);
+  });
+
+  it("retains but blocks an ID-less draft after geometry changes until its original row is restored", () => {
+    const { id: _id, ...feature } = cities.features[0];
+    const original = { ...cities, features: [feature] };
+    renderTable(original);
+    fireEvent.click(screen.getByRole("button", { name: "Edit attribute values" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Edit name for feature 0" }), {
+      target: { value: "Retained draft" },
+    });
+    const changed = {
+      ...original,
+      features: [{ ...feature, geometry: { type: "Point" as const, coordinates: [12, 60] } }],
+    };
+    act(() => useAppStore.getState().updateLayer("cities", { geojson: changed }));
+    act(() => assert.equal(commitPendingAttributeDrafts("cities"), "blocked"));
+    assert.equal(useAppStore.getState().layers[0].geojson, changed);
+    assert.equal(
+      (screen.getByRole("textbox", { name: "Edit name for feature 0" }) as HTMLInputElement).value,
+      "Retained draft",
+    );
+    act(() => useAppStore.getState().updateLayer("cities", { geojson: structuredClone(original) }));
+    act(() => assert.equal(commitPendingAttributeDrafts("cities"), "committed"));
+    assert.equal(
+      useAppStore.getState().layers[0].geojson?.features[0].properties?.name,
+      "Retained draft",
+    );
+  });
+});
