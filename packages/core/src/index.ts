@@ -94,6 +94,8 @@ export {
   useAppStore,
   useAppCapability,
   type AppState,
+  type AttributeTableDrafts,
+  type AttributeTableDraftTarget,
   type ConversionToolKind,
   type GpsStatusFix,
   type NetworkToolKind,

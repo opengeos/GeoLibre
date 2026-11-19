@@ -74,3 +74,16 @@ export function cascadeJoinRefreshForRemoved(
   }
   return current;
 }
+
+/**
+ * Drop the attribute table drafts of removed layers. Returns the same
+ * reference when nothing changes.
+ */
+export function scrubAttributeTableDrafts<T>(
+  drafts: Record<string, T>,
+  layerIds: string | Iterable<string>,
+): Record<string, T> {
+  const removed = removedLayerIdSet(layerIds);
+  if (!Object.keys(drafts).some((id) => removed.has(id))) return drafts;
+  return Object.fromEntries(Object.entries(drafts).filter(([id]) => !removed.has(id)));
+}

@@ -18,6 +18,8 @@ import {
   validateAttributeFormValues,
   excludeHiddenFieldsFromGeojson,
   resolveLayerCapabilities,
+  type AttributeTableDrafts as AttributeDrafts,
+  type AttributeTableDraftTarget,
   type AttributeFormConfig,
   type AttributeFormFieldConfig,
   type AttributeFormFieldError,
@@ -174,7 +176,7 @@ import { openExternalLink } from "../../lib/open-external";
 type SortDirection = "asc" | "desc";
 type SortKey = "__featureId" | string;
 type ColumnWidths = Record<string, number>;
-type AttributeDrafts = Record<string, Record<string, string>>;
+const EMPTY_DRAFTS: AttributeDrafts = {};
 type AttributeTableRow = {
   featureId: string;
   properties: Record<string, unknown>;
@@ -279,6 +281,22 @@ function isInvalidObjectDraft(draft: string, previousValue: unknown): boolean {
   } catch {
     return true;
   }
+}
+
+/**
+ * Serialize a draft target for comparison. DuckDB BIGINT columns hold BigInts,
+ * which JSON.stringify rejects. Encode them as an object under a NUL-prefixed
+ * key no real column carries, so `1n` never matches the string "1n" or "1".
+ */
+function draftTargetJson(target: AttributeTableDraftTarget): string {
+  return JSON.stringify(target, (_key, value: unknown) =>
+    typeof value === "bigint" ? { "\u0000bigint": value.toString() } : value,
+  );
+}
+
+/** Look up a row by its literal feature ID without inheriting Object members. */
+function getAttributeDraftRow(drafts: AttributeDrafts, featureId: string) {
+  return Object.hasOwn(drafts, featureId) ? drafts[featureId] : undefined;
 }
 
 function hasDraftEdits(drafts: AttributeDrafts): boolean {
@@ -425,7 +443,7 @@ function applyDraftsToFeatures(
   const columnTypes = inferColumnTypes(features.map((feature) => feature.properties));
   return features.map((feature, index) => {
     const featureId = String(feature.id ?? index);
-    const rowDrafts = drafts[featureId];
+    const rowDrafts = getAttributeDraftRow(drafts, featureId);
     if (!rowDrafts) return feature;
 
     let properties = draftCandidate(
@@ -627,8 +645,28 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   // Collapsed shows only the toolbar header, hiding the table body, while the
   // panel stays open. Distinct from closing the panel entirely (the X button).
   const [collapsed, setCollapsed] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [drafts, setDrafts] = useState<AttributeDrafts>({});
+  const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
+  const draftSession = useAppStore((s) =>
+    selectedLayerId ? s.ui.attributeTableDrafts[selectedLayerId] : undefined,
+  );
+  const drafts = draftSession?.values ?? EMPTY_DRAFTS;
+  const setAttributeTableDrafts = useAppStore((s) => s.setAttributeTableDrafts);
+  // A layer with drafts reopens in edit mode, even after the panel remounts.
+  const isEditing =
+    (editingLayerId !== null && editingLayerId === selectedLayerId) || hasDraftEdits(drafts);
+  const setIsEditing = (editing: boolean) => setEditingLayerId(editing ? selectedLayerId : null);
+  const setDrafts = (next: AttributeDrafts | ((current: AttributeDrafts) => AttributeDrafts)) => {
+    if (!selectedLayerId) return;
+    const current =
+      useAppStore.getState().ui.attributeTableDrafts[selectedLayerId]?.values ?? EMPTY_DRAFTS;
+    setAttributeTableDrafts(
+      selectedLayerId,
+      typeof next === "function" ? next(current) : next,
+      // The table's own row map, so the store need not rebuild it (and DuckDB
+      // rows, which have no geojson, are snapshotted too).
+      currentFeatures,
+    );
+  };
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportWarning, setExportWarning] = useState<string | null>(null);
   const deferTableResize = isTauri();
@@ -754,6 +792,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const isReadOnlyVectorLayer = isReadOnlyAttributeLayer(layer);
   // While this layer's geometry is being edited in place, attribute edits would
   // race the editor's geometry write-back, so the inline editor is disabled.
+  // Drafts stay in the session when geometry editing finishes. Stable-ID rows
+  // can resume saving; changed positional targets still need reconciliation.
   const geometryEditLayerId = useSyncExternalStore(
     subscribeGeometryEdit,
     getGeometryEditTargetLayerId,
@@ -810,8 +850,54 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     };
   }, [attributeTableOpen, layer, layerCaps.query, mapControllerRef, updateLayer]);
   const hasEdits = hasDraftEdits(drafts);
+  // Never partially save missing targets or apply a positional draft to a
+  // different feature after refresh/undo/sync. Keep the drafts for recovery.
+  const rowIds = useMemo(() => new Set(attributeRows.map((row) => row.featureId)), [attributeRows]);
+  // DuckDB rows are keyed by rendered row index, so a re-query can put another
+  // source row at a drafted index. Compare id-less snapshots of their
+  // properties, which the positional check below treats like GeoJSON rows.
+  const currentFeatures: ReadonlyMap<string, AttributeTableDraftTarget> = useMemo(
+    () =>
+      isDuckDBLayer
+        ? new Map(
+            attributeRows.map((row) => [
+              row.featureId,
+              { type: "Feature", geometry: null, properties: row.properties },
+            ]),
+          )
+        : new Map(features.map((feature, index) => [String(feature.id ?? index), feature])),
+    [attributeRows, features, isDuckDBLayer],
+  );
+  const draftTargets = draftSession?.targets;
+  const unsafeTargetIds = useMemo(
+    () =>
+      new Set(
+        Object.entries(draftTargets ?? {})
+          .filter(([featureId, original]) => {
+            const current = currentFeatures.get(featureId);
+            if (!current) return true;
+            // IDs follow reorders. Without IDs, even a geometry-only change cannot
+            // be distinguished from a different row occupying the same position.
+            return (
+              (original.id == null || current.id == null) &&
+              original !== current &&
+              draftTargetJson(original) !== draftTargetJson(current)
+            );
+          })
+          .map(([featureId]) => featureId),
+      ),
+    [currentFeatures, draftTargets],
+  );
+  const hasUnsafeDraftTargets = Object.entries(drafts).some(
+    ([featureId, row]) =>
+      Object.keys(row).length > 0 &&
+      (!rowIds.has(featureId) ||
+        !draftTargets ||
+        !Object.hasOwn(draftTargets, featureId) ||
+        unsafeTargetIds.has(featureId)),
+  );
   const hasInvalidDrafts = attributeRows.some((row) => {
-    const rowDrafts = drafts[row.featureId];
+    const rowDrafts = getAttributeDraftRow(drafts, row.featureId);
     if (!rowDrafts) return false;
     return Object.entries(rowDrafts).some(([column, draft]) =>
       isInvalidObjectDraft(draft, row.properties[column]),
@@ -904,8 +990,9 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const hasFormErrors = Object.keys(formDraftErrors).length > 0;
 
   useEffect(() => {
-    setIsEditing(false);
-    setDrafts({});
+    setEditingLayerId(null);
+    // Drafts belong to the layer in the store, so selection and geometry-edit
+    // changes must not discard them. Only reset the transient column UI here.
     // Clear column-management state too, so a rename input or pending delete
     // started on the previous layer cannot apply to a same-named column on the
     // newly selected layer. Suppress the rename Input's onBlur first: clearing
@@ -1304,8 +1391,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     previousValue: unknown,
   ) => {
     setDrafts((current) => {
-      const next = { ...current };
-      const row = { ...(next[featureId] ?? {}) };
+      const row = { ...getAttributeDraftRow(current, featureId) };
 
       if (value === formatAttributeValue(previousValue)) {
         delete row[column];
@@ -1313,13 +1399,9 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
         row[column] = value;
       }
 
-      if (Object.keys(row).length === 0) {
-        delete next[featureId];
-      } else {
-        next[featureId] = row;
-      }
-
-      return next;
+      const rows = Object.entries(current).filter(([id]) => id !== featureId);
+      if (Object.keys(row).length > 0) rows.push([featureId, row]);
+      return Object.fromEntries(rows);
     });
   };
 
@@ -1345,7 +1427,15 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     // edit mode (and the dialogs below) can be open across a project reload or
     // a collaborator's change that revokes the capability, and the commit would
     // otherwise still run.
-    if (!layer || !layerCaps.update || !hasEdits || hasInvalidDrafts || hasFormErrors) return false;
+    if (
+      !layer ||
+      !canEnterEditMode ||
+      !hasEdits ||
+      hasUnsafeDraftTargets ||
+      hasInvalidDrafts ||
+      hasFormErrors
+    )
+      return false;
 
     if (isDuckDBLayer) {
       updateDuckDBLayerRows(layer.id, applyDraftsToDuckDBRows(attributeRows, drafts));
@@ -1390,7 +1480,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   });
 
   const geojsonWithDrafts = () => {
-    if (!layer?.geojson) return null;
+    if (!layer?.geojson || hasUnsafeDraftTargets) return null;
 
     return {
       ...layer.geojson,
@@ -1400,6 +1490,10 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
 
   const exportLayer = async (format: VectorExportFormat, precision?: number) => {
     if (!layer?.geojson) return;
+    if (hasUnsafeDraftTargets) {
+      setExportError(t("layers.pendingTableDraftsBlocked"));
+      return;
+    }
 
     try {
       setExportError(null);
@@ -2033,17 +2127,24 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
           size="sm"
           className="h-7 px-2"
           title={
-            hasInvalidDrafts
-              ? t("attributeTable.saveTitleInvalid")
-              : hasFormErrors
-                ? t("attributeTable.saveTitleFormErrors")
-                : isDuckDBLayer
-                  ? t("attributeTable.saveTitleDuckdb")
-                  : t("attributeTable.saveEdits")
+            hasUnsafeDraftTargets
+              ? t("layers.pendingTableDraftsBlocked")
+              : hasInvalidDrafts
+                ? t("attributeTable.saveTitleInvalid")
+                : hasFormErrors
+                  ? t("attributeTable.saveTitleFormErrors")
+                  : isDuckDBLayer
+                    ? t("attributeTable.saveTitleDuckdb")
+                    : t("attributeTable.saveEdits")
           }
           aria-label={t("attributeTable.saveEdits")}
           disabled={
-            !isEditing || !layerCaps.update || !hasEdits || hasInvalidDrafts || hasFormErrors
+            !isEditing ||
+            !canEnterEditMode ||
+            !hasEdits ||
+            hasUnsafeDraftTargets ||
+            hasInvalidDrafts ||
+            hasFormErrors
           }
           onClick={saveDrafts}
         >
@@ -2440,7 +2541,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                 {virtualRows.map((virtualRow) => {
                   const { featureId, properties } = sorted[virtualRow.index];
                   const selected = selectedIdSet.has(featureId);
-                  const rowDrafts = drafts[featureId];
+                  const rowDrafts = getAttributeDraftRow(drafts, featureId);
                   // Follows a drafted type/subtype, so dependent dropdowns
                   // and bounds update as soon as the selector changes.
                   const drafted = rowDrafts
@@ -2474,7 +2575,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                       </TableCell>
                       {columns.map((col) => {
                         const value = properties[col];
-                        const draft = drafts[featureId]?.[col];
+                        const draft = rowDrafts?.[col];
                         const changed = draft !== undefined;
                         const formError = formDraftErrors[featureId]?.[col];
                         const invalid =
@@ -2501,7 +2602,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                         const cellText = formatAttributeCellText(value, i18n.language);
                         const numeric = numericColumns.has(col);
                         const current = draft ?? formattedValue;
-                        const isEditableCell = isEditing && !readOnlyColumns.has(col);
+                        const isEditableCell =
+                          isEditing && canEnterEditMode && !readOnlyColumns.has(col);
                         const linkUrl = isEditableCell ? null : attributeLinkUrl(value);
                         const invalidTitle = invalid
                           ? formError

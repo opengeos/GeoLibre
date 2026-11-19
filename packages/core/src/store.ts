@@ -31,6 +31,8 @@ import { bindHistoryStore, createHistoryOptions } from "./store/undo-history";
 
 export type { AppState } from "./store/types";
 export type {
+  AttributeTableDrafts,
+  AttributeTableDraftTarget,
   ConversionToolKind,
   NetworkToolKind,
   RasterToolKind,
