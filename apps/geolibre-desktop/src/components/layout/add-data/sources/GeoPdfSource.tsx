@@ -4,7 +4,7 @@ import { Button, Label, Select } from "@geolibre/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { primaryViewport } from "../../../../lib/geopdf/georef";
-import { takePendingGeoPdf } from "../../../../lib/geopdf/pending";
+import { subscribePendingGeoPdf, takePendingGeoPdf } from "../../../../lib/geopdf/pending";
 import { PdfReadError } from "../../../../lib/geopdf/pdf-objects";
 import {
   GeoPdfNotGeoreferencedError,
@@ -34,16 +34,36 @@ export function GeoPdfSource() {
   const [pageIndex, setPageIndex] = useState(0);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+  // Other PDFs dropped with this one: the form opens one at a time.
+  const [skipped, setSkipped] = useState<string[]>([]);
   const openedRef = useRef<OpenedGeoPdf | null>(null);
+  // The document an Add is rendering: it must outlive being replaced until the
+  // render finishes, or destroying it aborts the import.
+  const renderingRef = useRef<OpenedGeoPdf | null>(null);
+  // Bumped per load, so a load overtaken by a newer file releases its document.
+  const loadGenerationRef = useRef(0);
+  // False once the form unmounts, so a load finishing later releases its
+  // document. Set again on mount: StrictMode remounts the form in development.
+  const mountedRef = useRef(true);
   const { setLayerName, setError } = source;
 
   // Release pdf.js when another file replaces this one or the form unmounts.
   useEffect(() => {
     const previous = openedRef.current;
     openedRef.current = opened;
-    if (previous && previous !== opened) void previous.destroy();
+    if (previous && previous !== opened && previous !== renderingRef.current) {
+      void previous.destroy();
+    }
   }, [opened]);
-  useEffect(() => () => void openedRef.current?.destroy(), []);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (openedRef.current !== renderingRef.current) void openedRef.current?.destroy();
+      // A render still running destroys its document when it finishes.
+      openedRef.current = null;
+    };
+  }, []);
 
   const describeError = (error: unknown): string => {
     if (error instanceof GeoPdfNotGeoreferencedError)
@@ -54,30 +74,43 @@ export function GeoPdfSource() {
   };
 
   const load = async (bytes: Uint8Array, path: string) => {
+    const generation = ++loadGenerationRef.current;
     setLoading(true);
     setError(null);
     try {
       const next = await openGeoPdf(bytes);
+      if (generation !== loadGenerationRef.current || !mountedRef.current) {
+        void next.destroy();
+        return;
+      }
       setOpened(next);
       setFileName(fileNameFromPath(path));
       setLayerName(layerNameFromPath(path, t("addData.geopdf.defaultName")));
       setPageIndex(next.firstGeoreferencedPage);
       setHidden(new Set(next.layers.filter((layer) => !layer.visible).map((layer) => layer.id)));
     } catch (error) {
+      if (generation !== loadGenerationRef.current) return;
       setOpened(null);
       setFileName("");
       setError(describeError(error));
     } finally {
-      setLoading(false);
+      if (generation === loadGenerationRef.current) setLoading(false);
     }
   };
 
-  // A PDF dropped on the map opens this form with the file already chosen.
+  // A PDF dropped on the map opens this form with the file already chosen;
+  // one dropped while the form is open replaces the current file.
+  const loadRef = useRef(load);
+  loadRef.current = load;
   useEffect(() => {
-    const pending = takePendingGeoPdf();
-    if (pending) void load(pending.bytes, pending.name);
-    // Only on mount: a later drop reopens the dialog, which remounts the form.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const takePending = () => {
+      const pending = takePendingGeoPdf();
+      if (!pending) return;
+      setSkipped(pending.skipped ?? []);
+      void loadRef.current(pending.bytes, pending.name);
+    };
+    takePending();
+    return subscribePendingGeoPdf(takePending);
   }, []);
 
   const pickFile = async () => {
@@ -88,6 +121,7 @@ export function GeoPdfSource() {
         binaryExtensions: ["pdf"],
       });
       if (!file?.data) return;
+      setSkipped([]);
       await load(new Uint8Array(file.data), file.path);
     } catch (error) {
       setError(describeError(error));
@@ -97,10 +131,15 @@ export function GeoPdfSource() {
   const handleSubmit = source.runSubmit(async () => {
     if (!opened) throw new Error(t("addData.geopdf.errorNoFile"));
     let rendered;
+    renderingRef.current = opened;
     try {
       rendered = await renderGeoPdfPage(opened, pageIndex, hidden, epsgDefinition);
     } catch (error) {
       throw new Error(describeError(error));
+    } finally {
+      renderingRef.current = null;
+      // Replaced (or the form closed) while rendering: release it now.
+      if (openedRef.current !== opened) void opened.destroy();
     }
     const name = source.layerName.trim() || t("addData.geopdf.defaultName");
     const layer = createBaseLayer(
@@ -144,7 +183,7 @@ export function GeoPdfSource() {
             <Button
               type="button"
               variant="outline"
-              disabled={loading}
+              disabled={loading || source.isSubmitting}
               onClick={() => void pickFile()}
             >
               {t("addData.geopdf.chooseFile")}
@@ -154,6 +193,11 @@ export function GeoPdfSource() {
             </span>
           </div>
           <p className="text-xs text-muted-foreground">{t("addData.geopdf.hint")}</p>
+          {skipped.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {t("addData.geopdf.skipped", { names: skipped.join(", ") })}
+            </p>
+          )}
         </div>
 
         {opened && georeferencedPages.length > 1 && (

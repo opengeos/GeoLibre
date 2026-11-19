@@ -13,8 +13,13 @@ import {
   fitViewportTransform,
   primaryViewport,
   readGeoPdfPages,
+  viewportsByArea,
   type GeoPdfPage,
+  type GeoPdfViewport,
+  type UserToCrs,
 } from "./georef";
+import { isAffineInMercator, planMercatorWarp, warpCorners, warpToMercator } from "./warp";
+import type { GeoPdfCrsConverters } from "./crs";
 import { geoPdfCrsConverters } from "./crs";
 
 type OptionalContentConfig = Awaited<ReturnType<PDFDocumentProxy["getOptionalContentConfig"]>>;
@@ -83,17 +88,29 @@ function loadPdfjs(): Promise<typeof import("pdfjs-dist")> {
  * app's own assets. pdf.js asks for them by file name from a directory, which
  * hashed build assets do not have, so each name maps to its bundled URL.
  */
+const WASM_URLS: Record<string, () => Promise<{ default: string }>> = {
+  "openjpeg.wasm": () => import("pdfjs-dist/wasm/openjpeg.wasm?url"),
+  "jbig2.wasm": () => import("pdfjs-dist/wasm/jbig2.wasm?url"),
+  "qcms_bg.wasm": () => import("pdfjs-dist/wasm/qcms_bg.wasm?url"),
+};
+
+/**
+ * The predefined CMaps (CJK character encodings) a PDF may name without
+ * embedding, emitted as separate assets and fetched only when a PDF asks.
+ */
+const CMAP_URLS = import.meta.glob<string>("/node_modules/pdfjs-dist/cmaps/*.bcmap", {
+  query: "?url",
+  import: "default",
+});
+
 class BundledBinaryDataFactory {
   async fetch({ kind, filename }: { kind: string; filename: string }): Promise<Uint8Array> {
-    if (kind !== "wasmUrl") throw new Error(`No bundled ${kind} data for ${filename}`);
-    const loaders: Record<string, () => Promise<{ default: string }>> = {
-      "openjpeg.wasm": () => import("pdfjs-dist/wasm/openjpeg.wasm?url"),
-      "jbig2.wasm": () => import("pdfjs-dist/wasm/jbig2.wasm?url"),
-      "qcms_bg.wasm": () => import("pdfjs-dist/wasm/qcms_bg.wasm?url"),
-    };
-    const load = loaders[filename];
-    if (!load) throw new Error(`No bundled wasm named ${filename}`);
-    const response = await fetch((await load()).default);
+    let url: string | undefined;
+    if (kind === "wasmUrl") url = (await WASM_URLS[filename]?.())?.default;
+    else if (kind === "cMapUrl")
+      url = await CMAP_URLS[`/node_modules/pdfjs-dist/cmaps/${filename}`]?.();
+    if (!url) throw new Error(`No bundled ${kind} data named ${filename}`);
+    const response = await fetch(url);
     if (!response.ok) throw new Error(`Could not load ${filename} (${response.status})`);
     return new Uint8Array(await response.arrayBuffer());
   }
@@ -119,11 +136,22 @@ export async function openGeoPdf(bytes: Uint8Array): Promise<OpenedGeoPdf> {
     throw new GeoPdfNotGeoreferencedError("The PDF is not georeferenced");
   const pdfjs = await loadPdfjs();
   // pdf.js transfers the buffer to its worker, so hand it a copy.
-  const pdf = await pdfjs.getDocument({
+  const loadingTask = pdfjs.getDocument({
     data: bytes.slice(),
     useWorkerFetch: false,
+    // Fetched through the factory, which needs these set to ask for them.
+    cMapUrl: "bundled/",
+    cMapPacked: true,
     BinaryDataFactory: BundledBinaryDataFactory,
-  }).promise;
+  });
+  let pdf: PDFDocumentProxy;
+  try {
+    pdf = await loadingTask.promise;
+  } catch (error) {
+    // Release the worker pdf.js started before it rejected.
+    await loadingTask.destroy().catch(() => undefined);
+    throw error;
+  }
   let config: OptionalContentConfig | null = null;
   const layers: GeoPdfLayer[] = [];
   try {
@@ -132,7 +160,9 @@ export async function openGeoPdf(bytes: Uint8Array): Promise<OpenedGeoPdf> {
       layers.push({
         id: String(id),
         name: String(group?.name ?? id),
-        visible: config.isVisible(group),
+        // The iterator yields group objects; isVisible() wants a content
+        // descriptor and calls these visible.
+        visible: group?.visible !== false,
       });
     }
     const order = flattenOrder(config.getOrder());
@@ -189,14 +219,26 @@ export async function renderGeoPdfPage(
   resolveEpsg: (code: number) => Promise<string | null>,
 ): Promise<RenderedGeoPdf> {
   const page = opened.pages[pageIndex];
-  const vp = page ? primaryViewport(page) : null;
-  if (!vp) throw new GeoPdfNotGeoreferencedError("This page is not georeferenced");
+  if (!page || page.viewports.length === 0) {
+    throw new GeoPdfNotGeoreferencedError("This page is not georeferenced");
+  }
   const { default: proj4 } = await import("proj4");
-  const converters = await geoPdfCrsConverters(vp.crs, resolveEpsg, proj4);
-  if (!converters)
+  // The largest viewport whose CRS and control points work: an unusable map
+  // frame falls back to a smaller usable one (an inset) rather than failing.
+  let chosen: { vp: GeoPdfViewport; converters: GeoPdfCrsConverters; userToCrs: UserToCrs } | null =
+    null;
+  for (const vp of viewportsByArea(page)) {
+    const converters = await geoPdfCrsConverters(vp.crs, resolveEpsg, proj4);
+    const userToCrs = converters ? fitViewportTransform(vp, converters.latLonToCrs) : null;
+    if (converters && userToCrs) {
+      chosen = { vp, converters, userToCrs };
+      break;
+    }
+  }
+  if (!chosen) {
     throw new GeoPdfNotGeoreferencedError("The PDF's coordinate system is not supported");
-  const userToCrs = fitViewportTransform(vp, converters.latLonToCrs);
-  if (!userToCrs) throw new GeoPdfNotGeoreferencedError("The PDF's georeference is degenerate");
+  }
+  const { vp, converters, userToCrs } = chosen;
 
   const pdfPage = await opened.pdf.getPage(pageIndex + 1);
   // The frame's rectangle on the rendered (rotated, y-down) page at scale 1.
@@ -216,53 +258,159 @@ export async function renderGeoPdfPage(
   const viewport = pdfPage.getViewport({ scale });
   const width = Math.max(1, Math.round((maxX - minX) * scale));
   const height = Math.max(1, Math.round((maxY - minY) * scale));
+  const offsetX = minX * scale;
+  const offsetY = minY * scale;
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
 
   const config = opened.config;
   if (config) {
-    for (const layer of opened.layers) config.setVisibility(layer.id, !hiddenLayers.has(layer.id));
+    // preserveRB false: the form's checkboxes are independent, so ticking two
+    // layers of one radio-button group keeps both rather than switching.
+    for (const layer of opened.layers) {
+      config.setVisibility(layer.id, !hiddenLayers.has(layer.id), false);
+    }
   }
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Could not create a canvas to render the PDF");
-  await pdfPage.render({
-    // pdf.js draws into an opaque (no-alpha) context of a canvas it is given;
-    // handing it our own context keeps the transparent background below.
-    canvas: null,
-    canvasContext: context,
-    viewport,
-    // Shift the frame's top-left corner to the canvas origin.
-    transform: [1, 0, 0, 1, -minX * scale, -minY * scale],
-    // Transparent outside what the PDF draws, so a single picked layer
-    // overlays the map rather than hiding it under white paper.
-    background: "rgba(0,0,0,0)",
-    ...(config ? { optionalContentConfigPromise: Promise.resolve(config) } : {}),
-  }).promise;
-  pdfPage.cleanup();
+  try {
+    await pdfPage.render({
+      // pdf.js draws into an opaque (no-alpha) context of a canvas it is
+      // given; handing it our own context keeps the transparent background.
+      canvas: null,
+      canvasContext: context,
+      viewport,
+      // Shift the frame's top-left corner to the canvas origin.
+      transform: [1, 0, 0, 1, -offsetX, -offsetY],
+      // Transparent outside what the PDF draws, so a single picked layer
+      // overlays the map rather than hiding it under white paper.
+      background: "rgba(0,0,0,0)",
+      ...(config ? { optionalContentConfigPromise: Promise.resolve(config) } : {}),
+    }).promise;
+  } finally {
+    pdfPage.cleanup();
+  }
 
-  // Each canvas corner back to PDF user space, then through the fit.
+  // PDF user space <-> canvas pixels.
+  const userToPixel = (u: number, v: number): [number, number] => {
+    const [px, py] = viewport.convertToViewportPoint(u, v);
+    return [px - offsetX, py - offsetY];
+  };
+  maskToNeatline(context, vp, userToPixel);
+
+  // Each canvas pixel back to PDF user space, then through the fit.
   const toLngLat = (px: number, py: number): [number, number] => {
-    const [u, v] = viewport.convertToPdfPoint(px + minX * scale, py + minY * scale);
+    const [u, v] = viewport.convertToPdfPoint(px + offsetX, py + offsetY);
     const [x, y] = applyUserToCrs(userToCrs, u, v);
     return converters.crsToWgs84(x, y);
   };
-  const coordinates: RenderedGeoPdf["coordinates"] = [
-    toLngLat(0, 0),
-    toLngLat(width, 0),
-    toLngLat(width, height),
-    toLngLat(0, height),
-  ];
+
+  let output: HTMLCanvasElement = canvas;
+  let coordinates: RenderedGeoPdf["coordinates"];
+  if (isAffineInMercator(width, height, toLngLat)) {
+    coordinates = [
+      toLngLat(0, 0),
+      toLngLat(width, 0),
+      toLngLat(width, height),
+      toLngLat(0, height),
+    ];
+  } else {
+    // The map would bend this frame between its corners: resample it into a
+    // north-up Web Mercator raster instead.
+    const inverse = invertAffine(userToCrs);
+    const plan = planMercatorWarp(width, height, toLngLat, GEOPDF_MAX_SIDE);
+    const warped = warpToMercator(context.getImageData(0, 0, width, height), plan, (lng, lat) => {
+      const [x, y] = converters.wgs84ToCrs(lng, lat);
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !inverse) return null;
+      return userToPixel(...applyUserToCrs(inverse, x, y));
+    });
+    output = document.createElement("canvas");
+    output.width = warped.width;
+    output.height = warped.height;
+    output
+      .getContext("2d")
+      ?.putImageData(new ImageData(warped.data, warped.width, warped.height), 0, 0);
+    canvas.width = canvas.height = 0;
+    coordinates = warpCorners(plan);
+  }
   const lngs = coordinates.map((c) => c[0]);
   const lats = coordinates.map((c) => c[1]);
-  const url = canvas.toDataURL("image/webp", 0.92);
-  canvas.width = canvas.height = 0;
-  return {
+  const url = await canvasDataUrl(output);
+  const result = {
     url,
-    width,
-    height,
+    width: output.width,
+    height: output.height,
     coordinates,
-    bounds: [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)],
+    bounds: [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)] as [
+      number,
+      number,
+      number,
+      number,
+    ],
     crsLabel: converters.label,
   };
+  output.width = output.height = 0;
+  return result;
+}
+
+/**
+ * Clear the pixels outside a viewport's neatline (`/Bounds`), so marks in the
+ * corners of a non-rectangular map frame stay off the map. A neatline that is
+ * the whole rectangle needs nothing.
+ */
+function maskToNeatline(
+  context: CanvasRenderingContext2D,
+  vp: GeoPdfViewport,
+  userToPixel: (u: number, v: number) => [number, number],
+): void {
+  const { bounds } = vp;
+  const isUnitSquare =
+    bounds.length === 8 &&
+    [0, 0, 0, 1, 1, 1, 1, 0].every((value, i) => Math.abs(bounds[i] - value) < 1e-6);
+  const corners = new Set<string>();
+  for (let i = 0; i + 1 < bounds.length; i += 2) corners.add(`${bounds[i]},${bounds[i + 1]}`);
+  const fullSquare =
+    isUnitSquare ||
+    (corners.size === 4 && ["0,0", "0,1", "1,1", "1,0"].every((c) => corners.has(c)));
+  if (fullSquare) return;
+  const [x0, y0, x1, y1] = vp.bbox;
+  context.save();
+  context.globalCompositeOperation = "destination-in";
+  context.beginPath();
+  for (let i = 0; i + 1 < bounds.length; i += 2) {
+    const [px, py] = userToPixel(x0 + bounds[i] * (x1 - x0), y0 + bounds[i + 1] * (y1 - y0));
+    if (i === 0) context.moveTo(px, py);
+    else context.lineTo(px, py);
+  }
+  context.closePath();
+  context.fillStyle = "#000";
+  context.fill();
+  context.restore();
+}
+
+/** The inverse of a user-space transform, or null when it is singular. */
+function invertAffine(t: UserToCrs): UserToCrs | null {
+  const [a, b, c, d, e, f] = t;
+  const det = b * f - c * e;
+  if (!Number.isFinite(det) || det === 0) return null;
+  return [(c * d - a * f) / det, f / det, -c / det, (a * e - b * d) / det, -e / det, b / det];
+}
+
+/**
+ * Encode a canvas as a data URL (WebP where the browser encodes it, else PNG)
+ * without blocking the main thread on the encode, as `toDataURL` would. The
+ * data URL is what an image layer persists in the project.
+ */
+async function canvasDataUrl(canvas: HTMLCanvasElement): Promise<string> {
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, "image/webp", 0.92),
+  );
+  if (!blob) return canvas.toDataURL("image/png");
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("Could not encode the image"));
+    reader.readAsDataURL(blob);
+  });
 }

@@ -31,6 +31,11 @@ export interface GeoPdfViewport {
   lpts: number[];
   /** Latitude/longitude pairs on the CRS's datum, as `[lat, lon, lat, lon, ...]`. */
   gpts: number[];
+  /**
+   * The neatline: the georeferenced area as a polygon in the unit square of
+   * {@link bbox}, `[x, y, x, y, ...]`. The whole square when the PDF gives none.
+   */
+  bounds: number[];
   crs: GeoPdfCrs;
 }
 
@@ -72,8 +77,11 @@ function readViewports(doc: PdfDocument, page: PdfDict): GeoPdfViewport[] {
     const measure = doc.dict(vp.get("Measure"));
     if (!measure || nameOf(doc.resolve(measure.get("Subtype"))) !== "GEO") continue;
     const bbox = numberArray(doc, vp.get("BBox"));
-    // LPTS defaults to the unit square's corners in /Bounds order.
-    const lpts = numberArray(doc, measure.get("LPTS")) ?? numberArray(doc, measure.get("Bounds"));
+    // /Bounds (default: the unit square) is the neatline polygon, not a list
+    // of control points, so a viewport without /LPTS is skipped rather than
+    // guessing which points /GPTS pairs with. GDAL, Adobe and Avenza write it.
+    const bounds = numberArray(doc, measure.get("Bounds")) ?? [0, 0, 0, 1, 1, 1, 1, 0];
+    const lpts = numberArray(doc, measure.get("LPTS"));
     const gpts = numberArray(doc, measure.get("GPTS"));
     const gcs = doc.dict(measure.get("GCS"));
     if (!bbox || bbox.length !== 4 || !lpts || !gpts || !gcs) continue;
@@ -97,6 +105,7 @@ function readViewports(doc: PdfDocument, page: PdfDict): GeoPdfViewport[] {
       ],
       lpts,
       gpts,
+      bounds: bounds.length >= 6 && bounds.length % 2 === 0 ? bounds : [0, 0, 0, 1, 1, 1, 1, 0],
       crs: {
         geographic: nameOf(doc.resolve(gcs.get("Type"))) === "GEOGCS",
         epsg,
@@ -108,22 +117,69 @@ function readViewports(doc: PdfDocument, page: PdfDict): GeoPdfViewport[] {
 }
 
 /**
- * The EPSG code a WKT names for the whole CRS: its last `AUTHORITY["EPSG", N]`
- * (WKT 1) or `ID["EPSG", N]` (WKT 2), which closes the outermost object.
+ * The EPSG code a WKT names for the whole CRS: an `AUTHORITY["EPSG", N]`
+ * (WKT 1) or `ID["EPSG", N]` (WKT 2) that is a direct child of the outermost
+ * object. Authorities nested deeper (the datum's, a unit's) are ignored, and
+ * brackets inside quoted names do not count.
  *
  * Args:
  *   wkt: The WKT.
  *
  * Returns:
- *   The code, or null when the WKT carries none.
+ *   The code, or null when the root carries none.
  */
 export function wktEpsg(wkt: string): number | null {
-  const matches = [...wkt.matchAll(/(?:AUTHORITY|ID)\[\s*"EPSG"\s*,\s*"?(\d+)"?\s*\]/gi)];
-  const last = matches.at(-1);
-  if (!last) return null;
-  // Only the outermost object's authority: nothing but closing brackets after it.
-  const rest = wkt.slice((last.index ?? 0) + last[0].length);
-  return /^[\s\]]*$/.test(rest) ? Number(last[1]) : null;
+  let depth = 0;
+  let inQuote = false;
+  let tokenStart = -1;
+  for (let i = 0; i < wkt.length; i++) {
+    const ch = wkt[i];
+    if (inQuote) {
+      // WKT escapes a quote inside a name by doubling it.
+      if (ch === '"') {
+        if (wkt[i + 1] === '"') i++;
+        else inQuote = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inQuote = true;
+    } else if (ch === "[" || ch === "(") {
+      if (depth === 1 && tokenStart >= 0) {
+        const keyword = wkt.slice(tokenStart, i).trim().toUpperCase();
+        if (keyword === "AUTHORITY" || keyword === "ID") {
+          const match = /^\s*"EPSG"\s*,\s*"?(\d+)"?/i.exec(wkt.slice(i + 1));
+          if (match) return Number(match[1]);
+        }
+      }
+      depth++;
+      tokenStart = -1;
+    } else if (ch === "]" || ch === ")") {
+      depth--;
+      tokenStart = -1;
+    } else if (ch === ",") {
+      tokenStart = -1;
+    } else if (tokenStart < 0 && /[A-Za-z_]/.test(ch)) {
+      tokenStart = i;
+    }
+  }
+  return null;
+}
+
+/**
+ * A page's georeferenced viewports, largest first (a map sheet can carry a
+ * small inset or locator map too). The renderer takes the first one whose
+ * CRS and control points it can use.
+ *
+ * Args:
+ *   page: The page.
+ *
+ * Returns:
+ *   The viewports in descending area.
+ */
+export function viewportsByArea(page: GeoPdfPage): GeoPdfViewport[] {
+  const area = (vp: GeoPdfViewport) => (vp.bbox[2] - vp.bbox[0]) * (vp.bbox[3] - vp.bbox[1]);
+  return [...page.viewports].sort((a, b) => area(b) - area(a));
 }
 
 /**
@@ -166,14 +222,22 @@ export function fitViewportTransform(
   latLonToCrs: (lat: number, lon: number) => [number, number],
 ): UserToCrs | null {
   const [x0, y0, x1, y1] = vp.bbox;
+  const width = x1 - x0;
+  const height = y1 - y0;
+  if (!(width > 0) || !(height > 0)) return null;
+  // Fit in the viewport's unit square, where the points are O(1) wherever the
+  // frame sits on the page, then fold the bbox scale and offset back in: the
+  // singularity test would otherwise grow with the page offset.
   const rows: { u: number; v: number; x: number; y: number }[] = [];
   for (let i = 0; i + 1 < vp.lpts.length; i += 2) {
     const [x, y] = latLonToCrs(vp.gpts[i], vp.gpts[i + 1]);
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    rows.push({ u: x0 + vp.lpts[i] * (x1 - x0), v: y0 + vp.lpts[i + 1] * (y1 - y0), x, y });
+    rows.push({ u: vp.lpts[i], v: vp.lpts[i + 1], x, y });
   }
   if (rows.length < 3) return null;
-  // Normal equations for [1 u v] against x and against y.
+  // Centre the CRS values too, so large eastings keep their precision.
+  const cx = rows.reduce((sum, r) => sum + r.x, 0) / rows.length;
+  const cy = rows.reduce((sum, r) => sum + r.y, 0) / rows.length;
   let n = 0;
   let su = 0;
   let sv = 0;
@@ -186,7 +250,9 @@ export function fitViewportTransform(
   let sy = 0;
   let suy = 0;
   let svy = 0;
-  for (const { u, v, x, y } of rows) {
+  for (const { u, v, x: rawX, y: rawY } of rows) {
+    const x = rawX - cx;
+    const y = rawY - cy;
     n++;
     su += u;
     sv += v;
@@ -208,7 +274,15 @@ export function fitViewportTransform(
   const a = solve3(m, [sx, sux, svx]);
   const d = solve3(m, [sy, suy, svy]);
   if (!a || !d) return null;
-  return [a[0], a[1], a[2], d[0], d[1], d[2]];
+  // x = cx + a0 + a1*(u - x0)/W + a2*(v - y0)/H, and likewise for y.
+  return [
+    cx + a[0] - (a[1] * x0) / width - (a[2] * y0) / height,
+    a[1] / width,
+    a[2] / height,
+    cy + d[0] - (d[1] * x0) / width - (d[2] * y0) / height,
+    d[1] / width,
+    d[2] / height,
+  ];
 }
 
 /** Solve a 3x3 linear system by Cramer's rule; null when singular. */
@@ -218,9 +292,9 @@ function solve3(m: number[][], r: number[]): [number, number, number] | null {
     k[0][1] * (k[1][0] * k[2][2] - k[1][2] * k[2][0]) +
     k[0][2] * (k[1][0] * k[2][1] - k[1][1] * k[2][0]);
   const base = det(m);
-  // Scale-aware singularity test: PDF user space spans hundreds of points.
+  // The matrix is built from unit-square points, so its entries are O(count).
   const scale = Math.max(...m.flat().map(Math.abs), 1);
-  if (!Number.isFinite(base) || Math.abs(base) < 1e-12 * scale ** 3) return null;
+  if (!Number.isFinite(base) || Math.abs(base) < 1e-9 * scale ** 3) return null;
   const column = (c: number) => m.map((row, i) => row.map((value, j) => (j === c ? r[i] : value)));
   return [det(column(0)) / base, det(column(1)) / base, det(column(2)) / base];
 }

@@ -857,6 +857,7 @@
       "chooseFile": "Choose PDF…",
       "noFile": "No file chosen",
       "reading": "Reading the PDF…",
+      "skipped": "Only one PDF opens at a time. Not opened: {{names}}",
       "hint": "A georeferenced PDF map from Avenza Maps, USGS, QGIS, ArcGIS or a GeoLibre print layout. Only the map frame is added, not the margins or legend.",
       "page": "Page",
       "pageOption": "Page {{page}} of {{total}}",

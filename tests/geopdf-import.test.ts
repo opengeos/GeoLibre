@@ -8,10 +8,28 @@ import {
   fitViewportTransform,
   primaryViewport,
   readGeoPdfPages,
+  viewportsByArea,
   wktEpsg,
 } from "../apps/geolibre-desktop/src/lib/geopdf/georef";
-import { PdfDocument, PdfReadError } from "../apps/geolibre-desktop/src/lib/geopdf/pdf-objects";
-import { isPdfFileName } from "../apps/geolibre-desktop/src/lib/geopdf/pending";
+import {
+  boundedInflate,
+  PdfDocument,
+  PdfReadError,
+} from "../apps/geolibre-desktop/src/lib/geopdf/pdf-objects";
+import {
+  handOffDroppedPdfs,
+  isPdfFileName,
+  subscribePendingGeoPdf,
+  takePendingGeoPdf,
+} from "../apps/geolibre-desktop/src/lib/geopdf/pending";
+import {
+  isAffineInMercator,
+  lngLatToMercator,
+  mercatorToLngLat,
+  planMercatorWarp,
+  warpCorners,
+  warpToMercator,
+} from "../apps/geolibre-desktop/src/lib/geopdf/warp";
 
 // GeoPDF import (GH #3523): a small PDF object reader finds each page's ISO
 // 32000 geospatial viewport, and the fitted transform places the map frame.
@@ -54,10 +72,13 @@ function frameGpts(): number[] {
 }
 
 /** The `/VP` entry of a page georeferenced like {@link frameGpts}. */
-function viewportEntry(gcs = "<< /Type /PROJCS /EPSG 3857 >>"): string {
+function viewportEntry(
+  gcs = "<< /Type /PROJCS /EPSG 3857 >>",
+  { bbox = BBOX, lpts = "/LPTS [0 1 0 0 1 0 1 1] ", bounds = "/Bounds [0 1 0 0 1 0 1 1] " } = {},
+): string {
   return (
-    `/VP [<< /Type /Viewport /Name (Map) /BBox [${BBOX.join(" ")}] /Measure << /Type /Measure ` +
-    `/Subtype /GEO /Bounds [0 1 0 0 1 0 1 1] /LPTS [0 1 0 0 1 0 1 1] ` +
+    `/VP [<< /Type /Viewport /Name (Map) /BBox [${bbox.join(" ")}] /Measure << /Type /Measure ` +
+    `/Subtype /GEO ${bounds}${lpts}` +
     `/GPTS [${frameGpts().join(" ")}] /GCS ${gcs} >> >>]`
   );
 }
@@ -291,5 +312,181 @@ describe("isPdfFileName", () => {
   it("matches .pdf in any case", () => {
     assert.ok(isPdfFileName("map.PDF"));
     assert.ok(!isPdfFileName("map.pdf.zip"));
+  });
+});
+
+describe("PdfDocument hardening", () => {
+  it("falls back to scanning when a classic xref table is truncated", () => {
+    // Cut the table after its entries: no trailer, the file just ends.
+    const text = new TextDecoder().decode(classicPdf(viewportEntry()));
+    const truncated = text.slice(0, text.indexOf("trailer"));
+    const withMarker = `${truncated}startxref\n${text.indexOf("xref\n0 ")}\n%%EOF\n`;
+    assertFrame(encoder.encode(withMarker));
+  });
+
+  it("recovers when the trailer parses but its offsets are stale", () => {
+    const text = new TextDecoder().decode(classicPdf(viewportEntry()));
+    // Shift every object by padding after the header; the xref table is left as is.
+    const shifted = text.replace("%PDF-1.4\n", "%PDF-1.4\n%padding padding padding\n");
+    const xref = shifted.indexOf("xref\n0 ");
+    assertFrame(encoder.encode(shifted.replace(/startxref\n\d+/, `startxref\n${xref}`)));
+  });
+
+  it("treats a free entry from a newer revision as deleted", () => {
+    const text = new TextDecoder().decode(classicPdf(viewportEntry()));
+    const prev = Number(/startxref\n(\d+)/.exec(text)![1]);
+    // An incremental update that frees object 3 (the page).
+    const body = text.slice(0, text.lastIndexOf("startxref"));
+    const xref = body.length;
+    const update =
+      `xref\n3 1\n0000000000 00001 f \ntrailer\n<< /Size 4 /Root 1 0 R /Prev ${prev} >>\n` +
+      `startxref\n${xref}\n%%EOF\n`;
+    const doc = new PdfDocument(encoder.encode(body + update));
+    assert.equal(doc.pages().length, 0);
+  });
+
+  it("keeps the Encrypt marker when recovering a lost /Root", () => {
+    const text = new TextDecoder()
+      .decode(classicPdf(viewportEntry()))
+      .replace("/Root 1 0 R", "/Encrypt << /Filter /Standard >>");
+    assert.throws(() => new PdfDocument(encoder.encode(text)), /Encrypted/);
+  });
+
+  it("stops inflating once the output passes the limit", () => {
+    const bomb = zlibSync(new Uint8Array(1_000_000));
+    assert.throws(() => boundedInflate(bomb, 10_000, false), /too large/);
+    assert.equal(boundedInflate(bomb, 2_000_000, false).length, 1_000_000);
+  });
+});
+
+describe("viewport reading", () => {
+  it("skips a viewport without /LPTS", () => {
+    const bytes = classicPdf(viewportEntry(undefined, { lpts: "" }));
+    assert.equal(primaryViewport(readGeoPdfPages(bytes)[0]), null);
+  });
+
+  it("carries the neatline polygon from /Bounds", () => {
+    const bytes = classicPdf(viewportEntry(undefined, { bounds: "/Bounds [0 0 0 1 1 0] " }));
+    assert.deepEqual(primaryViewport(readGeoPdfPages(bytes)[0])?.bounds, [0, 0, 0, 1, 1, 0]);
+  });
+
+  it("fits a small frame far from the page origin", () => {
+    const far = [20000, 20000, 20100, 20100];
+    const vp = primaryViewport(
+      readGeoPdfPages(classicPdf(viewportEntry(undefined, { bbox: far })))[0],
+    )!;
+    const t = fitViewportTransform(vp, mercator);
+    assert.ok(t, "a translated frame is not singular");
+    const ul = applyUserToCrs(t, far[0], far[3]);
+    assert.ok(Math.abs(ul[0] - UL[0]) < 1e-3 && Math.abs(ul[1] - UL[1]) < 1e-3);
+  });
+
+  it("orders viewports largest first", () => {
+    const vp = primaryViewport(readGeoPdfPages(classicPdf(viewportEntry()))[0])!;
+    const inset = { ...vp, bbox: [0, 0, 10, 10] as [number, number, number, number] };
+    assert.deepEqual(viewportsByArea({ index: 0, viewports: [inset, vp] })[0], vp);
+  });
+
+  it("ignores authorities nested below the root in a WKT", () => {
+    const wkt = 'PROJCS["x",GEOGCS["y"],UNIT["metre",1,AUTHORITY["EPSG","9001"]]]';
+    assert.equal(wktEpsg(wkt), null);
+    assert.equal(wktEpsg('PROJCS["a [b]",AUTHORITY["EPSG","2100"]]'), 2100);
+  });
+});
+
+describe("geoPdfCrsConverters prime meridian", () => {
+  it("counts GPTS longitudes from the CRS's prime meridian", async () => {
+    // NTF (Paris) / Lambert zone II: longitude 0 is the Paris meridian.
+    const def =
+      "+proj=lcc +lat_1=46.8 +lat_0=46.8 +lon_0=0 +k_0=0.99987742 +x_0=600000 +y_0=2200000 " +
+      "+a=6378249.2 +b=6356515 +towgs84=-168,-60,320,0,0,0,0 +pm=paris +units=m +no_defs";
+    const c = await geoPdfCrsConverters(
+      { geographic: false, epsg: 27572, wkt: null },
+      async () => def,
+      proj4,
+    );
+    const [x, y] = c!.latLonToCrs(46.8, 0);
+    assert.ok(Math.abs(x - 600000) < 1e-2 && Math.abs(y - 2200000) < 1e-2);
+  });
+});
+
+describe("Mercator warp", () => {
+  /** A geographic (plate carree) frame from 0 to 60 degrees north. */
+  const W = 200;
+  const H = 300;
+  const plate = (px: number, py: number): [number, number] => [
+    10 + (px / W) * 40,
+    60 - (py / H) * 60,
+  ];
+
+  it("leaves a Web Mercator frame to corner placement", () => {
+    const [x0, y0] = lngLatToMercator(-84, 36);
+    const merc = (px: number, py: number) => mercatorToLngLat(x0 + px * 30, y0 - py * 30);
+    assert.ok(isAffineInMercator(W, H, merc));
+  });
+
+  it("warps a tall latitude/longitude frame so its interior lands in place", () => {
+    assert.ok(!isAffineInMercator(W, H, plate));
+    const plan = planMercatorWarp(W, H, plate, 1000);
+    const corners = warpCorners(plan);
+    assert.ok(Math.abs(corners[0][0] - 10) < 1e-6 && Math.abs(corners[0][1] - 60) < 1e-6);
+    assert.ok(Math.abs(corners[2][0] - 50) < 1e-6 && Math.abs(corners[2][1]) < 1e-6);
+    // A source whose red channel is its row: the output row at 30 N must hold
+    // source row 150, halfway down the plate carree frame.
+    const data = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        data[(y * W + x) * 4] = Math.round((y / H) * 255);
+        data[(y * W + x) * 4 + 3] = 255;
+      }
+    const out = warpToMercator({ width: W, height: H, data }, plan, (lng, lat) => [
+      ((lng - 10) / 40) * W,
+      ((60 - lat) / 60) * H,
+    ]);
+    const [, yTop] = lngLatToMercator(0, 60);
+    const [, y30] = lngLatToMercator(0, 30);
+    const [, yBottom] = lngLatToMercator(0, 0);
+    const row = Math.floor(((yTop - y30) / (yTop - yBottom)) * out.height);
+    const red = out.data[(row * out.width + Math.floor(out.width / 2)) * 4];
+    assert.ok(Math.abs(red - 128) <= 3, `row at 30 N holds source row ~150 (red ${red})`);
+  });
+});
+
+describe("handOffDroppedPdfs", () => {
+  it("opens the first readable PDF and names the others", async () => {
+    let opened = 0;
+    let notified = 0;
+    const stop = subscribePendingGeoPdf(() => notified++);
+    const name = await handOffDroppedPdfs(
+      ["bad.pdf", "a.pdf", "b.pdf"],
+      (file) => file,
+      async (file) => {
+        if (file === "bad.pdf") throw new Error("unreadable");
+        return encoder.encode(file);
+      },
+      () => opened++,
+    );
+    stop();
+    assert.equal(name, "a.pdf");
+    assert.equal(opened, 1);
+    assert.equal(notified, 1);
+    const pending = takePendingGeoPdf();
+    assert.equal(pending?.name, "a.pdf");
+    assert.deepEqual(pending?.skipped, ["bad.pdf", "b.pdf"]);
+    assert.equal(takePendingGeoPdf(), null);
+  });
+
+  it("rejects when no PDF can be read", async () => {
+    await assert.rejects(
+      handOffDroppedPdfs(
+        ["x.pdf"],
+        (f) => f,
+        async () => {
+          throw new Error("nope");
+        },
+        () => {},
+      ),
+      /nope/,
+    );
   });
 });

@@ -9,7 +9,7 @@
  * file for `N G obj` headers. Encrypted documents are refused: their strings
  * and streams would need decrypting first.
  */
-import { inflateSync, unzlibSync } from "fflate";
+import { Inflate, Unzlib } from "fflate";
 
 /** A PDF name, e.g. `/Type`. */
 export class PdfName {
@@ -357,7 +357,53 @@ function unpredictPng(data: Uint8Array, columns: number, bytesPerPixel: number):
   return out;
 }
 
-type XrefEntry = { type: 1; offset: number } | { type: 2; stream: number; index: number };
+type XrefEntry =
+  | { type: 0 }
+  | { type: 1; offset: number }
+  | { type: 2; stream: number; index: number };
+
+/** True for a token that is a non-negative integer (not an empty read). */
+function isUint(word: string): boolean {
+  return /^\d+$/.test(word);
+}
+
+/**
+ * Inflate a zlib (or raw deflate) stream, refusing to produce more than
+ * `limit` bytes. The streaming decoder stops as soon as the output passes the
+ * limit, so a small "decompression bomb" cannot allocate gigabytes first.
+ */
+export function boundedInflate(data: Uint8Array, limit: number, raw: boolean): Uint8Array {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let overflow = false;
+  const onData = (chunk: Uint8Array) => {
+    if (overflow) return;
+    total += chunk.length;
+    if (total > limit) {
+      overflow = true;
+      return;
+    }
+    chunks.push(chunk);
+  };
+  const inflater = raw ? new Inflate(onData) : new Unzlib(onData);
+  // Feed in slices so the size check runs while decoding, not after.
+  const SLICE = 64 * 1024;
+  for (let at = 0; at < data.length && !overflow; at += SLICE) {
+    const end = Math.min(data.length, at + SLICE);
+    inflater.push(data.subarray(at, end), end === data.length);
+  }
+  if (overflow) throw new PdfStreamTooLargeError("PDF stream too large");
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
+}
+
+/** A stream that inflates past the size budget; final, never retried. */
+class PdfStreamTooLargeError extends Error {}
 
 /** A parsed PDF document: its trailer, and object lookup by reference. */
 export class PdfDocument {
@@ -377,9 +423,23 @@ export class PdfDocument {
     } catch {
       trailer = null;
     }
-    if (!trailer || !trailer.has("Root")) trailer = this.scanObjects();
+    // Refuse encryption before any recovery can replace the trailer that says so.
+    if (trailer?.has("Encrypt")) throw new PdfReadError("Encrypted PDFs are not supported");
+    // A trailer can parse while its offsets are stale: recover unless the
+    // catalog and its page tree actually resolve.
+    if (!trailer || !this.catalogResolves(trailer)) trailer = this.scanObjects();
     this.trailer = trailer;
     if (this.trailer.has("Encrypt")) throw new PdfReadError("Encrypted PDFs are not supported");
+  }
+
+  /** Whether a trailer's `/Root` resolves to a catalog with a page tree. */
+  private catalogResolves(trailer: PdfDict): boolean {
+    try {
+      const root = this.dict(trailer.get("Root"));
+      return root !== null && this.dict(root.get("Pages")) !== null;
+    } catch {
+      return false;
+    }
   }
 
   /** Follow `startxref` and every `/Prev`, newest entries winning. */
@@ -414,17 +474,26 @@ export class PdfDocument {
       for (;;) {
         const word = parser.readWord();
         if (word === "trailer") break;
+        // readWord() returns "" without advancing at a delimiter or the end of
+        // the file; accepting it as 0 would loop forever on a damaged table.
+        const countWord = parser.readWord();
+        if (!isUint(word) || !isUint(countWord)) throw new PdfReadError("Bad xref");
         const first = Number(word);
-        const count = Number(parser.readWord());
-        if (!Number.isInteger(first) || !Number.isInteger(count))
-          throw new PdfReadError("Bad xref");
+        const count = Number(countWord);
         for (let i = 0; i < count; i++) {
-          const entryOffset = Number(parser.readWord());
-          parser.readWord(); // generation
+          const offsetWord = parser.readWord();
+          const genWord = parser.readWord();
           const kind = parser.readWord();
-          if (kind === "n" && !this.xref.has(first + i)) {
-            this.xref.set(first + i, { type: 1, offset: entryOffset });
+          if (!isUint(offsetWord) || !isUint(genWord) || (kind !== "n" && kind !== "f")) {
+            throw new PdfReadError("Bad xref entry");
           }
+          // A newer revision's entry wins, a free ("f") one included, so a
+          // deleted object does not come back from an older revision.
+          if (this.xref.has(first + i)) continue;
+          this.xref.set(
+            first + i,
+            kind === "n" ? { type: 1, offset: Number(offsetWord) } : { type: 0 },
+          );
         }
       }
       const trailer = parser.parseObject();
@@ -461,7 +530,8 @@ export class PdfDocument {
         const num = index[s] + i;
         if (this.xref.has(num)) continue;
         const type = field(row, 0, 1);
-        if (type === 1) this.xref.set(num, { type: 1, offset: field(row, 1, 0) });
+        if (type === 0) this.xref.set(num, { type: 0 });
+        else if (type === 1) this.xref.set(num, { type: 1, offset: field(row, 1, 0) });
         else if (type === 2)
           this.xref.set(num, { type: 2, stream: field(row, 1, 0), index: field(row, 2, 0) });
       }
@@ -496,7 +566,10 @@ export class PdfDocument {
         const value = this.tryGet(new PdfRef(num, 0));
         const dict = value instanceof PdfStream ? value.dict : value;
         if (dict instanceof Map && nameOf(dict.get("Type")) === "Catalog") {
-          trailer = new Map([["Root", new PdfRef(num, 0)]]);
+          // Keep an Encrypt marker from a trailer that lost only its /Root.
+          const recovered: PdfDict = new Map([["Root", new PdfRef(num, 0)]]);
+          if (trailer?.has("Encrypt")) recovered.set("Encrypt", trailer.get("Encrypt")!);
+          trailer = recovered;
           break;
         }
         // An xref stream also carries the trailer keys.
@@ -535,13 +608,20 @@ export class PdfDocument {
       if (name !== "FlateDecode" && name !== "Fl") {
         throw new PdfReadError(`Unsupported PDF stream filter ${name}`);
       }
+      const encoded = data;
       try {
-        data = unzlibSync(data);
-      } catch {
+        data = boundedInflate(encoded, MAX_STREAM_BYTES, false);
+      } catch (error) {
+        if (error instanceof PdfStreamTooLargeError) throw new PdfReadError(error.message);
         // Some writers emit raw deflate without the zlib header.
-        data = inflateSync(data);
+        try {
+          data = boundedInflate(encoded, MAX_STREAM_BYTES, true);
+        } catch (rawError) {
+          throw new PdfReadError(
+            rawError instanceof PdfStreamTooLargeError ? rawError.message : "Corrupt PDF stream",
+          );
+        }
       }
-      if (data.length > MAX_STREAM_BYTES) throw new PdfReadError("PDF stream too large");
       const parm = this.resolve(Array.isArray(parms) ? parms[i] : parms);
       if (parm instanceof Map) {
         const predictor = (parm.get("Predictor") as number | undefined) ?? 1;
@@ -563,7 +643,7 @@ export class PdfDocument {
   get(ref: PdfRef): PdfValue {
     if (this.cache.has(ref.num)) return this.cache.get(ref.num)!;
     const entry = this.xref.get(ref.num);
-    if (!entry) return null;
+    if (!entry || entry.type === 0) return null;
     // Guard against a self-referencing /Length while this object parses.
     this.cache.set(ref.num, null);
     let value: PdfValue;
@@ -592,10 +672,15 @@ export class PdfDocument {
     const first = stream.dict.get("First") as number;
     const header = new Parser(data, 0);
     const offsets = new Map<number, number>();
+    if (!Number.isInteger(count) || !Number.isInteger(first) || count < 0) {
+      throw new PdfReadError(`Bad object stream ${num}`);
+    }
     for (let i = 0; i < count; i++) {
-      const objNum = Number(header.readWord());
-      const objOffset = Number(header.readWord());
-      offsets.set(objNum, first + objOffset);
+      const numWord = header.readWord();
+      const offsetWord = header.readWord();
+      if (!isUint(numWord) || !isUint(offsetWord))
+        throw new PdfReadError(`Bad object stream ${num}`);
+      offsets.set(Number(numWord), first + Number(offsetWord));
     }
     const result = { data, offsets };
     this.objectStreams.set(num, result);

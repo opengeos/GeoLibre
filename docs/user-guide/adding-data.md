@@ -171,12 +171,12 @@ Drag a vector file (GeoJSON, zipped Shapefile, KMZ, and similar) or a GeoTIFF/CO
 
 ## GeoPDF
 
-**Add Data → GeoPDF Layer** (or dropping a `.pdf` on the map) reads a georeferenced PDF and adds its map frame as an image layer, placed by the coordinates the PDF carries. Only the frame is added: the title, legend, and margins of a map sheet stay off the map. The page renders with a transparent background, so a PDF layer you keep on its own overlays the map instead of hiding it.
+**Add Data → GeoPDF Layer** (or dropping a `.pdf` on the map, or loading one with `?data=`) reads a georeferenced PDF and adds its map frame as an image layer, placed by the coordinates the PDF carries. The image is cut to the frame (its neatline), so a title, legend, or margin outside the frame stays off the map; anything the sheet draws inside the frame, such as an inset legend, comes along. The page renders with a transparent background, so a PDF layer you keep on its own overlays the map instead of hiding it. Drop one PDF at a time: when several are dropped together, the form opens the first and lists the others.
 
 - **PDF layers to include** lists the PDF's layers (its optional content groups) when it has any, ticked the way the PDF opens. Untick a layer to leave it out of the image. The choice is made when the layer is added; to change it, add the PDF again.
 - **Page** appears when more than one page is georeferenced.
 - The georeference must be in the ISO 32000 geospatial format, which GDAL, QGIS, ArcGIS, Avenza Maps, and GeoLibre's own [Print Layout](print-layout.md) PDF exports write. The older OGC "LGIDict" encoding and encrypted PDFs are not supported.
-- The PDF's coordinate system is read from its EPSG code (with the datum shift GeoLibre's EPSG tables carry), or from its WKT when there is no code. A map in a projected CRS (UTM, a national grid) is placed by its four frame corners, which is exact for Web Mercator and close for a typical map sheet.
+- The PDF's coordinate system is read from its EPSG code (with the datum shift GeoLibre's EPSG tables carry), or from its WKT when there is no code. A frame that the map's Web Mercator would bend between its corners (a large latitude/longitude sheet, say) is reprojected into Web Mercator first, so its interior lands in place too.
 - The frame is rendered at up to 4096 pixels on its longest side and saved in the project.
 
 ## The Browser panel

@@ -18,6 +18,8 @@ export interface GeoPdfCrsConverters {
   latLonToCrs: (lat: number, lon: number) => [number, number];
   /** CRS coordinates to WGS 84 `[lng, lat]`. */
   crsToWgs84: (x: number, y: number) => [number, number];
+  /** WGS 84 longitude/latitude to CRS coordinates. */
+  wgs84ToCrs: (lng: number, lat: number) => [number, number];
 }
 
 /** The part of a parsed proj4 projection that carries its datum. */
@@ -25,6 +27,8 @@ interface ParsedProj {
   a?: number;
   b?: number;
   datum?: unknown;
+  /** The prime meridian's offset from Greenwich, in radians. */
+  from_greenwich?: number;
 }
 
 type ProjFactory = (definition: string) => ParsedProj;
@@ -33,8 +37,8 @@ type ProjFactory = (definition: string) => ParsedProj;
  * A longitude/latitude projection on a CRS's own datum: proj4 applies no
  * datum shift between two projections that share one datum object, so
  * converting from it reads GPTS on the CRS's datum rather than on WGS 84. The
- * datum is shared rather than rebuilt from parameters, so it works for a PROJ
- * string and a WKT alike.
+ * datum (and prime meridian) is shared rather than rebuilt from parameters,
+ * so it works for a PROJ string and a WKT alike.
  *
  * Args:
  *   parsed: The CRS as parsed by `proj4.Proj`.
@@ -48,6 +52,9 @@ export function datumGeographicProj(parsed: ParsedProj, makeProj: ProjFactory): 
   if (!(typeof a === "number" && a > 0) || !(typeof b === "number" && b > 0)) return null;
   const geographic = makeProj(`+proj=longlat +a=${a} +b=${b} +no_defs`);
   if (parsed.datum) geographic.datum = parsed.datum;
+  // proj4 applies the prime meridian apart from the datum: GPTS longitudes on
+  // a Paris-meridian CRS are counted from Paris.
+  if (parsed.from_greenwich) geographic.from_greenwich = parsed.from_greenwich;
   return geographic;
 }
 
@@ -89,6 +96,7 @@ export async function geoPdfCrsConverters(
         label,
         latLonToCrs: (lat, lon) => fromDatum.forward([lon, lat]) as [number, number],
         crsToWgs84: (x, y) => toWgs84.inverse([x, y]) as [number, number],
+        wgs84ToCrs: (lng, lat) => toWgs84.forward([lng, lat]) as [number, number],
       };
     } catch {
       // Try the next description of the CRS.
