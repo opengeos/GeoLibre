@@ -273,8 +273,14 @@ instead.
 ## Editing values
 
 Click **Edit** to turn the cells into inputs. Changed cells are highlighted;
-**Save** commits them and the reset button discards every unsaved edit. A cell
-that holds an object must contain valid JSON before you can save.
+**Save** commits them and the reset button discards every unsaved edit.
+
+Pending edits are kept separately for each layer during the current project
+session, including when you switch layers or close and reopen the table. Return
+to a layer to resume editing, then use **Save** or the reset button. Drafts are
+not written to the project file until you press **Save**, so save them before
+reloading or opening another project. A cell that holds an object must contain
+valid JSON before you can save.
 
 - Joined, virtual, and editor-tracking fields are read-only.
 - **Edit** is unavailable while you are editing geometry, and for Add Vector

@@ -158,6 +158,11 @@ export const createLayerGroupsSlice: SliceCreator<LayerGroupsSlice> = (set, get)
         ui: removeChildren
           ? {
               ...s.ui,
+              attributeTableDrafts: Object.fromEntries(
+                Object.entries(s.ui.attributeTableDrafts).filter(
+                  ([layerId]) => !removedIds.has(layerId),
+                ),
+              ),
               selectByExpressionLayerId:
                 s.ui.selectByExpressionLayerId !== null &&
                 removedIds.has(s.ui.selectByExpressionLayerId)

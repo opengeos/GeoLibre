@@ -99,6 +99,9 @@ export type RasterToolKind =
   | "mosaic"
   | "focal";
 
+/** Unsaved cell text, keyed by feature id and field name. Kept only for this project session. */
+export type AttributeTableDrafts = Record<string, Record<string, string>>;
+
 export interface UiSlice {
   ui: {
     processingOpen: boolean;
@@ -126,6 +129,8 @@ export interface UiSlice {
     notebookOpen: boolean;
     assistantOpen: boolean;
     attributeTableOpen: boolean;
+    /** Drafts survive layer selection and panel remounts; Save/Cancel clears one layer. */
+    attributeTableDrafts: Record<string, AttributeTableDrafts>;
     /**
      * Pending "open the attribute table in edit mode" request for this layer,
      * written by Identify's Edit attributes action (#2932). The table consumes
@@ -205,6 +210,7 @@ export interface UiSlice {
   setNotebookOpen: (open: boolean) => void;
   setAssistantOpen: (open: boolean) => void;
   setAttributeTableOpen: (open: boolean) => void;
+  setAttributeTableDrafts: (layerId: string, drafts: AttributeTableDrafts) => void;
   /**
    * Ask the attribute table to open in edit mode on `layerId` (opening the
    * table too), or clear a pending request with `null`.
@@ -254,6 +260,7 @@ export const createUiSlice: SliceCreator<UiSlice> = (set) => ({
     notebookOpen: false,
     assistantOpen: false,
     attributeTableOpen: false,
+    attributeTableDrafts: {},
     attributeTableEditLayerId: null,
     rasterAttributeTableOpen: false,
     dashboardOpen: false,
@@ -314,6 +321,17 @@ export const createUiSlice: SliceCreator<UiSlice> = (set) => ({
   setNotebookOpen: (open) => set((s) => ({ ui: { ...s.ui, notebookOpen: open } })),
   setAssistantOpen: (open) => set((s) => ({ ui: { ...s.ui, assistantOpen: open } })),
   setAttributeTableOpen: (open) => set((s) => ({ ui: { ...s.ui, attributeTableOpen: open } })),
+  setAttributeTableDrafts: (layerId, drafts) =>
+    set((s) => {
+      if (!s.layers.some((layer) => layer.id === layerId)) return s;
+      const attributeTableDrafts = { ...s.ui.attributeTableDrafts };
+      if (Object.values(drafts).some((row) => Object.keys(row).length > 0)) {
+        attributeTableDrafts[layerId] = drafts;
+      } else {
+        delete attributeTableDrafts[layerId];
+      }
+      return { ui: { ...s.ui, attributeTableDrafts } };
+    }),
   requestAttributeTableEdit: (layerId) =>
     set((s) => ({
       ui: {

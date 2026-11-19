@@ -201,6 +201,7 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
       // Don't carry an active story presentation into a different project.
       ui: {
         ...s.ui,
+        attributeTableDrafts: {},
         storymapPresenting: false,
         storymapReturnToEditor: false,
         storymapLayerOpacity: {},
@@ -294,6 +295,7 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
       // carried over from the previous project.
       ui: {
         ...s.ui,
+        attributeTableDrafts: {},
         storymapPresenting: presentStory,
         // A bundled story auto-presents for viewing, so exiting it should
         // not pop open the editor (#918).

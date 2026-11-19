@@ -175,6 +175,7 @@ type SortDirection = "asc" | "desc";
 type SortKey = "__featureId" | string;
 type ColumnWidths = Record<string, number>;
 type AttributeDrafts = Record<string, Record<string, string>>;
+const EMPTY_DRAFTS: AttributeDrafts = {};
 type AttributeTableRow = {
   featureId: string;
   properties: Record<string, unknown>;
@@ -627,8 +628,20 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   // Collapsed shows only the toolbar header, hiding the table body, while the
   // panel stays open. Distinct from closing the panel entirely (the X button).
   const [collapsed, setCollapsed] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [drafts, setDrafts] = useState<AttributeDrafts>({});
+  const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
+  const drafts = useAppStore((s) =>
+    selectedLayerId ? (s.ui.attributeTableDrafts[selectedLayerId] ?? EMPTY_DRAFTS) : EMPTY_DRAFTS,
+  );
+  const setAttributeTableDrafts = useAppStore((s) => s.setAttributeTableDrafts);
+  // A layer with drafts reopens in edit mode, even after the panel remounts.
+  const isEditing =
+    (editingLayerId !== null && editingLayerId === selectedLayerId) || hasDraftEdits(drafts);
+  const setIsEditing = (editing: boolean) => setEditingLayerId(editing ? selectedLayerId : null);
+  const setDrafts = (next: AttributeDrafts | ((current: AttributeDrafts) => AttributeDrafts)) => {
+    if (!selectedLayerId) return;
+    const current = useAppStore.getState().ui.attributeTableDrafts[selectedLayerId] ?? EMPTY_DRAFTS;
+    setAttributeTableDrafts(selectedLayerId, typeof next === "function" ? next(current) : next);
+  };
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportWarning, setExportWarning] = useState<string | null>(null);
   const deferTableResize = isTauri();
@@ -904,8 +917,9 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const hasFormErrors = Object.keys(formDraftErrors).length > 0;
 
   useEffect(() => {
-    setIsEditing(false);
-    setDrafts({});
+    setEditingLayerId(null);
+    // Drafts belong to the layer in the store, so selection and geometry-edit
+    // changes must not discard them. Only reset the transient column UI here.
     // Clear column-management state too, so a rename input or pending delete
     // started on the previous layer cannot apply to a same-named column on the
     // newly selected layer. Suppress the rename Input's onBlur first: clearing
@@ -1345,7 +1359,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     // edit mode (and the dialogs below) can be open across a project reload or
     // a collaborator's change that revokes the capability, and the commit would
     // otherwise still run.
-    if (!layer || !layerCaps.update || !hasEdits || hasInvalidDrafts || hasFormErrors) return false;
+    if (!layer || !canEnterEditMode || !hasEdits || hasInvalidDrafts || hasFormErrors) return false;
 
     if (isDuckDBLayer) {
       updateDuckDBLayerRows(layer.id, applyDraftsToDuckDBRows(attributeRows, drafts));
@@ -2043,7 +2057,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
           }
           aria-label={t("attributeTable.saveEdits")}
           disabled={
-            !isEditing || !layerCaps.update || !hasEdits || hasInvalidDrafts || hasFormErrors
+            !isEditing || !canEnterEditMode || !hasEdits || hasInvalidDrafts || hasFormErrors
           }
           onClick={saveDrafts}
         >
@@ -2501,7 +2515,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                         const cellText = formatAttributeCellText(value, i18n.language);
                         const numeric = numericColumns.has(col);
                         const current = draft ?? formattedValue;
-                        const isEditableCell = isEditing && !readOnlyColumns.has(col);
+                        const isEditableCell =
+                          isEditing && canEnterEditMode && !readOnlyColumns.has(col);
                         const linkUrl = isEditableCell ? null : attributeLinkUrl(value);
                         const invalidTitle = invalid
                           ? formError
