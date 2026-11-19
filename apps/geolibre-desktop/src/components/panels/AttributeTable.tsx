@@ -28,6 +28,7 @@ import {
   useLayer,
 } from "@geolibre/core";
 import {
+  SKETCHES_SOURCE_KIND,
   stripEditorProperties,
   isInternalEditorProperty,
   arcGISAttachmentObjectId,
@@ -758,7 +759,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
       features.map((feature, index) => ({
         featureId: String(feature.id ?? index),
         properties:
-          layer?.metadata.sourceKind === "geoeditor-sketches"
+          layer?.metadata.sourceKind === SKETCHES_SOURCE_KIND
             ? stripEditorProperties(feature.properties)
             : ((feature.properties ?? {}) as Record<string, unknown>),
       })),
@@ -1255,7 +1256,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     [features, layer?.editorTracking],
   );
   const isReservedFieldName = (name: string) =>
-    layer?.metadata.sourceKind === "geoeditor-sketches" && isInternalEditorProperty(name);
+    layer?.metadata.sourceKind === SKETCHES_SOURCE_KIND && isInternalEditorProperty(name);
   const columnSettings = getColumnSettings(layer);
   // Columns rendered in the table, honoring saved order and hidden state.
   const columns = visibleColumns(discoveredColumns, columnSettings);

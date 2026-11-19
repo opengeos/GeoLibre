@@ -1,3 +1,4 @@
+import type { Feature } from "geojson";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
@@ -90,7 +91,12 @@ it("includes existing public Sketches fields automatically while honoring config
           ...original.preferences.map,
           geoEditor: {
             showAfterDraw: true,
-            fields: [{ name: "name", label: "Parcel name", type: "textarea", geometry: "polygon" }],
+            fields: [
+              { name: "name", label: "Parcel name", type: "textarea", geometry: "polygon" },
+              { name: "nested", type: "string", geometry: "all" },
+              { name: "mixed", type: "textarea", geometry: "all" },
+              { name: "items", type: "string", geometry: "all" },
+            ],
           },
         },
       },
@@ -118,6 +124,7 @@ it("includes existing public Sketches fields automatically while honoring config
                   "Road name": "A",
                   __gm_id: "feature-1",
                   nested: { x: 1 },
+                  items: [1, 2],
                   mixed: 1,
                 },
               },
@@ -131,7 +138,26 @@ it("includes existing public Sketches fields automatically while honoring config
         },
       ],
     });
-    const schema = getGeoEditorOptions(null).attributeSchema;
+    const options = getGeoEditorOptions(null);
+    const schema = options.attributeSchema;
+    for (const [before, after, expected] of [
+      [null, null, null],
+      [true, "false", false],
+      [false, "true", true],
+    ]) {
+      const feature: Feature = {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [0, 0] },
+        properties: { active: after },
+      };
+      options.onAttributeChange?.({
+        feature,
+        previousProperties: { active: before },
+        newProperties: feature.properties,
+        isNewFeature: false,
+      });
+      assert.equal(feature.properties?.active, expected);
+    }
     assert.deepEqual(schema?.polygon?.[0], {
       name: "name",
       label: "Parcel name",
@@ -141,7 +167,7 @@ it("includes existing public Sketches fields automatically while honoring config
       schema?.common?.map((field) => [field.name, field.type]),
       [
         ["stroke", "string"],
-        ["active", "boolean"],
+        ["active", "select"],
         ["count", "number"],
         ["Road name", "string"],
       ],

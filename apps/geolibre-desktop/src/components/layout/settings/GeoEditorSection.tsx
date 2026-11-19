@@ -121,7 +121,7 @@ export function GeoEditorSection() {
           update((current) => {
             let name = "attribute";
             let number = 1;
-            while (current.fields.some((field) => field.name === name))
+            while (current.fields.some((field) => field.name.trim() === name))
               name = `attribute_${number++}`;
             return { fields: [...current.fields, { name, type: "string", geometry: "all" }] };
           })

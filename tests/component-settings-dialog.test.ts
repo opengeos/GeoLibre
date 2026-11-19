@@ -228,3 +228,18 @@ it("keeps queued GeoEditor field additions instead of overwriting a pending upda
     ["height", "attribute", "attribute_1"],
   );
 });
+
+it("uses normalized names when finding a free GeoEditor field name", () => {
+  renderSettings();
+  const dialog = openAt("geoEditor");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Add field" }));
+  fireEvent.change(within(dialog).getAllByRole("textbox", { name: "Property name" })[1], {
+    target: { value: " attribute " },
+  });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Add field" }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "Save settings" }));
+  assert.deepEqual(
+    useAppStore.getState().preferences.map.geoEditor?.fields.map((field) => field.name),
+    ["height", "attribute", "attribute_1"],
+  );
+});

@@ -278,7 +278,7 @@ with GeoEditor. Geoman's internal `__gm_*` shape metadata is hidden in
 the Sketches table and retained for geometry editing.
 
 The properties popup automatically includes public text, number, and boolean
-fields from Sketches or the vector layer being edited. Nested or mixed-type values remain read-only.
+fields from Sketches or the vector layer being edited. Nested or mixed-type values remain read-only, even when configured explicitly. Boolean fields offer true, false, and an unset option so unrelated edits preserve null values.
 
 In **Settings → GeoEditor**, configure additional fields or override existing
 field labels, types, and geometry scopes by name. These settings are saved with the project and apply
