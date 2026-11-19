@@ -4,6 +4,7 @@
  * tracks (see `undo-history.ts`), so opening or closing a dialog never records
  * an undo step and undo/redo never toggles one.
  */
+import type { Feature } from "geojson";
 import type { ProcessingRerunRequest } from "../types";
 import type { SliceCreator } from "./types";
 
@@ -102,6 +103,12 @@ export type RasterToolKind =
 /** Unsaved cell text, keyed by feature id and field name. Kept only for this project session. */
 export type AttributeTableDrafts = Record<string, Record<string, string>>;
 
+/** Values and the original GeoJSON targets captured when each row is first edited. */
+export interface AttributeTableDraftSession {
+  values: AttributeTableDrafts;
+  targets: Record<string, Feature>;
+}
+
 export interface UiSlice {
   ui: {
     processingOpen: boolean;
@@ -130,7 +137,7 @@ export interface UiSlice {
     assistantOpen: boolean;
     attributeTableOpen: boolean;
     /** Drafts survive layer selection and panel remounts; Save/Cancel clears one layer. */
-    attributeTableDrafts: Record<string, AttributeTableDrafts>;
+    attributeTableDrafts: Record<string, AttributeTableDraftSession>;
     /**
      * Pending "open the attribute table in edit mode" request for this layer,
      * written by Identify's Edit attributes action (#2932). The table consumes
@@ -323,10 +330,22 @@ export const createUiSlice: SliceCreator<UiSlice> = (set) => ({
   setAttributeTableOpen: (open) => set((s) => ({ ui: { ...s.ui, attributeTableOpen: open } })),
   setAttributeTableDrafts: (layerId, drafts) =>
     set((s) => {
-      if (!s.layers.some((layer) => layer.id === layerId)) return s;
+      const layer = s.layers.find((candidate) => candidate.id === layerId);
+      if (!layer) return s;
       const attributeTableDrafts = { ...s.ui.attributeTableDrafts };
       if (Object.values(drafts).some((row) => Object.keys(row).length > 0)) {
-        attributeTableDrafts[layerId] = drafts;
+        const previousTargets = attributeTableDrafts[layerId]?.targets ?? {};
+        const features = new Map(
+          layer.geojson?.features.map((feature, index) => [String(feature.id ?? index), feature]),
+        );
+        const targets: Record<string, Feature> = {};
+        for (const [featureId, row] of Object.entries(drafts)) {
+          if (Object.keys(row).length === 0) continue;
+          // Keep the first target across source replacement and panel remounts.
+          const target = previousTargets[featureId] ?? features.get(featureId);
+          if (target) targets[featureId] = target;
+        }
+        attributeTableDrafts[layerId] = { values: drafts, targets };
       } else {
         delete attributeTableDrafts[layerId];
       }

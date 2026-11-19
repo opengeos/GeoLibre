@@ -18,6 +18,7 @@ import {
   validateAttributeFormValues,
   excludeHiddenFieldsFromGeojson,
   resolveLayerCapabilities,
+  type AttributeTableDrafts as AttributeDrafts,
   type AttributeFormConfig,
   type AttributeFormFieldConfig,
   type AttributeFormFieldError,
@@ -174,7 +175,6 @@ import { openExternalLink } from "../../lib/open-external";
 type SortDirection = "asc" | "desc";
 type SortKey = "__featureId" | string;
 type ColumnWidths = Record<string, number>;
-type AttributeDrafts = Record<string, Record<string, string>>;
 const EMPTY_DRAFTS: AttributeDrafts = {};
 type AttributeTableRow = {
   featureId: string;
@@ -629,9 +629,10 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   // panel stays open. Distinct from closing the panel entirely (the X button).
   const [collapsed, setCollapsed] = useState(false);
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
-  const drafts = useAppStore((s) =>
-    selectedLayerId ? (s.ui.attributeTableDrafts[selectedLayerId] ?? EMPTY_DRAFTS) : EMPTY_DRAFTS,
+  const draftSession = useAppStore((s) =>
+    selectedLayerId ? s.ui.attributeTableDrafts[selectedLayerId] : undefined,
   );
+  const drafts = draftSession?.values ?? EMPTY_DRAFTS;
   const setAttributeTableDrafts = useAppStore((s) => s.setAttributeTableDrafts);
   // A layer with drafts reopens in edit mode, even after the panel remounts.
   const isEditing =
@@ -639,7 +640,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const setIsEditing = (editing: boolean) => setEditingLayerId(editing ? selectedLayerId : null);
   const setDrafts = (next: AttributeDrafts | ((current: AttributeDrafts) => AttributeDrafts)) => {
     if (!selectedLayerId) return;
-    const current = useAppStore.getState().ui.attributeTableDrafts[selectedLayerId] ?? EMPTY_DRAFTS;
+    const current =
+      useAppStore.getState().ui.attributeTableDrafts[selectedLayerId]?.values ?? EMPTY_DRAFTS;
     setAttributeTableDrafts(selectedLayerId, typeof next === "function" ? next(current) : next);
   };
   const [exportError, setExportError] = useState<string | null>(null);
@@ -767,6 +769,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const isReadOnlyVectorLayer = isReadOnlyAttributeLayer(layer);
   // While this layer's geometry is being edited in place, attribute edits would
   // race the editor's geometry write-back, so the inline editor is disabled.
+  // Drafts stay in the session and resume when geometry editing finishes;
+  // the user can finish/cancel geometry editing without discarding attributes.
   const geometryEditLayerId = useSyncExternalStore(
     subscribeGeometryEdit,
     getGeometryEditTargetLayerId,
@@ -823,6 +827,29 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     };
   }, [attributeTableOpen, layer, layerCaps.query, mapControllerRef, updateLayer]);
   const hasEdits = hasDraftEdits(drafts);
+  // Never partially save missing targets or apply a positional draft to a
+  // different feature after refresh/undo/sync. Keep the drafts for recovery.
+  const hasUnsafeDraftTargets = useMemo(() => {
+    const rowIds = new Set(attributeRows.map((row) => row.featureId));
+    const currentFeatures = new Map(
+      features.map((feature, index) => [String(feature.id ?? index), feature]),
+    );
+    return Object.entries(drafts).some(([featureId, row]) => {
+      if (Object.keys(row).length === 0) return false;
+      if (!rowIds.has(featureId)) return true;
+      if (isDuckDBLayer) return false;
+      const original = draftSession?.targets[featureId];
+      const current = currentFeatures.get(featureId);
+      if (!original || !current) return true;
+      // Stable IDs follow reorders. Positional IDs require the original row,
+      // allowing an equivalent source reload that creates new object instances.
+      return (
+        (original.id == null || current.id == null) &&
+        original !== current &&
+        JSON.stringify(original) !== JSON.stringify(current)
+      );
+    });
+  }, [attributeRows, features, drafts, draftSession, isDuckDBLayer]);
   const hasInvalidDrafts = attributeRows.some((row) => {
     const rowDrafts = drafts[row.featureId];
     if (!rowDrafts) return false;
@@ -1359,7 +1386,15 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     // edit mode (and the dialogs below) can be open across a project reload or
     // a collaborator's change that revokes the capability, and the commit would
     // otherwise still run.
-    if (!layer || !canEnterEditMode || !hasEdits || hasInvalidDrafts || hasFormErrors) return false;
+    if (
+      !layer ||
+      !canEnterEditMode ||
+      !hasEdits ||
+      hasUnsafeDraftTargets ||
+      hasInvalidDrafts ||
+      hasFormErrors
+    )
+      return false;
 
     if (isDuckDBLayer) {
       updateDuckDBLayerRows(layer.id, applyDraftsToDuckDBRows(attributeRows, drafts));
@@ -1404,7 +1439,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   });
 
   const geojsonWithDrafts = () => {
-    if (!layer?.geojson) return null;
+    if (!layer?.geojson || hasUnsafeDraftTargets) return null;
 
     return {
       ...layer.geojson,
@@ -1414,6 +1449,10 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
 
   const exportLayer = async (format: VectorExportFormat, precision?: number) => {
     if (!layer?.geojson) return;
+    if (hasUnsafeDraftTargets) {
+      setExportError(t("layers.pendingTableDraftsBlocked"));
+      return;
+    }
 
     try {
       setExportError(null);
@@ -2047,17 +2086,24 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
           size="sm"
           className="h-7 px-2"
           title={
-            hasInvalidDrafts
-              ? t("attributeTable.saveTitleInvalid")
-              : hasFormErrors
-                ? t("attributeTable.saveTitleFormErrors")
-                : isDuckDBLayer
-                  ? t("attributeTable.saveTitleDuckdb")
-                  : t("attributeTable.saveEdits")
+            hasUnsafeDraftTargets
+              ? t("layers.pendingTableDraftsBlocked")
+              : hasInvalidDrafts
+                ? t("attributeTable.saveTitleInvalid")
+                : hasFormErrors
+                  ? t("attributeTable.saveTitleFormErrors")
+                  : isDuckDBLayer
+                    ? t("attributeTable.saveTitleDuckdb")
+                    : t("attributeTable.saveEdits")
           }
           aria-label={t("attributeTable.saveEdits")}
           disabled={
-            !isEditing || !canEnterEditMode || !hasEdits || hasInvalidDrafts || hasFormErrors
+            !isEditing ||
+            !canEnterEditMode ||
+            !hasEdits ||
+            hasUnsafeDraftTargets ||
+            hasInvalidDrafts ||
+            hasFormErrors
           }
           onClick={saveDrafts}
         >

@@ -430,3 +430,84 @@ describe("attribute draft lifecycle", () => {
     assert.deepEqual(useAppStore.getState().ui.attributeTableDrafts, {});
   });
 });
+
+describe("attribute draft targets after external data changes", () => {
+  it("blocks a partial save when a drafted row disappears and keeps both drafts", () => {
+    renderTable();
+    fireEvent.click(screen.getByRole("button", { name: "Edit attribute values" }));
+    for (const featureId of [1, 2]) {
+      fireEvent.change(
+        screen.getByRole("textbox", { name: `Edit name for feature ${featureId}` }),
+        {
+          target: { value: `Draft ${featureId}` },
+        },
+      );
+    }
+    const drafts = useAppStore.getState().ui.attributeTableDrafts.cities;
+    const reduced = { ...cities, features: cities.features.slice(0, 1) };
+    act(() => {
+      useAppStore.getState().selectLayer(null);
+      useAppStore.getState().updateLayer("cities", { geojson: reduced });
+    });
+    act(() => useAppStore.getState().selectLayer("cities"));
+    assert.equal(
+      (screen.getByRole("button", { name: "Save attribute edits" }) as HTMLButtonElement).disabled,
+      true,
+    );
+    act(() => assert.equal(commitPendingAttributeDrafts("cities"), "blocked"));
+    assert.equal(useAppStore.getState().layers[0].geojson, reduced);
+    assert.equal(useAppStore.getState().ui.attributeTableDrafts.cities, drafts);
+    act(() => useAppStore.getState().updateLayer("cities", { geojson: cities }));
+    act(() => assert.equal(commitPendingAttributeDrafts("cities"), "committed"));
+    assert.deepEqual(
+      useAppStore
+        .getState()
+        .layers[0].geojson?.features.slice(0, 2)
+        .map((f) => f.properties?.name),
+      ["Draft 1", "Draft 2"],
+    );
+  });
+
+  it("blocks index-based drafts after a reorder, including after table remount", () => {
+    const idless = {
+      ...cities,
+      features: cities.features.map(({ id: _id, ...feature }) => feature),
+    };
+    const view = renderTable(idless);
+    fireEvent.click(screen.getByRole("button", { name: "Edit attribute values" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Edit name for feature 0" }), {
+      target: { value: "Draft for Oslo" },
+    });
+    view.unmount();
+    const reordered = { ...idless, features: [...idless.features].reverse() };
+    act(() => useAppStore.getState().updateLayer("cities", { geojson: reordered }));
+    render(createElement(AttributeTable, { mapControllerRef: { current: null } }));
+    act(() => assert.equal(commitPendingAttributeDrafts("cities"), "blocked"));
+    assert.equal(useAppStore.getState().layers[0].geojson, reordered);
+    // A refresh returning equivalent feature objects at their original positions is safe.
+    act(() => useAppStore.getState().updateLayer("cities", { geojson: structuredClone(idless) }));
+    act(() => assert.equal(commitPendingAttributeDrafts("cities"), "committed"));
+    assert.equal(
+      useAppStore.getState().layers[0].geojson?.features[0].properties?.name,
+      "Draft for Oslo",
+    );
+  });
+
+  it("allows an ID-based draft to follow its feature through a reorder", () => {
+    renderTable();
+    fireEvent.click(screen.getByRole("button", { name: "Edit attribute values" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Edit name for feature 1" }), {
+      target: { value: "Draft for Oslo" },
+    });
+    act(() =>
+      useAppStore.getState().updateLayer("cities", {
+        geojson: { ...cities, features: [...cities.features].reverse() },
+      }),
+    );
+    act(() => assert.equal(commitPendingAttributeDrafts("cities"), "committed"));
+    assert.equal(
+      useAppStore.getState().layers[0].geojson?.features.find((f) => f.id === 1)?.properties?.name,
+      "Draft for Oslo",
+    );
+  });
+});

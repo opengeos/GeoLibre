@@ -282,6 +282,18 @@ not written to the project file until you press **Save**, so save them before
 reloading or opening another project. A cell that holds an object must contain
 valid JSON before you can save.
 
+If the source changes while drafts are pending, saving and exporting are blocked
+when an edited row is missing or a row without an ID has changed at its original
+position. The drafts are retained. Restore the original rows to save them, or
+cancel the drafts and re-enter the values against the current data.
+
+Layer-menu exports and source writes also stop when pending drafts cannot be
+applied, including when the table is unmounted. Open this layer's attribute
+table to save, correct, or cancel its drafts, then retry the export or write.
+
+While geometry editing is active, attribute drafts are paused. Finish or cancel
+the geometry edit to resume editing and saving the attribute values.
+
 - Joined, virtual, and editor-tracking fields are read-only.
 - **Edit** is unavailable while you are editing geometry, and for Add Vector
   Layer layers.
