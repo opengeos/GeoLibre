@@ -6420,7 +6420,7 @@ html[data-touch-ui="true"] [data-testid="layer-row"] [role="button"] {
 /* Lift toast notifications above the MobileBottomNav + MobileStatusPill when
    the phone mobile shell is active so toasts never overlap bottom chrome. */
 body:has([data-mobile-shell="true"]) [data-testid="notification-region"] {
-  bottom: calc(5.75rem + env(safe-area-inset-bottom));
+  bottom: calc(6.75rem + env(safe-area-inset-bottom));
 }
 
 /* Present modal Radix dialogs and the Processing toolbox as full-width
@@ -6432,6 +6432,7 @@ body:has([data-mobile-shell="true"]) [data-testid="notification-region"] {
     top: auto;
     left: auto;
     transform: none;
+    translate: none;
     width: 100%;
     max-width: none;
     max-height: 92dvh;
@@ -6447,6 +6448,7 @@ body:has([data-mobile-shell="true"]) [data-testid="notification-region"] {
     top: auto !important;
     left: auto !important;
     transform: none !important;
+    translate: none !important;
     width: 100% !important;
     height: 88dvh !important;
     border-inline-width: 0;

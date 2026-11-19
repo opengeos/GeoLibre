@@ -1,5 +1,5 @@
 import { Button } from "@geolibre/ui";
-import { Map, Menu, Moon, Plus, Search, Sun } from "lucide-react";
+import { Map as MapIcon, Menu, Moon, Plus, Search, Sun } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ThemeMode } from "../../../hooks/useThemeMode";
 
@@ -62,7 +62,7 @@ export function MobileTopBar({
         <Menu className="h-5 w-5" />
       </Button>
       <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1">
-        <Map className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <MapIcon className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
         <span className="truncate text-sm font-semibold text-foreground">{title}</span>
       </div>
       <div className="ms-auto flex shrink-0 items-center gap-0.5">
