@@ -16,6 +16,7 @@ function readFullscreenElement(): Element | null {
   return (
     document.fullscreenElement ??
     (document as Document & { webkitFullscreenElement?: Element | null }).webkitFullscreenElement ??
+    document.querySelector(".maplibregl-pseudo-fullscreen") ??
     null
   );
 }
@@ -24,8 +25,9 @@ function readFullscreenElement(): Element | null {
  * Floating touch action bar displayed over the map while a feature-selection
  * gesture is active in Touch UI mode (GeoLibre#3537 Phase 3), replacing the
  * desktop double-click (Finish) and Escape (Cancel) shortcuts. Portals into
- * `document.fullscreenElement` while the map is fullscreen so controls stay
- * reachable.
+ * native fullscreen (`document.fullscreenElement`) or MapLibre's CSS fallback
+ * (`.maplibregl-pseudo-fullscreen`, used on iOS Safari) so controls stay
+ * reachable while fullscreen.
  */
 export function TouchSelectionActionBar() {
   const { t } = useTranslation();
@@ -40,13 +42,21 @@ export function TouchSelectionActionBar() {
   useEffect(() => {
     if (typeof document === "undefined") return;
     const sync = () => setFullscreenEl(readFullscreenElement());
+    sync();
     document.addEventListener("fullscreenchange", sync);
     document.addEventListener("webkitfullscreenchange", sync);
+    const observer = typeof MutationObserver !== "undefined" ? new MutationObserver(sync) : null;
+    if (observer) {
+      for (const el of document.querySelectorAll(".maplibregl-map")) {
+        observer.observe(el, { attributes: true, attributeFilter: ["class"] });
+      }
+    }
     return () => {
       document.removeEventListener("fullscreenchange", sync);
       document.removeEventListener("webkitfullscreenchange", sync);
+      observer?.disconnect();
     };
-  }, []);
+  }, [active]);
 
   if (!active) return null;
 
