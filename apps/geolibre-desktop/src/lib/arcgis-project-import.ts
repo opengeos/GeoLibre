@@ -24,12 +24,26 @@ export interface ArcgisProjectImportWarning {
     | "map-extent"
     | "nesting";
   layerType?: string;
+  /**
+   * Import id of the layer, raster or service the warning is about, when that
+   * item was imported (a note on a layer that still loads). Lets
+   * {@link dropArcgisImportLayers} take the note away with the layer. Absent
+   * for warnings about layers that were never imported.
+   */
+  layerId?: string;
 }
 
 export interface ArcgisProjectImportResult {
   project: GeoLibreProject;
   rasters: ArcgisRasterImport[];
   services: ArcgisServiceImport[];
+  /**
+   * Import ids of every layer, raster and service, bottom first as the store
+   * keeps them (ArcGIS Pro lists them top first). Rasters and services join
+   * the store only after the project loads, each on top, so the caller puts
+   * them back in this order once they have been added.
+   */
+  layerOrder: string[];
   warnings: ArcgisProjectImportWarning[];
 }
 
@@ -50,6 +64,8 @@ export type ArcgisServiceImport = ArcgisVectorTileServiceImport | ArcgisFeatureS
 
 export interface ArcgisVectorTileServiceImport {
   kind: "vector-tile";
+  /** Import id; the service gets a new store id once the ArcGIS plugin adds it. */
+  id: string;
   name: string;
   itemId: string;
   visible: boolean;
@@ -58,6 +74,8 @@ export interface ArcgisVectorTileServiceImport {
 
 export interface ArcgisFeatureServiceImport {
   kind: "feature";
+  /** Import id; the service gets a new store id once the ArcGIS plugin adds it. */
+  id: string;
   name: string;
   /**
    * The sublayer URL (`…/FeatureServer/<n>`), rebuilt from scheme, host and
@@ -69,14 +87,7 @@ export interface ArcgisFeatureServiceImport {
   opacity: number;
   groupId?: string;
   /** The CIM layer URI, kept on the store layer as its ArcGIS identity. */
-  arcgisLayerUri: string;
-  /**
-   * Ids of the project layers that follow this one in ArcGIS order. The
-   * import ranks the service just ahead of the first of them that is still in
-   * the loaded project, so it keeps its place among the file layers even when
-   * the browser build has dropped some of them.
-   */
-  nextLayerIds: string[];
+  arcgisLayerUri?: string;
 }
 
 type CimObject = Record<string, unknown>;
@@ -178,53 +189,106 @@ function importMap(
   // otherwise a project in an unsupported projection opens at a generic world
   // view with nothing to explain why.
   if (!extentRestored) warnings.push({ layerName: projectName, reason: "map-extent" });
-  const layers: GeoLibreLayer[] = [];
-  const rasters: ArcgisRasterImport[] = [];
-  const services: ArcgisServiceImport[] = [];
-  const groups: LayerGroup[] = [];
-  const usedIds = new Set<string>();
-  const serviceLayerIndex = new Map<ArcgisFeatureServiceImport, number>();
-
-  const definitions = resolveLayerList(map, files);
-  for (const definition of definitions) {
-    importLayer(
-      definition,
-      files,
-      sourcePath,
-      undefined,
-      layers,
-      rasters,
-      services,
-      groups,
-      warnings,
-      usedIds,
-      new Set(),
-      serviceLayerIndex,
-    );
-  }
-  for (const [service, index] of serviceLayerIndex) {
-    service.nextLayerIds = layers.slice(index).map((layer) => layer.id);
+  const context: ImportContext = {
+    files,
+    sourcePath,
+    layers: [],
+    rasters: [],
+    services: [],
+    order: [],
+    groups: [],
+    warnings,
+    usedIds: new Set(),
+  };
+  for (const definition of resolveLayerList(map, files)) {
+    importLayer(definition, context, undefined, new Set());
   }
 
-  project.layers = layers;
-  // Rasters and services are attached to their group after the project loads
-  // (they become store layers only once the raster control and ArcGIS plugin
-  // have added them), so a group holding nothing else must survive this prune.
-  // Dropping it would make the later moveLayerToGroup call a silent no-op and
-  // strand the raster or service at the top level.
-  project.layerGroups = groups.filter(
-    (group) =>
-      layers.some((layer) => layer.groupId === group.id) ||
-      rasters.some((raster) => raster.groupId === group.id) ||
-      services.some((service) => service.groupId === group.id) ||
-      groups.some((child) => child.parentId === group.id),
-  );
+  // CIM lists layers top first; the store keeps them bottom first (the layer
+  // panel reverses them), as the QGIS importer does.
+  project.layers = context.layers.reverse();
+  project.layerGroups = context.groups;
   project.metadata = {
     ...project.metadata,
     importedFrom: "arcgis-pro",
     arcgisProjectPath: sourcePath,
   };
-  return { project, rasters, services, warnings };
+  const result: ArcgisProjectImportResult = {
+    project,
+    rasters: context.rasters,
+    services: context.services,
+    layerOrder: context.order.reverse(),
+    warnings,
+  };
+  pruneArcgisImportGroups(result);
+  return result;
+}
+
+/**
+ * Drop groups an import result no longer needs. A group survives while it
+ * holds a layer, a raster or service still to be added, or a surviving child
+ * group, so the ancestors of anything kept are kept too. Rasters and services
+ * count because they are moved into their group only after the project loads;
+ * dropping that group would strand them at the top level.
+ *
+ * @param imported - The import result, updated in place.
+ */
+export function pruneArcgisImportGroups(imported: ArcgisProjectImportResult): void {
+  const usedGroupIds = new Set<string>(
+    [...imported.project.layers, ...imported.rasters, ...imported.services].flatMap((item) =>
+      item.groupId ? [item.groupId] : [],
+    ),
+  );
+  const groupById = new Map((imported.project.layerGroups ?? []).map((group) => [group.id, group]));
+  for (const id of [...usedGroupIds]) {
+    let parentId = groupById.get(id)?.parentId;
+    while (parentId && !usedGroupIds.has(parentId)) {
+      usedGroupIds.add(parentId);
+      parentId = groupById.get(parentId)?.parentId;
+    }
+  }
+  imported.project.layerGroups = imported.project.layerGroups?.filter((group) =>
+    usedGroupIds.has(group.id),
+  );
+}
+
+/**
+ * Remove imported layers, rasters and services the caller cannot load, along
+ * with the warnings tagged with their ids and any group left empty, so the
+ * import report never describes a layer the user will not see.
+ *
+ * @param imported - The import result, updated in place.
+ * @param ids - Import ids to drop.
+ */
+export function dropArcgisImportLayers(
+  imported: ArcgisProjectImportResult,
+  ids: ReadonlySet<string>,
+): void {
+  if (ids.size === 0) return;
+  const kept = <T extends { id: string }>(items: T[]) => items.filter((item) => !ids.has(item.id));
+  imported.project.layers = kept(imported.project.layers);
+  imported.rasters = kept(imported.rasters);
+  imported.services = kept(imported.services);
+  imported.layerOrder = imported.layerOrder.filter((id) => !ids.has(id));
+  imported.warnings = imported.warnings.filter(
+    (warning) => warning.layerId === undefined || !ids.has(warning.layerId),
+  );
+  pruneArcgisImportGroups(imported);
+}
+
+/** The state one {@link importMap} call builds up while walking the layer tree. */
+interface ImportContext {
+  files: Map<string, CimObject>;
+  sourcePath: string;
+  /** Layers, rasters and services in CIM (top-first) order. */
+  layers: GeoLibreLayer[];
+  rasters: ArcgisRasterImport[];
+  services: ArcgisServiceImport[];
+  /** Ids of layers, rasters and services in CIM (top-first) order. */
+  order: string[];
+  groups: LayerGroup[];
+  warnings: ArcgisProjectImportWarning[];
+  usedIds: Set<string>;
 }
 
 function readCimFiles(
@@ -352,18 +416,11 @@ function unwrapLayer(value: CimObject | undefined): CimObject | null {
  */
 function importLayer(
   layer: CimObject,
-  files: Map<string, CimObject>,
-  sourcePath: string,
+  context: ImportContext,
   parentId: string | undefined,
-  layers: GeoLibreLayer[],
-  rasters: ArcgisRasterImport[],
-  services: ArcgisServiceImport[],
-  groups: LayerGroup[],
-  warnings: ArcgisProjectImportWarning[],
-  usedIds: Set<string>,
   ancestors: ReadonlySet<CimObject>,
-  serviceLayerIndex: Map<ArcgisFeatureServiceImport, number>,
 ): void {
+  const { files, sourcePath, layers, rasters, services, groups, warnings, usedIds } = context;
   const type = stringValue(layer.type);
   const name = stringValue(layer.name) || type || "ArcGIS layer";
   // Each item stores only its *own* ArcGIS toggle. `applyGroupEffects`
@@ -389,20 +446,7 @@ function importLayer(
     });
     const branch = new Set(ancestors).add(layer);
     for (const child of resolveLayerList(layer, files)) {
-      importLayer(
-        child,
-        files,
-        sourcePath,
-        id,
-        layers,
-        rasters,
-        services,
-        groups,
-        warnings,
-        usedIds,
-        branch,
-        serviceLayerIndex,
-      );
+      importLayer(child, context, id, branch);
     }
     return;
   }
@@ -411,6 +455,7 @@ function importLayer(
     const connection = objectValue(layer.dataConnection);
     const resolvedRaster = resolveRasterSource(connection, sourcePath);
     if (resolvedRaster.path) {
+      context.order.push(id);
       rasters.push({
         id,
         name,
@@ -433,6 +478,7 @@ function importLayer(
     const serviceConnection = objectValue(layer.serviceConnection);
     const url = stringValue(serviceConnection?.url).replace(/\/+$/, "");
     if (url && stringValue(serviceConnection?.objectType).toLowerCase() === "mapserver") {
+      context.order.push(id);
       layers.push({
         id,
         name,
@@ -452,8 +498,10 @@ function importLayer(
   if (type.includes("CIMVectorTileLayer")) {
     const itemId = stringValue(layer.sourceURI);
     if (/^[a-f0-9]{32}$/i.test(itemId)) {
+      context.order.push(id);
       services.push({
         kind: "vector-tile",
+        id,
         name,
         itemId,
         visible,
@@ -475,20 +523,18 @@ function importLayer(
   const connection = objectValue(objectValue(layer.featureTable)?.dataConnection);
   const serviceUrl = featureServiceSublayerUrl(connection);
   if (serviceUrl) {
-    const service: ArcgisFeatureServiceImport = {
+    const arcgisLayerUri = stringValue(layer.uRI);
+    context.order.push(id);
+    services.push({
       kind: "feature",
+      id,
       name,
       url: serviceUrl,
       visible,
       opacity: layerOpacity(layer),
-      arcgisLayerUri: stringValue(layer.uRI),
-      nextLayerIds: [],
+      ...(arcgisLayerUri ? { arcgisLayerUri } : {}),
       ...(parentId ? { groupId: parentId } : {}),
-    };
-    services.push(service);
-    // Filled in once the whole tree is read: only then are the layers that
-    // follow this one known.
-    serviceLayerIndex.set(service, layers.length);
+    });
     return;
   }
   const resolved = resolveDataSource(connection, sourcePath);
@@ -501,6 +547,7 @@ function importLayer(
     return;
   }
 
+  context.order.push(id);
   layers.push({
     id,
     name,
@@ -590,9 +637,12 @@ function resolveRasterSource(
  * The URL is rebuilt from scheme, host and path, so a token or user info in the
  * connection string never reaches a request, a saved project or a log.
  *
- * Plain `http:` is accepted, as Add Data accepts it, because ArcGIS Server on
- * an intranet often has no certificate; such a layer loads anonymously, since
- * a sign-in token is only ever sent over https.
+ * Plain `http:` is accepted, as Add Data accepts it on desktop, because ArcGIS
+ * Server on an intranet often has no certificate; such a layer loads
+ * anonymously, since a sign-in token is only ever sent over https. A browser
+ * deployment whose content security policy allows only https requests (as
+ * `docker/nginx.conf` does) cannot reach such a layer, so it is reported as
+ * unavailable there.
  */
 function featureServiceSublayerUrl(connection: CimObject | undefined): string | null {
   if (!connection || !isFeatureServiceFactory(connection)) return null;

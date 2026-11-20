@@ -1,49 +1,5 @@
-import { normalizeGroupContiguity, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { isTrustedPortalServiceUrl } from "@geolibre/plugins";
 import { ARCGIS_ONLINE_PORTAL } from "./arcgis-oauth";
-
-/**
- * Puts the feature service layers added so far where project load would have
- * put them had they been file layers: the project's layers and services in
- * ArcGIS order, then the store's own group contiguity pass, exactly as
- * `applyProjectToStore` lays out a loaded project. A layer the import placed
- * another way (a raster, a vector tile service) travels with the ranked layer
- * just before it, which keeps it in its group; any ahead of every ranked layer
- * stay first.
- *
- * @param projectLayerIds - The loaded project's layer ids, in ArcGIS order.
- * @param placed - Each loaded service's layer id with the project layers that
- *   follow it, in ArcGIS order.
- */
-export function placeImportedServiceLayers(
-  projectLayerIds: string[],
-  placed: { layerId: string; nextLayerIds: string[] }[],
-): void {
-  const projectRank = new Map(projectLayerIds.map((id, index) => [id, index]));
-  const rank = new Map(projectRank);
-  placed.forEach(({ layerId, nextLayerIds }, index) => {
-    const nextId = nextLayerIds.find((id) => projectRank.has(id));
-    const next = nextId === undefined ? projectLayerIds.length : projectRank.get(nextId)!;
-    // Just ahead of the next project layer, keeping services that share it in
-    // their own order.
-    rank.set(layerId, next - 1 + (index + 1) / (placed.length + 1));
-  });
-  const head: GeoLibreLayer[] = [];
-  const runs: { rank: number; layers: GeoLibreLayer[] }[] = [];
-  for (const layer of useAppStore.getState().layers) {
-    const layerRank = rank.get(layer.id);
-    if (layerRank !== undefined) runs.push({ rank: layerRank, layers: [layer] });
-    else (runs.at(-1)?.layers ?? head).push(layer);
-  }
-  runs.sort((a, b) => a.rank - b.rank);
-  // A direct write, as project load makes one: the store has no bulk reorder
-  // action, and this only reorders the same layer objects (same ids, same
-  // groups) and restores group contiguity, so nothing the actions maintain
-  // (joins, selection, references in other slices) changes.
-  useAppStore.setState({
-    layers: normalizeGroupContiguity([...head, ...runs.flatMap((run) => run.layers)]),
-  });
-}
 
 /**
  * The ArcGIS sign-in, if any, whose token an imported project's service may
@@ -120,9 +76,11 @@ export function cachedOrgIdLookup(
 /**
  * The token provider for an imported service layer's later requests (viewport
  * queries, refreshes, edits). Each renewed token passes
- * {@link signInForImportedService} again, so if the portal's session changes to
- * another account, that account's token is withheld from a service in the first
- * account's organisation rather than sent with the next request.
+ * {@link signInForImportedService} again. If the portal's session changes to an
+ * account in another organisation, that account's token is withheld from a
+ * service on ArcGIS Online's shared hosting rather than sent with the next
+ * request. An account in the same organisation, or any account on an Enterprise
+ * portal's own host, still passes the rule and gets its token, as at import.
  *
  * @param url - The service URL.
  * @param portal - The portal the import chose for this service.
