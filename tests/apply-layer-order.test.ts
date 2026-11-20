@@ -85,4 +85,12 @@ describe("moveLayer", () => {
     assert.deepEqual(ids(), ["y", "g1", "g2", "x"]);
     assert.equal(useAppStore.getState().isDirty, true);
   });
+
+  it("moves an ungrouped layer aimed inside a group past the whole group", () => {
+    // The Style panel's "Insert below" can aim at a slot between two members
+    // of a group; the layer lands just past the group instead of splitting it.
+    start([layer("a"), layer("g1", "g"), layer("g2", "g"), layer("g3", "g")]);
+    useAppStore.getState().moveLayer("a", 2);
+    assert.deepEqual(ids(), ["g1", "g2", "g3", "a"]);
+  });
 });
