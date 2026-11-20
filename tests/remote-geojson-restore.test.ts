@@ -161,11 +161,14 @@ describe("restoreRemoteGeoJsonLayers", () => {
   it("fetches a URL-only layer's features into the store once", async () => {
     serve(collection("remote"));
     useAppStore.getState().addLayer(layer());
+    useAppStore.setState({ isDirty: false });
     await restoreRemoteGeoJsonLayers();
     const restored = useAppStore.getState().layers[0];
     assert.equal(restored.geojson?.features[0].properties?.name, "remote");
     assert.equal(isFetchedGeoJson(restored.geojson), true);
     assert.deepEqual(requests, ["https://data.example/fields.geojson"]);
+    // Loading the referenced data is part of opening: no undo step, not dirty.
+    assert.equal(useAppStore.getState().isDirty, false);
 
     // A map re-init re-runs restore over the same records: no second request.
     await restoreRemoteGeoJsonLayers();

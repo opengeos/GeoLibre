@@ -1,9 +1,9 @@
 import {
   geoJsonSourceReferences,
-  isFetchedGeoJson,
   rememberFetchedGeoJson,
   remoteGeoJsonUrl,
   useAppStore,
+  withoutHistory,
   type GeoLibreLayer,
 } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
@@ -76,7 +76,13 @@ export async function restoreRemoteGeoJsonLayers(): Promise<void> {
         signal: AbortSignal.timeout(RESTORE_TIMEOUT_MS),
       });
       if (!isStillWaiting(layer)) return;
-      useAppStore.getState().updateLayer(layer.id, { geojson: rememberFetchedGeoJson(geojson) });
+      // Loading what the file references is part of opening it: not an undo
+      // step, and not an unsaved change (as in fetchStartupLayerFeatures).
+      withoutHistory(() => {
+        const wasDirty = useAppStore.getState().isDirty;
+        useAppStore.getState().updateLayer(layer.id, { geojson: rememberFetchedGeoJson(geojson) });
+        if (!wasDirty) useAppStore.setState({ isDirty: false });
+      });
       rememberDerivedGeoJson(layer.id, geojson);
     } catch (error) {
       // A request from a project that has since been replaced, or for a
@@ -203,8 +209,5 @@ export async function addEmbedLayer(spec: AddLayerSpec, signal?: AbortSignal): P
   // The fetch yields, so another command may have taken the id meanwhile.
   assertLayerIdAvailable(layer.id, useAppStore.getState().layers);
   useAppStore.getState().addLayer(layer, spec.beforeId);
-  if (layer.geojson && isFetchedGeoJson(layer.geojson)) {
-    rememberDerivedGeoJson(layer.id, layer.geojson);
-  }
   return layer.id;
 }
