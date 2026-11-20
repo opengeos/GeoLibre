@@ -262,8 +262,8 @@ export function LayerActionsTouchSheet({
       label: t("layers.rename"),
       disabled: !layerEditable,
       icon: <Pencil className="h-4 w-4" />,
-      // Defer until after BottomSheet finishes closing and restoring focus,
-      // otherwise focus restoration immediately blurs the inline rename input.
+      // Defer past the synchronous sheet unmount so BottomSheet's cleanup focus
+      // restoration does not immediately blur the inline rename input.
       onSelect: () => {
         window.setTimeout(() => beginRename(layer), 0);
       },

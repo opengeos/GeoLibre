@@ -321,6 +321,9 @@ export function LayerRow({
         <div className="pointer-events-none absolute -bottom-1 left-2 right-2 h-1 rounded-full bg-primary shadow-[0_0_0_2px_hsl(var(--background))]" />
       )}
       <div className="flex min-w-0 items-center gap-1">
+        {/* Dedicated non-scroll drag grip (`touch-none` prevents browser
+            vertical pan from cancelling an active reorder drag while the rest
+            of the layer row scrolls naturally). */}
         <span
           role="button"
           tabIndex={0}

@@ -1826,14 +1826,26 @@ export function ProcessingDialog({
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          aria-label={t("common.close")}
-          onClick={() => setProcessingOpen(false)}
-          className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {drawing ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => void handleDrawBbox()}
+            >
+              {t("common.cancel")}
+            </Button>
+          ) : null}
+          <button
+            type="button"
+            aria-label={t("common.close")}
+            onClick={() => setProcessingOpen(false)}
+            className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Tool list beside the parameter form, but only while the panel is wide

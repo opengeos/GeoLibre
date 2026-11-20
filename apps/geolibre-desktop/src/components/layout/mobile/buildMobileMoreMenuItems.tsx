@@ -48,6 +48,9 @@ const SPLIT_VIEW_PRESETS: ReadonlyArray<{
 export interface BuildMobileMoreMenuOptions {
   t: TFunction;
   uiProfile: UiProfile;
+  primaryRenderer: ReturnType<typeof useAppStore.getState>["primaryRenderer"];
+  gridKey: string;
+  cvdMode: ReturnType<typeof useCvdPreviewStore.getState>["mode"];
   canEditProject: boolean;
   canShare: boolean;
   canShowView: boolean;
@@ -82,6 +85,9 @@ export interface BuildMobileMoreMenuOptions {
 export function buildMobileMoreMenuItems({
   t,
   uiProfile,
+  primaryRenderer,
+  gridKey,
+  cvdMode,
   canEditProject,
   canShare,
   canShowView,
@@ -108,9 +114,8 @@ export function buildMobileMoreMenuItems({
   onSwitchToDesktopUi,
   onOpenAbout,
 }: BuildMobileMoreMenuOptions): TouchMenuItem[] {
-  const { mapLayout, primaryRenderer, setMapGrid, setPrimaryRenderer } = useAppStore.getState();
-  const { mode: cvdMode, setMode: setCvdMode } = useCvdPreviewStore.getState();
-  const gridKey = `${mapLayout.rows}x${mapLayout.cols}`;
+  const { setMapGrid, setPrimaryRenderer } = useAppStore.getState();
+  const { setMode: setCvdMode } = useCvdPreviewStore.getState();
 
   const projectItems: TouchMenuItem[] = canEditProject
     ? [
@@ -285,14 +290,13 @@ export function buildMobileMoreMenuItems({
       list.push(cmd);
       byGroup.set(cmd.group, list);
     }
-    let groupIndex = 0;
     for (const [group, cmds] of byGroup) {
-      groupIndex += 1;
       processingSubmenus.push({
         kind: "submenu",
-        // Use a stable numeric index rather than ASCII slugification so non-Latin
-        // localized group labels (e.g. CJK/Arabic/Cyrillic) never collide.
-        id: `proc-group-${groupIndex}`,
+        // Key the submenu by its first command id. Command ids are unique, so
+        // localized group labels cannot collide, and the key does not shift
+        // when an earlier group is removed.
+        id: `proc-group-${cmds[0].id}`,
         label: group,
         badge: String(cmds.length),
         icon: <Cpu className="h-4 w-4" />,
