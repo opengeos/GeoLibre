@@ -11617,6 +11617,7 @@
     },
     "attributeCards": {
       "empty": "No features match the current filter.",
+      "featureIdOption": "#ID",
       "zoomToFeature": "Zoom to feature",
       "switchToCards": "Card view",
       "switchToTable": "Table view",

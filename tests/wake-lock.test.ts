@@ -121,4 +121,54 @@ describe("createWakeLockController", () => {
     controller.dispose();
     assert.equal(visibilityListener, null);
   });
+
+  it("ignores delayed request rejections from a disposed controller", async () => {
+    let rejectFirst: ((err: Error) => void) | null = null;
+    let activeState = false;
+    const onChange = (active: boolean) => {
+      activeState = active;
+    };
+
+    const first = createWakeLockController({
+      navigator: {
+        wakeLock: {
+          request: () =>
+            new Promise<WakeLockSentinelLike>((_resolve, reject) => {
+              rejectFirst = reject;
+            }),
+        },
+      },
+      onChange,
+    });
+
+    const firstPending = first.acquire();
+    first.dispose();
+
+    const replacement = createWakeLockController({
+      navigator: {
+        wakeLock: {
+          request: () =>
+            Promise.resolve({
+              released: false,
+              async release() {},
+            }),
+        },
+      },
+      onChange,
+    });
+
+    assert.equal(await replacement.acquire(), true);
+    assert.equal(activeState, true);
+
+    assert.ok(rejectFirst);
+    (rejectFirst as (err: Error) => void)(new Error("denied"));
+    assert.equal(await firstPending, false);
+    assert.equal(
+      activeState,
+      true,
+      "disposed controller rejection must not clear replacement active state",
+    );
+
+    replacement.dispose();
+  });
 });

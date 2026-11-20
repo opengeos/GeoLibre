@@ -635,8 +635,15 @@ export function AttributeTable({
   const selectedFeatureIds = useAppStore((s) => s.selectedFeatureIds);
   const selectFeature = useAppStore((s) => s.selectFeature);
   const selectFeatures = useAppStore((s) => s.selectFeatures);
-  const [cardViewOverride, setCardViewOverride] = useState<boolean | null>(null);
-  const useCardView = cardViewOverride ?? mobileShell;
+  const [cardViewOverride, setCardViewOverride] = useState<{
+    mobileShell: boolean;
+    value: boolean;
+  } | null>(null);
+  const useCardView = mobileShell
+    ? cardViewOverride?.mobileShell === mobileShell
+      ? cardViewOverride.value
+      : true
+    : false;
   const attributeTableOpen = useAppStore((s) => s.ui.attributeTableOpen);
   const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
   const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
@@ -1222,9 +1229,11 @@ export function AttributeTable({
   // different position for the selected row). Also when edit mode toggles or the
   // table expands: edit-mode inputs make every row taller (and a collapsed table
   // has no viewport), so a row placed before that change slides out of view.
+  const isCardViewActive = useCardView && !isEditing;
+
   useEffect(() => {
     // `""` is a valid feature id; only `null` means no selection.
-    if (!attributeTableOpen || selectedFeatureId === null) return;
+    if (!attributeTableOpen || selectedFeatureId === null || isCardViewActive) return;
     const index = sorted.findIndex((row) => row.featureId === selectedFeatureId);
     if (index >= 0) rowVirtualizer.scrollToIndex(index, { align: "auto" });
     // `sorted`/`rowVirtualizer` are rebuilt every render and so are intentionally
@@ -1240,6 +1249,7 @@ export function AttributeTable({
     attributeFilter,
     isEditing,
     collapsed,
+    isCardViewActive,
   ]);
 
   const propKeys = new Set<string>();
@@ -2479,7 +2489,7 @@ export function AttributeTable({
             <Network className="h-3.5 w-3.5" />
           </Button>
         ) : null}
-        {hasAttributeSource && !isEditing ? (
+        {mobileShell && hasAttributeSource && !isEditing ? (
           <Button
             variant={useCardView ? "secondary" : "ghost"}
             size="icon"
@@ -2496,7 +2506,7 @@ export function AttributeTable({
                 : t("mobileShell.attributeCards.switchToCards")
             }
             aria-pressed={useCardView}
-            onClick={() => setCardViewOverride(!useCardView)}
+            onClick={() => setCardViewOverride({ mobileShell, value: !useCardView })}
           >
             {useCardView ? (
               <TableProperties className="h-4 w-4" />
@@ -2547,11 +2557,12 @@ export function AttributeTable({
                 ? t("attributeTable.loadingAttributes")
                 : t("attributeTable.requiresVectorLayer")}
             </p>
-          ) : useCardView && !isEditing ? (
+          ) : isCardViewActive ? (
             <AttributeCardList
               rows={sorted}
               columns={columns}
               selectedIds={selectedIdSet}
+              activeFeatureId={selectedFeatureId}
               scrollElementRef={scrollViewportRef}
               sortKey={sort.key}
               sortDirection={sort.direction}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface WakeLockSentinelLike {
   released?: boolean;
@@ -47,7 +47,7 @@ export function createWakeLockController(options?: {
 
   const handleSentinelRelease = () => {
     sentinel = null;
-    notify(false);
+    if (!disposed) notify(false);
   };
 
   const requestLock = (): Promise<boolean> => {
@@ -70,7 +70,7 @@ export function createWakeLockController(options?: {
         notify(true);
         return true;
       } catch {
-        notify(false);
+        if (!disposed) notify(false);
         return false;
       }
     })();
@@ -126,24 +126,35 @@ export function createWakeLockController(options?: {
 export function useScreenWakeLock(enabled: boolean): {
   supported: boolean;
   active: boolean;
+  retry: () => void;
 } {
   const [active, setActive] = useState(false);
+  const controllerRef = useRef<WakeLockController | null>(null);
   const supported =
     typeof navigator !== "undefined" &&
     Boolean((navigator as WakeLockNavigatorLike).wakeLock?.request);
 
   useEffect(() => {
     if (!enabled || !supported) {
+      controllerRef.current = null;
       setActive(false);
       return;
     }
     const controller = createWakeLockController({ onChange: setActive });
+    controllerRef.current = controller;
     void controller.acquire();
     return () => {
+      if (controllerRef.current === controller) {
+        controllerRef.current = null;
+      }
       controller.dispose();
       setActive(false);
     };
   }, [enabled, supported]);
 
-  return { supported, active };
+  const retry = useCallback(() => {
+    void controllerRef.current?.acquire();
+  }, []);
+
+  return { supported, active, retry };
 }

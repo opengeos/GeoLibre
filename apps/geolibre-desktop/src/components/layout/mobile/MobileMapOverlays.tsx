@@ -18,18 +18,29 @@ export interface MobileMapOverlaysProps {
  * crosshair capture.
  */
 export function MobileMapOverlays({ mapControllerRef }: MobileMapOverlaysProps) {
-  const gpsStatus = useAppStore((s) => s.gpsStatus);
+  const hasGps = useAppStore((s) => Boolean(s.gpsStatus));
   const crosshairActive = useFieldCrosshairStore((s) => s.active);
   const [keepAwake, setKeepAwake] = useState(true);
-  const wakeLock = useScreenWakeLock(keepAwake && (Boolean(gpsStatus) || crosshairActive));
+  const wakeLock = useScreenWakeLock(keepAwake && (hasGps || crosshairActive));
+
+  const handleToggleKeepAwake = () => {
+    // If keep-awake is enabled but the OS rejected or dropped the lock, a tap
+    // retries acquisition without flipping the stored preference off.
+    if (keepAwake && !wakeLock.active) {
+      wakeLock.retry();
+      return;
+    }
+    setKeepAwake((v) => !v);
+  };
 
   return (
     <>
       <TouchSelectionActionBar />
       <MobileGpsHud
+        crosshairActive={crosshairActive}
         wakeLockActive={wakeLock.active}
         wakeLockSupported={wakeLock.supported}
-        onToggleKeepAwake={() => setKeepAwake((v) => !v)}
+        onToggleKeepAwake={handleToggleKeepAwake}
       />
       <FieldCrosshairOverlay mapControllerRef={mapControllerRef} />
     </>
