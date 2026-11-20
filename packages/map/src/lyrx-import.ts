@@ -68,7 +68,7 @@ export function isLyrxDocument(value: unknown): boolean {
 /**
  * Read a parsed `.lyrx` document.
  *
- * @param document - The layer file's JSON, already parsed and known to be a `CIMLayerDocument`.
+ * @param document - The .lyrx style's JSON, already parsed and known to be a `CIMLayerDocument`.
  */
 export function parseLyrx(document: unknown): LyrxImportResult {
   const result: LyrxImportResult = { style: {}, labels: null, warnings: [], matchedCount: 0 };
@@ -79,21 +79,15 @@ export function parseLyrx(document: unknown): LyrxImportResult {
   const layer = featureLayers[0];
   if (!layer) {
     result.warnings.push(
-      "The layer file has no feature layer, so it has no vector symbology to import.",
+      "The .lyrx style has no feature layer, so it has no vector symbology to import.",
     );
     return result;
   }
-  if (featureLayers.length > 1) {
-    result.warnings.push(
-      `The layer file holds ${featureLayers.length} feature layers; only the first, "${stringOf(layer.name)}", was imported.`,
-    );
-  }
-
   const renderer = objectOf(layer.renderer);
   const rendererType = stringOf(renderer?.type);
   const notes = new Set<string>();
   if (!renderer) {
-    result.warnings.push("The layer file's feature layer has no renderer to import.");
+    result.warnings.push("The .lyrx style's feature layer has no renderer to import.");
     return result;
   }
   if (rendererType === "CIMSimpleRenderer") {
@@ -103,13 +97,18 @@ export function parseLyrx(document: unknown): LyrxImportResult {
       UNSUPPORTED_RENDERER_NAMES[rendererType] ??
       (rendererType.replace(/^CIM|Renderer$/g, "") || "unrecognised");
     result.warnings.push(
-      `The layer file uses the ${name} renderer, which GeoLibre cannot import; the layer keeps its current style.`,
+      `The .lyrx style uses the ${name} renderer, which GeoLibre cannot import; the layer keeps its current style.`,
     );
+  }
+  for (const note of notes) {
+    result.warnings.push(`The .lyrx style's ${note} was not imported.`);
   }
   if (result.matchedCount === 0) return result;
 
-  for (const note of notes) {
-    result.warnings.push(`The layer file's ${note} was not imported.`);
+  if (featureLayers.length > 1) {
+    result.warnings.push(
+      `The .lyrx style holds ${featureLayers.length} feature layers; only the first, "${stringOf(layer.name)}", was imported.`,
+    );
   }
   result.labels = readLabels(layer, result.warnings);
   return result;
@@ -128,7 +127,7 @@ export function applyLyrxImport(base: LayerStyle, result: LyrxImportResult): Lay
 interface SymbolInfo {
   geometry: "polygon" | "line" | "point" | "unknown";
   fill?: { color: string; opacity: number };
-  stroke?: { color: string; opacity: number; width: number | null };
+  stroke?: { color: string; opacity: number; width: number | null; dashed: boolean };
   /** Marker size in points (CIM's own unit); converted to a radius on write. */
   markerSize?: number;
 }
@@ -150,16 +149,23 @@ function readSymbol(symbol: CimObject, notes: Set<string>): SymbolInfo {
             ? "point"
             : "unknown",
   };
-  // CIM lists symbol layers top first, so the first enabled one of each kind is what shows.
+  // CIM lists symbol layers top first, so the first enabled one of each kind is what shows. Pro
+  // omits false booleans when it saves CIM JSON, so a layer without `enable: true` is switched off.
   for (const layer of arrayOf(symbol.symbolLayers)) {
-    if (layer.enable === false) continue;
+    if (layer.enable !== true) continue;
     const layerType = stringOf(layer.type);
     if (layerType === "CIMSolidFill") {
       const color = cimColor(objectOf(layer.color));
       if (color && !info.fill) info.fill = color;
     } else if (layerType === "CIMSolidStroke") {
       const color = cimColor(objectOf(layer.color));
-      if (color && !info.stroke) info.stroke = { ...color, width: numberOf(layer.width) };
+      if (color && !info.stroke) {
+        const dashed = arrayOf(layer.effects).some(
+          (effect) => effect.type === "CIMGeometricEffectDashes",
+        );
+        if (dashed) notes.add("dash pattern");
+        info.stroke = { ...color, width: numberOf(layer.width), dashed };
+      }
     } else if (layerType === "CIMVectorMarker" || layerType === "CIMCharacterMarker") {
       if (info.markerSize !== undefined) continue;
       info.markerSize = numberOf(layer.size) ?? undefined;
@@ -184,20 +190,32 @@ function readSymbol(symbol: CimObject, notes: Set<string>): SymbolInfo {
 
 /** Write one symbol's flat symbology (fill, stroke, marker size) onto the patch. */
 function applySymbol(info: SymbolInfo, patch: Partial<Omit<LayerStyle, "labels">>): void {
+  // A CIM symbol is the whole symbol: a polygon or marker without an outline has none, and one
+  // without a fill is hollow, rather than keeping whatever the layer had.
+  const areal = info.geometry === "polygon" || info.geometry === "point";
   if (info.fill) {
     patch.fillColor = info.fill.color;
     patch.fillOpacity = info.fill.opacity;
-  } else if (info.geometry === "polygon" && info.stroke) {
-    // An outline-only polygon symbol is hollow, not "whatever fill the layer had".
+    // A solid fill: a pattern the layer had would otherwise draw over it.
+    patch.fillPattern = "none";
+  } else if (areal) {
     patch.fillOpacity = 0;
   }
   if (info.stroke) {
     patch.strokeColor = info.stroke.color;
     patch.strokeOpacity = info.stroke.opacity;
+    // A dashed stroke's pattern is not read (and is named in a warning), so the layer keeps its own.
+    if (!info.stroke.dashed) patch.strokeDash = [];
     if (info.stroke.width !== null) {
       patch.strokeWidth = round(info.stroke.width * PIXELS_PER_POINT);
       patch.strokeWidthUnit = "pixels";
     }
+  } else if (areal) {
+    patch.strokeOpacity = 0;
+  }
+  if (info.geometry === "point") {
+    // Read as a circle, so an icon marker the layer had would hide what was imported.
+    patch.markerEnabled = false;
   }
   if (info.markerSize !== undefined) {
     // A CIM marker size is its diameter in points; GeoLibre's is a radius in pixels.
@@ -225,9 +243,7 @@ function readSimple(
  */
 function readLabels(layer: CimObject, warnings: string[]): Partial<LabelStyle> | null {
   if (layer.labelVisibility !== true) return null;
-  const labelClass = arrayOf(layer.labelClasses).find(
-    (candidate) => candidate.visibility !== false,
-  );
+  const labelClass = arrayOf(layer.labelClasses).find((candidate) => candidate.visibility === true);
   if (!labelClass) return null;
   const expression = stringOf(labelClass.expression).trim();
   const field =
@@ -236,11 +252,12 @@ function readLabels(layer: CimObject, warnings: string[]): Partial<LabelStyle> |
     expression.match(/^\$feature\[\s*["']([^"']+)["']\s*\]$/)?.[1];
   if (!field) {
     warnings.push(
-      "The layer file's label expression is more than a single field, so its labels were not imported.",
+      "The .lyrx style's label expression is more than a single field, so its labels were not imported.",
     );
     return null;
   }
-  return { enabled: true, field };
+  // Cleared, because a label expression takes precedence over the field.
+  return { enabled: true, field, expression: "" };
 }
 
 /**

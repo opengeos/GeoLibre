@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE } from "@geolibre/core";
 import { importStyleText } from "@geolibre/map/style-import";
-import { isLyrxDocument, parseLyrx } from "../packages/map/src/lyrx-import";
+import { applyLyrxImport, isLyrxDocument, parseLyrx } from "../packages/map/src/lyrx-import";
 
 function rgb(r: number, g: number, b: number, a = 100) {
   return { type: "CIMRGBColor", values: [r, g, b, a] };
@@ -62,7 +62,7 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     const result = importStyleText(
       lyrx(
         { type: "CIMSimpleRenderer", symbol: polygonSymbol([255, 136, 0, 50], [17, 34, 51], 1.5) },
-        { labelVisibility: true, labelClasses: [{ expression: "[OWNER]" }] },
+        { labelVisibility: true, labelClasses: [{ expression: "[OWNER]", visibility: true }] },
       ),
     );
     assert.equal(result.ok, true);
@@ -75,6 +75,7 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     // CIM widths are points; GeoLibre's are CSS pixels.
     assert.equal(style.strokeWidth, 2);
     assert.equal(style.strokeWidthUnit, "pixels");
+    assert.equal(style.fillPattern, "none");
     assert.equal(style.labels.enabled, true);
     assert.equal(style.labels.field, "OWNER");
     assert.deepEqual(result.warnings, []);
@@ -111,6 +112,13 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     assert.equal(result.matchedCount, 1);
     assert.equal(result.style.fillColor, "#008000");
     assert.equal(result.style.circleRadius, 8);
+    // The marker has no outline, so the layer's own outline and icon must not show through.
+    const style = applyLyrxImport(
+      { ...structuredClone(DEFAULT_LAYER_STYLE), markerEnabled: true },
+      result,
+    );
+    assert.equal(style.strokeOpacity, 0);
+    assert.equal(style.markerEnabled, false);
   });
 
   it("refuses unique value and class breaks renderers by name for now", () => {
@@ -136,13 +144,17 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
             symbol: {
               type: "CIMLineSymbol",
               symbolLayers: [
-                { type: "CIMSolidStroke", enable: false, width: 9, color: rgb(9, 9, 9) },
+                // Pro omits `enable` when it is false.
+                { type: "CIMSolidStroke", width: 9, color: rgb(9, 9, 9) },
                 { type: "CIMSolidStroke", enable: true, width: 3, color: rgb(0, 0, 255, 40) },
               ],
             },
           },
         },
-        { labelVisibility: true, labelClasses: [{ expression: "$feature.NAME" }] },
+        {
+          labelVisibility: true,
+          labelClasses: [{ expression: "$feature.NAME", visibility: true }],
+        },
       ),
     );
     assert.equal(result.matchedCount, 1);
@@ -150,7 +162,8 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     assert.equal(result.style.strokeOpacity, 0.4);
     assert.equal(result.style.strokeWidth, 4);
     assert.equal(result.style.fillColor, undefined);
-    assert.deepEqual(result.labels, { enabled: true, field: "NAME" });
+    assert.deepEqual(result.labels, { enabled: true, field: "NAME", expression: "" });
+    assert.deepEqual(result.style.strokeDash, []);
   });
 
   it("keeps the layer's other style fields when merging", () => {
@@ -194,7 +207,7 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
           type: "CIMFeatureLayer",
           name: "First",
           labelVisibility: true,
-          labelClasses: [{ expression: "[A] + ' ' + [B]" }],
+          labelClasses: [{ expression: "[A] + ' ' + [B]", visibility: true }],
           renderer: {
             type: "CIMSimpleRenderer",
             symbol: {
@@ -219,6 +232,40 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     assert.match(result.warnings.join("\n"), /only the first, "First"/);
     assert.match(result.warnings.join("\n"), /picture fill/i);
     assert.match(result.warnings.join("\n"), /label expression/i);
+  });
+
+  it("leads with the renderer refusal when the first of several layers is unsupported", () => {
+    const result = importStyleText(
+      JSON.stringify({
+        type: "CIMLayerDocument",
+        layerDefinitions: [
+          { type: "CIMFeatureLayer", name: "Heat", renderer: { type: "CIMHeatMapRenderer" } },
+          { type: "CIMFeatureLayer", name: "Other", renderer: { type: "CIMSimpleRenderer" } },
+        ],
+      }),
+    );
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.warnings.length, 1);
+    assert.match(result.warnings[0], /heat map/);
+  });
+
+  it("names the symbol it could not read when nothing else was readable", () => {
+    const result = importStyleText(
+      lyrx({
+        type: "CIMSimpleRenderer",
+        symbol: {
+          type: "CIMSymbolReference",
+          symbol: {
+            type: "CIMPolygonSymbol",
+            symbolLayers: [{ type: "CIMPictureFill", enable: true }],
+          },
+        },
+      }),
+    );
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.match(result.warnings[0], /picture fill/);
   });
 
   it("leaves Mapbox GL JSON to the Mapbox reader", () => {
