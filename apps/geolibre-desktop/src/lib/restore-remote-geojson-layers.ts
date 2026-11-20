@@ -1,10 +1,12 @@
 import {
   geoJsonSourceReferences,
+  isFetchedGeoJson,
   rememberFetchedGeoJson,
   remoteGeoJsonUrl,
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
+import type { FeatureCollection } from "geojson";
 import i18next from "i18next";
 import { fetchGeoJsonFeatureCollection } from "./data-url";
 import type { AddLayerSpec } from "@geolibre/embed";
@@ -22,6 +24,12 @@ const attemptedSources = new WeakSet<object>();
 
 /** How many layer downloads restore runs at once, bounding peak memory. */
 const RESTORE_CONCURRENCY = 4;
+
+/**
+ * How long one layer download may take before it is abandoned, so a host
+ * that never finishes a response cannot hold a worker and starve the queue.
+ */
+const RESTORE_TIMEOUT_MS = 60_000;
 
 /**
  * The URL root-relative layer sources resolve against: the page the app runs
@@ -61,10 +69,15 @@ export async function restoreRemoteGeoJsonLayers(): Promise<void> {
   if (pending.length === 0) return;
 
   const restoreOne = async ({ layer, url }: (typeof pending)[number]): Promise<void> => {
+    // Skip a queued layer removed or replaced before its turn came.
+    if (!isStillWaiting(layer)) return;
     try {
-      const geojson = await fetchGeoJsonFeatureCollection(url);
+      const geojson = await fetchGeoJsonFeatureCollection(url, {
+        signal: AbortSignal.timeout(RESTORE_TIMEOUT_MS),
+      });
       if (!isStillWaiting(layer)) return;
       useAppStore.getState().updateLayer(layer.id, { geojson: rememberFetchedGeoJson(geojson) });
+      rememberDerivedGeoJson(layer.id, geojson);
     } catch (error) {
       // A request from a project that has since been replaced, or for a
       // layer removed meanwhile, has no one left to warn.
@@ -78,6 +91,22 @@ export async function restoreRemoteGeoJsonLayers(): Promise<void> {
     while (next < pending.length) await restoreOne(pending[next++]);
   };
   await Promise.all(Array.from({ length: Math.min(RESTORE_CONCURRENCY, pending.length) }, worker));
+}
+
+/**
+ * Keep a layer counted as fetched after the store re-derives its features.
+ *
+ * Writing `geojson` re-applies a layer's joins and virtual fields, which
+ * yields a new collection. That collection is still just the download plus
+ * derived columns (rebuilt on every open), so it is marked too; otherwise the
+ * next save would embed it and drop the URL reference.
+ *
+ * @param layerId - The layer just written.
+ * @param fetched - The collection that was written.
+ */
+function rememberDerivedGeoJson(layerId: string, fetched: FeatureCollection): void {
+  const current = useAppStore.getState().layers.find((entry) => entry.id === layerId)?.geojson;
+  if (current && current !== fetched) rememberFetchedGeoJson(current);
 }
 
 /**
@@ -174,5 +203,8 @@ export async function addEmbedLayer(spec: AddLayerSpec, signal?: AbortSignal): P
   // The fetch yields, so another command may have taken the id meanwhile.
   assertLayerIdAvailable(layer.id, useAppStore.getState().layers);
   useAppStore.getState().addLayer(layer, spec.beforeId);
+  if (layer.geojson && isFetchedGeoJson(layer.geojson)) {
+    rememberDerivedGeoJson(layer.id, layer.geojson);
+  }
   return layer.id;
 }

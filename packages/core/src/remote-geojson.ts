@@ -26,6 +26,24 @@ export function rememberFetchedGeoJson<T extends FeatureCollection>(collection: 
 }
 
 /**
+ * A layer whose fetched `geojson` a snapshot must carry rather than strip.
+ *
+ * `prepareLayerForSave` leaves a fetched collection out of the file, which is
+ * right for Save but wrong for undo history, autosave and collaboration
+ * snapshots: those restore without re-running the fetch, so the layer would
+ * come back empty. A shallow copy of the collection is no longer "fetched",
+ * so the snapshot embeds it.
+ *
+ * @param layer - A store layer.
+ * @returns The layer, with its fetched collection swapped for an unmarked copy.
+ */
+export function keepFetchedGeoJson(layer: GeoLibreLayer): GeoLibreLayer {
+  return layer.geojson && isFetchedGeoJson(layer.geojson)
+    ? { ...layer, geojson: { ...layer.geojson } }
+    : layer;
+}
+
+/**
  * Whether a layer's `geojson` is the unedited copy fetched from its source URL.
  *
  * @param collection - A layer's `geojson`, or undefined.

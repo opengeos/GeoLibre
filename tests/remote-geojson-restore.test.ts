@@ -4,6 +4,7 @@ import type { FeatureCollection } from "geojson";
 import type { AddLayerSpec } from "../packages/embed/src";
 import {
   isFetchedGeoJson,
+  keepFetchedGeoJson,
   projectFromStore,
   rememberFetchedGeoJson,
   remoteGeoJsonUrl,
@@ -119,6 +120,15 @@ describe("saving a fetched GeoJSON layer", () => {
     assert.deepEqual(projectFromStore(useAppStore.getState()).layers[0].geojson, edited);
   });
 
+  it("keeps fetched features in history and collaboration snapshots", () => {
+    const fetched = rememberFetchedGeoJson(collection("fetched"));
+    const kept = keepFetchedGeoJson(layer({ geojson: fetched }));
+    useAppStore.getState().addLayer(kept);
+    assert.deepEqual(projectFromStore(useAppStore.getState()).layers[0].geojson, fetched);
+    const inline = layer({ id: "inline", geojson: collection("inline") });
+    assert.equal(keepFetchedGeoJson(inline), inline);
+  });
+
   it("still embeds inline features that were never fetched", () => {
     const inline = collection("inline");
     useAppStore.getState().addLayer(layer({ geojson: inline }));
@@ -189,6 +199,31 @@ describe("restoreRemoteGeoJsonLayers", () => {
     }
     assert.equal(requests.length, 0);
     assert.equal(warnings.length, 1);
+  });
+
+  it("skips a queued layer removed before its download starts", async () => {
+    const releases: (() => void)[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requests.push(String(input));
+      await new Promise<void>((resolve) => releases.push(resolve));
+      return new Response(JSON.stringify(collection("slow")));
+    }) as typeof fetch;
+    for (let index = 0; index < 5; index += 1) {
+      useAppStore.getState().addLayer(
+        layer({
+          id: `l${index}`,
+          source: { type: "geojson", data: `https://data.example/${index}.geojson` },
+        }),
+      );
+    }
+    const pending = restoreRemoteGeoJsonLayers();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    useAppStore.getState().removeLayer("l4");
+    // Four workers started four requests; release them.
+    assert.equal(releases.length, 4);
+    for (const release of releases) release();
+    await pending;
+    assert.equal(requests.includes("https://data.example/4.geojson"), false);
   });
 
   it("does not overwrite a layer removed while the request was in flight", async () => {
