@@ -47,4 +47,30 @@ describe("mobile back-handler stack", () => {
     assert.equal(dispatchMobileBack(), true);
     assert.deepEqual(log, ["inactive", "base"]);
   });
+
+  it("keeps an overlay handler above a stable base handler even as base state changes", () => {
+    const log: string[] = [];
+    const baseState = { openTab: "layers" as string | null };
+    registerMobileBackHandler(() => {
+      if (baseState.openTab !== null) {
+        log.push(`sheet:${baseState.openTab}`);
+        baseState.openTab = null;
+        return true;
+      }
+      return false;
+    });
+    const unregCrosshair = registerMobileBackHandler(() => {
+      log.push("crosshair");
+      return true;
+    });
+
+    // Mutating base state without re-registering must leave crosshair on top.
+    baseState.openTab = "field";
+    assert.equal(dispatchMobileBack(), true);
+    assert.deepEqual(log, ["crosshair"]);
+
+    unregCrosshair();
+    assert.equal(dispatchMobileBack(), true);
+    assert.deepEqual(log, ["crosshair", "sheet:field"]);
+  });
 });

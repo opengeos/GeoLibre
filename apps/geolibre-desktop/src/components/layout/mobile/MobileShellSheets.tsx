@@ -151,29 +151,7 @@ export function useMobileShellState(mobileShell: boolean) {
     setActiveMobileTab(null);
   }, []);
 
-  useEffect(() => {
-    if (!mobileShell) return;
-    return registerMobileBackHandler(() => {
-      if (floatingPanelCount > 0) {
-        closeAllFloatingPanels();
-        return true;
-      }
-      if (activeMobileTab !== null) {
-        closeMobileTab();
-        return true;
-      }
-      if (expandedPluginPanelId) {
-        collapseRightPanel(expandedPluginPanelId);
-        return true;
-      }
-      if (anyBottomPanelOpen) {
-        closeAllBottomPanels();
-        return true;
-      }
-      return false;
-    });
-  }, [
-    mobileShell,
+  const backStateRef = useRef({
     floatingPanelCount,
     activeMobileTab,
     expandedPluginPanelId,
@@ -181,7 +159,40 @@ export function useMobileShellState(mobileShell: boolean) {
     closeAllFloatingPanels,
     closeMobileTab,
     closeAllBottomPanels,
-  ]);
+  });
+  backStateRef.current = {
+    floatingPanelCount,
+    activeMobileTab,
+    expandedPluginPanelId,
+    anyBottomPanelOpen,
+    closeAllFloatingPanels,
+    closeMobileTab,
+    closeAllBottomPanels,
+  };
+
+  useEffect(() => {
+    if (!mobileShell) return;
+    return registerMobileBackHandler(() => {
+      const state = backStateRef.current;
+      if (state.floatingPanelCount > 0) {
+        state.closeAllFloatingPanels();
+        return true;
+      }
+      if (state.activeMobileTab !== null) {
+        state.closeMobileTab();
+        return true;
+      }
+      if (state.expandedPluginPanelId) {
+        collapseRightPanel(state.expandedPluginPanelId);
+        return true;
+      }
+      if (state.anyBottomPanelOpen) {
+        state.closeAllBottomPanels();
+        return true;
+      }
+      return false;
+    });
+  }, [mobileShell]);
 
   const handleSelectMobileTab = useCallback(
     (tab: MobileNavTabId | null) => {

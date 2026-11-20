@@ -27,3 +27,48 @@ export function resolveMapPixelRatio(options?: {
   if (!touch) return rawDpr;
   return Math.min(rawDpr, MAX_MOBILE_PIXEL_RATIO);
 }
+
+/**
+ * Subscribe to `window.devicePixelRatio` changes (moving across displays or
+ * switching zoom/display modes) and invoke `onChange` with the resolved
+ * pixel ratio (respecting the 2x mobile cap). Returns a cleanup callback.
+ */
+export function watchMapPixelRatio(onChange: (pixelRatio: number) => void): () => void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return () => {};
+  }
+  let disposed = false;
+  let activeMedia: MediaQueryList | null = null;
+  let activeListener: (() => void) | null = null;
+
+  const detach = () => {
+    if (activeMedia && activeListener) {
+      activeMedia.removeEventListener("change", activeListener);
+    }
+    activeMedia = null;
+    activeListener = null;
+  };
+
+  const subscribe = () => {
+    detach();
+    if (disposed) return;
+    const dpr = window.devicePixelRatio;
+    if (!Number.isFinite(dpr) || dpr <= 0) return;
+    const media = window.matchMedia(`(resolution: ${dpr}dppx)`);
+    const onResolutionChange = () => {
+      if (disposed) return;
+      const resolved = resolveMapPixelRatio();
+      if (resolved !== undefined) onChange(resolved);
+      subscribe();
+    };
+    activeMedia = media;
+    activeListener = onResolutionChange;
+    media.addEventListener("change", onResolutionChange, { once: true });
+  };
+
+  subscribe();
+  return () => {
+    disposed = true;
+    detach();
+  };
+}

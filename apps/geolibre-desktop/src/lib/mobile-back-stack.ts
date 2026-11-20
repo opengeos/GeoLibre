@@ -6,6 +6,13 @@
  * BottomSheet, drill-down page, or crosshair capture mode).
  */
 
+/**
+ * Native bridge event dispatched by `src-tauri/android/MainActivity.kt` on
+ * hardware/predictive Android Back presses. Dispatchers MUST pass
+ * `{ cancelable: true }` (`new CustomEvent(ANDROID_BACK_EVENT, { cancelable: true })`)
+ * and inspect `event.defaultPrevented` to know whether a JS surface consumed
+ * the gesture.
+ */
 export const ANDROID_BACK_EVENT = "geolibre:android-back";
 
 export type MobileBackHandler = () => boolean;
