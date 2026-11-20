@@ -177,6 +177,40 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
         </DialogContent>
       </Dialog>
       <Dialog
+        open={projectFiles.arcgisMapPrompt !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) projectFiles.settleArcgisMapPrompt(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("toolbar.item.arcgisChooseMapTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("toolbar.item.arcgisChooseMapDescription", {
+                fileName: projectFiles.arcgisMapPrompt?.fileName ?? "",
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
+            {projectFiles.arcgisMapPrompt?.maps.map((map) => (
+              <Button
+                key={map.index}
+                variant="outline"
+                className="justify-start"
+                onClick={() => projectFiles.settleArcgisMapPrompt(map.index)}
+              >
+                {map.name || t("toolbar.item.arcgisUnnamedMap", { number: map.index + 1 })}
+              </Button>
+            ))}
+          </div>
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => projectFiles.settleArcgisMapPrompt(null)}>
+              {t("common.cancel")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
         open={projectFiles.arcgisImportWarnings !== null}
         onOpenChange={(open: boolean) => {
           if (!open) projectFiles.setArcgisImportWarnings(null);
