@@ -11600,6 +11600,11 @@
       "quickActions": "Quick actions",
       "organize": "Organize and export",
       "manage": "Layer info"
+    },
+    "selectionBar": {
+      "label": "Selection actions",
+      "undo": "Undo",
+      "finish": "Finish"
     }
   }
 }

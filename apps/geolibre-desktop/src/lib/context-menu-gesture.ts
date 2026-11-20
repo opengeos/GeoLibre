@@ -29,20 +29,47 @@ export const CONTEXT_MENU_DRAG_TOLERANCE_PX = 3;
  */
 export const CONTEXT_MENU_RELEASE_WINDOW_MS = 500;
 
+/**
+ * Duration (ms) a single touch must remain stationary on the map before the
+ * cross-platform touch long-press context menu opens (iOS + Android parity).
+ */
+export const CONTEXT_MENU_TOUCH_HOLD_MS = 500;
+
+/**
+ * Pixels a held finger may drift before cancelling a touch long-press (wider
+ * than desktop mouse tolerance to accommodate natural finger jitter).
+ */
+export const CONTEXT_MENU_TOUCH_TOLERANCE_PX = 10;
+
 /** Minimal pointer payload the tracker needs. */
 export interface GesturePointer {
   /** Pointer id, so a second pointer does not disturb the tracked gesture. */
   pointerId: number;
+  /** Pointer type (`"mouse"`, `"touch"`, `"pen"`). */
+  pointerType?: string;
   /** Button that changed state (`0` left, `2` right); ignored on move. */
   button: number;
   clientX: number;
   clientY: number;
 }
 
+/** Injectable timer scheduler so touch long-press tests run deterministically. */
+export interface ContextMenuTimerScheduler {
+  setTimeout(callback: () => void, ms: number): unknown;
+  clearTimeout(handle: unknown): void;
+}
+
+const DEFAULT_SCHEDULER: ContextMenuTimerScheduler = {
+  setTimeout: (cb, ms) => globalThis.setTimeout(cb, ms),
+  clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+};
+
 /** Cursor position of a `contextmenu` request, in viewport pixels. */
 export interface ContextMenuRequest {
   clientX: number;
   clientY: number;
+  /** True when triggered by a touch long-press gesture. */
+  isTouch?: boolean;
 }
 
 interface Gesture {
@@ -57,31 +84,68 @@ interface Gesture {
   pending: ContextMenuRequest | null;
 }
 
+interface TouchHoldGesture {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  timer: unknown;
+}
+
 /**
- * Follows one mouse-button gesture on the map and decides whether the
- * `contextmenu` it produced should open the quick-actions menu.
+ * Follows one mouse-button gesture or single-finger touch long-press on the map
+ * and decides when to open the quick-actions menu.
  */
 export class ContextMenuGestureTracker {
   private gesture: Gesture | null = null;
+  private touchHold: TouchHoldGesture | null = null;
+  private activeTouchIds = new Set<number>();
+  private lastTouchLongPressAt: number | null = null;
 
   /**
    * Creates a tracker.
    *
    * @param open - Called with the request position when the menu should open.
    * @param now - Clock in milliseconds; injectable for tests.
+   * @param scheduler - Timer implementation; injectable for tests.
    */
   constructor(
     private readonly open: (request: ContextMenuRequest) => void,
     private readonly now: () => number = () => Date.now(),
+    private readonly scheduler: ContextMenuTimerScheduler = DEFAULT_SCHEDULER,
   ) {}
 
+  private clearTouchHold(): void {
+    if (!this.touchHold) return;
+    this.scheduler.clearTimeout(this.touchHold.timer);
+    this.touchHold = null;
+  }
+
   /**
-   * Records a button press on the map. A new press always replaces whatever
-   * gesture came before it.
+   * Records a button or finger press on the map.
    *
    * @param event - The `pointerdown` payload.
    */
   pointerDown(event: GesturePointer): void {
+    if (event.pointerType === "touch") {
+      this.activeTouchIds.add(event.pointerId);
+      // Multi-touch (pinch/zoom/rotate) cancels any pending single-finger long-press.
+      if (this.activeTouchIds.size > 1) {
+        this.clearTouchHold();
+        return;
+      }
+      this.clearTouchHold();
+      const pointerId = event.pointerId;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const timer = this.scheduler.setTimeout(() => {
+        if (this.touchHold?.pointerId !== pointerId) return;
+        this.touchHold = null;
+        this.lastTouchLongPressAt = this.now();
+        this.open({ clientX: startX, clientY: startY, isTouch: true });
+      }, CONTEXT_MENU_TOUCH_HOLD_MS);
+      this.touchHold = { pointerId, startX, startY, timer };
+      return;
+    }
     this.gesture = {
       pointerId: event.pointerId,
       button: event.button,
@@ -99,6 +163,16 @@ export class ContextMenuGestureTracker {
    * @param event - A `pointermove` payload.
    */
   pointerMove(event: GesturePointer): void {
+    if (event.pointerType === "touch") {
+      if (this.touchHold && this.touchHold.pointerId === event.pointerId) {
+        const dx = event.clientX - this.touchHold.startX;
+        const dy = event.clientY - this.touchHold.startY;
+        if (Math.hypot(dx, dy) > CONTEXT_MENU_TOUCH_TOLERANCE_PX) {
+          this.clearTouchHold();
+        }
+      }
+      return;
+    }
     const gesture = this.gesture;
     if (!gesture || gesture.releasedAt !== null || gesture.pointerId !== event.pointerId) return;
     if (gesture.moved) return;
@@ -114,6 +188,13 @@ export class ContextMenuGestureTracker {
    * @param event - The `pointerup` payload.
    */
   pointerUp(event: GesturePointer): void {
+    if (event.pointerType === "touch") {
+      this.activeTouchIds.delete(event.pointerId);
+      if (this.touchHold?.pointerId === event.pointerId) {
+        this.clearTouchHold();
+      }
+      return;
+    }
     const gesture = this.gesture;
     if (!gesture || gesture.releasedAt !== null || gesture.pointerId !== event.pointerId) return;
     this.pointerMove(event);
@@ -128,13 +209,23 @@ export class ContextMenuGestureTracker {
    * Drops the held gesture without opening anything, e.g. on `pointercancel`
    * or when the window loses focus mid-press.
    *
-   * @param pointerId - Only cancel when the tracked gesture belongs to this
-   *   pointer, so a cancelled unrelated pointer leaves it alone. Omit it (window
-   *   blur) to cancel unconditionally.
+   * @param pointerId - When provided, only cancels if the tracked gesture or
+   *   touch hold belongs to that pointer; when omitted, resets all state.
    */
   cancel(pointerId?: number): void {
-    if (pointerId !== undefined && this.gesture?.pointerId !== pointerId) return;
-    this.gesture = null;
+    if (pointerId === undefined) {
+      this.activeTouchIds.clear();
+      this.clearTouchHold();
+      this.gesture = null;
+      return;
+    }
+    this.activeTouchIds.delete(pointerId);
+    if (this.touchHold?.pointerId === pointerId) {
+      this.clearTouchHold();
+    }
+    if (this.gesture?.pointerId === pointerId) {
+      this.gesture = null;
+    }
   }
 
   /**
@@ -142,11 +233,24 @@ export class ContextMenuGestureTracker {
    *
    * - Button still held (Linux/macOS): defer until release.
    * - Just released (Windows): open only if the gesture was not a drag.
+   * - Just opened by touch long-press (Android): suppress duplicate native event.
    * - No gesture (keyboard menu key, Shift+F10): open right away.
-   *
-   * @param request - Cursor position of the `contextmenu` event.
    */
   contextMenu(request: ContextMenuRequest): void {
+    // On Android, Chrome's native long-press `contextmenu` can fire either
+    // slightly before or after our 500 ms timer. Suppress it whenever a touch
+    // hold is in progress (or multi-touch is active) or just fired so our
+    // tolerance-checked timer remains the single source of truth.
+    if (this.touchHold !== null || this.activeTouchIds.size > 0) {
+      return;
+    }
+    if (
+      this.lastTouchLongPressAt !== null &&
+      this.now() - this.lastTouchLongPressAt <= CONTEXT_MENU_RELEASE_WINDOW_MS
+    ) {
+      this.lastTouchLongPressAt = null;
+      return;
+    }
     const gesture = this.gesture;
     if (gesture && gesture.releasedAt === null) {
       gesture.pending = request;
