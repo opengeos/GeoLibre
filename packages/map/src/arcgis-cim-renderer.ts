@@ -33,8 +33,8 @@
  * nothing is dropped without a warning. A refused renderer keeps any readable
  * single or default symbol, otherwise the caller's default style applies, and
  * names the reason: another renderer type (`renderer`), unique values on
- * several fields (`multiple-fields`), an Arcade expression (`expression`),
- * normalised breaks (`normalization`), graduated symbols
+ * several fields or none (`multiple-fields`), an Arcade expression
+ * (`expression`), normalised breaks (`normalization`), graduated symbols
  * (`graduated-symbols`), an exclusion clause (`exclusion`), a class symbol
  * with no solid colour (`symbol`), or no usable classes (`no-classes`). A
  * translated renderer can still carry issues for what it leaves out: visual

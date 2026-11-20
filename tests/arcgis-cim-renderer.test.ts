@@ -470,6 +470,7 @@ describe("CIM renderer refusals", () => {
       zoning({ fields: ["ZONE", "SUB"] }),
       [{ code: "multiple-fields" }],
     ],
+    ["unique values on no field", zoning({ fields: [] }), [{ code: "multiple-fields" }]],
     [
       "an Arcade expression",
       zoning({
