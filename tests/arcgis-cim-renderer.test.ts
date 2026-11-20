@@ -287,7 +287,7 @@ describe("CIM unique value renderer", () => {
         },
       ],
     });
-    const feature = (KIND: string) => ({ type: 2, properties: { KIND } } as never);
+    const feature = (KIND: string) => ({ type: 2, properties: { KIND } }) as never;
     const value = vectorLineColorValue(style);
     assert.equal(evaluateColor(value, feature("hw")), "#ff0000");
     assert.equal(evaluateColor(value, feature("st")), "#0000ff");
@@ -550,9 +550,7 @@ describe("CIM renderer refusals", () => {
       size,
       markerGraphics: [{ symbol: { type: "CIMPolygonSymbol", symbolLayers: [fill()] } }],
     });
-    const hidden = translateCimRenderer(
-      simple(symbolRef("CIMPointSymbol", [sized(0), sized(8)])),
-    );
+    const hidden = translateCimRenderer(simple(symbolRef("CIMPointSymbol", [sized(0), sized(8)])));
     assert.equal(hidden.translated, false);
     assert.equal(hidden.issues[0].code, "symbol");
     assert.equal(

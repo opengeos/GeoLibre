@@ -634,10 +634,10 @@ function symbolLook(reference: unknown): SymbolLook | null {
     type === "CIMPolygonSymbol"
       ? polygonLook(scanLayers(layers, SOLID_LAYERS))
       : type === "CIMLineSymbol"
-      ? lineLook(scanLayers(layers, ["CIMSolidStroke"]))
-      : type === "CIMPointSymbol"
-      ? markerLook(layers)
-      : null;
+        ? lineLook(scanLayers(layers, ["CIMSolidStroke"]))
+        : type === "CIMPointSymbol"
+          ? markerLook(layers)
+          : null;
   if (!look) return null;
   // When a layer that was left out (dropped or unreadable) is all that would
   // show, as with a hatch over a clear background, a transparent top stroke
@@ -753,8 +753,8 @@ function markerLook(layers: CimObject[]): SymbolLook | null {
   const dropped = outer
     ? stringValue(outer.type) || "symbol layer"
     : drawing.length > 1
-    ? "CIMMarkerGraphic"
-    : scan.dropped;
+      ? "CIMMarkerGraphic"
+      : scan.dropped;
   const unreadable =
     marker.color !== undefined && !markerColor ? colorType(marker) : scan.unreadable;
   const effect = layers.map(layerEffect).find(Boolean);
