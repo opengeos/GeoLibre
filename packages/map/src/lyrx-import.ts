@@ -94,9 +94,12 @@ export function parseLyrx(document: unknown): LyrxImportResult {
     result.matchedCount = readSimple(renderer, result.style, notes);
     // Leads the warnings, since a one-line surface shows only the first.
     if (result.matchedCount === 0) {
-      const symbolType = stringOf(objectOf(objectOf(renderer.symbol)?.symbol)?.type);
+      // "CIMPolygonSymbol" reads as "polygon symbol".
+      const kind = stringOf(objectOf(objectOf(renderer.symbol)?.symbol)?.type)
+        .replace(/^CIM|Symbol$/g, "")
+        .toLowerCase();
       result.warnings.push(
-        `The .lyrx style's ${symbolType || "symbol"} has no fill, outline or marker GeoLibre can import; the layer keeps its current style.`,
+        `The .lyrx style's ${kind ? `${kind} symbol` : "symbol"} has no fill, outline or marker GeoLibre can import; the layer keeps its current style.`,
       );
     }
   } else {

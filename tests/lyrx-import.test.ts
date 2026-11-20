@@ -440,7 +440,7 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     );
     assert.equal(empty.ok, false);
     if (empty.ok) return;
-    assert.match(empty.warnings[0], /CIMMeshSymbol has no fill, outline or marker/);
+    assert.match(empty.warnings[0], /mesh symbol has no fill, outline or marker/);
   });
 
   it("keeps the layer's colour and says so when a colour type cannot be read", () => {
