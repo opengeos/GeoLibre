@@ -4338,7 +4338,7 @@
         "format": "The layer's data format is not supported.",
         "file-geodatabase": "File Geodatabase (.gdb) sources are not loaded from projects. In GeoLibre Desktop, add them with Add data → File geodatabase (GDB).",
         "file-geodatabase-raster": "Raster datasets stored in a File Geodatabase (.gdb) are not supported. Export the raster to GeoTIFF and add it as a raster layer.",
-        "file-geodatabase-read": "The feature class could not be read from its File Geodatabase (.gdb). Check that the geodatabase is still at the path the project names, then import the project again.",
+        "file-geodatabase-read": "The feature class could not be read from its File Geodatabase (.gdb). The geodatabase may have moved, or GeoLibre's processing server may have failed to start or been busy. Check that the geodatabase is still at the path the project names, then import the project again.",
         "file-geodatabase-crs": "The feature class's coordinate system could not be detected. Add it with Add data → File geodatabase (GDB) and enter its source CRS.",
         "network-path": "Network share paths are not loaded for security reasons.",
         "service": "This ArcGIS service layer could not be imported. Projects can bring in hosted feature layers that name a FeatureServer sublayer, ArcGIS vector tile items and cached map services.",
