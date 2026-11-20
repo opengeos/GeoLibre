@@ -94,7 +94,9 @@ export function parseLyrx(document: unknown): LyrxImportResult {
     result.matchedCount = readSimple(renderer, result.style, notes);
   } else {
     const name =
-      UNSUPPORTED_RENDERER_NAMES[rendererType] ??
+      (Object.hasOwn(UNSUPPORTED_RENDERER_NAMES, rendererType)
+        ? UNSUPPORTED_RENDERER_NAMES[rendererType]
+        : undefined) ??
       (rendererType.replace(/^CIM|Renderer$/g, "") || "unrecognised");
     result.warnings.push(
       `The .lyrx style uses the ${name} renderer, which GeoLibre cannot import; the layer keeps its current style.`,
@@ -260,6 +262,12 @@ function readLabels(layer: CimObject, warnings: string[]): Partial<LabelStyle> |
       "The .lyrx style's label expression is more than a single field, so its labels were not imported.",
     );
     return null;
+  }
+  // Only the field is read; the text symbol is named rather than dropped silently.
+  if (labelClass.textSymbol !== undefined) {
+    warnings.push(
+      "The .lyrx style's label font, size, colour and halo were not imported; the labels keep the layer's own text style.",
+    );
   }
   // Cleared, because a label expression takes precedence over the field.
   return { enabled: true, field, expression: "" };

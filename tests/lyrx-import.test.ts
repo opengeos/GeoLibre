@@ -294,6 +294,38 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     assert.match(result.warnings[0], /picture fill/);
   });
 
+  it("names a renderer type that collides with an Object prototype key as itself", () => {
+    for (const type of ["constructor", "__proto__", "toString"]) {
+      const result = importStyleText(lyrx({ type }));
+      assert.equal(result.ok, false);
+      if (result.ok) continue;
+      assert.match(result.warnings[0], new RegExp(`uses the ${type} renderer`));
+    }
+  });
+
+  it("says the label's text style was not imported", () => {
+    const result = parseLyrx(
+      lyrxDocument(
+        { type: "CIMSimpleRenderer", symbol: polygonSymbol([1, 2, 3]) },
+        {
+          labelVisibility: true,
+          labelClasses: [
+            {
+              expression: "[NAME]",
+              visibility: true,
+              textSymbol: {
+                type: "CIMSymbolReference",
+                symbol: { type: "CIMTextSymbol", height: 12 },
+              },
+            },
+          ],
+        },
+      ),
+    );
+    assert.deepEqual(result.labels, { enabled: true, field: "NAME", expression: "" });
+    assert.match(result.warnings.join(" "), /label font, size, colour and halo/);
+  });
+
   it("leaves Mapbox GL JSON to the Mapbox reader", () => {
     const result = importStyleText(
       JSON.stringify({
