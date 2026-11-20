@@ -33,12 +33,31 @@ export function resolveMapPixelRatio(options?: {
  * switching zoom/display modes) and invoke `onChange` with the resolved
  * pixel ratio (respecting the 2x mobile cap). Returns a cleanup callback.
  */
-export function watchMapPixelRatio(onChange: (pixelRatio: number) => void): () => void {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+export function watchMapPixelRatio(
+  onChange: (pixelRatio: number) => void,
+  env?: {
+    getDevicePixelRatio?: () => number;
+    matchMedia?: (query: string) => {
+      matches: boolean;
+      addEventListener: (type: string, listener: () => void, options?: { once?: boolean }) => void;
+      removeEventListener: (type: string, listener: () => void) => void;
+    };
+    isTouchDevice?: boolean;
+  },
+): () => void {
+  const matchMediaFn =
+    env?.matchMedia ??
+    (typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? (q: string) => window.matchMedia(q)
+      : undefined);
+  const getDpr =
+    env?.getDevicePixelRatio ??
+    (typeof window !== "undefined" ? () => window.devicePixelRatio : undefined);
+  if (!matchMediaFn || !getDpr) {
     return () => {};
   }
   let disposed = false;
-  let activeMedia: MediaQueryList | null = null;
+  let activeMedia: ReturnType<typeof matchMediaFn> | null = null;
   let activeListener: (() => void) | null = null;
 
   const detach = () => {
@@ -52,14 +71,19 @@ export function watchMapPixelRatio(onChange: (pixelRatio: number) => void): () =
   const subscribe = () => {
     detach();
     if (disposed) return;
-    const dpr = window.devicePixelRatio;
+    const dpr = getDpr();
     if (!Number.isFinite(dpr) || dpr <= 0) return;
-    const media = window.matchMedia(`(resolution: ${dpr}dppx)`);
+    const media = matchMediaFn(`(resolution: ${dpr}dppx)`);
     const onResolutionChange = () => {
       if (disposed) return;
-      const resolved = resolveMapPixelRatio();
-      if (resolved !== undefined) onChange(resolved);
+      // Re-subscribe BEFORE invoking onChange so a throwing callback cannot
+      // kill future DPR tracking.
       subscribe();
+      const resolved = resolveMapPixelRatio({
+        devicePixelRatio: getDpr(),
+        isTouchDevice: env?.isTouchDevice,
+      });
+      if (resolved !== undefined) onChange(resolved);
     };
     activeMedia = media;
     activeListener = onResolutionChange;

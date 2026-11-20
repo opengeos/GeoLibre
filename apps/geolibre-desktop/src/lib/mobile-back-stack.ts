@@ -32,7 +32,11 @@ let installed = false;
  */
 export function dispatchMobileBack(): boolean {
   for (let i = handlers.length - 1; i >= 0; i -= 1) {
-    if (handlers[i].handler()) return true;
+    try {
+      if (handlers[i].handler()) return true;
+    } catch (error) {
+      console.error("mobile back handler failed:", error);
+    }
   }
   return false;
 }

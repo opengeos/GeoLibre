@@ -499,7 +499,9 @@ export class MapController implements MapEngine {
     this.selectionDragGuardDispose = installSelectionDragGuard(this.map.getCanvasContainer());
     this.pixelRatioWatchDispose?.();
     this.pixelRatioWatchDispose = watchMapPixelRatio((ratio) => {
-      this.map?.setPixelRatio(ratio);
+      if (typeof this.map?.setPixelRatio === "function") {
+        this.map.setPixelRatio(ratio);
+      }
     });
     installGlobePopupOcclusion(maplibregl);
     // Per-layer blend modes wrap MapLibre's render loop, so they have to be in

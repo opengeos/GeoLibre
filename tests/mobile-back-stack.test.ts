@@ -73,4 +73,18 @@ describe("mobile back-handler stack", () => {
     assert.equal(dispatchMobileBack(), true);
     assert.deepEqual(log, ["crosshair", "sheet:field"]);
   });
+
+  it("isolates a throwing handler so lower handlers still consume back", () => {
+    const log: string[] = [];
+    registerMobileBackHandler(() => {
+      log.push("fallback");
+      return true;
+    });
+    registerMobileBackHandler(() => {
+      throw new Error("boom");
+    });
+
+    assert.equal(dispatchMobileBack(), true);
+    assert.deepEqual(log, ["fallback"]);
+  });
 });

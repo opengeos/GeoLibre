@@ -53,21 +53,23 @@ class MainActivity : TauriActivity() {
     // drill-down, or field crosshair overlay calls `event.preventDefault()`,
     // stay in the app; otherwise delegate back to Android's default behavior.
     val backCallback = object : OnBackPressedCallback(true) {
+      private fun passBackToSystem() {
+        isEnabled = false
+        onBackPressedDispatcher.onBackPressed()
+        isEnabled = true
+      }
+
       override fun handleOnBackPressed() {
         val webView = findWebView(content)
         if (webView == null) {
-          isEnabled = false
-          onBackPressedDispatcher.onBackPressed()
-          isEnabled = true
+          passBackToSystem()
           return
         }
         webView.evaluateJavascript(
           "(function(){var e=new CustomEvent('geolibre:android-back',{cancelable:true});window.dispatchEvent(e);return e.defaultPrevented;})()",
         ) { result ->
           if (result != "true") {
-            isEnabled = false
-            onBackPressedDispatcher.onBackPressed()
-            isEnabled = true
+            passBackToSystem()
           }
         }
       }

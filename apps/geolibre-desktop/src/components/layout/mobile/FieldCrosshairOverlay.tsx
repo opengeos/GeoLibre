@@ -33,6 +33,14 @@ export function FieldCrosshairOverlay({ mapControllerRef }: FieldCrosshairOverla
   useEffect(() => {
     if (!active) return;
     return registerMobileBackHandler(() => {
+      // If a BottomSheet is currently open on top of the map, yield so the
+      // sheet closes first and visual stacking order is preserved.
+      if (typeof document !== "undefined") {
+        const sheets = document.querySelectorAll<HTMLElement>("[data-mobile-bottom-sheet]");
+        for (const sheet of sheets) {
+          if (sheet.offsetParent !== null) return false;
+        }
+      }
       stop();
       return true;
     });

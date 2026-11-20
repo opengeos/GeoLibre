@@ -7,8 +7,12 @@ const HAPTIC_DURATION_MS: Record<HapticStyle, number> = {
 };
 
 /**
- * Trigger a subtle tactile haptic pulse on supported touch devices while
- * respecting `prefers-reduced-motion: reduce` (GeoLibre#3537 Phase 5).
+ * Trigger a subtle tactile haptic pulse on supported touch devices
+ * (GeoLibre#3537 Phase 5).
+ *
+ * Intentionally silences vibration when `prefers-reduced-motion: reduce` is set
+ * as a conservative sensory-comfort guard because the Web Vibration API has no
+ * dedicated user-haptics preference query.
  */
 export function triggerHaptic(
   style: HapticStyle = "light",

@@ -151,16 +151,7 @@ export function useMobileShellState(mobileShell: boolean) {
     setActiveMobileTab(null);
   }, []);
 
-  const backStateRef = useRef({
-    floatingPanelCount,
-    activeMobileTab,
-    expandedPluginPanelId,
-    anyBottomPanelOpen,
-    closeAllFloatingPanels,
-    closeMobileTab,
-    closeAllBottomPanels,
-  });
-  backStateRef.current = {
+  const backState = {
     floatingPanelCount,
     activeMobileTab,
     expandedPluginPanelId,
@@ -169,6 +160,8 @@ export function useMobileShellState(mobileShell: boolean) {
     closeMobileTab,
     closeAllBottomPanels,
   };
+  const backStateRef = useRef(backState);
+  backStateRef.current = backState;
 
   useEffect(() => {
     if (!mobileShell) return;
