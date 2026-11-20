@@ -313,6 +313,7 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
             {
               expression: "[NAME]",
               visibility: true,
+              whereClause: "POP > 1000",
               textSymbol: {
                 type: "CIMSymbolReference",
                 symbol: { type: "CIMTextSymbol", height: 12 },
@@ -324,6 +325,7 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     );
     assert.deepEqual(result.labels, { enabled: true, field: "NAME", expression: "" });
     assert.match(result.warnings.join(" "), /label font, size, colour and halo/);
+    assert.match(result.warnings.join(" "), /label filter \(where clause\)/);
   });
 
   it("turns labels off when the layer file has them off", () => {

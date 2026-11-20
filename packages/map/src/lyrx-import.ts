@@ -290,6 +290,11 @@ function readLabels(layer: CimObject, warnings: string[]): Partial<LabelStyle> |
       "The .lyrx style's label font, size, colour and halo were not imported; the labels keep the layer's own text style.",
     );
   }
+  if (stringOf(labelClass.whereClause).trim()) {
+    warnings.push(
+      "The .lyrx style's label filter (where clause) was not imported, so every feature is labelled.",
+    );
+  }
   // Cleared, because a label expression takes precedence over the field.
   return { enabled: true, field, expression: "" };
 }
