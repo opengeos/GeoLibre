@@ -73,7 +73,9 @@ export function remoteGeoJsonUrl(
     const value = candidate.trim();
     if (!value) continue;
     const isAbsolute = /^https?:\/\//i.test(value);
-    const isRootRelative = value.startsWith("/") && !value.startsWith("//");
+    // The URL parser reads `\` as `/` and drops tabs and newlines, so
+    // `/\host/x` or `/<tab>/host/x` would otherwise resolve to another origin.
+    const isRootRelative = value.startsWith("/") && !/^\/[\\/\t\r\n]/.test(value);
     if (!isAbsolute && !isRootRelative) continue;
     try {
       return new URL(value, baseUrl).href;

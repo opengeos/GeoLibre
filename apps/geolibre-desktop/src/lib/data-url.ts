@@ -227,7 +227,13 @@ function parseFeatureCollection(text: string, source: string): FeatureCollection
     !parsed ||
     typeof parsed !== "object" ||
     (parsed as { type?: unknown }).type !== "FeatureCollection" ||
-    !Array.isArray((parsed as { features?: unknown }).features)
+    !Array.isArray((parsed as { features?: unknown }).features) ||
+    !(parsed as { features: unknown[] }).features.every(
+      (feature) =>
+        typeof feature === "object" &&
+        feature !== null &&
+        (feature as { type?: unknown }).type === "Feature",
+    )
   ) {
     throw new Error(`${source} is not a GeoJSON FeatureCollection.`);
   }

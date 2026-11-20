@@ -1,4 +1,9 @@
-import { rememberFetchedGeoJson, remoteGeoJsonUrl, useAppStore } from "@geolibre/core";
+import {
+  rememberFetchedGeoJson,
+  remoteGeoJsonUrl,
+  useAppStore,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import i18next from "i18next";
 import { fetchGeoJsonFeatureCollection } from "./data-url";
 import { notify } from "./notify";
@@ -32,13 +37,10 @@ function pageUrl(): string {
  */
 export async function restoreRemoteGeoJsonLayers(): Promise<void> {
   const base = pageUrl();
-  const pending = useAppStore
-    .getState()
-    .layers.map((layer) => ({ layer, url: remoteGeoJsonUrl(layer, base) }))
-    .filter(
-      (entry): entry is { layer: (typeof entry)["layer"]; url: string } =>
-        entry.url !== null && !attemptedSources.has(entry.layer.source),
-    );
+  const pending = useAppStore.getState().layers.flatMap((layer) => {
+    const url = remoteGeoJsonUrl(layer, base);
+    return url !== null && !attemptedSources.has(layer.source) ? [{ layer, url }] : [];
+  });
   if (pending.length === 0) return;
   for (const { layer } of pending) attemptedSources.add(layer.source);
 
@@ -46,12 +48,12 @@ export async function restoreRemoteGeoJsonLayers(): Promise<void> {
     pending.map(async ({ layer, url }) => {
       try {
         const geojson = await fetchGeoJsonFeatureCollection(url);
-        // The layer may have been removed, replaced by another project's, or
-        // given features some other way while the request was in flight.
-        const current = useAppStore.getState().layers.find((entry) => entry.id === layer.id);
-        if (!current || current.source !== layer.source || current.geojson) return;
+        if (!isStillWaiting(layer)) return;
         useAppStore.getState().updateLayer(layer.id, { geojson: rememberFetchedGeoJson(geojson) });
       } catch (error) {
+        // A request from a project that has since been replaced, or for a
+        // layer removed meanwhile, has no one left to warn.
+        if (!isStillWaiting(layer)) return;
         console.warn(`[GeoLibre] Could not fetch GeoJSON for layer "${layer.name}".`, error);
         notify.warning(
           i18next.t("notifications.remoteGeoJsonFetchFailed", {
@@ -63,6 +65,20 @@ export async function restoreRemoteGeoJsonLayers(): Promise<void> {
       }
     }),
   );
+}
+
+/**
+ * Whether a layer is still the record a fetch was started for: present, with
+ * the same `source` object, and still without features. It may have been
+ * removed, replaced by another project's, or given features some other way
+ * while the request was in flight.
+ *
+ * @param layer - The layer record the fetch was started for.
+ * @returns True when the fetch result still belongs to the live layer.
+ */
+function isStillWaiting(layer: GeoLibreLayer): boolean {
+  const current = useAppStore.getState().layers.find((entry) => entry.id === layer.id);
+  return current !== undefined && current.source === layer.source && !current.geojson;
 }
 
 /**

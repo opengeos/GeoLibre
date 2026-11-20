@@ -261,11 +261,23 @@ export function useEmbedApi(
           // A geojson spec that points at its data by URL is fetched before it
           // is added, so a bad URL fails this call instead of acking a layer
           // that draws nothing (#3508).
-          const layer = await withFetchedRemoteGeoJson(buildEmbedLayer(command.spec, state.layers));
-          // The fetch yields, so another command may have taken the id meanwhile.
-          buildEmbedLayer(command.spec, useAppStore.getState().layers);
-          useAppStore.getState().addLayer(layer, command.spec.beforeId);
-          return layer.id;
+          // Registered like addData's loads, so tearing the embed down aborts
+          // the fetch and the layer is never written behind a dropped ack.
+          const abort = new AbortController();
+          dataLoadAborts.add(abort);
+          try {
+            const layer = await withFetchedRemoteGeoJson(
+              buildEmbedLayer(command.spec, state.layers),
+              { signal: abort.signal },
+            );
+            abort.signal.throwIfAborted();
+            // The fetch yields, so another command may have taken the id meanwhile.
+            buildEmbedLayer(command.spec, useAppStore.getState().layers);
+            useAppStore.getState().addLayer(layer, command.spec.beforeId);
+            return layer.id;
+          } finally {
+            dataLoadAborts.delete(abort);
+          }
         }
         case "addData": {
           if (!useAppStore.getState().deploymentCapabilities.has("data:add"))

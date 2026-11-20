@@ -75,7 +75,14 @@ describe("remoteGeoJsonUrl", () => {
     );
     assert.equal(remoteGeoJsonUrl(layer({ metadata: { externalNativeLayer: true } }), BASE), null);
     assert.equal(remoteGeoJsonUrl(layer({ metadata: { localFileReloadable: true } }), BASE), null);
-    for (const data of ["fields.geojson", "//cdn.example/f.json", "file:///f.json", "data:,{}"]) {
+    for (const data of [
+      "fields.geojson",
+      "//cdn.example/f.json",
+      "/\\evil.example/f.json",
+      "/\t/evil.example/f.json",
+      "file:///f.json",
+      "data:,{}",
+    ]) {
       assert.equal(remoteGeoJsonUrl(layer({ source: { type: "geojson", data } }), BASE), null);
     }
   });
@@ -168,6 +175,27 @@ describe("restoreRemoteGeoJsonLayers", () => {
     await pending;
     assert.equal(useAppStore.getState().layers.length, 0);
   });
+
+  it("does not warn about a failed request for a layer removed meanwhile", async () => {
+    let release!: () => void;
+    globalThis.fetch = (async () => {
+      await new Promise<void>((resolve) => (release = resolve));
+      return new Response("nope", { status: 500 });
+    }) as typeof fetch;
+    const warnings: unknown[] = [];
+    const realWarn = console.warn;
+    console.warn = (...args: unknown[]) => void warnings.push(args);
+    try {
+      useAppStore.getState().addLayer(layer());
+      const pending = restoreRemoteGeoJsonLayers();
+      useAppStore.getState().removeLayer("fields");
+      release();
+      await pending;
+    } finally {
+      console.warn = realWarn;
+    }
+    assert.equal(warnings.length, 0);
+  });
 });
 
 describe("withFetchedRemoteGeoJson (embed addLayer)", () => {
@@ -187,6 +215,24 @@ describe("withFetchedRemoteGeoJson (embed addLayer)", () => {
   it("rejects when the referenced document is not GeoJSON", async () => {
     globalThis.fetch = (async () => new Response("<html></html>")) as typeof fetch;
     await assert.rejects(withFetchedRemoteGeoJson(layer()), /valid JSON/);
+  });
+
+  it("rejects a collection whose features are not Feature objects", async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({ type: "FeatureCollection", features: [null] }),
+      )) as typeof fetch;
+    await assert.rejects(withFetchedRemoteGeoJson(layer()), /not a GeoJSON FeatureCollection/);
+  });
+
+  it("stops at an aborted signal", async () => {
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      init?.signal?.throwIfAborted();
+      return new Response(JSON.stringify(collection("remote")));
+    }) as typeof fetch;
+    const abort = new AbortController();
+    abort.abort();
+    await assert.rejects(withFetchedRemoteGeoJson(layer(), { signal: abort.signal }));
   });
 
   it("passes a layer with inline features through untouched", async () => {
