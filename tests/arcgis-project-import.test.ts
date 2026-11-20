@@ -745,6 +745,7 @@ describe("ArcGIS Pro project import", () => {
       /too large to import safely/,
     );
   });
+
   it("imports explicit FeatureServer sublayers from an APRX with their place and state", () => {
     const map = {
       type: "CIMMapDocument",
