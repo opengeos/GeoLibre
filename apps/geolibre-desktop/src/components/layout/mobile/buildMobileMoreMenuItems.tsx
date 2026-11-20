@@ -28,6 +28,9 @@ import type { Command } from "../../../lib/commands";
 import { CVD_MODE_LABEL_KEYS, useCvdPreviewStore } from "../../../lib/cvd-preview-store";
 import { CVD_MODES } from "../../../lib/cvd-simulation";
 import type { TouchMenuItem } from "../../../lib/touch-menu-nav";
+import { isMenuItemVisible } from "../../../lib/ui-profile";
+
+type UiProfile = Parameters<typeof isMenuItemVisible>[0];
 
 const SPLIT_VIEW_PRESETS: ReadonlyArray<{
   rows: number;
@@ -44,6 +47,7 @@ const SPLIT_VIEW_PRESETS: ReadonlyArray<{
 
 export interface BuildMobileMoreMenuOptions {
   t: TFunction;
+  uiProfile: UiProfile;
   canEditProject: boolean;
   canShare: boolean;
   canShowView: boolean;
@@ -77,6 +81,7 @@ export interface BuildMobileMoreMenuOptions {
  */
 export function buildMobileMoreMenuItems({
   t,
+  uiProfile,
   canEditProject,
   canShare,
   canShowView,
@@ -151,100 +156,118 @@ export function buildMobileMoreMenuItems({
       ]
     : [];
 
-  const viewItems: TouchMenuItem[] = canShowView
-    ? [
+  const showViewItem = (id: string) => canShowView && isMenuItemVisible(uiProfile, id);
+  // eslint-disable-next-line local/no-renderer-kind-checks -- recovery action so users can always switch back to MapLibre
+  const isNonDefaultRenderer = primaryRenderer !== "maplibre";
+  const showRenderingEngine = showViewItem("view.renderingEngine") || isNonDefaultRenderer;
+
+  const viewItems: TouchMenuItem[] = [];
+  if (showViewItem("view.zoomIn")) {
+    viewItems.push({
+      kind: "action",
+      id: "view-zoom-in",
+      label: t("toolbar.item.zoomIn"),
+      icon: <ZoomIn className="h-4 w-4" />,
+      onSelect: onZoomIn,
+    });
+  }
+  if (showViewItem("view.zoomOut")) {
+    viewItems.push({
+      kind: "action",
+      id: "view-zoom-out",
+      label: t("toolbar.item.zoomOut"),
+      icon: <ZoomOut className="h-4 w-4" />,
+      onSelect: onZoomOut,
+    });
+  }
+  if (showViewItem("view.resetNorth")) {
+    viewItems.push({
+      kind: "action",
+      id: "view-reset-north",
+      label: t("toolbar.item.resetBearing"),
+      icon: <Compass className="h-4 w-4" />,
+      onSelect: onResetNorth,
+    });
+  }
+  if (showViewItem("view.resetPitch")) {
+    viewItems.push({
+      kind: "action",
+      id: "view-reset-pitch",
+      label: t("toolbar.item.resetPitch"),
+      icon: <Mountain className="h-4 w-4" />,
+      onSelect: onResetPitch,
+    });
+  }
+  if (showViewItem("view.resetPitchBearing")) {
+    viewItems.push({
+      kind: "action",
+      id: "view-reset-both",
+      label: t("toolbar.item.resetPitchBearing"),
+      icon: <RotateCcw className="h-4 w-4" />,
+      onSelect: onResetPitchBearing,
+    });
+  }
+  if (showViewItem("view.splitView")) {
+    viewItems.push({
+      kind: "submenu",
+      id: "view-split",
+      label: t("toolbar.item.splitView"),
+      icon: <LayoutGrid className="h-4 w-4" />,
+      items: SPLIT_VIEW_PRESETS.map((preset) => ({
+        kind: "action" as const,
+        id: `split-${preset.rows}x${preset.cols}`,
+        label: t(preset.labelKey),
+        active: gridKey === `${preset.rows}x${preset.cols}`,
+        onSelect: () => setMapGrid(preset.rows, preset.cols),
+      })),
+    });
+  }
+  if (showViewItem("view.colorVision")) {
+    viewItems.push({
+      kind: "submenu",
+      id: "view-cvd",
+      label: t("toolbar.item.colorVisionPreview"),
+      icon: <Palette className="h-4 w-4" />,
+      items: [
         {
           kind: "action",
-          id: "view-zoom-in",
-          label: t("toolbar.item.zoomIn"),
-          icon: <ZoomIn className="h-4 w-4" />,
-          onSelect: onZoomIn,
+          id: "cvd-off",
+          label: t("toolbar.item.cvdOff"),
+          active: cvdMode === null,
+          onSelect: () => setCvdMode(null),
         },
-        {
-          kind: "action",
-          id: "view-zoom-out",
-          label: t("toolbar.item.zoomOut"),
-          icon: <ZoomOut className="h-4 w-4" />,
-          onSelect: onZoomOut,
-        },
-        {
-          kind: "action",
-          id: "view-reset-north",
-          label: t("toolbar.item.resetBearing"),
-          icon: <Compass className="h-4 w-4" />,
-          onSelect: onResetNorth,
-        },
-        {
-          kind: "action",
-          id: "view-reset-pitch",
-          label: t("toolbar.item.resetPitch"),
-          icon: <Mountain className="h-4 w-4" />,
-          onSelect: onResetPitch,
-        },
-        {
-          kind: "action",
-          id: "view-reset-both",
-          label: t("toolbar.item.resetPitchBearing"),
-          icon: <RotateCcw className="h-4 w-4" />,
-          onSelect: onResetPitchBearing,
-        },
-        {
-          kind: "submenu",
-          id: "view-split",
-          label: t("toolbar.item.splitView"),
-          icon: <LayoutGrid className="h-4 w-4" />,
-          items: SPLIT_VIEW_PRESETS.map((preset) => ({
-            kind: "action" as const,
-            id: `split-${preset.rows}x${preset.cols}`,
-            label: t(preset.labelKey),
-            active: gridKey === `${preset.rows}x${preset.cols}`,
-            onSelect: () => setMapGrid(preset.rows, preset.cols),
-          })),
-        },
-        {
-          kind: "submenu",
-          id: "view-cvd",
-          label: t("toolbar.item.colorVisionPreview"),
-          icon: <Palette className="h-4 w-4" />,
-          items: [
-            {
-              kind: "action",
-              id: "cvd-off",
-              label: t("toolbar.item.cvdOff"),
-              active: cvdMode === null,
-              onSelect: () => setCvdMode(null),
-            },
-            ...CVD_MODES.map((mode) => ({
-              kind: "action" as const,
-              id: `cvd-${mode}`,
-              label: t(CVD_MODE_LABEL_KEYS[mode]),
-              active: cvdMode === mode,
-              onSelect: () => setCvdMode(mode),
-            })),
-          ],
-        },
-        {
-          kind: "submenu",
-          id: "view-renderer",
-          label: t("toolbar.item.renderingEngine"),
-          icon: <Box className="h-4 w-4" />,
-          items: (
-            [
-              ["maplibre", "toolbar.item.rendererMapLibre"],
-              ["mapbox", "toolbar.item.rendererMapbox"],
-              ["arcgis", "toolbar.item.rendererArcgis"],
-              ["cesium", "toolbar.item.rendererCesium"],
-            ] as const
-          ).map(([id, labelKey]) => ({
-            kind: "action" as const,
-            id: `renderer-${id}`,
-            label: t(labelKey),
-            active: primaryRenderer === id,
-            onSelect: () => setPrimaryRenderer(id),
-          })),
-        },
-      ]
-    : [];
+        ...CVD_MODES.map((mode) => ({
+          kind: "action" as const,
+          id: `cvd-${mode}`,
+          label: t(CVD_MODE_LABEL_KEYS[mode]),
+          active: cvdMode === mode,
+          onSelect: () => setCvdMode(mode),
+        })),
+      ],
+    });
+  }
+  if (showRenderingEngine) {
+    viewItems.push({
+      kind: "submenu",
+      id: "view-renderer",
+      label: t("toolbar.item.renderingEngine"),
+      icon: <Box className="h-4 w-4" />,
+      items: (
+        [
+          ["maplibre", "toolbar.item.rendererMapLibre"],
+          ["mapbox", "toolbar.item.rendererMapbox"],
+          ["arcgis", "toolbar.item.rendererArcgis"],
+          ["cesium", "toolbar.item.rendererCesium"],
+        ] as const
+      ).map(([id, labelKey]) => ({
+        kind: "action" as const,
+        id: `renderer-${id}`,
+        label: t(labelKey),
+        active: primaryRenderer === id,
+        onSelect: () => setPrimaryRenderer(id),
+      })),
+    });
+  }
 
   // Group processing commands by their localized group name into drill-down submenus.
   const processingSubmenus: TouchMenuItem[] = [];
@@ -262,10 +285,14 @@ export function buildMobileMoreMenuItems({
       list.push(cmd);
       byGroup.set(cmd.group, list);
     }
+    let groupIndex = 0;
     for (const [group, cmds] of byGroup) {
+      groupIndex += 1;
       processingSubmenus.push({
         kind: "submenu",
-        id: `proc-group-${group.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+        // Use a stable numeric index rather than ASCII slugification so non-Latin
+        // localized group labels (e.g. CJK/Arabic/Cyrillic) never collide.
+        id: `proc-group-${groupIndex}`,
         label: group,
         badge: String(cmds.length),
         icon: <Cpu className="h-4 w-4" />,
@@ -287,7 +314,7 @@ export function buildMobileMoreMenuItems({
   }
 
   const toolsItems: TouchMenuItem[] = [];
-  if (canShowView) {
+  if (viewItems.length > 0) {
     toolsItems.push({
       kind: "submenu",
       id: "view-menu",

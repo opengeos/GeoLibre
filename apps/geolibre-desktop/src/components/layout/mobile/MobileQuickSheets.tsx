@@ -75,6 +75,7 @@ function SheetActionRow({
 }
 
 export interface MobileAddSheetProps {
+  addDataReady: boolean;
   canAddVector: boolean;
   canAddRaster: boolean;
   canAddDelimited: boolean;
@@ -96,6 +97,7 @@ export interface MobileAddSheetProps {
 
 /** Touch action list for adding local/remote layers and switching basemaps. */
 export function MobileAddSheetContent({
+  addDataReady,
   canAddVector,
   canAddRaster,
   canAddDelimited,
@@ -122,6 +124,7 @@ export function MobileAddSheetContent({
         <SheetActionRow
           icon={<Upload className="h-4 w-4" />}
           label={t("mobileShell.add.localVector")}
+          disabled={!addDataReady}
           onClick={onAddVector}
         />
       ) : null}
@@ -129,6 +132,7 @@ export function MobileAddSheetContent({
         <SheetActionRow
           icon={<Layers className="h-4 w-4" />}
           label={t("mobileShell.add.localRaster")}
+          disabled={!addDataReady}
           onClick={onAddRaster}
         />
       ) : null}
@@ -136,6 +140,7 @@ export function MobileAddSheetContent({
         <SheetActionRow
           icon={<Table2 className="h-4 w-4" />}
           label={t("mobileShell.add.delimitedText")}
+          disabled={!addDataReady}
           onClick={onAddDelimited}
         />
       ) : null}
@@ -143,6 +148,7 @@ export function MobileAddSheetContent({
         <SheetActionRow
           icon={<Globe className="h-4 w-4" />}
           label={t("mobileShell.add.xyz")}
+          disabled={!addDataReady}
           onClick={onAddXyz}
         />
       ) : null}
@@ -150,6 +156,7 @@ export function MobileAddSheetContent({
         <SheetActionRow
           icon={<Link2 className="h-4 w-4" />}
           label={t("mobileShell.add.wms")}
+          disabled={!addDataReady}
           onClick={onAddWms}
         />
       ) : null}
@@ -157,6 +164,7 @@ export function MobileAddSheetContent({
         <SheetActionRow
           icon={<Cloud className="h-4 w-4" />}
           label={t("mobileShell.add.geoParquet")}
+          disabled={!addDataReady}
           onClick={onAddGeoParquet}
         />
       ) : null}

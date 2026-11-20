@@ -51,8 +51,12 @@ export function buildFieldCaptureFeature(
   };
 }
 
-/** Compute the next monotonic capture index even if earlier points were deleted. */
-function nextFieldCaptureIndex(features: readonly Feature[]): number {
+/**
+ * Next capture index: one past the highest surviving `field-pt-N` id, or at
+ * least `minNextIndex` when a persisted counter is provided (so deleting even
+ * the newest point stays monotonic).
+ */
+export function nextFieldCaptureIndex(features: readonly Feature[], minNextIndex?: number): number {
   let maxIndex = features.length;
   for (const feature of features) {
     if (typeof feature.id === "string") {
@@ -63,16 +67,23 @@ function nextFieldCaptureIndex(features: readonly Feature[]): number {
       }
     }
   }
-  return maxIndex + 1;
+  const candidate = maxIndex + 1;
+  return typeof minNextIndex === "number" && Number.isFinite(minNextIndex)
+    ? Math.max(candidate, Math.floor(minNextIndex))
+    : candidate;
 }
 
 /** Append a captured point to an existing GeoJSON collection immutably. */
 export function appendFieldCaptureFeature(
   existing: FeatureCollection | undefined,
   point: FieldCrosshairPoint,
+  minNextIndex?: number,
 ): FeatureCollection {
   const prevFeatures = existing?.features ?? [];
-  const feature = buildFieldCaptureFeature(point, nextFieldCaptureIndex(prevFeatures));
+  const feature = buildFieldCaptureFeature(
+    point,
+    nextFieldCaptureIndex(prevFeatures, minNextIndex),
+  );
   return {
     type: "FeatureCollection",
     features: [...prevFeatures, feature],

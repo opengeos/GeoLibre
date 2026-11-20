@@ -328,9 +328,9 @@ export function LayerRow({
           aria-label={t("layers.dragNamedToReorder", {
             name: layer.name,
           })}
-          className={`select-none cursor-grab rounded p-0.5 text-muted-foreground hover:bg-muted active:cursor-grabbing ${
-            dragged ? "touch-none" : touchUi ? "touch-pan-y" : "touch-none"
-          } ${touchUi ? "inline-flex min-h-11 min-w-9 items-center justify-center" : ""}`}
+          className={`select-none cursor-grab rounded p-0.5 text-muted-foreground hover:bg-muted active:cursor-grabbing touch-none ${
+            touchUi ? "inline-flex min-h-11 min-w-9 items-center justify-center" : ""
+          }`}
           onClick={(e: ReactMouseEvent) => e.stopPropagation()}
           onPointerDown={(e) => onPointerDown(e, layer.id)}
           onPointerMove={onPointerMove}
@@ -684,6 +684,9 @@ export function LayerRow({
                 identifyOwnsClicks={identifyOwnsClicks}
                 identifyLabel={identifyLabel}
                 geometryEditActive={geometryEditActive}
+                geometryEditElsewhere={geometryEditElsewhere}
+                isLayerLocked={isLayerLocked}
+                isRefreshing={isRefreshing}
                 layerEditable={layerEditable}
                 readOnlyHint={readOnlyHint}
                 onOpenMetadata={onOpenMetadata}

@@ -1,19 +1,27 @@
 import { useAppStore } from "@geolibre/core";
+import type { MapEngine } from "@geolibre/map";
 import { Check, Crosshair, Navigation, Plus, X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import { appendFieldCaptureFeature, useFieldCrosshairStore } from "../../../lib/field-crosshair";
+import {
+  appendFieldCaptureFeature,
+  nextFieldCaptureIndex,
+  useFieldCrosshairStore,
+} from "../../../lib/field-crosshair";
 import { triggerHaptic } from "../../../lib/haptics";
 import { registerMobileBackHandler } from "../../../lib/mobile-back-stack";
 import { notify } from "../../../lib/notify";
 
+export interface FieldCrosshairOverlayProps {
+  mapControllerRef: RefObject<MapEngine | null>;
+}
+
 /**
  * Fixed center-of-map crosshair digitizing overlay for outdoor touch field
  * collection (GeoLibre#3537 Phase 4). Users pan the map underneath the reticle
- * and tap a thumb-zone button to drop a point at the exact map center or live
- * GPS fix.
+ * and tap a thumb-zone button to drop a point at the live map center or GPS fix.
  */
-export function FieldCrosshairOverlay() {
+export function FieldCrosshairOverlay({ mapControllerRef }: FieldCrosshairOverlayProps) {
   const { t } = useTranslation();
   const active = useFieldCrosshairStore((s) => s.active);
   const capturedCount = useFieldCrosshairStore((s) => s.capturedCount);
@@ -33,22 +41,43 @@ export function FieldCrosshairOverlay() {
   if (!active) return null;
 
   const dropPoint = (source: "crosshair" | "gps") => {
-    const lng = source === "gps" && gpsStatus ? gpsStatus.lng : mapView.center[0];
-    const lat = source === "gps" && gpsStatus ? gpsStatus.lat : mapView.center[1];
+    // Read live camera center from the map controller so a tap during pan
+    // inertia captures the exact point under the reticle rather than stale
+    // moveend store state.
+    const engine = mapControllerRef.current;
+    const liveCenter = engine?.getRenderSurface() ? engine.readView().center : mapView.center;
+    const lng = source === "gps" && gpsStatus ? gpsStatus.lng : liveCenter[0];
+    const lat = source === "gps" && gpsStatus ? gpsStatus.lat : liveCenter[1];
     const store = useAppStore.getState();
-    const existing = store.layers.find((layer) => layer.metadata.fieldCrosshair === true);
-    const nextCollection = appendFieldCaptureFeature(existing?.geojson, {
-      lng,
-      lat,
-      accuracyM: source === "gps" ? gpsStatus?.accuracy : null,
-      source,
-      capturedAt: new Date().toISOString(),
-    });
+    const existing = store.layers.find((layer) => layer.metadata?.fieldCrosshair === true);
+    const persistedNext =
+      typeof existing?.metadata?.fieldCrosshairNextIndex === "number"
+        ? existing.metadata.fieldCrosshairNextIndex
+        : undefined;
+    const usedIndex = nextFieldCaptureIndex(existing?.geojson?.features ?? [], persistedNext);
+    const nextCollection = appendFieldCaptureFeature(
+      existing?.geojson,
+      {
+        lng,
+        lat,
+        accuracyM: source === "gps" ? gpsStatus?.accuracy : null,
+        source,
+        capturedAt: new Date().toISOString(),
+      },
+      usedIndex,
+    );
     if (existing) {
-      store.updateLayer(existing.id, { geojson: nextCollection });
+      store.updateLayer(existing.id, {
+        geojson: nextCollection,
+        metadata: {
+          ...existing.metadata,
+          fieldCrosshair: true,
+          fieldCrosshairNextIndex: usedIndex + 1,
+        },
+      });
     } else {
       store.addGeoJsonLayer(t("mobileShell.crosshair.layerName"), nextCollection, undefined, null, {
-        metadata: { fieldCrosshair: true },
+        metadata: { fieldCrosshair: true, fieldCrosshairNextIndex: usedIndex + 1 },
       });
     }
     incrementCaptured();

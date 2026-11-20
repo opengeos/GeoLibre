@@ -118,8 +118,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import { isTauri } from "../../lib/tauri-io";
-import { useLayoutOptions } from "../../hooks/useLayoutOptions";
-import { useTouchUi } from "../../hooks/useTouchUi";
 import { isRefreshableLayer } from "../../lib/layer-refresh";
 import { isLocalFileLayer } from "../../lib/local-file-watch";
 import { AttributeCardList } from "./attribute-table/AttributeCardList";
@@ -613,9 +611,15 @@ interface AttributeTableProps {
     handleRefreshLayer: (layer: GeoLibreLayer) => Promise<void> | void;
     refreshStatuses: Record<string, LayerRefreshStatus>;
   };
+  /** Whether the phone mobile shell is active (propagated from DesktopShell). */
+  mobileShell?: boolean;
 }
 
-export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProps) {
+export function AttributeTable({
+  mapControllerRef,
+  refresh,
+  mobileShell = false,
+}: AttributeTableProps) {
   const { t, i18n } = useTranslation();
   // Column order is visual: in a right-to-left layout the first column renders
   // rightmost, so the move-left/right actions and their guards swap.
@@ -631,8 +635,6 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const selectedFeatureIds = useAppStore((s) => s.selectedFeatureIds);
   const selectFeature = useAppStore((s) => s.selectFeature);
   const selectFeatures = useAppStore((s) => s.selectFeatures);
-  const { compact: layoutCompact, panelsHidden: layoutPanelsHidden } = useLayoutOptions();
-  const { mobileShell } = useTouchUi({ compact: layoutCompact, panelsHidden: layoutPanelsHidden });
   const [cardViewOverride, setCardViewOverride] = useState<boolean | null>(null);
   const useCardView = cardViewOverride ?? mobileShell;
   const attributeTableOpen = useAppStore((s) => s.ui.attributeTableOpen);
@@ -2551,6 +2553,15 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
               columns={columns}
               selectedIds={selectedIdSet}
               scrollElementRef={scrollViewportRef}
+              sortKey={sort.key}
+              sortDirection={sort.direction}
+              onChangeSortKey={(key) => setSort({ key, direction: "asc" })}
+              onToggleSortDirection={() =>
+                setSort((current) => ({
+                  ...current,
+                  direction: current.direction === "asc" ? "desc" : "asc",
+                }))
+              }
               onSelectRow={(featureId, event) =>
                 handleRowClick(featureId, event as unknown as ReactMouseEvent<HTMLTableRowElement>)
               }

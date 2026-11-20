@@ -54,5 +54,23 @@ describe("field crosshair capture helpers", () => {
     });
     assert.equal(third.features[1].id, "field-pt-3");
     assert.equal(third.features[1].properties?.name, "Point 3");
+
+    // Passing a persisted next index keeps IDs strictly monotonic even if the newest point is deleted.
+    const afterDeleteNewest = {
+      type: "FeatureCollection" as const,
+      features: third.features.slice(0, 1),
+    };
+    const fourth = appendFieldCaptureFeature(
+      afterDeleteNewest,
+      {
+        lng: -98.5,
+        lat: 37.7,
+        source: "crosshair",
+        capturedAt: "2026-11-19T12:03:00.000Z",
+      },
+      4,
+    );
+    assert.equal(fourth.features[1].id, "field-pt-4");
+    assert.equal(fourth.features[1].properties?.name, "Point 4");
   });
 });

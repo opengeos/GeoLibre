@@ -65,6 +65,7 @@ export { MAX_MOBILE_PIXEL_RATIO, resolveMapPixelRatio } from "./mobile-pixel-rat
 export {
   buildIdentifyQueryGeometry,
   isTouchIdentifyActive,
+  queryIdentifyFeatures,
   sortIdentifyFeaturesByGeometryPriority,
   TOUCH_IDENTIFY_HIT_RADIUS_PX,
   type GeometryTypedFeature,

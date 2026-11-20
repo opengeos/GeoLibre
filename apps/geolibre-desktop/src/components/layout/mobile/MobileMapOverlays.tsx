@@ -1,10 +1,15 @@
 import { useAppStore } from "@geolibre/core";
-import { useState } from "react";
+import type { MapEngine } from "@geolibre/map";
+import { useState, type RefObject } from "react";
 import { useFieldCrosshairStore } from "../../../lib/field-crosshair";
 import { useScreenWakeLock } from "../../../lib/wake-lock";
 import { FieldCrosshairOverlay } from "./FieldCrosshairOverlay";
 import { MobileGpsHud } from "./MobileGpsHud";
 import { TouchSelectionActionBar } from "./TouchSelectionActionBar";
+
+export interface MobileMapOverlaysProps {
+  mapControllerRef: RefObject<MapEngine | null>;
+}
 
 /**
  * Touch-mode on-map floating overlays (feature selection action bar, live GPS
@@ -12,7 +17,7 @@ import { TouchSelectionActionBar } from "./TouchSelectionActionBar";
  * Screen Wake Lock controller so the HUD toggle governs both GPS tracking and
  * crosshair capture.
  */
-export function MobileMapOverlays() {
+export function MobileMapOverlays({ mapControllerRef }: MobileMapOverlaysProps) {
   const gpsStatus = useAppStore((s) => s.gpsStatus);
   const crosshairActive = useFieldCrosshairStore((s) => s.active);
   const [keepAwake, setKeepAwake] = useState(true);
@@ -22,11 +27,11 @@ export function MobileMapOverlays() {
     <>
       <TouchSelectionActionBar />
       <MobileGpsHud
-        keepAwake={keepAwake}
+        wakeLockActive={wakeLock.active}
         wakeLockSupported={wakeLock.supported}
         onToggleKeepAwake={() => setKeepAwake((v) => !v)}
       />
-      <FieldCrosshairOverlay />
+      <FieldCrosshairOverlay mapControllerRef={mapControllerRef} />
     </>
   );
 }

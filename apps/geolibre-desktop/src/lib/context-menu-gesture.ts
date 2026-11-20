@@ -163,7 +163,7 @@ export class ContextMenuGestureTracker {
    * @param event - A `pointermove` payload.
    */
   pointerMove(event: GesturePointer): void {
-    if (event.pointerType === "touch" || this.touchHold?.pointerId === event.pointerId) {
+    if (event.pointerType === "touch") {
       if (this.touchHold && this.touchHold.pointerId === event.pointerId) {
         const dx = event.clientX - this.touchHold.startX;
         const dy = event.clientY - this.touchHold.startY;
@@ -188,7 +188,7 @@ export class ContextMenuGestureTracker {
    * @param event - The `pointerup` payload.
    */
   pointerUp(event: GesturePointer): void {
-    if (event.pointerType === "touch" || this.activeTouchIds.has(event.pointerId)) {
+    if (event.pointerType === "touch") {
       this.activeTouchIds.delete(event.pointerId);
       if (this.touchHold?.pointerId === event.pointerId) {
         this.clearTouchHold();
@@ -234,6 +234,13 @@ export class ContextMenuGestureTracker {
    * - No gesture (keyboard menu key, Shift+F10): open right away.
    */
   contextMenu(request: ContextMenuRequest): void {
+    // On Android, Chrome's native long-press `contextmenu` can fire either
+    // slightly before or after our 500 ms timer. Suppress it whenever a touch
+    // hold is in progress (or multi-touch is active) or just fired so our
+    // tolerance-checked timer remains the single source of truth.
+    if (this.touchHold !== null || this.activeTouchIds.size > 0) {
+      return;
+    }
     if (
       this.lastTouchLongPressAt !== null &&
       this.now() - this.lastTouchLongPressAt <= CONTEXT_MENU_RELEASE_WINDOW_MS

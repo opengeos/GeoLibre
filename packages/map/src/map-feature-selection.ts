@@ -391,9 +391,7 @@ export function attachFeatureSelection(
     const onTouchPointerCancel = (event: PointerEvent) => {
       if (activeTouchPointerId === null || event.pointerId !== activeTouchPointerId) return;
       activeTouchPointerId = null;
-      dragging = false;
-      points = [];
-      render();
+      state.cancel.current?.();
     };
     const onUndoVertex = () => {
       if (request.shape !== "polygon" || points.length === 0) return;
@@ -402,7 +400,7 @@ export function attachFeatureSelection(
     };
     const onFinishAction = () => {
       if (request.shape === "polygon" && points.length > 2) {
-        finish({ shiftKey: false, altKey: false } as MouseEvent);
+        finish({});
       }
     };
     const onCancelAction = () => {

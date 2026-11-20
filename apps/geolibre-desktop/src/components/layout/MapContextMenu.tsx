@@ -38,9 +38,9 @@ import {
   formatContextCoords,
   formatContextViewshedRadius,
   liveContextZoom,
-  MapContextTouchSheet,
   VIEWSHED_RADII_METERS,
-} from "./mobile/MapContextTouchSheet";
+} from "../../lib/map-context-helpers";
+import { MapContextTouchSheet } from "./mobile/MapContextTouchSheet";
 import { googleEarthUrl, googleMapsUrl } from "../../lib/external-map-links";
 import { openExternalLink } from "../../lib/open-external";
 import {
@@ -137,6 +137,8 @@ export function MapContextMenu({
     const tracker = new ContextMenuGestureTracker(openAt);
 
     const handlePointerDown = (event: PointerEvent) => {
+      // Both the geo editor and active map feature-selection gestures own
+      // pointer input on the canvas, so stand down while either is active.
       if (isGeoEditorUsingRightClick() || useAppStore.getState().featureSelectionActive) return;
       tracker.pointerDown(event);
     };
@@ -154,7 +156,9 @@ export function MapContextMenu({
       event.preventDefault();
       // The geo editor owns right-click while drawing or editing: it removes
       // the vertex under the cursor or finishes the draw (discussion #2750).
-      if (isGeoEditorUsingRightClick()) return;
+      // Active feature-selection gestures likewise suppress context menus so
+      // Android's native long-press event cannot interrupt a selection drag.
+      if (isGeoEditorUsingRightClick() || useAppStore.getState().featureSelectionActive) return;
       tracker.contextMenu(event);
     };
 

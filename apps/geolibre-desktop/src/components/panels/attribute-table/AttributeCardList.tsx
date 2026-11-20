@@ -1,6 +1,6 @@
 import { cn } from "@geolibre/ui";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ZoomIn } from "lucide-react";
+import { ArrowDown, ArrowUp, ZoomIn } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -14,6 +14,10 @@ export interface AttributeCardListProps {
   columns: readonly string[];
   selectedIds: ReadonlySet<string>;
   scrollElementRef: RefObject<HTMLDivElement | null>;
+  sortKey: string;
+  sortDirection: "asc" | "desc";
+  onChangeSortKey: (key: string) => void;
+  onToggleSortDirection: () => void;
   onSelectRow: (featureId: string, event: ReactMouseEvent<HTMLElement>) => void;
   onZoomRow: (featureId: string) => void;
 }
@@ -34,14 +38,19 @@ function formatCardValue(value: unknown): string {
 
 /**
  * Virtualized card list alternative to the wide desktop attribute grid for
- * touch phones (GeoLibre#3537 Phase 4). Displays each feature's title, top
- * fields, and a 44px Zoom-to-feature action while only mounting visible cards.
+ * touch phones (GeoLibre#3537 Phase 4). Displays a compact sort control bar,
+ * each feature's title and top fields as a native selectable button, and a
+ * sibling 44px Zoom-to-feature button (avoiding nested interactive controls).
  */
 export function AttributeCardList({
   rows,
   columns,
   selectedIds,
   scrollElementRef,
+  sortKey,
+  sortDirection,
+  onChangeSortKey,
+  onToggleSortDirection,
   onSelectRow,
   onZoomRow,
 }: AttributeCardListProps) {
@@ -69,86 +78,109 @@ export function AttributeCardList({
   const virtualItems = cardVirtualizer.getVirtualItems();
 
   return (
-    <div
-      data-testid="attribute-card-list"
-      className="relative w-full"
-      style={{ height: `${cardVirtualizer.getTotalSize() + 24}px` }}
-    >
-      {virtualItems.map((virtualItem) => {
-        const { featureId, properties } = rows[virtualItem.index];
-        const selected = selectedIds.has(featureId);
-        const primaryValue = titleColumn ? properties[titleColumn] : null;
-        const heading =
-          primaryValue !== null && primaryValue !== undefined && String(primaryValue).trim() !== ""
-            ? String(primaryValue)
-            : `#${featureId}`;
-        return (
-          <div
-            key={featureId}
-            data-index={virtualItem.index}
-            ref={cardVirtualizer.measureElement}
-            className="absolute inset-x-0 top-0 px-2.5 pb-2"
-            style={{ transform: `translateY(${virtualItem.start + 10}px)` }}
-          >
+    <div data-testid="attribute-card-list" className="w-full">
+      <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-background/95 px-2.5 py-1.5 backdrop-blur">
+        <select
+          aria-label={t("mobileShell.attributeCards.sortBy")}
+          value={sortKey}
+          onChange={(event) => onChangeSortKey(event.target.value)}
+          className="h-9 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs text-foreground"
+        >
+          <option value="__featureId">#ID</option>
+          {columns.map((col) => (
+            <option key={col} value={col}>
+              {col}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={onToggleSortDirection}
+          aria-label={
+            sortDirection === "asc"
+              ? t("mobileShell.attributeCards.sortDescending")
+              : t("mobileShell.attributeCards.sortAscending")
+          }
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground hover:bg-accent hover:text-foreground active:bg-accent"
+        >
+          {sortDirection === "asc" ? (
+            <ArrowUp className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <ArrowDown className="h-4 w-4" aria-hidden="true" />
+          )}
+        </button>
+      </div>
+      <div
+        className="relative w-full"
+        style={{ height: `${cardVirtualizer.getTotalSize() + 24}px` }}
+      >
+        {virtualItems.map((virtualItem) => {
+          const { featureId, properties } = rows[virtualItem.index];
+          const selected = selectedIds.has(featureId);
+          const primaryValue = titleColumn ? properties[titleColumn] : null;
+          const heading =
+            primaryValue !== null &&
+            primaryValue !== undefined &&
+            String(primaryValue).trim() !== ""
+              ? String(primaryValue)
+              : `#${featureId}`;
+          return (
             <div
-              role="button"
-              tabIndex={0}
-              aria-pressed={selected}
-              onClick={(event) => onSelectRow(featureId, event)}
-              onKeyDown={(event) => {
-                if (event.target !== event.currentTarget) return;
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onSelectRow(featureId, event as unknown as ReactMouseEvent<HTMLElement>);
-                }
-              }}
-              className={cn(
-                "rounded-xl border p-3 transition-colors active:bg-accent/70",
-                selected
-                  ? "border-primary bg-primary/10"
-                  : "border-border bg-card hover:bg-accent/40",
-              )}
+              key={featureId}
+              data-index={virtualItem.index}
+              ref={cardVirtualizer.measureElement}
+              className="absolute inset-x-0 top-0 px-2.5 pb-2"
+              style={{ transform: `translateY(${virtualItem.start + 10}px)` }}
             >
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0 flex-1">
+              <div
+                className={cn(
+                  "flex items-start gap-2 rounded-xl border p-3 transition-colors",
+                  selected
+                    ? "border-primary bg-primary/10"
+                    : "border-border bg-card hover:bg-accent/40",
+                )}
+              >
+                <button
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={(event) => onSelectRow(featureId, event)}
+                  className="min-w-0 flex-1 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
                   <div className="truncate text-sm font-semibold text-foreground">{heading}</div>
                   {titleColumn ? (
                     <div className="truncate font-mono text-[11px] text-muted-foreground">
                       #{featureId}
                     </div>
                   ) : null}
-                </div>
+                  {previewColumns.length > 0 ? (
+                    <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 border-t pt-2 text-xs">
+                      {previewColumns.map((col) => (
+                        <div key={col} className="min-w-0">
+                          <dt className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">
+                            {col}
+                          </dt>
+                          <dd className="truncate font-medium text-foreground">
+                            {formatCardValue(properties[col])}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : null}
+                </button>
                 <button
                   type="button"
                   aria-label={t("mobileShell.attributeCards.zoomToFeature")}
                   title={t("mobileShell.attributeCards.zoomToFeature")}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onZoomRow(featureId);
-                  }}
+                  onClick={() => onZoomRow(featureId)}
                   className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border bg-background/80 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:bg-accent"
                 >
                   <ZoomIn className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
-              {previewColumns.length > 0 ? (
-                <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 border-t pt-2 text-xs">
-                  {previewColumns.map((col) => (
-                    <div key={col} className="min-w-0">
-                      <dt className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">
-                        {col}
-                      </dt>
-                      <dd className="truncate font-medium text-foreground">
-                        {formatCardValue(properties[col])}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : null}
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
