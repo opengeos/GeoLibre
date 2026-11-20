@@ -1422,9 +1422,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // references. The Mac App Store build is the exception: its sandbox drops
   // access to user-selected files once the process exits, so references cannot
   // reload and Embed is the only durable mode (see the guard below). Returns
-  // the layers override to serialize, an empty result to use the live layers
-  // as-is, or "cancel" to abort the save.
-  const resolveLayersForSave = async (): Promise<{ layers?: GeoLibreLayer[] } | "cancel"> => {
+  // the layers override to serialize (plus an optional `onProjectSaved` commit
+  // callback that runs only after the project file write succeeds), an empty
+  // result to use the live layers as-is, or "cancel" to abort the save.
+  const resolveLayersForSave = async (): Promise<
+    { layers?: GeoLibreLayer[]; onProjectSaved?: () => void } | "cancel"
+  > => {
     const state = useAppStore.getState();
     const embeddable = await materializeEmbeddableVectorLayers(state.layers);
     if (useAppStore.getState().projectGeneration !== state.projectGeneration) return "cancel";
@@ -1565,6 +1568,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         layerIds: liveEditedIds,
         projectGeneration: state.projectGeneration,
         preserveHiddenFields: true,
+        abortOnBlockedDrafts: true,
+        fallbackErrorMessage: t("toolbar.error.couldNotSaveLayerCopies"),
       });
       if (
         copyResult.aborted ||
@@ -1577,8 +1582,15 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         copyResult.blockedDraftLayers.length > 0 ||
         copyResult.written.length === 0
       ) {
+        if (copyResult.written.length > 0) {
+          notify.info(t("toolbar.item.saveCopiesWritten", { count: copyResult.written.length }), {
+            dedupeKey: "save-layer-copies",
+          });
+        }
         const details = [
-          ...copyResult.errors.map((err) => `${err.layerName}: ${err.message}`),
+          ...copyResult.errors.map((err) =>
+            err.message ? `${err.layerName}: ${err.message}` : err.layerName,
+          ),
           ...(copyResult.blockedDraftLayers.length > 0
             ? [
                 t("toolbar.item.geojsonZipBlockedDrafts", {
@@ -1597,37 +1609,50 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           { path: item.path, capturedGeojson: item.capturedGeojson },
         ]),
       );
-      // Point live plain-GeoJSON layers at their newly written external copies
-      // only when their live geometry revision still matches what was written.
       const currentLiveLayers = useAppStore.getState().layers;
+      const postCopyEditedIds = new Set(
+        currentLiveLayers.filter(hasEditedGeometry).map((layer) => layer.id),
+      );
       const updatedLive = applyExternalCopyReferences(currentLiveLayers, writtenByLayerId);
       const repointedIds = new Set<string>();
-      useAppStore.setState({
-        layers: currentLiveLayers.map((layer, index) => {
-          const next = updatedLive[index];
-          const target = writtenByLayerId.get(layer.id);
-          if (
-            !next ||
-            !target ||
-            next.sourcePath !== target.path ||
-            next.metadata.localFileReloadable !== true
-          ) {
-            return layer;
-          }
-          repointedIds.add(layer.id);
-          return {
-            ...layer,
-            sourcePath: next.sourcePath,
-            metadata: next.metadata,
-          };
-        }),
-      });
+      for (const next of updatedLive) {
+        const target = writtenByLayerId.get(next.id);
+        if (target && next.sourcePath === target.path && next.metadata.localFileReloadable === true) {
+          repointedIds.add(next.id);
+        }
+      }
+      // Defer retargeting the live store layers until after the project file
+      // write succeeds so a cancelled or failed save leaves live state intact.
+      const onProjectSaved = () => {
+        if (useAppStore.getState().projectGeneration !== state.projectGeneration) return;
+        const liveAtCommit = useAppStore.getState().layers;
+        const updatedAtCommit = applyExternalCopyReferences(liveAtCommit, writtenByLayerId);
+        useAppStore.setState({
+          layers: liveAtCommit.map((layer, index) => {
+            const next = updatedAtCommit[index];
+            const target = writtenByLayerId.get(layer.id);
+            if (
+              !next ||
+              !target ||
+              next.sourcePath !== target.path ||
+              next.metadata.localFileReloadable !== true
+            ) {
+              return layer;
+            }
+            return {
+              ...layer,
+              sourcePath: next.sourcePath,
+              metadata: next.metadata,
+            };
+          }),
+        });
+      };
       notify.success(t("toolbar.item.saveCopiesWritten", { count: copyResult.written.length }), {
         dedupeKey: "save-layer-copies",
       });
       const layers = updatedLive.map((layer) => {
         if (
-          !liveEditedIds.has(layer.id) &&
+          !postCopyEditedIds.has(layer.id) &&
           !repointedIds.has(layer.id) &&
           isReloadableLocalFileLayer(layer)
         ) {
@@ -1639,7 +1664,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         }
         return layer;
       });
-      return { layers };
+      return { layers, onProjectSaved };
     }
 
     // A Mac App Store app receives temporary access to user-selected files.
@@ -2195,6 +2220,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // external action. The old project may have been written successfully, but
     // never attach its path or saved state to the replacement project.
     if (useAppStore.getState().projectGeneration !== saveProjectGeneration) return false;
+    layersForSave.onProjectSaved?.();
     setProjectPath(path);
     rememberRecentProject({
       path,
@@ -2626,6 +2652,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         map: mapControllerRef.current?.getMap() ?? undefined,
         layerIds,
         projectGeneration: startGeneration,
+        fallbackErrorMessage: t("toolbar.error.couldNotSaveLayerCopies"),
       });
       if (result.aborted || useAppStore.getState().projectGeneration !== startGeneration) {
         return false;
@@ -2636,7 +2663,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         });
       }
       if (result.errors.length > 0) {
-        const details = result.errors.map((err) => `${err.layerName}: ${err.message}`).join("; ");
+        const details = result.errors
+          .map((err) => (err.message ? `${err.layerName}: ${err.message}` : err.layerName))
+          .join("; ");
         setActionError(details || t("toolbar.error.couldNotSaveLayerCopies"));
         return false;
       }

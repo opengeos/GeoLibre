@@ -176,6 +176,82 @@ describe("SaveLayerEditsDialog", () => {
 
     assert.equal(screen.queryByRole("button", { name: "Export layers as GeoJSON ZIP…" }), null);
   });
+
+  it("handles onSaveSelected rejection cleanly and blocks overlapping runs across reopen", async () => {
+    const edited = makeCandidate("roads", "Roads", { hasPendingEdits: true });
+    useAppStore.setState({ layers: [edited.layer] });
+
+    // 1. Rejection clears saving state instead of leaving an unhandled rejection.
+    const { unmount } = render(
+      createElement(SaveLayerEditsDialog, {
+        open: true,
+        onOpenChange: () => {},
+        candidatesOverride: [edited],
+        onSaveSelected: async () => {
+          throw new Error("Unexpected crash");
+        },
+        onExportGeojsonZip: async () => true,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save 1 layer" }));
+    await waitFor(() => {
+      const btn = screen.getByRole("button", { name: "Save 1 layer" }) as HTMLButtonElement;
+      assert.equal(btn.disabled, false);
+    });
+    unmount();
+
+    // 2. Reopening while an earlier batch is still in flight keeps Save disabled.
+    let resolveRun!: (v: { hasIssues: boolean; aborted: boolean }) => void;
+    let invocations = 0;
+    const pendingSave = () => {
+      invocations += 1;
+      return new Promise<{ hasIssues: boolean; aborted: boolean }>((resolve) => {
+        resolveRun = resolve;
+      });
+    };
+
+    const { rerender } = render(
+      createElement(SaveLayerEditsDialog, {
+        open: true,
+        onOpenChange: () => {},
+        candidatesOverride: [edited],
+        onSaveSelected: pendingSave,
+        onExportGeojsonZip: async () => true,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save 1 layer" }));
+    assert.equal(invocations, 1);
+
+    // Simulate external close and reopen while pendingSave is still in flight.
+    rerender(
+      createElement(SaveLayerEditsDialog, {
+        open: false,
+        onOpenChange: () => {},
+        candidatesOverride: [edited],
+        onSaveSelected: pendingSave,
+        onExportGeojsonZip: async () => true,
+      }),
+    );
+    rerender(
+      createElement(SaveLayerEditsDialog, {
+        open: true,
+        onOpenChange: () => {},
+        candidatesOverride: [edited],
+        onSaveSelected: pendingSave,
+        onExportGeojsonZip: async () => true,
+      }),
+    );
+
+    const savingBtn = screen.getByRole("button", { name: "Saving…" }) as HTMLButtonElement;
+    assert.equal(savingBtn.disabled, true);
+    fireEvent.click(savingBtn);
+    assert.equal(invocations, 1);
+
+    resolveRun({ hasIssues: false, aborted: false });
+    await waitFor(() => {
+      assert.equal(screen.queryByRole("button", { name: "Saving…" }) === null, true);
+    });
+  });
 });
 
 describe("EmbedVectorDataDialog", () => {

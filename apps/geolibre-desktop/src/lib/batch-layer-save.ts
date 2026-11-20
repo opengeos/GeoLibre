@@ -20,6 +20,7 @@ import {
 } from "@geolibre/plugins";
 import {
   fetchMssqlStatus,
+  PostgisWriteRejectedError,
   readMssqlTable,
   readPostgisTable,
   writeMssqlTable,
@@ -44,6 +45,7 @@ import { embedEditedGeometry, hasEditedGeometry } from "./edited-geometry-save";
 import { isGeojsonSourcePath, joinLocalPath } from "./file-io/paths";
 import { collectGeojsonLayersForExport, type CollectGeojsonExportDeps } from "./geojson-zip-export";
 import { isTauri } from "./is-tauri";
+import { localFileSourceLayer } from "./local-file-source";
 import { MssqlReconnectRequiredError, withMssqlSession } from "./mssql-sessions";
 import {
   mssqlWritePayload,
@@ -328,6 +330,9 @@ export interface WriteLayerEditsDeps {
   writeLocalGeojson?: (path: string, geojson: FeatureCollection) => Promise<void>;
   startSidecar?: () => Promise<void>;
   writeVectorSource?: typeof writeVectorToSource;
+  writePostgis?: typeof writePostgisTable;
+  readPostgis?: typeof readPostgisTable;
+  resolvePostgisConn?: typeof resolvePostgisConnection;
   saveArcgis?: typeof saveArcGISLayerEdits;
   hasArcgisPendingEdits?: (layerId: string) => boolean;
   clearGeometryEdited?: (
@@ -366,6 +371,9 @@ export async function writeLayerEditsToSource(
   const writeLocalGeojson = deps?.writeLocalGeojson ?? writeLocalGeojsonFile;
   const startSidecar = deps?.startSidecar ?? startGeoLibreSidecar;
   const writeVectorSource = deps?.writeVectorSource ?? writeVectorToSource;
+  const writePostgis = deps?.writePostgis ?? writePostgisTable;
+  const readPostgis = deps?.readPostgis ?? readPostgisTable;
+  const resolvePostgisConn = deps?.resolvePostgisConn ?? resolvePostgisConnection;
   const saveArcgis = deps?.saveArcgis ?? saveArcGISLayerEdits;
   const hasArcgisPendingEdits = deps?.hasArcgisPendingEdits ?? arcGISLayerHasPendingEdits;
   const clearGeometryEdited = deps?.clearGeometryEdited ?? clearLayerGeometryEditedFlag;
@@ -403,46 +411,49 @@ export async function writeLayerEditsToSource(
     return { status: "error", message: t("layers.saveEditsPostgisRefreshWarning") };
   }
 
-  if (commitDrafts(clickedLayer.id) === "blocked") {
-    return { status: "error", message: t("layers.pendingTableDraftsBlocked") };
-  }
-
-  const layer = readLatestLayer(clickedLayer.id);
-  if (!layer || readProjectGeneration() !== requestProjectGeneration) {
-    return { status: "error", message: t("layers.saveEditsError") };
-  }
-  const isMssql = isMssqlEditableLayer(layer);
-  const mssqlBaseline = isMssql ? databaseBaselineKeys(layer, "mssqlBaselineKeys") : undefined;
-  const isCurrentMssqlRequest = () => {
-    const current = readLatestLayer(layer.id);
-    return (
-      readProjectGeneration() === requestProjectGeneration &&
-      current !== undefined &&
-      current.metadata.sourceKind === layer.metadata.sourceKind &&
-      current.metadata.mssqlConnectionId === layer.metadata.mssqlConnectionId &&
-      current.metadata.mssqlSchema === layer.metadata.mssqlSchema &&
-      current.metadata.mssqlTable === layer.metadata.mssqlTable &&
-      current.metadata.mssqlGeometryColumn === layer.metadata.mssqlGeometryColumn
-    );
-  };
-  const isPostgis = isPostgisEditableLayer(layer);
-  const isCurrentPostgisRequest = () => {
-    const current = readLatestLayer(layer.id);
-    return (
-      readProjectGeneration() === requestProjectGeneration &&
-      current !== undefined &&
-      current.metadata.sourceKind === layer.metadata.sourceKind &&
-      current.metadata.postgisSchema === layer.metadata.postgisSchema &&
-      current.metadata.postgisTable === layer.metadata.postgisTable &&
-      current.metadata.postgisGeometryColumn === layer.metadata.postgisGeometryColumn
-    );
-  };
-  const path = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
-  if (!isMssql && !isPostgis && !isArcGISWritableLayer(layer) && !path) {
-    return { status: "error", message: t("layers.saveEditsError"), silent: true };
-  }
+  let isMssql = false;
+  let isCurrentMssqlRequest = () => false;
 
   try {
+    if (commitDrafts(clickedLayer.id) === "blocked") {
+      return { status: "error", message: t("layers.pendingTableDraftsBlocked") };
+    }
+
+    const layer = readLatestLayer(clickedLayer.id);
+    if (!layer || readProjectGeneration() !== requestProjectGeneration) {
+      return { status: "error", message: t("layers.saveEditsError") };
+    }
+    isMssql = isMssqlEditableLayer(layer);
+    const mssqlBaseline = isMssql ? databaseBaselineKeys(layer, "mssqlBaselineKeys") : undefined;
+    isCurrentMssqlRequest = () => {
+      const current = readLatestLayer(layer.id);
+      return (
+        readProjectGeneration() === requestProjectGeneration &&
+        current !== undefined &&
+        current.metadata.sourceKind === layer.metadata.sourceKind &&
+        current.metadata.mssqlConnectionId === layer.metadata.mssqlConnectionId &&
+        current.metadata.mssqlSchema === layer.metadata.mssqlSchema &&
+        current.metadata.mssqlTable === layer.metadata.mssqlTable &&
+        current.metadata.mssqlGeometryColumn === layer.metadata.mssqlGeometryColumn
+      );
+    };
+    const isPostgis = isPostgisEditableLayer(layer);
+    const isCurrentPostgisRequest = () => {
+      const current = readLatestLayer(layer.id);
+      return (
+        readProjectGeneration() === requestProjectGeneration &&
+        current !== undefined &&
+        current.metadata.sourceKind === layer.metadata.sourceKind &&
+        current.metadata.postgisSchema === layer.metadata.postgisSchema &&
+        current.metadata.postgisTable === layer.metadata.postgisTable &&
+        current.metadata.postgisGeometryColumn === layer.metadata.postgisGeometryColumn
+      );
+    };
+    const path = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
+    if (!isMssql && !isPostgis && !isArcGISWritableLayer(layer) && !path) {
+      return { status: "error", message: t("layers.saveEditsError"), silent: true };
+    }
+
     if (isArcGISWritableLayer(layer)) {
       const result = await saveArcgis(layer.id);
       if (result.errors.length === 0 && !hasArcgisPendingEdits(layer.id)) {
@@ -487,6 +498,9 @@ export async function writeLayerEditsToSource(
         () =>
           withMssqlSession(connectionId, async (sessionId) => {
             await fetchMssqlStatus();
+            if (!isCurrentMssqlRequest()) {
+              throw new Error("Project changed before the SQL Server write was sent.");
+            }
             return runMssqlWriteRequest(() =>
               writeMssqlTable({
                 session_id: sessionId,
@@ -577,7 +591,7 @@ export async function writeLayerEditsToSource(
     }
 
     if (isPostgis) {
-      const connection = resolvePostgisConnection(layer);
+      const connection = resolvePostgisConn(layer);
       if (!connection) {
         return { status: "error", message: t("layers.saveEditsPostgisNoConnection") };
       }
@@ -588,18 +602,29 @@ export async function writeLayerEditsToSource(
         typeof layer.metadata.postgisGeometryColumn === "string"
           ? layer.metadata.postgisGeometryColumn
           : undefined;
-      const result = await writePostgisTable({
-        connection,
-        schema_name: schema,
-        table,
-        geometry_column: geometryColumn,
-        geojson,
-        baseline_keys: databaseBaselineKeys(layer, "postgisBaselineKeys"),
-        capabilities: resolveLayerCapabilities(layer),
-      });
+      let result;
+      try {
+        result = await writePostgis({
+          connection,
+          schema_name: schema,
+          table,
+          geometry_column: geometryColumn,
+          geojson,
+          baseline_keys: databaseBaselineKeys(layer, "postgisBaselineKeys"),
+          capabilities: resolveLayerCapabilities(layer),
+        });
+      } catch (error) {
+        // Only a definite HTTP rejection guarantees the sidecar transaction
+        // rolled back; a network/decode failure may follow a committed write,
+        // so require a reload before retrying to prevent duplicate inserts.
+        if (!(error instanceof PostgisWriteRejectedError) && isCurrentPostgisRequest()) {
+          markPostgisWritebackRefreshRequired(layer, requestProjectGeneration);
+        }
+        throw error;
+      }
       let fresh;
       try {
-        fresh = await readPostgisTable({
+        fresh = await readPostgis({
           connection,
           schema_name: schema,
           table,
@@ -656,7 +681,12 @@ export async function writeLayerEditsToSource(
     }
 
     if (isDesktop()) await startSidecar();
-    const result = await writeVectorSource({ path, geojson });
+    const sourceLayer = localFileSourceLayer(layer);
+    const result = await writeVectorSource({
+      path,
+      geojson,
+      layer: sourceLayer || undefined,
+    });
     clearGeometryEdited(layer.id, requestProjectGeneration, geojson);
     return {
       status: "success",
@@ -712,12 +742,20 @@ export async function saveLayerEditsBatch(
     const liveLayer = readLatestLayer(layer.id);
     if (!liveLayer) continue;
     options.onLayerStart?.(liveLayer.id);
-    const outcome = await writeLayerEditsToSource(liveLayer, {
-      map: options.map,
-      t: options.t,
-      canEditLayer: options.canEditLayer,
-      deps: options.deps,
-    });
+    let outcome: SingleLayerWriteBackResult;
+    try {
+      outcome = await writeLayerEditsToSource(liveLayer, {
+        map: options.map,
+        t: options.t,
+        canEditLayer: options.canEditLayer,
+        deps: options.deps,
+      });
+    } catch (error) {
+      outcome = {
+        status: "error",
+        message: error instanceof Error ? error.message : options.t("layers.saveEditsError"),
+      };
+    }
     if (readProjectGeneration() !== options.projectGeneration) {
       aborted = true;
       break;
@@ -777,6 +815,10 @@ export async function saveGeojsonCopiesToDirectory(
     layerIds?: ReadonlySet<string>;
     projectGeneration?: number;
     preserveHiddenFields?: boolean;
+    /** Return early before writing any files if any layer had blocked attribute drafts. */
+    abortOnBlockedDrafts?: boolean;
+    /** Localized fallback error message when a non-Error rejection has no message. */
+    fallbackErrorMessage?: string;
     deps?: CollectGeojsonExportDeps & {
       writeTextFile?: (path: string, content: string) => Promise<void>;
     };
@@ -785,6 +827,9 @@ export async function saveGeojsonCopiesToDirectory(
   const writeTextFile = options.deps?.writeTextFile ?? writeNewTextFileToPath;
   const readProjectGeneration =
     options.deps?.readProjectGeneration ?? (() => useAppStore.getState().projectGeneration);
+  const isStaleGeneration = () =>
+    options.projectGeneration !== undefined &&
+    readProjectGeneration() !== options.projectGeneration;
   const collected = await collectGeojsonLayersForExport(layers, options.map, {
     layerIds: options.layerIds,
     projectGeneration: options.projectGeneration,
@@ -803,15 +848,21 @@ export async function saveGeojsonCopiesToDirectory(
       aborted: true,
     };
   }
+  if (options.abortOnBlockedDrafts && collected.blockedDraftLayers.length > 0) {
+    return {
+      written,
+      blockedDraftLayers: collected.blockedDraftLayers,
+      skippedLayers: collected.skippedLayers,
+      errors,
+      aborted: false,
+    };
+  }
 
   const usedNamesLower = new Set<string>();
   const MAX_NAME_ATTEMPTS = 1_000;
 
   for (const item of collected.items) {
-    if (
-      options.projectGeneration !== undefined &&
-      readProjectGeneration() !== options.projectGeneration
-    ) {
+    if (isStaleGeneration()) {
       return {
         written,
         blockedDraftLayers: collected.blockedDraftLayers,
@@ -826,6 +877,15 @@ export async function saveGeojsonCopiesToDirectory(
     let lastError: unknown = null;
 
     for (let attempt = 1; attempt <= MAX_NAME_ATTEMPTS; attempt += 1) {
+      if (isStaleGeneration()) {
+        return {
+          written,
+          blockedDraftLayers: collected.blockedDraftLayers,
+          skippedLayers: collected.skippedLayers,
+          errors,
+          aborted: true,
+        };
+      }
       const candidateName =
         attempt === 1 ? `${baseName}.geojson` : `${baseName}-${attempt}.geojson`;
       if (usedNamesLower.has(candidateName.toLowerCase())) continue;
@@ -841,6 +901,15 @@ export async function saveGeojsonCopiesToDirectory(
           capturedGeojson: item.sourceGeojson,
         });
         saved = true;
+        if (isStaleGeneration()) {
+          return {
+            written,
+            blockedDraftLayers: collected.blockedDraftLayers,
+            skippedLayers: collected.skippedLayers,
+            errors,
+            aborted: true,
+          };
+        }
         break;
       } catch (error) {
         if (isFileExistsError(error)) {
@@ -854,10 +923,16 @@ export async function saveGeojsonCopiesToDirectory(
     }
 
     if (!saved) {
+      const errorMessage =
+        lastError instanceof Error && lastError.message.trim()
+          ? lastError.message
+          : typeof lastError === "string" && lastError.trim()
+            ? lastError
+            : (options.fallbackErrorMessage ?? "");
       errors.push({
         layerId: item.layer.id,
         layerName: item.layer.name,
-        message: lastError instanceof Error ? lastError.message : "Could not write GeoJSON file.",
+        message: errorMessage,
       });
     }
   }

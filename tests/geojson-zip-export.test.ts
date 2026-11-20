@@ -93,6 +93,21 @@ describe("buildUniqueGeojsonZipEntryNames", () => {
     assert.equal(names.get("4"), "Cities-Towns.geojson");
     assert.equal(names.get("5"), "layer.geojson");
   });
+
+  it("escapes Windows reserved device names including dotted forms", () => {
+    const names = buildUniqueGeojsonZipEntryNames([
+      { id: "1", name: "AUX" },
+      { id: "2", name: "con" },
+      { id: "3", name: "LPT1" },
+      { id: "4", name: "NUL.extra" },
+      { id: "5", name: "AUX-layer" },
+    ]);
+    assert.equal(names.get("1"), "AUX-layer.geojson");
+    assert.equal(names.get("2"), "con-layer.geojson");
+    assert.equal(names.get("3"), "LPT1-layer.geojson");
+    assert.equal(names.get("4"), "NUL-layer.extra.geojson");
+    assert.equal(names.get("5"), "AUX-layer-2.geojson");
+  });
 });
 
 describe("collectGeojsonLayersForExport", () => {

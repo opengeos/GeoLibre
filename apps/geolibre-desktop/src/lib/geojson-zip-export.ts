@@ -74,13 +74,17 @@ export function isExportableGeojsonLayer(layer: GeoLibreLayer): boolean {
   return layer.type === "geojson" && resolveLayerCapabilities(layer).export;
 }
 
+const WINDOWS_RESERVED_SEGMENT_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?=\.|$)/i;
+
 /**
  * Build collision-free `.geojson` file names for a list of layers.
  *
  * Strips a trailing `.geojson` / `.json` suffix already present on a layer name
- * so `"roads.geojson"` does not become `"roads.geojson.geojson"`, and deduplicates
- * case-insensitively (`roads.geojson`, `roads-2.geojson`, …) so archives unzip
- * cleanly on Windows and macOS filesystems.
+ * so `"roads.geojson"` does not become `"roads.geojson.geojson"`, escapes
+ * Windows reserved device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`,
+ * `LPT1`–`LPT9`), and deduplicates case-insensitively (`roads.geojson`,
+ * `roads-2.geojson`, …) so archives unzip cleanly on Windows and macOS
+ * filesystems.
  */
 export function buildUniqueGeojsonZipEntryNames(
   layers: ReadonlyArray<Pick<GeoLibreLayer, "id" | "name">>,
@@ -89,7 +93,8 @@ export function buildUniqueGeojsonZipEntryNames(
   const result = new Map<string, string>();
   for (const layer of layers) {
     const stripped = layer.name.trim().replace(/\.(geo)?json$/i, "");
-    const base = sanitizeExportFileName(stripped);
+    const rawBase = sanitizeExportFileName(stripped);
+    const base = rawBase.replace(WINDOWS_RESERVED_SEGMENT_RE, "$1-layer");
     let candidate = `${base}.geojson`;
     let suffix = 2;
     while (usedLower.has(candidate.toLowerCase())) {
@@ -236,10 +241,15 @@ export async function collectGeojsonLayersForExport(
 export async function buildGeojsonZipArchive(
   entries: ReadonlyArray<Pick<ResolvedGeojsonExportItem, "fileName" | "geojson">>,
 ): Promise<Uint8Array> {
-  const { strToU8, zipSync } = await import("fflate");
+  const { strToU8, zip } = await import("fflate");
   const files: Record<string, Uint8Array> = {};
   for (const entry of entries) {
     files[entry.fileName] = strToU8(JSON.stringify(entry.geojson, null, 2));
   }
-  return zipSync(files);
+  return new Promise<Uint8Array>((resolve, reject) => {
+    zip(files, (error, data) => {
+      if (error) reject(error);
+      else resolve(data);
+    });
+  });
 }

@@ -30,6 +30,7 @@ import {
 import { IS_MAS_BUILD } from "../../../lib/build-flags";
 import { isExportableGeojsonLayer } from "../../../lib/geojson-zip-export";
 import { isTauri } from "../../../lib/is-tauri";
+import { notify } from "../../../lib/notify";
 
 export interface SaveLayerEditsDialogProps {
   open: boolean;
@@ -134,11 +135,14 @@ export function SaveLayerEditsDialog({
   const [resultsById, setResultsById] = useState<Record<string, BatchLayerSaveItemResult>>({});
   const [hasCompletedRun, setHasCompletedRun] = useState(false);
   const runIdRef = useRef(0);
+  const inFlightRunCountRef = useRef(0);
   const selectAllRef = useRef<HTMLInputElement>(null);
 
-  // Reset selection and per-row statuses whenever the dialog opens fresh.
+  // Reset selection and per-row statuses whenever the dialog opens fresh,
+  // unless an earlier batch save is still in flight (keep it locked so
+  // reopening mid-run cannot start a second overlapping write batch).
   useEffect(() => {
-    if (!open) return;
+    if (!open || inFlightRunCountRef.current > 0) return;
     runIdRef.current += 1;
     setSelectedIds(new Set(defaultSelectedWritableLayerIds(candidates)));
     setSaving(false);
@@ -181,9 +185,10 @@ export function SaveLayerEditsDialog({
   };
 
   const handleSave = async () => {
-    if (saving || selectedEnabledIds.length === 0) return;
+    if (saving || inFlightRunCountRef.current > 0 || selectedEnabledIds.length === 0) return;
     const runId = runIdRef.current + 1;
     runIdRef.current = runId;
+    inFlightRunCountRef.current += 1;
     const isCurrentRun = () => runIdRef.current === runId;
     setSaving(true);
     setResultsById({});
@@ -206,7 +211,12 @@ export function SaveLayerEditsDialog({
       if (!outcome.hasIssues && !outcome.aborted) {
         onOpenChange(false);
       }
+    } catch (error) {
+      if (isCurrentRun()) {
+        notify.error(error instanceof Error ? error.message : t("layers.saveEditsError"));
+      }
     } finally {
+      inFlightRunCountRef.current = Math.max(0, inFlightRunCountRef.current - 1);
       if (isCurrentRun()) {
         setSaving(false);
         setActiveLayerId(null);

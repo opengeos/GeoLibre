@@ -5,11 +5,14 @@ import type { CollaborationState, GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { TFunction } from "i18next";
 
+const { PostgisWriteRejectedError } = await import("@geolibre/processing");
 const {
   applyExternalCopyReferences,
   canCollaboratorEditLayer,
   clearLayerGeometryEditedFlag,
+  clearPostgisWritebackRefreshRequired,
   defaultSelectedWritableLayerIds,
+  isPostgisWritebackRefreshRequired,
   listWritableLayerCandidates,
   saveGeojsonCopiesToDirectory,
   saveLayerEditsBatch,
@@ -235,9 +238,13 @@ describe("writeLayerEditsToSource and saveLayerEditsBatch", () => {
     assert.deepEqual(cleared, ["roads"]);
   });
 
-  it("routes GeoPackage files through the sidecar and clears geometryEdited", async () => {
+  it("routes GeoPackage files through the sidecar with sourceLayer and clears geometryEdited", async () => {
     let sidecarStarted = false;
-    const layer = makeLayer("parcels", "Parcels", { sourcePath: "/data/parcels.gpkg" });
+    let receivedLayer: string | undefined;
+    const layer = makeLayer("parcels", "Parcels", {
+      sourcePath: "/data/parcels.gpkg",
+      metadata: { sourceLayer: "roads" },
+    });
 
     const res = await writeLayerEditsToSource(layer, {
       map: undefined,
@@ -252,18 +259,109 @@ describe("writeLayerEditsToSource and saveLayerEditsBatch", () => {
         startSidecar: async () => {
           sidecarStarted = true;
         },
-        writeVectorSource: async () => ({
-          feature_count: 1,
-          path: "/data/parcels.gpkg",
-          layer: null,
-          messages: [],
-        }),
+        writeVectorSource: async (req) => {
+          receivedLayer = req.layer;
+          return {
+            feature_count: 1,
+            path: "/data/parcels.gpkg",
+            layer: req.layer ?? null,
+            messages: [],
+          };
+        },
         clearGeometryEdited: () => {},
       },
     });
 
     assert.equal(sidecarStarted, true);
+    assert.equal(receivedLayer, "roads");
     assert.equal(res.status, "success");
+  });
+
+  it("distinguishes definite PostGIS rejections from uncertain write failures", async () => {
+    const pgLayer = makeLayer("pg1", "PG Layer", {
+      sourcePath: undefined,
+      metadata: {
+        sourceKind: "postgis-table",
+        postgisSchema: "public",
+        postgisTable: "roads",
+        postgisPrimaryKey: "id",
+        postgisBaselineKeys: [1],
+      },
+    });
+    const fakeConn = "postgresql://postgres:secret@localhost:5432/gis";
+
+    try {
+      const rejected = await writeLayerEditsToSource(pgLayer, {
+        map: undefined,
+        t,
+        canEditLayer: () => true,
+        deps: {
+          commitDrafts: () => "none",
+          readLatestLayer: () => pgLayer,
+          readProjectGeneration: () => 7,
+          resolveGeojson: async () => pgLayer.geojson!,
+          resolvePostgisConn: () => fakeConn,
+          writePostgis: async () => {
+            throw new PostgisWriteRejectedError("constraint violation");
+          },
+        },
+      });
+      assert.equal(rejected.status, "error");
+      assert.equal(rejected.message, "constraint violation");
+      assert.equal(isPostgisWritebackRefreshRequired(pgLayer, 7), false);
+
+      const uncertain = await writeLayerEditsToSource(pgLayer, {
+        map: undefined,
+        t,
+        canEditLayer: () => true,
+        deps: {
+          commitDrafts: () => "none",
+          readLatestLayer: () => pgLayer,
+          readProjectGeneration: () => 7,
+          resolveGeojson: async () => pgLayer.geojson!,
+          resolvePostgisConn: () => fakeConn,
+          writePostgis: async () => {
+            throw new Error("Connection reset while waiting for response");
+          },
+        },
+      });
+      assert.equal(uncertain.status, "error");
+      assert.equal(isPostgisWritebackRefreshRequired(pgLayer, 7), true);
+    } finally {
+      clearPostgisWritebackRefreshRequired("pg1", 7);
+    }
+  });
+
+  it("catches synchronous commitDrafts throws so later batch layers still run", async () => {
+    const l1 = makeLayer("l1", "Layer 1");
+    const l2 = makeLayer("l2", "Layer 2");
+    const written: string[] = [];
+
+    const summary = await saveLayerEditsBatch([l1, l2], {
+      map: undefined,
+      t,
+      projectGeneration: 3,
+      canEditLayer: () => true,
+      deps: {
+        isDesktop: () => true,
+        commitDrafts: (id) => {
+          if (id === "l1") throw new Error("draft store corrupted");
+          return "none";
+        },
+        readLatestLayer: (id) => [l1, l2].find((l) => l.id === id),
+        readProjectGeneration: () => 3,
+        resolveGeojson: async (layer) => layer.geojson!,
+        writeLocalGeojson: async (path) => {
+          written.push(path);
+        },
+        clearGeometryEdited: () => {},
+      },
+    });
+
+    assert.equal(summary.failed, 1);
+    assert.equal(summary.succeeded, 1);
+    assert.equal(summary.results[0].message, "draft store corrupted");
+    assert.deepEqual(written, ["/data/l2.geojson"]);
   });
 
   it("reports blocked drafts and empty collections without writing", async () => {
@@ -492,5 +590,67 @@ describe("saveGeojsonCopiesToDirectory and applyExternalCopyReferences", () => {
     assert.equal(updated[1].metadata.localFileReloadable, undefined);
 
     assert.equal(updated[2], untouched);
+  });
+
+  it("aborts before writing on blocked drafts, extracts string errors, and checks generation in retry loop", async () => {
+    const l1 = makeLayer("1", "Roads");
+    const l2 = makeLayer("2", "Cities");
+    let writes = 0;
+
+    // abortOnBlockedDrafts prevents partial disk writes when another layer has blocked drafts.
+    const blockedRes = await saveGeojsonCopiesToDirectory([l1, l2], "/out", {
+      map: undefined,
+      abortOnBlockedDrafts: true,
+      deps: {
+        commitDrafts: (id) => (id === "2" ? "blocked" : "none"),
+        readLatestLayer: (id) => [l1, l2].find((l) => l.id === id),
+        resolveGeojson: async (layer) => layer.geojson!,
+        writeTextFile: async () => {
+          writes += 1;
+        },
+      },
+    });
+    assert.equal(writes, 0);
+    assert.deepEqual(blockedRes.blockedDraftLayers, ["Cities"]);
+    assert.equal(blockedRes.written.length, 0);
+
+    // Non-Error string rejection (Tauri style) is preserved, and empty rejections use fallbackErrorMessage.
+    const stringErrRes = await saveGeojsonCopiesToDirectory([l1, l2], "/out", {
+      map: undefined,
+      fallbackErrorMessage: "Localized fallback",
+      deps: {
+        commitDrafts: () => "none",
+        readLatestLayer: (id) => [l1, l2].find((l) => l.id === id),
+        resolveGeojson: async (layer) => layer.geojson!,
+        writeTextFile: async (path) => {
+          if (path.includes("Roads")) throw "Permission denied (os error 13)";
+          throw {};
+        },
+      },
+    });
+    assert.equal(stringErrRes.errors.length, 2);
+    assert.equal(stringErrRes.errors[0].message, "Permission denied (os error 13)");
+    assert.equal(stringErrRes.errors[1].message, "Localized fallback");
+
+    // Project switch during EEXIST retry loop stops before attempting the next suffix.
+    let gen = 5;
+    const attempted: string[] = [];
+    const switchedRes = await saveGeojsonCopiesToDirectory([l1], "/out", {
+      map: undefined,
+      projectGeneration: 5,
+      deps: {
+        readProjectGeneration: () => gen,
+        commitDrafts: () => "none",
+        readLatestLayer: () => l1,
+        resolveGeojson: async () => l1.geojson!,
+        writeTextFile: async (path) => {
+          attempted.push(path);
+          gen = 6;
+          throw new Error("File exists (os error 17)");
+        },
+      },
+    });
+    assert.equal(switchedRes.aborted, true);
+    assert.deepEqual(attempted, ["/out/Roads.geojson"]);
   });
 });
