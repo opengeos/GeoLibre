@@ -20,6 +20,7 @@ import {
   addRasterToMap,
   getGeometryEditTargetLayerId,
   isRecoverableNonTiledRasterError,
+  fetchPortalUser,
   materializeEmbeddableVectorLayers,
 } from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
@@ -126,9 +127,17 @@ import { readQgisSnapshotTable } from "../lib/qgis-form-tables";
 import { qgisRemoteFetch, readQgisRemoteVector } from "../lib/qgis-remote-vector";
 import {
   readArcgisProject,
+  type ArcgisFeatureServiceImport,
   type ArcgisProjectImportWarning,
   type ArcgisProjectMapChoice,
 } from "../lib/arcgis-project-import";
+import { arcgisLayerTokenProvider, useArcGISAuthStore } from "../lib/arcgis-oauth";
+import {
+  cachedOrgIdLookup,
+  placeImportedServiceLayers,
+  serviceTokenProvider,
+  signInForImportedService,
+} from "../lib/arcgis-project-services";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 import { IS_MAS_BUILD } from "../lib/build-flags";
 import { resolveDroppedProjectIfCurrent } from "../lib/dropped-project";
@@ -340,6 +349,10 @@ function importedProjectMapReady(
  * @param source - Raster source resolved from the project's layer path.
  * @param options - Passed through to {@link addRasterToMap}.
  * @param groupId - Imported layer group to move the raster into, if any.
+ * @param isReplaced - Whether another project has replaced the imported one
+ *   while the raster loaded. Its layer is then taken back out, and a failure
+ *   skips the rollback, whose snapshot predates the switch and would remove
+ *   the new project's own layers.
  * @throws The original load error, after the partial layer has been removed.
  */
 async function addImportedProjectRaster(
@@ -347,12 +360,18 @@ async function addImportedProjectRaster(
   source: Parameters<typeof addRasterToMap>[1],
   options: Parameters<typeof addRasterToMap>[2],
   groupId: string | undefined,
+  isReplaced: () => boolean = () => false,
 ): Promise<void> {
   const before = new Set(useAppStore.getState().layers.map((layer) => layer.id));
   try {
     const layerId = await addRasterToMap(app, source, options);
+    if (isReplaced()) {
+      useAppStore.getState().removeLayer(layerId);
+      return;
+    }
     if (groupId) useAppStore.getState().moveLayerToGroup(layerId, groupId);
   } catch (error) {
+    if (isReplaced()) throw error;
     if (isRecoverableNonTiledRasterError(error)) {
       // The rejection carried no layer id, but the control already created the
       // store layer and is keeping it while the COG conversion is offered, so
@@ -371,6 +390,67 @@ async function addImportedProjectRaster(
     }
     throw error;
   }
+}
+
+/**
+ * Adds one FeatureServer sublayer from an imported ArcGIS Pro project through
+ * the ArcGIS plugin's feature loader, then gives it the project's group,
+ * opacity and layer identity. {@link placeImportedServiceLayers} puts it in
+ * draw order; visibility is applied by the caller.
+ *
+ * The layer uses an existing ArcGIS sign-in only where
+ * {@link signInForImportedService} allows it, and loads anonymously otherwise.
+ *
+ * @returns The new store layer's id.
+ */
+async function addImportedArcgisFeatureService(
+  app: ReturnType<typeof createAppAPI>,
+  service: ArcgisFeatureServiceImport,
+  translate: Parameters<typeof arcgisLayerTokenProvider>[1],
+  orgId: (portal: string, token: string) => Promise<string | undefined>,
+): Promise<string> {
+  const signIn = await signInForImportedService(service.url, {
+    portals: Object.keys(useArcGISAuthStore.getState().connections),
+    token: (portal) => arcgisLayerTokenProvider(portal, translate)(),
+    orgId,
+  });
+  // Renewed tokens for the layer's later requests pass the same rule, so a
+  // switch to another account never sends its token to this service.
+  const tokenProvider = signIn
+    ? serviceTokenProvider(
+        service.url,
+        signIn.portal,
+        arcgisLayerTokenProvider(signIn.portal, translate),
+        orgId,
+      )
+    : undefined;
+  const layerId = await addArcGISLayer(app, {
+    layerType: "feature",
+    name: service.name,
+    sourceType: "url",
+    // The loader's own requests send `token`; the provider renews it for
+    // later ones (edits, refresh). Both stay in memory, never in the project.
+    token: signIn?.token,
+    tokenProvider,
+    url: service.url,
+    zoomTo: false,
+  });
+  const store = useAppStore.getState();
+  // Through the store, which ignores a group the loaded project no longer has;
+  // placeImportedServiceLayers then puts the layer in draw order.
+  if (service.groupId) store.moveLayerToGroup(layerId, service.groupId);
+  store.setLayerOpacity(layerId, service.opacity);
+  const added = useAppStore.getState().layers.find((layer) => layer.id === layerId);
+  if (added) {
+    store.updateLayer(layerId, {
+      metadata: {
+        ...added.metadata,
+        importedFrom: "arcgis-pro",
+        ...(service.arcgisLayerUri ? { arcgisLayerUri: service.arcgisLayerUri } : {}),
+      },
+    });
+  }
+  return layerId;
 }
 
 /** What Import Layer Styles did, shown in its summary dialog. */
@@ -913,14 +993,22 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
       );
       loadProject(imported.project, null);
+      // Read straight after the load that bumps it. Rasters and services load
+      // after the map settles; if another project replaces this one meanwhile,
+      // the import stops before its next raster or service and publishes no
+      // warnings, and a service layer that lands late is taken back out.
+      const generation = useAppStore.getState().projectGeneration;
+      const replaced = () => useAppStore.getState().projectGeneration !== generation;
       await mapReady;
       const app = createAppAPI(mapControllerRef);
       if (isTauri()) {
         for (const raster of imported.rasters) {
+          if (replaced()) return;
           try {
             const [loaded] = await loadDroppedRasterPaths([raster.sourcePath], {
               importProjectPath: result.path,
             });
+            if (replaced()) return;
             if (!loaded) throw new Error("Unsupported raster path");
             await addImportedProjectRaster(
               app,
@@ -933,8 +1021,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
                 zoomTo: false,
               },
               raster.groupId,
+              replaced,
             );
           } catch (error) {
+            if (replaced()) return;
             console.error(`Failed to import ArcGIS raster "${raster.name}"`, error);
             imported.warnings.push({
               layerName: raster.name,
@@ -943,32 +1033,56 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           }
         }
       }
+      const projectLayerIds = imported.project.layers.map((layer) => layer.id);
+      const placedServices: { layerId: string; nextLayerIds: string[] }[] = [];
+      // One organisation lookup per portal for the whole import.
+      const orgId = cachedOrgIdLookup((portal, token) =>
+        fetchPortalUser(portal, token).then((user) => user.orgId),
+      );
       for (const service of imported.services) {
+        if (replaced()) return;
         try {
-          const serviceLayerId = await addArcGISLayer(app, {
-            itemId: service.itemId,
-            layerType: "vector-tile",
-            name: service.name,
-            sourceType: "portal-item",
-            // The project's saved extent was applied by loadProject above, and
-            // this runs after it. Without the opt-out, each imported service
-            // would fit the map to its own bounds and throw that extent away.
-            zoomTo: false,
-          });
-          if (service.groupId) {
+          // The project's saved extent was applied by loadProject above, and
+          // this runs after it. Without the opt-out, each imported service
+          // would fit the map to its own bounds and throw that extent away.
+          const serviceLayerId =
+            service.kind === "feature"
+              ? await addImportedArcgisFeatureService(app, service, (key) => t(key), orgId)
+              : await addArcGISLayer(app, {
+                  itemId: service.itemId,
+                  layerType: "vector-tile",
+                  name: service.name,
+                  sourceType: "portal-item",
+                  zoomTo: false,
+                });
+          if (replaced()) {
+            // The new project is left marked as changed: the flag it had before
+            // this add cannot be told apart from an edit made while the service
+            // loaded, and a needless save prompt is safer than a lost one.
+            useAppStore.getState().removeLayer(serviceLayerId);
+            return;
+          }
+          if (service.kind === "feature") {
+            placedServices.push({ layerId: serviceLayerId, nextLayerIds: service.nextLayerIds });
+            placeImportedServiceLayers(projectLayerIds, placedServices);
+          } else if (service.groupId) {
             useAppStore.getState().moveLayerToGroup(serviceLayerId, service.groupId);
           }
           if (!service.visible) {
             useAppStore.getState().setLayerVisibility(serviceLayerId, false);
           }
         } catch (error) {
+          if (replaced()) return;
           console.error(`Failed to import ArcGIS service "${service.name}"`, error);
           imported.warnings.push({
             layerName: service.name,
-            reason: "service",
+            reason: service.kind === "feature" ? "service-unavailable" : "service",
           });
         }
       }
+      // Checked again here because an import with no rasters or services left
+      // never enters the loops above.
+      if (replaced()) return;
       useAppStore.setState({ isDirty: true });
       setArcgisImportWarnings(imported.warnings.length > 0 ? imported.warnings : null);
     } catch (error) {

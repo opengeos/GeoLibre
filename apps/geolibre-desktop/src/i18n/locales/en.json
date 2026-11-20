@@ -4337,7 +4337,8 @@
         "file-geodatabase": "File Geodatabase (.gdb) sources are not loaded from projects. In GeoLibre Desktop, add them with Add data → File geodatabase (GDB).",
         "file-geodatabase-raster": "Raster datasets stored in a File Geodatabase (.gdb) are not supported. Export the raster to GeoTIFF and add it as a raster layer.",
         "network-path": "Network share paths are not loaded for security reasons.",
-        "service": "ArcGIS service layers in projects are not supported yet.",
+        "service": "This ArcGIS service layer could not be imported. Projects can bring in hosted feature layers that name a FeatureServer sublayer, ArcGIS vector tile items and cached map services.",
+        "service-unavailable": "The ArcGIS feature service could not be loaded. It may be offline, or need a sign-in GeoLibre does not have.",
         "browser-local-file": "The local file is referenced, but browsers cannot reopen ArcGIS Pro data paths. Use GeoLibre Desktop to load it.",
         "map-extent": "The saved map extent uses a coordinate system GeoLibre cannot convert, so the map opened at a default view.",
         "nesting": "The group is nested too deeply, or the project refers back to a group that already contains it."
