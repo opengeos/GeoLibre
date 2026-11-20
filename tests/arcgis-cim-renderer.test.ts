@@ -518,6 +518,14 @@ describe("CIM renderer refusals", () => {
     assert.deepEqual(translateCimRenderer(density({ normalizationType: "Nothing" })).issues, []);
   });
 
+  it("refuses an unreadable fill whose outline would not draw either", () => {
+    for (const outline of [stroke(rgb(255, 0, 0), 0), stroke(rgb(255, 0, 0, 0))]) {
+      const result = translateCimRenderer(simple(polygonWith([outline, fill(hsl)])));
+      assert.equal(result.translated, false);
+      assert.deepEqual(result.issues, [{ code: "symbol", cimType: "CIMPolygonSymbol" }]);
+    }
+  });
+
   it("refuses a symbol whose only colour cannot be read, and draws nothing invented", () => {
     for (const color of [{ type: "CIMRGBColor", values: [null, 0, 0, 100] }, hsl]) {
       const broken = translateCimRenderer(simple(polygonWith([fill(color)])));
@@ -725,6 +733,32 @@ describe("what a translated renderer reports leaving out", () => {
       "an effect inside a marker graphic",
       simple(markerWithEffect),
       [{ code: "effects", cimType: "CIMGeometricEffectOffset" }],
+    ],
+    [
+      "an effect inside a marker placed along a line",
+      simple(
+        symbolRef("CIMLineSymbol", [
+          stroke(),
+          {
+            type: "CIMVectorMarker",
+            enable: true,
+            markerPlacement: { type: "CIMMarkerPlacementAlongLineSameSize" },
+            markerGraphics: [
+              {
+                symbol: {
+                  type: "CIMPolygonSymbol",
+                  effects: [{ type: "CIMGeometricEffectOffset", offset: 2 }],
+                  symbolLayers: [solidRed],
+                },
+              },
+            ],
+          },
+        ]),
+      ),
+      [
+        { code: "symbol-layers", cimType: "CIMVectorMarker" },
+        { code: "effects", cimType: "CIMGeometricEffectOffset" },
+      ],
     ],
     [
       "an unreadable fill behind a readable outline",

@@ -657,7 +657,7 @@ function scanLayers(layers: CimObject[], drawn: readonly string[]): LayerScan {
   const remaining = new Set(drawn);
   for (const layer of layers) {
     const type = stringValue(layer.type);
-    scan.effect ??= firstEffect(layer);
+    scan.effect ??= layerEffect(layer);
     if (!remaining.delete(type)) {
       scan.dropped ??= type || "symbol layer";
       continue;
@@ -683,14 +683,16 @@ function polygonLook(scan: LayerScan): SymbolLook | null {
   // An outline-only polygon is hollow. A polygon whose only fill is one
   // GeoLibre cannot draw flat (hatch, picture, gradient) or cannot read keeps
   // its outline, and the fill is reported; without an outline it has nothing
-  // to draw, so the symbol is refused.
-  const color = scan.fill ?? scan.stroke?.color;
+  // to draw (no outline, or one of zero width or fully transparent), so the
+  // symbol is refused rather than drawn invisible.
+  const stroke = strokeLook(scan.stroke);
+  const color = scan.fill ?? (stroke.strokeWidth !== 0 ? scan.stroke?.color : undefined);
   if (!color) return null;
   return {
     geometry: "polygon",
     color: color.hex,
     fillOpacity: scan.fill?.opacity ?? 0,
-    ...strokeLook(scan.stroke),
+    ...stroke,
     ...scanNotes(scan),
   };
 }
@@ -719,8 +721,7 @@ function markerLook(layers: CimObject[]): SymbolLook | null {
   if (!marker) return null;
   const graphics = markerGraphicSymbols(marker);
   const drawing = graphics.filter((graphic) => enabledLayers(graphic).length > 0);
-  const scans = drawing.map((graphic) => scanLayers(enabledLayers(graphic), SOLID_LAYERS));
-  const scan = scans[0] ?? {};
+  const scan = scanLayers(enabledLayers(drawing[0]), SOLID_LAYERS);
   const markerColor = cimColor(marker.color);
   const fill = markerColor ?? scan.fill;
   if (!fill) return null;
@@ -733,9 +734,7 @@ function markerLook(layers: CimObject[]): SymbolLook | null {
     : scan.dropped;
   const unreadable =
     marker.color !== undefined && !markerColor ? colorType(marker) : scan.unreadable;
-  const effect =
-    [...layers, ...graphics].map(firstEffect).find(Boolean) ??
-    scans.find((graphicScan) => graphicScan.effect)?.effect;
+  const effect = layers.map(layerEffect).find(Boolean);
   return {
     geometry: "point",
     color: fill.hex,
@@ -763,6 +762,21 @@ function markerGraphicSymbols(marker: CimObject): CimObject[] {
       .map((graphic) => objectValue(graphic.symbol)),
     objectValue(marker.symbol),
   ].filter((graphic): graphic is CimObject => graphic !== undefined);
+}
+
+/**
+ * The first geometric effect on a symbol layer, including, for a marker, those
+ * on its graphics and their enabled layers (even when the marker itself is
+ * not drawn, as with markers along a line).
+ */
+function layerEffect(layer: CimObject): string | undefined {
+  if (!isMarkerLayer(layer)) return firstEffect(layer);
+  return [
+    layer,
+    ...markerGraphicSymbols(layer).flatMap((graphic) => [graphic, ...enabledLayers(graphic)]),
+  ]
+    .map(firstEffect)
+    .find(Boolean);
 }
 
 /** The type of the first geometric effect on a symbol or symbol layer. */
