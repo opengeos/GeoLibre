@@ -972,6 +972,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
       );
       loadProject(imported.project, null);
+      // Read straight after the load that bumps it. Services load over the
+      // network after the map settles; if another project replaces this one
+      // at any point from here, nothing more from this import may touch the
+      // store: a late layer is taken back out and the rest is dropped.
+      const generation = useAppStore.getState().projectGeneration;
+      const replaced = () => useAppStore.getState().projectGeneration !== generation;
       await mapReady;
       const app = createAppAPI(mapControllerRef);
       if (isTauri()) {
@@ -1008,11 +1014,6 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       const orgId = cachedOrgIdLookup((portal, token) =>
         fetchPortalUser(portal, token).then((user) => user.orgId),
       );
-      // Services load over the network after the project opened. If another
-      // project replaces it meanwhile, nothing more from this import may touch
-      // the store: a late layer is taken back out and the rest is dropped.
-      const generation = useAppStore.getState().projectGeneration;
-      const replaced = () => useAppStore.getState().projectGeneration !== generation;
       for (const service of imported.services) {
         if (replaced()) return;
         try {

@@ -483,4 +483,30 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "t"), "AbCdEfGh12345678");
     assert.equal(calls, 2);
   });
+
+  it("leaves a project opened while the map settles untouched", async () => {
+    const actions = renderActions();
+    // The import waits two animation frames for the map before any service
+    // loads; the user opens another project during the first of them.
+    const originalFrame = globalThis.requestAnimationFrame;
+    let switched = false;
+    globalThis.requestAnimationFrame = (callback) =>
+      originalFrame((time) => {
+        if (!switched) {
+          switched = true;
+          useAppStore.getState().loadProject(createEmptyProject("Other"), null);
+        }
+        callback(time);
+      });
+    try {
+      await act(() => actions().handleImportArcgisProject());
+    } finally {
+      globalThis.requestAnimationFrame = originalFrame;
+    }
+    assert.ok(switched);
+    assert.equal(useAppStore.getState().projectName, "Other");
+    assert.deepEqual(useAppStore.getState().layers, []);
+    assert.deepEqual(nativeRequests, []);
+    assert.equal(actions().arcgisImportWarnings, null);
+  });
 });
