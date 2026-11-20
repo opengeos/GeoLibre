@@ -1,6 +1,7 @@
 import {
   DEFAULT_PROJECT_NAME,
   detachProjectCopy,
+  isFetchedGeoJson,
   parseProject,
   projectFromStore,
   redactProjectCredentials,
@@ -1460,7 +1461,14 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // original files do not exist, so it must be self-contained — never file
   // references. Used by the Share dialog.
   const buildEmbeddedProject = async (nameOverride?: string) => {
-    const layers = await buildEmbeddedLayers(useAppStore.getState().layers);
+    const layers = (await buildEmbeddedLayers(useAppStore.getState().layers)).map(
+      // A save leaves a URL-referenced GeoJSON layer's downloaded features out;
+      // a self-contained export carries them. An unmarked copy is embedded.
+      (layer) =>
+        layer.geojson && isFetchedGeoJson(layer.geojson)
+          ? { ...layer, geojson: { ...layer.geojson } }
+          : layer,
+    );
     return buildCurrentProject(nameOverride, layers);
   };
 

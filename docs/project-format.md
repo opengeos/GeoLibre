@@ -401,7 +401,8 @@ with a warning. Saving the project keeps the URL reference rather than
 embedding the downloaded features, unless they were edited in the app, in
 which case the edited features are embedded. Autosave, Project History and
 collaboration snapshots keep the reference the same way, and fetch the data
-again when they are restored. When a layer has both an inline
+again when they are restored. Share and the standalone HTML export, which must work on
+their own, embed the downloaded features. When a layer has both an inline
 `geojson` and a URL, the inline copy is drawn and the URL is not fetched.
 
 A layer can define an optional `capabilities` set (`query`, `create`, `update`,
