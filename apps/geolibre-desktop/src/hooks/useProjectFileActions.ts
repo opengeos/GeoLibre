@@ -348,6 +348,10 @@ function importedProjectMapReady(
  * @param source - Raster source resolved from the project's layer path.
  * @param options - Passed through to {@link addRasterToMap}.
  * @param groupId - Imported layer group to move the raster into, if any.
+ * @param isReplaced - Whether another project has replaced the imported one
+ *   while the raster loaded. Its layer is then taken back out, and a failure
+ *   skips the rollback, whose snapshot predates the switch and would remove
+ *   the new project's own layers.
  * @throws The original load error, after the partial layer has been removed.
  */
 async function addImportedProjectRaster(
@@ -355,12 +359,18 @@ async function addImportedProjectRaster(
   source: Parameters<typeof addRasterToMap>[1],
   options: Parameters<typeof addRasterToMap>[2],
   groupId: string | undefined,
+  isReplaced: () => boolean = () => false,
 ): Promise<void> {
   const before = new Set(useAppStore.getState().layers.map((layer) => layer.id));
   try {
     const layerId = await addRasterToMap(app, source, options);
+    if (isReplaced()) {
+      useAppStore.getState().removeLayer(layerId);
+      return;
+    }
     if (groupId) useAppStore.getState().moveLayerToGroup(layerId, groupId);
   } catch (error) {
+    if (isReplaced()) throw error;
     if (isRecoverableNonTiledRasterError(error)) {
       // The rejection carried no layer id, but the control already created the
       // store layer and is keeping it while the COG conversion is offered, so
@@ -1010,6 +1020,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
                 zoomTo: false,
               },
               raster.groupId,
+              replaced,
             );
           } catch (error) {
             if (replaced()) return;

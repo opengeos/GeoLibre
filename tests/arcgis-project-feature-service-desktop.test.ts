@@ -179,6 +179,7 @@ let dialogPath = APRX_PATH;
 let onServiceRequest: (() => void) | null = null;
 let onRasterRead: (() => void) | null = null;
 let rasterReads: string[] = [];
+let allowRasters = false;
 const RASTER_APRX_PATH = "/Users/me/projects/rasters.aprx";
 const RASTER_APRX = zipSync({
   "GISProject.json": member({
@@ -224,6 +225,7 @@ beforeEach(async () => {
   let callbackId = 0;
   globals.__TAURI_INTERNALS__ = {
     transformCallback: () => ++callbackId,
+    convertFileSrc: (path: string, protocol = "asset") => `${protocol}://localhost${path}`,
     invoke: async (cmd: string, args: Record<string, unknown>, ipc?: { headers?: unknown }) => {
       switch (cmd) {
         case "plugin:dialog|open":
@@ -234,6 +236,7 @@ beforeEach(async () => {
         case "allow_raster_asset":
           rasterReads.push(String(args.path));
           onRasterRead?.();
+          if (allowRasters) return null;
           throw new Error("raster read refused in this test");
         case "plugin:fs|read_text_file":
           assert.equal(args.path, SAVED_PATH);
@@ -265,6 +268,7 @@ afterEach(() => {
   onServiceRequest = null;
   onRasterRead = null;
   rasterReads = [];
+  allowRasters = false;
   dialogPath = APRX_PATH;
   cleanup();
   resetStores();
@@ -272,10 +276,12 @@ afterEach(() => {
   delete globals.__TAURI_INTERNALS__;
 });
 
-function renderActions(): () => ProjectFileActions {
+function renderActions(
+  mapControllerRef: Parameters<typeof useProjectFileActions>[0] = { current: null },
+): () => ProjectFileActions {
   let actions: ProjectFileActions | null = null;
   function Harness() {
-    actions = useProjectFileActions({ current: null });
+    actions = useProjectFileActions(mapControllerRef);
     return null;
   }
   render(createElement(Harness));
@@ -638,5 +644,43 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     assert.equal(useAppStore.getState().projectName, "Other");
     assert.equal(useAppStore.getState().isDirty, false);
     assert.equal(actions().arcgisImportWarnings, null);
+  });
+
+  it("keeps a project opened while a raster loads, layers and all", async () => {
+    dialogPath = RASTER_APRX_PATH;
+    allowRasters = true;
+    // The switch lands inside the raster load: the first time the import asks
+    // for the map after the first raster file was granted.
+    let armed = false;
+    onRasterRead = () => {
+      onRasterRead = null;
+      armed = true;
+    };
+    const mapControllerRef = {
+      get current() {
+        if (armed) {
+          armed = false;
+          const other = createEmptyProject("Other");
+          other.layers = [geojsonLayer({ id: "their-layer", name: "Their layer" })];
+          useAppStore.getState().loadProject(other, null);
+        }
+        return null;
+      },
+    } as Parameters<typeof useProjectFileActions>[0];
+    const actions = renderActions(mapControllerRef);
+    const originalError = console.error;
+    console.error = () => {};
+    try {
+      await act(() => actions().handleImportArcgisProject());
+    } finally {
+      console.error = originalError;
+    }
+    assert.equal(useAppStore.getState().projectName, "Other");
+    assert.deepEqual(
+      useAppStore.getState().layers.map((layer) => layer.id),
+      ["their-layer"],
+    );
+    assert.deepEqual(rasterReads, ["/data/dem.tif"]);
+    assert.deepEqual(nativeRequests, []);
   });
 });
