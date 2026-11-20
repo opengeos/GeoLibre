@@ -1,37 +1,48 @@
 /**
- * Translate an ArcGIS Pro CIM feature-layer renderer into GeoLibre symbology,
- * and read CIM colours and symbol layers for every other CIM reader.
+ * The one reader of ArcGIS Pro CIM symbology: renderers, symbols and colours.
  *
- * Shared by every reader of CIM JSON (ArcGIS Pro projects, map files and layer
- * files), so a renderer or colour means the same thing whichever file it
- * arrives in. Pure and DOM-free.
+ * Every importer of CIM JSON (ArcGIS Pro projects and map files today, layer
+ * files next) reads symbology through this module, so a renderer, symbol or
+ * colour means the same thing whichever file it arrives in. Pure and free of
+ * `maplibre-gl`, like the other style importers behind
+ * `@geolibre/map/style-import`.
  *
- * Layout of this module, top to bottom:
+ * Public API (exported from `@geolibre/map/style-import`):
  *
- * 1. Shared CIM readers: {@link cimColor} (RGB, Gray, CMYK, HSV and CIELAB
- *    colours, alpha as opacity) and {@link cimSymbolLayerEnabled}.
- * 2. {@link translateCimRenderer}, dispatching on the renderer type:
- *    - `CIMSimpleRenderer` becomes a single-symbol style.
- *    - `CIMUniqueValueRenderer` on one field becomes one rule per class.
- *    - `CIMClassBreaksRenderer` of type `GraduatedColor` becomes one rule per
- *      break.
- *    - Anything else, and the cases below, is refused.
- * 3. The thematic style builder shared by both thematic renderers.
- * 4. Symbol reading: one CIM symbol to one flat {@link SymbolLook}.
+ * - {@link translateCimRenderer}`(renderer)`: a feature layer's `renderer`
+ *   object to style fields plus issues. The entry point for a layer.
+ * - {@link translateCimSymbol}`(reference)`: one `CIMSymbolReference` to a
+ *   single-symbol style, with the same issues as a simple renderer.
+ * - {@link cimColor}`(color)`: one `CIMColor` to `{ hex, opacity }`, or null
+ *   when it cannot be read (for label text symbols and the like).
+ * - {@link cimSymbolLayerEnabled}`(layer)`: whether a symbol layer draws.
  *
- * Nothing is dropped silently. A refused renderer comes back with
- * `translated: false`, its single or default symbol as a flat style (so the
- * layer still draws in a sensible colour), and an issue naming the reason:
- * another renderer type (`renderer`), unique values on several fields
- * (`multiple-fields`), an Arcade expression (`expression`), normalised breaks
- * (`normalization`), graduated symbols (`graduated-symbols`), an exclusion
- * clause (`exclusion`), a class symbol with no solid colour (`symbol`), or no
- * usable classes (`no-classes`). A translated renderer can still carry
- * issues for what it leaves out: visual variables (`visual-variables`),
- * symbol layers it does not draw (`symbol-layers`), geometric effects such as
- * dashes or offsets (`effects`), and per-class stroke transparency GeoLibre's
- * rules cannot hold (`transparency`). The importer
- * turns each issue into one translated warning for the layer.
+ * An adapter merges `style` over its base style and turns each issue code into
+ * one warning for the layer; `translated: false` means the renderer was
+ * refused and `style` holds only what its single or default symbol says.
+ *
+ * Renderers:
+ *
+ * - `CIMSimpleRenderer` becomes a single-symbol style.
+ * - `CIMUniqueValueRenderer` on one field becomes one rule per class.
+ * - `CIMClassBreaksRenderer` of type `GraduatedColor` becomes one rule per
+ *   break.
+ * - Anything else is refused.
+ *
+ * Supported renderers produce per-layer issues for what they leave out, so
+ * nothing is dropped without a warning. A refused renderer keeps any readable
+ * single or default symbol, otherwise the caller's default style applies, and
+ * names the reason: another renderer type (`renderer`), unique values on
+ * several fields (`multiple-fields`), an Arcade expression (`expression`),
+ * normalised breaks (`normalization`), graduated symbols
+ * (`graduated-symbols`), an exclusion clause (`exclusion`), a class symbol
+ * with no solid colour (`symbol`), or no usable classes (`no-classes`). A
+ * translated renderer can still carry issues for what it leaves out: visual
+ * variables (`visual-variables`), symbol layers it does not draw
+ * (`symbol-layers`), a fill or outline colour it cannot read (`color`),
+ * per-class stroke transparency GeoLibre's rules cannot hold
+ * (`transparency`), and geometric effects such as dashes or offsets
+ * (`effects`). Marker shapes are approximated as circles without an issue.
  *
  * Thematic renderers become `"rule-based"` styles rather than the native
  * `"categorized"`/`"graduated"` modes, because neither native mode can carry
@@ -63,7 +74,7 @@
  * Symbol-layer `enable` is the exception: see {@link cimSymbolLayerEnabled}.
  */
 
-import { DEFAULT_LAYER_STYLE, type LayerStyle, type VectorRule } from "./types";
+import { DEFAULT_LAYER_STYLE, rgbToHex, type LayerStyle, type VectorRule } from "@geolibre/core";
 
 type CimObject = Record<string, unknown>;
 
@@ -71,14 +82,14 @@ type CimObject = Record<string, unknown>;
 const PIXELS_PER_POINT = 96 / 72;
 
 /** How ArcGIS writes a null field value in a unique value class. */
-export const CIM_NULL_VALUE = "<Null>";
+const CIM_NULL_VALUE = "<Null>";
 
 /**
  * Why a renderer, or part of it, was not carried over. `renderer` names the
  * renderer type that was left behind; the rest name the feature that made a
  * supported renderer type untranslatable (or, for `visual-variables`,
- * `symbol-layers`, `transparency` and `effects`, the part that was dropped from an
- * otherwise translated renderer).
+ * `symbol-layers`, `color`, `transparency` and `effects`, the part that was
+ * dropped from an otherwise translated renderer).
  */
 export type CimRendererIssueCode =
   | "renderer"
@@ -91,25 +102,34 @@ export type CimRendererIssueCode =
   | "no-classes"
   | "visual-variables"
   | "symbol-layers"
+  | "color"
   | "transparency"
   | "effects";
 
 export interface CimRendererIssue {
   code: CimRendererIssueCode;
-  /** The CIM type involved (a renderer or symbol type), when there is one. */
+  /** The CIM type involved (a renderer, symbol, layer or colour type), when there is one. */
   cimType?: string;
 }
 
 export interface CimRendererTranslation {
   /**
    * Whether the renderer was translated. When false, {@link style} holds only
-   * what the renderer's single or default symbol says (so the caller can still
-   * draw the layer) and {@link issues} explains what was left behind.
+   * what the renderer's single or default symbol says (empty when neither can
+   * be read) and {@link issues} explains what was left behind.
    */
   translated: boolean;
   /** Style fields to merge over the layer's base style. */
   style: Partial<Omit<LayerStyle, "labels">>;
   issues: CimRendererIssue[];
+}
+
+/** A CIM colour as GeoLibre draws it. */
+export interface CimColor {
+  /** `#rrggbb`. */
+  hex: string;
+  /** 0-1, from the colour's alpha channel. */
+  opacity: number;
 }
 
 /** The flat look of one CIM symbol, as far as GeoLibre can carry it. */
@@ -126,8 +146,18 @@ interface SymbolLook {
   circleRadius?: number;
   /** The first enabled symbol layer type that is not drawn (a hatch, a marker line). */
   dropped?: string;
+  /** The colour type of a solid fill or stroke whose colour cannot be read. */
+  unreadable?: string;
   /** The first geometric effect (dashes, offset, ...) that is not drawn. */
   effect?: string;
+}
+
+/** One thematic class before it becomes a rule. */
+interface ThematicClass {
+  look: SymbolLook;
+  label: string;
+  filter: unknown[];
+  visible: boolean;
 }
 
 /**
@@ -149,6 +179,16 @@ export function translateCimRenderer(renderer: unknown): CimRendererTranslation 
 }
 
 /**
+ * Translate one `CIMSymbolReference` as a single-symbol style, exactly as a
+ * simple renderer holding it would be.
+ *
+ * @param reference - The symbol reference (any shape).
+ */
+export function translateCimSymbol(reference: unknown): CimRendererTranslation {
+  return simpleRenderer({ symbol: reference });
+}
+
+/**
  * Convert a CIM colour to hex plus opacity.
  *
  * Every CIMColor subclass stores its channels in a `values` array with alpha
@@ -156,10 +196,12 @@ export function translateCimRenderer(renderer: unknown): CimRendererTranslation 
  * to be read before `values` can be interpreted -- treating a CMYK or HSV
  * triple as RGB silently produces the wrong colour. Channels are per the CIM
  * spec (Esri/cim-spec docs/v3/CIMColor.md): RGB 0-255, CMYK/Gray/S/V 0-100,
- * hue 0-360, CIELAB L 0-100 with signed a/b, alpha 0-100. An unrecognised subclass returns null so the caller
- * keeps its own default rather than an invented colour.
+ * hue 0-360, CIELAB L 0-100 with signed a/b, alpha 0-100. RGB, Gray, CMYK,
+ * HSV and LAB are read; any other subclass (HSL, XYZ, Spot, ...) and any
+ * non-numeric channel return null, so the caller decides what to do rather
+ * than drawing an invented colour.
  */
-export function cimColor(value: unknown): { hex: string; opacity: number } | null {
+export function cimColor(value: unknown): CimColor | null {
   const color = objectValue(value);
   if (!color) return null;
   const type = stringValue(color.type);
@@ -170,22 +212,17 @@ export function cimColor(value: unknown): { hex: string; opacity: number } | nul
   );
   if (values.some((channel) => !Number.isFinite(channel))) return null;
 
-  let rgb: [number, number, number] | null = null;
+  let rgb: number[] | null = null;
   let alpha = 100;
   if (type === "CIMRGBColor" && values.length >= 3) {
-    rgb = [values[0], values[1], values[2]];
+    rgb = values.slice(0, 3);
     alpha = values[3] ?? 100;
   } else if (type === "CIMGrayColor" && values.length >= 1) {
-    const level = (values[0] / 100) * 255;
-    rgb = [level, level, level];
+    rgb = [0, 0, 0].map(() => (values[0] / 100) * 255);
     alpha = values[1] ?? 100;
   } else if (type === "CIMCMYKColor" && values.length >= 4) {
-    const [c, m, y, k] = values;
-    rgb = [
-      255 * (1 - c / 100) * (1 - k / 100),
-      255 * (1 - m / 100) * (1 - k / 100),
-      255 * (1 - y / 100) * (1 - k / 100),
-    ];
+    const k = 1 - values[3] / 100;
+    rgb = values.slice(0, 3).map((channel) => 255 * (1 - channel / 100) * k);
     alpha = values[4] ?? 100;
   } else if (type === "CIMHSVColor" && values.length >= 3) {
     rgb = hsvToRgb(values[0], values[1] / 100, values[2] / 100);
@@ -196,22 +233,19 @@ export function cimColor(value: unknown): { hex: string; opacity: number } | nul
   }
   if (!rgb) return null;
 
-  const hex = `#${rgb
-    .map((channel) =>
-      Math.max(0, Math.min(255, Math.round(channel)))
-        .toString(16)
-        .padStart(2, "0"),
-    )
-    .join("")}`;
-  return { hex, opacity: Math.max(0, Math.min(1, alpha / 100)) };
+  const [r, g, b] = rgb.map((channel) => Math.max(0, Math.min(255, Math.round(channel))));
+  return {
+    hex: rgbToHex({ r, g, b }),
+    opacity: Math.max(0, Math.min(1, alpha / 100)),
+  };
 }
 
 /**
  * Whether a CIM symbol layer draws.
  *
- * ArcGIS Pro writes `enable` on every symbol layer, `true` or `false` (checked
- * against public `.lyrx` exports from Pro 2.3 to 3.3), so for its files this is
- * just the flag. CIM written by other tools sometimes leaves the flag out on
+ * The seven public ArcGIS Pro `.lyrx` exports checked (Pro 2.3 to 3.3) write
+ * `enable` on every symbol layer, `true` or `false`, so for Pro's files this
+ * is just the flag. CIM written by other tools sometimes leaves the flag out on
  * layers that are meant to draw, so an absent flag counts as enabled and only
  * an explicit `false` switches a layer off.
  */
@@ -246,12 +280,7 @@ function uniqueValueRenderer(renderer: CimObject): CimRendererTranslation {
   if (fields.length !== 1) return untranslated(renderer, { code: "multiple-fields" });
   const field = fields[0];
 
-  const classes: {
-    look: SymbolLook;
-    label: string;
-    filter: unknown[];
-    visible: boolean;
-  }[] = [];
+  const classes: ThematicClass[] = [];
   const groups = arrayValue(renderer.groups).filter(isObject);
   // Pro writes `visible` on every class, so where a renderer has it at all, a
   // class without it was saved unchecked (false is left out). Files from
@@ -266,7 +295,9 @@ function uniqueValueRenderer(renderer: CimObject): CimRendererTranslation {
       const values = arrayValue(valueClass.values)
         .filter(isObject)
         .map((value) => arrayValue(value.fieldValues)[0])
-        .map((value) => (typeof value === "number" && Number.isFinite(value) ? String(value) : value))
+        .map((value) =>
+          typeof value === "number" && Number.isFinite(value) ? String(value) : value,
+        )
         .filter((value): value is string => typeof value === "string");
       // A class with no values matches nothing in ArcGIS either.
       if (values.length === 0) continue;
@@ -309,8 +340,6 @@ function classBreaksRenderer(renderer: CimObject): CimRendererTranslation {
     return untranslated(renderer, { code: "exclusion" });
   }
   const field = stringValue(renderer.field);
-  if (!field) return untranslated(renderer, { code: "no-classes" });
-
   const breaks = arrayValue(renderer.breaks).filter(isObject);
   // An upper bound or minimum of 0 is left out of the file, like any default.
   // A bound that is present but not a number is refused, not read as 0.
@@ -319,25 +348,17 @@ function classBreaksRenderer(renderer: CimObject): CimRendererTranslation {
   const uppers = breaks.map((classBreak) => bound(classBreak, "upperBound"));
   const minimumBreak = bound(renderer, "minimumBreak");
   if (
-    minimumBreak === null ||
-    !uppers.every((upper): upper is number => upper !== null)
-  ) {
-    return untranslated(renderer, { code: "no-classes" });
-  }
-  if (
+    !field ||
     breaks.length === 0 ||
+    minimumBreak === null ||
+    !uppers.every((upper): upper is number => upper !== null) ||
     minimumBreak > uppers[0] ||
     uppers.some((upper, index) => index > 0 && upper <= uppers[index - 1])
   ) {
     return untranslated(renderer, { code: "no-classes" });
   }
 
-  const classes: {
-    look: SymbolLook;
-    label: string;
-    filter: unknown[];
-    visible: boolean;
-  }[] = [];
+  const classes: ThematicClass[] = [];
   for (const [index, classBreak] of breaks.entries()) {
     const look = symbolLook(classBreak.symbol);
     if (!look) return untranslated(renderer, symbolIssue(classBreak.symbol));
@@ -362,15 +383,7 @@ function classBreaksRenderer(renderer: CimObject): CimRendererTranslation {
  * QGIS and the QML importer do; a class whose symbol differs keeps the
  * difference as a per-rule override, so outlines and sizes survive per class.
  */
-function thematicStyle(
-  renderer: CimObject,
-  classes: {
-    look: SymbolLook;
-    label: string;
-    filter: unknown[];
-    visible: boolean;
-  }[],
-): CimRendererTranslation {
+function thematicStyle(renderer: CimObject, classes: ThematicClass[]): CimRendererTranslation {
   const base = classes[0].look;
   // `isDefaultSymbolVisible` is the "all other values" class's own checkbox
   // in the unique values table. Files from Pro 3.3 and earlier leave it out
@@ -387,8 +400,6 @@ function thematicStyle(
     return untranslated(renderer, symbolIssue(renderer.defaultSymbol));
   }
   const defaultLabel = stringValue(renderer.defaultLabel);
-  // The legend shows a catch-all without a label as "Other"; the explicit
-  // default rule below needs the same, or its filter JSON is shown instead.
   const drawnDefault = showDefault ? defaultLook : null;
 
   const rules: VectorRule[] = classes.map((entry, index) => ({
@@ -403,31 +414,33 @@ function thematicStyle(
     ...lookOverrides(entry.look, base),
   }));
 
-  const hasHiddenClass = classes.some((entry) => !entry.visible);
-  let elseRule: VectorRule;
-  if (drawnDefault && hasHiddenClass) {
+  if (drawnDefault && classes.some((entry) => !entry.visible)) {
     // A disabled rule's features fall through to the catch-all, but ArcGIS
     // hides a hidden class's features even when "all other values" draws.
     // Writing the default as an explicit "none of the classes" rule and
-    // switching the catch-all off keeps both behaviours.
-    rules.push({
-      id: "cim-default",
-      label: defaultLabel || "Other",
-      filter: JSON.stringify(["!", ["any", ...classes.map((entry) => entry.filter)]]),
-      color: drawnDefault.color,
-      isElse: false,
-      ...lookOverrides(drawnDefault, base),
-    });
-    elseRule = {
-      id: "cim-else",
-      label: "",
-      filter: "",
-      color: base.color,
-      isElse: true,
-    };
-    elseRule.enabled = false;
+    // switching the catch-all off keeps both behaviours. The legend shows a
+    // catch-all without a label as "Other"; this rule needs the same, or its
+    // filter JSON is shown instead.
+    rules.push(
+      {
+        id: "cim-default",
+        label: defaultLabel || "Other",
+        filter: JSON.stringify(["!", ["any", ...classes.map((entry) => entry.filter)]]),
+        color: drawnDefault.color,
+        isElse: false,
+        ...lookOverrides(drawnDefault, base),
+      },
+      {
+        id: "cim-else",
+        label: "",
+        filter: "",
+        color: base.color,
+        isElse: true,
+        enabled: false,
+      },
+    );
   } else {
-    elseRule = {
+    rules.push({
       id: "cim-else",
       label: defaultLabel,
       filter: "",
@@ -435,9 +448,8 @@ function thematicStyle(
       isElse: true,
       ...(defaultLook ? lookOverrides(defaultLook, base) : {}),
       ...(drawnDefault ? {} : { enabled: false }),
-    };
+    });
   }
-  rules.push(elseRule);
 
   const style = flatStyle(base);
   // The flat fill/stroke colour is what a rule falls back to; keep it on the
@@ -538,15 +550,18 @@ function symbolIssue(reference: unknown): CimRendererIssue {
 
 /**
  * What a translated renderer leaves out: visual variables, undrawn symbol
- * layers, geometric effects, and stroke transparency a class cannot draw with
- * (a rule can override a stroke's colour and width but not its opacity, so
- * every outline and line draws at the layer's one shared stroke opacity).
+ * layers, unreadable colours, stroke transparency a class cannot draw with (a
+ * rule can override a stroke's colour and width but not its opacity, so every
+ * outline and line draws at the layer's one shared stroke opacity), and
+ * geometric effects.
  */
 function partialIssues(renderer: CimObject, looks: SymbolLook[]): CimRendererIssue[] {
   const issues: CimRendererIssue[] = [];
   if (arrayValue(renderer.visualVariables).length > 0) issues.push({ code: "visual-variables" });
   const dropped = looks.find((look) => look.dropped)?.dropped;
   if (dropped) issues.push({ code: "symbol-layers", cimType: dropped });
+  const unreadable = looks.find((look) => look.unreadable)?.unreadable;
+  if (unreadable) issues.push({ code: "color", cimType: unreadable });
   // Every class draws its stroke at the layer's opacity, which the first look
   // sets (or leaves at the default when it has no stroke).
   const inherited = looks[0]?.strokeOpacity ?? DEFAULT_LAYER_STYLE.strokeOpacity;
@@ -595,117 +610,170 @@ function lookOverrides(look: SymbolLook, base: SymbolLook): Partial<VectorRule> 
   };
 }
 
+/** What one pass over a symbol's enabled layers found. */
+interface LayerScan {
+  fill?: CimColor;
+  stroke?: { color: CimColor; width: number | null };
+  dropped?: string;
+  unreadable?: string;
+  effect?: string;
+}
+
+const SOLID_LAYERS = ["CIMSolidFill", "CIMSolidStroke"] as const;
+
 /**
  * Read a `CIMSymbolReference` into a {@link SymbolLook}, or null when the
  * symbol carries no colour GeoLibre can draw (a picture, hatch or gradient
- * fill, for example). Symbol layers are listed top-most first in CIM, so the
- * first enabled solid fill and solid stroke are the ones the user sees.
+ * fill, or a marker whose drawn graphic has no readable fill, for example).
  */
 function symbolLook(reference: unknown): SymbolLook | null {
-  const look = flatSymbolLook(reference);
-  if (!look) return null;
-  // Geometric effects (dashes, offsets, buffers and so on) change the shape
-  // that is drawn, which a flat style cannot reproduce, so they are reported.
-  const symbol = objectValue(objectValue(reference)?.symbol);
-  const layers = enabledLayers(symbol);
-  // A marker's own graphics can carry effects too.
-  const graphics = layers.flatMap(markerGraphicSymbols);
-  const effect = [symbol, ...layers, ...graphics, ...graphics.flatMap(enabledLayers)]
-    .flatMap((owner) => arrayValue(owner?.effects).filter(isObject))
-    .map((effectObject) => stringValue(effectObject.type) || "geometric effect")[0];
-  return effect ? { ...look, effect } : look;
-}
-
-function flatSymbolLook(reference: unknown): SymbolLook | null {
   const symbol = objectValue(objectValue(reference)?.symbol);
   const layers = enabledLayers(symbol);
   const type = stringValue(symbol?.type) || inferredSymbolType(layers);
-  if (type === "CIMPolygonSymbol") {
-    const fill = solidColor(layers, "CIMSolidFill");
-    const stroke = solidStroke(layers);
-    const dropped = droppedLayer(layers, ["CIMSolidFill", "CIMSolidStroke"]);
-    if (!fill) {
-      // An outline-only polygon is hollow. A polygon whose only fill is one
-      // GeoLibre cannot draw flat (hatch, picture, gradient) keeps its outline
-      // and is reported as a dropped symbol layer; without an outline it has
-      // nothing to draw, so the symbol is refused.
-      if (!stroke) return null;
-      return {
-        geometry: "polygon",
-        color: stroke.color.hex,
-        fillOpacity: 0,
-        ...strokeLook(stroke),
-        ...(dropped ? { dropped } : {}),
-      };
+  const look =
+    type === "CIMPolygonSymbol"
+      ? polygonLook(scanLayers(layers, SOLID_LAYERS))
+      : type === "CIMLineSymbol"
+      ? lineLook(scanLayers(layers, ["CIMSolidStroke"]))
+      : type === "CIMPointSymbol"
+      ? markerLook(layers)
+      : null;
+  if (!look) return null;
+  // Geometric effects (dashes, offsets, buffers and so on) change the shape
+  // that is drawn, which a flat style cannot reproduce, so they are reported.
+  const effect = firstEffect(symbol) ?? look.effect;
+  return effect ? { ...look, effect } : look;
+}
+
+/**
+ * One pass over enabled symbol layers, listed top-most first in CIM. The first
+ * layer of each `drawn` type is drawn, as the one the user sees; any other
+ * enabled layer is dropped, so a second solid stroke (the casing of a cased
+ * line, say) counts as dropped too. A drawn layer whose colour cannot be read
+ * is noted as unreadable rather than treated as absent.
+ */
+function scanLayers(layers: CimObject[], drawn: readonly string[]): LayerScan {
+  const scan: LayerScan = {};
+  const remaining = new Set(drawn);
+  for (const layer of layers) {
+    const type = stringValue(layer.type);
+    scan.effect ??= firstEffect(layer);
+    if (!remaining.delete(type)) {
+      scan.dropped ??= type || "symbol layer";
+      continue;
     }
-    return {
-      geometry: "polygon",
-      color: fill.hex,
-      fillOpacity: fill.opacity,
-      ...strokeLook(stroke),
-      ...(dropped ? { dropped } : {}),
-    };
+    const color = cimColor(layer.color);
+    if (!color) scan.unreadable ??= colorType(layer);
+    else if (type === "CIMSolidFill") scan.fill = color;
+    else scan.stroke = { color, width: numberValue(layer.width) };
   }
-  if (type === "CIMLineSymbol") {
-    const stroke = solidStroke(layers);
-    if (!stroke) return null;
-    const dropped = droppedLayer(layers, ["CIMSolidStroke"]);
-    return {
-      geometry: "line",
-      color: stroke.color.hex,
-      ...strokeLook(stroke),
-      ...(dropped ? { dropped } : {}),
-    };
-  }
-  if (type === "CIMPointSymbol") {
-    const marker = layers.find((layer) => /Marker$/.test(stringValue(layer.type)));
-    if (!marker) return null;
-    // The circle takes its fill and outline from the marker's first graphic
-    // that draws anything; each graphic is inspected on its own, so a second
-    // graphic is reported even when its layer types differ from the first's.
-    const drawing = markerGraphicSymbols(marker).filter(
-      (graphic) => enabledLayers(graphic).length > 0,
-    );
-    const graphicLayers = enabledLayers(drawing[0]);
-    const fill = cimColor(marker.color) ?? solidColor(graphicLayers, "CIMSolidFill");
-    if (!fill) return null;
-    const stroke = solidStroke(graphicLayers);
-    const size = numberValue(marker.size);
-    // Anything beyond the marker's one fill and outline is not drawn: another
-    // outer layer, a second graphic, or a hatch inside the drawn graphic.
-    const outer = layers.find((layer) => layer !== marker)?.type;
-    const dropped =
-      typeof outer === "string"
-        ? outer
-        : drawing.length > 1
-          ? "CIMMarkerGraphic"
-          : droppedLayer(graphicLayers, ["CIMSolidFill", "CIMSolidStroke"]);
-    return {
-      geometry: "point",
-      color: fill.hex,
-      fillOpacity: fill.opacity,
-      ...strokeLook(stroke),
-      ...(typeof dropped === "string" ? { dropped } : {}),
-      // A CIM marker size is its height in points; a GeoLibre circle radius is
-      // half the diameter in pixels.
-      ...(size !== null ? { circleRadius: round((size * PIXELS_PER_POINT) / 2) } : {}),
-    };
-  }
-  return null;
+  return scan;
+}
+
+/** The parts of a look a scan carries regardless of geometry. */
+function scanNotes(scan: LayerScan): Pick<SymbolLook, "dropped" | "unreadable" | "effect"> {
+  return {
+    ...(scan.dropped ? { dropped: scan.dropped } : {}),
+    ...(scan.unreadable ? { unreadable: scan.unreadable } : {}),
+    ...(scan.effect ? { effect: scan.effect } : {}),
+  };
+}
+
+function polygonLook(scan: LayerScan): SymbolLook | null {
+  // An outline-only polygon is hollow. A polygon whose only fill is one
+  // GeoLibre cannot draw flat (hatch, picture, gradient) or cannot read keeps
+  // its outline, and the fill is reported; without an outline it has nothing
+  // to draw, so the symbol is refused.
+  const color = scan.fill ?? scan.stroke?.color;
+  if (!color) return null;
+  return {
+    geometry: "polygon",
+    color: color.hex,
+    fillOpacity: scan.fill?.opacity ?? 0,
+    ...strokeLook(scan.stroke),
+    ...scanNotes(scan),
+  };
+}
+
+function lineLook(scan: LayerScan): SymbolLook | null {
+  if (!scan.stroke) return null;
+  return {
+    geometry: "line",
+    color: scan.stroke.color.hex,
+    ...strokeLook(scan.stroke),
+    ...scanNotes(scan),
+  };
+}
+
+/**
+ * A marker as a circle. The circle takes its fill and outline from the
+ * marker's first graphic that draws anything; that graphic needs a readable
+ * fill (or the marker its own colour), so an outline-only graphic is refused
+ * rather than drawn as an empty ring. Anything beyond the one fill and outline
+ * is reported: another layer beside the marker, a second drawing graphic
+ * (inspected on its own, so it is reported whatever its layer types), or a
+ * hatch inside the drawn graphic.
+ */
+function markerLook(layers: CimObject[]): SymbolLook | null {
+  const marker = layers.find(isMarkerLayer);
+  if (!marker) return null;
+  const graphics = markerGraphicSymbols(marker);
+  const drawing = graphics.filter((graphic) => enabledLayers(graphic).length > 0);
+  const scans = drawing.map((graphic) => scanLayers(enabledLayers(graphic), SOLID_LAYERS));
+  const scan = scans[0] ?? {};
+  const markerColor = cimColor(marker.color);
+  const fill = markerColor ?? scan.fill;
+  if (!fill) return null;
+  const outer = layers.find((layer) => layer !== marker);
+  const size = numberValue(marker.size);
+  const dropped = outer
+    ? stringValue(outer.type) || "symbol layer"
+    : drawing.length > 1
+    ? "CIMMarkerGraphic"
+    : scan.dropped;
+  const unreadable =
+    marker.color !== undefined && !markerColor ? colorType(marker) : scan.unreadable;
+  const effect =
+    [...layers, ...graphics].map(firstEffect).find(Boolean) ??
+    scans.find((graphicScan) => graphicScan.effect)?.effect;
+  return {
+    geometry: "point",
+    color: fill.hex,
+    fillOpacity: fill.opacity,
+    ...strokeLook(scan.stroke),
+    ...scanNotes({ dropped, unreadable, effect }),
+    // A CIM marker size is its height in points; a GeoLibre circle radius is
+    // half the diameter in pixels.
+    ...(size !== null ? { circleRadius: round((size * PIXELS_PER_POINT) / 2) } : {}),
+  };
+}
+
+function isMarkerLayer(layer: CimObject): boolean {
+  return /Marker$/.test(stringValue(layer.type));
 }
 
 /**
  * The symbols a marker draws with: each vector marker graphic's symbol, and a
- * character marker's glyph symbol. Empty for any other symbol layer.
+ * character marker's glyph symbol.
  */
-function markerGraphicSymbols(layer: CimObject): CimObject[] {
-  if (!/Marker$/.test(stringValue(layer.type))) return [];
+function markerGraphicSymbols(marker: CimObject): CimObject[] {
   return [
-    ...arrayValue(layer.markerGraphics)
+    ...arrayValue(marker.markerGraphics)
       .filter(isObject)
       .map((graphic) => objectValue(graphic.symbol)),
-    objectValue(layer.symbol),
+    objectValue(marker.symbol),
   ].filter((graphic): graphic is CimObject => graphic !== undefined);
+}
+
+/** The type of the first geometric effect on a symbol or symbol layer. */
+function firstEffect(owner: CimObject | undefined): string | undefined {
+  const effect = arrayValue(owner?.effects).find(isObject);
+  return effect ? stringValue(effect.type) || "geometric effect" : undefined;
+}
+
+/** The colour type a layer's unreadable colour reports: its subclass, else the layer type. */
+function colorType(owner: CimObject): string {
+  return stringValue(objectValue(owner.color)?.type) || stringValue(owner.type) || "CIMColor";
 }
 
 /** The symbol type an untyped symbol's layers imply. */
@@ -717,36 +785,8 @@ function inferredSymbolType(layers: CimObject[]): string {
   return "";
 }
 
-/**
- * The first enabled layer the look does not draw, if any. The look draws only
- * the first layer of each `drawn` type, so a second solid stroke (the casing
- * of a cased line, say) counts as dropped too.
- */
-function droppedLayer(layers: CimObject[], drawn: string[]): string | undefined {
-  const remaining = new Set(drawn);
-  for (const layer of layers) {
-    const type = stringValue(layer.type);
-    if (remaining.delete(type)) continue;
-    return type || "symbol layer";
-  }
-  return undefined;
-}
-
 function enabledLayers(symbol: CimObject | undefined): CimObject[] {
   return arrayValue(symbol?.symbolLayers).filter(isObject).filter(cimSymbolLayerEnabled);
-}
-
-function solidColor(layers: CimObject[], type: string): { hex: string; opacity: number } | null {
-  const layer = layers.find((candidate) => candidate.type === type);
-  return layer ? cimColor(layer.color) : null;
-}
-
-function solidStroke(
-  layers: CimObject[],
-): { color: { hex: string; opacity: number }; width: number | null } | null {
-  const layer = layers.find((candidate) => candidate.type === "CIMSolidStroke");
-  const color = layer ? cimColor(layer.color) : null;
-  return layer && color ? { color, width: numberValue(layer.width) } : null;
 }
 
 /**
@@ -755,7 +795,7 @@ function solidStroke(
  * would let the class inherit another class's outline, or GeoLibre's default.
  */
 function strokeLook(
-  stroke: { color: { hex: string; opacity: number }; width: number | null } | null,
+  stroke: LayerScan["stroke"],
 ): Pick<SymbolLook, "strokeColor" | "strokeOpacity" | "strokeWidth"> {
   if (!stroke || stroke.color.opacity === 0) return { strokeWidth: 0 };
   return {
@@ -772,7 +812,7 @@ function strokeLook(
  *
  * @returns Red, green, and blue channels on a 0-255 scale (unclamped).
  */
-function labToRgb(l: number, a: number, b: number): [number, number, number] {
+function labToRgb(l: number, a: number, b: number): number[] {
   const fy = (l + 16) / 116;
   const fx = fy + a / 500;
   const fz = fy - b / 200;
@@ -793,7 +833,7 @@ function labToRgb(l: number, a: number, b: number): [number, number, number] {
     const encoded =
       magnitude <= 0.0031308 ? 12.92 * magnitude : 1.055 * magnitude ** (1 / 2.4) - 0.055;
     return Math.sign(channel) * encoded * 255;
-  }) as [number, number, number];
+  });
 }
 
 /**
@@ -804,26 +844,20 @@ function labToRgb(l: number, a: number, b: number): [number, number, number] {
  * @param value - Value as a 0-1 fraction.
  * @returns Red, green, and blue channels on a 0-255 scale.
  */
-function hsvToRgb(hue: number, saturation: number, value: number): [number, number, number] {
+function hsvToRgb(hue: number, saturation: number, value: number): number[] {
   const h = (((hue % 360) + 360) % 360) / 60;
-  const s = Math.max(0, Math.min(1, saturation));
   const v = Math.max(0, Math.min(1, value));
-  const chroma = v * s;
+  const chroma = v * Math.max(0, Math.min(1, saturation));
   const second = chroma * (1 - Math.abs((h % 2) - 1));
-  const [r, g, b] =
-    h < 1
-      ? [chroma, second, 0]
-      : h < 2
-        ? [second, chroma, 0]
-        : h < 3
-          ? [0, chroma, second]
-          : h < 4
-            ? [0, second, chroma]
-            : h < 5
-              ? [second, 0, chroma]
-              : [chroma, 0, second];
-  const match = v - chroma;
-  return [(r + match) * 255, (g + match) * 255, (b + match) * 255];
+  const sector = [
+    [chroma, second, 0],
+    [second, chroma, 0],
+    [0, chroma, second],
+    [0, second, chroma],
+    [second, 0, chroma],
+    [chroma, 0, second],
+  ][Math.min(5, Math.floor(h))];
+  return sector.map((channel) => (channel + v - chroma) * 255);
 }
 
 /**

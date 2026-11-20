@@ -6,9 +6,8 @@ import {
   type LayerGroup,
   type LayerStyle,
   type MapViewState,
-  translateCimRenderer,
-  type CimRendererIssueCode,
 } from "@geolibre/core";
+import { translateCimRenderer, type CimRendererIssueCode } from "@geolibre/map/style-import";
 import { strFromU8, unzipSync } from "fflate";
 
 export interface ArcgisProjectImportWarning {

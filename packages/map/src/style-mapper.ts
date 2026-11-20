@@ -1,6 +1,7 @@
 import {
   DEFAULT_LAYER_STYLE,
   circleRadiusValue,
+  effectiveVectorRules,
   extrusionBaseValue,
   extrusionColorValue,
   extrusionHeightValue,
@@ -57,8 +58,13 @@ function layerOpacityForBlend(style: LayerStyle): number {
 
 /**
  * Whether a polygon's fill draws its 1px hairline outline in the stroke color.
- * Only a solid, opaque stroke keeps it: the line layer draws the real outline,
- * and a hairline under a dashed or translucent one would show through. A
+ * Only a solid, opaque, visible stroke keeps it: the line layer draws the real
+ * outline, and a hairline under a dashed or translucent one would show
+ * through. A zero stroke width means no outline at all, so a hairline would
+ * draw one anyway; that includes a rule-based style where any drawn rule (or
+ * the layer width it falls back to) has width 0, since the hairline cannot be
+ * switched per rule. Outlined rules still get their outline from the line
+ * layer. A
  * simplestyle layer drops it too, since any feature's own `stroke-opacity` can
  * make its outline translucent. That is deliberately per layer rather than per
  * feature: scanning the data for the property would cost a pass over every
@@ -72,8 +78,19 @@ export function fillOutlineDrawn(style: LayerStyle): boolean {
   return (
     strokeDashValue(style) === null &&
     strokeOpacityValue(style) >= 1 &&
-    styleValue(style, "simpleStyleEnabled") !== true
+    styleValue(style, "simpleStyleEnabled") !== true &&
+    !hasZeroStrokeWidth(style)
   );
+}
+
+/** Whether any feature of the layer can draw with a stroke width of 0. */
+function hasZeroStrokeWidth(style: LayerStyle): boolean {
+  const widths: unknown[] = [styleValue(style, "strokeWidth")];
+  if (styleValue(style, "vectorStyleMode") === "rule-based") {
+    const { rules, elseRule } = effectiveVectorRules(style);
+    widths.push(...rules.map((rule) => rule.strokeWidth), elseRule?.strokeWidth);
+  }
+  return widths.some((width) => typeof width === "number" && width <= 0);
 }
 
 /**

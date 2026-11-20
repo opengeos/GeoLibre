@@ -8,9 +8,6 @@ import {
   parseProject,
   serializeProject,
   ruleBasedVisibilityFilter,
-  translateCimRenderer,
-  cimColor,
-  cimSymbolLayerEnabled,
   lineWidthValue,
   vectorFillColorValue,
   vectorStrokeWidthValue,
@@ -18,6 +15,13 @@ import {
   type GeoLibreLayer,
   type LayerStyle,
 } from "@geolibre/core";
+import {
+  cimColor,
+  cimSymbolLayerEnabled,
+  translateCimRenderer,
+  translateCimSymbol,
+} from "@geolibre/map/style-import";
+import { fillPaint } from "../packages/map/src/style-mapper";
 import { importArcgisProject } from "../apps/geolibre-desktop/src/lib/arcgis-project-import";
 
 const rgb = (r: number, g: number, b: number, a = 100) => ({
@@ -283,7 +287,7 @@ describe("CIM unique value renderer", () => {
         },
       ],
     });
-    const feature = (KIND: string) => ({ type: 2, properties: { KIND } }) as never;
+    const feature = (KIND: string) => ({ type: 2, properties: { KIND } } as never);
     const value = vectorLineColorValue(style);
     assert.equal(evaluateColor(value, feature("hw")), "#ff0000");
     assert.equal(evaluateColor(value, feature("st")), "#0000ff");
@@ -292,39 +296,12 @@ describe("CIM unique value renderer", () => {
     assert.equal(rules[1].strokeWidth, 2);
   });
 
-  it("reports what it cannot translate instead of flattening silently", () => {
+  it("falls back to the default symbol's colour when it refuses a renderer", () => {
     const multi = translateCimRenderer(zoning({ fields: ["ZONE", "SUB"] }));
     assert.equal(multi.translated, false);
     assert.deepEqual(multi.issues, [{ code: "multiple-fields" }]);
-    // The default symbol still colours the layer.
     assert.equal(multi.style.vectorStyleMode, "single");
     assert.equal(multi.style.fillColor, "#c8c8c8");
-
-    const arcade = translateCimRenderer(
-      zoning({
-        valueExpressionInfo: {
-          type: "CIMExpressionInfo",
-          expression: "$feature.ZONE",
-        },
-      }),
-    );
-    assert.deepEqual(arcade.issues, [{ code: "expression" }]);
-
-    const picture = zoning();
-    picture.groups[0].classes[0].symbol = {
-      type: "CIMSymbolReference",
-      symbol: {
-        type: "CIMPolygonSymbol",
-        symbolLayers: [{ type: "CIMPictureFill" }],
-      },
-    } as never;
-    assert.deepEqual(translateCimRenderer(picture).issues, [
-      { code: "symbol", cimType: "CIMPolygonSymbol" },
-    ]);
-
-    assert.deepEqual(translateCimRenderer({ type: "CIMHeatMapRenderer" }).issues, [
-      { code: "renderer", cimType: "CIMHeatMapRenderer" },
-    ]);
   });
 });
 
@@ -399,18 +376,6 @@ describe("CIM class breaks renderer", () => {
     );
     assert.equal(renderedFill(style, { DENSITY: 10 }), LIGHT);
   });
-
-  it("refuses renderers whose classes it cannot reproduce", () => {
-    const codes = (overrides: Record<string, unknown>) =>
-      translateCimRenderer(density(overrides)).issues.map((issue) => issue.code);
-    assert.deepEqual(codes({ classBreakType: "GraduatedSymbol" }), ["graduated-symbols"]);
-    assert.deepEqual(codes({ normalizationType: "Field", normalizationField: "AREA" }), [
-      "normalization",
-    ]);
-    assert.deepEqual(codes({ exclusionClause: "DENSITY < 0" }), ["exclusion"]);
-    assert.deepEqual(codes({ breaks: [] }), ["no-classes"]);
-    assert.deepEqual(codes({ normalizationType: "Nothing" }), []);
-  });
 });
 
 /** The outline width a polygon feature renders with, from the map's own paint value. */
@@ -429,99 +394,201 @@ function renderedOutlineWidth(style: LayerStyle, properties: Record<string, unkn
   );
 }
 
-function polygonWith(layers: unknown[]) {
-  return { type: "CIMSymbolReference", symbol: { type: "CIMPolygonSymbol", symbolLayers: layers } };
+const symbolRef = (type: string, symbolLayers: unknown[], extra: Record<string, unknown> = {}) => ({
+  type: "CIMSymbolReference",
+  symbol: { type, symbolLayers, ...extra },
+});
+const polygonWith = (layers: unknown[]) => symbolRef("CIMPolygonSymbol", layers);
+const simple = (symbol: unknown) => ({ type: "CIMSimpleRenderer", symbol });
+const fill = (color: unknown = rgb(1, 1, 1)) => ({
+  type: "CIMSolidFill",
+  enable: true,
+  color,
+});
+const stroke = (
+  color: unknown = rgb(0, 0, 0),
+  width = 1.5,
+  extra: Record<string, unknown> = {},
+) => ({
+  type: "CIMSolidStroke",
+  enable: true,
+  width,
+  color,
+  ...extra,
+});
+const hsl = { type: "CIMHSLColor", values: [0, 100, 50, 100] };
+/** A point symbol with one vector marker drawing each of `graphics` (symbol layer lists). */
+function marker(...graphics: unknown[][]) {
+  return symbolRef("CIMPointSymbol", [
+    {
+      type: "CIMVectorMarker",
+      enable: true,
+      size: 6,
+      markerGraphics: graphics.map((layers) => ({
+        symbol: { type: "CIMPolygonSymbol", symbolLayers: layers },
+      })),
+    },
+  ]);
 }
+const twoClasses = (first: unknown, second: unknown) => ({
+  type: "CIMUniqueValueRenderer",
+  fields: ["K"],
+  groups: [
+    {
+      classes: [
+        {
+          label: "a",
+          visible: true,
+          symbol: first,
+          values: [{ fieldValues: ["a"] }],
+        },
+        {
+          label: "b",
+          visible: true,
+          symbol: second,
+          values: [{ fieldValues: ["b"] }],
+        },
+      ],
+    },
+  ],
+});
+
+describe("CIM renderer refusals", () => {
+  const picture = zoning();
+  picture.groups[0].classes[0].symbol = polygonWith([{ type: "CIMPictureFill" }]) as never;
+  const brokenBound = (upperBound: unknown) => {
+    const renderer = density({ minimumBreak: -5 });
+    (renderer.breaks[0] as { upperBound: unknown }).upperBound = upperBound;
+    return renderer;
+  };
+  const cases: [string, unknown, unknown[]][] = [
+    [
+      "unique values on several fields",
+      zoning({ fields: ["ZONE", "SUB"] }),
+      [{ code: "multiple-fields" }],
+    ],
+    [
+      "an Arcade expression",
+      zoning({
+        valueExpressionInfo: {
+          type: "CIMExpressionInfo",
+          expression: "$feature.ZONE",
+        },
+      }),
+      [{ code: "expression" }],
+    ],
+    ["a class without a solid colour", picture, [{ code: "symbol", cimType: "CIMPolygonSymbol" }]],
+    [
+      "another renderer type",
+      { type: "CIMHeatMapRenderer" },
+      [{ code: "renderer", cimType: "CIMHeatMapRenderer" }],
+    ],
+    [
+      "unclassed colours",
+      density({ classBreakType: "UnclassedColor" }),
+      [{ code: "renderer", cimType: "UnclassedColor" }],
+    ],
+    [
+      "graduated symbols",
+      density({ classBreakType: "GraduatedSymbol" }),
+      [{ code: "graduated-symbols" }],
+    ],
+    [
+      "normalised breaks",
+      density({ normalizationType: "Field", normalizationField: "AREA" }),
+      [{ code: "normalization" }],
+    ],
+    ["an exclusion clause", density({ exclusionClause: "DENSITY < 0" }), [{ code: "exclusion" }]],
+    ["no breaks", density({ breaks: [] }), [{ code: "no-classes" }]],
+    ["a minimum above the first break", density({ minimumBreak: 11 }), [{ code: "no-classes" }]],
+    ["a null upper bound", brokenBound(null), [{ code: "no-classes" }]],
+    ["a text upper bound", brokenBound("10"), [{ code: "no-classes" }]],
+    ["a boolean upper bound", brokenBound(false), [{ code: "no-classes" }]],
+    ["a text minimum", density({ minimumBreak: "0" }), [{ code: "no-classes" }]],
+  ];
+  for (const [name, renderer, issues] of cases) {
+    it(`refuses ${name}`, () => {
+      const result = translateCimRenderer(renderer);
+      assert.equal(result.translated, false);
+      assert.deepEqual(result.issues, issues);
+    });
+  }
+
+  it("accepts normalisation of Nothing", () => {
+    assert.deepEqual(translateCimRenderer(density({ normalizationType: "Nothing" })).issues, []);
+  });
+
+  it("refuses a symbol whose only colour cannot be read, and draws nothing invented", () => {
+    for (const color of [{ type: "CIMRGBColor", values: [null, 0, 0, 100] }, hsl]) {
+      const broken = translateCimRenderer(simple(polygonWith([fill(color)])));
+      assert.equal(broken.translated, false);
+      assert.equal(broken.style.fillColor, undefined);
+    }
+  });
+});
 
 describe("CIM symbols and defaults as Pro writes them", () => {
-  const fill = (r: number, g: number, b: number) => ({
-    type: "CIMSolidFill",
-    enable: true,
-    color: rgb(r, g, b),
-  });
-  const stroke = (alpha: number) => ({
-    type: "CIMSolidStroke",
-    enable: true,
-    width: 1.5,
-    color: rgb(0, 0, 0, alpha),
-  });
-  const twoClasses = (first: unknown[], second: unknown[]) => ({
-    type: "CIMUniqueValueRenderer",
-    fields: ["K"],
-    groups: [
-      {
-        classes: [
-          {
-            label: "a",
-            visible: true,
-            symbol: polygonWith(first),
-            values: [{ fieldValues: ["a"] }],
-          },
-          {
-            label: "b",
-            visible: true,
-            symbol: polygonWith(second),
-            values: [{ fieldValues: ["b"] }],
-          },
-        ],
-      },
-    ],
-  });
-
   it("draws no outline where a class has none or a transparent one", () => {
     const style = translatedStyle(
-      twoClasses([stroke(0), fill(1, 1, 1)], [stroke(100), fill(2, 2, 2)]),
+      twoClasses(polygonWith([stroke(rgb(0, 0, 0, 0)), fill()]), polygonWith([stroke(), fill()])),
     );
     assert.equal(renderedOutlineWidth(style, { K: "a" }), 0);
     assert.equal(renderedOutlineWidth(style, { K: "b" }), 2);
-    const fillOnly = translatedStyle(twoClasses([stroke(100), fill(1, 1, 1)], [fill(2, 2, 2)]));
+    const fillOnly = translatedStyle(
+      twoClasses(polygonWith([stroke(), fill()]), polygonWith([fill()])),
+    );
     assert.equal(renderedOutlineWidth(fillOnly, { K: "a" }), 2);
     assert.equal(renderedOutlineWidth(fillOnly, { K: "b" }), 0);
+  });
+
+  it("leaves no coloured hairline on a polygon without an outline", () => {
+    const outline = (style: LayerStyle) => fillPaint(style, 1)["fill-outline-color"];
+    // A plain fill-only polygon.
+    assert.equal(outline(translatedStyle(simple(polygonWith([fill(rgb(255, 0, 0))])))), undefined);
+    // Mixed classes, either way round, and an outline-free default symbol.
+    for (const renderer of [
+      twoClasses(polygonWith([stroke(), fill()]), polygonWith([fill()])),
+      twoClasses(polygonWith([fill()]), polygonWith([stroke(), fill()])),
+      { ...zoning(), defaultSymbol: polygonWith([fill()]) },
+    ]) {
+      assert.equal(outline(translatedStyle(renderer)), undefined);
+    }
+    // Every class outlined: the hairline under the outline stays.
+    assert.notEqual(outline(translatedStyle(zoning())), undefined);
   });
 
   it("reads an omitted upper bound as 0, as CIM leaves out defaults", () => {
     const renderer = density({ minimumBreak: -3 });
     renderer.breaks = [
-      { type: "CIMClassBreak", label: "≤-1", upperBound: -1, symbol: polygon([1, 1, 1]) },
-      { type: "CIMClassBreak", label: "≤0", symbol: polygon([2, 2, 2]) } as never,
-      { type: "CIMClassBreak", label: "≤3", upperBound: 3, symbol: polygon([3, 3, 3]) },
+      {
+        type: "CIMClassBreak",
+        label: "≤-1",
+        upperBound: -1,
+        symbol: polygon([1, 1, 1]),
+      },
+      {
+        type: "CIMClassBreak",
+        label: "≤0",
+        symbol: polygon([2, 2, 2]),
+      } as never,
+      {
+        type: "CIMClassBreak",
+        label: "≤3",
+        upperBound: 3,
+        symbol: polygon([3, 3, 3]),
+      },
     ];
     const style = translatedStyle(renderer);
     assert.equal(renderedFill(style, { DENSITY: -3 }), "#010101");
     assert.equal(renderedFill(style, { DENSITY: 0 }), "#020202");
     assert.equal(renderedFill(style, { DENSITY: 0.5 }), "#030303");
-    assert.deepEqual(translateCimRenderer(density({ minimumBreak: 11 })).issues, [
-      { code: "no-classes" },
-    ]);
-  });
-
-  it("refuses a colour channel that is not a number instead of reading it as 0", () => {
-    const broken = translateCimRenderer({
-      type: "CIMSimpleRenderer",
-      symbol: polygonWith([
-        { type: "CIMSolidFill", color: { type: "CIMRGBColor", values: [null, 0, 0, 100] } },
-      ]),
-    });
-    assert.equal(broken.translated, false);
-    assert.equal(broken.style.fillColor, undefined);
-  });
-
-  it("reads CIELAB colours", () => {
-    const lab = translateCimRenderer({
-      type: "CIMSimpleRenderer",
-      symbol: polygonWith([
-        {
-          type: "CIMSolidFill",
-          color: { type: "CIMLABColor", values: [54.29, 80.82, 69.89, 100] },
-        },
-      ]),
-    });
-    // CSS lab(54.29 80.82 69.89), D50, is sRGB red.
-    assert.equal(lab.style.fillColor, "#ff0000");
   });
 
   it("hides a class Pro saved unchecked by leaving out visible", () => {
-    const renderer = twoClasses([fill(1, 1, 1)], [fill(2, 2, 2)]);
+    const renderer = twoClasses(
+      polygonWith([fill(rgb(1, 1, 1))]),
+      polygonWith([fill(rgb(2, 2, 2))]),
+    );
     delete (renderer.groups[0].classes[1] as { visible?: boolean }).visible;
     const style = translatedStyle(renderer);
     assert.equal(renderedFill(style, { K: "a" }), "#010101");
@@ -548,84 +615,11 @@ describe("CIM symbols and defaults as Pro writes them", () => {
     assert.equal(labels.at(-1), "Other");
   });
 
-  it("notes symbol layers it does not draw, and names unclassed colours", () => {
-    const hatched = translateCimRenderer(
-      twoClasses([fill(1, 1, 1), { type: "CIMHatchFill", enable: true }], [fill(2, 2, 2)]),
-    );
-    assert.equal(hatched.translated, true);
-    assert.deepEqual(hatched.issues, [{ code: "symbol-layers", cimType: "CIMHatchFill" }]);
-    // A cased line draws only its top stroke, so the casing is reported.
-    const cased = translateCimRenderer({
-      type: "CIMSimpleRenderer",
-      symbol: {
-        type: "CIMSymbolReference",
-        symbol: {
-          type: "CIMLineSymbol",
-          symbolLayers: [
-            { type: "CIMSolidStroke", enable: true, width: 2.6, color: rgb(255, 255, 255) },
-            { type: "CIMSolidStroke", enable: true, width: 3.4, color: rgb(0, 0, 0) },
-          ],
-        },
-      },
-    });
-    assert.equal(cased.style.strokeColor, "#ffffff");
-    assert.deepEqual(cased.issues, [{ code: "symbol-layers", cimType: "CIMSolidStroke" }]);
-    assert.deepEqual(translateCimRenderer(density({ classBreakType: "UnclassedColor" })).issues, [
-      { code: "renderer", cimType: "UnclassedColor" },
-    ]);
-  });
-});
-
-describe("shared CIM readers and edge cases", () => {
-  it("reads every CIM colour space, with alpha as opacity", () => {
-    assert.deepEqual(cimColor({ type: "CIMRGBColor", values: [255, 128, 0, 50] }), {
-      hex: "#ff8000",
-      opacity: 0.5,
-    });
-    assert.deepEqual(cimColor({ type: "CIMGrayColor", values: [50] }), {
-      hex: "#808080",
-      opacity: 1,
-    });
-    assert.equal(cimColor({ type: "CIMCMYKColor", values: [0, 100, 100, 0, 100] })?.hex, "#ff0000");
-    assert.equal(cimColor({ type: "CIMHSVColor", values: [240, 100, 100, 100] })?.hex, "#0000ff");
-    assert.equal(cimColor({ type: "CIMLABColor", values: [100, 0, 0, 100] })?.hex, "#ffffff");
-    // Unknown subclasses and too few channels are refused, not guessed.
-    assert.equal(cimColor({ type: "CIMSpotColor", values: [1, 2, 3] }), null);
-    assert.equal(cimColor({ type: "CIMRGBColor", values: [1, 2] }), null);
-    for (const broken of [null, "", true, Number.NaN, undefined]) {
-      assert.equal(cimColor({ type: "CIMRGBColor", values: [broken, 0, 0, 100] }), null);
-    }
-  });
-
-  it("switches a symbol layer off only for an explicit enable: false", () => {
-    assert.equal(cimSymbolLayerEnabled({ type: "CIMSolidFill", enable: true }), true);
-    assert.equal(cimSymbolLayerEnabled({ type: "CIMSolidFill", enable: false }), false);
-    assert.equal(cimSymbolLayerEnabled({ type: "CIMSolidFill" }), true);
-    assert.equal(cimSymbolLayerEnabled(null), false);
-    // A Pro 2.6 export (Esri Japan's zoning layer) switches the outline off this way.
-    const style = translatedStyle({
-      type: "CIMSimpleRenderer",
-      symbol: polygonWith([
-        { type: "CIMSolidStroke", enable: false, width: 0.7, color: rgb(110, 110, 110) },
-        { type: "CIMSolidFill", enable: true, color: rgb(254, 203, 252) },
-      ]),
-    });
-    assert.equal(style.fillColor, "#fecbfc");
-    assert.equal(style.strokeWidth, 0);
-  });
-
-  it("keeps the outline of a hatched polygon and reports the hatch", () => {
-    const hatched = translateCimRenderer({
-      type: "CIMSimpleRenderer",
-      symbol: polygonWith([
-        { type: "CIMSolidStroke", enable: true, width: 1.5, color: rgb(255, 0, 0) },
-        { type: "CIMHatchFill", enable: true },
-      ]),
-    });
-    assert.equal(hatched.translated, true);
-    assert.equal(hatched.style.strokeColor, "#ff0000");
-    assert.equal(hatched.style.fillOpacity, 0);
-    assert.deepEqual(hatched.issues, [{ code: "symbol-layers", cimType: "CIMHatchFill" }]);
+  it("labels an unlabelled break without floating-point noise", () => {
+    const renderer = density();
+    renderer.breaks[0].upperBound = 0.1 + 0.2;
+    renderer.breaks[0].label = "";
+    assert.equal(translatedStyle(renderer).vectorRules[0].label, "0 – 0.3");
   });
 
   it("matches numeric unique values by their text, as ArcGIS stores them", () => {
@@ -634,29 +628,6 @@ describe("shared CIM readers and edge cases", () => {
     const style = translatedStyle(renderer);
     assert.equal(renderedFill(style, { ZONE: 3 }), "#0000ff");
     assert.equal(renderedFill(style, { ZONE: "3" }), "#0000ff");
-  });
-
-  it("reports classes whose outlines differ only in transparency", () => {
-    const outlined = (alpha: number) => ({
-      type: "CIMSymbolReference",
-      symbol: {
-        type: "CIMPolygonSymbol",
-        symbolLayers: [
-          { type: "CIMSolidStroke", enable: true, width: 1, color: rgb(0, 0, 0, alpha) },
-          { type: "CIMSolidFill", enable: true, color: rgb(9, 9, 9) },
-        ],
-      },
-    });
-    const renderer = zoning();
-    renderer.groups[0].classes[0].symbol = outlined(50) as never;
-    renderer.groups[0].classes[1].symbol = outlined(100) as never;
-    assert.deepEqual(translateCimRenderer(renderer).issues, [{ code: "transparency" }]);
-    // Same transparency everywhere, or no outline at all, is carried exactly.
-    renderer.groups[0].classes[1].symbol = outlined(50) as never;
-    renderer.groups[0].classes[2].symbol = outlined(50) as never;
-    renderer.groups[0].classes[3].symbol = outlined(0) as never;
-    renderer.defaultSymbol = outlined(50) as never;
-    assert.deepEqual(translateCimRenderer(renderer).issues, []);
   });
 
   it("matches a stored number however ArcGIS spelled it", () => {
@@ -673,106 +644,212 @@ describe("shared CIM readers and edge cases", () => {
     // Text is still compared as text: "1" is not the stored text "1.0".
     assert.equal(renderedFill(style, { ZONE: "1" }), "#c8c8c8");
   });
+});
 
-  it("reports an outline drawn at another class's transparency", () => {
+describe("what a translated renderer reports leaving out", () => {
+  const solidRed = fill(rgb(255, 0, 0));
+  const casedLine = symbolRef("CIMLineSymbol", [
+    stroke(rgb(255, 255, 255), 2.6),
+    stroke(rgb(0, 0, 0), 3.4),
+  ]);
+  const outlined = (alpha: number) =>
+    polygonWith([stroke(rgb(0, 0, 0, alpha), 1), fill(rgb(9, 9, 9))]);
+  const transparencies = (...symbols: unknown[]) => {
     const renderer = zoning();
-    renderer.groups[0].classes[0].symbol = polygonWith([
-      { type: "CIMSolidFill", enable: true, color: rgb(9, 9, 9) },
-    ]) as never;
-    renderer.groups[0].classes[1].symbol = polygonWith([
-      { type: "CIMSolidStroke", enable: true, width: 1, color: rgb(0, 0, 0, 50) },
-      { type: "CIMSolidFill", enable: true, color: rgb(9, 9, 9) },
-    ]) as never;
-    assert.deepEqual(translateCimRenderer(renderer).issues, [{ code: "transparency" }]);
-  });
-
-  it("reports geometric effects such as dashes instead of drawing them solid silently", () => {
-    const dashed = translateCimRenderer({
-      type: "CIMSimpleRenderer",
-      symbol: {
-        type: "CIMSymbolReference",
-        symbol: {
-          type: "CIMLineSymbol",
-          symbolLayers: [
-            {
-              type: "CIMSolidStroke",
-              enable: true,
-              width: 1,
-              color: rgb(0, 0, 0),
-              effects: [{ type: "CIMGeometricEffectDashes", dashTemplate: [6, 3] }],
-            },
-          ],
-        },
-      },
+    symbols.forEach((symbol, index) => {
+      if (index < 4) renderer.groups[0].classes[index].symbol = symbol as never;
+      else renderer.defaultSymbol = symbol as never;
     });
-    assert.equal(dashed.translated, true);
-    assert.deepEqual(dashed.issues, [{ code: "effects", cimType: "CIMGeometricEffectDashes" }]);
-  });
+    return renderer;
+  };
+  // A second graphic is reported even when it only adds a stroke.
+  const markerWithStrokeGraphic = marker([solidRed], [stroke(rgb(0, 0, 255))]);
+  const markerWithEffect = marker([solidRed]);
+  const graphics = (
+    markerWithEffect.symbol.symbolLayers[0] as { markerGraphics: { symbol: object }[] }
+  ).markerGraphics;
+  Object.assign(graphics[0].symbol, { effects: [{ type: "CIMGeometricEffectOffset", offset: 2 }] });
 
-  it("reports a hatch or second graphic inside a marker", () => {
-    const marker = (graphicLayers: unknown[]) => ({
-      type: "CIMSimpleRenderer",
-      symbol: {
-        type: "CIMSymbolReference",
-        symbol: {
-          type: "CIMPointSymbol",
-          symbolLayers: [
-            {
-              type: "CIMVectorMarker",
-              enable: true,
-              size: 6,
-              markerGraphics: [
-                { symbol: { type: "CIMPolygonSymbol", symbolLayers: graphicLayers } },
-              ],
-            },
-          ],
-        },
-      },
-    });
-    const solid = { type: "CIMSolidFill", enable: true, color: rgb(255, 0, 0) };
-    assert.deepEqual(translateCimRenderer(marker([solid])).issues, []);
-    assert.deepEqual(
-      translateCimRenderer(marker([{ type: "CIMHatchFill", enable: true }, solid])).issues,
+  const cases: [string, unknown, unknown[]][] = [
+    [
+      "a hatch beside a solid fill",
+      twoClasses(
+        polygonWith([fill(), { type: "CIMHatchFill", enable: true }]),
+        polygonWith([fill()]),
+      ),
       [{ code: "symbol-layers", cimType: "CIMHatchFill" }],
-    );
-    // A second graphic is reported even when it only adds a stroke.
-    const twoGraphics = marker([solid]);
-    twoGraphics.symbol.symbol.symbolLayers[0].markerGraphics.push({
-      symbol: {
-        type: "CIMLineSymbol",
-        symbolLayers: [{ type: "CIMSolidStroke", enable: true, color: rgb(0, 0, 255) } as never],
-      },
+    ],
+    [
+      "a cased line's casing",
+      simple(casedLine),
+      [{ code: "symbol-layers", cimType: "CIMSolidStroke" }],
+    ],
+    [
+      "a dash effect",
+      simple(
+        symbolRef("CIMLineSymbol", [
+          stroke(rgb(0, 0, 0), 1, {
+            effects: [{ type: "CIMGeometricEffectDashes", dashTemplate: [6, 3] }],
+          }),
+        ]),
+      ),
+      [{ code: "effects", cimType: "CIMGeometricEffectDashes" }],
+    ],
+    [
+      "classes whose outlines differ only in transparency",
+      transparencies(outlined(50), outlined(100)),
+      [{ code: "transparency" }],
+    ],
+    [
+      "an outline drawn at another class's transparency",
+      transparencies(polygonWith([fill()]), outlined(50)),
+      [{ code: "transparency" }],
+    ],
+    [
+      "nothing when transparency is shared or outlines are absent",
+      transparencies(outlined(50), outlined(50), outlined(50), outlined(0), outlined(50)),
+      [],
+    ],
+    ["nothing for a plain marker", simple(marker([solidRed])), []],
+    [
+      "a hatch inside a marker graphic",
+      simple(marker([{ type: "CIMHatchFill", enable: true }, solidRed])),
+      [{ code: "symbol-layers", cimType: "CIMHatchFill" }],
+    ],
+    [
+      "a second marker graphic",
+      simple(markerWithStrokeGraphic),
+      [{ code: "symbol-layers", cimType: "CIMMarkerGraphic" }],
+    ],
+    [
+      "an effect inside a marker graphic",
+      simple(markerWithEffect),
+      [{ code: "effects", cimType: "CIMGeometricEffectOffset" }],
+    ],
+    [
+      "an unreadable fill behind a readable outline",
+      simple(polygonWith([stroke(rgb(255, 0, 0)), fill(hsl)])),
+      [{ code: "color", cimType: "CIMHSLColor" }],
+    ],
+    [
+      "an outline with a null channel",
+      simple(polygonWith([stroke({ type: "CIMRGBColor", values: [0, null, 0, 100] }), fill()])),
+      [{ code: "color", cimType: "CIMRGBColor" }],
+    ],
+    [
+      "a fill layer with no colour at all",
+      simple(polygonWith([stroke(), { type: "CIMSolidFill", enable: true }])),
+      [{ code: "color", cimType: "CIMSolidFill" }],
+    ],
+    [
+      "an unreadable marker outline",
+      simple(marker([stroke(hsl), solidRed])),
+      [{ code: "color", cimType: "CIMHSLColor" }],
+    ],
+    [
+      "an unreadable outline in one class only",
+      twoClasses(polygonWith([stroke(), fill()]), polygonWith([stroke(hsl), fill()])),
+      [{ code: "color", cimType: "CIMHSLColor" }],
+    ],
+  ];
+  for (const [name, renderer, issues] of cases) {
+    it(`reports ${name}`, () => {
+      const result = translateCimRenderer(renderer);
+      assert.equal(result.translated, true, JSON.stringify(result.issues));
+      assert.deepEqual(result.issues, issues);
     });
-    const twoResult = translateCimRenderer(twoGraphics);
-    assert.equal(twoResult.style.fillColor, "#ff0000");
-    assert.equal(twoResult.style.strokeWidth, 0);
-    assert.deepEqual(twoResult.issues, [{ code: "symbol-layers", cimType: "CIMMarkerGraphic" }]);
-    // Effects inside a marker graphic are reported like any other.
-    const offset = marker([solid]);
-    (offset.symbol.symbol.symbolLayers[0].markerGraphics[0].symbol as Record<string, unknown>).effects =
-      [{ type: "CIMGeometricEffectOffset", offset: 2 }];
-    assert.deepEqual(translateCimRenderer(offset).issues, [
-      { code: "effects", cimType: "CIMGeometricEffectOffset" },
-    ]);
+  }
+
+  it("draws what it can of a symbol with an unreadable part", () => {
+    const hollow = translateCimRenderer(simple(polygonWith([stroke(rgb(255, 0, 0)), fill(hsl)])));
+    assert.equal(hollow.style.fillOpacity, 0);
+    assert.equal(hollow.style.strokeColor, "#ff0000");
+    const unoutlined = translateCimRenderer(simple(polygonWith([stroke(hsl), fill(rgb(1, 2, 3))])));
+    assert.equal(unoutlined.style.fillColor, "#010203");
+    assert.equal(unoutlined.style.strokeWidth, 0);
   });
 
-  it("refuses a break bound that is present but not a number", () => {
-    for (const broken of [null, "10", false]) {
-      const renderer = density({ minimumBreak: -5 });
-      (renderer.breaks[0] as { upperBound: unknown }).upperBound = broken;
-      assert.deepEqual(translateCimRenderer(renderer).issues, [{ code: "no-classes" }]);
-    }
-    assert.deepEqual(translateCimRenderer(density({ minimumBreak: "0" })).issues, [
-      { code: "no-classes" },
-    ]);
+  it("draws only the top stroke of a cased line and the first marker graphic", () => {
+    assert.equal(translateCimRenderer(simple(casedLine)).style.strokeColor, "#ffffff");
+    const style = translateCimRenderer(simple(markerWithStrokeGraphic)).style;
+    assert.equal(style.fillColor, "#ff0000");
+    assert.equal(style.strokeWidth, 0);
   });
 
-  it("labels an unlabelled break without floating-point noise", () => {
-    const renderer = density();
-    renderer.breaks[0].upperBound = 0.1 + 0.2;
-    renderer.breaks[0].label = "";
-    const rules = translatedStyle(renderer).vectorRules;
-    assert.equal(rules[0].label, "0 – 0.3");
+  it("keeps the outline of a hatched polygon and reports the hatch", () => {
+    const hatched = translateCimRenderer(
+      simple(polygonWith([stroke(rgb(255, 0, 0)), { type: "CIMHatchFill", enable: true }])),
+    );
+    assert.equal(hatched.translated, true);
+    assert.equal(hatched.style.strokeColor, "#ff0000");
+    assert.equal(hatched.style.fillOpacity, 0);
+    assert.deepEqual(hatched.issues, [{ code: "symbol-layers", cimType: "CIMHatchFill" }]);
+  });
+
+  it("refuses an outline-only marker graphic rather than drawing an empty ring", () => {
+    const result = translateCimRenderer(simple(marker([stroke()], [solidRed])));
+    assert.equal(result.translated, false);
+    assert.deepEqual(result.issues, [{ code: "symbol", cimType: "CIMPointSymbol" }]);
+  });
+});
+
+describe("shared CIM readers", () => {
+  const colours: [string, unknown, { hex: string; opacity: number } | null][] = [
+    [
+      "RGB with alpha",
+      { type: "CIMRGBColor", values: [255, 128, 0, 50] },
+      { hex: "#ff8000", opacity: 0.5 },
+    ],
+    ["Gray", { type: "CIMGrayColor", values: [50] }, { hex: "#808080", opacity: 1 }],
+    [
+      "CMYK",
+      { type: "CIMCMYKColor", values: [0, 100, 100, 0, 100] },
+      { hex: "#ff0000", opacity: 1 },
+    ],
+    ["HSV", { type: "CIMHSVColor", values: [240, 100, 100, 100] }, { hex: "#0000ff", opacity: 1 }],
+    [
+      "LAB white",
+      { type: "CIMLABColor", values: [100, 0, 0, 100] },
+      { hex: "#ffffff", opacity: 1 },
+    ],
+    // CSS lab(54.29 80.82 69.89), D50, is sRGB red.
+    [
+      "LAB red",
+      { type: "CIMLABColor", values: [54.29, 80.82, 69.89, 100] },
+      { hex: "#ff0000", opacity: 1 },
+    ],
+    ["an unsupported subclass", hsl, null],
+    ["a Spot colour", { type: "CIMSpotColor", values: [1, 2, 3] }, null],
+    ["too few channels", { type: "CIMRGBColor", values: [1, 2] }, null],
+    ...[null, "", true, Number.NaN, undefined].map((broken): [string, unknown, null] => [
+      `a channel of ${typeof broken === "string" ? '""' : String(broken)}`,
+      { type: "CIMRGBColor", values: [broken, 0, 0, 100] },
+      null,
+    ]),
+  ];
+  for (const [name, color, expected] of colours) {
+    it(`reads ${name}`, () => assert.deepEqual(cimColor(color), expected));
+  }
+
+  it("switches a symbol layer off only for an explicit enable: false", () => {
+    assert.equal(cimSymbolLayerEnabled({ type: "CIMSolidFill", enable: true }), true);
+    assert.equal(cimSymbolLayerEnabled({ type: "CIMSolidFill", enable: false }), false);
+    assert.equal(cimSymbolLayerEnabled({ type: "CIMSolidFill" }), true);
+    assert.equal(cimSymbolLayerEnabled(null), false);
+    // A Pro 2.6 export (Esri Japan's zoning layer) switches the outline off this way.
+    const style = translatedStyle(
+      simple(
+        polygonWith([stroke(rgb(110, 110, 110), 0.7, { enable: false }), fill(rgb(254, 203, 252))]),
+      ),
+    );
+    assert.equal(style.fillColor, "#fecbfc");
+    assert.equal(style.strokeWidth, 0);
+  });
+
+  it("translates a lone symbol reference as a simple renderer would", () => {
+    const symbol = polygonWith([stroke(rgb(255, 0, 0)), fill(hsl)]);
+    assert.deepEqual(translateCimSymbol(symbol), translateCimRenderer(simple(symbol)));
+    assert.deepEqual(translateCimSymbol(undefined).issues, [{ code: "symbol" }]);
   });
 });
 
