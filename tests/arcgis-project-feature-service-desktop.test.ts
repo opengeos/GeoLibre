@@ -478,6 +478,23 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     ]) {
       assert.equal(await signIn(hosted(ORG, host), [online, org]), null, host);
     }
+    // Nor does a path that carries the user's organisation id first but could
+    // be resolved into another organisation's folder by the server.
+    for (const path of [
+      `${ORG}/%2e%2e%2fZzZzZzZz87654321/arcgis/rest/services/Water/FeatureServer/3`,
+      `${ORG}/..;/ZzZzZzZz87654321/arcgis/rest/services/Water/FeatureServer/3`,
+      `${ORG}/%2E%2E%5CZzZzZzZz87654321/arcgis/rest/services/Water/FeatureServer/3`,
+      `${ORG};x/arcgis/rest/services/Water/FeatureServer/3`,
+      `${ORG}/arcgis/rest/services/Water/FeatureServer/3/%2e%2e%2f%2e%2e%2f%2e%2e%2fZzZz`,
+    ]) {
+      const url = `https://services-eu1.arcgis.com/${path}`;
+      assert.equal(await signIn(url, [online, org]), null, path);
+    }
+    // A trailing slash is still a plain path.
+    assert.deepEqual(await signIn(`${hosted(ORG, "services-eu1.arcgis.com")}/`, [online]), {
+      portal: online,
+      token: `token-for-${online}`,
+    });
     // Nor does any other *.arcgis.com host, an untrusted host, or plain HTTP.
     assert.equal(
       await signIn("https://utility.arcgis.com/usrsvcs/servers/x/rest/services/A/FeatureServer/0", [

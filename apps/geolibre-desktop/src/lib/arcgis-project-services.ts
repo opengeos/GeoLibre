@@ -13,6 +13,16 @@ import { ARCGIS_ONLINE_PORTAL } from "./arcgis-oauth";
 const ARCGIS_ONLINE_HOSTING = /^services(?:\d*|-[a-z]{2}\d+)\.arcgis\.com$/i;
 
 /**
+ * A service path on that hosting that the organisation check can trust: plain
+ * segments of ASCII letters, digits, `_` and `-`, with an optional trailing
+ * slash. `new URL` already resolves literal and `%2e` dot segments, but it
+ * keeps `%2e%2e%2f`, `..;` and other encoded separators inside one segment,
+ * which the server may decode or resolve into another organisation's folder
+ * after the first segment has been checked. Such a path loads anonymously.
+ */
+const PLAIN_SERVICE_PATH = /^(?:\/[\w-]+)+\/?$/;
+
+/**
  * Puts the feature service layers added so far where project load would have
  * put them had they been file layers: the project's layers and services in
  * ArcGIS order, then the store's own group contiguity pass, exactly as
@@ -63,7 +73,8 @@ export function placeImportedServiceLayers(
  * - a host the signed-in portal trusts ({@link isTrustedPortalServiceUrl});
  * - on ArcGIS Online's shared hosting ({@link ARCGIS_ONLINE_HOSTING}), which
  *   any organisation can publish to, only a service whose path carries the
- *   signed-in user's own organisation id, so a crafted project cannot collect
+ *   signed-in user's own organisation id and nothing the server could resolve
+ *   elsewhere ({@link PLAIN_SERVICE_PATH}), so a crafted project cannot collect
  *   the token;
  * - no other `*.arcgis.com` host.
  *
@@ -89,9 +100,10 @@ export async function signInForImportedService(
     .sort((a, b) => Number(b === ARCGIS_ONLINE_PORTAL) - Number(a === ARCGIS_ONLINE_PORTAL));
   for (const portal of candidates) {
     const sameHost = service.hostname.toLowerCase() === new URL(portal).hostname.toLowerCase();
-    const hostedOrgId = ARCGIS_ONLINE_HOSTING.test(service.hostname)
-      ? service.pathname.split("/")[1]
-      : undefined;
+    const hostedOrgId =
+      ARCGIS_ONLINE_HOSTING.test(service.hostname) && PLAIN_SERVICE_PATH.test(service.pathname)
+        ? service.pathname.split("/")[1]
+        : undefined;
     if (!sameHost && !hostedOrgId) continue;
     const token = await deps.token(portal).catch(() => undefined);
     if (!token) continue;
