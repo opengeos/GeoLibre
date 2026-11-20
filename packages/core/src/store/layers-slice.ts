@@ -65,7 +65,16 @@ const RASTER_TILE_LAYER_TYPES: ReadonlySet<string> = new Set<
 export interface LayersSlice {
   layers: GeoLibreLayer[];
 
-  addLayer: (layer: GeoLibreLayer, beforeLayerId?: string | null) => void;
+  /**
+   * Add a layer, before `beforeLayerId` or on top. A name taken from the
+   * layer's local file name is numbered when another layer already has it,
+   * unless `options.keepName` says the name is the one a project saved.
+   */
+  addLayer: (
+    layer: GeoLibreLayer,
+    beforeLayerId?: string | null,
+    options?: { keepName?: boolean },
+  ) => void;
   removeLayer: (id: string) => void;
   updateLayer: (id: string, patch: Partial<GeoLibreLayer>) => void;
   setLayerVisibility: (id: string, visible: boolean) => void;
@@ -254,7 +263,7 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
   layers: [],
   copiedLayerStyle: null,
 
-  addLayer: (inputLayer, beforeLayerId = null) =>
+  addLayer: (inputLayer, beforeLayerId = null, options) =>
     set((s) => {
       let layer = withRasterSourceDefaults(inputLayer);
       const layers = [...s.layers];
@@ -266,7 +275,7 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
       // Only filename-derived names are deduplicated; an explicit name (an
       // embedded document title, a tool output label, a user-typed name)
       // is kept as supplied.
-      if (localSource && isSourceDerivedLayerName(layer.name, sourcePath)) {
+      if (localSource && !options?.keepName && isSourceDerivedLayerName(layer.name, sourcePath)) {
         layer = {
           ...layer,
           name: uniqueImportedLayerName(

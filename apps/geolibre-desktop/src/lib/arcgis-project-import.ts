@@ -15,6 +15,7 @@ export interface ArcgisProjectImportWarning {
   reason:
     | "layer-type"
     | "missing-source"
+    | "data-not-found"
     | "format"
     | "file-geodatabase"
     | "file-geodatabase-raster"
@@ -41,9 +42,11 @@ export interface ArcgisProjectImportWarning {
   symbologyIssue?: CimRendererIssueCode;
   /**
    * Import id of the layer, raster or service the warning is about, when that
-   * item was imported (a note on a layer that still loads). Lets
-   * {@link dropArcgisImportLayers} take the note away with the layer. Absent
-   * for warnings about layers that were never imported.
+   * item was imported (a note on a layer that still loads) or can still be
+   * loaded by locating its data folder (see {@link ArcgisWorkspaceRepairData}).
+   * Lets {@link dropArcgisImportLayers} take the note away with the layer, and
+   * a Locate folder take it away once the layer loads. Absent for warnings
+   * about layers that were never imported.
    */
   layerId?: string;
 }
@@ -63,10 +66,41 @@ export interface ArcgisProjectImportResult {
    * Import ids of every layer, raster and service, bottom first as the store
    * keeps them (ArcGIS Pro lists them top first). Rasters and services join
    * the store only after the project loads, each on top, so the caller puts
-   * them back in this order once they have been added.
+   * them back in this order once they have been added. Also lists the
+   * folder-backed layers in `repair.unresolvedLayers`, so a layer loaded later
+   * from a located folder goes back into its saved place.
    */
   layerOrder: string[];
   warnings: ArcgisProjectImportWarning[];
+  repair: ArcgisWorkspaceRepairData;
+}
+
+/**
+ * Where a folder-backed feature layer's data lived when the project was saved:
+ * a shapefile, delimited text or other single file inside a workspace folder.
+ * Kept so that, once the project has moved, the user can point at the folder's
+ * new location and the same file is read from there.
+ */
+export interface ArcgisFolderSource {
+  /** Workspace folder exactly as the project stored it (Windows, UNC, POSIX or relative). */
+  workspace: string;
+  /** The data file inside that folder, with `/` separators and no `..` segment. */
+  file: string;
+}
+
+/** What the desktop app needs to repair layers whose data folder has moved. */
+export interface ArcgisWorkspaceRepairData {
+  /**
+   * Folder reference of every folder-backed feature layer, by layer id. A
+   * `Map`, because ids come from layer names and `constructor` or `__proto__`
+   * is a valid one.
+   */
+  folderSources: Map<string, ArcgisFolderSource>;
+  /**
+   * Folder-backed layers that are not in `project.layers` because their saved
+   * location is never read (a network share). Each has a warning with its id.
+   */
+  unresolvedLayers: GeoLibreLayer[];
 }
 
 export interface ArcgisFileGeodatabaseImport {
@@ -248,6 +282,7 @@ function importMap(
     groups: [],
     warnings,
     usedIds: new Set(),
+    repair: { folderSources: new Map(), unresolvedLayers: [] },
   };
   for (const definition of resolveLayerList(map, files)) {
     importLayer(definition, context, undefined, new Set());
@@ -269,6 +304,7 @@ function importMap(
     fileGeodatabaseLayers: context.fileGeodatabaseLayers,
     layerOrder: context.order.reverse(),
     warnings,
+    repair: context.repair,
   };
   pruneArcgisImportGroups(result);
   return result;
@@ -276,18 +312,22 @@ function importMap(
 
 /**
  * Drop groups an import result no longer needs. A group survives while it
- * holds a layer, a raster or service still to be added, or a surviving child
- * group, so the ancestors of anything kept are kept too. Rasters and services
- * count because they are moved into their group only after the project loads;
- * dropping that group would strand them at the top level.
+ * holds a layer, a raster or service still to be added, a layer waiting for
+ * its data folder to be located, or a surviving child group, so the ancestors
+ * of anything kept are kept too. Rasters, services and waiting layers count
+ * because they join their group only after the project loads; dropping that
+ * group would strand them at the top level.
  *
  * @param imported - The import result, updated in place.
  */
 export function pruneArcgisImportGroups(imported: ArcgisProjectImportResult): void {
   const usedGroupIds = new Set<string>(
-    [...imported.project.layers, ...imported.rasters, ...imported.services].flatMap((item) =>
-      item.groupId ? [item.groupId] : [],
-    ),
+    [
+      ...imported.project.layers,
+      ...imported.repair.unresolvedLayers,
+      ...imported.rasters,
+      ...imported.services,
+    ].flatMap((item) => (item.groupId ? [item.groupId] : [])),
   );
   const groupById = new Map((imported.project.layerGroups ?? []).map((group) => [group.id, group]));
   for (const id of [...usedGroupIds]) {
@@ -337,6 +377,7 @@ export function dropArcgisImportLayers(
   imported.services = kept(imported.services);
   imported.fileGeodatabaseLayers = kept(imported.fileGeodatabaseLayers);
   imported.layerOrder = imported.layerOrder.filter((id) => !ids.has(id));
+  imported.repair.unresolvedLayers = kept(imported.repair.unresolvedLayers);
   imported.warnings = imported.warnings.filter(
     (warning) => warning.layerId === undefined || !ids.has(warning.layerId),
   );
@@ -359,6 +400,7 @@ interface ImportContext {
   groups: LayerGroup[];
   warnings: ArcgisProjectImportWarning[];
   usedIds: Set<string>;
+  repair: ArcgisWorkspaceRepairData;
 }
 
 function readCimFiles(
@@ -490,7 +532,8 @@ function importLayer(
   parentId: string | undefined,
   ancestors: ReadonlySet<CimObject>,
 ): void {
-  const { files, sourcePath, layers, rasters, services, groups, warnings, usedIds } = context;
+  const { files, sourcePath, layers, rasters, services, groups, warnings, usedIds, repair } =
+    context;
   const type = stringValue(layer.type);
   const name = stringValue(layer.name) || type || "ArcGIS layer";
   // Each item stores only its *own* ArcGIS toggle. `applyGroupEffects`
@@ -634,7 +677,7 @@ function importLayer(
     });
     return;
   }
-  if (!resolved.path) {
+  if (!resolved.path && !resolved.folder) {
     warnings.push({
       layerName: name,
       reason: resolved.reason ?? "format",
@@ -644,7 +687,7 @@ function importLayer(
   }
 
   context.order.push(id);
-  layers.push({
+  const record: GeoLibreLayer = {
     id,
     name,
     type: "geojson",
@@ -652,7 +695,7 @@ function importLayer(
     visible,
     opacity: layerOpacity(layer),
     style: parseStyle(layer, id, name, warnings),
-    sourcePath: resolved.path,
+    ...(resolved.path ? { sourcePath: resolved.path } : {}),
     metadata: {
       localFileReloadable: true,
       importedFrom: "arcgis-pro",
@@ -661,6 +704,21 @@ function importLayer(
       arcgisWorkspaceFactory: stringValue(connection?.workspaceFactory),
     },
     ...(parentId ? { groupId: parentId } : {}),
+  };
+  if (resolved.folder) repair.folderSources.set(id, resolved.folder);
+  if (resolved.path) {
+    layers.push(record);
+    return;
+  }
+  // A folder-backed layer whose saved location is never read (a network
+  // share): reported as before, but its record is kept so it can still be
+  // loaded from a folder the user picks.
+  repair.unresolvedLayers.push(record);
+  warnings.push({
+    layerName: name,
+    reason: resolved.reason ?? "format",
+    ...(type ? { layerType: type } : {}),
+    layerId: id,
   });
 }
 
@@ -716,6 +774,7 @@ function resolveRasterSource(
       : { reason: "missing-source" };
   }
   const path = resolveRelativePath(joinPath(workspace, dataset), projectPath);
+  if (isNetworkPath(path)) return { reason: "network-path" };
   if (["tif", "tiff"].includes(extension(path))) return { path };
   return looksLikeGeodatabase ? { reason: "file-geodatabase-raster" } : { reason: "format" };
 }
@@ -771,6 +830,7 @@ function resolveDataSource(
   path?: string;
   fileGeodatabase?: { gdbPath: string; featureClass: string };
   reason?: ArcgisProjectImportWarning["reason"];
+  folder?: ArcgisFolderSource;
 } {
   if (!connection) return { reason: "missing-source" };
   if (stringValue(connection.url) || isFeatureServiceFactory(connection)) {
@@ -780,9 +840,10 @@ function resolveDataSource(
   const workspace = parseWorkspacePath(stringValue(connection.workspaceConnectionString));
   const dataset = stringValue(connection.dataset);
   if (!workspace && !dataset) return { reason: "missing-source" };
-  if (isNetworkPath(workspace)) return { reason: "network-path" };
-
   const workspaceFactory = stringValue(connection.workspaceFactory).toLowerCase();
+  const folder = folderSource(workspace, dataset, workspaceFactory);
+  if (isNetworkPath(workspace)) return { reason: "network-path", ...(folder ? { folder } : {}) };
+
   let path = workspace;
   if (workspaceFactory.includes("shapefile") && dataset) {
     path = joinPath(workspace, /\.[a-z0-9]+$/i.test(dataset) ? dataset : `${dataset}.shp`);
@@ -834,9 +895,75 @@ function resolveDataSource(
   }
 
   path = resolveRelativePath(path, projectPath);
+  // A relative path in a project opened from a network share lands on that
+  // share, which is never read either.
+  if (isNetworkPath(path)) return { reason: "network-path", ...(folder ? { folder } : {}) };
   // `reason` is omitted on success so a caller that reads it unconditionally
   // cannot mistake a supported layer for an unsupported format.
-  return SUPPORTED_VECTOR_EXTENSIONS.has(extension(path)) ? { path } : { reason: "format" };
+  return SUPPORTED_VECTOR_EXTENSIONS.has(extension(path))
+    ? { path, ...(folder ? { folder } : {}) }
+    : { reason: "format" };
+}
+
+/**
+ * The folder reference of a connection whose data is one file inside a
+ * workspace folder, mirroring the joins {@link resolveDataSource} makes.
+ * Geodatabases and GeoPackages are containers rather than folders, so they
+ * have none.
+ */
+function folderSource(
+  workspace: string,
+  dataset: string,
+  workspaceFactory: string,
+): ArcgisFolderSource | undefined {
+  if (!workspace || !dataset || workspaceFactory.includes("filegdb")) return undefined;
+  let file: string;
+  if (workspaceFactory.includes("shapefile")) {
+    file = /\.[a-z0-9]+$/i.test(dataset) ? dataset : `${dataset}.shp`;
+  } else if (workspaceFactory.includes("text") || !extension(workspace)) {
+    file = dataset;
+  } else {
+    return undefined;
+  }
+  const segments = file
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter((part) => part && part !== ".");
+  // The dataset comes from an untrusted project, and a located folder is
+  // joined with it: a `..` would read outside the folder the user picked, and
+  // a drive (`C:`, `C:name`) would name another drive. A leading separator was
+  // dropped above, so `/etc/x.shp` can only mean `etc/x.shp` inside the folder.
+  if (segments.length === 0 || segments.some((part) => part === ".." || part.includes(":"))) {
+    return undefined;
+  }
+  file = segments.join("/");
+  return SUPPORTED_VECTOR_EXTENSIONS.has(extension(file)) ? { workspace, file } : undefined;
+}
+
+/**
+ * Identify the workspace folder a layer was saved against, so layers that
+ * shared a folder are located together and layers in an unrelated folder of
+ * the same name are not. A relative workspace is resolved against the project
+ * file, as ArcGIS Pro does. Windows drive and UNC paths compare without case,
+ * as their file systems do; POSIX paths keep it.
+ *
+ * @param workspace - The workspace as the project stored it.
+ * @param projectPath - Path of the imported project file.
+ * @returns `key` to group by, and `label`, the folder as shown to the user.
+ */
+export function arcgisWorkspaceIdentity(
+  workspace: string,
+  projectPath: string,
+): { key: string; label: string } {
+  // Trailing separators are dropped, except the one a root needs (`/`, `E:/`).
+  const resolved = resolveRelativePath(workspace, projectPath)
+    .replace(/(.)\/+$/, "$1")
+    .replace(/^([A-Za-z]:)$/, "$1/");
+  if (isNetworkPath(resolved) || /^[A-Za-z]:/.test(resolved)) {
+    const label = resolved.replace(/\//g, "\\");
+    return { key: label.toLowerCase(), label };
+  }
+  return { key: resolved, label: resolved };
 }
 
 function parseStyle(
@@ -944,7 +1071,22 @@ function parseWorkspacePath(connection: string): string {
   return (match?.[1] ?? match?.[2] ?? "").trim();
 }
 
+/**
+ * Resolve a path saved in the project against the project file, with Windows
+ * semantics where the project has them: a path rooted without a drive
+ * (`\\GISData`) is on the project file's drive, and a project opened from a
+ * UNC share resolves relative paths on that share rather than at the root.
+ */
 function resolveRelativePath(path: string, projectPath: string): string {
+  // A single leading separator is the root of the project's own drive or
+  // share when the project is on Windows, and the POSIX root otherwise.
+  if (/^[\\/](?![\\/])/.test(path)) {
+    const root =
+      projectPath.match(/^[A-Za-z]:/)?.[0] ??
+      projectPath.match(/^[\\/]{2}[^\\/]+[\\/][^\\/]+/)?.[0] ??
+      "";
+    return normalizePath(`${root}${path}`);
+  }
   if (!path || isAbsolutePath(path)) return normalizePath(path);
   const directory = projectPath.replace(/\\/g, "/").replace(/\/[^/]*$/, "");
   return normalizePath(directory ? `${directory}/${path}` : path);
@@ -956,29 +1098,34 @@ function joinPath(parent: string, child: string): string {
 
 function normalizePath(path: string): string {
   const windows = /^[A-Za-z]:/.test(path);
-  const absolute = path.startsWith("/");
-  const prefix = windows ? path.slice(0, 2) : absolute ? "/" : "";
+  // A UNC path keeps its `//server/share` root: `..` cannot climb above it.
+  const unc = isNetworkPath(path);
+  const absolute = /^[\\/]/.test(path);
+  const prefix = windows ? path.slice(0, 2) : unc ? "//" : absolute ? "/" : "";
   const parts = path
     .replace(/\\/g, "/")
-    .replace(/^[A-Za-z]:|^\//, "")
+    .replace(/^[A-Za-z]:|^\/+/, "")
     .split("/")
     .filter(Boolean);
   const normalized: string[] = [];
+  const root = unc ? Math.min(2, parts.length) : 0;
   for (const part of parts) {
     if (part === ".") continue;
-    if (part === ".." && normalized.length > 0) normalized.pop();
-    else normalized.push(part);
+    if (part === ".." && normalized.length > root) normalized.pop();
+    // `..` cannot climb above an absolute root; only a relative path keeps it.
+    else if (part !== ".." || !(windows || absolute)) normalized.push(part);
   }
   const separator = windows && normalized.length ? "/" : "";
   return `${prefix}${separator}${normalized.join("/")}`;
 }
 
 function isAbsolutePath(path: string): boolean {
-  return path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path);
+  return path.startsWith("/") || isNetworkPath(path) || /^[A-Za-z]:[\\/]/.test(path);
 }
 
+/** A UNC path: two leading separators of either kind (`\\\\server`, `//server`, `\\/server`). */
 function isNetworkPath(path: string): boolean {
-  return /^\\\\|^\/\//.test(path);
+  return /^[\\/]{2}/.test(path);
 }
 
 /**
@@ -987,9 +1134,10 @@ function isNetworkPath(path: string): boolean {
  * not one of GDAL's `/vsi*` virtual file systems.
  */
 function isLocalFileGeodatabasePath(path: string): boolean {
-  // UNC paths never get here: `resolveDataSource` refuses a UNC workspace, and
-  // a relative one in a project on a network share, as "network-path" first.
-  if (!isAbsolutePath(path)) return false;
+  // `resolveDataSource` refuses a UNC workspace, and a relative one in a
+  // project on a network share, as "network-path" first; `isAbsolutePath`
+  // accepts UNC paths, so refuse them here too rather than rely on that.
+  if (isNetworkPath(path) || !isAbsolutePath(path)) return false;
   const normalised = path.replace(/\\/g, "/");
   if (/^\/vsi[a-z0-9_]*\//i.test(normalised)) return false;
   const segments = normalised.split("/");

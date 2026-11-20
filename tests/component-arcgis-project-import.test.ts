@@ -121,7 +121,7 @@ describe("Import ArcGIS Pro project", () => {
     await act(() => importing);
     assert.equal(useAppStore.getState().projectName, "Opened");
     assert.equal(useAppStore.getState().isDirty, false);
-    assert.equal(actions().arcgisImportWarnings, null);
+    assert.equal(actions().arcgisImportReport.warnings, null);
   });
 
   // First of the service tests: the ArcGIS plugin numbers its layers from
@@ -139,7 +139,10 @@ describe("Import ArcGIS Pro project", () => {
       await act(() => actions().handleImportArcgisProject());
       assert.deepEqual(layerNames(), ["Middle", "Top"]);
       assert.deepEqual(
-        actions().arcgisImportWarnings?.map((warning) => [warning.layerName, warning.reason]),
+        actions().arcgisImportReport.warnings?.map((warning) => [
+          warning.layerName,
+          warning.reason,
+        ]),
         [
           ["Imported map", "map-extent"],
           ["arcgis-layer-1", "service"],
@@ -196,7 +199,7 @@ describe("Import ArcGIS Pro project", () => {
       assert.deepEqual(layerNames(), []);
       assert.equal(useAppStore.getState().isDirty, false);
       assert.equal(pastLength(), history);
-      assert.equal(actions().arcgisImportWarnings, null);
+      assert.equal(actions().arcgisImportReport.warnings, null);
     } finally {
       services.restore();
     }
@@ -253,7 +256,7 @@ describe("Import ArcGIS Pro project", () => {
       assert.equal(useAppStore.getState().projectName, "Opened");
       assert.deepEqual(layerNames(), []);
       assert.equal(useAppStore.getState().isDirty, false);
-      assert.equal(actions().arcgisImportWarnings, null);
+      assert.equal(actions().arcgisImportReport.warnings, null);
     } finally {
       loader.mock.restore();
     }
