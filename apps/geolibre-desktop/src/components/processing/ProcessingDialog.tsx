@@ -1744,6 +1744,7 @@ export function ProcessingDialog({
     <div
       ref={panelRef}
       data-processing-dialog=""
+      data-drawing={drawing ? "true" : undefined}
       role="dialog"
       tabIndex={-1}
       aria-labelledby="whitebox-toolbox-title"
