@@ -438,6 +438,70 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     assert.match(empty.warnings[0], /CIMMeshSymbol has no fill, outline or marker/);
   });
 
+  it("keeps the layer's colour and says so when a colour type cannot be read", () => {
+    const result = importStyleText(
+      lyrx({
+        type: "CIMSimpleRenderer",
+        symbol: {
+          type: "CIMSymbolReference",
+          symbol: {
+            type: "CIMPolygonSymbol",
+            symbolLayers: [
+              { type: "CIMSolidStroke", enable: true, width: 1, color: rgb(1, 2, 3) },
+              {
+                type: "CIMSolidFill",
+                enable: true,
+                color: { type: "CIMSpotColor", values: [1, 2, 3] },
+              },
+            ],
+          },
+        },
+      }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const base = structuredClone(DEFAULT_LAYER_STYLE);
+    const style = result.apply(base);
+    assert.equal(style.fillOpacity, base.fillOpacity);
+    assert.equal(style.fillColor, base.fillColor);
+    assert.equal(style.strokeColor, "#010203");
+    assert.match(result.warnings.join(" "), /colours GeoLibre cannot read/);
+  });
+
+  it("names a second point marker even when the first has no size", () => {
+    const marker = (size: number | undefined, fill: number[]) => ({
+      type: "CIMVectorMarker",
+      enable: true,
+      ...(size === undefined ? {} : { size }),
+      markerGraphics: [
+        {
+          type: "CIMMarkerGraphic",
+          symbol: {
+            type: "CIMPolygonSymbol",
+            symbolLayers: [
+              { type: "CIMSolidFill", enable: true, color: rgb(fill[0], fill[1], fill[2]) },
+            ],
+          },
+        },
+      ],
+    });
+    const result = parseLyrx(
+      lyrxDocument({
+        type: "CIMSimpleRenderer",
+        symbol: {
+          type: "CIMSymbolReference",
+          symbol: {
+            type: "CIMPointSymbol",
+            symbolLayers: [marker(undefined, [0, 128, 0]), marker(24, [255, 0, 0])],
+          },
+        },
+      }),
+    );
+    assert.equal(result.style.fillColor, "#008000");
+    assert.equal(result.style.circleRadius, undefined);
+    assert.match(result.warnings.join(" "), /extra point markers/);
+  });
+
   it("leaves Mapbox GL JSON to the Mapbox reader", () => {
     const result = importStyleText(
       JSON.stringify({

@@ -138,6 +138,12 @@ interface SymbolInfo {
   stroke?: { color: string; opacity: number; width: number | null; dashed: boolean };
   /** Marker size in points (CIM's own unit); converted to a radius on write. */
   markerSize?: number;
+  /** Whether a point marker was read, with or without a size. */
+  markerRead?: boolean;
+  /** A fill or outline was there but its colour type is not one GeoLibre reads, so the layer
+   * keeps its own rather than being made hollow. */
+  fillUnread?: boolean;
+  strokeUnread?: boolean;
 }
 
 function readSymbolReference(reference: unknown, notes: Set<string>): SymbolInfo | null {
@@ -167,15 +173,21 @@ function readSymbol(symbol: CimObject, notes: Set<string>): SymbolInfo {
     const layerType = stringOf(layer.type);
     if (layerType === "CIMSolidFill") {
       const color = cimColor(objectOf(layer.color));
-      if (color && !info.fill) info.fill = color;
-      else if (color) notes.add("extra fill and outline layers");
+      if (!color) {
+        notes.add("colours GeoLibre cannot read");
+        if (!info.fill) info.fillUnread = true;
+      } else if (!info.fill) info.fill = color;
+      else notes.add("extra fill and outline layers");
     } else if (layerType === "CIMSolidStroke") {
       const color = cimColor(objectOf(layer.color));
-      if (color && !info.stroke) {
+      if (!color) {
+        notes.add("colours GeoLibre cannot read");
+        if (!info.stroke) info.strokeUnread = true;
+      } else if (!info.stroke) {
         const dashed = symbolDashed || arrayOf(layer.effects).some(isDashes);
         if (dashed) notes.add("dash pattern");
         info.stroke = { ...color, width: numberOf(layer.width), dashed };
-      } else if (color) {
+      } else {
         notes.add("extra fill and outline layers");
       }
     } else if (layerType === "CIMVectorMarker" || layerType === "CIMCharacterMarker") {
@@ -185,10 +197,11 @@ function readSymbol(symbol: CimObject, notes: Set<string>): SymbolInfo {
         notes.add("markers along lines and outlines");
         continue;
       }
-      if (info.markerSize !== undefined) {
+      if (info.markerRead) {
         notes.add("extra point markers");
         continue;
       }
+      info.markerRead = true;
       info.markerSize = numberOf(layer.size) ?? undefined;
       // A vector marker draws its graphics, a character marker its glyph, each with a nested
       // symbol whose fill and outline are the marker's colours.
@@ -201,6 +214,8 @@ function readSymbol(symbol: CimObject, notes: Set<string>): SymbolInfo {
         const read = readSymbol(inner, notes);
         info.fill ??= read.fill;
         info.stroke ??= read.stroke;
+        info.fillUnread ||= read.fillUnread;
+        info.strokeUnread ||= read.strokeUnread;
       }
     } else if (Object.hasOwn(UNSUPPORTED_SYMBOL_LAYER_NAMES, layerType)) {
       notes.add(UNSUPPORTED_SYMBOL_LAYER_NAMES[layerType]);
@@ -219,7 +234,7 @@ function applySymbol(info: SymbolInfo, patch: Partial<Omit<LayerStyle, "labels">
     patch.fillOpacity = info.fill.opacity;
     // A solid fill: a pattern the layer had would otherwise draw over it.
     patch.fillPattern = "none";
-  } else if (areal) {
+  } else if (areal && !info.fillUnread) {
     patch.fillOpacity = 0;
   }
   if (info.stroke) {
@@ -231,7 +246,7 @@ function applySymbol(info: SymbolInfo, patch: Partial<Omit<LayerStyle, "labels">
       patch.strokeWidth = round(info.stroke.width * PIXELS_PER_POINT);
       patch.strokeWidthUnit = "pixels";
     }
-  } else if (areal) {
+  } else if (areal && !info.strokeUnread) {
     patch.strokeOpacity = 0;
   }
   if (info.geometry === "point") {
