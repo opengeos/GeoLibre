@@ -2,7 +2,7 @@ import { act, cleanup, render, resetStores, useAppStore } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { createElement } from "react";
-import { parseProject } from "@geolibre/core";
+import { createEmptyProject, parseProject } from "@geolibre/core";
 import { setArcGISFetch } from "@geolibre/plugins";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 import { strToU8, zipSync } from "fflate";
@@ -170,6 +170,7 @@ const globals = window as unknown as Record<string, unknown>;
 let nativeRequests: string[] = [];
 let savedText = "";
 let dialogPath = APRX_PATH;
+let onServiceRequest: (() => void) | null = null;
 
 beforeEach(async () => {
   nativeRequests = [];
@@ -188,6 +189,7 @@ beforeEach(async () => {
           return Array.from(strToU8(savedText));
         case "fetch_arcgis_response":
           nativeRequests.push(String(args.url));
+          onServiceRequest?.();
           return serviceResponse(new URL(String(args.url)));
         case "plugin:dialog|save":
           return SAVED_PATH;
@@ -209,6 +211,8 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  onServiceRequest = null;
+  dialogPath = APRX_PATH;
   cleanup();
   resetStores();
   setArcGISFetch(null);
@@ -436,6 +440,32 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     assert.deepEqual(
       useAppStore.getState().layers.map((item) => item.id),
       ["S1", "S2", "A", "R"],
+    );
+  });
+
+  it("leaves a project opened mid-import untouched", async () => {
+    const actions = renderActions();
+    // The first service request: the user opens another project meanwhile.
+    onServiceRequest = () => {
+      onServiceRequest = null;
+      useAppStore.getState().loadProject(createEmptyProject("Other"), null);
+    };
+    const originalError = console.error;
+    console.error = () => {};
+    try {
+      await act(() => actions().handleImportArcgisProject());
+    } finally {
+      console.error = originalError;
+    }
+    const state = useAppStore.getState();
+    assert.equal(state.projectName, "Other");
+    assert.deepEqual(state.layers, []);
+    assert.equal(actions().arcgisImportWarnings, null);
+    // Only the first service was asked for; the rest of the old import stopped.
+    assert.ok(nativeRequests.length > 0);
+    assert.ok(
+      nativeRequests.every((url) => url.startsWith(`${SERVICE}/3`)),
+      nativeRequests.join(),
     );
   });
 });

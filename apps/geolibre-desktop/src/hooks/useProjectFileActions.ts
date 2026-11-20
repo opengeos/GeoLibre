@@ -1100,7 +1100,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       const projectLayerIds = imported.project.layers.map((layer) => layer.id);
       const placedServices: { layerId: string; nextLayerIds: string[] }[] = [];
       const orgIds = new Map<string, Promise<string | undefined>>();
+      // Services load over the network after the project opened. If another
+      // project replaces it meanwhile, nothing more from this import may touch
+      // the store: a late layer is taken back out and the rest is dropped.
+      const generation = useAppStore.getState().projectGeneration;
+      const replaced = () => useAppStore.getState().projectGeneration !== generation;
       for (const service of imported.services) {
+        if (replaced()) return;
         try {
           // The project's saved extent was applied by loadProject above, and
           // this runs after it. Without the opt-out, each imported service
@@ -1115,6 +1121,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
                   sourceType: "portal-item",
                   zoomTo: false,
                 });
+          if (replaced()) {
+            useAppStore.getState().removeLayer(serviceLayerId);
+            return;
+          }
           if (service.kind === "feature") {
             placedServices.push({ layerId: serviceLayerId, nextLayerIds: service.nextLayerIds });
             placeImportedServiceLayers(projectLayerIds, placedServices);
@@ -1125,6 +1135,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
             useAppStore.getState().setLayerVisibility(serviceLayerId, false);
           }
         } catch (error) {
+          if (replaced()) return;
           console.error(`Failed to import ArcGIS service "${service.name}"`, error);
           imported.warnings.push({
             layerName: service.name,

@@ -273,6 +273,8 @@ test("opens FeatureServer sublayers from an ArcGIS Pro project and keeps them ac
     const savedPath = join(dir, "water.geolibre.json");
     await writeFile(savedPath, savedBytes);
     await waitForMap(page);
+    // The import's own requests are checked before the history is cleared.
+    expect(requested.join("\n")).not.toContain(SECRET);
     requested.length = 0;
     const reopenChooser = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "Project" }).click();
