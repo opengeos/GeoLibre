@@ -5,8 +5,6 @@ import { imageBlobToDataUrl } from "@geolibre/map";
 import {
   assertEmbedCapability,
   buildEmbedEvent,
-  assertLayerIdAvailable,
-  buildEmbedLayer,
   createFeaturesChangeTracker,
   embedEventTargets,
   embedEventVersions,
@@ -25,7 +23,7 @@ import { fetchProjectFromUrl, projectUrlFromLocation } from "../lib/project-url"
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import { isKnownWhiteboxToolId } from "../lib/whitebox-tool-url";
 import { queueDataLoad } from "../lib/data-load-queue";
-import { withFetchedRemoteGeoJson } from "../lib/restore-remote-geojson-layers";
+import { addEmbedLayer } from "../lib/restore-remote-geojson-layers";
 import { loadDataUrl } from "./useDataUrlLoader";
 import type { createAppAPI } from "./usePlugins";
 
@@ -256,31 +254,11 @@ export function useEmbedApi(
           return view;
         }
         case "addLayer": {
-          const state = useAppStore.getState();
-          if (!state.deploymentCapabilities.has("data:add"))
-            throw new Error("Missing data:add capability");
-          // A geojson spec that points at its data by URL is fetched before it
-          // is added, so a bad URL fails this call instead of acking a layer
-          // that draws nothing (#3508).
-          // Registered like addData's loads, so tearing the embed down aborts
-          // the fetch and the layer is never written behind a dropped ack.
+          // Registered like addData's loads, so teardown aborts a pending fetch.
           const abort = new AbortController();
           dataLoadAborts.add(abort);
           try {
-            const layer = await withFetchedRemoteGeoJson(
-              buildEmbedLayer(command.spec, state.layers),
-              { signal: abort.signal },
-            );
-            abort.signal.throwIfAborted();
-            // A project load replaces every layer; one fetched for the previous
-            // project must not land in the new one.
-            if (useAppStore.getState().projectGeneration !== state.projectGeneration) {
-              throw new Error("The project changed while the layer was loading");
-            }
-            // The fetch yields, so another command may have taken the id meanwhile.
-            assertLayerIdAvailable(layer.id, useAppStore.getState().layers);
-            useAppStore.getState().addLayer(layer, command.spec.beforeId);
-            return layer.id;
+            return await addEmbedLayer(command.spec, abort.signal);
           } finally {
             dataLoadAborts.delete(abort);
           }

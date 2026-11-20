@@ -392,9 +392,12 @@ may instead reference its data by URL and leave `geojson` out:
 When the project opens, GeoLibre fetches `source.data` (or, failing that,
 `source.url`) and draws the result. The reference must be an absolute
 http(s) URL or a root-relative path (`/data/fields.geojson`, resolved against
-the page the app is served from), and the server must allow CORS for a
-cross-origin URL. A layer whose data cannot be fetched stays in the project,
-empty, with a warning. Saving the project keeps the URL reference rather than
+the page the app is served from; the desktop app accepts absolute URLs only,
+since a leading `/` is a filesystem path there), and the server must allow
+CORS for a cross-origin URL. Opening such a project contacts every host it
+names, as tile and service layers already do. A layer whose data cannot be
+fetched, or whose reference is in neither form, stays in the project, empty,
+with a warning. Saving the project keeps the URL reference rather than
 embedding the downloaded features, unless they were edited in the app, in
 which case the edited features are embedded. When a layer has both an inline
 `geojson` and a URL, the inline copy is drawn and the URL is not fetched.

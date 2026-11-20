@@ -604,8 +604,9 @@ or a non-empty `tiles`, or — for the two layer types drawn from inline feature
 `ack` rather than reporting success and rendering nothing. A `geojson` layer
 whose source names its data by URL (`source.data` or `source.url`, an http(s)
 URL or a root-relative path) instead of carrying an inline `geojson` is
-fetched before the layer is added, so an unreachable URL or a document that is
-not a GeoJSON FeatureCollection rejects the call. `addLayer` also
+fetched before the layer is added, so an unreachable URL, a reference in
+neither form, or a document that is not a GeoJSON FeatureCollection rejects
+the call. `addLayer` also
 refuses `javascript:`, `vbscript:`, `data:`, `file:`, and `blob:` URLs on a
 source; a custom map protocol such as `pmtiles://` is fine. The spec has no
 `groupId`; a layer added this way lands outside any layer group.

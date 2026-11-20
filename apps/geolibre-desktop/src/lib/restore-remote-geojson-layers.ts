@@ -1,4 +1,5 @@
 import {
+  geoJsonSourceReferences,
   rememberFetchedGeoJson,
   remoteGeoJsonUrl,
   useAppStore,
@@ -6,6 +7,8 @@ import {
 } from "@geolibre/core";
 import i18next from "i18next";
 import { fetchGeoJsonFeatureCollection } from "./data-url";
+import type { AddLayerSpec } from "@geolibre/embed";
+import { assertLayerIdAvailable, buildEmbedLayer } from "./embed-api";
 import { isTauri } from "./is-tauri";
 import { notify } from "./notify";
 
@@ -43,12 +46,19 @@ function pageUrl(): string | null {
  */
 export async function restoreRemoteGeoJsonLayers(): Promise<void> {
   const base = pageUrl();
-  const pending = useAppStore.getState().layers.flatMap((layer) => {
+  const pending: { layer: GeoLibreLayer; url: string }[] = [];
+  for (const layer of useAppStore.getState().layers) {
+    if (attemptedSources.has(layer.source)) continue;
+    const references = geoJsonSourceReferences(layer);
+    if (references.length === 0) continue;
+    attemptedSources.add(layer.source);
     const url = remoteGeoJsonUrl(layer, base);
-    return url !== null && !attemptedSources.has(layer.source) ? [{ layer, url }] : [];
-  });
+    if (url) pending.push({ layer, url });
+    // A reference this app cannot fetch (a relative path, `//host/…`, or a
+    // `/path` on the desktop) would otherwise leave the layer silently empty.
+    else warnNoData(layer, unfetchableReferenceMessage(references[0]));
+  }
   if (pending.length === 0) return;
-  for (const { layer } of pending) attemptedSources.add(layer.source);
 
   const restoreOne = async ({ layer, url }: (typeof pending)[number]): Promise<void> => {
     try {
@@ -60,13 +70,7 @@ export async function restoreRemoteGeoJsonLayers(): Promise<void> {
       // layer removed meanwhile, has no one left to warn.
       if (!isStillWaiting(layer)) return;
       console.warn(`[GeoLibre] Could not fetch GeoJSON for layer "${layer.name}".`, error);
-      notify.warning(
-        i18next.t("notifications.remoteGeoJsonFetchFailed", {
-          layer: layer.name,
-          error: error instanceof Error ? error.message : String(error),
-        }),
-        { durationMs: null, dedupeKey: `remote-geojson-failed:${layer.id}` },
-      );
+      warnNoData(layer, error instanceof Error ? error.message : String(error));
     }
   };
   let next = 0;
@@ -74,6 +78,34 @@ export async function restoreRemoteGeoJsonLayers(): Promise<void> {
     while (next < pending.length) await restoreOne(pending[next++]);
   };
   await Promise.all(Array.from({ length: Math.min(RESTORE_CONCURRENCY, pending.length) }, worker));
+}
+
+/**
+ * Why a layer's data reference was not fetched.
+ *
+ * @param reference - The layer's first `source.data` / `source.url` string.
+ * @returns A message naming the reference and the accepted forms.
+ */
+function unfetchableReferenceMessage(reference: string): string {
+  return isTauri()
+    ? `${reference} is not an http(s) URL.`
+    : `${reference} is not an http(s) URL or a path starting with "/".`;
+}
+
+/**
+ * Warn that a layer was left without data.
+ *
+ * @param layer - The layer that stays empty.
+ * @param reason - What went wrong, shown after the layer name.
+ */
+function warnNoData(layer: GeoLibreLayer, reason: string): void {
+  notify.warning(
+    i18next.t("notifications.remoteGeoJsonFetchFailed", { layer: layer.name, error: reason }),
+    {
+      durationMs: null,
+      dedupeKey: `remote-geojson-failed:${layer.id}`,
+    },
+  );
 }
 
 /**
@@ -99,14 +131,48 @@ function isStillWaiting(layer: GeoLibreLayer): boolean {
  * @param options - Optional abort signal.
  * @returns The layer with `geojson` filled in, or the layer unchanged when it
  *   needs no fetch.
- * @throws When the referenced data cannot be fetched or is not GeoJSON.
+ * @throws When the referenced data cannot be fetched or is not GeoJSON, or
+ *   the layer names its data by a reference this app cannot fetch.
  */
 export async function withFetchedRemoteGeoJson<T extends Parameters<typeof remoteGeoJsonUrl>[0]>(
   layer: T,
   options: { signal?: AbortSignal } = {},
 ): Promise<T> {
   const url = remoteGeoJsonUrl(layer, pageUrl());
-  if (!url) return layer;
+  if (!url) {
+    const [reference] = geoJsonSourceReferences(layer);
+    if (reference !== undefined) throw new Error(unfetchableReferenceMessage(reference));
+    return layer;
+  }
   const geojson = await fetchGeoJsonFeatureCollection(url, options);
   return { ...layer, geojson: rememberFetchedGeoJson(geojson) };
+}
+
+/**
+ * Run an embed `addLayer` command: build the layer, fetch a URL-referenced
+ * GeoJSON source first (#3508) so a bad URL fails the call instead of acking a
+ * layer that draws nothing, then add it to the store.
+ *
+ * @param spec - The validated `addLayer` spec from the host.
+ * @param signal - Aborted when the embed is torn down.
+ * @returns The new layer's id.
+ * @throws When the capability is missing, the id is taken, the fetch fails or
+ *   is aborted, or a project load replaced the layers while it ran.
+ */
+export async function addEmbedLayer(spec: AddLayerSpec, signal?: AbortSignal): Promise<string> {
+  const state = useAppStore.getState();
+  if (!state.deploymentCapabilities.has("data:add")) {
+    throw new Error("Missing data:add capability");
+  }
+  const layer = await withFetchedRemoteGeoJson(buildEmbedLayer(spec, state.layers), { signal });
+  signal?.throwIfAborted();
+  // A project load replaces every layer; one fetched for the previous project
+  // must not land in the new one.
+  if (useAppStore.getState().projectGeneration !== state.projectGeneration) {
+    throw new Error("The project changed while the layer was loading");
+  }
+  // The fetch yields, so another command may have taken the id meanwhile.
+  assertLayerIdAvailable(layer.id, useAppStore.getState().layers);
+  useAppStore.getState().addLayer(layer, spec.beforeId);
+  return layer.id;
 }

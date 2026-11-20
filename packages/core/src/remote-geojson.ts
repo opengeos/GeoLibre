@@ -35,46 +35,56 @@ export function isFetchedGeoJson(collection: FeatureCollection | undefined): boo
   return collection !== undefined && fetchedCollections.has(collection);
 }
 
+type RemoteGeoJsonLayer = Pick<GeoLibreLayer, "type" | "geojson" | "source" | "metadata">;
+
 /**
- * The URL a plain GeoJSON layer's features should be fetched from, or null.
+ * The string references a plain GeoJSON layer names its data by, in the order
+ * they are tried, or an empty list when the layer is not one that is fetched.
  *
  * A `type: "geojson"` layer renders from its inline `geojson`. A project file
  * (or an embed `addLayer` spec) may instead point at the data with
- * `source.data` (MapLibre's own spelling) or `source.url`, in which case the
- * features are fetched when the layer is restored. Only plain layers qualify:
- * layers owned by a control or plugin (`metadata.sourceKind`,
+ * `source.data` (MapLibre's own spelling) or `source.url`. Only plain layers
+ * qualify: layers owned by a control or plugin (`metadata.sourceKind`,
  * `metadata.externalNativeLayer`) and desktop local-file layers
  * (`metadata.localFileReloadable`) have their own restore paths.
  *
- * Accepted URLs are absolute http(s) URLs and root-relative paths, which are
- * resolved against `baseUrl` (the page the app is served from). Pass `null`
- * where the page is not a web server (the desktop app), so a leading `/` —
- * there an OS path such as `/home/…` — is never fetched.
- *
  * @param layer - A store layer.
- * @param baseUrl - The URL root-relative paths resolve against, or null to
- *   accept absolute http(s) URLs only.
- * @returns The absolute URL to fetch, or null when the layer needs no fetch.
+ * @returns The non-empty trimmed `source.data` / `source.url` strings.
  */
-export function remoteGeoJsonUrl(
-  layer: Pick<GeoLibreLayer, "type" | "geojson" | "source" | "metadata">,
-  baseUrl: string | null,
-): string | null {
-  if (layer.type !== "geojson" || layer.geojson) return null;
+export function geoJsonSourceReferences(layer: RemoteGeoJsonLayer): string[] {
+  if (layer.type !== "geojson" || layer.geojson) return [];
   const metadata = layer.metadata ?? {};
   if (
     metadata.sourceKind != null ||
     metadata.externalNativeLayer === true ||
     metadata.localFileReloadable === true
   ) {
-    return null;
+    return [];
   }
   const source = layer.source ?? {};
-  const candidates = [source.data, source.url];
-  for (const candidate of candidates) {
-    if (typeof candidate !== "string") continue;
-    const value = candidate.trim();
-    if (!value) continue;
+  return [source.data, source.url]
+    .filter((candidate): candidate is string => typeof candidate === "string")
+    .map((candidate) => candidate.trim())
+    .filter(Boolean);
+}
+
+/**
+ * The URL a plain GeoJSON layer's features should be fetched from, or null.
+ *
+ * Tries each of {@link geoJsonSourceReferences}. Accepted are absolute http(s)
+ * URLs and root-relative paths, which are resolved against `baseUrl` (the page
+ * the app is served from). Pass `null` where the page is not a web server (the
+ * desktop app), so a leading `/` — there an OS path such as `/home/…` — is
+ * never fetched. A layer with references but no fetchable URL gets null too;
+ * callers tell that apart with {@link geoJsonSourceReferences}.
+ *
+ * @param layer - A store layer.
+ * @param baseUrl - The URL root-relative paths resolve against, or null to
+ *   accept absolute http(s) URLs only.
+ * @returns The absolute URL to fetch, or null when there is none.
+ */
+export function remoteGeoJsonUrl(layer: RemoteGeoJsonLayer, baseUrl: string | null): string | null {
+  for (const value of geoJsonSourceReferences(layer)) {
     const isAbsolute = /^https?:\/\//i.test(value);
     // The URL parser reads `\` as `/` and drops tabs and newlines, so
     // `/\host/x` or `/<tab>/host/x` would otherwise resolve to another origin.

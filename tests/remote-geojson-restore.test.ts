@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import type { FeatureCollection } from "geojson";
+import type { AddLayerSpec } from "../packages/embed/src";
 import {
   isFetchedGeoJson,
   projectFromStore,
@@ -10,9 +11,11 @@ import {
   type GeoLibreLayer,
 } from "../packages/core/src";
 import {
+  addEmbedLayer,
   restoreRemoteGeoJsonLayers,
   withFetchedRemoteGeoJson,
 } from "../apps/geolibre-desktop/src/lib/restore-remote-geojson-layers";
+import * as notifyModule from "../apps/geolibre-desktop/src/lib/notify";
 
 // GeoLibre#3508: a plain `geojson` layer that points at its data with
 // `source.data` / `source.url` (no inline `geojson`) was listed but never
@@ -170,6 +173,24 @@ describe("restoreRemoteGeoJsonLayers", () => {
     assert.equal(requests.length, 1);
   });
 
+  it("warns, without fetching, about a reference it cannot fetch", async () => {
+    serve(collection("unused"));
+    const warnings: unknown[] = [];
+    const realWarn = notifyModule.notify.warning;
+    notifyModule.notify.warning = ((message: string) => void warnings.push(message)) as never;
+    try {
+      useAppStore
+        .getState()
+        .addLayer(layer({ source: { type: "geojson", data: "fields.geojson" } }));
+      await restoreRemoteGeoJsonLayers();
+      await restoreRemoteGeoJsonLayers();
+    } finally {
+      notifyModule.notify.warning = realWarn;
+    }
+    assert.equal(requests.length, 0);
+    assert.equal(warnings.length, 1);
+  });
+
   it("does not overwrite a layer removed while the request was in flight", async () => {
     let release!: () => void;
     globalThis.fetch = (async () => {
@@ -243,8 +264,75 @@ describe("withFetchedRemoteGeoJson (embed addLayer)", () => {
     await assert.rejects(withFetchedRemoteGeoJson(layer(), { signal: abort.signal }));
   });
 
+  it("rejects a reference it cannot fetch instead of adding an empty layer", async () => {
+    for (const data of ["fields.geojson", "//cdn.example/f.json"]) {
+      await assert.rejects(
+        withFetchedRemoteGeoJson(layer({ source: { type: "geojson", data } })),
+        /not an http\(s\) URL/,
+      );
+    }
+  });
+
   it("passes a layer with inline features through untouched", async () => {
     const inline = layer({ geojson: collection("inline") });
     assert.equal(await withFetchedRemoteGeoJson(inline), inline);
+  });
+});
+
+describe("addEmbedLayer", () => {
+  const realFetch = globalThis.fetch;
+  const spec = {
+    id: "fields",
+    name: "Fields",
+    type: "geojson",
+    source: { type: "geojson", data: "https://data.example/fields.geojson" },
+  } as AddLayerSpec;
+
+  beforeEach(() => {
+    useAppStore.getState().newProject();
+  });
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it("adds a URL-only geojson layer with its fetched features", async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify(collection("remote")))) as typeof fetch;
+    assert.equal(await addEmbedLayer(spec), "fields");
+    const added = useAppStore.getState().layers.find((entry) => entry.id === "fields");
+    assert.equal(added?.geojson?.features.length, 1);
+  });
+
+  it("adds nothing when a project load lands during the fetch", async () => {
+    let release!: () => void;
+    globalThis.fetch = (async () => {
+      await new Promise<void>((resolve) => (release = resolve));
+      return new Response(JSON.stringify(collection("late")));
+    }) as typeof fetch;
+    const pending = addEmbedLayer(spec);
+    useAppStore.setState((state) => ({ projectGeneration: state.projectGeneration + 1 }));
+    release();
+    await assert.rejects(pending, /project changed/);
+    assert.equal(
+      useAppStore.getState().layers.some((entry) => entry.id === "fields"),
+      false,
+    );
+  });
+
+  it("adds nothing once the embed is torn down", async () => {
+    let release!: () => void;
+    globalThis.fetch = (async () => {
+      await new Promise<void>((resolve) => (release = resolve));
+      return new Response(JSON.stringify(collection("late")));
+    }) as typeof fetch;
+    const abort = new AbortController();
+    const pending = addEmbedLayer(spec, abort.signal);
+    abort.abort();
+    release();
+    await assert.rejects(pending);
+    assert.equal(
+      useAppStore.getState().layers.some((entry) => entry.id === "fields"),
+      false,
+    );
   });
 });
