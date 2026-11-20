@@ -41,8 +41,9 @@
  * variables (`visual-variables`), symbol layers it does not draw
  * (`symbol-layers`), a fill or outline colour it cannot read (`color`),
  * per-class stroke transparency GeoLibre's rules cannot hold
- * (`transparency`), and geometric effects such as dashes or offsets
- * (`effects`). Marker shapes are approximated as circles without an issue.
+ * (`transparency`), geometric effects such as dashes or offsets
+ * (`effects`), and a marker shape other than a circle, which is drawn as a
+ * circle (`marker-shape`).
  *
  * Thematic renderers become `"rule-based"` styles rather than the native
  * `"categorized"`/`"graduated"` modes, because neither native mode can carry
@@ -104,7 +105,8 @@ export type CimRendererIssueCode =
   | "symbol-layers"
   | "color"
   | "transparency"
-  | "effects";
+  | "effects"
+  | "marker-shape";
 
 export interface CimRendererIssue {
   code: CimRendererIssueCode;
@@ -150,6 +152,8 @@ interface SymbolLook {
   unreadable?: string;
   /** The first geometric effect (dashes, offset, ...) that is not drawn. */
   effect?: string;
+  /** The marker type whose shape is not a circle, so drawing it as one changes it. */
+  shape?: string;
 }
 
 /** One thematic class before it becomes a rule. */
@@ -573,6 +577,8 @@ function partialIssues(renderer: CimObject, looks: SymbolLook[]): CimRendererIss
   if (differs) issues.push({ code: "transparency" });
   const effect = looks.find((look) => look.effect)?.effect;
   if (effect) issues.push({ code: "effects", cimType: effect });
+  const shape = looks.find((look) => look.shape)?.shape;
+  if (shape) issues.push({ code: "marker-shape", cimType: shape });
   return issues;
 }
 
@@ -736,8 +742,9 @@ function lineLook(scan: LayerScan): SymbolLook | null {
  * fill (or the marker its own colour), so an outline-only graphic is refused
  * rather than drawn as an empty ring. Anything beyond the one fill and outline
  * is reported: another layer beside the marker, a second drawing graphic
- * (inspected on its own, so it is reported whatever its layer types), or a
- * hatch inside the drawn graphic.
+ * (inspected on its own, so it is reported whatever its layer types), a
+ * hatch inside the drawn graphic, or a shape that is not a circle (a
+ * character marker's glyph, or a drawn graphic with any other geometry).
  */
 function markerLook(layers: CimObject[]): SymbolLook | null {
   const marker = layers.find(isMarkerLayer);
@@ -758,8 +765,15 @@ function markerLook(layers: CimObject[]): SymbolLook | null {
   const unreadable =
     marker.color !== undefined && !markerColor ? colorType(marker) : scan.unreadable;
   const effect = layers.map(layerEffect).find(Boolean);
+  const circle =
+    marker.type === "CIMVectorMarker" &&
+    arrayValue(marker.markerGraphics)
+      .filter(isObject)
+      .filter((graphic) => enabledLayers(objectValue(graphic.symbol)).length > 0)
+      .every((graphic) => graphic.geometry === undefined || isCircle(graphic.geometry));
   return {
     geometry: "point",
+    ...(circle ? {} : { shape: stringValue(marker.type) || "marker" }),
     color: fill.hex,
     fillOpacity: fill.opacity,
     ...strokeLook(scan.stroke),
@@ -800,6 +814,31 @@ function layerEffect(layer: CimObject): string | undefined {
   ]
     .map(firstEffect)
     .find(Boolean);
+}
+
+/**
+ * Whether a marker graphic's geometry is a full circle as ArcGIS Pro writes
+ * one: a single curve ring holding its start point and one arc (`a`) that ends
+ * back at that point. A rounded square or any other curved shape has more
+ * segments, and a polygon is written as `rings`. An elliptic arc is written
+ * with seven elements, the last its minor-to-major axis ratio, so a closed
+ * ellipse counts only when that ratio is 1.
+ */
+function isCircle(geometry: unknown): boolean {
+  const rings = objectValue(geometry)?.curveRings;
+  if (!Array.isArray(rings) || rings.length !== 1) return false;
+  const ring = rings[0];
+  if (!Array.isArray(ring) || ring.length !== 2) return false;
+  const [start, segment] = ring;
+  const arc = objectValue(segment)?.a;
+  return (
+    Array.isArray(start) &&
+    Array.isArray(arc) &&
+    Array.isArray(arc[0]) &&
+    arc[0][0] === start[0] &&
+    arc[0][1] === start[1] &&
+    (arc.length < 7 || arc[6] === 1)
+  );
 }
 
 /** The type of the first geometric effect on a symbol or symbol layer. */

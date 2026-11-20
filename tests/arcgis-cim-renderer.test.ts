@@ -762,6 +762,19 @@ describe("what a translated renderer reports leaving out", () => {
     markerWithEffect.symbol.symbolLayers[0] as { markerGraphics: { symbol: object }[] }
   ).markerGraphics;
   Object.assign(graphics[0].symbol, { effects: [{ type: "CIMGeometricEffectOffset", offset: 2 }] });
+  // Pro writes a circle as one curve ring: its start point and one arc back to it.
+  const circleRing = { curveRings: [[[0, 5], { a: [[0, 5], [0, 0], 0, 1] }]] };
+  const squareRing = { rings: [[[-5, -5], [-5, 5], [5, 5], [5, -5], [-5, -5]]] };
+  const roundedRing = {
+    curveRings: [[[0, 5], { a: [[5, 0], [0, 0], 0, 1] }, { a: [[0, 5], [0, 0], 0, 1] }]],
+  };
+  const shaped = (geometry: unknown) => {
+    const symbol = marker([solidRed]);
+    const [graphic] = (symbol.symbol.symbolLayers[0] as { markerGraphics: object[] })
+      .markerGraphics;
+    Object.assign(graphic, { geometry });
+    return symbol;
+  };
 
   const cases: [string, unknown, unknown[]][] = [
     [
@@ -804,6 +817,37 @@ describe("what a translated renderer reports leaving out", () => {
       [],
     ],
     ["nothing for a plain marker", simple(marker([solidRed])), []],
+    ["nothing for a marker drawn as Pro's circle", simple(shaped(circleRing)), []],
+    [
+      "a square marker drawn as a circle",
+      simple(shaped(squareRing)),
+      [{ code: "marker-shape", cimType: "CIMVectorMarker" }],
+    ],
+    [
+      "an ellipse written as one elliptic arc",
+      simple(shaped({ curveRings: [[[0, 5], { a: [[0, 5], [0, 0], 0, 1, 0, 5, 0.5] }]] })),
+      [{ code: "marker-shape", cimType: "CIMVectorMarker" }],
+    ],
+    [
+      "a rounded shape that is not a single arc",
+      simple(shaped(roundedRing)),
+      [{ code: "marker-shape", cimType: "CIMVectorMarker" }],
+    ],
+    [
+      "a character marker's glyph drawn as a circle",
+      simple(
+        symbolRef("CIMPointSymbol", [
+          {
+            type: "CIMCharacterMarker",
+            enable: true,
+            size: 10,
+            characterIndex: 72,
+            symbol: { type: "CIMPolygonSymbol", symbolLayers: [solidRed] },
+          },
+        ]),
+      ),
+      [{ code: "marker-shape", cimType: "CIMCharacterMarker" }],
+    ],
     [
       "a hatch inside a marker graphic",
       simple(marker([{ type: "CIMHatchFill", enable: true }, solidRed])),
