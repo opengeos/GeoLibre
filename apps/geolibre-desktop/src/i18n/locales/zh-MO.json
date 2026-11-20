@@ -9382,7 +9382,7 @@
     "exportStyleDataNotReady": "圖層數據尚未準備就緒。請稍後重試。",
     "exportStyleNeedsFeatures": "樣式導出需要包含要素的矢量圖層。",
     "exportStyleError": "無法導出此圖層的樣式。",
-    "importStyle": "導入樣式（GeoLibre URL / Mapbox GL / SLD / QML）…",
+    "importStyle": "導入樣式（GeoLibre URL / Mapbox GL / SLD / QML / LYRX）…",
     "importStyleFromText": "從文本導入樣式…",
     "importStyleFromTextDescription": "粘貼 GeoLibre、Mapbox GL、SLD 或 QML 樣式。格式將根據文本自動識別。",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

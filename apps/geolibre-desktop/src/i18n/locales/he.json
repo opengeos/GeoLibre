@@ -9726,7 +9726,7 @@
     "exportStyleDataNotReady": "נתוני השכבה עדיין לא מוכנים. נסה שוב בעוד רגע.",
     "exportStyleNeedsFeatures": "ייצוא סגנון מחייב שכבת וקטור עם ישויות.",
     "exportStyleError": "לא ניתן לייצא את הסגנון של שכבה זו.",
-    "importStyle": "ייבא סגנון (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "ייבא סגנון (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "ייבא סגנון מטקסט…",
     "importStyleFromTextDescription": "יש להדביק סגנון GeoLibre, Mapbox GL, SLD או QML. הפורמט מזוהה מתוך הטקסט.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

@@ -750,12 +750,12 @@ export interface GeoLibreAppAPI {
   getLayerFeatures?: (layerId: string) => Feature<Geometry | null>[];
   /**
    * Apply a style written in another format to a layer, like the Layers
-   * panel's "Import style": an OGC SLD, a QGIS QML or a Mapbox GL style JSON,
-   * detected from the content. The style is merged over the layer's current
-   * one and saved with the project. Only GeoJSON and vector-tile layers take a
-   * style, as in the Layers panel; any other layer is left untouched with
-   * `reason: "unsupported-layer"`. Accepts any such layer id, not only the
-   * plugin's own; throws for an unknown id.
+   * panel's "Import style": an OGC SLD, a QGIS QML, an ArcGIS Pro layer file
+   * (`.lyrx`) or a Mapbox GL style JSON, detected from the content. The style
+   * is merged over the layer's current one and saved with the project. Only
+   * GeoJSON and vector-tile layers take a style, as in the Layers panel; any
+   * other layer is left untouched with `reason: "unsupported-layer"`. Accepts
+   * any such layer id, not only the plugin's own; throws for an unknown id.
    *
    * Lets a plugin that adds features from a web service dress them as the
    * service does, e.g. with the SLD a GeoServer returns for WMS `GetStyles`.

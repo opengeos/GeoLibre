@@ -9802,7 +9802,7 @@
     "exportStyleDataNotReady": "Данные слоя ещё не готовы. Повторите попытку через мгновение.",
     "exportStyleNeedsFeatures": "Для экспорта стиля требуется векторный слой с объектами.",
     "exportStyleError": "Не удалось экспортировать стиль этого слоя.",
-    "importStyle": "Импортировать стиль (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "Импортировать стиль (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Импортировать стиль из текста…",
     "importStyleFromTextDescription": "Вставьте стиль GeoLibre, Mapbox GL, SLD или QML. Формат определяется по тексту.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

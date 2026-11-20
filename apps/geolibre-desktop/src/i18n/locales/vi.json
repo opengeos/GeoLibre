@@ -9382,7 +9382,7 @@
     "exportStyleDataNotReady": "Dữ liệu lớp chưa sẵn sàng. Hãy thử lại sau giây lát.",
     "exportStyleNeedsFeatures": "Dán kiểu từ \"__PH0__\"",
     "exportStyleError": "Không thể xuất kiểu của lớp này.",
-    "importStyle": "Kiểu nhập (URL GeoLibre / Mapbox GL / SLD / QML)…",
+    "importStyle": "Kiểu nhập (URL GeoLibre / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Nhập kiểu từ văn bản…",
     "importStyleFromTextDescription": "Dán kiểu GeoLibre, Mapbox GL, SLD hoặc QML. Định dạng được nhận biết từ văn bản.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

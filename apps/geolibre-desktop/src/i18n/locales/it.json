@@ -9522,7 +9522,7 @@
     "exportStyleDataNotReady": "I dati del layer non sono ancora pronti. Riprova tra un momento.",
     "exportStyleNeedsFeatures": "L'esportazione dello stile richiede un layer vettoriale con elementi.",
     "exportStyleError": "Impossibile esportare lo stile di questo layer.",
-    "importStyle": "Importa stile (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "Importa stile (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Importa stile da testo…",
     "importStyleFromTextDescription": "Incolla uno stile GeoLibre, Mapbox GL, SLD o QML. Il formato viene riconosciuto dal testo.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

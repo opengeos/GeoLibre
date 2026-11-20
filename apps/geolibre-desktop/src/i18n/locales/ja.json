@@ -9382,7 +9382,7 @@
     "exportStyleDataNotReady": "レイヤーデータの準備がまだ完了していません。しばらくしてから再試行してください。",
     "exportStyleNeedsFeatures": "スタイルのエクスポートにはフィーチャを含むベクターレイヤーが必要です。",
     "exportStyleError": "このレイヤーのスタイルをエクスポートできませんでした。",
-    "importStyle": "スタイルをインポート (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "スタイルをインポート (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "テキストからスタイルをインポート…",
     "importStyleFromTextDescription": "GeoLibre、Mapbox GL、SLD、またはQMLのスタイルを貼り付けてください。形式はテキストから判別されます。",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",
