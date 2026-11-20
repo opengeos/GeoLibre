@@ -240,6 +240,28 @@ describe("restoreRemoteGeoJsonLayers", () => {
     assert.doesNotMatch((errors[0] as Error).message, /CORS/);
   });
 
+  it("redacts credentials from the URL in a failure message", async () => {
+    serve({ error: "gone" }, 404);
+    const errors: unknown[] = [];
+    const realWarning = notifyModule.notify.warning;
+    const realWarn = console.warn;
+    notifyModule.notify.warning = (() => {}) as never;
+    console.warn = (_message: unknown, error: unknown) => void errors.push(error);
+    try {
+      useAppStore.getState().addLayer(
+        layer({
+          source: { type: "geojson", data: "https://alice:s3cret@data.example/f.geojson" },
+        }),
+      );
+      await restoreRemoteGeoJsonLayers();
+    } finally {
+      notifyModule.notify.warning = realWarning;
+      console.warn = realWarn;
+    }
+    assert.equal(errors.length, 1);
+    assert.doesNotMatch((errors[0] as Error).message, /s3cret/);
+  });
+
   it("does not overwrite a layer removed while the request was in flight", async () => {
     let release!: () => void;
     globalThis.fetch = (async () => {

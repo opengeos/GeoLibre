@@ -1,5 +1,6 @@
 import {
   geoJsonSourceReferences,
+  redactUrlCredentials,
   rememberFetchedGeoJson,
   remoteGeoJsonUrl,
   useAppStore,
@@ -22,7 +23,11 @@ import { notify } from "./notify";
  */
 const attemptedSources = new WeakSet<object>();
 
-/** How many layer downloads restore runs at once, bounding peak memory. */
+/**
+ * How many layer downloads restore runs at once. This bounds the number of
+ * downloads held in memory together, not their bytes: each may still be up to
+ * the Add Data URL cap.
+ */
 const RESTORE_CONCURRENCY = 4;
 
 /**
@@ -72,21 +77,7 @@ export async function restoreRemoteGeoJsonLayers(): Promise<void> {
     // Skip a queued layer removed or replaced before its turn came.
     if (!isStillWaiting(layer)) return;
     try {
-      const geojson = await fetchGeoJsonFeatureCollection(url, {
-        signal: AbortSignal.timeout(RESTORE_TIMEOUT_MS),
-      }).catch((error: unknown) => {
-        // A timeout surfaces as a generic network error or a raw browser
-        // message depending on whether it hit the request or the body read.
-        if (error instanceof DOMException && error.name === "TimeoutError") {
-          throw new Error(
-            i18next.t("notifications.remoteGeoJsonTimedOut", {
-              url,
-              seconds: RESTORE_TIMEOUT_MS / 1000,
-            }),
-          );
-        }
-        throw error;
-      });
+      const geojson = await fetchWithDeadline(url);
       if (!isStillWaiting(layer)) return;
       // Loading what the file references is part of opening it: not an undo
       // step, and not an unsaved change (as in fetchStartupLayerFeatures).
@@ -125,6 +116,55 @@ export async function restoreRemoteGeoJsonLayers(): Promise<void> {
 function rememberDerivedGeoJson(layerId: string, fetched: FeatureCollection): void {
   const current = useAppStore.getState().layers.find((entry) => entry.id === layerId)?.geojson;
   if (current && current !== fetched) rememberFetchedGeoJson(current);
+}
+
+/**
+ * Fetch one layer's GeoJSON with a deadline, so a host that never finishes a
+ * response cannot hold the caller forever, and with credentials redacted from
+ * the URL in any error message (it reaches a toast and the console).
+ *
+ * @param url - The absolute URL to fetch.
+ * @param signal - Optional caller signal, aborted on teardown.
+ * @returns The FeatureCollection.
+ * @throws When the fetch fails, times out, is aborted, or is not GeoJSON.
+ */
+async function fetchWithDeadline(url: string, signal?: AbortSignal): Promise<FeatureCollection> {
+  // Combined by hand: AbortSignal.any is missing from older desktop webviews.
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new DOMException("timed out", "TimeoutError")),
+    RESTORE_TIMEOUT_MS,
+  );
+  const onAbort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) onAbort();
+  else signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    return await fetchGeoJsonFeatureCollection(url, { signal: controller.signal });
+  } catch (error) {
+    const shown = redactUrlCredentials(url);
+    // A timeout surfaces as a generic network error or a raw browser message
+    // depending on whether it hit the request or the body read.
+    if (
+      controller.signal.reason instanceof DOMException &&
+      controller.signal.reason.name === "TimeoutError" &&
+      !signal?.aborted
+    ) {
+      throw new Error(
+        i18next.t("notifications.remoteGeoJsonTimedOut", {
+          url: shown,
+          seconds: RESTORE_TIMEOUT_MS / 1000,
+        }),
+        { cause: error },
+      );
+    }
+    if (error instanceof Error && shown !== url && error.message.includes(url)) {
+      throw new Error(error.message.split(url).join(shown), { cause: error });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
 }
 
 /**
@@ -194,7 +234,7 @@ export async function withFetchedRemoteGeoJson<T extends Parameters<typeof remot
     if (reference !== undefined) throw new Error(unfetchableReferenceMessage(reference));
     return layer;
   }
-  const geojson = await fetchGeoJsonFeatureCollection(url, options);
+  const geojson = await fetchWithDeadline(url, options.signal);
   return { ...layer, geojson: rememberFetchedGeoJson(geojson) };
 }
 
