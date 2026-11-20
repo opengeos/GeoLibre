@@ -35,6 +35,7 @@ export async function loadArcgisFileGeodatabaseLayers(
   const pending = imported.fileGeodatabaseLayers;
   if (pending.length === 0) return;
 
+  signal?.throwIfAborted();
   const outcomes = new Map<string, ReadOutcome>();
   let started = true;
   try {
@@ -67,6 +68,9 @@ export async function loadArcgisFileGeodatabaseLayers(
         ? await readEntry(entry, listLayers, reader, signal)
         : { reason: "file-geodatabase-read" },
     );
+    // Also after the last read: an abandoned import never gets its layers,
+    // even when the read itself finished (or failed) after the abort.
+    signal?.throwIfAborted();
   }
 
   const failed = new Set<string>();

@@ -959,7 +959,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           t("toolbar.item.arcgisImportReadingGdb", {
             count: imported.fileGeodatabaseLayers.length,
           }),
-          { durationMs: null },
+          // Its own key: an abandoned import showing the same text would
+          // otherwise share this notice, and dismiss it when it finishes.
+          { durationMs: null, dedupeKey: `arcgis-gdb-read:${crypto.randomUUID()}` },
         );
         try {
           await loadArcgisFileGeodatabaseLayers(

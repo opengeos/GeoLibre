@@ -1231,33 +1231,71 @@ describe("ArcGIS Pro File Geodatabase layers", () => {
     assert.deepEqual(result.layerOrder, ["Roads", "Imagery", "Streets", "Parcels"].map(id));
   });
 
-  it("stops reading once the import is abandoned", async () => {
-    const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {
-      readFileGeodatabase: true,
-    });
-    const controller = new AbortController();
-    const reads: string[] = [];
-    await assert.rejects(
-      loadArcgisFileGeodatabaseLayers(
-        result,
-        {
-          start: async () => undefined,
-          listLayers: async () => [
-            { name: "parcels", feature_count: 0, geometry_type: "Polygon", crs: "EPSG:4326" },
-          ],
-          readLayer: async (_gdbPath, featureClass) => {
-            reads.push(featureClass);
-            // Another project opens while the first layer is read.
-            controller.abort();
-            return { type: "FeatureCollection", features: [] };
+  // When another project opens: before the reads, while the only layer is
+  // read (whether that read then succeeds or fails), or during the first of
+  // several reads. None of them may hand back layers.
+  for (const { when, project, abortAt, readFails, expectedCalls } of [
+    { when: "before the reads", project: "one", abortAt: "start", expectedCalls: [] },
+    {
+      when: "during the last read",
+      project: "one",
+      abortAt: "read",
+      expectedCalls: ["start", "read"],
+    },
+    {
+      when: "during a last read that fails",
+      project: "one",
+      abortAt: "read",
+      readFails: true,
+      expectedCalls: ["start", "read"],
+    },
+    {
+      when: "during an earlier read",
+      project: "many",
+      abortAt: "read",
+      expectedCalls: ["start", "read"],
+    },
+  ]) {
+    it(`rejects without filling layers when abandoned ${when}`, async () => {
+      const result = importArcgisProject(
+        project === "one"
+          ? JSON.stringify({
+              type: "CIMMap",
+              name: "One",
+              layerDefinitions: [gdbLayer("Parcels", "C:\\data\\city.gdb")],
+            })
+          : gdbProject(),
+        "C:\\work\\projects\\survey.mapx",
+        { readFileGeodatabase: true },
+      );
+      const controller = new AbortController();
+      if (abortAt === "start") controller.abort();
+      const calls: string[] = [];
+      await assert.rejects(
+        loadArcgisFileGeodatabaseLayers(
+          result,
+          {
+            start: async () => {
+              calls.push("start");
+            },
+            listLayers: async () => [
+              { name: "parcels", feature_count: 0, geometry_type: "Polygon", crs: "EPSG:4326" },
+            ],
+            readLayer: async () => {
+              calls.push("read");
+              controller.abort();
+              if (readFails) throw new Error("sidecar stopped");
+              return { type: "FeatureCollection", features: [] };
+            },
           },
-        },
-        controller.signal,
-      ),
-      { name: "AbortError" },
-    );
-    assert.deepEqual(reads, ["parcels"]);
-  });
+          controller.signal,
+        ),
+        { name: "AbortError" },
+      );
+      assert.deepEqual(calls, expectedCalls);
+      assert.ok(result.project.layers.every((layer) => layer.geojson === undefined));
+    });
+  }
 
   it("reports every layer as unreadable when the sidecar cannot start", async () => {
     const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {
