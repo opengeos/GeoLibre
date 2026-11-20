@@ -133,16 +133,16 @@ export function MobileToolbarChrome({
   const mapLayoutCols = useAppStore((s) => s.mapLayout.cols);
   const cvdMode = useCvdPreviewStore((s) => s.mode);
 
+  const gridKey = `${mapLayoutRows}x${mapLayoutCols}`;
+
   const moreMenuItems = useMemo(() => {
     if (activeMobileTab !== "more") return [];
-    // Reference reactive view state so active checkmarks update when changed.
-    void primaryRenderer;
-    void mapLayoutRows;
-    void mapLayoutCols;
-    void cvdMode;
     return buildMobileMoreMenuItems({
       t,
       uiProfile,
+      primaryRenderer,
+      gridKey,
+      cvdMode,
       canEditProject: !viewer && isMenuVisible(uiProfile, "project"),
       canShare: shareAvailable,
       canShowView: isMenuVisible(uiProfile, "view"),
@@ -173,6 +173,9 @@ export function MobileToolbarChrome({
     activeMobileTab,
     t,
     uiProfile,
+    primaryRenderer,
+    gridKey,
+    cvdMode,
     viewer,
     shareAvailable,
     canRunProcessing,
@@ -180,10 +183,6 @@ export function MobileToolbarChrome({
     canManageSettings,
     diagnosticsErrorCount,
     processingCommands,
-    primaryRenderer,
-    mapLayoutRows,
-    mapLayoutCols,
-    cvdMode,
     dialogs,
     projectFiles,
     onZoomIn,
