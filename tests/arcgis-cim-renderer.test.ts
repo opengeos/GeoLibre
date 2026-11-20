@@ -526,6 +526,27 @@ describe("CIM renderer refusals", () => {
     }
   });
 
+  it("refuses a hatch over a clear background with no visible outline", () => {
+    const hatch = { type: "CIMHatchFill", enable: true };
+    for (const outline of [[], [stroke(rgb(0, 0, 0), 0)], [stroke(rgb(0, 0, 0, 0))]]) {
+      const result = translateCimRenderer(
+        simple(polygonWith([...outline, hatch, fill(rgb(255, 255, 255, 0))])),
+      );
+      assert.equal(result.translated, false);
+      assert.deepEqual(result.issues, [{ code: "symbol", cimType: "CIMPolygonSymbol" }]);
+    }
+    // A transparent symbol made only of supported layers is carried as it is.
+    const clear = translateCimRenderer(simple(polygonWith([fill(rgb(255, 255, 255, 0))])));
+    assert.equal(clear.translated, true);
+    assert.equal(clear.style.fillOpacity, 0);
+    // With a visible outline, the hatch is reported and the outline kept.
+    const outlined = translateCimRenderer(
+      simple(polygonWith([stroke(), hatch, fill(rgb(255, 255, 255, 0))])),
+    );
+    assert.equal(outlined.translated, true);
+    assert.deepEqual(outlined.issues, [{ code: "symbol-layers", cimType: "CIMHatchFill" }]);
+  });
+
   it("refuses a symbol whose only colour cannot be read, and draws nothing invented", () => {
     for (const color of [{ type: "CIMRGBColor", values: [null, 0, 0, 100] }, hsl]) {
       const broken = translateCimRenderer(simple(polygonWith([fill(color)])));

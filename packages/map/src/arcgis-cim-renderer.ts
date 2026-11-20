@@ -682,12 +682,16 @@ function scanNotes(scan: LayerScan): Pick<SymbolLook, "dropped" | "unreadable" |
 function polygonLook(scan: LayerScan): SymbolLook | null {
   // An outline-only polygon is hollow. A polygon whose only fill is one
   // GeoLibre cannot draw flat (hatch, picture, gradient) or cannot read keeps
-  // its outline, and the fill is reported; without an outline it has nothing
-  // to draw (no outline, or one of zero width or fully transparent), so the
-  // symbol is refused rather than drawn invisible.
+  // its outline, and the fill is reported. When what was left out is all
+  // that would show (no outline, or one of zero width or fully transparent,
+  // and no fill or only a transparent one, such as a hatch over a clear
+  // background), the symbol is refused rather than drawn invisible. A symbol
+  // made only of supported layers that is itself transparent is kept.
   const stroke = strokeLook(scan.stroke);
-  const color = scan.fill ?? (stroke.strokeWidth !== 0 ? scan.stroke?.color : undefined);
-  if (!color) return null;
+  const strokeDraws = stroke.strokeWidth !== 0;
+  const fillDraws = scan.fill !== undefined && scan.fill.opacity > 0;
+  const color = scan.fill ?? (strokeDraws ? scan.stroke?.color : undefined);
+  if (!color || ((scan.dropped || scan.unreadable) && !fillDraws && !strokeDraws)) return null;
   return {
     geometry: "polygon",
     color: color.hex,
