@@ -11,25 +11,33 @@ let mounted: {
   removeRaster: (id: string) => void;
 } | null = null;
 
+/**
+ * Mounts the raster control through an add whose signal is aborted while the
+ * control mounts (the project is replaced). The control is module state, so
+ * later adds reuse it.
+ */
+async function mountAbortedAdd(): Promise<void> {
+  const controller = new AbortController();
+  const app = {
+    getMapRenderer: () => "maplibre",
+    getMapboxMap: () => null,
+    getMap: () => null,
+    addMapControl: (control: NonNullable<typeof mounted>) => {
+      mounted = control;
+      controller.abort(new DOMException("replaced", "AbortError"));
+      return true;
+    },
+  };
+  const file = new File([new Uint8Array(8)], "dem.tif");
+  await assert.rejects(
+    addRasterToMap(app as never, file, { signal: controller.signal, zoomTo: false }),
+    { name: "AbortError" },
+  );
+}
+
 describe("addRasterToMap", () => {
   it("adds nothing once its signal is aborted while the control mounts", async () => {
-    const controller = new AbortController();
-    const app = {
-      getMapRenderer: () => "maplibre",
-      getMapboxMap: () => null,
-      getMap: () => null,
-      // The project is replaced while the raster control is still mounting.
-      addMapControl: (control: NonNullable<typeof mounted>) => {
-        mounted = control;
-        controller.abort(new DOMException("replaced", "AbortError"));
-        return true;
-      },
-    };
-    const file = new File([new Uint8Array(8)], "dem.tif");
-    await assert.rejects(
-      addRasterToMap(app as never, file, { signal: controller.signal, zoomTo: false }),
-      { name: "AbortError" },
-    );
+    await mountAbortedAdd();
     assert.deepEqual(useAppStore.getState().layers, []);
   });
 
@@ -42,7 +50,10 @@ describe("addRasterToMap", () => {
     interrupt: (controller: AbortController) => void,
     succeed = false,
   ): Promise<string[]> {
-    assert.ok(mounted, "the first test mounted the control");
+    // Mounted here too, so a test selected on its own does not depend on the
+    // first one having run.
+    if (!mounted) await mountAbortedAdd();
+    assert.ok(mounted, "the raster control is mounted");
     const control = mounted;
     const pending = Promise.withResolvers<string>();
     const removed: string[] = [];
