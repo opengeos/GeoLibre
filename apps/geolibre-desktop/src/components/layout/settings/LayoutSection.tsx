@@ -1,4 +1,4 @@
-import { Button } from "@geolibre/ui";
+import { Button, Select } from "@geolibre/ui";
 import {
   FolderCog,
   FolderTree,
@@ -8,13 +8,16 @@ import {
   PanelLeft,
   PanelRight,
   RotateCcw,
+  Smartphone,
   Type,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   DEFAULT_DESKTOP_LAYOUT_SETTINGS,
+  TOUCH_UI_MODES,
   useDesktopSettingsStore,
   type DesktopLayoutSettings,
+  type TouchUiMode,
 } from "../../../hooks/useDesktopSettings";
 import { showsAdvancedNotices } from "../../../lib/ui-profile";
 import { useSettingsDraft } from "./SettingsDraftContext";
@@ -174,6 +177,38 @@ export function LayoutSection() {
           />
           <PanelBottom className="h-4 w-4 text-muted-foreground" />
           <span>{t("settings.layout.bottomPanelsUnderMap")}</span>
+        </label>
+      </div>
+      <div className="space-y-2">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {t("settings.layout.touchUi")}
+        </h4>
+        <label className="flex flex-col gap-2 rounded-md border p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <span className="flex items-start gap-2.5">
+            <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="space-y-0.5">
+              <span className="block font-medium">{t("settings.layout.touchUi")}</span>
+              <span className="block text-xs text-muted-foreground">
+                {t("settings.layout.touchUiDescription")}
+              </span>
+            </span>
+          </span>
+          <Select
+            aria-label={t("settings.layout.touchUi")}
+            className="sm:w-40"
+            value={draftDesktopSettings.layout.touchUiMode}
+            onChange={(event) =>
+              updateDraftLayoutSettings({
+                touchUiMode: event.target.value as TouchUiMode,
+              })
+            }
+          >
+            {TOUCH_UI_MODES.map((mode) => (
+              <option key={mode} value={mode}>
+                {t(`settings.layout.touchUiMode.${mode}`)}
+              </option>
+            ))}
+          </Select>
         </label>
       </div>
       {showsAdvancedNotices(desktopSettings.uiProfile) ? (

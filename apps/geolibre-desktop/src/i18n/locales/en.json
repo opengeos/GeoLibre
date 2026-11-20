@@ -3214,6 +3214,13 @@
       "compactLayerList": "Compact Layers panel (show layer controls only on the selected layer)",
       "bottomPanelsUnderMap": "Keep bottom panels under the map",
       "showAttributePanel": "Show Attribute panel",
+      "touchUi": "Touch interface",
+      "touchUiDescription": "Use larger touch targets and the mobile bottom-sheet layout on phones and tablets.",
+      "touchUiMode": {
+        "auto": "Automatic",
+        "touch": "Touch",
+        "desktop": "Desktop"
+      },
       "urlParamsNote": "URL layout parameters still apply when present in shared viewer links."
     },
     "appearance": {
@@ -11518,5 +11525,69 @@
     "updated": "Saved related record {{id}}.",
     "unchanged": "Nothing changed, so nothing was sent.",
     "deleted": "Deleted related record {{id}}."
+  },
+  "mobileShell": {
+    "topBarLabel": "Mobile toolbar",
+    "bottomNavLabel": "Workspace navigation",
+    "resizeSheet": "Resize panel",
+    "openMenu": "Open menu",
+    "searchCommands": "Search commands",
+    "addData": "Add data",
+    "tabs": {
+      "layers": "Layers",
+      "style": "Style",
+      "add": "Add",
+      "field": "Field",
+      "more": "More"
+    },
+    "sheet": {
+      "addTitle": "Add data and basemaps",
+      "fieldTitle": "Field and GPS tools",
+      "moreTitle": "Menu",
+      "pluginTitle": "Panel",
+      "bottomPanelTitle": "Workspace panel",
+      "floatingTitle": "Tool panel"
+    },
+    "add": {
+      "localVector": "Local vector file…",
+      "localRaster": "Local raster file…",
+      "delimitedText": "CSV / delimited text…",
+      "xyz": "XYZ tile URL…",
+      "wms": "WMS / WMTS service…",
+      "geoParquet": "GeoParquet file…",
+      "basemaps": "Basemaps",
+      "gallery": "Project gallery…",
+      "allSources": "All data sources…"
+    },
+    "field": {
+      "fieldCollection": "Field collection…",
+      "gpsTracking": "GPS tracking…",
+      "geoEditor": "Draw and edit geometry",
+      "measure": "Measure distance and area",
+      "offlineBasemap": "Offline basemap…",
+      "addComment": "Add map comment"
+    },
+    "more": {
+      "project": "Project",
+      "tools": "Tools and panels",
+      "app": "App",
+      "newProject": "New project…",
+      "openFile": "Open project file…",
+      "openUrl": "Open project from URL…",
+      "save": "Save project",
+      "share": "Share project…",
+      "commandPalette": "Search all commands…",
+      "processing": "Processing tools…",
+      "managePlugins": "Manage plugins…",
+      "settings": "Settings…",
+      "diagnostics": "Diagnostics",
+      "about": "About GeoLibre",
+      "switchToDesktopUi": "Switch to desktop layout",
+      "switchToTouchUi": "Touch layout"
+    },
+    "status": {
+      "gpsLabel": "GPS",
+      "diagnosticsLabel": "Open diagnostics ({{count}})"
+    }
   }
 }

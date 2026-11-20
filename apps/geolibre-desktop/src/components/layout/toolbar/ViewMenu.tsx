@@ -28,13 +28,18 @@ import {
   Mountain,
   Palette,
   RotateCcw,
+  Smartphone,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ParseKeys } from "i18next";
-import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
+import {
+  setTouchUiMode,
+  TOUCH_UI_MODES,
+  useDesktopSettingsStore,
+} from "../../../hooks/useDesktopSettings";
 import type { ViewportHistory } from "../../../hooks/useViewportHistory";
 import { isMenuItemVisible, isMenuVisible } from "../../../lib/ui-profile";
 import type { ToolbarChrome } from "./constants";
@@ -111,6 +116,7 @@ export function ViewMenu({
 }: ViewMenuProps) {
   const { t } = useTranslation();
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
+  const touchUiMode = useDesktopSettingsStore((s) => s.desktopSettings.layout.touchUiMode);
   const mapLayout = useAppStore((s) => s.mapLayout);
   const setMapGrid = useAppStore((s) => s.setMapGrid);
   const setSyncView = useAppStore((s) => s.setSyncView);
@@ -157,6 +163,9 @@ export function ViewMenu({
   // it there would strand a user on a renderer whose tools are all disabled.
   // eslint-disable-next-line local/no-renderer-kind-checks -- the renderer picker's way back to MapLibre
   const showRenderingEngine = show("view.renderingEngine") || primaryRenderer !== "maplibre";
+  // Keep Touch interface reachable whenever the user forced Desktop mode so a
+  // phone/tablet user who switched to desktop layout always has a way back.
+  const showTouchUi = show("view.touchUi") || touchUiMode === "desktop";
   // Zoom, viewport history, orientation, Set View, and the Google Maps/Earth
   // hand-offs read or animate the camera — which every engine has. They were
   // greyed out on the globe only because there was no engine behind the ref to
@@ -179,6 +188,7 @@ export function ViewMenu({
     !showSplitView &&
     !showColorVision &&
     !showRenderingEngine &&
+    !showTouchUi &&
     !showExternal
   )
     return null;
@@ -406,6 +416,41 @@ export function ViewMenu({
           showSplitView ||
           showColorVision ||
           showRenderingEngine) &&
+          showTouchUi && <DropdownMenuSeparator />}
+        {showTouchUi && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Smartphone className="h-3.5 w-3.5 shrink-0" />
+              <span className="whitespace-nowrap">{t("settings.layout.touchUi")}</span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuRadioGroup
+                value={touchUiMode}
+                onValueChange={(value: string) => {
+                  if (value === "auto" || value === "touch" || value === "desktop") {
+                    setTouchUiMode(value);
+                  }
+                }}
+              >
+                {TOUCH_UI_MODES.map((mode) => (
+                  <DropdownMenuRadioItem key={mode} value={mode}>
+                    <span className="whitespace-nowrap">
+                      {t(`settings.layout.touchUiMode.${mode}`)}
+                    </span>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
+        {(showZoom ||
+          showNavigation ||
+          showReset ||
+          showSetView ||
+          showSplitView ||
+          showColorVision ||
+          showRenderingEngine ||
+          showTouchUi) &&
           showExternal && <DropdownMenuSeparator />}
         {showGoogleMaps && (
           <DropdownMenuItem onSelect={onViewInGoogleMaps}>

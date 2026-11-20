@@ -1,13 +1,13 @@
 // @refresh reset
-import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
+import { useAppStore } from "@geolibre/core";
 import type { MapDiagnosticEvent, MapEngine } from "@geolibre/map";
 import { MapCanvas, rendererCapabilities } from "@geolibre/map";
 import { useTranslation } from "react-i18next";
 import {
-  addLidarLayerFromBytes,
   addRasterToMap,
   getGeometryEditTargetLayerId,
   openRasterLayerPanel,
+  openRightPanel,
   subscribeGeometryEdit,
 } from "@geolibre/plugins";
 import {
@@ -27,8 +27,11 @@ import { RightDockPortals } from "./RightDockPortals";
 import { CommentMapOverlay } from "../comments/CommentMapOverlay";
 import { useCommentTool } from "../comments/useCommentTool";
 import { AddCommentDialog } from "../comments/AddCommentDialog";
-import { openRightPanel } from "@geolibre/plugins";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
+import { useApplyTouchUiAttribute, useTouchUi } from "../../hooks/useTouchUi";
+import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import { entryMenuOffered } from "../../lib/deployment-gates";
+import { isMenuVisible } from "../../lib/ui-profile";
 import { useProjectFileActions } from "../../hooks/useProjectFileActions";
 import { useLiveMapUrl } from "../../hooks/useLiveMapUrl";
 import { useProjectHistory } from "../../hooks/useProjectHistory";
@@ -45,7 +48,6 @@ import {
 import type { DataUrlLoadState } from "../../hooks/useDataUrlLoader";
 import { wikipediaLang } from "../../lib/knowledge";
 import { isMapClickModeActive } from "../../lib/map-click-modes";
-import { lidarOutputForMap } from "../../lib/lidar-export";
 import { createLatch } from "../../lib/settle-gate";
 import { useLineOfSightTool } from "../../lib/line-of-sight-store";
 import { bindNetcdfProfileSamplesToProject } from "../../lib/netcdf-profile-store";
@@ -127,29 +129,23 @@ import { RegistryPluginTrustDialog } from "./RegistryPluginTrustDialog";
 import { ProjectHistoryDialog } from "./ProjectHistoryDialog";
 import { ProjectRecoveryDialog } from "./ProjectRecoveryDialog";
 import { BottomPanels } from "./BottomPanels";
+import { MobileBottomNav } from "./mobile/MobileBottomNav";
+import { MobileShellSheets, useMobileShellState } from "./mobile/MobileShellSheets";
+import { MobileStatusPill } from "./mobile/MobileStatusPill";
 import { StatusBar } from "./StatusBar";
 import { TopToolbar } from "./TopToolbar";
 import type { LayoutOptions } from "../../hooks/useLayoutOptions";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import type { ProjectUrlLoadState } from "../../hooks/useProjectUrlLoader";
+import { DesktopShellProcessingDialogs } from "./DesktopShellProcessingDialogs";
 import {
-  BatchToolsDialog,
-  ConversionDialog,
-  GeocodeDialog,
   ModelBuilderPanel,
-  NetworkToolsDialog,
   NotebookPanel,
   ObjectDetectionDialog,
-  ProcessingDialog,
-  ProcessingHistoryDialog,
-  RasterToolsDialog,
-  SegmentationDialog,
   SegmentEverythingPanel,
   SelectByExpressionDialog,
   SelectByLocationDialog,
-  StatisticsToolsDialog,
   StyleManagerPanel,
-  VectorToolsDialog,
 } from "./desktopShellLazyPanels";
 import { useCollabShareLinkAutoOpen } from "../../hooks/desktop-shell/useCollabShareLinkAutoOpen";
 import { useDataUrlFit } from "../../hooks/desktop-shell/useDataUrlFit";
@@ -386,10 +382,21 @@ export function DesktopShell({
   useTerrainRestore(mapControllerRef, mapReadyGeneration, projectGeneration);
   useScriptControlRestore(mapControllerRef, mapReadyGeneration, projectGeneration);
   useProjectInteractionRestore(mapControllerRef, mapReadyGeneration, projectGeneration);
+  const { touchUi, mobileShell } = useTouchUi({
+    compact: layoutOptions.compact,
+    panelsHidden: layoutOptions.panelsHidden,
+  });
+  useApplyTouchUiAttribute(touchUi && !layoutOptions.compact && !layoutOptions.panelsHidden);
+  const mobile = useMobileShellState(mobileShell);
+  const { openMobileTab } = mobile;
+  const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
+  const deploymentCapabilities = useAppStore((s) => s.deploymentCapabilities);
+
   const [stylePanelOpenRequest, setStylePanelOpenRequest] = useState(0);
   const openStylePanel = useCallback(() => {
     setStylePanelOpenRequest((request) => request + 1);
-  }, []);
+    if (mobileShell) openMobileTab("style");
+  }, [mobileShell, openMobileTab]);
   const { shellStyle, startLayerPanelResize, startNotebookPanelResize, startStylePanelResize } =
     usePanelResize({ shellRef, verticalResizeGuideRef, layoutOptions, notebookOpen });
   const {
@@ -582,10 +589,17 @@ export function DesktopShell({
     />
   );
 
+  const mobileCanAddData = entryMenuOffered("addData", {
+    viewer: layoutOptions.viewer,
+    capabilities: deploymentCapabilities,
+    menuVisible: isMenuVisible(uiProfile, "addData"),
+  });
+
   return (
     <div
       ref={shellRef}
       data-testid="desktop-shell"
+      data-mobile-shell={mobileShell ? "true" : undefined}
       className="relative flex h-full min-w-0 flex-col overflow-hidden bg-background"
       style={shellStyle}
       onDragEnter={handleDragEnter}
@@ -615,10 +629,18 @@ export function DesktopShell({
             onOpenBasemapExtract={() => setBasemapExtractOpen(true)}
             onAddComment={commentTool.toggleTool}
             viewer={layoutOptions.viewer}
+            mobileShell={mobileShell}
+            activeMobileTab={mobile.activeMobileTab}
+            onSelectMobileTab={mobile.handleSelectMobileTab}
+            mobileSheetHostEl={mobile.mobileSheetHostEl}
           />
         </SectionErrorBoundary>
       ) : null}
-      <div data-workspace-row="" className="relative flex min-h-0 flex-1 flex-col md:flex-row">
+      <div
+        ref={mobile.setMobileSheetHostEl}
+        data-workspace-row=""
+        className="relative flex min-h-0 flex-1 flex-col md:flex-row"
+      >
         <RightDockPortals
           activePanelId={activePanelId}
           layoutOptions={layoutOptions}
@@ -639,8 +661,9 @@ export function DesktopShell({
         />
         {/* Map-only / hidden-panels embeds show nothing but the map: skip the
             whole left side-dock (Layers, plugin panels, and the shared rail that
-            hosts the Browser entry), not just the built-in Layers panel. */}
-        {layoutOptions.panelsHidden ? null : (
+            hosts the Browser entry), not just the built-in Layers panel. In
+            mobileShell mode, Layers and plugins are hosted in BottomSheet instead. */}
+        {layoutOptions.panelsHidden || mobileShell ? null : (
           <>
             {/* The positional plugin docks flank whichever middle surface the
                 Layers side shows (the shared rail or the standalone Layers
@@ -949,7 +972,7 @@ export function DesktopShell({
               label="Plugin floating panels"
               displayName={t("shell.section.pluginFloatingPanels")}
             >
-              <FloatingPanels />
+              <FloatingPanels mobileSheet={mobileShell} />
             </SectionErrorBoundary>
             {/* Mounted inside the map area (like FloatingPanels) so the canvas
               floats over the map and drag-clamps to it, not to the whole
@@ -1035,11 +1058,19 @@ export function DesktopShell({
               />
             )}
           </main>
-          {layoutOptions.bottomPanelsUnderMap ? bottomPanels : null}
+          {mobileShell && layoutOptions.statusBarVisible ? (
+            <MobileStatusPill
+              diagnosticsErrorCount={diagnostics.errorCount}
+              diagnosticsWarningCount={diagnostics.warningCount}
+              onOpenDiagnostics={() => setDiagnosticsOpen(true)}
+            />
+          ) : null}
+          {!mobileShell && layoutOptions.bottomPanelsUnderMap ? bottomPanels : null}
         </div>
         {/* Same as the left dock: a map-only / hidden-panels embed skips the
-            entire right side-dock (Style, plugin panels, and their shared rail). */}
-        {layoutOptions.panelsHidden || layoutOptions.viewer ? null : (
+            entire right side-dock (Style, plugin panels, and their shared rail).
+            In mobileShell mode these are routed into the unified BottomSheet. */}
+        {layoutOptions.panelsHidden || layoutOptions.viewer || mobileShell ? null : (
           <>
             {/* Shared-rail panels such as Comments must not remove the ordinary
                 positional docks: enabled Web Services panels still live in
@@ -1143,9 +1174,49 @@ export function DesktopShell({
             </Suspense>
           </SectionErrorBoundary>
         ) : null}
+        {mobileShell ? (
+          <MobileShellSheets
+            activeMobileTab={mobile.activeMobileTab}
+            onOpenMobileTab={mobile.openMobileTab}
+            onCloseMobileTab={mobile.closeMobileTab}
+            expandedPluginPanelId={mobile.expandedPluginPanelId}
+            anyBottomPanelOpen={mobile.anyBottomPanelOpen}
+            onCloseBottomPanels={mobile.closeAllBottomPanels}
+            dockContentEl={dockContentEl}
+            layoutOptions={layoutOptions}
+            themeMode={themeMode}
+            mapControllerRef={mapControllerRef}
+            mapReadyGeneration={mapReadyGeneration}
+            collaboration={collaboration}
+            layerRefresh={layerRefresh}
+            geometryEditLayerId={geometryEditLayerId}
+            onToggleGeometryEdit={handleToggleGeometryEdit}
+            onCancelGeometryEdit={handleCancelGeometryEdit}
+            onMaterializeDuckDBLayer={handleMaterializeDuckDBLayer}
+            onOpenStylePanel={openStylePanel}
+            onOpenRasterSubset={setRasterSubsetLayer}
+            startLayerPanelResize={startLayerPanelResize}
+            startStylePanelResize={startStylePanelResize}
+            stylePanelOpenRequest={stylePanelOpenRequest}
+            notebookOpen={notebookOpen}
+            storymapPresenting={storymapPresenting}
+            bottomPanels={bottomPanels}
+          />
+        ) : null}
       </div>
-      {layoutOptions.bottomPanelsUnderMap ? null : bottomPanels}
-      {layoutOptions.statusBarVisible ? (
+      {!mobileShell && !layoutOptions.bottomPanelsUnderMap ? bottomPanels : null}
+      {mobileShell ? (
+        <MobileBottomNav
+          activeTab={mobile.activeMobileTab}
+          onSelectTab={mobile.handleSelectMobileTab}
+          layerCount={layers.length}
+          showLayers={layoutOptions.layerPanelVisible}
+          showStyle={layoutOptions.stylePanelVisible}
+          showAdd={layoutOptions.toolbarVisible && mobileCanAddData}
+          showField={layoutOptions.toolbarVisible && !layoutOptions.viewer}
+          showMore={layoutOptions.toolbarVisible}
+        />
+      ) : layoutOptions.statusBarVisible ? (
         <SectionErrorBoundary label="Status bar" displayName={t("shell.section.statusBar")}>
           <StatusBar
             autosavePaused={projectHistory.autosavePaused}
@@ -1198,91 +1269,7 @@ export function DesktopShell({
       {/* Trust prompt for a `?plugin=<registry id>` link to a plugin that is
           not installed yet; inert otherwise. */}
       <RegistryPluginTrustDialog link={registryPluginLink} />
-      <MountWhenOpened isOpen={(ui) => ui.processingOpen}>
-        <Suspense fallback={null}>
-          <ProcessingDialog
-            mapControllerRef={mapControllerRef}
-            onAddRaster={async (bytes, name, fileName) => {
-              // Cast required: TS types Uint8Array as Uint8Array<ArrayBufferLike>,
-              // which is not directly assignable to BlobPart under this lib.
-              // `fileName` (when given) becomes the layer's sourcePath while `name`
-              // stays the human-readable display name; the control keeps them
-              // separate (info.source.fileName vs info.name).
-              const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
-                type: "image/tiff",
-              });
-              await addRasterToMap(createAppAPI(mapControllerRef), file, {
-                name,
-              });
-            }}
-            onAddLidar={async (bytes, name, fileName) => {
-              try {
-                const cloud = await lidarOutputForMap(bytes, fileName);
-                const id = await addLidarLayerFromBytes(
-                  createAppAPI(mapControllerRef),
-                  cloud.bytes,
-                  {
-                    name,
-                    fileName: cloud.fileName,
-                    fit: shouldZoomToNewLayers(),
-                  },
-                );
-                return id !== null;
-              } catch (error) {
-                // Too large to convert, or unreadable by the viewer: the dialog
-                // downloads the output instead.
-                console.warn("[lidar] could not add tool output to the map", error);
-                return false;
-              }
-            }}
-          />
-        </Suspense>
-      </MountWhenOpened>
-      <MountWhenOpened isOpen={(ui) => ui.conversionOpen}>
-        <Suspense fallback={null}>
-          <ConversionDialog />
-        </Suspense>
-      </MountWhenOpened>
-      <MountWhenOpened isOpen={(ui) => ui.vectorToolOpen}>
-        <Suspense fallback={null}>
-          <VectorToolsDialog mapControllerRef={mapControllerRef} />
-        </Suspense>
-      </MountWhenOpened>
-      <MountWhenOpened isOpen={(ui) => ui.networkToolOpen}>
-        <Suspense fallback={null}>
-          <NetworkToolsDialog mapControllerRef={mapControllerRef} />
-        </Suspense>
-      </MountWhenOpened>
-      <MountWhenOpened isOpen={(ui) => ui.batchToolsOpen}>
-        <Suspense fallback={null}>
-          <BatchToolsDialog mapControllerRef={mapControllerRef} />
-        </Suspense>
-      </MountWhenOpened>
-      <MountWhenOpened isOpen={(ui) => ui.statisticsToolOpen}>
-        <Suspense fallback={null}>
-          <StatisticsToolsDialog mapControllerRef={mapControllerRef} />
-        </Suspense>
-      </MountWhenOpened>
-      <MountWhenOpened isOpen={(ui) => ui.geocodeOpen}>
-        <Suspense fallback={null}>
-          <GeocodeDialog mapControllerRef={mapControllerRef} />
-        </Suspense>
-      </MountWhenOpened>
-      <MountWhenOpened isOpen={(ui) => ui.processingHistoryOpen}>
-        <Suspense fallback={null}>
-          <ProcessingHistoryDialog />
-        </Suspense>
-      </MountWhenOpened>
-      <MountWhenOpened isOpen={(ui) => ui.rasterToolOpen}>
-        <Suspense fallback={null}>
-          <RasterToolsDialog mapControllerRef={mapControllerRef} />
-        </Suspense>
-      </MountWhenOpened>
-      <MountWhenOpened isOpen={(ui) => ui.segmentationOpen}>
-        <Suspense fallback={null}>
-          <SegmentationDialog mapControllerRef={mapControllerRef} />
-        </Suspense>
-      </MountWhenOpened>
+      <DesktopShellProcessingDialogs mapControllerRef={mapControllerRef} />
       <StoryMapPanel mapControllerRef={mapControllerRef} />
       <StoryMapPresenter
         mapControllerRef={mapControllerRef}
