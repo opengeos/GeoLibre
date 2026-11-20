@@ -5,6 +5,7 @@ import {
   LINE_GAP_ANGLE_PROPERTY,
   LINE_GAP_TEXT_PROPERTY,
   buildLineGapLabels,
+  lineGapTextResolver,
   lineGapZoomBucket,
 } from "../packages/map/src/line-gap-labels";
 
@@ -244,4 +245,106 @@ describe("buildLineGapLabels", () => {
     assert.equal(labels.features.length, 2);
     assert.equal((lines.features[0].geometry as MultiLineString).coordinates.length, 4);
   });
+
+  it("finds a wide label placed earlier on another line when checking collisions", () => {
+    // At zoom 0 a 300 px label (radius 150) centred at x=250 and a 20 px label
+    // centred 150 px away at x=100 overlap. The grid cells are 62.5 px, so the
+    // narrow label's search must reach the wide label's cell, not only its own
+    // radius's.
+    const wide = line(
+      [
+        [-172.96875, 0],
+        [164.53125, 0],
+      ],
+      { elev: "wide" },
+    );
+    const narrow = line(
+      [
+        [-120.5859375, 0],
+        [-98.7890625, 0],
+      ],
+      { elev: "x" },
+    );
+    const { labels } = buildLineGapLabels(fc(wide, narrow), {
+      ...base,
+      zoom: 0,
+      measure: (text) => (text === "wide" ? 300 : 20),
+      padding: 0,
+      spacing: 250,
+    });
+    assert.equal(labels.features.length, 1);
+  });
+
+  it("cuts the gap in screen pixels on a steep line", () => {
+    // Mercator stretches latitude, so a gap cut by degrees would not be 40 px.
+    const input = fc(
+      line(
+        [
+          [0, 0],
+          [0, 80],
+        ],
+        { elev: "x" },
+      ),
+    );
+    const { lines, labels } = buildLineGapLabels(input, {
+      ...base,
+      zoom: 0,
+      measure: () => 40,
+      padding: 0,
+    });
+    assert.equal(labels.features.length, 1);
+    const geometry = lines.features[0].geometry as MultiLineString;
+    assert.equal(geometry.coordinates.length, 2);
+    const before = projectPx(geometry.coordinates[0].at(-1)!);
+    const after = projectPx(geometry.coordinates[1][0]);
+    const gapPx = Math.hypot(after[0] - before[0], after[1] - before[1]);
+    assert.ok(Math.abs(gapPx - 40) < 1e-6, `gap is ${gapPx}px`);
+  });
+
+  it("leaves hidden features uncut and unlabeled", () => {
+    const shown = line(
+      [
+        [0, 0],
+        [0.2, 0],
+      ],
+      { elev: 1 },
+    );
+    const hidden = line(
+      [
+        [0, 1],
+        [0.2, 1],
+      ],
+      { elev: 2 },
+    );
+    const input = fc(shown, hidden);
+    const { lines, labels } = buildLineGapLabels(input, {
+      ...base,
+      visible: (feature) => feature.properties?.elev === 1,
+    });
+    assert.equal(labels.features.length, 1);
+    assert.equal(labels.features[0].properties?.elev, 1);
+    assert.equal(lines.features[1], hidden, "hidden line keeps its geometry");
+  });
 });
+
+describe("lineGapTextResolver", () => {
+  it("evaluates a zoom-dependent text at the placement zoom", () => {
+    const textFor = lineGapTextResolver(["step", ["zoom"], "low", 10, "high"], "none", 12);
+    assert.ok(textFor);
+    const point: Feature = {
+      type: "Feature",
+      properties: {},
+      geometry: { type: "Point", coordinates: [0, 0] },
+    };
+    assert.equal(textFor(point), "high");
+  });
+});
+
+/** Mercator world pixels at zoom 0, the space the placement measures in. */
+function projectPx(position: number[]): [number, number] {
+  const sin = Math.sin((position[1] * Math.PI) / 180);
+  return [
+    ((position[0] + 180) / 360) * 512,
+    (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * 512,
+  ];
+}

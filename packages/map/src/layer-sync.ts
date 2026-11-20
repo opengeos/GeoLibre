@@ -1774,7 +1774,7 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
     layer,
     profile,
   );
-  const lineGap = wantCluster ? null : lineGapPlacement(map, layer, profile, renderer);
+  const lineGap = wantCluster ? null : lineGapPlacement(map, layer, profile);
   const sourceGeoJson = wantCluster
     ? authoredClusterInput(layer, map.getZoom())
     : (lineGap?.lines ?? layer.geojson!);
@@ -2636,50 +2636,86 @@ function measureLabelText(text: string, size: number): number {
   return measureContext.measureText(text).width;
 }
 
+/** A layer's effective label settings. */
+function layerLabelStyle(layer: GeoLibreLayer): LabelStyle {
+  return { ...DEFAULT_LAYER_STYLE.labels, ...styleValue(layer.style, "labels") };
+}
+
+/**
+ * The label zoom range, as the label layers apply it: the label's own range
+ * intersected with the layer's style range.
+ */
+function labelZoomRange(
+  labels: LabelStyle,
+  style: LayerStyle,
+): { minzoom: number; maxzoom: number } {
+  return intersectZoomRange(
+    {
+      minzoom: clampLayerZoom(labels.minZoom, MIN_LAYER_ZOOM),
+      maxzoom: clampLayerZoom(labels.maxZoom, MAX_LAYER_ZOOM),
+    },
+    style,
+  );
+}
+
 function lineGapWanted(labels: LabelStyle): boolean {
   return (
     labels.enabled &&
     labels.placement === "line" &&
     labels.lineGap === true &&
-    Boolean(labels.expression.trim() || labels.field)
+    Boolean(labels.expression.trim() || labels.field) &&
+    // The gap is cut at one size per label, so a size expression (which can
+    // vary per feature) keeps the ordinary line labels.
+    !parseLabelOverride(labels.sizeExpression, "number")
+  );
+}
+
+/**
+ * Whether a layer's labels cut gaps in its lines, given its geometry. Only
+ * line-only layers on the inline GeoJSON path take it: the cut lines replace
+ * the source's features, which a point or polygon in the same source must not
+ * see, and the tiled path cuts its tiles once, not per zoom. Shared by the
+ * placement and the zoom-resync predicate so the two cannot drift.
+ */
+function lineGapApplies(
+  layer: GeoLibreLayer,
+  profile: ReturnType<typeof detectGeometryProfile>,
+): boolean {
+  const { renderer, wantCluster } = resolveVectorRenderMode(layer, profile);
+  return (
+    !wantCluster &&
+    renderer !== "heatmap" &&
+    !layer.style.extrusionEnabled &&
+    profile.hasLine &&
+    !profile.hasPoint &&
+    !profile.hasPolygon
   );
 }
 
 /**
  * The contour-style placement for a layer whose line labels cut gaps in
  * their lines ({@link LabelStyle.lineGap}), or null when it does not apply.
- *
- * Only line-only layers on the inline GeoJSON path take it: the cut lines
- * replace the source's features, which a point or polygon in the same source
- * must not see, and the tiled path cuts its tiles once, not per zoom. The
- * placement is computed for the map's zoom bucket; the controller resyncs on
- * `zoomend` while such a layer exists ({@link hasLineGapLabels}).
+ * The placement is computed for the map's zoom bucket; the controller resyncs
+ * on `zoomend` while such a layer exists ({@link hasLineGapLabels}). Outside
+ * the label's zoom range nothing is cut, so the line shows whole.
  */
 function lineGapPlacement(
   map: maplibregl.Map,
   layer: GeoLibreLayer,
   profile: ReturnType<typeof detectGeometryProfile>,
-  renderer: string,
 ): LineGapLabelResult | null {
-  const labels: LabelStyle = {
-    ...DEFAULT_LAYER_STYLE.labels,
-    ...styleValue(layer.style, "labels"),
-  };
-  if (
-    !layer.geojson ||
-    !lineGapWanted(labels) ||
-    layer.style.extrusionEnabled ||
-    renderer === "heatmap" ||
-    !profile.hasLine ||
-    profile.hasPoint ||
-    profile.hasPolygon
-  ) {
+  const labels = layerLabelStyle(layer);
+  if (!layer.geojson || !lineGapWanted(labels) || !lineGapApplies(layer, profile)) {
     return null;
   }
+  // The live zoom, not the placement bucket, decides whether the labels show.
+  const zoom = map.getZoom();
+  const range = labelZoomRange(labels, layer.style);
+  if (zoom < range.minzoom || zoom >= range.maxzoom) return null;
   const textField = attributeLabelTextField(labels, null);
   if (textField === "") return null;
   const size = Math.max(1, labels.size);
-  return getLineGapLabels(layer.geojson, labels, textField, map.getZoom(), (text) =>
+  return getLineGapLabels(layer.geojson, labels, textField, zoom, (text) =>
     measureLabelText(text, size),
   );
 }
@@ -2689,12 +2725,12 @@ function lineGapPlacement(
  * on the zoom and so needs a resync when the zoom changes.
  */
 export function hasLineGapLabels(layers: readonly GeoLibreLayer[]): boolean {
-  return layers.some(
-    (layer) =>
-      layer.type === "geojson" &&
-      layer.visible &&
-      lineGapWanted({ ...DEFAULT_LAYER_STYLE.labels, ...styleValue(layer.style, "labels") }),
-  );
+  return layers.some((layer) => {
+    if (layer.type !== "geojson" || !layer.visible || !layer.geojson) return false;
+    const labels = layerLabelStyle(layer);
+    // Check the cheap label settings first; the profile walks every feature.
+    return lineGapWanted(labels) && lineGapApplies(layer, detectGeometryProfile(layer.geojson));
+  });
 }
 
 /**
@@ -2721,13 +2757,7 @@ function ensureLineGapLabelLayer(
   if (existingLabel && existingLabel.source !== pointSourceId) {
     removeIfExists(map, labelLayerId(layer.id));
   }
-  const labelZoom = intersectZoomRange(
-    {
-      minzoom: clampLayerZoom(labels.minZoom, MIN_LAYER_ZOOM),
-      maxzoom: clampLayerZoom(labels.maxZoom, MAX_LAYER_ZOOM),
-    },
-    layer.style,
-  );
+  const labelZoom = labelZoomRange(labels, layer.style);
   // Label points copy their line's attributes, so the visibility override and
   // the layer's feature filters apply to them as to the lines.
   const { labelBaseFilter, colorOverride, opacityOverride } = attributeLabelOverrides(labels, null);

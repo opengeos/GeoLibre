@@ -1,5 +1,6 @@
 import { compileFeatureExpression, type LabelStyle } from "@geolibre/core";
 import type { Feature, FeatureCollection, LineString, MultiLineString, Position } from "geojson";
+import { parseLabelOverride } from "./label-style";
 
 // Contour-style line labels (the "Cut line under label" option): each label
 // sits in a gap cut out of its own line, so the text reads cleanly without a
@@ -42,6 +43,11 @@ export interface LineGapLabelOptions {
   spacing: number;
   /** Keep labels whose boxes overlap other labels. */
   allowOverlap?: boolean;
+  /**
+   * Whether a feature's label is shown. A hidden feature keeps its line
+   * uncut and reserves no space; null shows every feature.
+   */
+  visible?: ((feature: Feature) => boolean) | null;
 }
 
 export interface LineGapLabelResult {
@@ -75,6 +81,7 @@ interface MeasuredPart {
   px: [number, number][];
   cum: number[];
   length: number;
+  worldSize: number;
 }
 
 function measurePart(coords: Position[], worldSize: number): MeasuredPart {
@@ -84,7 +91,7 @@ function measurePart(coords: Position[], worldSize: number): MeasuredPart {
   for (let i = 1; i < px.length; i++) {
     cum[i] = cum[i - 1] + Math.hypot(px[i][0] - px[i - 1][0], px[i][1] - px[i - 1][1]);
   }
-  return { coords, px, cum, length: cum[cum.length - 1] ?? 0 };
+  return { coords, px, cum, length: cum[cum.length - 1] ?? 0, worldSize };
 }
 
 /** The segment index `i` with `cum[i] <= d <= cum[i + 1]`. */
@@ -108,14 +115,29 @@ function pixelAt(part: MeasuredPart, d: number): [number, number] {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 }
 
-/** The geographic position at distance `d`, interpolated along its segment. */
+/** The inverse of {@link project}: a world pixel back to lon/lat. */
+function unproject([x, y]: [number, number], worldSize: number): Position {
+  const lon = (x / worldSize) * 360 - 180;
+  const lat = (Math.atan(Math.sinh(Math.PI - (2 * Math.PI * y) / worldSize)) * 180) / Math.PI;
+  return [lon, lat];
+}
+
+/**
+ * The geographic position at distance `d`. Interpolated in screen pixels, the
+ * space distances are measured in, then unprojected, so a gap of N pixels is N
+ * pixels on the map. The line's own vertices are returned as they are.
+ */
 function positionAt(part: MeasuredPart, d: number): Position {
   const i = segmentAt(part.cum, d);
   const span = part.cum[i + 1] - part.cum[i];
   const t = span > 0 ? (d - part.cum[i]) / span : 0;
   const a = part.coords[i];
   const b = part.coords[i + 1] ?? a;
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  if (t <= 0) return a;
+  if (t >= 1) return b;
+  const pa = part.px[i];
+  const pb = part.px[i + 1] ?? pa;
+  return unproject([pa[0] + (pb[0] - pa[0]) * t, pa[1] + (pb[1] - pa[1]) * t], part.worldSize);
 }
 
 /** The part's coordinates between distances `from` and `to`. */
@@ -139,6 +161,8 @@ function uprightAngle(a: [number, number], b: [number, number]): number {
 /** Placed label circles in a uniform grid, for overlap checks. */
 class CollisionGrid {
   private readonly cells = new Map<string, Array<[number, number, number]>>();
+  /** Largest radius stored so far, so a search reaches every circle it can overlap. */
+  private maxRadius = 0;
   constructor(private readonly cellSize: number) {}
 
   private key(cx: number, cy: number): string {
@@ -146,7 +170,7 @@ class CollisionGrid {
   }
 
   collides(x: number, y: number, r: number): boolean {
-    const reach = Math.ceil(r / this.cellSize) + 1;
+    const reach = Math.ceil((r + this.maxRadius) / this.cellSize) + 1;
     const cx = Math.floor(x / this.cellSize);
     const cy = Math.floor(y / this.cellSize);
     for (let dx = -reach; dx <= reach; dx++) {
@@ -160,6 +184,7 @@ class CollisionGrid {
   }
 
   add(x: number, y: number, r: number): void {
+    this.maxRadius = Math.max(this.maxRadius, r);
     const key = this.key(Math.floor(x / this.cellSize), Math.floor(y / this.cellSize));
     const cell = this.cells.get(key);
     if (cell) cell.push([x, y, r]);
@@ -202,6 +227,7 @@ export function buildLineGapLabels(
     if (!geometry || (geometry.type !== "LineString" && geometry.type !== "MultiLineString")) {
       return feature;
     }
+    if (options.visible && !options.visible(feature)) return feature;
     const raw = options.textFor(feature);
     const text = raw == null ? "" : String(raw).trim();
     if (!text) return feature;
@@ -299,10 +325,13 @@ function applyTransform(text: string, transform: LabelStyle["transform"]): strin
  * symbol layer would evaluate (field lookup, number formatting, or the
  * user's expression), so the gap is cut for exactly the text drawn in it.
  * The letter-case transform is applied too, since it changes the width.
+ * `zoom` is the zoom the expression is evaluated at, so a zoom-dependent
+ * `text-field` matches the placement's zoom bucket.
  */
 export function lineGapTextResolver(
   textField: unknown,
   transform: LabelStyle["transform"],
+  zoom?: number,
 ): ((feature: Feature) => string | null) | null {
   if (typeof textField === "string") {
     const literal = applyTransform(textField, transform);
@@ -313,9 +342,31 @@ export function lineGapTextResolver(
   const evaluate = compiled.evaluate;
   return (feature) => {
     try {
-      return applyTransform(plainText(evaluate(feature)), transform);
+      return applyTransform(plainText(evaluate(feature, zoom)), transform);
     } catch {
       return null;
+    }
+  };
+}
+
+/**
+ * Feature visibility for a label's `visibilityExpression` (a parsed boolean
+ * override), evaluated at `zoom`. A feature whose expression fails to evaluate
+ * is hidden, as the label layer's filter would hide it.
+ */
+function lineGapVisibilityResolver(
+  visibility: unknown,
+  zoom: number,
+): ((feature: Feature) => boolean) | null {
+  if (visibility == null) return null;
+  const compiled = compileFeatureExpression(JSON.stringify(visibility));
+  if (!compiled.ok || !compiled.evaluate) return null;
+  const evaluate = compiled.evaluate;
+  return (feature) => {
+    try {
+      return Boolean(evaluate(feature, zoom));
+    } catch {
+      return false;
     }
   };
 }
@@ -353,11 +404,12 @@ export function getLineGapLabels(
     labels.lineGapPadding,
     labels.lineSpacing,
     labels.allowOverlap,
+    labels.visibilityExpression,
   ]);
   let byKey = placementCache.get(collection);
   const cached = byKey?.get(key);
   if (cached) return cached;
-  const textFor = lineGapTextResolver(textField, labels.transform);
+  const textFor = lineGapTextResolver(textField, labels.transform, bucket);
   if (!textFor) return null;
   const result = buildLineGapLabels(collection, {
     zoom: bucket,
@@ -367,6 +419,10 @@ export function getLineGapLabels(
     padding: Math.max(0, labels.lineGapPadding),
     spacing: Math.max(1, labels.lineSpacing),
     allowOverlap: labels.allowOverlap,
+    visible: lineGapVisibilityResolver(
+      parseLabelOverride(labels.visibilityExpression, "boolean"),
+      bucket,
+    ),
   });
   if (!byKey) {
     byKey = new Map();
