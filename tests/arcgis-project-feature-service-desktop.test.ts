@@ -9,11 +9,10 @@ import { strToU8, zipSync } from "fflate";
 import type { ProjectFileActions } from "../apps/geolibre-desktop/src/hooks/useProjectFileActions";
 
 // Loaded after the harness so its CSS imports and Vite globals are handled.
-const { placeImportedServiceLayers, signedInPortalForServiceUrl, useProjectFileActions } =
+const { placeImportedServiceLayers, signInForImportedService, useProjectFileActions } =
   await import("../apps/geolibre-desktop/src/hooks/useProjectFileActions");
 const { installNativeArcGISFetch } = await import("../apps/geolibre-desktop/src/lib/arcgis-fetch");
-const { ARCGIS_ONLINE_PORTAL, useArcGISAuthStore } =
-  await import("../apps/geolibre-desktop/src/lib/arcgis-oauth");
+const { ARCGIS_ONLINE_PORTAL } = await import("../apps/geolibre-desktop/src/lib/arcgis-oauth");
 
 /**
  * The desktop build's half of ArcGIS Pro feature service import: the Tauri
@@ -361,43 +360,61 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     }
   });
 
-  it("offers a sign-in token only to hosts the signed-in portal trusts", () => {
+  it("offers a sign-in token only to its own organisation's services", async () => {
+    const online = ARCGIS_ONLINE_PORTAL;
     const org = "https://myorg.maps.arcgis.com";
     const enterprise = "https://gis.example.org/portal";
-    const hosted = "https://services3.arcgis.com/abc/arcgis/rest/services/Water/FeatureServer/3";
-    const connect = (...portals: string[]) =>
-      useArcGISAuthStore.setState({
-        connections: Object.fromEntries(
-          portals.map((portal) => [portal, { portal, username: "u" }]),
-        ),
+    const ORG = "AbCdEfGh12345678";
+    const hosted = (orgId: string) =>
+      `https://services3.arcgis.com/${orgId}/arcgis/rest/services/Water/FeatureServer/3`;
+    const orgIds: Record<string, string> = { [online]: ORG, [org]: ORG };
+    const lookups: string[] = [];
+    const signIn = (url: string, portals: string[], failing: string[] = []) =>
+      signInForImportedService(url, {
+        portals,
+        token: async (portal) => {
+          if (failing.includes(portal)) throw new Error("refresh failed");
+          return `token-for-${portal}`;
+        },
+        orgId: async (portal) => {
+          lookups.push(portal);
+          return orgIds[portal];
+        },
       });
-    try {
-      connect();
-      assert.equal(signedInPortalForServiceUrl(hosted), null);
-      // An organisation sign-in serves the organisation's hosted services.
-      connect(org);
-      assert.equal(signedInPortalForServiceUrl(hosted), org);
-      assert.equal(signedInPortalForServiceUrl(`${SERVICE}/3`), null);
-      connect(org, ARCGIS_ONLINE_PORTAL);
-      assert.equal(signedInPortalForServiceUrl(hosted), ARCGIS_ONLINE_PORTAL);
-      // An Enterprise portal only trusts its own host, and never plain HTTP.
-      connect(enterprise);
-      assert.equal(
-        signedInPortalForServiceUrl(
-          "https://gis.example.org/server/rest/services/A/FeatureServer/0",
-        ),
-        enterprise,
-      );
-      assert.equal(signedInPortalForServiceUrl(hosted), null);
-      assert.equal(
-        signedInPortalForServiceUrl(
-          "http://gis.example.org/server/rest/services/A/FeatureServer/0",
-        ),
-        null,
-      );
-    } finally {
-      connect();
-    }
+
+    // The user's own organisation's hosted service gets the token.
+    assert.deepEqual(await signIn(hosted(ORG), [online]), {
+      portal: online,
+      token: `token-for-${online}`,
+    });
+    assert.deepEqual(await signIn(hosted(ORG), [org]), { portal: org, token: `token-for-${org}` });
+    // Another organisation's service on the same shared hosting does not.
+    assert.equal(await signIn(hosted("ZzZzZzZz87654321"), [online, org]), null);
+    // Nor does any other *.arcgis.com host, an untrusted host, or plain HTTP.
+    assert.equal(
+      await signIn("https://utility.arcgis.com/usrsvcs/servers/x/rest/services/A/FeatureServer/0", [
+        online,
+      ]),
+      null,
+    );
+    assert.equal(await signIn(`${SERVICE}/3`, [online, org]), null);
+    // An Enterprise portal's own host gets its token without an organisation check.
+    const lookupsBefore = lookups.length;
+    assert.deepEqual(
+      await signIn("https://gis.example.org/server/rest/services/A/FeatureServer/0", [enterprise]),
+      { portal: enterprise, token: `token-for-${enterprise}` },
+    );
+    assert.equal(lookups.length, lookupsBefore);
+    assert.equal(
+      await signIn("http://gis.example.org/server/rest/services/A/FeatureServer/0", [enterprise]),
+      null,
+    );
+    // A session whose token cannot be read is skipped; the next one is tried.
+    assert.deepEqual(await signIn(hosted(ORG), [online, org], [online]), {
+      portal: org,
+      token: `token-for-${org}`,
+    });
+    assert.equal(await signIn(hosted(ORG), [online], [online]), null);
   });
 
   it("keeps a layer placed another way with its group when services move past it", () => {

@@ -20,6 +20,7 @@ import {
   addRasterToMap,
   getGeometryEditTargetLayerId,
   isRecoverableNonTiledRasterError,
+  fetchPortalUser,
   isTrustedPortalServiceUrl,
   materializeEmbeddableVectorLayers,
 } from "@geolibre/plugins";
@@ -386,10 +387,8 @@ async function addImportedProjectRaster(
  * opacity and layer identity. {@link placeImportedServiceLayers} puts it in
  * draw order; visibility is applied by the caller.
  *
- * The layer uses an existing ArcGIS sign-in only when that portal trusts the
- * service's host (see {@link signedInPortalForServiceUrl}), and loads
- * anonymously otherwise. The project file chooses the host, so a token is
- * never offered to any other server.
+ * The layer uses an existing ArcGIS sign-in only where
+ * {@link signInForImportedService} allows it, and loads anonymously otherwise.
  *
  * @returns The new store layer's id.
  */
@@ -397,26 +396,44 @@ async function addImportedArcgisFeatureService(
   app: ReturnType<typeof createAppAPI>,
   service: ArcgisFeatureServiceImport,
   translate: Parameters<typeof arcgisLayerTokenProvider>[1],
+  orgIds: Map<string, Promise<string | undefined>>,
 ): Promise<string> {
-  const portal = signedInPortalForServiceUrl(service.url);
-  const tokenProvider = portal ? arcgisLayerTokenProvider(portal, translate) : undefined;
+  const signIn = await signInForImportedService(service.url, {
+    portals: Object.keys(useArcGISAuthStore.getState().connections),
+    token: (portal) => arcgisLayerTokenProvider(portal, translate)(),
+    orgId: (portal, token) => {
+      // One lookup per portal per import, however many services share it.
+      let lookup = orgIds.get(portal);
+      if (!lookup) {
+        lookup = fetchPortalUser(portal, token).then(
+          (user) => user.orgId,
+          () => undefined,
+        );
+        orgIds.set(portal, lookup);
+      }
+      return lookup;
+    },
+  });
+  const tokenProvider = signIn ? arcgisLayerTokenProvider(signIn.portal, translate) : undefined;
   const layerId = await addArcGISLayer(app, {
     layerType: "feature",
     name: service.name,
     sourceType: "url",
     // The loader's own requests send `token`; the provider renews it for
     // later ones (edits, refresh). Both stay in memory, never in the project.
-    token: await tokenProvider?.(),
+    token: signIn?.token,
     tokenProvider,
     url: service.url,
     zoomTo: false,
   });
   const store = useAppStore.getState();
+  // Through the store, which ignores a group the loaded project no longer has;
+  // placeImportedServiceLayers then puts the layer in draw order.
+  if (service.groupId) store.moveLayerToGroup(layerId, service.groupId);
   store.setLayerOpacity(layerId, service.opacity);
   const added = useAppStore.getState().layers.find((layer) => layer.id === layerId);
   if (added) {
     store.updateLayer(layerId, {
-      ...(service.groupId ? { groupId: service.groupId } : {}),
       metadata: {
         ...added.metadata,
         importedFrom: "arcgis-pro",
@@ -467,18 +484,47 @@ export function placeImportedServiceLayers(
 }
 
 /**
- * The signed-in ArcGIS portal whose token a service URL may receive, by the
- * rule a portal's own web map layers follow ({@link isTrustedPortalServiceUrl}):
- * the portal's host, or `*.arcgis.com` for ArcGIS Online and its organisation
- * URLs. ArcGIS Online's default portal is preferred when several qualify.
+ * The ArcGIS sign-in, if any, whose token an imported project's service may
+ * receive. The project file names the host, so the rule is stricter than for a
+ * web map the user opens:
  *
- * @returns The portal, or null when no signed-in portal trusts the host.
+ * - a host the signed-in portal trusts ({@link isTrustedPortalServiceUrl});
+ * - on ArcGIS Online's shared hosting (`services*.arcgis.com`), which any
+ *   organisation can publish to, only a service whose path carries the signed-in
+ *   user's own organisation id, so a crafted project cannot collect the token;
+ * - no other `*.arcgis.com` host.
+ *
+ * Sessions are tried with ArcGIS Online's default portal first. A session whose
+ * token cannot be read is skipped, so a public service still loads.
+ *
+ * @param url - The service URL from the project.
+ * @param deps - The signed-in portals, and lookups for a portal's current
+ *   token and its user's organisation id.
+ * @returns The portal and its current token, or null to load anonymously.
  */
-export function signedInPortalForServiceUrl(url: string): string | null {
-  const portals = Object.keys(useArcGISAuthStore.getState().connections).filter((portal) =>
-    isTrustedPortalServiceUrl(portal, url),
-  );
-  return portals.includes(ARCGIS_ONLINE_PORTAL) ? ARCGIS_ONLINE_PORTAL : (portals[0] ?? null);
+export async function signInForImportedService(
+  url: string,
+  deps: {
+    portals: string[];
+    token: (portal: string) => Promise<string | undefined>;
+    orgId: (portal: string, token: string) => Promise<string | undefined>;
+  },
+): Promise<{ portal: string; token: string } | null> {
+  const service = new URL(url);
+  const candidates = deps.portals
+    .filter((portal) => isTrustedPortalServiceUrl(portal, url))
+    .sort((a, b) => Number(b === ARCGIS_ONLINE_PORTAL) - Number(a === ARCGIS_ONLINE_PORTAL));
+  for (const portal of candidates) {
+    const sameHost = service.hostname.toLowerCase() === new URL(portal).hostname.toLowerCase();
+    const hostedOrgId = /^services\d*\.arcgis\.com$/i.test(service.hostname)
+      ? service.pathname.split("/")[1]
+      : undefined;
+    if (!sameHost && !hostedOrgId) continue;
+    const token = await deps.token(portal).catch(() => undefined);
+    if (!token) continue;
+    if (sameHost || (await deps.orgId(portal, token)) === hostedOrgId) return { portal, token };
+  }
+  return null;
 }
 
 /** What Import Layer Styles did, shown in its summary dialog. */
@@ -1053,6 +1099,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       }
       const projectLayerIds = imported.project.layers.map((layer) => layer.id);
       const placedServices: { layerId: string; nextLayerIds: string[] }[] = [];
+      const orgIds = new Map<string, Promise<string | undefined>>();
       for (const service of imported.services) {
         try {
           // The project's saved extent was applied by loadProject above, and
@@ -1060,7 +1107,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           // would fit the map to its own bounds and throw that extent away.
           const serviceLayerId =
             service.kind === "feature"
-              ? await addImportedArcgisFeatureService(app, service, (key) => t(key))
+              ? await addImportedArcgisFeatureService(app, service, (key) => t(key), orgIds)
               : await addArcGISLayer(app, {
                   itemId: service.itemId,
                   layerType: "vector-tile",

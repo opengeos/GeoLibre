@@ -72,9 +72,9 @@ export interface ArcgisFeatureServiceImport {
   arcgisLayerUri: string;
   /**
    * Ids of the project layers that follow this one in ArcGIS order. The
-   * service layer is inserted before the first of them still in the store, so
-   * it keeps its place among the file layers even when the browser build has
-   * dropped some of them.
+   * import ranks the service just ahead of the first of them that is still in
+   * the loaded project, so it keeps its place among the file layers even when
+   * the browser build has dropped some of them.
    */
   nextLayerIds: string[];
 }
