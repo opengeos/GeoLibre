@@ -9,6 +9,8 @@ import {
 } from "../apps/geolibre-desktop/src/lib/arcgis-project-import";
 import { aprx, groupLayer, hostedFeatureLayer } from "./helpers/arcgis-aprx-fixtures";
 import { loadArcgisFileGeodatabaseLayers } from "../apps/geolibre-desktop/src/lib/arcgis-gdb-import";
+import { useAppStore, withoutHistory } from "../packages/core/src/store";
+import { geojsonLayer } from "./helpers/layer-fixtures";
 
 function featureLayer(name: string, path: string) {
   return {
@@ -1179,13 +1181,16 @@ describe("ArcGIS Pro File Geodatabase layers", () => {
     );
   });
 
-  it("keeps one order across layers, rasters and services, minus unreadable layers", async () => {
+  it("keeps ArcGIS Pro's order across geodatabase layers, rasters and services", async () => {
+    const featureRoot =
+      "https://services3.example.com/abc/arcgis/rest/services/Water/FeatureServer";
     const result = importArcgisProject(
       JSON.stringify({
         type: "CIMMap",
         name: "Mixed",
         layerDefinitions: [
           gdbLayer("Parcels", "C:\\data\\city.gdb"),
+          hostedFeatureLayer("Mains", featureRoot, "3"),
           {
             type: "CIMGroupLayer",
             name: "Base",
@@ -1216,8 +1221,12 @@ describe("ArcGIS Pro File Geodatabase layers", () => {
       [...result.project.layers, ...result.rasters, ...result.services].find(
         (item) => item.name === name,
       )?.id;
-    // Bottom first: Roads, Lots, then the group (Imagery below Streets), then Parcels.
-    assert.deepEqual(result.layerOrder, ["Roads", "Lots", "Imagery", "Streets", "Parcels"].map(id));
+    // Bottom first: Roads, Lots, then the group (Imagery below Streets), then
+    // the Mains service, then Parcels on top.
+    assert.deepEqual(
+      result.layerOrder,
+      ["Roads", "Lots", "Imagery", "Streets", "Mains", "Parcels"].map(id),
+    );
     const lots = id("Lots");
     await loadArcgisFileGeodatabaseLayers(result, {
       start: async () => undefined,
@@ -1228,7 +1237,32 @@ describe("ArcGIS Pro File Geodatabase layers", () => {
     });
     // The unreadable feature class leaves the order with its layer.
     assert.ok(lots && !result.layerOrder.includes(lots));
-    assert.deepEqual(result.layerOrder, ["Roads", "Imagery", "Streets", "Parcels"].map(id));
+    assert.deepEqual(
+      result.layerOrder,
+      ["Roads", "Imagery", "Streets", "Mains", "Parcels"].map(id),
+    );
+
+    // As the desktop hook does: load the project, then add the raster and the
+    // services on top of the stack under new store ids as each lands (here in
+    // an order unlike ArcGIS Pro's), and apply the import order once.
+    useAppStore.getState().loadProject(result.project, null);
+    const storeIds = new Map(result.project.layers.map((layer) => [layer.id, layer.id]));
+    for (const [name, storeId] of [
+      ["Mains", "arcgis-layer-1"],
+      ["Imagery", "raster-1"],
+      ["Streets", "arcgis-layer-2"],
+    ]) {
+      useAppStore.getState().addLayer(geojsonLayer({ id: storeId, name }));
+      const importId = id(name);
+      assert.ok(importId);
+      storeIds.set(importId, storeId);
+    }
+    const order = result.layerOrder.flatMap((importId) => storeIds.get(importId) ?? []);
+    withoutHistory(() => useAppStore.getState().applyLayerOrder(order));
+    assert.deepEqual(
+      useAppStore.getState().layers.map((layer) => layer.name),
+      ["Roads", "Imagery", "Streets", "Mains", "Parcels"],
+    );
   });
 
   // When another project opens: before the reads, while the only layer is
