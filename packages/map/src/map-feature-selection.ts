@@ -204,8 +204,13 @@ export function attachFeatureSelection(
       cleanups.push(() => handler.enable());
     }
     canvas.style.cursor = "crosshair";
+    const previousTouchAction = canvas.style.touchAction;
+    if (request.shape !== "single") {
+      canvas.style.touchAction = "none";
+    }
     cleanups.push(() => {
       canvas.style.cursor = "";
+      canvas.style.touchAction = previousTouchAction;
     });
     state.active.current = true;
 
