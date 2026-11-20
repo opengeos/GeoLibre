@@ -74,7 +74,7 @@ export function MobileStatusPill({
   return (
     <div
       data-testid="mobile-status-pill"
-      className="flex h-7 shrink-0 items-center justify-between gap-2 border-t bg-muted/40 px-3 font-mono text-[11px] text-muted-foreground"
+      className="flex min-h-11 shrink-0 items-center justify-between gap-2 border-t bg-muted/40 px-2 font-mono text-[11px] text-muted-foreground"
     >
       <button
         type="button"
@@ -84,10 +84,10 @@ export function MobileStatusPill({
             code: coordinateEpsgCode,
           }),
         })}
-        className="inline-flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-foreground hover:bg-accent active:bg-accent"
+        className="inline-flex min-h-11 min-w-11 items-center gap-1.5 rounded px-2 text-foreground hover:bg-accent active:bg-accent"
       >
         {gpsStatus ? (
-          <Navigation className="h-3 w-3 shrink-0 text-emerald-500" aria-hidden="true" />
+          <Navigation className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-hidden="true" />
         ) : null}
         <span className="truncate">
           {gpsStatus
@@ -95,7 +95,7 @@ export function MobileStatusPill({
             : coordText}
         </span>
       </button>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1 pe-1">
         <span>
           {t("statusBar.zoom")}: {mapView.zoom.toFixed(1)}
         </span>
@@ -105,13 +105,13 @@ export function MobileStatusPill({
             onClick={onOpenDiagnostics}
             aria-label={t("mobileShell.status.diagnosticsLabel", { count: diagnosticsCount })}
             className={cn(
-              "inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-medium hover:bg-accent active:bg-accent",
+              "inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded px-2 font-medium hover:bg-accent active:bg-accent",
               diagnosticsErrorCount > 0
                 ? "text-red-700 dark:text-red-300"
                 : "text-amber-700 dark:text-amber-300",
             )}
           >
-            <Bug className="h-3 w-3" aria-hidden="true" />
+            <Bug className="h-3.5 w-3.5" aria-hidden="true" />
             <span>{diagnosticsCount}</span>
           </button>
         ) : null}

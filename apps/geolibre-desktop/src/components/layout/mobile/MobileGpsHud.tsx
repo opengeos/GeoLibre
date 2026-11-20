@@ -1,21 +1,27 @@
 import { useAppStore } from "@geolibre/core";
 import { cn } from "@geolibre/ui";
 import { Navigation, Sun } from "lucide-react";
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { formatAccuracy, formatSpeedKmh } from "../../../lib/gps-tracking";
-import { useScreenWakeLock } from "../../../lib/wake-lock";
+
+export interface MobileGpsHudProps {
+  keepAwake: boolean;
+  wakeLockSupported: boolean;
+  onToggleKeepAwake: () => void;
+}
 
 /**
  * Compact live GPS HUD pill displayed near the top-center of the map while GPS
  * tracking is active in Touch UI mode (GeoLibre#3537 Phase 4). Shows live
  * accuracy, optional speed, and a 1-tap Screen Wake Lock toggle.
  */
-export function MobileGpsHud() {
+export function MobileGpsHud({
+  keepAwake,
+  wakeLockSupported,
+  onToggleKeepAwake,
+}: MobileGpsHudProps) {
   const { t } = useTranslation();
   const gpsStatus = useAppStore((s) => s.gpsStatus);
-  const [keepAwake, setKeepAwake] = useState(true);
-  const wakeLock = useScreenWakeLock(Boolean(gpsStatus) && keepAwake);
 
   if (!gpsStatus) return null;
 
@@ -37,13 +43,13 @@ export function MobileGpsHud() {
         ±{accuracy}
         {speed ? ` · ${speed}` : ""}
       </span>
-      {wakeLock.supported ? (
+      {wakeLockSupported ? (
         <button
           type="button"
           aria-pressed={keepAwake}
           title={t("mobileShell.field.keepScreenAwake")}
           aria-label={t("mobileShell.field.keepScreenAwake")}
-          onClick={() => setKeepAwake((v) => !v)}
+          onClick={onToggleKeepAwake}
           className={cn(
             "ms-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
             keepAwake

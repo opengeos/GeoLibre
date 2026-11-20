@@ -175,7 +175,7 @@ export function StatusBar({
         compact ? "overflow-hidden" : "overflow-x-auto",
       )}
     >
-      {touchUiMode === "desktop" ? (
+      {!compact && touchUiMode === "desktop" ? (
         <button
           type="button"
           data-testid="status-bar-switch-to-touch"

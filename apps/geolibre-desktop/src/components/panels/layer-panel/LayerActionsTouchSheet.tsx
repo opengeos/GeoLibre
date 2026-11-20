@@ -415,7 +415,12 @@ export function LayerActionsTouchSheet({
   ) : undefined;
 
   return createPortal(
-    <div className="fixed inset-0 z-50">
+    <div
+      role="presentation"
+      className="fixed inset-0 z-50"
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
       <TouchMenuSheet
         open={open}
         onOpenChange={onOpenChange}

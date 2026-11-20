@@ -9,6 +9,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -235,6 +236,45 @@ export interface MobileShellSheetsProps {
 }
 
 /**
+ * Wraps a controlled desktop panel (`LayerPanel`, `StylePanel`) inside a
+ * keepMounted mobile `BottomSheet`, preserving vertical scroll offsets across
+ * tab switches even when the panel returns `null` while collapsed.
+ */
+function MobilePanelHost({ active, children }: { active: boolean; children: ReactNode }) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const savedScrollRef = useRef<number[]>([]);
+
+  useLayoutEffect(() => {
+    if (!active) return;
+    const host = hostRef.current;
+    if (!host || savedScrollRef.current.length === 0) return;
+    const scrollers = host.querySelectorAll<HTMLElement>(".overflow-y-auto, .overflow-auto");
+    scrollers.forEach((el, index) => {
+      const top = savedScrollRef.current[index];
+      if (typeof top === "number" && top > 0) el.scrollTop = top;
+    });
+  }, [active]);
+
+  const handleScrollCapture = useCallback(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const scrollers = host.querySelectorAll<HTMLElement>(".overflow-y-auto, .overflow-auto");
+    savedScrollRef.current = Array.from(scrollers, (el) => el.scrollTop);
+  }, []);
+
+  return (
+    <div
+      ref={hostRef}
+      data-mobile-panel-host=""
+      onScrollCapture={handleScrollCapture}
+      className="flex min-h-0 flex-1 flex-col"
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
  * Renders the unified BottomSheet hosts for Layers, Style, active plugin right
  * panels, and docked bottom panels (Attribute Table, Assistant, SQL, Dashboard)
  * when the phone mobile shell is active.
@@ -285,7 +325,7 @@ export function MobileShellSheets({
           bodyClassName="flex flex-col overflow-hidden"
           data-testid="mobile-sheet-layers"
         >
-          <div data-mobile-panel-host="" className="flex min-h-0 flex-1 flex-col">
+          <MobilePanelHost active={activeMobileTab === "layers"}>
             <SectionErrorBoundary label="Layer panel" displayName={t("shell.section.layerPanel")}>
               <LayerPanel
                 refresh={layerRefresh}
@@ -308,7 +348,7 @@ export function MobileShellSheets({
                 hideOwnRail
               />
             </SectionErrorBoundary>
-          </div>
+          </MobilePanelHost>
         </BottomSheet>
       ) : null}
       {layoutOptions.stylePanelVisible ? (
@@ -326,7 +366,7 @@ export function MobileShellSheets({
           bodyClassName="flex flex-col overflow-hidden"
           data-testid="mobile-sheet-style"
         >
-          <div data-mobile-panel-host="" className="flex min-h-0 flex-1 flex-col">
+          <MobilePanelHost active={activeMobileTab === "style"}>
             <SectionErrorBoundary label="Style panel" displayName={t("shell.section.stylePanel")}>
               <StylePanel
                 mapControllerRef={mapControllerRef}
@@ -342,7 +382,7 @@ export function MobileShellSheets({
                 hideOwnRail
               />
             </SectionErrorBoundary>
-          </div>
+          </MobilePanelHost>
         </BottomSheet>
       ) : null}
       <MobilePluginSheet activePanelId={expandedPluginPanelId} contentEl={dockContentEl} />

@@ -6,7 +6,6 @@ import { appendFieldCaptureFeature, useFieldCrosshairStore } from "../../../lib/
 import { triggerHaptic } from "../../../lib/haptics";
 import { registerMobileBackHandler } from "../../../lib/mobile-back-stack";
 import { notify } from "../../../lib/notify";
-import { useScreenWakeLock } from "../../../lib/wake-lock";
 
 /**
  * Fixed center-of-map crosshair digitizing overlay for outdoor touch field
@@ -17,11 +16,11 @@ import { useScreenWakeLock } from "../../../lib/wake-lock";
 export function FieldCrosshairOverlay() {
   const { t } = useTranslation();
   const active = useFieldCrosshairStore((s) => s.active);
+  const capturedCount = useFieldCrosshairStore((s) => s.capturedCount);
   const stop = useFieldCrosshairStore((s) => s.stop);
   const incrementCaptured = useFieldCrosshairStore((s) => s.incrementCaptured);
   const mapView = useAppStore((s) => s.mapView);
   const gpsStatus = useAppStore((s) => s.gpsStatus);
-  useScreenWakeLock(active);
 
   useEffect(() => {
     if (!active) return;
@@ -48,8 +47,9 @@ export function FieldCrosshairOverlay() {
     if (existing) {
       store.updateLayer(existing.id, { geojson: nextCollection });
     } else {
-      const id = store.addGeoJsonLayer(t("mobileShell.crosshair.layerName"), nextCollection);
-      store.updateLayer(id, { metadata: { fieldCrosshair: true } });
+      store.addGeoJsonLayer(t("mobileShell.crosshair.layerName"), nextCollection, undefined, null, {
+        metadata: { fieldCrosshair: true },
+      });
     }
     incrementCaptured();
     triggerHaptic("medium");
@@ -84,6 +84,11 @@ export function FieldCrosshairOverlay() {
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           <span>{t("mobileShell.crosshair.dropPoint")}</span>
+          {capturedCount > 0 ? (
+            <span className="rounded-full bg-primary-foreground/20 px-1.5 py-0.5 font-mono text-[10px] leading-none">
+              {capturedCount}
+            </span>
+          ) : null}
         </button>
         {gpsStatus ? (
           <button

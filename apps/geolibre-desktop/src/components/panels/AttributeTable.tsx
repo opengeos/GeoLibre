@@ -118,6 +118,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { isTauri } from "../../lib/tauri-io";
+import { useLayoutOptions } from "../../hooks/useLayoutOptions";
 import { useTouchUi } from "../../hooks/useTouchUi";
 import { isRefreshableLayer } from "../../lib/layer-refresh";
 import { isLocalFileLayer } from "../../lib/local-file-watch";
@@ -630,7 +631,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const selectedFeatureIds = useAppStore((s) => s.selectedFeatureIds);
   const selectFeature = useAppStore((s) => s.selectFeature);
   const selectFeatures = useAppStore((s) => s.selectFeatures);
-  const { mobileShell } = useTouchUi();
+  const { compact: layoutCompact, panelsHidden: layoutPanelsHidden } = useLayoutOptions();
+  const { mobileShell } = useTouchUi({ compact: layoutCompact, panelsHidden: layoutPanelsHidden });
   const [cardViewOverride, setCardViewOverride] = useState<boolean | null>(null);
   const useCardView = cardViewOverride ?? mobileShell;
   const attributeTableOpen = useAppStore((s) => s.ui.attributeTableOpen);
@@ -2548,13 +2550,15 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
               rows={sorted}
               columns={columns}
               selectedIds={selectedIdSet}
+              scrollElementRef={scrollViewportRef}
               onSelectRow={(featureId, event) =>
                 handleRowClick(featureId, event as unknown as ReactMouseEvent<HTMLTableRowElement>)
               }
               onZoomRow={(featureId) => {
-                const store = useAppStore.getState();
-                if (!store.ui.zoomToSelectedFeature) store.setZoomToSelectedFeature(true);
                 selectFeature(featureId);
+                if (layer) {
+                  mapControllerRef.current?.highlightFeature(layer, [featureId], { fit: true });
+                }
               }}
             />
           ) : (

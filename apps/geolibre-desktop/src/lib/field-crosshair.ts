@@ -1,8 +1,6 @@
 import { create } from "zustand";
 import type { Feature, FeatureCollection, Point } from "geojson";
 
-export const FIELD_CROSSHAIR_LAYER_ID = "field-crosshair-captures";
-
 export interface FieldCrosshairPoint {
   lng: number;
   lat: number;
@@ -53,13 +51,28 @@ export function buildFieldCaptureFeature(
   };
 }
 
+/** Compute the next monotonic capture index even if earlier points were deleted. */
+function nextFieldCaptureIndex(features: readonly Feature[]): number {
+  let maxIndex = features.length;
+  for (const feature of features) {
+    if (typeof feature.id === "string") {
+      const match = /^field-pt-(\d+)$/.exec(feature.id);
+      if (match) {
+        const parsed = Number.parseInt(match[1], 10);
+        if (Number.isFinite(parsed) && parsed > maxIndex) maxIndex = parsed;
+      }
+    }
+  }
+  return maxIndex + 1;
+}
+
 /** Append a captured point to an existing GeoJSON collection immutably. */
 export function appendFieldCaptureFeature(
   existing: FeatureCollection | undefined,
   point: FieldCrosshairPoint,
 ): FeatureCollection {
   const prevFeatures = existing?.features ?? [];
-  const feature = buildFieldCaptureFeature(point, prevFeatures.length + 1);
+  const feature = buildFieldCaptureFeature(point, nextFieldCaptureIndex(prevFeatures));
   return {
     type: "FeatureCollection",
     features: [...prevFeatures, feature],

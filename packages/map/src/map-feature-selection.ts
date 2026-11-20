@@ -43,6 +43,32 @@ export function cancelActiveFeatureSelection(): void {
   }
 }
 
+export interface FeatureSelectionUiState {
+  shape: FeatureSelectionShape | null;
+  vertexCount: number;
+}
+
+const IDLE_SELECTION_UI_STATE: FeatureSelectionUiState = { shape: null, vertexCount: 0 };
+let selectionUiState: FeatureSelectionUiState = IDLE_SELECTION_UI_STATE;
+const selectionUiListeners = new Set<() => void>();
+
+function updateFeatureSelectionUiState(shape: FeatureSelectionShape | null, vertexCount: number) {
+  if (selectionUiState.shape === shape && selectionUiState.vertexCount === vertexCount) return;
+  selectionUiState = shape === null ? IDLE_SELECTION_UI_STATE : { shape, vertexCount };
+  for (const listener of selectionUiListeners) listener();
+}
+
+export function getFeatureSelectionUiState(): FeatureSelectionUiState {
+  return selectionUiState;
+}
+
+export function subscribeFeatureSelectionUiState(listener: () => void): () => void {
+  selectionUiListeners.add(listener);
+  return () => {
+    selectionUiListeners.delete(listener);
+  };
+}
+
 /** Minimum screen distance between freehand vertices, avoiding oversized rings. */
 const FREEHAND_MIN_POINT_DISTANCE = 3;
 /** Maximum screen distance between duplicate clicks generated before `dblclick`. */
@@ -146,7 +172,10 @@ export function attachFeatureSelection(
       if (!replacingGesture && useAppStore.getState().featureSelectionActive) {
         useAppStore.getState().setFeatureSelectionActive(false);
       }
-      if (!replacingGesture) onEnd?.();
+      if (!replacingGesture) {
+        updateFeatureSelectionUiState(null, 0);
+        onEnd?.();
+      }
     };
 
     const overlay = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -182,7 +211,9 @@ export function attachFeatureSelection(
 
     let points: PointLike[] = [];
     let dragging = false;
+    updateFeatureSelectionUiState(request.shape, 0);
     const render = () => {
+      updateFeatureSelectionUiState(request.shape, points.length);
       if (points.length === 0) return shape.setAttribute("d", "");
       if (request.shape === "rectangle" && points.length > 1) {
         const [a, b] = points;

@@ -137,7 +137,7 @@ export function MapContextMenu({
     const tracker = new ContextMenuGestureTracker(openAt);
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (isGeoEditorUsingRightClick()) return;
+      if (isGeoEditorUsingRightClick() || useAppStore.getState().featureSelectionActive) return;
       tracker.pointerDown(event);
     };
     const handlePointerMove = (event: PointerEvent) => tracker.pointerMove(event);

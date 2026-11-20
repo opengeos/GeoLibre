@@ -522,15 +522,14 @@ export const MapCanvas = memo(function MapCanvas({
         const queryIds = identifyStyleLayerIds(layer).filter((id) => map.getLayer(id));
         const touch = isTouchIdentifyActive(lastPointerTypeRef.current);
         const radius = touch ? TOUCH_IDENTIFY_HIT_RADIUS_PX : 4;
-        const rendered = sortIdentifyFeaturesByGeometryPriority(
-          map.queryRenderedFeatures(
-            [
-              [point.x - radius, point.y - radius],
-              [point.x + radius, point.y + radius],
-            ],
-            { layers: queryIds },
-          ),
+        const hits = map.queryRenderedFeatures(
+          [
+            [point.x - radius, point.y - radius],
+            [point.x + radius, point.y + radius],
+          ],
+          { layers: queryIds },
         );
+        const rendered = touch ? sortIdentifyFeaturesByGeometryPriority(hits) : hits;
         return rendered[0] ? findFeatureId(layer, rendered[0]) : null;
       },
       onDiagnostic: (event) => onMapDiagnosticEventRef.current?.(event),
@@ -646,14 +645,15 @@ export const MapCanvas = memo(function MapCanvas({
         const acceptHit = createGlobalIdentifyHitDeduper();
         const queryLayerIds = [...owners.keys()];
         const touchIdentify = isTouchIdentifyActive(lastPointerTypeRef.current);
-        const rendered =
+        const rawRendered =
           queryLayerIds.length === 0
             ? []
-            : sortIdentifyFeaturesByGeometryPriority(
-                map.queryRenderedFeatures(buildIdentifyQueryGeometry(event.point, touchIdentify), {
-                  layers: queryLayerIds,
-                }),
-              );
+            : map.queryRenderedFeatures(buildIdentifyQueryGeometry(event.point, touchIdentify), {
+                layers: queryLayerIds,
+              });
+        const rendered = touchIdentify
+          ? sortIdentifyFeaturesByGeometryPriority(rawRendered)
+          : rawRendered;
         for (const feature of rendered) {
           const owner = owners.get(feature.layer.id);
           if (!owner) continue;
@@ -1133,11 +1133,13 @@ export const MapCanvas = memo(function MapCanvas({
       }
 
       const touchIdentify = isTouchIdentifyActive(lastPointerTypeRef.current);
-      const [feature] = sortIdentifyFeaturesByGeometryPriority(
-        map.queryRenderedFeatures(buildIdentifyQueryGeometry(event.point, touchIdentify), {
+      const rawHits = map.queryRenderedFeatures(
+        buildIdentifyQueryGeometry(event.point, touchIdentify),
+        {
           layers: queryLayerIds,
-        }),
+        },
       );
+      const [feature] = touchIdentify ? sortIdentifyFeaturesByGeometryPriority(rawHits) : rawHits;
       if (!feature) {
         clearIdentifyResult();
         return;

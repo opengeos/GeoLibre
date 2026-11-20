@@ -56,7 +56,10 @@ export {
   FEATURE_SELECTION_FINISH_EVENT,
   FEATURE_SELECTION_UNDO_EVENT,
   finishFeatureSelection,
+  getFeatureSelectionUiState,
+  subscribeFeatureSelectionUiState,
   undoFeatureSelectionVertex,
+  type FeatureSelectionUiState,
 } from "./map-feature-selection";
 export { MAX_MOBILE_PIXEL_RATIO, resolveMapPixelRatio } from "./mobile-pixel-ratio";
 export {
