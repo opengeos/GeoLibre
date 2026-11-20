@@ -182,9 +182,13 @@ export interface LayersSlice {
   /**
    * Rearrange layers into `ids` order (store order: bottom first) in one
    * update. The listed layers take the positions they already occupy between
-   * them, so layers left out of `ids` keep their place; unknown and repeated
-   * ids are ignored. Group members are then pulled back into one contiguous
-   * block per group. One `set()`, so it records at most one undo step; call it
+   * them, and layers left out of `ids` are not reordered by that step; unknown
+   * and repeated ids are ignored. Group members are then pulled back into one
+   * contiguous block per group, anchored at the group's bottom-most member.
+   * Contiguity wins over `ids`: a group member listed apart from its group
+   * ends up in the group's block, and an unlisted layer between two members
+   * of one group moves out of the way. One `set()`, so it records at most one
+   * undo step; call it
    * through `withoutHistory` when the order is not the user's own edit (an
    * import placing the layers it added).
    */

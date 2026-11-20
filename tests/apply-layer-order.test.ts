@@ -61,6 +61,14 @@ describe("applyLayerOrder", () => {
     useAppStore.getState().applyLayerOrder(["g2", "y", "x", "g1"]);
     assert.deepEqual(ids(), ["g2", "g1", "y", "x"]);
   });
+
+  it("lets group contiguity override the requested order and move unlisted layers", () => {
+    start([layer("g1", "g"), layer("g2", "g"), layer("x"), layer("a")]);
+    // Placing a and g1 swaps their slots ([a, g2, x, g1]), then g1 is pulled
+    // down beside g2, which pushes the unlisted x up past it.
+    useAppStore.getState().applyLayerOrder(["a", "g1"]);
+    assert.deepEqual(ids(), ["a", "g2", "g1", "x"]);
+  });
 });
 
 describe("moveLayer", () => {
