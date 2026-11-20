@@ -22,7 +22,10 @@ import {
   translateCimSymbol,
 } from "@geolibre/map/style-import";
 import { fillPaint } from "../packages/map/src/style-mapper";
-import { importArcgisProject } from "../apps/geolibre-desktop/src/lib/arcgis-project-import";
+import {
+  dropArcgisImportLayers,
+  importArcgisProject,
+} from "../apps/geolibre-desktop/src/lib/arcgis-project-import";
 
 const rgb = (r: number, g: number, b: number, a = 100) => ({
   type: "CIMRGBColor",
@@ -1082,5 +1085,18 @@ describe("ArcGIS Pro project import with thematic renderers", () => {
     // The default symbol still colours the layer it could not classify.
     assert.equal(heat.style.fillColor, "#090909");
     assert.equal(heat.style.vectorStyleMode, "single");
+  });
+
+  it("drops a layer's symbology notes when the caller drops the layer", () => {
+    const result = importArcgisProject(aprx(), "C:\\work\\planning.aprx");
+    dropArcgisImportLayers(result, new Set([layerNamed(result.project.layers, "Heat").id]));
+    assert.deepEqual(
+      result.project.layers.map((layer) => layer.name),
+      ["Density", "Zoning"],
+    );
+    assert.equal(
+      result.warnings.some((warning) => warning.symbologyIssue),
+      false,
+    );
   });
 });
