@@ -19,8 +19,8 @@ export function hasPathTraversal(path: string): boolean {
  * Matches the raw path (not a trimmed copy): a whitespace-padded value would
  * pass a trimmed check but reach the file read unchanged and fail there, so it
  * is rejected up front. Accepts POSIX paths and Windows drive-letter paths only.
- * UNC paths (`\\server\share`, and the `//server/share` form Windows also
- * accepts) are deliberately rejected: reading one can make Windows
+ * UNC paths (`\\server\share`, and the `//server/share` and mixed
+ * `/\server\share` forms Windows also accepts) are deliberately rejected: reading one can make Windows
  * auto-authenticate against a remote host (NTLM hash capture), and a remote
  * share is not a supported local data source.
  *
@@ -32,5 +32,5 @@ export function hasPathTraversal(path: string): boolean {
  * @returns True when the path is an absolute POSIX or Windows path.
  */
 export function isAbsoluteFilesystemPath(path: string): boolean {
-  return (path.startsWith("/") && !path.startsWith("//")) || /^[a-z]:[\\/]/i.test(path);
+  return (path.startsWith("/") && !/^[\\/]{2}/.test(path)) || /^[a-z]:[\\/]/i.test(path);
 }

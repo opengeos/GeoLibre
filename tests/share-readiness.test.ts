@@ -196,6 +196,12 @@ describe("collectShareSources", () => {
           type: "cog",
           source: { url: "//server/share/dem.tif" },
         }),
+        layer({
+          id: "d",
+          name: "CDN parcels",
+          type: "geojson",
+          source: { type: "geojson", data: "//cdn.example.com/parcels.json" },
+        }),
       ],
     });
     assert.deepEqual(
@@ -205,6 +211,10 @@ describe("collectShareSources", () => {
         ["b", "local", "private-host", null],
         // Not a local path any more (a UNC share), but still not the recipient's.
         ["c", "local", "local-file", null],
+        // A protocol-relative URL cannot be told from a UNC share, so it is
+        // flagged the same way (as it was before UNC paths stopped counting
+        // as absolute local paths).
+        ["d", "local", "local-file", null],
       ],
     );
   });
