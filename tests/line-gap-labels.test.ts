@@ -423,6 +423,15 @@ describe("hasLineGapLabels", () => {
     assert.equal(hasLineGapLabels([contourLayer()]), true);
   });
 
+  it("keeps ordinary labels while a priority expression is set", () => {
+    const layer = contourLayer();
+    layer.style = {
+      ...layer.style,
+      labels: { ...gapLabels, priorityExpression: '["get", "elev"]' },
+    };
+    assert.equal(hasLineGapLabels([layer]), false);
+  });
+
   it("keeps ordinary labels while a feature filter is active", () => {
     // MapLibre filters after collision placement, so a hidden line could
     // otherwise take a visible line's label spot.

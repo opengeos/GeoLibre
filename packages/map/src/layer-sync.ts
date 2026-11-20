@@ -2678,7 +2678,10 @@ function lineGapWanted(labels: LabelStyle): boolean {
     Boolean(labels.expression.trim() || labels.field) &&
     // The gap is cut at one size per label, so a size expression (which can
     // vary per feature) keeps the ordinary line labels.
-    !parseLabelOverride(labels.sizeExpression, "number")
+    !parseLabelOverride(labels.sizeExpression, "number") &&
+    // Placement gives space to features in source order, so a priority
+    // expression (lower value placed first) keeps the ordinary labels too.
+    !parseLabelOverride(labels.priorityExpression, "number")
   );
 }
 
