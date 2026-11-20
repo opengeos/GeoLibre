@@ -549,15 +549,9 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
                 markerGraphics: [
                   {
                     type: "CIMMarkerGraphic",
+                    // A rounded shape: curved, but more than the single arc of a circle.
                     geometry: {
-                      rings: [
-                        [
-                          [0, 0],
-                          [1, 2],
-                          [2, 0],
-                          [0, 0],
-                        ],
-                      ],
+                      curveRings: [[[0, 0], { a: [[2, 0], [1, 0], 0, 1] }, [2, 2], [0, 0]]],
                     },
                     symbol: {
                       type: "CIMPolygonSymbol",

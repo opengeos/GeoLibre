@@ -207,13 +207,11 @@ function readSymbol(symbol: CimObject, notes: Set<string>): SymbolInfo {
       }
       info.markerRead = true;
       info.markerSize = numberOf(layer.size) ?? undefined;
-      // Drawn as a circle either way. A glyph, or graphics other than a circle (Pro writes a
-      // circle as `curveRings`), is a shape GeoLibre does not carry.
+      // Drawn as a circle either way. A glyph, or graphics other than a circle, is a shape
+      // GeoLibre does not carry.
       const circular =
         layerType === "CIMVectorMarker" &&
-        arrayOf(layer.markerGraphics).every(
-          (graphic) => objectOf(graphic.geometry)?.curveRings !== undefined,
-        );
+        arrayOf(layer.markerGraphics).every((graphic) => isCircle(objectOf(graphic.geometry)));
       if (!circular) notes.add("marker shape (drawn as a circle)");
       // A vector marker draws its graphics, a character marker its glyph, each with a nested
       // symbol whose fill and outline are the marker's colours.
@@ -404,6 +402,27 @@ function hsvToRgb(hue: number, saturation: number, value: number): [number, numb
               : [chroma, 0, second];
   const match = v - chroma;
   return [(r + match) * 255, (g + match) * 255, (b + match) * 255];
+}
+
+/**
+ * Whether a marker graphic is a full circle as Pro writes one: a single curve ring holding its
+ * start point and one arc (`a`) that ends back at that point. A rounded square or any other curved
+ * shape has more segments.
+ */
+function isCircle(geometry: CimObject | undefined): boolean {
+  const rings = geometry?.curveRings;
+  if (!Array.isArray(rings) || rings.length !== 1) return false;
+  const ring = rings[0];
+  if (!Array.isArray(ring) || ring.length !== 2) return false;
+  const [start, segment] = ring;
+  const arc = objectOf(segment)?.a;
+  return (
+    Array.isArray(start) &&
+    Array.isArray(arc) &&
+    Array.isArray(arc[0]) &&
+    arc[0][0] === start[0] &&
+    arc[0][1] === start[1]
+  );
 }
 
 function round(value: number): number {
