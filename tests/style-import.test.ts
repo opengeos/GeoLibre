@@ -267,7 +267,7 @@ describe("what a failed import calls the thing it could not read", () => {
     ["a QML with no renderer", "<qgis></qgis>"],
     [
       "a .lyrx with an unsupported renderer",
-      '{"type":"CIMLayerDocument","layerDefinitions":[{"type":"CIMFeatureLayer","renderer":{"type":"CIMUniqueValueRenderer"}}]}',
+      '{"type":"CIMLayerDocument","layerDefinitions":[{"type":"CIMFeatureLayer","renderer":{"type":"CIMHeatMapRenderer"}}]}',
     ],
   ] as const) {
     it(`never says "file" for ${label}`, () => {

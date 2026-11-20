@@ -203,7 +203,7 @@ This is easy to overlook but determines whether GeoLibre can fit into your exist
 | **Mapbox GL / MapLibre style** | `.json` | Import + export |
 | **OGC SLD** | `.sld` `.xml` | Import + export |
 | **QGIS QML** | `.qml` | Import + export |
-| **ArcGIS Pro layer file** | `.lyrx` | **Import only**, single symbol renderer; other renderers are refused by name |
+| **ArcGIS Pro layer file** | `.lyrx` | **Import only**: single symbol, unique values and graduated colours; other renderers are refused by name |
 
 > **Key insight**: Symbology configured in QGIS can be brought over, and vice versa. Style import format is **determined by content, not by extension** — a file with the wrong extension will still be recognized.
 

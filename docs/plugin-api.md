@@ -952,7 +952,7 @@ app.setLayerVisibility?.(rasterLayerId, false);
 
 ## Layer styles
 
-`importLayerStyle` applies a style written in another format to a layer, like the Layers panel's "Import style": an OGC SLD, a QGIS QML, an ArcGIS Pro layer file (`.lyrx`) or a Mapbox GL style JSON, detected from the content. The style is merged over the layer's current one, so fields it does not describe keep their values, and it is saved with the project. Like the Layers panel, it styles only GeoJSON and vector-tile layers; it accepts any such layer id, not only the plugin's own, and throws for an unknown one.
+`importLayerStyle` applies a style written in another format to a layer, like the Layers panel's "Import style": an OGC SLD, a QGIS QML, an ArcGIS Pro layer file (`.lyrx`) or a Mapbox GL style JSON, detected from the content. The style is merged over the layer's current one, so fields it does not describe keep their values, and it is saved with the project. A `.lyrx` symbol is the exception: it is a whole symbol, so it also switches off the layer's dash, blur, line decorations, fill pattern, inverted fill, icon marker, heat map or cluster renderer and proportional sizing, and resets outline transparency, widths and circle radius to GeoLibre's defaults where the file does not set them. Like the Layers panel, it styles only GeoJSON and vector-tile layers; it accepts any such layer id, not only the plugin's own, and throws for an unknown one.
 
 A plugin that adds features from a web service can dress them as the service does. A GeoServer, for example, returns a layer's SLD for WMS `GetStyles`:
 
