@@ -17,6 +17,8 @@ export interface ArcgisProjectImportWarning {
     | "format"
     | "file-geodatabase"
     | "file-geodatabase-raster"
+    | "file-geodatabase-read"
+    | "file-geodatabase-crs"
     | "network-path"
     | "service"
     | "service-unavailable"
@@ -38,6 +40,13 @@ export interface ArcgisProjectImportResult {
   rasters: ArcgisRasterImport[];
   services: ArcgisServiceImport[];
   /**
+   * Feature classes read from a local File Geodatabase. Each is already in
+   * `project.layers` (in table-of-contents order, grouped and styled) as a
+   * GeoJSON layer with no features yet; the caller fills it through the
+   * desktop sidecar or drops it. Empty unless `readFileGeodatabase` was set.
+   */
+  fileGeodatabaseLayers: ArcgisFileGeodatabaseImport[];
+  /**
    * Import ids of every layer, raster and service, bottom first as the store
    * keeps them (ArcGIS Pro lists them top first). Rasters and services join
    * the store only after the project loads, each on top, so the caller puts
@@ -45,6 +54,25 @@ export interface ArcgisProjectImportResult {
    */
   layerOrder: string[];
   warnings: ArcgisProjectImportWarning[];
+}
+
+export interface ArcgisFileGeodatabaseImport {
+  /** Id of the placeholder layer in `project.layers`. */
+  id: string;
+  name: string;
+  /** Absolute path of the `.gdb` folder. */
+  gdbPath: string;
+  /** Feature class name inside the geodatabase. */
+  featureClass: string;
+}
+
+export interface ArcgisProjectImportOptions {
+  /**
+   * Keep File Geodatabase feature classes as layers for the caller to read,
+   * rather than reporting them as unsupported. Only the desktop build can read
+   * a geodatabase (through the Python sidecar's GDAL).
+   */
+  readFileGeodatabase?: boolean;
 }
 
 export interface ArcgisRasterImport {
@@ -151,6 +179,7 @@ export interface ArcgisProjectReader {
 export function readArcgisProject(
   data: ArrayBuffer | Uint8Array | string,
   sourcePath: string,
+  options: ArcgisProjectImportOptions = {},
 ): ArcgisProjectReader {
   const files = readCimFiles(data, sourcePath);
   const maps = findMaps(files);
@@ -160,7 +189,7 @@ export function readArcgisProject(
     importMap: (index = 0) => {
       const map = maps[index];
       if (!map) throw new Error("This ArcGIS Pro project has no such map.");
-      return importMap(map, files, sourcePath);
+      return importMap(map, files, sourcePath, options);
     },
   };
 }
@@ -172,14 +201,16 @@ export function readArcgisProject(
 export function importArcgisProject(
   data: ArrayBuffer | Uint8Array | string,
   sourcePath: string,
+  options: ArcgisProjectImportOptions = {},
 ): ArcgisProjectImportResult {
-  return readArcgisProject(data, sourcePath).importMap();
+  return readArcgisProject(data, sourcePath, options).importMap();
 }
 
 function importMap(
   map: CimObject,
   files: Map<string, CimObject>,
   sourcePath: string,
+  options: ArcgisProjectImportOptions,
 ): ArcgisProjectImportResult {
   const projectName = stringValue(map.name) || fileStem(sourcePath) || "Imported ArcGIS Project";
   const { view: mapView, extentRestored } = parseMapView(map);
@@ -192,9 +223,11 @@ function importMap(
   const context: ImportContext = {
     files,
     sourcePath,
+    readFileGeodatabase: options.readFileGeodatabase === true,
     layers: [],
     rasters: [],
     services: [],
+    fileGeodatabaseLayers: [],
     order: [],
     groups: [],
     warnings,
@@ -217,6 +250,7 @@ function importMap(
     project,
     rasters: context.rasters,
     services: context.services,
+    fileGeodatabaseLayers: context.fileGeodatabaseLayers,
     layerOrder: context.order.reverse(),
     warnings,
   };
@@ -269,6 +303,7 @@ export function dropArcgisImportLayers(
   imported.project.layers = kept(imported.project.layers);
   imported.rasters = kept(imported.rasters);
   imported.services = kept(imported.services);
+  imported.fileGeodatabaseLayers = kept(imported.fileGeodatabaseLayers);
   imported.layerOrder = imported.layerOrder.filter((id) => !ids.has(id));
   imported.warnings = imported.warnings.filter(
     (warning) => warning.layerId === undefined || !ids.has(warning.layerId),
@@ -280,10 +315,13 @@ export function dropArcgisImportLayers(
 interface ImportContext {
   files: Map<string, CimObject>;
   sourcePath: string;
+  /** Keep File Geodatabase feature classes for the caller to read. */
+  readFileGeodatabase: boolean;
   /** Layers, rasters and services in CIM (top-first) order. */
   layers: GeoLibreLayer[];
   rasters: ArcgisRasterImport[];
   services: ArcgisServiceImport[];
+  fileGeodatabaseLayers: ArcgisFileGeodatabaseImport[];
   /** Ids of layers, rasters and services in CIM (top-first) order. */
   order: string[];
   groups: LayerGroup[];
@@ -537,7 +575,33 @@ function importLayer(
     });
     return;
   }
-  const resolved = resolveDataSource(connection, sourcePath);
+  const resolved = resolveDataSource(connection, sourcePath, context.readFileGeodatabase);
+  if (resolved.fileGeodatabase) {
+    context.fileGeodatabaseLayers.push({ id, name, ...resolved.fileGeodatabase });
+    context.order.push(id);
+    layers.push({
+      id,
+      name,
+      type: "geojson",
+      source: { type: "geojson" },
+      visible,
+      opacity: layerOpacity(layer),
+      style: parseStyle(layer),
+      sourcePath: resolved.fileGeodatabase.gdbPath,
+      // The same shape the Add data → File geodatabase source saves, so the
+      // features are embedded on save (a .gdb cannot be re-read on reopen).
+      metadata: {
+        sourceKind: "gdb",
+        gdbLayer: resolved.fileGeodatabase.featureClass,
+        importedFrom: "arcgis-pro",
+        arcgisLayerUri: stringValue(layer.uRI),
+        arcgisDataset: stringValue(connection?.dataset),
+        arcgisWorkspaceFactory: stringValue(connection?.workspaceFactory),
+      },
+      ...(parentId ? { groupId: parentId } : {}),
+    });
+    return;
+  }
   if (!resolved.path) {
     warnings.push({
       layerName: name,
@@ -670,7 +734,12 @@ function isFeatureServiceFactory(connection: CimObject): boolean {
 function resolveDataSource(
   connection: CimObject | undefined,
   projectPath: string,
-): { path?: string; reason?: ArcgisProjectImportWarning["reason"] } {
+  readFileGeodatabase: boolean,
+): {
+  path?: string;
+  fileGeodatabase?: { gdbPath: string; featureClass: string };
+  reason?: ArcgisProjectImportWarning["reason"];
+} {
   if (!connection) return { reason: "missing-source" };
   if (stringValue(connection.url) || isFeatureServiceFactory(connection)) {
     return { reason: "service" };
@@ -695,7 +764,14 @@ function resolveDataSource(
     // the desktop build can add those feature classes another way. The
     // workspace path is checked as well as the factory because not every
     // connection names one, and a .gdb workspace is a geodatabase either way.
-    return { reason: "file-geodatabase" };
+    if (!readFileGeodatabase) return { reason: "file-geodatabase" };
+    if (!workspace || !dataset) return { reason: "missing-source" };
+    return {
+      fileGeodatabase: {
+        gdbPath: resolveRelativePath(workspace, projectPath),
+        featureClass: dataset,
+      },
+    };
   } else if (dataset && extension(workspace) === "gpkg") {
     path = workspace;
   } else if (!path && dataset) {

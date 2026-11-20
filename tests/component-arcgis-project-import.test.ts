@@ -1,4 +1,4 @@
-import { act, cleanup, render, resetStores, useAppStore, waitFor } from "./helpers/dom";
+import { act, cleanup, mockFetch, render, resetStores, useAppStore, waitFor } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { afterEach, describe, it, mock } from "node:test";
 import { createElement } from "react";
@@ -256,6 +256,162 @@ describe("Import ArcGIS Pro project", () => {
       assert.equal(actions().arcgisImportWarnings, null);
     } finally {
       loader.mock.restore();
+    }
+  });
+});
+
+/** A feature layer whose data is a feature class in a File Geodatabase. */
+function gdbLayer(name: string, gdbPath: string) {
+  return {
+    type: "CIMFeatureLayer",
+    name,
+    featureTable: {
+      dataConnection: {
+        workspaceFactory: "FileGDB",
+        workspaceConnectionString: `DATABASE=${gdbPath}`,
+        dataset: name.toLowerCase(),
+      },
+    },
+  };
+}
+
+const PROJECT_PATH = "/work/projects/survey.mapx";
+const GDB_PATH = "/work/data/city.gdb";
+const PARCELS: GeoJSON.FeatureCollection = {
+  type: "FeatureCollection",
+  features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [1, 2] } }],
+};
+
+/**
+ * Run the import as the desktop build does: a native file dialog, local file
+ * reads and the Python sidecar, all answered through a stand-in for Tauri's
+ * IPC and the sidecar's HTTP API. The geodatabase lists only "parcels".
+ *
+ * @param project - The `.mapx` document the dialog picks.
+ * @param holdListing - Resolves when the geodatabase listing may answer.
+ */
+function desktopImport(project: unknown, holdListing: Promise<void> = Promise.resolve()) {
+  const requests: string[] = [];
+  const globals = globalThis as { window: Window & { __TAURI_INTERNALS__?: unknown } };
+  globals.window.__TAURI_INTERNALS__ = {
+    invoke: async (command: string, args: { path?: string; paths?: string[] }) => {
+      switch (command) {
+        case "plugin:dialog|open":
+          return PROJECT_PATH;
+        case "plugin:fs|read_file":
+          return new TextEncoder().encode(
+            JSON.stringify(args.path === PROJECT_PATH ? project : PARCELS),
+          ).buffer;
+        case "start_geolibre_sidecar":
+          return { baseUrl: "http://127.0.0.1:8765", port: 8765, token: "t" };
+        case "plugin:path|resolve_directory":
+          return "/tmp";
+        case "plugin:path|join":
+          return args.paths?.join("/");
+        default:
+          return null;
+      }
+    },
+  };
+  mockFetch(async (input) => {
+    const url = String(input);
+    requests.push(url.replace(/^.*\/conversion\//, ""));
+    if (url.endsWith("/vector-layers")) {
+      await holdListing;
+      return Response.json({
+        id: "list",
+        status: "succeeded",
+        result: {
+          layers: [{ name: "parcels", feature_count: 1, geometry_type: "Point", crs: "EPSG:4326" }],
+        },
+      });
+    }
+    return Response.json({ id: "read", status: "succeeded" });
+  });
+  return {
+    requests,
+    restore: () => {
+      delete globals.window.__TAURI_INTERNALS__;
+    },
+  };
+}
+
+describe("Import ArcGIS Pro project with File Geodatabase layers (desktop)", () => {
+  it("loads readable feature classes in ArcGIS Pro's order and reports the rest", async () => {
+    const loader = mock.method(VectorTileLayer, "fromPortalItem", async (itemId: string) => {
+      return runtimeLayer(itemId) as never;
+    });
+    const desktop = desktopImport({
+      type: "CIMMapDocument",
+      mapDefinition: {
+        type: "CIMMap",
+        name: "Imported map",
+        // Top first: Parcels draws above the Streets service.
+        layerDefinitions: [
+          gdbLayer("Parcels", GDB_PATH),
+          { type: "CIMGroupLayer", name: "Old", layerDefinitions: [gdbLayer("Gone", GDB_PATH)] },
+          { type: "CIMVectorTileLayer", name: "Streets", sourceURI: "0".repeat(32) },
+        ],
+      },
+    });
+    try {
+      const actions = renderActions();
+      await act(() => actions().handleImportArcgisProject());
+      // Streets joined the store after the load, on top; it is put back below.
+      assert.deepEqual(layerNames(), ["Streets", "Parcels"]);
+      const parcels = useAppStore.getState().layers[1];
+      assert.equal(parcels.geojson?.features.length, 1);
+      assert.equal(parcels.metadata.sourceCrs, "EPSG:4326");
+      // The group held only the missing feature class.
+      assert.deepEqual(useAppStore.getState().layerGroups, []);
+      assert.deepEqual(
+        actions().arcgisImportWarnings?.map((warning) => [warning.layerName, warning.reason]),
+        [
+          ["Imported map", "map-extent"],
+          ["Gone", "missing-source"],
+        ],
+      );
+      // One listing for the shared geodatabase, one read for Parcels.
+      assert.deepEqual(desktop.requests, ["vector-layers", "vector-to-vector"]);
+    } finally {
+      desktop.restore();
+      loader.mock.restore();
+    }
+  });
+
+  it("adds nothing to a project opened while a geodatabase was being read", async () => {
+    let releaseListing = () => {};
+    const listing = new Promise<void>((resolve) => {
+      releaseListing = resolve;
+    });
+    const desktop = desktopImport(
+      {
+        type: "CIMMapDocument",
+        mapDefinition: {
+          type: "CIMMap",
+          name: "Imported map",
+          layerDefinitions: [gdbLayer("Parcels", GDB_PATH)],
+        },
+      },
+      listing,
+    );
+    try {
+      const actions = renderActions();
+      const importing = actions().handleImportArcgisProject();
+      await waitFor(() => assert.deepEqual(desktop.requests, ["vector-layers"]));
+      act(() => useAppStore.getState().loadProject({ ...createEmptyProject(), name: "Opened" }));
+      const history = pastLength();
+      releaseListing();
+      await act(() => importing);
+      assert.equal(useAppStore.getState().projectName, "Opened");
+      assert.deepEqual(layerNames(), []);
+      assert.equal(useAppStore.getState().isDirty, false);
+      assert.equal(pastLength(), history);
+      assert.equal(actions().arcgisImportWarnings, null);
+      // The feature class is not read once the import is abandoned.
+      assert.deepEqual(desktop.requests, ["vector-layers"]);
+    } finally {
+      desktop.restore();
     }
   });
 });
