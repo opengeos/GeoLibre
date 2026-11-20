@@ -6432,21 +6432,21 @@ body:has([data-testid="field-crosshair-bar"]) [data-testid="notification-region"
    bottom-anchored sheets on touch phones (GeoLibre#3537 Phase 2). */
 @media (max-width: 639px) {
   html[data-touch-ui="true"] [data-dialog-content] {
-    left: 0;
-    right: 0;
-    bottom: 0;
-    top: auto;
-    --tw-translate-x: 0;
-    --tw-translate-y: 0;
-    transform: none;
-    translate: none;
-    width: 100%;
-    max-width: none;
-    max-height: 92dvh;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
+    --tw-translate-x: 0 !important;
+    --tw-translate-y: 0 !important;
+    transform: none !important;
+    translate: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: 92dvh !important;
     border-inline-width: 0;
     border-bottom-width: 0;
     border-radius: 1rem 1rem 0 0;
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 
   html[data-touch-ui="true"] [data-processing-dialog] {
@@ -6463,7 +6463,14 @@ body:has([data-testid="field-crosshair-bar"]) [data-testid="notification-region"
     border-inline-width: 0;
     border-bottom-width: 0;
     border-radius: 1rem 1rem 0 0;
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+
+  /* While drawing a map extent for a Processing tool, shrink the sheet so the
+     map stays unobstructed and drawable on phones. */
+  html[data-touch-ui="true"] [data-processing-dialog][data-drawing="true"] {
+    height: auto !important;
+    max-height: 28dvh !important;
   }
 
   html[data-touch-ui="true"] [data-processing-resize-handle] {
@@ -6474,11 +6481,14 @@ body:has([data-testid="field-crosshair-bar"]) [data-testid="notification-region"
      tapped near screen edges never clip off-screen (GeoLibre#3537 Phase 3). */
   html[data-touch-ui="true"] .geolibre-identify-popup {
     position: fixed !important;
-    inset-inline: 0.5rem !important;
-    bottom: calc(5.75rem + env(safe-area-inset-bottom)) !important;
+    left: 0.5rem !important;
+    right: 0.5rem !important;
+    bottom: calc(6.75rem + env(safe-area-inset-bottom)) !important;
     top: auto !important;
-    left: auto !important;
+    --tw-translate-x: 0 !important;
+    --tw-translate-y: 0 !important;
     transform: none !important;
+    translate: none !important;
     max-width: none !important;
     width: auto !important;
     z-index: 25 !important;

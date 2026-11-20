@@ -1,4 +1,5 @@
 import {
+  isDuckDBQueryLayer,
   pluginOwnsPaint,
   rendererAppliesOpacity,
   resolveLayerCapabilities,
@@ -6,54 +7,43 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
-import { startFeatureSelection } from "@geolibre/map";
+import { canEditLayerGeometry, isArcGISWritableLayer } from "@geolibre/plugins";
 import {
   ArrowDown,
   ArrowUp,
-  CircleDashed,
   Download,
-  FilePlus2,
   Folder,
-  FolderMinus,
   Info,
-  LassoSelect,
   MousePointerClick,
   Palette,
   Pencil,
-  Pentagon,
+  PencilRuler,
   RefreshCw,
-  Shuffle,
+  Save,
   SquareDashed,
   Table2,
   Trash2,
-  X,
   ZoomIn,
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { canOpenLayerAttributeTable } from "../../../lib/attribute-table-source";
-import { canExportLidarLayer, type LidarExportFormat } from "../../../lib/lidar-export";
 import { isRefreshableLayer } from "../../../lib/layer-refresh";
 import { notify } from "../../../lib/notify";
-import { canExportRasterLayer } from "../../../lib/raster-export";
 import {
   activateLayerPreservingSelection,
-  clearFeatureSelection,
-  exportSelectionAsLayer,
-  invertLayerSelection,
   openLayerAttributeTable,
-  zoomToSelection,
 } from "../../../lib/selection-actions";
 import type { TouchMenuItem } from "../../../lib/touch-menu-nav";
 import { TouchMenuSheet } from "../../layout/mobile/TouchMenuSheet";
+import {
+  canWriteEditsToSource,
+  isMssqlEditableLayer,
+  isPostgisEditableLayer,
+} from "./layer-panel-utils";
 import type { LayerActionsMenuShared } from "./LayerActionsMenu";
 import { LayerOpacitySlider } from "./LayerOpacitySlider";
-
-const LIDAR_EXPORT_ITEMS = [
-  { format: "las", labelKey: "layers.exportLas" },
-  { format: "laz", labelKey: "layers.exportLaz" },
-  { format: "copc", labelKey: "layers.exportCopc" },
-] as const satisfies ReadonlyArray<{ format: LidarExportFormat; labelKey: string }>;
+import { buildLayerTouchSubmenus } from "./layer-touch-submenus";
 
 export interface LayerActionsTouchSheetProps {
   open: boolean;
@@ -67,6 +57,9 @@ export interface LayerActionsTouchSheetProps {
   identifyOwnsClicks: boolean;
   identifyLabel: string;
   geometryEditActive: boolean;
+  geometryEditElsewhere: boolean;
+  isLayerLocked: boolean;
+  isRefreshing: boolean;
   layerEditable: boolean;
   readOnlyHint?: string;
   onOpenMetadata: (layer: GeoLibreLayer) => void;
@@ -89,6 +82,9 @@ export function LayerActionsTouchSheet({
   identifyOwnsClicks,
   identifyLabel,
   geometryEditActive,
+  geometryEditElsewhere,
+  isLayerLocked,
+  isRefreshing,
   layerEditable,
   readOnlyHint,
   onOpenMetadata,
@@ -112,6 +108,8 @@ export function LayerActionsTouchSheet({
     actions,
     handleRefreshLayer,
     beginRename,
+    onToggleGeometryEdit,
+    onMaterializeDuckDBLayer,
     onOpenStylePanel,
   } = shared;
 
@@ -120,131 +118,31 @@ export function LayerActionsTouchSheet({
     supportsBridgedOpacity(layer.id) ||
     rendererAppliesOpacity(layer, primaryRenderer);
   const canOpenAttrTable = canOpenLayerAttributeTable(layer) && layerCaps.query;
-  const canSelect = layer.type === "geojson" && layerCaps.query;
   const holdsSelection = selectedLayerId === layer.id && selectedFeatureCount > 0;
-  const canExportVector = layer.type === "geojson" && layerCaps.export;
-  const canExportRaster = canExportRasterLayer(layer) && layerCaps.export;
-  const canExportLidar = canExportLidarLayer(layer) && layerCaps.export;
-  const moveIds = selectedMoveIds(layer.id);
+  const canEditGeometry =
+    canEditLayerGeometry(layer) && (layerCaps.update || layerCaps.create || layerCaps.delete);
+  const canMaterializeDuckDB = isDuckDBQueryLayer(layer);
+  const canWriteBack =
+    canWriteEditsToSource(layer) && (layerCaps.update || layerCaps.create || layerCaps.delete);
 
-  const exportItems: TouchMenuItem[] = [];
-  if (canExportVector) {
-    for (const [format, label] of [
-      ["geojson", "GeoJSON"],
-      ["geoparquet", "GeoParquet"],
-      ["geopackage", "GeoPackage"],
-      ["shapefile", "Shapefile (zipped)"],
-      ["kml", "KML"],
-      ["kmz", "KMZ"],
-      ["csv", "CSV"],
-    ] as const) {
-      exportItems.push({
-        kind: "action",
-        id: `export-${format}`,
-        label,
-        icon: <Download className="h-4 w-4" />,
-        onSelect: () => void actions.handleExportLayer(layer, format),
-      });
-    }
-  }
-  if (canExportRaster) {
-    exportItems.push({
-      kind: "action",
-      id: "export-raster",
-      label: t("layers.exportGeoTiff"),
-      icon: <Download className="h-4 w-4" />,
-      onSelect: () => void actions.handleExportRasterLayer(layer),
-    });
-  }
-  if (canExportLidar) {
-    for (const { format, labelKey } of LIDAR_EXPORT_ITEMS) {
-      exportItems.push({
-        kind: "action",
-        id: `export-${format}`,
-        label: t(labelKey),
-        icon: <Download className="h-4 w-4" />,
-        onSelect: () => void actions.handleExportLidarLayer(layer, format),
-      });
-    }
-  }
-
-  const selectionItems: TouchMenuItem[] = [];
-  if (canSelect) {
-    for (const [shape, Icon, labelKey] of [
-      ["single", MousePointerClick, "layers.selectFeaturesSingle"],
-      ["rectangle", SquareDashed, "layers.selectFeaturesRectangle"],
-      ["polygon", Pentagon, "layers.selectFeaturesPolygon"],
-      ["freehand", LassoSelect, "layers.selectFeaturesFreehand"],
-      ["radius", CircleDashed, "layers.selectFeaturesRadius"],
-    ] as const) {
-      selectionItems.push({
-        kind: "action",
-        id: `select-${shape}`,
-        label: t(labelKey),
-        disabled: !layerRendered,
-        icon: <Icon className="h-4 w-4" />,
-        onSelect: () => {
-          if (identifyOwnsClicks) setIdentifyLayer(null);
-          startFeatureSelection({ layerId: layer.id, shape });
-        },
-      });
-    }
-    if (holdsSelection) {
-      selectionItems.push(
-        {
-          kind: "action",
-          id: "selection-zoom",
-          label: t("toolbar.item.zoomToSelection"),
-          icon: <SquareDashed className="h-4 w-4" />,
-          onSelect: () => zoomToSelection(mapControllerRef.current),
-        },
-        {
-          kind: "action",
-          id: "selection-invert",
-          label: t("toolbar.item.invertSelection"),
-          icon: <Shuffle className="h-4 w-4" />,
-          onSelect: invertLayerSelection,
-        },
-        {
-          kind: "action",
-          id: "selection-clear",
-          label: t("toolbar.item.clearSelection"),
-          icon: <X className="h-4 w-4" />,
-          onSelect: clearFeatureSelection,
-        },
-      );
-      if (layerCaps.export) {
-        selectionItems.push({
-          kind: "action",
-          id: "selection-export",
-          label: t("toolbar.item.exportSelection"),
-          icon: <FilePlus2 className="h-4 w-4" />,
-          onSelect: () =>
-            exportSelectionAsLayer(t("selection.exportedLayerName", { name: layer.name })),
-        });
-      }
-    }
-  }
-
-  const groupItems: TouchMenuItem[] = layerGroups.map((g) => ({
-    kind: "action",
-    id: `group-${g.id}`,
-    label: g.name,
-    active: layer.groupId === g.id,
-    disabled: !layerEditable,
-    icon: <Folder className="h-4 w-4" />,
-    onSelect: () => moveLayersToGroup(moveIds, g.id),
-  }));
-  if (layer.groupId) {
-    groupItems.push({
-      kind: "action",
-      id: "group-ungroup",
-      label: t("layers.removeFromGroup"),
-      disabled: !layerEditable,
-      icon: <FolderMinus className="h-4 w-4" />,
-      onSelect: () => moveLayersToGroup(moveIds, null),
-    });
-  }
+  const { exportItems, selectionItems, groupItems } = buildLayerTouchSubmenus({
+    t,
+    layer,
+    layerCaps,
+    layerRendered,
+    layerEditable,
+    layerGroups,
+    holdsSelection,
+    identifyOwnsClicks,
+    geometryEditActive,
+    geometryEditElsewhere,
+    isLayerLocked,
+    moveIds: selectedMoveIds(layer.id),
+    actions,
+    mapControllerRef,
+    setIdentifyLayer,
+    moveLayersToGroup,
+  });
 
   const primaryActions: TouchMenuItem[] = [
     {
@@ -285,13 +183,60 @@ export function LayerActionsTouchSheet({
       onSelect: () => openLayerAttributeTable(layer.id),
     });
   }
+  if (canMaterializeDuckDB) {
+    primaryActions.push({
+      kind: "action",
+      id: "materialize-duckdb",
+      label: t("layers.materializeToEditable"),
+      disabled: !layerEditable,
+      icon: <Table2 className="h-4 w-4" />,
+      onSelect: () => {
+        if (!layerEditable) return;
+        onMaterializeDuckDBLayer(layer);
+      },
+    });
+  }
+  if (canEditGeometry || geometryEditActive) {
+    primaryActions.push({
+      kind: "action",
+      id: "edit-geometry",
+      label: geometryEditActive ? t("layers.finishEditingGeometry") : t("layers.editGeometry"),
+      active: geometryEditActive,
+      disabled: geometryEditElsewhere || !layerEditable,
+      icon: <PencilRuler className="h-4 w-4" />,
+      onSelect: () => {
+        if (!layerEditable) return;
+        activateLayerPreservingSelection(layer.id);
+        if (identifyOwnsClicks) setIdentifyLayer(null);
+        onToggleGeometryEdit(layer.id);
+      },
+    });
+  }
+  if (canWriteBack) {
+    const mssqlPending = isMssqlEditableLayer(layer) && layer.mssqlWritebackPending === true;
+    primaryActions.push({
+      kind: "action",
+      id: "save-edits-to-source",
+      label: isArcGISWritableLayer(layer)
+        ? t("layers.saveEditsToArcgis")
+        : isMssqlEditableLayer(layer)
+          ? t("layers.saveEditsToMssql")
+          : isPostgisEditableLayer(layer)
+            ? t("layers.saveEditsToPostgis")
+            : t("layers.saveEditsToSource"),
+      description: mssqlPending ? t("layers.saveEditsMssqlRefreshRequired") : undefined,
+      disabled: geometryEditActive || !layerEditable || mssqlPending,
+      icon: <Save className="h-4 w-4" />,
+      onSelect: () => void actions.handleSaveEditsToSource(layer),
+    });
+  }
   if (canIdentify) {
     primaryActions.push({
       kind: "action",
       id: "identify",
       label: identifyLabel,
       active: identifyActive,
-      disabled: geometryEditActive,
+      disabled: geometryEditActive || geometryEditElsewhere || isLayerLocked,
       icon: <MousePointerClick className="h-4 w-4" />,
       onSelect: () => {
         activateLayerPreservingSelection(layer.id);
@@ -304,7 +249,8 @@ export function LayerActionsTouchSheet({
       kind: "action",
       id: "refresh-layer",
       label: t("layers.refresh"),
-      icon: <RefreshCw className="h-4 w-4" />,
+      disabled: isRefreshing,
+      icon: <RefreshCw className={`h-4 w-4${isRefreshing ? " animate-spin" : ""}`} />,
       onSelect: () => void handleRefreshLayer(layer),
     });
   }
@@ -316,7 +262,11 @@ export function LayerActionsTouchSheet({
       label: t("layers.rename"),
       disabled: !layerEditable,
       icon: <Pencil className="h-4 w-4" />,
-      onSelect: () => beginRename(layer),
+      // Defer until after BottomSheet finishes closing and restoring focus,
+      // otherwise focus restoration immediately blurs the inline rename input.
+      onSelect: () => {
+        window.setTimeout(() => beginRename(layer), 0);
+      },
     },
     {
       kind: "action",

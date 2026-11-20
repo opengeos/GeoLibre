@@ -180,7 +180,7 @@ export function TouchMenuSheet({
         type="button"
         data-testid="touch-menu-back"
         aria-label={t("mobileShell.menu.backTo", { title: page.parentTitle ?? title })}
-        onClick={() => setPath((prev) => prev.slice(0, -1))}
+        onClick={() => setPath(page.path.slice(0, -1))}
         className="-ms-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:bg-accent"
       >
         <ChevronLeft className="h-5 w-5 rtl:rotate-180" />

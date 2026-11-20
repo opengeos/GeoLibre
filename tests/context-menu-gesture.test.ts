@@ -222,4 +222,44 @@ describe("ContextMenuGestureTracker", () => {
     });
     assert.equal(timers.size, 0);
   });
+
+  it("suppresses Android native contextmenu arriving before the 500ms hold timer fires", () => {
+    const opened: ContextMenuRequest[] = [];
+    let clock = 5000;
+    const timers = new Map<number, () => void>();
+    let nextId = 1;
+    const scheduler = {
+      setTimeout: (cb: () => void) => {
+        const id = nextId++;
+        timers.set(id, cb);
+        return id as unknown as ReturnType<typeof setTimeout>;
+      },
+      clearTimeout: (handle: ReturnType<typeof setTimeout>) => {
+        timers.delete(handle as unknown as number);
+      },
+    };
+    const touchTracker = new ContextMenuGestureTracker(
+      (request) => opened.push(request),
+      () => clock,
+      scheduler,
+    );
+
+    touchTracker.pointerDown({
+      pointerId: 10,
+      pointerType: "touch",
+      button: 0,
+      clientX: 120,
+      clientY: 140,
+    });
+    // Native Android contextmenu fires at 400ms before our 500ms timer.
+    clock += 400;
+    touchTracker.contextMenu({ clientX: 120, clientY: 140 });
+    assert.equal(opened.length, 0);
+
+    // Our 500ms timer fires once and opens cleanly.
+    clock += 100;
+    for (const cb of [...timers.values()]) cb();
+    assert.equal(opened.length, 1);
+    assert.deepEqual(opened[0], { clientX: 120, clientY: 140, isTouch: true });
+  });
 });

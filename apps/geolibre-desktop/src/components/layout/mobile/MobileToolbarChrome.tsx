@@ -1,8 +1,10 @@
 import { useAppStore } from "@geolibre/core";
 import { BASEMAP_CONTROL_PLUGIN_ID, GEO_EDITOR_PLUGIN_ID } from "@geolibre/plugins";
 import { BottomSheet } from "@geolibre/ui";
+import { useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { useCvdPreviewStore } from "../../../lib/cvd-preview-store";
 import type { ThemeMode } from "../../../hooks/useThemeMode";
 import { setTouchUiMode, useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import type { ProjectFileActions } from "../../../hooks/useProjectFileActions";
@@ -128,37 +130,71 @@ export function MobileToolbarChrome({
   const mobileQuickSheetTitle =
     activeMobileTab === "add" ? t("mobileShell.sheet.addTitle") : t("mobileShell.sheet.fieldTitle");
 
-  const moreMenuItems =
-    activeMobileTab === "more"
-      ? buildMobileMoreMenuItems({
-          t,
-          canEditProject: !viewer && isMenuVisible(uiProfile, "project"),
-          canShare: shareAvailable,
-          canShowView: isMenuVisible(uiProfile, "view"),
-          canRunProcessing,
-          canManagePlugins,
-          canManageSettings,
-          diagnosticsErrorCount,
-          processingCommands,
-          onOpenCommandPalette: () => dialogs.setCommandPaletteOpen(true),
-          onNewProject: () => dialogs.setNewProjectDialogOpen(true),
-          onOpenFromFile: () => void projectFiles.handleOpenFromFile(),
-          onOpenFromUrl: () => projectFiles.setProjectUrlDialogOpen(true),
-          onSaveProject: () => void projectFiles.handleSave(),
-          onShareProject: () => dialogs.setShareDialogOpen(true),
-          onZoomIn,
-          onZoomOut,
-          onResetNorth,
-          onResetPitch,
-          onResetPitchBearing,
-          onOpenProcessing: () => useAppStore.getState().setProcessingOpen(true),
-          onOpenManagePlugins: () => dialogs.setManagePluginsOpen(true),
-          onOpenSettings: () => openSettingsSection("layout"),
-          onOpenDiagnostics,
-          onSwitchToDesktopUi: switchToDesktopUi,
-          onOpenAbout: () => dialogs.setAboutOpen(true),
-        })
-      : [];
+  const primaryRenderer = useAppStore((s) => s.primaryRenderer);
+  const mapLayoutRows = useAppStore((s) => s.mapLayout.rows);
+  const mapLayoutCols = useAppStore((s) => s.mapLayout.cols);
+  const cvdMode = useCvdPreviewStore((s) => s.mode);
+
+  const moreMenuItems = useMemo(() => {
+    if (activeMobileTab !== "more") return [];
+    // Reference reactive view state so active checkmarks update when changed.
+    void primaryRenderer;
+    void mapLayoutRows;
+    void mapLayoutCols;
+    void cvdMode;
+    return buildMobileMoreMenuItems({
+      t,
+      uiProfile,
+      canEditProject: !viewer && isMenuVisible(uiProfile, "project"),
+      canShare: shareAvailable,
+      canShowView: isMenuVisible(uiProfile, "view"),
+      canRunProcessing,
+      canManagePlugins,
+      canManageSettings,
+      diagnosticsErrorCount,
+      processingCommands,
+      onOpenCommandPalette: () => dialogs.setCommandPaletteOpen(true),
+      onNewProject: () => dialogs.setNewProjectDialogOpen(true),
+      onOpenFromFile: () => void projectFiles.handleOpenFromFile(),
+      onOpenFromUrl: () => projectFiles.setProjectUrlDialogOpen(true),
+      onSaveProject: () => void projectFiles.handleSave(),
+      onShareProject: () => dialogs.setShareDialogOpen(true),
+      onZoomIn,
+      onZoomOut,
+      onResetNorth,
+      onResetPitch,
+      onResetPitchBearing,
+      onOpenProcessing: () => useAppStore.getState().setProcessingOpen(true),
+      onOpenManagePlugins: () => dialogs.setManagePluginsOpen(true),
+      onOpenSettings: () => openSettingsSection("layout"),
+      onOpenDiagnostics,
+      onSwitchToDesktopUi: switchToDesktopUi,
+      onOpenAbout: () => dialogs.setAboutOpen(true),
+    });
+  }, [
+    activeMobileTab,
+    t,
+    uiProfile,
+    viewer,
+    shareAvailable,
+    canRunProcessing,
+    canManagePlugins,
+    canManageSettings,
+    diagnosticsErrorCount,
+    processingCommands,
+    primaryRenderer,
+    mapLayoutRows,
+    mapLayoutCols,
+    cvdMode,
+    dialogs,
+    projectFiles,
+    onZoomIn,
+    onZoomOut,
+    onResetNorth,
+    onResetPitch,
+    onResetPitchBearing,
+    onOpenDiagnostics,
+  ]);
 
   const mobileQuickSheet =
     activeMobileTab === "more" && mobileSheetHostEl
@@ -194,6 +230,7 @@ export function MobileToolbarChrome({
             >
               {activeMobileTab === "add" ? (
                 <MobileAddSheetContent
+                  addDataReady={addDataReady}
                   canAddVector={isDataSourceVisible(uiProfile, "vector")}
                   canAddRaster={isDataSourceVisible(uiProfile, "raster")}
                   canAddDelimited={isDataSourceVisible(uiProfile, "delimited-text")}
