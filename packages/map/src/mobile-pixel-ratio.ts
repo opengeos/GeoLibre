@@ -59,8 +59,15 @@ export function watchMapPixelRatio(
   let disposed = false;
   let activeMedia: ReturnType<typeof matchMediaFn> | null = null;
   let activeListener: (() => void) | null = null;
+  const pointerMedia = env?.isTouchDevice === undefined ? matchMediaFn("(pointer: coarse)") : null;
 
-  const detach = () => {
+  const resolveCurrent = () =>
+    resolveMapPixelRatio({
+      devicePixelRatio: getDpr(),
+      isTouchDevice: env?.isTouchDevice ?? pointerMedia?.matches,
+    });
+
+  const detachResolution = () => {
     if (activeMedia && activeListener) {
       activeMedia.removeEventListener("change", activeListener);
     }
@@ -68,8 +75,8 @@ export function watchMapPixelRatio(
     activeListener = null;
   };
 
-  const subscribe = () => {
-    detach();
+  const subscribeResolution = () => {
+    detachResolution();
     if (disposed) return;
     const dpr = getDpr();
     if (!Number.isFinite(dpr) || dpr <= 0) return;
@@ -78,11 +85,8 @@ export function watchMapPixelRatio(
       if (disposed) return;
       // Re-subscribe BEFORE invoking onChange so a throwing callback cannot
       // kill future DPR tracking.
-      subscribe();
-      const resolved = resolveMapPixelRatio({
-        devicePixelRatio: getDpr(),
-        isTouchDevice: env?.isTouchDevice,
-      });
+      subscribeResolution();
+      const resolved = resolveCurrent();
       if (resolved !== undefined) onChange(resolved);
     };
     activeMedia = media;
@@ -90,9 +94,17 @@ export function watchMapPixelRatio(
     media.addEventListener("change", onResolutionChange, { once: true });
   };
 
-  subscribe();
+  const onPointerChange = () => {
+    if (disposed) return;
+    const resolved = resolveCurrent();
+    if (resolved !== undefined) onChange(resolved);
+  };
+
+  pointerMedia?.addEventListener("change", onPointerChange);
+  subscribeResolution();
   return () => {
     disposed = true;
-    detach();
+    detachResolution();
+    pointerMedia?.removeEventListener("change", onPointerChange);
   };
 }

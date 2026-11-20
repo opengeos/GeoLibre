@@ -161,7 +161,9 @@ export function useMobileShellState(mobileShell: boolean) {
     closeAllBottomPanels,
   };
   const backStateRef = useRef(backState);
-  backStateRef.current = backState;
+  useLayoutEffect(() => {
+    backStateRef.current = backState;
+  });
 
   useEffect(() => {
     if (!mobileShell) return;
