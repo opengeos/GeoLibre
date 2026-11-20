@@ -86,6 +86,7 @@ import {
   Download,
   EyeOff,
   LayoutDashboard,
+  LayoutList,
   MoreHorizontal,
   MousePointerSquareDashed,
   Network,
@@ -119,6 +120,7 @@ import {
 import { isTauri } from "../../lib/tauri-io";
 import { isRefreshableLayer } from "../../lib/layer-refresh";
 import { isLocalFileLayer } from "../../lib/local-file-watch";
+import { AttributeCardList } from "./attribute-table/AttributeCardList";
 import type { LayerRefreshStatus } from "./layer-panel/layer-panel-utils";
 import {
   addColumn,
@@ -609,9 +611,15 @@ interface AttributeTableProps {
     handleRefreshLayer: (layer: GeoLibreLayer) => Promise<void> | void;
     refreshStatuses: Record<string, LayerRefreshStatus>;
   };
+  /** Whether the phone mobile shell is active (propagated from DesktopShell). */
+  mobileShell?: boolean;
 }
 
-export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProps) {
+export function AttributeTable({
+  mapControllerRef,
+  refresh,
+  mobileShell = false,
+}: AttributeTableProps) {
   const { t, i18n } = useTranslation();
   // Column order is visual: in a right-to-left layout the first column renders
   // rightmost, so the move-left/right actions and their guards swap.
@@ -627,6 +635,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const selectedFeatureIds = useAppStore((s) => s.selectedFeatureIds);
   const selectFeature = useAppStore((s) => s.selectFeature);
   const selectFeatures = useAppStore((s) => s.selectFeatures);
+  const [cardViewOverride, setCardViewOverride] = useState<boolean | null>(null);
+  const useCardView = mobileShell && (cardViewOverride ?? true);
   const attributeTableOpen = useAppStore((s) => s.ui.attributeTableOpen);
   const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
   const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
@@ -1146,7 +1156,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   // Row selection with keyboard modifiers (plain / Ctrl-toggle / Shift-range /
   // Shift+Ctrl merge). The branching lives in the pure `computeRowSelection`
   // helper so it can be unit-tested; here we just feed it the current state.
-  const handleRowClick = (featureId: string, event: ReactMouseEvent<HTMLTableRowElement>) => {
+  const handleRowClick = (featureId: string, event: ReactMouseEvent<HTMLElement>) => {
     const additive = event.ctrlKey || event.metaKey;
     const range = event.shiftKey;
     const { ids, anchor } = computeRowSelection({
@@ -1212,9 +1222,11 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   // different position for the selected row). Also when edit mode toggles or the
   // table expands: edit-mode inputs make every row taller (and a collapsed table
   // has no viewport), so a row placed before that change slides out of view.
+  const isCardViewActive = useCardView && !isEditing;
+
   useEffect(() => {
     // `""` is a valid feature id; only `null` means no selection.
-    if (!attributeTableOpen || selectedFeatureId === null) return;
+    if (!attributeTableOpen || selectedFeatureId === null || isCardViewActive) return;
     const index = sorted.findIndex((row) => row.featureId === selectedFeatureId);
     if (index >= 0) rowVirtualizer.scrollToIndex(index, { align: "auto" });
     // `sorted`/`rowVirtualizer` are rebuilt every render and so are intentionally
@@ -1230,6 +1242,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     attributeFilter,
     isEditing,
     collapsed,
+    isCardViewActive,
   ]);
 
   const propKeys = new Set<string>();
@@ -2469,6 +2482,32 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
             <Network className="h-3.5 w-3.5" />
           </Button>
         ) : null}
+        {mobileShell && hasAttributeSource && !isEditing ? (
+          <Button
+            variant={useCardView ? "secondary" : "ghost"}
+            size="icon"
+            data-testid="attribute-table-view-toggle"
+            className="h-7 w-7"
+            title={
+              useCardView
+                ? t("mobileShell.attributeCards.switchToTable")
+                : t("mobileShell.attributeCards.switchToCards")
+            }
+            aria-label={
+              useCardView
+                ? t("mobileShell.attributeCards.switchToTable")
+                : t("mobileShell.attributeCards.switchToCards")
+            }
+            aria-pressed={useCardView}
+            onClick={() => setCardViewOverride(!useCardView)}
+          >
+            {useCardView ? (
+              <TableProperties className="h-4 w-4" />
+            ) : (
+              <LayoutList className="h-4 w-4" />
+            )}
+          </Button>
+        ) : null}
         <Button
           variant="ghost"
           size="icon"
@@ -2511,6 +2550,30 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                 ? t("attributeTable.loadingAttributes")
                 : t("attributeTable.requiresVectorLayer")}
             </p>
+          ) : isCardViewActive ? (
+            <AttributeCardList
+              rows={sorted}
+              columns={columns}
+              selectedIds={selectedIdSet}
+              activeFeatureId={selectedFeatureId}
+              scrollElementRef={scrollViewportRef}
+              sortKey={sort.key}
+              sortDirection={sort.direction}
+              onChangeSortKey={(key) => setSort({ key, direction: "asc" })}
+              onToggleSortDirection={() =>
+                setSort((current) => ({
+                  ...current,
+                  direction: current.direction === "asc" ? "desc" : "asc",
+                }))
+              }
+              onSelectRow={handleRowClick}
+              onZoomRow={(featureId) => {
+                selectFeature(featureId);
+                if (layer) {
+                  mapControllerRef.current?.highlightFeature(layer, [featureId], { fit: true });
+                }
+              }}
+            />
           ) : (
             // mb-3.5 reserves room for the horizontal scrollbar, which overlays
             // the viewport and would otherwise cover the last row even at full
