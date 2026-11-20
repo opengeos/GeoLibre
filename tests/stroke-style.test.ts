@@ -119,8 +119,6 @@ describe("line opacity, dashes and blur (#3350)", () => {
       fillPaint(style({ simpleStyleEnabled: true }), 1)["fill-outline-color"],
       undefined,
     );
-    // No stroke at all must not leave a coloured hairline behind.
-    assert.equal(fillPaint(style({ strokeWidth: 0 }), 1)["fill-outline-color"], undefined);
   });
 
   it("fades point outlines with the stroke opacity", () => {

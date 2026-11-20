@@ -693,18 +693,30 @@ function polygonLook(scan: LayerScan): SymbolLook | null {
   // nothing visible is left).
   const color = scan.fill ?? scan.stroke?.color;
   if (!color) return null;
+  const stroke = strokeLook(scan.stroke);
   return {
     geometry: "polygon",
     color: color.hex,
     fillOpacity: scan.fill?.opacity ?? 0,
-    ...strokeLook(scan.stroke),
+    ...stroke,
+    // GeoLibre's fill draws a 1px hairline in the stroke colour even at width
+    // 0 (QGIS reads a width of 0 as a 1px pen too), so a polygon without an
+    // outline takes its own fill colour as the stroke colour. That hairline
+    // then matches the edge MapLibre draws for a fill with no outline colour.
+    ...(stroke.strokeWidth === 0 ? { strokeColor: color.hex } : {}),
     ...scanNotes(scan),
   };
 }
 
-/** Whether a look draws anything: a visible fill (not for lines) or a stroke. */
+/**
+ * Whether a look draws anything: a stroke, or a visible fill (not for lines,
+ * and not for a marker of size 0).
+ */
 function looksVisible(look: SymbolLook): boolean {
-  const fillShows = look.geometry !== "line" && (look.fillOpacity ?? 1) > 0;
+  const fillShows =
+    look.geometry !== "line" &&
+    (look.fillOpacity ?? 1) > 0 &&
+    (look.geometry !== "point" || (look.circleRadius ?? DEFAULT_LAYER_STYLE.circleRadius) > 0);
   return fillShows || look.strokeWidth !== 0;
 }
 

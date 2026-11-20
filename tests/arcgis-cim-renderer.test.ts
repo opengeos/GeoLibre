@@ -543,6 +543,22 @@ describe("CIM renderer refusals", () => {
       assert.equal(result.translated, false, JSON.stringify(symbol));
       assert.equal(result.issues[0].code, "symbol");
     }
+    // A size-0 marker over a dropped second marker draws nothing either.
+    const sized = (size: number) => ({
+      type: "CIMVectorMarker",
+      enable: true,
+      size,
+      markerGraphics: [{ symbol: { type: "CIMPolygonSymbol", symbolLayers: [fill()] } }],
+    });
+    const hidden = translateCimRenderer(
+      simple(symbolRef("CIMPointSymbol", [sized(0), sized(8)])),
+    );
+    assert.equal(hidden.translated, false);
+    assert.equal(hidden.issues[0].code, "symbol");
+    assert.equal(
+      translateCimRenderer(simple(symbolRef("CIMPointSymbol", [sized(4), sized(8)]))).translated,
+      true,
+    );
     // Wholly supported transparent symbols stay as they are.
     for (const symbol of [
       symbolRef("CIMLineSymbol", [stroke(rgb(0, 0, 0, 0))]),
@@ -605,19 +621,32 @@ describe("CIM symbols and defaults as Pro writes them", () => {
   });
 
   it("leaves no coloured hairline on a polygon without an outline", () => {
-    const outline = (style: LayerStyle) => fillPaint(style, 1)["fill-outline-color"];
-    // A plain fill-only polygon.
-    assert.equal(outline(translatedStyle(simple(polygonWith([fill(rgb(255, 0, 0))])))), undefined);
-    // Mixed classes, either way round, and an outline-free default symbol.
-    for (const renderer of [
-      twoClasses(polygonWith([stroke(), fill()]), polygonWith([fill()])),
-      twoClasses(polygonWith([fill()]), polygonWith([stroke(), fill()])),
-      { ...zoning(), defaultSymbol: polygonWith([fill()]) },
-    ]) {
-      assert.equal(outline(translatedStyle(renderer)), undefined);
+    // The fill's 1px hairline draws even at stroke width 0, so a polygon
+    // without an outline must draw it in its own fill colour: the edge
+    // MapLibre draws anyway. Checked against the real fill paint, per class.
+    const red = fill(rgb(255, 0, 0));
+    const hairline = (style: LayerStyle, K: string) => {
+      const value = fillPaint(style, 1)["fill-outline-color"];
+      assert.notEqual(value, undefined);
+      return evaluateColor(value, { type: 3, properties: { K } } as never);
+    };
+    const plain = translatedStyle(simple(polygonWith([red])));
+    assert.equal(hairline(plain, "a"), "#ff0000");
+    // Mixed classes, either way round: only the outlined class keeps its
+    // outline colour.
+    const outlined = polygonWith([stroke(rgb(0, 0, 255)), fill()]);
+    for (const [renderer, bare, edged] of [
+      [twoClasses(outlined, polygonWith([red])), "b", "a"],
+      [twoClasses(polygonWith([red]), outlined), "a", "b"],
+    ] as const) {
+      const style = translatedStyle(renderer);
+      assert.equal(hairline(style, bare), "#ff0000");
+      assert.equal(hairline(style, edged), "#0000ff");
+      assert.equal(renderedOutlineWidth(style, { K: bare }), 0);
     }
-    // Every class outlined: the hairline under the outline stays.
-    assert.notEqual(outline(translatedStyle(zoning())), undefined);
+    // A transparent outline counts as none.
+    const clear = translatedStyle(simple(polygonWith([stroke(rgb(0, 0, 0, 0)), red])));
+    assert.equal(hairline(clear, "a"), "#ff0000");
   });
 
   it("reads an omitted upper bound as 0, as CIM leaves out defaults", () => {
