@@ -65,10 +65,10 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
     },
     [t],
   );
-  // Symbology notes describe layers that did load, so they are not counted as
-  // layers that could not be loaded.
+  // Symbology and map-extent notes describe a project that did load, so they
+  // are not counted as layers that could not be loaded.
   const arcgisUnloadedCount = (projectFiles.arcgisImportWarnings ?? []).filter(
-    (warning) => !warning.symbologyIssue,
+    (warning) => !warning.symbologyIssue && warning.reason !== "map-extent",
   ).length;
   return (
     <>

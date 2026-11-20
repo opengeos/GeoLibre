@@ -9,7 +9,9 @@ import {
   serializeProject,
   ruleBasedVisibilityFilter,
   translateCimRenderer,
+  lineWidthValue,
   vectorFillColorValue,
+  vectorStrokeWidthValue,
   vectorLineColorValue,
   type GeoLibreLayer,
   type LayerStyle,
@@ -406,6 +408,142 @@ describe("CIM class breaks renderer", () => {
     assert.deepEqual(codes({ exclusionClause: "DENSITY < 0" }), ["exclusion"]);
     assert.deepEqual(codes({ breaks: [] }), ["no-classes"]);
     assert.deepEqual(codes({ normalizationType: "Nothing" }), []);
+  });
+});
+
+/** The outline width a polygon feature renders with, from the map's own paint value. */
+function renderedOutlineWidth(style: LayerStyle, properties: Record<string, unknown>): number {
+  const value = vectorStrokeWidthValue(style, lineWidthValue(style));
+  if (typeof value === "number") return value;
+  const compiled = createExpression(value, {
+    type: "number",
+    "property-type": "data-driven",
+    expression: { interpolated: false, parameters: ["zoom", "feature"] },
+  } as never);
+  assert.equal(compiled.result, "success", JSON.stringify(compiled.value));
+  return (compiled.value as { evaluate: (g: unknown, f: unknown) => number }).evaluate(
+    { zoom: 10 },
+    { type: 3, properties },
+  );
+}
+
+function polygonWith(layers: unknown[]) {
+  return { type: "CIMSymbolReference", symbol: { type: "CIMPolygonSymbol", symbolLayers: layers } };
+}
+
+describe("CIM symbols and defaults as Pro writes them", () => {
+  const fill = (r: number, g: number, b: number) => ({
+    type: "CIMSolidFill",
+    enable: true,
+    color: rgb(r, g, b),
+  });
+  const stroke = (alpha: number) => ({
+    type: "CIMSolidStroke",
+    enable: true,
+    width: 1.5,
+    color: rgb(0, 0, 0, alpha),
+  });
+  const twoClasses = (first: unknown[], second: unknown[]) => ({
+    type: "CIMUniqueValueRenderer",
+    fields: ["K"],
+    groups: [
+      {
+        classes: [
+          {
+            label: "a",
+            visible: true,
+            symbol: polygonWith(first),
+            values: [{ fieldValues: ["a"] }],
+          },
+          {
+            label: "b",
+            visible: true,
+            symbol: polygonWith(second),
+            values: [{ fieldValues: ["b"] }],
+          },
+        ],
+      },
+    ],
+  });
+
+  it("draws no outline where a class has none or a transparent one", () => {
+    const style = translatedStyle(
+      twoClasses([stroke(0), fill(1, 1, 1)], [stroke(100), fill(2, 2, 2)]),
+    );
+    assert.equal(renderedOutlineWidth(style, { K: "a" }), 0);
+    assert.equal(renderedOutlineWidth(style, { K: "b" }), 2);
+    const fillOnly = translatedStyle(twoClasses([stroke(100), fill(1, 1, 1)], [fill(2, 2, 2)]));
+    assert.equal(renderedOutlineWidth(fillOnly, { K: "a" }), 2);
+    assert.equal(renderedOutlineWidth(fillOnly, { K: "b" }), 0);
+  });
+
+  it("reads an omitted upper bound as 0, as CIM leaves out defaults", () => {
+    const renderer = density({ minimumBreak: -3 });
+    renderer.breaks = [
+      { type: "CIMClassBreak", label: "≤-1", upperBound: -1, symbol: polygon([1, 1, 1]) },
+      { type: "CIMClassBreak", label: "≤0", symbol: polygon([2, 2, 2]) } as never,
+      { type: "CIMClassBreak", label: "≤3", upperBound: 3, symbol: polygon([3, 3, 3]) },
+    ];
+    const style = translatedStyle(renderer);
+    assert.equal(renderedFill(style, { DENSITY: -3 }), "#010101");
+    assert.equal(renderedFill(style, { DENSITY: 0 }), "#020202");
+    assert.equal(renderedFill(style, { DENSITY: 0.5 }), "#030303");
+    assert.deepEqual(translateCimRenderer(density({ minimumBreak: 11 })).issues, [
+      { code: "no-classes" },
+    ]);
+  });
+
+  it("reads CIELAB colours", () => {
+    const lab = translateCimRenderer({
+      type: "CIMSimpleRenderer",
+      symbol: polygonWith([
+        {
+          type: "CIMSolidFill",
+          color: { type: "CIMLABColor", values: [54.29, 80.82, 69.89, 100] },
+        },
+      ]),
+    });
+    // CSS lab(54.29 80.82 69.89), D50, is sRGB red.
+    assert.equal(lab.style.fillColor, "#ff0000");
+  });
+
+  it("hides a class Pro saved unchecked by leaving out visible", () => {
+    const renderer = twoClasses([fill(1, 1, 1)], [fill(2, 2, 2)]);
+    delete (renderer.groups[0].classes[1] as { visible?: boolean }).visible;
+    const style = translatedStyle(renderer);
+    assert.equal(renderedFill(style, { K: "a" }), "#010101");
+    assert.equal(renderedFill(style, { K: "b" }), null);
+    // Files from before the property existed carry it on no class.
+    for (const valueClass of renderer.groups[0].classes) {
+      delete (valueClass as { visible?: boolean }).visible;
+    }
+    assert.equal(renderedFill(translatedStyle(renderer), { K: "b" }), "#020202");
+  });
+
+  it("keeps a switched-off default symbol's colour on the catch-all", () => {
+    const style = translatedStyle(zoning({ useDefaultSymbol: false }));
+    const elseRule = style.vectorRules.find((rule) => rule.isElse);
+    assert.equal(elseRule?.enabled, false);
+    assert.equal(elseRule?.color, "#c8c8c8");
+    assert.equal(elseRule?.label, "Other zones");
+  });
+
+  it("labels an unlabelled default rule like the legend's catch-all", () => {
+    const renderer = zoning({ defaultLabel: "" });
+    (renderer.groups[0].classes[1] as { visible: boolean }).visible = false;
+    const labels = effectiveVectorRules(translatedStyle(renderer)).rules.map((rule) => rule.label);
+    assert.equal(labels.at(-1), "Other");
+  });
+
+  it("notes symbol layers it does not draw, and names unclassed colours", () => {
+    const hatched = translateCimRenderer(
+      twoClasses([fill(1, 1, 1), { type: "CIMHatchFill", enable: true }], [fill(2, 2, 2)]),
+    );
+    assert.equal(hatched.translated, true);
+    assert.deepEqual(hatched.issues, [{ code: "symbol-layers", cimType: "CIMHatchFill" }]);
+    assert.deepEqual(translateCimRenderer(density({ classBreakType: "UnclassedColor" })).issues, [
+      { code: "renderer", cimType: "UnclassedColor" },
+    ]);
   });
 });
 

@@ -20,7 +20,11 @@
  *
  * A rule per class keeps the class's own filter, label, colour and order, and
  * the catch-all rule carries the default symbol, switched off (so unclassified
- * features are hidden) when ArcGIS would not draw them.
+ * features are hidden) when ArcGIS would not draw them. Unique value groups are
+ * flattened into one list in group order; a group's heading is not kept.
+ *
+ * CIM JSON leaves out a property at its default (0, false, empty), so an
+ * absent number reads as 0. Pro writes `visible: true` on every shown class.
  */
 
 import { DEFAULT_LAYER_STYLE, type LayerStyle, type VectorRule } from "./types";
@@ -36,8 +40,9 @@ export const CIM_NULL_VALUE = "<Null>";
 /**
  * Why a renderer, or part of it, was not carried over. `renderer` names the
  * renderer type that was left behind; the rest name the feature that made a
- * supported renderer type untranslatable (or, for `visual-variables`, the part
- * that was dropped from an otherwise translated renderer).
+ * supported renderer type untranslatable (or, for `visual-variables` and
+ * `symbol-layers`, the part that was dropped from an otherwise translated
+ * renderer).
  */
 export type CimRendererIssueCode =
   | "renderer"
@@ -48,7 +53,8 @@ export type CimRendererIssueCode =
   | "exclusion"
   | "symbol"
   | "no-classes"
-  | "visual-variables";
+  | "visual-variables"
+  | "symbol-layers";
 
 export interface CimRendererIssue {
   code: CimRendererIssueCode;
@@ -80,6 +86,8 @@ interface SymbolLook {
   strokeWidth?: number;
   /** Marker radius in CSS pixels. */
   circleRadius?: number;
+  /** The first enabled symbol layer type that is not drawn (a hatch, a marker line). */
+  dropped?: string;
 }
 
 /**
@@ -108,7 +116,7 @@ export function translateCimRenderer(renderer: unknown): CimRendererTranslation 
  * to be read before `values` can be interpreted -- treating a CMYK or HSV
  * triple as RGB silently produces the wrong colour. Channels are per the CIM
  * spec (Esri/cim-spec docs/v3/CIMColor.md): RGB 0-255, CMYK/Gray/S/V 0-100,
- * hue 0-360, alpha 0-100. An unrecognised subclass returns null so the caller
+ * hue 0-360, CIELAB L 0-100 with signed a/b, alpha 0-100. An unrecognised subclass returns null so the caller
  * keeps its own default rather than an invented colour.
  */
 export function cimColor(value: unknown): { hex: string; opacity: number } | null {
@@ -138,6 +146,9 @@ export function cimColor(value: unknown): { hex: string; opacity: number } | nul
   } else if (type === "CIMHSVColor" && values.length >= 3) {
     rgb = hsvToRgb(values[0], values[1] / 100, values[2] / 100);
     alpha = values[3] ?? 100;
+  } else if (type === "CIMLABColor" && values.length >= 3) {
+    rgb = labToRgb(values[0], values[1], values[2]);
+    alpha = values[3] ?? 100;
   }
   if (!rgb) return null;
 
@@ -157,7 +168,7 @@ function simpleRenderer(renderer: CimObject): CimRendererTranslation {
   return {
     translated: true,
     style: { ...flatStyle(look), vectorStyleMode: "single" },
-    issues: visualVariableIssues(renderer),
+    issues: partialIssues(renderer, [look]),
   };
 }
 
@@ -184,7 +195,14 @@ function uniqueValueRenderer(renderer: CimObject): CimRendererTranslation {
     filter: unknown[];
     visible: boolean;
   }[] = [];
-  for (const group of arrayValue(renderer.groups).filter(isObject)) {
+  const groups = arrayValue(renderer.groups).filter(isObject);
+  // Pro writes `visible` on every class, so where a renderer has it at all, a
+  // class without it was saved unchecked (false is left out). Files from
+  // before the property existed have it on no class, and every class shows.
+  const writesVisible = groups.some((group) =>
+    arrayValue(group.classes).some((valueClass) => isObject(valueClass) && "visible" in valueClass),
+  );
+  for (const group of groups) {
     for (const valueClass of arrayValue(group.classes).filter(isObject)) {
       const values = arrayValue(valueClass.values)
         .filter(isObject)
@@ -198,7 +216,7 @@ function uniqueValueRenderer(renderer: CimObject): CimRendererTranslation {
         look,
         label: stringValue(valueClass.label) || values.join(", "),
         filter: uniqueValueFilter(field, values),
-        visible: valueClass.visible !== false,
+        visible: writesVisible ? valueClass.visible === true : true,
       });
     }
   }
@@ -215,11 +233,11 @@ function classBreaksRenderer(renderer: CimObject): CimRendererTranslation {
     return untranslated(renderer, { code: "expression" });
   }
   const breakType = stringValue(renderer.classBreakType) || "GraduatedColor";
+  if (breakType === "GraduatedSymbol") {
+    return untranslated(renderer, { code: "graduated-symbols" });
+  }
   if (breakType !== "GraduatedColor") {
-    return untranslated(renderer, {
-      code: "graduated-symbols",
-      cimType: breakType,
-    });
+    return untranslated(renderer, { code: "renderer", cimType: breakType });
   }
   const normalization = stringValue(renderer.normalizationType);
   if (normalization && normalization !== "Nothing") {
@@ -234,19 +252,16 @@ function classBreaksRenderer(renderer: CimObject): CimRendererTranslation {
   if (!field) return untranslated(renderer, { code: "no-classes" });
 
   const breaks = arrayValue(renderer.breaks).filter(isObject);
-  const uppers = breaks.map((classBreak) => numberValue(classBreak.upperBound));
+  // An upper bound or minimum of 0 is left out of the file, like any default.
+  const uppers = breaks.map((classBreak) => numberValue(classBreak.upperBound) ?? 0);
+  const minimumBreak = numberValue(renderer.minimumBreak) ?? 0;
   if (
     breaks.length === 0 ||
-    uppers.some((upper, index) => upper === null || (index > 0 && upper <= uppers[index - 1]!))
+    minimumBreak > uppers[0] ||
+    uppers.some((upper, index) => index > 0 && upper <= uppers[index - 1])
   ) {
     return untranslated(renderer, { code: "no-classes" });
   }
-  // CIM JSON omits a property at its default, so an absent minimumBreak is 0.
-  // A first class whose upper bound is already below 0 cannot have been
-  // classified from 0, so the omission is read as "no lower bound" there
-  // rather than producing a class that matches nothing.
-  const minimumBreak =
-    numberValue(renderer.minimumBreak) ?? ((uppers[0] as number) >= 0 ? 0 : null);
 
   const classes: {
     look: SymbolLook;
@@ -257,12 +272,11 @@ function classBreaksRenderer(renderer: CimObject): CimRendererTranslation {
   for (const [index, classBreak] of breaks.entries()) {
     const look = symbolLook(classBreak.symbol);
     if (!look) return untranslated(renderer, symbolIssue(classBreak.symbol));
-    const upper = uppers[index] as number;
-    const lower = index === 0 ? minimumBreak : (uppers[index - 1] as number);
+    const upper = uppers[index];
+    const lower = index === 0 ? minimumBreak : uppers[index - 1];
     classes.push({
       look,
-      label:
-        stringValue(classBreak.label) || (lower === null ? `≤ ${upper}` : `${lower} – ${upper}`),
+      label: stringValue(classBreak.label) || `${lower} – ${upper}`,
       filter: classBreakFilter(field, lower, index === 0, upper),
       visible: true,
     });
@@ -290,11 +304,13 @@ function thematicStyle(
 ): CimRendererTranslation {
   const base = classes[0].look;
   // `isDefaultSymbolVisible` is the "all other values" class's own checkbox
-  // in the unique values table; Pro writes it explicitly, so only an explicit
-  // false hides the class.
+  // in the unique values table. Files from Pro 3.3 and earlier leave it out
+  // while drawing the default, so only an explicit false hides the class.
   const showDefault =
     renderer.useDefaultSymbol === true && renderer.isDefaultSymbolVisible !== false;
-  const defaultLook = showDefault ? symbolLook(renderer.defaultSymbol) : null;
+  // Read even when it is off, so the switched-off catch-all keeps the colour
+  // ArcGIS would use if the user turns it back on.
+  const defaultLook = symbolLook(renderer.defaultSymbol);
   // ArcGIS draws unclassified features with the default symbol only when it
   // is switched on; a default it asks for but GeoLibre cannot read would hide
   // them instead, so the whole renderer is reported rather than half-applied.
@@ -302,6 +318,9 @@ function thematicStyle(
     return untranslated(renderer, symbolIssue(renderer.defaultSymbol));
   }
   const defaultLabel = stringValue(renderer.defaultLabel);
+  // The legend shows a catch-all without a label as "Other"; the explicit
+  // default rule below needs the same, or its filter JSON is shown instead.
+  const drawnDefault = showDefault ? defaultLook : null;
 
   const rules: VectorRule[] = classes.map((entry, index) => ({
     id: `cim-class-${index}`,
@@ -317,18 +336,18 @@ function thematicStyle(
 
   const hasHiddenClass = classes.some((entry) => !entry.visible);
   let elseRule: VectorRule;
-  if (defaultLook && hasHiddenClass) {
+  if (drawnDefault && hasHiddenClass) {
     // A disabled rule's features fall through to the catch-all, but ArcGIS
     // hides a hidden class's features even when "all other values" draws.
     // Writing the default as an explicit "none of the classes" rule and
     // switching the catch-all off keeps both behaviours.
     rules.push({
       id: "cim-default",
-      label: defaultLabel,
+      label: defaultLabel || "Other",
       filter: JSON.stringify(["!", ["any", ...classes.map((entry) => entry.filter)]]),
-      color: defaultLook.color,
+      color: drawnDefault.color,
       isElse: false,
-      ...lookOverrides(defaultLook, base),
+      ...lookOverrides(drawnDefault, base),
     });
     elseRule = {
       id: "cim-else",
@@ -345,7 +364,8 @@ function thematicStyle(
       filter: "",
       color: (defaultLook ?? base).color,
       isElse: true,
-      ...(defaultLook ? lookOverrides(defaultLook, base) : { enabled: false }),
+      ...(defaultLook ? lookOverrides(defaultLook, base) : {}),
+      ...(drawnDefault ? {} : { enabled: false }),
     };
   }
   rules.push(elseRule);
@@ -361,7 +381,10 @@ function thematicStyle(
   return {
     translated: true,
     style: { ...style, vectorStyleMode: "rule-based", vectorRules: rules },
-    issues: visualVariableIssues(renderer),
+    issues: partialIssues(renderer, [
+      ...classes.map((entry) => entry.look),
+      ...(drawnDefault ? [drawnDefault] : []),
+    ]),
   };
 }
 
@@ -391,20 +414,22 @@ function uniqueValueFilter(field: string, values: string[]): unknown[] {
  * A MapLibre filter for one class break. Only numeric values classify: ArcGIS
  * leaves a null out of every class, and `to-number` would turn it into 0.
  *
- * @param lower - The class's lower bound, or null for none.
+ * @param lower - The class's lower bound.
  * @param lowerInclusive - True for the first class, whose minimum belongs to it.
  */
 function classBreakFilter(
   field: string,
-  lower: number | null,
+  lower: number,
   lowerInclusive: boolean,
   upper: number,
 ): unknown[] {
   const value = ["to-number", ["get", field]];
-  const conditions: unknown[] = [["==", ["typeof", ["get", field]], "number"]];
-  if (lower !== null) conditions.push([lowerInclusive ? ">=" : ">", value, lower]);
-  conditions.push(["<=", value, upper]);
-  return ["all", ...conditions];
+  return [
+    "all",
+    ["==", ["typeof", ["get", field]], "number"],
+    [lowerInclusive ? ">=" : ">", value, lower],
+    ["<=", value, upper],
+  ];
 }
 
 function untranslated(renderer: CimObject, issue: CimRendererIssue): CimRendererTranslation {
@@ -423,8 +448,13 @@ function symbolIssue(reference: unknown): CimRendererIssue {
   return { code: "symbol", ...(type ? { cimType: type } : {}) };
 }
 
-function visualVariableIssues(renderer: CimObject): CimRendererIssue[] {
-  return arrayValue(renderer.visualVariables).length > 0 ? [{ code: "visual-variables" }] : [];
+/** What a translated renderer leaves out: visual variables and undrawn symbol layers. */
+function partialIssues(renderer: CimObject, looks: SymbolLook[]): CimRendererIssue[] {
+  const issues: CimRendererIssue[] = [];
+  if (arrayValue(renderer.visualVariables).length > 0) issues.push({ code: "visual-variables" });
+  const dropped = looks.find((look) => look.dropped)?.dropped;
+  if (dropped) issues.push({ code: "symbol-layers", cimType: dropped });
+  return issues;
 }
 
 /** The layer-level style one symbol implies. */
@@ -474,6 +504,7 @@ function symbolLook(reference: unknown): SymbolLook | null {
   if (type === "CIMPolygonSymbol") {
     const fill = solidColor(layers, "CIMSolidFill");
     const stroke = solidStroke(layers);
+    const dropped = droppedLayer(layers, ["CIMSolidFill", "CIMSolidStroke"]);
     if (!fill) {
       // An outline-only polygon is hollow. Any other fill (picture, hatch,
       // gradient) has no flat colour, so it is not drawn as hollow either.
@@ -483,19 +514,27 @@ function symbolLook(reference: unknown): SymbolLook | null {
         color: stroke.color.hex,
         fillOpacity: 0,
         ...strokeLook(stroke),
+        ...(dropped ? { dropped } : {}),
       };
     }
     return {
       geometry: "polygon",
       color: fill.hex,
       fillOpacity: fill.opacity,
-      ...(stroke ? strokeLook(stroke) : {}),
+      ...strokeLook(stroke),
+      ...(dropped ? { dropped } : {}),
     };
   }
   if (type === "CIMLineSymbol") {
     const stroke = solidStroke(layers);
     if (!stroke) return null;
-    return { geometry: "line", color: stroke.color.hex, ...strokeLook(stroke) };
+    const dropped = droppedLayer(layers, ["CIMSolidStroke"]);
+    return {
+      geometry: "line",
+      color: stroke.color.hex,
+      ...strokeLook(stroke),
+      ...(dropped ? { dropped } : {}),
+    };
   }
   if (type === "CIMPointSymbol") {
     const marker = layers.find((layer) => /Marker$/.test(stringValue(layer.type)));
@@ -512,11 +551,13 @@ function symbolLook(reference: unknown): SymbolLook | null {
     if (!fill) return null;
     const stroke = solidStroke(graphicLayers);
     const size = numberValue(marker.size);
+    const dropped = layers.find((layer) => layer !== marker)?.type;
     return {
       geometry: "point",
       color: fill.hex,
       fillOpacity: fill.opacity,
-      ...(stroke ? strokeLook(stroke) : {}),
+      ...strokeLook(stroke),
+      ...(typeof dropped === "string" ? { dropped } : {}),
       // A CIM marker size is its height in points; a GeoLibre circle radius is
       // half the diameter in pixels.
       ...(size !== null ? { circleRadius: round((size * PIXELS_PER_POINT) / 2) } : {}),
@@ -532,6 +573,12 @@ function inferredSymbolType(layers: CimObject[]): string {
   if (types.some((type) => /Fill$/.test(type))) return "CIMPolygonSymbol";
   if (types.some((type) => /Stroke$/.test(type))) return "CIMLineSymbol";
   return "";
+}
+
+/** The first enabled layer of a type the look does not draw, if any. */
+function droppedLayer(layers: CimObject[], drawn: string[]): string | undefined {
+  const type = layers.map((layer) => stringValue(layer.type)).find((t) => !drawn.includes(t));
+  return type || undefined;
 }
 
 function enabledLayers(symbol: CimObject | undefined): CimObject[] {
@@ -553,10 +600,15 @@ function solidStroke(
   return layer && color ? { color, width: numberValue(layer.width) } : null;
 }
 
-function strokeLook(stroke: {
-  color: { hex: string; opacity: number };
-  width: number | null;
-}): Pick<SymbolLook, "strokeColor" | "strokeOpacity" | "strokeWidth"> {
+/**
+ * The stroke part of a look. A symbol with no stroke, or a fully transparent
+ * one (Pro's "no colour" outline), gets a zero width: leaving the width out
+ * would let the class inherit another class's outline, or GeoLibre's default.
+ */
+function strokeLook(
+  stroke: { color: { hex: string; opacity: number }; width: number | null } | null,
+): Pick<SymbolLook, "strokeColor" | "strokeOpacity" | "strokeWidth"> {
+  if (!stroke || stroke.color.opacity === 0) return { strokeWidth: 0 };
   return {
     strokeColor: stroke.color.hex,
     ...(stroke.color.opacity !== DEFAULT_LAYER_STYLE.strokeOpacity
@@ -564,6 +616,35 @@ function strokeLook(stroke: {
       : {}),
     ...(stroke.width !== null ? { strokeWidth: round(stroke.width * PIXELS_PER_POINT) } : {}),
   };
+}
+
+/**
+ * CIELAB (D50, as ICC and CSS `lab()` use it) to sRGB for {@link cimColor}.
+ *
+ * @returns Red, green, and blue channels on a 0-255 scale (unclamped).
+ */
+function labToRgb(l: number, a: number, b: number): [number, number, number] {
+  const fy = (l + 16) / 116;
+  const fx = fy + a / 500;
+  const fz = fy - b / 200;
+  const epsilon = 216 / 24389;
+  const kappa = 24389 / 27;
+  const finv = (f: number) => (f ** 3 > epsilon ? f ** 3 : (116 * f - 16) / kappa);
+  const x = (finv(fx) * 0.3457) / 0.3585;
+  const y = l > kappa * epsilon ? fy ** 3 : l / kappa;
+  const z = (finv(fz) * (1 - 0.3457 - 0.3585)) / 0.3585;
+  // Bradford-adapted D50 XYZ to linear sRGB (CSS Color 4).
+  const linear = [
+    3.1341359569958707 * x - 1.6173863321612538 * y - 0.4906619460083532 * z,
+    -0.978795502912089 * x + 1.916254567259524 * y + 0.03344273116131949 * z,
+    0.07195537988411677 * x - 0.2289768264158322 * y + 1.405386058324125 * z,
+  ];
+  return linear.map((channel) => {
+    const magnitude = Math.abs(channel);
+    const encoded =
+      magnitude <= 0.0031308 ? 12.92 * magnitude : 1.055 * magnitude ** (1 / 2.4) - 0.055;
+    return Math.sign(channel) * encoded * 255;
+  }) as [number, number, number];
 }
 
 /**

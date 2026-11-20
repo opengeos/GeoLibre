@@ -4326,7 +4326,7 @@
       "arcgisImportWarnings_one": "The project was imported, but {{count}} layer could not be loaded.",
       "arcgisImportWarnings_other": "The project was imported, but {{count}} layers could not be loaded.",
       "arcgisUnknownLayerType": "unknown",
-      "arcgisImportSymbologyOnly": "The project was imported, but some layers are not drawn exactly as in ArcGIS Pro.",
+      "arcgisImportSymbologyOnly": "The project was imported, but some of it is not shown exactly as in ArcGIS Pro.",
       "arcgisSymbologyIssue": {
         "renderer": "The layer was loaded with a single symbol: its {{layerType}} renderer is not supported.",
         "multiple-fields": "The layer was loaded with a single symbol: unique values that combine more than one field are not supported.",
@@ -4336,7 +4336,8 @@
         "exclusion": "The layer was loaded with a single symbol: class breaks that exclude values are not supported.",
         "symbol": "The layer was loaded with a single symbol: one of its symbols ({{layerType}}) has no solid colour GeoLibre can draw.",
         "no-classes": "The layer was loaded with a single symbol: its renderer has no usable classes.",
-        "visual-variables": "The layer's classes were imported, but variation from its visual variables (size, colour, rotation or transparency) is not shown."
+        "visual-variables": "The layer's symbology was imported, but variation from its visual variables (size, colour, rotation or transparency) is not shown.",
+        "symbol-layers": "The layer's symbology was imported, but parts of its symbols ({{layerType}}, such as hatching or markers along lines) are not drawn."
       },
       "importWarningLayerCount_one": "{{count}} layer",
       "importWarningLayerCount_other": "{{count}} layers",
