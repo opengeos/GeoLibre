@@ -56,7 +56,10 @@ export {
   FEATURE_SELECTION_FINISH_EVENT,
   FEATURE_SELECTION_UNDO_EVENT,
   finishFeatureSelection,
+  getFeatureSelectionUiState,
+  subscribeFeatureSelectionUiState,
   undoFeatureSelectionVertex,
+  type FeatureSelectionUiState,
 } from "./map-feature-selection";
 export {
   buildIdentifyQueryGeometry,
