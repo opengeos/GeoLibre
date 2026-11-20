@@ -290,6 +290,20 @@ export interface LabelStyle {
   expression: string;
   /** `"point"` labels at the feature/centroid; `"line"` places them along lines. */
   placement: "point" | "line";
+  /**
+   * With `"line"` placement, cut a gap in the line under each label and set
+   * the text in it, the way topographic maps print contour values, so the
+   * label reads without a halo. Applies to line layers drawn from inline
+   * GeoJSON in the MapLibre view; elsewhere labels follow the line as usual.
+   */
+  lineGap: boolean;
+  /** Line removed on each side of the text when {@link lineGap} is on, in pixels. */
+  lineGapPadding: number;
+  /**
+   * Distance between repeated labels along one line, in pixels (MapLibre
+   * `symbol-spacing` for line placement).
+   */
+  lineSpacing: number;
   /** Label text size in pixels. */
   size: number;
   /** CSS color string for the label text. */
@@ -720,6 +734,9 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
     field: "",
     expression: "",
     placement: "point",
+    lineGap: false,
+    lineGapPadding: 3,
+    lineSpacing: 250,
     size: 13,
     color: "#111827",
     haloColor: "#ffffff",
