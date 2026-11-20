@@ -589,6 +589,10 @@ function resolveRasterSource(
  *
  * The URL is rebuilt from scheme, host and path, so a token or user info in the
  * connection string never reaches a request, a saved project or a log.
+ *
+ * Plain `http:` is accepted, as Add Data accepts it, because ArcGIS Server on
+ * an intranet often has no certificate; such a layer loads anonymously, since
+ * a sign-in token is only ever sent over https.
  */
 function featureServiceSublayerUrl(connection: CimObject | undefined): string | null {
   if (!connection || !isFeatureServiceFactory(connection)) return null;

@@ -1044,6 +1044,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
                   zoomTo: false,
                 });
           if (replaced()) {
+            // The new project is left marked as changed: the flag it had before
+            // this add cannot be told apart from an edit made while the service
+            // loaded, and a needless save prompt is safer than a lost one.
             useAppStore.getState().removeLayer(serviceLayerId);
             return;
           }
@@ -1065,7 +1068,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           });
         }
       }
-      // An import with nothing left to load reaches here without a check.
+      // Checked again here because an import with no rasters or services left
+      // never enters the loops above.
       if (replaced()) return;
       useAppStore.setState({ isDirty: true });
       setArcgisImportWarnings(imported.warnings.length > 0 ? imported.warnings : null);
