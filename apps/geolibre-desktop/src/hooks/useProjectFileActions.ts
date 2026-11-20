@@ -1617,7 +1617,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       const repointedIds = new Set<string>();
       for (const next of updatedLive) {
         const target = writtenByLayerId.get(next.id);
-        if (target && next.sourcePath === target.path && next.metadata.localFileReloadable === true) {
+        if (
+          target &&
+          next.sourcePath === target.path &&
+          next.metadata.localFileReloadable === true
+        ) {
           repointedIds.add(next.id);
         }
       }
