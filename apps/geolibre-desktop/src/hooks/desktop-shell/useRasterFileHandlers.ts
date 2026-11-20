@@ -1,3 +1,4 @@
+import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import {
   addRasterToMap,
@@ -69,6 +70,13 @@ export function useRasterFileHandlers(
     setNonTiledRasterHandler(async ({ name, bytesAreRemote, readBytes, dismiss }) => {
       const controller = new AbortController();
       conversions.add(controller);
+      // The converted raster belongs to the project it came from: opening
+      // another one cancels the conversion, so the result never lands in (or
+      // reports an error to) the project that replaced it.
+      const loadCount = useAppStore.getState().projectLoadCount;
+      const stopWatchingProject = useAppStore.subscribe((state) => {
+        if (state.projectLoadCount !== loadCount) controller.abort();
+      });
       let notice: string | undefined;
       try {
         // A remote source gets a single up-front prompt that names the download:
@@ -121,6 +129,7 @@ export function useRasterFileHandlers(
           return;
         }
         const info = await readGeoTiffInfo(bytes);
+        controller.signal.throwIfAborted();
         if (!info.ok) throw new Error("Not a readable GeoTIFF.");
         const samples = geoTiffSampleCount(info);
         if (exceedsBrowserCogConversionLimit(samples)) {
@@ -170,7 +179,13 @@ export function useRasterFileHandlers(
         const file = new File([cog as BlobPart], name, {
           type: "image/tiff",
         });
-        await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
+        await addRasterToMap(createAppAPI(mapControllerRef), file, {
+          name,
+          signal: controller.signal,
+        });
+        // A replaced project may reuse the original raster's id, so the
+        // dismissal below must not run against it.
+        controller.signal.throwIfAborted();
         // Drop the failed layer only after the replacement is fully loaded, so
         // any failure above (conversion or re-add) leaves the original errored
         // layer (and its message) in place.
@@ -180,6 +195,7 @@ export function useRasterFileHandlers(
         console.error("[GeoLibre] Failed to convert GeoTIFF to COG", error);
         notify.error(translateRef.current("raster.cogConvertFailed", { name }), { error });
       } finally {
+        stopWatchingProject();
         if (notice) dismissNotification(notice);
         conversions.delete(controller);
       }

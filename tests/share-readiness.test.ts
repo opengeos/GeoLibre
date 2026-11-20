@@ -190,6 +190,12 @@ describe("collectShareSources", () => {
           type: "xyz",
           source: { tiles: ["http://192.168.1.20:8080/{z}/{x}/{y}.png"] },
         }),
+        layer({
+          id: "c",
+          name: "Shared DEM",
+          type: "cog",
+          source: { url: "//server/share/dem.tif" },
+        }),
       ],
     });
     assert.deepEqual(
@@ -197,6 +203,8 @@ describe("collectShareSources", () => {
       [
         ["a", "local", "local-file", null],
         ["b", "local", "private-host", null],
+        // Not a local path any more (a UNC share), but still not the recipient's.
+        ["c", "local", "local-file", null],
       ],
     );
   });

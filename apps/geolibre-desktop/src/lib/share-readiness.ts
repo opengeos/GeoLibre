@@ -334,7 +334,9 @@ function classifyReference(url: string): Classification | null {
   if (value.startsWith("blob:")) {
     return { status: "local", reason: "local-file", probeUrl: null };
   }
-  if (value.startsWith("file://") || isAbsoluteFilesystemPath(value)) {
+  // `//server/share` is no longer an absolute local path (it is a UNC share),
+  // but it is still a file on this machine's network, not one a recipient can open.
+  if (value.startsWith("file://") || value.startsWith("//") || isAbsoluteFilesystemPath(value)) {
     return { status: "local", reason: "local-file", probeUrl: null };
   }
   if (!/^https?:\/\//i.test(value)) {

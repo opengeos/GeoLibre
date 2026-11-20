@@ -1,13 +1,17 @@
-import { act, cleanup, i18n, render, waitFor } from "./helpers/dom";
+import { act, cleanup, i18n, render, useAppStore, waitFor } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { createElement } from "react";
 import { useTranslation } from "react-i18next";
+import { createEmptyProject } from "@geolibre/core";
 import {
   addedRasters,
   conversions,
+  heldRasterAdds,
+  rasterAdds,
   rasterHandler,
   resetCogHarness,
+  setHoldRasterAdds,
 } from "./helpers/cog-conversion-harness";
 
 const { useRasterFileHandlers } =
@@ -77,6 +81,46 @@ describe("COG convert-and-load lifecycle", () => {
     assert.equal(dismiss.mock.callCount(), 0);
     assert.equal(useNotificationStore.getState().notifications.length, 0);
     assert.equal(rasterHandler, null);
+  });
+
+  it("cancels when another project opens, adding nothing to it", async () => {
+    render(createElement(RasterHost));
+    const { run, dismiss } = await startConversion();
+
+    act(() => useAppStore.getState().loadProject({ ...createEmptyProject(), name: "Opened" }));
+    await run;
+    assert.equal(conversions[0].options.signal?.aborted, true);
+    assert.equal(addedRasters, 0);
+    assert.equal(dismiss.mock.callCount(), 0);
+    assert.equal(useNotificationStore.getState().notifications.length, 0);
+  });
+
+  it("does not dismiss anything once another project opens during the final add", async () => {
+    setHoldRasterAdds(true);
+    render(createElement(RasterHost));
+    const { run, dismiss } = await startConversion();
+    conversions[0].result.resolve(Uint8Array.of(1));
+    await waitFor(() => assert.equal(heldRasterAdds.length, 1));
+    // The add was handed the conversion's signal, which the switch aborts.
+    act(() => useAppStore.getState().loadProject({ ...createEmptyProject(), name: "Opened" }));
+    assert.equal(rasterAdds[0].signal?.aborted, true);
+    // The add itself finishes anyway (it was past its own check).
+    heldRasterAdds[0].resolve();
+    await run;
+    assert.equal(dismiss.mock.callCount(), 0);
+    assert.equal(useNotificationStore.getState().notifications.length, 0);
+  });
+
+  it("keeps converting through a collaboration refresh of the open project", async () => {
+    render(createElement(RasterHost));
+    const { run } = await startConversion();
+
+    act(() =>
+      useAppStore.setState((state) => ({ projectGeneration: state.projectGeneration + 1 })),
+    );
+    conversions[0].result.resolve(Uint8Array.of(1));
+    await run;
+    assert.equal(addedRasters, 1);
   });
 
   it("cancels from the notification and preserves the original layer", async () => {

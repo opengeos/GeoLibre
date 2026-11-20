@@ -461,6 +461,18 @@ export async function addRasterToMap(
      * project's "Zoom to newly added layers" map preference.
      */
     zoomTo?: boolean;
+    /**
+     * Id for the new layer, so a caller can find (and dispose of) exactly the
+     * raster this call added. Generated when omitted.
+     */
+    id?: string;
+    /**
+     * Checked before the raster is added to the map and the store; once
+     * aborted, the call rejects with the signal's reason and adds nothing. A
+     * project import passes one so a raster still loading when another
+     * project opens never lands in that project.
+     */
+    signal?: AbortSignal;
   } = {},
 ): Promise<string> {
   // The ArcGIS view and the Cesium globe draw `cog` records natively and have
@@ -477,6 +489,9 @@ export async function addRasterToMap(
   if (!control) {
     throw new Error("The raster control could not be initialized.");
   }
+  // Last point a cancelled add can stop: from here the engine switch and the
+  // control's raster (which the store sync turns into a layer) touch the map.
+  options.signal?.throwIfAborted();
   // For File-backed rasters the control retains the original bytes behind a
   // blob URL (source.objectUrl), which the store sync surfaces as
   // metadata.localBytesUrl so in-browser tools (the WASM Whitebox runner) can
@@ -488,7 +503,10 @@ export async function addRasterToMap(
   }
   // Named here rather than by the control, so a failure below removes exactly
   // this add's raster and never one a concurrent add created.
-  const rasterId = `raster-${crypto.randomUUID().slice(0, 8)}`;
+  const rasterId = options.id ?? `raster-${crypto.randomUUID().slice(0, 8)}`;
+  // The project this raster joins; a failure below cleans up only while it is
+  // still open.
+  const loadCount = useAppStore.getState().projectLoadCount;
   let id: string;
   try {
     id = await addRasterSource(control, readable, { ...options, id: rasterId });
@@ -498,6 +516,10 @@ export async function addRasterToMap(
     // panel as an empty layer. A striped GeoTIFF is the exception: the
     // non-tiled conversion offer (see the control's "error" handler) owns that
     // raster, and reads its bytes, until it dismisses it.
+    // Once another project has opened, it may hold a raster with the same id;
+    // leave clean-up to the project switch rather than remove that one. A
+    // cancellation without a switch (an unmounted caller) still cleans up.
+    if (useAppStore.getState().projectLoadCount !== loadCount) throw error;
     const failed = control.getRaster(rasterId);
     if (failed && !isNonTiledRasterError(failed.error)) control.removeRaster(rasterId);
     // A bucket whose CORS rules block this origin fails as "Failed to fetch";
@@ -506,6 +528,10 @@ export async function addRasterToMap(
       ? await explainS3ReadError(source, error, app.translate)
       : error;
   }
+  // Another project may have opened while the header loaded. The sync below
+  // would then write this control's state over the new project's layers, so
+  // stop here and leave the raster to the project switch's own clean-up.
+  options.signal?.throwIfAborted();
   applyRgbBandDefaults(control, id, options.defaults?.rgbBands);
   if (options.localPath) {
     // The id only exists once addRaster resolves, which is after the rasteradd

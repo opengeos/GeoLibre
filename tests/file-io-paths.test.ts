@@ -76,6 +76,11 @@ describe("file-io path predicates", () => {
     assert.equal(isAbsoluteLocalPath("C:\\data\\a.geojson"), true);
     assert.equal(isAbsoluteLocalPath("data/a.geojson"), false);
     assert.equal(isAbsoluteLocalPath("\\\\host\\share\\a.geojson"), false);
+    // The forward-slash UNC form Windows also accepts.
+    assert.equal(isAbsoluteLocalPath("//host/share/a.geojson"), false);
+    assert.equal(isAbsoluteLocalPath("//"), false);
+    assert.equal(isAbsoluteLocalPath("/"), true);
+    assert.equal(isAbsoluteLocalPath("C:/data/a.geojson"), true);
   });
 
   it("classifies only drive-letter and UNC paths as Windows-style", () => {
