@@ -10234,6 +10234,7 @@
     "tableLayerTruncated": "{{layer}} is too long to load in full: only its first {{count}} rows are shown.",
     "localLayersDropped_one": "Removed {{count}} layer: its file could not be read ({{path}}).",
     "localLayersDropped_other": "Removed {{count}} layers: their file could not be read ({{path}}).",
+    "remoteGeoJsonFetchFailed": "Layer \"{{layer}}\" has no data: {{error}}",
     "pluginActivateFailed": "Could not start the plugin \"{{id}}\" from the link.",
     "pluginMenuActionFailed": "The menu action \"{{name}}\" failed.",
     "recordingOverlaysSkipped": "The map panels could not be captured, so the recording shows only the map.",

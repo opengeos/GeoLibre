@@ -24,6 +24,7 @@ import { fetchProjectFromUrl, projectUrlFromLocation } from "../lib/project-url"
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import { isKnownWhiteboxToolId } from "../lib/whitebox-tool-url";
 import { queueDataLoad } from "../lib/data-load-queue";
+import { withFetchedRemoteGeoJson } from "../lib/restore-remote-geojson-layers";
 import { loadDataUrl } from "./useDataUrlLoader";
 import type { createAppAPI } from "./usePlugins";
 
@@ -257,8 +258,13 @@ export function useEmbedApi(
           const state = useAppStore.getState();
           if (!state.deploymentCapabilities.has("data:add"))
             throw new Error("Missing data:add capability");
-          const layer = buildEmbedLayer(command.spec, state.layers);
-          state.addLayer(layer, command.spec.beforeId);
+          // A geojson spec that points at its data by URL is fetched before it
+          // is added, so a bad URL fails this call instead of acking a layer
+          // that draws nothing (#3508).
+          const layer = await withFetchedRemoteGeoJson(buildEmbedLayer(command.spec, state.layers));
+          // The fetch yields, so another command may have taken the id meanwhile.
+          buildEmbedLayer(command.spec, useAppStore.getState().layers);
+          useAppStore.getState().addLayer(layer, command.spec.beforeId);
           return layer.id;
         }
         case "addData": {

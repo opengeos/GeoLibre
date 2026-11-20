@@ -374,6 +374,31 @@ off in the app does not edit it.
 }
 ```
 
+A `geojson` layer renders from its inline `geojson` FeatureCollection. A layer
+may instead reference its data by URL and leave `geojson` out:
+
+```json
+{
+  "id": "fields",
+  "name": "Field boundaries",
+  "type": "geojson",
+  "source": { "type": "geojson", "data": "https://example.com/fields.geojson" },
+  "visible": true,
+  "opacity": 1,
+  "style": { "fillColor": "#3b82f6" }
+}
+```
+
+When the project opens, GeoLibre fetches `source.data` (or, failing that,
+`source.url`) and draws the result. The reference must be an absolute
+http(s) URL or a root-relative path (`/data/fields.geojson`, resolved against
+the page the app is served from), and the server must allow CORS for a
+cross-origin URL. A layer whose data cannot be fetched stays in the project,
+empty, with a warning. Saving the project keeps the URL reference rather than
+embedding the downloaded features, unless they were edited in the app, in
+which case the edited features are embedded. When a layer has both an inline
+`geojson` and a URL, the inline copy is drawn and the URL is not fetched.
+
 A layer can define an optional `capabilities` set (`query`, `create`, `update`,
 `delete`, `export`) to explicitly declare allowed user and session actions. Each
 flag gates only the actions it names: `query` the identify/attribute-table and

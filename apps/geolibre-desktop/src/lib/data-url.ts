@@ -569,6 +569,25 @@ export async function fetchRemoteData(
   return { kind: "geojson", layers };
 }
 
+/**
+ * Fetch one GeoJSON FeatureCollection from a URL, under the same download cap
+ * and error wording as the Add Data URL loader.
+ *
+ * @param url - Absolute http(s) URL of the GeoJSON document.
+ * @param options - Optional abort signal and fetch implementation (tests).
+ * @returns The parsed FeatureCollection.
+ * @throws When the request fails, the body is too large, or it is not a
+ *   GeoJSON FeatureCollection.
+ */
+export async function fetchGeoJsonFeatureCollection(
+  url: string,
+  options: { signal?: AbortSignal; fetchImpl?: typeof fetch } = {},
+): Promise<FeatureCollection> {
+  const response = await fetchOk(url, options.signal, options.fetchImpl ?? fetch);
+  const bytes = await readCappedBytes(response, url);
+  return parseFeatureCollection(strFromU8(bytes), url);
+}
+
 export async function fetchRemoteStyle(
   url: string,
   options: { signal?: AbortSignal; fetchImpl?: typeof fetch } = {},
