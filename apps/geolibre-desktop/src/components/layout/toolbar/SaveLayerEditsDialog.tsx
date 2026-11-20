@@ -85,7 +85,9 @@ export function SaveLayerEditsDialog({
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const collaboration = useAppStore((s) => s.collaboration);
   const attributeTableDrafts = useAppStore((s) => s.ui.attributeTableDrafts);
-  const deploymentAllowsExportData = useAppStore((s) => s.deploymentCapabilities.has("export:data"));
+  const deploymentAllowsExportData = useAppStore((s) =>
+    s.deploymentCapabilities.has("export:data"),
+  );
   const exportDataCapability = useAppCapability("export:data");
   const canExportData = deploymentAllowsExportData && exportDataCapability.granted;
   const geometryEditLayerId = useSyncExternalStore(

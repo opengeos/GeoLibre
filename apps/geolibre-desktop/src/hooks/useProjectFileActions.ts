@@ -1516,7 +1516,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         layerIds: liveEditedIds,
         projectGeneration: state.projectGeneration,
       });
-      if (copyResult.aborted || useAppStore.getState().projectGeneration !== state.projectGeneration) {
+      if (
+        copyResult.aborted ||
+        useAppStore.getState().projectGeneration !== state.projectGeneration
+      ) {
         return "cancel";
       }
       if (
@@ -2425,10 +2428,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       mapControllerRef.current?.getMap() ?? undefined,
       { layerIds: options?.layerIds, projectGeneration: exportProjectGeneration },
     );
-    if (
-      collected.aborted ||
-      useAppStore.getState().projectGeneration !== exportProjectGeneration
-    ) {
+    if (collected.aborted || useAppStore.getState().projectGeneration !== exportProjectGeneration) {
       return false;
     }
     if (collected.items.length === 0) {

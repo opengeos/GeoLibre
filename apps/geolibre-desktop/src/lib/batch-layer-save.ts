@@ -236,8 +236,7 @@ export function listWritableLayerCandidates(
   },
 ): WritableLayerCandidate[] {
   const canWriteSource = options?.canWriteSource ?? canWriteEditsToSource;
-  const projectGeneration =
-    options?.projectGeneration ?? useAppStore.getState().projectGeneration;
+  const projectGeneration = options?.projectGeneration ?? useAppStore.getState().projectGeneration;
   const candidates: WritableLayerCandidate[] = [];
   for (const layer of layers) {
     if (!canWriteSource(layer)) continue;
@@ -253,10 +252,7 @@ export function listWritableLayerCandidates(
       disabledReason = "geometryEditActive";
     } else if (kind === "mssql" && layer.mssqlWritebackPending === true) {
       disabledReason = "mssqlRefreshRequired";
-    } else if (
-      kind === "postgis" &&
-      isPostgisWritebackRefreshRequired(layer, projectGeneration)
-    ) {
+    } else if (kind === "postgis" && isPostgisWritebackRefreshRequired(layer, projectGeneration)) {
       disabledReason = "postgisRefreshRequired";
     }
 
@@ -823,7 +819,8 @@ export async function saveGeojsonCopiesToDirectory(
     let lastError: unknown = null;
 
     for (let attempt = 1; attempt <= MAX_NAME_ATTEMPTS; attempt += 1) {
-      const candidateName = attempt === 1 ? `${baseName}.geojson` : `${baseName}-${attempt}.geojson`;
+      const candidateName =
+        attempt === 1 ? `${baseName}.geojson` : `${baseName}-${attempt}.geojson`;
       if (usedNamesLower.has(candidateName.toLowerCase())) continue;
       const targetPath = joinLocalPath(directory, candidateName);
       try {
@@ -880,9 +877,7 @@ function isPlainLocalReloadableLayer(layer: GeoLibreLayer): boolean {
 }
 
 /** Reference to a written external copy, optionally pinned to the captured revision. */
-export type ExternalCopyTarget =
-  | string
-  | { path: string; capturedGeojson?: FeatureCollection };
+export type ExternalCopyTarget = string | { path: string; capturedGeojson?: FeatureCollection };
 
 /**
  * Build the layer list for a project save after external GeoJSON copies were
@@ -904,8 +899,7 @@ export function applyExternalCopyReferences(
     if (target && isPlainLocalReloadableLayer(layer)) {
       const copyPath = typeof target === "string" ? target : target.path;
       const capturedGeojson = typeof target === "string" ? undefined : target.capturedGeojson;
-      const revisionMatches =
-        capturedGeojson === undefined || layer.geojson === capturedGeojson;
+      const revisionMatches = capturedGeojson === undefined || layer.geojson === capturedGeojson;
       if (revisionMatches) {
         const { geometryEdited: _edited, sourceLayer: _table, ...restMetadata } = layer.metadata;
         return {
