@@ -504,17 +504,22 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     );
   });
 
-  it("looks up a portal's organisation once, and again after a failure", async () => {
+  it("looks up a token's organisation once, and again after a failure", async () => {
     let calls = 0;
-    const orgId = cachedOrgIdLookup(async () => {
+    const orgOf: Record<string, string> = { a: "AbCdEfGh12345678", b: "ZzZzZzZz87654321" };
+    const orgId = cachedOrgIdLookup(async (_portal, token) => {
       calls += 1;
       if (calls === 1) throw new Error("offline");
-      return "AbCdEfGh12345678";
+      return orgOf[token];
     });
-    assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "t"), undefined);
-    assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "t"), "AbCdEfGh12345678");
-    assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "t"), "AbCdEfGh12345678");
+    assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "a"), undefined);
+    assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "a"), "AbCdEfGh12345678");
+    assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "a"), "AbCdEfGh12345678");
     assert.equal(calls, 2);
+    // Another account's token on the same portal is never matched against the
+    // first account's organisation.
+    assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "b"), "ZzZzZzZz87654321");
+    assert.equal(calls, 3);
   });
 
   it("leaves a project opened while the map settles untouched", async () => {

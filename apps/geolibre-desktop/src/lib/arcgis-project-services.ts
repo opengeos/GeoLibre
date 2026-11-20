@@ -90,9 +90,12 @@ export async function signInForImportedService(
 }
 
 /**
- * A portal's signed-in organisation id, looked up once per portal and shared by
- * every service in one import. A failed lookup is not kept, so a transient
- * error does not strip the token from the import's later services.
+ * The organisation id behind a portal token, looked up once per portal and
+ * token and shared by every service in one import. Keyed by the token as well,
+ * so the id a service is matched against always belongs to the account whose
+ * token it is sent; a renewed or switched session simply looks up again. A
+ * failed lookup is not kept, so a transient error does not strip the token
+ * from the import's later services.
  *
  * @param fetchOrgId - Reads the user's organisation id from the portal.
  * @returns The lookup, resolving to undefined when the portal cannot say.
@@ -102,13 +105,14 @@ export function cachedOrgIdLookup(
 ): (portal: string, token: string) => Promise<string | undefined> {
   const lookups = new Map<string, Promise<string | undefined>>();
   return (portal, token) => {
-    let lookup = lookups.get(portal);
+    const key = `${portal}\n${token}`;
+    let lookup = lookups.get(key);
     if (!lookup) {
       lookup = fetchOrgId(portal, token).catch(() => {
-        lookups.delete(portal);
+        lookups.delete(key);
         return undefined;
       });
-      lookups.set(portal, lookup);
+      lookups.set(key, lookup);
     }
     return lookup;
   };
