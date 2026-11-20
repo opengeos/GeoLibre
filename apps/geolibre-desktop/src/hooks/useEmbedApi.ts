@@ -5,6 +5,7 @@ import { imageBlobToDataUrl } from "@geolibre/map";
 import {
   assertEmbedCapability,
   buildEmbedEvent,
+  assertLayerIdAvailable,
   buildEmbedLayer,
   createFeaturesChangeTracker,
   embedEventTargets,
@@ -271,8 +272,13 @@ export function useEmbedApi(
               { signal: abort.signal },
             );
             abort.signal.throwIfAborted();
+            // A project load replaces every layer; one fetched for the previous
+            // project must not land in the new one.
+            if (useAppStore.getState().projectGeneration !== state.projectGeneration) {
+              throw new Error("The project changed while the layer was loading");
+            }
             // The fetch yields, so another command may have taken the id meanwhile.
-            buildEmbedLayer(command.spec, useAppStore.getState().layers);
+            assertLayerIdAvailable(layer.id, useAppStore.getState().layers);
             useAppStore.getState().addLayer(layer, command.spec.beforeId);
             return layer.id;
           } finally {

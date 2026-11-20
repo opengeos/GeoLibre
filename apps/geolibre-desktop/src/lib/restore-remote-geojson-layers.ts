@@ -6,6 +6,7 @@ import {
 } from "@geolibre/core";
 import i18next from "i18next";
 import { fetchGeoJsonFeatureCollection } from "./data-url";
+import { isTauri } from "./is-tauri";
 import { notify } from "./notify";
 
 /**
@@ -16,11 +17,16 @@ import { notify } from "./notify";
  */
 const attemptedSources = new WeakSet<object>();
 
+/** How many layer downloads restore runs at once, bounding peak memory. */
+const RESTORE_CONCURRENCY = 4;
+
 /**
  * The URL root-relative layer sources resolve against: the page the app runs
- * from, so `/data/farm.geojson` reads from the same origin as the app.
+ * from, so `/data/farm.geojson` reads from the same origin as the app. Null
+ * on the desktop, where a leading `/` is a filesystem path, not a URL.
  */
-function pageUrl(): string {
+function pageUrl(): string | null {
+  if (isTauri()) return null;
   return typeof window === "undefined" ? "http://localhost/" : window.location.href;
 }
 
@@ -44,27 +50,30 @@ export async function restoreRemoteGeoJsonLayers(): Promise<void> {
   if (pending.length === 0) return;
   for (const { layer } of pending) attemptedSources.add(layer.source);
 
-  await Promise.all(
-    pending.map(async ({ layer, url }) => {
-      try {
-        const geojson = await fetchGeoJsonFeatureCollection(url);
-        if (!isStillWaiting(layer)) return;
-        useAppStore.getState().updateLayer(layer.id, { geojson: rememberFetchedGeoJson(geojson) });
-      } catch (error) {
-        // A request from a project that has since been replaced, or for a
-        // layer removed meanwhile, has no one left to warn.
-        if (!isStillWaiting(layer)) return;
-        console.warn(`[GeoLibre] Could not fetch GeoJSON for layer "${layer.name}".`, error);
-        notify.warning(
-          i18next.t("notifications.remoteGeoJsonFetchFailed", {
-            layer: layer.name,
-            error: error instanceof Error ? error.message : String(error),
-          }),
-          { durationMs: null, dedupeKey: `remote-geojson-failed:${layer.id}` },
-        );
-      }
-    }),
-  );
+  const restoreOne = async ({ layer, url }: (typeof pending)[number]): Promise<void> => {
+    try {
+      const geojson = await fetchGeoJsonFeatureCollection(url);
+      if (!isStillWaiting(layer)) return;
+      useAppStore.getState().updateLayer(layer.id, { geojson: rememberFetchedGeoJson(geojson) });
+    } catch (error) {
+      // A request from a project that has since been replaced, or for a
+      // layer removed meanwhile, has no one left to warn.
+      if (!isStillWaiting(layer)) return;
+      console.warn(`[GeoLibre] Could not fetch GeoJSON for layer "${layer.name}".`, error);
+      notify.warning(
+        i18next.t("notifications.remoteGeoJsonFetchFailed", {
+          layer: layer.name,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        { durationMs: null, dedupeKey: `remote-geojson-failed:${layer.id}` },
+      );
+    }
+  };
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < pending.length) await restoreOne(pending[next++]);
+  };
+  await Promise.all(Array.from({ length: Math.min(RESTORE_CONCURRENCY, pending.length) }, worker));
 }
 
 /**

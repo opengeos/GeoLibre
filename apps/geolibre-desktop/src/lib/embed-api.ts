@@ -764,6 +764,19 @@ export function embedLayerSummaries(layers: GeoLibreLayer[]): EmbedLayerSummary[
 }
 
 /**
+ * Throw when a layer id is already in use.
+ *
+ * @param id - The id a new layer would take.
+ * @param layers - The store's current layers.
+ * @throws When a layer with that id exists.
+ */
+export function assertLayerIdAvailable(id: string, layers: readonly GeoLibreLayer[]): void {
+  if (layers.some((layer) => layer.id === id)) {
+    throw new Error(`A layer with id "${id}" already exists`);
+  }
+}
+
+/**
  * Build the store layer an `addLayer` spec describes.
  *
  * The spec was already validated by {@link parseEmbedRequest}; the checks
@@ -776,9 +789,7 @@ export function embedLayerSummaries(layers: GeoLibreLayer[]): EmbedLayerSummary[
  * @throws When the id is taken or the type is not a known layer type.
  */
 export function buildEmbedLayer(spec: AddLayerSpec, layers: GeoLibreLayer[]): GeoLibreLayer {
-  if (layers.some((layer) => layer.id === spec.id)) {
-    throw new Error(`A layer with id "${spec.id}" already exists`);
-  }
+  assertLayerIdAvailable(spec.id, layers);
   if (!(LAYER_TYPES as readonly string[]).includes(spec.type)) {
     throw new Error(`Unsupported layer type "${spec.type}"`);
   }

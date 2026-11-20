@@ -66,6 +66,14 @@ describe("remoteGeoJsonUrl", () => {
     );
   });
 
+  it("accepts only absolute URLs when there is no page to resolve against", () => {
+    assert.equal(
+      remoteGeoJsonUrl(layer({ source: { type: "geojson", data: "/home/me/f.geojson" } }), null),
+      null,
+    );
+    assert.equal(remoteGeoJsonUrl(layer(), null), "https://data.example/fields.geojson");
+  });
+
   it("skips inline data, other layer types, owned layers, and non-http references", () => {
     assert.equal(remoteGeoJsonUrl(layer({ geojson: collection("a") }), BASE), null);
     assert.equal(remoteGeoJsonUrl(layer({ type: "xyz" }), BASE), null);

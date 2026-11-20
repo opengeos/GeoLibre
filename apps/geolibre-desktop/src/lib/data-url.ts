@@ -227,13 +227,7 @@ function parseFeatureCollection(text: string, source: string): FeatureCollection
     !parsed ||
     typeof parsed !== "object" ||
     (parsed as { type?: unknown }).type !== "FeatureCollection" ||
-    !Array.isArray((parsed as { features?: unknown }).features) ||
-    !(parsed as { features: unknown[] }).features.every(
-      (feature) =>
-        typeof feature === "object" &&
-        feature !== null &&
-        (feature as { type?: unknown }).type === "Feature",
-    )
+    !Array.isArray((parsed as { features?: unknown }).features)
   ) {
     throw new Error(`${source} is not a GeoJSON FeatureCollection.`);
   }
@@ -591,7 +585,21 @@ export async function fetchGeoJsonFeatureCollection(
 ): Promise<FeatureCollection> {
   const response = await fetchOk(url, options.signal, options.fetchImpl ?? fetch);
   const bytes = await readCappedBytes(response, url);
-  return parseFeatureCollection(strFromU8(bytes), url);
+  const collection = parseFeatureCollection(strFromU8(bytes), url);
+  // Stricter than the Add Data loaders, which keep their existing leniency:
+  // this data goes straight into a layer with no import step to clean it.
+  const features: unknown[] = collection.features;
+  if (
+    !features.every(
+      (feature) =>
+        typeof feature === "object" &&
+        feature !== null &&
+        (feature as { type?: unknown }).type === "Feature",
+    )
+  ) {
+    throw new Error(`${url} is not a GeoJSON FeatureCollection.`);
+  }
+  return collection;
 }
 
 export async function fetchRemoteStyle(

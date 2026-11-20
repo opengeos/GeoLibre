@@ -47,15 +47,18 @@ export function isFetchedGeoJson(collection: FeatureCollection | undefined): boo
  * (`metadata.localFileReloadable`) have their own restore paths.
  *
  * Accepted URLs are absolute http(s) URLs and root-relative paths, which are
- * resolved against `baseUrl` (the page the app is served from).
+ * resolved against `baseUrl` (the page the app is served from). Pass `null`
+ * where the page is not a web server (the desktop app), so a leading `/` —
+ * there an OS path such as `/home/…` — is never fetched.
  *
  * @param layer - A store layer.
- * @param baseUrl - The URL root-relative paths resolve against.
+ * @param baseUrl - The URL root-relative paths resolve against, or null to
+ *   accept absolute http(s) URLs only.
  * @returns The absolute URL to fetch, or null when the layer needs no fetch.
  */
 export function remoteGeoJsonUrl(
   layer: Pick<GeoLibreLayer, "type" | "geojson" | "source" | "metadata">,
-  baseUrl: string,
+  baseUrl: string | null,
 ): string | null {
   if (layer.type !== "geojson" || layer.geojson) return null;
   const metadata = layer.metadata ?? {};
@@ -75,10 +78,11 @@ export function remoteGeoJsonUrl(
     const isAbsolute = /^https?:\/\//i.test(value);
     // The URL parser reads `\` as `/` and drops tabs and newlines, so
     // `/\host/x` or `/<tab>/host/x` would otherwise resolve to another origin.
-    const isRootRelative = value.startsWith("/") && !/^\/[\\/\t\r\n]/.test(value);
+    const isRootRelative =
+      baseUrl !== null && value.startsWith("/") && !/^\/[\\/\t\r\n]/.test(value);
     if (!isAbsolute && !isRootRelative) continue;
     try {
-      return new URL(value, baseUrl).href;
+      return new URL(value, baseUrl ?? undefined).href;
     } catch {
       continue;
     }
