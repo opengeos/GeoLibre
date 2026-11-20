@@ -6423,6 +6423,11 @@ body:has([data-mobile-shell="true"]) [data-testid="notification-region"] {
   bottom: calc(6.75rem + env(safe-area-inset-bottom));
 }
 
+/* Keep capture confirmation toasts clear of the FieldCrosshairOverlay bar. */
+body:has([data-testid="field-crosshair-bar"]) [data-testid="notification-region"] {
+  bottom: calc(11.25rem + env(safe-area-inset-bottom));
+}
+
 /* Present modal Radix dialogs and the Processing toolbox as full-width
    bottom-anchored sheets on touch phones (GeoLibre#3537 Phase 2). */
 @media (max-width: 639px) {
