@@ -659,6 +659,95 @@ describe("shared CIM readers and edge cases", () => {
     assert.deepEqual(translateCimRenderer(renderer).issues, []);
   });
 
+  it("matches a stored number however ArcGIS spelled it", () => {
+    const renderer = zoning();
+    renderer.groups[0].classes[2].values = [
+      { type: "CIMUniqueValue", fieldValues: ["1.0"] },
+      { type: "CIMUniqueValue", fieldValues: ["1E+21"] },
+      { type: "CIMUniqueValue", fieldValues: ["-0"] },
+    ];
+    const style = translatedStyle(renderer);
+    for (const value of [1, 1e21, 0, "1.0", "-0"]) {
+      assert.equal(renderedFill(style, { ZONE: value }), "#0000ff", String(value));
+    }
+    // Text is still compared as text: "1" is not the stored text "1.0".
+    assert.equal(renderedFill(style, { ZONE: "1" }), "#c8c8c8");
+  });
+
+  it("reports an outline drawn at another class's transparency", () => {
+    const renderer = zoning();
+    renderer.groups[0].classes[0].symbol = polygonWith([
+      { type: "CIMSolidFill", enable: true, color: rgb(9, 9, 9) },
+    ]) as never;
+    renderer.groups[0].classes[1].symbol = polygonWith([
+      { type: "CIMSolidStroke", enable: true, width: 1, color: rgb(0, 0, 0, 50) },
+      { type: "CIMSolidFill", enable: true, color: rgb(9, 9, 9) },
+    ]) as never;
+    assert.deepEqual(translateCimRenderer(renderer).issues, [{ code: "transparency" }]);
+  });
+
+  it("reports geometric effects such as dashes instead of drawing them solid silently", () => {
+    const dashed = translateCimRenderer({
+      type: "CIMSimpleRenderer",
+      symbol: {
+        type: "CIMSymbolReference",
+        symbol: {
+          type: "CIMLineSymbol",
+          symbolLayers: [
+            {
+              type: "CIMSolidStroke",
+              enable: true,
+              width: 1,
+              color: rgb(0, 0, 0),
+              effects: [{ type: "CIMGeometricEffectDashes", dashTemplate: [6, 3] }],
+            },
+          ],
+        },
+      },
+    });
+    assert.equal(dashed.translated, true);
+    assert.deepEqual(dashed.issues, [{ code: "effects", cimType: "CIMGeometricEffectDashes" }]);
+  });
+
+  it("reports a hatch or second graphic inside a marker", () => {
+    const marker = (graphicLayers: unknown[]) => ({
+      type: "CIMSimpleRenderer",
+      symbol: {
+        type: "CIMSymbolReference",
+        symbol: {
+          type: "CIMPointSymbol",
+          symbolLayers: [
+            {
+              type: "CIMVectorMarker",
+              enable: true,
+              size: 6,
+              markerGraphics: [
+                { symbol: { type: "CIMPolygonSymbol", symbolLayers: graphicLayers } },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    const solid = { type: "CIMSolidFill", enable: true, color: rgb(255, 0, 0) };
+    assert.deepEqual(translateCimRenderer(marker([solid])).issues, []);
+    assert.deepEqual(
+      translateCimRenderer(marker([{ type: "CIMHatchFill", enable: true }, solid])).issues,
+      [{ code: "symbol-layers", cimType: "CIMHatchFill" }],
+    );
+  });
+
+  it("refuses a break bound that is present but not a number", () => {
+    for (const broken of [null, "10", false]) {
+      const renderer = density({ minimumBreak: -5 });
+      (renderer.breaks[0] as { upperBound: unknown }).upperBound = broken;
+      assert.deepEqual(translateCimRenderer(renderer).issues, [{ code: "no-classes" }]);
+    }
+    assert.deepEqual(translateCimRenderer(density({ minimumBreak: "0" })).issues, [
+      { code: "no-classes" },
+    ]);
+  });
+
   it("labels an unlabelled break without floating-point noise", () => {
     const renderer = density();
     renderer.breaks[0].upperBound = 0.1 + 0.2;

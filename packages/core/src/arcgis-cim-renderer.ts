@@ -28,8 +28,9 @@
  * clause (`exclusion`), a class symbol with no solid colour (`symbol`), or no
  * usable classes (`no-classes`). A translated renderer can still carry
  * issues for what it leaves out: visual variables (`visual-variables`),
- * symbol layers it does not draw (`symbol-layers`), and per-class stroke
- * transparency GeoLibre's rules cannot hold (`transparency`). The importer
+ * symbol layers it does not draw (`symbol-layers`), geometric effects such as
+ * dashes or offsets (`effects`), and per-class stroke transparency GeoLibre's
+ * rules cannot hold (`transparency`). The importer
  * turns each issue into one translated warning for the layer.
  *
  * Thematic renderers become `"rule-based"` styles rather than the native
@@ -74,7 +75,7 @@ export const CIM_NULL_VALUE = "<Null>";
  * Why a renderer, or part of it, was not carried over. `renderer` names the
  * renderer type that was left behind; the rest name the feature that made a
  * supported renderer type untranslatable (or, for `visual-variables`,
- * `symbol-layers` and `transparency`, the part that was dropped from an
+ * `symbol-layers`, `transparency` and `effects`, the part that was dropped from an
  * otherwise translated renderer).
  */
 export type CimRendererIssueCode =
@@ -88,7 +89,8 @@ export type CimRendererIssueCode =
   | "no-classes"
   | "visual-variables"
   | "symbol-layers"
-  | "transparency";
+  | "transparency"
+  | "effects";
 
 export interface CimRendererIssue {
   code: CimRendererIssueCode;
@@ -122,6 +124,8 @@ interface SymbolLook {
   circleRadius?: number;
   /** The first enabled symbol layer type that is not drawn (a hatch, a marker line). */
   dropped?: string;
+  /** The first geometric effect (dashes, offset, ...) that is not drawn. */
+  effect?: string;
 }
 
 /**
@@ -307,8 +311,17 @@ function classBreaksRenderer(renderer: CimObject): CimRendererTranslation {
 
   const breaks = arrayValue(renderer.breaks).filter(isObject);
   // An upper bound or minimum of 0 is left out of the file, like any default.
-  const uppers = breaks.map((classBreak) => numberValue(classBreak.upperBound) ?? 0);
-  const minimumBreak = numberValue(renderer.minimumBreak) ?? 0;
+  // A bound that is present but not a number is refused, not read as 0.
+  const bound = (owner: CimObject, key: string) =>
+    owner[key] === undefined ? 0 : numberValue(owner[key]);
+  const uppers = breaks.map((classBreak) => bound(classBreak, "upperBound"));
+  const minimumBreak = bound(renderer, "minimumBreak");
+  if (
+    minimumBreak === null ||
+    !uppers.every((upper): upper is number => upper !== null)
+  ) {
+    return untranslated(renderer, { code: "no-classes" });
+  }
   if (
     breaks.length === 0 ||
     minimumBreak > uppers[0] ||
@@ -461,6 +474,25 @@ function uniqueValueFilter(field: string, values: string[]): unknown[] {
     const match = ["match", ["to-string", get], text, true, false];
     conditions.push(text.includes("") ? ["all", ["!=", get, null], match] : match);
   }
+  // `to-string` spells a number canonically (`1`, `1e+21`, `0`), so a stored
+  // number spelled any other way (`1.0`, `1E+21`, `-0`) is also compared as a
+  // number, against numeric feature values only, so text "1.0" still needs
+  // the exact text.
+  const respelled = [
+    ...new Set(
+      text
+        .filter((value) => value.trim() !== "" && Number.isFinite(Number(value)))
+        .filter((value) => String(Number(value)) !== value)
+        .map(Number),
+    ),
+  ];
+  if (respelled.length > 0) {
+    conditions.push([
+      "all",
+      ["==", ["typeof", get], "number"],
+      ["any", ...respelled.map((number) => ["==", get, number])],
+    ]);
+  }
   return conditions.length === 1 ? conditions[0] : ["any", ...conditions];
 }
 
@@ -513,10 +545,17 @@ function partialIssues(renderer: CimObject, looks: SymbolLook[]): CimRendererIss
   if (arrayValue(renderer.visualVariables).length > 0) issues.push({ code: "visual-variables" });
   const dropped = looks.find((look) => look.dropped)?.dropped;
   if (dropped) issues.push({ code: "symbol-layers", cimType: dropped });
-  const strokeOpacity = (look: SymbolLook) =>
-    look.strokeWidth === 0 ? undefined : (look.strokeOpacity ?? DEFAULT_LAYER_STYLE.strokeOpacity);
-  const opacities = new Set(looks.map(strokeOpacity).filter((value) => value !== undefined));
-  if (opacities.size > 1) issues.push({ code: "transparency" });
+  // Every class draws its stroke at the layer's opacity, which the first look
+  // sets (or leaves at the default when it has no stroke).
+  const inherited = looks[0]?.strokeOpacity ?? DEFAULT_LAYER_STYLE.strokeOpacity;
+  const differs = looks.some(
+    (look) =>
+      look.strokeWidth !== 0 &&
+      (look.strokeOpacity ?? DEFAULT_LAYER_STYLE.strokeOpacity) !== inherited,
+  );
+  if (differs) issues.push({ code: "transparency" });
+  const effect = looks.find((look) => look.effect)?.effect;
+  if (effect) issues.push({ code: "effects", cimType: effect });
   return issues;
 }
 
@@ -561,6 +600,18 @@ function lookOverrides(look: SymbolLook, base: SymbolLook): Partial<VectorRule> 
  * first enabled solid fill and solid stroke are the ones the user sees.
  */
 function symbolLook(reference: unknown): SymbolLook | null {
+  const look = flatSymbolLook(reference);
+  if (!look) return null;
+  // Geometric effects (dashes, offsets, buffers and so on) change the shape
+  // that is drawn, which a flat style cannot reproduce, so they are reported.
+  const symbol = objectValue(objectValue(reference)?.symbol);
+  const effect = [symbol, ...enabledLayers(symbol)]
+    .flatMap((owner) => arrayValue(owner?.effects).filter(isObject))
+    .map((effectObject) => stringValue(effectObject.type) || "geometric effect")[0];
+  return effect ? { ...look, effect } : look;
+}
+
+function flatSymbolLook(reference: unknown): SymbolLook | null {
   const symbol = objectValue(objectValue(reference)?.symbol);
   const layers = enabledLayers(symbol);
   const type = stringValue(symbol?.type) || inferredSymbolType(layers);
@@ -616,7 +667,13 @@ function symbolLook(reference: unknown): SymbolLook | null {
     if (!fill) return null;
     const stroke = solidStroke(graphicLayers);
     const size = numberValue(marker.size);
-    const dropped = layers.find((layer) => layer !== marker)?.type;
+    // Anything beyond the marker's one fill and outline is not drawn: another
+    // outer layer, or a hatch or second graphic inside the marker.
+    const outer = layers.find((layer) => layer !== marker)?.type;
+    const dropped =
+      typeof outer === "string"
+        ? outer
+        : droppedLayer(graphicLayers, ["CIMSolidFill", "CIMSolidStroke"]);
     return {
       geometry: "point",
       color: fill.hex,
