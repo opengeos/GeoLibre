@@ -122,17 +122,18 @@ describe("ArcGIS Pro project import", () => {
       itemType: "Map",
       catalogPath: `CIMPATH=Maps/${name}.json`,
     });
+    // Detail is stored ahead of Overview: the catalogue, not archive order, sets the order.
     const archive = zipSync({
       "GISProject.json": strToU8(
         JSON.stringify({
           projectItems: [mapItem("Overview"), mapItem("Terrain"), mapItem("Detail")],
         }),
       ),
-      "Maps/Overview.json": strToU8(
+      "Maps/Detail.json": strToU8(
         JSON.stringify({
           type: "CIMMap",
-          name: "Overview",
-          layers: ["CIMPATH=Layers/Roads.lyrx"],
+          name: "Detail",
+          layers: ["CIMPATH=Layers/Parks.lyrx"],
         }),
       ),
       "Maps/Terrain.json": strToU8(
@@ -143,11 +144,11 @@ describe("ArcGIS Pro project import", () => {
           layers: [],
         }),
       ),
-      "Maps/Detail.json": strToU8(
+      "Maps/Overview.json": strToU8(
         JSON.stringify({
           type: "CIMMap",
-          name: "Detail",
-          layers: ["CIMPATH=Layers/Parks.lyrx"],
+          name: "Overview",
+          layers: ["CIMPATH=Layers/Roads.lyrx"],
         }),
       ),
       "Layers/Roads.lyrx": strToU8(JSON.stringify(featureLayer("Roads", "C:\\data"))),
@@ -185,8 +186,16 @@ describe("ArcGIS Pro project import", () => {
         JSON.stringify({ type: "CIMMap", name: "Scene", mapType: "Scene" }),
       ),
       "Maps/Main.json": strToU8(JSON.stringify({ type: "CIMMap", name: "Main" })),
+      "Maps/Links.json": strToU8(
+        JSON.stringify({ type: "CIMMap", name: "Links", mapType: "LinkChart" }),
+      ),
+      "Maps/Basemap.json": strToU8(
+        JSON.stringify({ type: "CIMMap", name: "Basemap", mapType: "BasemapDocument" }),
+      ),
+      "Layers/Imagery.json": strToU8(JSON.stringify({ type: "CIMMapImageLayer", name: "Imagery" })),
     });
-    // With no project catalogue every map document is considered; scenes still are not.
+    // With no project catalogue every map document is considered, but only a
+    // plain map is offered: not a scene, link chart, basemap or map-service layer.
     assert.deepEqual(readArcgisProject(archive, "/work/main.aprx").maps, [
       { index: 0, name: "Main" },
     ]);

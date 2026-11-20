@@ -215,6 +215,8 @@ export interface SaveNamePrompt {
  * than one 2D map. Resolves with the chosen map's index, or null if cancelled.
  */
 export interface ArcgisMapPrompt {
+  /** Project generation that opened the prompt. */
+  projectGeneration: number;
   /** The project file's name, for the dialog description. */
   fileName: string;
   maps: ArcgisProjectMapChoice[];
@@ -458,6 +460,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     setSaveNamePrompt(null);
     setSaveNameInput("");
   }, []);
+  const settleArcgisMapPrompt = useCallback(
+    (prompt: ArcgisMapPrompt | null, index: number | null) => {
+      prompt?.resolve(index);
+      setArcgisMapPrompt(null);
+    },
+    [],
+  );
   const settleRemoteSignInPrompt = useCallback(
     (prompt: RemoteSignInPrompt | null, signedIn: boolean) => {
       prompt?.resolve(signedIn);
@@ -491,18 +500,25 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (remoteSignInPrompt && remoteSignInPrompt.projectGeneration !== projectGeneration) {
       settleRemoteSignInPrompt(remoteSignInPrompt, false);
     }
+    // Another project opened while the map picker waited: importing over it
+    // would replace the project the user just opened.
+    if (arcgisMapPrompt && arcgisMapPrompt.projectGeneration !== projectGeneration) {
+      settleArcgisMapPrompt(arcgisMapPrompt, null);
+    }
     if (droppedProjectPrompt && droppedProjectPrompt.projectGeneration !== projectGeneration) {
       droppedProjectPromptRef.current = null;
       setDroppedProjectPrompt(null);
       setDroppedProjectSaving(false);
     }
   }, [
+    arcgisMapPrompt,
     credentialStripPrompt,
     droppedProjectPrompt,
     embedVectorDataPrompt,
     projectGeneration,
     remoteSignInPrompt,
     saveNamePrompt,
+    settleArcgisMapPrompt,
     settleCredentialStripPrompt,
     settleEmbedVectorDataPrompt,
     settleRemoteSignInPrompt,
@@ -779,11 +795,6 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
   };
 
-  const settleArcgisMapPrompt = (index: number | null) => {
-    arcgisMapPrompt?.resolve(index);
-    setArcgisMapPrompt(null);
-  };
-
   const handleImportArcgisProject = async () => {
     const result = await openArcgisProjectFile();
     if (!result) return;
@@ -795,6 +806,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       if (reader.maps.length > 1) {
         const chosen = await new Promise<number | null>((resolve) =>
           setArcgisMapPrompt({
+            projectGeneration: useAppStore.getState().projectGeneration,
             fileName: fileBaseName(result.path),
             maps: reader.maps,
             resolve,
@@ -2312,7 +2324,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     arcgisImportWarnings,
     setArcgisImportWarnings,
     arcgisMapPrompt,
-    settleArcgisMapPrompt,
+    settleArcgisMapPrompt: (index: number | null) => settleArcgisMapPrompt(arcgisMapPrompt, index),
     remoteSaveWarning,
     clearRemoteSaveWarning: () => setRemoteSaveWarning(null),
     projectUrlDialogOpen,
