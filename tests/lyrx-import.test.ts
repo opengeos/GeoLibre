@@ -406,6 +406,36 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     assert.match(arrowed.warnings.join(" "), /markers along lines/);
   });
 
+  it("names extra symbol layers and an empty symbol rather than dropping them silently", () => {
+    const cased = parseLyrx(
+      lyrxDocument({
+        type: "CIMSimpleRenderer",
+        symbol: {
+          type: "CIMSymbolReference",
+          symbol: {
+            type: "CIMLineSymbol",
+            symbolLayers: [
+              { type: "CIMSolidStroke", enable: true, width: 1, color: rgb(255, 255, 255) },
+              { type: "CIMSolidStroke", enable: true, width: 3, color: rgb(0, 0, 0) },
+            ],
+          },
+        },
+      }),
+    );
+    assert.equal(cased.style.strokeColor, "#ffffff");
+    assert.match(cased.warnings.join(" "), /extra fill and outline layers/);
+
+    const empty = importStyleText(
+      lyrx({
+        type: "CIMSimpleRenderer",
+        symbol: { type: "CIMSymbolReference", symbol: { type: "CIMMeshSymbol" } },
+      }),
+    );
+    assert.equal(empty.ok, false);
+    if (empty.ok) return;
+    assert.match(empty.warnings[0], /CIMMeshSymbol has no fill, outline or marker/);
+  });
+
   it("leaves Mapbox GL JSON to the Mapbox reader", () => {
     const result = importStyleText(
       JSON.stringify({

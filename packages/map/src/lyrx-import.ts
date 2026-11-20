@@ -92,6 +92,12 @@ export function parseLyrx(document: unknown): LyrxImportResult {
   }
   if (rendererType === "CIMSimpleRenderer") {
     result.matchedCount = readSimple(renderer, result.style, notes);
+    if (result.matchedCount === 0 && notes.size === 0) {
+      const symbolType = stringOf(objectOf(objectOf(renderer.symbol)?.symbol)?.type);
+      result.warnings.push(
+        `The .lyrx style's ${symbolType || "symbol"} has no fill, outline or marker GeoLibre can import; the layer keeps its current style.`,
+      );
+    }
   } else {
     const name =
       (Object.hasOwn(UNSUPPORTED_RENDERER_NAMES, rendererType)
@@ -102,8 +108,8 @@ export function parseLyrx(document: unknown): LyrxImportResult {
       `The .lyrx style uses the ${name} renderer, which GeoLibre cannot import; the layer keeps its current style.`,
     );
   }
-  for (const note of notes) {
-    result.warnings.push(`The .lyrx style's ${note} was not imported.`);
+  if (notes.size > 0) {
+    result.warnings.push(`Not imported from the .lyrx style: ${[...notes].join(", ")}.`);
   }
   if (result.matchedCount === 0) return result;
 
@@ -162,12 +168,15 @@ function readSymbol(symbol: CimObject, notes: Set<string>): SymbolInfo {
     if (layerType === "CIMSolidFill") {
       const color = cimColor(objectOf(layer.color));
       if (color && !info.fill) info.fill = color;
+      else if (color) notes.add("extra fill and outline layers");
     } else if (layerType === "CIMSolidStroke") {
       const color = cimColor(objectOf(layer.color));
       if (color && !info.stroke) {
         const dashed = symbolDashed || arrayOf(layer.effects).some(isDashes);
         if (dashed) notes.add("dash pattern");
         info.stroke = { ...color, width: numberOf(layer.width), dashed };
+      } else if (color) {
+        notes.add("extra fill and outline layers");
       }
     } else if (layerType === "CIMVectorMarker" || layerType === "CIMCharacterMarker") {
       // On a line or polygon a marker is a decoration (an arrowhead, a hatch of symbols), often
@@ -176,7 +185,10 @@ function readSymbol(symbol: CimObject, notes: Set<string>): SymbolInfo {
         notes.add("markers along lines and outlines");
         continue;
       }
-      if (info.markerSize !== undefined) continue;
+      if (info.markerSize !== undefined) {
+        notes.add("extra point markers");
+        continue;
+      }
       info.markerSize = numberOf(layer.size) ?? undefined;
       // A vector marker draws its graphics, a character marker its glyph, each with a nested
       // symbol whose fill and outline are the marker's colours.
@@ -263,7 +275,7 @@ function readLabels(layer: CimObject, warnings: string[]): Partial<LabelStyle> |
   if (!labelClass) return { enabled: false };
   const expression = stringOf(labelClass.expression).trim();
   const field =
-    expression.match(/^\[\s*([^\]]+?)\s*\]$/)?.[1] ??
+    expression.match(/^\[([^\]]+)\]$/)?.[1]?.trim() ??
     expression.match(/^\$feature\.([A-Za-z_][A-Za-z0-9_]*)$/)?.[1] ??
     expression.match(/^\$feature\[\s*["']([^"']+)["']\s*\]$/)?.[1];
   if (!field) {
