@@ -432,6 +432,24 @@ describe("hasLineGapLabels", () => {
     assert.equal(hasLineGapLabels([layer]), false);
   });
 
+  it("keeps ordinary labels for deduped labels and a zoom-dependent visibility", () => {
+    const deduped = contourLayer();
+    deduped.style = { ...deduped.style, labels: { ...gapLabels, dedupe: "unique" } };
+    assert.equal(hasLineGapLabels([deduped]), false);
+    const zoomed = contourLayer();
+    zoomed.style = {
+      ...zoomed.style,
+      labels: { ...gapLabels, visibilityExpression: '[">=", ["zoom"], 12]' },
+    };
+    assert.equal(hasLineGapLabels([zoomed]), false);
+    const attr = contourLayer();
+    attr.style = {
+      ...attr.style,
+      labels: { ...gapLabels, visibilityExpression: '[">", ["get", "elev"], 0]' },
+    };
+    assert.equal(hasLineGapLabels([attr]), true);
+  });
+
   it("keeps ordinary labels while a feature filter is active", () => {
     // MapLibre filters after collision placement, so a hidden line could
     // otherwise take a visible line's label spot.

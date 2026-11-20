@@ -157,7 +157,10 @@ function positionAt(part: MeasuredPart, d: number): Position {
 /** The part's coordinates between distances `from` and `to`. */
 function slicePart(part: MeasuredPart, from: number, to: number): Position[] {
   const out: Position[] = [positionAt(part, from)];
-  for (let i = 0; i < part.cum.length; i++) {
+  // Only the vertices inside [from, to], found by binary search, so cutting a
+  // dense line with many labels stays linear in its output.
+  const last = Math.min(segmentAt(part.cum, to) + 1, part.cum.length - 1);
+  for (let i = segmentAt(part.cum, from); i <= last; i++) {
     if (part.cum[i] > from && part.cum[i] < to) out.push(part.coords[i]);
   }
   out.push(positionAt(part, to));

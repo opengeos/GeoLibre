@@ -2681,7 +2681,14 @@ function lineGapWanted(labels: LabelStyle): boolean {
     !parseLabelOverride(labels.sizeExpression, "number") &&
     // Placement gives space to features in source order, so a priority
     // expression (lower value placed first) keeps the ordinary labels too.
-    !parseLabelOverride(labels.priorityExpression, "number")
+    !parseLabelOverride(labels.priorityExpression, "number") &&
+    // Duplicate-label collapsing builds its own label points, which gap
+    // placement would bypass.
+    labels.dedupe === "off" &&
+    // Placement evaluates visibility at its half-zoom bucket, while the label
+    // filter reads the live zoom; a zoom-dependent visibility could hide a
+    // label whose gap is already cut.
+    !/"zoom"/.test(labels.visibilityExpression)
   );
 }
 
