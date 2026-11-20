@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE } from "@geolibre/core";
 import { strToU8, zipSync } from "fflate";
-import { importArcgisProject } from "../apps/geolibre-desktop/src/lib/arcgis-project-import";
+import {
+  importArcgisProject,
+  readArcgisProject,
+} from "../apps/geolibre-desktop/src/lib/arcgis-project-import";
 
 function featureLayer(name: string, path: string) {
   return {
@@ -111,6 +114,103 @@ describe("ArcGIS Pro project import", () => {
     assert.equal(result.project.metadata.importedFrom, "arcgis-pro");
     assert.deepEqual(result.rasters, []);
     assert.deepEqual(result.services, []);
+  });
+
+  it("lists every 2D map in project order and imports the one chosen", () => {
+    const mapItem = (name: string) => ({
+      type: "CIMProjectItem",
+      itemType: "Map",
+      catalogPath: `CIMPATH=Maps/${name}.json`,
+    });
+    // Detail is stored ahead of Overview: the catalogue, not archive order, sets the order.
+    const archive = zipSync({
+      "GISProject.json": strToU8(
+        JSON.stringify({
+          projectItems: [mapItem("Overview"), mapItem("Terrain"), mapItem("Detail")],
+        }),
+      ),
+      "Maps/Detail.json": strToU8(
+        JSON.stringify({
+          type: "CIMMap",
+          name: "Detail",
+          layers: ["CIMPATH=Layers/Parks.lyrx"],
+        }),
+      ),
+      "Maps/Terrain.json": strToU8(
+        JSON.stringify({
+          type: "CIMMap",
+          name: "Terrain",
+          mapType: "Scene",
+          layers: [],
+        }),
+      ),
+      "Maps/Overview.json": strToU8(
+        JSON.stringify({
+          type: "CIMMap",
+          name: "Overview",
+          layers: ["CIMPATH=Layers/Roads.lyrx"],
+        }),
+      ),
+      "Layers/Roads.lyrx": strToU8(JSON.stringify(featureLayer("Roads", "C:\\data"))),
+      "Layers/Parks.lyrx": strToU8(JSON.stringify(featureLayer("Parks", "C:\\data"))),
+    });
+
+    const reader = readArcgisProject(archive, "C:\\projects\\city.aprx");
+    // The scene is left out; the 2D maps keep the project's order.
+    assert.deepEqual(reader.maps, [
+      { index: 0, name: "Overview" },
+      { index: 1, name: "Detail" },
+    ]);
+    const detail = reader.importMap(1);
+    assert.equal(detail.project.name, "Detail");
+    assert.deepEqual(
+      detail.project.layers.map((layer) => layer.name),
+      ["Parks"],
+    );
+    // Without a choice the first 2D map is imported, as before.
+    assert.equal(importArcgisProject(archive, "C:\\projects\\city.aprx").project.name, "Overview");
+    assert.throws(() => reader.importMap(2), /no such map/);
+  });
+
+  it("offers no choice for a MAPX or a project with one 2D map", () => {
+    const mapx = {
+      type: "CIMMapDocument",
+      mapDefinition: { type: "CIMMap", name: "Solo" },
+    };
+    assert.deepEqual(readArcgisProject(JSON.stringify(mapx), "/work/solo.mapx").maps, [
+      { index: 0, name: "Solo" },
+    ]);
+
+    const archive = zipSync({
+      "Maps/Scene.json": strToU8(
+        JSON.stringify({ type: "CIMMap", name: "Scene", mapType: "Scene" }),
+      ),
+      "Maps/Main.json": strToU8(JSON.stringify({ type: "CIMMap", name: "Main" })),
+      "Maps/Links.json": strToU8(
+        JSON.stringify({ type: "CIMMap", name: "Links", mapType: "LinkChart" }),
+      ),
+      "Maps/Basemap.json": strToU8(
+        JSON.stringify({ type: "CIMMap", name: "Basemap", mapType: "Basemap" }),
+      ),
+      "Layers/Imagery.json": strToU8(JSON.stringify({ type: "CIMMapImageLayer", name: "Imagery" })),
+    });
+    // With no project catalogue every map document is considered, but only a
+    // plain map is offered: not a scene, link chart, basemap or map-service layer.
+    assert.deepEqual(readArcgisProject(archive, "/work/main.aprx").maps, [
+      { index: 0, name: "Main" },
+    ]);
+  });
+
+  it("refuses a project whose only map is a scene", () => {
+    const archive = zipSync({
+      "Maps/Scene.json": strToU8(
+        JSON.stringify({ type: "CIMMap", name: "Scene", mapType: "Scene" }),
+      ),
+    });
+    assert.throws(
+      () => readArcgisProject(archive, "/work/scene.aprx"),
+      /does not contain an ArcGIS Pro map/,
+    );
   });
 
   it("imports local rasters and cached map services", () => {

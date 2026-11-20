@@ -98,14 +98,8 @@ export function queryIdentifyFeatures<
 ): F[] {
   if (layerIds.length === 0) return [];
   const touch = isTouchIdentifyActive(pointerType);
-  const geometry = touch
-    ? buildIdentifyQueryGeometry(point, true)
-    : desktopRadiusPx > 0
-      ? ([
-          [point.x - desktopRadiusPx, point.y - desktopRadiusPx],
-          [point.x + desktopRadiusPx, point.y + desktopRadiusPx],
-        ] as [[number, number], [number, number]])
-      : point;
+  const radius = touch ? TOUCH_IDENTIFY_HIT_RADIUS_PX : desktopRadiusPx;
+  const geometry = buildIdentifyQueryGeometry(point, radius > 0, radius);
   const hits = queryRendered(geometry, { layers: layerIds });
   return touch ? sortIdentifyFeaturesByGeometryPriority(hits) : hits;
 }

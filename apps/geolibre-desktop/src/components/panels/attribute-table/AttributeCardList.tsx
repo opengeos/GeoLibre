@@ -1,7 +1,7 @@
 import { cn } from "@geolibre/ui";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp, ZoomIn } from "lucide-react";
-import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
+import { useEffect, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 export interface AttributeCardRow {
@@ -13,6 +13,7 @@ export interface AttributeCardListProps {
   rows: readonly AttributeCardRow[];
   columns: readonly string[];
   selectedIds: ReadonlySet<string>;
+  activeFeatureId: string | null;
   scrollElementRef: RefObject<HTMLDivElement | null>;
   sortKey: string;
   sortDirection: "asc" | "desc";
@@ -23,6 +24,7 @@ export interface AttributeCardListProps {
 }
 
 const MAX_PREVIEW_FIELDS = 4;
+const SORT_BAR_HEIGHT_PX = 48;
 
 function formatCardValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";
@@ -46,6 +48,7 @@ export function AttributeCardList({
   rows,
   columns,
   selectedIds,
+  activeFeatureId,
   scrollElementRef,
   sortKey,
   sortDirection,
@@ -64,8 +67,20 @@ export function AttributeCardList({
     getScrollElement: () => scrollElementRef.current,
     estimateSize: () => (previewColumns.length > 0 ? 136 : 76),
     getItemKey: (index) => rows[index].featureId,
+    scrollMargin: SORT_BAR_HEIGHT_PX,
+    scrollPaddingStart: SORT_BAR_HEIGHT_PX,
     overscan: 6,
   });
+
+  const activeIndex =
+    activeFeatureId === null ? -1 : rows.findIndex((row) => row.featureId === activeFeatureId);
+
+  useEffect(() => {
+    if (activeIndex >= 0) {
+      cardVirtualizer.scrollToIndex(activeIndex, { align: "auto" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIndex, activeFeatureId]);
 
   if (rows.length === 0) {
     return (
@@ -79,14 +94,14 @@ export function AttributeCardList({
 
   return (
     <div data-testid="attribute-card-list" className="w-full">
-      <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-background/95 px-2.5 py-1.5 backdrop-blur">
+      <div className="sticky top-0 z-10 flex h-12 items-center gap-2 border-b bg-background/95 px-2.5 backdrop-blur">
         <select
           aria-label={t("mobileShell.attributeCards.sortBy")}
           value={sortKey}
           onChange={(event) => onChangeSortKey(event.target.value)}
           className="h-9 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs text-foreground"
         >
-          <option value="__featureId">#ID</option>
+          <option value="__featureId">{t("mobileShell.attributeCards.featureIdOption")}</option>
           {columns.map((col) => (
             <option key={col} value={col}>
               {col}
@@ -118,11 +133,10 @@ export function AttributeCardList({
           const { featureId, properties } = rows[virtualItem.index];
           const selected = selectedIds.has(featureId);
           const primaryValue = titleColumn ? properties[titleColumn] : null;
+          const formattedPrimary = formatCardValue(primaryValue).trim();
           const heading =
-            primaryValue !== null &&
-            primaryValue !== undefined &&
-            String(primaryValue).trim() !== ""
-              ? String(primaryValue)
+            formattedPrimary !== "" && formattedPrimary !== "—"
+              ? formattedPrimary
               : `#${featureId}`;
           return (
             <div
@@ -130,7 +144,9 @@ export function AttributeCardList({
               data-index={virtualItem.index}
               ref={cardVirtualizer.measureElement}
               className="absolute inset-x-0 top-0 px-2.5 pb-2"
-              style={{ transform: `translateY(${virtualItem.start + 10}px)` }}
+              style={{
+                transform: `translateY(${virtualItem.start - cardVirtualizer.options.scrollMargin + 10}px)`,
+              }}
             >
               <div
                 className={cn(
@@ -146,25 +162,27 @@ export function AttributeCardList({
                   onClick={(event) => onSelectRow(featureId, event)}
                   className="min-w-0 flex-1 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <div className="truncate text-sm font-semibold text-foreground">{heading}</div>
+                  <span className="block truncate text-sm font-semibold text-foreground">
+                    {heading}
+                  </span>
                   {titleColumn ? (
-                    <div className="truncate font-mono text-[11px] text-muted-foreground">
+                    <span className="block truncate font-mono text-[11px] text-muted-foreground">
                       #{featureId}
-                    </div>
+                    </span>
                   ) : null}
                   {previewColumns.length > 0 ? (
-                    <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 border-t pt-2 text-xs">
+                    <span className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 border-t pt-2 text-xs">
                       {previewColumns.map((col) => (
-                        <div key={col} className="min-w-0">
-                          <dt className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <span key={col} className="block min-w-0">
+                          <span className="block truncate text-[10px] uppercase tracking-wide text-muted-foreground">
                             {col}
-                          </dt>
-                          <dd className="truncate font-medium text-foreground">
+                          </span>
+                          <span className="block truncate font-medium text-foreground">
                             {formatCardValue(properties[col])}
-                          </dd>
-                        </div>
+                          </span>
+                        </span>
                       ))}
-                    </dl>
+                    </span>
                   ) : null}
                 </button>
                 <button

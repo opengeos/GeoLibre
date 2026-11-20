@@ -7,13 +7,27 @@ import {
   undoFeatureSelectionVertex,
 } from "@geolibre/map";
 import { Check, Undo2, X } from "lucide-react";
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+
+function readFullscreenElement(): Element | null {
+  if (typeof document === "undefined") return null;
+  return (
+    document.fullscreenElement ??
+    (document as Document & { webkitFullscreenElement?: Element | null }).webkitFullscreenElement ??
+    document.querySelector(".maplibregl-pseudo-fullscreen") ??
+    null
+  );
+}
 
 /**
  * Floating touch action bar displayed over the map while a feature-selection
  * gesture is active in Touch UI mode (GeoLibre#3537 Phase 3), replacing the
- * desktop double-click (Finish) and Escape (Cancel) shortcuts.
+ * desktop double-click (Finish) and Escape (Cancel) shortcuts. Portals into
+ * native fullscreen (`document.fullscreenElement`) or MapLibre's CSS fallback
+ * (`.maplibregl-pseudo-fullscreen`, used on iOS Safari) so controls stay
+ * reachable while fullscreen.
  */
 export function TouchSelectionActionBar() {
   const { t } = useTranslation();
@@ -23,12 +37,32 @@ export function TouchSelectionActionBar() {
     getFeatureSelectionUiState,
     getFeatureSelectionUiState,
   );
+  const [fullscreenEl, setFullscreenEl] = useState<Element | null>(readFullscreenElement);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const sync = () => setFullscreenEl(readFullscreenElement());
+    sync();
+    document.addEventListener("fullscreenchange", sync);
+    document.addEventListener("webkitfullscreenchange", sync);
+    const observer = typeof MutationObserver !== "undefined" ? new MutationObserver(sync) : null;
+    if (observer) {
+      for (const el of document.querySelectorAll(".maplibregl-map")) {
+        observer.observe(el, { attributes: true, attributeFilter: ["class"] });
+      }
+    }
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+      document.removeEventListener("webkitfullscreenchange", sync);
+      observer?.disconnect();
+    };
+  }, [active]);
 
   if (!active) return null;
 
   const isPolygon = shape === "polygon";
 
-  return (
+  const bar = (
     <div
       data-testid="touch-selection-action-bar"
       role="toolbar"
@@ -72,4 +106,6 @@ export function TouchSelectionActionBar() {
       </button>
     </div>
   );
+
+  return fullscreenEl ? createPortal(bar, fullscreenEl) : bar;
 }

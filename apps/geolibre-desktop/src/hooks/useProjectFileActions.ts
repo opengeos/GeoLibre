@@ -57,6 +57,7 @@ import {
   ensureProjectFileName,
   suggestedProjectName,
 } from "../lib/file-names";
+import { fileBaseName } from "../lib/file-io/paths";
 import { pickLayerStylesFile } from "../lib/layer-style-files";
 import { notify } from "../lib/notify";
 import { notifyUnsavedLocalRasters } from "../lib/local-raster-notices";
@@ -104,7 +105,11 @@ import {
 } from "../lib/qgis-project-import";
 import { readQgisSnapshotTable } from "../lib/qgis-form-tables";
 import { qgisRemoteFetch, readQgisRemoteVector } from "../lib/qgis-remote-vector";
-import { importArcgisProject, type ArcgisProjectImportWarning } from "../lib/arcgis-project-import";
+import {
+  readArcgisProject,
+  type ArcgisProjectImportWarning,
+  type ArcgisProjectMapChoice,
+} from "../lib/arcgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 import { IS_MAS_BUILD } from "../lib/build-flags";
 import { resolveDroppedProjectIfCurrent } from "../lib/dropped-project";
@@ -203,6 +208,19 @@ export interface SaveNamePrompt {
   label: string;
   /** Placeholder for the file-name input. */
   placeholder: string;
+}
+
+/**
+ * A pending "which map?" prompt, shown when an ArcGIS Pro project holds more
+ * than one 2D map. Resolves with the chosen map's index, or null if cancelled.
+ */
+export interface ArcgisMapPrompt {
+  /** Project generation that opened the prompt. */
+  projectGeneration: number;
+  /** The project file's name, for the dialog description. */
+  fileName: string;
+  maps: ArcgisProjectMapChoice[];
+  resolve: (index: number | null) => void;
 }
 
 export interface RemoteSignInPrompt {
@@ -365,6 +383,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const [arcgisImportWarnings, setArcgisImportWarnings] = useState<
     ArcgisProjectImportWarning[] | null
   >(null);
+  const [arcgisMapPrompt, setArcgisMapPrompt] = useState<ArcgisMapPrompt | null>(null);
   const [layerStyleImportResult, setLayerStyleImportResult] =
     useState<LayerStyleImportResult | null>(null);
   const [projectUrlDialogOpen, setProjectUrlDialogOpen] = useState(false);
@@ -441,6 +460,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     setSaveNamePrompt(null);
     setSaveNameInput("");
   }, []);
+  const settleArcgisMapPrompt = useCallback(
+    (prompt: ArcgisMapPrompt | null, index: number | null) => {
+      prompt?.resolve(index);
+      setArcgisMapPrompt(null);
+    },
+    [],
+  );
   const settleRemoteSignInPrompt = useCallback(
     (prompt: RemoteSignInPrompt | null, signedIn: boolean) => {
       prompt?.resolve(signedIn);
@@ -474,18 +500,25 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (remoteSignInPrompt && remoteSignInPrompt.projectGeneration !== projectGeneration) {
       settleRemoteSignInPrompt(remoteSignInPrompt, false);
     }
+    // Another project opened while the map picker waited: importing over it
+    // would replace the project the user just opened.
+    if (arcgisMapPrompt && arcgisMapPrompt.projectGeneration !== projectGeneration) {
+      settleArcgisMapPrompt(arcgisMapPrompt, null);
+    }
     if (droppedProjectPrompt && droppedProjectPrompt.projectGeneration !== projectGeneration) {
       droppedProjectPromptRef.current = null;
       setDroppedProjectPrompt(null);
       setDroppedProjectSaving(false);
     }
   }, [
+    arcgisMapPrompt,
     credentialStripPrompt,
     droppedProjectPrompt,
     embedVectorDataPrompt,
     projectGeneration,
     remoteSignInPrompt,
     saveNamePrompt,
+    settleArcgisMapPrompt,
     settleCredentialStripPrompt,
     settleEmbedVectorDataPrompt,
     settleRemoteSignInPrompt,
@@ -766,7 +799,23 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const result = await openArcgisProjectFile();
     if (!result) return;
     try {
-      const imported = importArcgisProject(result.data, result.path);
+      const reader = readArcgisProject(result.data, result.path);
+      // One GeoLibre project holds one map, so a project with several 2D maps
+      // asks which to bring across rather than silently taking the first.
+      let mapIndex = 0;
+      if (reader.maps.length > 1) {
+        const chosen = await new Promise<number | null>((resolve) =>
+          setArcgisMapPrompt({
+            projectGeneration: useAppStore.getState().projectGeneration,
+            fileName: fileBaseName(result.path),
+            maps: reader.maps,
+            resolve,
+          }),
+        );
+        if (chosen === null) return;
+        mapIndex = chosen;
+      }
+      const imported = reader.importMap(mapIndex);
       if (!isTauri()) {
         const unavailableLayerIds = new Set<string>();
         for (const layer of imported.project.layers) {
@@ -2274,6 +2323,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     setQgisImportStyleNotes,
     arcgisImportWarnings,
     setArcgisImportWarnings,
+    arcgisMapPrompt,
+    settleArcgisMapPrompt: (index: number | null) => settleArcgisMapPrompt(arcgisMapPrompt, index),
     remoteSaveWarning,
     clearRemoteSaveWarning: () => setRemoteSaveWarning(null),
     projectUrlDialogOpen,

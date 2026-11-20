@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   buildIdentifyQueryGeometry,
   isTouchIdentifyActive,
+  queryIdentifyFeatures,
   sortIdentifyFeaturesByGeometryPriority,
   TOUCH_IDENTIFY_HIT_RADIUS_PX,
 } from "../packages/map/src/touch-identify";
@@ -36,5 +37,63 @@ describe("touch identify hit-radius and geometry priority", () => {
   it("respects explicit pointer types when deciding touch identify mode", () => {
     assert.equal(isTouchIdentifyActive("touch"), true);
     assert.equal(isTouchIdentifyActive("mouse"), false);
+  });
+
+  it("queryIdentifyFeatures scopes padded box and geometry sort to touch, preserves mouse order, honors desktop radius, and skips empty layer lists", () => {
+    const raw = [
+      { id: "poly", geometry: { type: "Polygon" } },
+      { id: "point", geometry: { type: "Point" } },
+    ];
+    const calls: Array<{ geometry: unknown; layers: string[] }> = [];
+    const queryRendered = (geometry: unknown, options: { layers: string[] }) => {
+      calls.push({ geometry, layers: options.layers });
+      return raw;
+    };
+
+    // Empty layer list short-circuits without querying.
+    assert.deepEqual(queryIdentifyFeatures(queryRendered, { x: 50, y: 60 }, [], "touch"), []);
+    assert.equal(calls.length, 0);
+
+    // Default mouse query passes exact point and preserves raw draw order.
+    const mouseHits = queryIdentifyFeatures(queryRendered, { x: 50, y: 60 }, ["layer-a"], "mouse");
+    assert.deepEqual(calls.at(-1)?.geometry, { x: 50, y: 60 });
+    assert.deepEqual(
+      mouseHits.map((f) => f.id),
+      ["poly", "point"],
+    );
+
+    // Desktop selection with 4px radius passes 4px box and keeps draw order.
+    const desktopRadiusHits = queryIdentifyFeatures(
+      queryRendered,
+      { x: 50, y: 60 },
+      ["layer-a"],
+      "mouse",
+      4,
+    );
+    assert.deepEqual(calls.at(-1)?.geometry, [
+      [46, 56],
+      [54, 64],
+    ]);
+    assert.deepEqual(
+      desktopRadiusHits.map((f) => f.id),
+      ["poly", "point"],
+    );
+
+    // Touch query uses TOUCH_IDENTIFY_HIT_RADIUS_PX box and prioritizes Point over Polygon.
+    const touchHits = queryIdentifyFeatures(
+      queryRendered,
+      { x: 50, y: 60 },
+      ["layer-a"],
+      "touch",
+      4,
+    );
+    assert.deepEqual(calls.at(-1)?.geometry, [
+      [50 - TOUCH_IDENTIFY_HIT_RADIUS_PX, 60 - TOUCH_IDENTIFY_HIT_RADIUS_PX],
+      [50 + TOUCH_IDENTIFY_HIT_RADIUS_PX, 60 + TOUCH_IDENTIFY_HIT_RADIUS_PX],
+    ]);
+    assert.deepEqual(
+      touchHits.map((f) => f.id),
+      ["point", "poly"],
+    );
   });
 });

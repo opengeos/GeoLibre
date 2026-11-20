@@ -47,7 +47,7 @@ export function createWakeLockController(options?: {
 
   const handleSentinelRelease = () => {
     sentinel = null;
-    notify(false);
+    if (!disposed) notify(false);
   };
 
   const requestLock = (): Promise<boolean> => {
@@ -70,7 +70,7 @@ export function createWakeLockController(options?: {
         notify(true);
         return true;
       } catch {
-        notify(false);
+        if (!disposed) notify(false);
         return false;
       }
     })();
