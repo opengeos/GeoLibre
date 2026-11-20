@@ -9,9 +9,11 @@ import { strToU8, zipSync } from "fflate";
 import type { ProjectFileActions } from "../apps/geolibre-desktop/src/hooks/useProjectFileActions";
 
 // Loaded after the harness so its CSS imports and Vite globals are handled.
-const { placeImportedServiceLayers, signInForImportedService, useProjectFileActions } =
+const { useProjectFileActions } =
   await import("../apps/geolibre-desktop/src/hooks/useProjectFileActions");
 const { installNativeArcGISFetch } = await import("../apps/geolibre-desktop/src/lib/arcgis-fetch");
+const { cachedOrgIdLookup, placeImportedServiceLayers, signInForImportedService } =
+  await import("../apps/geolibre-desktop/src/lib/arcgis-project-services");
 const { ARCGIS_ONLINE_PORTAL } = await import("../apps/geolibre-desktop/src/lib/arcgis-oauth");
 
 /**
@@ -467,5 +469,18 @@ describe("ArcGIS Pro feature service import on desktop", () => {
       nativeRequests.every((url) => url.startsWith(`${SERVICE}/3`)),
       nativeRequests.join(),
     );
+  });
+
+  it("looks up a portal's organisation once, and again after a failure", async () => {
+    let calls = 0;
+    const orgId = cachedOrgIdLookup(async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("offline");
+      return "AbCdEfGh12345678";
+    });
+    assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "t"), undefined);
+    assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "t"), "AbCdEfGh12345678");
+    assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "t"), "AbCdEfGh12345678");
+    assert.equal(calls, 2);
   });
 });
