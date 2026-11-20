@@ -639,6 +639,13 @@ function symbolLook(reference: unknown): SymbolLook | null {
       ? markerLook(layers)
       : null;
   if (!look) return null;
+  // When a layer that was left out (dropped or unreadable) is all that would
+  // show, as with a hatch over a clear background, a transparent top stroke
+  // over a dropped casing, or a clear marker graphic over a second one, the
+  // symbol is refused rather than imported invisible. A symbol made only of
+  // supported layers that is itself transparent is kept, as ArcGIS draws
+  // nothing for it either.
+  if ((look.dropped || look.unreadable) && !looksVisible(look)) return null;
   // Geometric effects (dashes, offsets, buffers and so on) change the shape
   // that is drawn, which a flat style cannot reproduce, so they are reported.
   const effect = firstEffect(symbol) ?? look.effect;
@@ -682,23 +689,23 @@ function scanNotes(scan: LayerScan): Pick<SymbolLook, "dropped" | "unreadable" |
 function polygonLook(scan: LayerScan): SymbolLook | null {
   // An outline-only polygon is hollow. A polygon whose only fill is one
   // GeoLibre cannot draw flat (hatch, picture, gradient) or cannot read keeps
-  // its outline, and the fill is reported. When what was left out is all
-  // that would show (no outline, or one of zero width or fully transparent,
-  // and no fill or only a transparent one, such as a hatch over a clear
-  // background), the symbol is refused rather than drawn invisible. A symbol
-  // made only of supported layers that is itself transparent is kept.
-  const stroke = strokeLook(scan.stroke);
-  const strokeDraws = stroke.strokeWidth !== 0;
-  const fillDraws = scan.fill !== undefined && scan.fill.opacity > 0;
-  const color = scan.fill ?? (strokeDraws ? scan.stroke?.color : undefined);
-  if (!color || ((scan.dropped || scan.unreadable) && !fillDraws && !strokeDraws)) return null;
+  // its outline, and the fill is reported (see {@link symbolLook} for when
+  // nothing visible is left).
+  const color = scan.fill ?? scan.stroke?.color;
+  if (!color) return null;
   return {
     geometry: "polygon",
     color: color.hex,
     fillOpacity: scan.fill?.opacity ?? 0,
-    ...stroke,
+    ...strokeLook(scan.stroke),
     ...scanNotes(scan),
   };
+}
+
+/** Whether a look draws anything: a visible fill (not for lines) or a stroke. */
+function looksVisible(look: SymbolLook): boolean {
+  const fillShows = look.geometry !== "line" && (look.fillOpacity ?? 1) > 0;
+  return fillShows || look.strokeWidth !== 0;
 }
 
 function lineLook(scan: LayerScan): SymbolLook | null {

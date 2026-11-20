@@ -526,6 +526,40 @@ describe("CIM renderer refusals", () => {
     }
   });
 
+  it("refuses a line or marker whose only visible part was left out", () => {
+    const clearRed = fill(rgb(255, 0, 0, 0));
+    const cases = [
+      // A transparent or zero-width top stroke over an opaque casing.
+      symbolRef("CIMLineSymbol", [stroke(rgb(0, 0, 0, 0)), stroke()]),
+      symbolRef("CIMLineSymbol", [stroke(rgb(0, 0, 0), 0), stroke()]),
+      // A hatch over a clear marker fill, a clear graphic over an opaque one,
+      // and a clear fill under an unreadable outline.
+      marker([{ type: "CIMHatchFill", enable: true }, clearRed]),
+      marker([clearRed], [fill(rgb(0, 0, 255))]),
+      marker([stroke(hsl), clearRed]),
+    ];
+    for (const symbol of cases) {
+      const result = translateCimRenderer(simple(symbol));
+      assert.equal(result.translated, false, JSON.stringify(symbol));
+      assert.equal(result.issues[0].code, "symbol");
+    }
+    // Wholly supported transparent symbols stay as they are.
+    for (const symbol of [
+      symbolRef("CIMLineSymbol", [stroke(rgb(0, 0, 0, 0))]),
+      marker([clearRed]),
+    ]) {
+      assert.equal(translateCimRenderer(simple(symbol)).translated, true);
+    }
+  });
+
+  it("keeps a class whose only outline is invisible, as ArcGIS draws nothing for it", () => {
+    const renderer = twoClasses(polygonWith([stroke(rgb(0, 0, 0, 0))]), polygonWith([fill()]));
+    const style = translatedStyle(renderer);
+    assert.equal(style.vectorRules.length, 3);
+    assert.equal(renderedOutlineWidth(style, { K: "a" }), 0);
+    assert.equal(style.fillOpacity, 0);
+  });
+
   it("refuses a hatch over a clear background with no visible outline", () => {
     const hatch = { type: "CIMHatchFill", enable: true };
     for (const outline of [[], [stroke(rgb(0, 0, 0), 0)], [stroke(rgb(0, 0, 0, 0))]]) {
