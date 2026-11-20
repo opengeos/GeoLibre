@@ -255,8 +255,9 @@ function readCimFiles(
  * the catalogue names none that can be read, every map document in the file.
  */
 function findMaps(files: Map<string, CimObject>): CimObject[] {
-  // Only a plain map: scenes, link charts and basemap documents share the
-  // CIMMap type but are not maps a GeoLibre project can stand in for.
+  // CIM MapType "Map" is the only 2D map; Scene, Basemap, NetworkDiagram,
+  // ContainmentMap and LinkChart share the CIMMap type but are not maps a
+  // GeoLibre project can stand in for. Older documents omit the field.
   const is2dMap = (map: CimObject | null): map is CimObject =>
     map !== null && ["", "map"].includes(stringValue(map.mapType).toLowerCase());
   const project = files.get("gisproject.json");

@@ -190,7 +190,7 @@ describe("ArcGIS Pro project import", () => {
         JSON.stringify({ type: "CIMMap", name: "Links", mapType: "LinkChart" }),
       ),
       "Maps/Basemap.json": strToU8(
-        JSON.stringify({ type: "CIMMap", name: "Basemap", mapType: "BasemapDocument" }),
+        JSON.stringify({ type: "CIMMap", name: "Basemap", mapType: "Basemap" }),
       ),
       "Layers/Imagery.json": strToU8(JSON.stringify({ type: "CIMMapImageLayer", name: "Imagery" })),
     });
