@@ -74,10 +74,16 @@ test("renders the touch mobile shell with bottom navigation and draggable sheets
   await expect(page.getByTestId("mobile-sheet-add")).toBeHidden();
   await expect(page.getByTestId("mobile-sheet-field")).toBeVisible();
 
-  // Switching to More offers "Switch to desktop layout", which exits mobileShell.
+  // Switching to More opens the searchable TouchMenuSheet drill-down navigator.
   await page.getByTestId("mobile-nav-more").tap();
   const moreSheet = page.getByTestId("mobile-sheet-more");
   await expect(moreSheet).toBeVisible();
+  await moreSheet.getByRole("button", { name: "View" }).tap();
+  await expect(moreSheet.getByTestId("touch-menu-back")).toBeVisible();
+  await moreSheet.getByTestId("touch-menu-back").tap();
+  await moreSheet.getByTestId("touch-menu-search").fill("MapLibre");
+  await expect(moreSheet.getByRole("button", { name: /MapLibre/i })).toBeVisible();
+  await moreSheet.getByTestId("touch-menu-search").fill("");
   await moreSheet.getByRole("button", { name: "Switch to desktop layout" }).tap();
 
   await expect(page.getByTestId("mobile-bottom-nav")).toBeHidden();

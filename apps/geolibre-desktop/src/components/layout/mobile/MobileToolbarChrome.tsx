@@ -1,25 +1,26 @@
 import { useAppStore } from "@geolibre/core";
 import { BASEMAP_CONTROL_PLUGIN_ID, GEO_EDITOR_PLUGIN_ID } from "@geolibre/plugins";
 import { BottomSheet } from "@geolibre/ui";
+import { useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { useCvdPreviewStore } from "../../../lib/cvd-preview-store";
 import type { ThemeMode } from "../../../hooks/useThemeMode";
 import { setTouchUiMode, useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import type { ProjectFileActions } from "../../../hooks/useProjectFileActions";
 import type { ToolbarDialogs } from "../../../hooks/toolbar/useToolbarDialogs";
 import { IS_MAS_BUILD } from "../../../lib/build-flags";
+import type { Command } from "../../../lib/commands";
 import { entryMenuOffered } from "../../../lib/deployment-gates";
 import { isDataSourceVisible, isMenuVisible, isPluginVisible } from "../../../lib/ui-profile";
 import type { AddDataKind } from "../AddDataDialog";
 import { openSettingsSection } from "../SettingsDialog";
 import type { AddLayerHandlers, AppApi } from "../toolbar/constants";
+import { buildMobileMoreMenuItems } from "./buildMobileMoreMenuItems";
 import type { MobileNavTabId } from "./MobileBottomNav";
-import {
-  MobileAddSheetContent,
-  MobileFieldSheetContent,
-  MobileMoreSheetContent,
-} from "./MobileQuickSheets";
+import { MobileAddSheetContent, MobileFieldSheetContent } from "./MobileQuickSheets";
 import { MobileTopBar } from "./MobileTopBar";
+import { TouchMenuSheet } from "./TouchMenuSheet";
 
 export interface MobileToolbarChromeProps {
   title: string;
@@ -45,6 +46,12 @@ export interface MobileToolbarChromeProps {
   onOpenBasemapExtract: () => void;
   onAddComment: () => void;
   onOpenDiagnostics: () => void;
+  processingCommands: readonly Command[];
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onResetNorth: () => void;
+  onResetPitch: () => void;
+  onResetPitchBearing: () => void;
 }
 
 /**
@@ -76,6 +83,12 @@ export function MobileToolbarChrome({
   onOpenBasemapExtract,
   onAddComment,
   onOpenDiagnostics,
+  processingCommands,
+  onZoomIn,
+  onZoomOut,
+  onResetNorth,
+  onResetPitch,
+  onResetPitchBearing,
 }: MobileToolbarChromeProps) {
   const { t } = useTranslation();
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
@@ -111,108 +124,155 @@ export function MobileToolbarChrome({
     setTouchUiMode("desktop");
   };
 
-  const mobileQuickSheetOpen =
-    activeMobileTab === "add" || activeMobileTab === "field" || activeMobileTab === "more";
+  const mobileQuickSheetOpen = activeMobileTab === "add" || activeMobileTab === "field";
   const mobileQuickSheetTitle =
-    activeMobileTab === "add"
-      ? t("mobileShell.sheet.addTitle")
-      : activeMobileTab === "field"
-        ? t("mobileShell.sheet.fieldTitle")
-        : t("mobileShell.sheet.moreTitle");
+    activeMobileTab === "add" ? t("mobileShell.sheet.addTitle") : t("mobileShell.sheet.fieldTitle");
+
+  const primaryRenderer = useAppStore((s) => s.primaryRenderer);
+  const mapLayoutRows = useAppStore((s) => s.mapLayout.rows);
+  const mapLayoutCols = useAppStore((s) => s.mapLayout.cols);
+  const cvdMode = useCvdPreviewStore((s) => s.mode);
+
+  const gridKey = `${mapLayoutRows}x${mapLayoutCols}`;
+
+  const moreMenuItems = useMemo(() => {
+    if (activeMobileTab !== "more") return [];
+    return buildMobileMoreMenuItems({
+      t,
+      uiProfile,
+      primaryRenderer,
+      gridKey,
+      cvdMode,
+      canEditProject: !viewer && isMenuVisible(uiProfile, "project"),
+      canShare: shareAvailable,
+      canShowView: isMenuVisible(uiProfile, "view"),
+      canRunProcessing,
+      canManagePlugins,
+      canManageSettings,
+      diagnosticsErrorCount,
+      processingCommands,
+      onOpenCommandPalette: () => dialogs.setCommandPaletteOpen(true),
+      onNewProject: () => dialogs.setNewProjectDialogOpen(true),
+      onOpenFromFile: () => void projectFiles.handleOpenFromFile(),
+      onOpenFromUrl: () => projectFiles.setProjectUrlDialogOpen(true),
+      onSaveProject: () => void projectFiles.handleSave(),
+      onShareProject: () => dialogs.setShareDialogOpen(true),
+      onZoomIn,
+      onZoomOut,
+      onResetNorth,
+      onResetPitch,
+      onResetPitchBearing,
+      onOpenProcessing: () => useAppStore.getState().setProcessingOpen(true),
+      onOpenManagePlugins: () => dialogs.setManagePluginsOpen(true),
+      onOpenSettings: () => openSettingsSection("layout"),
+      onOpenDiagnostics,
+      onSwitchToDesktopUi: switchToDesktopUi,
+      onOpenAbout: () => dialogs.setAboutOpen(true),
+    });
+  }, [
+    activeMobileTab,
+    t,
+    uiProfile,
+    primaryRenderer,
+    gridKey,
+    cvdMode,
+    viewer,
+    shareAvailable,
+    canRunProcessing,
+    canManagePlugins,
+    canManageSettings,
+    diagnosticsErrorCount,
+    processingCommands,
+    dialogs,
+    projectFiles,
+    onZoomIn,
+    onZoomOut,
+    onResetNorth,
+    onResetPitch,
+    onResetPitchBearing,
+    onOpenDiagnostics,
+  ]);
 
   const mobileQuickSheet =
-    mobileQuickSheetOpen && mobileSheetHostEl
+    activeMobileTab === "more" && mobileSheetHostEl
       ? createPortal(
-          <BottomSheet
-            key={activeMobileTab}
+          <TouchMenuSheet
             open
-            modal={activeMobileTab === "more"}
             onOpenChange={(open) => {
               if (!open) onSelectMobileTab?.(null);
             }}
-            defaultDetent={activeMobileTab === "more" ? "full" : "half"}
-            title={mobileQuickSheetTitle}
-            closeLabel={t("common.close")}
-            dragHandleLabel={t("mobileShell.resizeSheet")}
-            data-testid={`mobile-sheet-${activeMobileTab}`}
-          >
-            {activeMobileTab === "add" ? (
-              <MobileAddSheetContent
-                canAddVector={isDataSourceVisible(uiProfile, "vector")}
-                canAddRaster={isDataSourceVisible(uiProfile, "raster")}
-                canAddDelimited={isDataSourceVisible(uiProfile, "delimited-text")}
-                canAddXyz={isDataSourceVisible(uiProfile, "xyz")}
-                canAddWms={isDataSourceVisible(uiProfile, "wms")}
-                canAddGeoParquet={isDataSourceVisible(uiProfile, "geoparquet")}
-                canOpenBasemaps={canOpenBasemaps}
-                basemapsActive={isPluginActive(BASEMAP_CONTROL_PLUGIN_ID)}
-                onAddVector={() => runMobileAction(addLayer.vector)}
-                onAddRaster={() => runMobileAction(addLayer.raster)}
-                onAddDelimited={() => runMobileAction(() => openAddDataKind("delimited-text"))}
-                onAddXyz={() => runMobileAction(() => openAddDataKind("xyz"))}
-                onAddWms={() => runMobileAction(() => openAddDataKind("wms"))}
-                onAddGeoParquet={() => runMobileAction(addLayer.vector)}
-                onToggleBasemaps={() =>
-                  runMobileAction(() => togglePlugin(BASEMAP_CONTROL_PLUGIN_ID, appApi))
-                }
-                onOpenGallery={() => runMobileAction(() => dialogs.setGalleryDialogOpen(true))}
-                onSearchAllSources={() =>
-                  runMobileAction(() => dialogs.setCommandPaletteOpen(true))
-                }
-              />
-            ) : null}
-            {activeMobileTab === "field" ? (
-              <MobileFieldSheetContent
-                canUseGeoEditor={canUseGeoEditor}
-                geoEditorActive={isPluginActive(GEO_EDITOR_PLUGIN_ID)}
-                measureActive={measureVisible}
-                measureDisabled={!measureSupported && !measureVisible}
-                onOpenFieldCollection={() =>
-                  runMobileAction(() => dialogs.setFieldCollectionOpen(true))
-                }
-                onOpenGpsTracking={() => runMobileAction(() => dialogs.setGpsTrackingOpen(true))}
-                onToggleGeoEditor={() =>
-                  runMobileAction(() => togglePlugin(GEO_EDITOR_PLUGIN_ID, appApi))
-                }
-                onToggleMeasure={() => runMobileAction(onToggleMeasure)}
-                onOpenOfflineBasemap={() => runMobileAction(onOpenBasemapExtract)}
-                onAddComment={() => runMobileAction(onAddComment)}
-              />
-            ) : null}
-            {activeMobileTab === "more" ? (
-              <MobileMoreSheetContent
-                canEditProject={!viewer && isMenuVisible(uiProfile, "project")}
-                canShare={shareAvailable}
-                canRunProcessing={canRunProcessing}
-                canManagePlugins={canManagePlugins}
-                canManageSettings={canManageSettings}
-                diagnosticsErrorCount={diagnosticsErrorCount}
-                onOpenCommandPalette={() =>
-                  runMobileAction(() => dialogs.setCommandPaletteOpen(true))
-                }
-                onNewProject={() => runMobileAction(() => dialogs.setNewProjectDialogOpen(true))}
-                onOpenFromFile={() => runMobileAction(() => void projectFiles.handleOpenFromFile())}
-                onOpenFromUrl={() =>
-                  runMobileAction(() => projectFiles.setProjectUrlDialogOpen(true))
-                }
-                onSaveProject={() => runMobileAction(() => void projectFiles.handleSave())}
-                onShareProject={() => runMobileAction(() => dialogs.setShareDialogOpen(true))}
-                onOpenProcessing={() =>
-                  runMobileAction(() => useAppStore.getState().setProcessingOpen(true))
-                }
-                onOpenManagePlugins={() =>
-                  runMobileAction(() => dialogs.setManagePluginsOpen(true))
-                }
-                onOpenSettings={() => runMobileAction(() => openSettingsSection("layout"))}
-                onOpenDiagnostics={() => runMobileAction(onOpenDiagnostics)}
-                onSwitchToDesktopUi={() => runMobileAction(switchToDesktopUi)}
-                onOpenAbout={() => runMobileAction(() => dialogs.setAboutOpen(true))}
-              />
-            ) : null}
-          </BottomSheet>,
+            title={t("mobileShell.sheet.moreTitle")}
+            items={moreMenuItems}
+            defaultDetent="full"
+            modal
+            searchable
+            searchPlaceholder={t("mobileShell.menu.searchPlaceholder")}
+            data-testid="mobile-sheet-more"
+          />,
           mobileSheetHostEl,
         )
-      : null;
+      : mobileQuickSheetOpen && mobileSheetHostEl
+        ? createPortal(
+            <BottomSheet
+              key={activeMobileTab}
+              open
+              onOpenChange={(open) => {
+                if (!open) onSelectMobileTab?.(null);
+              }}
+              defaultDetent="half"
+              title={mobileQuickSheetTitle}
+              closeLabel={t("common.close")}
+              dragHandleLabel={t("mobileShell.resizeSheet")}
+              data-testid={`mobile-sheet-${activeMobileTab}`}
+            >
+              {activeMobileTab === "add" ? (
+                <MobileAddSheetContent
+                  addDataReady={addDataReady}
+                  canAddVector={isDataSourceVisible(uiProfile, "vector")}
+                  canAddRaster={isDataSourceVisible(uiProfile, "raster")}
+                  canAddDelimited={isDataSourceVisible(uiProfile, "delimited-text")}
+                  canAddXyz={isDataSourceVisible(uiProfile, "xyz")}
+                  canAddWms={isDataSourceVisible(uiProfile, "wms")}
+                  canAddGeoParquet={isDataSourceVisible(uiProfile, "geoparquet")}
+                  canOpenBasemaps={canOpenBasemaps}
+                  basemapsActive={isPluginActive(BASEMAP_CONTROL_PLUGIN_ID)}
+                  onAddVector={() => runMobileAction(addLayer.vector)}
+                  onAddRaster={() => runMobileAction(addLayer.raster)}
+                  onAddDelimited={() => runMobileAction(() => openAddDataKind("delimited-text"))}
+                  onAddXyz={() => runMobileAction(() => openAddDataKind("xyz"))}
+                  onAddWms={() => runMobileAction(() => openAddDataKind("wms"))}
+                  onAddGeoParquet={() => runMobileAction(addLayer.vector)}
+                  onToggleBasemaps={() =>
+                    runMobileAction(() => togglePlugin(BASEMAP_CONTROL_PLUGIN_ID, appApi))
+                  }
+                  onOpenGallery={() => runMobileAction(() => dialogs.setGalleryDialogOpen(true))}
+                  onSearchAllSources={() =>
+                    runMobileAction(() => dialogs.setCommandPaletteOpen(true))
+                  }
+                />
+              ) : null}
+              {activeMobileTab === "field" ? (
+                <MobileFieldSheetContent
+                  canUseGeoEditor={canUseGeoEditor}
+                  geoEditorActive={isPluginActive(GEO_EDITOR_PLUGIN_ID)}
+                  measureActive={measureVisible}
+                  measureDisabled={!measureSupported && !measureVisible}
+                  onOpenFieldCollection={() =>
+                    runMobileAction(() => dialogs.setFieldCollectionOpen(true))
+                  }
+                  onOpenGpsTracking={() => runMobileAction(() => dialogs.setGpsTrackingOpen(true))}
+                  onToggleGeoEditor={() =>
+                    runMobileAction(() => togglePlugin(GEO_EDITOR_PLUGIN_ID, appApi))
+                  }
+                  onToggleMeasure={() => runMobileAction(onToggleMeasure)}
+                  onOpenOfflineBasemap={() => runMobileAction(onOpenBasemapExtract)}
+                  onAddComment={() => runMobileAction(onAddComment)}
+                />
+              ) : null}
+            </BottomSheet>,
+            mobileSheetHostEl,
+          )
+        : null;
 
   return (
     <>

@@ -9642,6 +9642,7 @@
     "selectFeaturesRadius": "Select features by radius",
     "selectFeaturesModifiers": "Shift adds, Alt removes, and Shift+Alt intersects. Press Esc to cancel.",
     "exportGeoTiff": "GeoTIFF (COG)",
+    "exportShapefileZipped": "Shapefile (zipped)",
     "exportLas": "LAS",
     "exportLaz": "LAZ (compressed)",
     "exportCopc": "COPC (cloud optimized)",
@@ -11588,6 +11589,17 @@
     "status": {
       "gpsLabel": "GPS",
       "diagnosticsLabel": "Open diagnostics ({{count}})"
+    },
+    "menu": {
+      "searchPlaceholder": "Search tools and commands…",
+      "clearSearch": "Clear search",
+      "noResults": "No matching actions found.",
+      "backTo": "Back to {{title}}"
+    },
+    "layerActions": {
+      "quickActions": "Quick actions",
+      "organize": "Organize and export",
+      "manage": "Layer info"
     }
   }
 }

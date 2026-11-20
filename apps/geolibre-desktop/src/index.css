@@ -6422,3 +6422,53 @@ html[data-touch-ui="true"] [data-testid="layer-row"] [role="button"] {
 body:has([data-mobile-shell="true"]) [data-testid="notification-region"] {
   bottom: calc(6.75rem + env(safe-area-inset-bottom));
 }
+
+/* Present modal Radix dialogs and the Processing toolbox as full-width
+   bottom-anchored sheets on touch phones (GeoLibre#3537 Phase 2). */
+@media (max-width: 639px) {
+  html[data-touch-ui="true"] [data-dialog-content] {
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
+    --tw-translate-x: 0 !important;
+    --tw-translate-y: 0 !important;
+    transform: none !important;
+    translate: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: 92dvh !important;
+    border-inline-width: 0;
+    border-bottom-width: 0;
+    border-radius: 1rem 1rem 0 0;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  html[data-touch-ui="true"] [data-processing-dialog] {
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
+    --tw-translate-x: 0 !important;
+    --tw-translate-y: 0 !important;
+    transform: none !important;
+    translate: none !important;
+    width: 100% !important;
+    height: 88dvh !important;
+    border-inline-width: 0;
+    border-bottom-width: 0;
+    border-radius: 1rem 1rem 0 0;
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+
+  /* While drawing a map extent for a Processing tool, shrink the sheet so the
+     map stays unobstructed and drawable on phones. */
+  html[data-touch-ui="true"] [data-processing-dialog][data-drawing="true"] {
+    height: auto !important;
+    max-height: 28dvh !important;
+  }
+
+  html[data-touch-ui="true"] [data-processing-resize-handle] {
+    display: none;
+  }
+}
