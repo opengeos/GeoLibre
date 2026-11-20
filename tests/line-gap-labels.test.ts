@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Feature, FeatureCollection, MultiLineString, Point } from "geojson";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LabelStyle } from "@geolibre/core";
+import { hasLineGapLabels } from "../packages/map/src/layer-sync";
 import {
   LINE_GAP_ANGLE_PROPERTY,
   LINE_GAP_TEXT_PROPERTY,
   buildLineGapLabels,
+  getLineGapLabels,
   lineGapTextResolver,
   lineGapZoomBucket,
 } from "../packages/map/src/line-gap-labels";
@@ -121,6 +124,23 @@ describe("buildLineGapLabels", () => {
     // ~1456 px / 300 px → 4 labels, so 5 pieces of line.
     assert.equal(labels.features.length, 4);
     assert.equal((lines.features[0].geometry as MultiLineString).coordinates.length, 5);
+  });
+
+  it("stops and reports overBudget past maxTargets, leaving the input uncut", () => {
+    const input = fc(
+      line(
+        [
+          [0, 0],
+          [1, 0],
+        ],
+        { elev: 10 },
+      ),
+    );
+    // The line asks for 4 targets at a 300 px spacing.
+    const result = buildLineGapLabels(input, { ...base, spacing: 300, maxTargets: 3 });
+    assert.equal(result.overBudget, true);
+    assert.equal(result.lines, input);
+    assert.equal(result.labels.features.length, 0);
   });
 
   it("leaves lines too short for their text, unlabeled lines and points untouched", () => {
@@ -348,3 +368,67 @@ function projectPx(position: number[]): [number, number] {
     (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * 512,
   ];
 }
+
+const gapLabels: LabelStyle = {
+  ...DEFAULT_LAYER_STYLE.labels,
+  enabled: true,
+  field: "elev",
+  placement: "line",
+  lineGap: true,
+};
+
+describe("getLineGapLabels", () => {
+  it("falls back to ordinary labels when a placement would place far too many labels", () => {
+    // A 10° line at zoom 22 is ~1.5e9 px long: millions of label targets.
+    const input = fc(
+      line(
+        [
+          [0, 0],
+          [10, 0],
+        ],
+        { elev: 10 },
+      ),
+    );
+    const measure = (text: string) => text.length * 8;
+    assert.equal(getLineGapLabels(input, gapLabels, ["get", "elev"], 22, measure), null);
+    // The same layer at a low zoom still gets its gaps.
+    const low = getLineGapLabels(input, gapLabels, ["get", "elev"], 6, measure);
+    assert.ok(low && low.labels.features.length > 0);
+  });
+});
+
+describe("hasLineGapLabels", () => {
+  function contourLayer(extra: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
+    return {
+      id: "contours",
+      name: "Contours",
+      type: "geojson",
+      visible: true,
+      opacity: 1,
+      geojson: fc(
+        line(
+          [
+            [0, 0],
+            [1, 0],
+          ],
+          { elev: 10 },
+        ),
+      ),
+      style: { ...DEFAULT_LAYER_STYLE, labels: gapLabels },
+      ...extra,
+    } as GeoLibreLayer;
+  }
+
+  it("applies to a visible line layer with gap labels", () => {
+    assert.equal(hasLineGapLabels([contourLayer()]), true);
+  });
+
+  it("keeps ordinary labels while a feature filter is active", () => {
+    // MapLibre filters after collision placement, so a hidden line could
+    // otherwise take a visible line's label spot.
+    const filtered = contourLayer({
+      embedFilter: ["==", ["get", "elev"], 20],
+    } as Partial<GeoLibreLayer>);
+    assert.equal(hasLineGapLabels([filtered]), false);
+  });
+});

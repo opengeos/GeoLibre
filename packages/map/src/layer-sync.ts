@@ -182,6 +182,22 @@ function unclusteredPointFilter(hasTextMarkers: boolean): maplibregl.FilterSpeci
 }
 
 /**
+ * Whether any per-feature filter {@link withFeatureFilters} combines is
+ * active. Symbology derived from the raw features cannot see these filters.
+ *
+ * @param layer - The store layer being synced.
+ * @returns True while a time, embed, authored or rule filter applies.
+ */
+function layerHasFeatureFilter(layer: GeoLibreLayer): boolean {
+  return (
+    (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
+    (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) ||
+    compileLayerFilters(layer) !== null ||
+    ruleBasedVisibilityFilter(layer.style) !== null
+  );
+}
+
+/**
  * Combine a sub-layer's geometry filter with the layer's per-feature filters:
  * the transient {@link GeoLibreLayer.timeFilter} (a Time-Slider-bound layer
  * only renders features inside the current timeline window), the transient
@@ -1961,11 +1977,7 @@ function applyVectorDataRenderLayers(
   // it. While a Time Slider window or a rule-based visibility filter is
   // active, those derivations would disagree with the visible data — skip
   // them for the duration, mirroring the dedup-label behavior.
-  const hasFeatureFilter =
-    (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
-    (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) ||
-    compileLayerFilters(layer) !== null ||
-    ruleBasedVisibilityFilter(layer.style) !== null;
+  const hasFeatureFilter = layerHasFeatureFilter(layer);
 
   const ctx: VectorRenderContext = {
     map,
@@ -2674,8 +2686,11 @@ function lineGapWanted(labels: LabelStyle): boolean {
  * Whether a layer's labels cut gaps in its lines, given its geometry. Only
  * line-only layers on the inline GeoJSON path take it: the cut lines replace
  * the source's features, which a point or polygon in the same source must not
- * see, and the tiled path cuts its tiles once, not per zoom. Shared by the
- * placement and the zoom-resync predicate so the two cannot drift.
+ * see, and the tiled path cuts its tiles once, not per zoom. Layers with an
+ * active feature filter keep ordinary labels too: MapLibre applies filters
+ * after collision, so a hidden line could take the spot of a visible line's
+ * label (the derived-symbology rule). Shared by the placement and the
+ * zoom-resync predicate so the two cannot drift.
  */
 function lineGapApplies(
   layer: GeoLibreLayer,
@@ -2688,7 +2703,8 @@ function lineGapApplies(
     !layer.style.extrusionEnabled &&
     profile.hasLine &&
     !profile.hasPoint &&
-    !profile.hasPolygon
+    !profile.hasPolygon &&
+    !layerHasFeatureFilter(layer)
   );
 }
 

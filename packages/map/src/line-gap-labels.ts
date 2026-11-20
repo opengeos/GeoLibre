@@ -27,6 +27,13 @@ const MAX_LATITUDE = 85.051129;
  * stick out of a bend.
  */
 const MIN_STRAIGHTNESS = 0.92;
+/**
+ * Most label positions one placement may try. Spacing is in screen pixels, so
+ * a long line at a high zoom asks for a label every few hundred pixels along a
+ * length of millions; past this budget the layer keeps its ordinary line labels
+ * instead of building (and uploading) gaps that are almost all offscreen.
+ */
+export const MAX_LINE_GAP_TARGETS = 50_000;
 
 export interface LineGapLabelOptions {
   /** Zoom the placement is computed for (see {@link lineGapZoomBucket}). */
@@ -48,6 +55,8 @@ export interface LineGapLabelOptions {
    * uncut and reserves no space; null shows every feature.
    */
   visible?: ((feature: Feature) => boolean) | null;
+  /** Label positions to try before giving up; see {@link MAX_LINE_GAP_TARGETS}. */
+  maxTargets?: number;
 }
 
 export interface LineGapLabelResult {
@@ -55,6 +64,11 @@ export interface LineGapLabelResult {
   lines: FeatureCollection;
   /** One point per label, carrying the text and rotation properties. */
   labels: FeatureCollection;
+  /**
+   * True when the placement stopped at {@link LineGapLabelOptions.maxTargets}:
+   * `lines` is then the input unchanged and `labels` is empty.
+   */
+  overBudget?: boolean;
 }
 
 /**
@@ -205,7 +219,9 @@ function lineParts(geometry: LineString | MultiLineString): Position[][] {
  * and clear of labels already placed. A line too short for its text gets no
  * label and no gap. Features that are not lines, or get no label, pass through
  * unchanged (the same object), and a cut line keeps its properties, so the
- * line's own styling, filters and identify still apply.
+ * line's own styling, filters and identify still apply. Past
+ * {@link LineGapLabelOptions.maxTargets} label positions it stops and reports
+ * `overBudget` instead.
  *
  * @param collection The layer's features.
  * @param options Placement settings for one zoom.
@@ -222,7 +238,27 @@ export function buildLineGapLabels(
   const grid = new CollisionGrid(Math.max(16, spacing / 4));
   const widths = new Map<string, number>();
   const labels: Feature[] = [];
-  const features = collection.features.map((feature) => {
+  const maxTargets = options.maxTargets ?? Infinity;
+  let targets = 0;
+  const features: Feature[] = [];
+  for (const feature of collection.features) {
+    const placed = placeFeature(feature);
+    if (placed === null) {
+      return {
+        lines: collection,
+        labels: { type: "FeatureCollection", features: [] },
+        overBudget: true,
+      };
+    }
+    features.push(placed);
+  }
+  return {
+    lines: { ...collection, features },
+    labels: { type: "FeatureCollection", features: labels },
+  };
+
+  /** The feature with its gaps cut, or null once the target budget is spent. */
+  function placeFeature(feature: Feature): Feature | null {
     const geometry = feature.geometry;
     if (!geometry || (geometry.type !== "LineString" && geometry.type !== "MultiLineString")) {
       return feature;
@@ -253,6 +289,8 @@ export function buildLineGapLabels(
       const intervals: Array<[number, number]> = [];
       if (part.length >= gap * 1.5) {
         const count = Math.max(1, Math.floor(part.length / spacing));
+        targets += count;
+        if (targets > maxTargets) return null;
         for (let n = 0; n < count; n++) {
           const target = ((n + 0.5) * part.length) / count;
           for (const shift of [0, gap, -gap, 2 * gap, -2 * gap, 3 * gap, -3 * gap]) {
@@ -296,11 +334,7 @@ export function buildLineGapLabels(
       ...feature,
       geometry: { type: "MultiLineString", coordinates: pieces } satisfies MultiLineString,
     };
-  });
-  return {
-    lines: { ...collection, features },
-    labels: { type: "FeatureCollection", features: labels },
-  };
+  }
 }
 
 /** Plain text of an evaluated `text-field` (a string, number or `Formatted`). */
@@ -373,9 +407,11 @@ function lineGapVisibilityResolver(
 
 // Placements per collection, keyed by everything that changes them, so a
 // resync at the same zoom bucket hands back the same objects (which the
-// geojson source then skips re-uploading) and zooming back is instant.
-const placementCache = new WeakMap<FeatureCollection, Map<string, LineGapLabelResult>>();
-const PLACEMENTS_PER_COLLECTION = 8;
+// geojson source then skips re-uploading) and zooming back is instant. Each
+// placement holds a cut copy of every line, so only the current bucket and its
+// neighbours are kept. A null entry records a placement over budget.
+const placementCache = new WeakMap<FeatureCollection, Map<string, LineGapLabelResult | null>>();
+const PLACEMENTS_PER_COLLECTION = 3;
 
 /**
  * {@link buildLineGapLabels} for a layer's labels at a zoom, memoized per
@@ -386,7 +422,8 @@ const PLACEMENTS_PER_COLLECTION = 8;
  * @param textField The label layer's `text-field` value.
  * @param zoom The map's current zoom; placement uses its bucket.
  * @param measure Text width in pixels at the label size.
- * @returns The placement, or null when there is no usable label text.
+ * @returns The placement, or null when there is no usable label text or the
+ *   placement would exceed {@link MAX_LINE_GAP_TARGETS} label positions.
  */
 export function getLineGapLabels(
   collection: FeatureCollection,
@@ -407,8 +444,7 @@ export function getLineGapLabels(
     labels.visibilityExpression,
   ]);
   let byKey = placementCache.get(collection);
-  const cached = byKey?.get(key);
-  if (cached) return cached;
+  if (byKey?.has(key)) return byKey.get(key) ?? null;
   const textFor = lineGapTextResolver(textField, labels.transform, bucket);
   if (!textFor) return null;
   const result = buildLineGapLabels(collection, {
@@ -423,7 +459,9 @@ export function getLineGapLabels(
       parseLabelOverride(labels.visibilityExpression, "boolean"),
       bucket,
     ),
+    maxTargets: MAX_LINE_GAP_TARGETS,
   });
+  const placement = result.overBudget ? null : result;
   if (!byKey) {
     byKey = new Map();
     placementCache.set(collection, byKey);
@@ -432,6 +470,6 @@ export function getLineGapLabels(
     const oldest = byKey.keys().next().value;
     if (oldest !== undefined) byKey.delete(oldest);
   }
-  byKey.set(key, result);
-  return result;
+  byKey.set(key, placement);
+  return placement;
 }
