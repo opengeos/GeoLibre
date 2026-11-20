@@ -1,6 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { Check, Crosshair, Navigation, Plus, X } from "lucide-react";
+import { Check, Crosshair, Navigation, Plus } from "lucide-react";
 import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -25,7 +25,6 @@ export function FieldCrosshairOverlay({ mapControllerRef }: FieldCrosshairOverla
   const capturedCount = useFieldCrosshairStore((s) => s.capturedCount);
   const stop = useFieldCrosshairStore((s) => s.stop);
   const incrementCaptured = useFieldCrosshairStore((s) => s.incrementCaptured);
-  const mapView = useAppStore((s) => s.mapView);
   const gpsStatus = useAppStore((s) => s.gpsStatus);
 
   if (!active) return null;
@@ -35,10 +34,14 @@ export function FieldCrosshairOverlay({ mapControllerRef }: FieldCrosshairOverla
     // inertia captures the exact point under the reticle rather than stale
     // moveend store state.
     const engine = mapControllerRef.current;
-    const liveCenter = engine?.getRenderSurface() ? engine.readView().center : mapView.center;
-    const lng = source === "gps" && gpsStatus ? gpsStatus.lng : liveCenter[0];
-    const lat = source === "gps" && gpsStatus ? gpsStatus.lat : liveCenter[1];
     const store = useAppStore.getState();
+    const liveCenter = engine?.getRenderSurface() ? engine.readView().center : store.mapView.center;
+    // Re-read live GPS status at tap time so a fix lost just before tapping
+    // falls back to the reticle center without mislabeling the capture as "gps".
+    const liveGps = source === "gps" ? store.gpsStatus : null;
+    const effectiveSource: "crosshair" | "gps" = liveGps ? "gps" : "crosshair";
+    const lng = liveGps ? liveGps.lng : liveCenter[0];
+    const lat = liveGps ? liveGps.lat : liveCenter[1];
     const existing = store.layers.find((layer) => layer.metadata?.fieldCrosshair === true);
     const persistedNext =
       typeof existing?.metadata?.fieldCrosshairNextIndex === "number"
@@ -50,8 +53,8 @@ export function FieldCrosshairOverlay({ mapControllerRef }: FieldCrosshairOverla
       {
         lng,
         lat,
-        accuracyM: source === "gps" ? gpsStatus?.accuracy : null,
-        source,
+        accuracyM: liveGps ? liveGps.accuracy : null,
+        source: effectiveSource,
         capturedAt: new Date().toISOString(),
       },
       usedIndex,
@@ -127,14 +130,6 @@ export function FieldCrosshairOverlay({ mapControllerRef }: FieldCrosshairOverla
         >
           <Check className="h-4 w-4" aria-hidden="true" />
           <span>{t("mobileShell.crosshair.done")}</span>
-        </button>
-        <button
-          type="button"
-          onClick={stop}
-          aria-label={t("common.close")}
-          className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground active:bg-accent"
-        >
-          <X className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
     </>

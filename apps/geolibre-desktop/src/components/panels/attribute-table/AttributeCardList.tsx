@@ -23,6 +23,7 @@ export interface AttributeCardListProps {
 }
 
 const MAX_PREVIEW_FIELDS = 4;
+const SORT_BAR_HEIGHT_PX = 48;
 
 function formatCardValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";
@@ -64,6 +65,7 @@ export function AttributeCardList({
     getScrollElement: () => scrollElementRef.current,
     estimateSize: () => (previewColumns.length > 0 ? 136 : 76),
     getItemKey: (index) => rows[index].featureId,
+    scrollMargin: SORT_BAR_HEIGHT_PX,
     overscan: 6,
   });
 
@@ -79,7 +81,7 @@ export function AttributeCardList({
 
   return (
     <div data-testid="attribute-card-list" className="w-full">
-      <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-background/95 px-2.5 py-1.5 backdrop-blur">
+      <div className="sticky top-0 z-10 flex h-12 items-center gap-2 border-b bg-background/95 px-2.5 backdrop-blur">
         <select
           aria-label={t("mobileShell.attributeCards.sortBy")}
           value={sortKey}
@@ -130,7 +132,9 @@ export function AttributeCardList({
               data-index={virtualItem.index}
               ref={cardVirtualizer.measureElement}
               className="absolute inset-x-0 top-0 px-2.5 pb-2"
-              style={{ transform: `translateY(${virtualItem.start + 10}px)` }}
+              style={{
+                transform: `translateY(${virtualItem.start - cardVirtualizer.options.scrollMargin + 10}px)`,
+              }}
             >
               <div
                 className={cn(

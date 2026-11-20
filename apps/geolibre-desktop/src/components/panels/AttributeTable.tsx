@@ -1156,7 +1156,7 @@ export function AttributeTable({
   // Row selection with keyboard modifiers (plain / Ctrl-toggle / Shift-range /
   // Shift+Ctrl merge). The branching lives in the pure `computeRowSelection`
   // helper so it can be unit-tested; here we just feed it the current state.
-  const handleRowClick = (featureId: string, event: ReactMouseEvent<HTMLTableRowElement>) => {
+  const handleRowClick = (featureId: string, event: ReactMouseEvent<HTMLElement>) => {
     const additive = event.ctrlKey || event.metaKey;
     const range = event.shiftKey;
     const { ids, anchor } = computeRowSelection({
@@ -2562,9 +2562,7 @@ export function AttributeTable({
                   direction: current.direction === "asc" ? "desc" : "asc",
                 }))
               }
-              onSelectRow={(featureId, event) =>
-                handleRowClick(featureId, event as unknown as ReactMouseEvent<HTMLTableRowElement>)
-              }
+              onSelectRow={handleRowClick}
               onZoomRow={(featureId) => {
                 selectFeature(featureId);
                 if (layer) {
