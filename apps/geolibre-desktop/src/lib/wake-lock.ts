@@ -37,6 +37,7 @@ export function createWakeLockController(options?: {
   const supported = Boolean(nav?.wakeLock && typeof nav.wakeLock.request === "function");
 
   let sentinel: WakeLockSentinelLike | null = null;
+  let pendingRequest: Promise<boolean> | null = null;
   let wanted = false;
   let disposed = false;
 
@@ -49,23 +50,35 @@ export function createWakeLockController(options?: {
     notify(false);
   };
 
-  const requestLock = async (): Promise<boolean> => {
-    if (!supported || disposed || !nav?.wakeLock) return false;
-    if (sentinel && !sentinel.released) return true;
-    try {
-      const next = await nav.wakeLock.request("screen");
-      if (disposed || !wanted) {
-        await next.release().catch(() => {});
+  const requestLock = (): Promise<boolean> => {
+    if (!supported || disposed || !nav?.wakeLock) return Promise.resolve(false);
+    if (sentinel && !sentinel.released) return Promise.resolve(true);
+    if (pendingRequest) return pendingRequest;
+    const req = (async () => {
+      try {
+        const next = await nav.wakeLock!.request("screen");
+        if (disposed || !wanted) {
+          await next.release().catch(() => {});
+          return false;
+        }
+        if (sentinel && sentinel !== next) {
+          sentinel.removeEventListener?.("release", handleSentinelRelease);
+          await sentinel.release().catch(() => {});
+        }
+        sentinel = next;
+        next.addEventListener?.("release", handleSentinelRelease);
+        notify(true);
+        return true;
+      } catch {
+        notify(false);
         return false;
       }
-      sentinel = next;
-      next.addEventListener?.("release", handleSentinelRelease);
-      notify(true);
-      return true;
-    } catch {
-      notify(false);
-      return false;
-    }
+    })();
+    pendingRequest = req;
+    void req.finally(() => {
+      if (pendingRequest === req) pendingRequest = null;
+    });
+    return req;
   };
 
   const handleVisibilityChange = () => {

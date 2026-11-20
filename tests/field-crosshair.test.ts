@@ -40,5 +40,19 @@ describe("field crosshair capture helpers", () => {
     assert.equal(first.features.length, 1);
     assert.equal(second.features.length, 2);
     assert.equal(second.features[1].properties?.name, "Point 2");
+
+    // Deleting Point 1 and capturing again must not reuse id field-pt-2.
+    const afterDelete = {
+      type: "FeatureCollection" as const,
+      features: second.features.slice(1),
+    };
+    const third = appendFieldCaptureFeature(afterDelete, {
+      lng: -98.4,
+      lat: 37.6,
+      source: "crosshair",
+      capturedAt: "2026-11-19T12:02:00.000Z",
+    });
+    assert.equal(third.features[1].id, "field-pt-3");
+    assert.equal(third.features[1].properties?.name, "Point 3");
   });
 });
