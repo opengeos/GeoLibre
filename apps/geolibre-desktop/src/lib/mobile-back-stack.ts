@@ -17,8 +17,18 @@ export const ANDROID_BACK_EVENT = "geolibre:android-back";
 
 export type MobileBackHandler = () => boolean;
 
+export interface MobileBackHandlerOptions {
+  /**
+   * Dispatch priority (higher runs first; LIFO within equal priority).
+   * Defaults to `0` for modal sheets; map-level capture modes use `-1` so any
+   * open sheet closes first without risking a false yield that exits the app.
+   */
+  priority?: number;
+}
+
 interface RegisteredHandler {
   id: number;
+  priority: number;
   handler: MobileBackHandler;
 }
 
@@ -27,13 +37,15 @@ let nextHandlerId = 1;
 let installed = false;
 
 /**
- * Dispatch a back press to the topmost registered handler that consumes it.
- * Returns `true` if a handler closed an active UI surface.
+ * Dispatch a back press to the highest-priority (and within equal priority,
+ * most recently registered) handler that consumes it. Returns `true` if a
+ * handler closed an active UI surface.
  */
 export function dispatchMobileBack(): boolean {
-  for (let i = handlers.length - 1; i >= 0; i -= 1) {
+  const ordered = [...handlers].sort((a, b) => b.priority - a.priority || b.id - a.id);
+  for (const entry of ordered) {
     try {
-      if (handlers[i].handler()) return true;
+      if (entry.handler()) return true;
     } catch (error) {
       console.error("mobile back handler failed:", error);
     }
@@ -52,10 +64,14 @@ function ensureBackListeners(): void {
 }
 
 /** Register a back-press handler; returns an unregister callback. */
-export function registerMobileBackHandler(handler: MobileBackHandler): () => void {
+export function registerMobileBackHandler(
+  handler: MobileBackHandler,
+  options?: MobileBackHandlerOptions,
+): () => void {
   ensureBackListeners();
   const id = nextHandlerId++;
-  handlers.push({ id, handler });
+  const priority = options?.priority ?? 0;
+  handlers.push({ id, priority, handler });
   return () => {
     const index = handlers.findIndex((entry) => entry.id === id);
     if (index >= 0) handlers.splice(index, 1);

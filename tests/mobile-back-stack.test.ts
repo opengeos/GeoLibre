@@ -87,4 +87,30 @@ describe("mobile back-handler stack", () => {
     assert.equal(dispatchMobileBack(), true);
     assert.deepEqual(log, ["fallback"]);
   });
+
+  it("dispatches higher-priority sheet handlers before lower-priority mode handlers and falls through when sheets are closed", () => {
+    const log: string[] = [];
+    let sheetOpen = true;
+    registerMobileBackHandler(() => {
+      if (!sheetOpen) return false;
+      sheetOpen = false;
+      log.push("sheet");
+      return true;
+    });
+    registerMobileBackHandler(
+      () => {
+        log.push("crosshair");
+        return true;
+      },
+      { priority: -1 },
+    );
+
+    // Even though crosshair registered later, the higher-priority open sheet closes first.
+    assert.equal(dispatchMobileBack(), true);
+    assert.deepEqual(log, ["sheet"]);
+
+    // With no sheet open, Back falls through to the lower-priority crosshair handler.
+    assert.equal(dispatchMobileBack(), true);
+    assert.deepEqual(log, ["sheet", "crosshair"]);
+  });
 });
