@@ -16,7 +16,7 @@ function fakeInput(type: string) {
 describe("releaseNumberInputOnWheel", () => {
   it("blurs a focused number input so the wheel cannot step its value", () => {
     const input = fakeInput("number");
-    const released = releaseNumberInputOnWheel(input, input as unknown as Element);
+    const released = releaseNumberInputOnWheel(input, input);
     assert.equal(released, true);
     assert.equal(input.blurred, 1);
   });
@@ -24,14 +24,14 @@ describe("releaseNumberInputOnWheel", () => {
   it("leaves an unfocused number input alone", () => {
     const input = fakeInput("number");
     const other = fakeInput("text");
-    assert.equal(releaseNumberInputOnWheel(input, other as unknown as Element), false);
+    assert.equal(releaseNumberInputOnWheel(input, other), false);
     assert.equal(releaseNumberInputOnWheel(input, null), false);
     assert.equal(input.blurred, 0);
   });
 
   it("leaves a focused text input alone", () => {
     const input = fakeInput("text");
-    assert.equal(releaseNumberInputOnWheel(input, input as unknown as Element), false);
+    assert.equal(releaseNumberInputOnWheel(input, input), false);
     assert.equal(input.blurred, 0);
   });
 });

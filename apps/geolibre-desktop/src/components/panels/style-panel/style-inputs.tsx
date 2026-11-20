@@ -135,9 +135,19 @@ export function NumericStyleInput({
             const raw = event.target.value.trim();
             if (raw === "") return;
             const next = Number(raw);
-            if (Number.isFinite(next)) onChange(normalize(next));
+            // Commit in-range values only while typing: a partial entry such
+            // as "1" on the way to "15" (min 10) would clamp to 10 and move the
+            // layer. Blur clamps whatever stays out of range.
+            if (Number.isFinite(next) && next >= min && next <= max) onChange(normalize(next));
           }}
-          onBlur={() => setDraft(null)}
+          onBlur={() => {
+            const raw = draft?.trim() ?? "";
+            const next = Number(raw);
+            if (raw !== "" && Number.isFinite(next) && (next < min || next > max)) {
+              onChange(normalize(next));
+            }
+            setDraft(null);
+          }}
         />
         <div className="absolute end-1 top-0.5 flex h-8 w-7 flex-col overflow-hidden rounded border bg-background">
           <button

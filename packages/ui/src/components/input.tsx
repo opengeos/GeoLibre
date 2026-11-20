@@ -18,9 +18,9 @@ import { cn } from "../lib/utils";
  */
 export function releaseNumberInputOnWheel(
   target: Pick<HTMLInputElement, "type" | "blur">,
-  activeElement: Element | null,
+  activeElement: unknown,
 ): boolean {
-  if (target.type !== "number" || (activeElement as unknown) !== target) return false;
+  if (target.type !== "number" || activeElement !== target) return false;
   target.blur();
   return true;
 }
