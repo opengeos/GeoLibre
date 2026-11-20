@@ -6427,10 +6427,12 @@ body:has([data-mobile-shell="true"]) [data-testid="notification-region"] {
    bottom-anchored sheets on touch phones (GeoLibre#3537 Phase 2). */
 @media (max-width: 639px) {
   html[data-touch-ui="true"] [data-dialog-content] {
-    inset-inline: 0;
+    left: 0;
+    right: 0;
     bottom: 0;
     top: auto;
-    left: auto;
+    --tw-translate-x: 0;
+    --tw-translate-y: 0;
     transform: none;
     translate: none;
     width: 100%;
@@ -6443,10 +6445,12 @@ body:has([data-mobile-shell="true"]) [data-testid="notification-region"] {
   }
 
   html[data-touch-ui="true"] [data-processing-dialog] {
-    inset-inline: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
     bottom: 0 !important;
     top: auto !important;
-    left: auto !important;
+    --tw-translate-x: 0 !important;
+    --tw-translate-y: 0 !important;
     transform: none !important;
     translate: none !important;
     width: 100% !important;

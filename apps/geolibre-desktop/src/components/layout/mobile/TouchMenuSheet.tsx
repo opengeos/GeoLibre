@@ -212,7 +212,9 @@ export function TouchMenuSheet({
               aria-hidden="true"
             />
             <input
-              type="search"
+              type="text"
+              inputMode="search"
+              enterKeyHint="search"
               data-testid="touch-menu-search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
