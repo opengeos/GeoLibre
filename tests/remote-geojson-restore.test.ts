@@ -110,6 +110,19 @@ describe("saving a fetched GeoJSON layer", () => {
     assert.equal(saved.source.data, "https://data.example/fields.geojson");
   });
 
+  it("embeds fetched features when the reference carries a credential", () => {
+    // Save redacts the credential from the URL, so the reference alone could
+    // not fetch the data again on reopen.
+    const fetched = rememberFetchedGeoJson(collection("fetched"));
+    useAppStore.getState().addLayer(
+      layer({
+        source: { type: "geojson", data: "https://alice:s3cret@data.example/f.geojson" },
+        geojson: fetched,
+      }),
+    );
+    assert.deepEqual(projectFromStore(useAppStore.getState()).layers[0].geojson, fetched);
+  });
+
   it("embeds the features once they are edited", () => {
     const fetched = rememberFetchedGeoJson(collection("fetched"));
     useAppStore.getState().addLayer(layer({ geojson: fetched }));

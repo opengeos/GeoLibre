@@ -584,7 +584,7 @@ export async function fetchRemoteData(
  * @throws When the request fails, the body is too large, or it is not a
  *   GeoJSON FeatureCollection.
  */
-export async function fetchGeoJsonFeatureCollection(
+export async function fetchRemoteFeatureCollection(
   url: string,
   options: { signal?: AbortSignal; fetchImpl?: typeof fetch } = {},
 ): Promise<FeatureCollection> {

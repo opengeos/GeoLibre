@@ -3,13 +3,14 @@ import {
   redactUrlCredentials,
   rememberFetchedGeoJson,
   remoteGeoJsonUrl,
+  type RemoteGeoJsonLayer,
   useAppStore,
   withoutHistory,
   type GeoLibreLayer,
 } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import i18next from "i18next";
-import { fetchGeoJsonFeatureCollection } from "./data-url";
+import { fetchRemoteFeatureCollection } from "./data-url";
 import type { AddLayerSpec } from "@geolibre/embed";
 import { assertLayerIdAvailable, buildEmbedLayer } from "./embed-api";
 import { isTauri } from "./is-tauri";
@@ -139,7 +140,7 @@ async function fetchWithDeadline(url: string, signal?: AbortSignal): Promise<Fea
   if (signal?.aborted) onAbort();
   else signal?.addEventListener("abort", onAbort, { once: true });
   try {
-    return await fetchGeoJsonFeatureCollection(url, { signal: controller.signal });
+    return await fetchRemoteFeatureCollection(url, { signal: controller.signal });
   } catch (error) {
     const shown = redactUrlCredentials(url);
     // A timeout surfaces as a generic network error or a raw browser message
@@ -154,11 +155,12 @@ async function fetchWithDeadline(url: string, signal?: AbortSignal): Promise<Fea
           url: shown,
           seconds: RESTORE_TIMEOUT_MS / 1000,
         }),
-        { cause: error },
       );
     }
     if (error instanceof Error && shown !== url && error.message.includes(url)) {
-      throw new Error(error.message.split(url).join(shown), { cause: error });
+      // No `cause`: the original error still holds the unredacted URL, and
+      // devtools prints causes.
+      throw new Error(error.message.split(url).join(shown));
     }
     throw error;
   } finally {
@@ -178,7 +180,7 @@ function unfetchableReferenceMessage(reference: string): string {
     isTauri()
       ? "notifications.remoteGeoJsonNotFetchableDesktop"
       : "notifications.remoteGeoJsonNotFetchable",
-    { reference },
+    { reference: redactUrlCredentials(reference) },
   );
 }
 
@@ -224,7 +226,7 @@ function isStillWaiting(layer: GeoLibreLayer): boolean {
  * @throws When the referenced data cannot be fetched or is not GeoJSON, or
  *   the layer names its data by a reference this app cannot fetch.
  */
-export async function withFetchedRemoteGeoJson<T extends Parameters<typeof remoteGeoJsonUrl>[0]>(
+export async function withFetchedRemoteGeoJson<T extends RemoteGeoJsonLayer>(
   layer: T,
   options: { signal?: AbortSignal } = {},
 ): Promise<T> {

@@ -28,6 +28,10 @@ export function rememberFetchedGeoJson<T extends FeatureCollection>(collection: 
 /**
  * Whether a layer's `geojson` is the unedited copy fetched from its source URL.
  *
+ * Relies on the store's invariant that every edit replaces `layer.geojson`
+ * with a new object; an in-place mutation of a fetched collection would be
+ * mistaken for the unedited download and dropped on save.
+ *
  * @param collection - A layer's `geojson`, or undefined.
  * @returns True when the collection came from {@link rememberFetchedGeoJson}.
  */
@@ -35,7 +39,8 @@ export function isFetchedGeoJson(collection: FeatureCollection | undefined): boo
   return collection !== undefined && fetchedCollections.has(collection);
 }
 
-type RemoteGeoJsonLayer = Pick<GeoLibreLayer, "type" | "geojson" | "source" | "metadata">;
+/** The layer fields the remote-GeoJSON helpers read. */
+export type RemoteGeoJsonLayer = Pick<GeoLibreLayer, "type" | "geojson" | "source" | "metadata">;
 
 /**
  * The string references a plain GeoJSON layer names its data by, in the order
