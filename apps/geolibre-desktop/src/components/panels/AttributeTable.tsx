@@ -635,15 +635,8 @@ export function AttributeTable({
   const selectedFeatureIds = useAppStore((s) => s.selectedFeatureIds);
   const selectFeature = useAppStore((s) => s.selectFeature);
   const selectFeatures = useAppStore((s) => s.selectFeatures);
-  const [cardViewOverride, setCardViewOverride] = useState<{
-    mobileShell: boolean;
-    value: boolean;
-  } | null>(null);
-  const useCardView = mobileShell
-    ? cardViewOverride?.mobileShell === mobileShell
-      ? cardViewOverride.value
-      : true
-    : false;
+  const [cardViewOverride, setCardViewOverride] = useState<boolean | null>(null);
+  const useCardView = mobileShell && (cardViewOverride ?? true);
   const attributeTableOpen = useAppStore((s) => s.ui.attributeTableOpen);
   const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
   const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
@@ -2506,7 +2499,7 @@ export function AttributeTable({
                 : t("mobileShell.attributeCards.switchToCards")
             }
             aria-pressed={useCardView}
-            onClick={() => setCardViewOverride({ mobileShell, value: !useCardView })}
+            onClick={() => setCardViewOverride(!useCardView)}
           >
             {useCardView ? (
               <TableProperties className="h-4 w-4" />

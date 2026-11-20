@@ -6,7 +6,7 @@ import { formatAccuracy, formatSpeedKmh } from "../../../lib/gps-tracking";
 
 export interface MobileGpsHudProps {
   crosshairActive?: boolean;
-  wakeLockActive: boolean;
+  keepAwake: boolean;
   wakeLockSupported: boolean;
   onToggleKeepAwake: () => void;
 }
@@ -15,11 +15,11 @@ export interface MobileGpsHudProps {
  * Compact live GPS HUD pill displayed near the top-center of the map while GPS
  * tracking or crosshair capture is active in Touch UI mode (GeoLibre#3537
  * Phase 4). Shows live accuracy, optional speed, and a 1-tap Screen Wake Lock
- * toggle reflecting the actual OS wake-lock state.
+ * toggle bound to the user's keep-awake preference.
  */
 export function MobileGpsHud({
   crosshairActive = false,
-  wakeLockActive,
+  keepAwake,
   wakeLockSupported,
   onToggleKeepAwake,
 }: MobileGpsHudProps) {
@@ -52,21 +52,21 @@ export function MobileGpsHud({
           <Navigation className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-hidden="true" />
           <span className="truncate">
             ±{accuracy}
-            {speed ? ` · ${speed} km/h` : ""}
+            {speed ? ` · ${t("gps.speedValue", { value: speed })}` : ""}
           </span>
         </>
       ) : null}
       {wakeLockSupported ? (
         <button
           type="button"
-          aria-pressed={wakeLockActive}
+          aria-pressed={keepAwake}
           title={t("mobileShell.field.keepScreenAwake")}
           aria-label={t("mobileShell.field.keepScreenAwake")}
           onClick={onToggleKeepAwake}
           className={cn(
             "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
             gpsStatus ? "ms-0.5" : "",
-            wakeLockActive
+            keepAwake
               ? "bg-primary/15 text-primary"
               : "text-muted-foreground hover:bg-accent hover:text-foreground",
           )}

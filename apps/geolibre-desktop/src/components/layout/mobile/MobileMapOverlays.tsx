@@ -23,24 +23,14 @@ export function MobileMapOverlays({ mapControllerRef }: MobileMapOverlaysProps) 
   const [keepAwake, setKeepAwake] = useState(true);
   const wakeLock = useScreenWakeLock(keepAwake && (hasGps || crosshairActive));
 
-  const handleToggleKeepAwake = () => {
-    // If keep-awake is enabled but the OS rejected or dropped the lock, a tap
-    // retries acquisition without flipping the stored preference off.
-    if (keepAwake && !wakeLock.active) {
-      wakeLock.retry();
-      return;
-    }
-    setKeepAwake((v) => !v);
-  };
-
   return (
     <>
       <TouchSelectionActionBar />
       <MobileGpsHud
         crosshairActive={crosshairActive}
-        wakeLockActive={wakeLock.active}
+        keepAwake={keepAwake}
         wakeLockSupported={wakeLock.supported}
-        onToggleKeepAwake={handleToggleKeepAwake}
+        onToggleKeepAwake={() => setKeepAwake((v) => !v)}
       />
       <FieldCrosshairOverlay mapControllerRef={mapControllerRef} />
     </>

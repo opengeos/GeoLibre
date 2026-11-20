@@ -68,6 +68,7 @@ export function AttributeCardList({
     estimateSize: () => (previewColumns.length > 0 ? 136 : 76),
     getItemKey: (index) => rows[index].featureId,
     scrollMargin: SORT_BAR_HEIGHT_PX,
+    scrollPaddingStart: SORT_BAR_HEIGHT_PX,
     overscan: 6,
   });
 
@@ -157,7 +158,6 @@ export function AttributeCardList({
               >
                 <button
                   type="button"
-                  aria-label={heading}
                   aria-pressed={selected}
                   onClick={(event) => onSelectRow(featureId, event)}
                   className="min-w-0 flex-1 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
