@@ -685,15 +685,15 @@ export function useLayerActions({
         const picked = await openLocalDataFileWithFallback({
           filters: [
             {
-              name: "Style (GeoLibre URL / Mapbox GL / SLD / QML)",
-              extensions: ["json", "sld", "qml", "xml"],
+              name: "Style (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)",
+              extensions: ["json", "sld", "qml", "xml", "lyrx"],
             },
           ],
-          // Android filters document pickers by MIME type, but SLD and QML do
-          // not have consistently reported MIME types. Leave the native picker
+          // Android filters document pickers by MIME type, but SLD, QML and
+          // LYRX do not have consistently reported MIME types. Leave the native picker
           // broad there, then validate the selected file by content below.
           androidFilters: [],
-          accept: ".json,.sld,.qml,.xml,application/json,application/xml,text/xml",
+          accept: ".json,.sld,.qml,.xml,.lyrx,application/json,application/xml,text/xml",
           readText: true,
         });
         // A null result means the user dismissed the file dialog; no note. Guard

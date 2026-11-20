@@ -9522,7 +9522,7 @@
     "exportStyleDataNotReady": "Katman verisi henüz hazır değil. Birazdan tekrar deneyin.",
     "exportStyleNeedsFeatures": "Stil dışa aktarımı öğeleri olan bir vektör katmanı gerektirir.",
     "exportStyleError": "Bu katmanın stili dışa aktarılamadı.",
-    "importStyle": "Stil içe aktar (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "Stil içe aktar (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Metinden stil içe aktar…",
     "importStyleFromTextDescription": "Bir GeoLibre, Mapbox GL, SLD veya QML stili yapıştırın. Biçim metinden algılanır.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

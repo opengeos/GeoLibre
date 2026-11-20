@@ -9522,7 +9522,7 @@
     "exportStyleDataNotReady": "دادهٔ لایه هنوز آماده نیست. لحظه‌ای دیگر دوباره تلاش کنید.",
     "exportStyleNeedsFeatures": "صدور شیوهٔ نمایش به یک لایهٔ برداری دارای عارضه نیاز دارد.",
     "exportStyleError": "خروجی شیوهٔ نمایش این لایه ممکن نشد.",
-    "importStyle": "وارد کردن شیوهٔ نمایش (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "وارد کردن شیوهٔ نمایش (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "وارد کردن شیوهٔ نمایش از متن…",
     "importStyleFromTextDescription": "یک شیوهٔ نمایش GeoLibre، Mapbox GL، SLD یا QML را جای‌گذاری کنید. قالب از روی متن تشخیص داده می‌شود.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

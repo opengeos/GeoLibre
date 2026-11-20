@@ -6,7 +6,7 @@
  * The index reaches MapLibre's stylesheet, which `node --test` cannot load, so a test for the
  * format detection would need a browser; and `packages/plugins` cannot import from `apps/`, so
  * anything living in the desktop app is out of reach of the STAC and PMTiles doors that need to
- * apply a catalog's published style. The three parsers below pull only `@geolibre/core`,
+ * apply a catalog's published style. The parsers below pull only `@geolibre/core`,
  * `fast-xml-parser` and sibling pure modules — no `maplibre-gl` — so this entry stays resolvable
  * under the test runner.
  *
@@ -18,6 +18,7 @@ import type { LayerStyle } from "@geolibre/core";
 import { applyMapboxStyleImport, parseMapboxStyle } from "./mapbox-style-import";
 import { applySldImport, parseSld } from "./sld-import";
 import { applyQmlImport, parseQml } from "./qml-import";
+import { applyLyrxImport, isLyrxDocument, parseLyrx } from "./lyrx-import";
 
 export { qgisLengthToPixels } from "./qml-import";
 
@@ -72,7 +73,8 @@ export interface ImportedStyleError {
  *
  * The format comes from the content rather than a file extension, since a `.xml` can hold either
  * XML dialect: a QGIS QML has a `<qgis>`/`renderer-v2` root, an SLD a `StyledLayerDescriptor` root,
- * and everything else — including a `.geolibre.style.json` export — is Mapbox GL style JSON. A
+ * an ArcGIS Pro layer file (`.lyrx`) is JSON whose `type` is `CIMLayerDocument`, and everything
+ * else — including a `.geolibre.style.json` export — is Mapbox GL style JSON. A
  * Mapbox style's source binding is deliberately ignored: importing dresses the chosen layer,
  * wherever the style's author happened to point it.
  */
@@ -83,7 +85,7 @@ export function importStyleText(text: string): ImportedStyle | ImportedStyleErro
   // to look at one character.
   const isXml = /^\s*</.test(text);
 
-  /** One shape for all three formats: nothing matched, or a patch and whatever went unread. */
+  /** One shape for every format: nothing matched, or a patch and whatever went unread. */
   const read = (
     result: { warnings: string[] },
     matched: number,
@@ -108,6 +110,11 @@ export function importStyleText(text: string): ImportedStyle | ImportedStyleErro
     parsed = JSON.parse(text);
   } catch {
     return { ok: false, reason: "invalid", warnings: [] };
+  }
+
+  if (isLyrxDocument(parsed)) {
+    const result = parseLyrx(parsed);
+    return read(result, result.matchedCount, (base) => applyLyrxImport(base, result));
   }
 
   const result = parseMapboxStyle(parsed);

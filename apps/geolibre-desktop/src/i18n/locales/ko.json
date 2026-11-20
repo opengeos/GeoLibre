@@ -9382,7 +9382,7 @@
     "exportStyleDataNotReady": "레이어 데이터가 아직 준비되지 않았습니다. 잠시 후 다시 시도하세요.",
     "exportStyleNeedsFeatures": "스타일 내보내기는 피처가 있는 벡터 레이어가 필요합니다.",
     "exportStyleError": "이 레이어의 스타일을 내보낼 수 없습니다.",
-    "importStyle": "스타일 가져오기(GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "스타일 가져오기(GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "텍스트에서 스타일 가져오기…",
     "importStyleFromTextDescription": "GeoLibre, Mapbox GL, SLD 또는 QML 스타일을 붙여 넣으세요. 형식은 텍스트에서 자동으로 판별됩니다.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

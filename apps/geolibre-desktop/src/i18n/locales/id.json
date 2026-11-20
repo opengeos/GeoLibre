@@ -9382,7 +9382,7 @@
     "exportStyleDataNotReady": "Data layer belum siap. Coba lagi sesaat lagi.",
     "exportStyleNeedsFeatures": "Ekspor gaya memerlukan layer vektor dengan fitur.",
     "exportStyleError": "Tidak dapat mengekspor gaya layer ini.",
-    "importStyle": "Impor gaya (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "Impor gaya (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Impor gaya dari teks…",
     "importStyleFromTextDescription": "Tempel gaya GeoLibre, Mapbox GL, SLD, atau QML. Formatnya dikenali dari teks.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

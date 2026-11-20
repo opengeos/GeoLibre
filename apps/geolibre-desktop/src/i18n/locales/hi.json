@@ -9522,7 +9522,7 @@
     "exportStyleDataNotReady": "लेयर डेटा अभी तैयार नहीं है। कुछ समय बाद पुनः प्रयास करें।",
     "exportStyleNeedsFeatures": "शैली निर्यात के लिए फ़ीचर वाली एक वेक्टर लेयर आवश्यक है।",
     "exportStyleError": "इस लेयर की शैली निर्यात नहीं की जा सकी।",
-    "importStyle": "शैली आयात करें (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "शैली आयात करें (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "टेक्स्ट से शैली आयात करें…",
     "importStyleFromTextDescription": "GeoLibre, Mapbox GL, SLD या QML शैली पेस्ट करें। प्रारूप टेक्स्ट से पहचाना जाता है।",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

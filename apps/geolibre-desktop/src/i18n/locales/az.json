@@ -9586,7 +9586,7 @@
     "exportStyleDataNotReady": "Lay verilənləri hələ hazır deyil. Bir az sonra yenidən cəhd edin.",
     "exportStyleNeedsFeatures": "Üslubu ixrac etmək üçün obyektləri olan vektor layı lazımdır.",
     "exportStyleError": "Bu layın üslubunu ixrac etmək mümkün olmadı.",
-    "importStyle": "Fayldan üslub idxal et (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "Fayldan üslub idxal et (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Mətndən üslub idxal et…",
     "importStyleFromTextDescription": "GeoLibre, Mapbox GL, SLD və ya QML üslubunu yapışdırın. Format mətndən müəyyən edilir.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

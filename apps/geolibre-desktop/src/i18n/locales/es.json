@@ -9522,7 +9522,7 @@
     "exportStyleDataNotReady": "Los datos de la capa aún no están listos. Inténtelo de nuevo en un momento.",
     "exportStyleNeedsFeatures": "La exportación de estilo requiere una capa vectorial con entidades.",
     "exportStyleError": "No se pudo exportar el estilo de esta capa.",
-    "importStyle": "Importar estilo (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "Importar estilo (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Importar estilo desde texto…",
     "importStyleFromTextDescription": "Pegue un estilo de GeoLibre, Mapbox GL, SLD o QML. El formato se detecta a partir del texto.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

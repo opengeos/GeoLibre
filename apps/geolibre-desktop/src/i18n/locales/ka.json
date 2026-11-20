@@ -9522,7 +9522,7 @@
     "exportStyleDataNotReady": "შრის მონაცემები ჯერ არ არის მზად. სცადეთ ცოტა ხანში.",
     "exportStyleNeedsFeatures": "სტილის ექსპორტს სჭირდება ვექტორული შრე ობიექტებით.",
     "exportStyleError": "ამ შრის სტილის ექსპორტი ვერ მოხერხდა.",
-    "importStyle": "სტილის იმპორტი (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "სტილის იმპორტი (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "სტილის იმპორტი ტექსტიდან…",
     "importStyleFromTextDescription": "ჩასვით GeoLibre, Mapbox GL, SLD ან QML სტილი. ფორმატი ტექსტიდან განისაზღვრება.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

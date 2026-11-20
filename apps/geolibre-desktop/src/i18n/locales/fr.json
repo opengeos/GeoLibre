@@ -9522,7 +9522,7 @@
     "exportStyleDataNotReady": "Les données de la couche ne sont pas encore prêtes. Réessayez dans un instant.",
     "exportStyleNeedsFeatures": "L'exportation de style nécessite une couche vectorielle avec des entités.",
     "exportStyleError": "Impossible d'exporter le style de cette couche.",
-    "importStyle": "Importer un style (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "Importer un style (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Importer un style depuis du texte…",
     "importStyleFromTextDescription": "Collez un style GeoLibre, Mapbox GL, SLD ou QML. Le format est déduit du texte.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

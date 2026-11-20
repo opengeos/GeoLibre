@@ -10081,7 +10081,7 @@
     "exportStyleDataNotReady": "بيانات الطبقة ليست جاهزة بعد. حاول مرة أخرى بعد قليل.",
     "exportStyleNeedsFeatures": "يتطلب تصدير النمط طبقة متجهات تحتوي على معالم.",
     "exportStyleError": "تعذر تصدير نمط هذه الطبقة.",
-    "importStyle": "استيراد نمط (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "استيراد نمط (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "استيراد نمط من نص…",
     "importStyleFromTextDescription": "الصق نمطًا بصيغة GeoLibre أو Mapbox GL أو SLD أو QML. يُتعرَّف على الصيغة من النص.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

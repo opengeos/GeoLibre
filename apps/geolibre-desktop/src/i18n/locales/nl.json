@@ -9522,7 +9522,7 @@
     "exportStyleDataNotReady": "Laaggegevens zijn nog niet gereed. Probeer het straks opnieuw.",
     "exportStyleNeedsFeatures": "Stijlexport vereist een vectorlaag met objecten.",
     "exportStyleError": "De stijl van deze laag kon niet worden geëxporteerd.",
-    "importStyle": "Stijl importeren (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "Stijl importeren (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Stijl importeren uit tekst…",
     "importStyleFromTextDescription": "Plak een GeoLibre-, Mapbox GL-, SLD- of QML-stijl. Het formaat wordt uit de tekst afgeleid.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

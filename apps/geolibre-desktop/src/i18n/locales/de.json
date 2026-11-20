@@ -9522,7 +9522,7 @@
     "exportStyleDataNotReady": "Ebenendaten sind noch nicht bereit. Versuchen Sie es gleich noch einmal.",
     "exportStyleNeedsFeatures": "Für den Stilexport ist eine Vektorebene mit Objekten erforderlich.",
     "exportStyleError": "Der Stil dieser Ebene konnte nicht exportiert werden.",
-    "importStyle": "Stil importieren (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "Stil importieren (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Stil aus Text importieren…",
     "importStyleFromTextDescription": "Fügen Sie einen GeoLibre-, Mapbox GL-, SLD- oder QML-Stil ein. Das Format wird aus dem Text erkannt.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",

@@ -9522,7 +9522,7 @@
     "exportStyleDataNotReady": "Os dados da camada ainda não estão prontos. Tente novamente em instantes.",
     "exportStyleNeedsFeatures": "A exportação de estilo requer uma camada vetorial com feições.",
     "exportStyleError": "Não foi possível exportar o estilo desta camada.",
-    "importStyle": "Importar estilo (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "Importar estilo (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Importar estilo de texto…",
     "importStyleFromTextDescription": "Cole um estilo GeoLibre, Mapbox GL, SLD ou QML. O formato é detectado a partir do texto.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",
