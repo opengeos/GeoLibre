@@ -92,6 +92,11 @@ export function NumericStyleInput({
   // The text being typed, shown in place of `value` until the field loses
   // focus; null when the field shows the stored value.
   const [draft, setDraft] = useState<string | null>(null);
+  // Set when the shared Input is about to blur this field because the wheel
+  // turned over it: that blur is a scroll, not a finished edit, so an
+  // out-of-range partial entry (e.g. "1" on the way to "15") is dropped
+  // rather than clamped and committed.
+  const wheelBlurRef = useRef(false);
 
   const stepValue = (direction: 1 | -1) => {
     setDraft(null);
@@ -140,10 +145,15 @@ export function NumericStyleInput({
             // layer. Blur clamps whatever stays out of range.
             if (Number.isFinite(next) && next >= min && next <= max) onChange(normalize(next));
           }}
+          onWheel={() => {
+            wheelBlurRef.current = true;
+          }}
           onBlur={() => {
+            const fromWheel = wheelBlurRef.current;
+            wheelBlurRef.current = false;
             const raw = draft?.trim() ?? "";
             const next = Number(raw);
-            if (raw !== "" && Number.isFinite(next) && (next < min || next > max)) {
+            if (!fromWheel && raw !== "" && Number.isFinite(next) && (next < min || next > max)) {
               onChange(normalize(next));
             }
             setDraft(null);

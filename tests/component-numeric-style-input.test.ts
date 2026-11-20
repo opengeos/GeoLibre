@@ -1,25 +1,32 @@
 import { fireEvent, render, screen } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createElement } from "react";
+import { createElement, useState } from "react";
 
 // Loaded after the harness so its CSS imports and Vite globals are handled.
 const { NumericStyleInput } =
   await import("../apps/geolibre-desktop/src/components/panels/style-panel/style-inputs");
 const { Input } = await import("@geolibre/ui");
 
+// Feeds each committed value back into `value`, as the Style panel's store does.
+function StatefulField({ onChange }: { onChange: (value: number) => void }) {
+  const [value, setValue] = useState(50);
+  return createElement(NumericStyleInput, {
+    id: "opacity",
+    label: "Opacity",
+    value,
+    min: 10,
+    max: 100,
+    step: 1,
+    onChange: (next: number) => {
+      onChange(next);
+      setValue(next);
+    },
+  });
+}
+
 function renderField(onChange: (value: number) => void) {
-  return render(
-    createElement(NumericStyleInput, {
-      id: "opacity",
-      label: "Opacity",
-      value: 50,
-      min: 10,
-      max: 100,
-      step: 1,
-      onChange,
-    }),
-  );
+  return render(createElement(StatefulField, { onChange }));
 }
 
 describe("NumericStyleInput", () => {
@@ -54,6 +61,22 @@ describe("NumericStyleInput", () => {
     fireEvent.blur(input);
     assert.deepEqual(committed, [15, 100]);
     assert.equal(input.value, "100");
+  });
+});
+
+describe("NumericStyleInput wheel blur", () => {
+  it("drops an out-of-range partial entry instead of clamping it when the wheel blurs the field", () => {
+    const committed: number[] = [];
+    renderField((value) => committed.push(value));
+    const input = screen.getByLabelText("Opacity") as HTMLInputElement;
+    input.focus();
+
+    fireEvent.change(input, { target: { value: "1" } });
+    fireEvent.wheel(input);
+
+    assert.equal(document.activeElement === input, false, "the wheel should blur the input");
+    assert.deepEqual(committed, []);
+    assert.equal(input.value, "50");
   });
 });
 
