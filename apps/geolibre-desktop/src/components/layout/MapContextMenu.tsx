@@ -32,6 +32,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { useTranslation } from "react-i18next";
 import { useTouchUi } from "../../hooks/useTouchUi";
 import { ContextMenuGestureTracker, type ContextMenuRequest } from "../../lib/context-menu-gesture";
+import { triggerHaptic } from "../../lib/haptics";
 import {
   copyContextText,
   formatContextCoords,
@@ -111,13 +112,14 @@ export function MapContextMenu({
     if (!surface) return;
     const canvas = surface.getCanvas();
 
-    const openAt = ({ clientX, clientY }: ContextMenuRequest) => {
+    const openAt = ({ clientX, clientY, isTouch }: ContextMenuRequest) => {
       const rect = canvas.getBoundingClientRect();
       const coordinate = surface.unproject([clientX - rect.left, clientY - rect.top]);
       // Globe renderers can return no coordinate when the pointer is over
       // empty space beyond the planet. In that case there is no point for the
       // menu actions to operate on.
       if (!coordinate) return;
+      if (isTouch) triggerHaptic("light");
       seqRef.current += 1;
       setMenu({
         id: seqRef.current,

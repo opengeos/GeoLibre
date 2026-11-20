@@ -1,13 +1,15 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { Check, Crosshair, Navigation, Plus } from "lucide-react";
-import type { RefObject } from "react";
+import { useEffect, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import {
   appendFieldCaptureFeature,
   nextFieldCaptureIndex,
   useFieldCrosshairStore,
 } from "../../../lib/field-crosshair";
+import { triggerHaptic } from "../../../lib/haptics";
+import { registerMobileBackHandler } from "../../../lib/mobile-back-stack";
 import { notify } from "../../../lib/notify";
 
 export interface FieldCrosshairOverlayProps {
@@ -26,6 +28,20 @@ export function FieldCrosshairOverlay({ mapControllerRef }: FieldCrosshairOverla
   const stop = useFieldCrosshairStore((s) => s.stop);
   const incrementCaptured = useFieldCrosshairStore((s) => s.incrementCaptured);
   const gpsStatus = useAppStore((s) => s.gpsStatus);
+
+  useEffect(() => {
+    if (!active) return;
+    // Register below modal sheets (priority -1 vs default 0) so any open
+    // sheet closes first while Back still stops crosshair mode instead of
+    // exiting the app when no sheet consumes it.
+    return registerMobileBackHandler(
+      () => {
+        stop();
+        return true;
+      },
+      { priority: -1 },
+    );
+  }, [active, stop]);
 
   if (!active) return null;
 
@@ -74,6 +90,7 @@ export function FieldCrosshairOverlay({ mapControllerRef }: FieldCrosshairOverla
       });
     }
     incrementCaptured();
+    triggerHaptic("medium");
     notify.info(
       t("mobileShell.crosshair.pointCaptured", {
         coords: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,

@@ -6,11 +6,25 @@ package org.geolibre.app
 
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 
 class MainActivity : TauriActivity() {
+  private fun findWebView(view: View): WebView? {
+    if (view is WebView) return view
+    if (view is ViewGroup) {
+      for (i in 0 until view.childCount) {
+        val found = findWebView(view.getChildAt(i))
+        if (found != null) return found
+      }
+    }
+    return null
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
@@ -33,5 +47,33 @@ class MainActivity : TauriActivity() {
       view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
       WindowInsetsCompat.CONSUMED
     }
+
+    // Route hardware/predictive back gestures into the WebView's LIFO mobile
+    // back stack first (`mobile-back-stack.ts`). If a BottomSheet, menu
+    // drill-down, or field crosshair overlay calls `event.preventDefault()`,
+    // stay in the app; otherwise delegate back to Android's default behavior.
+    val backCallback = object : OnBackPressedCallback(true) {
+      private fun passBackToSystem() {
+        isEnabled = false
+        onBackPressedDispatcher.onBackPressed()
+        isEnabled = true
+      }
+
+      override fun handleOnBackPressed() {
+        val webView = findWebView(content)
+        if (webView == null) {
+          passBackToSystem()
+          return
+        }
+        webView.evaluateJavascript(
+          "(function(){var e=new CustomEvent('geolibre:android-back',{cancelable:true});window.dispatchEvent(e);return e.defaultPrevented;})()",
+        ) { result ->
+          if (result != "true") {
+            passBackToSystem()
+          }
+        }
+      }
+    }
+    onBackPressedDispatcher.addCallback(this, backCallback)
   }
 }

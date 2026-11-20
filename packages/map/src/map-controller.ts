@@ -1,4 +1,5 @@
 import { showGlSearchResult } from "./gl-search-result";
+import { resolveMapPixelRatio, watchMapPixelRatio } from "./mobile-pixel-ratio";
 import {
   antimeridianAwareBbox,
   BLANK_BASEMAP,
@@ -486,6 +487,7 @@ export class MapController implements MapEngine {
       // that discard the drawing buffer after compositing (most mobile GPUs).
       // Trade-off: adds one extra framebuffer copy per frame on tiled renderers.
       canvasContextAttributes: { preserveDrawingBuffer: true },
+      pixelRatio: resolveMapPixelRatio(),
       // The map's only request transform: plugins register headers for their
       // tile services rather than replacing it (see tile-request-headers.ts).
       transformRequest: transformTileRequest,
@@ -495,6 +497,10 @@ export class MapController implements MapEngine {
     // drag of the selection in WebKit; see selection-drag-guard.ts.
     this.selectionDragGuardDispose?.();
     this.selectionDragGuardDispose = installSelectionDragGuard(this.map.getCanvasContainer());
+    this.pixelRatioWatchDispose?.();
+    this.pixelRatioWatchDispose = watchMapPixelRatio((ratio) => {
+      this.map?.setPixelRatio(ratio);
+    });
     installGlobePopupOcclusion(maplibregl);
     // Per-layer blend modes wrap MapLibre's render loop, so they have to be in
     // place before the first frame. Feature-detected: an unsupported build
@@ -1054,6 +1060,8 @@ export class MapController implements MapEngine {
     this.removePendingNativeFilterListener();
     this.selectionDragGuardDispose?.();
     this.selectionDragGuardDispose = null;
+    this.pixelRatioWatchDispose?.();
+    this.pixelRatioWatchDispose = null;
     this.map?.remove();
     this.map = null;
     this.styleReady = false;
@@ -1886,6 +1894,7 @@ export class MapController implements MapEngine {
 
   private extentDrawingDispose: (() => void) | null = null;
   private selectionDragGuardDispose: (() => void) | null = null;
+  private pixelRatioWatchDispose: (() => void) | null = null;
 
   getRenderSurface() {
     return this.map;
