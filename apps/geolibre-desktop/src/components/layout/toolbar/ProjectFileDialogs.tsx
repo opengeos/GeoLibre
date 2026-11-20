@@ -57,12 +57,19 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
 
   // Stable identities so the warning lists regroup only when the warnings change.
   const describeArcgisWarning = useCallback(
-    (warning: ArcgisProjectImportWarning) =>
-      t(`toolbar.item.arcgisImportReason.${warning.reason}`, {
-        layerType: warning.layerType || t("toolbar.item.arcgisUnknownLayerType"),
-      }),
+    (warning: ArcgisProjectImportWarning) => {
+      const layerType = warning.layerType || t("toolbar.item.arcgisUnknownLayerType");
+      return warning.symbologyIssue
+        ? t(`toolbar.item.arcgisSymbologyIssue.${warning.symbologyIssue}`, { layerType })
+        : t(`toolbar.item.arcgisImportReason.${warning.reason}`, { layerType });
+    },
     [t],
   );
+  // Symbology notes describe layers that did load, so they are not counted as
+  // layers that could not be loaded.
+  const arcgisUnloadedCount = (projectFiles.arcgisImportWarnings ?? []).filter(
+    (warning) => !warning.symbologyIssue,
+  ).length;
   return (
     <>
       <Dialog
@@ -221,9 +228,9 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           <DialogHeader>
             <DialogTitle>{t("toolbar.item.arcgisImportComplete")}</DialogTitle>
             <DialogDescription>
-              {t("toolbar.item.arcgisImportWarnings", {
-                count: projectFiles.arcgisImportWarnings?.length ?? 0,
-              })}
+              {arcgisUnloadedCount > 0
+                ? t("toolbar.item.arcgisImportWarnings", { count: arcgisUnloadedCount })
+                : t("toolbar.item.arcgisImportSymbologyOnly")}
             </DialogDescription>
           </DialogHeader>
           <ImportWarningList

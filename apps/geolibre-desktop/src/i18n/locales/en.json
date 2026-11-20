@@ -4326,6 +4326,18 @@
       "arcgisImportWarnings_one": "The project was imported, but {{count}} layer could not be loaded.",
       "arcgisImportWarnings_other": "The project was imported, but {{count}} layers could not be loaded.",
       "arcgisUnknownLayerType": "unknown",
+      "arcgisImportSymbologyOnly": "The project was imported, but some layers are not drawn exactly as in ArcGIS Pro.",
+      "arcgisSymbologyIssue": {
+        "renderer": "The layer was loaded with a single symbol: its {{layerType}} renderer is not supported.",
+        "multiple-fields": "The layer was loaded with a single symbol: unique values that combine more than one field are not supported.",
+        "expression": "The layer was loaded with a single symbol: symbology driven by an Arcade expression is not supported.",
+        "normalization": "The layer was loaded with a single symbol: normalised class breaks are not supported.",
+        "graduated-symbols": "The layer was loaded with a single symbol: graduated symbols (classes drawn by size) are not supported.",
+        "exclusion": "The layer was loaded with a single symbol: class breaks that exclude values are not supported.",
+        "symbol": "The layer was loaded with a single symbol: one of its symbols ({{layerType}}) has no solid colour GeoLibre can draw.",
+        "no-classes": "The layer was loaded with a single symbol: its renderer has no usable classes.",
+        "visual-variables": "The layer's classes were imported, but variation from its visual variables (size, colour, rotation or transparency) is not shown."
+      },
       "importWarningLayerCount_one": "{{count}} layer",
       "importWarningLayerCount_other": "{{count}} layers",
       "showLayerNames": "Show layer names",
@@ -4341,7 +4353,9 @@
         "service-unavailable": "The ArcGIS feature service could not be loaded. It may be offline, or need a sign-in GeoLibre does not have.",
         "browser-local-file": "The local file is referenced, but browsers cannot reopen ArcGIS Pro data paths. Use GeoLibre Desktop to load it.",
         "map-extent": "The saved map extent uses a coordinate system GeoLibre cannot convert, so the map opened at a default view.",
-        "nesting": "The group is nested too deeply, or the project refers back to a group that already contains it."
+        "nesting": "The group is nested too deeply, or the project refers back to a group that already contains it.",
+        "symbology": "The layer was loaded with a single symbol because its symbology is not supported.",
+        "symbology-partial": "The layer's classes were imported, but part of its symbology is not shown."
       },
       "qgisImportComplete": "QGIS project imported",
       "qgisImportWarnings_one": "The project was imported, but {{count}} layer could not be loaded.",
