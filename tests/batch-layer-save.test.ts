@@ -388,15 +388,42 @@ describe("writeLayerEditsToSource and saveLayerEditsBatch", () => {
     assert.equal(copyRes.written[0].path, "/data/Layer-1-2.geojson");
     assert.equal(copyRes.written[0].capturedGeojson, l1.geojson);
 
-    // applyExternalCopyReferences embeds instead of repointing when live geojson changed.
+    // applyExternalCopyReferences embeds instead of repointing when live geojson changed,
+    // even if the live layer mutated during async resolution before the copy finished.
+    const mutatedGeojson: FeatureCollection = { type: "FeatureCollection", features: [] };
     const mutated = {
       ...l1,
       metadata: { geometryEdited: true },
-      geojson: { type: "FeatureCollection", features: [] } as FeatureCollection,
+      geojson: mutatedGeojson,
     };
+    let liveLayer: GeoLibreLayer = l1;
+    const raceCopy = await saveGeojsonCopiesToDirectory([l1], "/data", {
+      map: undefined,
+      projectGeneration: 1,
+      deps: {
+        readProjectGeneration: () => 1,
+        commitDrafts: () => "none",
+        readLatestLayer: () => liveLayer,
+        resolveGeojson: async (layer) => {
+          const resolved = layer.geojson!;
+          liveLayer = mutated; // mutate live layer while resolution is in flight
+          return resolved;
+        },
+        writeTextFile: async () => {},
+      },
+    });
+    assert.equal(raceCopy.written[0].capturedGeojson, l1.geojson);
     const [afterMutate] = applyExternalCopyReferences(
       [mutated],
-      new Map([["l1", { path: "/data/Layer-1-2.geojson", capturedGeojson: l1.geojson }]]),
+      new Map([
+        [
+          "l1",
+          {
+            path: raceCopy.written[0].path,
+            capturedGeojson: raceCopy.written[0].capturedGeojson,
+          },
+        ],
+      ]),
     );
     assert.equal(afterMutate.sourcePath, "/data/l1.geojson");
     assert.equal(afterMutate.metadata.localFileReloadable, undefined);

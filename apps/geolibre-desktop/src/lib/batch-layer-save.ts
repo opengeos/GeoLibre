@@ -831,7 +831,7 @@ export async function saveGeojsonCopiesToDirectory(
           layerName: item.layer.name,
           fileName: candidateName,
           path: targetPath,
-          capturedGeojson: item.layer.geojson,
+          capturedGeojson: item.sourceGeojson,
         });
         saved = true;
         break;

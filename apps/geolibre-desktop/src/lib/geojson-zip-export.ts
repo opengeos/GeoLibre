@@ -25,6 +25,8 @@ export interface ResolvedGeojsonExportItem {
   layer: GeoLibreLayer;
   fileName: string;
   geojson: FeatureCollection;
+  /** The layer's `geojson` reference captured before async resolution began. */
+  sourceGeojson?: FeatureCollection;
 }
 
 /** Outcome of collecting exportable GeoJSON layers from a project. */
@@ -167,6 +169,7 @@ export async function collectGeojsonLayersForExport(
 
     const current = readLatestLayer(layer.id);
     if (!current || !isExportableGeojsonLayer(current)) continue;
+    const capturedSourceGeojson = current.geojson;
 
     let geojson: FeatureCollection | null = null;
     try {
@@ -211,6 +214,7 @@ export async function collectGeojsonLayersForExport(
       fileName:
         fileNames.get(layer.id) ?? `${sanitizeExportFileName(liveAfterResolve.name)}.geojson`,
       geojson: egressGeojson,
+      sourceGeojson: capturedSourceGeojson,
     });
   }
 
