@@ -201,6 +201,23 @@ describe("collectGeojsonLayersForExport", () => {
     assert.equal(abortedRun.aborted, true);
     assert.deepEqual(committedAfterSwitch, ["a"]);
     assert.deepEqual(abortedRun.items, []);
+
+    // preserveHiddenFields keeps excluded attributes for local source copies.
+    const hiddenLayer = makeGeojsonLayer("h", "Hidden", undefined, {
+      fieldVisibility: { secret: "excluded" },
+    });
+    const preserved = await collectGeojsonLayersForExport([hiddenLayer], undefined, {
+      preserveHiddenFields: true,
+      deps: {
+        commitDrafts: () => "none",
+        readLatestLayer: () => hiddenLayer,
+        resolveGeojson: async (layer) => layer.geojson ?? null,
+      },
+    });
+    assert.deepEqual(preserved.items[0].geojson.features[0].properties, {
+      name: "A",
+      secret: "hidden-val",
+    });
   });
 });
 

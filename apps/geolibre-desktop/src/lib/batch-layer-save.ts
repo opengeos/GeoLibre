@@ -78,6 +78,8 @@ export interface WritableLayerCandidate {
 export interface SingleLayerWriteBackResult {
   status: "success" | "warning" | "error";
   message: string;
+  /** True when the save was silently ignored (e.g. stale request or already in flight). */
+  silent?: boolean;
 }
 
 /** Per-layer outcome in a batch write-back run. */
@@ -380,19 +382,19 @@ export async function writeLayerEditsToSource(
     ((layerId: string) => canCollaboratorEditLayer(useAppStore.getState().collaboration, layerId));
 
   if (!canEdit(clickedLayer.id)) {
-    return { status: "error", message: t("layers.saveEditsError") };
+    return { status: "error", message: t("layers.saveEditsError"), silent: true };
   }
 
   const requestProjectGeneration = readProjectGeneration();
   const currentBeforeCommit = readLatestLayer(clickedLayer.id);
   if (!currentBeforeCommit) {
-    return { status: "error", message: t("layers.saveEditsError") };
+    return { status: "error", message: t("layers.saveEditsError"), silent: true };
   }
   if (
     isMssqlEditableLayer(currentBeforeCommit) &&
     currentBeforeCommit.mssqlWritebackPending === true
   ) {
-    return { status: "error", message: t("layers.saveEditsMssqlRefreshRequired") };
+    return { status: "error", message: t("layers.saveEditsMssqlRefreshRequired"), silent: true };
   }
   if (
     isPostgisEditableLayer(currentBeforeCommit) &&
@@ -437,7 +439,7 @@ export async function writeLayerEditsToSource(
   };
   const path = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
   if (!isMssql && !isPostgis && !isArcGISWritableLayer(layer) && !path) {
-    return { status: "error", message: t("layers.saveEditsError") };
+    return { status: "error", message: t("layers.saveEditsError"), silent: true };
   }
 
   try {
@@ -515,7 +517,7 @@ export async function writeLayerEditsToSource(
           ),
       );
       if (!isCurrentMssqlRequest() || outcome.kind === "blocked" || outcome.kind === "stale") {
-        return { status: "error", message: t("layers.saveEditsError") };
+        return { status: "error", message: t("layers.saveEditsError"), silent: true };
       }
       if (outcome.kind === "missing-baseline") {
         return { status: "error", message: t("layers.saveEditsMssqlMissingBaseline") };
@@ -661,6 +663,9 @@ export async function writeLayerEditsToSource(
       message: t("layers.saveEditsSuccess", { count: result.feature_count }),
     };
   } catch (error) {
+    if (isMssql && !isCurrentMssqlRequest()) {
+      return { status: "error", message: t("layers.saveEditsError"), silent: true };
+    }
     const message =
       error instanceof MssqlReconnectRequiredError
         ? t("layers.saveEditsMssqlNoConnection")
@@ -771,6 +776,7 @@ export async function saveGeojsonCopiesToDirectory(
     map: MapLibreMap | undefined;
     layerIds?: ReadonlySet<string>;
     projectGeneration?: number;
+    preserveHiddenFields?: boolean;
     deps?: CollectGeojsonExportDeps & {
       writeTextFile?: (path: string, content: string) => Promise<void>;
     };
@@ -782,6 +788,7 @@ export async function saveGeojsonCopiesToDirectory(
   const collected = await collectGeojsonLayersForExport(layers, options.map, {
     layerIds: options.layerIds,
     projectGeneration: options.projectGeneration,
+    preserveHiddenFields: options.preserveHiddenFields,
     deps: options.deps,
   });
 

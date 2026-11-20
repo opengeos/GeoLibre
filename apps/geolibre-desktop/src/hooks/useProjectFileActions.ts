@@ -1463,14 +1463,6 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       if (summary.aborted || useAppStore.getState().projectGeneration !== state.projectGeneration) {
         return "cancel";
       }
-      if (summary.failed > 0) {
-        const details = summary.results
-          .filter((item) => item.status === "error")
-          .map((item) => `${item.layerName}: ${item.message}`)
-          .join("; ");
-        setActionError(t("toolbar.error.saveLayerEditsFailed", { count: summary.failed, details }));
-        return "cancel";
-      }
       if (summary.succeeded > 0) {
         notify.success(t("toolbar.item.saveLayerEditsSuccess", { count: summary.succeeded }), {
           dedupeKey: "save-layer-edits",
@@ -1488,6 +1480,14 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           }),
           { dedupeKey: "save-layer-edits-warnings" },
         );
+      }
+      if (summary.failed > 0) {
+        const details = summary.results
+          .filter((item) => item.status === "error")
+          .map((item) => `${item.layerName}: ${item.message}`)
+          .join("; ");
+        setActionError(t("toolbar.error.saveLayerEditsFailed", { count: summary.failed, details }));
+        return "cancel";
       }
       const layers = useAppStore.getState().layers.map((layer) => {
         if (hasEditedGeometry(layer)) return embedEditedGeometry(layer);
@@ -1515,6 +1515,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         map: mapControllerRef.current?.getMap() ?? undefined,
         layerIds: liveEditedIds,
         projectGeneration: state.projectGeneration,
+        preserveHiddenFields: true,
       });
       if (
         copyResult.aborted ||

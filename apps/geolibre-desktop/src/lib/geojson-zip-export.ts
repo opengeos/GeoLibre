@@ -127,6 +127,12 @@ export async function collectGeojsonLayersForExport(
     layerIds?: ReadonlySet<string>;
     projectGeneration?: number;
     isCancelled?: () => boolean;
+    /**
+     * Keep hidden/excluded fields when writing local working copies that will
+     * become the layer's own `sourcePath` (Save Project -> Save external copies).
+     * Defaults to `false` so exports always strip excluded fields.
+     */
+    preserveHiddenFields?: boolean;
     deps?: CollectGeojsonExportDeps;
   },
 ): Promise<CollectedGeojsonExport> {
@@ -206,9 +212,10 @@ export async function collectGeojsonLayersForExport(
       skippedLayers.push(liveAfterResolve.name);
       continue;
     }
-    const egressGeojson = liveAfterResolve.fieldVisibility
-      ? excludeHiddenFieldsFromGeojson(geojson, liveAfterResolve.fieldVisibility)
-      : geojson;
+    const egressGeojson =
+      !options?.preserveHiddenFields && liveAfterResolve.fieldVisibility
+        ? excludeHiddenFieldsFromGeojson(geojson, liveAfterResolve.fieldVisibility)
+        : geojson;
     items.push({
       layer: liveAfterResolve,
       fileName:

@@ -4401,7 +4401,7 @@
       "embedVectorEmbedButton": "Embed data",
       "embedVectorReferenceButton": "Save file references",
       "embedVectorSkipButton": "Save without data",
-      "embedVectorOverwriteSourcesButton": "Overwrite source files",
+      "embedVectorOverwriteSourcesButton": "Save edits to sources",
       "embedVectorSaveCopiesButton": "Save external copies…",
       "embedVectorExportCopiesZipButton": "Export copies (ZIP)…",
       "saveLayerEditsEllipsis": "Save layer edits to source files…",
