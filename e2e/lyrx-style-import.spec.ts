@@ -25,6 +25,8 @@ const SIMPLE_MARKER = lyrx({
           markerGraphics: [
             {
               type: "CIMMarkerGraphic",
+              // Pro writes a circle marker as a curve ring.
+              geometry: { curveRings: [[[0, 5], { a: [[0, 5], [0, 0], 0, 1] }]] },
               symbol: {
                 type: "CIMPolygonSymbol",
                 symbolLayers: [

@@ -97,6 +97,7 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
                 markerGraphics: [
                   {
                     type: "CIMMarkerGraphic",
+                    geometry: { curveRings: [[[0, 5], { a: [[0, 5], [0, 0], 0, 1] }]] },
                     symbol: {
                       type: "CIMPolygonSymbol",
                       symbolLayers: [{ type: "CIMSolidFill", enable: true, color: rgb(0, 128, 0) }],
@@ -112,6 +113,7 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     assert.equal(result.matchedCount, 1);
     assert.equal(result.style.fillColor, "#008000");
     assert.equal(result.style.circleRadius, 8);
+    assert.doesNotMatch(result.warnings.join(" "), /marker shape/);
     // The marker has no outline, so the layer's own outline and icon must not show through.
     const style = applyLyrxImport(
       {
@@ -529,6 +531,64 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     );
     assert.equal(result.style.fillColor, undefined);
     assert.match(result.warnings.join(" "), /colours GeoLibre cannot read/);
+  });
+
+  it("names a marker shape drawn as a circle, and refuses a marker with only a size", () => {
+    const shaped = parseLyrx(
+      lyrxDocument({
+        type: "CIMSimpleRenderer",
+        symbol: {
+          type: "CIMSymbolReference",
+          symbol: {
+            type: "CIMPointSymbol",
+            symbolLayers: [
+              {
+                type: "CIMVectorMarker",
+                enable: true,
+                size: 12,
+                markerGraphics: [
+                  {
+                    type: "CIMMarkerGraphic",
+                    geometry: {
+                      rings: [
+                        [
+                          [0, 0],
+                          [1, 2],
+                          [2, 0],
+                          [0, 0],
+                        ],
+                      ],
+                    },
+                    symbol: {
+                      type: "CIMPolygonSymbol",
+                      symbolLayers: [{ type: "CIMSolidFill", enable: true, color: rgb(0, 0, 255) }],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    );
+    assert.equal(shaped.style.fillColor, "#0000ff");
+    assert.match(shaped.warnings.join(" "), /marker shape \(drawn as a circle\)/);
+
+    const sizeOnly = importStyleText(
+      lyrx({
+        type: "CIMSimpleRenderer",
+        symbol: {
+          type: "CIMSymbolReference",
+          symbol: {
+            type: "CIMPointSymbol",
+            symbolLayers: [{ type: "CIMVectorMarker", enable: true, size: 12, markerGraphics: [] }],
+          },
+        },
+      }),
+    );
+    assert.equal(sizeOnly.ok, false);
+    if (sizeOnly.ok) return;
+    assert.match(sizeOnly.warnings[0], /point symbol has no fill, outline or marker/);
   });
 
   it("leaves Mapbox GL JSON to the Mapbox reader", () => {
