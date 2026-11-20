@@ -9642,6 +9642,7 @@
     "selectFeaturesRadius": "Select features by radius",
     "selectFeaturesModifiers": "Shift adds, Alt removes, and Shift+Alt intersects. Press Esc to cancel.",
     "exportGeoTiff": "GeoTIFF (COG)",
+    "exportShapefileZipped": "Shapefile (zipped)",
     "exportLas": "LAS",
     "exportLaz": "LAZ (compressed)",
     "exportCopc": "COPC (cloud optimized)",

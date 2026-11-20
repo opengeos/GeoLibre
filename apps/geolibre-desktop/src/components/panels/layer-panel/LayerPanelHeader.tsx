@@ -71,9 +71,9 @@ export function LayerPanelHeader({
 
   if (touchUi) {
     return (
-      <div className="flex items-center justify-between gap-2 border-b px-3 py-1">
-        <span className="text-sm font-semibold">{t("sharedRail.layers")}</span>
-        <div className="ms-auto flex items-center gap-0.5">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b px-3 py-1">
+        <span className="min-w-0 truncate text-sm font-semibold">{t("sharedRail.layers")}</span>
+        <div className="ms-auto flex flex-wrap items-center gap-0.5">
           <Button
             variant="ghost"
             size="icon"
