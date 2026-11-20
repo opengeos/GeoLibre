@@ -166,6 +166,25 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     assert.deepEqual(result.style.strokeDash, []);
   });
 
+  it("keeps the layer's dash and names it when the line is dashed, on the stroke or the symbol", () => {
+    const stroke = { type: "CIMSolidStroke", enable: true, width: 1, color: rgb(1, 2, 3) };
+    const dashes = [{ type: "CIMGeometricEffectDashes", dashTemplate: [4, 2] }];
+    for (const symbol of [
+      { type: "CIMLineSymbol", symbolLayers: [{ ...stroke, effects: dashes }] },
+      { type: "CIMLineSymbol", effects: dashes, symbolLayers: [stroke] },
+    ]) {
+      const result = importStyleText(
+        lyrx({ type: "CIMSimpleRenderer", symbol: { type: "CIMSymbolReference", symbol } }),
+      );
+      assert.equal(result.ok, true);
+      if (!result.ok) continue;
+      const style = result.apply({ ...structuredClone(DEFAULT_LAYER_STYLE), strokeDash: [3, 1] });
+      assert.deepEqual(style.strokeDash, [3, 1]);
+      assert.equal(style.strokeColor, "#010203");
+      assert.match(result.warnings.join(" "), /dash pattern/);
+    }
+  });
+
   it("keeps the layer's other style fields when merging", () => {
     const result = importStyleText(
       lyrx({ type: "CIMSimpleRenderer", symbol: polygonSymbol([1, 2, 3]) }),

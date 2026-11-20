@@ -149,6 +149,9 @@ function readSymbol(symbol: CimObject, notes: Set<string>): SymbolInfo {
             ? "point"
             : "unknown",
   };
+  // A dash effect can sit on the whole symbol as well as on one stroke.
+  const isDashes = (effect: CimObject) => effect.type === "CIMGeometricEffectDashes";
+  const symbolDashed = arrayOf(symbol.effects).some(isDashes);
   // CIM lists symbol layers top first, so the first enabled one of each kind is what shows. Pro
   // omits false booleans when it saves CIM JSON, so a layer without `enable: true` is switched off.
   for (const layer of arrayOf(symbol.symbolLayers)) {
@@ -160,9 +163,7 @@ function readSymbol(symbol: CimObject, notes: Set<string>): SymbolInfo {
     } else if (layerType === "CIMSolidStroke") {
       const color = cimColor(objectOf(layer.color));
       if (color && !info.stroke) {
-        const dashed = arrayOf(layer.effects).some(
-          (effect) => effect.type === "CIMGeometricEffectDashes",
-        );
+        const dashed = symbolDashed || arrayOf(layer.effects).some(isDashes);
         if (dashed) notes.add("dash pattern");
         info.stroke = { ...color, width: numberOf(layer.width), dashed };
       }

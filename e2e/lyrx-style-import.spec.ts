@@ -86,12 +86,12 @@ test("a .lyrx file styles the layer, and an unsupported renderer is refused by n
         const circle = map
           ?.getStyle()
           .layers.find(
-            (layer) => layer.type === "circle" && JSON.stringify(layer.paint).includes("#008000"),
+            (layer) => layer.type === "circle" && layer.paint?.["circle-color"] === "#008000",
           );
-        return circle ? JSON.stringify(circle.paint?.["circle-radius"]) : null;
+        return circle ? circle.paint?.["circle-radius"] : null;
       }),
     )
-    .toContain("8");
+    .toBe(8);
 
   // A heat map has no GeoLibre equivalent: refused in the dialog, by name, text kept.
   await row.locator('button[aria-label="Layer actions"]').click();
