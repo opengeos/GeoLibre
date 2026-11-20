@@ -1,6 +1,6 @@
 /**
- * LIFO back-navigation stack for Android hardware/predictive back gestures and
- * browser back button interception in the mobile shell (GeoLibre#3537 Phase 5).
+ * LIFO back-navigation stack for Android hardware/predictive back gestures in
+ * the mobile shell (GeoLibre#3537 Phase 5).
  *
  * Handlers return `true` if they consumed the back press (e.g. closing an open
  * BottomSheet, drill-down page, or crosshair capture mode).

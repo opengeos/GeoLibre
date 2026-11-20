@@ -14,9 +14,10 @@ import {
   Spline,
   ZoomIn,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { registerMobileBackHandler } from "../../../lib/mobile-back-stack";
 import { QUICK_TRAVEL_CONTOURS_LABEL, type QuickBufferPreset } from "../../../lib/quick-analysis";
 import type { TouchMenuItem } from "../../../lib/touch-menu-nav";
 import { TouchMenuSheet } from "./TouchMenuSheet";
@@ -77,6 +78,14 @@ export function MapContextTouchSheet({
   onViewInGoogleEarth,
 }: MapContextTouchSheetProps) {
   const { t } = useTranslation();
+
+  useEffect(() => {
+    if (!open) return;
+    return registerMobileBackHandler(() => {
+      onOpenChange(false);
+      return true;
+    });
+  }, [open, onOpenChange]);
 
   const items = useMemo<TouchMenuItem[]>(() => {
     const quickItems: TouchMenuItem[] = [
