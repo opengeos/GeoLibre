@@ -347,6 +347,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "basic",
   },
   {
+    id: "project.saveLayerEdits",
+    menuId: "project",
+    labelKey: "toolbar.item.saveLayerEditsEllipsis",
+    tier: "intermediate",
+  },
+  {
     id: "project.duplicate",
     menuId: "project",
     labelKey: "toolbar.item.duplicate",
@@ -380,6 +386,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     id: "project.exportLayers",
     menuId: "project",
     labelKey: "toolbar.item.exportLayersEllipsis",
+    tier: "intermediate",
+  },
+  {
+    id: "project.exportGeojsonZip",
+    menuId: "project",
+    labelKey: "toolbar.item.exportGeojsonZipEllipsis",
     tier: "intermediate",
   },
   {

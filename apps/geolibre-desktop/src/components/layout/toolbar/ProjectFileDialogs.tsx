@@ -35,6 +35,7 @@ import { RemoteSignInDialog } from "./RemoteSignInDialog";
 import { SaveTemplateDialog } from "../SaveTemplateDialog";
 import { ImportWarningList } from "./ImportWarningList";
 import { QgisImportReportDialog } from "./QgisImportReportDialog";
+import { SaveLayerEditsDialog } from "./SaveLayerEditsDialog";
 
 interface ProjectFileDialogsProps {
   projectFiles: ProjectFileActions;
@@ -388,13 +389,47 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
               })}
             </p>
           ) : null}
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button
               variant="outline"
               onClick={() => projectFiles.resolveEmbedVectorDataPrompt("cancel")}
             >
               {t("common.cancel")}
             </Button>
+            {projectFiles.embedVectorDataPrompt?.hasGeometryEdits &&
+            projectFiles.embedVectorDataPrompt?.allowFileReferences &&
+            (projectFiles.embedVectorDataPrompt?.exportableEditedCount ?? 0) > 0 ? (
+              <Button
+                variant="outline"
+                onClick={() => projectFiles.resolveEmbedVectorDataPrompt("save-copies")}
+              >
+                {t("toolbar.item.embedVectorSaveCopiesButton")}
+              </Button>
+            ) : null}
+            {projectFiles.embedVectorDataPrompt?.hasGeometryEdits &&
+            !projectFiles.embedVectorDataPrompt?.allowFileReferences &&
+            (projectFiles.embedVectorDataPrompt?.exportableEditedCount ?? 0) > 0 ? (
+              <Button
+                variant="outline"
+                onClick={() =>
+                  void projectFiles.handleExportEditedCopiesZip(
+                    projectFiles.embedVectorDataPrompt?.editedExportableLayerIds ?? [],
+                  )
+                }
+              >
+                {t("toolbar.item.embedVectorExportCopiesZipButton")}
+              </Button>
+            ) : null}
+            {projectFiles.embedVectorDataPrompt?.hasGeometryEdits &&
+            projectFiles.embedVectorDataPrompt?.allowFileReferences &&
+            (projectFiles.embedVectorDataPrompt?.writableEditedCount ?? 0) > 0 ? (
+              <Button
+                variant="secondary"
+                onClick={() => projectFiles.resolveEmbedVectorDataPrompt("overwrite-sources")}
+              >
+                {t("toolbar.item.embedVectorOverwriteSourcesButton")}
+              </Button>
+            ) : null}
             {projectFiles.embedVectorDataPrompt?.allowFileReferences ||
             !projectFiles.embedVectorDataPrompt?.desktop ? (
               <Button
@@ -414,6 +449,13 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           </div>
         </DialogContent>
       </Dialog>
+      <SaveLayerEditsDialog
+        open={projectFiles.saveLayerEditsDialogOpen}
+        onOpenChange={projectFiles.setSaveLayerEditsDialogOpen}
+        onSaveSelected={projectFiles.handleSaveSelectedLayerEdits}
+        onExportGeojsonZip={projectFiles.handleExportGeojsonZip}
+        onSaveCopiesToFolder={projectFiles.handleSaveLayerCopiesToFolder}
+      />
       <SaveTemplateDialog
         open={projectFiles.saveTemplateDialogOpen}
         onOpenChange={projectFiles.setSaveTemplateDialogOpen}

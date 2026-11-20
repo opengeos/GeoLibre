@@ -17,6 +17,7 @@ import {
 import {
   addArcGISLayer,
   addRasterToMap,
+  getGeometryEditTargetLayerId,
   isRecoverableNonTiledRasterError,
   materializeEmbeddableVectorLayers,
 } from "@geolibre/plugins";
@@ -41,7 +42,9 @@ import {
   openProjectFile,
   openQgisProjectFile,
   openRecentProjectFile,
+  pickLocalDirectory,
   RecentProjectGoneError,
+  saveBinaryFileWithFallback,
   saveProjectFile,
   saveProjectFileToPath,
   saveStartupProjectSnapshot,
@@ -55,8 +58,22 @@ import {
   ensureHtmlFileName,
   ensureJsonFileName,
   ensureProjectFileName,
+  ensureZipFileName,
   suggestedProjectName,
 } from "../lib/file-names";
+import {
+  applyExternalCopyReferences,
+  listWritableLayerCandidates,
+  saveGeojsonCopiesToDirectory,
+  saveLayerEditsBatch,
+  type BatchLayerSaveItemResult,
+} from "../lib/batch-layer-save";
+import {
+  buildGeojsonZipArchive,
+  buildProjectGeojsonZipSlug,
+  collectGeojsonLayersForExport,
+  isExportableGeojsonLayer,
+} from "../lib/geojson-zip-export";
 import { pickLayerStylesFile } from "../lib/layer-style-files";
 import { notify } from "../lib/notify";
 import { notifyUnsavedLocalRasters } from "../lib/local-raster-notices";
@@ -160,6 +177,13 @@ export interface DroppedProjectPrompt {
  */
 export const LARGE_EMBED_WARNING_BYTES = 50 * 1024 * 1024;
 
+export type EmbedVectorDataPromptChoice =
+  | "embed"
+  | "noembed"
+  | "overwrite-sources"
+  | "save-copies"
+  | "cancel";
+
 /**
  * A pending "embed local vector data?" prompt, shown on the web when saving a
  * project that has local-file Add Vector Layer layers whose data would
@@ -170,6 +194,12 @@ export interface EmbedVectorDataPrompt {
   hasGeometryEdits: boolean;
   /** Number of local-file vector layers that can be embedded. */
   count: number;
+  /** Number of edited layers whose source files can be overwritten directly. */
+  writableEditedCount: number;
+  /** Number of edited layers that can be exported as external GeoJSON copies. */
+  exportableEditedCount: number;
+  /** Ids of edited exportable layers (for web "Export copies (ZIP)" without dismissing). */
+  editedExportableLayerIds: string[];
   /** Total embedded size in bytes, for the size warning. */
   bytes: number;
   /**
@@ -182,7 +212,7 @@ export interface EmbedVectorDataPrompt {
   allowFileReferences: boolean;
   /** Project generation that opened the prompt. */
   projectGeneration: number;
-  resolve: (choice: "embed" | "noembed" | "cancel") => void;
+  resolve: (choice: EmbedVectorDataPromptChoice) => void;
 }
 
 /**
@@ -371,6 +401,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const [projectUrl, setProjectUrl] = useState("");
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
+  const [saveLayerEditsDialogOpen, setSaveLayerEditsDialogOpen] = useState(false);
   const [credentialStripPrompt, setCredentialStripPrompt] = useState<CredentialStripPrompt | null>(
     null,
   );
@@ -430,7 +461,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     [],
   );
   const settleEmbedVectorDataPrompt = useCallback(
-    (prompt: EmbedVectorDataPrompt | null, choice: "embed" | "noembed" | "cancel") => {
+    (prompt: EmbedVectorDataPrompt | null, choice: EmbedVectorDataPromptChoice) => {
       prompt?.resolve(choice);
       setEmbedVectorDataPrompt(null);
     },
@@ -479,6 +510,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       setDroppedProjectPrompt(null);
       setDroppedProjectSaving(false);
     }
+    setSaveLayerEditsDialogOpen(false);
   }, [
     credentialStripPrompt,
     droppedProjectPrompt,
@@ -1241,11 +1273,19 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     desktop: boolean,
     promptProjectGeneration: number,
     hasGeometryEdits: boolean,
+    editedCounts: {
+      writableEditedCount: number;
+      exportableEditedCount: number;
+      editedExportableLayerIds: string[];
+    },
   ) =>
-    new Promise<"embed" | "noembed" | "cancel">((resolve) => {
+    new Promise<EmbedVectorDataPromptChoice>((resolve) => {
       setEmbedVectorDataPrompt({
         count,
         hasGeometryEdits,
+        writableEditedCount: editedCounts.writableEditedCount,
+        exportableEditedCount: editedCounts.exportableEditedCount,
+        editedExportableLayerIds: editedCounts.editedExportableLayerIds,
         bytes,
         desktop,
         allowFileReferences: canSaveVectorFileReferences(desktop, IS_MAS_BUILD),
@@ -1254,7 +1294,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       });
     });
 
-  const resolveEmbedVectorDataPrompt = (choice: "embed" | "noembed" | "cancel") =>
+  const resolveEmbedVectorDataPrompt = (choice: EmbedVectorDataPromptChoice) =>
     settleEmbedVectorDataPrompt(embedVectorDataPrompt, choice);
 
   // Builds the embed-mode layers: every local vector layer carries its own
@@ -1365,7 +1405,15 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       durableVectorDataChoice(reusableChoice, IS_MAS_BUILD) !== reusableChoice
         ? undefined
         : reusableChoice;
-    const requestedChoice =
+    const writableEditedCandidates = listWritableLayerCandidates(editedLayers, {
+      collaboration: state.collaboration,
+      geometryEditLayerId: getGeometryEditTargetLayerId(),
+      attributeTableDrafts: state.ui.attributeTableDrafts,
+    }).filter((candidate) => !candidate.disabledReason);
+    const editedExportableLayerIds = editedLayers
+      .filter(isExportableGeojsonLayer)
+      .map((layer) => layer.id);
+    const requestedChoice: EmbedVectorDataPromptChoice =
       rememberedVectorChoice ??
       (await askEmbedVectorData(
         count,
@@ -1373,7 +1421,129 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         isTauri(),
         state.projectGeneration,
         editedLayers.length > 0,
+        {
+          writableEditedCount: writableEditedCandidates.length,
+          exportableEditedCount: editedExportableLayerIds.length,
+          editedExportableLayerIds,
+        },
       ));
+    // A project can be opened while a prompt is visible. Do not apply that
+    // prompt's answer to the replacement project or continue saving stale data.
+    if (useAppStore.getState().projectGeneration !== state.projectGeneration) return "cancel";
+
+    if (requestedChoice === "overwrite-sources") {
+      const liveState = useAppStore.getState();
+      const liveEdited = liveState.layers.filter(hasEditedGeometry);
+      const targets = listWritableLayerCandidates(liveEdited, {
+        collaboration: liveState.collaboration,
+        geometryEditLayerId: getGeometryEditTargetLayerId(),
+        attributeTableDrafts: liveState.ui.attributeTableDrafts,
+      })
+        .filter((candidate) => !candidate.disabledReason)
+        .map((candidate) => candidate.layer);
+      const summary = await saveLayerEditsBatch(targets, {
+        map: mapControllerRef.current?.getMap() ?? undefined,
+        t,
+        projectGeneration: state.projectGeneration,
+      });
+      if (summary.aborted || useAppStore.getState().projectGeneration !== state.projectGeneration) {
+        return "cancel";
+      }
+      if (summary.failed > 0) {
+        const details = summary.results
+          .filter((item) => item.status === "error")
+          .map((item) => `${item.layerName}: ${item.message}`)
+          .join("; ");
+        setActionError(
+          t("toolbar.error.saveLayerEditsFailed", { count: summary.failed, details }),
+        );
+        return "cancel";
+      }
+      const savedCount = summary.succeeded + summary.warnings;
+      if (savedCount > 0) {
+        notify.success(t("toolbar.item.saveLayerEditsSuccess", { count: savedCount }), {
+          dedupeKey: "save-layer-edits",
+        });
+      }
+      const layers = useAppStore.getState().layers.map((layer) => {
+        if (hasEditedGeometry(layer)) return embedEditedGeometry(layer);
+        if (isReloadableLocalFileLayer(layer)) {
+          return { ...layer, metadata: { ...layer.metadata, localFileReloadable: true } };
+        }
+        const collection = embeddable.get(layer.id);
+        if (collection && layer.metadata.localFileReloadable !== true) {
+          return { ...layer, metadata: { ...layer.metadata, embeddedGeoJSON: collection } };
+        }
+        return layer;
+      });
+      return { layers };
+    }
+
+    if (requestedChoice === "save-copies") {
+      const directory = await pickLocalDirectory();
+      if (!directory || useAppStore.getState().projectGeneration !== state.projectGeneration) {
+        return "cancel";
+      }
+      const liveLayers = useAppStore.getState().layers;
+      const liveEditedIds = new Set(liveLayers.filter(hasEditedGeometry).map((layer) => layer.id));
+      const copyResult = await saveGeojsonCopiesToDirectory(liveLayers, directory, {
+        map: mapControllerRef.current?.getMap() ?? undefined,
+        layerIds: liveEditedIds,
+      });
+      if (useAppStore.getState().projectGeneration !== state.projectGeneration) return "cancel";
+      if (
+        copyResult.errors.length > 0 ||
+        copyResult.blockedDraftLayers.length > 0 ||
+        copyResult.written.length === 0
+      ) {
+        const details = [
+          ...copyResult.errors.map((err) => `${err.layerName}: ${err.message}`),
+          ...(copyResult.blockedDraftLayers.length > 0
+            ? [
+                t("toolbar.item.geojsonZipBlockedDrafts", {
+                  count: copyResult.blockedDraftLayers.length,
+                  names: copyResult.blockedDraftLayers.join(", "),
+                }),
+              ]
+            : []),
+        ].join(" ");
+        setActionError(details || t("toolbar.error.couldNotSaveLayerCopies"));
+        return "cancel";
+      }
+      const writtenByLayerId = new Map(copyResult.written.map((item) => [item.layerId, item.path]));
+      // Point live plain-GeoJSON layers at their newly written external copies
+      // so future saves reference them too.
+      const updatedLive = applyExternalCopyReferences(
+        useAppStore.getState().layers,
+        writtenByLayerId,
+      );
+      useAppStore.setState({
+        layers: useAppStore.getState().layers.map((layer) => {
+          const next = updatedLive.find((candidate) => candidate.id === layer.id);
+          if (!next || !writtenByLayerId.has(layer.id)) return layer;
+          return {
+            ...layer,
+            sourcePath: next.sourcePath,
+            metadata: next.metadata,
+          };
+        }),
+      });
+      notify.success(t("toolbar.item.saveCopiesWritten", { count: copyResult.written.length }), {
+        dedupeKey: "save-layer-copies",
+      });
+      const layers = updatedLive.map((layer) => {
+        if (isReloadableLocalFileLayer(layer)) {
+          return { ...layer, metadata: { ...layer.metadata, localFileReloadable: true } };
+        }
+        const collection = embeddable.get(layer.id);
+        if (collection && layer.metadata.localFileReloadable !== true) {
+          return { ...layer, metadata: { ...layer.metadata, embeddedGeoJSON: collection } };
+        }
+        return layer;
+      });
+      return { layers };
+    }
+
     // A Mac App Store app receives temporary access to user-selected files.
     // That access expires when the sandboxed process exits, so a path-only
     // project cannot restore its local vectors after the next launch. Embed is
@@ -1381,9 +1551,6 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // well, so an old remembered "reference" choice cannot bypass it.
     const choice = durableVectorDataChoice(requestedChoice, IS_MAS_BUILD);
     if (choice === "cancel") return "cancel";
-    // A project can be opened while a prompt is visible. Do not apply that
-    // prompt's answer to the replacement project or continue saving stale data.
-    if (useAppStore.getState().projectGeneration !== state.projectGeneration) return "cancel";
     saveChoicesRef.current = rememberProjectSaveChoices(
       saveChoicesRef.current,
       state.projectGeneration,
@@ -2201,6 +2368,192 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
   };
 
+  // Shared core for exporting GeoJSON layers into one `.zip` archive (issue #3528).
+  const runExportGeojsonZip = async (options?: {
+    layerIds?: ReadonlySet<string>;
+    skipNamePrompt?: boolean;
+  }): Promise<boolean> => {
+    const exportProjectGeneration = useAppStore.getState().projectGeneration;
+    const collected = await collectGeojsonLayersForExport(
+      useAppStore.getState().layers,
+      mapControllerRef.current?.getMap() ?? undefined,
+      { layerIds: options?.layerIds },
+    );
+    if (useAppStore.getState().projectGeneration !== exportProjectGeneration) return false;
+    if (collected.items.length === 0) {
+      setActionError(
+        collected.blockedDraftLayers.length > 0
+          ? t("toolbar.item.geojsonZipBlockedDrafts", {
+              count: collected.blockedDraftLayers.length,
+              names: collected.blockedDraftLayers.join(", "),
+            })
+          : t("toolbar.error.noGeojsonLayersToExport"),
+      );
+      return false;
+    }
+    const slug = buildProjectGeojsonZipSlug(useAppStore.getState().projectName);
+    let defaultName = `${slug}.zip`;
+    if (!options?.skipNamePrompt && browserSaveFallsBackToDownload()) {
+      const chosen = await askSaveName(
+        defaultName,
+        {
+          title: t("toolbar.item.exportGeojsonZipAsTitle"),
+          description: t("toolbar.item.exportGeojsonZipAsDesc"),
+          label: t("toolbar.item.exportGeojsonZipFileName"),
+          placeholder: t("toolbar.item.exportGeojsonZipFileNamePlaceholder"),
+        },
+        exportProjectGeneration,
+      );
+      if (chosen === null) return false;
+      defaultName = ensureZipFileName(chosen, slug);
+    }
+    if (useAppStore.getState().projectGeneration !== exportProjectGeneration) return false;
+    const archive = await buildGeojsonZipArchive(collected.items);
+    const savedPath = await saveBinaryFileWithFallback(archive, {
+      defaultName,
+      filters: [{ name: t("toolbar.item.geojsonZipFile"), extensions: ["zip"] }],
+      browserTypes: [
+        {
+          description: t("toolbar.item.geojsonZipFile"),
+          accept: { "application/zip": [".zip"] },
+        },
+      ],
+      mimeType: "application/zip",
+    });
+    if (savedPath === null) return false;
+    notify.success(t("toolbar.item.geojsonZipExported", { count: collected.items.length }), {
+      dedupeKey: "export-geojson-zip",
+    });
+    if (collected.blockedDraftLayers.length > 0) {
+      notify.warning(
+        t("toolbar.item.geojsonZipBlockedDrafts", {
+          count: collected.blockedDraftLayers.length,
+          names: collected.blockedDraftLayers.join(", "),
+        }),
+        { dedupeKey: "export-geojson-zip-blocked" },
+      );
+    }
+    if (collected.skippedLayers.length > 0) {
+      notify.warning(
+        t("toolbar.item.geojsonZipSkipped", {
+          count: collected.skippedLayers.length,
+          names: collected.skippedLayers.join(", "),
+        }),
+        { dedupeKey: "export-geojson-zip-skipped" },
+      );
+    }
+    return true;
+  };
+
+  // Export all (or selected) GeoJSON vector layers in one `.zip` archive.
+  const handleExportGeojsonZip = async (layerIds?: ReadonlySet<string>): Promise<boolean> => {
+    if (isSavingRef.current) return false;
+    isSavingRef.current = true;
+    try {
+      return await runExportGeojsonZip({ layerIds });
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotExportGeojsonZip"),
+      );
+      return false;
+    } finally {
+      isSavingRef.current = false;
+    }
+  };
+
+  // Triggered from inside the Save Project embed prompt on web hosts, where
+  // `isSavingRef` is already held by `saveProject`.
+  const handleExportEditedCopiesZip = async (layerIds: string[]): Promise<boolean> => {
+    try {
+      return await runExportGeojsonZip({
+        layerIds: new Set(layerIds),
+        skipNamePrompt: true,
+      });
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotExportGeojsonZip"),
+      );
+      return false;
+    }
+  };
+
+  // Batch write-back handler for SaveLayerEditsDialog (issue #3528).
+  const handleSaveSelectedLayerEdits = async (
+    layerIds: string[],
+    callbacks: {
+      onLayerStart: (layerId: string) => void;
+      onLayerDone: (result: BatchLayerSaveItemResult) => void;
+    },
+  ): Promise<{ hasIssues: boolean; aborted: boolean }> => {
+    const startGeneration = useAppStore.getState().projectGeneration;
+    const idSet = new Set(layerIds);
+    const targets = useAppStore.getState().layers.filter((layer) => idSet.has(layer.id));
+    const summary = await saveLayerEditsBatch(targets, {
+      map: mapControllerRef.current?.getMap() ?? undefined,
+      t,
+      projectGeneration: startGeneration,
+      onLayerStart: callbacks.onLayerStart,
+      onLayerDone: callbacks.onLayerDone,
+    });
+    const hasIssues = summary.failed > 0 || summary.warnings > 0;
+    if (!summary.aborted && !hasIssues && summary.succeeded > 0) {
+      notify.success(t("toolbar.item.saveLayerEditsSuccess", { count: summary.succeeded }), {
+        dedupeKey: "save-layer-edits",
+      });
+    }
+    return { hasIssues, aborted: summary.aborted };
+  };
+
+  // Desktop-only: save external GeoJSON copies of selected layers into a chosen folder.
+  const handleSaveLayerCopiesToFolder = async (
+    layerIds?: ReadonlySet<string>,
+  ): Promise<boolean> => {
+    const startGeneration = useAppStore.getState().projectGeneration;
+    const directory = await pickLocalDirectory();
+    if (!directory || useAppStore.getState().projectGeneration !== startGeneration) return false;
+    try {
+      const result = await saveGeojsonCopiesToDirectory(useAppStore.getState().layers, directory, {
+        map: mapControllerRef.current?.getMap() ?? undefined,
+        layerIds,
+      });
+      if (useAppStore.getState().projectGeneration !== startGeneration) return false;
+      if (result.written.length > 0) {
+        notify.success(t("toolbar.item.saveCopiesWritten", { count: result.written.length }), {
+          dedupeKey: "save-layer-copies",
+        });
+      }
+      if (result.errors.length > 0) {
+        const details = result.errors.map((err) => `${err.layerName}: ${err.message}`).join("; ");
+        setActionError(details || t("toolbar.error.couldNotSaveLayerCopies"));
+        return false;
+      }
+      if (result.blockedDraftLayers.length > 0) {
+        notify.warning(
+          t("toolbar.item.geojsonZipBlockedDrafts", {
+            count: result.blockedDraftLayers.length,
+            names: result.blockedDraftLayers.join(", "),
+          }),
+          { dedupeKey: "save-layer-copies-blocked" },
+        );
+      }
+      if (result.skippedLayers.length > 0) {
+        notify.warning(
+          t("toolbar.item.geojsonZipSkipped", {
+            count: result.skippedLayers.length,
+            names: result.skippedLayers.join(", "),
+          }),
+          { dedupeKey: "save-layer-copies-skipped" },
+        );
+      }
+      return result.written.length > 0;
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotSaveLayerCopies"),
+      );
+      return false;
+    }
+  };
+
   // Restyle the current project's layers from a layer styles file, matching
   // each entry to a layer by name, then report what matched.
   const handleImportLayerStyles = async () => {
@@ -2314,6 +2667,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     handleExportHtml,
     handleExportLayerStyles,
     handleExportLayers,
+    handleExportGeojsonZip,
+    handleExportEditedCopiesZip,
+    saveLayerEditsDialogOpen,
+    setSaveLayerEditsDialogOpen,
+    handleSaveSelectedLayerEdits,
+    handleSaveLayerCopiesToFolder,
     handleImportLayerStyles,
     layerStyleImportResult,
     setLayerStyleImportResult,

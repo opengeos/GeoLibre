@@ -45,6 +45,7 @@ import {
   writeVectorToSource,
 } from "@geolibre/processing";
 import { commitPendingAttributeDrafts } from "../../../lib/attribute-draft-commit";
+import { clearLayerGeometryEditedFlag } from "../../../lib/batch-layer-save";
 import { bindTemporalLayer, createAppAPI, usePluginRegistry } from "../../../hooks/usePlugins";
 import {
   bufferPresetsFor,
@@ -804,6 +805,9 @@ export function useLayerActions({
       try {
         if (isArcGISWritableLayer(layer)) {
           const result = await saveArcGISLayerEdits(layer.id);
+          if (result.errors.length === 0) {
+            clearLayerGeometryEditedFlag(layer.id, requestProjectGeneration);
+          }
           setRefreshStatuses((current) => ({
             ...current,
             [layer.id]: {
@@ -1075,6 +1079,7 @@ export function useLayerActions({
           // itself instead of depending on a sidecar that may not be running
           // (#2439: the save failed and the file kept its old values).
           await writeLocalGeojsonFile(path, geojson);
+          clearLayerGeometryEditedFlag(layer.id, requestProjectGeneration);
           message = t("layers.saveEditsSuccess", { count: geojson.features.length });
         } else {
           // GeoPackage write-back needs GeoPandas in the sidecar. The desktop
@@ -1082,6 +1087,7 @@ export function useLayerActions({
           // the web build reaches its own through the /sidecar proxy.
           if (isTauri()) await startGeoLibreSidecar();
           const result = await writeVectorToSource({ path, geojson });
+          clearLayerGeometryEditedFlag(layer.id, requestProjectGeneration);
           message = t("layers.saveEditsSuccess", {
             count: result.feature_count,
           });

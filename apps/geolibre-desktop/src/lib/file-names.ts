@@ -66,3 +66,18 @@ export function ensureJsonFileName(name: string, fallbackSlug: string): string {
   if (!trimmed || /^\.+$/.test(trimmed)) return `${fallbackSlug}.json`;
   return /\.json$/i.test(trimmed) ? trimmed : `${trimmed}.json`;
 }
+
+/**
+ * Normalize a user-entered ZIP archive file name: keep the user's `.zip`
+ * suffix, add one when missing, and fall back to the slug-derived name for a
+ * blank or dots-only entry.
+ *
+ * @param name - The name the user typed.
+ * @param fallbackSlug - Slug used when the entry has no usable base.
+ * @returns A file name ending in `.zip`.
+ */
+export function ensureZipFileName(name: string, fallbackSlug: string): string {
+  const trimmed = name.trim();
+  if (!trimmed || /^\.+$/.test(trimmed)) return `${fallbackSlug}.zip`;
+  return /\.zip$/i.test(trimmed) ? trimmed : `${trimmed}.zip`;
+}
