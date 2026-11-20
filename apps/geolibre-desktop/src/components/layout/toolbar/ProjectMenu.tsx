@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import {
+  Archive,
   BookOpen,
   Bookmark,
   Copy,
@@ -32,6 +33,7 @@ import {
   Palette,
   Printer,
   Save,
+  SaveAll,
   Share2,
   Users,
   X,
@@ -77,12 +79,14 @@ interface ProjectMenuProps {
   onOpenHistory: () => void;
   onSave: () => void;
   onSaveAs: () => void;
+  onSaveLayerEdits?: () => void;
   onDuplicate?: () => void;
   onSaveAsTemplate?: () => void;
   onShare: () => void;
   onExportHtml: () => void;
   onExportLayerStyles: () => void;
   onExportLayers: () => void;
+  onExportGeojsonZip?: () => void;
   onCollaborate: () => void;
   onPrintLayout: () => void;
   onOpenOfflineBasemap: () => void;
@@ -104,12 +108,14 @@ export function ProjectMenu({
   onOpenHistory,
   onSave,
   onSaveAs,
+  onSaveLayerEdits,
   onDuplicate,
   onSaveAsTemplate,
   onShare,
   onExportHtml,
   onExportLayerStyles,
   onExportLayers,
+  onExportGeojsonZip,
   onCollaborate,
   onPrintLayout,
   onOpenOfflineBasemap,
@@ -177,8 +183,12 @@ export function ProjectMenu({
     { name: "exportHtml", onSelect: onExportHtml, Icon: FileCode2 },
     { name: "exportLayerStyles", onSelect: onExportLayerStyles, Icon: Palette },
     { name: "exportLayers", onSelect: onExportLayers, Icon: Layers },
+    ...(onExportGeojsonZip
+      ? [{ name: "exportGeojsonZip", onSelect: onExportGeojsonZip, Icon: Archive } as const]
+      : []),
   ] as const;
-  // The two save-group items that also need an optional callback to render.
+  // The save-group items that also need an optional callback to render.
+  const showSaveLayerEdits = show("project.saveLayerEdits") && Boolean(onSaveLayerEdits);
   const showDuplicate = show("project.duplicate") && Boolean(onDuplicate);
   const showSaveAsTemplate = show("project.saveAsTemplate") && Boolean(onSaveAsTemplate);
   // Group-visibility flags so the separators between groups aren't left orphaned
@@ -186,6 +196,7 @@ export function ProjectMenu({
   const showSaveGroup =
     show("project.save") ||
     show("project.saveAs") ||
+    showSaveLayerEdits ||
     showDuplicate ||
     showSaveAsTemplate ||
     (!shareHidden && show("project.share")) ||
@@ -194,7 +205,11 @@ export function ProjectMenu({
   // Narrower than showSaveGroup, which also covers share/export/collaborate: the
   // `project:save` note must not render when only those siblings are on screen.
   const showSaveActions =
-    show("project.save") || show("project.saveAs") || showDuplicate || showSaveAsTemplate;
+    show("project.save") ||
+    show("project.saveAs") ||
+    showSaveLayerEdits ||
+    showDuplicate ||
+    showSaveAsTemplate;
   // The two `export:data` entries sit in different groups, so their shared note
   // renders at the menu's foot and needs to know whether either is on screen.
   const showExportMenu = exportItems.some((item) => show(`project.${item.name}`));
@@ -384,6 +399,16 @@ export function ProjectMenu({
           >
             <FilePen className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.saveAsEllipsis")}
+          </DropdownMenuItem>
+        )}
+        {showSaveLayerEdits && onSaveLayerEdits && (
+          <DropdownMenuItem
+            onSelect={onSaveLayerEdits}
+            disabled={!saveCapability.granted}
+            aria-describedby={saveDeniedBy}
+          >
+            <SaveAll className="me-2 h-3.5 w-3.5" />
+            {t("toolbar.item.saveLayerEditsEllipsis")}
           </DropdownMenuItem>
         )}
         {showDuplicate && onDuplicate && (

@@ -13,10 +13,9 @@ import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import {
-  LARGE_EMBED_WARNING_BYTES,
-  type RemoteSharedProjectTarget,
-  type ProjectFileActions,
+import type {
+  RemoteSharedProjectTarget,
+  ProjectFileActions,
 } from "../../../hooks/useProjectFileActions";
 import type { ArcgisProjectImportWarning } from "../../../lib/arcgis-project-import";
 import {
@@ -33,8 +32,10 @@ import {
 } from "../../../lib/share-oauth";
 import { RemoteSignInDialog } from "./RemoteSignInDialog";
 import { SaveTemplateDialog } from "../SaveTemplateDialog";
+import { EmbedVectorDataDialog } from "./EmbedVectorDataDialog";
 import { ImportWarningList } from "./ImportWarningList";
 import { QgisImportReportDialog } from "./QgisImportReportDialog";
+import { SaveLayerEditsDialog } from "./SaveLayerEditsDialog";
 
 interface ProjectFileDialogsProps {
   projectFiles: ProjectFileActions;
@@ -381,73 +382,19 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog
-        open={projectFiles.embedVectorDataPrompt !== null}
-        onOpenChange={(open: boolean) => {
-          if (!open) projectFiles.resolveEmbedVectorDataPrompt("cancel");
-        }}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {t(
-                projectFiles.embedVectorDataPrompt?.hasGeometryEdits
-                  ? "toolbar.item.embedEditedVectorTitle"
-                  : "toolbar.item.embedVectorTitle",
-              )}
-            </DialogTitle>
-            <DialogDescription>
-              {t(
-                projectFiles.embedVectorDataPrompt?.hasGeometryEdits
-                  ? "toolbar.item.embedEditedFeaturesDesc"
-                  : projectFiles.embedVectorDataPrompt?.allowFileReferences
-                    ? "toolbar.item.embedVectorDescDesktop"
-                    : projectFiles.embedVectorDataPrompt?.desktop
-                      ? "toolbar.item.embedVectorDescMas"
-                      : "toolbar.item.embedVectorDesc",
-                {
-                  count: projectFiles.embedVectorDataPrompt?.count ?? 0,
-                  size: formatByteSize(projectFiles.embedVectorDataPrompt?.bytes ?? 0),
-                },
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          {(projectFiles.embedVectorDataPrompt?.bytes ?? 0) >= LARGE_EMBED_WARNING_BYTES ? (
-            <p
-              role="alert"
-              className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
-            >
-              {t("toolbar.item.embedVectorLargeWarning", {
-                size: formatByteSize(projectFiles.embedVectorDataPrompt?.bytes ?? 0),
-              })}
-            </p>
-          ) : null}
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => projectFiles.resolveEmbedVectorDataPrompt("cancel")}
-            >
-              {t("common.cancel")}
-            </Button>
-            {projectFiles.embedVectorDataPrompt?.allowFileReferences ||
-            !projectFiles.embedVectorDataPrompt?.desktop ? (
-              <Button
-                variant="outline"
-                onClick={() => projectFiles.resolveEmbedVectorDataPrompt("noembed")}
-              >
-                {t(
-                  projectFiles.embedVectorDataPrompt?.desktop
-                    ? "toolbar.item.embedVectorReferenceButton"
-                    : "toolbar.item.embedVectorSkipButton",
-                )}
-              </Button>
-            ) : null}
-            <Button onClick={() => projectFiles.resolveEmbedVectorDataPrompt("embed")}>
-              {t("toolbar.item.embedVectorEmbedButton")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <EmbedVectorDataDialog
+        prompt={projectFiles.embedVectorDataPrompt}
+        exportingEditedCopiesZip={projectFiles.exportingEditedCopiesZip}
+        onResolve={projectFiles.resolveEmbedVectorDataPrompt}
+        onExportEditedCopiesZip={projectFiles.handleExportEditedCopiesZip}
+      />
+      <SaveLayerEditsDialog
+        open={projectFiles.saveLayerEditsDialogOpen}
+        onOpenChange={projectFiles.setSaveLayerEditsDialogOpen}
+        onSaveSelected={projectFiles.handleSaveSelectedLayerEdits}
+        onExportGeojsonZip={projectFiles.handleExportGeojsonZip}
+        onSaveCopiesToFolder={projectFiles.handleSaveLayerCopiesToFolder}
+      />
       <SaveTemplateDialog
         open={projectFiles.saveTemplateDialogOpen}
         onOpenChange={projectFiles.setSaveTemplateDialogOpen}
@@ -596,28 +543,4 @@ function SharedProjectVersionsDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-/**
- * Formats a byte count as a short, human-readable size (e.g. "3.4 MB") for the
- * embed-data prompt's size warning.
- *
- * @param bytes - The size in bytes.
- * @returns A localized-ish size string with one decimal for MB and above.
- */
-function formatByteSize(bytes: number): string {
-  // One decimal, with the user's locale decimal separator (e.g. "3,4 MB").
-  const oneDecimal = (value: number) =>
-    value.toLocaleString(undefined, {
-      minimumFractionDigits: 1,
-      maximumFractionDigits: 1,
-    });
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  // < 1023.5 so a value that rounds up to 1024 prints "1.0 MB", not "1024 KB".
-  if (kb < 1023.5) return `${Math.round(kb).toLocaleString()} KB`;
-  const mb = kb / 1024;
-  if (mb < 1024) return `${oneDecimal(mb)} MB`;
-  const gb = mb / 1024;
-  return `${oneDecimal(gb)} GB`;
 }

@@ -396,12 +396,14 @@ export function TopToolbar({
             onOpenHistory={onOpenProjectHistory}
             onSave={() => void projectFiles.handleSave()}
             onSaveAs={() => void projectFiles.handleSaveAs()}
+            onSaveLayerEdits={() => projectFiles.setSaveLayerEditsDialogOpen(true)}
             onDuplicate={() => projectFiles.handleDuplicate()}
             onSaveAsTemplate={() => projectFiles.handleSaveAsTemplate()}
             onShare={() => dialogs.setShareDialogOpen(true)}
             onExportHtml={() => void projectFiles.handleExportHtml()}
             onExportLayerStyles={() => void projectFiles.handleExportLayerStyles()}
             onExportLayers={() => void projectFiles.handleExportLayers()}
+            onExportGeojsonZip={() => void projectFiles.handleExportGeojsonZip()}
             onCollaborate={() => setCollaborateDialogOpen(true)}
             onPrintLayout={() => dialogs.setPrintLayoutOpen(true)}
             onOpenOfflineBasemap={onOpenBasemapExtract}

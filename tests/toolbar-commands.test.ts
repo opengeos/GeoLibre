@@ -64,6 +64,8 @@ const FULL_REGISTRY_IDS = [
   "project.open-url",
   "project.save",
   "project.save-as",
+  "project.save-layer-edits",
+  "project.export-geojson-zip",
   "project.share",
   "project.collaborate",
   "project.print-layout",

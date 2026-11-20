@@ -1007,6 +1007,10 @@ export async function readPostgisTable(
   return (await res.json()) as ReadPostgisTableResult;
 }
 
+export class PostgisWriteRejectedError extends Error {
+  override readonly name = "PostgisWriteRejectedError";
+}
+
 /**
  * Commit edited features back to their source PostGIS table via the sidecar.
  *
@@ -1028,7 +1032,9 @@ export async function writePostgisTable(
     throw sidecarConnectionError(baseUrl, error);
   }
   if (!res.ok) {
-    throw new Error(await responseErrorMessage(res, "Could not save edits to PostGIS"));
+    throw new PostgisWriteRejectedError(
+      await responseErrorMessage(res, "Could not save edits to PostGIS"),
+    );
   }
   return (await res.json()) as WritePostgisTableResult;
 }

@@ -49,6 +49,8 @@ describe("commandCapability", () => {
       ["project.new", "project.new"],
       ["project.save", "project.save"],
       ["project.save-as", "project.saveAs"],
+      ["project.save-layer-edits", "project.saveLayerEdits"],
+      ["project.export-geojson-zip", "project.exportGeojsonZip"],
       ["project.open-file", "project.openFrom"],
       ["project.open-url", "project.openFrom"],
       ["project.share", "project.share"],
@@ -117,6 +119,7 @@ describe("projectMenuItemCapability", () => {
       "project.history",
       "project.save",
       "project.saveAs",
+      "project.saveLayerEdits",
       "project.duplicate",
       "project.saveAsTemplate",
       "project.collaborate",
@@ -132,6 +135,7 @@ describe("projectMenuItemCapability", () => {
       "project.exportHtml",
       "project.exportLayerStyles",
       "project.exportLayers",
+      "project.exportGeojsonZip",
       "project.print",
       "project.printLayout",
       "project.offlineRegion",
@@ -182,6 +186,14 @@ describe("commandAppPrivileges", () => {
     });
     assert.deepEqual(commandAppPrivileges("project.save-as"), {
       privileges: ["project:save"],
+      mode: "any",
+    });
+    assert.deepEqual(commandAppPrivileges("project.save-layer-edits"), {
+      privileges: ["project:save"],
+      mode: "any",
+    });
+    assert.deepEqual(commandAppPrivileges("project.export-geojson-zip"), {
+      privileges: ["export:data"],
       mode: "any",
     });
     assert.deepEqual(commandAppPrivileges("project.share"), {

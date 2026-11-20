@@ -33,6 +33,7 @@ const COMMAND_CAPABILITY_PREFIXES: ReadonlyArray<readonly [string, DeploymentCap
   // the palette.
   ["project.print-layout", "export:data"],
   ["project.share", "export:data"],
+  ["project.export-geojson-zip", "export:data"],
   // Includes opening a different project: a deployment that pins what may be
   // authored also pins which project is on screen.
   ["project.", "project:edit"],
@@ -154,6 +155,7 @@ const COMMAND_PRIVILEGE_PREFIXES: ReadonlyArray<readonly [string, CommandPrivile
   // collaboration both put the project on a server outside this machine. Matches
   // how the Project menu gates the same three actions.
   ["project.print-layout", any("export:image")],
+  ["project.export-geojson-zip", any("export:data")],
   ["project.share", any("project:share")],
   ["project.collaborate", any("project:share")],
   // Covers `project.save-as` as well as `project.save`.
@@ -235,6 +237,7 @@ const PROJECT_MENU_ITEM_CAPABILITIES: Readonly<Record<string, DeploymentCapabili
   "project.history": "project:edit",
   "project.save": "project:edit",
   "project.saveAs": "project:edit",
+  "project.saveLayerEdits": "project:edit",
   "project.duplicate": "project:edit",
   "project.saveAsTemplate": "project:edit",
   "project.collaborate": "project:edit",
@@ -244,6 +247,7 @@ const PROJECT_MENU_ITEM_CAPABILITIES: Readonly<Record<string, DeploymentCapabili
   "project.exportHtml": "export:data",
   "project.exportLayerStyles": "export:data",
   "project.exportLayers": "export:data",
+  "project.exportGeojsonZip": "export:data",
   "project.print": "export:data",
   "project.printLayout": "export:data",
   "project.offlineRegion": "export:data",
