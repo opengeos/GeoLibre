@@ -585,6 +585,24 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     assert.match(sizeOnly.warnings[0], /point symbol has no fill, outline or marker/);
   });
 
+  it("says when only the first of several visible label classes was imported", () => {
+    const result = parseLyrx(
+      lyrxDocument(
+        { type: "CIMSimpleRenderer", symbol: polygonSymbol([1, 2, 3]) },
+        {
+          labelVisibility: true,
+          labelClasses: [
+            { expression: "[NAME]", visibility: true },
+            { expression: "[CODE]", visibility: true },
+            { expression: "[HIDDEN]" },
+          ],
+        },
+      ),
+    );
+    assert.equal(result.labels?.field, "NAME");
+    assert.match(result.warnings.join(" "), /2 visible label classes; only the first/);
+  });
+
   it("leaves Mapbox GL JSON to the Mapbox reader", () => {
     const result = importStyleText(
       JSON.stringify({

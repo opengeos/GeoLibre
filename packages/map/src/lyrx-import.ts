@@ -305,7 +305,13 @@ function readSimple(
  */
 function readLabels(layer: CimObject, warnings: string[]): Partial<LabelStyle> | null {
   if (layer.labelVisibility !== true) return { enabled: false };
-  const labelClass = arrayOf(layer.labelClasses).find((candidate) => candidate.visibility === true);
+  const visible = arrayOf(layer.labelClasses).filter((candidate) => candidate.visibility === true);
+  const labelClass = visible[0];
+  if (visible.length > 1) {
+    warnings.push(
+      `The .lyrx style has ${visible.length} visible label classes; only the first was imported.`,
+    );
+  }
   if (!labelClass) return { enabled: false };
   const expression = stringOf(labelClass.expression).trim();
   const field =
