@@ -326,6 +326,86 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     assert.match(result.warnings.join(" "), /label font, size, colour and halo/);
   });
 
+  it("turns labels off when the layer file has them off", () => {
+    const labelled = {
+      ...structuredClone(DEFAULT_LAYER_STYLE),
+      labels: { ...DEFAULT_LAYER_STYLE.labels, enabled: true, field: "OLD" },
+    };
+    for (const extra of [{}, { labelVisibility: true, labelClasses: [{ expression: "[NAME]" }] }]) {
+      const result = importStyleText(
+        lyrx({ type: "CIMSimpleRenderer", symbol: polygonSymbol([1, 2, 3]) }, extra),
+      );
+      assert.equal(result.ok, true);
+      if (!result.ok) continue;
+      const style = result.apply(labelled);
+      assert.equal(style.labels.enabled, false);
+      assert.equal(style.labels.field, "OLD");
+    }
+  });
+
+  it("reads a character marker's glyph colour and ignores markers decorating a line", () => {
+    const glyph = parseLyrx(
+      lyrxDocument({
+        type: "CIMSimpleRenderer",
+        symbol: {
+          type: "CIMSymbolReference",
+          symbol: {
+            type: "CIMPointSymbol",
+            symbolLayers: [
+              {
+                type: "CIMCharacterMarker",
+                enable: true,
+                size: 15,
+                // Per the CIM spec, a character marker's `symbol` is the glyph's polygon symbol.
+                symbol: {
+                  type: "CIMPolygonSymbol",
+                  symbolLayers: [{ type: "CIMSolidFill", enable: true, color: rgb(200, 0, 0) }],
+                },
+              },
+            ],
+          },
+        },
+      }),
+    );
+    assert.equal(glyph.style.fillColor, "#c80000");
+    assert.equal(glyph.style.circleRadius, 10);
+
+    const arrowed = parseLyrx(
+      lyrxDocument({
+        type: "CIMSimpleRenderer",
+        symbol: {
+          type: "CIMSymbolReference",
+          symbol: {
+            type: "CIMLineSymbol",
+            symbolLayers: [
+              {
+                type: "CIMVectorMarker",
+                enable: true,
+                size: 6,
+                markerGraphics: [
+                  {
+                    type: "CIMMarkerGraphic",
+                    symbol: {
+                      type: "CIMPolygonSymbol",
+                      symbolLayers: [
+                        { type: "CIMSolidStroke", enable: true, width: 9, color: rgb(255, 0, 0) },
+                      ],
+                    },
+                  },
+                ],
+              },
+              { type: "CIMSolidStroke", enable: true, width: 1.5, color: rgb(0, 0, 255) },
+            ],
+          },
+        },
+      }),
+    );
+    assert.equal(arrowed.style.strokeColor, "#0000ff");
+    assert.equal(arrowed.style.strokeWidth, 2);
+    assert.equal(arrowed.style.circleRadius, undefined);
+    assert.match(arrowed.warnings.join(" "), /markers along lines/);
+  });
+
   it("leaves Mapbox GL JSON to the Mapbox reader", () => {
     const result = importStyleText(
       JSON.stringify({

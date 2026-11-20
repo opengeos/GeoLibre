@@ -170,6 +170,12 @@ function readSymbol(symbol: CimObject, notes: Set<string>): SymbolInfo {
         info.stroke = { ...color, width: numberOf(layer.width), dashed };
       }
     } else if (layerType === "CIMVectorMarker" || layerType === "CIMCharacterMarker") {
+      // On a line or polygon a marker is a decoration (an arrowhead, a hatch of symbols), often
+      // listed above the stroke, so reading it would take its outline for the line's own.
+      if (info.geometry !== "point") {
+        notes.add("markers along lines and outlines");
+        continue;
+      }
       if (info.markerSize !== undefined) continue;
       info.markerSize = numberOf(layer.size) ?? undefined;
       // A vector marker draws its graphics, a character marker its glyph, each with a nested
@@ -245,13 +251,16 @@ function readSimple(
 /**
  * The label field of a layer whose labels are on, from its first label class.
  *
+ * Labels that are off in the layer file (`labelVisibility` or every class's `visibility` omitted,
+ * which is how Pro saves false) are turned off, as the file describes the whole layer.
+ *
  * Only a bare field reference reads: `[NAME]` (VBScript/Python/JScript) or `$feature.NAME` /
  * `$feature["NAME"]` (Arcade). A computed expression is named in a warning.
  */
 function readLabels(layer: CimObject, warnings: string[]): Partial<LabelStyle> | null {
-  if (layer.labelVisibility !== true) return null;
+  if (layer.labelVisibility !== true) return { enabled: false };
   const labelClass = arrayOf(layer.labelClasses).find((candidate) => candidate.visibility === true);
-  if (!labelClass) return null;
+  if (!labelClass) return { enabled: false };
   const expression = stringOf(labelClass.expression).trim();
   const field =
     expression.match(/^\[\s*([^\]]+?)\s*\]$/)?.[1] ??
