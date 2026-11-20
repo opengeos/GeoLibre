@@ -36,6 +36,10 @@ export function placeImportedServiceLayers(
     else (runs.at(-1)?.layers ?? head).push(layer);
   }
   runs.sort((a, b) => a.rank - b.rank);
+  // A direct write, as project load makes one: the store has no bulk reorder
+  // action, and this only reorders the same layer objects (same ids, same
+  // groups) and restores group contiguity, so nothing the actions maintain
+  // (joins, selection, references in other slices) changes.
   useAppStore.setState({
     layers: normalizeGroupContiguity([...head, ...runs.flatMap((run) => run.layers)]),
   });
