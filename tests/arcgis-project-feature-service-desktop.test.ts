@@ -12,8 +12,12 @@ import type { ProjectFileActions } from "../apps/geolibre-desktop/src/hooks/useP
 const { useProjectFileActions } =
   await import("../apps/geolibre-desktop/src/hooks/useProjectFileActions");
 const { installNativeArcGISFetch } = await import("../apps/geolibre-desktop/src/lib/arcgis-fetch");
-const { cachedOrgIdLookup, placeImportedServiceLayers, signInForImportedService } =
-  await import("../apps/geolibre-desktop/src/lib/arcgis-project-services");
+const {
+  cachedOrgIdLookup,
+  placeImportedServiceLayers,
+  serviceTokenProvider,
+  signInForImportedService,
+} = await import("../apps/geolibre-desktop/src/lib/arcgis-project-services");
 const { ARCGIS_ONLINE_PORTAL } = await import("../apps/geolibre-desktop/src/lib/arcgis-oauth");
 
 /**
@@ -196,9 +200,23 @@ const RASTER_APRX = zipSync({
     ],
   }),
 });
+const TILED_APRX_PATH = "/Users/me/projects/tiled.aprx";
+const TILED_APRX = zipSync({
+  "GISProject.json": member({
+    projectItems: [{ itemType: "Map", catalogPath: "CIMPATH=map/map.json" }],
+  }),
+  "map/map.json": member({
+    type: "CIMMap",
+    name: "Tiles only",
+    mapType: "Map",
+    defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+    layerDefinitions: [tiledLayer("Streets")],
+  }),
+});
 const archives: Record<string, Uint8Array> = {
   [APRX_PATH]: APRX,
   [RASTER_APRX_PATH]: RASTER_APRX,
+  [TILED_APRX_PATH]: TILED_APRX,
 };
 
 beforeEach(async () => {
@@ -567,6 +585,55 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     // The second raster and the service are never asked for.
     assert.deepEqual(rasterReads, ["/data/dem.tif"]);
     assert.deepEqual(nativeRequests, []);
+    assert.equal(actions().arcgisImportWarnings, null);
+  });
+
+  it("withholds a renewed token from another account's organisation", async () => {
+    const ORG = "AbCdEfGh12345678";
+    const hosted = `https://services3.arcgis.com/${ORG}/arcgis/rest/services/Water/FeatureServer/3`;
+    const orgOf: Record<string, string> = { a: ORG, b: "ZzZzZzZz87654321" };
+    let current = "a";
+    const provider = serviceTokenProvider(
+      hosted,
+      ARCGIS_ONLINE_PORTAL,
+      async () => current,
+      cachedOrgIdLookup(async (_portal, token) => orgOf[token]),
+    );
+    assert.equal(await provider(), "a");
+    // The portal's session switches to an account in another organisation.
+    current = "b";
+    assert.equal(await provider(), undefined);
+    // An Enterprise portal's own host keeps receiving its renewed token.
+    const enterprise = serviceTokenProvider(
+      "https://gis.example.org/server/rest/services/A/FeatureServer/0",
+      "https://gis.example.org/portal",
+      async () => current,
+      async () => undefined,
+    );
+    assert.equal(await enterprise(), "b");
+  });
+
+  it("leaves a project opened mid-import untouched when nothing is left to load", async () => {
+    dialogPath = TILED_APRX_PATH;
+    const actions = renderActions();
+    const originalFrame = globalThis.requestAnimationFrame;
+    let switched = false;
+    globalThis.requestAnimationFrame = (callback) =>
+      originalFrame((time) => {
+        if (!switched) {
+          switched = true;
+          useAppStore.getState().loadProject(createEmptyProject("Other"), null);
+        }
+        callback(time);
+      });
+    try {
+      await act(() => actions().handleImportArcgisProject());
+    } finally {
+      globalThis.requestAnimationFrame = originalFrame;
+    }
+    assert.ok(switched);
+    assert.equal(useAppStore.getState().projectName, "Other");
+    assert.equal(useAppStore.getState().isDirty, false);
     assert.equal(actions().arcgisImportWarnings, null);
   });
 });

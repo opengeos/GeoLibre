@@ -117,3 +117,26 @@ export function cachedOrgIdLookup(
     return lookup;
   };
 }
+
+/**
+ * The token provider for an imported service layer's later requests (viewport
+ * queries, refreshes, edits). Each renewed token passes
+ * {@link signInForImportedService} again, so if the portal's session changes to
+ * another account, that account's token is withheld from a service in the first
+ * account's organisation rather than sent with the next request.
+ *
+ * @param url - The service URL.
+ * @param portal - The portal the import chose for this service.
+ * @param token - Reads the portal's current token.
+ * @param orgId - Looks up the organisation behind a token.
+ * @returns A provider resolving to the token, or undefined to send none.
+ */
+export function serviceTokenProvider(
+  url: string,
+  portal: string,
+  token: () => Promise<string | undefined>,
+  orgId: (portal: string, token: string) => Promise<string | undefined>,
+): () => Promise<string | undefined> {
+  return async () =>
+    (await signInForImportedService(url, { portals: [portal], token, orgId }))?.token;
+}

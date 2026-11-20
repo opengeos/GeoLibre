@@ -134,6 +134,7 @@ import { arcgisLayerTokenProvider, useArcGISAuthStore } from "../lib/arcgis-oaut
 import {
   cachedOrgIdLookup,
   placeImportedServiceLayers,
+  serviceTokenProvider,
   signInForImportedService,
 } from "../lib/arcgis-project-services";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
@@ -402,7 +403,16 @@ async function addImportedArcgisFeatureService(
     token: (portal) => arcgisLayerTokenProvider(portal, translate)(),
     orgId,
   });
-  const tokenProvider = signIn ? arcgisLayerTokenProvider(signIn.portal, translate) : undefined;
+  // Renewed tokens for the layer's later requests pass the same rule, so a
+  // switch to another account never sends its token to this service.
+  const tokenProvider = signIn
+    ? serviceTokenProvider(
+        service.url,
+        signIn.portal,
+        arcgisLayerTokenProvider(signIn.portal, translate),
+        orgId,
+      )
+    : undefined;
   const layerId = await addArcGISLayer(app, {
     layerType: "feature",
     name: service.name,
@@ -425,7 +435,7 @@ async function addImportedArcgisFeatureService(
       metadata: {
         ...added.metadata,
         importedFrom: "arcgis-pro",
-        arcgisLayerUri: service.arcgisLayerUri,
+        ...(service.arcgisLayerUri ? { arcgisLayerUri: service.arcgisLayerUri } : {}),
       },
     });
   }
@@ -1055,6 +1065,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           });
         }
       }
+      // An import with nothing left to load reaches here without a check.
+      if (replaced()) return;
       useAppStore.setState({ isDirty: true });
       setArcgisImportWarnings(imported.warnings.length > 0 ? imported.warnings : null);
     } catch (error) {
