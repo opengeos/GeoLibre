@@ -53,7 +53,9 @@ export interface SaveLayerEditsDialogProps {
   candidatesOverride?: WritableLayerCandidate[];
 }
 
-function disabledReasonKey(reason: LayerWriteBackDisabledReason):
+function disabledReasonKey(
+  reason: LayerWriteBackDisabledReason,
+):
   | "toolbar.saveLayerEdits.disabledGeometryEdit"
   | "toolbar.saveLayerEdits.disabledMssqlRefresh"
   | "toolbar.saveLayerEdits.disabledReadOnly" {
@@ -105,10 +107,7 @@ export function SaveLayerEditsDialog({
     [candidates],
   );
   const editedEnabledIds = useMemo(
-    () =>
-      candidates
-        .filter((c) => !c.disabledReason && c.hasPendingEdits)
-        .map((c) => c.layer.id),
+    () => candidates.filter((c) => !c.disabledReason && c.hasPendingEdits).map((c) => c.layer.id),
     [candidates],
   );
 

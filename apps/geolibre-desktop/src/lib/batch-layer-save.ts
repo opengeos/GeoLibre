@@ -38,10 +38,7 @@ import { participantCanEditLayer } from "./collab-protocol";
 import { databaseBaselineKeys, databaseFeatureKeys } from "./database-tables";
 import { embedEditedGeometry, hasEditedGeometry } from "./edited-geometry-save";
 import { isGeojsonSourcePath, joinLocalPath } from "./file-io/paths";
-import {
-  collectGeojsonLayersForExport,
-  type CollectGeojsonExportDeps,
-} from "./geojson-zip-export";
+import { collectGeojsonLayersForExport, type CollectGeojsonExportDeps } from "./geojson-zip-export";
 import { isTauri } from "./is-tauri";
 import { MssqlReconnectRequiredError, withMssqlSession } from "./mssql-sessions";
 import {
@@ -282,7 +279,8 @@ export async function writeLayerEditsToSource(
   const commitDrafts = deps?.commitDrafts ?? commitPendingAttributeDrafts;
   const readLatestLayer =
     deps?.readLatestLayer ??
-    ((layerId: string) => useAppStore.getState().layers.find((candidate) => candidate.id === layerId));
+    ((layerId: string) =>
+      useAppStore.getState().layers.find((candidate) => candidate.id === layerId));
   const readProjectGeneration =
     deps?.readProjectGeneration ?? (() => useAppStore.getState().projectGeneration);
   const resolveGeojson = deps?.resolveGeojson ?? resolveLayerGeojson;

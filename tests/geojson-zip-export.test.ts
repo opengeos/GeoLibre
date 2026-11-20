@@ -63,7 +63,9 @@ describe("isExportableGeojsonLayer", () => {
   it("returns true for exportable geojson layers and false for non-geojson or non-exportable", () => {
     assert.equal(isExportableGeojsonLayer(makeGeojsonLayer("a", "Roads")), true);
     assert.equal(
-      isExportableGeojsonLayer(makeGeojsonLayer("b", "Locked", [], { capabilities: { export: false } })),
+      isExportableGeojsonLayer(
+        makeGeojsonLayer("b", "Locked", [], { capabilities: { export: false } }),
+      ),
       false,
     );
     assert.equal(
@@ -109,7 +111,8 @@ describe("collectGeojsonLayersForExport", () => {
       {
         deps: {
           commitDrafts: (id) => (id === "blocked" ? "blocked" : "none"),
-          readLatestLayer: (id) => [roads, cities, blocked, unresolved, raster].find((l) => l.id === id),
+          readLatestLayer: (id) =>
+            [roads, cities, blocked, unresolved, raster].find((l) => l.id === id),
           resolveGeojson: async (layer) => layer.geojson ?? null,
           materializeEmbeddable: async () => new Map(),
         },
@@ -144,13 +147,21 @@ describe("buildGeojsonZipArchive", () => {
     const fc1: FeatureCollection = {
       type: "FeatureCollection",
       features: [
-        { type: "Feature", geometry: { type: "Point", coordinates: [1, 2] }, properties: { id: 1 } },
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [1, 2] },
+          properties: { id: 1 },
+        },
       ],
     };
     const fc2: FeatureCollection = {
       type: "FeatureCollection",
       features: [
-        { type: "Feature", geometry: { type: "Point", coordinates: [3, 4] }, properties: { id: 2 } },
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [3, 4] },
+          properties: { id: 2 },
+        },
       ],
     };
 

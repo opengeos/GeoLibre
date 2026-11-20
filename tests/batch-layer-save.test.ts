@@ -32,7 +32,11 @@ const sampleFeatureCollection: FeatureCollection = {
   ],
 };
 
-function makeLayer(id: string, name: string, overrides: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
+function makeLayer(
+  id: string,
+  name: string,
+  overrides: Partial<GeoLibreLayer> = {},
+): GeoLibreLayer {
   return {
     id,
     name,

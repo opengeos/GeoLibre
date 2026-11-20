@@ -112,7 +112,8 @@ export async function collectGeojsonLayersForExport(
   const commitDrafts = options?.deps?.commitDrafts ?? commitPendingAttributeDrafts;
   const readLatestLayer =
     options?.deps?.readLatestLayer ??
-    ((layerId: string) => useAppStore.getState().layers.find((candidate) => candidate.id === layerId));
+    ((layerId: string) =>
+      useAppStore.getState().layers.find((candidate) => candidate.id === layerId));
   const resolveGeojson = options?.deps?.resolveGeojson ?? resolveLayerGeojson;
   const materializeEmbeddable = options?.deps?.materializeEmbeddable;
 
@@ -137,9 +138,8 @@ export async function collectGeojsonLayersForExport(
         const materialized = await materializeEmbeddable([current]);
         geojson = materialized.get(current.id) ?? null;
       } else {
-        const { isEmbeddableLocalVectorLayer, materializeEmbeddableVectorLayers } = await import(
-          "@geolibre/plugins"
-        );
+        const { isEmbeddableLocalVectorLayer, materializeEmbeddableVectorLayers } =
+          await import("@geolibre/plugins");
         if (isEmbeddableLocalVectorLayer(current)) {
           const materialized = await materializeEmbeddableVectorLayers([current]);
           geojson = materialized.get(current.id) ?? null;

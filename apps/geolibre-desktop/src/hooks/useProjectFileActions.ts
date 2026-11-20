@@ -1454,9 +1454,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           .filter((item) => item.status === "error")
           .map((item) => `${item.layerName}: ${item.message}`)
           .join("; ");
-        setActionError(
-          t("toolbar.error.saveLayerEditsFailed", { count: summary.failed, details }),
-        );
+        setActionError(t("toolbar.error.saveLayerEditsFailed", { count: summary.failed, details }));
         return "cancel";
       }
       const savedCount = summary.succeeded + summary.warnings;

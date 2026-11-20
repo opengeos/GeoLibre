@@ -6,9 +6,8 @@ import { fireEvent, waitFor } from "@testing-library/react";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { WritableLayerCandidate } from "../apps/geolibre-desktop/src/lib/batch-layer-save";
 
-const { SaveLayerEditsDialog } = await import(
-  "../apps/geolibre-desktop/src/components/layout/toolbar/SaveLayerEditsDialog"
-);
+const { SaveLayerEditsDialog } =
+  await import("../apps/geolibre-desktop/src/components/layout/toolbar/SaveLayerEditsDialog");
 
 function makeLayer(id: string, name: string): GeoLibreLayer {
   return {
@@ -22,7 +21,9 @@ function makeLayer(id: string, name: string): GeoLibreLayer {
     sourcePath: `/maps/${id}.geojson`,
     geojson: {
       type: "FeatureCollection",
-      features: [{ type: "Feature", geometry: { type: "Point", coordinates: [0, 0] }, properties: {} }],
+      features: [
+        { type: "Feature", geometry: { type: "Point", coordinates: [0, 0] }, properties: {} },
+      ],
     },
     metadata: {},
   } as GeoLibreLayer;
