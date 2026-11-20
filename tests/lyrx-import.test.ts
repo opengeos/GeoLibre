@@ -370,8 +370,26 @@ describe(".lyrx style import", () => {
   describe("labels", () => {
     const labelled = (): LayerStyle => ({
       ...base(),
-      labels: { ...DEFAULT_LAYER_STYLE.labels, enabled: true, field: "OLD", size: 20 },
+      labels: {
+        ...DEFAULT_LAYER_STYLE.labels,
+        enabled: true,
+        field: "OLD",
+        size: 20,
+        sizeExpression: '["get", "SIZE"]',
+        colorExpression: '["get", "COLOUR"]',
+        opacityExpression: "0",
+        visibilityExpression: "false",
+      },
     });
+    const textLabel = (textSymbol: Record<string, unknown>) =>
+      withLabels([
+        {
+          expression: "[NAME]",
+          visibility: true,
+          textSymbol: symbol("CIMTextSymbol", [], textSymbol),
+        },
+      ]);
+    const fillSymbol = (color: unknown) => symbol("CIMPolygonSymbol", [solidFill(color)]).symbol;
     const withLabels = (labelClasses: unknown[], visibility = true) =>
       lyrx(simple(), { labelVisibility: visibility, labelClasses });
 
@@ -400,25 +418,122 @@ describe(".lyrx style import", () => {
       assert.match(warnings.join(" "), /label expression is not a single field/);
     });
 
-    it("names the text symbol, filter and extra label classes it does not import", () => {
+    it("reads the text size, colour and halo, and names the font and filter", () => {
       const { style, warnings } = applied(
         withLabels([
           {
             expression: "[NAME]",
             visibility: true,
             whereClause: "POP > 1000",
-            textSymbol: symbol("CIMTextSymbol", [], { height: 12, fontFamilyName: "Arial" }),
+            textSymbol: symbol("CIMTextSymbol", [], {
+              height: 12,
+              fontFamilyName: "Arial",
+              haloSize: 1.5,
+              symbol: symbol("CIMPolygonSymbol", [solidFill(rgb(255, 255, 255))]).symbol,
+              haloSymbol: symbol("CIMPolygonSymbol", [solidFill(rgb(0, 77, 168))]).symbol,
+            }),
           },
           { expression: "[CODE]", visibility: true },
         ]),
         labelled(),
       );
-      assert.equal(style.labels.field, "NAME");
-      assert.equal(style.labels.size, 20);
+      assert.equal(style.labels.size, 16);
+      assert.equal(style.labels.color, "#ffffff");
+      assert.equal(style.labels.haloColor, "#004da8");
+      assert.equal(style.labels.haloWidth, 2);
+      // The layer's data-defined overrides would beat what the file says.
+      assert.equal(style.labels.sizeExpression, "");
+      assert.equal(style.labels.colorExpression, "");
+      assert.equal(style.labels.opacityExpression, "");
+      assert.equal(style.labels.visibilityExpression, "");
       const text = warnings.join(" ");
+      assert.doesNotMatch(text, /transparency|halo colour/);
       assert.match(text, /2 visible label classes; only the first/);
       assert.match(text, /label filter \(where clause\) was not imported/);
-      assert.match(text, /label font, size, colour and halo were not imported/);
+      assert.match(text, /label font \(Arial\) was not imported/);
+    });
+
+    it("draws no halo when the file has none, and keeps the colour it cannot read", () => {
+      const { style, warnings } = applied(
+        withLabels([
+          {
+            expression: "[NAME]",
+            visibility: true,
+            textSymbol: symbol("CIMTextSymbol", [], {
+              symbol: symbol("CIMPolygonSymbol", [solidFill({ type: "CIMSpotColor", values: [1] })])
+                .symbol,
+            }),
+          },
+        ]),
+        labelled(),
+      );
+      assert.equal(style.labels.haloWidth, 0);
+      assert.equal(style.labels.color, DEFAULT_LAYER_STYLE.labels.color);
+      assert.equal(style.labels.size, 20);
+      assert.match(warnings.join(" "), /label colour could not be read/);
+      // The colour it could not read keeps the layer's data-defined colour too.
+      assert.equal(style.labels.colorExpression, '["get", "COLOUR"]');
+    });
+
+    it("names an unreadable halo and transparent text, and drops a fully clear halo", () => {
+      const spot = { type: "CIMSpotColor", values: [1] };
+      for (const [textSymbol, haloWidth, warning] of [
+        [
+          { symbol: fillSymbol(rgb(0, 0, 0)), haloSize: 1, haloSymbol: fillSymbol(spot) },
+          0,
+          /halo colour could not be read/,
+        ],
+        [{ symbol: fillSymbol(rgb(0, 0, 0, 40)) }, 0, /label transparency was not imported/],
+        [
+          {
+            symbol: fillSymbol(rgb(0, 0, 0)),
+            haloSize: 1,
+            haloSymbol: fillSymbol(rgb(255, 255, 255, 50)),
+          },
+          1.3333,
+          /label transparency was not imported/,
+        ],
+        [
+          {
+            symbol: fillSymbol(rgb(0, 0, 0)),
+            haloSize: 1,
+            haloSymbol: fillSymbol(rgb(255, 255, 255, 0)),
+          },
+          0,
+          null,
+        ],
+        [
+          {
+            symbol: fillSymbol(rgb(0, 0, 0)),
+            haloSize: 1,
+            haloSymbol: symbol("CIMPolygonSymbol", [solidStroke(rgb(0, 0, 255))]).symbol,
+          },
+          0,
+          /label symbol was not imported: the halo outline\./,
+        ],
+        [
+          {
+            symbol: fillSymbol(rgb(0, 0, 0)),
+            haloSize: 1,
+            haloSymbol: symbol("CIMPolygonSymbol", [
+              solidFill(rgb(255, 255, 255)),
+              { type: "CIMHatchFill", enable: true },
+            ]).symbol,
+          },
+          1.3333,
+          /label symbol was not imported: the halo hatch fill\./,
+        ],
+        [
+          { symbol: symbol("CIMPolygonSymbol", [solidStroke(), solidFill(rgb(0, 0, 0))]).symbol },
+          0,
+          /label symbol was not imported: the text outline\./,
+        ],
+      ] as const) {
+        const { style, warnings } = applied(textLabel(textSymbol), labelled());
+        assert.equal(style.labels.haloWidth, haloWidth);
+        if (warning) assert.match(warnings.join(" "), warning);
+        else assert.deepEqual(warnings, []);
+      }
     });
   });
 });

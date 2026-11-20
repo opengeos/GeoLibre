@@ -15,7 +15,11 @@
  */
 
 import { DEFAULT_LAYER_STYLE, type LabelStyle, type LayerStyle } from "@geolibre/core";
-import { translateCimRenderer, type CimRendererIssue } from "./arcgis-cim-renderer";
+import {
+  translateCimRenderer,
+  translateCimSymbol,
+  type CimRendererIssue,
+} from "./arcgis-cim-renderer";
 
 /** What a parsed layer file contributes to a layer's symbology. Mirrors the QML/SLD result. */
 export interface LyrxImportResult {
@@ -27,6 +31,9 @@ export interface LyrxImportResult {
 }
 
 type CimObject = Record<string, unknown>;
+
+/** CIM lengths are points; GeoLibre's are CSS pixels. */
+const PIXELS_PER_POINT = 96 / 72;
 
 /**
  * Style fields a CIM symbol describes in full, reset to GeoLibre's defaults before the imported
@@ -249,19 +256,122 @@ function readLabels(layer: CimObject, warnings: string[]): Partial<LabelStyle> |
     );
     return null;
   }
-  // Only the field is read; the text symbol is named rather than dropped silently.
-  if (labelClass.textSymbol !== undefined) {
-    warnings.push(
-      "The .lyrx style's label font, size, colour and halo were not imported; the labels keep the layer's own text style.",
-    );
-  }
   if (stringOf(labelClass.whereClause).trim()) {
     warnings.push(
       "The .lyrx style's label filter (where clause) was not imported, so every feature is labelled.",
     );
   }
-  // Cleared, because a label expression takes precedence over the field.
-  return { enabled: true, field, expression: "" };
+  // The file's label replaces the layer's: a text expression would take precedence over the field,
+  // and a data-defined opacity or visibility would hide labels the file shows.
+  return {
+    enabled: true,
+    field,
+    expression: "",
+    opacityExpression: "",
+    visibilityExpression: "",
+    ...readTextSymbol(labelClass, warnings),
+  };
+}
+
+/**
+ * A label class's text size, colour and halo, from its `CIMTextSymbol`. The text and halo are
+ * each drawn with a polygon symbol, read by the shared CIM reader. CIM leaves out a zero halo
+ * size, so a missing one means no halo, and so does a fully transparent halo.
+ *
+ * A data-defined size or colour on the layer is cleared with the value it would override.
+ * Transparency is not carried: a label colour is a plain hex colour, which the SLD and QML
+ * exporters need, so partly transparent text or halo is named in a warning instead. So is anything
+ * else the text or halo symbol draws that a label cannot (an outline, a hatch, a second fill).
+ */
+function readTextSymbol(labelClass: CimObject, warnings: string[]): Partial<LabelStyle> {
+  const text = objectOf(objectOf(labelClass.textSymbol)?.symbol);
+  if (!text) return {};
+  const labels: Partial<LabelStyle> = {};
+  let translucent = false;
+  const height = numberOf(text.height);
+  if (height !== null && height > 0) {
+    labels.size = round(height * PIXELS_PER_POINT);
+    labels.sizeExpression = "";
+  }
+  const textTranslation = translateCimSymbol({ symbol: text.symbol });
+  const textLook = textTranslation.style;
+  const leftOut = labelParts("text", textTranslation);
+  if (textLook.fillColor) {
+    labels.color = textLook.fillColor;
+    labels.colorExpression = "";
+    translucent ||= (textLook.fillOpacity ?? 1) < 1;
+  } else {
+    warnings.push("The .lyrx style's label colour could not be read; labels keep their colour.");
+  }
+  const haloSize = numberOf(text.haloSize) ?? 0;
+  const haloTranslation =
+    haloSize > 0 && text.haloSymbol !== undefined
+      ? translateCimSymbol({ symbol: text.haloSymbol })
+      : undefined;
+  const haloLook = haloTranslation?.style;
+  const haloOpacity = haloLook?.fillOpacity ?? 1;
+  if (haloLook?.fillColor && haloOpacity > 0) {
+    labels.haloColor = haloLook.fillColor;
+    labels.haloWidth = round(haloSize * PIXELS_PER_POINT);
+    translucent ||= haloOpacity < 1;
+  } else {
+    labels.haloWidth = 0;
+    if (haloLook && !haloLook.fillColor) {
+      warnings.push(
+        "The .lyrx style's label halo colour could not be read, so labels have no halo.",
+      );
+    }
+  }
+  // A clear halo fill with a visible outline is an outlined halo, which a label cannot draw; one
+  // with no outline either is no halo at all, as ArcGIS Pro draws it.
+  if (haloTranslation) leftOut.push(...labelParts("halo", haloTranslation));
+  if (leftOut.length > 0) {
+    warnings.push(
+      `Part of the .lyrx style's label symbol was not imported: ${leftOut.join(", ")}.`,
+    );
+  }
+  if (translucent) {
+    warnings.push(
+      "The .lyrx style's label transparency was not imported; labels are drawn opaque.",
+    );
+  }
+  const font = stringOf(text.fontFamilyName);
+  if (font) {
+    warnings.push(
+      `The .lyrx style's label font (${font}) was not imported; labels use GeoLibre's font.`,
+    );
+  }
+  return labels;
+}
+
+/**
+ * What a label's text or halo symbol draws that a label cannot: an outline (a label has one halo,
+ * not an outlined one), and whatever the shared reader reports leaving out of the symbol. A
+ * symbol it refuses outright is reported as an unreadable colour instead.
+ */
+function labelParts(
+  part: "text" | "halo",
+  translation: ReturnType<typeof translateCimSymbol>,
+): string[] {
+  const { style, issues } = translation;
+  if (!translation.translated) return [];
+  const parts: string[] = [];
+  if ((style.strokeWidth ?? 0) > 0) parts.push(`the ${part} outline`);
+  for (const issue of issues) {
+    const name =
+      issue.code === "effects"
+        ? typeName(issue.cimType, /^GeometricEffect/) || "geometric effect"
+        : issue.code === "color"
+        ? colourName(issue.cimType) || "colour"
+        : typeName(issue.cimType) || issue.code;
+    parts.push(`the ${part} ${name}`);
+  }
+  return parts;
+}
+
+/** Rounded so `0.75 * 96 / 72` is written as 1, not 0.9999999999999999. */
+function round(value: number): number {
+  return Math.round(value * 10000) / 10000;
 }
 
 function isObject(value: unknown): value is CimObject {
@@ -278,4 +388,8 @@ function arrayOf(value: unknown): CimObject[] {
 
 function stringOf(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function numberOf(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
