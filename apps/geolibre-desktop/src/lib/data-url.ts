@@ -242,7 +242,12 @@ async function fetchOk(url: string, signal: AbortSignal | undefined, fetchImpl: 
       headers: { Accept: "application/geo+json, application/json, application/zip, */*;q=0.8" },
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    if (
+      error instanceof DOMException &&
+      (error.name === "AbortError" || error.name === "TimeoutError")
+    ) {
+      throw error;
+    }
     throw new Error(`Could not fetch ${url}. The server may be unreachable or blocking CORS.`, {
       cause: error,
     });
@@ -567,6 +572,39 @@ export async function fetchRemoteData(
   }));
   if (!layers.length) throw new Error("The ZIP archive does not contain any GeoJSON files.");
   return { kind: "geojson", layers };
+}
+
+/**
+ * Fetch one GeoJSON FeatureCollection from a URL, under the same download cap
+ * and error wording as the Add Data URL loader.
+ *
+ * @param url - Absolute http(s) URL of the GeoJSON document.
+ * @param options - Optional abort signal and fetch implementation (tests).
+ * @returns The parsed FeatureCollection.
+ * @throws When the request fails, the body is too large, or it is not a
+ *   GeoJSON FeatureCollection.
+ */
+export async function fetchRemoteFeatureCollection(
+  url: string,
+  options: { signal?: AbortSignal; fetchImpl?: typeof fetch } = {},
+): Promise<FeatureCollection> {
+  const response = await fetchOk(url, options.signal, options.fetchImpl ?? fetch);
+  const bytes = await readCappedBytes(response, url);
+  const collection = parseFeatureCollection(strFromU8(bytes), url);
+  // Stricter than the Add Data loaders, which keep their existing leniency:
+  // this data goes straight into a layer with no import step to clean it.
+  const features: unknown[] = collection.features;
+  if (
+    !features.every(
+      (feature) =>
+        typeof feature === "object" &&
+        feature !== null &&
+        (feature as { type?: unknown }).type === "Feature",
+    )
+  ) {
+    throw new Error(`${url} is not a GeoJSON FeatureCollection.`);
+  }
+  return collection;
 }
 
 export async function fetchRemoteStyle(

@@ -4,6 +4,7 @@ import { normalizeMapCrs } from "./map-crs";
 import { normalizeCesiumBasemap } from "./cesium-imagery";
 import { parseCesiumIonAssetId } from "./cesium-ion";
 import { redactUrlCredentials } from "./credentials";
+import { isFetchedGeoJson } from "./remote-geojson";
 import { normalizeStoryChapterDurationSeconds } from "./storymap-duration";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -2471,6 +2472,22 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
   // only set when a real path was captured (desktop), so a web project — which
   // cannot re-read a path — never sets it and keeps the embedded copy.
   if (layer.geojson && layer.metadata.localFileReloadable === true) {
+    const { geojson: _geojson, ...rest } = layer;
+    layer = rest;
+  }
+
+  // A plain GeoJSON layer whose features were fetched from its `source.data` /
+  // `source.url` on restore saves the reference it was opened with, not the
+  // fetched copy, so the file stays as small as the one that was opened and
+  // the next open fetches current data. An edit replaces the collection, so
+  // edited features are no longer "fetched" and are embedded like any other.
+  // Unless the reference carries a credential: Save redacts it from the URL
+  // (redactProjectCredentials), so the reopened file could not fetch the data
+  // again and would come back empty. Keep the features, as WFS does above.
+  const referenceCarriesCredentials = [layer.source.data, layer.source.url].some(
+    (value) => typeof value === "string" && redactUrlCredentials(value) !== value,
+  );
+  if (layer.geojson && isFetchedGeoJson(layer.geojson) && !referenceCarriesCredentials) {
     const { geojson: _geojson, ...rest } = layer;
     layer = rest;
   }

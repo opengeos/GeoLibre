@@ -41,6 +41,9 @@ export function buildProjectSnapshot(
     blankBackgroundColor: state.blankBackgroundColor,
     // History and external snapshots must preserve the current edited data.
     // File saves use their own explicit embedding choice before serialization.
+    // A URL-referenced GeoJSON layer's fetched features are left out, as on
+    // Save: restoring a snapshot goes through loadProject, which fetches them
+    // again, and embedding them could push autosave past its size limit.
     layers: (overrides.layers ?? state.layers).map(embedEditedGeometry),
     selectedLayerId: state.selectedLayerId,
     layerGroups: state.layerGroups,

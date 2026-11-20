@@ -32,6 +32,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { notify } from "../../lib/notify";
 import { startupActivationSettled } from "../../lib/settle-gate";
 import { restoreLocalFileLayers } from "../../lib/restore-local-layers";
+import { restoreRemoteGeoJsonLayers } from "../../lib/restore-remote-geojson-layers";
 import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
 import { createAppAPI, getPluginManager, markPluginActivationSettled } from "../usePlugins";
 
@@ -240,6 +241,7 @@ export function usePluginStateRestore({
       if (engine.capabilities.nativeZarr) restoreArcgisZarrLayers();
       else void restoreZarrLayers(appAPI);
       void restoreLocalFileLayers();
+      void restoreRemoteGeoJsonLayers();
       // Same cleanup as the native path: this branch also starts an async
       // handleUrlParameters above, so an older completion must not publish its
       // generation after a newer restore has started.
@@ -274,6 +276,8 @@ export function usePluginStateRestore({
     // Re-read drag-dropped / Add Data local-file GeoJSON layers from disk
     // (their data was saved as a path, not embedded).
     void restoreLocalFileLayers();
+    // Fetch plain GeoJSON layers that reference their data by URL (#3508).
+    void restoreRemoteGeoJsonLayers();
     // Let layer-sync push the store-derived beforeId into the control that owns
     // each deck.gl COG raster so it interleaves with vector layers instead of
     // always drawing on top. Two controls render such layers: the raster

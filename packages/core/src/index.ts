@@ -53,6 +53,7 @@ export * from "./i3s-building-state";
 export * from "./project-diff";
 export * from "./style-library";
 export * from "./layer-library";
+export * from "./remote-geojson";
 export * from "./layer-defaults";
 export * from "./layer-style-clipboard";
 export * from "./layer-style-file";

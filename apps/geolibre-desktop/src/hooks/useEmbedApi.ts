@@ -5,7 +5,6 @@ import { imageBlobToDataUrl } from "@geolibre/map";
 import {
   assertEmbedCapability,
   buildEmbedEvent,
-  buildEmbedLayer,
   createFeaturesChangeTracker,
   embedEventTargets,
   embedEventVersions,
@@ -24,6 +23,7 @@ import { fetchProjectFromUrl, projectUrlFromLocation } from "../lib/project-url"
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import { isKnownWhiteboxToolId } from "../lib/whitebox-tool-url";
 import { queueDataLoad } from "../lib/data-load-queue";
+import { addEmbedLayer } from "../lib/restore-remote-geojson-layers";
 import { loadDataUrl } from "./useDataUrlLoader";
 import type { createAppAPI } from "./usePlugins";
 
@@ -254,12 +254,14 @@ export function useEmbedApi(
           return view;
         }
         case "addLayer": {
-          const state = useAppStore.getState();
-          if (!state.deploymentCapabilities.has("data:add"))
-            throw new Error("Missing data:add capability");
-          const layer = buildEmbedLayer(command.spec, state.layers);
-          state.addLayer(layer, command.spec.beforeId);
-          return layer.id;
+          // Registered like addData's loads, so teardown aborts a pending fetch.
+          const abort = new AbortController();
+          dataLoadAborts.add(abort);
+          try {
+            return await addEmbedLayer(command.spec, abort.signal);
+          } finally {
+            dataLoadAborts.delete(abort);
+          }
         }
         case "addData": {
           if (!useAppStore.getState().deploymentCapabilities.has("data:add"))
