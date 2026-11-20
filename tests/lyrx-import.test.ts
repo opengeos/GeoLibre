@@ -258,6 +258,9 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     assert.match(result.warnings.join("\n"), /only the first, "First"/);
     assert.match(result.warnings.join("\n"), /picture fill/i);
     assert.match(result.warnings.join("\n"), /label expression/i);
+    // The picture fill is not drawn, so the layer keeps its own fill rather than going hollow.
+    const base = structuredClone(DEFAULT_LAYER_STYLE);
+    assert.equal(result.apply(base).fillOpacity, base.fillOpacity);
   });
 
   it("leads with the renderer refusal when the first of several layers is unsupported", () => {
@@ -291,7 +294,9 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     );
     assert.equal(result.ok, false);
     if (result.ok) return;
-    assert.match(result.warnings[0], /picture fill/);
+    // The reason leads, since a one-line surface shows only the first; the note follows.
+    assert.match(result.warnings[0], /has no fill, outline or marker GeoLibre can import/);
+    assert.match(result.warnings[1], /picture fill/);
   });
 
   it("names a renderer type that collides with an Object prototype key as itself", () => {

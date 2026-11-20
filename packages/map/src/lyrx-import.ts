@@ -92,7 +92,8 @@ export function parseLyrx(document: unknown): LyrxImportResult {
   }
   if (rendererType === "CIMSimpleRenderer") {
     result.matchedCount = readSimple(renderer, result.style, notes);
-    if (result.matchedCount === 0 && notes.size === 0) {
+    // Leads the warnings, since a one-line surface shows only the first.
+    if (result.matchedCount === 0) {
       const symbolType = stringOf(objectOf(objectOf(renderer.symbol)?.symbol)?.type);
       result.warnings.push(
         `The .lyrx style's ${symbolType || "symbol"} has no fill, outline or marker GeoLibre can import; the layer keeps its current style.`,
@@ -219,6 +220,9 @@ function readSymbol(symbol: CimObject, notes: Set<string>): SymbolInfo {
       }
     } else if (Object.hasOwn(UNSUPPORTED_SYMBOL_LAYER_NAMES, layerType)) {
       notes.add(UNSUPPORTED_SYMBOL_LAYER_NAMES[layerType]);
+      // Keep the layer's own fill or outline rather than clearing it for one GeoLibre cannot draw.
+      if (layerType.endsWith("Fill") && !info.fill) info.fillUnread = true;
+      else if (layerType.endsWith("Stroke") && !info.stroke) info.strokeUnread = true;
     }
   }
   return info;
@@ -295,7 +299,7 @@ function readLabels(layer: CimObject, warnings: string[]): Partial<LabelStyle> |
     expression.match(/^\$feature\[\s*["']([^"']+)["']\s*\]$/)?.[1];
   if (!field) {
     warnings.push(
-      "The .lyrx style's label expression is more than a single field, so its labels were not imported.",
+      "The .lyrx style's label expression is not a single field, so its labels were not imported.",
     );
     return null;
   }
