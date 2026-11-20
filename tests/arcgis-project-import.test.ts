@@ -42,6 +42,36 @@ function featureLayer(name: string, path: string) {
   };
 }
 
+/**
+ * A hosted feature layer as ArcGIS Pro saves it: the FeatureServer root in the
+ * connection string and the sublayer number as the dataset (the shape in
+ * public .lyrx files such as Esri samples and USEPA/BEEP's USA_Structures).
+ */
+function hostedFeatureLayer(
+  name: string,
+  dataset: string,
+  extra: Record<string, unknown> = {},
+  serviceUrl = "https://services3.example.com/abc/arcgis/rest/services/Water/FeatureServer",
+) {
+  return {
+    type: "CIMFeatureLayer",
+    name,
+    uRI: `CIMPATH=map/${name.toLowerCase()}.json`,
+    visibility: true,
+    featureTable: {
+      type: "CIMFeatureTable",
+      dataConnection: {
+        type: "CIMStandardDataConnection",
+        workspaceConnectionString: `URL=${serviceUrl}`,
+        workspaceFactory: "FeatureService",
+        dataset,
+        datasetType: "esriDTFeatureClass",
+      },
+    },
+    ...extra,
+  };
+}
+
 describe("ArcGIS Pro project import", () => {
   it("imports MAPX groups, extent, styles, labels, visibility, and paths", () => {
     const mapx = {
@@ -267,6 +297,7 @@ describe("ArcGIS Pro project import", () => {
     ]);
     assert.deepEqual(result.services, [
       {
+        kind: "vector-tile",
         name: "Basemap",
         itemId: "79a4630cf75d49bba0d54d85030ba338",
         visible: true,
@@ -712,6 +743,159 @@ describe("ArcGIS Pro project import", () => {
     assert.throws(
       () => importArcgisProject(archive, "C:\\projects\\big.aprx"),
       /too large to import safely/,
+    );
+  });
+  it("imports explicit FeatureServer sublayers from an APRX with their place and state", () => {
+    const map = {
+      type: "CIMMapDocument",
+      mapDefinition: {
+        type: "CIMMap",
+        name: "Water",
+        mapType: "Map",
+        defaultExtent: {
+          xmin: -80,
+          ymin: 30,
+          xmax: -70,
+          ymax: 40,
+          spatialReference: { wkid: 4326 },
+        },
+        layers: ["CIMPATH=map/utilities.json", "CIMPATH=map/cities.json"],
+      },
+    };
+    const zip = zipSync({
+      "GISProject.json": strToU8(
+        JSON.stringify({
+          projectItems: [{ itemType: "Map", catalogPath: "CIMPATH=map/map.json" }],
+        }),
+      ),
+      "map/map.json": strToU8(JSON.stringify(map)),
+      "map/utilities.json": strToU8(
+        JSON.stringify({
+          type: "CIMGroupLayer",
+          name: "Utilities",
+          uRI: "CIMPATH=map/utilities.json",
+          layers: ["CIMPATH=map/network.json"],
+        }),
+      ),
+      "map/network.json": strToU8(
+        JSON.stringify({
+          type: "CIMGroupLayer",
+          name: "Network",
+          uRI: "CIMPATH=map/network.json",
+          layers: ["CIMPATH=map/mains.json", "CIMPATH=map/valves.json"],
+        }),
+      ),
+      "map/mains.json": strToU8(JSON.stringify(hostedFeatureLayer("Mains", "3"))),
+      "map/valves.json": strToU8(
+        JSON.stringify(
+          hostedFeatureLayer("Valves", "5", {
+            visibility: false,
+            transparency: 40,
+          }),
+        ),
+      ),
+      "map/cities.json": strToU8(JSON.stringify(featureLayer("Cities", "../data"))),
+    });
+
+    const result = importArcgisProject(zip, "/work/projects/water.aprx");
+
+    assert.deepEqual(result.warnings, []);
+    const groups = new Map(result.project.layerGroups?.map((group) => [group.name, group]));
+    // Both groups survive the prune although only services sit in them.
+    assert.equal(groups.get("Network")?.parentId, groups.get("Utilities")?.id);
+    const root = "https://services3.example.com/abc/arcgis/rest/services/Water/FeatureServer";
+    assert.deepEqual(result.services, [
+      {
+        kind: "feature",
+        name: "Mains",
+        url: `${root}/3`,
+        visible: true,
+        opacity: 1,
+        arcgisLayerUri: "CIMPATH=map/mains.json",
+        nextLayerIds: ["layers-cities"],
+        groupId: groups.get("Network")?.id,
+      },
+      {
+        kind: "feature",
+        name: "Valves",
+        url: `${root}/5`,
+        visible: false,
+        opacity: 0.6,
+        arcgisLayerUri: "CIMPATH=map/valves.json",
+        nextLayerIds: ["layers-cities"],
+        groupId: groups.get("Network")?.id,
+      },
+    ]);
+    assert.deepEqual(
+      result.project.layers.map((layer) => layer.id),
+      ["layers-cities"],
+    );
+  });
+
+  it("keeps secrets in a FeatureServer connection string out of the import", () => {
+    const mapx = {
+      type: "CIMMap",
+      name: "Secured",
+      defaultExtent: {
+        xmin: -80,
+        ymin: 30,
+        xmax: -70,
+        ymax: 40,
+        spatialReference: { wkid: 4326 },
+      },
+      layerDefinitions: [
+        hostedFeatureLayer(
+          "Parcels",
+          "02",
+          {},
+          "https://user:pass@gis.example.com/server/rest/services/Parcels/FeatureServer/?token=SECRET#frag",
+        ),
+      ],
+    };
+    const result = importArcgisProject(JSON.stringify(mapx), "/work/projects/secured.mapx");
+    assert.equal(result.services.length, 1);
+    const [service] = result.services;
+    assert.equal(service.kind, "feature");
+    assert.equal(
+      service.kind === "feature" && service.url,
+      "https://gis.example.com/server/rest/services/Parcels/FeatureServer/2",
+    );
+    assert.doesNotMatch(JSON.stringify(result), /SECRET|user:pass/);
+  });
+
+  it("reports a feature service connection without an explicit sublayer", () => {
+    const mapx = {
+      type: "CIMMap",
+      name: "Ambiguous",
+      defaultExtent: {
+        xmin: -80,
+        ymin: 30,
+        xmax: -70,
+        ymax: 40,
+        spatialReference: { wkid: 4326 },
+      },
+      layerDefinitions: [
+        // No dataset: not guessed as sublayer 0.
+        hostedFeatureLayer("Rootless", ""),
+        hostedFeatureLayer("Named", "parcels"),
+        // A MapServer root is not a FeatureServer.
+        hostedFeatureLayer(
+          "Dynamic",
+          "1",
+          {},
+          "https://gis.example.com/server/rest/services/Parcels/MapServer",
+        ),
+      ],
+    };
+    const result = importArcgisProject(JSON.stringify(mapx), "/work/projects/ambiguous.mapx");
+    assert.deepEqual(result.services, []);
+    assert.deepEqual(
+      result.warnings.map((warning) => [warning.layerName, warning.reason]),
+      [
+        ["Rootless", "service"],
+        ["Named", "service"],
+        ["Dynamic", "service"],
+      ],
     );
   });
 });

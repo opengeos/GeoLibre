@@ -19,6 +19,7 @@ export interface ArcgisProjectImportWarning {
     | "file-geodatabase-raster"
     | "network-path"
     | "service"
+    | "service-unavailable"
     | "browser-local-file"
     | "map-extent"
     | "nesting";
@@ -41,11 +42,41 @@ export interface ArcgisRasterImport {
   groupId?: string;
 }
 
-export interface ArcgisServiceImport {
+/**
+ * A service layer the ArcGIS plugin adds once the project has loaded: a portal
+ * vector tile item, or one numbered sublayer of a FeatureServer.
+ */
+export type ArcgisServiceImport = ArcgisVectorTileServiceImport | ArcgisFeatureServiceImport;
+
+export interface ArcgisVectorTileServiceImport {
+  kind: "vector-tile";
   name: string;
   itemId: string;
   visible: boolean;
   groupId?: string;
+}
+
+export interface ArcgisFeatureServiceImport {
+  kind: "feature";
+  name: string;
+  /**
+   * The sublayer URL (`…/FeatureServer/<n>`), rebuilt from scheme, host and
+   * path only, so no query string or user info from the project file reaches
+   * a request, a saved project or a log.
+   */
+  url: string;
+  visible: boolean;
+  opacity: number;
+  groupId?: string;
+  /** The CIM layer URI, kept on the store layer as its ArcGIS identity. */
+  arcgisLayerUri: string;
+  /**
+   * Ids of the project layers that follow this one in ArcGIS order. The
+   * service layer is inserted before the first of them still in the store, so
+   * it keeps its place among the file layers even when the browser build has
+   * dropped some of them.
+   */
+  nextLayerIds: string[];
 }
 
 type CimObject = Record<string, unknown>;
@@ -152,6 +183,7 @@ function importMap(
   const services: ArcgisServiceImport[] = [];
   const groups: LayerGroup[] = [];
   const usedIds = new Set<string>();
+  const serviceLayerIndex = new Map<ArcgisFeatureServiceImport, number>();
 
   const definitions = resolveLayerList(map, files);
   for (const definition of definitions) {
@@ -167,7 +199,11 @@ function importMap(
       warnings,
       usedIds,
       new Set(),
+      serviceLayerIndex,
     );
+  }
+  for (const [service, index] of serviceLayerIndex) {
+    service.nextLayerIds = layers.slice(index).map((layer) => layer.id);
   }
 
   project.layers = layers;
@@ -326,6 +362,7 @@ function importLayer(
   warnings: ArcgisProjectImportWarning[],
   usedIds: Set<string>,
   ancestors: ReadonlySet<CimObject>,
+  serviceLayerIndex: Map<ArcgisFeatureServiceImport, number>,
 ): void {
   const type = stringValue(layer.type);
   const name = stringValue(layer.name) || type || "ArcGIS layer";
@@ -364,6 +401,7 @@ function importLayer(
         warnings,
         usedIds,
         branch,
+        serviceLayerIndex,
       );
     }
     return;
@@ -415,6 +453,7 @@ function importLayer(
     const itemId = stringValue(layer.sourceURI);
     if (/^[a-f0-9]{32}$/i.test(itemId)) {
       services.push({
+        kind: "vector-tile",
         name,
         itemId,
         visible,
@@ -434,6 +473,24 @@ function importLayer(
   }
 
   const connection = objectValue(objectValue(layer.featureTable)?.dataConnection);
+  const serviceUrl = featureServiceSublayerUrl(connection);
+  if (serviceUrl) {
+    const service: ArcgisFeatureServiceImport = {
+      kind: "feature",
+      name,
+      url: serviceUrl,
+      visible,
+      opacity: layerOpacity(layer),
+      arcgisLayerUri: stringValue(layer.uRI),
+      nextLayerIds: [],
+      ...(parentId ? { groupId: parentId } : {}),
+    };
+    services.push(service);
+    // Filled in once the whole tree is read: only then are the layers that
+    // follow this one known.
+    serviceLayerIndex.set(service, layers.length);
+    return;
+  }
   const resolved = resolveDataSource(connection, sourcePath);
   if (!resolved.path) {
     warnings.push({
@@ -520,12 +577,50 @@ function resolveRasterSource(
   return looksLikeGeodatabase ? { reason: "file-geodatabase-raster" } : { reason: "format" };
 }
 
+/**
+ * The FeatureServer sublayer a feature layer reads, when its connection names
+ * one explicitly.
+ *
+ * ArcGIS Pro saves a hosted feature layer as a `CIMStandardDataConnection` with
+ * `workspaceFactory: "FeatureService"`, the service root in the connection
+ * string (`URL=https://…/FeatureServer`) and the sublayer number as the
+ * `dataset`. Only that shape is accepted: a connection without a numeric
+ * dataset is reported rather than guessed as sublayer 0.
+ *
+ * The URL is rebuilt from scheme, host and path, so a token or user info in the
+ * connection string never reaches a request, a saved project or a log.
+ */
+function featureServiceSublayerUrl(connection: CimObject | undefined): string | null {
+  if (!connection || !isFeatureServiceFactory(connection)) return null;
+  const dataset = stringValue(connection.dataset).trim();
+  if (!/^\d+$/.test(dataset)) return null;
+  const match = stringValue(connection.workspaceConnectionString).match(
+    /(?:^|;)URL=(?:"([^"]+)"|([^;]+))/i,
+  );
+  let url: URL;
+  try {
+    url = new URL((match?.[1] ?? match?.[2] ?? "").trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  const path = url.pathname.replace(/\/+$/, "");
+  if (!/\/FeatureServer$/i.test(path)) return null;
+  return `${url.origin}${path}/${dataset.replace(/^0+(?=\d)/, "")}`;
+}
+
+function isFeatureServiceFactory(connection: CimObject): boolean {
+  return stringValue(connection.workspaceFactory).toLowerCase() === "featureservice";
+}
+
 function resolveDataSource(
   connection: CimObject | undefined,
   projectPath: string,
 ): { path?: string; reason?: ArcgisProjectImportWarning["reason"] } {
   if (!connection) return { reason: "missing-source" };
-  if (stringValue(connection.url)) return { reason: "service" };
+  if (stringValue(connection.url) || isFeatureServiceFactory(connection)) {
+    return { reason: "service" };
+  }
 
   const workspace = parseWorkspacePath(stringValue(connection.workspaceConnectionString));
   const dataset = stringValue(connection.dataset);

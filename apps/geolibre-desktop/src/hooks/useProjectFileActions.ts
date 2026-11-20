@@ -5,6 +5,7 @@ import {
   projectFromStore,
   redactProjectCredentials,
   excludeHiddenFieldsFromProject,
+  normalizeGroupContiguity,
   extractLayerStyleEntries,
   serializeLayerStylesFile,
   serializeLayersFile,
@@ -19,6 +20,7 @@ import {
   addRasterToMap,
   getGeometryEditTargetLayerId,
   isRecoverableNonTiledRasterError,
+  isTrustedPortalServiceUrl,
   materializeEmbeddableVectorLayers,
 } from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
@@ -125,9 +127,15 @@ import { readQgisSnapshotTable } from "../lib/qgis-form-tables";
 import { qgisRemoteFetch, readQgisRemoteVector } from "../lib/qgis-remote-vector";
 import {
   readArcgisProject,
+  type ArcgisFeatureServiceImport,
   type ArcgisProjectImportWarning,
   type ArcgisProjectMapChoice,
 } from "../lib/arcgis-project-import";
+import {
+  ARCGIS_ONLINE_PORTAL,
+  arcgisLayerTokenProvider,
+  useArcGISAuthStore,
+} from "../lib/arcgis-oauth";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 import { IS_MAS_BUILD } from "../lib/build-flags";
 import { resolveDroppedProjectIfCurrent } from "../lib/dropped-project";
@@ -370,6 +378,107 @@ async function addImportedProjectRaster(
     }
     throw error;
   }
+}
+
+/**
+ * Adds one FeatureServer sublayer from an imported ArcGIS Pro project through
+ * the ArcGIS plugin's feature loader, then gives it the project's group,
+ * opacity and layer identity. {@link placeImportedServiceLayers} puts it in
+ * draw order; visibility is applied by the caller.
+ *
+ * The layer uses an existing ArcGIS sign-in only when that portal trusts the
+ * service's host (see {@link signedInPortalForServiceUrl}), and loads
+ * anonymously otherwise. The project file chooses the host, so a token is
+ * never offered to any other server.
+ *
+ * @returns The new store layer's id.
+ */
+async function addImportedArcgisFeatureService(
+  app: ReturnType<typeof createAppAPI>,
+  service: ArcgisFeatureServiceImport,
+  translate: Parameters<typeof arcgisLayerTokenProvider>[1],
+): Promise<string> {
+  const portal = signedInPortalForServiceUrl(service.url);
+  const tokenProvider = portal ? arcgisLayerTokenProvider(portal, translate) : undefined;
+  const layerId = await addArcGISLayer(app, {
+    layerType: "feature",
+    name: service.name,
+    sourceType: "url",
+    // The loader's own requests send `token`; the provider renews it for
+    // later ones (edits, refresh). Both stay in memory, never in the project.
+    token: await tokenProvider?.(),
+    tokenProvider,
+    url: service.url,
+    zoomTo: false,
+  });
+  const store = useAppStore.getState();
+  store.setLayerOpacity(layerId, service.opacity);
+  const added = useAppStore.getState().layers.find((layer) => layer.id === layerId);
+  if (added) {
+    store.updateLayer(layerId, {
+      ...(service.groupId ? { groupId: service.groupId } : {}),
+      metadata: {
+        ...added.metadata,
+        importedFrom: "arcgis-pro",
+        arcgisLayerUri: service.arcgisLayerUri,
+      },
+    });
+  }
+  return layerId;
+}
+
+/**
+ * Puts the feature service layers added so far where project load would have
+ * put them had they been file layers: the project's layers and services in
+ * ArcGIS order, then the store's own group contiguity pass, exactly as
+ * `applyProjectToStore` lays out a loaded project. A layer the import placed
+ * another way (a raster, a vector tile service) travels with the ranked layer
+ * just before it, which keeps it in its group; any ahead of every ranked layer
+ * stay first.
+ *
+ * @param projectLayerIds - The loaded project's layer ids, in ArcGIS order.
+ * @param placed - Each loaded service's layer id with the project layers that
+ *   follow it, in ArcGIS order.
+ */
+export function placeImportedServiceLayers(
+  projectLayerIds: string[],
+  placed: { layerId: string; nextLayerIds: string[] }[],
+): void {
+  const projectRank = new Map(projectLayerIds.map((id, index) => [id, index]));
+  const rank = new Map(projectRank);
+  placed.forEach(({ layerId, nextLayerIds }, index) => {
+    const nextId = nextLayerIds.find((id) => projectRank.has(id));
+    const next = nextId === undefined ? projectLayerIds.length : projectRank.get(nextId)!;
+    // Just ahead of the next project layer, keeping services that share it in
+    // their own order.
+    rank.set(layerId, next - 1 + (index + 1) / (placed.length + 1));
+  });
+  const head: GeoLibreLayer[] = [];
+  const runs: { rank: number; layers: GeoLibreLayer[] }[] = [];
+  for (const layer of useAppStore.getState().layers) {
+    const layerRank = rank.get(layer.id);
+    if (layerRank !== undefined) runs.push({ rank: layerRank, layers: [layer] });
+    else (runs.at(-1)?.layers ?? head).push(layer);
+  }
+  runs.sort((a, b) => a.rank - b.rank);
+  useAppStore.setState({
+    layers: normalizeGroupContiguity([...head, ...runs.flatMap((run) => run.layers)]),
+  });
+}
+
+/**
+ * The signed-in ArcGIS portal whose token a service URL may receive, by the
+ * rule a portal's own web map layers follow ({@link isTrustedPortalServiceUrl}):
+ * the portal's host, or `*.arcgis.com` for ArcGIS Online and its organisation
+ * URLs. ArcGIS Online's default portal is preferred when several qualify.
+ *
+ * @returns The portal, or null when no signed-in portal trusts the host.
+ */
+export function signedInPortalForServiceUrl(url: string): string | null {
+  const portals = Object.keys(useArcGISAuthStore.getState().connections).filter((portal) =>
+    isTrustedPortalServiceUrl(portal, url),
+  );
+  return portals.includes(ARCGIS_ONLINE_PORTAL) ? ARCGIS_ONLINE_PORTAL : (portals[0] ?? null);
 }
 
 /** What Import Layer Styles did, shown in its summary dialog. */
@@ -942,19 +1051,27 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           }
         }
       }
+      const projectLayerIds = imported.project.layers.map((layer) => layer.id);
+      const placedServices: { layerId: string; nextLayerIds: string[] }[] = [];
       for (const service of imported.services) {
         try {
-          const serviceLayerId = await addArcGISLayer(app, {
-            itemId: service.itemId,
-            layerType: "vector-tile",
-            name: service.name,
-            sourceType: "portal-item",
-            // The project's saved extent was applied by loadProject above, and
-            // this runs after it. Without the opt-out, each imported service
-            // would fit the map to its own bounds and throw that extent away.
-            zoomTo: false,
-          });
-          if (service.groupId) {
+          // The project's saved extent was applied by loadProject above, and
+          // this runs after it. Without the opt-out, each imported service
+          // would fit the map to its own bounds and throw that extent away.
+          const serviceLayerId =
+            service.kind === "feature"
+              ? await addImportedArcgisFeatureService(app, service, (key) => t(key))
+              : await addArcGISLayer(app, {
+                  itemId: service.itemId,
+                  layerType: "vector-tile",
+                  name: service.name,
+                  sourceType: "portal-item",
+                  zoomTo: false,
+                });
+          if (service.kind === "feature") {
+            placedServices.push({ layerId: serviceLayerId, nextLayerIds: service.nextLayerIds });
+            placeImportedServiceLayers(projectLayerIds, placedServices);
+          } else if (service.groupId) {
             useAppStore.getState().moveLayerToGroup(serviceLayerId, service.groupId);
           }
           if (!service.visible) {
@@ -964,7 +1081,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           console.error(`Failed to import ArcGIS service "${service.name}"`, error);
           imported.warnings.push({
             layerName: service.name,
-            reason: "service",
+            reason: service.kind === "feature" ? "service-unavailable" : "service",
           });
         }
       }

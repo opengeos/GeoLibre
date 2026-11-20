@@ -792,6 +792,7 @@ export {
   type ArcGisPortalAuth,
   type ArcGisPortalConnection,
 } from "./plugins/maplibre-arcgis-portal";
+export { isTrustedPortalServiceUrl } from "./plugins/arcgis-portal-api";
 export {
   DEFAULT_TENNESSEE_GIS_LABELS,
   maplibreTennesseeGisPlugin,
