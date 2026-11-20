@@ -53,6 +53,12 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
     lastSaveNamePrompt.current = projectFiles.saveNamePrompt;
   }
   const saveNameLabels = projectFiles.saveNamePrompt ?? lastSaveNamePrompt.current;
+  // Same for the ArcGIS map picker, so its list does not empty mid-close.
+  const lastArcgisMapPrompt = useRef<typeof projectFiles.arcgisMapPrompt>(null);
+  if (projectFiles.arcgisMapPrompt) {
+    lastArcgisMapPrompt.current = projectFiles.arcgisMapPrompt;
+  }
+  const arcgisMapChoices = projectFiles.arcgisMapPrompt ?? lastArcgisMapPrompt.current;
 
   // Stable identities so the warning lists regroup only when the warnings change.
   const describeArcgisWarning = useCallback(
@@ -174,6 +180,40 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={projectFiles.arcgisMapPrompt !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) projectFiles.settleArcgisMapPrompt(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("toolbar.item.arcgisChooseMapTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("toolbar.item.arcgisChooseMapDescription", {
+                fileName: arcgisMapChoices?.fileName ?? "",
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
+            {arcgisMapChoices?.maps.map((map) => (
+              <Button
+                key={map.index}
+                variant="outline"
+                className="justify-start"
+                onClick={() => projectFiles.settleArcgisMapPrompt(map.index)}
+              >
+                {map.name || t("toolbar.item.arcgisUnnamedMap", { number: map.index + 1 })}
+              </Button>
+            ))}
+          </div>
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => projectFiles.settleArcgisMapPrompt(null)}>
+              {t("common.cancel")}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
       <Dialog
