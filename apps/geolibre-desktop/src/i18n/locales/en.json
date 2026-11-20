@@ -4337,7 +4337,8 @@
         "symbol": "The layer was loaded with a single symbol: one of its symbols ({{layerType}}) has no solid colour GeoLibre can draw.",
         "no-classes": "The layer was loaded with a single symbol: its renderer has no usable classes.",
         "visual-variables": "The layer's symbology was imported, but variation from its visual variables (size, colour, rotation or transparency) is not shown.",
-        "symbol-layers": "The layer's symbology was imported, but parts of its symbols ({{layerType}}, such as hatching or markers along lines) are not drawn."
+        "symbol-layers": "The layer's symbology was imported, but parts of its symbols ({{layerType}}, such as hatching or markers along lines) are not drawn.",
+        "transparency": "The layer's symbology was imported, but its classes' different outline or line transparencies are not kept: every class uses the first class's."
       },
       "importWarningLayerCount_one": "{{count}} layer",
       "importWarningLayerCount_other": "{{count}} layers",

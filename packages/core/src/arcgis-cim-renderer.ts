@@ -1,9 +1,36 @@
 /**
- * Translate an ArcGIS Pro CIM feature-layer renderer into GeoLibre symbology.
+ * Translate an ArcGIS Pro CIM feature-layer renderer into GeoLibre symbology,
+ * and read CIM colours and symbol layers for every other CIM reader.
  *
  * Shared by every reader of CIM JSON (ArcGIS Pro projects, map files and layer
- * files), so a renderer means the same thing whichever file it arrives in. Pure
- * and DOM-free.
+ * files), so a renderer or colour means the same thing whichever file it
+ * arrives in. Pure and DOM-free.
+ *
+ * Layout of this module, top to bottom:
+ *
+ * 1. Shared CIM readers: {@link cimColor} (RGB, Gray, CMYK, HSV and CIELAB
+ *    colours, alpha as opacity) and {@link cimSymbolLayerEnabled}.
+ * 2. {@link translateCimRenderer}, dispatching on the renderer type:
+ *    - `CIMSimpleRenderer` becomes a single-symbol style.
+ *    - `CIMUniqueValueRenderer` on one field becomes one rule per class.
+ *    - `CIMClassBreaksRenderer` of type `GraduatedColor` becomes one rule per
+ *      break.
+ *    - Anything else, and the cases below, is refused.
+ * 3. The thematic style builder shared by both thematic renderers.
+ * 4. Symbol reading: one CIM symbol to one flat {@link SymbolLook}.
+ *
+ * Nothing is dropped silently. A refused renderer comes back with
+ * `translated: false`, its single or default symbol as a flat style (so the
+ * layer still draws in a sensible colour), and an issue naming the reason:
+ * another renderer type (`renderer`), unique values on several fields
+ * (`multiple-fields`), an Arcade expression (`expression`), normalised breaks
+ * (`normalization`), graduated symbols (`graduated-symbols`), an exclusion
+ * clause (`exclusion`), a class symbol with no solid colour (`symbol`), or no
+ * usable classes (`no-classes`). A translated renderer can still carry
+ * issues for what it leaves out: visual variables (`visual-variables`),
+ * symbol layers it does not draw (`symbol-layers`), and per-class stroke
+ * transparency GeoLibre's rules cannot hold (`transparency`). The importer
+ * turns each issue into one translated warning for the layer.
  *
  * Thematic renderers become `"rule-based"` styles rather than the native
  * `"categorized"`/`"graduated"` modes, because neither native mode can carry
@@ -23,8 +50,14 @@
  * features are hidden) when ArcGIS would not draw them. Unique value groups are
  * flattened into one list in group order; a group's heading is not kept.
  *
+ * Rules are evaluated first match first, all in one map layer, so features
+ * draw in data order whatever their class, as they do in ArcGIS Pro unless
+ * symbol level drawing is switched on (not reproduced). Classes never share
+ * a value or a range, so rule order decides only the legend.
+ *
  * CIM JSON leaves out a property at its default (0, false, empty), so an
  * absent number reads as 0. Pro writes `visible: true` on every shown class.
+ * Symbol-layer `enable` is the exception: see {@link cimSymbolLayerEnabled}.
  */
 
 import { DEFAULT_LAYER_STYLE, type LayerStyle, type VectorRule } from "./types";
@@ -40,9 +73,9 @@ export const CIM_NULL_VALUE = "<Null>";
 /**
  * Why a renderer, or part of it, was not carried over. `renderer` names the
  * renderer type that was left behind; the rest name the feature that made a
- * supported renderer type untranslatable (or, for `visual-variables` and
- * `symbol-layers`, the part that was dropped from an otherwise translated
- * renderer).
+ * supported renderer type untranslatable (or, for `visual-variables`,
+ * `symbol-layers` and `transparency`, the part that was dropped from an
+ * otherwise translated renderer).
  */
 export type CimRendererIssueCode =
   | "renderer"
@@ -54,7 +87,8 @@ export type CimRendererIssueCode =
   | "symbol"
   | "no-classes"
   | "visual-variables"
-  | "symbol-layers";
+  | "symbol-layers"
+  | "transparency";
 
 export interface CimRendererIssue {
   code: CimRendererIssueCode;
@@ -166,6 +200,19 @@ export function cimColor(value: unknown): { hex: string; opacity: number } | nul
   return { hex, opacity: Math.max(0, Math.min(1, alpha / 100)) };
 }
 
+/**
+ * Whether a CIM symbol layer draws.
+ *
+ * ArcGIS Pro writes `enable` on every symbol layer, `true` or `false` (checked
+ * against public `.lyrx` exports from Pro 2.3 to 3.3), so for its files this is
+ * just the flag. CIM written by other tools sometimes leaves the flag out on
+ * layers that are meant to draw, so an absent flag counts as enabled and only
+ * an explicit `false` switches a layer off.
+ */
+export function cimSymbolLayerEnabled(layer: unknown): boolean {
+  return isObject(layer) && layer.enable !== false;
+}
+
 function simpleRenderer(renderer: CimObject): CimRendererTranslation {
   const look = symbolLook(renderer.symbol);
   if (!look) return untranslated(renderer, symbolIssue(renderer.symbol));
@@ -208,9 +255,12 @@ function uniqueValueRenderer(renderer: CimObject): CimRendererTranslation {
   );
   for (const group of groups) {
     for (const valueClass of arrayValue(group.classes).filter(isObject)) {
+      // Pro writes every value as a string; a number from hand-written CIM is
+      // read as its text, which is what ArcGIS would have stored.
       const values = arrayValue(valueClass.values)
         .filter(isObject)
         .map((value) => arrayValue(value.fieldValues)[0])
+        .map((value) => (typeof value === "number" && Number.isFinite(value) ? String(value) : value))
         .filter((value): value is string => typeof value === "string");
       // A class with no values matches nothing in ArcGIS either.
       if (values.length === 0) continue;
@@ -280,7 +330,7 @@ function classBreaksRenderer(renderer: CimObject): CimRendererTranslation {
     const lower = index === 0 ? minimumBreak : uppers[index - 1];
     classes.push({
       look,
-      label: stringValue(classBreak.label) || `${lower} – ${upper}`,
+      label: stringValue(classBreak.label) || `${formatBound(lower)} – ${formatBound(upper)}`,
       filter: classBreakFilter(field, lower, index === 0, upper),
       visible: true,
     });
@@ -452,12 +502,21 @@ function symbolIssue(reference: unknown): CimRendererIssue {
   return { code: "symbol", ...(type ? { cimType: type } : {}) };
 }
 
-/** What a translated renderer leaves out: visual variables and undrawn symbol layers. */
+/**
+ * What a translated renderer leaves out: visual variables, undrawn symbol
+ * layers, and stroke transparency that differs between classes (a rule can
+ * override a stroke's colour and width but not its opacity, so every class
+ * draws with the first class's).
+ */
 function partialIssues(renderer: CimObject, looks: SymbolLook[]): CimRendererIssue[] {
   const issues: CimRendererIssue[] = [];
   if (arrayValue(renderer.visualVariables).length > 0) issues.push({ code: "visual-variables" });
   const dropped = looks.find((look) => look.dropped)?.dropped;
   if (dropped) issues.push({ code: "symbol-layers", cimType: dropped });
+  const strokeOpacity = (look: SymbolLook) =>
+    look.strokeWidth === 0 ? undefined : (look.strokeOpacity ?? DEFAULT_LAYER_STYLE.strokeOpacity);
+  const opacities = new Set(looks.map(strokeOpacity).filter((value) => value !== undefined));
+  if (opacities.size > 1) issues.push({ code: "transparency" });
   return issues;
 }
 
@@ -510,9 +569,11 @@ function symbolLook(reference: unknown): SymbolLook | null {
     const stroke = solidStroke(layers);
     const dropped = droppedLayer(layers, ["CIMSolidFill", "CIMSolidStroke"]);
     if (!fill) {
-      // An outline-only polygon is hollow. Any other fill (picture, hatch,
-      // gradient) has no flat colour, so it is not drawn as hollow either.
-      if (!stroke || layers.some((layer) => /Fill$/.test(stringValue(layer.type)))) return null;
+      // An outline-only polygon is hollow. A polygon whose only fill is one
+      // GeoLibre cannot draw flat (hatch, picture, gradient) keeps its outline
+      // and is reported as a dropped symbol layer; without an outline it has
+      // nothing to draw, so the symbol is refused.
+      if (!stroke) return null;
       return {
         geometry: "polygon",
         color: stroke.color.hex,
@@ -595,9 +656,7 @@ function droppedLayer(layers: CimObject[], drawn: string[]): string | undefined 
 }
 
 function enabledLayers(symbol: CimObject | undefined): CimObject[] {
-  return arrayValue(symbol?.symbolLayers)
-    .filter(isObject)
-    .filter((layer) => layer.enable !== false);
+  return arrayValue(symbol?.symbolLayers).filter(isObject).filter(cimSymbolLayerEnabled);
 }
 
 function solidColor(layers: CimObject[], type: string): { hex: string; opacity: number } | null {
@@ -688,6 +747,14 @@ function hsvToRgb(hue: number, saturation: number, value: number): [number, numb
               : [chroma, 0, second];
   const match = v - chroma;
   return [(r + match) * 255, (g + match) * 255, (b + match) * 255];
+}
+
+/**
+ * A class bound for a generated label: up to 12 significant digits, so a bound
+ * computed in floating point reads `0.3`, not `0.30000000000000004`.
+ */
+function formatBound(value: number): string {
+  return String(Number(value.toPrecision(12)));
 }
 
 /** Rounded so `0.75 * 96 / 72` is written as 1, not 0.9999999999999999. */

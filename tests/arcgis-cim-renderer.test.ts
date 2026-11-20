@@ -9,6 +9,8 @@ import {
   serializeProject,
   ruleBasedVisibilityFilter,
   translateCimRenderer,
+  cimColor,
+  cimSymbolLayerEnabled,
   lineWidthValue,
   vectorFillColorValue,
   vectorStrokeWidthValue,
@@ -571,6 +573,98 @@ describe("CIM symbols and defaults as Pro writes them", () => {
     assert.deepEqual(translateCimRenderer(density({ classBreakType: "UnclassedColor" })).issues, [
       { code: "renderer", cimType: "UnclassedColor" },
     ]);
+  });
+});
+
+describe("shared CIM readers and edge cases", () => {
+  it("reads every CIM colour space, with alpha as opacity", () => {
+    assert.deepEqual(cimColor({ type: "CIMRGBColor", values: [255, 128, 0, 50] }), {
+      hex: "#ff8000",
+      opacity: 0.5,
+    });
+    assert.deepEqual(cimColor({ type: "CIMGrayColor", values: [50] }), {
+      hex: "#808080",
+      opacity: 1,
+    });
+    assert.equal(cimColor({ type: "CIMCMYKColor", values: [0, 100, 100, 0, 100] })?.hex, "#ff0000");
+    assert.equal(cimColor({ type: "CIMHSVColor", values: [240, 100, 100, 100] })?.hex, "#0000ff");
+    assert.equal(cimColor({ type: "CIMLABColor", values: [100, 0, 0, 100] })?.hex, "#ffffff");
+    // Unknown subclasses and too few channels are refused, not guessed.
+    assert.equal(cimColor({ type: "CIMSpotColor", values: [1, 2, 3] }), null);
+    assert.equal(cimColor({ type: "CIMRGBColor", values: [1, 2] }), null);
+    for (const broken of [null, "", true, Number.NaN, undefined]) {
+      assert.equal(cimColor({ type: "CIMRGBColor", values: [broken, 0, 0, 100] }), null);
+    }
+  });
+
+  it("switches a symbol layer off only for an explicit enable: false", () => {
+    assert.equal(cimSymbolLayerEnabled({ type: "CIMSolidFill", enable: true }), true);
+    assert.equal(cimSymbolLayerEnabled({ type: "CIMSolidFill", enable: false }), false);
+    assert.equal(cimSymbolLayerEnabled({ type: "CIMSolidFill" }), true);
+    assert.equal(cimSymbolLayerEnabled(null), false);
+    // A Pro 2.6 export (Esri Japan's zoning layer) switches the outline off this way.
+    const style = translatedStyle({
+      type: "CIMSimpleRenderer",
+      symbol: polygonWith([
+        { type: "CIMSolidStroke", enable: false, width: 0.7, color: rgb(110, 110, 110) },
+        { type: "CIMSolidFill", enable: true, color: rgb(254, 203, 252) },
+      ]),
+    });
+    assert.equal(style.fillColor, "#fecbfc");
+    assert.equal(style.strokeWidth, 0);
+  });
+
+  it("keeps the outline of a hatched polygon and reports the hatch", () => {
+    const hatched = translateCimRenderer({
+      type: "CIMSimpleRenderer",
+      symbol: polygonWith([
+        { type: "CIMSolidStroke", enable: true, width: 1.5, color: rgb(255, 0, 0) },
+        { type: "CIMHatchFill", enable: true },
+      ]),
+    });
+    assert.equal(hatched.translated, true);
+    assert.equal(hatched.style.strokeColor, "#ff0000");
+    assert.equal(hatched.style.fillOpacity, 0);
+    assert.deepEqual(hatched.issues, [{ code: "symbol-layers", cimType: "CIMHatchFill" }]);
+  });
+
+  it("matches numeric unique values by their text, as ArcGIS stores them", () => {
+    const renderer = zoning();
+    renderer.groups[0].classes[2].values = [{ type: "CIMUniqueValue", fieldValues: [3 as never] }];
+    const style = translatedStyle(renderer);
+    assert.equal(renderedFill(style, { ZONE: 3 }), "#0000ff");
+    assert.equal(renderedFill(style, { ZONE: "3" }), "#0000ff");
+  });
+
+  it("reports classes whose outlines differ only in transparency", () => {
+    const outlined = (alpha: number) => ({
+      type: "CIMSymbolReference",
+      symbol: {
+        type: "CIMPolygonSymbol",
+        symbolLayers: [
+          { type: "CIMSolidStroke", enable: true, width: 1, color: rgb(0, 0, 0, alpha) },
+          { type: "CIMSolidFill", enable: true, color: rgb(9, 9, 9) },
+        ],
+      },
+    });
+    const renderer = zoning();
+    renderer.groups[0].classes[0].symbol = outlined(50) as never;
+    renderer.groups[0].classes[1].symbol = outlined(100) as never;
+    assert.deepEqual(translateCimRenderer(renderer).issues, [{ code: "transparency" }]);
+    // Same transparency everywhere, or no outline at all, is carried exactly.
+    renderer.groups[0].classes[1].symbol = outlined(50) as never;
+    renderer.groups[0].classes[2].symbol = outlined(50) as never;
+    renderer.groups[0].classes[3].symbol = outlined(0) as never;
+    renderer.defaultSymbol = outlined(50) as never;
+    assert.deepEqual(translateCimRenderer(renderer).issues, []);
+  });
+
+  it("labels an unlabelled break without floating-point noise", () => {
+    const renderer = density();
+    renderer.breaks[0].upperBound = 0.1 + 0.2;
+    renderer.breaks[0].label = "";
+    const rules = translatedStyle(renderer).vectorRules;
+    assert.equal(rules[0].label, "0 – 0.3");
   });
 });
 
