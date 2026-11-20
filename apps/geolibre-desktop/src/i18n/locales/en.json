@@ -4338,7 +4338,7 @@
         "no-classes": "The layer was loaded with a single symbol: its renderer has no usable classes.",
         "visual-variables": "The layer's symbology was imported, but variation from its visual variables (size, colour, rotation or transparency) is not shown.",
         "symbol-layers": "The layer's symbology was imported, but parts of its symbols ({{layerType}}, such as hatching or markers along lines) are not drawn.",
-        "transparency": "The layer's symbology was imported, but its classes' different outline or line transparencies are not kept: every class uses the first class's.",
+        "transparency": "The layer's symbology was imported, but its classes' different outline or line transparencies are not kept: all outlines and lines use the layer's one shared transparency.",
         "effects": "The layer's symbology was imported, but its symbols' geometric effects ({{layerType}}, such as dashes or offsets) are not drawn: lines draw solid and in place."
       },
       "importWarningLayerCount_one": "{{count}} layer",

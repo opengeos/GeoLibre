@@ -735,6 +735,25 @@ describe("shared CIM readers and edge cases", () => {
       translateCimRenderer(marker([{ type: "CIMHatchFill", enable: true }, solid])).issues,
       [{ code: "symbol-layers", cimType: "CIMHatchFill" }],
     );
+    // A second graphic is reported even when it only adds a stroke.
+    const twoGraphics = marker([solid]);
+    twoGraphics.symbol.symbol.symbolLayers[0].markerGraphics.push({
+      symbol: {
+        type: "CIMLineSymbol",
+        symbolLayers: [{ type: "CIMSolidStroke", enable: true, color: rgb(0, 0, 255) } as never],
+      },
+    });
+    const twoResult = translateCimRenderer(twoGraphics);
+    assert.equal(twoResult.style.fillColor, "#ff0000");
+    assert.equal(twoResult.style.strokeWidth, 0);
+    assert.deepEqual(twoResult.issues, [{ code: "symbol-layers", cimType: "CIMMarkerGraphic" }]);
+    // Effects inside a marker graphic are reported like any other.
+    const offset = marker([solid]);
+    (offset.symbol.symbol.symbolLayers[0].markerGraphics[0].symbol as Record<string, unknown>).effects =
+      [{ type: "CIMGeometricEffectOffset", offset: 2 }];
+    assert.deepEqual(translateCimRenderer(offset).issues, [
+      { code: "effects", cimType: "CIMGeometricEffectOffset" },
+    ]);
   });
 
   it("refuses a break bound that is present but not a number", () => {

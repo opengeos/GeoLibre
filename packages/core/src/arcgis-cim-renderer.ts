@@ -53,8 +53,10 @@
  *
  * Rules are evaluated first match first, all in one map layer, so features
  * draw in data order whatever their class, as they do in ArcGIS Pro unless
- * symbol level drawing is switched on (not reproduced). Classes never share
- * a value or a range, so rule order decides only the legend.
+ * symbol level drawing is switched on (not reproduced). Pro-generated
+ * classes never share a value or a range, so rule order decides only the
+ * legend; if hand-written CIM repeats a value across classes, the first
+ * enabled matching rule wins.
  *
  * CIM JSON leaves out a property at its default (0, false, empty), so an
  * absent number reads as 0. Pro writes `visible: true` on every shown class.
@@ -536,9 +538,9 @@ function symbolIssue(reference: unknown): CimRendererIssue {
 
 /**
  * What a translated renderer leaves out: visual variables, undrawn symbol
- * layers, and stroke transparency that differs between classes (a rule can
- * override a stroke's colour and width but not its opacity, so every class
- * draws with the first class's).
+ * layers, geometric effects, and stroke transparency a class cannot draw with
+ * (a rule can override a stroke's colour and width but not its opacity, so
+ * every outline and line draws at the layer's one shared stroke opacity).
  */
 function partialIssues(renderer: CimObject, looks: SymbolLook[]): CimRendererIssue[] {
   const issues: CimRendererIssue[] = [];
@@ -605,7 +607,10 @@ function symbolLook(reference: unknown): SymbolLook | null {
   // Geometric effects (dashes, offsets, buffers and so on) change the shape
   // that is drawn, which a flat style cannot reproduce, so they are reported.
   const symbol = objectValue(objectValue(reference)?.symbol);
-  const effect = [symbol, ...enabledLayers(symbol)]
+  const layers = enabledLayers(symbol);
+  // A marker's own graphics can carry effects too.
+  const graphics = layers.flatMap(markerGraphicSymbols);
+  const effect = [symbol, ...layers, ...graphics, ...graphics.flatMap(enabledLayers)]
     .flatMap((owner) => arrayValue(owner?.effects).filter(isObject))
     .map((effectObject) => stringValue(effectObject.type) || "geometric effect")[0];
   return effect ? { ...look, effect } : look;
@@ -655,25 +660,26 @@ function flatSymbolLook(reference: unknown): SymbolLook | null {
   if (type === "CIMPointSymbol") {
     const marker = layers.find((layer) => /Marker$/.test(stringValue(layer.type)));
     if (!marker) return null;
-    const graphics = [
-      ...arrayValue(marker.markerGraphics)
-        .filter(isObject)
-        .map((graphic) => graphic.symbol),
-      // A character marker draws its glyph with a polygon symbol.
-      marker.symbol,
-    ];
-    const graphicLayers = graphics.flatMap((graphic) => enabledLayers(objectValue(graphic)));
+    // The circle takes its fill and outline from the marker's first graphic
+    // that draws anything; each graphic is inspected on its own, so a second
+    // graphic is reported even when its layer types differ from the first's.
+    const drawing = markerGraphicSymbols(marker).filter(
+      (graphic) => enabledLayers(graphic).length > 0,
+    );
+    const graphicLayers = enabledLayers(drawing[0]);
     const fill = cimColor(marker.color) ?? solidColor(graphicLayers, "CIMSolidFill");
     if (!fill) return null;
     const stroke = solidStroke(graphicLayers);
     const size = numberValue(marker.size);
     // Anything beyond the marker's one fill and outline is not drawn: another
-    // outer layer, or a hatch or second graphic inside the marker.
+    // outer layer, a second graphic, or a hatch inside the drawn graphic.
     const outer = layers.find((layer) => layer !== marker)?.type;
     const dropped =
       typeof outer === "string"
         ? outer
-        : droppedLayer(graphicLayers, ["CIMSolidFill", "CIMSolidStroke"]);
+        : drawing.length > 1
+          ? "CIMMarkerGraphic"
+          : droppedLayer(graphicLayers, ["CIMSolidFill", "CIMSolidStroke"]);
     return {
       geometry: "point",
       color: fill.hex,
@@ -686,6 +692,20 @@ function flatSymbolLook(reference: unknown): SymbolLook | null {
     };
   }
   return null;
+}
+
+/**
+ * The symbols a marker draws with: each vector marker graphic's symbol, and a
+ * character marker's glyph symbol. Empty for any other symbol layer.
+ */
+function markerGraphicSymbols(layer: CimObject): CimObject[] {
+  if (!/Marker$/.test(stringValue(layer.type))) return [];
+  return [
+    ...arrayValue(layer.markerGraphics)
+      .filter(isObject)
+      .map((graphic) => objectValue(graphic.symbol)),
+    objectValue(layer.symbol),
+  ].filter((graphic): graphic is CimObject => graphic !== undefined);
 }
 
 /** The symbol type an untyped symbol's layers imply. */
