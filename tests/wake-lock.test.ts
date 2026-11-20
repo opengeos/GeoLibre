@@ -96,8 +96,7 @@ describe("createWakeLockController", () => {
     const invokeVisibility = visibilityListener as (() => void) | null;
     assert.ok(invokeVisibility);
     invokeVisibility();
-    await Promise.resolve();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(requestCount, 2);
     assert.equal(states.at(-1), true);
 

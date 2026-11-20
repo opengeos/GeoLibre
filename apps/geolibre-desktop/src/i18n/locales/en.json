@@ -11619,7 +11619,10 @@
       "empty": "No features match the current filter.",
       "zoomToFeature": "Zoom to feature",
       "switchToCards": "Card view",
-      "switchToTable": "Table view"
+      "switchToTable": "Table view",
+      "sortBy": "Sort by",
+      "sortAscending": "Sort ascending",
+      "sortDescending": "Sort descending"
     }
   }
 }

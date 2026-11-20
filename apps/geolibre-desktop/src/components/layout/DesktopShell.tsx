@@ -587,6 +587,7 @@ export function DesktopShell({
       attributePanelVisible={layoutOptions.attributePanelVisible}
       mapControllerRef={mapControllerRef}
       layerRefresh={layerRefresh}
+      mobileShell={mobileShell}
     />
   );
 
@@ -1058,7 +1059,7 @@ export function DesktopShell({
                 api={collaboration}
               />
             )}
-            {touchUi ? <MobileMapOverlays /> : null}
+            {touchUi ? <MobileMapOverlays mapControllerRef={mapControllerRef} /> : null}
           </main>
           {mobileShell && layoutOptions.statusBarVisible ? (
             <MobileStatusPill
