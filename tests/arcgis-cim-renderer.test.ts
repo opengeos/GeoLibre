@@ -493,6 +493,17 @@ describe("CIM symbols and defaults as Pro writes them", () => {
     ]);
   });
 
+  it("refuses a colour channel that is not a number instead of reading it as 0", () => {
+    const broken = translateCimRenderer({
+      type: "CIMSimpleRenderer",
+      symbol: polygonWith([
+        { type: "CIMSolidFill", color: { type: "CIMRGBColor", values: [null, 0, 0, 100] } },
+      ]),
+    });
+    assert.equal(broken.translated, false);
+    assert.equal(broken.style.fillColor, undefined);
+  });
+
   it("reads CIELAB colours", () => {
     const lab = translateCimRenderer({
       type: "CIMSimpleRenderer",

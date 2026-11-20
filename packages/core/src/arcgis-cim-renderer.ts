@@ -123,7 +123,11 @@ export function cimColor(value: unknown): { hex: string; opacity: number } | nul
   const color = objectValue(value);
   if (!color) return null;
   const type = stringValue(color.type);
-  const values = arrayValue(color.values).map(Number);
+  // A non-number channel (null, "", true) is refused rather than coerced:
+  // `Number(null)` is 0, which would read a broken colour as black.
+  const values = arrayValue(color.values).map((channel) =>
+    typeof channel === "number" ? channel : Number.NaN,
+  );
   if (values.some((channel) => !Number.isFinite(channel))) return null;
 
   let rgb: [number, number, number] | null = null;
