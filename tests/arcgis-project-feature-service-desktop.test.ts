@@ -538,6 +538,9 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     // first account's organisation.
     assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "b"), "ZzZzZzZz87654321");
     assert.equal(calls, 3);
+    // Only the portal's latest token is kept, so going back looks up again.
+    assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "a"), "AbCdEfGh12345678");
+    assert.equal(calls, 4);
   });
 
   it("leaves a project opened while the map settles untouched", async () => {

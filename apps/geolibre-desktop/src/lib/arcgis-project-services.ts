@@ -90,10 +90,11 @@ export async function signInForImportedService(
 }
 
 /**
- * The organisation id behind a portal token, looked up once per portal and
- * token and shared by every service in one import. Keyed by the token as well,
- * so the id a service is matched against always belongs to the account whose
- * token it is sent; a renewed or switched session simply looks up again. A
+ * The organisation id behind a portal token, looked up once per token and
+ * shared by every service in one import and their later requests. One entry is
+ * kept per portal, for its latest token: the id a service is matched against
+ * always belongs to the account whose token it is sent, a renewed or switched
+ * session looks up again, and a superseded token is not kept in memory. A
  * failed lookup is not kept, so a transient error does not strip the token
  * from the import's later services.
  *
@@ -103,17 +104,15 @@ export async function signInForImportedService(
 export function cachedOrgIdLookup(
   fetchOrgId: (portal: string, token: string) => Promise<string | undefined>,
 ): (portal: string, token: string) => Promise<string | undefined> {
-  const lookups = new Map<string, Promise<string | undefined>>();
+  const lookups = new Map<string, { token: string; lookup: Promise<string | undefined> }>();
   return (portal, token) => {
-    const key = `${portal}\n${token}`;
-    let lookup = lookups.get(key);
-    if (!lookup) {
-      lookup = fetchOrgId(portal, token).catch(() => {
-        lookups.delete(key);
-        return undefined;
-      });
-      lookups.set(key, lookup);
-    }
+    const cached = lookups.get(portal);
+    if (cached?.token === token) return cached.lookup;
+    const lookup: Promise<string | undefined> = fetchOrgId(portal, token).catch(() => {
+      if (lookups.get(portal)?.lookup === lookup) lookups.delete(portal);
+      return undefined;
+    });
+    lookups.set(portal, { token, lookup });
     return lookup;
   };
 }
