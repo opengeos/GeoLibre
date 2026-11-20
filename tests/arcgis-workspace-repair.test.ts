@@ -24,6 +24,7 @@ import {
   readLocatedArcgisLayers,
   type ArcgisWorkspaceRepairSession,
 } from "../apps/geolibre-desktop/src/lib/arcgis-workspace-repair";
+import { hostedFeatureLayer } from "./helpers/arcgis-aprx-fixtures";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 const PROJECT_PATH = "/Users/analyst/projects/city.mapx";
@@ -81,6 +82,13 @@ const tiled = (name: string): Cim => ({
   name,
   serviceConnection: { url: "https://example.com/MapServer", objectType: "MapServer" },
 });
+/** A hosted feature layer, which joins the store after the project loads. */
+const hosted = (name: string): Cim =>
+  hostedFeatureLayer(
+    name,
+    "https://services.example.com/arcgis/rest/services/City/FeatureServer",
+    "0",
+  );
 const group = (name: string, layerDefinitions: Cim[]): Cim => ({
   type: "CIMGroupLayer",
   name,
@@ -113,7 +121,8 @@ function fakeReader(exists: string[] | ((path: string) => boolean)) {
 
 /**
  * Import a project the way the desktop app does: read its folder-backed
- * layers, load it, add rasters on top and into their group, put everything
+ * layers, load it, add rasters and hosted services on top and into their
+ * group, put everything
  * in ArcGIS Pro's order, and keep what a Locate folder needs.
  */
 async function importAndLoad(
@@ -125,11 +134,11 @@ async function importAndLoad(
   const pending = await loadArcgisFolderLayers(imported, projectPath, fakeReader(exists).read);
   useAppStore.getState().loadProject(imported.project, null);
   const storeIds = new Map(imported.project.layers.map((layer) => [layer.id, layer.id]));
-  for (const raster of imported.rasters) {
-    const id = `${raster.id}-store`;
-    useAppStore.getState().addLayer(geojsonLayer({ id, name: raster.name }));
-    if (raster.groupId) useAppStore.getState().moveLayerToGroup(id, raster.groupId);
-    storeIds.set(raster.id, id);
+  for (const added of [...imported.rasters, ...imported.services]) {
+    const id = `${added.id}-store`;
+    useAppStore.getState().addLayer(geojsonLayer({ id, name: added.name }));
+    if (added.groupId) useAppStore.getState().moveLayerToGroup(id, added.groupId);
+    storeIds.set(added.id, id);
   }
   const order = imported.layerOrder.flatMap((id) => storeIds.get(id) ?? []);
   withoutHistory(() => useAppStore.getState().applyLayerOrder(order));
@@ -587,7 +596,8 @@ describe("ArcGIS Pro workspace repair: Locate folder", () => {
 
   // Each case imports the map twice: once with every file found, and once with
   // `missing` not found and then located. Both must end in the same order and
-  // groups. Rasters join the store after the project loads, as in the app.
+  // groups. Rasters and hosted services join the store after the project loads,
+  // as in the app.
   const placements: {
     name: string;
     layers: Cim[];
@@ -599,6 +609,11 @@ describe("ArcGIS Pro workspace repair: Locate folder", () => {
       name: "below an imported tiled layer",
       layers: [shp("Missing"), tiled("Basemap")],
       missing: ["Missing"],
+    },
+    {
+      name: "between hosted feature layers in a group",
+      layers: [group("G", [hosted("Top"), shp("A"), hosted("Bottom")]), shp("B")],
+      missing: ["A"],
     },
     {
       // Without contiguity, the restored A would sit outside its own group,
@@ -726,7 +741,10 @@ describe("ArcGIS Pro workspace repair: random projects", () => {
     return result;
   }
 
-  /** A random project: nested groups of vector layers from two workspaces and rasters. */
+  /**
+   * A random project: nested groups of vector layers from two workspaces,
+   * rasters and hosted feature layers.
+   */
   function randomProject(random: () => number) {
     let count = 0;
     const workspaces = new Map<string, string>();
@@ -735,6 +753,7 @@ describe("ArcGIS Pro workspace repair: random projects", () => {
         const roll = random();
         if (depth < 3 && roll < 0.3) return group(`G${count++}`, items(depth + 1, 1));
         if (roll < 0.4) return tif(`R${count++}`);
+        if (roll < 0.5) return hosted(`S${count++}`);
         const name = `L${count++}`;
         const workspace = random() < 0.5 ? "C:\\Old" : "D:\\Other";
         workspaces.set(name, workspace);
