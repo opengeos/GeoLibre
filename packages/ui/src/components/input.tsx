@@ -1,10 +1,34 @@
 import * as React from "react";
 import { cn } from "../lib/utils";
 
+/**
+ * Release focus from a number input the mouse wheel is turning.
+ *
+ * Chromium (and so the desktop's WebView2) steps a focused
+ * `<input type="number">` by one `step` per wheel notch. In a scrolling panel
+ * that silently edits the field under the pointer instead of scrolling: after
+ * typing a fill opacity, scrolling down the Style panel lowers it notch by
+ * notch. Blurring before the browser's default action stops the step and lets
+ * the wheel scroll the panel as the user meant. Unfocused inputs are left
+ * alone, since the browser only steps the focused one.
+ *
+ * @param target The input the wheel event was dispatched to.
+ * @param activeElement The document's focused element.
+ * @returns Whether the input was blurred.
+ */
+export function releaseNumberInputOnWheel(
+  target: Pick<HTMLInputElement, "type" | "blur">,
+  activeElement: Element | null,
+): boolean {
+  if (target.type !== "number" || (activeElement as unknown) !== target) return false;
+  target.blur();
+  return true;
+}
+
 export const Input = React.forwardRef<
   HTMLInputElement,
   React.InputHTMLAttributes<HTMLInputElement>
->(({ className, type, ...props }, ref) => (
+>(({ className, type, onWheel, ...props }, ref) => (
   <input
     type={type}
     className={cn(
@@ -12,6 +36,13 @@ export const Input = React.forwardRef<
       className,
     )}
     ref={ref}
+    onWheel={(event) => {
+      onWheel?.(event);
+      releaseNumberInputOnWheel(
+        event.currentTarget,
+        event.currentTarget.ownerDocument.activeElement,
+      );
+    }}
     {...props}
   />
 ));
