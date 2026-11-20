@@ -398,6 +398,7 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
             </Button>
             {projectFiles.embedVectorDataPrompt?.hasGeometryEdits &&
             projectFiles.embedVectorDataPrompt?.allowFileReferences &&
+            projectFiles.embedVectorDataPrompt?.allowExportData &&
             (projectFiles.embedVectorDataPrompt?.exportableEditedCount ?? 0) > 0 ? (
               <Button
                 variant="outline"
@@ -408,9 +409,11 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
             ) : null}
             {projectFiles.embedVectorDataPrompt?.hasGeometryEdits &&
             !projectFiles.embedVectorDataPrompt?.allowFileReferences &&
+            projectFiles.embedVectorDataPrompt?.allowExportData &&
             (projectFiles.embedVectorDataPrompt?.exportableEditedCount ?? 0) > 0 ? (
               <Button
                 variant="outline"
+                disabled={projectFiles.exportingEditedCopiesZip}
                 onClick={() =>
                   void projectFiles.handleExportEditedCopiesZip(
                     projectFiles.embedVectorDataPrompt?.editedExportableLayerIds ?? [],

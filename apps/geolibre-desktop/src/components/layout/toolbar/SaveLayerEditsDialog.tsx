@@ -7,7 +7,7 @@
  * (Save copies to folder on desktop, or Export layers as GeoJSON ZIP).
  */
 
-import { useAppStore } from "@geolibre/core";
+import { useAppCapability, useAppStore } from "@geolibre/core";
 import { getGeometryEditTargetLayerId, subscribeGeometryEdit } from "@geolibre/plugins";
 import {
   Button,
@@ -58,12 +58,15 @@ function disabledReasonKey(
 ):
   | "toolbar.saveLayerEdits.disabledGeometryEdit"
   | "toolbar.saveLayerEdits.disabledMssqlRefresh"
+  | "toolbar.saveLayerEdits.disabledPostgisRefresh"
   | "toolbar.saveLayerEdits.disabledReadOnly" {
   switch (reason) {
     case "geometryEditActive":
       return "toolbar.saveLayerEdits.disabledGeometryEdit";
     case "mssqlRefreshRequired":
       return "toolbar.saveLayerEdits.disabledMssqlRefresh";
+    case "postgisRefreshRequired":
+      return "toolbar.saveLayerEdits.disabledPostgisRefresh";
     case "readOnlyCollaboration":
       return "toolbar.saveLayerEdits.disabledReadOnly";
   }
@@ -79,8 +82,12 @@ export function SaveLayerEditsDialog({
 }: SaveLayerEditsDialogProps) {
   const { t } = useTranslation();
   const layers = useAppStore((s) => s.layers);
+  const projectGeneration = useAppStore((s) => s.projectGeneration);
   const collaboration = useAppStore((s) => s.collaboration);
   const attributeTableDrafts = useAppStore((s) => s.ui.attributeTableDrafts);
+  const deploymentAllowsExportData = useAppStore((s) => s.deploymentCapabilities.has("export:data"));
+  const exportDataCapability = useAppCapability("export:data");
+  const canExportData = deploymentAllowsExportData && exportDataCapability.granted;
   const geometryEditLayerId = useSyncExternalStore(
     subscribeGeometryEdit,
     getGeometryEditTargetLayerId,
@@ -93,8 +100,16 @@ export function SaveLayerEditsDialog({
         collaboration,
         geometryEditLayerId,
         attributeTableDrafts,
+        projectGeneration,
       }),
-    [attributeTableDrafts, candidatesOverride, collaboration, geometryEditLayerId, layers],
+    [
+      attributeTableDrafts,
+      candidatesOverride,
+      collaboration,
+      geometryEditLayerId,
+      layers,
+      projectGeneration,
+    ],
   );
 
   const exportableGeojsonCount = useMemo(
@@ -116,11 +131,13 @@ export function SaveLayerEditsDialog({
   const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
   const [resultsById, setResultsById] = useState<Record<string, BatchLayerSaveItemResult>>({});
   const [hasCompletedRun, setHasCompletedRun] = useState(false);
+  const runIdRef = useRef(0);
   const selectAllRef = useRef<HTMLInputElement>(null);
 
   // Reset selection and per-row statuses whenever the dialog opens fresh.
   useEffect(() => {
     if (!open) return;
+    runIdRef.current += 1;
     setSelectedIds(new Set(defaultSelectedWritableLayerIds(candidates)));
     setSaving(false);
     setActiveLayerId(null);
@@ -163,31 +180,45 @@ export function SaveLayerEditsDialog({
 
   const handleSave = async () => {
     if (saving || selectedEnabledIds.length === 0) return;
+    const runId = runIdRef.current + 1;
+    runIdRef.current = runId;
+    const isCurrentRun = () => runIdRef.current === runId;
     setSaving(true);
     setResultsById({});
     setActiveLayerId(null);
     setHasCompletedRun(false);
     try {
       const outcome = await onSaveSelected(selectedEnabledIds, {
-        onLayerStart: (layerId) => setActiveLayerId(layerId),
+        onLayerStart: (layerId) => {
+          if (isCurrentRun()) setActiveLayerId(layerId);
+        },
         onLayerDone: (result) => {
+          if (!isCurrentRun()) return;
           setActiveLayerId((current) => (current === result.layerId ? null : current));
           setResultsById((current) => ({ ...current, [result.layerId]: result }));
         },
       });
+      if (!isCurrentRun()) return;
       setActiveLayerId(null);
       setHasCompletedRun(true);
       if (!outcome.hasIssues && !outcome.aborted) {
         onOpenChange(false);
       }
     } finally {
-      setSaving(false);
-      setActiveLayerId(null);
+      if (isCurrentRun()) {
+        setSaving(false);
+        setActiveLayerId(null);
+      }
     }
   };
 
   const canSaveCopiesToFolder =
-    isTauri() && !IS_MAS_BUILD && Boolean(onSaveCopiesToFolder) && exportableGeojsonCount > 0;
+    canExportData &&
+    isTauri() &&
+    !IS_MAS_BUILD &&
+    Boolean(onSaveCopiesToFolder) &&
+    exportableGeojsonCount > 0;
+  const canExportZip = canExportData && exportableGeojsonCount > 0;
   const showSelectEditedButton =
     editedEnabledIds.length > 0 && editedEnabledIds.length < enabledIds.length;
 
@@ -215,7 +246,7 @@ export function SaveLayerEditsDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               {t("common.close")}
             </Button>
-            {exportableGeojsonCount > 0 && (
+            {canExportZip && (
               <Button
                 onClick={() => {
                   onOpenChange(false);
@@ -359,16 +390,18 @@ export function SaveLayerEditsDialog({
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={saving || selectedEnabledIds.length === 0}
+                    disabled={saving}
                     onClick={() => {
-                      void onSaveCopiesToFolder(new Set(selectedEnabledIds));
+                      const ids =
+                        selectedEnabledIds.length > 0 ? new Set(selectedEnabledIds) : undefined;
+                      void onSaveCopiesToFolder(ids);
                     }}
                   >
                     <FolderOutput className="me-1.5 h-3.5 w-3.5" />
                     {t("toolbar.saveLayerEdits.saveCopiesToFolder")}
                   </Button>
                 )}
-                {exportableGeojsonCount > 0 && (
+                {canExportZip && (
                   <Button
                     type="button"
                     variant="outline"

@@ -139,6 +139,15 @@ export async function writeTextFileToPath(path: string, content: string): Promis
 }
 
 /**
+ * Atomically create a brand-new local text file, failing if a file already
+ * exists at `path`. Used when saving external layer copies so a copy never
+ * silently overwrites an existing source file.
+ */
+export async function writeNewTextFileToPath(path: string, content: string): Promise<void> {
+  await writeTextFile(path, content, { createNew: true });
+}
+
+/**
  * Overwrite an existing local GeoJSON source file with an edited layer, for
  * Layer actions > Save edits to source file (GeoLibre#2439). Desktop only.
  *

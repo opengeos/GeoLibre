@@ -9,6 +9,7 @@ import {
   excludeHiddenFieldsFromGeojson,
   resolveLayerCapabilities,
   useAppStore,
+  type AppState,
   type GeoLibreLayer,
 } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
@@ -33,17 +34,33 @@ export interface CollectedGeojsonExport {
   blockedDraftLayers: string[];
   /** Layer names skipped because their feature data could not be resolved. */
   skippedLayers: string[];
+  /** True when collection stopped early because the project changed mid-run. */
+  aborted: boolean;
 }
 
 /** Injectable dependencies for {@link collectGeojsonLayersForExport} (unit tests). */
 export interface CollectGeojsonExportDeps {
   commitDrafts?: (layerId: string) => PendingAttributeDraftsResult;
   readLatestLayer?: (layerId: string) => GeoLibreLayer | undefined;
+  readProjectGeneration?: () => number;
   resolveGeojson?: (
     layer: GeoLibreLayer,
     map: MapLibreMap | undefined,
   ) => Promise<FeatureCollection | null>;
   materializeEmbeddable?: (layers: GeoLibreLayer[]) => Promise<Map<string, FeatureCollection>>;
+}
+
+/**
+ * Whether the active deployment and session role both permit exporting data
+ * out of the application (`export:data`).
+ */
+export function isExportDataAllowed(
+  state: Pick<AppState, "deploymentCapabilities" | "capabilities"> = useAppStore.getState(),
+): boolean {
+  return (
+    state.deploymentCapabilities.has("export:data") &&
+    state.capabilities.privileges.includes("export:data")
+  );
 }
 
 /**
@@ -106,6 +123,8 @@ export async function collectGeojsonLayersForExport(
   map: MapLibreMap | undefined,
   options?: {
     layerIds?: ReadonlySet<string>;
+    projectGeneration?: number;
+    isCancelled?: () => boolean;
     deps?: CollectGeojsonExportDeps;
   },
 ): Promise<CollectedGeojsonExport> {
@@ -114,8 +133,14 @@ export async function collectGeojsonLayersForExport(
     options?.deps?.readLatestLayer ??
     ((layerId: string) =>
       useAppStore.getState().layers.find((candidate) => candidate.id === layerId));
+  const readProjectGeneration =
+    options?.deps?.readProjectGeneration ?? (() => useAppStore.getState().projectGeneration);
   const resolveGeojson = options?.deps?.resolveGeojson ?? resolveLayerGeojson;
   const materializeEmbeddable = options?.deps?.materializeEmbeddable;
+  const isStale = () =>
+    Boolean(options?.isCancelled?.()) ||
+    (options?.projectGeneration !== undefined &&
+      readProjectGeneration() !== options.projectGeneration);
 
   const eligible = layers.filter(
     (layer) =>
@@ -127,40 +152,69 @@ export async function collectGeojsonLayersForExport(
   const skippedLayers: string[] = [];
 
   for (const layer of eligible) {
+    if (isStale()) return { items, blockedDraftLayers, skippedLayers, aborted: true };
+
+    // Validate the live layer before committing its drafts so a layer removed
+    // or stripped of export permission while an earlier layer loaded is skipped.
+    const liveBeforeCommit = readLatestLayer(layer.id);
+    if (!liveBeforeCommit || !isExportableGeojsonLayer(liveBeforeCommit)) continue;
+
     if (commitDrafts(layer.id) === "blocked") {
-      blockedDraftLayers.push(layer.name);
+      blockedDraftLayers.push(liveBeforeCommit.name);
       continue;
     }
-    const current = readLatestLayer(layer.id) ?? layer;
-    let geojson = await resolveGeojson(current, map);
+    if (isStale()) return { items, blockedDraftLayers, skippedLayers, aborted: true };
+
+    const current = readLatestLayer(layer.id);
+    if (!current || !isExportableGeojsonLayer(current)) continue;
+
+    let geojson: FeatureCollection | null = null;
+    try {
+      geojson = await resolveGeojson(current, map);
+    } catch {
+      geojson = null;
+    }
+    if (isStale()) return { items, blockedDraftLayers, skippedLayers, aborted: true };
+
     if (!geojson) {
-      if (materializeEmbeddable) {
-        const materialized = await materializeEmbeddable([current]);
-        geojson = materialized.get(current.id) ?? null;
-      } else {
-        const { isEmbeddableLocalVectorLayer, materializeEmbeddableVectorLayers } =
-          await import("@geolibre/plugins");
-        if (isEmbeddableLocalVectorLayer(current)) {
-          const materialized = await materializeEmbeddableVectorLayers([current]);
+      try {
+        if (materializeEmbeddable) {
+          const materialized = await materializeEmbeddable([current]);
           geojson = materialized.get(current.id) ?? null;
+        } else {
+          const { isEmbeddableLocalVectorLayer, materializeEmbeddableVectorLayers } =
+            await import("@geolibre/plugins");
+          if (isEmbeddableLocalVectorLayer(current)) {
+            const materialized = await materializeEmbeddableVectorLayers([current]);
+            geojson = materialized.get(current.id) ?? null;
+          }
         }
+      } catch {
+        geojson = null;
       }
     }
+    if (isStale()) return { items, blockedDraftLayers, skippedLayers, aborted: true };
+
+    // Revalidate live permission after async resolution before emitting data.
+    const liveAfterResolve = readLatestLayer(layer.id);
+    if (!liveAfterResolve || !isExportableGeojsonLayer(liveAfterResolve)) continue;
+
     if (!geojson) {
-      skippedLayers.push(current.name);
+      skippedLayers.push(liveAfterResolve.name);
       continue;
     }
-    const egressGeojson = current.fieldVisibility
-      ? excludeHiddenFieldsFromGeojson(geojson, current.fieldVisibility)
+    const egressGeojson = liveAfterResolve.fieldVisibility
+      ? excludeHiddenFieldsFromGeojson(geojson, liveAfterResolve.fieldVisibility)
       : geojson;
     items.push({
-      layer: current,
-      fileName: fileNames.get(layer.id) ?? `${sanitizeExportFileName(current.name)}.geojson`,
+      layer: liveAfterResolve,
+      fileName:
+        fileNames.get(layer.id) ?? `${sanitizeExportFileName(liveAfterResolve.name)}.geojson`,
       geojson: egressGeojson,
     });
   }
 
-  return { items, blockedDraftLayers, skippedLayers };
+  return { items, blockedDraftLayers, skippedLayers, aborted: false };
 }
 
 /**

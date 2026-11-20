@@ -72,6 +72,7 @@ import {
   buildGeojsonZipArchive,
   buildProjectGeojsonZipSlug,
   collectGeojsonLayersForExport,
+  isExportDataAllowed,
   isExportableGeojsonLayer,
 } from "../lib/geojson-zip-export";
 import { pickLayerStylesFile } from "../lib/layer-style-files";
@@ -210,6 +211,8 @@ export interface EmbedVectorDataPrompt {
   desktop: boolean;
   /** Whether the host can persist a path-only project that survives relaunch. */
   allowFileReferences: boolean;
+  /** Whether the deployment and session role permit exporting layer data. */
+  allowExportData: boolean;
   /** Project generation that opened the prompt. */
   projectGeneration: number;
   resolve: (choice: EmbedVectorDataPromptChoice) => void;
@@ -402,6 +405,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
   const [saveLayerEditsDialogOpen, setSaveLayerEditsDialogOpen] = useState(false);
+  const [exportingEditedCopiesZip, setExportingEditedCopiesZip] = useState(false);
+  const isExportingEditedCopiesZipRef = useRef(false);
   const [credentialStripPrompt, setCredentialStripPrompt] = useState<CredentialStripPrompt | null>(
     null,
   );
@@ -510,7 +515,6 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       setDroppedProjectPrompt(null);
       setDroppedProjectSaving(false);
     }
-    setSaveLayerEditsDialogOpen(false);
   }, [
     credentialStripPrompt,
     droppedProjectPrompt,
@@ -523,6 +527,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     settleRemoteSignInPrompt,
     settleSaveNamePrompt,
   ]);
+
+  // Close the Save Layer Edits dialog only when the loaded project itself
+  // switches, not when unrelated prompts (e.g. a dropped-project confirmation)
+  // appear over the same workspace.
+  useLayoutEffect(() => {
+    setSaveLayerEditsDialogOpen(false);
+  }, [projectGeneration]);
 
   // On Android a project lives behind a `content://` URI whose read grant dies
   // with the process, so the startup restore has nothing to reopen on the next
@@ -1289,6 +1300,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         bytes,
         desktop,
         allowFileReferences: canSaveVectorFileReferences(desktop, IS_MAS_BUILD),
+        allowExportData: isExportDataAllowed(),
         projectGeneration: promptProjectGeneration,
         resolve,
       });
@@ -1409,6 +1421,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       collaboration: state.collaboration,
       geometryEditLayerId: getGeometryEditTargetLayerId(),
       attributeTableDrafts: state.ui.attributeTableDrafts,
+      projectGeneration: state.projectGeneration,
     }).filter((candidate) => !candidate.disabledReason);
     const editedExportableLayerIds = editedLayers
       .filter(isExportableGeojsonLayer)
@@ -1438,6 +1451,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         collaboration: liveState.collaboration,
         geometryEditLayerId: getGeometryEditTargetLayerId(),
         attributeTableDrafts: liveState.ui.attributeTableDrafts,
+        projectGeneration: state.projectGeneration,
       })
         .filter((candidate) => !candidate.disabledReason)
         .map((candidate) => candidate.layer);
@@ -1457,11 +1471,23 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         setActionError(t("toolbar.error.saveLayerEditsFailed", { count: summary.failed, details }));
         return "cancel";
       }
-      const savedCount = summary.succeeded + summary.warnings;
-      if (savedCount > 0) {
-        notify.success(t("toolbar.item.saveLayerEditsSuccess", { count: savedCount }), {
+      if (summary.succeeded > 0) {
+        notify.success(t("toolbar.item.saveLayerEditsSuccess", { count: summary.succeeded }), {
           dedupeKey: "save-layer-edits",
         });
+      }
+      if (summary.warnings > 0) {
+        const warningDetails = summary.results
+          .filter((item) => item.status === "warning")
+          .map((item) => `${item.layerName}: ${item.message}`)
+          .join("; ");
+        notify.warning(
+          t("toolbar.item.saveLayerEditsWarnings", {
+            count: summary.warnings,
+            details: warningDetails,
+          }),
+          { dedupeKey: "save-layer-edits-warnings" },
+        );
       }
       const layers = useAppStore.getState().layers.map((layer) => {
         if (hasEditedGeometry(layer)) return embedEditedGeometry(layer);
@@ -1478,6 +1504,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
 
     if (requestedChoice === "save-copies") {
+      if (!isExportDataAllowed()) return "cancel";
       const directory = await pickLocalDirectory();
       if (!directory || useAppStore.getState().projectGeneration !== state.projectGeneration) {
         return "cancel";
@@ -1487,8 +1514,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       const copyResult = await saveGeojsonCopiesToDirectory(liveLayers, directory, {
         map: mapControllerRef.current?.getMap() ?? undefined,
         layerIds: liveEditedIds,
+        projectGeneration: state.projectGeneration,
       });
-      if (useAppStore.getState().projectGeneration !== state.projectGeneration) return "cancel";
+      if (copyResult.aborted || useAppStore.getState().projectGeneration !== state.projectGeneration) {
+        return "cancel";
+      }
       if (
         copyResult.errors.length > 0 ||
         copyResult.blockedDraftLayers.length > 0 ||
@@ -1508,17 +1538,30 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         setActionError(details || t("toolbar.error.couldNotSaveLayerCopies"));
         return "cancel";
       }
-      const writtenByLayerId = new Map(copyResult.written.map((item) => [item.layerId, item.path]));
-      // Point live plain-GeoJSON layers at their newly written external copies
-      // so future saves reference them too.
-      const updatedLive = applyExternalCopyReferences(
-        useAppStore.getState().layers,
-        writtenByLayerId,
+      const writtenByLayerId = new Map(
+        copyResult.written.map((item) => [
+          item.layerId,
+          { path: item.path, capturedGeojson: item.capturedGeojson },
+        ]),
       );
+      // Point live plain-GeoJSON layers at their newly written external copies
+      // only when their live geometry revision still matches what was written.
+      const currentLiveLayers = useAppStore.getState().layers;
+      const updatedLive = applyExternalCopyReferences(currentLiveLayers, writtenByLayerId);
+      const repointedIds = new Set<string>();
       useAppStore.setState({
-        layers: useAppStore.getState().layers.map((layer) => {
-          const next = updatedLive.find((candidate) => candidate.id === layer.id);
-          if (!next || !writtenByLayerId.has(layer.id)) return layer;
+        layers: currentLiveLayers.map((layer, index) => {
+          const next = updatedLive[index];
+          const target = writtenByLayerId.get(layer.id);
+          if (
+            !next ||
+            !target ||
+            next.sourcePath !== target.path ||
+            next.metadata.localFileReloadable !== true
+          ) {
+            return layer;
+          }
+          repointedIds.add(layer.id);
           return {
             ...layer,
             sourcePath: next.sourcePath,
@@ -1530,7 +1573,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         dedupeKey: "save-layer-copies",
       });
       const layers = updatedLive.map((layer) => {
-        if (isReloadableLocalFileLayer(layer)) {
+        if (
+          !liveEditedIds.has(layer.id) &&
+          !repointedIds.has(layer.id) &&
+          isReloadableLocalFileLayer(layer)
+        ) {
           return { ...layer, metadata: { ...layer.metadata, localFileReloadable: true } };
         }
         const collection = embeddable.get(layer.id);
@@ -2371,13 +2418,19 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     layerIds?: ReadonlySet<string>;
     skipNamePrompt?: boolean;
   }): Promise<boolean> => {
+    if (!isExportDataAllowed()) return false;
     const exportProjectGeneration = useAppStore.getState().projectGeneration;
     const collected = await collectGeojsonLayersForExport(
       useAppStore.getState().layers,
       mapControllerRef.current?.getMap() ?? undefined,
-      { layerIds: options?.layerIds },
+      { layerIds: options?.layerIds, projectGeneration: exportProjectGeneration },
     );
-    if (useAppStore.getState().projectGeneration !== exportProjectGeneration) return false;
+    if (
+      collected.aborted ||
+      useAppStore.getState().projectGeneration !== exportProjectGeneration
+    ) {
+      return false;
+    }
     if (collected.items.length === 0) {
       setActionError(
         collected.blockedDraftLayers.length > 0
@@ -2407,6 +2460,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
     if (useAppStore.getState().projectGeneration !== exportProjectGeneration) return false;
     const archive = await buildGeojsonZipArchive(collected.items);
+    if (useAppStore.getState().projectGeneration !== exportProjectGeneration) return false;
     const savedPath = await saveBinaryFileWithFallback(archive, {
       defaultName,
       filters: [{ name: t("toolbar.item.geojsonZipFile"), extensions: ["zip"] }],
@@ -2445,7 +2499,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
 
   // Export all (or selected) GeoJSON vector layers in one `.zip` archive.
   const handleExportGeojsonZip = async (layerIds?: ReadonlySet<string>): Promise<boolean> => {
-    if (isSavingRef.current) return false;
+    if (!isExportDataAllowed() || isSavingRef.current) return false;
     isSavingRef.current = true;
     try {
       return await runExportGeojsonZip({ layerIds });
@@ -2460,8 +2514,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   };
 
   // Triggered from inside the Save Project embed prompt on web hosts, where
-  // `isSavingRef` is already held by `saveProject`.
+  // `isSavingRef` is already held by `saveProject`. Uses its own in-flight
+  // guard so repeated clicks cannot launch overlapping exports.
   const handleExportEditedCopiesZip = async (layerIds: string[]): Promise<boolean> => {
+    if (!isExportDataAllowed() || isExportingEditedCopiesZipRef.current) return false;
+    isExportingEditedCopiesZipRef.current = true;
+    setExportingEditedCopiesZip(true);
     try {
       return await runExportGeojsonZip({
         layerIds: new Set(layerIds),
@@ -2472,6 +2530,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         error instanceof Error ? error.message : t("toolbar.error.couldNotExportGeojsonZip"),
       );
       return false;
+    } finally {
+      isExportingEditedCopiesZipRef.current = false;
+      setExportingEditedCopiesZip(false);
     }
   };
 
@@ -2506,15 +2567,19 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const handleSaveLayerCopiesToFolder = async (
     layerIds?: ReadonlySet<string>,
   ): Promise<boolean> => {
+    if (!isExportDataAllowed()) return false;
     const startGeneration = useAppStore.getState().projectGeneration;
-    const directory = await pickLocalDirectory();
-    if (!directory || useAppStore.getState().projectGeneration !== startGeneration) return false;
     try {
+      const directory = await pickLocalDirectory();
+      if (!directory || useAppStore.getState().projectGeneration !== startGeneration) return false;
       const result = await saveGeojsonCopiesToDirectory(useAppStore.getState().layers, directory, {
         map: mapControllerRef.current?.getMap() ?? undefined,
         layerIds,
+        projectGeneration: startGeneration,
       });
-      if (useAppStore.getState().projectGeneration !== startGeneration) return false;
+      if (result.aborted || useAppStore.getState().projectGeneration !== startGeneration) {
+        return false;
+      }
       if (result.written.length > 0) {
         notify.success(t("toolbar.item.saveCopiesWritten", { count: result.written.length }), {
           dedupeKey: "save-layer-copies",
@@ -2667,6 +2732,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     handleExportLayers,
     handleExportGeojsonZip,
     handleExportEditedCopiesZip,
+    exportingEditedCopiesZip,
     saveLayerEditsDialogOpen,
     setSaveLayerEditsDialogOpen,
     handleSaveSelectedLayerEdits,

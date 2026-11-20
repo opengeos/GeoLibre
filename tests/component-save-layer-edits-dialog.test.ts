@@ -157,4 +157,21 @@ describe("SaveLayerEditsDialog", () => {
     fireEvent.click(zipBtn);
     assert.equal(zipTriggered, true);
   });
+
+  it("hides ZIP export when export:data is withheld", () => {
+    useAppStore.setState({ layers: [makeLayer("a", "Cities")] });
+    useAppStore.getState().setDeploymentCapabilities(["project:edit"]);
+
+    render(
+      createElement(SaveLayerEditsDialog, {
+        open: true,
+        onOpenChange: () => {},
+        candidatesOverride: [],
+        onSaveSelected: async () => ({ hasIssues: false, aborted: false }),
+        onExportGeojsonZip: async () => true,
+      }),
+    );
+
+    assert.equal(screen.queryByRole("button", { name: "Export layers as GeoJSON ZIP…" }), null);
+  });
 });

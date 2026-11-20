@@ -1,4 +1,5 @@
 import {
+  arcGISLayerHasPendingEdits,
   isArcGISWritableLayer,
   saveArcGISLayerEdits,
   getTemporalLayerAdapter,
@@ -45,7 +46,13 @@ import {
   writeVectorToSource,
 } from "@geolibre/processing";
 import { commitPendingAttributeDrafts } from "../../../lib/attribute-draft-commit";
-import { clearLayerGeometryEditedFlag } from "../../../lib/batch-layer-save";
+import {
+  clearLayerGeometryEditedFlag,
+  clearPostgisWritebackRefreshRequired,
+  isPostgisWritebackRefreshRequired,
+  markPostgisWritebackRefreshRequired,
+  sharedSavingMssqlEditsIds,
+} from "../../../lib/batch-layer-save";
 import { bindTemporalLayer, createAppAPI, usePluginRegistry } from "../../../hooks/usePlugins";
 import {
   bufferPresetsFor,
@@ -137,7 +144,6 @@ export function useLayerActions({
   // Layer ids with a Save to My Data in flight, so a repeat click during the
   // vector-control materialize cannot create a duplicate library entry.
   const savingToLibraryIdsRef = useRef(new Set<string>());
-  const savingMssqlEditsIdsRef = useRef(new Set<string>());
   const lidarExportsInFlightRef = useRef(new Set<string>());
 
   // Quick analysis (#1523): run an existing vector tool over a whole layer from
@@ -779,6 +785,21 @@ export function useLayerActions({
       ) {
         return;
       }
+      if (
+        currentLayer &&
+        isPostgisEditableLayer(currentLayer) &&
+        isPostgisWritebackRefreshRequired(currentLayer, requestProjectGeneration)
+      ) {
+        setRefreshStatuses((current) => ({
+          ...current,
+          [clickedLayer.id]: {
+            type: "error",
+            message: t("layers.saveEditsPostgisRefreshWarning"),
+          },
+        }));
+        scheduleStatusClear(clickedLayer.id);
+        return;
+      }
       clearRefreshStatusTimer(clickedLayer.id);
       const layer = commitTableDrafts(clickedLayer);
       if (!layer) return;
@@ -805,7 +826,7 @@ export function useLayerActions({
       try {
         if (isArcGISWritableLayer(layer)) {
           const result = await saveArcGISLayerEdits(layer.id);
-          if (result.errors.length === 0) {
+          if (result.errors.length === 0 && !arcGISLayerHasPendingEdits(layer.id)) {
             clearLayerGeometryEditedFlag(layer.id, requestProjectGeneration);
           }
           setRefreshStatuses((current) => ({
@@ -853,7 +874,7 @@ export function useLayerActions({
           const outcome = await writeMssqlAndRefresh(
             {
               layerId: layer.id,
-              inFlightLayerIds: savingMssqlEditsIdsRef.current,
+              inFlightLayerIds: sharedSavingMssqlEditsIds,
               refreshRequired:
                 useAppStore.getState().layers.find((current) => current.id === layer.id)
                   ?.mssqlWritebackPending === true,
@@ -1035,6 +1056,7 @@ export function useLayerActions({
             // The write committed; only the refresh failed. Reporting this as
             // a plain failure would invite a retry that re-inserts the still
             // key-less new features, so surface a distinct warning instead.
+            markPostgisWritebackRefreshRequired(layer, requestProjectGeneration);
             setRefreshStatuses((current) => ({
               ...current,
               [layer.id]: {
@@ -1045,6 +1067,7 @@ export function useLayerActions({
             scheduleStatusClear(layer.id);
             return;
           }
+          clearPostgisWritebackRefreshRequired(layer.id, requestProjectGeneration);
           // Merge into the store's current metadata, not the click-time
           // closure: the write/re-read round trip is slow enough for other
           // updates (auto-refresh, time-slider binding) to land in between.
@@ -1079,7 +1102,7 @@ export function useLayerActions({
           // itself instead of depending on a sidecar that may not be running
           // (#2439: the save failed and the file kept its old values).
           await writeLocalGeojsonFile(path, geojson);
-          clearLayerGeometryEditedFlag(layer.id, requestProjectGeneration);
+          clearLayerGeometryEditedFlag(layer.id, requestProjectGeneration, geojson);
           message = t("layers.saveEditsSuccess", { count: geojson.features.length });
         } else {
           // GeoPackage write-back needs GeoPandas in the sidecar. The desktop
@@ -1087,7 +1110,7 @@ export function useLayerActions({
           // the web build reaches its own through the /sidecar proxy.
           if (isTauri()) await startGeoLibreSidecar();
           const result = await writeVectorToSource({ path, geojson });
-          clearLayerGeometryEditedFlag(layer.id, requestProjectGeneration);
+          clearLayerGeometryEditedFlag(layer.id, requestProjectGeneration, geojson);
           message = t("layers.saveEditsSuccess", {
             count: result.feature_count,
           });

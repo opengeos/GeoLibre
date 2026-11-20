@@ -140,6 +140,68 @@ describe("collectGeojsonLayersForExport", () => {
       ["cities"],
     );
   });
+
+  it("stops before committing drafts after a project switch, rechecks live export permission, and tolerates per-layer read failures", async () => {
+    const a = makeGeojsonLayer("a", "A");
+    const b = makeGeojsonLayer("b", "B");
+    const c = makeGeojsonLayer("c", "C");
+    const committed: string[] = [];
+    let bRevoked = false;
+
+    const mixed = await collectGeojsonLayersForExport([a, b, c], undefined, {
+      projectGeneration: 1,
+      deps: {
+        readProjectGeneration: () => 1,
+        commitDrafts: (id) => {
+          committed.push(id);
+          return "none";
+        },
+        readLatestLayer: (id) => {
+          if (id === "b" && bRevoked) return { ...b, capabilities: { export: false } };
+          return [a, b, c].find((l) => l.id === id);
+        },
+        resolveGeojson: async (layer) => {
+          if (layer.id === "a") {
+            bRevoked = true;
+            throw new Error("source getData failed");
+          }
+          return layer.geojson ?? null;
+        },
+        materializeEmbeddable: async () => new Map(),
+      },
+    });
+
+    assert.equal(mixed.aborted, false);
+    assert.deepEqual(mixed.skippedLayers, ["A"]);
+    // B had export revoked while A was loading, so its drafts were never committed and it was excluded.
+    assert.deepEqual(committed, ["a", "c"]);
+    assert.deepEqual(
+      mixed.items.map((item) => item.layer.id),
+      ["c"],
+    );
+
+    // Project switch stops before committing the next layer's drafts.
+    let gen = 1;
+    const committedAfterSwitch: string[] = [];
+    const abortedRun = await collectGeojsonLayersForExport([a, b], undefined, {
+      projectGeneration: 1,
+      deps: {
+        readProjectGeneration: () => gen,
+        commitDrafts: (id) => {
+          committedAfterSwitch.push(id);
+          return "none";
+        },
+        readLatestLayer: (id) => [a, b].find((l) => l.id === id),
+        resolveGeojson: async (layer) => {
+          gen = 2;
+          return layer.geojson ?? null;
+        },
+      },
+    });
+    assert.equal(abortedRun.aborted, true);
+    assert.deepEqual(committedAfterSwitch, ["a"]);
+    assert.deepEqual(abortedRun.items, []);
+  });
 });
 
 describe("buildGeojsonZipArchive", () => {

@@ -13,7 +13,11 @@ import {
   type CollaborationState,
   type GeoLibreLayer,
 } from "@geolibre/core";
-import { isArcGISWritableLayer, saveArcGISLayerEdits } from "@geolibre/plugins";
+import {
+  arcGISLayerHasPendingEdits,
+  isArcGISWritableLayer,
+  saveArcGISLayerEdits,
+} from "@geolibre/plugins";
 import {
   fetchMssqlStatus,
   readMssqlTable,
@@ -50,7 +54,7 @@ import {
 } from "./mssql-writeback";
 import { resolvePostgisConnection } from "./postgis-connections";
 import { startGeoLibreSidecar } from "./sidecar";
-import { writeLocalGeojsonFile, writeTextFileToPath } from "./tauri-io";
+import { writeLocalGeojsonFile, writeNewTextFileToPath } from "./tauri-io";
 import { resolveLayerGeojson } from "./vector-export";
 
 export type WritableLayerSourceKind = "geojson" | "geopackage" | "postgis" | "mssql" | "arcgis";
@@ -58,6 +62,7 @@ export type WritableLayerSourceKind = "geojson" | "geopackage" | "postgis" | "ms
 export type LayerWriteBackDisabledReason =
   | "geometryEditActive"
   | "mssqlRefreshRequired"
+  | "postgisRefreshRequired"
   | "readOnlyCollaboration";
 
 /** A layer that has a writable backing source, annotated for the batch-save modal. */
@@ -90,8 +95,67 @@ export interface BatchLayerSaveSummary {
   aborted: boolean;
 }
 
-/** Shared in-flight set for SQL Server write-backs so concurrent clicks never race. */
-const sharedSavingMssqlEditsIds = new Set<string>();
+/** Shared in-flight set for SQL Server write-backs across single-layer and batch entrypoints. */
+export const sharedSavingMssqlEditsIds = new Set<string>();
+
+interface PostgisPendingRefreshEntry {
+  schema: string;
+  table: string;
+  baselineKeys: unknown;
+}
+
+/**
+ * PostGIS layers whose write committed but whose follow-up reread failed.
+ * Keyed by `${projectGeneration}\0${layerId}` and pinned to the stale
+ * `postgisBaselineKeys` reference so retrying before reloading cannot
+ * double-insert keyless features.
+ */
+const postgisRefreshRequiredMap = new Map<string, PostgisPendingRefreshEntry>();
+
+function postgisRefreshKey(projectGeneration: number, layerId: string): string {
+  return `${projectGeneration}\0${layerId}`;
+}
+
+export function markPostgisWritebackRefreshRequired(
+  layer: GeoLibreLayer,
+  projectGeneration: number,
+): void {
+  const schema =
+    typeof layer.metadata.postgisSchema === "string" ? layer.metadata.postgisSchema : "public";
+  const table = typeof layer.metadata.postgisTable === "string" ? layer.metadata.postgisTable : "";
+  postgisRefreshRequiredMap.set(postgisRefreshKey(projectGeneration, layer.id), {
+    schema,
+    table,
+    baselineKeys: layer.metadata.postgisBaselineKeys,
+  });
+}
+
+export function clearPostgisWritebackRefreshRequired(
+  layerId: string,
+  projectGeneration: number,
+): void {
+  postgisRefreshRequiredMap.delete(postgisRefreshKey(projectGeneration, layerId));
+}
+
+export function isPostgisWritebackRefreshRequired(
+  layer: GeoLibreLayer,
+  projectGeneration: number,
+): boolean {
+  const entry = postgisRefreshRequiredMap.get(postgisRefreshKey(projectGeneration, layer.id));
+  if (!entry) return false;
+  const schema =
+    typeof layer.metadata.postgisSchema === "string" ? layer.metadata.postgisSchema : "public";
+  const table = typeof layer.metadata.postgisTable === "string" ? layer.metadata.postgisTable : "";
+  if (
+    entry.schema !== schema ||
+    entry.table !== table ||
+    entry.baselineKeys !== layer.metadata.postgisBaselineKeys
+  ) {
+    postgisRefreshRequiredMap.delete(postgisRefreshKey(projectGeneration, layer.id));
+    return false;
+  }
+  return true;
+}
 
 /**
  * Mirror of `useCollaboration`'s `canEditLayer`, readable outside React hooks.
@@ -166,11 +230,14 @@ export function listWritableLayerCandidates(
     collaboration?: CollaborationState;
     geometryEditLayerId?: string | null;
     attributeTableDrafts?: Record<string, unknown>;
+    projectGeneration?: number;
     /** Override for unit tests (defaults to {@link canWriteEditsToSource}). */
     canWriteSource?: (layer: GeoLibreLayer) => boolean;
   },
 ): WritableLayerCandidate[] {
   const canWriteSource = options?.canWriteSource ?? canWriteEditsToSource;
+  const projectGeneration =
+    options?.projectGeneration ?? useAppStore.getState().projectGeneration;
   const candidates: WritableLayerCandidate[] = [];
   for (const layer of layers) {
     if (!canWriteSource(layer)) continue;
@@ -186,6 +253,11 @@ export function listWritableLayerCandidates(
       disabledReason = "geometryEditActive";
     } else if (kind === "mssql" && layer.mssqlWritebackPending === true) {
       disabledReason = "mssqlRefreshRequired";
+    } else if (
+      kind === "postgis" &&
+      isPostgisWritebackRefreshRequired(layer, projectGeneration)
+    ) {
+      disabledReason = "postgisRefreshRequired";
     }
 
     const hasPendingEdits =
@@ -218,11 +290,14 @@ export function defaultSelectedWritableLayerIds(
 /**
  * Strip the transient `metadata.geometryEdited` flag from a live store layer
  * after its edits have been written back to its backing source. Does not push
- * an undo entry or dirty the project.
+ * an undo entry or dirty the project. When `expectedGeojson` is supplied, the
+ * flag is cleared only if the live layer still carries that same GeoJSON
+ * revision, so edits committed while the write was in flight remain flagged.
  */
 export function clearLayerGeometryEditedFlag(
   layerId: string,
   expectedProjectGeneration?: number,
+  expectedGeojson?: FeatureCollection,
 ): void {
   const state = useAppStore.getState();
   if (
@@ -233,6 +308,7 @@ export function clearLayerGeometryEditedFlag(
   }
   const existing = state.layers.find((candidate) => candidate.id === layerId);
   if (!existing || existing.metadata.geometryEdited !== true) return;
+  if (expectedGeojson !== undefined && existing.geojson !== expectedGeojson) return;
   const { geometryEdited: _cleared, ...metadata } = existing.metadata;
   useAppStore.setState((current) => ({
     layers: current.layers.map((candidate) =>
@@ -255,7 +331,12 @@ export interface WriteLayerEditsDeps {
   startSidecar?: () => Promise<void>;
   writeVectorSource?: typeof writeVectorToSource;
   saveArcgis?: typeof saveArcGISLayerEdits;
-  clearGeometryEdited?: (layerId: string, expectedProjectGeneration?: number) => void;
+  hasArcgisPendingEdits?: (layerId: string) => boolean;
+  clearGeometryEdited?: (
+    layerId: string,
+    expectedProjectGeneration?: number,
+    expectedGeojson?: FeatureCollection,
+  ) => void;
   updateLayer?: (layerId: string, patch: Partial<GeoLibreLayer>) => void;
   markMssqlRefreshRequired?: (layerId: string) => void;
   inFlightMssqlIds?: Set<string>;
@@ -288,6 +369,7 @@ export async function writeLayerEditsToSource(
   const startSidecar = deps?.startSidecar ?? startGeoLibreSidecar;
   const writeVectorSource = deps?.writeVectorSource ?? writeVectorToSource;
   const saveArcgis = deps?.saveArcgis ?? saveArcGISLayerEdits;
+  const hasArcgisPendingEdits = deps?.hasArcgisPendingEdits ?? arcGISLayerHasPendingEdits;
   const clearGeometryEdited = deps?.clearGeometryEdited ?? clearLayerGeometryEditedFlag;
   const updateLayer = deps?.updateLayer ?? useAppStore.getState().updateLayer;
   const markMssqlRefreshRequired =
@@ -307,19 +389,30 @@ export async function writeLayerEditsToSource(
 
   const requestProjectGeneration = readProjectGeneration();
   const currentBeforeCommit = readLatestLayer(clickedLayer.id);
+  if (!currentBeforeCommit) {
+    return { status: "error", message: t("layers.saveEditsError") };
+  }
   if (
-    currentBeforeCommit &&
     isMssqlEditableLayer(currentBeforeCommit) &&
     currentBeforeCommit.mssqlWritebackPending === true
   ) {
     return { status: "error", message: t("layers.saveEditsMssqlRefreshRequired") };
+  }
+  if (
+    isPostgisEditableLayer(currentBeforeCommit) &&
+    isPostgisWritebackRefreshRequired(currentBeforeCommit, requestProjectGeneration)
+  ) {
+    return { status: "error", message: t("layers.saveEditsPostgisRefreshWarning") };
   }
 
   if (commitDrafts(clickedLayer.id) === "blocked") {
     return { status: "error", message: t("layers.pendingTableDraftsBlocked") };
   }
 
-  const layer = readLatestLayer(clickedLayer.id) ?? clickedLayer;
+  const layer = readLatestLayer(clickedLayer.id);
+  if (!layer || readProjectGeneration() !== requestProjectGeneration) {
+    return { status: "error", message: t("layers.saveEditsError") };
+  }
   const isMssql = isMssqlEditableLayer(layer);
   const mssqlBaseline = isMssql ? databaseBaselineKeys(layer, "mssqlBaselineKeys") : undefined;
   const isCurrentMssqlRequest = () => {
@@ -335,6 +428,17 @@ export async function writeLayerEditsToSource(
     );
   };
   const isPostgis = isPostgisEditableLayer(layer);
+  const isCurrentPostgisRequest = () => {
+    const current = readLatestLayer(layer.id);
+    return (
+      readProjectGeneration() === requestProjectGeneration &&
+      current !== undefined &&
+      current.metadata.sourceKind === layer.metadata.sourceKind &&
+      current.metadata.postgisSchema === layer.metadata.postgisSchema &&
+      current.metadata.postgisTable === layer.metadata.postgisTable &&
+      current.metadata.postgisGeometryColumn === layer.metadata.postgisGeometryColumn
+    );
+  };
   const path = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
   if (!isMssql && !isPostgis && !isArcGISWritableLayer(layer) && !path) {
     return { status: "error", message: t("layers.saveEditsError") };
@@ -343,7 +447,7 @@ export async function writeLayerEditsToSource(
   try {
     if (isArcGISWritableLayer(layer)) {
       const result = await saveArcgis(layer.id);
-      if (result.errors.length === 0) {
+      if (result.errors.length === 0 && !hasArcgisPendingEdits(layer.id)) {
         clearGeometryEdited(layer.id, requestProjectGeneration);
       }
       return {
@@ -353,6 +457,10 @@ export async function writeLayerEditsToSource(
     }
 
     const geojson = await resolveGeojson(layer, map);
+    const liveAfterResolve = readLatestLayer(layer.id);
+    if (!liveAfterResolve || readProjectGeneration() !== requestProjectGeneration) {
+      return { status: "error", message: t("layers.saveEditsError") };
+    }
     if (
       !geojson ||
       (geojson.features.length === 0 && !(isMssql && (mssqlBaseline?.length ?? 0) > 0))
@@ -505,8 +613,15 @@ export async function writeLayerEditsToSource(
             : undefined,
         });
       } catch {
+        if (isCurrentPostgisRequest()) {
+          markPostgisWritebackRefreshRequired(layer, requestProjectGeneration);
+        }
         return { status: "error", message: t("layers.saveEditsPostgisRefreshWarning") };
       }
+      if (!isCurrentPostgisRequest()) {
+        return { status: "error", message: t("layers.saveEditsError") };
+      }
+      clearPostgisWritebackRefreshRequired(layer.id, requestProjectGeneration);
       const currentMetadata = readLatestLayer(layer.id)?.metadata ?? layer.metadata;
       const { geometryEdited: _cleared, ...restMetadata } = currentMetadata;
       updateLayer(layer.id, {
@@ -535,7 +650,7 @@ export async function writeLayerEditsToSource(
 
     if (isDesktop() && isGeojsonSourcePath(path)) {
       await writeLocalGeojson(path, geojson);
-      clearGeometryEdited(layer.id, requestProjectGeneration);
+      clearGeometryEdited(layer.id, requestProjectGeneration, geojson);
       return {
         status: "success",
         message: t("layers.saveEditsSuccess", { count: geojson.features.length }),
@@ -544,7 +659,7 @@ export async function writeLayerEditsToSource(
 
     if (isDesktop()) await startSidecar();
     const result = await writeVectorSource({ path, geojson });
-    clearGeometryEdited(layer.id, requestProjectGeneration);
+    clearGeometryEdited(layer.id, requestProjectGeneration, geojson);
     return {
       status: "success",
       message: t("layers.saveEditsSuccess", { count: result.feature_count }),
@@ -578,6 +693,10 @@ export async function saveLayerEditsBatch(
 ): Promise<BatchLayerSaveSummary> {
   const readProjectGeneration =
     options.deps?.readProjectGeneration ?? (() => useAppStore.getState().projectGeneration);
+  const readLatestLayer =
+    options.deps?.readLatestLayer ??
+    ((layerId: string) =>
+      useAppStore.getState().layers.find((candidate) => candidate.id === layerId));
   const results: BatchLayerSaveItemResult[] = [];
   let succeeded = 0;
   let warnings = 0;
@@ -589,16 +708,22 @@ export async function saveLayerEditsBatch(
       aborted = true;
       break;
     }
-    options.onLayerStart?.(layer.id);
-    const outcome = await writeLayerEditsToSource(layer, {
+    const liveLayer = readLatestLayer(layer.id);
+    if (!liveLayer) continue;
+    options.onLayerStart?.(liveLayer.id);
+    const outcome = await writeLayerEditsToSource(liveLayer, {
       map: options.map,
       t: options.t,
       canEditLayer: options.canEditLayer,
       deps: options.deps,
     });
+    if (readProjectGeneration() !== options.projectGeneration) {
+      aborted = true;
+      break;
+    }
     const item: BatchLayerSaveItemResult = {
-      layerId: layer.id,
-      layerName: layer.name,
+      layerId: liveLayer.id,
+      layerName: liveLayer.name,
       ...outcome,
     };
     results.push(item);
@@ -617,6 +742,8 @@ export interface WrittenExternalCopy {
   layerName: string;
   fileName: string;
   path: string;
+  /** The layer's live `geojson` reference captured when the copy was built. */
+  capturedGeojson?: FeatureCollection;
 }
 
 /** Outcome of writing external GeoJSON copies into a local folder (desktop). */
@@ -625,11 +752,21 @@ export interface SaveCopiesToDirectoryResult {
   blockedDraftLayers: string[];
   skippedLayers: string[];
   errors: Array<{ layerId: string; layerName: string; message: string }>;
+  aborted: boolean;
+}
+
+function isFileExistsError(error: unknown): boolean {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = String((error as { code?: unknown }).code).toUpperCase();
+    if (code === "EEXIST") return true;
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return /already exists|file exists|eexist|\(os error (17|80)\)/i.test(message);
 }
 
 /**
  * Write external `.geojson` copies of the selected layers into `directory`
- * without touching their original source files (desktop only).
+ * without overwriting any existing file in that directory (desktop only).
  */
 export async function saveGeojsonCopiesToDirectory(
   layers: readonly GeoLibreLayer[],
@@ -637,35 +774,86 @@ export async function saveGeojsonCopiesToDirectory(
   options: {
     map: MapLibreMap | undefined;
     layerIds?: ReadonlySet<string>;
+    projectGeneration?: number;
     deps?: CollectGeojsonExportDeps & {
       writeTextFile?: (path: string, content: string) => Promise<void>;
     };
   },
 ): Promise<SaveCopiesToDirectoryResult> {
-  const writeTextFile = options.deps?.writeTextFile ?? writeTextFileToPath;
+  const writeTextFile = options.deps?.writeTextFile ?? writeNewTextFileToPath;
+  const readProjectGeneration =
+    options.deps?.readProjectGeneration ?? (() => useAppStore.getState().projectGeneration);
   const collected = await collectGeojsonLayersForExport(layers, options.map, {
     layerIds: options.layerIds,
+    projectGeneration: options.projectGeneration,
     deps: options.deps,
   });
 
   const written: WrittenExternalCopy[] = [];
   const errors: Array<{ layerId: string; layerName: string; message: string }> = [];
+  if (collected.aborted) {
+    return {
+      written,
+      blockedDraftLayers: collected.blockedDraftLayers,
+      skippedLayers: collected.skippedLayers,
+      errors,
+      aborted: true,
+    };
+  }
+
+  const usedNamesLower = new Set<string>();
+  const MAX_NAME_ATTEMPTS = 1_000;
 
   for (const item of collected.items) {
-    const targetPath = joinLocalPath(directory, item.fileName);
-    try {
-      await writeTextFile(targetPath, JSON.stringify(item.geojson, null, 2));
-      written.push({
-        layerId: item.layer.id,
-        layerName: item.layer.name,
-        fileName: item.fileName,
-        path: targetPath,
-      });
-    } catch (error) {
+    if (
+      options.projectGeneration !== undefined &&
+      readProjectGeneration() !== options.projectGeneration
+    ) {
+      return {
+        written,
+        blockedDraftLayers: collected.blockedDraftLayers,
+        skippedLayers: collected.skippedLayers,
+        errors,
+        aborted: true,
+      };
+    }
+    const baseName = item.fileName.replace(/\.geojson$/i, "");
+    const payload = JSON.stringify(item.geojson, null, 2);
+    let saved = false;
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= MAX_NAME_ATTEMPTS; attempt += 1) {
+      const candidateName = attempt === 1 ? `${baseName}.geojson` : `${baseName}-${attempt}.geojson`;
+      if (usedNamesLower.has(candidateName.toLowerCase())) continue;
+      const targetPath = joinLocalPath(directory, candidateName);
+      try {
+        await writeTextFile(targetPath, payload);
+        usedNamesLower.add(candidateName.toLowerCase());
+        written.push({
+          layerId: item.layer.id,
+          layerName: item.layer.name,
+          fileName: candidateName,
+          path: targetPath,
+          capturedGeojson: item.layer.geojson,
+        });
+        saved = true;
+        break;
+      } catch (error) {
+        if (isFileExistsError(error)) {
+          usedNamesLower.add(candidateName.toLowerCase());
+          lastError = error;
+          continue;
+        }
+        lastError = error;
+        break;
+      }
+    }
+
+    if (!saved) {
       errors.push({
         layerId: item.layer.id,
         layerName: item.layer.name,
-        message: error instanceof Error ? error.message : "Could not write GeoJSON file.",
+        message: lastError instanceof Error ? lastError.message : "Could not write GeoJSON file.",
       });
     }
   }
@@ -675,6 +863,7 @@ export async function saveGeojsonCopiesToDirectory(
     blockedDraftLayers: collected.blockedDraftLayers,
     skippedLayers: collected.skippedLayers,
     errors,
+    aborted: false,
   };
 }
 
@@ -690,29 +879,41 @@ function isPlainLocalReloadableLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
+/** Reference to a written external copy, optionally pinned to the captured revision. */
+export type ExternalCopyTarget =
+  | string
+  | { path: string; capturedGeojson?: FeatureCollection };
+
 /**
  * Build the layer list for a project save after external GeoJSON copies were
  * written to disk:
- * - Plain GeoJSON layers whose copy was written get `sourcePath` pointed at
- *   their new copy, `localFileReloadable: true`, and transient `geometryEdited`
- *   / `sourceLayer` stripped so reopening loads the new external copy.
+ * - Plain GeoJSON layers whose copy was written — and whose live `geojson`
+ *   still matches the revision captured for the copy — get `sourcePath` pointed
+ *   at their new copy, `localFileReloadable: true`, and transient
+ *   `geometryEdited` / `sourceLayer` stripped so reopening loads the new copy.
  * - Any remaining edited layer that cannot reload from a plain GeoJSON path
- *   (e.g., WFS or an Add Vector Layer control layer) keeps its edited data
- *   embedded so no edits are silently lost.
+ *   (or whose geometry changed while the copy was being written) keeps its
+ *   edited data embedded so no edits are silently lost.
  */
 export function applyExternalCopyReferences(
   layers: readonly GeoLibreLayer[],
-  writtenByLayerId: ReadonlyMap<string, string>,
+  writtenByLayerId: ReadonlyMap<string, ExternalCopyTarget>,
 ): GeoLibreLayer[] {
   return layers.map((layer) => {
-    const copyPath = writtenByLayerId.get(layer.id);
-    if (copyPath && isPlainLocalReloadableLayer(layer)) {
-      const { geometryEdited: _edited, sourceLayer: _table, ...restMetadata } = layer.metadata;
-      return {
-        ...layer,
-        sourcePath: copyPath,
-        metadata: { ...restMetadata, localFileReloadable: true },
-      };
+    const target = writtenByLayerId.get(layer.id);
+    if (target && isPlainLocalReloadableLayer(layer)) {
+      const copyPath = typeof target === "string" ? target : target.path;
+      const capturedGeojson = typeof target === "string" ? undefined : target.capturedGeojson;
+      const revisionMatches =
+        capturedGeojson === undefined || layer.geojson === capturedGeojson;
+      if (revisionMatches) {
+        const { geometryEdited: _edited, sourceLayer: _table, ...restMetadata } = layer.metadata;
+        return {
+          ...layer,
+          sourcePath: copyPath,
+          metadata: { ...restMetadata, localFileReloadable: true },
+        };
+      }
     }
     if (hasEditedGeometry(layer)) {
       return embedEditedGeometry(layer);

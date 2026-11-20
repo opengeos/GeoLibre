@@ -4421,6 +4421,8 @@
       "saveCopiesWritten_other": "Saved {{count}} GeoJSON copies to the selected folder.",
       "saveLayerEditsSuccess_one": "Saved edits for {{count}} layer to its source.",
       "saveLayerEditsSuccess_other": "Saved edits for {{count}} layers to their sources.",
+      "saveLayerEditsWarnings_one": "{{count}} layer saved with warnings: {{details}}",
+      "saveLayerEditsWarnings_other": "{{count}} layers saved with warnings: {{details}}",
       "saveProjectFileName": "File name",
       "saveProjectFileNamePlaceholder": "my-project.geolibre.json",
       "exportHtmlAsTitle": "Export as interactive HTML",
@@ -4613,6 +4615,7 @@
       "exportZip": "Export ZIP…",
       "disabledGeometryEdit": "Finish editing geometry before saving to the source file.",
       "disabledMssqlRefresh": "Refresh this SQL Server layer before saving edits again.",
+      "disabledPostgisRefresh": "Reload this PostGIS layer before saving edits again to avoid duplicating newly inserted features.",
       "disabledReadOnly": "You do not have permission to edit this layer in the current session."
     },
     "remoteSave": {

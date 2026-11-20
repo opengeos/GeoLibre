@@ -192,11 +192,16 @@ describe("clearLayerGeometryEditedFlag", () => {
     });
   });
 
-  it("removes geometryEdited when generation matches and ignores stale generations", () => {
-    clearLayerGeometryEditedFlag("a", 4);
+  it("removes geometryEdited only when generation and saved geojson revision match", () => {
+    const savedGeojson = useAppStore.getState().layers[0].geojson!;
+    clearLayerGeometryEditedFlag("a", 4, savedGeojson);
     assert.equal(useAppStore.getState().layers[0].metadata.geometryEdited, true);
 
-    clearLayerGeometryEditedFlag("a", 5);
+    const newerGeojson: FeatureCollection = { type: "FeatureCollection", features: [] };
+    clearLayerGeometryEditedFlag("a", 5, newerGeojson);
+    assert.equal(useAppStore.getState().layers[0].metadata.geometryEdited, true);
+
+    clearLayerGeometryEditedFlag("a", 5, savedGeojson);
     assert.equal(useAppStore.getState().layers[0].metadata.geometryEdited, undefined);
     assert.equal(useAppStore.getState().layers[0].metadata.custom, 1);
   });
@@ -326,9 +331,76 @@ describe("writeLayerEditsToSource and saveLayerEditsBatch", () => {
 
     assert.deepEqual(started, ["l1", "l2"]);
     assert.equal(summary.succeeded, 1);
-    assert.equal(summary.failed, 1);
+    assert.equal(summary.failed, 0);
     assert.equal(summary.aborted, true);
-    assert.equal(summary.results.length, 2);
+    assert.equal(summary.results.length, 1);
+  });
+
+  it("skips removed layers during a batch run and does not overwrite existing copy files", async () => {
+    const l1 = makeLayer("l1", "Layer 1");
+    const l2 = makeLayer("l2", "Layer 2");
+    const live = new Map<string, GeoLibreLayer>([
+      ["l1", l1],
+      ["l2", l2],
+    ]);
+    const writtenPaths: string[] = [];
+
+    const summary = await saveLayerEditsBatch([l1, l2], {
+      map: undefined,
+      t,
+      projectGeneration: 1,
+      canEditLayer: () => true,
+      deps: {
+        isDesktop: () => true,
+        commitDrafts: () => "none",
+        readLatestLayer: (id) => live.get(id),
+        readProjectGeneration: () => 1,
+        resolveGeojson: async (layer) => layer.geojson!,
+        writeLocalGeojson: async (path) => {
+          writtenPaths.push(path);
+          live.delete("l2"); // remove l2 while l1 writes
+        },
+        clearGeometryEdited: () => {},
+      },
+    });
+    assert.deepEqual(writtenPaths, ["/data/l1.geojson"]);
+    assert.equal(summary.results.length, 1);
+
+    // Exclusive copy creation retries with suffix when destination already exists.
+    const existing = new Set<string>(["/data/Layer-1.geojson"]);
+    const copyRes = await saveGeojsonCopiesToDirectory([l1], "/data", {
+      map: undefined,
+      projectGeneration: 1,
+      deps: {
+        readProjectGeneration: () => 1,
+        commitDrafts: () => "none",
+        readLatestLayer: () => l1,
+        resolveGeojson: async () => l1.geojson!,
+        writeTextFile: async (path) => {
+          if (existing.has(path)) {
+            throw new Error("File exists (os error 17)");
+          }
+          existing.add(path);
+        },
+      },
+    });
+    assert.equal(copyRes.errors.length, 0);
+    assert.equal(copyRes.written[0].path, "/data/Layer-1-2.geojson");
+    assert.equal(copyRes.written[0].capturedGeojson, l1.geojson);
+
+    // applyExternalCopyReferences embeds instead of repointing when live geojson changed.
+    const mutated = {
+      ...l1,
+      metadata: { geometryEdited: true },
+      geojson: { type: "FeatureCollection", features: [] } as FeatureCollection,
+    };
+    const [afterMutate] = applyExternalCopyReferences(
+      [mutated],
+      new Map([["l1", { path: "/data/Layer-1-2.geojson", capturedGeojson: l1.geojson }]]),
+    );
+    assert.equal(afterMutate.sourcePath, "/data/l1.geojson");
+    assert.equal(afterMutate.metadata.localFileReloadable, undefined);
+    assert.equal(afterMutate.metadata.geometryEdited, undefined);
   });
 });
 
