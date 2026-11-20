@@ -420,7 +420,12 @@ const stroke = (
   ...extra,
 });
 const hsl = { type: "CIMHSLColor", values: [0, 100, 50, 100] };
-/** A point symbol with one vector marker drawing each of `graphics` (symbol layer lists). */
+/** Pro writes a circle as one curve ring: its start point and one arc back to it. */
+const circleRing = { curveRings: [[[0, 5], { a: [[0, 5], [0, 0], 0, 1] }]] };
+/**
+ * A point symbol with one vector marker drawing each of `graphics` (symbol
+ * layer lists) as a circle.
+ */
 function marker(...graphics: unknown[][]) {
   return symbolRef("CIMPointSymbol", [
     {
@@ -428,6 +433,7 @@ function marker(...graphics: unknown[][]) {
       enable: true,
       size: 6,
       markerGraphics: graphics.map((layers) => ({
+        geometry: circleRing,
         symbol: { type: "CIMPolygonSymbol", symbolLayers: layers },
       })),
     },
@@ -763,9 +769,17 @@ describe("what a translated renderer reports leaving out", () => {
     markerWithEffect.symbol.symbolLayers[0] as { markerGraphics: { symbol: object }[] }
   ).markerGraphics;
   Object.assign(graphics[0].symbol, { effects: [{ type: "CIMGeometricEffectOffset", offset: 2 }] });
-  // Pro writes a circle as one curve ring: its start point and one arc back to it.
-  const circleRing = { curveRings: [[[0, 5], { a: [[0, 5], [0, 0], 0, 1] }]] };
-  const squareRing = { rings: [[[-5, -5], [-5, 5], [5, 5], [5, -5], [-5, -5]]] };
+  const squareRing = {
+    rings: [
+      [
+        [-5, -5],
+        [-5, 5],
+        [5, 5],
+        [5, -5],
+        [-5, -5],
+      ],
+    ],
+  };
   const roundedRing = {
     curveRings: [[[0, 5], { a: [[5, 0], [0, 0], 0, 1] }, { a: [[0, 5], [0, 0], 0, 1] }]],
   };
@@ -817,8 +831,29 @@ describe("what a translated renderer reports leaving out", () => {
       transparencies(outlined(50), outlined(50), outlined(50), outlined(0), outlined(50)),
       [],
     ],
-    ["nothing for a plain marker", simple(marker([solidRed])), []],
-    ["nothing for a marker drawn as Pro's circle", simple(shaped(circleRing)), []],
+    ["nothing for a marker drawn as Pro's circle", simple(marker([solidRed])), []],
+    [
+      "a marker graphic with no geometry, whose shape is unknown",
+      simple(shaped(undefined)),
+      [{ code: "marker-shape", cimType: "CIMVectorMarker" }],
+    ],
+    [
+      "a vector marker drawn only by its own colour, with no drawing graphic",
+      simple(
+        symbolRef("CIMPointSymbol", [
+          {
+            type: "CIMVectorMarker",
+            enable: true,
+            size: 6,
+            color: rgb(255, 0, 0),
+            markerGraphics: [
+              { geometry: circleRing, symbol: { type: "CIMPolygonSymbol", symbolLayers: [] } },
+            ],
+          },
+        ]),
+      ),
+      [{ code: "marker-shape", cimType: "CIMVectorMarker" }],
+    ],
     [
       "a square marker drawn as a circle",
       simple(shaped(squareRing)),

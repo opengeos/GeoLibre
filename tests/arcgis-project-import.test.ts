@@ -34,6 +34,22 @@ function featureLayer(name: string, path: string) {
               type: "CIMVectorMarker",
               size: 9,
               color: { type: "CIMRGBColor", values: [10, 20, 30, 80] },
+              // ArcGIS Pro's circle: one curve ring, one arc back to its start.
+              markerGraphics: [
+                {
+                  geometry: { curveRings: [[[0, 5], { a: [[0, 5], [0, 0], 0, 1] }]] },
+                  symbol: {
+                    type: "CIMPolygonSymbol",
+                    symbolLayers: [
+                      {
+                        type: "CIMSolidFill",
+                        enable: true,
+                        color: { type: "CIMRGBColor", values: [10, 20, 30, 80] },
+                      },
+                    ],
+                  },
+                },
+              ],
             },
           ],
         },

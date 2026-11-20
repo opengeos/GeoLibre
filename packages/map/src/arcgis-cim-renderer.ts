@@ -744,7 +744,8 @@ function lineLook(scan: LayerScan): SymbolLook | null {
  * is reported: another layer beside the marker, a second drawing graphic
  * (inspected on its own, so it is reported whatever its layer types), a
  * hatch inside the drawn graphic, or a shape that is not a circle (a
- * character marker's glyph, or a drawn graphic with any other geometry).
+ * character marker's glyph, or a drawn graphic with any other geometry or
+ * none).
  */
 function markerLook(layers: CimObject[]): SymbolLook | null {
   const marker = layers.find(isMarkerLayer);
@@ -765,12 +766,15 @@ function markerLook(layers: CimObject[]): SymbolLook | null {
   const unreadable =
     marker.color !== undefined && !markerColor ? colorType(marker) : scan.unreadable;
   const effect = layers.map(layerEffect).find(Boolean);
+  // Only a shape confirmed as a circle goes unreported: a graphic without a
+  // geometry, or a marker with no drawing graphic, has no known shape.
+  const drawingGraphics = arrayValue(marker.markerGraphics)
+    .filter(isObject)
+    .filter((graphic) => enabledLayers(objectValue(graphic.symbol)).length > 0);
   const circle =
     marker.type === "CIMVectorMarker" &&
-    arrayValue(marker.markerGraphics)
-      .filter(isObject)
-      .filter((graphic) => enabledLayers(objectValue(graphic.symbol)).length > 0)
-      .every((graphic) => graphic.geometry === undefined || isCircle(graphic.geometry));
+    drawingGraphics.length > 0 &&
+    drawingGraphics.every((graphic) => isCircle(graphic.geometry));
   return {
     geometry: "point",
     ...(circle ? {} : { shape: stringValue(marker.type) || "marker" }),
