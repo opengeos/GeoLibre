@@ -261,7 +261,10 @@ export function TopToolbar({
   // surface first opens).
   const paletteCommands = usePaletteCommands({
     commands: allowedCommands,
-    open: dialogs.commandPaletteOpen || processingMenuOpen,
+    open:
+      dialogs.commandPaletteOpen ||
+      processingMenuOpen ||
+      (mobileShell && activeMobileTab === "more"),
     openNetworkTool: consent.openNetworkTool,
   });
 
@@ -333,6 +336,12 @@ export function TopToolbar({
           onOpenBasemapExtract={onOpenBasemapExtract}
           onAddComment={onAddComment}
           onOpenDiagnostics={onOpenDiagnostics}
+          processingCommands={paletteCommands.processingCommands}
+          onZoomIn={() => mapControllerRef.current?.zoomIn()}
+          onZoomOut={() => mapControllerRef.current?.zoomOut()}
+          onResetNorth={() => mapControllerRef.current?.resetNorth()}
+          onResetPitch={() => mapControllerRef.current?.resetPitch()}
+          onResetPitchBearing={() => mapControllerRef.current?.resetNorthPitch()}
         />
         {!viewer && deploymentCapabilities.has("settings:manage") ? (
           <SettingsDialog

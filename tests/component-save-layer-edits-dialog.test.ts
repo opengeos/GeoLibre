@@ -8,6 +8,8 @@ import type { WritableLayerCandidate } from "../apps/geolibre-desktop/src/lib/ba
 
 const { SaveLayerEditsDialog } =
   await import("../apps/geolibre-desktop/src/components/layout/toolbar/SaveLayerEditsDialog");
+const { EmbedVectorDataDialog } =
+  await import("../apps/geolibre-desktop/src/components/layout/toolbar/EmbedVectorDataDialog");
 
 function makeLayer(id: string, name: string): GeoLibreLayer {
   return {
@@ -173,5 +175,82 @@ describe("SaveLayerEditsDialog", () => {
     );
 
     assert.equal(screen.queryByRole("button", { name: "Export layers as GeoJSON ZIP…" }), null);
+  });
+});
+
+describe("EmbedVectorDataDialog", () => {
+  it("renders Save edits to sources and Save external copies on desktop when allowed", () => {
+    const choices: string[] = [];
+    render(
+      createElement(EmbedVectorDataDialog, {
+        prompt: {
+          hasGeometryEdits: true,
+          count: 2,
+          writableEditedCount: 2,
+          exportableEditedCount: 2,
+          editedExportableLayerIds: ["a", "b"],
+          bytes: 2048,
+          desktop: true,
+          allowFileReferences: true,
+          allowExportData: true,
+          projectGeneration: 1,
+          resolve: () => {},
+        },
+        exportingEditedCopiesZip: false,
+        onResolve: (choice) => choices.push(choice),
+        onExportEditedCopiesZip: async () => true,
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save edits to sources" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save external copies…" }));
+    assert.deepEqual(choices, ["overwrite-sources", "save-copies"]);
+  });
+
+  it("disables Export copies (ZIP) while exporting and hides it when export:data is withheld", () => {
+    const { rerender } = render(
+      createElement(EmbedVectorDataDialog, {
+        prompt: {
+          hasGeometryEdits: true,
+          count: 1,
+          writableEditedCount: 0,
+          exportableEditedCount: 1,
+          editedExportableLayerIds: ["a"],
+          bytes: 512,
+          desktop: false,
+          allowFileReferences: false,
+          allowExportData: true,
+          projectGeneration: 1,
+          resolve: () => {},
+        },
+        exportingEditedCopiesZip: true,
+        onResolve: () => {},
+        onExportEditedCopiesZip: async () => true,
+      }),
+    );
+    const btn = screen.getByRole("button", { name: "Export copies (ZIP)…" }) as HTMLButtonElement;
+    assert.equal(btn.disabled, true);
+
+    rerender(
+      createElement(EmbedVectorDataDialog, {
+        prompt: {
+          hasGeometryEdits: true,
+          count: 1,
+          writableEditedCount: 0,
+          exportableEditedCount: 1,
+          editedExportableLayerIds: ["a"],
+          bytes: 512,
+          desktop: false,
+          allowFileReferences: false,
+          allowExportData: false,
+          projectGeneration: 1,
+          resolve: () => {},
+        },
+        exportingEditedCopiesZip: false,
+        onResolve: () => {},
+        onExportEditedCopiesZip: async () => true,
+      }),
+    );
+    assert.equal(screen.queryByRole("button", { name: "Export copies (ZIP)…" }), null);
   });
 });

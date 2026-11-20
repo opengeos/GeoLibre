@@ -83,21 +83,62 @@ const SUPPORTED_VECTOR_EXTENSIONS = new Set([
   "zip",
 ]);
 
+/** A 2D map in an ArcGIS Pro project that the user can choose to import. */
+export interface ArcgisProjectMapChoice {
+  /** Position among the project's 2D maps, in project order. */
+  index: number;
+  /** The map's own name; empty when the CIM document does not give one. */
+  name: string;
+}
+
+/** An ArcGIS Pro project read once, listing its 2D maps for the caller to choose from. */
+export interface ArcgisProjectReader {
+  /** The project's 2D maps in project order. Scenes are left out. */
+  maps: ArcgisProjectMapChoice[];
+  /** Import one map by its {@link ArcgisProjectMapChoice.index}; the first by default. */
+  importMap(index?: number): ArcgisProjectImportResult;
+}
+
 /**
- * Convert an ArcGIS Pro project (.aprx) or map file (.mapx) from its documented
+ * Read an ArcGIS Pro project (.aprx) or map file (.mapx) from its documented
  * CIM JSON representation without executing scripts or requiring ArcPy.
  *
- * ArcGIS projects can contain several maps. GeoLibre imports the first 2D map
- * in project order because one GeoLibre project represents one map.
+ * An ArcGIS project can contain several maps, but one GeoLibre project
+ * represents one map, so the caller picks which 2D map to import.
+ */
+export function readArcgisProject(
+  data: ArrayBuffer | Uint8Array | string,
+  sourcePath: string,
+): ArcgisProjectReader {
+  const files = readCimFiles(data, sourcePath);
+  const maps = findMaps(files);
+  if (maps.length === 0) throw new Error("This file does not contain an ArcGIS Pro map.");
+  return {
+    maps: maps.map((map, index) => ({ index, name: stringValue(map.name) })),
+    importMap: (index = 0) => {
+      const map = maps[index];
+      if (!map) throw new Error("This ArcGIS Pro project has no such map.");
+      return importMap(map, files, sourcePath);
+    },
+  };
+}
+
+/**
+ * Convert an ArcGIS Pro project or map file, importing its first 2D map in
+ * project order. Use {@link readArcgisProject} to import a different map.
  */
 export function importArcgisProject(
   data: ArrayBuffer | Uint8Array | string,
   sourcePath: string,
 ): ArcgisProjectImportResult {
-  const files = readCimFiles(data, sourcePath);
-  const map = findMap(files);
-  if (!map) throw new Error("This file does not contain an ArcGIS Pro map.");
+  return readArcgisProject(data, sourcePath).importMap();
+}
 
+function importMap(
+  map: CimObject,
+  files: Map<string, CimObject>,
+  sourcePath: string,
+): ArcgisProjectImportResult {
   const projectName = stringValue(map.name) || fileStem(sourcePath) || "Imported ArcGIS Project";
   const { view: mapView, extentRestored } = parseMapView(map);
   const project = createEmptyProject(projectName, { mapView });
@@ -209,31 +250,39 @@ function readCimFiles(
   return files;
 }
 
-function findMap(files: Map<string, CimObject>): CimObject | null {
+/**
+ * The project's 2D maps in project order: those its catalogue lists, or, when
+ * the catalogue names none that can be read, every map document in the file.
+ */
+function findMaps(files: Map<string, CimObject>): CimObject[] {
+  // CIM MapType "Map" is the only 2D map; Scene, Basemap, NetworkDiagram,
+  // ContainmentMap and LinkChart share the CIMMap type but are not maps a
+  // GeoLibre project can stand in for. Older documents omit the field.
+  const is2dMap = (map: CimObject | null): map is CimObject =>
+    map !== null && ["", "map"].includes(stringValue(map.mapType).toLowerCase());
   const project = files.get("gisproject.json");
-  const projectItems = arrayValue(project?.projectItems);
-  for (const item of projectItems) {
+  const listed: CimObject[] = [];
+  const seenPaths = new Set<string>();
+  for (const item of arrayValue(project?.projectItems)) {
     if (!isObject(item)) continue;
     const itemType = stringValue(item.itemType).toLowerCase();
     const type = stringValue(item.type).toLowerCase();
     if (itemType !== "map" && !type.includes("cimmapdocument")) continue;
     const path = cimPath(item.catalogPath ?? item.uRI ?? item.uri);
-    const candidate = path ? files.get(path) : undefined;
-    const map = unwrapMap(candidate);
-    if (map && stringValue(map.mapType).toLowerCase() !== "scene") return map;
+    if (!path || seenPaths.has(path)) continue;
+    seenPaths.add(path);
+    const map = unwrapMap(files.get(path));
+    if (is2dMap(map)) listed.push(map);
   }
-  for (const candidate of files.values()) {
-    const map = unwrapMap(candidate);
-    if (map && stringValue(map.mapType).toLowerCase() !== "scene") return map;
-  }
-  return null;
+  if (listed.length > 0) return listed;
+  return [...files.values()].map(unwrapMap).filter(is2dMap);
 }
 
 function unwrapMap(value: CimObject | undefined): CimObject | null {
   if (!value) return null;
-  if (stringValue(value.type).includes("CIMMap") && !stringValue(value.type).includes("Document")) {
-    return value;
-  }
+  // Exact match: layer and layout element types such as CIMMapImageLayer and
+  // CIMMapFrame also start with "CIMMap".
+  if (stringValue(value.type) === "CIMMap") return value;
   if (isObject(value.mapDefinition)) return value.mapDefinition;
   if (isObject(value.map)) return value.map;
   return null;

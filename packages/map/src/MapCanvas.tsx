@@ -31,6 +31,7 @@ import {
   FEATURE_SELECTION_BEGIN_EVENT,
   type FeatureSelectionMap,
 } from "./map-feature-selection";
+import { queryIdentifyFeatures } from "./touch-identify";
 import { isGlobeControlToggleClick } from "./globe-control-toggle";
 import { createGlobalIdentifyHitDeduper } from "./identify-all";
 import {
@@ -497,28 +498,43 @@ export const MapCanvas = memo(function MapCanvas({
     controller.current?.waitAndSyncLayers(renderLayers);
   }, [renderLayers]);
 
+  const lastPointerTypeRef = useRef<string | null>(null);
+
   useEffect(() => {
     const map = controller.current?.getMap();
     if (!map) return;
-    return attachFeatureSelection(map as unknown as FeatureSelectionMap, {
+    const canvas = map.getCanvas();
+    const recordPointerType = (event: PointerEvent) => {
+      lastPointerTypeRef.current = event.pointerType;
+    };
+    canvas.addEventListener("pointerdown", recordPointerType, { passive: true });
+    const detachSelection = attachFeatureSelection(map as unknown as FeatureSelectionMap, {
       state: {
         active: featureSelectionActive,
         cancel: cancelFeatureSelection,
       },
       featureIdAtPoint: (layer, point) => {
         const queryIds = identifyStyleLayerIds(layer).filter((id) => map.getLayer(id));
-        const rendered = map.queryRenderedFeatures(
-          [
-            [point.x - 4, point.y - 4],
-            [point.x + 4, point.y + 4],
-          ],
-          { layers: queryIds },
+        const rendered = queryIdentifyFeatures(
+          (geometry, options) =>
+            map.queryRenderedFeatures(
+              geometry as maplibregl.PointLike | [maplibregl.PointLike, maplibregl.PointLike],
+              options,
+            ),
+          point,
+          queryIds,
+          lastPointerTypeRef.current,
+          4,
         );
         return rendered[0] ? findFeatureId(layer, rendered[0]) : null;
       },
       onDiagnostic: (event) => onMapDiagnosticEventRef.current?.(event),
       onEnd: () => setMapLibreIdentifyCursor(map, Boolean(useAppStore.getState().identifyLayerId)),
     });
+    return () => {
+      canvas.removeEventListener("pointerdown", recordPointerType);
+      detachSelection();
+    };
   }, []);
 
   // Stable key over just the geotagged-photo layer ids, so the photo-click
@@ -624,10 +640,12 @@ export const MapCanvas = memo(function MapCanvas({
         const hits: GlobalIdentifyHit[] = [];
         const acceptHit = createGlobalIdentifyHitDeduper();
         const queryLayerIds = [...owners.keys()];
-        const rendered =
-          queryLayerIds.length === 0
-            ? []
-            : map.queryRenderedFeatures(event.point, { layers: queryLayerIds });
+        const rendered = queryIdentifyFeatures(
+          (geometry, options) => map.queryRenderedFeatures(geometry, options),
+          event.point,
+          queryLayerIds,
+          lastPointerTypeRef.current,
+        );
         for (const feature of rendered) {
           const owner = owners.get(feature.layer.id);
           if (!owner) continue;
@@ -1106,9 +1124,12 @@ export const MapCanvas = memo(function MapCanvas({
         return;
       }
 
-      const [feature] = map.queryRenderedFeatures(event.point, {
-        layers: queryLayerIds,
-      });
+      const [feature] = queryIdentifyFeatures(
+        (geometry, options) => map.queryRenderedFeatures(geometry, options),
+        event.point,
+        queryLayerIds,
+        lastPointerTypeRef.current,
+      );
       if (!feature) {
         clearIdentifyResult();
         return;
