@@ -1325,42 +1325,55 @@ async function addArcGISMapServiceSublayerGroup(
 
   const layerIds: string[] = [];
   let bounds: [number, number, number, number] | undefined;
-  // `addLayer` stacks each new layer above the previous one, so walk the list
-  // bottom-up to leave sublayer 0 on top, as the service itself draws it.
-  for (const child of [...children].reverse()) {
-    const id = await addArcGISImageServiceLayer(
-      app,
-      {
-        ...options,
-        name: child.name,
-        splitSublayers: false,
-        sublayers: child.sublayers,
-        zoomTo: false,
-      },
-      input,
-      service,
-      child.visible,
-    );
-    layerIds.push(id);
-    const layerBounds = useAppStore.getState().layers.find((layer) => layer.id === id)
-      ?.source.bounds;
-    if (isGeoBounds(layerBounds)) {
-      bounds = bounds
-        ? [
-            Math.min(bounds[0], layerBounds[0]),
-            Math.min(bounds[1], layerBounds[1]),
-            Math.max(bounds[2], layerBounds[2]),
-            Math.max(bounds[3], layerBounds[3]),
-          ]
-        : layerBounds;
+  // The project the children join; a cancelled add takes them back out only
+  // while that project is still open.
+  const loadCount = useAppStore.getState().projectLoadCount;
+  try {
+    // `addLayer` stacks each new layer above the previous one, so walk the list
+    // bottom-up to leave sublayer 0 on top, as the service itself draws it.
+    for (const child of [...children].reverse()) {
+      const id = await addArcGISImageServiceLayer(
+        app,
+        {
+          ...options,
+          name: child.name,
+          splitSublayers: false,
+          sublayers: child.sublayers,
+          zoomTo: false,
+        },
+        input,
+        service,
+        child.visible,
+      );
+      layerIds.push(id);
+      const layerBounds = useAppStore.getState().layers.find((layer) => layer.id === id)
+        ?.source.bounds;
+      if (isGeoBounds(layerBounds)) {
+        bounds = bounds
+          ? [
+              Math.min(bounds[0], layerBounds[0]),
+              Math.min(bounds[1], layerBounds[1]),
+              Math.max(bounds[2], layerBounds[2]),
+              Math.max(bounds[3], layerBounds[3]),
+            ]
+          : layerBounds;
+      }
     }
+    options.signal?.throwIfAborted();
+  } catch (error) {
+    // A cancelled add adds nothing, so the children placed before the
+    // cancellation go too. Once another project has opened, the store is that
+    // project's, and these children left with the old one.
+    if (options.signal?.aborted && useAppStore.getState().projectLoadCount === loadCount) {
+      for (const id of layerIds) useAppStore.getState().removeLayer(id);
+    }
+    throw error;
   }
 
   // `mapName` is usually the generic "Layers", so the URL's service folder
   // name is the better fallback.
   const groupName =
     options.name?.trim() || layerNameFromArcGISInput(service.serviceUrl, "ArcGIS Layer");
-  options.signal?.throwIfAborted();
   useAppStore.getState().addLayerGroup(groupName, layerIds);
   if (bounds && (options.zoomTo ?? shouldZoomToNewLayers())) app.fitBounds?.(bounds);
   return layerIds[layerIds.length - 1];

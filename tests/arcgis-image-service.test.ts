@@ -786,6 +786,33 @@ describe("addArcGISLayer (map and image services)", () => {
       ],
     };
 
+    it("takes back the sublayers it added when cancelled part-way", async () => {
+      respondWith(GROUPED_MAP_SERVICE);
+      const controller = new AbortController();
+      // Cancelled as soon as the first sublayer lands, before the second.
+      const unsubscribe = useAppStore.subscribe((state) => {
+        if (state.layers.length > 0 && !controller.signal.aborted) {
+          controller.abort(new DOMException("cancelled", "AbortError"));
+        }
+      });
+      try {
+        await assert.rejects(
+          addArcGISLayer(app, {
+            layerType: "map-service",
+            sourceType: "url",
+            url: MAP_SERVICE_URL,
+            splitSublayers: true,
+            signal: controller.signal,
+          }),
+          { name: "AbortError" },
+        );
+      } finally {
+        unsubscribe();
+      }
+      assert.deepEqual(useAppStore.getState().layers, []);
+      assert.deepEqual(useAppStore.getState().layerGroups, []);
+    });
+
     it("adds one dynamic layer per top-level sublayer inside a group", async () => {
       respondWith(GROUPED_MAP_SERVICE);
       const topId = await addArcGISLayer(app, {

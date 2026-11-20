@@ -528,10 +528,15 @@ export async function addRasterToMap(
       ? await explainS3ReadError(source, error, app.translate)
       : error;
   }
-  // Another project may have opened while the header loaded. The sync below
-  // would then write this control's state over the new project's layers, so
-  // stop here and leave the raster to the project switch's own clean-up.
-  options.signal?.throwIfAborted();
+  // Cancelled while the header loaded. The raster is already in the control
+  // (and, through the rasteradd sync, the store), so an add that rejects must
+  // take it back out, as the failure path above does. Once another project
+  // has opened, it may hold a raster with the same id, and its restore prunes
+  // control rasters the project lacks, so leave this one to that clean-up.
+  if (options.signal?.aborted) {
+    if (useAppStore.getState().projectLoadCount === loadCount) control.removeRaster(id);
+    options.signal.throwIfAborted();
+  }
   applyRgbBandDefaults(control, id, options.defaults?.rgbBands);
   if (options.localPath) {
     // The id only exists once addRaster resolves, which is after the rasteradd

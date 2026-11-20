@@ -34,10 +34,14 @@ describe("addRasterToMap", () => {
   });
 
   /**
-   * Starts an add whose header read fails after `interrupt` runs, and returns
-   * the raster ids its failure clean-up removed.
+   * Starts an add whose header read settles (fails, or succeeds with
+   * `succeed`) after `interrupt` runs, and returns the raster ids its clean-up
+   * removed.
    */
-  async function failAfter(interrupt: (controller: AbortController) => void): Promise<string[]> {
+  async function failAfter(
+    interrupt: (controller: AbortController) => void,
+    succeed = false,
+  ): Promise<string[]> {
     assert.ok(mounted, "the first test mounted the control");
     const control = mounted;
     const pending = Promise.withResolvers<string>();
@@ -64,7 +68,8 @@ describe("addRasterToMap", () => {
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
       interrupt(controller);
-      pending.reject(new Error("fetch failed"));
+      if (succeed) pending.resolve("shared-raster");
+      else pending.reject(new Error("fetch failed"));
       await assert.rejects(adding);
       return removed;
     } finally {
@@ -88,5 +93,23 @@ describe("addRasterToMap", () => {
       controller.abort(new DOMException("unmounted", "AbortError")),
     );
     assert.deepEqual(removed, ["shared-raster"]);
+  });
+
+  it("removes a raster whose header loaded after the add was cancelled", async () => {
+    // The user cancels while the header is read; the read then succeeds. The
+    // add rejects, so the raster it put in the control must not stay.
+    const removed = await failAfter(
+      (controller) => controller.abort(new DOMException("cancelled", "AbortError")),
+      true,
+    );
+    assert.deepEqual(removed, ["shared-raster"]);
+  });
+
+  it("leaves a raster loaded after a project switch to that project's restore", async () => {
+    const removed = await failAfter((controller) => {
+      useAppStore.setState((state) => ({ projectLoadCount: state.projectLoadCount + 1 }));
+      controller.abort(new DOMException("replaced", "AbortError"));
+    }, true);
+    assert.deepEqual(removed, []);
   });
 });
