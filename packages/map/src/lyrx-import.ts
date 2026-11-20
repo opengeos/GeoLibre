@@ -217,10 +217,14 @@ function applySymbol(info: SymbolInfo, patch: Partial<Omit<LayerStyle, "labels">
   if (info.geometry === "point") {
     // Read as a circle, so an icon marker the layer had would hide what was imported.
     patch.markerEnabled = false;
+    // As the Mapbox reader does for a circle: a heatmap or cluster would hide the symbol.
+    patch.pointRenderer = "single";
   }
   if (info.markerSize !== undefined) {
     // A CIM marker size is its diameter in points; GeoLibre's is a radius in pixels.
     patch.circleRadius = round((info.markerSize * PIXELS_PER_POINT) / 2);
+    // A fixed size, which proportional sizing would otherwise override.
+    patch.proportionalSizeEnabled = false;
   }
 }
 

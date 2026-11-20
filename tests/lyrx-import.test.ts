@@ -114,11 +114,18 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     assert.equal(result.style.circleRadius, 8);
     // The marker has no outline, so the layer's own outline and icon must not show through.
     const style = applyLyrxImport(
-      { ...structuredClone(DEFAULT_LAYER_STYLE), markerEnabled: true },
+      {
+        ...structuredClone(DEFAULT_LAYER_STYLE),
+        markerEnabled: true,
+        pointRenderer: "heatmap",
+        proportionalSizeEnabled: true,
+      },
       result,
     );
     assert.equal(style.strokeOpacity, 0);
     assert.equal(style.markerEnabled, false);
+    assert.equal(style.pointRenderer, "single");
+    assert.equal(style.proportionalSizeEnabled, false);
   });
 
   it("refuses unique value and class breaks renderers by name for now", () => {
