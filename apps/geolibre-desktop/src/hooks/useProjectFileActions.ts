@@ -972,20 +972,22 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
       );
       loadProject(imported.project, null);
-      // Read straight after the load that bumps it. Services load over the
-      // network after the map settles; if another project replaces this one
-      // at any point from here, nothing more from this import may touch the
-      // store: a late layer is taken back out and the rest is dropped.
+      // Read straight after the load that bumps it. Rasters and services load
+      // after the map settles; if another project replaces this one meanwhile,
+      // the import stops before its next raster or service and publishes no
+      // warnings, and a service layer that lands late is taken back out.
       const generation = useAppStore.getState().projectGeneration;
       const replaced = () => useAppStore.getState().projectGeneration !== generation;
       await mapReady;
       const app = createAppAPI(mapControllerRef);
       if (isTauri()) {
         for (const raster of imported.rasters) {
+          if (replaced()) return;
           try {
             const [loaded] = await loadDroppedRasterPaths([raster.sourcePath], {
               importProjectPath: result.path,
             });
+            if (replaced()) return;
             if (!loaded) throw new Error("Unsupported raster path");
             await addImportedProjectRaster(
               app,
@@ -1000,6 +1002,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
               raster.groupId,
             );
           } catch (error) {
+            if (replaced()) return;
             console.error(`Failed to import ArcGIS raster "${raster.name}"`, error);
             imported.warnings.push({
               layerName: raster.name,

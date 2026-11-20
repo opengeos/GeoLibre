@@ -173,6 +173,33 @@ let nativeRequests: string[] = [];
 let savedText = "";
 let dialogPath = APRX_PATH;
 let onServiceRequest: (() => void) | null = null;
+let onRasterRead: (() => void) | null = null;
+let rasterReads: string[] = [];
+const RASTER_APRX_PATH = "/Users/me/projects/rasters.aprx";
+const RASTER_APRX = zipSync({
+  "GISProject.json": member({
+    projectItems: [{ itemType: "Map", catalogPath: "CIMPATH=map/map.json" }],
+  }),
+  "map/map.json": member({
+    type: "CIMMap",
+    name: "Terrain",
+    mapType: "Map",
+    defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+    layerDefinitions: [
+      ...["dem", "slope"].map((name) => ({
+        type: "CIMRasterLayer",
+        name,
+        uRI: `CIMPATH=map/${name}.json`,
+        dataConnection: { workspaceConnectionString: "DATABASE=/data", dataset: `${name}.tif` },
+      })),
+      hostedLayer("Mains", SERVICE, "3"),
+    ],
+  }),
+});
+const archives: Record<string, Uint8Array> = {
+  [APRX_PATH]: APRX,
+  [RASTER_APRX_PATH]: RASTER_APRX,
+};
 
 beforeEach(async () => {
   nativeRequests = [];
@@ -184,8 +211,12 @@ beforeEach(async () => {
         case "plugin:dialog|open":
           return dialogPath;
         case "plugin:fs|read_file":
-          assert.equal(args.path, APRX_PATH);
-          return Array.from(APRX);
+          assert.ok(archives[String(args.path)], String(args.path));
+          return Array.from(archives[String(args.path)]);
+        case "allow_raster_asset":
+          rasterReads.push(String(args.path));
+          onRasterRead?.();
+          throw new Error("raster read refused in this test");
         case "plugin:fs|read_text_file":
           assert.equal(args.path, SAVED_PATH);
           return Array.from(strToU8(savedText));
@@ -214,6 +245,8 @@ beforeEach(async () => {
 
 afterEach(() => {
   onServiceRequest = null;
+  onRasterRead = null;
+  rasterReads = [];
   dialogPath = APRX_PATH;
   cleanup();
   resetStores();
@@ -506,6 +539,28 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     assert.ok(switched);
     assert.equal(useAppStore.getState().projectName, "Other");
     assert.deepEqual(useAppStore.getState().layers, []);
+    assert.deepEqual(nativeRequests, []);
+    assert.equal(actions().arcgisImportWarnings, null);
+  });
+
+  it("stops reading rasters once another project opens", async () => {
+    dialogPath = RASTER_APRX_PATH;
+    const actions = renderActions();
+    onRasterRead = () => {
+      onRasterRead = null;
+      useAppStore.getState().loadProject(createEmptyProject("Other"), null);
+    };
+    const originalError = console.error;
+    console.error = () => {};
+    try {
+      await act(() => actions().handleImportArcgisProject());
+    } finally {
+      console.error = originalError;
+    }
+    assert.equal(useAppStore.getState().projectName, "Other");
+    assert.deepEqual(useAppStore.getState().layers, []);
+    // The second raster and the service are never asked for.
+    assert.deepEqual(rasterReads, ["/data/dem.tif"]);
     assert.deepEqual(nativeRequests, []);
     assert.equal(actions().arcgisImportWarnings, null);
   });
