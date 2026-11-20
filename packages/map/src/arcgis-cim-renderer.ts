@@ -765,7 +765,11 @@ function markerLook(layers: CimObject[]): SymbolLook | null {
       : scan.dropped;
   const unreadable =
     marker.color !== undefined && !markerColor ? colorType(marker) : scan.unreadable;
-  const effect = layers.map(layerEffect).find(Boolean);
+  // A marker offset moves the marker off its point, which a circle layer
+  // cannot draw, so it is reported with the geometric effects.
+  const offset =
+    (numberValue(marker.offsetX) ?? 0) !== 0 || (numberValue(marker.offsetY) ?? 0) !== 0;
+  const effect = layers.map(layerEffect).find(Boolean) ?? (offset ? "marker offset" : undefined);
   // Only a shape confirmed as a circle goes unreported: a graphic without a
   // geometry, or a marker with no drawing graphic, has no known shape.
   const drawingGraphics = arrayValue(marker.markerGraphics)
@@ -780,12 +784,32 @@ function markerLook(layers: CimObject[]): SymbolLook | null {
     ...(circle ? {} : { shape: stringValue(marker.type) || "marker" }),
     color: fill.hex,
     fillOpacity: fill.opacity,
-    ...strokeLook(scan.stroke),
+    ...strokeLook(scaledStroke(marker, size, scan.stroke)),
     ...scanNotes({ dropped, unreadable, effect }),
     // A CIM marker size is its height in points; a GeoLibre circle radius is
     // half the diameter in pixels.
     ...(size !== null ? { circleRadius: round((size * PIXELS_PER_POINT) / 2) } : {}),
   };
+}
+
+/**
+ * A vector marker's outline at the marker's size. With
+ * `scaleSymbolsProportionally`, the graphic's stroke widths are given at the
+ * size of its `frame` and scale with the marker, so a 1pt outline in a 10pt
+ * frame is 2pt on a 20pt marker. Without a readable frame or size the width
+ * is kept as written.
+ */
+function scaledStroke(
+  marker: CimObject,
+  size: number | null,
+  stroke: LayerScan["stroke"],
+): LayerScan["stroke"] {
+  if (!stroke || stroke.width === null || marker.scaleSymbolsProportionally !== true) return stroke;
+  const frame = objectValue(marker.frame);
+  const height =
+    (numberValue(frame?.ymax) ?? Number.NaN) - (numberValue(frame?.ymin) ?? Number.NaN);
+  if (size === null || !(height > 0)) return stroke;
+  return { ...stroke, width: (stroke.width * size) / height };
 }
 
 function isMarkerLayer(layer: CimObject): boolean {

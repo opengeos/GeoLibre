@@ -783,6 +783,11 @@ describe("what a translated renderer reports leaving out", () => {
   const roundedRing = {
     curveRings: [[[0, 5], { a: [[5, 0], [0, 0], 0, 1] }, { a: [[0, 5], [0, 0], 0, 1] }]],
   };
+  const markerLayer = (extra: Record<string, unknown>, layers: unknown[] = [solidRed]) => {
+    const symbol = marker(layers);
+    Object.assign(symbol.symbol.symbolLayers[0] as object, extra);
+    return symbol;
+  };
   const shaped = (geometry: unknown) => {
     const symbol = marker([solidRed]);
     const [graphic] = (symbol.symbol.symbolLayers[0] as { markerGraphics: object[] })
@@ -946,6 +951,11 @@ describe("what a translated renderer reports leaving out", () => {
       [{ code: "color", cimType: "CIMHSLColor" }],
     ],
     [
+      "a marker moved off its point",
+      simple(markerLayer({ offsetX: 12, offsetY: 8 })),
+      [{ code: "effects", cimType: "marker offset" }],
+    ],
+    [
       "an unreadable outline in one class only",
       twoClasses(polygonWith([stroke(), fill()]), polygonWith([stroke(hsl), fill()])),
       [{ code: "color", cimType: "CIMHSLColor" }],
@@ -973,6 +983,18 @@ describe("what a translated renderer reports leaving out", () => {
     const style = translateCimRenderer(simple(markerWithStrokeGraphic)).style;
     assert.equal(style.fillColor, "#ff0000");
     assert.equal(style.strokeWidth, 0);
+  });
+
+  it("scales a marker's outline with the marker when Pro scales it proportionally", () => {
+    const outlinedMarker = (extra: Record<string, unknown>) =>
+      translateCimRenderer(
+        simple(markerLayer({ size: 20, ...extra }, [stroke(rgb(0, 0, 0), 1), solidRed])),
+      ).style.strokeWidth;
+    const frame = { xmin: -5, ymin: -5, xmax: 5, ymax: 5 };
+    // A 1pt outline in a 10pt frame on a 20pt marker is 2pt, or 2.6667px.
+    assert.equal(outlinedMarker({ frame, scaleSymbolsProportionally: true }), 2.6667);
+    assert.equal(outlinedMarker({ frame }), 1.3333);
+    assert.equal(outlinedMarker({ scaleSymbolsProportionally: true }), 1.3333);
   });
 
   it("keeps the outline of a hatched polygon and reports the hatch", () => {
