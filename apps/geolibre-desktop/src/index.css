@@ -6476,11 +6476,14 @@ body:has([data-mobile-shell="true"]) [data-testid="notification-region"] {
      tapped near screen edges never clip off-screen (GeoLibre#3537 Phase 3). */
   html[data-touch-ui="true"] .geolibre-identify-popup {
     position: fixed !important;
-    inset-inline: 0.5rem !important;
-    bottom: calc(5.75rem + env(safe-area-inset-bottom)) !important;
+    left: 0.5rem !important;
+    right: 0.5rem !important;
+    bottom: calc(6.75rem + env(safe-area-inset-bottom)) !important;
     top: auto !important;
-    left: auto !important;
+    --tw-translate-x: 0 !important;
+    --tw-translate-y: 0 !important;
     transform: none !important;
+    translate: none !important;
     max-width: none !important;
     width: auto !important;
     z-index: 25 !important;

@@ -64,6 +64,7 @@ export {
 export {
   buildIdentifyQueryGeometry,
   isTouchIdentifyActive,
+  queryIdentifyFeatures,
   sortIdentifyFeaturesByGeometryPriority,
   TOUCH_IDENTIFY_HIT_RADIUS_PX,
   type GeometryTypedFeature,

@@ -77,3 +77,35 @@ export function sortIdentifyFeaturesByGeometryPriority<T extends GeometryTypedFe
     .sort((a, b) => a.priority - b.priority || a.index - b.index)
     .map((entry) => entry.feature);
 }
+
+/**
+ * Shared identify query helper: expands the hit box and applies Point > Line >
+ * Polygon priority ONLY on touch input, keeping desktop mouse queries identical
+ * to MapLibre's top-most draw order.
+ */
+export function queryIdentifyFeatures<
+  P extends IdentifyScreenPoint,
+  F extends GeometryTypedFeature,
+>(
+  queryRendered: (
+    geometry: P | [[number, number], [number, number]],
+    options: { layers: string[] },
+  ) => F[],
+  point: P,
+  layerIds: string[],
+  pointerType?: string | null,
+  desktopRadiusPx = 0,
+): F[] {
+  if (layerIds.length === 0) return [];
+  const touch = isTouchIdentifyActive(pointerType);
+  const geometry = touch
+    ? buildIdentifyQueryGeometry(point, true)
+    : desktopRadiusPx > 0
+      ? ([
+          [point.x - desktopRadiusPx, point.y - desktopRadiusPx],
+          [point.x + desktopRadiusPx, point.y + desktopRadiusPx],
+        ] as [[number, number], [number, number]])
+      : point;
+  const hits = queryRendered(geometry, { layers: layerIds });
+  return touch ? sortIdentifyFeaturesByGeometryPriority(hits) : hits;
+}
