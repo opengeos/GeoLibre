@@ -10,7 +10,7 @@ import { ARCGIS_ONLINE_PORTAL } from "./arcgis-oauth";
  * ends, so a look-alike such as `services-eu1.arcgis.com.example.org` or
  * `myservices-eu1.arcgis.com` never matches.
  */
-const ARCGIS_ONLINE_HOSTING = /^services(?:\d*|-[a-z]{2}\d+)\.arcgis\.com$/i;
+export const ARCGIS_ONLINE_HOSTING = /^services(?:\d*|-[a-z]{2}\d+)\.arcgis\.com$/i;
 
 /**
  * A service path on that hosting that the organisation check can trust: plain
@@ -20,7 +20,7 @@ const ARCGIS_ONLINE_HOSTING = /^services(?:\d*|-[a-z]{2}\d+)\.arcgis\.com$/i;
  * which the server may decode or resolve into another organisation's folder
  * after the first segment has been checked. Such a path loads anonymously.
  */
-const PLAIN_SERVICE_PATH = /^(?:\/[\w-]+)+\/?$/;
+export const PLAIN_SERVICE_PATH = /^(?:\/[\w-]+)+\/?$/;
 
 /**
  * Puts the feature service layers added so far where project load would have

@@ -13,7 +13,9 @@ const { useProjectFileActions } =
   await import("../apps/geolibre-desktop/src/hooks/useProjectFileActions");
 const { installNativeArcGISFetch } = await import("../apps/geolibre-desktop/src/lib/arcgis-fetch");
 const {
+  ARCGIS_ONLINE_HOSTING,
   cachedOrgIdLookup,
+  PLAIN_SERVICE_PATH,
   placeImportedServiceLayers,
   serviceTokenProvider,
   signInForImportedService,
@@ -423,6 +425,45 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     }
   });
 
+  it("matches only ArcGIS Online's hosting servers and plain service paths", () => {
+    // Called directly: most look-alike hosts never reach the pattern, because
+    // the portal trust check turns away anything outside arcgis.com first.
+    for (const host of [
+      "services.arcgis.com",
+      "services3.arcgis.com",
+      "services-eu1.arcgis.com",
+      "services-ap1.arcgis.com",
+    ]) {
+      assert.equal(ARCGIS_ONLINE_HOSTING.test(host), true, host);
+    }
+    for (const host of [
+      "services-eu1.arcgis.com.",
+      "services-eu1.arcgis.com.evil.example",
+      "evilservices-eu1.arcgis.com",
+      "services-eu1x.arcgis.com",
+      "services-eu.arcgis.com",
+      "services-1.arcgis.com",
+      "services-eu1.evil.arcgis.com",
+      "tiles.arcgis.com",
+    ]) {
+      assert.equal(ARCGIS_ONLINE_HOSTING.test(host), false, host);
+    }
+    for (const path of ["/AbCd_12-3/arcgis/rest/services/Water/FeatureServer/3", "/AbCd/x/"]) {
+      assert.equal(PLAIN_SERVICE_PATH.test(path), true, path);
+    }
+    for (const path of [
+      "",
+      "/",
+      "//AbCd/x",
+      "/AbCd/%2e%2e%2fZzZz/x",
+      "/AbCd/..;/ZzZz/x",
+      "/AbCd/arcgis;x/rest",
+      "/AbCd/x.y",
+    ]) {
+      assert.equal(PLAIN_SERVICE_PATH.test(path), false, path);
+    }
+  });
+
   it("offers a sign-in token only to its own organisation's services", async () => {
     const online = ARCGIS_ONLINE_PORTAL;
     const org = "https://myorg.maps.arcgis.com";
@@ -484,7 +525,7 @@ describe("ArcGIS Pro feature service import on desktop", () => {
       `${ORG}/%2e%2e%2fZzZzZzZz87654321/arcgis/rest/services/Water/FeatureServer/3`,
       `${ORG}/..;/ZzZzZzZz87654321/arcgis/rest/services/Water/FeatureServer/3`,
       `${ORG}/%2E%2E%5CZzZzZzZz87654321/arcgis/rest/services/Water/FeatureServer/3`,
-      `${ORG};x/arcgis/rest/services/Water/FeatureServer/3`,
+      `${ORG}/arcgis;x/rest/services/Water/FeatureServer/3`,
       `${ORG}/arcgis/rest/services/Water/FeatureServer/3/%2e%2e%2f%2e%2e%2f%2e%2e%2fZzZz`,
     ]) {
       const url = `https://services-eu1.arcgis.com/${path}`;
