@@ -4,9 +4,8 @@ import { describe, it } from "node:test";
 import { createElement } from "react";
 
 // Loaded after the harness so its CSS imports and Vite globals are handled.
-const { NumericStyleInput } = await import(
-  "../apps/geolibre-desktop/src/components/panels/style-panel/style-inputs"
-);
+const { NumericStyleInput } =
+  await import("../apps/geolibre-desktop/src/components/panels/style-panel/style-inputs");
 const { Input } = await import("@geolibre/ui");
 
 function renderField(onChange: (value: number) => void) {
