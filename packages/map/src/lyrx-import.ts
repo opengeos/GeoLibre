@@ -216,6 +216,10 @@ function readSymbol(symbol: CimObject, notes: Set<string>): SymbolInfo {
       for (const inner of nested) {
         if (!inner) continue;
         const read = readSymbol(inner, notes);
+        // A later graphic's colours are not read, so say so rather than drop them silently.
+        if ((info.fill && read.fill) || (info.stroke && read.stroke)) {
+          notes.add("extra marker graphics");
+        }
         info.fill ??= read.fill;
         info.stroke ??= read.stroke;
         info.fillUnread ||= read.fillUnread;
@@ -331,7 +335,10 @@ function readLabels(layer: CimObject, warnings: string[]): Partial<LabelStyle> |
 function cimColor(color: CimObject | undefined): { color: string; opacity: number } | null {
   if (!color) return null;
   const type = stringOf(color.type);
-  const values = Array.isArray(color.values) ? color.values.map(Number) : [];
+  // `Number(null)` is 0, so only real numbers count; anything else makes the colour unreadable.
+  const values = Array.isArray(color.values)
+    ? color.values.map((value) => (typeof value === "number" ? value : Number.NaN))
+    : [];
   if (values.some((value) => !Number.isFinite(value))) return null;
 
   let rgb: [number, number, number] | null = null;

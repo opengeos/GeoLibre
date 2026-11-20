@@ -507,6 +507,30 @@ describe("ArcGIS Pro layer file (.lyrx) style import", () => {
     assert.match(result.warnings.join(" "), /extra point markers/);
   });
 
+  it("treats a null colour channel as unreadable, not black", () => {
+    const result = parseLyrx(
+      lyrxDocument({
+        type: "CIMSimpleRenderer",
+        symbol: {
+          type: "CIMSymbolReference",
+          symbol: {
+            type: "CIMPolygonSymbol",
+            symbolLayers: [
+              { type: "CIMSolidStroke", enable: true, width: 1, color: rgb(1, 2, 3) },
+              {
+                type: "CIMSolidFill",
+                enable: true,
+                color: { type: "CIMRGBColor", values: [null, 0, 0, 100] },
+              },
+            ],
+          },
+        },
+      }),
+    );
+    assert.equal(result.style.fillColor, undefined);
+    assert.match(result.warnings.join(" "), /colours GeoLibre cannot read/);
+  });
+
   it("leaves Mapbox GL JSON to the Mapbox reader", () => {
     const result = importStyleText(
       JSON.stringify({
