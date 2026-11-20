@@ -428,8 +428,8 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     const org = "https://myorg.maps.arcgis.com";
     const enterprise = "https://gis.example.org/portal";
     const ORG = "AbCdEfGh12345678";
-    const hosted = (orgId: string) =>
-      `https://services3.arcgis.com/${orgId}/arcgis/rest/services/Water/FeatureServer/3`;
+    const hosted = (orgId: string, host = "services3.arcgis.com") =>
+      `https://${host}/${orgId}/arcgis/rest/services/Water/FeatureServer/3`;
     const orgIds: Record<string, string> = { [online]: ORG, [org]: ORG };
     const lookups: string[] = [];
     const signIn = (url: string, portals: string[], failing: string[] = []) =>
@@ -453,6 +453,31 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     assert.deepEqual(await signIn(hosted(ORG), [org]), { portal: org, token: `token-for-${org}` });
     // Another organisation's service on the same shared hosting does not.
     assert.equal(await signIn(hosted("ZzZzZzZz87654321"), [online, org]), null);
+    // The same holds on the unnumbered and regional hosting servers.
+    for (const host of [
+      "services.arcgis.com",
+      "services-eu1.arcgis.com",
+      "SERVICES-AP1.arcgis.com",
+    ]) {
+      assert.deepEqual(await signIn(hosted(ORG, host), [online]), {
+        portal: online,
+        token: `token-for-${online}`,
+      });
+      assert.equal(await signIn(hosted("ZzZzZzZz87654321", host), [online, org]), null);
+    }
+    // A host that only looks like the shared hosting never gets the token,
+    // even with the user's own organisation id in its path.
+    for (const host of [
+      "services-eu1.arcgis.com.evil.example",
+      "evilservices-eu1.arcgis.com",
+      "services-eu1x.arcgis.com",
+      "services-eu.arcgis.com",
+      "services-1.arcgis.com",
+      "services-eu1.evil.arcgis.com",
+      "services-eu1.arcgis.com.",
+    ]) {
+      assert.equal(await signIn(hosted(ORG, host), [online, org]), null, host);
+    }
     // Nor does any other *.arcgis.com host, an untrusted host, or plain HTTP.
     assert.equal(
       await signIn("https://utility.arcgis.com/usrsvcs/servers/x/rest/services/A/FeatureServer/0", [
