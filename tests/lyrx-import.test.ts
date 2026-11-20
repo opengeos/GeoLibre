@@ -253,6 +253,25 @@ describe(".lyrx style import", () => {
       });
     }
 
+    it("names the picture or hatch fill that left a symbol with nothing drawable", () => {
+      for (const [fill, name] of [
+        [
+          { type: "CIMPictureFill", enable: true },
+          /^Not imported from the \.lyrx style: picture fill\.$/,
+        ],
+        [
+          { type: "CIMHatchFill", enable: true },
+          /^Not imported from the \.lyrx style: hatch fill\.$/,
+        ],
+      ] as const) {
+        const result = importStyleText(lyrx(simple(polygon(fill))));
+        assert.equal(result.ok, false);
+        if (result.ok) return;
+        assert.match(result.warnings[0], /has no fill, outline or marker GeoLibre can import/);
+        assert.match(result.warnings[1], name);
+      }
+    });
+
     it("a document without a feature layer or renderer", () => {
       for (const [text, warning] of [
         [
@@ -451,6 +470,18 @@ describe(".lyrx style import", () => {
       assert.match(text, /2 visible label classes; only the first/);
       assert.match(text, /label filter \(where clause\) was not imported/);
       assert.match(text, /label font \(Arial\) was not imported/);
+    });
+
+    it("keeps the layer's text style and says so when the text symbol cannot be read", () => {
+      const { style, warnings } = applied(
+        withLabels([
+          { expression: "[NAME]", visibility: true, textSymbol: { type: "CIMSymbolReference" } },
+        ]),
+        labelled(),
+      );
+      assert.equal(style.labels.field, "NAME");
+      assert.equal(style.labels.size, 20);
+      assert.match(warnings.join(" "), /label text symbol could not be read/);
     });
 
     it("draws no halo when the file has none, and keeps the colour it cannot read", () => {

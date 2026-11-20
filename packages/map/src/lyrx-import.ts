@@ -16,6 +16,7 @@
 
 import { DEFAULT_LAYER_STYLE, type LabelStyle, type LayerStyle } from "@geolibre/core";
 import {
+  cimSymbolLayerEnabled,
   translateCimRenderer,
   translateCimSymbol,
   type CimRendererIssue,
@@ -116,6 +117,14 @@ export function parseLyrx(document: unknown): LyrxImportResult {
   // replace the user's own style with a fraction of the file's.
   if (!translation.translated) {
     result.warnings.push(...translation.issues.map(refusal));
+    // A symbol refused for having nothing drawable is followed by what it does draw, such as a
+    // picture or hatch fill, so the user knows what to change in ArcGIS Pro.
+    const undrawn = translation.issues.some((issue) => issue.code === "symbol")
+      ? undrawnLayerTypes(layer.renderer)
+      : [];
+    if (undrawn.length > 0) {
+      result.warnings.push(`Not imported from the .lyrx style: ${undrawn.join(", ")}.`);
+    }
     return result;
   }
   result.style = translation.style;
@@ -176,6 +185,32 @@ function refusal(issue: CimRendererIssue): string {
       return `The .lyrx style uses the ${name} renderer, which GeoLibre cannot import; ${KEEPS_STYLE}`;
     }
   }
+}
+
+/** Symbol layer types the shared reader can draw as a flat style. */
+const FLAT_LAYERS = new Set(["CIMSolidFill", "CIMSolidStroke", "CIMVectorMarker"]);
+
+/**
+ * The enabled symbol layer types anywhere in a renderer's symbols that GeoLibre does not draw
+ * flat (a picture or hatch fill, a picture marker), in plain words and without repeats.
+ */
+function undrawnLayerTypes(renderer: unknown): string[] {
+  const names = new Set<string>();
+  const visit = (value: unknown, depth: number): void => {
+    if (depth > 32 || typeof value !== "object" || value === null) return;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, depth + 1);
+      return;
+    }
+    const object = value as CimObject;
+    for (const layer of arrayOf(object.symbolLayers)) {
+      const type = stringOf(layer.type);
+      if (cimSymbolLayerEnabled(layer) && type && !FLAT_LAYERS.has(type)) names.add(typeName(type));
+    }
+    for (const child of Object.values(object)) visit(child, depth + 1);
+  };
+  visit(renderer, 0);
+  return [...names];
 }
 
 /** The warning for something an imported renderer left out. */
@@ -285,7 +320,14 @@ function readLabels(layer: CimObject, warnings: string[]): Partial<LabelStyle> |
  */
 function readTextSymbol(labelClass: CimObject, warnings: string[]): Partial<LabelStyle> {
   const text = objectOf(objectOf(labelClass.textSymbol)?.symbol);
-  if (!text) return {};
+  if (!text) {
+    if (labelClass.textSymbol !== undefined) {
+      warnings.push(
+        "The .lyrx style's label text symbol could not be read, so the labels keep the layer's own text style.",
+      );
+    }
+    return {};
+  }
   const labels: Partial<LabelStyle> = {};
   let translucent = false;
   const height = numberOf(text.height);
@@ -362,8 +404,8 @@ function labelParts(
       issue.code === "effects"
         ? typeName(issue.cimType, /^GeometricEffect/) || "geometric effect"
         : issue.code === "color"
-        ? colourName(issue.cimType) || "colour"
-        : typeName(issue.cimType) || issue.code;
+          ? colourName(issue.cimType) || "colour"
+          : typeName(issue.cimType) || issue.code;
     parts.push(`the ${part} ${name}`);
   }
   return parts;
