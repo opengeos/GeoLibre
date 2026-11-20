@@ -575,10 +575,19 @@ function inferredSymbolType(layers: CimObject[]): string {
   return "";
 }
 
-/** The first enabled layer of a type the look does not draw, if any. */
+/**
+ * The first enabled layer the look does not draw, if any. The look draws only
+ * the first layer of each `drawn` type, so a second solid stroke (the casing
+ * of a cased line, say) counts as dropped too.
+ */
 function droppedLayer(layers: CimObject[], drawn: string[]): string | undefined {
-  const type = layers.map((layer) => stringValue(layer.type)).find((t) => !drawn.includes(t));
-  return type || undefined;
+  const remaining = new Set(drawn);
+  for (const layer of layers) {
+    const type = stringValue(layer.type);
+    if (remaining.delete(type)) continue;
+    return type || "symbol layer";
+  }
+  return undefined;
 }
 
 function enabledLayers(symbol: CimObject | undefined): CimObject[] {

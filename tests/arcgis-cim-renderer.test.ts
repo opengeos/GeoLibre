@@ -541,6 +541,22 @@ describe("CIM symbols and defaults as Pro writes them", () => {
     );
     assert.equal(hatched.translated, true);
     assert.deepEqual(hatched.issues, [{ code: "symbol-layers", cimType: "CIMHatchFill" }]);
+    // A cased line draws only its top stroke, so the casing is reported.
+    const cased = translateCimRenderer({
+      type: "CIMSimpleRenderer",
+      symbol: {
+        type: "CIMSymbolReference",
+        symbol: {
+          type: "CIMLineSymbol",
+          symbolLayers: [
+            { type: "CIMSolidStroke", enable: true, width: 2.6, color: rgb(255, 255, 255) },
+            { type: "CIMSolidStroke", enable: true, width: 3.4, color: rgb(0, 0, 0) },
+          ],
+        },
+      },
+    });
+    assert.equal(cased.style.strokeColor, "#ffffff");
+    assert.deepEqual(cased.issues, [{ code: "symbol-layers", cimType: "CIMSolidStroke" }]);
     assert.deepEqual(translateCimRenderer(density({ classBreakType: "UnclassedColor" })).issues, [
       { code: "renderer", cimType: "UnclassedColor" },
     ]);
