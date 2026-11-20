@@ -1,4 +1,3 @@
-import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import {
   addRasterToMap,
@@ -19,6 +18,7 @@ import type { TFunction } from "i18next";
 import { useEffect, useRef, type RefObject } from "react";
 import { dismissNotification, notify } from "../../lib/notify";
 import { notifyUnrestorableRasters } from "../../lib/local-raster-notices";
+import { startProjectImportSession } from "../../lib/project-import-session";
 import { isTauri, pickLocalRasterFiles, readRasterFileAtPath } from "../../lib/tauri-io";
 import { createAppAPI } from "../usePlugins";
 
@@ -72,11 +72,11 @@ export function useRasterFileHandlers(
       conversions.add(controller);
       // The converted raster belongs to the project it came from: opening
       // another one cancels the conversion, so the result never lands in (or
-      // reports an error to) the project that replaced it.
-      const loadCount = useAppStore.getState().projectLoadCount;
-      const stopWatchingProject = useAppStore.subscribe((state) => {
-        if (state.projectLoadCount !== loadCount) controller.abort();
-      });
+      // reports an error to) the project that replaced it. The session judges
+      // replacement by the same rule as a project import; the controller also
+      // carries the notice's Cancel and the unmount.
+      const session = startProjectImportSession();
+      session.signal.addEventListener("abort", () => controller.abort(), { once: true });
       let notice: string | undefined;
       try {
         // A remote source gets a single up-front prompt that names the download:
@@ -195,7 +195,7 @@ export function useRasterFileHandlers(
         console.error("[GeoLibre] Failed to convert GeoTIFF to COG", error);
         notify.error(translateRef.current("raster.cogConvertFailed", { name }), { error });
       } finally {
-        stopWatchingProject();
+        session.dispose();
         if (notice) dismissNotification(notice);
         conversions.delete(controller);
       }
