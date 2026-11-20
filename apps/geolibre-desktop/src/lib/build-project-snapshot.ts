@@ -1,5 +1,4 @@
 import {
-  keepFetchedGeoJson,
   projectFromStore,
   redactCredentials,
   useAppStore,
@@ -40,13 +39,12 @@ export function buildProjectSnapshot(
     basemapVisible: state.basemapVisible,
     basemapOpacity: state.basemapOpacity,
     blankBackgroundColor: state.blankBackgroundColor,
-    // History and external snapshots must preserve the current edited data,
-    // and the features fetched for a URL-referenced GeoJSON layer, which
-    // they restore without fetching again. File saves use their own explicit
-    // embedding choice before serialization.
-    layers: (overrides.layers ?? state.layers).map((layer) =>
-      embedEditedGeometry(keepFetchedGeoJson(layer)),
-    ),
+    // History and external snapshots must preserve the current edited data.
+    // File saves use their own explicit embedding choice before serialization.
+    // A URL-referenced GeoJSON layer's fetched features are left out, as on
+    // Save: restoring a snapshot goes through loadProject, which fetches them
+    // again, and embedding them could push autosave past its size limit.
+    layers: (overrides.layers ?? state.layers).map(embedEditedGeometry),
     selectedLayerId: state.selectedLayerId,
     layerGroups: state.layerGroups,
     preferences: state.preferences,

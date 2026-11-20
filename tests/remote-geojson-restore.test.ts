@@ -4,7 +4,6 @@ import type { FeatureCollection } from "geojson";
 import type { AddLayerSpec } from "../packages/embed/src";
 import {
   isFetchedGeoJson,
-  keepFetchedGeoJson,
   projectFromStore,
   rememberFetchedGeoJson,
   remoteGeoJsonUrl,
@@ -120,15 +119,6 @@ describe("saving a fetched GeoJSON layer", () => {
     assert.deepEqual(projectFromStore(useAppStore.getState()).layers[0].geojson, edited);
   });
 
-  it("keeps fetched features in history and collaboration snapshots", () => {
-    const fetched = rememberFetchedGeoJson(collection("fetched"));
-    const kept = keepFetchedGeoJson(layer({ geojson: fetched }));
-    useAppStore.getState().addLayer(kept);
-    assert.deepEqual(projectFromStore(useAppStore.getState()).layers[0].geojson, fetched);
-    const inline = layer({ id: "inline", geojson: collection("inline") });
-    assert.equal(keepFetchedGeoJson(inline), inline);
-  });
-
   it("still embeds inline features that were never fetched", () => {
     const inline = collection("inline");
     useAppStore.getState().addLayer(layer({ geojson: inline }));
@@ -229,6 +219,27 @@ describe("restoreRemoteGeoJsonLayers", () => {
     assert.equal(requests.includes("https://data.example/4.geojson"), false);
   });
 
+  it("reports a download timeout as a timeout, not a CORS failure", async () => {
+    globalThis.fetch = (async () => {
+      throw new DOMException("signal timed out", "TimeoutError");
+    }) as typeof fetch;
+    const errors: unknown[] = [];
+    const realWarning = notifyModule.notify.warning;
+    const realWarn = console.warn;
+    notifyModule.notify.warning = (() => {}) as never;
+    console.warn = (_message: unknown, error: unknown) => void errors.push(error);
+    try {
+      useAppStore.getState().addLayer(layer());
+      await restoreRemoteGeoJsonLayers();
+    } finally {
+      notifyModule.notify.warning = realWarning;
+      console.warn = realWarn;
+    }
+    assert.equal(errors.length, 1);
+    // Before, fetchOk rewrapped the timeout as "unreachable or blocking CORS".
+    assert.doesNotMatch((errors[0] as Error).message, /CORS/);
+  });
+
   it("does not overwrite a layer removed while the request was in flight", async () => {
     let release!: () => void;
     globalThis.fetch = (async () => {
@@ -306,7 +317,8 @@ describe("withFetchedRemoteGeoJson (embed addLayer)", () => {
     for (const data of ["fields.geojson", "//cdn.example/f.json"]) {
       await assert.rejects(
         withFetchedRemoteGeoJson(layer({ source: { type: "geojson", data } })),
-        /not an http\(s\) URL/,
+        // The message is translated, and i18next is not initialized here.
+        Error,
       );
     }
   });

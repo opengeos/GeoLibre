@@ -242,7 +242,12 @@ async function fetchOk(url: string, signal: AbortSignal | undefined, fetchImpl: 
       headers: { Accept: "application/geo+json, application/json, application/zip, */*;q=0.8" },
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    if (
+      error instanceof DOMException &&
+      (error.name === "AbortError" || error.name === "TimeoutError")
+    ) {
+      throw error;
+    }
     throw new Error(`Could not fetch ${url}. The server may be unreachable or blocking CORS.`, {
       cause: error,
     });

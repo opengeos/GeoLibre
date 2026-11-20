@@ -74,6 +74,18 @@ export async function restoreRemoteGeoJsonLayers(): Promise<void> {
     try {
       const geojson = await fetchGeoJsonFeatureCollection(url, {
         signal: AbortSignal.timeout(RESTORE_TIMEOUT_MS),
+      }).catch((error: unknown) => {
+        // A timeout surfaces as a generic network error or a raw browser
+        // message depending on whether it hit the request or the body read.
+        if (error instanceof DOMException && error.name === "TimeoutError") {
+          throw new Error(
+            i18next.t("notifications.remoteGeoJsonTimedOut", {
+              url,
+              seconds: RESTORE_TIMEOUT_MS / 1000,
+            }),
+          );
+        }
+        throw error;
       });
       if (!isStillWaiting(layer)) return;
       // Loading what the file references is part of opening it: not an undo
@@ -122,9 +134,12 @@ function rememberDerivedGeoJson(layerId: string, fetched: FeatureCollection): vo
  * @returns A message naming the reference and the accepted forms.
  */
 function unfetchableReferenceMessage(reference: string): string {
-  return isTauri()
-    ? `${reference} is not an http(s) URL.`
-    : `${reference} is not an http(s) URL or a path starting with "/".`;
+  return i18next.t(
+    isTauri()
+      ? "notifications.remoteGeoJsonNotFetchableDesktop"
+      : "notifications.remoteGeoJsonNotFetchable",
+    { reference },
+  );
 }
 
 /**

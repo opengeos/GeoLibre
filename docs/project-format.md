@@ -399,10 +399,9 @@ names, as tile and service layers already do. A layer whose data cannot be
 fetched, or whose reference is in neither form, stays in the project, empty,
 with a warning. Saving the project keeps the URL reference rather than
 embedding the downloaded features, unless they were edited in the app, in
-which case the edited features are embedded. Undo history, autosave and
-collaboration snapshots carry the downloaded features, so a layer restored
-from one of them (crash recovery, Project History) is embedded on its next
-save, like an edited one. When a layer has both an inline
+which case the edited features are embedded. Autosave, Project History and
+collaboration snapshots keep the reference the same way, and fetch the data
+again when they are restored. When a layer has both an inline
 `geojson` and a URL, the inline copy is drawn and the URL is not fetched.
 
 A layer can define an optional `capabilities` set (`query`, `create`, `update`,
