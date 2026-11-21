@@ -571,10 +571,12 @@ function ruleScaleAttributes(rule: VectorRule): string {
  * (outline color/width, opacity, size) are folded into each rule's
  * symbol. The ELSE rule stays a top-level catch-all.
  *
- * Returns null when no rule could be exported and the ELSE rule is switched
- * off, so the tree would draw nothing; the caller then exports a single
- * symbol, as it does for categorized and graduated styles with no valid
- * classes. Rules the user switched off still export (unchecked).
+ * Returns null when the style has rules but none could be exported and the
+ * ELSE rule is switched off, so the tree would draw nothing; the caller then
+ * exports a single symbol, as it does for categorized and graduated styles
+ * with no valid classes. Rules the user switched off still export
+ * (unchecked), and so does a style whose only rule is a switched-off ELSE,
+ * which draws nothing on the map either.
  */
 function ruleRenderer(
   geometry: SymbolGeometry,
@@ -651,7 +653,7 @@ function ruleRenderer(
   };
 
   const ruleXml = roots.map(emitRule).join("");
-  if (!ruleXml && elseRule?.enabled === false) return null;
+  if (!ruleXml && concrete.length > 0 && elseRule?.enabled === false) return null;
   // The ELSE rule catches features no other rule matched; its color falls back
   // to the layer's single-symbol color for the geometry when the else rule has
   // no valid color.

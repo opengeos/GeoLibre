@@ -193,6 +193,13 @@ describe("buildQml", () => {
     ];
     const groupSkipped = buildQml(layer({ style: grouped }), polygons());
     assert.match(compact(groupSkipped.qml), /<renderer-v2 type="singleSymbol"/);
+    // A style whose only rule is a switched-off ELSE draws nothing on the map,
+    // and its export keeps it that way.
+    const elseOnly = rules(true, untranslatable);
+    elseOnly.vectorRules = [elseOnly.vectorRules[1]];
+    const empty = buildQml(layer({ style: elseOnly }), polygons());
+    assert.match(compact(empty.qml), /<renderer-v2 type="RuleRenderer"/);
+    assert.match(empty.qml, /filter="ELSE"[^>]*checkstate="0"/);
     // Rules the user switched off still export as unchecked rules.
     const off = buildQml(layer({ style: rules(false, [">", ["get", "pop"], 1000]) }), polygons());
     assert.match(compact(off.qml), /<renderer-v2 type="RuleRenderer"/);
