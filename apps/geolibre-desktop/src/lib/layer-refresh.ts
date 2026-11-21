@@ -884,10 +884,24 @@ function parseGeoJsonFeatureCollection(value: unknown): FeatureCollection {
   } as FeatureCollection;
 }
 
-function layerHttpUrl(layer: GeoLibreLayer): string | null {
+function layerUrl(layer: GeoLibreLayer): string {
   const sourcePath = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
   const sourceUrl = typeof layer.source.url === "string" ? layer.source.url.trim() : "";
-  const url = sourceUrl || sourcePath;
+  return sourceUrl || sourcePath;
+}
+
+function layerHttpUrl(layer: GeoLibreLayer): string | null {
+  const url = layerUrl(layer);
+  return isHttpUrl(url) ? url : null;
+}
+
+/**
+ * The layer's HTTP(S) URL, or its `gs://`/`s3://`/`s3a://` URL. Only the
+ * GeoJSON refresh path resolves cloud schemes; the vector-control, OGC, and
+ * ArcGIS paths stay HTTP-only.
+ */
+function layerGeoJsonSourceUrl(layer: GeoLibreLayer): string | null {
+  const url = layerUrl(layer);
   return isHttpUrl(url) || /^(?:gs|s3|s3a):\/\//i.test(url) ? url : null;
 }
 
@@ -901,7 +915,7 @@ function layerHttpUrl(layer: GeoLibreLayer): string | null {
 export function refreshSourceUrl(layer: GeoLibreLayer): string | null {
   if (layer.type !== "geojson") return null;
 
-  const url = layerHttpUrl(layer);
+  const url = layerGeoJsonSourceUrl(layer);
   if (!url) return null;
 
   if (isWfsLayer(layer)) return url;

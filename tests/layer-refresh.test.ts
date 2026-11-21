@@ -45,6 +45,18 @@ describe("isVectorControlRefreshLayer / isRefreshableLayer", () => {
     assert.equal(isRefreshableLayer(layer), true);
   });
 
+  it("keeps cloud-scheme vector-control layers out of the control refresh path", () => {
+    for (const url of ["s3://bucket/a.geojson", "gs://bucket/a.geojson"]) {
+      const layer = makeLayer({
+        type: "geojson",
+        source: { type: "geojson", url },
+        metadata: { sourceKind: "maplibre-gl-vector", externalNativeLayer: true },
+      });
+      assert.equal(isVectorControlRefreshLayer(layer), false);
+      assert.equal(isRefreshableLayer(layer), false);
+    }
+  });
+
   it("does not treat a file-backed vector-control layer (no url) as a vector-control refresh layer", () => {
     const layer = makeLayer({
       type: "geojson",
