@@ -183,7 +183,11 @@ describe("buildQml", () => {
     const skipped = buildQml(layer({ style: rules(true, untranslatable) }), polygons());
     assert.match(compact(skipped.qml), /<renderer-v2 type="singleSymbol"/);
     assert.ok(skipped.warnings.some((w) => /"Low" uses a filter with no QGIS equivalent/.test(w)));
-    assert.ok(skipped.warnings.some((w) => /rule-based renderer had no valid classes/.test(w)));
+    assert.ok(
+      skipped.warnings.some((w) =>
+        /None of the rule-based renderer's rules could be exported; .* draws every feature/.test(w),
+      ),
+    );
     // The same holds when the skipped rules sit inside an enabled group.
     const grouped = rules(true, untranslatable);
     grouped.vectorRules = [

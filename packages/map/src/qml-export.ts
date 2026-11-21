@@ -781,6 +781,14 @@ export function buildQml(
       warnings.push(
         "The custom color expression has no QML equivalent; the layer is exported with its fallback color.",
       );
+    } else if (mode === "rule-based" && rules.length > 0) {
+      // Only reached when rules exist but none exported and ELSE is off. QGIS
+      // cannot express the skipped filters, so neither an empty tree nor a
+      // single symbol matches the map; the single symbol keeps the layer
+      // visible, as the flat export did, and says that it draws everything.
+      warnings.push(
+        "None of the rule-based renderer's rules could be exported; the layer is exported as a single symbol that draws every feature.",
+      );
     } else if (mode === "categorized" || mode === "graduated" || mode === "rule-based") {
       warnings.push(
         `The ${mode} renderer had no valid classes to export; the layer is exported as a single symbol.`,
