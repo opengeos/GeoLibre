@@ -60,9 +60,11 @@ export interface LayersFileHost {
    */
   isReloadableLocalFile: (layer: GeoLibreLayer) => boolean;
   /**
-   * Whether the layer's features can be fetched again from its URL (a GeoJSON
-   * layer loaded from the web). Such a layer is written without its features
-   * and re-fetched when it is added again.
+   * Whether the layer's features are fetched again automatically from its URL
+   * when the layers file is added (a GeoJSON layer from a public web host, or
+   * WFS). Such a layer is written without its features. A layer whose URL is
+   * only refreshed on request (a private host or a signed S3 source) answers
+   * false, so it is not written without features it would then load without.
    */
   canRefetch: (layer: GeoLibreLayer) => boolean;
 }
@@ -70,7 +72,10 @@ export interface LayersFileHost {
 /** What Export Layers writes, and what it had to leave out or change. */
 export interface LayersFileBuild {
   content: LayersFileContent;
-  /** Names of layers left out because their data exists only in the app. */
+  /**
+   * Names of layers left out because their features exist only in the app:
+   * inline data, or a URL that is not fetched automatically on reload.
+   */
   skipped: string[];
   /** How many credential values (tokens, keys) were removed from the layers. */
   redactedCount: number;

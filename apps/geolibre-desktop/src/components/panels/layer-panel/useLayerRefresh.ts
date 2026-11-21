@@ -120,10 +120,12 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
   );
 
   const handleRefreshLayer = useCallback(
-    async (layer: GeoLibreLayer, automatic = false, bootstrap = false) => {
-      // Initial hydration is a restore, not an edit or an undo step.
+    async (layer: GeoLibreLayer, automatic = false, outsideHistory = false) => {
+      // Initial hydration and the fetch that follows a URL change are not edits
+      // of their own: recording them would add an undo step, and on undo/redo
+      // would clear the redo stack.
       const applyLayerUpdate: typeof updateLayer = (id, patch) => {
-        if (!bootstrap) return updateLayer(id, patch);
+        if (!outsideHistory) return updateLayer(id, patch);
         const wasDirty = useAppStore.getState().isDirty;
         withoutHistory(() => {
           updateLayer(id, patch);
@@ -486,9 +488,8 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
       // Hydrated non-WFS layers: record the observed URL on first sight so a
       // later URL change is detected, but do not auto-fetch on project open
       // (security: only public http(s) sources are bootstrapped automatically).
-      // Note: a URL change on a hydrated non-WFS layer triggers an automatic
-      // refresh that overwrites geojson and is recorded as an undo step. This
-      // matches WFS behaviour and is intentional; before this PR only WFS did it.
+      // A later URL change (including one applied by undo/redo) refreshes the
+      // features outside undo history, so the URL edit stays the only step.
       if (layer.geojson && !isWfs) {
         if (!alreadyObserved) observedSourceUrlsRef.current.set(layer.id, sourceUrl);
         if (!alreadyObserved || sameUrl) continue;
@@ -505,7 +506,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
       // A hydrated layer present at first observation needs no bootstrap.
       if (layer.geojson && !alreadyObserved) continue;
 
-      void handleRefreshLayerRef.current(layer, false, !alreadyObserved && !layer.geojson);
+      void handleRefreshLayerRef.current(layer, false, true);
     }
   }, [layers, projectGeneration]);
 

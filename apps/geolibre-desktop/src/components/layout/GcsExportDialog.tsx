@@ -22,6 +22,15 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const operationRef = useRef<AbortController | null>(null);
+  // Aborts a pending submission only when the component goes away; closing
+  // the dialog lets it finish so the job ID can still be recorded.
+  const mountRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const mount = new AbortController();
+    mountRef.current = mount;
+    return () => mount.abort();
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -137,12 +146,19 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
     setError(null);
     setResult(null);
     try {
-      signal = AbortSignal.any([operation.signal, AbortSignal.timeout(30 * 60 * 1000)]);
+      const timeout = AbortSignal.timeout(30 * 60 * 1000);
+      signal = AbortSignal.any([operation.signal, timeout]);
       let execution = resume?.id;
       if (!execution) {
+        // Closing the dialog must not abort the submission: the backend may
+        // already have accepted the job, and its ID is what lets a reopened
+        // dialog resume observing it. Only the timeout or an unmount cancels it.
+        const submitSignal = mountRef.current
+          ? AbortSignal.any([mountRef.current.signal, timeout])
+          : timeout;
         const resp = await fetch(`${endpoint}/harvest-large`, {
           method: "POST",
-          signal,
+          signal: submitSignal,
           headers: {
             "Content-Type": "application/json",
             "X-API-Key": apiKey,
@@ -162,12 +178,12 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
           throw new Error(detail || message || t("gcsExport.errors.http", { status: resp.status }));
         }
         const receivedExecution = (await resp.json().catch(() => null))?.execution;
-        signal.throwIfAborted();
         if (typeof receivedExecution !== "string" || !receivedExecution)
           throw new Error(t("gcsExport.errors.missingExecution"));
         execution = receivedExecution;
         setLastExecution({ id: receivedExecution, endpoint, apiKey });
         setCanResume(true);
+        signal.throwIfAborted();
       }
       await observeHarvest(execution, endpoint, resume?.apiKey ?? apiKey, signal);
     } catch (e) {

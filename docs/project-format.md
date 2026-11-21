@@ -443,7 +443,10 @@ error when its layer loads.
 Opening a project automatically requests public HTTP(S) and GCS layer URLs.
 Non-WFS localhost, LAN, and S3 sources require manual refresh unless an
 auto-refresh interval is configured. WFS retains automatic loading on localhost
-and LAN hosts. Only open projects whose data sources you trust.
+and LAN hosts. The host check reads only the URL as written: it does not resolve
+DNS names (a public name can point at a private address) and redirects are
+followed, so a public URL can still lead the request to a local or LAN host.
+Only open projects whose data sources you trust.
 Remote responses must contain a FeatureCollection of valid Features and geometries,
 including valid nested GeometryCollections. Missing feature geometry is normalized
 to `null` for compatibility with servers that omit it; other malformed features

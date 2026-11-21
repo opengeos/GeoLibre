@@ -3,7 +3,7 @@ import { afterEach, describe, it, mock } from "node:test";
 import { createElement } from "react";
 import { act, cleanup, render, screen, useAppStore, waitFor } from "./helpers/dom";
 import { geojsonLayer } from "./helpers/layer-fixtures";
-import { createEmptyProject } from "@geolibre/core";
+import { createEmptyProject, getHistoryCoalesceMs, setHistoryCoalesceMs } from "@geolibre/core";
 import {
   normalizeDesktopSettings,
   useDesktopSettingsStore,
@@ -118,6 +118,41 @@ it("refreshes a hydrated non-WFS layer after its public URL changes", async () =
     ),
   );
   assert.equal(fetcher.mock.callCount(), 1);
+});
+
+it("keeps the redo stack when undo and redo change a hydrated layer's URL", async (t) => {
+  const coalesceMs = getHistoryCoalesceMs();
+  setHistoryCoalesceMs(0);
+  t.after(() => setHistoryCoalesceMs(coalesceMs));
+  useAppStore.getState().newProject({ name: "Hydrated GeoJSON" });
+  useAppStore.getState().addLayer(
+    geojsonLayer({
+      id: LAYER_ID,
+      source: { type: "geojson", url: "https://example.test/first.json" },
+      geojson: collection("first"),
+    }),
+  );
+  mock.method(globalThis, "fetch", async (input: RequestInfo | URL) =>
+    Response.json(collection(String(input).includes("second") ? "second" : "first")),
+  );
+  useAppStore.temporal.getState().clear();
+  render(createElement(RefreshHost));
+  const label = () => useAppStore.getState().layers[0]?.geojson?.features[0]?.properties?.label;
+  act(() =>
+    useAppStore.getState().updateLayer(LAYER_ID, {
+      source: { type: "geojson", url: "https://example.test/second.json" },
+    }),
+  );
+  await waitFor(() => assert.equal(label(), "second"));
+  const pastAfterEdit = useAppStore.temporal.getState().pastStates.length;
+  assert.equal(pastAfterEdit, 1);
+  act(() => useAppStore.temporal.getState().undo());
+  await waitFor(() => assert.equal(label(), "first"));
+  assert.equal(useAppStore.temporal.getState().futureStates.length, 1);
+  assert.equal(useAppStore.temporal.getState().pastStates.length, pastAfterEdit - 1);
+  act(() => useAppStore.temporal.getState().redo());
+  await waitFor(() => assert.equal(label(), "second"));
+  assert.equal(useAppStore.temporal.getState().pastStates.length, pastAfterEdit);
 });
 
 function RefreshHost() {

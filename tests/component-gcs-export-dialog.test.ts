@@ -31,20 +31,24 @@ function openDialog() {
   });
 }
 
-it("cancels an in-flight request on dismissal and allows a fresh run", async () => {
-  let signal: AbortSignal | undefined;
+it("lets a submission finish after dismissal so the job can be resumed", async () => {
+  let submitSignal: AbortSignal | undefined;
+  let accept: ((response: Response) => void) | undefined;
   mock.method(globalThis, "fetch", async (_url: unknown, options?: RequestInit) => {
-    signal = options?.signal ?? undefined;
-    return new Promise<Response>((_resolve, reject) => {
-      signal?.addEventListener("abort", () => reject(signal?.reason), { once: true });
+    submitSignal = options?.signal ?? undefined;
+    return new Promise<Response>((resolve) => {
+      accept = resolve;
     });
   });
   openDialog();
   fireEvent.click(screen.getByRole("button", { name: "Harvest & Export" }));
-  await waitFor(() => assert.ok(signal));
+  await waitFor(() => assert.ok(accept));
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-  assert.equal(signal?.aborted, true);
+  assert.equal(submitSignal?.aborted, false);
+  await act(async () => accept?.(Response.json({ execution: "run-late" })));
   fireEvent.click(screen.getByRole("button", { name: "Open harvest" }));
+  await waitFor(() => assert.ok(screen.getByText(/run-late/)));
+  assert.ok(screen.getByRole("button", { name: "Resume job observation" }));
   assert.equal(
     screen.getByRole("button", { name: "Harvest & Export" }).hasAttribute("disabled"),
     false,
