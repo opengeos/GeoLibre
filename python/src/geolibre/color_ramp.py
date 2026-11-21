@@ -216,17 +216,18 @@ def graduated_class_breaks(values: list[float], count: int, scheme: str) -> list
     """
     if count <= 0 or not values:
         return []
-    sorted_values = sorted(values)
-    minimum, maximum = sorted_values[0], sorted_values[-1]
     if scheme == "quantile":
+        sorted_values = sorted(values)
         raw = [
             _quantile_at_position(sorted_values, (index / count) * (len(sorted_values) - 1))
             for index in range(count)
         ]
     else:
+        # Equal interval needs only the extrema, so skip the O(n log n) sort.
+        minimum, maximum = min(values), max(values)
         raw = [minimum + ((maximum - minimum) * index) / count for index in range(count)]
     breaks: list[float] = []
-    for value in _round_class_breaks(raw, sorted_values):
+    for value in _round_class_breaks(raw, values):
         if not math.isfinite(value) or (breaks and value <= breaks[-1]):
             continue
         breaks.append(value)
