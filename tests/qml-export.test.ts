@@ -160,6 +160,36 @@ describe("buildQml", () => {
     assert.match(qml, /filter="ELSE"/);
   });
 
+  it("exports a single symbol when no rule exports and the ELSE rule is off", () => {
+    // As an ArcGIS class breaks import without a default symbol: class
+    // filters QML cannot express, and a switched-off catch-all.
+    const rules = (classEnabled: boolean, filter: unknown) =>
+      style({
+        vectorStyleMode: "rule-based",
+        fillColor: "#ff0000",
+        vectorRules: [
+          {
+            id: "c1",
+            label: "Low",
+            filter: JSON.stringify(filter),
+            color: "#ff0000",
+            isElse: false,
+            enabled: classEnabled,
+          },
+          { id: "else", label: "", filter: "", color: "#dddddd", isElse: true, enabled: false },
+        ],
+      });
+    const untranslatable = ["match", ["to-string", ["get", "k"]], ["a"], true, false];
+    const skipped = buildQml(layer({ style: rules(true, untranslatable) }), polygons());
+    assert.match(compact(skipped.qml), /<renderer-v2 type="singleSymbol"/);
+    assert.ok(skipped.warnings.some((w) => /"Low" uses a filter with no QGIS equivalent/.test(w)));
+    assert.ok(skipped.warnings.some((w) => /rule-based renderer had no valid classes/.test(w)));
+    // Rules the user switched off still export as unchecked rules.
+    const off = buildQml(layer({ style: rules(false, [">", ["get", "pop"], 1000]) }), polygons());
+    assert.match(compact(off.qml), /<renderer-v2 type="RuleRenderer"/);
+    assert.match(off.qml, /checkstate="0" label="Low"/);
+  });
+
   it("degrades an expression renderer to a single symbol with a warning", () => {
     const { qml, warnings } = buildQml(
       layer({

@@ -570,6 +570,11 @@ function ruleScaleAttributes(rule: VectorRule): string {
  * gets `checkstate="0"` (the QGIS rule checkbox); per-rule symbol overrides
  * (outline color/width, opacity, size) are folded into each rule's
  * symbol. The ELSE rule stays a top-level catch-all.
+ *
+ * Returns null when no rule could be exported and the ELSE rule is switched
+ * off, so the tree would draw nothing; the caller then exports a single
+ * symbol, as it does for categorized and graduated styles with no valid
+ * classes. Rules the user switched off still export (unchecked).
  */
 function ruleRenderer(
   geometry: SymbolGeometry,
@@ -577,7 +582,7 @@ function ruleRenderer(
   opacity: number,
   rules: VectorRule[],
   warnings: string[],
-): string {
+): string | null {
   const paint = basePaint(style);
   const symbols: string[] = [];
   const elseRule = rules.find((entry) => entry.isElse);
@@ -642,6 +647,7 @@ function ruleRenderer(
   };
 
   const ruleXml = roots.map(emitRule).join("");
+  if (!ruleXml && elseRule?.enabled === false) return null;
   // The ELSE rule catches features no other rule matched; its color falls back
   // to the layer's single-symbol color for the geometry when the else rule has
   // no valid color.
@@ -751,13 +757,19 @@ export function buildQml(
       ),
   ).length;
 
+  const rules = styleValue(style, "vectorRules");
+  const ruleXml =
+    mode === "rule-based" && rules.length > 0
+      ? ruleRenderer(geometry, style, opacity, rules, warnings)
+      : null;
+
   let renderer: string;
   if (mode === "categorized" && property && validCategorized > 0) {
     renderer = categorizedRenderer(geometry, style, opacity, property, stops, warnings);
   } else if (mode === "graduated" && property && validGraduated >= 2) {
     renderer = graduatedRenderer(geometry, style, opacity, property, stops, warnings);
-  } else if (mode === "rule-based" && styleValue(style, "vectorRules").length > 0) {
-    renderer = ruleRenderer(geometry, style, opacity, styleValue(style, "vectorRules"), warnings);
+  } else if (ruleXml) {
+    renderer = ruleXml;
   } else {
     if (mode === "expression") {
       warnings.push(
