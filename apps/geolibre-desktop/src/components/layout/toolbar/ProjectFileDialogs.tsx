@@ -17,7 +17,10 @@ import type {
   RemoteSharedProjectTarget,
   ProjectFileActions,
 } from "../../../hooks/useProjectFileActions";
-import type { ArcgisProjectImportWarning } from "../../../lib/arcgis-project-import";
+import {
+  countArcgisUnloadedLayers,
+  type ArcgisProjectImportWarning,
+} from "../../../lib/arcgis-project-import";
 import {
   fetchSharedProjectVersions,
   shareHostLabel,
@@ -59,17 +62,16 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
   const describeArcgisWarning = useCallback(
     (warning: ArcgisProjectImportWarning) => {
       const layerType = warning.layerType || t("toolbar.item.arcgisUnknownLayerType");
+      // The importer gives every symbology warning an issue code, so the
+      // `symbology`/`symbology-partial` reason texts are only a fallback; the
+      // typed key below still needs one entry per reason.
       return warning.symbologyIssue
         ? t(`toolbar.item.arcgisSymbologyIssue.${warning.symbologyIssue}`, { layerType })
         : t(`toolbar.item.arcgisImportReason.${warning.reason}`, { layerType });
     },
     [t],
   );
-  // Symbology and map-extent notes describe a project that did load, so they
-  // are not counted as layers that could not be loaded.
-  const arcgisUnloadedCount = (projectFiles.arcgisImportWarnings ?? []).filter(
-    (warning) => !warning.symbologyIssue && warning.reason !== "map-extent",
-  ).length;
+  const arcgisUnloadedCount = countArcgisUnloadedLayers(projectFiles.arcgisImportWarnings ?? []);
   return (
     <>
       <Dialog

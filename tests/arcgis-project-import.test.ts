@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE } from "@geolibre/core";
 import { strToU8, zipSync } from "fflate";
 import {
+  countArcgisUnloadedLayers,
   dropArcgisImportLayers,
   importArcgisProject,
   readArcgisProject,
@@ -746,6 +747,21 @@ describe("ArcGIS Pro project import", () => {
       // "Drop" is the map's own missing-extent note.
       ["Drop", "Roads", "Elsewhere"],
     );
+  });
+
+  it("counts only layers that were not loaded in the import headline", () => {
+    const extent = { layerName: "Map", reason: "map-extent" } as const;
+    const symbology = {
+      layerName: "Zoning",
+      layerId: "zoning",
+      reason: "symbology-partial",
+      symbologyIssue: "effects",
+    } as const;
+    const unloaded = { layerName: "Roads", reason: "format" } as const;
+    // A map-extent or symbology note alone is not an unloaded layer.
+    assert.equal(countArcgisUnloadedLayers([extent]), 0);
+    assert.equal(countArcgisUnloadedLayers([extent, symbology]), 0);
+    assert.equal(countArcgisUnloadedLayers([extent, symbology, unloaded]), 1);
   });
 
   it("reports a raster on a network share as a network path, not a bad format", () => {
