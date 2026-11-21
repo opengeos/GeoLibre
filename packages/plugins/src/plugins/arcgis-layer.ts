@@ -891,6 +891,8 @@ function startArcGISViewportLoader(
   stopArcGISViewportLoader(layerId);
   map.on("moveend", move);
   arcgisFeatureLoaders.set(layerId, loader);
+  // A restored layer registers here without passing through the add path.
+  ensureArcGISFeatureLoaderCleanup();
   ensureArcGISFeatureLoaderCleanup();
   // fitBounds may still be animating. Its moveend will replace this first query.
   if (!map.isMoving()) move();
@@ -977,7 +979,8 @@ export function restoreArcGISViewportLayers(app: GeoLibreAppAPI): void {
 }
 
 /**
- * Tear down viewport loaders for layers that have left the store.
+ * Tear down viewport loaders for layers that have left the store, and every
+ * loader when another project is opened.
  *
  * One shared subscription for every loader, matching
  * {@link ensureArcGISStoreCleanup}: a subscription per layer would run a linear
@@ -987,6 +990,17 @@ export function restoreArcGISViewportLayers(app: GeoLibreAppAPI): void {
 function ensureArcGISFeatureLoaderCleanup(): void {
   arcgisFeatureLoaderUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     if (arcgisFeatureLoaders.size === 0 && arcgisEditOptions.size === 0) return;
+    // Another project replaced this one. It may hold a layer with the same
+    // `arcgis-layer-N` id, which the id check below would keep bound to the old
+    // project's service; drop every loader and let the replacement's restore
+    // bind its own (it runs from an effect, after this notification). A
+    // collaboration snapshot refreshes the open project without bumping the
+    // count, so its loaders stay.
+    if (state.projectLoadCount !== previous.projectLoadCount) {
+      for (const layerId of [...arcgisFeatureLoaders.keys()]) stopArcGISViewportLoader(layerId);
+      arcgisEditOptions.clear();
+      return;
+    }
     for (const layer of previous.layers) {
       if (!state.layers.some((current) => current.id === layer.id)) {
         stopArcGISViewportLoader(layer.id);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { useAppStore } from "@geolibre/core";
+import { createEmptyProject, useAppStore } from "@geolibre/core";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 import {
   addArcGISLayer,
@@ -910,6 +910,60 @@ describe("addArcGISLayer (feature layer)", () => {
     const reloaded = await reloadArcGISViewportLayer(id);
     assert.equal(reloaded?.features.length, 1);
     assert.deepEqual(geometries, ["150,-35,152,-33", "10,10,12,12", "10,10,12,12"]);
+  });
+
+  it("unbinds a loader when another project with the same layer id opens", async () => {
+    const geometries: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (!url.pathname.endsWith("/query")) return jsonResponse(VIEWPORT_LAYER_INFO);
+      const offset = Number(url.searchParams.get("resultOffset") ?? "0");
+      if (offset > 0) return jsonResponse({ type: "FeatureCollection", features: [] });
+      geometries.push(`${url.origin}${url.pathname} ${url.searchParams.get("geometry")}`);
+      return jsonResponse({ type: "FeatureCollection", features: [viewportFeature(1)] });
+    }) as typeof fetch;
+
+    const restoredLayer = (queryUrl: string) => {
+      const id = useAppStore
+        .getState()
+        .addGeoJsonLayer("Restored", { type: "FeatureCollection", features: [] }, undefined, null);
+      useAppStore.getState().updateLayer(id, {
+        source: { type: "geojson", arcgisQueryUrl: queryUrl },
+        metadata: { sourceKind: "arcgis-feature-query", viewportLoading: true },
+      });
+      return useAppStore.getState().layers.find((layer) => layer.id === id)!;
+    };
+    const first = restoredLayer(`${SERVICE_URL}/query`);
+    const view = fakeViewportMap([144, -39, 146, -37]);
+    restoreArcGISViewportLayers({ getMap: () => view.map } as unknown as GeoLibreAppAPI);
+    assert.ok(view.listeners.has("moveend"));
+
+    // The next project holds a layer with the same id but another service.
+    const otherUrl = "https://other.example.com/arcgis/rest/services/B/FeatureServer/0/query";
+    const project = createEmptyProject("Other");
+    project.layers = [{ ...first, source: { type: "geojson", arcgisQueryUrl: otherUrl } }];
+    await settle();
+    const beforeSwitch = geometries.length;
+    useAppStore.getState().loadProject(project, null);
+    assert.deepEqual(
+      view.offCalls.map(([event]) => event),
+      ["moveend"],
+      "the old project's loader detaches",
+    );
+    assert.equal(reloadArcGISViewportLayer(first.id), null, "no loader until the restore runs");
+
+    // The replacement's restore binds a loader to its own service.
+    restoreArcGISViewportLayers({ getMap: () => view.map } as unknown as GeoLibreAppAPI);
+    await reloadArcGISViewportLayer(first.id);
+    // A pan reaches only the new loader.
+    view.listeners.get("moveend")?.();
+    await settle();
+    const afterSwitch = geometries.slice(beforeSwitch);
+    assert.ok(afterSwitch.length > 0);
+    assert.ok(
+      afterSwitch.every((query) => query.startsWith(otherUrl)),
+      afterSwitch.join("\n"),
+    );
   });
 
   it("holds a split viewport to maxFeatures across both envelopes", async () => {
