@@ -467,10 +467,14 @@ export async function addRasterToMap(
      */
     id?: string;
     /**
-     * Checked before the raster is added to the map and the store; once
-     * aborted, the call rejects with the signal's reason and adds nothing. A
-     * project import passes one so a raster still loading when another
-     * project opens never lands in that project.
+     * Checked before the raster is added to the map and the store, and again
+     * once its header has loaded. An add aborted before that point adds
+     * nothing; one aborted while the header loads has already listed the
+     * raster, which is then removed again (or, when another project has
+     * opened, left to that project's restore to prune). Either way the call
+     * rejects with the signal's reason. A project import passes one so a
+     * raster still loading when another project opens never lands in that
+     * project.
      */
     signal?: AbortSignal;
   } = {},
@@ -1279,6 +1283,11 @@ function createRasterControl(
     if (nonTiledInFlight.has(layerId)) return;
     const info = control.getRaster(layerId);
     if (!info || !isNonTiledRasterError(info.error)) return;
+    // The rasteradd sync puts every control raster in the store as it is
+    // added, so one the store lacks belongs to a project that has since been
+    // replaced and is waiting for the restore to prune it. Converting it would
+    // add the result to the replacement project.
+    if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) return;
     // Re-read the original bytes so the host can convert them to a COG: a local
     // file from its blob URL, a remote URL by fetching it whole. In the browser
     // the remote fetch needs the server to allow CORS, which it normally has

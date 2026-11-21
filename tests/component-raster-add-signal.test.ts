@@ -1,14 +1,17 @@
 import { useAppStore } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { geojsonLayer } from "./helpers/layer-fixtures";
 
-const { addRasterToMap } = await import("../packages/plugins/src/plugins/maplibre-raster");
+const { addRasterToMap, setNonTiledRasterHandler } =
+  await import("../packages/plugins/src/plugins/maplibre-raster");
 
 /** The raster control the first test mounts; module state, reused by later adds. */
 let mounted: {
   addRaster: (...args: unknown[]) => Promise<string>;
   getRaster: (id: string) => unknown;
   removeRaster: (id: string) => void;
+  _emit: (type: string, extra?: { layerId?: string }) => void;
 } | null = null;
 
 /**
@@ -122,5 +125,51 @@ describe("addRasterToMap", () => {
       controller.abort(new DOMException("replaced", "AbortError"));
     }, true);
     assert.deepEqual(removed, []);
+  });
+
+  /**
+   * Fires the control's "error" event for a striped GeoTIFF with id `layerId`
+   * and returns the layer ids the non-tiled conversion handler was offered.
+   */
+  async function offerConversion(layerId: string): Promise<string[]> {
+    if (!mounted) await mountAbortedAdd();
+    assert.ok(mounted, "the raster control is mounted");
+    const control = mounted;
+    const offered: string[] = [];
+    const getRaster = control.getRaster;
+    control.getRaster = (id) => ({
+      id,
+      name: "striped.tif",
+      error: new Error("GeoTIFF is not tiled"),
+      source: { kind: "url", url: "https://example.com/striped.tif" },
+    });
+    setNonTiledRasterHandler(({ layerId: offeredId }) => void offered.push(offeredId));
+    try {
+      control._emit("error", { layerId });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return offered;
+    } finally {
+      control.getRaster = getRaster;
+      setNonTiledRasterHandler(null);
+    }
+  }
+
+  it("offers to convert a striped GeoTIFF in the open project", async () => {
+    useAppStore.setState({
+      // Only the id matters to the check: the store holds the raster.
+      layers: [geojsonLayer({ id: "striped", name: "striped.tif" })],
+    });
+    try {
+      assert.deepEqual(await offerConversion("striped"), ["striped"]);
+    } finally {
+      useAppStore.setState({ layers: [] });
+    }
+  });
+
+  it("does not convert a striped GeoTIFF left behind by a replaced project", async () => {
+    // The raster's project was replaced before its error arrived, so the store
+    // (now the replacement project) no longer holds it; the restore has not
+    // pruned it from the control yet.
+    assert.deepEqual(await offerConversion("striped"), []);
   });
 });

@@ -20,9 +20,9 @@ export function hasPathTraversal(path: string): boolean {
  * pass a trimmed check but reach the file read unchanged and fail there, so it
  * is rejected up front. Accepts POSIX paths and Windows drive-letter paths only.
  * UNC paths (`\\server\share`, and the `//server/share` and mixed
- * `/\server\share` forms Windows also accepts) are deliberately rejected: reading one can make Windows
- * auto-authenticate against a remote host (NTLM hash capture), and a remote
- * share is not a supported local data source.
+ * `/\server\share` forms Windows also accepts) are deliberately rejected:
+ * reading one can make Windows auto-authenticate against a remote host (NTLM
+ * hash capture), and a remote share is not a supported local data source.
  *
  * Lives in core so validation of a persisted path is available wherever a
  * record is normalized — the desktop app's `isAbsoluteLocalPath` re-exports the
