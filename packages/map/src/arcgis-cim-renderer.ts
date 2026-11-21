@@ -299,15 +299,24 @@ function uniqueValueRenderer(renderer: CimObject): CimRendererTranslation {
   );
   for (const group of groups) {
     for (const valueClass of arrayValue(group.classes).filter(isObject)) {
-      // Pro writes every value as a string; a number from hand-written CIM is
-      // read as its text, which is what ArcGIS would have stored.
-      const values = arrayValue(valueClass.values)
+      // Pro writes every value as a string (a null as "<Null>"); a number or
+      // boolean from hand-written CIM is read as its text, which is what ArcGIS
+      // would have stored, and a JSON null as "<Null>".
+      const stored = arrayValue(valueClass.values)
         .filter(isObject)
-        .map((value) => arrayValue(value.fieldValues)[0])
-        .map((value) =>
-          typeof value === "number" && Number.isFinite(value) ? String(value) : value,
-        )
-        .filter((value): value is string => typeof value === "string");
+        .map((value) => arrayValue(value.fieldValues)[0]);
+      const values = stored.map((value) =>
+        value === null
+          ? CIM_NULL_VALUE
+          : typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))
+            ? String(value)
+            : value,
+      );
+      // Any other value cannot be matched, and dropping it would let its
+      // features fall to another class unreported.
+      if (!values.every((value): value is string => typeof value === "string")) {
+        return untranslated(renderer, { code: "no-classes" });
+      }
       // A class with no values matches nothing in ArcGIS either.
       if (values.length === 0) continue;
       const look = symbolLook(valueClass.symbol);
@@ -377,6 +386,8 @@ function classBreaksRenderer(renderer: CimObject): CimRendererTranslation {
       look,
       label: stringValue(classBreak.label) || `${formatBound(lower)} – ${formatBound(upper)}`,
       filter: classBreakFilter(field, lower, index === 0, upper),
+      // Unlike a unique value class, a class break has no checkbox: Pro writes
+      // no `visible` on it (none of 243 breaks in 113 public .lyrx files has one).
       visible: true,
     });
   }
@@ -388,9 +399,11 @@ function classBreaksRenderer(renderer: CimObject): CimRendererTranslation {
 /**
  * Build the rule-based style shared by both thematic renderers.
  *
- * The layer's flat stroke, opacity and radius come from the first class, as
- * QGIS and the QML importer do; a class whose symbol differs keeps the
- * difference as a per-rule override, so outlines and sizes survive per class.
+ * The layer's flat stroke, opacity and radius come from the first class in
+ * legend order (the top break when a class breaks renderer lists them
+ * descending), as QGIS and the QML importer do; a class whose symbol differs
+ * keeps the difference as a per-rule override, so outlines and sizes
+ * survive per class.
  */
 function thematicStyle(renderer: CimObject, classes: ThematicClass[]): CimRendererTranslation {
   const base = classes[0].look;

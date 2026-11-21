@@ -771,6 +771,31 @@ describe("CIM symbols and defaults as Pro writes them", () => {
     assert.equal(translatedStyle(renderer).vectorRules[0].label, "0 – 0.3");
   });
 
+  it("reads boolean and null unique values, and refuses ones it cannot match", () => {
+    const renderer = zoning();
+    renderer.groups[0].classes[2].values = [
+      { type: "CIMUniqueValue", fieldValues: [true as never] },
+      { type: "CIMUniqueValue", fieldValues: [null as never] },
+    ];
+    const style = translatedStyle(renderer);
+    assert.equal(renderedFill(style, { ZONE: true }), "#0000ff");
+    assert.equal(renderedFill(style, { ZONE: null }), "#0000ff");
+    assert.equal(renderedFill(style, {}), "#0000ff");
+    assert.equal(renderedFill(style, { ZONE: false }), "#c8c8c8");
+    // A value that is not text, a number, a boolean or null is not dropped
+    // silently: the renderer is refused and says why.
+    for (const unreadable of [{ nested: 1 }, Number.NaN]) {
+      const refused = zoning();
+      refused.groups[0].classes[2].values = [
+        { type: "CIMUniqueValue", fieldValues: ["R9"] },
+        { type: "CIMUniqueValue", fieldValues: [unreadable as never] },
+      ];
+      const result = translateCimRenderer(refused);
+      assert.equal(result.translated, false);
+      assert.deepEqual(result.issues, [{ code: "no-classes" }]);
+    }
+  });
+
   it("matches numeric unique values by their text, as ArcGIS stores them", () => {
     const renderer = zoning();
     renderer.groups[0].classes[2].values = [{ type: "CIMUniqueValue", fieldValues: [3 as never] }];
