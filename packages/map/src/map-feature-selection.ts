@@ -18,6 +18,56 @@ import {
 
 /** Lets pointer overlays stand down immediately when a menu arms selection. */
 export const FEATURE_SELECTION_BEGIN_EVENT = "geolibre:feature-selection-begin";
+/** Removes the most recently placed polygon vertex during touch/keyboard selection. */
+export const FEATURE_SELECTION_UNDO_EVENT = "geolibre:feature-selection-undo";
+/** Finishes an active polygon selection without requiring a double-click. */
+export const FEATURE_SELECTION_FINISH_EVENT = "geolibre:feature-selection-finish";
+/** Cancels any active feature-selection gesture without requiring Escape. */
+export const FEATURE_SELECTION_CANCEL_EVENT = "geolibre:feature-selection-cancel";
+
+export function undoFeatureSelectionVertex(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(FEATURE_SELECTION_UNDO_EVENT));
+  }
+}
+
+export function finishFeatureSelection(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(FEATURE_SELECTION_FINISH_EVENT));
+  }
+}
+
+export function cancelActiveFeatureSelection(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(FEATURE_SELECTION_CANCEL_EVENT));
+  }
+}
+
+export interface FeatureSelectionUiState {
+  shape: FeatureSelectionShape | null;
+  vertexCount: number;
+}
+
+const IDLE_SELECTION_UI_STATE: FeatureSelectionUiState = { shape: null, vertexCount: 0 };
+let selectionUiState: FeatureSelectionUiState = IDLE_SELECTION_UI_STATE;
+const selectionUiListeners = new Set<() => void>();
+
+function updateFeatureSelectionUiState(shape: FeatureSelectionShape | null, vertexCount: number) {
+  if (selectionUiState.shape === shape && selectionUiState.vertexCount === vertexCount) return;
+  selectionUiState = shape === null ? IDLE_SELECTION_UI_STATE : { shape, vertexCount };
+  for (const listener of selectionUiListeners) listener();
+}
+
+export function getFeatureSelectionUiState(): FeatureSelectionUiState {
+  return selectionUiState;
+}
+
+export function subscribeFeatureSelectionUiState(listener: () => void): () => void {
+  selectionUiListeners.add(listener);
+  return () => {
+    selectionUiListeners.delete(listener);
+  };
+}
 
 /** Minimum screen distance between freehand vertices, avoiding oversized rings. */
 const FREEHAND_MIN_POINT_DISTANCE = 3;
@@ -122,7 +172,10 @@ export function attachFeatureSelection(
       if (!replacingGesture && useAppStore.getState().featureSelectionActive) {
         useAppStore.getState().setFeatureSelectionActive(false);
       }
-      if (!replacingGesture) onEnd?.();
+      if (!replacingGesture) {
+        updateFeatureSelectionUiState(null, 0);
+        onEnd?.();
+      }
     };
 
     const overlay = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -151,14 +204,21 @@ export function attachFeatureSelection(
       cleanups.push(() => handler.enable());
     }
     canvas.style.cursor = "crosshair";
+    const previousTouchAction = canvas.style.touchAction;
+    if (request.shape !== "single") {
+      canvas.style.touchAction = "none";
+    }
     cleanups.push(() => {
       canvas.style.cursor = "";
+      canvas.style.touchAction = previousTouchAction;
     });
     state.active.current = true;
 
     let points: PointLike[] = [];
     let dragging = false;
+    updateFeatureSelectionUiState(request.shape, 0);
     const render = () => {
+      updateFeatureSelectionUiState(request.shape, points.length);
       if (points.length === 0) return shape.setAttribute("d", "");
       if (request.shape === "rectangle" && points.length > 1) {
         const [a, b] = points;
@@ -308,25 +368,82 @@ export function attachFeatureSelection(
     const onBlur = () => {
       if (dragging) state.cancel.current?.();
     };
+    // Touch pointer support for rectangle, radius, and freehand selection drags.
+    let activeTouchPointerId: number | null = null;
+    const onTouchPointerDown = (event: PointerEvent) => {
+      if (
+        event.pointerType !== "touch" ||
+        !event.isPrimary ||
+        request.shape === "polygon" ||
+        request.shape === "single"
+      ) {
+        return;
+      }
+      activeTouchPointerId = event.pointerId;
+      dragging = true;
+      points = [canvasPoint(event.clientX, event.clientY)];
+      render();
+    };
+    const onTouchPointerMove = (event: PointerEvent) => {
+      if (activeTouchPointerId === null || event.pointerId !== activeTouchPointerId) return;
+      moveTo(canvasPoint(event.clientX, event.clientY));
+    };
+    const onTouchPointerUp = (event: PointerEvent) => {
+      if (activeTouchPointerId === null || event.pointerId !== activeTouchPointerId) return;
+      activeTouchPointerId = null;
+      endDrag(canvasPoint(event.clientX, event.clientY), event);
+    };
+    const onTouchPointerCancel = (event: PointerEvent) => {
+      if (activeTouchPointerId === null || event.pointerId !== activeTouchPointerId) return;
+      activeTouchPointerId = null;
+      state.cancel.current?.();
+    };
+    const onUndoVertex = () => {
+      if (request.shape !== "polygon" || points.length === 0) return;
+      points.pop();
+      render();
+    };
+    const onFinishAction = () => {
+      if (request.shape === "polygon" && points.length > 2) {
+        finish({});
+      }
+    };
+    const onCancelAction = () => {
+      state.cancel.current?.();
+    };
     map.on("mousedown", onMouseDown);
     map.on("mousemove", onMouseMove);
     map.on("mouseup", onMouseUp);
     map.on("click", onClick);
     map.on("dblclick", onDoubleClick);
+    canvas.addEventListener("pointerdown", onTouchPointerDown);
+    window.addEventListener("pointermove", onTouchPointerMove);
+    window.addEventListener("pointerup", onTouchPointerUp);
+    window.addEventListener("pointercancel", onTouchPointerCancel);
     window.addEventListener("mousemove", onWindowMouseMove);
     window.addEventListener("mouseup", onWindowMouseUp);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("blur", onBlur);
+    window.addEventListener(FEATURE_SELECTION_UNDO_EVENT, onUndoVertex);
+    window.addEventListener(FEATURE_SELECTION_FINISH_EVENT, onFinishAction);
+    window.addEventListener(FEATURE_SELECTION_CANCEL_EVENT, onCancelAction);
     cleanups.push(
       () => void map.off("mousedown", onMouseDown),
       () => void map.off("mousemove", onMouseMove),
       () => void map.off("mouseup", onMouseUp),
       () => void map.off("click", onClick),
       () => void map.off("dblclick", onDoubleClick),
+      () => canvas.removeEventListener("pointerdown", onTouchPointerDown),
+      () => window.removeEventListener("pointermove", onTouchPointerMove),
+      () => window.removeEventListener("pointerup", onTouchPointerUp),
+      () => window.removeEventListener("pointercancel", onTouchPointerCancel),
       () => window.removeEventListener("mousemove", onWindowMouseMove),
       () => window.removeEventListener("mouseup", onWindowMouseUp),
       () => window.removeEventListener("keydown", onKeyDown),
       () => window.removeEventListener("blur", onBlur),
+      () => window.removeEventListener(FEATURE_SELECTION_UNDO_EVENT, onUndoVertex),
+      () => window.removeEventListener(FEATURE_SELECTION_FINISH_EVENT, onFinishAction),
+      () => window.removeEventListener(FEATURE_SELECTION_CANCEL_EVENT, onCancelAction),
     );
     // Publish only after every listener has its cleanup registered: a plugin
     // reacting synchronously may cancel or replace this gesture. A superseded

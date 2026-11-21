@@ -204,3 +204,50 @@
   height: auto;
   width: 100%;
 }
+
+/* Linked YouTube thumbnail with a play button, used at the top of each
+   workshop section page. The page loads only the image; YouTube opens on
+   click. The play button is a pseudo-element so the markup stays one <a>. */
+.md-typeset a.video-thumb {
+  border-radius: 0.5rem;
+  display: block;
+  margin: 1.2rem 0 1rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.md-typeset a.video-thumb img {
+  aspect-ratio: 16 / 9;
+  display: block;
+  height: auto;
+  object-fit: cover;
+  transition: filter 0.2s;
+  width: 100%;
+}
+
+.md-typeset a.video-thumb::after {
+  background: center / contain no-repeat
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 68 48'%3E%3Cpath fill='%23f00' d='M66.5 7.7a8.5 8.5 0 0 0-6-6C55.2.3 34 .3 34 .3s-21.2 0-26.5 1.4a8.5 8.5 0 0 0-6 6C.1 13 .1 24 .1 24s0 11 1.4 16.3a8.5 8.5 0 0 0 6 6C12.8 47.7 34 47.7 34 47.7s21.2 0 26.5-1.4a8.5 8.5 0 0 0 6-6C67.9 35 67.9 24 67.9 24s0-11-1.4-16.3z'/%3E%3Cpath fill='%23fff' d='M45 24 27 14v20z'/%3E%3C/svg%3E");
+  content: "";
+  height: 3.5rem;
+  left: 50%;
+  opacity: 0.9;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
+  width: 5rem;
+}
+
+.md-typeset a.video-thumb:hover img,
+.md-typeset a.video-thumb:focus-visible img {
+  filter: brightness(0.85);
+}
+
+.md-typeset a.video-thumb:hover::after,
+.md-typeset a.video-thumb:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.08);
+}

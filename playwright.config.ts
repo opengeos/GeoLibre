@@ -32,6 +32,7 @@ const CORE_SPECS = [
   "error-handling.spec.ts",
   "attribute-status.spec.ts",
   "rtl.spec.ts",
+  "mobile-shell.spec.ts",
   "pwa.spec.ts",
   "deployment-policy.spec.ts",
   // Project -> Save -> reopen. Moved from `features` after an unexpected save

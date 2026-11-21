@@ -18,6 +18,8 @@ interface BottomPanelsProps {
   mapControllerRef: RefObject<MapEngine | null>;
   /** The layer panel's refresh state, shared with the attribute table. */
   layerRefresh: ComponentProps<typeof AttributeTable>["refresh"];
+  /** Whether the phone mobile shell is active (propagated from DesktopShell). */
+  mobileShell?: boolean;
 }
 
 /**
@@ -38,6 +40,7 @@ export function BottomPanels({
   attributePanelVisible,
   mapControllerRef,
   layerRefresh,
+  mobileShell,
 }: BottomPanelsProps) {
   const { t } = useTranslation();
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
@@ -54,7 +57,11 @@ export function BottomPanels({
           label="Attribute table"
           displayName={t("shell.section.attributeTable")}
         >
-          <AttributeTable mapControllerRef={mapControllerRef} refresh={layerRefresh} />
+          <AttributeTable
+            mapControllerRef={mapControllerRef}
+            refresh={layerRefresh}
+            mobileShell={mobileShell}
+          />
         </SectionErrorBoundary>
       ) : null}
       {attributePanelVisible ? (

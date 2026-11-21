@@ -44,6 +44,5 @@
   "apps/geolibre-desktop/src/components/storymap/StoryMapPanel.tsx": 1146,
   "apps/geolibre-desktop/src/hooks/desktop-shell/useFileDrop.ts": 544,
   "apps/geolibre-desktop/src/hooks/toolbar/usePluginLabelSync.ts": 1080,
-  "apps/geolibre-desktop/src/hooks/useCollaboration.ts": 601,
   "apps/geolibre-desktop/src/lib/print-layout-export.ts": 526
 }

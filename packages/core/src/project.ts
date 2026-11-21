@@ -1,9 +1,11 @@
 import { gcsUriToHttps } from "./gcs";
+import { normalizeGeoEditorSettings } from "./geo-editor-settings";
 import { normalizeArcgisWkid } from "./arcgis-projection";
 import { normalizeMapCrs } from "./map-crs";
 import { normalizeCesiumBasemap } from "./cesium-imagery";
 import { parseCesiumIonAssetId } from "./cesium-ion";
 import { redactUrlCredentials } from "./credentials";
+import { isFetchedGeoJson } from "./remote-geojson";
 import { normalizeStoryChapterDurationSeconds } from "./storymap-duration";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -1553,6 +1555,13 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
   return {
     map: {
       ...DEFAULT_PROJECT_PREFERENCES.map,
+      ...((map as Partial<ProjectPreferences["map"]>).geoEditor !== undefined
+        ? {
+            geoEditor: normalizeGeoEditorSettings(
+              (map as Partial<ProjectPreferences["map"]>).geoEditor,
+            ),
+          }
+        : {}),
       bounds: normalizeBounds((map as Partial<ProjectPreferences["map"]>).bounds),
       minZoom: normalizeNumber(
         (map as Partial<ProjectPreferences["map"]>).minZoom,
@@ -1618,6 +1627,12 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
       terrainSource: normalizeTerrainSource(
         (map as Partial<ProjectPreferences["map"]>).terrainSource,
       ),
+      // Absent in projects written before #3470: the default for the source
+      // applies (fill around a URL DEM, not around a local file).
+      terrainFillOutside:
+        typeof (map as Partial<ProjectPreferences["map"]>).terrainFillOutside === "boolean"
+          ? (map as Partial<ProjectPreferences["map"]>).terrainFillOutside
+          : undefined,
       // Kept as a free string here; the app coerces an unknown notation to
       // decimal degrees when it renders, so a hand-edited project cannot break
       // the readout.
@@ -2040,15 +2055,10 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
   if (source && typeof source === "object") {
     const url = source.url;
     if (typeof url === "string") {
-      const wasGs = /^gs:\/\//i.test(url.trim());
       try {
         source.url = gcsUriToHttps(url);
       } catch {
         // Keep the original URL so the refresh pipeline can report its error.
-      }
-      // Strip signed-URL parameters from gs:// sources so they never persist.
-      if (wasGs && typeof source.url === "string") {
-        source.url = redactUrlCredentials(source.url);
       }
     }
   }
@@ -2475,6 +2485,22 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
   // only set when a real path was captured (desktop), so a web project — which
   // cannot re-read a path — never sets it and keeps the embedded copy.
   if (layer.geojson && layer.metadata.localFileReloadable === true) {
+    const { geojson: _geojson, ...rest } = layer;
+    layer = rest;
+  }
+
+  // A plain GeoJSON layer whose features were fetched from its `source.data` /
+  // `source.url` on restore saves the reference it was opened with, not the
+  // fetched copy, so the file stays as small as the one that was opened and
+  // the next open fetches current data. An edit replaces the collection, so
+  // edited features are no longer "fetched" and are embedded like any other.
+  // Unless the reference carries a credential: Save redacts it from the URL
+  // (redactProjectCredentials), so the reopened file could not fetch the data
+  // again and would come back empty. Keep the features, as WFS does above.
+  const referenceCarriesCredentials = [layer.source.data, layer.source.url].some(
+    (value) => typeof value === "string" && redactUrlCredentials(value) !== value,
+  );
+  if (layer.geojson && isFetchedGeoJson(layer.geojson) && !referenceCarriesCredentials) {
     const { geojson: _geojson, ...rest } = layer;
     layer = rest;
   }

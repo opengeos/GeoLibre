@@ -22,7 +22,8 @@
  * **Fill and line layers blend as a whole layer, not per primitive.** MapLibre
  * 6.3 renders a fill or line layer whose `fill-layer-opacity` /
  * `line-layer-opacity` is below 1 into a scratch framebuffer and composites it
- * in a single draw with the `layerOpacity` program (`drawLayerOpacity`). That
+ * in a single draw with the `layerComposite` program (`drawLayerComposite`; it
+ * was `layerOpacity` / `drawLayerOpacity` before maplibre-gl 6.18). That
  * is exactly the semantics a cartographic blend mode wants: two overlapping
  * polygons in one layer must not multiply against each other, only against the
  * map beneath. So `style-mapper` pins those properties just under 1 for a
@@ -476,8 +477,12 @@ function setSupported(next: boolean): void {
  * `tests/layer-blend-modes.test.ts` checks this set against the style spec.
  */
 const COMPOSITE_LAYER_TYPES = new Set(["fill", "line"]);
-/** The program name MapLibre composites a layer-opacity render-to-texture with. */
-const COMPOSITE_PROGRAM = "layerOpacity";
+/**
+ * The program names MapLibre composites a layer-opacity render-to-texture
+ * with: `layerComposite` from maplibre-gl 6.18, `layerOpacity` before. Both are
+ * accepted so a host that pins an older maplibre-gl keeps fill/line blending.
+ */
+const COMPOSITE_PROGRAMS: ReadonlySet<string> = new Set(["layerComposite", "layerOpacity"]);
 
 /**
  * Wrap the render loop of `map` so registered layers blend. Idempotent, and
@@ -581,7 +586,7 @@ export function installLayerBlendModes(map: maplibregl.Map): boolean {
       // A fully masked-off colour write is a depth or stencil prepass; blending
       // it would be meaningless and can only confuse the state tracker.
       if (!colorMode.mask[0] && !colorMode.mask[1] && !colorMode.mask[2]) return;
-      if (active.compositeOnly && lastProgram !== COMPOSITE_PROGRAM) {
+      if (active.compositeOnly && !COMPOSITE_PROGRAMS.has(lastProgram ?? "")) {
         // Drawing *into* the scratch framebuffer: ordinary alpha compositing,
         // so overlapping features in one layer flatten before they blend.
         this.blendEquation.set(gl.FUNC_ADD);

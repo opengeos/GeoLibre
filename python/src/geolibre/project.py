@@ -3817,6 +3817,9 @@ DEFAULT_LABEL_STYLE: dict[str, Any] = {
     "field": "",
     "expression": "",
     "placement": "point",
+    "lineGap": False,
+    "lineGapPadding": 3,
+    "lineSpacing": 250,
     "size": 13,
     "color": "#111827",
     "haloColor": "#ffffff",
@@ -3864,6 +3867,9 @@ LABEL_NUMBER_LOCALES = frozenset({"", "en-US", "de-DE", "ru-RU", "hi-IN"})
 # snake_case keyword -> LabelStyle key, with how to check the value.
 _LABEL_OPTIONS: dict[str, tuple[str, str]] = {
     "placement": ("placement", "placement"),
+    "line_gap": ("lineGap", "bool"),
+    "line_gap_padding": ("lineGapPadding", "non_negative"),
+    "line_spacing": ("lineSpacing", "positive"),
     "size": ("size", "positive"),
     "color": ("color", "color"),
     "halo_color": ("haloColor", "color"),
@@ -3971,7 +3977,9 @@ def label_style(
         base: An existing labels object to update; unspecified options keep
             its values. Defaults to :data:`DEFAULT_LABEL_STYLE`.
         **options: Any of :data:`LABEL_OPTION_NAMES` -- ``placement``
-            (``"point"``/``"line"``), ``size``, ``color``, ``halo_color``,
+            (``"point"``/``"line"``), ``line_gap`` (cut the line under a
+            line-placed label, contour style), ``line_gap_padding``,
+            ``line_spacing``, ``size``, ``color``, ``halo_color``,
             ``halo_width``, ``min_zoom``, ``max_zoom``, ``allow_overlap``,
             ``anchor``, ``offset_x``, ``offset_y``, ``rotation``, ``max_width``,
             ``transform``, ``number_format``, ``number_decimals``,

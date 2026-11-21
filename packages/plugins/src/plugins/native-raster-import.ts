@@ -36,7 +36,8 @@ export async function addNativeRaster(
   const { openCog } = tiler;
   const cog = await openCog(source);
   const bandCount = cog.levels[0]?.bands ?? 1;
-  const id = crypto.randomUUID();
+  options.signal?.throwIfAborted();
+  const id = options.id ?? crypto.randomUUID();
   const file = typeof source !== "string";
   const local = file || !!options.localPath;
   const url = file ? URL.createObjectURL(source) : source;

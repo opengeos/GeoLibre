@@ -31,6 +31,15 @@ describe("tilesetExpression", () => {
     assert.equal(tilesetExpression(["==", ["get", "type"], "school"]), '(${type} === "school")');
   });
 
+  it("tests a null comparison for a defined value, so a missing property matches", () => {
+    assert.equal(tilesetExpression(["==", ["get", "kind"], null]), "(!defined(${kind}))");
+    assert.equal(tilesetExpression(["!=", ["get", "kind"], null]), "defined(${kind})");
+    assert.equal(
+      tilesetExpression(["any", ["==", ["get", "kind"], null], ["==", ["get", "kind"], ""]]),
+      '((!defined(${kind})) || (${kind} === ""))',
+    );
+  });
+
   it("quotes a property name that is not an identifier", () => {
     assert.equal(tilesetExpression(["get", "building height"]), '${feature["building height"]}');
     assert.equal(tilesetExpression(["get", "2020"]), '${feature["2020"]}');

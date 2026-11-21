@@ -419,9 +419,10 @@ function stateValue<T>(initial: T) {
  * A painter shaped like maplibre-gl 6.14's: `useProgram` lives on a per-frame
  * render context passed as `renderLayer`'s last argument, not on the painter.
  * Each fill draw feeds the scratch framebuffer once, then composites it with
- * the `layerOpacity` program, the same as `drawLayerOpacity`.
+ * the `layerComposite` program, the same as `drawLayerComposite` (or
+ * `compositeProgram`, to mimic the `layerOpacity` name before maplibre-gl 6.18).
  */
-function frameContextPainter() {
+function frameContextPainter(compositeProgram = "layerComposite") {
   const gl = { ...GL, MIN: 108 } as unknown as WebGL2RenderingContext;
   class Context {
     gl = gl;
@@ -457,7 +458,7 @@ function frameContextPainter() {
       frame: FrameRenderContext,
     ) {
       frame.useProgram("fill").draw();
-      frame.useProgram("layerOpacity").draw();
+      frame.useProgram(compositeProgram).draw();
     }
   }
   const painter = new Painter();
@@ -478,6 +479,20 @@ describe("installing the render wrappers", () => {
     const multiply = blendSpecFor("multiply", GL)!;
     // The draw into the scratch buffer stays on alpha compositing; only the
     // composite carries the mode.
+    assert.deepEqual(context.draws, [
+      { program: "fill", func: [GL.ONE, GL.ONE_MINUS_SRC_ALPHA], equation: GL.FUNC_ADD },
+      { program: "layerComposite", func: multiply.func, equation: multiply.equation },
+    ]);
+  });
+
+  it("still recognises the layerOpacity composite of maplibre-gl before 6.18", () => {
+    const { map, context, render } = frameContextPainter("layerOpacity");
+    assert.equal(installLayerBlendModes(map), true);
+    syncLayerBlendModes([
+      layer("abc", { style: { ...DEFAULT_LAYER_STYLE, blendMode: "multiply" } }),
+    ]);
+    render({ id: "layer-abc-fill", type: "fill" });
+    const multiply = blendSpecFor("multiply", GL)!;
     assert.deepEqual(context.draws, [
       { program: "fill", func: [GL.ONE, GL.ONE_MINUS_SRC_ALPHA], equation: GL.FUNC_ADD },
       { program: "layerOpacity", func: multiply.func, equation: multiply.equation },
@@ -539,7 +554,7 @@ describe("the maplibre-gl render-seam mirror", () => {
       "blendEquation",
       // The program the render-to-texture composite is drawn with, which is how
       // the wrapper tells the composite from the draws feeding it.
-      "layerOpacity",
+      "layerComposite",
     ]) {
       assert.match(
         bundle,

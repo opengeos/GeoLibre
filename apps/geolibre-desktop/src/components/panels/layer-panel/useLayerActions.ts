@@ -1,6 +1,4 @@
 import {
-  isArcGISWritableLayer,
-  saveArcGISLayerEdits,
   getTemporalLayerAdapter,
   isEmbeddableLocalVectorLayer,
   isTimeSliderIdle,
@@ -21,7 +19,6 @@ import {
   captureLayerLibraryEntry,
   createLayerLibraryEntryId,
   excludeHiddenFieldsFromGeojson,
-  resolveLayerCapabilities,
   useAppStore,
 } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
@@ -36,15 +33,8 @@ import {
   type MapEngine,
 } from "@geolibre/map";
 import { importStyleText } from "@geolibre/map/style-import";
-import {
-  fetchMssqlStatus,
-  readMssqlTable,
-  readPostgisTable,
-  writeMssqlTable,
-  writePostgisTable,
-  writeVectorToSource,
-} from "@geolibre/processing";
 import { commitPendingAttributeDrafts } from "../../../lib/attribute-draft-commit";
+import { writeLayerEditsToSource } from "../../../lib/batch-layer-save";
 import { bindTemporalLayer, createAppAPI, usePluginRegistry } from "../../../hooks/usePlugins";
 import {
   bufferPresetsFor,
@@ -66,30 +56,12 @@ import {
   type VectorExportFormat,
 } from "../../../lib/vector-export";
 import {
-  isGeojsonSourcePath,
-  isTauri,
   openLocalDataFileWithFallback,
   saveBinaryFileWithFallback,
   saveTextFileWithFallback,
-  writeLocalGeojsonFile,
 } from "../../../lib/tauri-io";
-import { startGeoLibreSidecar } from "../../../lib/sidecar";
 import { importedStyleErrorMessage, importedStyleNote } from "../../../lib/style-import-note";
-import { resolvePostgisConnection } from "../../../lib/postgis-connections";
-import { databaseBaselineKeys, databaseFeatureKeys } from "../../../lib/database-tables";
-import { MssqlReconnectRequiredError, withMssqlSession } from "../../../lib/mssql-sessions";
-import {
-  mssqlWritePayload,
-  reconcileMssqlWritebackMetadata,
-  rememberMssqlLoadedRows,
-  runMssqlWriteRequest,
-  writeMssqlAndRefresh,
-} from "../../../lib/mssql-writeback";
-import {
-  isMssqlEditableLayer,
-  isPostgisEditableLayer,
-  type LayerRefreshStatus,
-} from "./layer-panel-utils";
+import type { LayerRefreshStatus } from "./layer-panel-utils";
 
 type PluginRegistry = ReturnType<typeof usePluginRegistry>;
 
@@ -136,7 +108,6 @@ export function useLayerActions({
   // Layer ids with a Save to My Data in flight, so a repeat click during the
   // vector-control materialize cannot create a duplicate library entry.
   const savingToLibraryIdsRef = useRef(new Set<string>());
-  const savingMssqlEditsIdsRef = useRef(new Set<string>());
   const lidarExportsInFlightRef = useRef(new Set<string>());
 
   // Quick analysis (#1523): run an existing vector tool over a whole layer from
@@ -714,15 +685,15 @@ export function useLayerActions({
         const picked = await openLocalDataFileWithFallback({
           filters: [
             {
-              name: "Style (GeoLibre URL / Mapbox GL / SLD / QML)",
-              extensions: ["json", "sld", "qml", "xml"],
+              name: "Style (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)",
+              extensions: ["json", "sld", "qml", "xml", "lyrx"],
             },
           ],
-          // Android filters document pickers by MIME type, but SLD and QML do
-          // not have consistently reported MIME types. Leave the native picker
+          // Android filters document pickers by MIME type, but SLD, QML and
+          // LYRX do not have consistently reported MIME types. Leave the native picker
           // broad there, then validate the selected file by content below.
           androidFilters: [],
-          accept: ".json,.sld,.qml,.xml,application/json,application/xml,text/xml",
+          accept: ".json,.sld,.qml,.xml,.lyrx,application/json,application/xml,text/xml",
           readText: true,
         });
         // A null result means the user dismissed the file dialog; no note. Guard
@@ -762,354 +733,31 @@ export function useLayerActions({
   );
 
   // Commit the layer's current (edited) features back to the source they were
-  // loaded from: overwriting a local GeoJSON file directly (desktop), a
-  // GeoPackage through the sidecar, or diffing against the PostGIS or SQL
-  // Server table by primary key. Unlike Export, there is no save dialog:
-  // write-back targets the known source.
+  // loaded from via the shared write-back helper so single-layer and batch
+  // saves enforce identical guards, locks, and refresh rules.
   const handleSaveEditsToSource = useCallback(
     async (clickedLayer: GeoLibreLayer) => {
       if (!canEditLayer(clickedLayer.id)) return;
-      const requestProjectGeneration = useAppStore.getState().projectGeneration;
-      const currentLayer = useAppStore.getState().layers.find((l) => l.id === clickedLayer.id);
-      if (
-        currentLayer &&
-        isMssqlEditableLayer(currentLayer) &&
-        currentLayer.mssqlWritebackPending === true
-      ) {
-        return;
-      }
       clearRefreshStatusTimer(clickedLayer.id);
-      const layer = commitTableDrafts(clickedLayer);
-      if (!layer) return;
-      const isMssql = isMssqlEditableLayer(layer);
-      // Captured once, from the click-time layer, before any await: retries and
-      // store updates during the round trip must not change which rows may be deleted.
-      const mssqlBaseline = isMssql ? databaseBaselineKeys(layer, "mssqlBaselineKeys") : undefined;
-      const isCurrentMssqlRequest = () => {
-        const state = useAppStore.getState();
-        const current = state.layers.find((candidate) => candidate.id === layer.id);
-        return (
-          state.projectGeneration === requestProjectGeneration &&
-          current !== undefined &&
-          current.metadata.sourceKind === layer.metadata.sourceKind &&
-          current.metadata.mssqlConnectionId === layer.metadata.mssqlConnectionId &&
-          current.metadata.mssqlSchema === layer.metadata.mssqlSchema &&
-          current.metadata.mssqlTable === layer.metadata.mssqlTable &&
-          current.metadata.mssqlGeometryColumn === layer.metadata.mssqlGeometryColumn
-        );
-      };
-      const isPostgis = isPostgisEditableLayer(layer);
-      const path = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
-      if (!isMssql && !isPostgis && !isArcGISWritableLayer(layer) && !path) return;
-      try {
-        if (isArcGISWritableLayer(layer)) {
-          const result = await saveArcGISLayerEdits(layer.id);
-          setRefreshStatuses((current) => ({
-            ...current,
-            [layer.id]: {
-              type: result.errors.length ? "warning" : "success",
-              message: [t("layers.saveEditsArcgisSuccess", result), ...result.errors].join(" "),
-            },
-          }));
-          scheduleStatusClear(layer.id);
-          return;
-        }
-        const geojson = await resolveLayerGeojson(
-          layer,
-          mapControllerRef.current?.getMap() ?? undefined,
-        );
-        // Only a SQL Server layer with baseline keys may save an empty collection:
-        // the sidecar then deletes exactly the rows this layer read.
-        if (
-          !geojson ||
-          (geojson.features.length === 0 && !(isMssql && (mssqlBaseline?.length ?? 0) > 0))
-        ) {
-          setRefreshStatuses((current) => ({
-            ...current,
-            [layer.id]: {
-              type: "error",
-              message: t("layers.saveEditsNoFeatures"),
-            },
-          }));
-          scheduleStatusClear(layer.id);
-          return;
-        }
-        let message: string;
-        let statusType: "success" | "warning" = "success";
-        if (isMssql) {
-          const connectionId = layer.metadata.mssqlConnectionId as string;
-          const schema =
-            typeof layer.metadata.mssqlSchema === "string" ? layer.metadata.mssqlSchema : "dbo";
-          const table = layer.metadata.mssqlTable as string;
-          const geometryColumn =
-            typeof layer.metadata.mssqlGeometryColumn === "string"
-              ? layer.metadata.mssqlGeometryColumn
-              : undefined;
-          const payload = mssqlWritePayload(layer.id, requestProjectGeneration, geojson);
-          const outcome = await writeMssqlAndRefresh(
-            {
-              layerId: layer.id,
-              inFlightLayerIds: savingMssqlEditsIdsRef.current,
-              refreshRequired:
-                useAppStore.getState().layers.find((current) => current.id === layer.id)
-                  ?.mssqlWritebackPending === true,
-              baselineKeys: mssqlBaseline,
-              isCurrent: isCurrentMssqlRequest,
-            },
-            () =>
-              withMssqlSession(connectionId, async (sessionId) => {
-                await fetchMssqlStatus();
-                return runMssqlWriteRequest(() =>
-                  writeMssqlTable({
-                    session_id: sessionId,
-                    schema_name: schema,
-                    table,
-                    geometry_column: geometryColumn,
-                    geojson,
-                    baseline_keys: mssqlBaseline,
-                    unchanged_geometry_keys: payload.unchangedGeometryKeys,
-                    changed_columns: payload.changedColumns,
-                    capabilities: resolveLayerCapabilities(layer),
-                  }),
-                );
-              }),
-            () =>
-              withMssqlSession(connectionId, (sessionId) =>
-                readMssqlTable({
-                  session_id: sessionId,
-                  schema_name: schema,
-                  table,
-                  geometry_column: geometryColumn,
-                  excluded_fields: layer.fieldVisibility
-                    ? Object.keys(layer.fieldVisibility).filter(
-                        (key) => layer.fieldVisibility![key] === "excluded",
-                      )
-                    : undefined,
-                }),
-              ),
-          );
-          if (!isCurrentMssqlRequest()) return;
-          if (outcome.kind === "blocked" || outcome.kind === "stale") return;
-          if (outcome.kind === "missing-baseline") {
-            setRefreshStatuses((current) => ({
-              ...current,
-              [layer.id]: {
-                type: "error",
-                message: t("layers.saveEditsMssqlMissingBaseline"),
-              },
-            }));
-            scheduleStatusClear(layer.id);
-            return;
-          }
-          if (outcome.kind === "write-rejected") {
-            if (outcome.error instanceof MssqlReconnectRequiredError) throw outcome.error;
-            setRefreshStatuses((current) => ({
-              ...current,
-              [layer.id]: {
-                type: "error",
-                message: t("layers.saveEditsMssqlWriteRejected", {
-                  error:
-                    outcome.error instanceof Error
-                      ? outcome.error.message
-                      : t("layers.saveEditsError"),
-                }),
-              },
-            }));
-            scheduleStatusClear(layer.id);
-            return;
-          }
-          if (outcome.kind === "write-failed") {
-            // The sidecar may have committed before its response was lost.
-            markMssqlRefreshRequired(layer.id);
-            setRefreshStatuses((current) => ({
-              ...current,
-              [layer.id]: {
-                type: "error",
-                message: t("layers.saveEditsMssqlWriteUncertain", {
-                  error:
-                    outcome.error instanceof Error
-                      ? outcome.error.message
-                      : t("layers.saveEditsError"),
-                }),
-              },
-            }));
-            scheduleStatusClear(layer.id);
-            return;
-          }
-          if (outcome.kind === "refresh-failed") {
-            markMssqlRefreshRequired(layer.id);
-            setRefreshStatuses((current) => ({
-              ...current,
-              [layer.id]: {
-                type: "error",
-                message: t("layers.saveEditsMssqlRefreshWarning"),
-              },
-            }));
-            scheduleStatusClear(layer.id);
-            return;
-          }
-          const { writeResult: result, refreshed: fresh } = outcome;
-          const currentMetadata =
-            useAppStore.getState().layers.find((current) => current.id === layer.id)?.metadata ??
-            layer.metadata;
-          updateLayer(layer.id, {
-            geojson: fresh.geojson,
-            metadata: reconcileMssqlWritebackMetadata(currentMetadata, fresh),
-          });
-          const primaryKey = layer.metadata.mssqlPrimaryKey;
-          if (typeof primaryKey === "string") {
-            rememberMssqlLoadedRows(layer.id, requestProjectGeneration, primaryKey, fresh.geojson);
-          }
-          message = t("layers.saveEditsMssqlSuccess", {
-            table: `${schema}.${table}`,
-            inserted: result.inserted,
-            updated: result.updated,
-            deleted: result.deleted,
-          });
-          if (result.skipped_fields?.length) {
-            statusType = "warning";
-            message = `${message} ${t("layers.saveEditsMssqlSkippedFields", {
-              fields: result.skipped_fields.join(", "),
-            })}`;
-          }
-        } else if (isPostgis) {
-          const connection = resolvePostgisConnection(layer);
-          if (!connection) {
-            setRefreshStatuses((current) => ({
-              ...current,
-              [layer.id]: {
-                type: "error",
-                message: t("layers.saveEditsPostgisNoConnection"),
-              },
-            }));
-            scheduleStatusClear(layer.id);
-            return;
-          }
-          const schema =
-            typeof layer.metadata.postgisSchema === "string"
-              ? layer.metadata.postgisSchema
-              : "public";
-          const table = layer.metadata.postgisTable as string;
-          const geometryColumn =
-            typeof layer.metadata.postgisGeometryColumn === "string"
-              ? layer.metadata.postgisGeometryColumn
-              : undefined;
-          const result = await writePostgisTable({
-            connection,
-            schema_name: schema,
-            table,
-            geometry_column: geometryColumn,
-            geojson,
-            // Scope deletions to the rows this session actually read so a
-            // save cannot sweep away rows inserted concurrently elsewhere.
-            // The baseline lives on the layer metadata, so it survives a
-            // project reload.
-            baseline_keys: databaseBaselineKeys(layer, "postgisBaselineKeys"),
-            // Resolved, not `layer.capabilities`: the sidecar reads an omitted
-            // flag as allowed, so a partial override has to be filled in from
-            // the same inferred defaults the UI gated on, or the two can
-            // disagree about a flag the override never mentioned.
-            capabilities: resolveLayerCapabilities(layer),
-          });
-          // Re-read the table so inserted features pick up their database-
-          // assigned primary keys; without this a second save would insert
-          // them again as duplicates.
-          let fresh;
-          try {
-            fresh = await readPostgisTable({
-              connection,
-              schema_name: schema,
-              table,
-              geometry_column: geometryColumn,
-              excluded_fields: layer.fieldVisibility
-                ? Object.keys(layer.fieldVisibility).filter(
-                    (k) => layer.fieldVisibility![k] === "excluded",
-                  )
-                : undefined,
-            });
-          } catch {
-            // The write committed; only the refresh failed. Reporting this as
-            // a plain failure would invite a retry that re-inserts the still
-            // key-less new features, so surface a distinct warning instead.
-            setRefreshStatuses((current) => ({
-              ...current,
-              [layer.id]: {
-                type: "error",
-                message: t("layers.saveEditsPostgisRefreshWarning"),
-              },
-            }));
-            scheduleStatusClear(layer.id);
-            return;
-          }
-          // Merge into the store's current metadata, not the click-time
-          // closure: the write/re-read round trip is slow enough for other
-          // updates (auto-refresh, time-slider binding) to land in between.
-          const currentMetadata =
-            useAppStore.getState().layers.find((l) => l.id === layer.id)?.metadata ??
-            layer.metadata;
-          updateLayer(layer.id, {
-            geojson: fresh.geojson,
-            metadata: {
-              ...currentMetadata,
-              featureCount: fresh.feature_count,
-              postgisBaselineKeys: databaseFeatureKeys(fresh.geojson),
-            },
-          });
-          message = t("layers.saveEditsPostgisSuccess", {
-            table: `${schema}.${table}`,
-            inserted: result.inserted,
-            updated: result.updated,
-            deleted: result.deleted,
-          });
-          // The sidecar reports editor-added fields it could not persist
-          // (no matching table column); surface that so the drop is not
-          // silent behind a plain success toast.
-          if (result.skipped_fields?.length) {
-            statusType = "warning";
-            message = `${message} ${t("layers.saveEditsPostgisSkippedFields", {
-              fields: result.skipped_fields.join(", "),
-            })}`;
-          }
-        } else if (isTauri() && isGeojsonSourcePath(path)) {
-          // A GeoJSON rewrite needs no GeoPandas, so the desktop app writes it
-          // itself instead of depending on a sidecar that may not be running
-          // (#2439: the save failed and the file kept its old values).
-          await writeLocalGeojsonFile(path, geojson);
-          message = t("layers.saveEditsSuccess", { count: geojson.features.length });
-        } else {
-          // GeoPackage write-back needs GeoPandas in the sidecar. The desktop
-          // app starts it on demand, as the other sidecar-backed actions do;
-          // the web build reaches its own through the /sidecar proxy.
-          if (isTauri()) await startGeoLibreSidecar();
-          const result = await writeVectorToSource({ path, geojson });
-          message = t("layers.saveEditsSuccess", {
-            count: result.feature_count,
-          });
-        }
-        setRefreshStatuses((current) => ({
-          ...current,
-          [layer.id]: { type: statusType, message },
-        }));
-        scheduleStatusClear(layer.id);
-      } catch (error) {
-        if (isMssql && !isCurrentMssqlRequest()) return;
-        const message =
-          error instanceof MssqlReconnectRequiredError
-            ? t("layers.saveEditsMssqlNoConnection")
-            : error instanceof Error
-              ? error.message
-              : t("layers.saveEditsError");
-        setRefreshStatuses((current) => ({
-          ...current,
-          [layer.id]: { type: "error", message },
-        }));
-        scheduleStatusClear(layer.id);
-      }
+      const outcome = await writeLayerEditsToSource(clickedLayer, {
+        map: mapControllerRef.current?.getMap() ?? undefined,
+        t,
+        canEditLayer,
+        deps: {
+          updateLayer,
+          markMssqlRefreshRequired,
+        },
+      });
+      if (outcome.silent) return;
+      setRefreshStatuses((current) => ({
+        ...current,
+        [clickedLayer.id]: { type: outcome.status, message: outcome.message },
+      }));
+      scheduleStatusClear(clickedLayer.id);
     },
     [
       canEditLayer,
       clearRefreshStatusTimer,
-      commitTableDrafts,
       mapControllerRef,
       markMssqlRefreshRequired,
       scheduleStatusClear,

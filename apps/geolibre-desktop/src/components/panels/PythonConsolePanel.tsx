@@ -372,9 +372,10 @@ export function PythonConsolePanel({ mapControllerRef }: PythonConsolePanelProps
     <section
       ref={sectionRef}
       aria-label={t("pythonConsole.title")}
-      className="relative flex shrink-0 flex-col border-t bg-card"
+      className="geolibre-bottom-panel relative flex shrink-0 flex-col border-t bg-card"
       // Collapsed: drop the fixed height so the panel hugs its header.
       style={collapsed ? undefined : { height }}
+      data-collapsed={collapsed || undefined}
     >
       {collapsed ? null : (
         <div

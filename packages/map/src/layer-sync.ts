@@ -105,6 +105,7 @@ import {
   fillExtrusionPaint,
   fillPaint,
   heatmapPaint,
+  heatmapWeightMax,
   linePaint,
   rasterPaint,
   withPaintResets,
@@ -113,6 +114,12 @@ import { OwnedPaintResets } from "./owned-paint-resets";
 import { isViteDevServer, proxyWmsTileUrl, proxyWmsTiles } from "./wms-proxy";
 import { getActiveMapCrs, tileTemplatesForMapCrs } from "./active-map-crs";
 import { resolveTextFontFromStyleLayers } from "./text-font";
+import {
+  LINE_GAP_ANGLE_PROPERTY,
+  LINE_GAP_TEXT_PROPERTY,
+  getLineGapLabels,
+  type LineGapLabelResult,
+} from "./line-gap-labels";
 
 // Existing importers (MapController, tests) read it from here.
 export { hasZoomDependentClusterFilter };
@@ -172,6 +179,22 @@ function unclusteredPointFilter(hasTextMarkers: boolean): maplibregl.FilterSpeci
     ["!", ["has", "point_count"]],
     nonTextMarkerPointFilter,
   ] as maplibregl.FilterSpecification;
+}
+
+/**
+ * Whether any per-feature filter {@link withFeatureFilters} combines is
+ * active. Symbology derived from the raw features cannot see these filters.
+ *
+ * @param layer - The store layer being synced.
+ * @returns True while a time, embed, authored or rule filter applies.
+ */
+function layerHasFeatureFilter(layer: GeoLibreLayer): boolean {
+  return (
+    (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
+    (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) ||
+    compileLayerFilters(layer) !== null ||
+    ruleBasedVisibilityFilter(layer.style) !== null
+  );
 }
 
 /**
@@ -1767,7 +1790,10 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
     layer,
     profile,
   );
-  const sourceGeoJson = wantCluster ? authoredClusterInput(layer, map.getZoom()) : layer.geojson!;
+  const lineGap = wantCluster ? null : lineGapPlacement(map, layer, profile);
+  const sourceGeoJson = wantCluster
+    ? authoredClusterInput(layer, map.getZoom())
+    : (lineGap?.lines ?? layer.geojson!);
 
   // A layer can drop below the tiling threshold (e.g. a processing tool shrinks
   // it), or some other code may have left a non-geojson source under this id.
@@ -1821,7 +1847,7 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
     setGeoJsonData(map.getSource(src) as maplibregl.GeoJSONSource, sourceGeoJson);
   }
 
-  applyVectorDataRenderLayers(map, layer, src, profile, renderer, beforeId);
+  applyVectorDataRenderLayers(map, layer, src, profile, renderer, beforeId, undefined, lineGap);
 }
 
 /**
@@ -1899,6 +1925,12 @@ interface VectorRenderContext {
    * companion symbology (see {@link applyVectorDataRenderLayers}).
    */
   hasFeatureFilter: boolean;
+  /**
+   * The contour-style placement when the layer's line labels cut gaps in
+   * their lines: the source already holds its cut lines, and the label layer
+   * draws its label points (see {@link lineGapPlacement}).
+   */
+  lineGap?: LineGapLabelResult | null;
 }
 
 /**
@@ -1922,6 +1954,7 @@ function applyVectorDataRenderLayers(
   renderer: string,
   beforeId?: string,
   sourceLayer?: string,
+  lineGap: LineGapLabelResult | null = null,
 ): void {
   const sourceSpec: { source: string; "source-layer"?: string } = sourceLayer
     ? { source: src, "source-layer": sourceLayer }
@@ -1944,11 +1977,7 @@ function applyVectorDataRenderLayers(
   // it. While a Time Slider window or a rule-based visibility filter is
   // active, those derivations would disagree with the visible data — skip
   // them for the duration, mirroring the dedup-label behavior.
-  const hasFeatureFilter =
-    (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
-    (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) ||
-    compileLayerFilters(layer) !== null ||
-    ruleBasedVisibilityFilter(layer.style) !== null;
+  const hasFeatureFilter = layerHasFeatureFilter(layer);
 
   const ctx: VectorRenderContext = {
     map,
@@ -1963,6 +1992,7 @@ function applyVectorDataRenderLayers(
     opacity,
     hasTextMarkers,
     hasFeatureFilter,
+    lineGap,
   };
 
   applyPolygonRenderLayers(ctx, fillPatternId);
@@ -2291,7 +2321,7 @@ function applyHeatmapPointLayer(ctx: VectorRenderContext): void {
         layer,
         hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
       ),
-      paint: heatmapPaint(layer.style, opacity),
+      paint: heatmapPaint(layer.style, opacity, heatmapWeightMax(layer.style, layer.geojson)),
       layout: { visibility },
     },
     beforeId,
@@ -2501,6 +2531,10 @@ function applyAttributeLabelLayer(ctx: VectorRenderContext): void {
     ...DEFAULT_LAYER_STYLE.labels,
     ...styleValue(layer.style, "labels"),
   };
+  if (ctx.lineGap) {
+    ensureLineGapLabelLayer(ctx, labels, ctx.lineGap.labels);
+    return;
+  }
   const dedupedLabelFc = dedupedAttributeLabels(ctx, labels);
   if (
     !layer.style.extrusionEnabled &&
@@ -2592,6 +2626,202 @@ function attributeLabelTextField(
   return textField;
 }
 
+// Canvas used to measure label widths for line-gap placement.
+let measureContext: CanvasRenderingContext2D | null | undefined;
+
+/**
+ * Width of a label in pixels at `size`. MapLibre draws with the style's glyph
+ * font, which is not available to the canvas, so a sans-serif stand-in is
+ * measured; without a DOM (tests, workers) a per-character estimate is used.
+ */
+function measureLabelText(text: string, size: number): number {
+  if (measureContext === undefined) {
+    try {
+      measureContext =
+        typeof document === "undefined" ? null : document.createElement("canvas").getContext("2d");
+    } catch {
+      measureContext = null;
+    }
+  }
+  if (!measureContext) return text.length * size * 0.6;
+  measureContext.font = `${size}px "Open Sans", "Noto Sans", Arial, sans-serif`;
+  return measureContext.measureText(text).width;
+}
+
+/** A layer's effective label settings. */
+function layerLabelStyle(layer: GeoLibreLayer): LabelStyle {
+  return { ...DEFAULT_LAYER_STYLE.labels, ...styleValue(layer.style, "labels") };
+}
+
+/**
+ * The label zoom range, as the label layers apply it: the label's own range
+ * intersected with the layer's style range.
+ */
+function labelZoomRange(
+  labels: LabelStyle,
+  style: LayerStyle,
+): { minzoom: number; maxzoom: number } {
+  return intersectZoomRange(
+    {
+      minzoom: clampLayerZoom(labels.minZoom, MIN_LAYER_ZOOM),
+      maxzoom: clampLayerZoom(labels.maxZoom, MAX_LAYER_ZOOM),
+    },
+    style,
+  );
+}
+
+function lineGapWanted(labels: LabelStyle): boolean {
+  return (
+    labels.enabled &&
+    labels.placement === "line" &&
+    labels.lineGap === true &&
+    Boolean(labels.expression.trim() || labels.field) &&
+    // The gap is cut at one size per label, so a size expression (which can
+    // vary per feature) keeps the ordinary line labels.
+    !parseLabelOverride(labels.sizeExpression, "number") &&
+    // Placement gives space to features in source order, so a priority
+    // expression (lower value placed first) keeps the ordinary labels too.
+    !parseLabelOverride(labels.priorityExpression, "number") &&
+    // Duplicate-label collapsing builds its own label points, which gap
+    // placement would bypass.
+    labels.dedupe === "off" &&
+    // Placement evaluates visibility at its half-zoom bucket, while the label
+    // filter reads the live zoom; a zoom-dependent visibility could hide a
+    // label whose gap is already cut.
+    !/"zoom"/.test(labels.visibilityExpression)
+  );
+}
+
+/**
+ * Whether a layer's labels cut gaps in its lines, given its geometry. Only
+ * line-only layers on the inline GeoJSON path take it: the cut lines replace
+ * the source's features, which a point or polygon in the same source must not
+ * see, and the tiled path cuts its tiles once, not per zoom. Layers with an
+ * active feature filter keep ordinary labels too: MapLibre applies filters
+ * after collision, so a hidden line could take the spot of a visible line's
+ * label (the derived-symbology rule). Shared by the placement and the
+ * zoom-resync predicate so the two cannot drift.
+ */
+function lineGapApplies(
+  layer: GeoLibreLayer,
+  profile: ReturnType<typeof detectGeometryProfile>,
+): boolean {
+  const { renderer, wantCluster } = resolveVectorRenderMode(layer, profile);
+  return (
+    !wantCluster &&
+    renderer !== "heatmap" &&
+    !layer.style.extrusionEnabled &&
+    profile.hasLine &&
+    !profile.hasPoint &&
+    !profile.hasPolygon &&
+    !layerHasFeatureFilter(layer)
+  );
+}
+
+/**
+ * The contour-style placement for a layer whose line labels cut gaps in
+ * their lines ({@link LabelStyle.lineGap}), or null when it does not apply.
+ * The placement is computed for the map's zoom bucket; the controller resyncs
+ * on `zoomend` while such a layer exists ({@link hasLineGapLabels}). Outside
+ * the label's zoom range nothing is cut, so the line shows whole.
+ */
+function lineGapPlacement(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  profile: ReturnType<typeof detectGeometryProfile>,
+): LineGapLabelResult | null {
+  const labels = layerLabelStyle(layer);
+  if (!layer.geojson || !lineGapWanted(labels) || !lineGapApplies(layer, profile)) {
+    return null;
+  }
+  // The live zoom, not the placement bucket, decides whether the labels show.
+  const zoom = map.getZoom();
+  const range = labelZoomRange(labels, layer.style);
+  if (zoom < range.minzoom || zoom >= range.maxzoom) return null;
+  const textField = attributeLabelTextField(labels, null);
+  if (textField === "") return null;
+  const size = Math.max(1, labels.size);
+  return getLineGapLabels(layer.geojson, labels, textField, zoom, (text) =>
+    measureLabelText(text, size),
+  );
+}
+
+/**
+ * Whether any layer draws contour-style gap labels, whose placement depends
+ * on the zoom and so needs a resync when the zoom changes.
+ */
+export function hasLineGapLabels(layers: readonly GeoLibreLayer[]): boolean {
+  return layers.some((layer) => {
+    if (layer.type !== "geojson" || !layer.visible || !layer.geojson) return false;
+    const labels = layerLabelStyle(layer);
+    // Check the cheap label settings first; the profile walks every feature.
+    return lineGapWanted(labels) && lineGapApplies(layer, detectGeometryProfile(layer.geojson));
+  });
+}
+
+/**
+ * The label layer for contour-style gap labels: one point per gap, its text
+ * and rotation precomputed, always drawn (the gap is already cut, so a label
+ * hidden by collision would leave an empty hole; placement already avoided
+ * overlaps).
+ */
+function ensureLineGapLabelLayer(
+  ctx: VectorRenderContext,
+  labels: LabelStyle,
+  points: GeoJSON,
+): void {
+  const { map, layer, beforeId, visibility, opacity } = ctx;
+  const pointSourceId = labelSourceId(layer.id);
+  const existingSource = map.getSource(pointSourceId) as maplibregl.GeoJSONSource | undefined;
+  if (existingSource) {
+    setGeoJsonData(existingSource, points);
+  } else {
+    map.addSource(pointSourceId, { type: "geojson", data: points });
+    rememberGeoJsonData(map, pointSourceId, points);
+  }
+  const existingLabel = map.getLayer(labelLayerId(layer.id)) as { source?: string } | undefined;
+  if (existingLabel && existingLabel.source !== pointSourceId) {
+    removeIfExists(map, labelLayerId(layer.id));
+  }
+  const labelZoom = labelZoomRange(labels, layer.style);
+  // Label points copy their line's attributes, so the visibility override and
+  // the layer's feature filters apply to them as to the lines.
+  const { labelBaseFilter, colorOverride, opacityOverride } = attributeLabelOverrides(labels, null);
+  ensureLayer(
+    map,
+    labelLayerId(layer.id),
+    {
+      id: labelLayerId(layer.id),
+      type: "symbol",
+      source: pointSourceId,
+      ...labelZoom,
+      filter: withFeatureFilters(layer, labelBaseFilter),
+      layout: {
+        "text-field": ["get", LINE_GAP_TEXT_PROPERTY],
+        "text-font": textFontForMapStyle(map),
+        "text-size": Math.max(1, labels.size),
+        "symbol-placement": "point",
+        "text-allow-overlap": true,
+        "text-ignore-placement": true,
+        "text-anchor": "center",
+        "text-offset": [0, 0],
+        "text-rotate": ["get", LINE_GAP_ANGLE_PROPERTY],
+        "text-rotation-alignment": "map",
+        "text-max-width": 1000,
+        "text-transform": labels.transform,
+        visibility,
+      },
+      paint: {
+        "text-color": colorOverride ?? labels.color,
+        "text-halo-color": labels.haloColor,
+        "text-halo-width": Math.max(0, labels.haloWidth),
+        "text-opacity": opacityOverride ?? opacity,
+      },
+    },
+    beforeId,
+  );
+}
+
 /**
  * Create/update the attribute label layer (and, for deduped labels, its
  * aggregated source), then drop the dedup source once nothing references it.
@@ -2649,6 +2879,15 @@ function ensureAttributeLabelLayer(
         "text-size": sizeOverride ?? Math.max(1, labels.size),
         // The dedup source is points, so it cannot use line placement.
         "symbol-placement": !dedupedLabelFc && labels.placement === "line" ? "line" : "point",
+        // Only line placement repeats labels; point labels leave it unset.
+        ...(!dedupedLabelFc && labels.placement === "line"
+          ? {
+              "symbol-spacing": Math.max(
+                1,
+                labels.lineSpacing ?? DEFAULT_LAYER_STYLE.labels.lineSpacing,
+              ),
+            }
+          : {}),
         "text-allow-overlap": labels.allowOverlap,
         "text-ignore-placement": labels.allowOverlap,
         "text-anchor": labels.anchor,

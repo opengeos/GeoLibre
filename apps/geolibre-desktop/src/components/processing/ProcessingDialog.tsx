@@ -60,6 +60,7 @@ import {
   pickSavePathWithFallback,
 } from "../../lib/tauri-io";
 import { clamp } from "../../lib/clamp";
+import { uniqueLayerName } from "../../lib/unique-layer-name";
 import {
   layersForSubsetUrl,
   subsetUrlFieldValues,
@@ -268,6 +269,7 @@ export function ProcessingDialog({
   const [drawPoints, setDrawPoints] = useState<{ x: number; y: number }[] | null>(null);
 
   const onDragStart = (event: React.PointerEvent) => {
+    if (window.innerWidth < 640 && document.documentElement.dataset.touchUi === "true") return;
     // Never begin a drag from an interactive control: the pointer capture would
     // swallow the ensuing click (e.g. the close button).
     if ((event.target as Element).closest("button, a, input, [role='button']")) return;
@@ -303,6 +305,7 @@ export function ProcessingDialog({
   };
 
   const onResizeStart = (event: React.PointerEvent) => {
+    if (window.innerWidth < 640 && document.documentElement.dataset.touchUi === "true") return;
     // Don't also start a header drag; the grip lives outside the header but stop
     // propagation defensively.
     event.stopPropagation();
@@ -1336,7 +1339,10 @@ export function ProcessingDialog({
         const path = isFeatureCollection(value) ? "" : (outputPath(value) ?? "");
         const data = isFeatureCollection(value) ? value : await fetchWhiteboxJsonOutput(path);
         if (!isFeatureCollection(data)) continue;
-        const layerName = `${jobToolLabel} ${humanize(name)}`;
+        const layerName = uniqueLayerName(
+          `${jobToolLabel} ${humanize(name)}`,
+          useAppStore.getState().layers,
+        );
         const layerId = addGeoJsonLayer(layerName, data, path || undefined);
         historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(layerName);
         const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
@@ -1737,6 +1743,8 @@ export function ProcessingDialog({
   return (
     <div
       ref={panelRef}
+      data-processing-dialog=""
+      data-drawing={drawing ? "true" : undefined}
       role="dialog"
       tabIndex={-1}
       aria-labelledby="whitebox-toolbox-title"
@@ -1818,14 +1826,26 @@ export function ProcessingDialog({
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          aria-label={t("common.close")}
-          onClick={() => setProcessingOpen(false)}
-          className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {drawing ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => void handleDrawBbox()}
+            >
+              {t("common.cancel")}
+            </Button>
+          ) : null}
+          <button
+            type="button"
+            aria-label={t("common.close")}
+            onClick={() => setProcessingOpen(false)}
+            className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Tool list beside the parameter form, but only while the panel is wide
@@ -2239,6 +2259,7 @@ export function ProcessingDialog({
           expose to assistive tech. */}
       <div
         role="presentation"
+        data-processing-resize-handle=""
         className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none"
         onPointerDown={onResizeStart}
         onPointerMove={onResizeMove}

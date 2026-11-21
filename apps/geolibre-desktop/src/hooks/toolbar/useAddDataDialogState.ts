@@ -7,7 +7,9 @@ import {
   type OpenAddDataPostgres,
   type OpenAddDataMssql,
 } from "../../components/layout/add-data/open-add-data";
+import { registerFileHandler } from "@geolibre/plugins";
 import { serviceUrlParameter, type ServiceUrlParameter } from "../../lib/data-url";
+import { GEOPDF_FILE_HANDLER } from "../../lib/geopdf/file-handler";
 import { masHidesDataSource } from "../../lib/mas-build";
 
 /** The Add Data dialog's props that this hook owns (all but the map ref). */
@@ -59,6 +61,9 @@ export function useAddDataDialogState(viewer: boolean): AddDataDialogState {
   });
   const [addDataTargetGroupId, setAddDataTargetGroupId] = useState<string | null>(null);
   const addDataInitialLayerIdsRef = useRef<Set<string>>(new Set());
+  // A dropped PDF opens this dialog at the GeoPDF form (GH #3523); the viewer
+  // layout never opens it, so it does not claim PDFs there.
+  useEffect(() => (viewer ? undefined : registerFileHandler(GEOPDF_FILE_HANDLER)), [viewer]);
   // Every path that opens the dialog outside the OPEN_ADD_DATA_EVENT listener
   // (the Add Data menu, the command palette, the 3D-model button) is ungrouped,
   // so it must drop any group target a previous open left behind — otherwise

@@ -4,6 +4,10 @@
     Lecture 15 min · Hands-on 25 min · Wrap-up 10 min · Open questions 4:50 -
     5:00
 
+<a class="video-thumb" href="https://www.youtube.com/watch?v=CxEw6ClhAbM&amp;list=PLe4LOpcEE1lU" target="_blank" rel="noopener" title="Watch on YouTube">
+  <img src="https://i.ytimg.com/vi/CxEw6ClhAbM/maxresdefault.jpg" alt="Recording of section 8: AI and Automation" loading="lazy" width="1280" height="720">
+</a>
+
 ## Learning goals
 
 By the end of this section you will be able to:

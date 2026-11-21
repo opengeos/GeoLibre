@@ -308,10 +308,15 @@
     "bodyNote": "القياس على: {{body}} (تقريب كروي)"
   },
   "statusBar": {
+    "coords": "الإحداثيات",
     "elevation": "ارتفاع",
     "elevationLong": "الارتفاع",
     "cameraAltitude": "ارتفاع الرؤية",
     "cameraAltitudeLong": "ارتفاع الكاميرا فوق مستوى سطح البحر",
+    "zoom": "التكبير",
+    "bearing": "الاتجاه",
+    "pitch": "الميل",
+    "bbox": "الصندوق المحيط",
     "coordinateFormat": {
       "dd": "درجات عشرية",
       "dms": "درجات ودقائق وثوانٍ",
@@ -2173,7 +2178,10 @@
     "lockLayer": "قفل الطبقة أمام الضيوف",
     "unlockLayer": "إلغاء قفل الطبقة أمام الضيوف",
     "layerLocked": "مقفلة",
-    "layerLockedHint": "هذه الطبقة مقفلة من قِبل المضيف ولا يمكن تحريرها"
+    "layerLockedHint": "هذه الطبقة مقفلة من قِبل المضيف ولا يمكن تحريرها",
+    "viewOnlyHint": "أنت في وضع العرض فقط في هذه الجلسة، لذا لا يمكنك تغيير هذه الطبقة",
+    "layerLockedRejected": "لم تتم مشاركة هذا التغيير لأن المضيف قفل الطبقة. أُعيدت خريطتك إلى نسخة الجلسة.",
+    "viewOnlyLocalChange": "أنت في وضع العرض فقط في هذه الجلسة، لذا تبقى تغييراتك على شاشتك ولا تتم مشاركتها."
   },
   "share": {
     "title": "مشاركة المشروع",
@@ -2340,6 +2348,22 @@
     "resizeDialog": "تغيير حجم المعرض",
     "scopeFeatured": "المميزة",
     "scopeAll": "جميع المشاريع",
+    "scopeCollections": "مجموعات المشاريع",
+    "loadingCollections": "جارٍ تحميل المجموعات…",
+    "collectionsSearchPlaceholder": "تصفية المجموعات حسب العنوان أو المؤلف أو الوصف",
+    "noCollectionMatches": "لا توجد مجموعات تطابق عامل التصفية.",
+    "emptyCollections": "لا توجد مجموعات عامة لعرضها بعد.",
+    "emptyCollection": "لا تحتوي هذه المجموعة على مشاريع عامة.",
+    "untitledCollection": "مجموعة بلا عنوان",
+    "openCollection": "عرض المشاريع في هذه المجموعة",
+    "openCollectionOnWeb": "عرض المجموعة على الويب",
+    "backToCollections": "جميع المجموعات",
+    "collectionProjects_zero": "{{count}} مشروع",
+    "collectionProjects_one": "مشروع واحد ({{count}})",
+    "collectionProjects_two": "مشروعان ({{count}})",
+    "collectionProjects_few": "{{count}} مشاريع",
+    "collectionProjects_many": "{{count}} مشروعًا",
+    "collectionProjects_other": "{{count}} مشروع",
     "scopeMine": "مشاريعي",
     "scopeOrganizations": "المؤسسات",
     "scopeGroups": "المجموعات",
@@ -2640,7 +2664,9 @@
   },
   "kml": {
     "importFailed": "تعذر استيراد KML/KMZ.",
-    "timeOverlayGroup": "تحريك التراكب الزمني"
+    "timeOverlayGroup": "تحريك التراكب الزمني",
+    "dataUrlStyleUnsupported": "لا يمكن تطبيق نمط على مستند KML.",
+    "dataUrlNoImporter": "تعذّرت إضافة {{name}} إلى الخريطة: لا يتوفر مستورد KML."
   },
   "map": {
     "boundsRestricted": "الحدود مقفلة",
@@ -2730,6 +2756,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "نموذج ارتفاعات COG محلي",
     "localSourceDescription": "يبقى الملف على هذا الجهاز وتُقرأ منه نطاقات صغيرة عند الحاجة إلى مربعات التضاريس.",
+    "fillOutside": "ملء ما خارج DEM بالتضاريس العالمية",
+    "fillOutsideDescription": "يحيط DEM بالتضاريس العالمية ويملأ فجوات انعدام البيانات فيه بها بدلًا من سهل مستوٍ. مفعّل افتراضيًا لـ DEM من عنوان URL ومعطّل للملف المحلي، الذي لا يقرأ شيئًا من الشبكة بخلاف ذلك.",
     "useCog": "استخدام نموذج ارتفاعات COG",
     "ionAssetLabel": "أصل تضاريس Cesium Ion",
     "ionAssetDescription": "استخدم أصل تضاريس quantized-mesh من Cesium Ion على الكرة الأرضية. يجب أن يكون الأصل متاحًا لحساب Ion المكوَّن.",
@@ -3649,7 +3677,9 @@
       "profileCount_other": "{{count}} ملف تعريف",
       "noProfiles": "لا توجد ملفات تعريف بعد. أضف واحدًا أدناه لتهيئة مساعد الذكاء الاصطناعي.",
       "setDefault": "تعيين كافتراضي",
+      "keepDefault": "الإبقاء كافتراضي",
       "defaultProfile": "افتراضي",
+      "proxyIsDefault": "لا يوجد ملف تعريف افتراضي، لذا يبدأ المساعد على وكيل النشر. عيّن ملف تعريف كافتراضي ليبدأ عليه بدلًا من ذلك.",
       "edit": "تحرير",
       "deleteProfile": "حذف ملف التعريف",
       "backToProfiles": "→ العودة إلى ملفات التعريف",
@@ -3679,6 +3709,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-… (إذا كان مطلوبًا)"
+      },
+      "chatgpt": {
+        "account": "حساب ChatGPT",
+        "intro": "استخدم خطة ChatGPT الخاصة بك بدلًا من مفتاح API. يفتح متصفحك صفحة تسجيل الدخول في OpenAI، حيث تسمح لـ GeoLibre باستخدام خطتك.",
+        "continue": "المتابعة باستخدام ChatGPT",
+        "waiting": "في انتظار إكمال تسجيل الدخول في المتصفح…",
+        "openAgain": "فتح المتصفح مرة أخرى",
+        "signedInAs": "تم تسجيل الدخول باسم {{email}}",
+        "usingPlan": "يتم استخدام خطة ChatGPT الخاصة بك.",
+        "planDeclined": "GeoLibre غير مسموح له باستخدام خطة ChatGPT الخاصة بك. سجّل الدخول مرة أخرى واسمح بذلك.",
+        "signInAgain": "تسجيل الدخول مرة أخرى",
+        "notRemembered": "سلسلة مفاتيح النظام غير متاحة، لذا يستمر تسجيل الدخول هذا حتى إغلاق GeoLibre.",
+        "signOut": "تسجيل الخروج",
+        "useAnotherAccount": "استخدام حساب آخر",
+        "usage": "الاستخدام والتطبيقات المتصلة",
+        "revokeUnconfirmed": "تم تسجيل الخروج هنا، لكن OpenAI لم تؤكد إنهاء الجلسة. افصل GeoLibre من إعدادات ChatGPT للتأكد.",
+        "desktopOnly": "تسجيل الدخول باستخدام ChatGPT متاح في تطبيق GeoLibre لسطح المكتب."
       }
     }
   },
@@ -4172,6 +4219,7 @@
       "difference": "فرق",
       "union": "اتحاد",
       "spatialJoin": "ربط مكاني",
+      "summarizeWithin": "تلخيص داخل المضلعات",
       "attributeJoin": "ربط بالسمات",
       "selectByValue": "تحديد حسب القيمة",
       "selectByLocation": "تحديد حسب الموقع",
@@ -4505,6 +4553,8 @@
         "missing-source": "لا تحتوي الطبقة على مصدر بيانات قابل للقراءة.",
         "format": "تنسيق ملف الطبقة غير مدعوم.",
         "remote-file": "مصادر ملفات QGIS البعيدة غير مدعومة بعد.",
+        "remote-unreadable": "تعذّر تنزيل الملف البعيد أو قراءته.",
+        "wmts": "لا يتم استيراد طبقات WMTS بعد. أضف الخدمة من قائمة إضافة بيانات بدلًا من ذلك.",
         "network-path": "لا يتم تحميل مسارات مشاركة الشبكة لأسباب أمنية.",
         "browser-local-file": "تمت الإشارة إلى الملف المحلي، لكن المتصفحات لا تستطيع إعادة فتح مسارات بيانات QGIS. استخدم GeoLibre Desktop لتحميله.",
         "browser-local-raster": "تتم الإشارة إلى الراستر عبر مسار محلي. استخدم GeoLibre Desktop لتحميله.",
@@ -4642,6 +4692,7 @@
       "loadingVtpk": "جارٍ فتح حزمة البلاطات…",
       "loadingVtpkDesc": "قراءة دليل الحزمة ونمطها",
       "projectName": "اسم المشروع",
+      "untitledProject": "مشروع بلا عنوان",
       "storymapEllipsis": "خريطة قصصية...",
       "pointerElevationNoticeTitle": "الارتفاع يستخدم خدمة ارتفاعات عامة",
       "pointerElevationNoticeDesc": "يُحسب الارتفاع من تضاريس الخريطة ثلاثية الأبعاد عند تفعيلها دون إرسال أي بيانات. وبدونها تُستخدم واجهة Open-Meteo العامة، فتغادر إحداثيات المؤشر جهازك.",
@@ -6123,6 +6174,7 @@
     "setupTitle": "إعداد مساعد الذكاء الاصطناعي",
     "setupStatus": "يحتاج المساعد إلى موفر ذكاء اصطناعي ليتولى التفكير. أضف بيانات اعتماد لأي موفر واحد أدناه، وستتحول اللوحة إلى وضع الدردشة فور الحفظ.",
     "setupProviders": "إضافة بيانات اعتماد لأي موفر واحد",
+    "setupSignIn": "سجّل الدخول من الإعدادات ← موفرو الذكاء الاصطناعي",
     "setupOpenSettings": "فتح الإعدادات ← موفرو الذكاء الاصطناعي",
     "thinking": "جارٍ العمل…",
     "toolError": "فشل",
@@ -6917,6 +6969,26 @@
                 "inner": "داخلي (الاحتفاظ بالمعالم المتطابقة فقط)",
                 "left": "يساري (الاحتفاظ بجميع معالم الإدخال)"
               }
+            }
+          }
+        },
+        "summarize-within": {
+          "name": "تلخيص داخل المضلعات",
+          "description": "عدّ معالم طبقة أخرى التي تتقاطع مع كل مضلع، وتلخيص حقل رقمي، وقياس مقدار ما تغطيه من كل مضلع",
+          "params": {
+            "layer": {
+              "label": "طبقة المضلعات"
+            },
+            "overlay": {
+              "label": "الطبقة المراد تلخيصها"
+            },
+            "field": {
+              "label": "حقل رقمي",
+              "description": "اختياري. يضيف المجموع والمتوسط والحد الأدنى والحد الأقصى لهذا الحقل لكل مضلع."
+            },
+            "min_overlap_pct": {
+              "label": "تجاهل التداخلات الأصغر من (%)",
+              "description": "عندما تحتوي الطبقة المراد تلخيصها على مضلعات، تخطَّ أي مضلع يغطي أقل من هذه النسبة من المضلع، مثل الشظايا على امتداد الحواف المشتركة."
             }
           }
         },
@@ -9088,6 +9160,7 @@
     "loadingAttributes": "جارٍ تحميل سمات الطبقة…",
     "requiresVectorLayer": "يتطلب جدول السمات طبقة متجه أو طبقة استعلام DuckDB.",
     "invalidJson": "JSON غير صالح",
+    "nullValue": "NULL",
     "editCellAria": "تحرير {{col}} للمعلم {{featureId}}",
     "resizeColumn": "تغيير حجم العمود {{name}}",
     "renameFieldAria": "إعادة تسمية الحقل {{name}}",
@@ -10008,7 +10081,7 @@
     "exportStyleDataNotReady": "بيانات الطبقة ليست جاهزة بعد. حاول مرة أخرى بعد قليل.",
     "exportStyleNeedsFeatures": "يتطلب تصدير النمط طبقة متجهات تحتوي على معالم.",
     "exportStyleError": "تعذر تصدير نمط هذه الطبقة.",
-    "importStyle": "استيراد نمط (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "استيراد نمط (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "استيراد نمط من نص…",
     "importStyleFromTextDescription": "الصق نمطًا بصيغة GeoLibre أو Mapbox GL أو SLD أو QML. يُتعرَّف على الصيغة من النص.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",
@@ -10135,6 +10208,9 @@
     "hiddenByGroup": "مخفية لأن مجموعتها غير مرئية",
     "empty": "لا توجد طبقات بيانات. أضف بيانات من شريط الأدوات.",
     "emptyBeginner": "لا توجد طبقات بعد. أضف خرائط الأساس عبر الإضافات ← خرائط الأساس، أو بياناتك الخاصة عبر قائمة إضافة البيانات.",
+    "emptyBeginnerBasemapsOnly": "لا توجد طبقات بعد. أضف خرائط أساس عبر الإضافات ← خرائط الأساس.",
+    "emptyBeginnerDataOnly": "لا توجد طبقات بعد. أضف بياناتك عبر قائمة إضافة بيانات.",
+    "emptyNoAdd": "لا توجد طبقات بيانات.",
     "hideAllLayers": "إخفاء جميع الطبقات",
     "showAllLayers": "إظهار جميع الطبقات",
     "compactView": "عرض مضغوط",
@@ -10464,6 +10540,9 @@
     "localRasterNotRestored_other": "تعذّرت استعادة {{count}} طبقة نقطية محلية",
     "localRasterNotRestoredDesc": "حُمّلت من ملف محلي: {{names}}. لا يحتوي المشروع على بيانات نقطية، أو تعذّرت قراءة الملف. أضف الملف مرة أخرى."
   },
+  "zarrPanel": {
+    "selectorUnmatched": "لم يتم العثور على قيمة المحدد ({{values}}). استخدم قيمة إحداثية أو تاريخًا على محور الزمن أو فهرسًا."
+  },
   "attributeForm": {
     "error": {
       "required": "القيمة مطلوبة",
@@ -10644,7 +10723,8 @@
     "panelRenderFailed": "فشل فتح اللوحة \"{{name}}\".",
     "sharedSettingsFailed": "تعذر تحميل الإعدادات المشتركة من الرابط، لذلك تُستخدم إعداداتك الخاصة.",
     "sharedLanguageFailed": "تعذر التبديل إلى اللغة التي تطلبها الإعدادات المشتركة.",
-    "languageCatalogFailed": "تعذر تحميل ترجمة {{language}}، لذلك يعرض GeoLibre الإنجليزية."
+    "languageCatalogFailed": "تعذر تحميل ترجمة {{language}}، لذلك يعرض GeoLibre الإنجليزية.",
+    "dataUrlLoadFailed": "تعذّر تحميل عنوان URL للبيانات."
   },
   "shell": {
     "workspaceTitle": "مساحة عمل خرائط GeoLibre",

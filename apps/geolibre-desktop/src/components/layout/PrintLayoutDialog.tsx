@@ -448,6 +448,7 @@ export function PrintLayoutDialog({
         <ExportActions
           ui={state}
           hasCapture={Boolean(captured)}
+          georeferenced={Boolean(captured?.georef)}
           atlasEnabled={atlasEnabled}
           atlas={atlas}
           actions={actions}

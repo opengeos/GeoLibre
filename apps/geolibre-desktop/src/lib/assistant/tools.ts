@@ -3,6 +3,7 @@ import {
   OPENFREEMAP_BASEMAPS,
   useAppStore,
   type GeoLibreLayer,
+  type MapViewState,
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import type { GeoLibreAppAPI } from "@geolibre/plugins";
@@ -300,6 +301,66 @@ function asFeatureCollection(data: unknown): FeatureCollection {
     return { type: "FeatureCollection", features: [value as never] };
   }
   throw new Error("URL did not return a GeoJSON Feature or FeatureCollection.");
+}
+
+/** Camera fields `set_view` accepts, named like the MCP server's `set_view`. */
+export interface SetViewInput {
+  center?: number[];
+  zoom?: number;
+  bearing?: number;
+  pitch?: number;
+}
+
+/**
+ * Merge a `set_view` request into the current camera. Omitted fields keep their
+ * current value; zoom is clamped to [0, 24] and pitch to [0, 85], matching the
+ * MCP server's `set_view`, so an out-of-range model guess still lands somewhere
+ * sensible instead of failing. A stale `bbox` is dropped once the center or
+ * zoom moves, since it would no longer describe the visible extent.
+ *
+ * @param current The camera the map shows now.
+ * @param input The fields to change.
+ * @returns The camera to apply.
+ */
+export function resolveSetView(current: MapViewState, input: SetViewInput): MapViewState {
+  const next: MapViewState = { ...current };
+  if (input.center !== undefined) {
+    const [lng, lat] = input.center;
+    next.center = [lng, lat];
+  }
+  if (input.zoom !== undefined) next.zoom = Math.min(24, Math.max(0, input.zoom));
+  if (input.bearing !== undefined) next.bearing = input.bearing;
+  if (input.pitch !== undefined) next.pitch = Math.min(85, Math.max(0, input.pitch));
+  if (input.center !== undefined || input.zoom !== undefined) delete next.bbox;
+  return next;
+}
+
+/** True when two cameras show the same view, within float noise. */
+function sameCamera(a: MapViewState, b: MapViewState): boolean {
+  const close = (x: number, y: number) => Math.abs(x - y) < 1e-9;
+  // Bearings are angles: 360 and 0 face the same way.
+  const turn = Math.abs(((((a.bearing - b.bearing + 180) % 360) + 360) % 360) - 180);
+  return (
+    close(a.center[0], b.center[0]) &&
+    close(a.center[1], b.center[1]) &&
+    close(a.zoom, b.zoom) &&
+    turn < 1e-9 &&
+    close(a.pitch, b.pitch)
+  );
+}
+
+/** A camera reduced to the fields `set_view` reports back to the model. */
+function cameraSummary(view: MapViewState) {
+  const [lng, lat] = view.center;
+  // Panning across the antimeridian with world copies leaves the longitude
+  // outside [-180, 180]; wrap it so a reported view is valid set_view input.
+  const wrapped = ((((lng + 180) % 360) + 360) % 360) - 180;
+  return {
+    center: [wrapped, lat] as [number, number],
+    zoom: view.zoom,
+    bearing: view.bearing,
+    pitch: view.pitch,
+  };
 }
 
 /**
@@ -681,6 +742,59 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
     },
   });
 
+  const setView = tool({
+    name: "set_view",
+    description:
+      "Move the camera to an exact position: center the map on [longitude, latitude], set the zoom level, and optionally rotate (bearing) or tilt (pitch). Omitted fields keep their current value. Use this for requests like 'center on 40.7, -74.0 at zoom 12' or 'tilt the map 60 degrees'; use zoom_to to frame a layer or a bounding box instead. Returns the new camera and the previous one, so a later 'go back' can restore it with another set_view.",
+    inputSchema: z
+      .object({
+        // A plain array, not z.tuple: some providers (Gemini) reject the
+        // tuple form (`prefixItems`) in a function-call schema.
+        center: z
+          .array(z.number())
+          .length(2)
+          .refine(([lng, lat]) => Math.abs(lng) <= 180 && Math.abs(lat) <= 90, {
+            message: "center must be [longitude, latitude] within [-180, 180] and [-90, 90].",
+          })
+          .optional()
+          .describe("[longitude, latitude] in WGS84. Note the order: longitude first."),
+        zoom: z
+          .number()
+          .optional()
+          .describe("Zoom level, 0 (whole world) to 24 (building); about 10 is a city."),
+        bearing: z
+          .number()
+          .optional()
+          .describe("Rotation in degrees clockwise from north; 0 is north-up."),
+        pitch: z.number().optional().describe("Tilt in degrees, 0 (straight down) to 85."),
+      })
+      .refine(
+        (value) =>
+          value.center !== undefined ||
+          value.zoom !== undefined ||
+          value.bearing !== undefined ||
+          value.pitch !== undefined,
+        { message: "Provide at least one of center, zoom, bearing, or pitch." },
+      ),
+    callback: async (input) => {
+      const controller = deps.getMapController();
+      if (!controller) throw new Error("The map is not ready yet.");
+      const previous = controller.readView();
+      const target = resolveSetView(previous, input);
+      await controller.applyView(target);
+      const view = controller.readView();
+      // An engine skips the jump while the user is dragging the map, and Map
+      // preferences can clamp the request back to where the camera already is;
+      // report that instead of letting the model claim a move that did not happen.
+      if (!sameCamera(target, previous) && sameCamera(view, previous)) {
+        throw new Error(
+          "The map did not move. It may be mid-drag, or the requested view is outside the limits set in Map preferences. Try again or pick another view.",
+        );
+      }
+      return json({ view: cameraSummary(view), previous: cameraSummary(previous) });
+    },
+  });
+
   const runPython = tool({
     name: "run_python",
     description:
@@ -791,7 +905,7 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
   const listAlgorithms = tool({
     name: "list_algorithms",
     description:
-      "List the available client-side processing algorithms (vector geometry/overlay tools like buffer, clip, dissolve, intersection, difference, union, spatial-join; spatial-statistics tools; and the discrete-global-grid tools dggs-grid and dggs-bin, which build H3, S2, A5, DGGRID and DGGAL grids through their dggsType parameter, plus dggs-compact, which compacts or expands an existing cell layer for H3, S2, A5 and DGGAL but not DGGRID — there is no separate h3-grid id) with their id, name, group, and typed parameters. Call this before run_algorithm. These are vector-only — for raster work (hydrology, terrain, LiDAR, image processing) use list_whitebox_tools and run_whitebox_tool instead.",
+      "List the available client-side processing algorithms (vector geometry/overlay tools like buffer, clip, dissolve, intersection, difference, union, spatial-join, summarize-within; spatial-statistics tools; and the discrete-global-grid tools dggs-grid and dggs-bin, which build H3, S2, A5, DGGRID and DGGAL grids through their dggsType parameter, plus dggs-compact, which compacts or expands an existing cell layer for H3, S2, A5 and DGGAL but not DGGRID — there is no separate h3-grid id) with their id, name, group, and typed parameters. Call this before run_algorithm. These are vector-only — for raster work (hydrology, terrain, LiDAR, image processing) use list_whitebox_tools and run_whitebox_tool instead.",
     inputSchema: z.object({}),
     callback: async () => json({ algorithms: (await getScripting()).listAlgorithms() }),
   });
@@ -1151,6 +1265,7 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
     setLayerOpacity,
     setBasemap,
     zoomTo,
+    setView,
     applySymbology,
     runMaplibreJs,
     runPython,

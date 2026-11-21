@@ -543,6 +543,65 @@ def test_spatial_join_contains_predicate_matches() -> None:
     assert geojson["features"][0]["properties"].get("name_left") == "a"
 
 
+def _named(props: dict, geometry: dict) -> dict:
+    return {
+        "type": "FeatureCollection",
+        "features": [{"type": "Feature", "properties": props, "geometry": geometry}],
+    }
+
+
+@requires_geopandas
+def test_spatial_join_renames_case_only_name_clashes() -> None:
+    # world_countries has NAME and world_places has name; DuckDB treats column
+    # names case-insensitively, so keeping both breaks the SQL workspace (#3514).
+    countries = _named({"NAME": "Atlantis"}, SQUARE["features"][0]["geometry"])
+    places = _named({"name": "Capital"}, POINT_IN_SQUARE["features"][0]["geometry"])
+    geojson, _ = run_vector_tool(
+        "spatial-join", countries, places, parameters={"predicate": "contains", "how": "left"}
+    )
+    props = geojson["features"][0]["properties"]
+    assert props == {"NAME": "Atlantis", "name_right": "Capital"}
+
+
+@requires_geopandas
+def test_spatial_join_does_not_rename_onto_the_sjoin_index_column() -> None:
+    # Renaming the join layer's `index` to `index_right` would collide with the
+    # bookkeeping column gpd.sjoin adds, which it refuses to overwrite.
+    countries = _named({"INDEX": 1}, SQUARE["features"][0]["geometry"])
+    places = _named({"index": 2}, POINT_IN_SQUARE["features"][0]["geometry"])
+    geojson, _ = run_vector_tool(
+        "spatial-join", countries, places, parameters={"predicate": "contains"}
+    )
+    assert geojson["features"][0]["properties"] == {"INDEX": 1, "index_right_2": 2}
+
+
+def test_join_field_output_names_dedupes_case_insensitively() -> None:
+    names = vector_ops._join_field_output_names(
+        ["NAME", "name_right", "id"], ["name", "id", "Id", "pop"]
+    )
+    # Exact matches keep their name (the input wins); case-only clashes get the
+    # _right suffix, skipping a suffixed name that is already taken.
+    assert names == {"name": "name_right_2", "id": "id", "Id": "Id_right", "pop": "pop"}
+
+
+def test_dedupe_columns_case_insensitive_never_renames_kept_columns() -> None:
+    # The active geometry column keeps its name even when a property that
+    # differs only by case comes first.
+    assert vector_ops._dedupe_columns_case_insensitive(
+        ["Geometry", "geometry", "a"], keep=("geometry",)
+    ) == ["Geometry_2", "geometry", "a"]
+
+
+def test_dedupe_columns_case_insensitive_suffixes_repeats() -> None:
+    assert vector_ops._dedupe_columns_case_insensitive(["a", "A", "b", "a_2", "A"]) == [
+        "a",
+        "A_2",
+        "b",
+        "a_2_2",
+        "A_3",
+    ]
+
+
 @requires_geopandas
 def test_spatial_join_invalid_predicate_raises_value_error() -> None:
     with pytest.raises(ValueError, match="predicate"):
@@ -762,6 +821,31 @@ def test_attribute_join_left_keeps_all_and_null_fills_unmatched() -> None:
     assert by_geoid["09999"]["pop"] is None
     assert by_geoid["09999"]["label"] is None
     assert messages and "2 of 3 feature(s) matched" in messages[-1]
+
+
+def test_attribute_join_renames_case_only_name_clashes() -> None:
+    target = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "properties": {"id": 1, "NAME": "A"}, "geometry": None},
+            {"type": "Feature", "properties": {"id": 2, "NAME": "B"}, "geometry": None},
+        ],
+    }
+    table = {
+        "type": "FeatureCollection",
+        "features": [{"type": "Feature", "properties": {"id": 1, "name": "a"}, "geometry": None}],
+    }
+    geojson, _ = run_vector_tool(
+        "attribute-join",
+        target,
+        table,
+        parameters={"target_field": "id", "join_field": "id", "how": "left"},
+    )
+    props = [f["properties"] for f in geojson["features"]]
+    assert props == [
+        {"id": 1, "NAME": "A", "name_right": "a"},
+        {"id": 2, "NAME": "B", "name_right": None},
+    ]
 
 
 def test_attribute_join_inner_drops_unmatched_and_honours_field_list() -> None:

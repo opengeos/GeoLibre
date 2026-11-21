@@ -89,8 +89,17 @@ export function NumericStyleInput({
 }: NumericStyleInputProps) {
   const { t } = useTranslation();
   const normalize = (next: number) => Number(clamp(next, min, max).toFixed(stepPrecision(step)));
+  // The text being typed, shown in place of `value` until the field loses
+  // focus; null when the field shows the stored value.
+  const [draft, setDraft] = useState<string | null>(null);
+  // Set when the shared Input is about to blur this field because the wheel
+  // turned over it: that blur is a scroll, not a finished edit, so an
+  // out-of-range partial entry (e.g. "1" on the way to "15") is dropped
+  // rather than clamped and committed.
+  const wheelBlurRef = useRef(false);
 
   const stepValue = (direction: 1 | -1) => {
+    setDraft(null);
     onChange(normalize(value + direction * step));
   };
 
@@ -121,10 +130,33 @@ export function NumericStyleInput({
           max={max}
           step={step}
           className="pe-9 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-          value={value}
+          value={draft ?? value}
           onChange={(event) => {
-            const next = Number(event.target.value);
-            if (Number.isFinite(next)) onChange(normalize(next));
+            // Keep what is typed on screen, but commit only a real number: a
+            // cleared field (or one mid-edit, e.g. "-") reads back as "", and
+            // Number("") is 0, which would drop an opacity to 0 the moment the
+            // old value is deleted, before the new one is typed.
+            setDraft(event.target.value);
+            const raw = event.target.value.trim();
+            if (raw === "") return;
+            const next = Number(raw);
+            // Commit in-range values only while typing: a partial entry such
+            // as "1" on the way to "15" (min 10) would clamp to 10 and move the
+            // layer. Blur clamps whatever stays out of range.
+            if (Number.isFinite(next) && next >= min && next <= max) onChange(normalize(next));
+          }}
+          onWheel={() => {
+            wheelBlurRef.current = true;
+          }}
+          onBlur={() => {
+            const fromWheel = wheelBlurRef.current;
+            wheelBlurRef.current = false;
+            const raw = draft?.trim() ?? "";
+            const next = Number(raw);
+            if (!fromWheel && raw !== "" && Number.isFinite(next) && (next < min || next > max)) {
+              onChange(normalize(next));
+            }
+            setDraft(null);
           }}
         />
         <div className="absolute end-1 top-0.5 flex h-8 w-7 flex-col overflow-hidden rounded border bg-background">

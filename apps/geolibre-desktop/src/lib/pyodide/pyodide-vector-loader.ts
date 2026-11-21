@@ -1,6 +1,7 @@
 import type { VectorToolRequest, VectorToolResult } from "@geolibre/processing";
 import vectorOpsSource from "./vector_ops.generated.py?raw";
 import { getPyodideIndexUrl } from "./pyodide-config";
+import { pythonErrorMessage } from "./pyodide-error";
 
 // In-browser GeoPandas/Shapely vector engine, backed by Pyodide running in a
 // classic Web Worker. Mirrors the memoized-singleton pattern of
@@ -115,7 +116,8 @@ function createHandle(): Promise<WorkerHandle> {
           break;
         }
         case "error": {
-          const message = data.message || "Pyodide error";
+          // A Python exception arrives as its full traceback; keep the message.
+          const message = pythonErrorMessage(data.message || "Pyodide error");
           if (data.id === undefined) {
             // An init failure (no run id): tear down and fail any in-flight runs.
             failWorker(message);

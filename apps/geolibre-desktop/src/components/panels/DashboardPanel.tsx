@@ -281,7 +281,8 @@ export function DashboardPanel() {
     <section
       ref={sectionRef}
       style={isCollapsed ? undefined : { height }}
-      className="relative flex shrink-0 flex-col border-t bg-card"
+      data-collapsed={isCollapsed || undefined}
+      className="geolibre-bottom-panel relative flex shrink-0 flex-col border-t bg-card"
     >
       {!isCollapsed ? (
         <div

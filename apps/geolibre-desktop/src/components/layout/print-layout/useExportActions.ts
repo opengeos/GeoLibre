@@ -116,11 +116,11 @@ export function useExportActions({
     try {
       const base = sanitizeFilename(displayOptions.title || projectName || "map-layout");
       if (kind === "png") {
-        await exportLayoutPng(displayOptions, `${base}.png`);
+        await exportLayoutPng(displayOptions, `${base}.png`, layout.exportDpi);
       } else if (kind === "svg") {
         await exportLayoutSvg(displayOptions, `${base}.svg`);
       } else {
-        await exportLayoutPdf(displayOptions, `${base}.pdf`);
+        await exportLayoutPdf(displayOptions, `${base}.pdf`, layout.exportDpi);
       }
     } catch {
       setError(t("printLayout.errors.exportFailed", { format: kind.toUpperCase() }));
@@ -192,18 +192,20 @@ export function useExportActions({
             mapImageWidth: cap.width,
             mapImageHeight: cap.height,
             mapFit: atlasMapFit,
+            mapGeoref: cap.georef,
           };
         },
       };
       // The combined file's name cannot carry any single page's tokens.
       const base = sanitizeFilename(stripAtlasTokens(title) || projectName || "atlas");
       if (kind === "pdf") {
-        await exportAtlasPdf(source, `${base}-atlas.pdf`);
+        await exportAtlasPdf(source, `${base}-atlas.pdf`, layout.exportDpi);
       } else {
         await exportAtlasPngZip(
           source,
           (i) => atlasEntryName(atlasFilenamePattern, ctxFor(i)),
           `${base}-atlas.zip`,
+          layout.exportDpi,
         );
       }
     } catch {

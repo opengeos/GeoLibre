@@ -2660,7 +2660,8 @@ class Map(anywidget.AnyWidget):
         fc = _project.load_featurecollection(data)
         features = fc.get("features", [])
         values = [
-            feature.get("properties", {}).get(column)
+            # RFC 7946 allows "properties": null, which the .get default misses.
+            (feature.get("properties") or {}).get(column)
             for feature in features
             if isinstance(feature, dict)
         ]

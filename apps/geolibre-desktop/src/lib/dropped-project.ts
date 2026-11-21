@@ -13,7 +13,8 @@ interface ResolveDroppedProjectOptions {
   isCurrentOperation: () => boolean;
   getWorkspaceState: () => DroppedProjectWorkspaceState;
   resolveProject: (project: GeoLibreProject) => Promise<GeoLibreProject>;
-  loadProject: (project: GeoLibreProject) => void;
+  /** Loads the project; returns false when it was not loaded after all. */
+  loadProject: (project: GeoLibreProject) => boolean;
   workspaceChanged: (state: DroppedProjectWorkspaceState, project: GeoLibreProject) => void;
 }
 
@@ -41,6 +42,5 @@ export async function resolveDroppedProjectIfCurrent({
     workspaceChanged(current, resolvedProject);
     return false;
   }
-  loadProject(resolvedProject);
-  return true;
+  return loadProject(resolvedProject);
 }

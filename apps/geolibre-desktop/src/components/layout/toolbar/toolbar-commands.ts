@@ -3,6 +3,7 @@ import type { MapEngine } from "@geolibre/map";
 import type { GeoLibrePlugin } from "@geolibre/plugins";
 import type { TFunction } from "i18next";
 import {
+  Archive,
   ArrowLeft,
   ArrowRight,
   Bug,
@@ -32,6 +33,7 @@ import {
   Printer,
   RefreshCw,
   Save,
+  SaveAll,
   Shapes,
   Share2,
   Signpost,
@@ -115,7 +117,12 @@ export interface ToolbarCommandContext {
   mapControllerRef: RefObject<MapEngine | null>;
   projectFiles: Pick<
     ProjectFileActions,
-    "handleOpenFromFile" | "setProjectUrlDialogOpen" | "handleSave" | "handleSaveAs"
+    | "handleOpenFromFile"
+    | "setProjectUrlDialogOpen"
+    | "handleSave"
+    | "handleSaveAs"
+    | "setSaveLayerEditsDialogOpen"
+    | "handleExportGeojsonZip"
   >;
   addLayer: AddLayerHandlers;
   openAddDataKind: (kind: AddDataKind) => void;
@@ -299,6 +306,22 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       icon: FilePen,
       shortcut: { key: "s", mod: true, shift: true },
       run: () => void projectFiles.handleSaveAs(),
+    },
+    {
+      id: "project.save-layer-edits",
+      title: t("toolbar.command.projectSaveLayerEdits"),
+      group: t("toolbar.commandGroup.project"),
+      keywords: "save edits source files layers overwrite batch all",
+      icon: SaveAll,
+      run: () => projectFiles.setSaveLayerEditsDialogOpen(true),
+    },
+    {
+      id: "project.export-geojson-zip",
+      title: t("toolbar.command.projectExportGeojsonZip"),
+      group: t("toolbar.commandGroup.project"),
+      keywords: "export layers geojson zip archive batch all",
+      icon: Archive,
+      run: () => void projectFiles.handleExportGeojsonZip(),
     },
     // Only when the deployment has a usable share host; a command that always
     // failed would be worse than an absent one.

@@ -103,7 +103,8 @@ fail again with "Unsupported data format/bitsPerSample";
   one canvas and ships no per-layer blend API (upstream draft:
   maplibre/maplibre-gl-js#8073). The wrappers are `Painter.prototype.renderLayer`
   (brackets one layer's draws), `Painter.prototype.useProgram` (tells the
-  layer-opacity composite draw from the draws feeding it), and
+  layer-opacity composite draw, program `layerComposite` since maplibre-gl 6.18
+  and `layerOpacity` before, from the draws feeding it), and
   `Context.prototype.setColorMode` (the single place every draw resolves GL blend
   state). Fill and line layers additionally get `fill-layer-opacity` /
   `line-layer-opacity` pinned just under 1 by `style-mapper`, which elects
@@ -137,6 +138,18 @@ fail again with "Unsupported data format/bitsPerSample";
   GeoJSON on a custom CRS map silently draws in the wrong place (MapLibre only
   warns). After a bump, run `tests/map-crs.test.ts` and pick a preset under
   **Settings → Map** with a GeoJSON layer on the map.
+- **Map CRS fits** (`MapController.guardMapCrsFits`, issue #3516) replace
+  `fitBounds` on the map instance so fits that plugin controls make directly
+  (the PMTiles panel) stay on a custom CRS's tile grid. They assume MapLibre
+  clamps the camera center to the grid, draws the grid 512 px wide at zoom 0
+  (`cameraForMapCrsBox`), and that `fitBounds` stays an own-instance-overridable
+  method that MapLibre itself does not rely on internally. The guard also covers the
+  frame applied when a CRS is entered (`applyMapCrs` fits the preset's
+  `bounds`), so a new preset whose box straddles its grid edge is framed on
+  the clipped part. After a bump, run
+  `tests/map-crs-fit.test.ts`, then on `?crs=earth-arctic` add
+  `https://data.geolibre.app/knoxville_buildings.pmtiles`: the camera must stay
+  on the Arctic view and Zoom to layer must explain why it cannot move.
 
 ### `mapbox-gl`
 
@@ -329,6 +342,13 @@ black — it declines the stack.
   `MeasureControl` and fails if either field is gone. After a bump, still
   confirm the Terrain section appears and a measured line shows inside a point
   cloud.
+- **The MeasureControl's `_setupMapSources` and `_updateMapGeometry`**
+  (`healMeasureLayersOnStyleSwap`, `packages/plugins/src/plugins/components/measure.ts`)
+  re-add the measured line and polygon after a basemap swap: the control adds
+  its source once in `onAdd`, so a `setStyle` (the celestial body switch, any
+  basemap change) left the line undrawn (#3471). The heal is skipped when
+  either method is gone, and `tests/upstream-contracts.test.ts` checks both.
+  Drop it once the control re-adds its own layers on `style.load`.
 - **The measure paint** (`MEASURE_LINE_COLOR`/`MEASURE_LINE_WIDTH`/
   `MEASURE_FILL_COLOR`, `packages/plugins/src/plugins/lidar-measure-mirror.ts`)
   is passed to the control explicitly rather than left to its defaults, because

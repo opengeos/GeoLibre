@@ -9,7 +9,9 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   cn,
 } from "@geolibre/ui";
@@ -19,12 +21,14 @@ import {
   FolderPlus,
   ListCollapse,
   Map as MapIcon,
+  MoreHorizontal,
   MousePointerClick,
   Orbit,
   PanelLeftClose,
   PenTool,
 } from "lucide-react";
 import { createAppAPI, usePluginRegistry } from "../../../hooks/usePlugins";
+import { useTouchUi } from "../../../hooks/useTouchUi";
 import { PLANET_SWITCHER_LABEL_KEYS } from "../../../lib/planet-labels";
 import { useCompactLayerList } from "./useCompactLayerList";
 
@@ -63,6 +67,113 @@ export function LayerPanelHeader({
   const { t } = useTranslation();
   const setIdentifyLayer = useAppStore((s) => s.setIdentifyLayer);
   const [compactLayerList, setCompactLayerList] = useCompactLayerList();
+  const { touchUi } = useTouchUi();
+
+  if (touchUi) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b px-3 py-1">
+        <span className="min-w-0 truncate text-sm font-semibold">{t("sharedRail.layers")}</span>
+        <div className="ms-auto flex flex-wrap items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-11 w-11"
+            title={t("layers.basemaps")}
+            aria-label={t("layers.basemaps")}
+            aria-pressed={isPluginActive(BASEMAP_CONTROL_PLUGIN_ID)}
+            onClick={() => togglePlugin(BASEMAP_CONTROL_PLUGIN_ID, createAppAPI(mapControllerRef))}
+          >
+            <MapIcon
+              className={cn("h-4 w-4", isPluginActive(BASEMAP_CONTROL_PLUGIN_ID) && "text-primary")}
+            />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-11 w-11"
+            title={t("layers.identifyVisibleLayersHint")}
+            aria-label={t("layers.identifyVisibleLayers")}
+            aria-pressed={identifyLayerId === IDENTIFY_ALL_LAYERS_ID}
+            disabled={geometryEditLayerId !== null}
+            onClick={() =>
+              setIdentifyLayer(
+                identifyLayerId === IDENTIFY_ALL_LAYERS_ID ? null : IDENTIFY_ALL_LAYERS_ID,
+              )
+            }
+          >
+            <MousePointerClick
+              className={cn(
+                "h-4 w-4",
+                identifyLayerId === IDENTIFY_ALL_LAYERS_ID && "text-primary",
+              )}
+            />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-11 w-11"
+                title={t("mobileShell.tabs.more")}
+                aria-label={t("mobileShell.tabs.more")}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={onCreateGroup}>
+                <FolderPlus className="me-2 h-4 w-4" />
+                {t("layers.newGroup")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onToggleAllLayers}>
+                {allLayersVisible ? (
+                  <EyeOff className="me-2 h-4 w-4" />
+                ) : (
+                  <Eye className="me-2 h-4 w-4" />
+                )}
+                {allLayersVisible ? t("layers.hideAllLayers") : t("layers.showAllLayers")}
+              </DropdownMenuItem>
+              <DropdownMenuCheckboxItem
+                checked={isPluginActive(GEO_EDITOR_PLUGIN_ID)}
+                onCheckedChange={() =>
+                  togglePlugin(GEO_EDITOR_PLUGIN_ID, createAppAPI(mapControllerRef))
+                }
+              >
+                {t("layers.geoEditor")}
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={compactLayerList}
+                onCheckedChange={(checked) => setCompactLayerList(Boolean(checked))}
+              >
+                {t("layers.compactView")}
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>{t("planetSwitcher.label")}</DropdownMenuLabel>
+              {PLANET_SWITCHER_OPTIONS.map((option) => (
+                <DropdownMenuCheckboxItem
+                  key={option.ellipsoidId}
+                  checked={selectedPlanet === option.ellipsoidId}
+                  onCheckedChange={(checked) => togglePlanet(option.ellipsoidId, checked)}
+                >
+                  {t(PLANET_SWITCHER_LABEL_KEYS[option.ellipsoidId])}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-11 w-11"
+            title={t("layers.collapse")}
+            aria-label={t("layers.collapse")}
+            onClick={onCollapse}
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
   // The header row wraps (flex-wrap) instead of overflowing, since the panel
   // can be resized down to MIN_SIDE_PANEL_WIDTH (usePanelResize.ts).
   return (

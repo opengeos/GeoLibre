@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { normalizeDesktopSettings } from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
-import { selectActiveAssistantProfile } from "../apps/geolibre-desktop/src/lib/assistant/profiles";
+import {
+  effectiveDefaultProfileId,
+  selectActiveAssistantProfile,
+} from "../apps/geolibre-desktop/src/lib/assistant/profiles";
 import { mergeRuntimeEnv } from "../apps/geolibre-desktop/src/lib/assistant/provider";
 import type { AssistantProfile } from "../apps/geolibre-desktop/src/lib/assistant/provider";
 
@@ -210,6 +213,33 @@ describe("selectActiveAssistantProfile", () => {
       }),
       null,
     );
+  });
+});
+
+// Settings → AI providers badges this profile as the default, so it has to be
+// the one the assistant panel opens on, including before a default was saved.
+describe("effectiveDefaultProfileId", () => {
+  const two: AssistantProfile[] = [
+    { id: "first", name: "First", provider: "custom", modelId: "m", fieldValues: {} },
+    { id: "second", name: "Second", provider: "custom", modelId: "m", fieldValues: {} },
+  ];
+
+  it("is the saved default when it still exists", () => {
+    assert.equal(effectiveDefaultProfileId(two, "second", false), "second");
+    assert.equal(effectiveDefaultProfileId(two, "second", true), "second");
+  });
+
+  it("falls back to the first profile when none is saved or it was deleted", () => {
+    assert.equal(effectiveDefaultProfileId(two, null, false), "first");
+    assert.equal(effectiveDefaultProfileId(two, "deleted", false), "first");
+  });
+
+  it("is none when a deployment proxy stands in for a missing default", () => {
+    assert.equal(effectiveDefaultProfileId(two, null, true), null);
+  });
+
+  it("is none without profiles", () => {
+    assert.equal(effectiveDefaultProfileId([], null, false), null);
   });
 });
 

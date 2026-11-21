@@ -280,10 +280,15 @@
     "bodyNote": "Mesuré sur : {{body}} (approximation sphérique)"
   },
   "statusBar": {
+    "coords": "Coords",
     "elevation": "Alt",
     "elevationLong": "Altitude",
     "cameraAltitude": "Alt. caméra",
     "cameraAltitudeLong": "Altitude de la caméra au-dessus du niveau de la mer",
+    "zoom": "Zoom",
+    "bearing": "Orientation",
+    "pitch": "Inclinaison",
+    "bbox": "BBox",
     "coordinateFormat": {
       "dd": "Degrés décimaux",
       "dms": "Degrés, minutes, secondes",
@@ -1977,7 +1982,10 @@
     "lockLayer": "Verrouiller la couche pour les invités",
     "unlockLayer": "Déverrouiller la couche pour les invités",
     "layerLocked": "Verrouillée",
-    "layerLockedHint": "Cette couche est verrouillée par l'hôte et ne peut pas être modifiée"
+    "layerLockedHint": "Cette couche est verrouillée par l'hôte et ne peut pas être modifiée",
+    "viewOnlyHint": "Vous êtes en lecture seule dans cette session et ne pouvez donc pas modifier cette couche",
+    "layerLockedRejected": "Cette modification n'a pas été partagée, car l'hôte a verrouillé la couche. Votre carte a été rétablie à la version de la session.",
+    "viewOnlyLocalChange": "Vous êtes en lecture seule dans cette session : vos modifications restent sur votre écran et ne sont pas partagées."
   },
   "share": {
     "title": "Partager le projet",
@@ -2128,6 +2136,18 @@
     "resizeDialog": "Redimensionner la galerie",
     "scopeFeatured": "En vedette",
     "scopeAll": "Tous les projets",
+    "scopeCollections": "Collections",
+    "loadingCollections": "Chargement des collections…",
+    "collectionsSearchPlaceholder": "Filtrer les collections par titre, auteur ou description",
+    "noCollectionMatches": "Aucune collection ne correspond à votre filtre.",
+    "emptyCollections": "Aucune collection publique à afficher pour le moment.",
+    "emptyCollection": "Cette collection ne contient aucun projet public.",
+    "untitledCollection": "Collection sans titre",
+    "openCollection": "Afficher les projets de cette collection",
+    "openCollectionOnWeb": "Voir la collection sur le web",
+    "backToCollections": "Toutes les collections",
+    "collectionProjects_one": "{{count}} projet",
+    "collectionProjects_other": "{{count}} projets",
     "scopeMine": "Mes projets",
     "scopeOrganizations": "Organisations",
     "scopeGroups": "Groupes",
@@ -2412,7 +2432,9 @@
   },
   "kml": {
     "importFailed": "Impossible d’importer le KML/KMZ.",
-    "timeOverlayGroup": "Animation de superposition temporelle"
+    "timeOverlayGroup": "Animation de superposition temporelle",
+    "dataUrlStyleUnsupported": "Impossible d'appliquer un style à un document KML.",
+    "dataUrlNoImporter": "Impossible d'ajouter {{name}} à la carte : aucun importateur KML n'est disponible."
   },
   "map": {
     "boundsRestricted": "Limites verrouillées",
@@ -2495,6 +2517,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "MNT COG local",
     "localSourceDescription": "Le fichier reste sur cet appareil et est lu par petites plages à mesure que les tuiles de terrain sont nécessaires.",
+    "fillOutside": "Remplir l'extérieur du DEM avec le terrain mondial",
+    "fillOutsideDescription": "Entoure le DEM, et comble ses lacunes nodata, avec le terrain mondial au lieu d'une plaine plate. Activé par défaut pour un DEM provenant d'une URL et désactivé pour un fichier local, qui sinon ne lit rien sur le réseau.",
     "useCog": "Utiliser le MNT COG",
     "ionAssetLabel": "Asset de terrain Cesium Ion",
     "ionAssetDescription": "Utiliser un asset de terrain quantized-mesh de Cesium Ion sur le globe. L'asset doit être accessible au compte Ion configuré.",
@@ -3394,7 +3418,9 @@
       "profileCount_other": "{{count}} profils",
       "noProfiles": "Aucun profil pour l'instant. Ajoutez-en un ci-dessous pour configurer l'assistant IA.",
       "setDefault": "Définir par défaut",
+      "keepDefault": "Conserver par défaut",
       "defaultProfile": "Par défaut",
+      "proxyIsDefault": "Aucun profil n'est défini par défaut ; l'assistant démarre donc sur le proxy du déploiement. Définissez un profil par défaut pour démarrer sur celui-ci.",
       "edit": "Modifier",
       "deleteProfile": "Supprimer le profil",
       "backToProfiles": "← Retour aux profils",
@@ -3424,6 +3450,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-… (si requis)"
+      },
+      "chatgpt": {
+        "account": "Compte ChatGPT",
+        "intro": "Utilisez votre forfait ChatGPT au lieu d'une clé API. Votre navigateur ouvre la page de connexion d'OpenAI, où vous autorisez GeoLibre à utiliser votre forfait.",
+        "continue": "Continuer avec ChatGPT",
+        "waiting": "En attente de la fin de votre connexion dans le navigateur…",
+        "openAgain": "Rouvrir le navigateur",
+        "signedInAs": "Connecté en tant que {{email}}",
+        "usingPlan": "Votre forfait ChatGPT est utilisé.",
+        "planDeclined": "GeoLibre n'est pas autorisé à utiliser votre forfait ChatGPT. Reconnectez-vous et autorisez-le.",
+        "signInAgain": "Se reconnecter",
+        "notRemembered": "Le trousseau du système n'est pas disponible, cette connexion ne dure donc que jusqu'à la fermeture de GeoLibre.",
+        "signOut": "Se déconnecter",
+        "useAnotherAccount": "Utiliser un autre compte",
+        "usage": "Utilisation et applications connectées",
+        "revokeUnconfirmed": "Déconnecté ici, mais OpenAI n'a pas confirmé la fin de la session. Déconnectez GeoLibre dans vos paramètres ChatGPT pour en être sûr.",
+        "desktopOnly": "La connexion avec ChatGPT est disponible dans l'application de bureau GeoLibre."
       }
     }
   },
@@ -3917,6 +3960,7 @@
       "difference": "Différence",
       "union": "Union",
       "spatialJoin": "Jointure spatiale",
+      "summarizeWithin": "Résumer à l'intérieur",
       "attributeJoin": "Jointure attributaire",
       "selectByValue": "Sélectionner par valeur",
       "selectByLocation": "Sélectionner par emplacement",
@@ -4238,6 +4282,8 @@
         "missing-source": "La couche n'a pas de source de données lisible.",
         "format": "Le format de fichier de la couche n'est pas pris en charge.",
         "remote-file": "Les sources de fichiers QGIS distantes ne sont pas encore prises en charge.",
+        "remote-unreadable": "Le fichier distant n'a pas pu être téléchargé ou lu.",
+        "wmts": "Les couches WMTS ne sont pas encore importées. Ajoutez plutôt le service depuis le menu Ajouter des données.",
         "network-path": "Les chemins de partage réseau ne sont pas chargés pour des raisons de sécurité.",
         "browser-local-file": "Le fichier local est référencé, mais les navigateurs ne peuvent pas rouvrir les chemins de données QGIS. Utilisez GeoLibre Desktop pour le charger.",
         "browser-local-raster": "Le raster est référencé par un chemin local. Utilisez GeoLibre Desktop pour le charger.",
@@ -4355,6 +4401,7 @@
       "loadingVtpk": "Ouverture du paquet de tuiles…",
       "loadingVtpkDesc": "Lecture du répertoire du paquet et de son style",
       "projectName": "Nom du projet",
+      "untitledProject": "Projet sans titre",
       "storymapEllipsis": "Story Map...",
       "pointerElevationNoticeTitle": "L'altitude est obtenue d'un service public",
       "pointerElevationNoticeDesc": "L'altitude est calculée à partir du relief 3D de la carte lorsqu'il est actif, sans rien envoyer. Sans relief 3D, l'API publique Open-Meteo est interrogée et les coordonnées sous le pointeur quittent votre appareil.",
@@ -5752,6 +5799,7 @@
     "setupTitle": "Configurer l'assistant IA",
     "setupStatus": "L'assistant a besoin d'un fournisseur d'IA pour réfléchir. Ajoutez des identifiants pour un fournisseur ci-dessous et le panneau passe en mode discussion dès que vous enregistrez.",
     "setupProviders": "Ajouter des identifiants pour un fournisseur",
+    "setupSignIn": "Connectez-vous dans Paramètres → Fournisseurs d'IA",
     "setupOpenSettings": "Ouvrir Paramètres → Fournisseurs d'IA",
     "thinking": "Traitement en cours…",
     "toolError": "échec",
@@ -6534,6 +6582,26 @@
                 "inner": "Interne (ne conserver que les entités correspondantes)",
                 "left": "Gauche (conserver toutes les entités d'entrée)"
               }
+            }
+          }
+        },
+        "summarize-within": {
+          "name": "Résumer à l'intérieur",
+          "description": "Compter les entités d'une autre couche qui intersectent chaque polygone, résumer un champ numérique et mesurer la part de chaque polygone qu'elles couvrent",
+          "params": {
+            "layer": {
+              "label": "Couche de polygones"
+            },
+            "overlay": {
+              "label": "Couche à résumer"
+            },
+            "field": {
+              "label": "Champ numérique",
+              "description": "Facultatif. Ajoute la somme, la moyenne, le minimum et le maximum de ce champ pour chaque polygone."
+            },
+            "min_overlap_pct": {
+              "label": "Ignorer les chevauchements inférieurs à (%)",
+              "description": "Lorsque la couche à résumer contient des polygones, ignorer ceux qui couvrent moins que cette part d'un polygone, comme les éclats le long des bords partagés."
             }
           }
         },
@@ -8565,6 +8633,7 @@
     "loadingAttributes": "Chargement des attributs de la couche…",
     "requiresVectorLayer": "La table attributaire nécessite une couche vectorielle ou de requête DuckDB.",
     "invalidJson": "JSON invalide",
+    "nullValue": "NULL",
     "editCellAria": "Modifier {{col}} pour l'entité {{featureId}}",
     "resizeColumn": "Redimensionner la colonne {{name}}",
     "renameFieldAria": "Renommer le champ {{name}}",
@@ -9453,7 +9522,7 @@
     "exportStyleDataNotReady": "Les données de la couche ne sont pas encore prêtes. Réessayez dans un instant.",
     "exportStyleNeedsFeatures": "L'exportation de style nécessite une couche vectorielle avec des entités.",
     "exportStyleError": "Impossible d'exporter le style de cette couche.",
-    "importStyle": "Importer un style (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "Importer un style (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Importer un style depuis du texte…",
     "importStyleFromTextDescription": "Collez un style GeoLibre, Mapbox GL, SLD ou QML. Le format est déduit du texte.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",
@@ -9580,6 +9649,9 @@
     "hiddenByGroup": "Masqué car son groupe n'est pas visible",
     "empty": "Aucune couche de données. Ajoutez des données depuis la barre d'outils.",
     "emptyBeginner": "Pas encore de couches. Ajoutez des fonds de carte via Extensions → Fonds de carte, ou vos propres données via le menu Ajouter des données.",
+    "emptyBeginnerBasemapsOnly": "Aucune couche pour l'instant. Ajoutez des fonds de carte via Extensions → Fonds de carte.",
+    "emptyBeginnerDataOnly": "Aucune couche pour l'instant. Ajoutez vos propres données via le menu Ajouter des données.",
+    "emptyNoAdd": "Aucune couche de données.",
     "hideAllLayers": "Masquer toutes les couches",
     "showAllLayers": "Afficher toutes les couches",
     "compactView": "Vue compacte",
@@ -9897,6 +9969,9 @@
     "localRasterNotRestored_other": "{{count}} couches raster locales n'ont pas pu être restaurées",
     "localRasterNotRestoredDesc": "Chargées depuis un fichier local : {{names}}. Le projet ne contient pas de données raster, ou le fichier n'a pas pu être lu. Ajoutez à nouveau le fichier."
   },
+  "zarrPanel": {
+    "selectorUnmatched": "Valeur du sélecteur introuvable ({{values}}). Utilisez une valeur de coordonnée, une date sur l'axe temporel ou un indice."
+  },
   "attributeForm": {
     "error": {
       "required": "Une valeur est requise",
@@ -10049,7 +10124,8 @@
     "panelRenderFailed": "Le panneau « {{name}} » n'a pas pu s'ouvrir.",
     "sharedSettingsFailed": "Impossible de charger les paramètres partagés depuis le lien, vos propres paramètres sont donc utilisés.",
     "sharedLanguageFailed": "Impossible de passer à la langue demandée par les paramètres partagés.",
-    "languageCatalogFailed": "Impossible de charger la traduction {{language}}, GeoLibre s'affiche donc en anglais."
+    "languageCatalogFailed": "Impossible de charger la traduction {{language}}, GeoLibre s'affiche donc en anglais.",
+    "dataUrlLoadFailed": "Impossible de charger l'URL des données."
   },
   "shell": {
     "workspaceTitle": "Espace de travail cartographique GeoLibre",

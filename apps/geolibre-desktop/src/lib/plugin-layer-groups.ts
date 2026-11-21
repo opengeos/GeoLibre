@@ -23,8 +23,14 @@ import { useAppStore } from "@geolibre/core";
  */
 export function createPluginLayerGroupActions() {
   return {
-    addLayerGroup: (name?: string, layerIds?: string[]) =>
-      useAppStore.getState().addLayerGroup(name, layerIds),
+    addLayerGroup: (name?: string, layerIds?: string[]) => {
+      const reused = reusablePluginLayerGroup(name, layerIds);
+      if (reused) {
+        useAppStore.getState().moveLayersToGroup(layerIds ?? [], reused);
+        return reused;
+      }
+      return useAppStore.getState().addLayerGroup(name, layerIds);
+    },
     moveLayersToGroup: (layerIds: string[], groupId: string | null) =>
       useAppStore.getState().moveLayersToGroup(layerIds, groupId),
     // The group-of-groups counterpart of moveLayersToGroup (#2553). The store
@@ -34,4 +40,38 @@ export function createPluginLayerGroupActions() {
       useAppStore.getState().moveLayerGroupToGroup(id, parentId),
     removeLayerGroup: (id: string) => useAppStore.getState().removeLayerGroup(id),
   };
+}
+
+/**
+ * The id of an existing group a plugin's `addLayerGroup` call should land in
+ * instead of creating a second folder of the same name, or null.
+ *
+ * A plugin builds its folder when it first adds its layers. Reopening a saved
+ * project restores that folder with the layers in it, then reactivates the
+ * plugin, which builds the folder again: the layers moved into the new copy
+ * and the restored one stayed behind, empty (#3473). So a call that names its
+ * layers reuses a same-named group holding nothing but (some of) those
+ * layers. A group with anything else in it, a layer or a subgroup, is a
+ * different folder that only shares the name, and is left alone; so is every
+ * call that names no layers, which keeps creating a new group as before.
+ *
+ * @param name - The requested group name.
+ * @param layerIds - The layers the plugin is putting in the group.
+ * @returns The group id to reuse, or null to create a new group.
+ */
+export function reusablePluginLayerGroup(name?: string, layerIds?: string[]): string | null {
+  const trimmed = name?.trim();
+  if (!trimmed || !layerIds?.length) return null;
+  const wanted = new Set(layerIds);
+  const { layers, layerGroups } = useAppStore.getState();
+  const candidates = layerGroups.filter(
+    (group) =>
+      group.name === trimmed &&
+      !layerGroups.some((child) => child.parentId === group.id) &&
+      layers.every((layer) => layer.groupId !== group.id || wanted.has(layer.id)),
+  );
+  // Prefer the folder that already holds the layers (the restored one) over
+  // an empty namesake.
+  const holding = candidates.find((group) => layers.some((layer) => layer.groupId === group.id));
+  return (holding ?? candidates[0])?.id ?? null;
 }

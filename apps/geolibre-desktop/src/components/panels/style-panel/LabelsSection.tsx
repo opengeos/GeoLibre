@@ -173,6 +173,44 @@ export function LabelsSection({
               <option value="line">{t("style.labels.placementLine")}</option>
             </Select>
           </div>
+          {labels.placement === "line" && !controlPainted ? (
+            <div className="space-y-2">
+              <label htmlFor="labelLineGap" className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  id="labelLineGap"
+                  type="checkbox"
+                  checked={labels.lineGap}
+                  onChange={(event) => updateLabels({ lineGap: event.target.checked })}
+                />
+                {t("style.labels.lineGap")}
+              </label>
+              {labels.lineGap ? (
+                <p className="text-xs text-muted-foreground">{t("style.labels.lineGapHint")}</p>
+              ) : null}
+              <div className="grid grid-cols-2 gap-3">
+                <NumericStyleInput
+                  id="labelLineSpacing"
+                  label={t("style.labels.lineSpacing")}
+                  min={50}
+                  max={2000}
+                  step={25}
+                  value={labels.lineSpacing}
+                  onChange={(lineSpacing) => updateLabels({ lineSpacing })}
+                />
+                {labels.lineGap ? (
+                  <NumericStyleInput
+                    id="labelLineGapPadding"
+                    label={t("style.labels.lineGapPadding")}
+                    min={0}
+                    max={20}
+                    step={1}
+                    value={labels.lineGapPadding}
+                    onChange={(lineGapPadding) => updateLabels({ lineGapPadding })}
+                  />
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <div className="grid grid-cols-2 gap-3">
             <NumericStyleInput
               id="labelSize"

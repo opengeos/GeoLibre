@@ -3,6 +3,10 @@
 !!! info "3:00 - 4:00 p.m."
     Lecture 15 min · Hands-on 35 min · Break 3:50 - 4:00
 
+<a class="video-thumb" href="https://www.youtube.com/watch?v=rVaRo-4T1qg&amp;list=PLe4LOpcEE1lU" target="_blank" rel="noopener" title="Watch on YouTube">
+  <img src="https://i.ytimg.com/vi/rVaRo-4T1qg/maxresdefault.jpg" alt="Recording of section 7: Communicating and Collaborating" loading="lazy" width="1280" height="720">
+</a>
+
 ## Learning goals
 
 By the end of this section you will be able to:

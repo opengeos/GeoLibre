@@ -87,6 +87,34 @@ export function selectActiveAssistantProfile({
 }
 
 /**
+ * The profile the assistant starts on when the user has not picked one in the
+ * panel: the saved default, or, when none is saved (or it points at a deleted
+ * profile), the first profile, unless a deployment proxy takes that place.
+ * Settings marks this profile as the default, so the badge matches what the
+ * panel actually opens with even before a default was chosen explicitly.
+ *
+ * @param profiles The saved profiles.
+ * @param defaultProfileId The saved default profile id, if any.
+ * @param deploymentProxyConfigured Whether a managed AI proxy is available.
+ * @returns The effective default profile id, or null when there is none.
+ */
+export function effectiveDefaultProfileId(
+  profiles: readonly AssistantProfile[],
+  defaultProfileId: string | null,
+  deploymentProxyConfigured: boolean,
+): string | null {
+  return (
+    selectActiveAssistantProfile({
+      profiles: [...profiles],
+      defaultProfileId,
+      selectedProfileId: null,
+      userExplicitlyChoseProfile: false,
+      deploymentProxyConfigured,
+    })?.id ?? null
+  );
+}
+
+/**
  * Migrate a legacy flat `aiProviderEnv` map to an array of {@link AssistantProfile}.
  * The legacy format stored every env var key/value in one flat map; we split it
  * per provider, creating one profile for each configured provider.

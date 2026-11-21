@@ -17,7 +17,10 @@ import { isTauri } from "../../../lib/is-tauri";
 import { masHidesDataSource } from "../../../lib/mas-build";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
-import { requiresArcgisDeckOverlay, supportsAddDataRenderer } from "../../../lib/add-data-renderer";
+import {
+  supportsAddDataRenderer,
+  unsupportedAddDataTitleKey,
+} from "../../../lib/add-data-renderer";
 import {
   DATA_SOURCE_CATALOG,
   DATA_SOURCE_SECTION_LABEL_KEYS,
@@ -43,14 +46,6 @@ interface AddDataMenuProps {
 interface AddDataItem {
   onSelect: () => void;
   disabled?: boolean;
-}
-
-function unsupportedTitleKey(renderer: MapRendererKind, id: string) {
-  // eslint-disable-next-line local/no-renderer-kind-checks -- the message names the engine
-  if (renderer !== "arcgis") return "renderer.layerMapboxUnsupported";
-  return requiresArcgisDeckOverlay(id)
-    ? "renderer.layerArcgisViewUnsupported"
-    : "renderer.layerArcgisUnsupported";
 }
 
 /** The Add Data menu: files, web services, cloud formats, 3D layers, databases. */
@@ -89,6 +84,7 @@ export function AddDataMenu({
     vtpk: { onSelect: onOpenTilePackageDialog, disabled: tilePackageBusy },
     photos: { onSelect: () => onSetAddDataKind("photos") },
     gpx: { onSelect: () => onSetAddDataKind("gpx") },
+    geopdf: { onSelect: () => onSetAddDataKind("geopdf") },
     landxml: { onSelect: () => onSetAddDataKind("landxml") },
     indoorgml: { onSelect: () => onSetAddDataKind("indoorgml") },
     polyline: { onSelect: () => onSetAddDataKind("polyline") },
@@ -206,7 +202,7 @@ export function AddDataMenu({
                 <DropdownMenuItem
                   key={entry.id}
                   disabled={item.disabled || !supported}
-                  title={supported ? undefined : t(unsupportedTitleKey(renderer, entry.id))}
+                  title={supported ? undefined : t(unsupportedAddDataTitleKey(renderer, entry.id))}
                   onSelect={item.onSelect}
                 >
                   {t(entry.labelKey)}

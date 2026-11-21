@@ -273,10 +273,15 @@
     "bodyNote": "Đo trên: {{body}} (xấp xỉ hình cầu)"
   },
   "statusBar": {
+    "coords": "Tọa độ",
     "elevation": "Độ cao",
     "elevationLong": "Độ cao của camera so với mực nước biển",
     "cameraAltitude": "Độ cao camera",
     "cameraAltitudeLong": "Độ cao của camera so với mực nước biển",
+    "zoom": "Thu phóng",
+    "bearing": "Hướng",
+    "pitch": "Góc nghiêng",
+    "bbox": "Hộp giới hạn",
     "coordinateFormat": {
       "dd": "Độ thập phân",
       "dms": "Độ, phút, giây",
@@ -1928,7 +1933,10 @@
     "lockLayer": "Khóa lớp đối với khách mời",
     "unlockLayer": "Mở khóa lớp đối với khách mời",
     "layerLocked": "Đã khóa",
-    "layerLockedHint": "Lớp này đã bị chủ nhà khóa và không thể chỉnh sửa"
+    "layerLockedHint": "Lớp này đã bị chủ nhà khóa và không thể chỉnh sửa",
+    "viewOnlyHint": "Bạn chỉ có quyền xem trong phiên này nên không thể thay đổi lớp này",
+    "layerLockedRejected": "Thay đổi đó không được chia sẻ vì chủ nhà đã khóa lớp. Bản đồ của bạn đã được đặt lại về phiên bản của phiên.",
+    "viewOnlyLocalChange": "Bạn chỉ có quyền xem trong phiên này nên các thay đổi của bạn chỉ nằm trên màn hình của bạn và không được chia sẻ."
   },
   "share": {
     "title": "Chia sẻ dự án",
@@ -2057,6 +2065,17 @@
     "resizeDialog": "Thay đổi kích thước thư viện",
     "scopeFeatured": "Nổi bật",
     "scopeAll": "Tất cả dự án",
+    "scopeCollections": "Bộ sưu tập",
+    "loadingCollections": "Đang tải bộ sưu tập…",
+    "collectionsSearchPlaceholder": "Lọc bộ sưu tập theo tiêu đề, tác giả hoặc mô tả",
+    "noCollectionMatches": "Không có bộ sưu tập nào phù hợp với bộ lọc của bạn.",
+    "emptyCollections": "Chưa có bộ sưu tập công khai nào để hiển thị.",
+    "emptyCollection": "Bộ sưu tập này không có dự án công khai nào.",
+    "untitledCollection": "Bộ sưu tập chưa có tiêu đề",
+    "openCollection": "Hiển thị các dự án trong bộ sưu tập này",
+    "openCollectionOnWeb": "Xem bộ sưu tập trên web",
+    "backToCollections": "Tất cả bộ sưu tập",
+    "collectionProjects_other": "{{count}} dự án",
     "scopeMine": "dự án của tôi",
     "scopeOrganizations": "Tổ chức",
     "scopeGroups": "Nhóm",
@@ -2355,7 +2374,9 @@
   },
   "kml": {
     "importFailed": "Không thể nhập KML/KMZ.",
-    "timeOverlayGroup": "Hoạt hình lớp phủ thời gian"
+    "timeOverlayGroup": "Hoạt hình lớp phủ thời gian",
+    "dataUrlStyleUnsupported": "Không thể áp dụng kiểu cho tài liệu KML.",
+    "dataUrlNoImporter": "Không thể thêm {{name}} vào bản đồ: không có trình nhập KML nào."
   },
   "map": {
     "boundsRestricted": "Đã khóa giới hạn",
@@ -2436,6 +2457,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "COG DEM cục bộ",
     "localSourceDescription": "Tệp vẫn nằm trên thiết bị này và được đọc theo từng phạm vi nhỏ khi cần các ô địa hình.",
+    "fillOutside": "Lấp vùng ngoài DEM bằng địa hình toàn cầu",
+    "fillOutsideDescription": "Bao quanh DEM và lấp các khoảng trống không có dữ liệu của nó bằng địa hình toàn cầu thay vì một mặt phẳng. Bật mặc định cho DEM từ URL và tắt cho tệp cục bộ, vốn nếu không sẽ không đọc gì từ mạng.",
     "useCog": "Dùng COG DEM",
     "ionAssetLabel": "Tài nguyên địa hình Cesium Ion",
     "ionAssetDescription": "Dùng một tài nguyên địa hình quantized-mesh từ Cesium Ion trên quả địa cầu. Tài nguyên phải khả dụng với tài khoản Ion đã cấu hình.",
@@ -3330,7 +3353,9 @@
       "profileCount_other": "{{count}} hồ sơ",
       "noProfiles": "Chưa có hồ sơ nào. Thêm một cái bên dưới để định cấu hình Trợ lý AI.",
       "setDefault": "Đặt làm mặc định",
+      "keepDefault": "Giữ làm mặc định",
       "defaultProfile": "Mặc định",
+      "proxyIsDefault": "Không có hồ sơ nào là mặc định nên trợ lý khởi động trên proxy của bản triển khai. Hãy đặt một hồ sơ làm mặc định để khởi động trên hồ sơ đó.",
       "edit": "Biên tập",
       "deleteProfile": "Xóa hồ sơ",
       "backToProfiles": "← Quay lại hồ sơ",
@@ -3360,6 +3385,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "id mẫu",
         "customApiKey": "sk-… (nếu cần)"
+      },
+      "chatgpt": {
+        "account": "Tài khoản ChatGPT",
+        "intro": "Dùng gói ChatGPT của bạn thay vì khóa API. Trình duyệt sẽ mở trang đăng nhập của OpenAI, nơi bạn cho phép GeoLibre dùng gói của mình.",
+        "continue": "Tiếp tục với ChatGPT",
+        "waiting": "Đang chờ bạn hoàn tất đăng nhập trong trình duyệt…",
+        "openAgain": "Mở lại trình duyệt",
+        "signedInAs": "Đã đăng nhập với tên {{email}}",
+        "usingPlan": "Đang dùng gói ChatGPT của bạn.",
+        "planDeclined": "GeoLibre không được phép dùng gói ChatGPT của bạn. Hãy đăng nhập lại và cho phép.",
+        "signInAgain": "Đăng nhập lại",
+        "notRemembered": "Chuỗi khóa hệ thống không khả dụng nên lần đăng nhập này chỉ kéo dài đến khi đóng GeoLibre.",
+        "signOut": "Đăng xuất",
+        "useAnotherAccount": "Dùng tài khoản khác",
+        "usage": "Mức sử dụng và ứng dụng đã kết nối",
+        "revokeUnconfirmed": "Đã đăng xuất tại đây, nhưng OpenAI chưa xác nhận kết thúc phiên. Hãy ngắt kết nối GeoLibre trong cài đặt ChatGPT để chắc chắn.",
+        "desktopOnly": "Đăng nhập bằng ChatGPT có trong ứng dụng GeoLibre cho máy tính."
       }
     }
   },
@@ -3853,6 +3895,7 @@
       "difference": "Sự khác biệt",
       "union": "Hợp nhất",
       "spatialJoin": "Nối không gian",
+      "summarizeWithin": "Tóm tắt bên trong",
       "attributeJoin": "Nối thuộc tính",
       "selectByValue": "Chọn theo giá trị",
       "selectByLocation": "Chọn theo vị trí",
@@ -4174,7 +4217,9 @@
         "provider": "Nhà cung cấp dữ liệu {{provider}} không được hỗ trợ.",
         "missing-source": "Lớp này không có nguồn dữ liệu có thể đọc được.",
         "format": "Định dạng tệp của lớp không được hỗ trợ.",
-        "remote-file": "Nguồn tệp QGIS từ xa chưa được hỗ trợ."
+        "remote-file": "Nguồn tệp QGIS từ xa chưa được hỗ trợ.",
+        "remote-unreadable": "Không thể tải xuống hoặc đọc tệp từ xa.",
+        "wmts": "Chưa hỗ trợ nhập lớp WMTS. Hãy thêm dịch vụ từ menu Thêm dữ liệu."
       },
       "qgisImportNotes": "Dự án đã được nhập. Một số thiết lập không thể chuyển sang.",
       "qgisImportFormNotes": "Một số thiết lập biểu mẫu không thể chuyển sang.",
@@ -4283,6 +4328,7 @@
       "loadingVtpk": "Đang mở gói ô…",
       "loadingVtpkDesc": "Đang đọc thư mục gói và kiểu hiển thị của gói",
       "projectName": "Tên dự án",
+      "untitledProject": "Dự án chưa có tiêu đề",
       "storymapEllipsis": "Bản đồ câu chuyện...",
       "pointerElevationNoticeTitle": "Độ cao sử dụng dịch vụ độ cao công cộng",
       "pointerElevationNoticeDesc": "Việc đọc độ cao của thanh trạng thái được phân giải từ địa hình 3D của chính bản đồ khi tính năng này được bật, tính năng này sẽ không gửi đi đâu cả. Nếu không có địa hình 3D, nó sẽ quay trở lại API độ cao Open-Meteo công khai và tọa độ dưới con trỏ sẽ rời khỏi thiết bị của bạn cho những yêu cầu đó.",
@@ -5649,6 +5695,7 @@
   "assistant": {
     "setupStatus": "Trợ lý cần một nhà cung cấp AI để thực hiện việc suy nghĩ. Thêm thông tin xác thực cho bất kỳ nhà cung cấp nào bên dưới và bảng điều khiển sẽ chuyển sang chế độ trò chuyện ngay khi bạn lưu.",
     "setupProviders": "Thêm thông tin xác thực cho bất kỳ nhà cung cấp nào",
+    "setupSignIn": "Đăng nhập trong Cài đặt → Nhà cung cấp AI",
     "setupOpenSettings": "Mở Cài đặt → Nhà cung cấp AI",
     "thinking": "Đang làm việc…",
     "toolError": "thất bại",
@@ -6438,6 +6485,26 @@
                 "inner": "Trong (chỉ giữ các đối tượng khớp)",
                 "left": "Trái (giữ tất cả đối tượng đầu vào)"
               }
+            }
+          }
+        },
+        "summarize-within": {
+          "name": "Tóm tắt bên trong",
+          "description": "Đếm các đối tượng của một lớp khác giao với mỗi đa giác, tóm tắt một trường số và đo mức độ chúng phủ lên mỗi đa giác",
+          "params": {
+            "layer": {
+              "label": "Lớp đa giác"
+            },
+            "overlay": {
+              "label": "Lớp cần tóm tắt"
+            },
+            "field": {
+              "label": "Trường số",
+              "description": "Tùy chọn. Thêm tổng, trung bình, nhỏ nhất và lớn nhất của trường này cho mỗi đa giác."
+            },
+            "min_overlap_pct": {
+              "label": "Bỏ qua phần chồng lấn nhỏ hơn (%)",
+              "description": "Khi lớp cần tóm tắt có đa giác, bỏ qua những đa giác phủ ít hơn tỷ lệ này của một đa giác, chẳng hạn các mảnh vụn dọc theo cạnh chung."
             }
           }
         },
@@ -8434,6 +8501,7 @@
     "loadingAttributes": "Đang tải thuộc tính lớp…",
     "requiresVectorLayer": "Bảng thuộc tính yêu cầu lớp truy vấn vectơ hoặc DuckDB.",
     "invalidJson": "JSON không hợp lệ",
+    "nullValue": "NULL",
     "editCellAria": "Chỉnh sửa {{col}} cho tính năng {{featureId}}",
     "resizeColumn": "Thay đổi kích thước cột {{name}}",
     "joinedColumnTitle": "Cột đã nối, bắt nguồn từ một bảng nối. Thay vào đó hãy chỉnh sửa bảng nối hoặc định nghĩa nối.",
@@ -9314,7 +9382,7 @@
     "exportStyleDataNotReady": "Dữ liệu lớp chưa sẵn sàng. Hãy thử lại sau giây lát.",
     "exportStyleNeedsFeatures": "Dán kiểu từ \"__PH0__\"",
     "exportStyleError": "Không thể xuất kiểu của lớp này.",
-    "importStyle": "Kiểu nhập (URL GeoLibre / Mapbox GL / SLD / QML)…",
+    "importStyle": "Kiểu nhập (URL GeoLibre / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Nhập kiểu từ văn bản…",
     "importStyleFromTextDescription": "Dán kiểu GeoLibre, Mapbox GL, SLD hoặc QML. Định dạng được nhận biết từ văn bản.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",
@@ -9441,6 +9509,9 @@
     "hiddenByGroup": "Ẩn vì nhóm của nó không hiển thị",
     "empty": "Không có lớp dữ liệu. Thêm dữ liệu từ thanh công cụ.",
     "emptyBeginner": "Chưa có lớp nào. Thêm bản đồ nền thông qua Plugin → Bản đồ nền hoặc dữ liệu của riêng bạn thông qua menu Thêm dữ liệu.",
+    "emptyBeginnerBasemapsOnly": "Chưa có lớp nào. Thêm bản đồ nền qua Plugin → Bản đồ nền.",
+    "emptyBeginnerDataOnly": "Chưa có lớp nào. Thêm dữ liệu của bạn qua menu Thêm dữ liệu.",
+    "emptyNoAdd": "Không có lớp dữ liệu.",
     "hideAllLayers": "Ẩn tất cả các lớp",
     "showAllLayers": "Hiển thị tất cả các lớp",
     "compactView": "Chế độ xem thu gọn",
@@ -9755,6 +9826,9 @@
     "localRasterNotRestored_other": "Không thể khôi phục {{count}} lớp raster cục bộ",
     "localRasterNotRestoredDesc": "Được tải từ tệp cục bộ: {{names}}. Dự án không chứa dữ liệu raster hoặc không thể đọc tệp. Hãy thêm lại tệp."
   },
+  "zarrPanel": {
+    "selectorUnmatched": "Không tìm thấy giá trị bộ chọn ({{values}}). Hãy dùng giá trị tọa độ, ngày trên trục thời gian hoặc chỉ số."
+  },
   "attributeForm": {
     "error": {
       "range": "Giá trị phải nằm trong khoảng {{min}} đến {{max}}.",
@@ -9900,7 +9974,8 @@
     "panelRenderFailed": "Không thể mở bảng \"{{name}}\".",
     "sharedSettingsFailed": "Không thể tải cài đặt được chia sẻ từ liên kết, nên đang dùng cài đặt của bạn.",
     "sharedLanguageFailed": "Không thể chuyển sang ngôn ngữ mà cài đặt được chia sẻ yêu cầu.",
-    "languageCatalogFailed": "Không thể tải bản dịch {{language}}, nên GeoLibre đang hiển thị tiếng Anh."
+    "languageCatalogFailed": "Không thể tải bản dịch {{language}}, nên GeoLibre đang hiển thị tiếng Anh.",
+    "dataUrlLoadFailed": "Không thể tải URL dữ liệu."
   },
   "shell": {
     "section": {

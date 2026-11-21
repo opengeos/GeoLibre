@@ -358,6 +358,11 @@ export const i18nReady: Promise<unknown> = (async () => {
     resources,
     lng: effectiveLanguage,
     fallbackLng: DEFAULT_LANGUAGE,
+    // The active language is always a shipped catalog code (`resolveLanguage`),
+    // so skip i18next's region → base walk. Without this a key missing from
+    // `zh-TW` would show Simplified `zh` text, but only when that catalog
+    // happened to be loaded earlier in the session; with it, English.
+    load: "currentOnly",
     defaultNS: "translation",
     interpolation: {
       // React already escapes rendered values, so i18next double-escaping would

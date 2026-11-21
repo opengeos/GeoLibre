@@ -272,9 +272,54 @@ instead.
 
 ## Editing values
 
+GeoEditor's **Sketches** layer supports editing attributes and adding fields
+such as `stroke`, `fill`, and `marker-color`. Create and delete sketch features
+with GeoEditor. Geoman's internal `__gm_*` shape metadata is hidden in
+the Sketches table and retained for geometry editing. Ordinary attributes such
+as `height`, `width`, and `text` are preserved when GeoEditor reloads features.
+
+The properties popup automatically includes public text, number, and boolean
+fields from Sketches or the vector layer being edited. Nested or mixed-type values remain read-only, even when configured explicitly. Boolean fields offer true, false, and an unset option so unrelated edits preserve null values.
+
+In **Settings → GeoEditor**, configure additional fields or override existing
+field labels, types, and geometry scopes by name. These settings are saved with the project and apply
+to the active editor. Turn off **Open feature properties after drawing** to
+stop the automatic popup. Select an existing feature with GeoEditor to edit its
+properties. For an existing vector layer, the form saves into the edit session;
+the layer’s **Save** commits the session and **Cancel** discards its changes.
+
 Click **Edit** to turn the cells into inputs. Changed cells are highlighted;
-**Save** commits them and the reset button discards every unsaved edit. A cell
-that holds an object must contain valid JSON before you can save.
+**Save** commits them and the reset button discards every unsaved edit.
+
+Pending edits are kept separately for each layer during the current project
+session, including when you switch layers or close and reopen the table. Return
+to a layer to resume editing, then use **Save** or the reset button. Drafts are
+not written to the project file until you press **Save**; saving the project
+does not keep them. Reloading or closing the browser tab raises the browser's
+leave-page warning, except where the project cannot be saved at all (the viewer
+layout, a hidden toolbar, or a deployment or role without saving); there, save
+or cancel the drafts before reloading. Closing the desktop window, or starting,
+opening, importing, restoring or duplicating a project, asks first and names the
+layers whose drafts would be lost. A cell that holds an object must contain
+valid JSON before you can save.
+
+If the source changes while drafts are pending, saving and exporting are blocked
+when an edited row is missing or a row without an ID has changed at its original
+position. The drafts are retained. Restore the original rows to save them, or
+cancel the drafts and re-enter the values against the current data.
+
+Layer-menu exports and source writes also stop when pending drafts cannot be
+applied, including when the table is unmounted. Open this layer's attribute
+table to save, correct, or cancel its drafts, then retry the export or write.
+
+While geometry editing is active, attribute drafts are paused. Finish or cancel
+the geometry edit to resume attribute editing. Drafts on features with stable
+IDs can then be saved. For a feature without an ID, a geometry change also
+makes its positional target uncertain, even if its attributes did not change.
+Saving and exporting stay blocked after the geometry session ends; the draft
+remains available. Restore the original geometry to save it, or cancel the
+draft and re-enter it against the edited feature. This conservative rule also
+prevents applying a draft to another feature after a reorder.
 
 - Joined, virtual, and editor-tracking fields are read-only.
 - **Edit** is unavailable while you are editing geometry, and for Add Vector

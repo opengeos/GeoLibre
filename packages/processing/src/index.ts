@@ -8,6 +8,7 @@ export {
 export { VECTOR_TOOLS, getVectorTool, resolveVectorRerun } from "./vector-tool-registry";
 export {
   matchFeaturesByLocation,
+  joinFieldOutputNames,
   decodePolylineTool,
   encodePolylineTool,
   MAX_CLIENT_PAIRS,
@@ -286,6 +287,7 @@ export {
   type ReadPostgisTableResult,
   type WritePostgisTableRequest,
   type WritePostgisTableResult,
+  PostgisWriteRejectedError,
   type MssqlAuthMethod,
   type MssqlStatus,
   type MssqlAuth,
@@ -357,6 +359,9 @@ export {
   whiteboxWasmAvailable,
   listWhiteboxWasmTools,
   listWasmToolManifests,
+  fetchPrebuiltToolManifests,
+  resetPrebuiltToolManifestsCache,
+  PREBUILT_TOOL_MANIFESTS_FILE,
   manifestScalarDefaults,
   mergeWasmToolManifests,
   type ToolManifest,

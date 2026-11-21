@@ -48,10 +48,16 @@ import {
   centralAngle,
   geodesicDistance,
   geodesicRadiusBounds,
+  geodesicRingArea,
   isLonLat,
   withinGeodesicDistance,
 } from "@geolibre/core/geodesic";
 import type { GeometryFamily, ProcessingAlgorithm, ProcessingContext } from "./types";
+import {
+  prepareAntimeridianInput,
+  splitPolygonalAtAntimeridian,
+  unwrapPolygonal,
+} from "./antimeridian-buffer";
 
 /** Upper bound on input×overlay pairs for the main-thread pairwise loops. */
 export const MAX_CLIENT_PAIRS = 250_000;
@@ -318,21 +324,39 @@ function bufferOneFeature(
   units: BufferUnits,
 ): Feature | null {
   const options = { units };
-  if (side === "inside") return nonEmptyBuffer(buffer(feature, -radius, options));
-  const outer = nonEmptyBuffer(buffer(feature, radius, options));
-  if (side === "outside" || !outer) return outer;
-  const inner = nonEmptyBuffer(buffer(feature, -radius, options));
-  if (!inner) return outer;
+  // A feature split at the antimeridian is buffered as one continuous shape,
+  // and every result is made continuous again (unwrapped past ±180) before it
+  // is combined, then cut at ±180 on the way out (GeoLibre#3469).
+  const { feature: input, referenceLon } = prepareAntimeridianInput(feature);
+  const grow = (distance: number): Feature | null => {
+    const result = nonEmptyBuffer(buffer(input, distance, options));
+    if (!result) return null;
+    const geometry = unwrapPolygonal(result.geometry as Polygon | MultiPolygon, referenceLon);
+    return geometry === result.geometry ? result : { ...result, geometry };
+  };
+  const finish = (result: Feature | null): Feature | null => {
+    if (!result) return null;
+    const geometry = splitPolygonalAtAntimeridian(
+      result.geometry as Polygon | MultiPolygon,
+      referenceLon,
+    );
+    // turf carries its input's properties through, but for a shifted feature
+    // that input is our own copy — restore the source feature's attributes.
+    // Cutting can leave nothing (every piece degenerate); drop that too.
+    return nonEmptyBuffer({ ...result, geometry, properties: feature.properties ?? {} });
+  };
+  if (side === "inside") return finish(grow(-radius));
+  const outer = grow(radius);
+  if (side === "outside" || !outer) return finish(outer);
+  const inner = grow(-radius);
+  if (!inner) return finish(outer);
   const band = difference(
     featureCollection([
       outer as Feature<Polygon | MultiPolygon>,
       inner as Feature<Polygon | MultiPolygon>,
     ]),
   );
-  const kept = nonEmptyBuffer(band as Feature | null);
-  // turf carries the first input's properties through, but that input is our own
-  // intermediate buffer — restore the source feature's attributes explicitly.
-  return kept ? { ...kept, properties: feature.properties ?? {} } : null;
+  return finish(nonEmptyBuffer(band as Feature | null));
 }
 
 /**
@@ -925,6 +949,73 @@ function matchesPredicate(input: Feature, join: Feature, predicate: SpatialPredi
   }
 }
 
+/** Suffix a join tool gives a join field whose name clashes with an input field. */
+const JOIN_FIELD_SUFFIX = "_right";
+
+/**
+ * Output name for each join-layer field, so no two output columns differ only
+ * in case. DuckDB (the SQL workspace) and most databases treat column names
+ * case-insensitively, so a join that keeps both `NAME` and `name` produces a
+ * layer that cannot be queried (issue #3514).
+ *
+ * A join field that exactly matches an input field keeps its name: the input
+ * value wins there, as before. A join field that matches an input field, or an
+ * earlier join field, only case-insensitively is renamed with the `_right`
+ * suffix GeoPandas' `sjoin` uses (`name_right`, then `name_right_2`, ...).
+ *
+ * @param inputKeys Every property name on the input (target) features.
+ * @param joinKeys Join-layer property names in first-seen order.
+ * @returns Map from each join key to its output name.
+ */
+export function joinFieldOutputNames(
+  inputKeys: Iterable<string>,
+  joinKeys: Iterable<string>,
+): Map<string, string> {
+  const input = new Set(inputKeys);
+  const taken = new Set([...input].map((key) => key.toLowerCase()));
+  const names = new Map<string, string>();
+  for (const key of joinKeys) {
+    if (names.has(key)) continue;
+    if (input.has(key)) {
+      names.set(key, key);
+      continue;
+    }
+    let name = key;
+    if (taken.has(name.toLowerCase())) {
+      name = `${key}${JOIN_FIELD_SUFFIX}`;
+      for (let n = 2; taken.has(name.toLowerCase()); n += 1) {
+        name = `${key}${JOIN_FIELD_SUFFIX}_${n}`;
+      }
+    }
+    taken.add(name.toLowerCase());
+    names.set(key, name);
+  }
+  return names;
+}
+
+/** Copy `properties` with each key renamed through `names` (unmapped keys kept). */
+function renameProperties(
+  properties: GeoJsonProperties,
+  names: Map<string, string>,
+): Record<string, unknown> {
+  // A null prototype keeps a `__proto__` key as an ordinary own property
+  // (assignment into `{}` would hit the inherited setter and drop it).
+  const out: Record<string, unknown> = Object.create(null);
+  for (const [key, value] of Object.entries(properties ?? {})) {
+    out[names.get(key) ?? key] = value;
+  }
+  return out;
+}
+
+/** Every property name across `features`, in first-seen order. */
+function propertyKeys(features: Feature[]): string[] {
+  const keys = new Set<string>();
+  for (const feature of features) {
+    for (const key of Object.keys(feature.properties ?? {})) keys.add(key);
+  }
+  return [...keys];
+}
+
 export const spatialJoinTool: ProcessingAlgorithm = {
   id: "spatial-join",
   name: "Spatial join",
@@ -999,14 +1090,15 @@ export const spatialJoinTool: ProcessingAlgorithm = {
     // Collect every join-layer attribute key so unmatched left-join rows get a
     // null for each one. This keeps the output schema consistent with matched
     // rows and mirrors GeoPandas, which fills NaN (→ null in GeoJSON) there.
-    // Only the left path consumes this, so skip the scan for inner joins.
-    const nullJoinProps: GeoJsonProperties = {};
+    // Only the left path null-fills unmatched rows, but matched rows of both
+    // joins use these names, so the scan always runs.
+    // Rename join fields that clash case-insensitively with an input field so
+    // the output never carries both `NAME` and `name` (issue #3514).
+    const joinNames = joinFieldOutputNames(propertyKeys(inputFeatures), propertyKeys(joinFeatures));
+    // Null prototype: a `__proto__` field stays an own property.
+    const nullJoinProps: Record<string, unknown> = Object.create(null);
     if (how === "left") {
-      for (const j of joinFeatures) {
-        for (const key of Object.keys(j.properties ?? {})) {
-          nullJoinProps[key] = null;
-        }
-      }
+      for (const name of joinNames.values()) nullJoinProps[name] = null;
     }
     const results: Feature[] = [];
     for (const feature of inputFeatures) {
@@ -1027,7 +1119,8 @@ export const spatialJoinTool: ProcessingAlgorithm = {
         continue;
       }
       // One output feature per match, like GeoPandas sjoin. Input attributes win
-      // on name collisions (the sidecar instead suffixes them _left/_right).
+      // on exact name collisions (the sidecar instead suffixes them
+      // _left/_right); case-only collisions were renamed above.
       // Build a fresh feature (no `id`) so a one-to-many join does not emit
       // duplicate feature ids, which would corrupt MapLibre feature state.
       for (const match of matches) {
@@ -1035,7 +1128,7 @@ export const spatialJoinTool: ProcessingAlgorithm = {
           type: "Feature",
           geometry: feature.geometry,
           properties: {
-            ...(match.properties ?? {}),
+            ...renameProperties(match.properties, joinNames),
             ...(feature.properties ?? {}),
           },
         });
@@ -1043,6 +1136,287 @@ export const spatialJoinTool: ProcessingAlgorithm = {
     }
     ctx.log(`Spatial join: produced ${results.length} feature(s)`);
     ctx.addResultLayer?.("Spatial join", featureCollection(results));
+  },
+};
+
+/** Statistics Summarize within adds for its optional numeric field. */
+const SUMMARIZE_STATS = ["sum", "mean", "min", "max"] as const;
+
+/**
+ * Area in square metres of a Polygon or MultiPolygon on the active body: each
+ * outer ring minus its holes, measured geodesically like the Measure tool.
+ */
+function polygonAreaM2(geometry: Polygon | MultiPolygon): number {
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  let total = 0;
+  for (const rings of polygons) {
+    rings.forEach((ring, index) => {
+      total += index === 0 ? geodesicRingArea(ring) : -geodesicRingArea(ring);
+    });
+  }
+  return Math.max(0, total);
+}
+
+/** True when two `[west, south, east, north]` boxes overlap or touch; a missing box never does. */
+function bboxesOverlap(a: BBox | null, b: BBox | null): boolean {
+  if (!a || !b) return false;
+  return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
+}
+
+/**
+ * Upper bound on polygon-to-polygon clips in one Summarize within run. Each is a
+ * full polygon-clipping pass, which costs milliseconds on detailed parcels, so
+ * the pair cap alone does not bound the runtime.
+ */
+const MAX_SUMMARIZE_CLIPS = 20_000;
+
+/**
+ * Area of the union of the overlap pieces inside one polygon, so two pieces of
+ * the summarized layer that overlap each other are not counted twice. Returns
+ * null when Turf cannot union them: summing the pieces instead would double
+ * count exactly the overlaps the union exists to remove.
+ */
+function coveredAreaM2(pieces: Feature<Polygon | MultiPolygon>[]): number | null {
+  if (!pieces.length) return 0;
+  if (pieces.length === 1) return polygonAreaM2(pieces[0].geometry);
+  try {
+    const merged = union(featureCollection(pieces));
+    return merged ? polygonAreaM2(merged.geometry as Polygon | MultiPolygon) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Summarize within: for each polygon, count the features of another layer that
+ * fall in it, reduce one of their numeric fields, and, when that layer has
+ * polygons, report how much of the polygon they cover.
+ *
+ * Points and lines count when they intersect the polygon (a point on a shared
+ * edge counts for both sides). Polygons count only when they overlap it by a
+ * positive area at least `min_overlap_pct` of the polygon, so a neighbour that
+ * only touches along an edge, or a digitizing sliver, is left out of the count,
+ * the statistics and the covered area alike.
+ */
+export const summarizeWithinTool: ProcessingAlgorithm = {
+  id: "summarize-within",
+  name: "Summarize within",
+  description:
+    "Count the features of another layer that intersect each polygon, summarize a numeric field, and measure how much of each polygon they cover",
+  group: "Join",
+  parameters: [
+    {
+      id: "layer",
+      label: "Polygon layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["polygon"],
+    },
+    { id: "overlay", label: "Layer to summarize", type: "layer", required: true },
+    {
+      id: "field",
+      label: "Numeric field",
+      type: "field",
+      fieldSource: "overlay",
+      description: "Optional. Adds the sum, mean, min and max of this field for each polygon.",
+    },
+    {
+      id: "min_overlap_pct",
+      label: "Ignore overlaps smaller than (%)",
+      type: "number",
+      default: 0,
+      min: 0,
+      max: 100,
+      step: 0.1,
+      description:
+        "When the layer to summarize has polygons, skip any that cover less than this share of a polygon, such as slivers along shared edges.",
+    },
+  ],
+  run: (ctx) => {
+    const input = requireFeatures(ctx, "layer");
+    if (!input) return;
+    const overlayLayer = getLayer(ctx, "overlay");
+    if (!overlayLayer) {
+      ctx.log('Error: parameter "overlay" has no layer selected');
+      return;
+    }
+    if (ctx.parameters.layer === ctx.parameters.overlay) {
+      // Not an error (Spatial join allows it too), but every polygon then
+      // matches itself and reads as fully covered.
+      ctx.log(
+        "Warning: both inputs are the same layer, so each polygon counts itself and shows 100% coverage",
+      );
+    }
+    const targets = polygonFeatures(input);
+    if (!targets.length) {
+      ctx.log("Error: the polygon layer has no polygon features");
+      return;
+    }
+    const nonPolygons = input.features.length - targets.length;
+    if (nonPolygons > 0) {
+      ctx.log(
+        `Note: ${nonPolygons} non-polygon feature(s) in the polygon layer were skipped and are not in the result`,
+      );
+    }
+    const field = typeof ctx.parameters.field === "string" ? ctx.parameters.field.trim() : "";
+    const minPct = numberParam(ctx, "min_overlap_pct", 0);
+    if (minPct < 0 || minPct > 100) {
+      ctx.log("Error: the minimum overlap must be between 0 and 100%");
+      return;
+    }
+    const overlayFeatures = (overlayLayer.geojson?.features ?? []).filter((f) => f.geometry);
+    if (!overlayFeatures.length) {
+      ctx.log("Warning: the layer to summarize has no features, so every count is 0");
+    }
+    if (
+      field &&
+      overlayFeatures.length &&
+      !overlayFeatures.some((f) => f.properties && field in f.properties)
+    ) {
+      ctx.log(`Warning: no feature in the layer to summarize has a field "${field}"`);
+    }
+    // Pairwise on the main thread (or a worker); cap it like Spatial join.
+    const pairs = targets.length * overlayFeatures.length;
+    if (pairs > MAX_CLIENT_PAIRS) {
+      ctx.log(
+        `Error: summarize within needs ${pairs} comparisons (limit ${MAX_CLIENT_PAIRS}); filter or clip the layers first`,
+      );
+      return;
+    }
+    // Turf returns a feature's stored bbox member unless told to recompute, and
+    // a stale one from the source file would hide real matches.
+    const boundsOf = (f: Feature) => horizontalBbox(bbox(f, { recompute: true }));
+    // Turf throws on a geometry type it doesn't know; skip that feature rather
+    // than abort the run, and report it below.
+    const overlayBoxes = overlayFeatures.map((f) => {
+      try {
+        return boundsOf(f);
+      } catch {
+        return null;
+      }
+    });
+    const unreadable = overlayBoxes.filter((box) => box === null).length;
+    const isPolygon = overlayFeatures.map((f) => isFamily(f.geometry, "polygon"));
+    const hasPolygons = isPolygon.some(Boolean);
+    const candidates = targets.map((target) => {
+      const box = boundsOf(target);
+      return overlayFeatures.flatMap((_, i) => {
+        const other = overlayBoxes[i];
+        return other && bboxesOverlap(box, other) ? [i] : [];
+      });
+    });
+    const clips = candidates.reduce((n, list) => n + list.filter((i) => isPolygon[i]).length, 0);
+    if (clips > MAX_SUMMARIZE_CLIPS) {
+      ctx.log(
+        `Error: summarize within needs ${clips} polygon overlaps (limit ${MAX_SUMMARIZE_CLIPS}); filter or clip the layers first`,
+      );
+      return;
+    }
+
+    const statKeys = field ? SUMMARIZE_STATS.map((stat) => `${stat}_${field}`) : [];
+    const outputKeys = [
+      "count",
+      ...statKeys,
+      ...(hasPolygons ? ["overlap_km2", "overlap_pct"] : []),
+    ];
+    const existing = new Set(targets.flatMap((t) => Object.keys(t.properties ?? {})));
+    const clashes = outputKeys.filter((key) => existing.has(key));
+    if (clashes.length) {
+      ctx.log(`Warning: replacing the existing field(s) ${clashes.join(", ")}`);
+    }
+
+    let slivers = 0;
+    let failedClips = 0;
+    let failedChecks = 0;
+    let matched = 0;
+    const results: Feature[] = targets.map((target, targetIndex) => {
+      const targetArea = hasPolygons ? polygonAreaM2(target.geometry) : 0;
+      let count = 0;
+      const values: number[] = [];
+      const pieces: Feature<Polygon | MultiPolygon>[] = [];
+      for (const index of candidates[targetIndex]) {
+        const feature = overlayFeatures[index];
+        if (isPolygon[index]) {
+          let piece: Feature<Polygon | MultiPolygon> | null;
+          try {
+            piece = intersect(
+              featureCollection([target, feature as Feature<Polygon | MultiPolygon>]),
+            ) as Feature<Polygon | MultiPolygon> | null;
+          } catch {
+            // Invalid or self-intersecting geometry; reported once below.
+            failedClips += 1;
+            continue;
+          }
+          const pieceArea = piece ? polygonAreaM2(piece.geometry) : 0;
+          if (!piece || pieceArea <= 0) continue;
+          if (targetArea > 0 && (pieceArea / targetArea) * 100 < minPct) {
+            slivers += 1;
+            continue;
+          }
+          pieces.push(piece);
+        } else {
+          let hit: boolean;
+          try {
+            hit = rawPredicate(feature, target, "intersects");
+          } catch {
+            // Reported once below, like a polygon pair that fails to clip.
+            failedChecks += 1;
+            continue;
+          }
+          if (!hit) continue;
+        }
+        count += 1;
+        if (field) {
+          const value = toNumeric(feature.properties?.[field]);
+          if (value !== null) values.push(value);
+        }
+      }
+
+      if (count > 0) matched += 1;
+      const properties: Record<string, unknown> = { ...(target.properties ?? {}), count };
+      if (field) {
+        SUMMARIZE_STATS.forEach((stat, i) => {
+          properties[statKeys[i]] = computeStat(values, stat);
+        });
+      }
+      if (hasPolygons) {
+        const covered = coveredAreaM2(pieces);
+        if (covered === null) {
+          ctx.log(
+            `Warning: could not merge the overlaps in polygon ${targetIndex + 1}, so its coverage is left empty`,
+          );
+        }
+        // Rounded so the table reads cleanly: km² to 6 places (about 1 m²), the
+        // share to 2 places. Geodesic edges leave noise past those digits.
+        properties.overlap_km2 = covered === null ? null : Math.round(covered) / 1e6;
+        properties.overlap_pct =
+          covered !== null && targetArea > 0
+            ? Math.round(Math.min(100, (covered / targetArea) * 100) * 100) / 100
+            : null;
+      }
+      return { ...target, properties };
+    });
+
+    ctx.log(`Summarize within: ${matched} of ${results.length} polygon(s) contain features`);
+    if (slivers) {
+      ctx.log(`Summarize within: ignored ${slivers} overlap(s) below ${minPct}% of a polygon`);
+    }
+    if (failedClips) {
+      ctx.log(
+        `Warning: skipped ${failedClips} polygon pair(s) whose geometry could not be intersected; try Fix geometries first`,
+      );
+    }
+    if (failedChecks) {
+      ctx.log(
+        `Warning: skipped ${failedChecks} point or line pair(s) whose geometry could not be compared; try Fix geometries first`,
+      );
+    }
+    if (unreadable) {
+      ctx.log(
+        `Warning: skipped ${unreadable} feature(s) in the layer to summarize with a geometry that could not be read`,
+      );
+    }
+    ctx.addResultLayer?.("Summarize within", featureCollection(results));
   },
 };
 
@@ -1193,8 +1567,12 @@ export const attributeJoinTool: ProcessingAlgorithm = {
 
     // Null-fill the brought-over columns for unmatched left-join rows so the
     // output schema stays consistent (mirrors the spatial join and the sidecar).
-    const nullFill: GeoJsonProperties = {};
-    for (const f of selectedFields) nullFill[f] = null;
+    // Rename brought-over fields that clash case-insensitively with a target
+    // field, so the output never carries both `NAME` and `name` (issue #3514).
+    const outputNames = joinFieldOutputNames(propertyKeys(input.features), selectedFields);
+    // Null prototype: a `__proto__` field stays an own property.
+    const nullFill: Record<string, unknown> = Object.create(null);
+    for (const f of selectedFields) nullFill[outputNames.get(f) ?? f] = null;
 
     let matched = 0;
     const results: Feature[] = [];
@@ -1214,9 +1592,12 @@ export const attributeJoinTool: ProcessingAlgorithm = {
         continue;
       }
       matched += 1;
-      const picked: GeoJsonProperties = {};
+      // Null prototype: a `__proto__` field stays an own property.
+      const picked: Record<string, unknown> = Object.create(null);
       for (const f of selectedFields) {
-        picked[f] = joinProps[f] !== undefined ? joinProps[f] : null;
+        // Own properties only: an absent `__proto__` would read Object.prototype.
+        const value = Object.hasOwn(joinProps, f) ? joinProps[f] : undefined;
+        picked[outputNames.get(f) ?? f] = value !== undefined ? value : null;
       }
       results.push({
         type: "Feature",

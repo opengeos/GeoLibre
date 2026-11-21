@@ -84,6 +84,7 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   { id: "vtpk", section: "files", labelKey: "toolbar.item.vtpkLayer", tier: "advanced" },
   { id: "photos", section: "files", labelKey: "toolbar.layerType.photos", tier: "intermediate" },
   { id: "gpx", section: "files", labelKey: "toolbar.layerType.gpx", tier: "intermediate" },
+  { id: "geopdf", section: "files", labelKey: "toolbar.layerType.geopdf", tier: "intermediate" },
   {
     id: "landxml",
     section: "files",
@@ -346,6 +347,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "basic",
   },
   {
+    id: "project.saveLayerEdits",
+    menuId: "project",
+    labelKey: "toolbar.item.saveLayerEditsEllipsis",
+    tier: "intermediate",
+  },
+  {
     id: "project.duplicate",
     menuId: "project",
     labelKey: "toolbar.item.duplicate",
@@ -379,6 +386,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     id: "project.exportLayers",
     menuId: "project",
     labelKey: "toolbar.item.exportLayersEllipsis",
+    tier: "intermediate",
+  },
+  {
+    id: "project.exportGeojsonZip",
+    menuId: "project",
+    labelKey: "toolbar.item.exportGeojsonZipEllipsis",
     tier: "intermediate",
   },
   {
@@ -491,6 +504,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     id: "view.renderingEngine",
     menuId: "view",
     labelKey: "toolbar.item.renderingEngine",
+    tier: "basic",
+  },
+  {
+    id: "view.touchUi",
+    menuId: "view",
+    labelKey: "settings.layout.touchUi",
     tier: "basic",
   },
   {

@@ -678,3 +678,19 @@ describe("buildStoryMapHtml label font resolution (#3033)", () => {
     );
   });
 });
+
+describe("buildStoryMapHtml chapter list (#3477)", () => {
+  it("moves left and full-width cards clear of the open chapter list", () => {
+    const html = buildStoryMapHtml({
+      storymap: story(),
+      basemapStyleUrl: "https://tiles.example.com/style.json",
+      layers: [],
+    });
+    assert.match(html, /body\.sm-nav-open \.lefty \{ margin-left: max\(5vw, 244px\); \}/);
+    assert.match(html, /body\.sm-nav-open \.fully \{ margin-left: 244px;/);
+    // The class follows the list: on at load unless the story hides it, and
+    // flipped with the toggle button.
+    assert.match(html, /else document\.body\.classList\.add\('sm-nav-open'\);/);
+    assert.match(html, /document\.body\.classList\.toggle\('sm-nav-open', !nowHidden\);/);
+  });
+});

@@ -50,6 +50,28 @@ export {
   type FeatureSelectionRequest,
   type FeatureSelectionShape,
 } from "./feature-selection";
+export {
+  cancelActiveFeatureSelection,
+  FEATURE_SELECTION_CANCEL_EVENT,
+  FEATURE_SELECTION_FINISH_EVENT,
+  FEATURE_SELECTION_UNDO_EVENT,
+  finishFeatureSelection,
+  getFeatureSelectionUiState,
+  subscribeFeatureSelectionUiState,
+  undoFeatureSelectionVertex,
+  type FeatureSelectionUiState,
+} from "./map-feature-selection";
+export { MAX_MOBILE_PIXEL_RATIO, resolveMapPixelRatio } from "./mobile-pixel-ratio";
+export {
+  buildIdentifyQueryGeometry,
+  isTouchIdentifyActive,
+  queryIdentifyFeatures,
+  sortIdentifyFeaturesByGeometryPriority,
+  TOUCH_IDENTIFY_HIT_RADIUS_PX,
+  type GeometryTypedFeature,
+  type IdentifyQueryGeometry,
+  type IdentifyScreenPoint,
+} from "./touch-identify";
 export { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "./map-resize";
 export { SecondaryMapCanvas, type SecondaryMapCanvasProps } from "./SecondaryMapCanvas";
 export { CesiumCanvas, type CesiumCanvasProps } from "./CesiumCanvas";
@@ -123,7 +145,9 @@ export {
   encodeTerrariumDem,
   registerCogDemSource,
   type CogDemErrorCode,
+  type CogDemFallback,
 } from "./cog-dem-source";
+export { createTerrariumFallback, type TerrariumFallbackOptions } from "./terrarium-fallback";
 export {
   detectGeometryProfile,
   getLayerBounds,

@@ -1053,3 +1053,103 @@ describe("mercatorSegmentMidpoint", () => {
     assert.equal(mercatorSegmentMidpoint([0, 0], [2, 0]).length, 2);
   });
 });
+
+it("commits editable form properties while preserving original reserved and read-only columns", () => {
+  const source: FeatureCollection = {
+    type: "FeatureCollection",
+    features: [point(7, { name: "Before", height: 12, locked: "original", nested: { a: 1 } })],
+  };
+  const tagged = tagFeatureKeys(source);
+  const originals = captureEditedProperties(tagged, source);
+  tagged.features[0].properties = {
+    ...tagged.features[0].properties,
+    name: "After",
+    height: 25,
+    locked: "tampered",
+    __gm_shape: "Marker",
+  };
+  const result = reconcileEditedFeatures(tagged, originals, undefined, {
+    originalIds: captureEditedFeatureIds(tagged, source),
+    editableFields: new Set(["name", "height"]),
+  });
+  assert.equal(result.features[0].id, 7);
+  assert.deepEqual(result.features[0].properties, {
+    name: "After",
+    height: 25,
+    locked: "original",
+    nested: { a: 1 },
+  });
+  assert.equal(source.features[0].properties?.name, "Before");
+});
+
+it("stamps attribute-only edits without changing geometry or creation metadata", () => {
+  const source: FeatureCollection = {
+    type: "FeatureCollection",
+    features: [point(1, { name: "Before", created_at: "original" })],
+  };
+  const tagged = tagFeatureKeys(source);
+  const originals = captureEditedProperties(tagged);
+  const geometry = captureEditedGeometries(tagged);
+  tagged.features[0].properties!.name = "After";
+  const result = reconcileEditedFeatures(
+    tagged,
+    originals,
+    {
+      config: { enabled: true, editedByField: "author", editedAtField: "touched" },
+      userIdentity: "ada",
+      timestamp: "2026-11-19T00:00:00.000Z",
+      originalGeometries: geometry,
+    },
+    { editableFields: new Set(["name"]), originalGeometries: geometry },
+  );
+  assert.deepEqual(result.features[0].properties, {
+    name: "After",
+    created_at: "original",
+    author: "ada",
+    touched: "2026-11-19T00:00:00.000Z",
+  });
+});
+
+it("stamps property-only Sketches edits while preserving creation metadata", () => {
+  const previous: FeatureCollection = {
+    type: "FeatureCollection",
+    features: [
+      point("a", {
+        name: "A",
+        created_by: "bob",
+        created_at: "original",
+        edited_by: "bob",
+        edited_at: "old",
+      }),
+    ],
+  };
+  const next: FeatureCollection = {
+    type: "FeatureCollection",
+    features: [point("a", { name: "B", __gm_shape: "marker" })],
+  };
+  const result = applySyncedEditorTracking(next, previous, (f) => String(f.id), {
+    config: { enabled: true },
+    userIdentity: "ada",
+    timestamp: "new",
+  });
+  assert.deepEqual(result.features[0].properties, {
+    name: "B",
+    __gm_shape: "marker",
+    created_by: "bob",
+    created_at: "original",
+    edited_by: "ada",
+    edited_at: "new",
+  });
+  const again = applySyncedEditorTracking(
+    { ...next, features: [point("a", { __gm_shape: "point", name: "B" })] },
+    result,
+    (f) => String(f.id),
+    {
+      config: { enabled: true },
+      userIdentity: "other",
+      timestamp: "later",
+    },
+  );
+  assert.equal(again.features[0].properties?.edited_at, "new");
+  assert.equal(again.features[0].properties?.edited_by, "ada");
+});

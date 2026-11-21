@@ -884,30 +884,6 @@ function parseGeoJsonFeatureCollection(value: unknown): FeatureCollection {
   } as FeatureCollection;
 }
 
-export function isPublicHttpUrl(url: string): boolean {
-  try {
-    const u = new URL(url);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-    const host = u.hostname.toLowerCase();
-    if (host === "localhost" || host.endsWith(".localhost")) return false;
-    if (host === "0.0.0.0" || host === "[::1]" || host === "::1") return false;
-    if (/^127\./.test(host)) return false;
-    if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) return false;
-    if (
-      /^\[?fe80:/.test(host) ||
-      /^\[?fc[0-9a-f]{2}:/.test(host) ||
-      /^\[?fd[0-9a-f]{2}:/.test(host)
-    )
-      return false;
-    if (/^\[?::ffff:/i.test(host)) return false;
-    if (/^192\.0\.0\./.test(host)) return false;
-    if (/^198\.(1[89])\./.test(host)) return false;
-    if (/^240\./.test(host)) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
 function layerHttpUrl(layer: GeoLibreLayer): string | null {
   const sourcePath = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
   const sourceUrl = typeof layer.source.url === "string" ? layer.source.url.trim() : "";
@@ -1057,25 +1033,37 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
-function isPublicHttpUrl(url: string): boolean {
+/**
+ * Whether a URL is plain HTTP(S) to a public host, so a layer can hydrate it
+ * automatically. Loopback, private, link-local, CGNAT, IPv6 ULA/link-local,
+ * IPv4-mapped IPv6, and IANA special-purpose ranges are rejected.
+ */
+export function isPublicHttpUrl(url: string): boolean {
   try {
     const u = new URL(url);
     if (u.protocol !== "http:" && u.protocol !== "https:") return false;
     const host = u.hostname.toLowerCase().replace(/\.$/, "");
-    // Loopback (IPv4 127.0.0.0/8, IPv6 [::1], and *.localhost)
+    // Loopback / unspecified (IPv4 0.0.0.0/8 and 127.0.0.0/8, IPv6 [::] and [::1], *.localhost)
     if (host === "localhost" || host.endsWith(".localhost")) return false;
     if (/^0\./.test(host) || host === "[::]" || host === "[::1]") return false;
     if (/^127\./.test(host)) return false;
+    // CGNAT 100.64.0.0/10
     if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host)) return false;
-    // Private ranges (RFC1918 + link-local + ULA + IPv4-mapped)
+    // Private ranges (RFC1918 + link-local)
     if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) return false;
+    // IPv6 link-local (fe80::/10) and ULA (fc00::/7)
     if (
       /^\[?fe[89ab][0-9a-f]:/.test(host) ||
       /^\[?fc[0-9a-f]{2}:/.test(host) ||
       /^\[?fd[0-9a-f]{2}:/.test(host)
     )
       return false;
+    // IPv4-mapped IPv6
     if (/^\[?::ffff:/i.test(host)) return false;
+    // IETF protocol assignments, benchmarking, and reserved (240.0.0.0/4)
+    if (/^192\.0\.0\./.test(host)) return false;
+    if (/^198\.(1[89])\./.test(host)) return false;
+    if (/^(24\d|25[0-5])\./.test(host)) return false;
     return true;
   } catch {
     return false;

@@ -280,10 +280,15 @@
     "bodyNote": "Misurato su: {{body}} (approssimazione sferica)"
   },
   "statusBar": {
+    "coords": "Coord.",
     "elevation": "Quota",
     "elevationLong": "Quota",
     "cameraAltitude": "Quota vista",
     "cameraAltitudeLong": "Quota della camera sul livello del mare",
+    "zoom": "Zoom",
+    "bearing": "Orientamento",
+    "pitch": "Inclinazione",
+    "bbox": "BBox",
     "coordinateFormat": {
       "dd": "Gradi decimali",
       "dms": "Gradi, primi, secondi",
@@ -1977,7 +1982,10 @@
     "lockLayer": "Blocca layer per gli ospiti",
     "unlockLayer": "Sblocca layer per gli ospiti",
     "layerLocked": "Bloccato",
-    "layerLockedHint": "Questo layer è bloccato dall'host e non può essere modificato"
+    "layerLockedHint": "Questo layer è bloccato dall'host e non può essere modificato",
+    "viewOnlyHint": "In questa sessione sei in sola visualizzazione, quindi non puoi modificare questo layer",
+    "layerLockedRejected": "La modifica non è stata condivisa perché l'host ha bloccato il layer. La tua mappa è stata ripristinata alla versione della sessione.",
+    "viewOnlyLocalChange": "In questa sessione sei in sola visualizzazione, quindi le tue modifiche restano sul tuo schermo e non vengono condivise."
   },
   "share": {
     "title": "Condividi progetto",
@@ -2128,6 +2136,18 @@
     "resizeDialog": "Ridimensiona la galleria",
     "scopeFeatured": "In evidenza",
     "scopeAll": "Tutti i progetti",
+    "scopeCollections": "Collezioni",
+    "loadingCollections": "Caricamento collezioni…",
+    "collectionsSearchPlaceholder": "Filtra le collezioni per titolo, autore o descrizione",
+    "noCollectionMatches": "Nessuna collezione corrisponde al filtro.",
+    "emptyCollections": "Nessuna collezione pubblica da mostrare.",
+    "emptyCollection": "Questa collezione non contiene progetti pubblici.",
+    "untitledCollection": "Collezione senza titolo",
+    "openCollection": "Mostra i progetti di questa collezione",
+    "openCollectionOnWeb": "Visualizza la collezione sul web",
+    "backToCollections": "Tutte le collezioni",
+    "collectionProjects_one": "{{count}} progetto",
+    "collectionProjects_other": "{{count}} progetti",
     "scopeMine": "I miei progetti",
     "scopeOrganizations": "Organizzazioni",
     "scopeGroups": "Gruppi",
@@ -2412,7 +2432,9 @@
   },
   "kml": {
     "importFailed": "Impossibile importare il KML/KMZ.",
-    "timeOverlayGroup": "Animazione overlay temporale"
+    "timeOverlayGroup": "Animazione overlay temporale",
+    "dataUrlStyleUnsupported": "Non è possibile applicare uno stile a un documento KML.",
+    "dataUrlNoImporter": "Impossibile aggiungere {{name}} alla mappa: nessun importatore KML disponibile."
   },
   "map": {
     "boundsRestricted": "Limiti bloccati",
@@ -2495,6 +2517,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "DEM COG locale",
     "localSourceDescription": "Il file rimane su questo dispositivo e viene letto in piccoli intervalli quando servono le tile del terreno.",
+    "fillOutside": "Riempi l'esterno del DEM con il terreno globale",
+    "fillOutsideDescription": "Circonda il DEM, e ne riempie le lacune nodata, con il terreno globale invece di una pianura piatta. Attivo per impostazione predefinita per un DEM da URL e disattivato per un file locale, che altrimenti non legge nulla dalla rete.",
     "useCog": "Usa DEM COG",
     "ionAssetLabel": "Asset di terreno Cesium Ion",
     "ionAssetDescription": "Usa sul globo un asset di terreno quantized-mesh da Cesium Ion. L'asset deve essere disponibile per l'account Ion configurato.",
@@ -3394,7 +3418,9 @@
       "profileCount_other": "{{count}} profili",
       "noProfiles": "Nessun profilo. Aggiungine uno qui sotto per configurare l'assistente IA.",
       "setDefault": "Imposta come predefinito",
+      "keepDefault": "Mantieni come predefinito",
       "defaultProfile": "Predefinito",
+      "proxyIsDefault": "Nessun profilo è predefinito, quindi l'assistente si avvia sul proxy della distribuzione. Imposta un profilo come predefinito per avviarlo con quello.",
       "edit": "Modifica",
       "deleteProfile": "Elimina profilo",
       "backToProfiles": "← Torna ai profili",
@@ -3424,6 +3450,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-… (se richiesto)"
+      },
+      "chatgpt": {
+        "account": "Account ChatGPT",
+        "intro": "Usa il tuo piano ChatGPT invece di una chiave API. Il browser apre la pagina di accesso di OpenAI, dove autorizzi GeoLibre a usare il tuo piano.",
+        "continue": "Continua con ChatGPT",
+        "waiting": "In attesa che tu completi l'accesso nel browser…",
+        "openAgain": "Riapri il browser",
+        "signedInAs": "Accesso effettuato come {{email}}",
+        "usingPlan": "Stai usando il tuo piano ChatGPT.",
+        "planDeclined": "GeoLibre non è autorizzato a usare il tuo piano ChatGPT. Accedi di nuovo e consentilo.",
+        "signInAgain": "Accedi di nuovo",
+        "notRemembered": "Il portachiavi di sistema non è disponibile, quindi questo accesso dura fino alla chiusura di GeoLibre.",
+        "signOut": "Esci",
+        "useAnotherAccount": "Usa un altro account",
+        "usage": "Utilizzo e app connesse",
+        "revokeUnconfirmed": "Disconnesso qui, ma OpenAI non ha confermato la chiusura della sessione. Per sicurezza, disconnetti GeoLibre nelle impostazioni di ChatGPT.",
+        "desktopOnly": "L'accesso con ChatGPT è disponibile nell'app desktop di GeoLibre."
       }
     }
   },
@@ -3917,6 +3960,7 @@
       "difference": "Differenza",
       "union": "Unione",
       "spatialJoin": "Join spaziale",
+      "summarizeWithin": "Riassumi all'interno",
       "attributeJoin": "Join per attributi",
       "selectByValue": "Seleziona per valore",
       "selectByLocation": "Seleziona per posizione",
@@ -4238,6 +4282,8 @@
         "missing-source": "Il layer non ha una sorgente dati leggibile.",
         "format": "Il formato file del layer non è supportato.",
         "remote-file": "Le sorgenti file QGIS remote non sono ancora supportate.",
+        "remote-unreadable": "Impossibile scaricare o leggere il file remoto.",
+        "wmts": "I layer WMTS non vengono ancora importati. Aggiungi invece il servizio dal menu Aggiungi dati.",
         "network-path": "I percorsi di condivisione di rete non vengono caricati per motivi di sicurezza.",
         "browser-local-file": "Il file locale è referenziato, ma i browser non possono riaprire i percorsi dati di QGIS. Usa GeoLibre Desktop per caricarlo.",
         "browser-local-raster": "Il raster è referenziato tramite un percorso locale. Usa GeoLibre Desktop per caricarlo.",
@@ -4355,6 +4401,7 @@
       "loadingVtpk": "Apertura del pacchetto di tile…",
       "loadingVtpkDesc": "Lettura della directory del pacchetto e del suo stile",
       "projectName": "Nome del progetto",
+      "untitledProject": "Progetto senza titolo",
       "storymapEllipsis": "Mappa narrativa...",
       "pointerElevationNoticeTitle": "La quota usa un servizio pubblico",
       "pointerElevationNoticeDesc": "La quota è ricavata dal terreno 3D della mappa quando è attivo, senza inviare nulla. Senza terreno 3D viene interrogata l'API pubblica Open-Meteo e le coordinate sotto il puntatore lasciano il dispositivo.",
@@ -5752,6 +5799,7 @@
     "setupTitle": "Configura l'assistente IA",
     "setupStatus": "L'assistente ha bisogno di un provider IA per elaborare le risposte. Aggiungi le credenziali di uno dei provider qui sotto e il pannello passerà alla modalità chat non appena salvi.",
     "setupProviders": "Aggiungi le credenziali di uno dei provider",
+    "setupSignIn": "Accedi in Impostazioni → Provider IA",
     "setupOpenSettings": "Apri Impostazioni → Provider IA",
     "thinking": "Elaborazione…",
     "toolError": "non riuscito",
@@ -6534,6 +6582,26 @@
                 "inner": "Interno (mantiene solo gli elementi corrispondenti)",
                 "left": "Sinistro (mantiene tutti gli elementi di input)"
               }
+            }
+          }
+        },
+        "summarize-within": {
+          "name": "Riassumi all'interno",
+          "description": "Conta gli elementi di un altro layer che intersecano ogni poligono, riassume un campo numerico e misura quanta parte di ogni poligono coprono",
+          "params": {
+            "layer": {
+              "label": "Layer poligonale"
+            },
+            "overlay": {
+              "label": "Layer da riassumere"
+            },
+            "field": {
+              "label": "Campo numerico",
+              "description": "Facoltativo. Aggiunge somma, media, minimo e massimo di questo campo per ogni poligono."
+            },
+            "min_overlap_pct": {
+              "label": "Ignora sovrapposizioni inferiori a (%)",
+              "description": "Quando il layer da riassumere contiene poligoni, salta quelli che coprono meno di questa quota di un poligono, come le schegge lungo i bordi condivisi."
             }
           }
         },
@@ -8565,6 +8633,7 @@
     "loadingAttributes": "Caricamento degli attributi del layer…",
     "requiresVectorLayer": "La tabella degli attributi richiede un layer vettoriale o un layer di query DuckDB.",
     "invalidJson": "JSON non valido",
+    "nullValue": "NULL",
     "editCellAria": "Modifica {{col}} per l'elemento {{featureId}}",
     "resizeColumn": "Ridimensiona la colonna {{name}}",
     "renameFieldAria": "Rinomina il campo {{name}}",
@@ -9453,7 +9522,7 @@
     "exportStyleDataNotReady": "I dati del layer non sono ancora pronti. Riprova tra un momento.",
     "exportStyleNeedsFeatures": "L'esportazione dello stile richiede un layer vettoriale con elementi.",
     "exportStyleError": "Impossibile esportare lo stile di questo layer.",
-    "importStyle": "Importa stile (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "Importa stile (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Importa stile da testo…",
     "importStyleFromTextDescription": "Incolla uno stile GeoLibre, Mapbox GL, SLD o QML. Il formato viene riconosciuto dal testo.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",
@@ -9580,6 +9649,9 @@
     "hiddenByGroup": "Nascosto perché il gruppo non è visibile",
     "empty": "Nessun layer di dati. Aggiungi dati dalla barra degli strumenti.",
     "emptyBeginner": "Nessun layer ancora presente. Aggiungi mappe di base tramite Plugin → Mappe di base, oppure i tuoi dati tramite il menu Aggiungi dati.",
+    "emptyBeginnerBasemapsOnly": "Ancora nessun layer. Aggiungi mappe di base da Plugin → Mappe di base.",
+    "emptyBeginnerDataOnly": "Ancora nessun layer. Aggiungi i tuoi dati dal menu Aggiungi dati.",
+    "emptyNoAdd": "Nessun layer di dati.",
     "hideAllLayers": "Nascondi tutti i layer",
     "showAllLayers": "Mostra tutti i layer",
     "compactView": "Vista compatta",
@@ -9897,6 +9969,9 @@
     "localRasterNotRestored_other": "Impossibile ripristinare {{count}} layer raster locali",
     "localRasterNotRestoredDesc": "Caricati da un file locale: {{names}}. Il progetto non contiene dati raster oppure non è stato possibile leggere il file. Aggiungi di nuovo il file."
   },
+  "zarrPanel": {
+    "selectorUnmatched": "Valore del selettore non trovato ({{values}}). Usa un valore di coordinata, una data sull'asse temporale o un indice."
+  },
   "attributeForm": {
     "error": {
       "required": "È richiesto un valore",
@@ -10049,7 +10124,8 @@
     "panelRenderFailed": "Impossibile aprire il pannello «{{name}}».",
     "sharedSettingsFailed": "Impossibile caricare le impostazioni condivise dal link, quindi vengono usate le tue impostazioni.",
     "sharedLanguageFailed": "Impossibile passare alla lingua richiesta dalle impostazioni condivise.",
-    "languageCatalogFailed": "Impossibile caricare la traduzione {{language}}, quindi GeoLibre è mostrato in inglese."
+    "languageCatalogFailed": "Impossibile caricare la traduzione {{language}}, quindi GeoLibre è mostrato in inglese.",
+    "dataUrlLoadFailed": "Impossibile caricare l'URL dei dati."
   },
   "shell": {
     "workspaceTitle": "Area di lavoro cartografica di GeoLibre",

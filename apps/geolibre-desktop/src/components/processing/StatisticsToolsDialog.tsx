@@ -25,6 +25,7 @@ import { Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { buildSymbologyStyle } from "../../lib/assistant/symbology";
+import { uniqueLayerName } from "../../lib/unique-layer-name";
 import { beginProcessingRun, type ProcessingRunTracker } from "../../lib/processing-history";
 import {
   translateParameter,
@@ -225,8 +226,9 @@ export function StatisticsToolsDialog({
         appendLog(`No features produced for "${name}"`);
         return;
       }
-      const layerId = addGeoJsonLayer(name, fc);
-      runTrackerRef.current?.addOutputLayer(name);
+      const layerName = uniqueLayerName(name, useAppStore.getState().layers);
+      const layerId = addGeoJsonLayer(layerName, fc);
+      runTrackerRef.current?.addOutputLayer(layerName);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       // A score column says nothing under the default single color, so a tool
       // that produces one hands the field to the graduated renderer and the

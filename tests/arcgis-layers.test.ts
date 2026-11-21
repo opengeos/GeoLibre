@@ -1410,8 +1410,10 @@ describe("ArcGIS native point styles and altitude", () => {
     const part = plan.parts[0];
     assert.equal(part.renderer.type, "heatmap");
     assert.deepEqual(
+      // Weights are scaled by the field maximum (3) before intensity, as on the
+      // MapLibre heatmap (#3471): 3 / 3 * 2 = 2, and negatives clamp to 0.
       part.features?.features.map((f) => f.properties?.gl__weight),
-      [6, 0],
+      [2, 0],
     );
     assert.equal(part.markerStyle, undefined);
     if (part.renderer.type !== "heatmap") return;
@@ -1453,7 +1455,8 @@ describe("ArcGIS native point styles and altitude", () => {
       plan.parts.map((part) => part.renderer.type),
       ["simple", "simple", "heatmap"],
     );
-    assert.equal(plan.parts[2].features?.features[0].properties?.gl__weight, 3);
+    // Every point weighs the field maximum, so each normalizes to 1.
+    assert.equal(plan.parts[2].features?.features[0].properties?.gl__weight, 1);
   });
   it("clusters in 2D and restores individual symbols in scenes", () => {
     const layer = {

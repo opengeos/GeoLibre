@@ -1,5 +1,12 @@
-import { CESIUM_BING_AERIAL_ASSET_ID, type CesiumBasemapImagery } from "@geolibre/core";
+import {
+  CESIUM_BING_AERIAL_ASSET_ID,
+  type CesiumBasemapImagery,
+  USGS_WMS_PROTOCOL,
+} from "@geolibre/core";
 import type { CesiumWidget, ImageryLayer, ImageryProvider } from "@cesium/engine";
+import { ProtocolImageryProvider } from "./cesium-protocol-imagery";
+import { protocolScheme } from "./protocol-tiles";
+import { ensureUsgsWmsProtocol } from "./usgs-wms-protocol";
 
 // Draws the project basemap on the Cesium globe. `@geolibre/core`'s
 // `basemapToCesiumImagery` decides *what* to show (it reads the basemap
@@ -63,6 +70,17 @@ function templateProvider(
     scheme?: "tms";
   },
 ): ImageryProvider {
+  if (protocolScheme(template) === USGS_WMS_PROTOCOL) {
+    // The reprojected USGS bodies (Mercury, Venus, ...) are drawn by a MapLibre
+    // custom protocol, not HTTP, so read the tiles through that handler.
+    ensureUsgsWmsProtocol();
+    return new ProtocolImageryProvider(Cesium, {
+      template,
+      scheme: options.scheme,
+      maximumLevel: options.maximumLevel,
+      credit: options.attribution,
+    });
+  }
   const url = options.scheme === "tms" ? template.replace("{y}", "{reverseY}") : template;
   return new Cesium.UrlTemplateImageryProvider({
     url,

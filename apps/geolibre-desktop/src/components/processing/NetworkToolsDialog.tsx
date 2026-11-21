@@ -27,6 +27,7 @@ import { Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { beginProcessingRun, type ProcessingRunTracker } from "../../lib/processing-history";
+import { uniqueLayerName } from "../../lib/unique-layer-name";
 import {
   translateParameter,
   translateToolDescription,
@@ -177,8 +178,9 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
         appendLog(`No features produced for "${name}"`);
         return;
       }
-      const layerId = addGeoJsonLayer(name, fc);
-      runTrackerRef.current?.addOutputLayer(name);
+      const layerName = uniqueLayerName(name, useAppStore.getState().layers);
+      const layerId = addGeoJsonLayer(layerName, fc);
+      runTrackerRef.current?.addOutputLayer(layerName);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
     },

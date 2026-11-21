@@ -26,8 +26,10 @@ import {
 import {
   type ExcelWorksheet,
   isExcelFile,
+  readDelimitedTextDownload,
   readExcelWorksheets,
 } from "../../../../lib/excel-workbook";
+import { readCappedBytes } from "../../../../lib/data-url";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
 import {
   COMMON_CRS_PRESETS,
@@ -104,6 +106,9 @@ export function DelimitedTextSource() {
     worksheets?: ExcelWorksheet[];
   } | null>(null);
   const [selectedWorksheet, setSelectedWorksheet] = useState("");
+  // Bumped whenever the source changes (mode, URL, or picked file), so a URL
+  // workbook download that finishes after the change cannot overwrite it.
+  const sourceGenerationRef = useRef(0);
   // Whether points are built from coordinate columns (default, unchanged
   // behaviour) or by geocoding an address composed from one or more columns.
   const [delimitedTextImportMode, setDelimitedTextImportMode] =
@@ -139,6 +144,7 @@ export function DelimitedTextSource() {
   };
 
   const handleDelimitedTextModeChange = (mode: DelimitedTextMode) => {
+    sourceGenerationRef.current += 1;
     setDelimitedTextMode(mode);
     setSelectedDelimitedText(null);
     setSelectedWorksheet("");
@@ -158,9 +164,15 @@ export function DelimitedTextSource() {
     );
   };
 
+  /**
+   * Reads the chosen file or URL as delimited text. `workbook` marks text
+   * converted from an Excel sheet, which is always comma-separated whatever
+   * delimiter the form shows.
+   */
   const readDelimitedTextSource = async (): Promise<{
     sourcePath: string;
     text: string;
+    workbook: boolean;
   }> => {
     if (delimitedTextMode === "file") {
       if (!selectedDelimitedText) {
@@ -172,20 +184,40 @@ export function DelimitedTextSource() {
       return {
         sourcePath: selectedDelimitedText.path,
         text: worksheet?.toCsv() ?? selectedDelimitedText.text,
+        workbook: Boolean(worksheet),
       };
     }
 
     const sourcePath = delimitedTextUrl.trim();
     if (!sourcePath) throw new Error(t("addData.delimitedText.errorUrl"));
 
+    // A workbook already downloaded from this URL (by Retrieve columns): read
+    // the sheet picked since rather than downloading it again.
+    if (selectedDelimitedText?.path === sourcePath && selectedDelimitedText.worksheets) {
+      const { worksheets } = selectedDelimitedText;
+      const worksheet = worksheets.find((item) => item.name === selectedWorksheet) ?? worksheets[0];
+      if (worksheet) return { sourcePath, text: worksheet.toCsv(), workbook: true };
+    }
+
+    const generation = sourceGenerationRef.current;
     const response = await fetch(sourcePath);
     if (!response.ok) {
       throw new Error(t("addData.common.requestFailed", { status: response.status }));
     }
-    return {
-      sourcePath,
-      text: await response.text(),
-    };
+    // Capped like a `?data=` download; a workbook is then read as one, not as text.
+    const bytes = await readCappedBytes(response, sourcePath);
+    const download = await readDelimitedTextDownload(sourcePath, bytes.buffer as ArrayBuffer);
+    // The source changed while downloading: drop this result, keep what replaced it.
+    if (generation !== sourceGenerationRef.current) {
+      throw new DOMException("The source changed while downloading.", "AbortError");
+    }
+    if ("text" in download) return { sourcePath, text: download.text, workbook: false };
+    const [first] = download.worksheets;
+    if (!first) throw new Error(t("addData.delimitedText.errorWorkbookEmpty"));
+    setDelimitedTextDelimiter("comma");
+    setSelectedWorksheet(first.name);
+    setSelectedDelimitedText({ path: sourcePath, text: "", worksheets: download.worksheets });
+    return { sourcePath, text: first.toCsv(), workbook: true };
   };
 
   const handleChooseDelimitedText = async () => {
@@ -203,6 +235,7 @@ export function DelimitedTextSource() {
         readText: true,
       });
       if (!result) return;
+      sourceGenerationRef.current += 1;
       const worksheets =
         isExcelFile(result.path) && result.data
           ? await readExcelWorksheets(result.data)
@@ -238,11 +271,10 @@ export function DelimitedTextSource() {
     setIsRetrievingDelimitedTextColumns(true);
 
     try {
-      const delimiter = resolveDelimitedTextDelimiter(
-        delimitedTextDelimiter,
-        delimitedTextCustomDelimiter,
-      );
-      const { text } = await readDelimitedTextSource();
+      const { text, workbook } = await readDelimitedTextSource();
+      const delimiter = workbook
+        ? ","
+        : resolveDelimitedTextDelimiter(delimitedTextDelimiter, delimitedTextCustomDelimiter);
       const fields = parseDelimitedTextFields(text, delimiter);
       setDelimitedTextFields(fields);
       // Resolve the coordinate columns as an all-or-nothing pair so the file is
@@ -279,6 +311,8 @@ export function DelimitedTextSource() {
             }),
       );
     } catch (err) {
+      // A download superseded by a newer source: its columns no longer apply.
+      if (err instanceof DOMException && err.name === "AbortError") return;
       source.setError(errorMessage(err, t("addData.delimitedText.errorRetrieveColumns")));
       setDelimitedTextFields([]);
     } finally {
@@ -457,11 +491,18 @@ export function DelimitedTextSource() {
 
   const handleSubmit = source.runSubmit(async () => {
     const name = source.layerName.trim() || defaultName;
-    const delimiter = resolveDelimitedTextDelimiter(
-      delimitedTextDelimiter,
-      delimitedTextCustomDelimiter,
-    );
-    const { sourcePath, text } = await readDelimitedTextSource();
+    let read: Awaited<ReturnType<typeof readDelimitedTextSource>>;
+    try {
+      read = await readDelimitedTextSource();
+    } catch (error) {
+      // Superseded by a newer source while downloading: nothing to add or report.
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      throw error;
+    }
+    const { sourcePath, text, workbook } = read;
+    const delimiter = workbook
+      ? ","
+      : resolveDelimitedTextDelimiter(delimitedTextDelimiter, delimitedTextCustomDelimiter);
     if (!text) throw new Error(t("addData.delimitedText.errorDataMissing"));
 
     if (delimitedTextImportMode === "addresses") {
@@ -545,6 +586,29 @@ export function DelimitedTextSource() {
   const missingCustomDelimiter =
     delimitedTextDelimiter === "custom" && !delimitedTextCustomDelimiter.trim();
 
+  // An Excel workbook (a picked file or a downloaded URL) offers its sheets.
+  const worksheetSelect = selectedDelimitedText?.worksheets ? (
+    <div className="space-y-1.5">
+      <Label htmlFor="delimited-text-worksheet">{t("addData.delimitedText.worksheet")}</Label>
+      <Select
+        id="delimited-text-worksheet"
+        value={selectedWorksheet}
+        onChange={(event) => {
+          setSelectedWorksheet(event.target.value);
+          setDelimitedTextDelimiter("comma");
+          resetDelimitedTextColumns();
+          resetDelimitedTextCrs();
+        }}
+      >
+        {selectedDelimitedText.worksheets.map((worksheet) => (
+          <option key={worksheet.name} value={worksheet.name}>
+            {worksheet.name}
+          </option>
+        ))}
+      </Select>
+    </div>
+  ) : null;
+
   return (
     <AddDataSourceForm
       layerName={source.layerName}
@@ -585,43 +649,27 @@ export function DelimitedTextSource() {
                   : t("addData.common.noFileSelected")}
               </span>
             </div>
-            {selectedDelimitedText?.worksheets ? (
-              <div className="space-y-1.5">
-                <Label htmlFor="delimited-text-worksheet">
-                  {t("addData.delimitedText.worksheet")}
-                </Label>
-                <Select
-                  id="delimited-text-worksheet"
-                  value={selectedWorksheet}
-                  onChange={(event) => {
-                    setSelectedWorksheet(event.target.value);
-                    setDelimitedTextDelimiter("comma");
-                    resetDelimitedTextColumns();
-                    resetDelimitedTextCrs();
-                  }}
-                >
-                  {selectedDelimitedText.worksheets.map((worksheet) => (
-                    <option key={worksheet.name} value={worksheet.name}>
-                      {worksheet.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            ) : null}
+            {worksheetSelect}
           </div>
         ) : (
-          <div className="space-y-1.5">
-            <Label htmlFor="delimited-text-url">{t("addData.delimitedText.url")}</Label>
-            <Input
-              id="delimited-text-url"
-              placeholder={t("addData.delimitedText.urlPlaceholder")}
-              value={delimitedTextUrl}
-              onChange={(event) => {
-                setDelimitedTextUrl(event.target.value);
-                resetDelimitedTextColumns();
-                resetDelimitedTextCrs();
-              }}
-            />
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="delimited-text-url">{t("addData.delimitedText.url")}</Label>
+              <Input
+                id="delimited-text-url"
+                placeholder={t("addData.delimitedText.urlPlaceholder")}
+                value={delimitedTextUrl}
+                onChange={(event) => {
+                  sourceGenerationRef.current += 1;
+                  setDelimitedTextUrl(event.target.value);
+                  setSelectedDelimitedText(null);
+                  setSelectedWorksheet("");
+                  resetDelimitedTextColumns();
+                  resetDelimitedTextCrs();
+                }}
+              />
+            </div>
+            {worksheetSelect}
           </div>
         )}
 
@@ -825,6 +873,7 @@ export function DelimitedTextSource() {
             { label: t("addData.delimitedText.sampleLabel"), value: DEFAULT_DELIMITED_TEXT_URL },
           ]}
           onSelect={(url) => {
+            sourceGenerationRef.current += 1;
             setDelimitedTextMode("url");
             setSelectedDelimitedText(null);
             setSelectedWorksheet("");

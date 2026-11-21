@@ -226,6 +226,8 @@ describe("command-profile-gates", () => {
     assert.equal(commandMenuItem("proc.whitebox"), "processing.whitebox");
     assert.equal(commandMenuItem("proc.whitebox.slope"), "processing.whitebox");
     assert.equal(commandMenuItem("project.save-as"), "project.saveAs");
+    assert.equal(commandMenuItem("project.save-layer-edits"), "project.saveLayerEdits");
+    assert.equal(commandMenuItem("project.export-geojson-zip"), "project.exportGeojsonZip");
     assert.equal(commandMenuItem("view.reset-pitch"), "view.resetPitch");
     assert.equal(commandMenuItem("view.reset-pitch-bearing"), "view.resetPitchBearing");
     assert.equal(commandMenuItem("control.compass"), "controls.mapControl.compass");

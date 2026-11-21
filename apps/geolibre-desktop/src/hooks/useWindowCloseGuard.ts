@@ -1,6 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import i18next from "i18next";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { confirmDiscardAttributeDrafts } from "../lib/attribute-draft-guard";
 import { isTauri } from "../lib/is-tauri";
 import { notify } from "../lib/notify";
 
@@ -63,10 +64,21 @@ export function useWindowCloseGuard(saveProject: () => Promise<boolean>): Window
     void import("@tauri-apps/api/window")
       .then(({ getCurrentWindow }) =>
         getCurrentWindow().onCloseRequested((event) => {
-          // Not prevented: the API destroys the window after this returns.
-          if (!useAppStore.getState().isDirty) return;
+          // A prompt or its save is in flight: it decides, and it asks about
+          // attribute drafts before destroying the window. Closing now could
+          // drop them even once the project turned clean meanwhile.
+          if (savingRef.current || promptOpenRef.current) {
+            event.preventDefault();
+            return;
+          }
+          if (!useAppStore.getState().isDirty) {
+            // Attribute drafts are not part of the project and never mark it
+            // dirty, so a clean project still asks about them. Not prevented:
+            // the API destroys the window after this returns.
+            if (!confirmDiscardAttributeDrafts()) event.preventDefault();
+            return;
+          }
           event.preventDefault();
-          if (savingRef.current || promptOpenRef.current) return;
           promptOpenRef.current = true;
           promptGenerationRef.current = useAppStore.getState().projectGeneration;
           setWindowClosePromptOpen(true);
@@ -126,6 +138,9 @@ export function useWindowCloseGuard(saveProject: () => Promise<boolean>): Window
       // while it was writing), so check the flag too.
       if (!saved || useAppStore.getState().isDirty) return;
     }
+    // Asked once the close is certain, after Save or Discard: the save prompt's
+    // Save does not keep attribute drafts, and a Cancel above keeps them.
+    if (!confirmDiscardAttributeDrafts()) return;
     try {
       await destroyCurrentWindow();
     } catch (error) {

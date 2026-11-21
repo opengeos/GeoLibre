@@ -1,4 +1,4 @@
-import { useAppStore, FEET_PER_METER, METERS_PER_MILE } from "@geolibre/core";
+import { useAppStore } from "@geolibre/core";
 import { rendererCapabilities, type MapEngine } from "@geolibre/map";
 import { isGeoEditorUsingRightClick } from "@geolibre/plugins";
 import {
@@ -30,7 +30,17 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import { useTouchUi } from "../../hooks/useTouchUi";
 import { ContextMenuGestureTracker, type ContextMenuRequest } from "../../lib/context-menu-gesture";
+import { triggerHaptic } from "../../lib/haptics";
+import {
+  copyContextText,
+  formatContextCoords,
+  formatContextViewshedRadius,
+  liveContextZoom,
+  VIEWSHED_RADII_METERS,
+} from "../../lib/map-context-helpers";
+import { MapContextTouchSheet } from "./mobile/MapContextTouchSheet";
 import { googleEarthUrl, googleMapsUrl } from "../../lib/external-map-links";
 import { openExternalLink } from "../../lib/open-external";
 import {
@@ -58,39 +68,6 @@ interface ContextMenuState {
   /** Cursor position in viewport pixels, used to anchor the popup. */
   x: number;
   y: number;
-}
-
-/** Decimal places used when formatting and copying coordinates. */
-const COORD_PRECISION = 6;
-
-/** Format a clicked point as "lat, lng" to mirror the Google Maps convention. */
-function formatCoords(lat: number, lng: number): string {
-  return `${lat.toFixed(COORD_PRECISION)}, ${lng.toFixed(COORD_PRECISION)}`;
-}
-
-async function copyText(value: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(value);
-  } catch {
-    // Clipboard access can be denied (insecure context, permissions). Fall back
-    // to a transient textarea + execCommand so the copy still works offline.
-    const textarea = document.createElement("textarea");
-    textarea.value = value;
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.select();
-    try {
-      document.execCommand("copy");
-    } finally {
-      document.body.removeChild(textarea);
-    }
-  }
-}
-
-/** Read the camera zoom only while the engine still owns a render surface. */
-function liveZoom(engine: MapEngine | null | undefined): number | undefined {
-  return engine?.getRenderSurface() ? engine.readView().zoom : undefined;
 }
 
 /**
@@ -123,6 +100,7 @@ export function MapContextMenu({
   onExplorePlace?: (lat: number, lng: number) => void;
 }) {
   const { i18n, t } = useTranslation();
+  const { touchUi } = useTouchUi();
   // `menu` keeps the last anchor/coordinate even while closing, so the exit
   // animation plays from the right spot; `open` drives visibility separately.
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
@@ -134,13 +112,14 @@ export function MapContextMenu({
     if (!surface) return;
     const canvas = surface.getCanvas();
 
-    const openAt = ({ clientX, clientY }: ContextMenuRequest) => {
+    const openAt = ({ clientX, clientY, isTouch }: ContextMenuRequest) => {
       const rect = canvas.getBoundingClientRect();
       const coordinate = surface.unproject([clientX - rect.left, clientY - rect.top]);
       // Globe renderers can return no coordinate when the pointer is over
       // empty space beyond the planet. In that case there is no point for the
       // menu actions to operate on.
       if (!coordinate) return;
+      if (isTouch) triggerHaptic("light");
       seqRef.current += 1;
       setMenu({
         id: seqRef.current,
@@ -158,7 +137,9 @@ export function MapContextMenu({
     const tracker = new ContextMenuGestureTracker(openAt);
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (event.pointerType === "touch") return;
+      // Both the geo editor and active map feature-selection gestures own
+      // pointer input on the canvas, so stand down while either is active.
+      if (isGeoEditorUsingRightClick() || useAppStore.getState().featureSelectionActive) return;
       tracker.pointerDown(event);
     };
     const handlePointerMove = (event: PointerEvent) => tracker.pointerMove(event);
@@ -175,7 +156,9 @@ export function MapContextMenu({
       event.preventDefault();
       // The geo editor owns right-click while drawing or editing: it removes
       // the vertex under the cursor or finishes the draw (discussion #2750).
-      if (isGeoEditorUsingRightClick()) return;
+      // Active feature-selection gestures likewise suppress context menus so
+      // Android's native long-press event cannot interrupt a selection drag.
+      if (isGeoEditorUsingRightClick() || useAppStore.getState().featureSelectionActive) return;
       tracker.contextMenu(event);
     };
 
@@ -201,7 +184,7 @@ export function MapContextMenu({
 
   const copyCoords = useCallback(() => {
     if (!menu) return;
-    void copyText(formatCoords(menu.lat, menu.lng));
+    void copyContextText(formatContextCoords(menu.lat, menu.lng));
   }, [menu]);
 
   const copyGeoJson = useCallback(() => {
@@ -211,7 +194,7 @@ export function MapContextMenu({
       geometry: { type: "Point", coordinates: [menu.lng, menu.lat] },
       properties: {},
     };
-    void copyText(JSON.stringify(feature, null, 2));
+    void copyContextText(JSON.stringify(feature, null, 2));
   }, [menu]);
 
   const centerHere = useCallback(() => {
@@ -225,7 +208,7 @@ export function MapContextMenu({
     // selection, omit zoom so the move still recenters instead of snapping to
     // zoom 1. MapLibre clamps the +1 to the configured maxZoom on its own.
     const engine = mapControllerRef.current;
-    const currentZoom = liveZoom(engine);
+    const currentZoom = liveContextZoom(engine);
     engine?.flyTo({
       center: [menu.lng, menu.lat],
       ...(currentZoom !== undefined ? { zoom: currentZoom + 1 } : {}),
@@ -245,14 +228,14 @@ export function MapContextMenu({
   const viewInGoogleMaps = useCallback(() => {
     if (!menu) return;
     const engine = mapControllerRef.current;
-    const zoom = liveZoom(engine) ?? 12;
+    const zoom = liveContextZoom(engine) ?? 12;
     void openExternalLink(googleMapsUrl(menu.lat, menu.lng, zoom, { marker: true }));
   }, [menu, mapControllerRef]);
 
   const viewInGoogleEarth = useCallback(() => {
     if (!menu) return;
     const engine = mapControllerRef.current;
-    const zoom = liveZoom(engine) ?? 12;
+    const zoom = liveContextZoom(engine) ?? 12;
     void openExternalLink(googleEarthUrl(menu.lat, menu.lng, zoom));
   }, [menu, mapControllerRef]);
 
@@ -263,33 +246,8 @@ export function MapContextMenu({
   const bufferPresets = useMemo(() => bufferPresetsFor(scaleUnit), [scaleUnit]);
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
 
-  /**
-   * Radius label for the viewshed entries.
-   *
-   * Follows the scale bar's unit system like the buffer ladder above, so an
-   * imperial-preference user does not get miles for buffers and kilometres for
-   * viewsheds in the same submenu. The radii themselves stay metric constants —
-   * they size the analysis, not the label — so an imperial reading is a
-   * conversion of the same distance rather than a different one.
-   */
   const formatViewshedRadius = useCallback(
-    (meters: number): string => {
-      const imperial = scaleUnit === "imperial";
-      const perUnit = imperial ? METERS_PER_MILE : 1000;
-      const large = meters >= perUnit;
-      const value = large ? meters / perUnit : imperial ? meters * FEET_PER_METER : meters;
-      const formatted = new Intl.NumberFormat(i18n.language, {
-        maximumFractionDigits: large ? 1 : 0,
-      }).format(value);
-      const unit = large
-        ? imperial
-          ? t("quickAnalysis.unit.miles")
-          : t("quickAnalysis.unit.kilometers")
-        : imperial
-          ? t("quickAnalysis.unit.feet")
-          : t("quickAnalysis.unit.meters");
-      return `${formatted} ${unit}`;
-    },
+    (meters: number) => formatContextViewshedRadius(meters, scaleUnit, i18n.language, t),
     [scaleUnit, i18n.language, t],
   );
 
@@ -297,10 +255,6 @@ export function MapContextMenu({
     (preset: QuickBufferPreset) => formatBufferDistance(preset, i18n.language, t),
     [i18n.language, t],
   );
-
-  // Viewshed radii. Small enough that the tile fetch and the line-of-sight walk
-  // stay interactive; the 50km cap in the processing module is the hard limit.
-  const VIEWSHED_RADII_METERS = [2000, 5000, 15000];
 
   const [viewshedBusy, setViewshedBusy] = useState(false);
   const viewshedHere = useCallback(
@@ -438,6 +392,45 @@ export function MapContextMenu({
     pendingTravelPoint.current = null;
   }, []);
 
+  if (touchUi) {
+    return (
+      <>
+        <RoutingConsentDialog
+          open={pendingTravelMode !== null}
+          onCancel={cancelTravelTime}
+          onConfirm={confirmTravelTime}
+        />
+        {menu ? (
+          <MapContextTouchSheet
+            open={open}
+            onOpenChange={setOpen}
+            coordLabel={formatContextCoords(menu.lat, menu.lng)}
+            hasExplorePlace={Boolean(onExplorePlace)}
+            lineOfSightAvailable={lineOfSightAvailable}
+            viewshedBusy={viewshedBusy}
+            bufferPresets={bufferPresets}
+            viewshedRadiiMeters={VIEWSHED_RADII_METERS}
+            formatDistance={formatDistance}
+            formatViewshedRadius={formatViewshedRadius}
+            onCopyCoords={copyCoords}
+            onExplorePlace={explorePlace}
+            onCopyGeoJson={copyGeoJson}
+            onCenterHere={centerHere}
+            onZoomInHere={zoomInHere}
+            onDirections={directionsHere}
+            onBufferHere={bufferHere}
+            onTravelTimeHere={travelTimeHere}
+            onViewshedHere={viewshedHere}
+            onLineOfSightHere={lineOfSightHere}
+            onOpenBufferProcessing={() => setVectorToolOpen("buffer")}
+            onViewInGoogleMaps={viewInGoogleMaps}
+            onViewInGoogleEarth={viewInGoogleEarth}
+          />
+        ) : null}
+      </>
+    );
+  }
+
   return (
     <>
       <RoutingConsentDialog
@@ -470,7 +463,7 @@ export function MapContextMenu({
             title={t("mapContextMenu.copyCoordinatesHint")}
           >
             <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <span className="truncate">{menu ? formatCoords(menu.lat, menu.lng) : ""}</span>
+            <span className="truncate">{menu ? formatContextCoords(menu.lat, menu.lng) : ""}</span>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">

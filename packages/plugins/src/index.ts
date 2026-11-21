@@ -624,6 +624,8 @@ export {
   buildEditorSaveCollection,
 } from "./plugins/maplibre-geo-editor";
 export {
+  stripEditorProperties,
+  isInternalEditorProperty,
   listViewVectorLayers,
   resolveStoreLayerViewSource,
   queryViewLayerFeatures,
@@ -790,6 +792,7 @@ export {
   type ArcGisPortalAuth,
   type ArcGisPortalConnection,
 } from "./plugins/maplibre-arcgis-portal";
+export { fetchPortalUser, isTrustedPortalServiceUrl } from "./plugins/arcgis-portal-api";
 export {
   DEFAULT_TENNESSEE_GIS_LABELS,
   maplibreTennesseeGisPlugin,

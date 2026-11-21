@@ -23,7 +23,7 @@ import {
 import { scrubPrintLayoutForLayers } from "../print-layout-config";
 import { getRegionalBasemapByStyleUrl } from "../regional-basemaps";
 import { DEFAULT_BASEMAP, type GeoLibreProject, type LayerGroup } from "../types";
-import { scrubSecondaryPaneLayerVisibility } from "./layer-removal";
+import { scrubAttributeTableDrafts, scrubSecondaryPaneLayerVisibility } from "./layer-removal";
 import type { AppState } from "./types";
 
 /** The fields undo/redo snapshots, restores and compares. */
@@ -241,9 +241,18 @@ function finishHistoryStep(previousBasemapStyleUrl: string): void {
   }
   const secondaryMapViews = scrubSecondaryPaneLayerVisibility(s.secondaryMapViews, danglingPaneIds);
   const printLayout = scrubPrintLayoutForLayers(s.printLayout, layerIds);
+  // Drafts are not undoable, so a step that removes a layer would otherwise
+  // leave its drafts behind with no table to resolve them in.
+  const attributeTableDrafts = scrubAttributeTableDrafts(
+    s.ui.attributeTableDrafts,
+    Object.keys(s.ui.attributeTableDrafts).filter((id) => !layerIds.has(id)),
+  );
   const referencePatch = {
     ...(secondaryMapViews !== s.secondaryMapViews ? { secondaryMapViews } : {}),
     ...(printLayout !== s.printLayout ? { printLayout } : {}),
+    ...(attributeTableDrafts !== s.ui.attributeTableDrafts
+      ? { ui: { ...s.ui, attributeTableDrafts } }
+      : {}),
   };
   const selectionDangling =
     s.selectedLayerId !== null && !s.layers.some((layer) => layer.id === s.selectedLayerId);

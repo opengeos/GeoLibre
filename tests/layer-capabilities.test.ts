@@ -51,6 +51,22 @@ describe("Layer capabilities", () => {
       });
     });
 
+    test("allows Sketches attribute updates while GeoEditor owns feature creation and deletion", () => {
+      const layer = makeLayer({ metadata: { sourceKind: "geoeditor-sketches" } });
+      assert.deepEqual(inferLayerCapabilities(layer), {
+        query: true,
+        create: false,
+        update: true,
+        delete: false,
+        export: true,
+      });
+      assert.equal(canEditLayerGeometry(layer), false);
+      assert.equal(
+        resolveLayerCapabilities({ ...layer, capabilities: { update: false } }).update,
+        false,
+      );
+    });
+
     test("infers read-only for raster layers", () => {
       const layer = makeLayer({ type: "raster", geojson: undefined });
       assert.deepEqual(inferLayerCapabilities(layer), {

@@ -18,6 +18,8 @@ import {
   validateAttributeFormValues,
   excludeHiddenFieldsFromGeojson,
   resolveLayerCapabilities,
+  type AttributeTableDrafts as AttributeDrafts,
+  type AttributeTableDraftTarget,
   type AttributeFormConfig,
   type AttributeFormFieldConfig,
   type AttributeFormFieldError,
@@ -26,6 +28,9 @@ import {
   useLayer,
 } from "@geolibre/core";
 import {
+  SKETCHES_SOURCE_KIND,
+  stripEditorProperties,
+  isInternalEditorProperty,
   arcGISAttachmentObjectId,
   arcGISAttachmentSupport,
   arcGISAttributeConstraints,
@@ -81,6 +86,7 @@ import {
   Download,
   EyeOff,
   LayoutDashboard,
+  LayoutList,
   MoreHorizontal,
   MousePointerSquareDashed,
   Network,
@@ -101,6 +107,7 @@ import {
   Ban,
 } from "lucide-react";
 import {
+  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject,
@@ -113,6 +120,7 @@ import {
 import { isTauri } from "../../lib/tauri-io";
 import { isRefreshableLayer } from "../../lib/layer-refresh";
 import { isLocalFileLayer } from "../../lib/local-file-watch";
+import { AttributeCardList } from "./attribute-table/AttributeCardList";
 import type { LayerRefreshStatus } from "./layer-panel/layer-panel-utils";
 import {
   addColumn,
@@ -128,6 +136,8 @@ import {
   type ColumnMoveDirection,
   type NewColumnType,
   inferColumnTypes,
+  formatAttributeCellText,
+  numericColumnSet,
 } from "../../lib/attribute-columns";
 import { markAttributeEdit } from "../../lib/edited-geometry-save";
 import {
@@ -171,7 +181,7 @@ import { openExternalLink } from "../../lib/open-external";
 type SortDirection = "asc" | "desc";
 type SortKey = "__featureId" | string;
 type ColumnWidths = Record<string, number>;
-type AttributeDrafts = Record<string, Record<string, string>>;
+const EMPTY_DRAFTS: AttributeDrafts = {};
 type AttributeTableRow = {
   featureId: string;
   properties: Record<string, unknown>;
@@ -193,6 +203,14 @@ const MAX_ATTRIBUTE_COLUMN_WIDTH = 520;
 const ESTIMATED_ROW_HEIGHT = 37;
 /** Sticky header plus horizontal scrollbar: the table's non-row height, in px. */
 const ATTRIBUTE_TABLE_CHROME_HEIGHT = 58;
+// The vertical scrollbar (w-3.5) overlays the viewport's inline-end edge, so
+// the last column is widened by this much and padded past it; otherwise the
+// scrollbar covers the end of right-aligned numbers.
+// Both are rem so they track the scrollbar (w-3.5) and cell padding (p-2 /
+// px-2) at any root font size. CELL_PADDING mirrors TableCell/TableHead in
+// packages/ui/src/components/table.tsx and must change with them.
+const VERTICAL_SCROLLBAR_GUTTER = "0.875rem";
+const CELL_PADDING = "0.5rem";
 // Tall enough to keep a few rows visible when the toolbar wraps on laptop widths.
 const DEFAULT_TABLE_HEIGHT = 240;
 const MIN_TABLE_HEIGHT = 96;
@@ -268,6 +286,22 @@ function isInvalidObjectDraft(draft: string, previousValue: unknown): boolean {
   } catch {
     return true;
   }
+}
+
+/**
+ * Serialize a draft target for comparison. DuckDB BIGINT columns hold BigInts,
+ * which JSON.stringify rejects. Encode them as an object under a NUL-prefixed
+ * key no real column carries, so `1n` never matches the string "1n" or "1".
+ */
+function draftTargetJson(target: AttributeTableDraftTarget): string {
+  return JSON.stringify(target, (_key, value: unknown) =>
+    typeof value === "bigint" ? { "\u0000bigint": value.toString() } : value,
+  );
+}
+
+/** Look up a row by its literal feature ID without inheriting Object members. */
+function getAttributeDraftRow(drafts: AttributeDrafts, featureId: string) {
+  return Object.hasOwn(drafts, featureId) ? drafts[featureId] : undefined;
 }
 
 function hasDraftEdits(drafts: AttributeDrafts): boolean {
@@ -414,7 +448,7 @@ function applyDraftsToFeatures(
   const columnTypes = inferColumnTypes(features.map((feature) => feature.properties));
   return features.map((feature, index) => {
     const featureId = String(feature.id ?? index);
-    const rowDrafts = drafts[featureId];
+    const rowDrafts = getAttributeDraftRow(drafts, featureId);
     if (!rowDrafts) return feature;
 
     let properties = draftCandidate(
@@ -577,10 +611,16 @@ interface AttributeTableProps {
     handleRefreshLayer: (layer: GeoLibreLayer) => Promise<void> | void;
     refreshStatuses: Record<string, LayerRefreshStatus>;
   };
+  /** Whether the phone mobile shell is active (propagated from DesktopShell). */
+  mobileShell?: boolean;
 }
 
-export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProps) {
-  const { t } = useTranslation();
+export function AttributeTable({
+  mapControllerRef,
+  refresh,
+  mobileShell = false,
+}: AttributeTableProps) {
+  const { t, i18n } = useTranslation();
   // Column order is visual: in a right-to-left layout the first column renders
   // rightmost, so the move-left/right actions and their guards swap.
   const isRtl = document.documentElement.dir === "rtl";
@@ -595,6 +635,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const selectedFeatureIds = useAppStore((s) => s.selectedFeatureIds);
   const selectFeature = useAppStore((s) => s.selectFeature);
   const selectFeatures = useAppStore((s) => s.selectFeatures);
+  const [cardViewOverride, setCardViewOverride] = useState<boolean | null>(null);
+  const useCardView = mobileShell && (cardViewOverride ?? true);
   const attributeTableOpen = useAppStore((s) => s.ui.attributeTableOpen);
   const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
   const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
@@ -616,8 +658,28 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   // Collapsed shows only the toolbar header, hiding the table body, while the
   // panel stays open. Distinct from closing the panel entirely (the X button).
   const [collapsed, setCollapsed] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [drafts, setDrafts] = useState<AttributeDrafts>({});
+  const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
+  const draftSession = useAppStore((s) =>
+    selectedLayerId ? s.ui.attributeTableDrafts[selectedLayerId] : undefined,
+  );
+  const drafts = draftSession?.values ?? EMPTY_DRAFTS;
+  const setAttributeTableDrafts = useAppStore((s) => s.setAttributeTableDrafts);
+  // A layer with drafts reopens in edit mode, even after the panel remounts.
+  const isEditing =
+    (editingLayerId !== null && editingLayerId === selectedLayerId) || hasDraftEdits(drafts);
+  const setIsEditing = (editing: boolean) => setEditingLayerId(editing ? selectedLayerId : null);
+  const setDrafts = (next: AttributeDrafts | ((current: AttributeDrafts) => AttributeDrafts)) => {
+    if (!selectedLayerId) return;
+    const current =
+      useAppStore.getState().ui.attributeTableDrafts[selectedLayerId]?.values ?? EMPTY_DRAFTS;
+    setAttributeTableDrafts(
+      selectedLayerId,
+      typeof next === "function" ? next(current) : next,
+      // The table's own row map, so the store need not rebuild it (and DuckDB
+      // rows, which have no geojson, are snapshotted too).
+      currentFeatures,
+    );
+  };
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportWarning, setExportWarning] = useState<string | null>(null);
   const deferTableResize = isTauri();
@@ -706,9 +768,12 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     () =>
       features.map((feature, index) => ({
         featureId: String(feature.id ?? index),
-        properties: (feature.properties ?? {}) as Record<string, unknown>,
+        properties:
+          layer?.metadata.sourceKind === SKETCHES_SOURCE_KIND
+            ? stripEditorProperties(feature.properties)
+            : ((feature.properties ?? {}) as Record<string, unknown>),
       })),
-    [features],
+    [features, layer?.metadata.sourceKind],
   );
   const attributeRows: AttributeTableRow[] = isDuckDBLayer
     ? duckDBRowsToAttributeRows(duckdbRows)
@@ -743,6 +808,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const isReadOnlyVectorLayer = isReadOnlyAttributeLayer(layer);
   // While this layer's geometry is being edited in place, attribute edits would
   // race the editor's geometry write-back, so the inline editor is disabled.
+  // Drafts stay in the session when geometry editing finishes. Stable-ID rows
+  // can resume saving; changed positional targets still need reconciliation.
   const geometryEditLayerId = useSyncExternalStore(
     subscribeGeometryEdit,
     getGeometryEditTargetLayerId,
@@ -799,8 +866,54 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     };
   }, [attributeTableOpen, layer, layerCaps.query, mapControllerRef, updateLayer]);
   const hasEdits = hasDraftEdits(drafts);
+  // Never partially save missing targets or apply a positional draft to a
+  // different feature after refresh/undo/sync. Keep the drafts for recovery.
+  const rowIds = useMemo(() => new Set(attributeRows.map((row) => row.featureId)), [attributeRows]);
+  // DuckDB rows are keyed by rendered row index, so a re-query can put another
+  // source row at a drafted index. Compare id-less snapshots of their
+  // properties, which the positional check below treats like GeoJSON rows.
+  const currentFeatures: ReadonlyMap<string, AttributeTableDraftTarget> = useMemo(
+    () =>
+      isDuckDBLayer
+        ? new Map(
+            attributeRows.map((row) => [
+              row.featureId,
+              { type: "Feature", geometry: null, properties: row.properties },
+            ]),
+          )
+        : new Map(features.map((feature, index) => [String(feature.id ?? index), feature])),
+    [attributeRows, features, isDuckDBLayer],
+  );
+  const draftTargets = draftSession?.targets;
+  const unsafeTargetIds = useMemo(
+    () =>
+      new Set(
+        Object.entries(draftTargets ?? {})
+          .filter(([featureId, original]) => {
+            const current = currentFeatures.get(featureId);
+            if (!current) return true;
+            // IDs follow reorders. Without IDs, even a geometry-only change cannot
+            // be distinguished from a different row occupying the same position.
+            return (
+              (original.id == null || current.id == null) &&
+              original !== current &&
+              draftTargetJson(original) !== draftTargetJson(current)
+            );
+          })
+          .map(([featureId]) => featureId),
+      ),
+    [currentFeatures, draftTargets],
+  );
+  const hasUnsafeDraftTargets = Object.entries(drafts).some(
+    ([featureId, row]) =>
+      Object.keys(row).length > 0 &&
+      (!rowIds.has(featureId) ||
+        !draftTargets ||
+        !Object.hasOwn(draftTargets, featureId) ||
+        unsafeTargetIds.has(featureId)),
+  );
   const hasInvalidDrafts = attributeRows.some((row) => {
-    const rowDrafts = drafts[row.featureId];
+    const rowDrafts = getAttributeDraftRow(drafts, row.featureId);
     if (!rowDrafts) return false;
     return Object.entries(rowDrafts).some(([column, draft]) =>
       isInvalidObjectDraft(draft, row.properties[column]),
@@ -893,8 +1006,9 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const hasFormErrors = Object.keys(formDraftErrors).length > 0;
 
   useEffect(() => {
-    setIsEditing(false);
-    setDrafts({});
+    setEditingLayerId(null);
+    // Drafts belong to the layer in the store, so selection and geometry-edit
+    // changes must not discard them. Only reset the transient column UI here.
     // Clear column-management state too, so a rename input or pending delete
     // started on the previous layer cannot apply to a same-named column on the
     // newly selected layer. Suppress the rename Input's onBlur first: clearing
@@ -1042,7 +1156,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   // Row selection with keyboard modifiers (plain / Ctrl-toggle / Shift-range /
   // Shift+Ctrl merge). The branching lives in the pure `computeRowSelection`
   // helper so it can be unit-tested; here we just feed it the current state.
-  const handleRowClick = (featureId: string, event: ReactMouseEvent<HTMLTableRowElement>) => {
+  const handleRowClick = (featureId: string, event: ReactMouseEvent<HTMLElement>) => {
     const additive = event.ctrlKey || event.metaKey;
     const range = event.shiftKey;
     const { ids, anchor } = computeRowSelection({
@@ -1108,9 +1222,11 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   // different position for the selected row). Also when edit mode toggles or the
   // table expands: edit-mode inputs make every row taller (and a collapsed table
   // has no viewport), so a row placed before that change slides out of view.
+  const isCardViewActive = useCardView && !isEditing;
+
   useEffect(() => {
     // `""` is a valid feature id; only `null` means no selection.
-    if (!attributeTableOpen || selectedFeatureId === null) return;
+    if (!attributeTableOpen || selectedFeatureId === null || isCardViewActive) return;
     const index = sorted.findIndex((row) => row.featureId === selectedFeatureId);
     if (index >= 0) rowVirtualizer.scrollToIndex(index, { align: "auto" });
     // `sorted`/`rowVirtualizer` are rebuilt every render and so are intentionally
@@ -1126,6 +1242,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     attributeFilter,
     isEditing,
     collapsed,
+    isCardViewActive,
   ]);
 
   const propKeys = new Set<string>();
@@ -1141,9 +1258,29 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   // that just turned tracking on shows what it is about to maintain (and the
   // Field Calculator's "new field" name check sees them as taken).
   const discoveredColumns = ensureEditorTrackingFields(Array.from(propKeys), layer?.editorTracking);
+  // Displayed columns omit engine metadata and large inline photos; mutation
+  // validation still needs every stored key to avoid overwriting hidden data.
+  const mutationColumns = useMemo(
+    () =>
+      ensureEditorTrackingFields(
+        Array.from(new Set(features.flatMap((feature) => Object.keys(feature.properties ?? {})))),
+        layer?.editorTracking,
+      ),
+    [features, layer?.editorTracking],
+  );
+  const isReservedFieldName = (name: string) =>
+    layer?.metadata.sourceKind === SKETCHES_SOURCE_KIND && isInternalEditorProperty(name);
   const columnSettings = getColumnSettings(layer);
   // Columns rendered in the table, honoring saved order and hidden state.
   const columns = visibleColumns(discoveredColumns, columnSettings);
+  // Number columns read like QGIS: right-aligned, with display-only rounding.
+  // A column's type comes from its first non-null value, as for editing. Keyed
+  // on the column names, not the array, which is rebuilt every render.
+  const columnsKey = columns.join("\u0000");
+  const numericColumns = useMemo(
+    () => numericColumnSet(attributeRows, columnsKey ? columnsKey.split("\u0000") : []),
+    [attributeRows, columnsKey],
+  );
   const hiddenCols = hiddenColumns(discoveredColumns, columnSettings);
   const hiddenColSet = new Set(hiddenCols);
   const tableColumns = ["__featureId", ...columns];
@@ -1156,7 +1293,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const columnWidth = (key: SortKey) =>
     columnWidths[key] ??
     (key === "__featureId" ? DEFAULT_FEATURE_ID_COLUMN_WIDTH : DEFAULT_ATTRIBUTE_COLUMN_WIDTH);
-  const tableWidth = tableColumns.reduce((width, column) => width + columnWidth(column), 0);
+  const columnsWidth = tableColumns.reduce((width, column) => width + columnWidth(column), 0);
+  const tableWidth = `calc(${columnsWidth}px + ${VERTICAL_SCROLLBAR_GUTTER})`;
 
   const columnWidthLimits = (key: SortKey) =>
     key === "__featureId"
@@ -1284,8 +1422,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     previousValue: unknown,
   ) => {
     setDrafts((current) => {
-      const next = { ...current };
-      const row = { ...(next[featureId] ?? {}) };
+      const row = { ...getAttributeDraftRow(current, featureId) };
 
       if (value === formatAttributeValue(previousValue)) {
         delete row[column];
@@ -1293,13 +1430,9 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
         row[column] = value;
       }
 
-      if (Object.keys(row).length === 0) {
-        delete next[featureId];
-      } else {
-        next[featureId] = row;
-      }
-
-      return next;
+      const rows = Object.entries(current).filter(([id]) => id !== featureId);
+      if (Object.keys(row).length > 0) rows.push([featureId, row]);
+      return Object.fromEntries(rows);
     });
   };
 
@@ -1325,7 +1458,15 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     // edit mode (and the dialogs below) can be open across a project reload or
     // a collaborator's change that revokes the capability, and the commit would
     // otherwise still run.
-    if (!layer || !layerCaps.update || !hasEdits || hasInvalidDrafts || hasFormErrors) return false;
+    if (
+      !layer ||
+      !canEnterEditMode ||
+      !hasEdits ||
+      hasUnsafeDraftTargets ||
+      hasInvalidDrafts ||
+      hasFormErrors
+    )
+      return false;
 
     if (isDuckDBLayer) {
       updateDuckDBLayerRows(layer.id, applyDraftsToDuckDBRows(attributeRows, drafts));
@@ -1370,7 +1511,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   });
 
   const geojsonWithDrafts = () => {
-    if (!layer?.geojson) return null;
+    if (!layer?.geojson || hasUnsafeDraftTargets) return null;
 
     return {
       ...layer.geojson,
@@ -1380,6 +1521,10 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
 
   const exportLayer = async (format: VectorExportFormat, precision?: number) => {
     if (!layer?.geojson) return;
+    if (hasUnsafeDraftTargets) {
+      setExportError(t("layers.pendingTableDraftsBlocked"));
+      return;
+    }
 
     try {
       setExportError(null);
@@ -1442,7 +1587,9 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     // renameColumn writes. (renameColumn also trims defensively for other
     // callers; passing the already-trimmed value keeps the two in agreement.)
     const newKey = editingColumnName.trim();
-    const patch = renameColumn(layer, discoveredColumns, oldKey, newKey);
+    const patch = isReservedFieldName(newKey)
+      ? null
+      : renameColumn(layer, mutationColumns, oldKey, newKey);
     if (patch) {
       updateLayer(layer.id, markAttributeEdit(layer, patch));
       // Keep view state pointing at the renamed column.
@@ -1511,11 +1658,13 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
 
   const newColumnNameTrimmed = newColumnName.trim();
   const newColumnCollides =
-    newColumnNameTrimmed !== "" && discoveredColumns.includes(newColumnNameTrimmed);
+    newColumnNameTrimmed !== "" && mutationColumns.includes(newColumnNameTrimmed);
+  const newColumnReserved = isReservedFieldName(newColumnNameTrimmed);
   // A field is only discoverable through feature property keys, so a new column
   // cannot be added to a layer with no features (see addColumn).
   const canAddColumn = features.length > 0;
-  const canSubmitNewColumn = newColumnNameTrimmed !== "" && !newColumnCollides && canAddColumn;
+  const canSubmitNewColumn =
+    newColumnNameTrimmed !== "" && !newColumnCollides && !newColumnReserved && canAddColumn;
 
   const openAddColumn = () => {
     setNewColumnName("");
@@ -1534,13 +1683,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
 
   const confirmAddColumn = () => {
     if (!layer || !canManageColumns || !canSubmitNewColumn) return;
-    const patch = addColumn(
-      layer,
-      discoveredColumns,
-      newColumnName,
-      newColumnType,
-      newColumnDefault,
-    );
+    const patch = addColumn(layer, mutationColumns, newColumnName, newColumnType, newColumnDefault);
     if (patch) updateLayer(layer.id, markAttributeEdit(layer, patch));
     setAddingColumn(false);
   };
@@ -1631,9 +1774,12 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const calcNameCollides =
     calcMode === "create" &&
     calcNewNameTrimmed !== "" &&
-    discoveredColumns.includes(calcNewNameTrimmed);
+    mutationColumns.includes(calcNewNameTrimmed);
+  const calcNameReserved = calcMode === "create" && isReservedFieldName(calcNewNameTrimmed);
   const calcHasTarget =
-    calcMode === "create" ? calcNewNameTrimmed !== "" && !calcNameCollides : calcTargetField !== "";
+    calcMode === "create"
+      ? calcNewNameTrimmed !== "" && !calcNameCollides && !calcNameReserved
+      : calcTargetField !== "" && !isReservedFieldName(calcTargetField);
   const calcHasSelection = selectedFeatureIds.length > 0;
 
   // Live preview of the expression against a sample feature: the selected row
@@ -1714,7 +1860,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
       calcSelectedOnly && selectedFeatureIds.length > 0 ? new Set(selectedFeatureIds) : undefined;
     const result = calculateField(
       layer,
-      discoveredColumns,
+      mutationColumns,
       targetName,
       calcMode === "create",
       calcExpression,
@@ -1746,11 +1892,13 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     setCalcOpen(false);
   };
 
-  const sortableHeader = (key: SortKey, label: string) => (
+  const sortableHeader = (key: SortKey, label: string, numeric = false) => (
     <div className="relative flex h-full min-h-10 items-center">
       <button
         type="button"
-        className="flex h-full min-w-0 flex-1 items-center gap-1 pe-3 text-start font-medium"
+        className={`flex h-full min-w-0 flex-1 items-center gap-1 pe-3 font-medium ${
+          numeric ? "justify-end text-end" : "text-start"
+        }`}
         onClick={() => toggleSort(key)}
       >
         <span className="truncate">{label}</span>
@@ -1803,13 +1951,16 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
 
     // Read-only / non-manageable layers (DuckDB, Add Vector Layer) keep the
     // plain sortable header with no management affordances.
-    if (!canManageColumns || isEditing) return sortableHeader(col, col);
+    const numeric = numericColumns.has(col);
+    if (!canManageColumns || isEditing) return sortableHeader(col, col, numeric);
 
     return (
       <div className="relative flex h-full min-h-10 items-center">
         <button
           type="button"
-          className="flex h-full min-w-0 flex-1 items-center gap-1 pe-1 text-start font-medium"
+          className={`flex h-full min-w-0 flex-1 items-center gap-1 pe-1 font-medium ${
+            numeric ? "justify-end text-end" : "text-start"
+          }`}
           onClick={() => toggleSort(col)}
           title={virtualFieldColumns.has(col) ? t("attributeTable.virtualColumnTitle") : undefined}
         >
@@ -1906,7 +2057,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
       ref={tableSectionRef}
       aria-label={t("attributeTable.title")}
       data-collapsed={collapsed || undefined}
-      className="geolibre-attribute-table-panel @container relative flex shrink-0 flex-col border-t bg-card"
+      className="geolibre-attribute-table-panel geolibre-bottom-panel @container relative flex shrink-0 flex-col border-t bg-card"
       style={{ height: collapsed ? undefined : tableHeight }}
     >
       {!collapsed ? (
@@ -2008,17 +2159,24 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
           size="sm"
           className="h-7 px-2"
           title={
-            hasInvalidDrafts
-              ? t("attributeTable.saveTitleInvalid")
-              : hasFormErrors
-                ? t("attributeTable.saveTitleFormErrors")
-                : isDuckDBLayer
-                  ? t("attributeTable.saveTitleDuckdb")
-                  : t("attributeTable.saveEdits")
+            hasUnsafeDraftTargets
+              ? t("layers.pendingTableDraftsBlocked")
+              : hasInvalidDrafts
+                ? t("attributeTable.saveTitleInvalid")
+                : hasFormErrors
+                  ? t("attributeTable.saveTitleFormErrors")
+                  : isDuckDBLayer
+                    ? t("attributeTable.saveTitleDuckdb")
+                    : t("attributeTable.saveEdits")
           }
           aria-label={t("attributeTable.saveEdits")}
           disabled={
-            !isEditing || !layerCaps.update || !hasEdits || hasInvalidDrafts || hasFormErrors
+            !isEditing ||
+            !canEnterEditMode ||
+            !hasEdits ||
+            hasUnsafeDraftTargets ||
+            hasInvalidDrafts ||
+            hasFormErrors
           }
           onClick={saveDrafts}
         >
@@ -2324,6 +2482,32 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
             <Network className="h-3.5 w-3.5" />
           </Button>
         ) : null}
+        {mobileShell && hasAttributeSource && !isEditing ? (
+          <Button
+            variant={useCardView ? "secondary" : "ghost"}
+            size="icon"
+            data-testid="attribute-table-view-toggle"
+            className="h-7 w-7"
+            title={
+              useCardView
+                ? t("mobileShell.attributeCards.switchToTable")
+                : t("mobileShell.attributeCards.switchToCards")
+            }
+            aria-label={
+              useCardView
+                ? t("mobileShell.attributeCards.switchToTable")
+                : t("mobileShell.attributeCards.switchToCards")
+            }
+            aria-pressed={useCardView}
+            onClick={() => setCardViewOverride(!useCardView)}
+          >
+            {useCardView ? (
+              <TableProperties className="h-4 w-4" />
+            ) : (
+              <LayoutList className="h-4 w-4" />
+            )}
+          </Button>
+        ) : null}
         <Button
           variant="ghost"
           size="icon"
@@ -2366,18 +2550,58 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                 ? t("attributeTable.loadingAttributes")
                 : t("attributeTable.requiresVectorLayer")}
             </p>
+          ) : isCardViewActive ? (
+            <AttributeCardList
+              rows={sorted}
+              columns={columns}
+              selectedIds={selectedIdSet}
+              activeFeatureId={selectedFeatureId}
+              scrollElementRef={scrollViewportRef}
+              sortKey={sort.key}
+              sortDirection={sort.direction}
+              onChangeSortKey={(key) => setSort({ key, direction: "asc" })}
+              onToggleSortDirection={() =>
+                setSort((current) => ({
+                  ...current,
+                  direction: current.direction === "asc" ? "desc" : "asc",
+                }))
+              }
+              onSelectRow={handleRowClick}
+              onZoomRow={(featureId) => {
+                selectFeature(featureId);
+                if (layer) {
+                  mapControllerRef.current?.highlightFeature(layer, [featureId], { fit: true });
+                }
+              }}
+            />
           ) : (
             // mb-3.5 reserves room for the horizontal scrollbar, which overlays
             // the viewport and would otherwise cover the last row even at full
             // scroll.
             <table
               data-testid="attribute-table"
-              className="mb-3.5 table-fixed caption-bottom text-sm"
-              style={{ minWidth: "100%", width: tableWidth }}
+              // The last column's cells pad past the vertical scrollbar
+              // (p-2 + VERTICAL_SCROLLBAR_GUTTER) so its values stay visible.
+              className="mb-3.5 table-fixed caption-bottom text-sm [&_tr>*:last-child]:pe-[var(--attribute-table-last-pe)]"
+              style={
+                {
+                  minWidth: "100%",
+                  width: tableWidth,
+                  "--attribute-table-last-pe": `calc(${CELL_PADDING} + ${VERTICAL_SCROLLBAR_GUTTER})`,
+                } as CSSProperties
+              }
             >
               <colgroup>
-                {tableColumns.map((col) => (
-                  <col key={col} style={{ width: columnWidth(col) }} />
+                {tableColumns.map((col, index) => (
+                  <col
+                    key={col}
+                    style={{
+                      width:
+                        index === tableColumns.length - 1
+                          ? `calc(${columnWidth(col)}px + ${VERTICAL_SCROLLBAR_GUTTER})`
+                          : columnWidth(col),
+                    }}
+                  />
                 ))}
               </colgroup>
               <TableHeader className="sticky top-0 z-10 bg-card shadow-xs">
@@ -2399,7 +2623,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                 {virtualRows.map((virtualRow) => {
                   const { featureId, properties } = sorted[virtualRow.index];
                   const selected = selectedIdSet.has(featureId);
-                  const rowDrafts = drafts[featureId];
+                  const rowDrafts = getAttributeDraftRow(drafts, featureId);
                   // Follows a drafted type/subtype, so dependent dropdowns
                   // and bounds update as soon as the selector changes.
                   const drafted = rowDrafts
@@ -2433,7 +2657,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                       </TableCell>
                       {columns.map((col) => {
                         const value = properties[col];
-                        const draft = drafts[featureId]?.[col];
+                        const draft = rowDrafts?.[col];
                         const changed = draft !== undefined;
                         const formError = formDraftErrors[featureId]?.[col];
                         const invalid =
@@ -2454,8 +2678,14 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                             ? config.valueMap?.find((entry) => entry.value === String(value))?.label
                             : undefined;
                         const formattedValue = formatAttributeValue(value);
+                        // Display-only text: numbers rounded and grouped for
+                        // the active language, null/missing as null so it can
+                        // read NULL. Edits, sorting and export use the raw value.
+                        const cellText = formatAttributeCellText(value, i18n.language);
+                        const numeric = numericColumns.has(col);
                         const current = draft ?? formattedValue;
-                        const isEditableCell = isEditing && !readOnlyColumns.has(col);
+                        const isEditableCell =
+                          isEditing && canEnterEditMode && !readOnlyColumns.has(col);
                         const linkUrl = isEditableCell ? null : attributeLinkUrl(value);
                         const invalidTitle = invalid
                           ? formError
@@ -2572,12 +2802,27 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                               >
                                 {codeLabel}
                               </span>
+                            ) : cellText === null ? (
+                              <span
+                                className={`block max-w-full truncate italic text-muted-foreground ${
+                                  numeric ? "text-end" : ""
+                                }`}
+                                title={columnHint}
+                              >
+                                {t("attributeTable.nullValue")}
+                              </span>
                             ) : (
                               <span
-                                className="block max-w-full truncate"
+                                className={
+                                  numeric
+                                    ? "block max-w-full truncate text-end tabular-nums"
+                                    : "block max-w-full truncate"
+                                }
+                                // The raw value stays in the tooltip, so the
+                                // unrounded number is one hover away.
                                 title={withColumnHint(formattedValue)}
                               >
-                                {formattedValue}
+                                {cellText}
                               </span>
                             )}
                           </TableCell>
@@ -2663,7 +2908,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                 autoFocus
                 value={newColumnName}
                 placeholder={t("attributeTable.newFieldPlaceholder")}
-                aria-invalid={newColumnCollides || undefined}
+                aria-invalid={newColumnCollides || newColumnReserved || undefined}
                 onChange={(event) => setNewColumnName(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && canSubmitNewColumn) {
@@ -2672,7 +2917,11 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                   }
                 }}
               />
-              {newColumnCollides ? (
+              {newColumnReserved ? (
+                <span className="text-xs text-destructive">
+                  {t("attributeTable.fieldReserved")}
+                </span>
+              ) : newColumnCollides ? (
                 <span className="text-xs text-destructive">
                   {t("attributeTable.fieldExists", {
                     name: newColumnNameTrimmed,
@@ -2773,7 +3022,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                     className="flex-1"
                     value={calcNewName}
                     placeholder={t("attributeTable.newFieldNamePlaceholder")}
-                    aria-invalid={calcNameCollides || undefined}
+                    aria-invalid={calcNameCollides || calcNameReserved || undefined}
                     onChange={(event) => setCalcNewName(event.target.value)}
                   />
                 ) : (
@@ -2791,7 +3040,11 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                   </Select>
                 )}
               </div>
-              {calcNameCollides ? (
+              {calcNameReserved ? (
+                <span className="text-xs text-destructive">
+                  {t("attributeTable.fieldReserved")}
+                </span>
+              ) : calcNameCollides ? (
                 <span className="text-xs text-destructive">
                   {t("attributeTable.fieldExists", {
                     name: calcNewNameTrimmed,

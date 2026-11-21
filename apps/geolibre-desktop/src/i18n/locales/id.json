@@ -273,10 +273,15 @@
     "bodyNote": "Diukur di: {{body}} (aproksimasi bola)"
   },
   "statusBar": {
+    "coords": "Koordinat",
     "elevation": "Elev",
     "elevationLong": "Elevasi",
     "cameraAltitude": "Alt. kamera",
     "cameraAltitudeLong": "Ketinggian kamera di atas permukaan laut",
+    "zoom": "Zoom",
+    "bearing": "Arah",
+    "pitch": "Kemiringan",
+    "bbox": "BBox",
     "coordinateFormat": {
       "dd": "Derajat desimal",
       "dms": "Derajat, menit, detik",
@@ -1928,7 +1933,10 @@
     "lockLayer": "Kunci layer untuk tamu",
     "unlockLayer": "Buka kunci layer untuk tamu",
     "layerLocked": "Terkunci",
-    "layerLockedHint": "Layer ini dikunci oleh host dan tidak dapat diedit"
+    "layerLockedHint": "Layer ini dikunci oleh host dan tidak dapat diedit",
+    "viewOnlyHint": "Anda hanya-lihat dalam sesi ini, jadi Anda tidak dapat mengubah layer ini",
+    "layerLockedRejected": "Perubahan itu tidak dibagikan karena host telah mengunci layer. Peta Anda dikembalikan ke versi sesi.",
+    "viewOnlyLocalChange": "Anda hanya-lihat dalam sesi ini, jadi perubahan Anda tetap di layar Anda dan tidak dibagikan."
   },
   "share": {
     "title": "Bagikan proyek",
@@ -2075,6 +2083,17 @@
     "resizeDialog": "Ubah ukuran galeri",
     "scopeFeatured": "Unggulan",
     "scopeAll": "Semua proyek",
+    "scopeCollections": "Koleksi",
+    "loadingCollections": "Memuat koleksi…",
+    "collectionsSearchPlaceholder": "Filter koleksi berdasarkan judul, penulis, atau deskripsi",
+    "noCollectionMatches": "Tidak ada koleksi yang sesuai dengan filter Anda.",
+    "emptyCollections": "Belum ada koleksi publik untuk ditampilkan.",
+    "emptyCollection": "Koleksi ini tidak memiliki proyek publik.",
+    "untitledCollection": "Koleksi tanpa judul",
+    "openCollection": "Tampilkan proyek dalam koleksi ini",
+    "openCollectionOnWeb": "Lihat koleksi di web",
+    "backToCollections": "Semua koleksi",
+    "collectionProjects_other": "{{count}} proyek",
     "scopeMine": "Proyek saya",
     "scopeOrganizations": "Organisasi",
     "scopeGroups": "Grup",
@@ -2355,7 +2374,9 @@
   },
   "kml": {
     "importFailed": "Tidak dapat mengimpor KML/KMZ.",
-    "timeOverlayGroup": "Animasi overlay waktu"
+    "timeOverlayGroup": "Animasi overlay waktu",
+    "dataUrlStyleUnsupported": "Gaya tidak dapat diterapkan ke dokumen KML.",
+    "dataUrlNoImporter": "Tidak dapat menambahkan {{name}} ke peta: tidak ada pengimpor KML yang tersedia."
   },
   "map": {
     "boundsRestricted": "Batas terkunci",
@@ -2436,6 +2457,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "DEM COG lokal",
     "localSourceDescription": "Berkas tetap berada di perangkat ini dan dibaca dalam rentang kecil saat petak medan diperlukan.",
+    "fillOutside": "Isi area di luar DEM dengan medan global",
+    "fillOutsideDescription": "Mengelilingi DEM, dan mengisi celah tanpa datanya, dengan medan global alih-alih dataran datar. Aktif secara default untuk DEM dari URL dan nonaktif untuk berkas lokal, yang jika tidak demikian tidak membaca apa pun dari jaringan.",
     "useCog": "Gunakan DEM COG",
     "ionAssetLabel": "Aset medan Cesium Ion",
     "ionAssetDescription": "Gunakan aset medan quantized-mesh dari Cesium Ion pada globe. Aset harus tersedia untuk akun Ion yang dikonfigurasi.",
@@ -3330,7 +3353,9 @@
       "profileCount_other": "{{count}} profil",
       "noProfiles": "Belum ada profil. Tambahkan satu di bawah untuk mengonfigurasi Asisten AI.",
       "setDefault": "Jadikan default",
+      "keepDefault": "Tetap jadikan default",
       "defaultProfile": "Default",
+      "proxyIsDefault": "Tidak ada profil yang menjadi default, jadi asisten dimulai pada proxy penerapan. Jadikan sebuah profil default untuk memulai dengan profil itu.",
       "edit": "Edit",
       "deleteProfile": "Hapus profil",
       "backToProfiles": "← Kembali ke profil",
@@ -3360,6 +3385,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-… (jika diperlukan)"
+      },
+      "chatgpt": {
+        "account": "Akun ChatGPT",
+        "intro": "Gunakan paket ChatGPT Anda alih-alih kunci API. Browser Anda membuka halaman masuk OpenAI, tempat Anda mengizinkan GeoLibre menggunakan paket Anda.",
+        "continue": "Lanjutkan dengan ChatGPT",
+        "waiting": "Menunggu Anda selesai masuk di browser…",
+        "openAgain": "Buka browser lagi",
+        "signedInAs": "Masuk sebagai {{email}}",
+        "usingPlan": "Menggunakan paket ChatGPT Anda.",
+        "planDeclined": "GeoLibre tidak diizinkan menggunakan paket ChatGPT Anda. Masuk lagi dan izinkan.",
+        "signInAgain": "Masuk lagi",
+        "notRemembered": "Keychain sistem tidak tersedia, jadi sesi masuk ini hanya bertahan sampai GeoLibre ditutup.",
+        "signOut": "Keluar",
+        "useAnotherAccount": "Gunakan akun lain",
+        "usage": "Penggunaan dan aplikasi terhubung",
+        "revokeUnconfirmed": "Sudah keluar di sini, tetapi OpenAI tidak mengonfirmasi bahwa sesi telah diakhiri. Putuskan GeoLibre di pengaturan ChatGPT Anda untuk memastikan.",
+        "desktopOnly": "Masuk dengan ChatGPT tersedia di aplikasi desktop GeoLibre."
       }
     }
   },
@@ -3853,6 +3895,7 @@
       "difference": "Selisih",
       "union": "Gabungan",
       "spatialJoin": "Gabungan spasial",
+      "summarizeWithin": "Ringkas di dalam",
       "attributeJoin": "Gabungan atribut",
       "selectByValue": "Pilih berdasarkan nilai",
       "selectByLocation": "Pilih berdasarkan lokasi",
@@ -4171,6 +4214,8 @@
         "missing-source": "Layer tidak memiliki sumber data yang dapat dibaca.",
         "format": "Format berkas layer tidak didukung.",
         "remote-file": "Sumber berkas QGIS jarak jauh belum didukung.",
+        "remote-unreadable": "Berkas jarak jauh tidak dapat diunduh atau dibaca.",
+        "wmts": "Layer WMTS belum diimpor. Tambahkan layanan dari menu Tambah Data sebagai gantinya.",
         "network-path": "Jalur berbagi jaringan tidak dimuat karena alasan keamanan.",
         "browser-local-file": "Berkas lokal dirujuk, tetapi peramban tidak dapat membuka kembali jalur data QGIS. Gunakan GeoLibre Desktop untuk memuatnya.",
         "browser-local-raster": "Raster dirujuk melalui jalur lokal. Gunakan GeoLibre Desktop untuk memuatnya.",
@@ -4283,6 +4328,7 @@
       "loadingVtpk": "Membuka paket ubin…",
       "loadingVtpkDesc": "Membaca direktori paket dan gayanya",
       "projectName": "Nama proyek",
+      "untitledProject": "Proyek tanpa judul",
       "storymapEllipsis": "Peta Cerita...",
       "pointerElevationNoticeTitle": "Elevasi memakai layanan publik",
       "pointerElevationNoticeDesc": "Elevasi dihitung dari medan 3D peta bila aktif, tanpa mengirim apa pun. Tanpa medan 3D, API publik Open-Meteo dikueri dan koordinat di bawah penunjuk meninggalkan perangkat Anda.",
@@ -5659,6 +5705,7 @@
     "setupTitle": "Siapkan Asisten AI",
     "setupStatus": "Asisten memerlukan penyedia AI untuk berpikir. Tambahkan kredensial untuk salah satu penyedia di bawah dan panel beralih ke mode obrolan segera setelah Anda menyimpan.",
     "setupProviders": "Tambahkan kredensial untuk salah satu penyedia",
+    "setupSignIn": "Masuk di Pengaturan → Penyedia AI",
     "setupOpenSettings": "Buka Pengaturan → Penyedia AI",
     "thinking": "Memproses…",
     "toolError": "gagal",
@@ -6438,6 +6485,26 @@
                 "inner": "Inner (hanya fitur yang cocok)",
                 "left": "Left (semua fitur masukan)"
               }
+            }
+          }
+        },
+        "summarize-within": {
+          "name": "Ringkas di dalam",
+          "description": "Menghitung fitur layer lain yang berpotongan dengan setiap poligon, meringkas bidang numerik, dan mengukur seberapa besar bagian setiap poligon yang tertutupi",
+          "params": {
+            "layer": {
+              "label": "Layer poligon"
+            },
+            "overlay": {
+              "label": "Layer yang diringkas"
+            },
+            "field": {
+              "label": "Bidang numerik",
+              "description": "Opsional. Menambahkan jumlah, rata-rata, minimum, dan maksimum bidang ini untuk setiap poligon."
+            },
+            "min_overlap_pct": {
+              "label": "Abaikan tumpang tindih yang lebih kecil dari (%)",
+              "description": "Jika layer yang diringkas berisi poligon, lewati poligon yang menutupi kurang dari porsi ini dari sebuah poligon, seperti serpihan di sepanjang tepi bersama."
             }
           }
         },
@@ -8434,6 +8501,7 @@
     "loadingAttributes": "Memuat atribut layer…",
     "requiresVectorLayer": "Tabel atribut memerlukan layer vektor atau kueri DuckDB.",
     "invalidJson": "JSON tidak valid",
+    "nullValue": "NULL",
     "editCellAria": "Edit {{col}} untuk fitur {{featureId}}",
     "resizeColumn": "Ubah ukuran kolom {{name}}",
     "renameFieldAria": "Ganti nama bidang {{name}}",
@@ -8676,6 +8744,10 @@
       "placement": "Penempatan",
       "placementPoint": "Sentroid / titik",
       "placementLine": "Sepanjang garis / tepi poligon",
+      "lineGap": "Potong garis di bawah setiap label",
+      "lineGapHint": "Teks dicetak di celah garisnya, seperti angka kontur di peta topografi, sehingga terbaca tanpa halo. Atur lebar halo ke 0 untuk celah yang bersih.",
+      "lineGapPadding": "Jarak celah (px)",
+      "lineSpacing": "Jarak antarlabel (px)",
       "textSize": "Ukuran teks",
       "haloWidth": "Lebar halo",
       "textColor": "Warna teks",
@@ -9314,7 +9386,7 @@
     "exportStyleDataNotReady": "Data layer belum siap. Coba lagi sesaat lagi.",
     "exportStyleNeedsFeatures": "Ekspor gaya memerlukan layer vektor dengan fitur.",
     "exportStyleError": "Tidak dapat mengekspor gaya layer ini.",
-    "importStyle": "Impor gaya (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "Impor gaya (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Impor gaya dari teks…",
     "importStyleFromTextDescription": "Tempel gaya GeoLibre, Mapbox GL, SLD, atau QML. Formatnya dikenali dari teks.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",
@@ -9441,6 +9513,9 @@
     "hiddenByGroup": "Tersembunyi karena grupnya tidak terlihat",
     "empty": "Tidak ada layer data. Tambahkan data dari bilah alat.",
     "emptyBeginner": "Belum ada layer. Tambahkan peta dasar melalui Plugin → Basemaps, atau data Anda sendiri melalui menu Tambah Data.",
+    "emptyBeginnerBasemapsOnly": "Belum ada layer. Tambahkan peta dasar melalui Plugin → Peta Dasar.",
+    "emptyBeginnerDataOnly": "Belum ada layer. Tambahkan data Anda sendiri melalui menu Tambah Data.",
+    "emptyNoAdd": "Tidak ada layer data.",
     "hideAllLayers": "Sembunyikan semua layer",
     "showAllLayers": "Tampilkan semua layer",
     "compactView": "Tampilan ringkas",
@@ -9755,6 +9830,9 @@
     "localRasterNotRestored_other": "{{count}} layer raster lokal tidak dapat dipulihkan",
     "localRasterNotRestoredDesc": "Dimuat dari berkas lokal: {{names}}. Proyek tidak menyimpan data raster, atau berkas tidak dapat dibaca. Tambahkan berkas itu lagi."
   },
+  "zarrPanel": {
+    "selectorUnmatched": "Nilai selektor tidak ditemukan ({{values}}). Gunakan nilai koordinat, tanggal pada sumbu waktu, atau indeks."
+  },
   "attributeForm": {
     "error": {
       "required": "Nilai diperlukan",
@@ -9900,7 +9978,8 @@
     "panelRenderFailed": "Panel \"{{name}}\" gagal dibuka.",
     "sharedSettingsFailed": "Tidak dapat memuat pengaturan bersama dari tautan, jadi pengaturan Anda sendiri yang digunakan.",
     "sharedLanguageFailed": "Tidak dapat beralih ke bahasa yang diminta pengaturan bersama.",
-    "languageCatalogFailed": "Tidak dapat memuat terjemahan {{language}}, sehingga GeoLibre menampilkan bahasa Inggris."
+    "languageCatalogFailed": "Tidak dapat memuat terjemahan {{language}}, sehingga GeoLibre menampilkan bahasa Inggris.",
+    "dataUrlLoadFailed": "Tidak dapat memuat URL data."
   },
   "shell": {
     "workspaceTitle": "Ruang kerja peta GeoLibre",

@@ -1,6 +1,7 @@
 import {
   DEFAULT_PROJECT_NAME,
   detachProjectCopy,
+  isFetchedGeoJson,
   parseProject,
   projectFromStore,
   redactProjectCredentials,
@@ -11,17 +12,22 @@ import {
   serializeProject,
   splitProjectCredentials,
   useAppStore,
+  withoutHistory,
   type GeoLibreLayer,
   type GeoLibreProject,
 } from "@geolibre/core";
 import {
   addArcGISLayer,
   addRasterToMap,
+  fetchPortalUser,
+  getGeometryEditTargetLayerId,
   isRecoverableNonTiledRasterError,
   materializeEmbeddableVectorLayers,
+  type ArcGISLayerOptions,
 } from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
 import { type FormEvent, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { confirmDiscardAttributeDrafts } from "../lib/attribute-draft-guard";
 import {
   discardEditedWfsGeometry,
   embedEditedGeometry,
@@ -40,7 +46,9 @@ import {
   openProjectFile,
   openQgisProjectFile,
   openRecentProjectFile,
+  pickLocalDirectory,
   RecentProjectGoneError,
+  saveBinaryFileWithFallback,
   saveProjectFile,
   saveProjectFileToPath,
   saveStartupProjectSnapshot,
@@ -50,7 +58,28 @@ import {
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 import { buildProjectHtml, viewerChromeParams } from "../lib/html-export";
 import { isLayersPanelCollapsed } from "../lib/layer-panel-collapse";
-import { ensureHtmlFileName, ensureJsonFileName, ensureProjectFileName } from "../lib/file-names";
+import {
+  ensureHtmlFileName,
+  ensureJsonFileName,
+  ensureProjectFileName,
+  ensureZipFileName,
+  suggestedProjectName,
+} from "../lib/file-names";
+import {
+  applyExternalCopyReferences,
+  listWritableLayerCandidates,
+  saveGeojsonCopiesToDirectory,
+  saveLayerEditsBatch,
+  type BatchLayerSaveItemResult,
+} from "../lib/batch-layer-save";
+import { fileBaseName } from "../lib/file-io/paths";
+import {
+  buildGeojsonZipArchive,
+  buildProjectGeojsonZipSlug,
+  collectGeojsonLayersForExport,
+  isExportDataAllowed,
+  isExportableGeojsonLayer,
+} from "../lib/geojson-zip-export";
 import { pickLayerStylesFile } from "../lib/layer-style-files";
 import { notify } from "../lib/notify";
 import { notifyUnsavedLocalRasters } from "../lib/local-raster-notices";
@@ -87,7 +116,7 @@ import {
   type ProjectSaveChoices,
 } from "../lib/project-save-choices";
 import { startupSettingsAfterForcedSaveAs } from "../lib/startup-project";
-import { resolveProjectXyzLayers } from "../lib/xyz-url";
+import { resolveProjectXyzLayers, routeWmsLayerThroughNativeProtocol } from "../lib/xyz-url";
 import {
   importQgisProject,
   materializeQgisFormRelations,
@@ -97,7 +126,24 @@ import {
   type QgisStyleImportNote,
 } from "../lib/qgis-project-import";
 import { readQgisSnapshotTable } from "../lib/qgis-form-tables";
-import { importArcgisProject, type ArcgisProjectImportWarning } from "../lib/arcgis-project-import";
+import { qgisRemoteFetch, readQgisRemoteVector } from "../lib/qgis-remote-vector";
+import {
+  startProjectImportSession,
+  type ProjectImportSession,
+} from "../lib/project-import-session";
+import {
+  dropArcgisImportLayers,
+  readArcgisProject,
+  type ArcgisFeatureServiceImport,
+  type ArcgisProjectImportWarning,
+  type ArcgisProjectMapChoice,
+} from "../lib/arcgis-project-import";
+import { arcgisLayerTokenProvider, useArcGISAuthStore } from "../lib/arcgis-oauth";
+import {
+  cachedOrgIdLookup,
+  serviceTokenProvider,
+  signInForImportedService,
+} from "../lib/arcgis-project-services";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 import { IS_MAS_BUILD } from "../lib/build-flags";
 import { resolveDroppedProjectIfCurrent } from "../lib/dropped-project";
@@ -153,6 +199,13 @@ export interface DroppedProjectPrompt {
  */
 export const LARGE_EMBED_WARNING_BYTES = 50 * 1024 * 1024;
 
+export type EmbedVectorDataPromptChoice =
+  | "embed"
+  | "noembed"
+  | "overwrite-sources"
+  | "save-copies"
+  | "cancel";
+
 /**
  * A pending "embed local vector data?" prompt, shown on the web when saving a
  * project that has local-file Add Vector Layer layers whose data would
@@ -163,6 +216,12 @@ export interface EmbedVectorDataPrompt {
   hasGeometryEdits: boolean;
   /** Number of local-file vector layers that can be embedded. */
   count: number;
+  /** Number of edited layers whose source files can be overwritten directly. */
+  writableEditedCount: number;
+  /** Number of edited layers that can be exported as external GeoJSON copies. */
+  exportableEditedCount: number;
+  /** Ids of edited exportable layers (for web "Export copies (ZIP)" without dismissing). */
+  editedExportableLayerIds: string[];
   /** Total embedded size in bytes, for the size warning. */
   bytes: number;
   /**
@@ -173,9 +232,11 @@ export interface EmbedVectorDataPrompt {
   desktop: boolean;
   /** Whether the host can persist a path-only project that survives relaunch. */
   allowFileReferences: boolean;
+  /** Whether the deployment and session role permit exporting layer data. */
+  allowExportData: boolean;
   /** Project generation that opened the prompt. */
   projectGeneration: number;
-  resolve: (choice: "embed" | "noembed" | "cancel") => void;
+  resolve: (choice: EmbedVectorDataPromptChoice) => void;
 }
 
 /**
@@ -196,6 +257,19 @@ export interface SaveNamePrompt {
   label: string;
   /** Placeholder for the file-name input. */
   placeholder: string;
+}
+
+/**
+ * A pending "which map?" prompt, shown when an ArcGIS Pro project holds more
+ * than one 2D map. Resolves with the chosen map's index, or null if cancelled.
+ */
+export interface ArcgisMapPrompt {
+  /** Project generation that opened the prompt. */
+  projectGeneration: number;
+  /** The project file's name, for the dialog description. */
+  fileName: string;
+  maps: ArcgisProjectMapChoice[];
+  resolve: (index: number | null) => void;
 }
 
 export interface RemoteSignInPrompt {
@@ -263,55 +337,94 @@ function importedProjectMapReady(
 }
 
 /**
- * Adds one raster from an imported QGIS/ArcGIS Pro project, cleaning up after
- * itself when the raster cannot be loaded.
+ * Adds one raster from an imported QGIS/ArcGIS Pro project and places it in its
+ * imported group.
  *
- * `addRasterToMap` resolves only once the GeoTIFF header has been read, but the
- * control creates the store layer earlier (its `rasteradd` fires before that
- * await). A rejection therefore leaves the layer behind, so importers that
- * simply caught the error listed a raster as unsupported while it was still
- * sitting in the layer list -- see the NLCD case in GeoLibre#1637. Rolling the
- * layer back keeps the warning dialog and the layer list telling the same story.
+ * The raster's id is chosen here, so every follow-up touches only the layer
+ * this call added, never one the user or a concurrent add created.
+ * `addRasterToMap` removes its own raster when the load fails, except for the
+ * striped "not tiled" rejection: that raster stays on the map while the
+ * registered non-tiled handler offers to convert it to a COG, so it still goes
+ * into its group and is neither rolled back nor reported (GeoLibre#1637).
  *
- * The striped "not tiled" rejection is deliberately not a failure: that layer
- * stays on the map while the registered non-tiled handler offers to convert it
- * to a COG, so it is neither rolled back nor reported.
+ * Once `session` is superseded the raster is not added at all, and nothing is
+ * touched afterwards: a raster that got in first left with the project that
+ * was replaced, and the replacement must stay exactly as it was opened.
  *
  * @param app - The app API for the live map.
  * @param source - Raster source resolved from the project's layer path.
  * @param options - Passed through to {@link addRasterToMap}.
  * @param groupId - Imported layer group to move the raster into, if any.
- * @throws The original load error, after the partial layer has been removed.
+ * @param session - The import this raster belongs to.
+ * @returns The raster's store id, or undefined once the import is superseded.
+ * @throws The load error, unless the import was superseded or the raster is
+ *   only not tiled.
  */
 async function addImportedProjectRaster(
   app: ReturnType<typeof createAppAPI>,
   source: Parameters<typeof addRasterToMap>[1],
   options: Parameters<typeof addRasterToMap>[2],
   groupId: string | undefined,
-): Promise<void> {
-  const before = new Set(useAppStore.getState().layers.map((layer) => layer.id));
+  session: ProjectImportSession,
+): Promise<string | undefined> {
+  const id = `raster-${crypto.randomUUID().slice(0, 8)}`;
   try {
-    const layerId = await addRasterToMap(app, source, options);
-    if (groupId) useAppStore.getState().moveLayerToGroup(layerId, groupId);
+    await addRasterToMap(app, source, { ...options, id, signal: session.signal });
   } catch (error) {
-    if (isRecoverableNonTiledRasterError(error)) {
-      // The rejection carried no layer id, but the control already created the
-      // store layer and is keeping it while the COG conversion is offered, so
-      // it still has to be placed in its imported group -- otherwise a raster
-      // that converts successfully ends up at the top level.
-      if (groupId) {
-        const { layers, moveLayerToGroup } = useAppStore.getState();
-        const created = layers.find((layer) => !before.has(layer.id));
-        if (created) moveLayerToGroup(created.id, groupId);
+    if (session.superseded()) return undefined;
+    if (!isRecoverableNonTiledRasterError(error)) {
+      // Normally already gone; make sure a partial layer never outlives the
+      // warning that reports it as not loaded.
+      if (useAppStore.getState().layers.some((layer) => layer.id === id)) {
+        useAppStore.getState().removeLayer(id);
       }
-      return;
+      throw error;
     }
-    const { layers, removeLayer } = useAppStore.getState();
-    for (const layer of layers) {
-      if (!before.has(layer.id)) removeLayer(layer.id);
-    }
-    throw error;
   }
+  if (session.superseded()) return undefined;
+  const { layers, moveLayerToGroup } = useAppStore.getState();
+  if (groupId && layers.some((layer) => layer.id === id)) moveLayerToGroup(id, groupId);
+  return id;
+}
+
+/**
+ * How the ArcGIS plugin's feature loader should open one FeatureServer sublayer
+ * from an imported ArcGIS Pro project.
+ *
+ * The layer uses an existing ArcGIS sign-in only where
+ * {@link signInForImportedService} allows it, and loads anonymously otherwise.
+ * Renewed tokens for its later requests (viewport queries, refresh, edits) pass
+ * the same rule through {@link serviceTokenProvider}: if the portal's session
+ * switches to an account in another organisation, that account's token is
+ * withheld from an ArcGIS Online hosted service. Both stay in memory and are
+ * never saved with the project.
+ */
+async function importedFeatureServiceOptions(
+  service: ArcgisFeatureServiceImport,
+  translate: Parameters<typeof arcgisLayerTokenProvider>[1],
+  orgId: (portal: string, token: string) => Promise<string | undefined>,
+): Promise<ArcGISLayerOptions> {
+  const signIn = await signInForImportedService(service.url, {
+    portals: Object.keys(useArcGISAuthStore.getState().connections),
+    token: (portal) => arcgisLayerTokenProvider(portal, translate)(),
+    orgId,
+  });
+  return {
+    layerType: "feature",
+    sourceType: "url",
+    url: service.url,
+    ...(signIn
+      ? {
+          token: signIn.token,
+          tokenProvider: serviceTokenProvider(
+            service.url,
+            signIn.portal,
+            arcgisLayerTokenProvider(signIn.portal, translate),
+            orgId,
+          ),
+        }
+      : {}),
+  };
 }
 
 /** What Import Layer Styles did, shown in its summary dialog. */
@@ -358,12 +471,16 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const [arcgisImportWarnings, setArcgisImportWarnings] = useState<
     ArcgisProjectImportWarning[] | null
   >(null);
+  const [arcgisMapPrompt, setArcgisMapPrompt] = useState<ArcgisMapPrompt | null>(null);
   const [layerStyleImportResult, setLayerStyleImportResult] =
     useState<LayerStyleImportResult | null>(null);
   const [projectUrlDialogOpen, setProjectUrlDialogOpen] = useState(false);
   const [projectUrl, setProjectUrl] = useState("");
   const [projectUrlError, setProjectUrlError] = useState<string | null>(null);
   const [projectUrlLoading, setProjectUrlLoading] = useState(false);
+  const [saveLayerEditsDialogOpen, setSaveLayerEditsDialogOpen] = useState(false);
+  const [exportingEditedCopiesZip, setExportingEditedCopiesZip] = useState(false);
+  const isExportingEditedCopiesZipRef = useRef(false);
   const [credentialStripPrompt, setCredentialStripPrompt] = useState<CredentialStripPrompt | null>(
     null,
   );
@@ -423,7 +540,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     [],
   );
   const settleEmbedVectorDataPrompt = useCallback(
-    (prompt: EmbedVectorDataPrompt | null, choice: "embed" | "noembed" | "cancel") => {
+    (prompt: EmbedVectorDataPrompt | null, choice: EmbedVectorDataPromptChoice) => {
       prompt?.resolve(choice);
       setEmbedVectorDataPrompt(null);
     },
@@ -434,6 +551,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     setSaveNamePrompt(null);
     setSaveNameInput("");
   }, []);
+  const settleArcgisMapPrompt = useCallback(
+    (prompt: ArcgisMapPrompt | null, index: number | null) => {
+      prompt?.resolve(index);
+      setArcgisMapPrompt(null);
+    },
+    [],
+  );
   const settleRemoteSignInPrompt = useCallback(
     (prompt: RemoteSignInPrompt | null, signedIn: boolean) => {
       prompt?.resolve(signedIn);
@@ -467,23 +591,37 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (remoteSignInPrompt && remoteSignInPrompt.projectGeneration !== projectGeneration) {
       settleRemoteSignInPrompt(remoteSignInPrompt, false);
     }
+    // Another project opened while the map picker waited: importing over it
+    // would replace the project the user just opened.
+    if (arcgisMapPrompt && arcgisMapPrompt.projectGeneration !== projectGeneration) {
+      settleArcgisMapPrompt(arcgisMapPrompt, null);
+    }
     if (droppedProjectPrompt && droppedProjectPrompt.projectGeneration !== projectGeneration) {
       droppedProjectPromptRef.current = null;
       setDroppedProjectPrompt(null);
       setDroppedProjectSaving(false);
     }
   }, [
+    arcgisMapPrompt,
     credentialStripPrompt,
     droppedProjectPrompt,
     embedVectorDataPrompt,
     projectGeneration,
     remoteSignInPrompt,
     saveNamePrompt,
+    settleArcgisMapPrompt,
     settleCredentialStripPrompt,
     settleEmbedVectorDataPrompt,
     settleRemoteSignInPrompt,
     settleSaveNamePrompt,
   ]);
+
+  // Close the Save Layer Edits dialog only when the loaded project itself
+  // switches, not when unrelated prompts (e.g. a dropped-project confirmation)
+  // appear over the same workspace.
+  useLayoutEffect(() => {
+    setSaveLayerEditsDialogOpen(false);
+  }, [projectGeneration]);
 
   // On Android a project lives behind a `content://` URI whose read grant dies
   // with the process, so the startup restore has nothing to reopen on the next
@@ -502,7 +640,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const result = await openProjectFile();
     if (result) {
       try {
-        loadProject(await resolveProjectXyzLayers(result.project), result.path, {
+        const project = await resolveProjectXyzLayers(result.project);
+        // Asked after the awaits, so drafts made meanwhile are covered too.
+        if (!confirmDiscardAttributeDrafts()) return;
+        loadProject(project, result.path, {
           rememberRecent: isTauri(),
         });
         rememberStartupProjectSnapshot(result.path, result.text);
@@ -532,10 +673,14 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       }),
       resolveProject: resolveProjectXyzLayers,
       loadProject: (project) => {
+        // Asked only once the replacement is certain: after the save prompt
+        // and the remote-layer awaits, so no later draft is dropped unasked.
+        if (!confirmDiscardAttributeDrafts()) return false;
         loadProject(project, candidate.path, {
           rememberRecent: isTauri() && candidate.path !== null,
         });
         if (candidate.path) rememberStartupProjectSnapshot(candidate.path, candidate.text);
+        return true;
       },
       workspaceChanged: (state, project) => {
         const updated = {
@@ -633,16 +778,21 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   };
 
   const handleImportQgisProject = async () => {
-    const result = await openQgisProjectFile();
-    if (!result) return;
-    // The reads below can outlast the user opening something else; loading
-    // the import then would replace the project they just opened.
-    const generation = useAppStore.getState().projectGeneration;
-    const superseded = () => useAppStore.getState().projectGeneration !== generation;
+    // Started before the file is read: the reads below can outlast the user
+    // opening something else, and loading the import then would replace the
+    // project they just opened.
+    const session = startProjectImportSession();
     try {
+      const result = await openQgisProjectFile();
+      if (!result || session.superseded()) return;
       const imported = await materializeQgisRemoteLayers(
         importQgisProject(result.data, result.path),
+        qgisRemoteFetch,
+        readQgisRemoteVector,
       );
+      // WMS layers fetch through the desktop app's CORS-exempt client, as
+      // those added from Add Data do.
+      imported.project.layers = imported.project.layers.map(routeWmsLayerThroughNativeProtocol);
       if (!isTauri()) {
         const unavailableLayerIds = new Set<string>();
         for (const layer of imported.project.layers) {
@@ -686,16 +836,17 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       imported.formNotes = imported.formNotes.filter((note) => loadedNames.has(note.layerName));
       imported.styleNotes = imported.styleNotes.filter((note) => loadedNames.has(note.layerName));
       await materializeQgisFormRelations(imported, readQgisSnapshotTable);
-      if (superseded()) return;
+      if (session.superseded() || !confirmDiscardAttributeDrafts()) return;
       const mapReady = importedProjectMapReady(
         mapControllerRef,
         useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
       );
-      loadProject(imported.project, null);
+      if (!session.replaceProject(() => loadProject(imported.project, null))) return;
       if (isTauri()) {
         await mapReady;
         const app = createAppAPI(mapControllerRef);
         for (const raster of imported.rasters) {
+          if (session.superseded()) return;
           try {
             const [loaded] = await loadDroppedRasterPaths([raster.sourcePath], {
               importProjectPath: result.path,
@@ -721,8 +872,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
                 zoomTo: false,
               },
               raster.groupId,
+              session,
             );
           } catch (error) {
+            if (session.superseded()) return;
             console.error(`Failed to import QGIS raster "${raster.name}"`, error);
             imported.warnings.push({
               layerName: raster.name,
@@ -731,85 +884,82 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           }
         }
       }
+      // Neither marked changed nor reported once another project replaced it.
+      if (session.superseded()) return;
       useAppStore.setState({ isDirty: true });
       setQgisImportWarnings(imported.warnings.length > 0 ? imported.warnings : null);
       setQgisImportFormNotes(imported.formNotes.length > 0 ? imported.formNotes : null);
       setQgisImportStyleNotes(imported.styleNotes.length > 0 ? imported.styleNotes : null);
     } catch (error) {
+      if (session.superseded()) return;
       console.error("Failed to import QGIS project", error);
       setActionError(
         error instanceof Error ? error.message : t("toolbar.error.couldNotImportQgisProject"),
       );
+    } finally {
+      session.dispose();
     }
   };
 
   const handleImportArcgisProject = async () => {
-    const result = await openArcgisProjectFile();
-    if (!result) return;
+    // Started before the file is read, so a project opened while the read (or
+    // the map choice) is still pending supersedes the import too.
+    const session = startProjectImportSession();
     try {
-      const imported = importArcgisProject(result.data, result.path);
-      if (!isTauri()) {
-        const unavailableLayerIds = new Set<string>();
-        for (const layer of imported.project.layers) {
-          if (layer.sourcePath && !isHttpUrl(layer.sourcePath)) {
-            unavailableLayerIds.add(layer.id);
-            imported.warnings.push({
-              layerName: layer.name,
-              reason: "browser-local-file",
-            });
-          }
-        }
-        imported.project.layers = imported.project.layers.filter(
-          (layer) => !unavailableLayerIds.has(layer.id),
+      const result = await openArcgisProjectFile();
+      if (!result || session.superseded()) return;
+      const reader = readArcgisProject(result.data, result.path);
+      // One GeoLibre project holds one map, so a project with several 2D maps
+      // asks which to bring across rather than silently taking the first.
+      let mapIndex = 0;
+      if (reader.maps.length > 1) {
+        const chosen = await new Promise<number | null>((resolve) =>
+          setArcgisMapPrompt({
+            projectGeneration: useAppStore.getState().projectGeneration,
+            fileName: fileBaseName(result.path),
+            maps: reader.maps,
+            resolve,
+          }),
         );
-        for (const raster of imported.rasters) {
-          imported.warnings.push({
-            layerName: raster.name,
-            reason: "browser-local-file",
-          });
-        }
-        // Rasters never load in the browser build, so drop them before the
-        // group prune below rather than letting them keep a group alive that
-        // will stay empty. Services still load, so they still count.
-        imported.rasters = [];
-        // Re-prune the groups: dropping the local-file layers can empty a group
-        // that the importer kept, and an empty group left behind shows up as a
-        // dangling entry in the layer panel.
-        const usedGroupIds = new Set<string>([
-          ...imported.project.layers.flatMap((layer) => (layer.groupId ? [layer.groupId] : [])),
-          ...imported.services.flatMap((service) => (service.groupId ? [service.groupId] : [])),
-        ]);
-        // A parent group stays as long as a surviving group still names it, so
-        // walk up the chain before filtering.
-        const groupById = new Map(
-          (imported.project.layerGroups ?? []).map((group) => [group.id, group]),
-        );
-        for (const id of [...usedGroupIds]) {
-          let parentId = groupById.get(id)?.parentId;
-          while (parentId && !usedGroupIds.has(parentId)) {
-            usedGroupIds.add(parentId);
-            parentId = groupById.get(parentId)?.parentId;
-          }
-        }
-        imported.project.layerGroups = imported.project.layerGroups?.filter((group) =>
-          usedGroupIds.has(group.id),
-        );
+        if (chosen === null) return;
+        mapIndex = chosen;
       }
+      const imported = reader.importMap(mapIndex);
+      if (!isTauri()) {
+        // The browser build can read neither local files nor rasters (which
+        // are always local). Services still load, so they stay.
+        const unavailable = [
+          ...imported.project.layers.filter(
+            (layer) => layer.sourcePath && !isHttpUrl(layer.sourcePath),
+          ),
+          ...imported.rasters,
+        ];
+        dropArcgisImportLayers(imported, new Set(unavailable.map((item) => item.id)));
+        for (const item of unavailable) {
+          imported.warnings.push({ layerName: item.name, reason: "browser-local-file" });
+        }
+      }
+      if (session.superseded() || !confirmDiscardAttributeDrafts()) return;
       const mapReady = importedProjectMapReady(
         mapControllerRef,
         useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
       );
-      loadProject(imported.project, null);
+      if (!session.replaceProject(() => loadProject(imported.project, null))) return;
       await mapReady;
       const app = createAppAPI(mapControllerRef);
+      // Store id of every imported item that made it into the store, by import
+      // id: project layers keep theirs, rasters and services get new ones as
+      // they are added. Anything that failed stays out of the final order.
+      const storeIds = new Map(imported.project.layers.map((layer) => [layer.id, layer.id]));
       if (isTauri()) {
         for (const raster of imported.rasters) {
+          if (session.superseded()) return;
           try {
             const [loaded] = await loadDroppedRasterPaths([raster.sourcePath], {
               importProjectPath: result.path,
             });
             if (!loaded) throw new Error("Unsupported raster path");
-            await addImportedProjectRaster(
+            const rasterLayerId = await addImportedProjectRaster(
               app,
               loaded.source,
               {
@@ -820,8 +970,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
                 zoomTo: false,
               },
               raster.groupId,
+              session,
             );
+            if (rasterLayerId) storeIds.set(raster.id, rasterLayerId);
           } catch (error) {
+            if (session.superseded()) return;
             console.error(`Failed to import ArcGIS raster "${raster.name}"`, error);
             imported.warnings.push({
               layerName: raster.name,
@@ -830,39 +983,74 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           }
         }
       }
+      // One organisation lookup per portal and token for the whole import.
+      const orgId = cachedOrgIdLookup((portal, token) =>
+        fetchPortalUser(portal, token).then((user) => user.orgId),
+      );
       for (const service of imported.services) {
+        if (session.superseded()) return;
         try {
           const serviceLayerId = await addArcGISLayer(app, {
-            itemId: service.itemId,
-            layerType: "vector-tile",
+            ...(service.kind === "feature"
+              ? await importedFeatureServiceOptions(service, (key) => t(key), orgId)
+              : { itemId: service.itemId, layerType: "vector-tile", sourceType: "portal-item" }),
             name: service.name,
-            sourceType: "portal-item",
             // The project's saved extent was applied by loadProject above, and
             // this runs after it. Without the opt-out, each imported service
             // would fit the map to its own bounds and throw that extent away.
             zoomTo: false,
+            // Adds nothing once another project has replaced this one.
+            signal: session.signal,
           });
-          if (service.groupId) {
-            useAppStore.getState().moveLayerToGroup(serviceLayerId, service.groupId);
-          }
-          if (!service.visible) {
-            useAppStore.getState().setLayerVisibility(serviceLayerId, false);
+          // The add can land just before another project replaces this one;
+          // grouping or hiding it then would edit the replacement.
+          if (session.superseded()) return;
+          storeIds.set(service.id, serviceLayerId);
+          const store = useAppStore.getState();
+          if (service.groupId) store.moveLayerToGroup(serviceLayerId, service.groupId);
+          if (!service.visible) store.setLayerVisibility(serviceLayerId, false);
+          if (service.kind === "feature") {
+            store.setLayerOpacity(serviceLayerId, service.opacity);
+            const added = useAppStore
+              .getState()
+              .layers.find((layer) => layer.id === serviceLayerId);
+            if (added) {
+              store.updateLayer(serviceLayerId, {
+                metadata: {
+                  ...added.metadata,
+                  importedFrom: "arcgis-pro",
+                  ...(service.arcgisLayerUri ? { arcgisLayerUri: service.arcgisLayerUri } : {}),
+                },
+              });
+            }
           }
         } catch (error) {
+          if (session.superseded()) return;
           console.error(`Failed to import ArcGIS service "${service.name}"`, error);
           imported.warnings.push({
             layerName: service.name,
-            reason: "service",
+            reason: service.kind === "feature" ? "service-unavailable" : "service",
           });
         }
       }
+      // Neither reordered, marked changed nor reported once another project
+      // replaced it.
+      if (session.superseded()) return;
+      // Rasters and services were each added on top of the stack; put the
+      // import back in ArcGIS Pro's drawing order. Part of the import, not an
+      // edit of the user's, so no undo step of its own.
+      const order = imported.layerOrder.flatMap((id) => storeIds.get(id) ?? []);
+      withoutHistory(() => useAppStore.getState().applyLayerOrder(order));
       useAppStore.setState({ isDirty: true });
       setArcgisImportWarnings(imported.warnings.length > 0 ? imported.warnings : null);
     } catch (error) {
+      if (session.superseded()) return;
       console.error("Failed to import ArcGIS project", error);
       setActionError(
         error instanceof Error ? error.message : t("toolbar.error.couldNotImportArcgisProject"),
       );
+    } finally {
+      session.dispose();
     }
   };
 
@@ -884,7 +1072,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     try {
       const result = await openRecentProjectFile(normalizedUrl, controller.signal);
       const project = await resolveProjectXyzLayers(result.project, controller.signal);
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || !confirmDiscardAttributeDrafts()) return;
       loadProject(project, result.path);
       setProjectUrl("");
       setProjectUrlDialogOpen(false);
@@ -932,7 +1120,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
        */
       signal?: AbortSignal;
     } = {},
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     const normalizedUrl = normalizeProjectUrl(url);
     if (!normalizedUrl) {
       throw new Error(t("toolbar.error.invalidProjectUrl"));
@@ -965,12 +1153,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         project = await resolveProjectXyzLayers(result.project, controller.signal);
       }
 
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) return false;
       if (
         options.oauthSessionRevision !== undefined &&
         options.oauthSessionRevision !== useShareOAuthStore.getState().sessionRevision
       )
-        return;
+        return false;
+      if (!confirmDiscardAttributeDrafts()) return false;
 
       if (options.asCopy) {
         const detached = detachProjectCopy(project, { nameSuffix: "" });
@@ -985,6 +1174,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           : null;
       }
       setRemoteSaveWarning(null);
+      return true;
     } finally {
       if (shareUrlAbortRef.current === controller) {
         shareUrlAbortRef.current = null;
@@ -1010,7 +1200,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (!result || signal.aborted) return null;
     try {
       const project = await resolveProjectXyzLayers(result.project, signal);
-      if (signal.aborted) return null;
+      if (signal.aborted || !confirmDiscardAttributeDrafts()) return null;
       loadProject(project, result.path);
       return null;
     } catch (error) {
@@ -1057,7 +1247,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
 
     try {
       const project = await resolveProjectXyzLayers(result.project, controller.signal);
-      if (controller.signal.aborted) return null;
+      if (controller.signal.aborted || !confirmDiscardAttributeDrafts()) return null;
       loadProject(project, result.path);
       if (result.fromStoredCopy) {
         notify.warning(t("settings.startup.storedCopyWarning"), {
@@ -1219,20 +1409,29 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     desktop: boolean,
     promptProjectGeneration: number,
     hasGeometryEdits: boolean,
+    editedCounts: {
+      writableEditedCount: number;
+      exportableEditedCount: number;
+      editedExportableLayerIds: string[];
+    },
   ) =>
-    new Promise<"embed" | "noembed" | "cancel">((resolve) => {
+    new Promise<EmbedVectorDataPromptChoice>((resolve) => {
       setEmbedVectorDataPrompt({
         count,
         hasGeometryEdits,
+        writableEditedCount: editedCounts.writableEditedCount,
+        exportableEditedCount: editedCounts.exportableEditedCount,
+        editedExportableLayerIds: editedCounts.editedExportableLayerIds,
         bytes,
         desktop,
         allowFileReferences: canSaveVectorFileReferences(desktop, IS_MAS_BUILD),
+        allowExportData: isExportDataAllowed(),
         projectGeneration: promptProjectGeneration,
         resolve,
       });
     });
 
-  const resolveEmbedVectorDataPrompt = (choice: "embed" | "noembed" | "cancel") =>
+  const resolveEmbedVectorDataPrompt = (choice: EmbedVectorDataPromptChoice) =>
     settleEmbedVectorDataPrompt(embedVectorDataPrompt, choice);
 
   // Builds the embed-mode layers: every local vector layer carries its own
@@ -1299,9 +1498,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // references. The Mac App Store build is the exception: its sandbox drops
   // access to user-selected files once the process exits, so references cannot
   // reload and Embed is the only durable mode (see the guard below). Returns
-  // the layers override to serialize, an empty result to use the live layers
-  // as-is, or "cancel" to abort the save.
-  const resolveLayersForSave = async (): Promise<{ layers?: GeoLibreLayer[] } | "cancel"> => {
+  // the layers override to serialize (plus an optional `onProjectSaved` commit
+  // callback that runs only after the project file write succeeds), an empty
+  // result to use the live layers as-is, or "cancel" to abort the save.
+  const resolveLayersForSave = async (): Promise<
+    { layers?: GeoLibreLayer[]; onProjectSaved?: () => void } | "cancel"
+  > => {
     const state = useAppStore.getState();
     const embeddable = await materializeEmbeddableVectorLayers(state.layers);
     if (useAppStore.getState().projectGeneration !== state.projectGeneration) return "cancel";
@@ -1343,7 +1545,16 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       durableVectorDataChoice(reusableChoice, IS_MAS_BUILD) !== reusableChoice
         ? undefined
         : reusableChoice;
-    const requestedChoice =
+    const writableEditedCandidates = listWritableLayerCandidates(editedLayers, {
+      collaboration: state.collaboration,
+      geometryEditLayerId: getGeometryEditTargetLayerId(),
+      attributeTableDrafts: state.ui.attributeTableDrafts,
+      projectGeneration: state.projectGeneration,
+    }).filter((candidate) => !candidate.disabledReason);
+    const editedExportableLayerIds = editedLayers
+      .filter(isExportableGeojsonLayer)
+      .map((layer) => layer.id);
+    const requestedChoice: EmbedVectorDataPromptChoice =
       rememberedVectorChoice ??
       (await askEmbedVectorData(
         count,
@@ -1351,7 +1562,191 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         isTauri(),
         state.projectGeneration,
         editedLayers.length > 0,
+        {
+          writableEditedCount: writableEditedCandidates.length,
+          exportableEditedCount: editedExportableLayerIds.length,
+          editedExportableLayerIds,
+        },
       ));
+    // A project can be opened while a prompt is visible. Do not apply that
+    // prompt's answer to the replacement project or continue saving stale data.
+    if (useAppStore.getState().projectGeneration !== state.projectGeneration) return "cancel";
+
+    if (requestedChoice === "overwrite-sources") {
+      const liveState = useAppStore.getState();
+      const liveEdited = liveState.layers.filter(hasEditedGeometry);
+      const targets = listWritableLayerCandidates(liveEdited, {
+        collaboration: liveState.collaboration,
+        geometryEditLayerId: getGeometryEditTargetLayerId(),
+        attributeTableDrafts: liveState.ui.attributeTableDrafts,
+        projectGeneration: state.projectGeneration,
+      })
+        .filter((candidate) => !candidate.disabledReason)
+        .map((candidate) => candidate.layer);
+      const summary = await saveLayerEditsBatch(targets, {
+        map: mapControllerRef.current?.getMap() ?? undefined,
+        t,
+        projectGeneration: state.projectGeneration,
+      });
+      if (summary.aborted || useAppStore.getState().projectGeneration !== state.projectGeneration) {
+        return "cancel";
+      }
+      if (summary.succeeded > 0) {
+        notify.success(t("toolbar.item.saveLayerEditsSuccess", { count: summary.succeeded }), {
+          dedupeKey: "save-layer-edits",
+        });
+      }
+      if (summary.warnings > 0) {
+        const warningDetails = summary.results
+          .filter((item) => item.status === "warning")
+          .map((item) => `${item.layerName}: ${item.message}`)
+          .join("; ");
+        notify.warning(
+          t("toolbar.item.saveLayerEditsWarnings", {
+            count: summary.warnings,
+            details: warningDetails,
+          }),
+          { dedupeKey: "save-layer-edits-warnings" },
+        );
+      }
+      if (summary.failed > 0) {
+        const details = summary.results
+          .filter((item) => item.status === "error")
+          .map((item) => `${item.layerName}: ${item.message}`)
+          .join("; ");
+        setActionError(t("toolbar.error.saveLayerEditsFailed", { count: summary.failed, details }));
+        return "cancel";
+      }
+      const layers = useAppStore.getState().layers.map((layer) => {
+        if (hasEditedGeometry(layer)) return embedEditedGeometry(layer);
+        if (isReloadableLocalFileLayer(layer)) {
+          return { ...layer, metadata: { ...layer.metadata, localFileReloadable: true } };
+        }
+        const collection = embeddable.get(layer.id);
+        if (collection && layer.metadata.localFileReloadable !== true) {
+          return { ...layer, metadata: { ...layer.metadata, embeddedGeoJSON: collection } };
+        }
+        return layer;
+      });
+      return { layers };
+    }
+
+    if (requestedChoice === "save-copies") {
+      if (!isExportDataAllowed()) return "cancel";
+      const directory = await pickLocalDirectory();
+      if (!directory || useAppStore.getState().projectGeneration !== state.projectGeneration) {
+        return "cancel";
+      }
+      const liveLayers = useAppStore.getState().layers;
+      const liveEditedIds = new Set(liveLayers.filter(hasEditedGeometry).map((layer) => layer.id));
+      const copyResult = await saveGeojsonCopiesToDirectory(liveLayers, directory, {
+        map: mapControllerRef.current?.getMap() ?? undefined,
+        layerIds: liveEditedIds,
+        projectGeneration: state.projectGeneration,
+        preserveHiddenFields: true,
+        abortOnBlockedDrafts: true,
+        fallbackErrorMessage: t("toolbar.error.couldNotSaveLayerCopies"),
+      });
+      if (
+        copyResult.aborted ||
+        useAppStore.getState().projectGeneration !== state.projectGeneration
+      ) {
+        return "cancel";
+      }
+      if (
+        copyResult.errors.length > 0 ||
+        copyResult.blockedDraftLayers.length > 0 ||
+        copyResult.written.length === 0
+      ) {
+        if (copyResult.written.length > 0) {
+          notify.info(t("toolbar.item.saveCopiesWritten", { count: copyResult.written.length }), {
+            dedupeKey: "save-layer-copies",
+          });
+        }
+        const details = [
+          ...copyResult.errors.map((err) =>
+            err.message ? `${err.layerName}: ${err.message}` : err.layerName,
+          ),
+          ...(copyResult.blockedDraftLayers.length > 0
+            ? [
+                t("toolbar.item.geojsonZipBlockedDrafts", {
+                  count: copyResult.blockedDraftLayers.length,
+                  names: copyResult.blockedDraftLayers.join(", "),
+                }),
+              ]
+            : []),
+        ].join(" ");
+        setActionError(details || t("toolbar.error.couldNotSaveLayerCopies"));
+        return "cancel";
+      }
+      const writtenByLayerId = new Map(
+        copyResult.written.map((item) => [
+          item.layerId,
+          { path: item.path, capturedGeojson: item.capturedGeojson },
+        ]),
+      );
+      const currentLiveLayers = useAppStore.getState().layers;
+      const postCopyEditedIds = new Set(
+        currentLiveLayers.filter(hasEditedGeometry).map((layer) => layer.id),
+      );
+      const updatedLive = applyExternalCopyReferences(currentLiveLayers, writtenByLayerId);
+      const repointedIds = new Set<string>();
+      for (const next of updatedLive) {
+        const target = writtenByLayerId.get(next.id);
+        if (
+          target &&
+          next.sourcePath === target.path &&
+          next.metadata.localFileReloadable === true
+        ) {
+          repointedIds.add(next.id);
+        }
+      }
+      // Defer retargeting the live store layers until after the project file
+      // write succeeds so a cancelled or failed save leaves live state intact.
+      const onProjectSaved = () => {
+        if (useAppStore.getState().projectGeneration !== state.projectGeneration) return;
+        const liveAtCommit = useAppStore.getState().layers;
+        const updatedAtCommit = applyExternalCopyReferences(liveAtCommit, writtenByLayerId);
+        useAppStore.setState({
+          layers: liveAtCommit.map((layer, index) => {
+            const next = updatedAtCommit[index];
+            const target = writtenByLayerId.get(layer.id);
+            if (
+              !next ||
+              !target ||
+              next.sourcePath !== target.path ||
+              next.metadata.localFileReloadable !== true
+            ) {
+              return layer;
+            }
+            return {
+              ...layer,
+              sourcePath: next.sourcePath,
+              metadata: next.metadata,
+            };
+          }),
+        });
+      };
+      notify.success(t("toolbar.item.saveCopiesWritten", { count: copyResult.written.length }), {
+        dedupeKey: "save-layer-copies",
+      });
+      const layers = updatedLive.map((layer) => {
+        if (
+          !postCopyEditedIds.has(layer.id) &&
+          !repointedIds.has(layer.id) &&
+          isReloadableLocalFileLayer(layer)
+        ) {
+          return { ...layer, metadata: { ...layer.metadata, localFileReloadable: true } };
+        }
+        const collection = embeddable.get(layer.id);
+        if (collection && layer.metadata.localFileReloadable !== true) {
+          return { ...layer, metadata: { ...layer.metadata, embeddedGeoJSON: collection } };
+        }
+        return layer;
+      });
+      return { layers, onProjectSaved };
+    }
+
     // A Mac App Store app receives temporary access to user-selected files.
     // That access expires when the sandboxed process exits, so a path-only
     // project cannot restore its local vectors after the next launch. Embed is
@@ -1359,9 +1754,6 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // well, so an old remembered "reference" choice cannot bypass it.
     const choice = durableVectorDataChoice(requestedChoice, IS_MAS_BUILD);
     if (choice === "cancel") return "cancel";
-    // A project can be opened while a prompt is visible. Do not apply that
-    // prompt's answer to the replacement project or continue saving stale data.
-    if (useAppStore.getState().projectGeneration !== state.projectGeneration) return "cancel";
     saveChoicesRef.current = rememberProjectSaveChoices(
       saveChoicesRef.current,
       state.projectGeneration,
@@ -1438,7 +1830,14 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // original files do not exist, so it must be self-contained — never file
   // references. Used by the Share dialog.
   const buildEmbeddedProject = async (nameOverride?: string) => {
-    const layers = await buildEmbeddedLayers(useAppStore.getState().layers);
+    const layers = (await buildEmbeddedLayers(useAppStore.getState().layers)).map(
+      // A save leaves a URL-referenced GeoJSON layer's downloaded features out;
+      // a self-contained export carries them. An unmarked copy is embedded.
+      (layer) =>
+        layer.geojson && isFetchedGeoJson(layer.geojson)
+          ? { ...layer, geojson: { ...layer.geojson } }
+          : layer,
+    );
     return buildCurrentProject(nameOverride, layers);
   };
 
@@ -1867,7 +2266,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // download under a fixed name, so Save As (and a first Save) would otherwise
     // reuse a default name — exactly the bug users hit. Prompt for the name so
     // they can choose it; later in-place Saves reuse the chosen name silently.
-    let saveName = `${defaultProjectName}.geolibre`;
+    const untitledLabel = t("toolbar.item.untitledProject");
+    let saveName = `${suggestedProjectName(defaultProjectName, untitledLabel)}.geolibre`;
     const promptForName =
       browserSaveFallsBackToDownload() && (options?.saveAs === true || !existingLocalPath);
     if (promptForName) {
@@ -1907,6 +2307,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // external action. The old project may have been written successfully, but
     // never attach its path or saved state to the replacement project.
     if (useAppStore.getState().projectGeneration !== saveProjectGeneration) return false;
+    layersForSave.onProjectSaved?.();
     setProjectPath(path);
     rememberRecentProject({
       path,
@@ -2178,6 +2579,210 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
   };
 
+  // Shared core for exporting GeoJSON layers into one `.zip` archive (issue #3528).
+  const runExportGeojsonZip = async (options?: {
+    layerIds?: ReadonlySet<string>;
+    skipNamePrompt?: boolean;
+  }): Promise<boolean> => {
+    if (!isExportDataAllowed()) return false;
+    const exportProjectGeneration = useAppStore.getState().projectGeneration;
+    const collected = await collectGeojsonLayersForExport(
+      useAppStore.getState().layers,
+      mapControllerRef.current?.getMap() ?? undefined,
+      { layerIds: options?.layerIds, projectGeneration: exportProjectGeneration },
+    );
+    if (collected.aborted || useAppStore.getState().projectGeneration !== exportProjectGeneration) {
+      return false;
+    }
+    if (collected.items.length === 0) {
+      setActionError(
+        collected.blockedDraftLayers.length > 0
+          ? t("toolbar.item.geojsonZipBlockedDrafts", {
+              count: collected.blockedDraftLayers.length,
+              names: collected.blockedDraftLayers.join(", "),
+            })
+          : t("toolbar.error.noGeojsonLayersToExport"),
+      );
+      return false;
+    }
+    const slug = buildProjectGeojsonZipSlug(useAppStore.getState().projectName);
+    let defaultName = `${slug}.zip`;
+    if (!options?.skipNamePrompt && browserSaveFallsBackToDownload()) {
+      const chosen = await askSaveName(
+        defaultName,
+        {
+          title: t("toolbar.item.exportGeojsonZipAsTitle"),
+          description: t("toolbar.item.exportGeojsonZipAsDesc"),
+          label: t("toolbar.item.exportGeojsonZipFileName"),
+          placeholder: t("toolbar.item.exportGeojsonZipFileNamePlaceholder"),
+        },
+        exportProjectGeneration,
+      );
+      if (chosen === null) return false;
+      defaultName = ensureZipFileName(chosen, slug);
+    }
+    if (useAppStore.getState().projectGeneration !== exportProjectGeneration) return false;
+    const archive = await buildGeojsonZipArchive(collected.items);
+    if (useAppStore.getState().projectGeneration !== exportProjectGeneration) return false;
+    const savedPath = await saveBinaryFileWithFallback(archive, {
+      defaultName,
+      filters: [{ name: t("toolbar.item.geojsonZipFile"), extensions: ["zip"] }],
+      browserTypes: [
+        {
+          description: t("toolbar.item.geojsonZipFile"),
+          accept: { "application/zip": [".zip"] },
+        },
+      ],
+      mimeType: "application/zip",
+    });
+    if (savedPath === null) return false;
+    notify.success(t("toolbar.item.geojsonZipExported", { count: collected.items.length }), {
+      dedupeKey: "export-geojson-zip",
+    });
+    if (collected.blockedDraftLayers.length > 0) {
+      notify.warning(
+        t("toolbar.item.geojsonZipBlockedDrafts", {
+          count: collected.blockedDraftLayers.length,
+          names: collected.blockedDraftLayers.join(", "),
+        }),
+        { dedupeKey: "export-geojson-zip-blocked" },
+      );
+    }
+    if (collected.skippedLayers.length > 0) {
+      notify.warning(
+        t("toolbar.item.geojsonZipSkipped", {
+          count: collected.skippedLayers.length,
+          names: collected.skippedLayers.join(", "),
+        }),
+        { dedupeKey: "export-geojson-zip-skipped" },
+      );
+    }
+    return true;
+  };
+
+  // Export all (or selected) GeoJSON vector layers in one `.zip` archive.
+  const handleExportGeojsonZip = async (layerIds?: ReadonlySet<string>): Promise<boolean> => {
+    if (!isExportDataAllowed() || isSavingRef.current) return false;
+    isSavingRef.current = true;
+    try {
+      return await runExportGeojsonZip({ layerIds });
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotExportGeojsonZip"),
+      );
+      return false;
+    } finally {
+      isSavingRef.current = false;
+    }
+  };
+
+  // Triggered from inside the Save Project embed prompt on web hosts, where
+  // `isSavingRef` is already held by `saveProject`. Uses its own in-flight
+  // guard so repeated clicks cannot launch overlapping exports.
+  const handleExportEditedCopiesZip = async (layerIds: string[]): Promise<boolean> => {
+    if (!isExportDataAllowed() || isExportingEditedCopiesZipRef.current) return false;
+    isExportingEditedCopiesZipRef.current = true;
+    setExportingEditedCopiesZip(true);
+    try {
+      return await runExportGeojsonZip({
+        layerIds: new Set(layerIds),
+        skipNamePrompt: true,
+      });
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotExportGeojsonZip"),
+      );
+      return false;
+    } finally {
+      isExportingEditedCopiesZipRef.current = false;
+      setExportingEditedCopiesZip(false);
+    }
+  };
+
+  // Batch write-back handler for SaveLayerEditsDialog (issue #3528).
+  const handleSaveSelectedLayerEdits = async (
+    layerIds: string[],
+    callbacks: {
+      onLayerStart: (layerId: string) => void;
+      onLayerDone: (result: BatchLayerSaveItemResult) => void;
+    },
+  ): Promise<{ hasIssues: boolean; aborted: boolean }> => {
+    const startGeneration = useAppStore.getState().projectGeneration;
+    const idSet = new Set(layerIds);
+    const targets = useAppStore.getState().layers.filter((layer) => idSet.has(layer.id));
+    const summary = await saveLayerEditsBatch(targets, {
+      map: mapControllerRef.current?.getMap() ?? undefined,
+      t,
+      projectGeneration: startGeneration,
+      onLayerStart: callbacks.onLayerStart,
+      onLayerDone: callbacks.onLayerDone,
+    });
+    const hasIssues = summary.failed > 0 || summary.warnings > 0;
+    if (!summary.aborted && !hasIssues && summary.succeeded > 0) {
+      notify.success(t("toolbar.item.saveLayerEditsSuccess", { count: summary.succeeded }), {
+        dedupeKey: "save-layer-edits",
+      });
+    }
+    return { hasIssues, aborted: summary.aborted };
+  };
+
+  // Desktop-only: save external GeoJSON copies of selected layers into a chosen folder.
+  const handleSaveLayerCopiesToFolder = async (
+    layerIds?: ReadonlySet<string>,
+  ): Promise<boolean> => {
+    if (!isExportDataAllowed()) return false;
+    const startGeneration = useAppStore.getState().projectGeneration;
+    try {
+      const directory = await pickLocalDirectory();
+      if (!directory || useAppStore.getState().projectGeneration !== startGeneration) return false;
+      const result = await saveGeojsonCopiesToDirectory(useAppStore.getState().layers, directory, {
+        map: mapControllerRef.current?.getMap() ?? undefined,
+        layerIds,
+        projectGeneration: startGeneration,
+        fallbackErrorMessage: t("toolbar.error.couldNotSaveLayerCopies"),
+      });
+      if (result.aborted || useAppStore.getState().projectGeneration !== startGeneration) {
+        return false;
+      }
+      if (result.written.length > 0) {
+        notify.success(t("toolbar.item.saveCopiesWritten", { count: result.written.length }), {
+          dedupeKey: "save-layer-copies",
+        });
+      }
+      if (result.errors.length > 0) {
+        const details = result.errors
+          .map((err) => (err.message ? `${err.layerName}: ${err.message}` : err.layerName))
+          .join("; ");
+        setActionError(details || t("toolbar.error.couldNotSaveLayerCopies"));
+        return false;
+      }
+      if (result.blockedDraftLayers.length > 0) {
+        notify.warning(
+          t("toolbar.item.geojsonZipBlockedDrafts", {
+            count: result.blockedDraftLayers.length,
+            names: result.blockedDraftLayers.join(", "),
+          }),
+          { dedupeKey: "save-layer-copies-blocked" },
+        );
+      }
+      if (result.skippedLayers.length > 0) {
+        notify.warning(
+          t("toolbar.item.geojsonZipSkipped", {
+            count: result.skippedLayers.length,
+            names: result.skippedLayers.join(", "),
+          }),
+          { dedupeKey: "save-layer-copies-skipped" },
+        );
+      }
+      return result.written.length > 0;
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotSaveLayerCopies"),
+      );
+      return false;
+    }
+  };
+
   // Restyle the current project's layers from a layer styles file, matching
   // each entry to a layer by name, then report what matched.
   const handleImportLayerStyles = async () => {
@@ -2228,6 +2833,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   };
 
   const handleDuplicate = () => {
+    if (!confirmDiscardAttributeDrafts()) return;
     const { project } = buildCurrentProject();
     const duplicated = detachProjectCopy(project, { nameSuffix: "(copy)" });
     // A copy of what is already on screen, so its basemap needs no confirmation.
@@ -2250,6 +2856,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     setQgisImportStyleNotes,
     arcgisImportWarnings,
     setArcgisImportWarnings,
+    arcgisMapPrompt,
+    settleArcgisMapPrompt: (index: number | null) => settleArcgisMapPrompt(arcgisMapPrompt, index),
     remoteSaveWarning,
     clearRemoteSaveWarning: () => setRemoteSaveWarning(null),
     projectUrlDialogOpen,
@@ -2290,6 +2898,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     handleExportHtml,
     handleExportLayerStyles,
     handleExportLayers,
+    handleExportGeojsonZip,
+    handleExportEditedCopiesZip,
+    exportingEditedCopiesZip,
+    saveLayerEditsDialogOpen,
+    setSaveLayerEditsDialogOpen,
+    handleSaveSelectedLayerEdits,
+    handleSaveLayerCopiesToFolder,
     handleImportLayerStyles,
     layerStyleImportResult,
     setLayerStyleImportResult,

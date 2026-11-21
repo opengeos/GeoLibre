@@ -397,7 +397,7 @@
 ## v2.5: QGIS and ArcGIS Pro project import, discrete global grids, hyperspectral cubes, and a self-hostable server
 
 - [x] **QGIS project import**: open a `.qgs` or `.qgz` and get its layers, nested groups, group visibility, layer order, styling, and saved map view rebuilt in GeoLibre, with a per-layer report of anything that had to be skipped rather than an all-or-nothing failure. See [Projects](user-guide/projects.md#importing-a-qgis-project)
-- [x] **ArcGIS Pro project import**: `.aprx` and `.mapx` files are read straight from their CIM JSON without ArcPy, restoring the first 2D map's extent, local vector and GeoTIFF layers, nested groups, visibility, simple symbols, field labels, vector-tile portal items, and cached map services. See [Projects](user-guide/projects.md#importing-an-arcgis-pro-project)
+- [x] **ArcGIS Pro project import**: `.aprx` and `.mapx` files are read straight from their CIM JSON without ArcPy, restoring the chosen 2D map's extent, local vector and GeoTIFF layers, nested groups, visibility, simple symbols, field labels, vector-tile portal items, cached map services, and hosted FeatureServer sublayers. See [Projects](user-guide/projects.md#importing-an-arcgis-pro-project)
 - [x] **Discrete global grid systems** arrive as three new plugins under Plugins > DGGS — **A5**, **DGGRID**, and **DGGAL** — that render the grid over the current view at a chosen or automatic resolution, identify a cell to read its id, parents, children, neighbors, and center, and add the grid or the selection to the map as a layer or export it
 - [x] **DGGS processing tools** to match: a DGGS Generator that fills an extent with cells, DGGS Binning that aggregates a point layer into them, and DGGS Compact that collapses a full set of children into their parent
 - [x] **Hyperspectral NetCDF and HDF grids become readable data rather than a single grey band**: local grids are colormapped in the browser from the same catalog the Style panel uses, the camera fits to the layer on add, and a cube gains an RGB band combination picked by wavelength
@@ -617,7 +617,7 @@
 - [x] **Deployment controls**: administrators can turn off the Regional basemaps served from mainland China (an opened project that selects one now asks first), point the OSM Downloader at their own Overpass endpoint, save projects straight to the project server, open a plugin panel on startup, and give plugins a file-read allowlist. See [Deployment Policy](deployment-policy.md)
 - [x] **For plugins**: data opened by URL with `?data=` or the embed `addData` command is offered to plugin file handlers, which can claim zips without an extension or declare their own `dataType`. See [Plugin API](plugin-api.md)
 
-## v3.8: QGIS and QField projects with their forms and symbology, RTK GNSS on Android, richer STAC and Planetary Computer search, and Model Builder samples (current)
+## v3.8: QGIS and QField projects with their forms and symbology, RTK GNSS on Android, richer STAC and Planetary Computer search, and Model Builder samples
 
 - [x] **QGIS and QField projects, complete**: importing a QGIS project now brings each layer's attribute form (Value Map, Range, Checkbox, Date/Time, Hidden, and UUID widgets, Value Relation and Relation Reference dropdowns, aliases, required fields, defaults, form sections, and photo fields), its categorized, graduated, and rule-based symbology, and GeoPackage tables without geometry as table layers whose linked records fill relation dropdowns live, so a project prepared for QField collects data the same way in GeoLibre. See [Projects](user-guide/projects.md#importing-a-qgis-project)
 - [x] **Bluetooth GNSS and RTK on Android**: the Android app connects to a paired Bluetooth GNSS receiver directly and feeds it RTK corrections from an NTRIP caster (NTRIP 1.0 and 2.0, optionally over TLS), so a survey-grade rover needs no second app. See [GPS Tracking](user-guide/field-collection.md#rtk-corrections-ntrip)
@@ -627,6 +627,17 @@
 - [x] **Model Builder samples**: a Samples menu opens six ready-to-run workflows, from DEM stream networks and Strahler order to terrain derivatives and route stations near cities, with their sample data. See [Model Builder](user-guide/model-builder.md#sample-workflows)
 - [x] **AI Assistant**: TrustedRouter joins the providers, and a managed deployment can switch on keyless Parallel web search. See [AI Assistant](user-guide/ai-assistant.md)
 - [x] **For plugins**: `app.readPluginAsset()` reads files shipped in a plugin's own bundle, and `app.setUrlRequestHeaders()` sends headers such as `Authorization` for tiles a plugin draws itself. See [Plugin API](plugin-api.md)
+
+## v3.9: Sign in with ChatGPT, an AI Assistant that keeps the conversation, Gallery collections, Summarize within, and Traditional Chinese (current)
+
+- [x] **Sign in with ChatGPT**: the desktop AI Assistant can use your ChatGPT plan instead of an API key. Sign-in runs in the system browser, the tokens stay in the system keychain, and Settings shows the signed-in account, a link to usage, and sign-out. See [AI Assistant](user-guide/ai-assistant.md#signing-in-with-chatgpt-desktop)
+- [x] **An AI Assistant that keeps the thread**: switching profiles or models mid-conversation carries the conversation over to the new provider instead of starting empty, a `set_view` tool moves the camera to an exact center, zoom, rotation, and tilt, and the panel shows which profile is the default. See [AI Assistant](user-guide/ai-assistant.md)
+- [x] **Gallery collections**: Open from Gallery has a Collections tab that browses public collections from share.geolibre.app and opens their projects in place. See [Gallery](gallery.md)
+- [x] **Summarize within**: a client-side Vector tool counts the features of another layer inside each polygon, summarizes a numeric field (sum, mean, min, max), and measures how much of each polygon other polygons cover, without double-counting overlaps. See [Processing](user-guide/processing.md)
+- [x] **Number columns that read like QGIS**: the attribute table right-aligns number columns, rounds floating-point noise for display only (the raw value stays in the tooltip, sorting, editing, and export), and shows missing values as NULL. See [Attribute Table](user-guide/attribute-table.md)
+- [x] **Terrain beyond your DEM**: a custom COG DEM can be surrounded, and its no-data gaps filled, by the global terrain instead of a flat plain
+- [x] **More from QGIS projects**: WMS and XYZ layers and remote GeoParquet now import from a QGIS project, which also reads its default view. See [Projects](user-guide/projects.md#importing-a-qgis-project)
+- [x] **Traditional Chinese**: the interface ships in Traditional Chinese for Taiwan, Hong Kong, and Macau, bringing it to 23 translations beyond English. See [Internationalization](i18n.md)
 
 ## Plugin marketplace and registry (design)
 

@@ -90,7 +90,7 @@ so and skips the relay; the table notes those cases.
 
 | Route | Upstream | Used by | Desktop |
 | --- | --- | --- | --- |
-| `/opm/...`, `/wms/...` | `s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net`, `s3.us-east-2.amazonaws.com/opmmarstiles`, `s3.amazonaws.com/opmbuilder`, `planetarymaps.usgs.gov` | Mars, Moon, and other planetary basemaps (`packages/core/src/ellipsoids.ts`) | Relay |
+| `/opm/...` | `s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net`, `s3.us-east-2.amazonaws.com/opmmarstiles`, `s3.amazonaws.com/opmbuilder` | Mars and Moon planetary basemaps (`packages/core/src/ellipsoids.ts`) | Relay |
 | `/overpass` (POST) | `z.overpass-api.de` (run by FOSSGIS e.V.), then `overpass.private.coffee` (run by Private.coffee, an Austrian non-profit association) on a 429, 5xx or network error. No other instance is tried; when both fail the relay answers 502 with an "Overpass is busy" message. Each instance that is tried sees the query and its area of interest, and the `x-overpass-upstream` response header names the one that answered. | OSM Downloader plugin, God's Eye View road layers | Relay |
 | `/oam/meta` | `api.openaerialmap.org` | OpenAerialMap search | Direct |
 | `/source-coop/...` | `source.coop` (API and feed) | Source Cooperative and Natural Earth plugins | Direct |
@@ -110,6 +110,7 @@ so and skips the relay; the table notes those cases.
 | Feature | Hosts | Builds | Route |
 | --- | --- | --- | --- |
 | Basemap picker and Basemaps plugin | CARTO (`basemaps.cartocdn.com`), Esri (`server.arcgisonline.com`, `services.arcgisonline.com`), EOX (`tiles.maps.eox.at`), USGS (`basemap.nationalmap.gov`), NASA GIBS, OpenStreetMap, Protomaps, Mapbox, MapTiler, Stadia, TomTom, HERE, Amazon Location, Tianditu, Google, swisstopo, BKG, Waymarked Trails, OpenRailwayMap. OpenFreeMap is the default basemap (see above). Opening the Basemaps panel loads a thumbnail per visible row, which contacts many of these hosts before the user picks one. Keyed providers receive the key the user or build supplies. | All | Direct |
+| Other planetary basemaps | USGS Astrogeology WMS (`planetarymaps.usgs.gov`) for Mercury, Venus, the Galilean moons, Titan, Pluto, and Charon, reprojected to Web Mercator in the app. Only when the user selects one of those bodies. | All | Direct |
 | Regional basemaps (China) | Amap (`webst01.is.autonavi.com`, `wprd01.is.autonavi.com`) and Tencent (`rt0.map.gtimg.com`). Only when the user selects one, or opens a project that selected one. | All | Direct |
 | Place search and reverse geocoding | Nominatim (`nominatim.openstreetmap.org`) by default; Pelias (`api.geocode.earth`), ArcGIS (`geocode.arcgis.com`), Mapbox, Google (`maps.googleapis.com`), and CartoCiudad (`www.cartociudad.es`) when configured. The query text or clicked point is sent. Reverse geocoding asks for consent first. | All | Direct |
 | Routing, isochrones, drive and walk time | `valhalla1.openstreetmap.de` (FOSSGIS Valhalla), or `VITE_ROUTING_ENDPOINT`. The Directions plugin uses `router.project-osrm.org` and asks for consent first. | All | Direct |
@@ -127,9 +128,9 @@ so and skips the relay; the table notes those cases.
 | Sign-in gate (Clerk or Auth0) | Only when an operator configures one (`GEOLIBRE_CLERK_PUBLISHABLE_KEY`, or `GEOLIBRE_AUTH0_DOMAIN` and client ID). Clerk: the Frontend API host encoded in the publishable key, plus `challenges.cloudflare.com` and `*.protect.clerk.com` for bot protection. Auth0: the operator's tenant domain (for example `<tenant>.us.auth0.com`). Default builds configure neither. | Web | Direct |
 | Earth Engine | `accounts.google.com`, `earthengine.googleapis.com`, `www.googleapis.com`, `storage.googleapis.com`, `raw.githubusercontent.com` (dataset catalogs) | All | Direct |
 | Cloud storage (S3 browser) | The user's S3 endpoint; on desktop, AWS STS (`sts.<region>.amazonaws.com`) and the instance or container metadata endpoints (`169.254.169.254`, `169.254.170.2`) only when the chosen AWS profile needs them. | All (STS desktop only) | Direct |
-| SQL workspace engines | PGlite and PostGIS, CereusDB (Sedona), and `gdal3.js` load from `cdn.jsdelivr.net` on first use by default; DuckDB-WASM does too in the `lite:build` variant. | All | Direct |
+| SQL workspace engines | PGlite and PostGIS, CereusDB (Sedona), and `gdal3.js` load from `cdn.jsdelivr.net` on first use by default, except the PostGIS extension bundle (`postgis.tar.gz`), which comes from `unpkg.com` with `cdn.jsdelivr.net` as the fallback; DuckDB-WASM does too in the `lite:build` variant. | All | Direct |
 | Python console and Python vector engine | Pyodide from `cdn.jsdelivr.net`, or `VITE_PYODIDE_INDEX_URL`. | All | Direct |
-| Object detection, Segment Everything | Model weights from `cdn.jsdelivr.net` and `huggingface.co`; ONNX Runtime from `cdn.jsdelivr.net`. | All | Direct |
+| Object detection, Segment Everything | Model weights from `raw.githubusercontent.com` and `huggingface.co`; ONNX Runtime from `cdn.jsdelivr.net`. | All | Direct |
 | 3D Tiles | Draco and KTX2 decoders from `unpkg.com` | All | Direct |
 | Story map HTML export | The exported page loads MapLibre from `unpkg.com` and fonts from `demotiles.maplibre.org`. | All | Direct (from the exported page) |
 | Python sidecar and Notebook panel | First use downloads `uv` from `astral.sh` (unless `uv` is installed), a Python build through `uv` (from GitHub), and packages from PyPI (`pypi.org`, `files.pythonhosted.org`). Applies to the sidecar itself and to the Whitebox, conversion, point cloud, and OBIA runtimes. | Desktop (and a self-run sidecar) | Direct, from the native process |

@@ -189,6 +189,11 @@ describe("normalizePrintLayoutConfig", () => {
   it("keeps a page border at a width that actually draws", () => {
     assert.equal(normalizePrintLayoutConfig({ pageBorderWidth: 0 })?.pageBorderWidth, 1);
     assert.equal(normalizePrintLayoutConfig({ pageBorderWidth: 4 })?.pageBorderWidth, 4);
+    // Export resolution: only the offered DPIs survive a load (GH #3523).
+    assert.equal(normalizePrintLayoutConfig({ exportDpi: 300 })?.exportDpi, 300);
+    assert.equal(normalizePrintLayoutConfig({ exportDpi: 600 })?.exportDpi, 150);
+    assert.equal(normalizePrintLayoutConfig({ exportDpi: "150" })?.exportDpi, 150);
+    assert.equal(normalizePrintLayoutConfig({})?.exportDpi, 150);
   });
 
   it("filters non-string table columns", () => {

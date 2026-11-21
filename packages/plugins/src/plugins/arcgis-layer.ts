@@ -217,6 +217,14 @@ export interface ArcGISLayerOptions {
   tokenProvider?: () => Promise<string | undefined>;
   url?: string;
   /**
+   * Checked before the layer is added to the map and the store; once aborted,
+   * the add rejects with the signal's reason and adds nothing. A project
+   * import passes one so a service still loading when another project opens
+   * never lands in that project. It belongs to the add alone and is not kept
+   * with the layer.
+   */
+  signal?: AbortSignal;
+  /**
    * Whether to fit the map to the layer once its bounds are known. Defaults to
    * the project's "Zoom to newly added layers" map preference (on unless the
    * user turned it off), which is what an interactive Add Data flow wants.
@@ -418,6 +426,9 @@ export async function addArcGISLayer(
 
   const arcgis = await import("@esri/maplibre-arcgis");
   const hostedLayer = await createArcGISHostedLayer(arcgis, options, input);
+  // Before the id is chosen: no await may sit between choosing an id that is
+  // free in the store and inserting the layer under it.
+  const bounds = await resolveArcGISLayerBounds(input, options, hostedLayer);
   const id = createArcGISLayerId();
   const sourceIds = prefixArcGISSourceIds(hostedLayer, id);
   // Snapshot the SDK style once it carries the prefixed source ids: the getters
@@ -425,8 +436,8 @@ export async function addArcGISLayer(
   // map and the store without assuming a stable order between reads.
   const { sources, layers: styleLayers } = snapshotArcGISStyle(hostedLayer, id);
   const nativeLayerIds = styleLayers.map((spec) => spec.id);
-  const bounds = await resolveArcGISLayerBounds(input, options, hostedLayer);
 
+  options.signal?.throwIfAborted();
   if (map) addArcGISRuntimeLayerToMap(sources, styleLayers, map);
   ensureArcGISStoreCleanup();
   arcgisLayerInstances.set(id, hostedLayer);
@@ -655,6 +666,7 @@ async function addArcGISFeatureLayerAsGeoJson(
       );
   // Add the layer before downloading features. Large services must not hold the
   // Add Data dialog open while hundreds of thousands of records are fetched.
+  options.signal?.throwIfAborted();
   const id = store.addGeoJsonLayer(name, initialData, refreshUrl, options.beforeLayerId ?? null);
   // A viewport-loaded layer only ever holds the features in view, so Zoom to
   // layer needs the service's extent stored on the layer to frame the data.
@@ -684,7 +696,7 @@ async function addArcGISFeatureLayerAsGeoJson(
     },
   });
 
-  arcgisEditOptions.set(id, { ...options, onProgress: undefined });
+  arcgisEditOptions.set(id, { ...options, onProgress: undefined, signal: undefined });
   ensureArcGISFeatureLoaderCleanup();
   const zoomTo = options.zoomTo ?? shouldZoomToNewLayers();
   if (bounds && zoomTo) app.fitBounds?.(bounds);
@@ -731,7 +743,7 @@ function startArcGISViewportLoader(
   // The Add Data dialog's progress callback belongs to the initial download. It
   // is unmounted well before the first viewport query lands, so carrying it for
   // the layer's lifetime would keep that closure alive to no purpose.
-  const queryOptions: ArcGISLayerOptions = { ...options, onProgress: undefined };
+  const queryOptions: ArcGISLayerOptions = { ...options, onProgress: undefined, signal: undefined };
   const maxFeatures = positiveInteger(options.maxFeatures);
   const loader: ArcGISViewportLoader = {
     abort: null,
@@ -965,7 +977,8 @@ export function restoreArcGISViewportLayers(app: GeoLibreAppAPI): void {
 }
 
 /**
- * Tear down viewport loaders for layers that have left the store.
+ * Tear down viewport loaders for layers that have left the store, and every
+ * loader when another project is opened.
  *
  * One shared subscription for every loader, matching
  * {@link ensureArcGISStoreCleanup}: a subscription per layer would run a linear
@@ -975,6 +988,17 @@ export function restoreArcGISViewportLayers(app: GeoLibreAppAPI): void {
 function ensureArcGISFeatureLoaderCleanup(): void {
   arcgisFeatureLoaderUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     if (arcgisFeatureLoaders.size === 0 && arcgisEditOptions.size === 0) return;
+    // Another project replaced this one. It may hold a layer with the same
+    // `arcgis-layer-N` id, which the id check below would keep bound to the old
+    // project's service; drop every loader and let the replacement's restore
+    // bind its own (it runs from an effect, after this notification). A
+    // collaboration snapshot refreshes the open project without bumping the
+    // count, so its loaders stay.
+    if (state.projectLoadCount !== previous.projectLoadCount) {
+      for (const layerId of [...arcgisFeatureLoaders.keys()]) stopArcGISViewportLoader(layerId);
+      arcgisEditOptions.clear();
+      return;
+    }
     for (const layer of previous.layers) {
       if (!state.layers.some((current) => current.id === layer.id)) {
         stopArcGISViewportLoader(layer.id);
@@ -1313,35 +1337,49 @@ async function addArcGISMapServiceSublayerGroup(
 
   const layerIds: string[] = [];
   let bounds: [number, number, number, number] | undefined;
-  // `addLayer` stacks each new layer above the previous one, so walk the list
-  // bottom-up to leave sublayer 0 on top, as the service itself draws it.
-  for (const child of [...children].reverse()) {
-    const id = await addArcGISImageServiceLayer(
-      app,
-      {
-        ...options,
-        name: child.name,
-        splitSublayers: false,
-        sublayers: child.sublayers,
-        zoomTo: false,
-      },
-      input,
-      service,
-      child.visible,
-    );
-    layerIds.push(id);
-    const layerBounds = useAppStore.getState().layers.find((layer) => layer.id === id)
-      ?.source.bounds;
-    if (isGeoBounds(layerBounds)) {
-      bounds = bounds
-        ? [
-            Math.min(bounds[0], layerBounds[0]),
-            Math.min(bounds[1], layerBounds[1]),
-            Math.max(bounds[2], layerBounds[2]),
-            Math.max(bounds[3], layerBounds[3]),
-          ]
-        : layerBounds;
+  // The project the children join; a cancelled add takes them back out only
+  // while that project is still open.
+  const loadCount = useAppStore.getState().projectLoadCount;
+  try {
+    // `addLayer` stacks each new layer above the previous one, so walk the list
+    // bottom-up to leave sublayer 0 on top, as the service itself draws it.
+    for (const child of [...children].reverse()) {
+      const id = await addArcGISImageServiceLayer(
+        app,
+        {
+          ...options,
+          name: child.name,
+          splitSublayers: false,
+          sublayers: child.sublayers,
+          zoomTo: false,
+        },
+        input,
+        service,
+        child.visible,
+      );
+      layerIds.push(id);
+      const layerBounds = useAppStore.getState().layers.find((layer) => layer.id === id)
+        ?.source.bounds;
+      if (isGeoBounds(layerBounds)) {
+        bounds = bounds
+          ? [
+              Math.min(bounds[0], layerBounds[0]),
+              Math.min(bounds[1], layerBounds[1]),
+              Math.max(bounds[2], layerBounds[2]),
+              Math.max(bounds[3], layerBounds[3]),
+            ]
+          : layerBounds;
+      }
     }
+    options.signal?.throwIfAborted();
+  } catch (error) {
+    // A cancelled add adds nothing, so the children placed before the
+    // cancellation go too. Once another project has opened, the store is that
+    // project's, and these children left with the old one.
+    if (options.signal?.aborted && useAppStore.getState().projectLoadCount === loadCount) {
+      for (const id of layerIds) useAppStore.getState().removeLayer(id);
+    }
+    throw error;
   }
 
   // `mapName` is usually the generic "Layers", so the URL's service folder
@@ -1463,6 +1501,7 @@ async function addArcGISImageServiceLayer(
     sourcePath: serviceUrl,
   };
 
+  options.signal?.throwIfAborted();
   useAppStore.getState().addLayer(layer, options.beforeLayerId ?? null);
   if (bounds && (options.zoomTo ?? shouldZoomToNewLayers())) app.fitBounds?.(bounds);
   return id;
@@ -3109,8 +3148,16 @@ function sanitizeIdPart(value: string): string {
 }
 
 function createArcGISLayerId(): string {
-  arcgisLayerSequence += 1;
-  return `arcgis-layer-${arcgisLayerSequence}`;
+  // Skip ids already in the store: a loaded project can hold a layer whose id
+  // happens to read `arcgis-layer-<n>` (an imported ArcGIS Pro layer is named
+  // after its title), and two layers sharing an id corrupt the layer list.
+  const taken = new Set(useAppStore.getState().layers.map((layer) => layer.id));
+  let id: string;
+  do {
+    arcgisLayerSequence += 1;
+    id = `arcgis-layer-${arcgisLayerSequence}`;
+  } while (taken.has(id));
+  return id;
 }
 
 // Credentials belong to the live connection, never to project metadata.

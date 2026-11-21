@@ -3635,6 +3635,13 @@ html
   max-width: 100%;
 }
 
+/* Several photos of one feature (Field collection's `geolibre_photos`) sit
+   side by side as smaller thumbnails. */
+.geolibre-popup-inline-image-list .geolibre-popup-inline-image {
+  max-height: 5rem;
+  max-width: calc(50% - 0.125rem);
+}
+
 .geolibre-identify-image-popup .geolibre-popup-image {
   max-height: none;
 }
@@ -3649,15 +3656,80 @@ html
   object-fit: contain;
 }
 
+/* The bottom panels (the attribute tables, Dashboard, Python console, SQL
+   workspace and Assistant) each keep the inline height their resize handle
+   sets. That height is a preferred size, not a fixed one: when the open panels
+   and the map don't fit, the panels give up height in proportion, each down to
+   its header, instead of running off the bottom of the window with a header
+   over the status bar. Wherever they fit, nothing changes.
+
+   Not every panel's body shrinks with it (the Python console's input row keeps
+   its height), so a squeezed panel clips what no longer fits rather than
+   drawing it over the panel below or the status bar. Only the bottom edge is
+   clipped: a clip path also cuts fixed-position descendants, and the resize
+   handle straddles the top edge while the attribute table's drag guide (the
+   desktop app's deferred resize) can sit anywhere along the window's width
+   and above the panel. */
+.geolibre-bottom-panel:not([data-collapsed]) {
+  flex-shrink: 1;
+  min-height: 3rem;
+  clip-path: inset(-100vh -100vw 0 -100vw);
+}
+
+/* On a narrow or short viewport (a phone, or a laptop at 200% zoom, which is
+   640x400) the map needs a different floor while any panel is docked, even a
+   collapsed one. Below `md` its own 18rem floor would win and push the panels,
+   or just a collapsed panel's header, off screen; at `md` and up it has none,
+   and the Dashboard's default 360px alone can fill a short window. So the map
+   keeps min(18rem, 35dvh) and the panels share the rest.
+
+   Under the map (the default), the map column may shrink below its content so
+   the panels' shrinking is what absorbs the shortfall. Full width, the
+   workspace row keeps room for the map for the same reason, instead of the map
+   drawing behind the panels. */
+@media (max-width: 767px), (max-height: 540px) {
+  [data-map-column]:has(.geolibre-bottom-panel) {
+    min-height: 0;
+  }
+
+  [data-map-column]:has(.geolibre-bottom-panel) > main,
+  [data-workspace-row]:has(~ .geolibre-bottom-panel) main {
+    min-height: min(18rem, 35dvh);
+  }
+}
+
+/* Below `md` the row stacks the side-tab strip above the map column, so its
+   content height is that strip plus the map's floor. At `md` and up the row
+   holds the side docks, whose content can be taller than the window, so it
+   takes the map's floor directly. */
+@media (max-width: 767px) {
+  [data-workspace-row]:has(~ .geolibre-bottom-panel) {
+    min-height: auto;
+  }
+}
+
+@media (min-width: 768px) and (max-height: 540px) {
+  [data-workspace-row]:has(~ .geolibre-bottom-panel) {
+    min-height: min(18rem, 35dvh);
+  }
+}
+
 /* The attribute-table toolbar wraps into several rows on portrait phones. Its
    desktop default is only 192px tall, which can leave the flexing row viewport
    with no usable height after the toolbar and status bar are laid out. Give the
    open panel a viewport-relative height on narrow portrait screens so the rows
    remain scrollable. The desktop inline height and resize handle still govern
-   every other layout. */
+   every other layout.
+
+   Like any bottom panel's height (above), that is a preferred size: on a
+   typical phone, less still with the browser's own bars showing, the toolbar,
+   the side-tab strips, the status bar and the map's floor leave less than
+   60dvh. The table's floor is higher than the other panels', so its feature
+   count footer and the tab strip under the map stay on screen. */
 @media (max-width: 639px) and (orientation: portrait) {
   .geolibre-attribute-table-panel:not([data-collapsed]) {
     height: clamp(22rem, 60dvh, 32rem) !important;
+    min-height: 13rem;
   }
 
   .geolibre-attribute-table-resize-handle {
@@ -6218,4 +6290,224 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
     [data-cvd-filter]
   ) {
   filter: url(#geolibre-cvd-achromatopsia);
+}
+
+/* ---------------------------------------------------------------------------
+ * Touch UI ergonomics (GeoLibre#3537).
+ *
+ * Scoped to `html[data-touch-ui="true"]`, set by `useApplyTouchUiAttribute`
+ * whenever Touch mode is enabled or auto-detected on a coarse-pointer / mobile
+ * device. Keeping every rule under this attribute leaves desktop mouse layouts
+ * completely untouched while letting both the shell and body-portaled Radix
+ * dialogs/menus inherit 44px targets and 16px form inputs.
+ * ------------------------------------------------------------------------- */
+html[data-touch-ui="true"] {
+  --touch-target: 2.75rem;
+}
+
+/* Prevent iOS Safari / WKWebView from zooming the page when a text input or
+   select receives focus (WebKit auto-zooms any form control below 16px). */
+html[data-touch-ui="true"]
+  :is(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]),
+    select,
+    textarea
+  ) {
+  font-size: max(1rem, 16px);
+}
+
+/* Enlarge Radix dialog close buttons to a comfortable 44x44px hit target. */
+html[data-touch-ui="true"] [data-dialog-close] {
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+  inset-block-start: 0.25rem;
+  inset-inline-end: 0.25rem;
+}
+
+/* Enlarge Radix dropdown items for finger taps. */
+html[data-touch-ui="true"]
+  :is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]) {
+  min-height: var(--touch-target);
+  padding-block: 0.625rem;
+}
+
+/* Enlarge slider thumbs visually (22px) and give them a 44x44px hit area via
+   an invisible pseudo-element so dragging opacity/range sliders works with a
+   finger without distorting surrounding row spacing. */
+html[data-touch-ui="true"] [data-slider-thumb] {
+  width: 1.375rem;
+  height: 1.375rem;
+}
+
+html[data-touch-ui="true"] [data-slider-thumb]::before {
+  content: "";
+  position: absolute;
+  inset: -0.6875rem;
+}
+
+/* Enlarge MapLibre / Mapbox corner control buttons from 29px to 44px on touch
+   and scale their icons proportionally (~1.4x) so glyphs match desktop density. */
+html[data-touch-ui="true"] :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group) > button {
+  width: 44px;
+  height: 44px;
+}
+
+html[data-touch-ui="true"]
+  :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group)
+  > button
+  :is(.maplibregl-ctrl-icon, .mapboxgl-ctrl-icon) {
+  background-size: 36px 36px;
+}
+
+/* Globe icon uses a tighter 22x22 viewBox than MapLibre's 29x29 glyphs. */
+html[data-touch-ui="true"]
+  :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group)
+  > button:is(.maplibregl-ctrl-globe, .maplibregl-ctrl-globe-enabled)
+  :is(.maplibregl-ctrl-icon, .mapboxgl-ctrl-icon) {
+  background-size: 31px 31px;
+}
+
+html[data-touch-ui="true"]
+  :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group)
+  > button
+  .geolibre-reset-bearing-needle {
+  width: 34px;
+  height: 34px;
+}
+
+html[data-touch-ui="true"]
+  :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group)
+  > button
+  svg:not(.geolibre-reset-bearing-needle) {
+  width: 28px;
+  height: 28px;
+}
+
+/* Enlarge LayerRow interactive targets in touch mode. */
+html[data-touch-ui="true"] [data-testid="layer-row"] > div:first-child {
+  min-height: var(--touch-target);
+}
+
+html[data-touch-ui="true"] [data-testid="layer-row"] button,
+html[data-touch-ui="true"] [data-testid="layer-row"] [role="button"] {
+  min-height: 2.5rem;
+}
+
+/* Panels hosted inside the mobile BottomSheet fill the sheet height directly
+   instead of applying desktop inline pixel heights, absolute mobile overlay
+   caps, or resize grips. */
+[data-mobile-bottom-sheet] .geolibre-bottom-panel {
+  height: 100% !important;
+  min-height: 0 !important;
+  border-top: 0;
+}
+
+[data-mobile-bottom-sheet] .geolibre-attribute-table-resize-handle {
+  display: none;
+}
+
+[data-mobile-bottom-sheet] [data-mobile-panel-host] > aside {
+  position: relative !important;
+  inset: auto !important;
+  z-index: auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Lift toast notifications above the MobileBottomNav + MobileStatusPill when
+   the phone mobile shell is active so toasts never overlap bottom chrome. */
+body:has([data-mobile-shell="true"]) [data-testid="notification-region"] {
+  bottom: calc(6.75rem + env(safe-area-inset-bottom));
+}
+
+/* Keep capture confirmation toasts clear of the FieldCrosshairOverlay bar. */
+body:has([data-testid="field-crosshair-bar"]) [data-testid="notification-region"] {
+  bottom: calc(11.25rem + env(safe-area-inset-bottom));
+}
+
+/* Present modal Radix dialogs and the Processing toolbox as full-width
+   bottom-anchored sheets on touch phones (GeoLibre#3537 Phase 2). */
+@media (max-width: 639px) {
+  html[data-touch-ui="true"] [data-dialog-content] {
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
+    --tw-translate-x: 0 !important;
+    --tw-translate-y: 0 !important;
+    transform: none !important;
+    translate: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: 92dvh !important;
+    border-inline-width: 0;
+    border-bottom-width: 0;
+    border-radius: 1rem 1rem 0 0;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  html[data-touch-ui="true"] [data-processing-dialog] {
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
+    --tw-translate-x: 0 !important;
+    --tw-translate-y: 0 !important;
+    transform: none !important;
+    translate: none !important;
+    width: 100% !important;
+    height: 88dvh !important;
+    border-inline-width: 0;
+    border-bottom-width: 0;
+    border-radius: 1rem 1rem 0 0;
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+
+  /* While drawing a map extent for a Processing tool, shrink the sheet so the
+     map stays unobstructed and drawable on phones. */
+  html[data-touch-ui="true"] [data-processing-dialog][data-drawing="true"] {
+    height: auto !important;
+    max-height: 28dvh !important;
+  }
+
+  html[data-touch-ui="true"] [data-processing-resize-handle] {
+    display: none;
+  }
+
+  /* Dock identify popups as a clean bottom card on touch phones so features
+     tapped near screen edges never clip off-screen (GeoLibre#3537 Phase 3). */
+  html[data-touch-ui="true"] .geolibre-identify-popup {
+    position: fixed !important;
+    left: 0.5rem !important;
+    right: 0.5rem !important;
+    bottom: calc(6.75rem + env(safe-area-inset-bottom)) !important;
+    top: auto !important;
+    --tw-translate-x: 0 !important;
+    --tw-translate-y: 0 !important;
+    transform: none !important;
+    translate: none !important;
+    max-width: none !important;
+    width: auto !important;
+    z-index: 25 !important;
+  }
+
+  html[data-touch-ui="true"] .geolibre-identify-popup .maplibregl-popup-tip {
+    display: none !important;
+  }
+
+  html[data-touch-ui="true"] .geolibre-identify-popup .maplibregl-popup-content {
+    max-height: 40dvh;
+    overflow: auto;
+    border-radius: 1rem;
+  }
+
+  /* Hide narrow desktop column-resize handles in touch phone attribute views. */
+  html[data-touch-ui="true"]
+    .geolibre-attribute-table-panel
+    [role="separator"][aria-orientation="vertical"] {
+    display: none;
+  }
 }

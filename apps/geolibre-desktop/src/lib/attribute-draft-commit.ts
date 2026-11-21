@@ -2,13 +2,15 @@
  * Hand-off between the attribute table's unsaved cell drafts and the Layers
  * panel's write-back action (Save edits to source file / ArcGIS / PostGIS).
  *
- * Drafts live in the attribute table's component state and only reach
+ * Drafts live in the project session's UI state and only reach
  * `layer.geojson` when the table's own Save runs. Write-back reads the layer
  * from the store, so without this hand-off a value that is visibly edited in the
  * table is silently left out of the save (GeoLibre#2438, #2439). The table
  * registers a committer while it holds drafts, and write-back commits them
  * first.
  */
+
+import { useAppStore } from "@geolibre/core";
 
 /** Outcome of committing a layer's pending attribute drafts. */
 export type PendingAttributeDraftsResult =
@@ -50,7 +52,9 @@ export function registerPendingAttributeDrafts(
  */
 export function commitPendingAttributeDrafts(layerId: string): PendingAttributeDraftsResult {
   const commit = committers.get(layerId);
-  if (!commit) return "none";
+  // Session drafts can outlive the mounted table. Never report "none" and
+  // silently export/write the old values while no validating committer exists.
+  if (!commit) return useAppStore.getState().ui.attributeTableDrafts[layerId] ? "blocked" : "none";
   if (!commit()) return "blocked";
   committers.delete(layerId);
   return "committed";

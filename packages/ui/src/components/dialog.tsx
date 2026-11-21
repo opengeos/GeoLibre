@@ -36,6 +36,7 @@ export const DialogContent = React.forwardRef<
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
+      data-dialog-content=""
       className={cn(
         "fixed left-[50%] top-[50%] z-50 flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] flex-col overflow-hidden border bg-popover text-popover-foreground shadow-xl duration-200 supports-[not_(max-height:1dvh)]:max-h-[calc(100vh-1rem)] sm:rounded-lg",
         className,
@@ -48,7 +49,10 @@ export const DialogContent = React.forwardRef<
       {/* ring-offset matches the popover surface this sits on, not --background.
           Inert today (no ring-offset width utility is applied, so the offset
           colour never paints) but wrong the moment one is added. */}
-      <DialogPrimitive.Close className="absolute end-4 top-4 rounded-sm opacity-70 ring-offset-popover transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring">
+      <DialogPrimitive.Close
+        data-dialog-close=""
+        className="absolute end-4 top-4 inline-flex items-center justify-center rounded-sm opacity-70 ring-offset-popover transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+      >
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>

@@ -265,6 +265,10 @@ describe("what a failed import calls the thing it could not read", () => {
     ["a non-SLD XML document", "<foo/>"],
     ["JSON that is not a style", '{"not":"a style"}'],
     ["a QML with no renderer", "<qgis></qgis>"],
+    [
+      "a .lyrx with an unsupported renderer",
+      '{"type":"CIMLayerDocument","layerDefinitions":[{"type":"CIMFeatureLayer","renderer":{"type":"CIMUniqueValueRenderer"}}]}',
+    ],
   ] as const) {
     it(`never says "file" for ${label}`, () => {
       const result = importStyleText(text);

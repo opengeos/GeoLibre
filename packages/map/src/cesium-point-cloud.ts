@@ -170,6 +170,21 @@ export function heightRange(
   };
 }
 
+/**
+ * How far the globe moves a point cloud vertically so it sits on the ground
+ * (#3476). Without terrain the ground is the ellipsoid at 0 m, so the cloud is
+ * shifted by minus its ground height, as the 2D map's LiDAR control does with
+ * its automatic Z offset; with terrain the surveyed heights are kept.
+ *
+ * @param baseHeight - The cloud's ground height in metres, if known.
+ * @param terrain - Whether the globe draws a terrain surface.
+ * @returns The vertical shift in metres (0 when there is nothing to do).
+ */
+export function pointCloudGroundOffset(baseHeight: number | undefined, terrain: boolean): number {
+  if (terrain || typeof baseHeight !== "number" || !Number.isFinite(baseHeight)) return 0;
+  return baseHeight === 0 ? 0 : -baseHeight;
+}
+
 async function defaultLazPerf(): Promise<unknown> {
   const [{ createLazPerf }, wasmUrl] = await Promise.all([
     import("laz-perf"),

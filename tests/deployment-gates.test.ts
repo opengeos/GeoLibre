@@ -5,6 +5,7 @@ import {
   commandAppPrivileges,
   commandCapability,
   editMenuItemCapability,
+  entryMenuOffered,
   filterCommandsByCapabilities,
   filterCommandsByPrivileges,
   projectMenuItemCapability,
@@ -48,6 +49,8 @@ describe("commandCapability", () => {
       ["project.new", "project.new"],
       ["project.save", "project.save"],
       ["project.save-as", "project.saveAs"],
+      ["project.save-layer-edits", "project.saveLayerEdits"],
+      ["project.export-geojson-zip", "project.exportGeojsonZip"],
       ["project.open-file", "project.openFrom"],
       ["project.open-url", "project.openFrom"],
       ["project.share", "project.share"],
@@ -116,6 +119,7 @@ describe("projectMenuItemCapability", () => {
       "project.history",
       "project.save",
       "project.saveAs",
+      "project.saveLayerEdits",
       "project.duplicate",
       "project.saveAsTemplate",
       "project.collaborate",
@@ -131,6 +135,7 @@ describe("projectMenuItemCapability", () => {
       "project.exportHtml",
       "project.exportLayerStyles",
       "project.exportLayers",
+      "project.exportGeojsonZip",
       "project.print",
       "project.printLayout",
       "project.offlineRegion",
@@ -181,6 +186,14 @@ describe("commandAppPrivileges", () => {
     });
     assert.deepEqual(commandAppPrivileges("project.save-as"), {
       privileges: ["project:save"],
+      mode: "any",
+    });
+    assert.deepEqual(commandAppPrivileges("project.save-layer-edits"), {
+      privileges: ["project:save"],
+      mode: "any",
+    });
+    assert.deepEqual(commandAppPrivileges("project.export-geojson-zip"), {
+      privileges: ["export:data"],
       mode: "any",
     });
     assert.deepEqual(commandAppPrivileges("project.share"), {
@@ -326,6 +339,40 @@ describe("filterCommandsByPrivileges", () => {
     assert.deepEqual(
       filterCommandsByPrivileges(sidecarRegistry, ROLE_PRIVILEGES.publisher).map((c) => c.id),
       sidecarRegistry.map((c) => c.id),
+    );
+  });
+});
+
+describe("entryMenuOffered", () => {
+  const all = new Set<DeploymentCapability>(["data:add", "plugins:install"]);
+  it("offers a menu only when not in the viewer, visible, and granted", () => {
+    assert.equal(
+      entryMenuOffered("addData", { viewer: false, capabilities: all, menuVisible: true }),
+      true,
+    );
+    assert.equal(
+      entryMenuOffered("plugins", { viewer: false, capabilities: all, menuVisible: true }),
+      true,
+    );
+    assert.equal(
+      entryMenuOffered("addData", { viewer: true, capabilities: all, menuVisible: true }),
+      false,
+    );
+    assert.equal(
+      entryMenuOffered("plugins", { viewer: false, capabilities: all, menuVisible: false }),
+      false,
+    );
+    assert.equal(
+      entryMenuOffered("plugins", {
+        viewer: false,
+        capabilities: new Set(["data:add"]),
+        menuVisible: true,
+      }),
+      false,
+    );
+    assert.equal(
+      entryMenuOffered("addData", { viewer: false, capabilities: new Set(), menuVisible: true }),
+      false,
     );
   });
 });

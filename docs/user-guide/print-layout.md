@@ -36,7 +36,12 @@ switches between **Portrait** and **Landscape** (not for custom sizes), and
 **Margin** is **Normal**, **Narrow**, or **None (borderless)**. **Page
 background** colours the page around the map: the title block, the footer row
 and the margins. On a dark colour the title and the footer switch to light text,
-so a dark map can sit on a dark page.
+so a dark map can sit on a dark page. **Export resolution** sets the DPI that
+PNG and PDF exports render a paper page at: **72 DPI**, **150 DPI** (the
+default), or **300 DPI**. Screen sizes always export at their exact pixel size.
+On the largest papers 300 DPI is lowered slightly (A3 to about 294, Tabloid
+to about 299), so the page stays within the largest canvas every browser
+engine can draw.
 
 ## Map frame, scale, and extent
 
@@ -165,12 +170,13 @@ The default page file name is `{atlas.pagenumber}-{atlas.name}`.
 | Button | Output |
 | --- | --- |
 | **Export PNG** | A raster image of the page. In an atlas it becomes **Export PNG ZIP**: one PNG per page in a ZIP file. |
-| **Export PDF** | A PDF page of the chosen size. In an atlas it becomes **Export PDF (N pages)**: one multi-page PDF. |
+| **Export PDF** | A georeferenced PDF (GeoPDF) page of the chosen size. In an atlas it becomes **Export PDF (N pages)**: one multi-page PDF, each page georeferenced to its own map. |
 | **Export SVG** | An SVG of the page. Not available in an atlas. |
 | **Copy to Clipboard** | The page as a PNG on the clipboard. |
 
-The file is named after the title. Paper pages render at 150 DPI; screen
-presets and pixel custom sizes render at their exact pixel size. An atlas export
+The file is named after the title. Paper pages render at the **Export
+resolution** (150 DPI by default); screen presets and pixel custom sizes render
+at their exact pixel size. An atlas export
 reports its progress page by page, and the dialog stays open until it finishes.
 
 !!! note "What is vector and what is raster"
@@ -178,8 +184,28 @@ reports its progress page by page, and the dialog stays open until it finishes.
     editor such as Inkscape or Illustrator: the title, legend, scale bar, north
     arrow, tables, charts, and borders are written as editable text and paths.
     The map itself, and any image-based marker icons, stay embedded as images.
-    The **PDF** is a 150 DPI image of the whole page placed on a PDF page, not
-    vector content.
+    The **PDF** is an image of the whole page, at the export resolution, placed
+    on a PDF page, not vector content.
+
+## GeoPDF
+
+A PDF export carries the map frame's coordinates in the ISO 32000 geospatial
+format, so GIS and mobile mapping apps (QGIS and other GDAL-based tools, or
+Avenza Maps) open it in the right place, and a GPS-enabled app can show your
+position on the printed map in the field. The georeference covers the map frame
+only, not the title, legend, or margins, and it is written in the map's CRS:
+Web Mercator on the default map, or the map's own CRS when it uses one with an
+EPSG code.
+
+The georeference is exact only while the screen is a flat view of that CRS, so
+some views export as a plain PDF instead. Hover **Export PDF** to see which you
+will get. To get a GeoPDF:
+
+- Remove any tilt (pitch); a rotated (bearing) map is fine.
+- On a globe, zoom in until the globe flattens to Mercator (around zoom 12), or
+  switch the map projection to Mercator.
+- Use a custom CRS that has an EPSG code.
+- Use an Earth map. Moon and Mars projects export plain PDFs.
 
 !!! tip "Getting a sharper map"
     The map is captured from the on-screen map, so its detail is limited by the

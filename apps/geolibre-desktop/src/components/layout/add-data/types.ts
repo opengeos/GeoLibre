@@ -12,6 +12,7 @@ export type AddDataKind =
   | "ogc-features"
   | "ogc-vector-tiles"
   | "gpx"
+  | "geopdf"
   | "landxml"
   | "indoorgml"
   | "georss"

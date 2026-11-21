@@ -2,6 +2,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type MouseEvent as ReactMouseEvent,
   useMemo,
+  useState,
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -55,7 +56,9 @@ import {
   relativeSyncTime,
   type LayerRefreshStatus,
 } from "./layer-panel-utils";
+import { useTouchUi } from "../../../hooks/useTouchUi";
 import { LayerActionsMenuItems, type LayerActionsMenuShared } from "./LayerActionsMenu";
+import { LayerActionsTouchSheet } from "./LayerActionsTouchSheet";
 import { LayerOpacitySlider } from "./LayerOpacitySlider";
 import { useCompactLayerList } from "./useCompactLayerList";
 
@@ -141,6 +144,8 @@ export function LayerRow({
   menu,
 }: LayerRowProps) {
   const { i18n, t } = useTranslation();
+  const { touchUi } = useTouchUi();
+  const [touchActionsOpen, setTouchActionsOpen] = useState(false);
   const setLayerVisibility = useAppStore((s) => s.setLayerVisibility);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const primaryRenderer = useAppStore((s) => s.primaryRenderer);
@@ -248,6 +253,11 @@ export function LayerRow({
   // and attributes, so a read-only reference layer can still be
   // renamed or taken off the map.
   const layerEditable = canEditLayer(layer.id);
+  // Why a guest cannot touch this layer: the host locked it, or the session
+  // (or the host's override for this guest) is view-only.
+  const readOnlyHint = isLayerLocked
+    ? t("collaborate.layerLockedHint")
+    : t("collaborate.viewOnlyHint");
   const refreshConfig = getLayerRefreshConfig(layer);
   const refreshStatus: LayerRefreshStatus | undefined =
     transientRefreshStatus ??
@@ -311,6 +321,9 @@ export function LayerRow({
         <div className="pointer-events-none absolute -bottom-1 left-2 right-2 h-1 rounded-full bg-primary shadow-[0_0_0_2px_hsl(var(--background))]" />
       )}
       <div className="flex min-w-0 items-center gap-1">
+        {/* Dedicated non-scroll drag grip (`touch-none` prevents browser
+            vertical pan from cancelling an active reorder drag while the rest
+            of the layer row scrolls naturally). */}
         <span
           role="button"
           tabIndex={0}
@@ -318,7 +331,9 @@ export function LayerRow({
           aria-label={t("layers.dragNamedToReorder", {
             name: layer.name,
           })}
-          className="touch-none select-none cursor-grab rounded p-0.5 text-muted-foreground hover:bg-muted active:cursor-grabbing"
+          className={`select-none cursor-grab rounded p-0.5 text-muted-foreground hover:bg-muted active:cursor-grabbing touch-none ${
+            touchUi ? "inline-flex min-h-11 min-w-9 items-center justify-center" : ""
+          }`}
           onClick={(e: ReactMouseEvent) => e.stopPropagation()}
           onPointerDown={(e) => onPointerDown(e, layer.id)}
           onPointerMove={onPointerMove}
@@ -330,7 +345,10 @@ export function LayerRow({
         </span>
         <button
           type="button"
-          className="rounded p-0.5 hover:bg-muted"
+          className="rounded p-0.5 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+          // A guest cannot change a host-locked layer, nor anything in a
+          // view-only session: the relay would refuse the change (#3477).
+          disabled={!layerEditable}
           // The eye stays the layer's *own* switch even while a
           // group hides it — showing EyeOff here would offer a
           // "Show layer" that turns the layer's own toggle off,
@@ -339,10 +357,11 @@ export function LayerRow({
           // Same string for the tooltip and the accessible name,
           // so the group-hidden context reaches a screen reader
           // and not only a sighted hover.
-          title={visibilityToggleLabel}
+          title={layerEditable ? visibilityToggleLabel : readOnlyHint}
           aria-label={visibilityToggleLabel}
           onClick={(e) => {
             e.stopPropagation();
+            if (!layerEditable) return;
             setLayerVisibility(layer.id, !layer.visible);
           }}
         >
@@ -545,6 +564,8 @@ export function LayerRow({
             label={t("layers.opacity")}
             ariaLabel={t("layers.opacityFor", { name: layer.name })}
             value={layer.opacity}
+            disabled={!layerEditable}
+            disabledHint={readOnlyHint}
             onChange={(v) => setLayerOpacity(layer.id, v)}
           />
         )}
@@ -586,10 +607,15 @@ export function LayerRow({
               e.stopPropagation();
               const controller = mapControllerRef.current;
               // A layer with no known extent (e.g. a bare `{z}/{x}/{y}` vector
-              // tile URL viewed nowhere near its data) cannot be framed; say so
+              // tile URL viewed nowhere near its data), or one wholly outside
+              // the area a custom map CRS shows, cannot be framed; say so
               // rather than leave the button looking broken.
               if (controller && !controller.fitLayer(layer)) {
-                notify.info(t("layers.zoomToLayerUnknownExtent", { name: layer.name }));
+                notify.info(
+                  controller.isLayerOutsideMapCrs?.(layer)
+                    ? t("layers.zoomToLayerOutsideMapCrs", { name: layer.name })
+                    : t("layers.zoomToLayerUnknownExtent", { name: layer.name }),
+                );
               }
             }}
           >
@@ -631,37 +657,81 @@ export function LayerRow({
               <Palette className="h-3.5 w-3.5" />
             </Button>
           )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          {touchUi ? (
+            <>
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-7 w-7 ${
+                data-testid="layer-row-touch-actions"
+                className={`h-10 w-10 ${
                   refreshConfig.enabled ? "border border-primary text-primary" : ""
                 }`}
                 title={t("layers.layerActions")}
                 aria-label={t("layers.layerActions")}
-                onClick={(e: ReactMouseEvent) => e.stopPropagation()}
+                onClick={(e: ReactMouseEvent) => {
+                  e.stopPropagation();
+                  setTouchActionsOpen(true);
+                }}
               >
-                <MoreHorizontal className="h-3.5 w-3.5" />
+                <MoreHorizontal className="h-4 w-4" />
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" onClick={(e: ReactMouseEvent) => e.stopPropagation()}>
-              <LayerActionsMenuItems
+              <LayerActionsTouchSheet
+                open={touchActionsOpen}
+                onOpenChange={setTouchActionsOpen}
                 shared={menu}
                 layer={layer}
                 layerCaps={layerCaps}
                 layerRendered={layerRendered}
+                canIdentify={canIdentify}
+                identifyActive={identifyActive}
                 identifyOwnsClicks={identifyOwnsClicks}
+                identifyLabel={identifyLabel}
                 geometryEditActive={geometryEditActive}
                 geometryEditElsewhere={geometryEditElsewhere}
                 isLayerLocked={isLayerLocked}
-                layerEditable={layerEditable}
-                refreshConfig={refreshConfig}
                 isRefreshing={isRefreshing}
+                layerEditable={layerEditable}
+                readOnlyHint={readOnlyHint}
+                onOpenMetadata={onOpenMetadata}
+                onRequestRemove={onRequestRemove}
               />
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-7 w-7 ${
+                    refreshConfig.enabled ? "border border-primary text-primary" : ""
+                  }`}
+                  title={t("layers.layerActions")}
+                  aria-label={t("layers.layerActions")}
+                  onClick={(e: ReactMouseEvent) => e.stopPropagation()}
+                >
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                onClick={(e: ReactMouseEvent) => e.stopPropagation()}
+              >
+                <LayerActionsMenuItems
+                  shared={menu}
+                  layer={layer}
+                  layerCaps={layerCaps}
+                  layerRendered={layerRendered}
+                  identifyOwnsClicks={identifyOwnsClicks}
+                  geometryEditActive={geometryEditActive}
+                  geometryEditElsewhere={geometryEditElsewhere}
+                  isLayerLocked={isLayerLocked}
+                  layerEditable={layerEditable}
+                  refreshConfig={refreshConfig}
+                  isRefreshing={isRefreshing}
+                />
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -679,7 +749,7 @@ export function LayerRow({
             variant="ghost"
             size="icon"
             className="h-7 w-7 text-destructive disabled:opacity-40"
-            title={!layerEditable ? t("collaborate.layerLockedHint") : t("layers.removeLayer")}
+            title={!layerEditable ? readOnlyHint : t("layers.removeLayer")}
             aria-label={t("layers.removeLayer")}
             disabled={!layerEditable}
             onClick={(e) => {

@@ -37,6 +37,8 @@ import { openExternalLink } from "../../lib/open-external";
 import { openSettingsSection } from "../layout/SettingsDialog";
 import { bedrockAuthFromConfig, hasModelPicker } from "../../lib/assistant/model-discovery";
 import { ProviderModelPicker } from "../ProviderModelPicker";
+import { useChatGptStatus } from "../../hooks/useChatGptStatus";
+import { isChatGptSignInAvailable } from "../../lib/assistant/chatgpt";
 import {
   ASSISTANT_PROVIDER_IDS,
   availableProviders,
@@ -84,6 +86,8 @@ const SETUP_PROVIDERS: ReadonlyArray<{
   { id: "google", envs: ["GEMINI_API_KEY"] },
   { id: "anthropic", envs: ["ANTHROPIC_API_KEY"] },
   { id: "openai", envs: ["OPENAI_API_KEY"] },
+  // No variable: signed in under Settings → AI Providers (desktop only).
+  { id: "chatgpt", envs: [] },
   { id: "openrouter", envs: ["OPENROUTER_API_KEY"] },
   { id: "vercel", envs: ["AI_GATEWAY_API_KEY"] },
   { id: "trustedrouter", envs: ["TRUSTEDROUTER_API_KEY"] },
@@ -203,6 +207,9 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
+  // Loads the ChatGPT sign-in once; a change fires the runtime-env event the
+  // effect below already rebuilds the provider state on.
+  useChatGptStatus();
   const [hasKey, setHasKey] = useState(() => hasProviderKey());
   const [providers, setProviders] = useState<AssistantProviderId[]>(() => availableProviders());
 
@@ -345,7 +352,10 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   // profile effect below deliberately does nothing when the profile itself is
   // unchanged, and would leave the agent on the superseded key.
   //
-  // Deferred rather than dropped while a response is streaming: reset() cancels
+  // The rebuild keeps the conversation, so the next agent still knows the turns
+  // on screen.
+  //
+  // Deferred rather than dropped while a response is streaming: rebuild() cancels
   // the in-flight agent, and that cancellation is not user-initiated, so send()'s
   // catch would surface it as an error turn and drop the reply. The effect below
   // flushes the deferred reset once the run finishes.
@@ -357,7 +367,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         envResetPendingRef.current = true;
         return;
       }
-      session.reset();
+      session.rebuild();
     };
     window.addEventListener(RUNTIME_ENV_EVENT, onEnvChange);
     return () => window.removeEventListener(RUNTIME_ENV_EVENT, onEnvChange);
@@ -370,7 +380,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   useEffect(() => {
     if (running || !envResetPendingRef.current) return;
     envResetPendingRef.current = false;
-    session.reset();
+    session.rebuild();
   }, [running, session]);
 
   // When the default profile changes (user set a new default in Settings),
@@ -390,15 +400,18 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   // Push the active profile into the session. When no profile is available,
   // fall back to auto-resolution (which reads from the runtime env directly).
   //
-  // Deferred while a response is streaming: applying a *changed* profile resets
-  // the session, which cancels the in-flight agent. That cancellation is not
+  // A changed profile rebuilds the agent on the new provider and seeds it with
+  // the conversation so far, so switching profiles keeps the context.
+  //
+  // Deferred while a response is streaming: applying a *changed* profile
+  // rebuilds the agent, which cancels the in-flight one. That cancellation is not
   // user-initiated, so send()'s catch would surface it as an error turn and drop
   // the reply. The panel dropdown is disabled while running, but Settings can
   // still change the default profile, so guard here. `running` is a dependency,
   // so the latest activeProfile is applied as soon as the run finishes — and it
   // flips back to false after every turn, which re-runs this effect on turns
   // where nothing changed. setSelection compares the selection by value and
-  // no-ops on those, which is what keeps the conversation history alive.
+  // no-ops on those, so the agent is not rebuilt after every turn.
   useEffect(() => {
     if (running) return;
     session.setSelection(activeProfile ?? null);
@@ -773,7 +786,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     <section
       ref={sectionRef}
       aria-label={t("assistant.title")}
-      className="relative flex shrink-0 flex-col border-t bg-card"
+      className="geolibre-bottom-panel relative flex shrink-0 flex-col border-t bg-card"
       style={{ height }}
     >
       <div
@@ -889,12 +902,17 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                 {t("assistant.setupProviders")}
               </p>
               <ul aria-label={t("assistant.setupProviders")} className="space-y-1">
-                {SETUP_PROVIDERS.map(({ id, envs }) => (
+                {SETUP_PROVIDERS.filter(
+                  ({ id }) => id !== "chatgpt" || isChatGptSignInAvailable(),
+                ).map(({ id, envs }) => (
                   <li key={id} className="flex items-start justify-between gap-3 text-xs">
                     <span className="shrink-0 text-foreground">{PROVIDER_LABELS[id]}</span>
                     {/* One chip per variable so a multi-credential provider
                         never reads as a single oddly-named env var. */}
                     <span className="flex flex-wrap justify-end gap-x-1 gap-y-0.5 text-end font-mono text-[11px] text-muted-foreground">
+                      {envs.length === 0 ? (
+                        <span className="font-sans">{t("assistant.setupSignIn")}</span>
+                      ) : null}
                       {envs.map((name, index) => (
                         <span key={name} className="whitespace-nowrap">
                           {index > 0 ? (
@@ -1162,7 +1180,11 @@ function CodeApprovalOverlay({
         role="dialog"
         aria-modal="true"
         aria-label={t("assistant.codeApprovalTitle")}
-        className="flex max-h-full w-full max-w-md flex-col gap-3 rounded-lg border bg-card p-4 shadow-lg"
+        // Scrolls when the panel is too short for it (a short window shrinks
+        // the panel), so the checkbox and buttons stay reachable. The code
+        // shrinks first, but only to a few lines (`min-h-16`) rather than
+        // away: it is what the user is approving.
+        className="flex max-h-full w-full max-w-md flex-col gap-3 overflow-y-auto rounded-lg border bg-card p-4 shadow-lg"
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.stopPropagation();
@@ -1196,7 +1218,7 @@ function CodeApprovalOverlay({
         <p className="text-xs text-muted-foreground">
           {t("assistant.codeApprovalBody", { language })}
         </p>
-        <pre className="max-h-48 overflow-auto rounded border bg-muted p-2 text-xs">
+        <pre className="max-h-48 min-h-16 overflow-auto whitespace-pre-wrap rounded border bg-muted p-2 text-xs [overflow-wrap:anywhere]">
           <code>{code}</code>
         </pre>
         <label className="flex items-center gap-2 text-xs text-muted-foreground">

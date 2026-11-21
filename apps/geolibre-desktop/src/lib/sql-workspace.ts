@@ -16,18 +16,35 @@ import {
   resetSqlDatabase,
   rowsFromResult,
 } from "./duckdb-vector-loader";
-import { GDAL_AUTO_FID_COLUMN, isAutoFidColumn, stripAutoFidColumn } from "./duckdb-geometry";
+import {
+  GDAL_AUTO_FID_COLUMN,
+  caseInsensitiveKeyRenames,
+  isAutoFidColumn,
+  prepareGeoJsonForStRead,
+} from "./duckdb-geometry";
 import { collectQueryDataSources } from "./sql-data-sources";
 import { maskSqlLiterals, resolveCloudUrls } from "./sql-cloud-urls";
 
 // Moved to sql-cloud-urls.ts (no DuckDB import, so node tests can load them);
 // re-exported so existing call sites keep one import path.
 export { maskSqlLiterals, resolveCloudUrls, rewriteCloudUrls } from "./sql-cloud-urls";
-import { assignTableNames, type SqlWorkspaceTable } from "./sql-table-names";
+import {
+  assignTableNames,
+  isLayerDataError,
+  withRegistrationFailures,
+  type SqlLayerRegistrationFailure,
+  type SqlWorkspaceTable,
+} from "./sql-table-names";
 
 // Table naming lives in sql-table-names.ts (no DuckDB import) so the assistant
 // can reuse it; re-exported here so existing call sites keep one import path.
-export { assignTableNames, previewLayerTables, type SqlWorkspaceTable } from "./sql-table-names";
+export {
+  assignTableNames,
+  previewLayerTables,
+  withRegistrationFailures,
+  type SqlLayerRegistrationFailure,
+  type SqlWorkspaceTable,
+} from "./sql-table-names";
 
 // Hidden column appended to the user's query so geometry can be returned as
 // GeoJSON for the "Add as layer" / export paths without disturbing the columns
@@ -125,11 +142,18 @@ const COLUMN_SCAN_FEATURE_LIMIT = 50;
  * @param layers Current app layers; those without `geojson` are skipped.
  * @param geometryColumn The geometry column name the active engine registers
  *   (`geom` for DuckDB/PGlite, `geometry` for Sedona). Defaults to `geom`.
+ * @param renameCaseDuplicates Whether the engine renames property names that
+ *   repeat another ignoring case (`name` next to `NAME` becomes `name_1`), as
+ *   DuckDB registration does. Defaults to true; PGlite keeps them distinct.
+ *   The renames come from the scanned features only, so a clashing casing that
+ *   first appears past the scan limit can make a completion name differ from
+ *   the registered one; the query itself is unaffected.
  * @returns Table name and its column names, in the same naming as registration.
  */
 export function previewLayerColumns(
   layers: GeoLibreLayer[],
   geometryColumn: string = DEFAULT_LAYER_GEOMETRY_COLUMN,
+  renameCaseDuplicates = true,
 ): SqlWorkspaceTableColumns[] {
   return assignTableNames(layers).map(({ layer, tableName }) => {
     const seen = new Set<string>();
@@ -153,7 +177,9 @@ export function previewLayerColumns(
     if (!seenLower.has(geometryColumn.toLowerCase())) {
       columns.push(geometryColumn);
     }
-    return { tableName, columns };
+    if (!renameCaseDuplicates) return { tableName, columns };
+    const renames = caseInsensitiveKeyRenames(columns);
+    return { tableName, columns: columns.map((column) => renames.get(column) ?? column) };
   });
 }
 
@@ -176,6 +202,9 @@ export function previewLayerColumns(
  * @param filePrefix Per-run prefix applied to every registered VFS file name.
  * @param registeredFiles Optional accumulator; each created file name is pushed
  *   as it is registered so the caller can clean up even if a later layer throws.
+ * @param failures Optional accumulator for layers DuckDB could not load. A
+ *   layer that fails is skipped rather than failing every query, so one bad
+ *   layer cannot break queries that never touch it (issue #3514).
  * @returns The registered tables in registration order.
  */
 export async function registerLayerTables(
@@ -184,6 +213,7 @@ export async function registerLayerTables(
   layers: GeoLibreLayer[],
   filePrefix: string,
   registeredFiles?: string[],
+  failures?: SqlLayerRegistrationFailure[],
 ): Promise<SqlWorkspaceTable[]> {
   const registered: SqlWorkspaceTable[] = [];
 
@@ -193,14 +223,29 @@ export async function registerLayerTables(
     // below (TypeScript does not carry the filter's narrowing across functions).
     if (!layer.geojson) continue;
     const fileName = `${filePrefix}__${tableName}.geojson`;
-    await db.registerFileText(fileName, JSON.stringify(stripAutoFidColumn(layer.geojson)));
+    // Drop GDAL's reserved OGC_FID and rename case-only duplicate property
+    // names (DuckDB columns are case-insensitive), either of which would make
+    // ST_Read fail with a duplicate-column binder error (issues #499, #3514).
+    await db.registerFileText(fileName, JSON.stringify(prepareGeoJsonForStRead(layer.geojson)));
     // Track immediately after registration so a failure in the CREATE TABLE
     // below still leaves this file in the cleanup list.
     registeredFiles?.push(fileName);
-    await connection.query(
-      `CREATE OR REPLACE TEMP TABLE ${quoteIdentifier(tableName)} AS ` +
-        `SELECT * FROM ST_Read(${quoteSqlString(fileName)})`,
-    );
+    try {
+      await connection.query(
+        `CREATE OR REPLACE TEMP TABLE ${quoteIdentifier(tableName)} AS ` +
+          `SELECT * FROM ST_Read(${quoteSqlString(fileName)})`,
+      );
+    } catch (error) {
+      // Skip only errors about this layer's data; anything else (out of
+      // memory, a poisoned instance, an interrupt) must still fail the query.
+      if (!failures || !isLayerDataError(error)) throw error;
+      failures.push({
+        tableName,
+        layerName: layer.name,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
     registered.push({ tableName, layerName: layer.name });
   }
 
@@ -627,51 +672,57 @@ async function runSqlStatementOnce(
         await connection.query(`SELECT 1 FROM ${readerCall} LIMIT 0`);
       }
     });
-    await registerLayerTables(db, connection, layers, filePrefix, registeredFiles);
+    const failures: SqlLayerRegistrationFailure[] = [];
+    await registerLayerTables(db, connection, layers, filePrefix, registeredFiles, failures);
+    // A layer that could not be registered is reported only when the query
+    // fails, since a query that never names it should run normally.
+    try {
+      const described = await describeQuery(connection, statement);
+      const geometryColumn = described?.geometryColumn ?? null;
 
-    const described = await describeQuery(connection, statement);
-    const geometryColumn = described?.geometryColumn ?? null;
+      if (geometryColumn) {
+        const geomId = quoteIdentifier(geometryColumn);
+        const hiddenId = quoteIdentifier(GEOMETRY_JSON_COLUMN);
+        // Drop a user column that already uses the reserved hidden name from the
+        // wildcard so appending our own alias cannot raise a duplicate-column
+        // error. EXCLUDE only when present, since DuckDB rejects EXCLUDE of a
+        // missing column.
+        const excludeClause = described?.columnNames.includes(GEOMETRY_JSON_COLUMN)
+          ? ` EXCLUDE (${hiddenId})`
+          : "";
+        const result = await connection.query(
+          `SELECT *${excludeClause} REPLACE (ST_AsText(${geomId}) AS ${geomId}), ` +
+            `ST_AsGeoJSON(${geomId}) AS ${hiddenId} ` +
+            `FROM (${statement}) AS ${quoteIdentifier(SQL_SUBQUERY_ALIAS)}`,
+        );
+        const allColumns = columnNamesFromResult(result);
+        const columns = allColumns.filter((column) => column !== GEOMETRY_JSON_COLUMN);
+        const rawRows = rowsFromResult(result);
+        const geojson = rowsToFeatureCollection(rawRows, geometryColumn);
+        const rows = rawRows.map((row) => normalizeRow(row, columns));
+        return {
+          columns,
+          rows,
+          rowCount: rows.length,
+          geometryColumn,
+          geojson,
+          dataSources: await queryDataSources(connection, statement),
+        };
+      }
 
-    if (geometryColumn) {
-      const geomId = quoteIdentifier(geometryColumn);
-      const hiddenId = quoteIdentifier(GEOMETRY_JSON_COLUMN);
-      // Drop a user column that already uses the reserved hidden name from the
-      // wildcard so appending our own alias cannot raise a duplicate-column
-      // error. EXCLUDE only when present, since DuckDB rejects EXCLUDE of a
-      // missing column.
-      const excludeClause = described?.columnNames.includes(GEOMETRY_JSON_COLUMN)
-        ? ` EXCLUDE (${hiddenId})`
-        : "";
-      const result = await connection.query(
-        `SELECT *${excludeClause} REPLACE (ST_AsText(${geomId}) AS ${geomId}), ` +
-          `ST_AsGeoJSON(${geomId}) AS ${hiddenId} ` +
-          `FROM (${statement}) AS ${quoteIdentifier(SQL_SUBQUERY_ALIAS)}`,
-      );
-      const allColumns = columnNamesFromResult(result);
-      const columns = allColumns.filter((column) => column !== GEOMETRY_JSON_COLUMN);
-      const rawRows = rowsFromResult(result);
-      const geojson = rowsToFeatureCollection(rawRows, geometryColumn);
-      const rows = rawRows.map((row) => normalizeRow(row, columns));
+      const result = await connection.query(statement);
+      const columns = columnNamesFromResult(result);
+      const rows = rowsFromResult(result).map((row) => normalizeRow(row, columns));
       return {
         columns,
         rows,
         rowCount: rows.length,
-        geometryColumn,
-        geojson,
-        dataSources: await queryDataSources(connection, statement),
+        geometryColumn: null,
+        geojson: null,
       };
+    } catch (error) {
+      throw withRegistrationFailures(error, failures);
     }
-
-    const result = await connection.query(statement);
-    const columns = columnNamesFromResult(result);
-    const rows = rowsFromResult(result).map((row) => normalizeRow(row, columns));
-    return {
-      columns,
-      rows,
-      rowCount: rows.length,
-      geometryColumn: null,
-      geojson: null,
-    };
   } finally {
     await connection.close();
     // The table data is materialised by CREATE TABLE, so the registered GeoJSON

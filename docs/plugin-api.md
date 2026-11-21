@@ -925,6 +925,8 @@ if (subBasins) app.removeLayerGroup?.(subBasins);
 
 `moveLayerGroupToGroup` is the group-of-groups counterpart of `moveLayersToGroup`: the same reparenting the Layers panel's own "Move to group" menu performs. It is a no-op when either id is unknown, when the group is already in that parent, and when the move would make a group its own ancestor — the host refuses the cycle rather than corrupting the tree, so a plugin does not have to walk the parent chain itself.
 
+A call to `addLayerGroup` that names its layers reuses a folder of the same name that holds nothing but some of those layers (or nothing at all) instead of creating a second one. That is what happens when a saved project is reopened: the folder comes back with the plugin's layers in it, and the plugin, reactivated, asks for it again. A namesake that holds anything else, another layer or a subgroup, is a different folder and is left alone, and a call without layers always creates a new group. An empty folder of that name, even one the user made, is reused.
+
 `addLayerGroup` is the only source of group ids for folders a plugin creates. To address a folder it did not create — one the user made, or one another plugin made — read the tree first:
 
 ```typescript
@@ -950,7 +952,7 @@ app.setLayerVisibility?.(rasterLayerId, false);
 
 ## Layer styles
 
-`importLayerStyle` applies a style written in another format to a layer, like the Layers panel's "Import style": an OGC SLD, a QGIS QML or a Mapbox GL style JSON, detected from the content. The style is merged over the layer's current one, so fields it does not describe keep their values, and it is saved with the project. Like the Layers panel, it styles only GeoJSON and vector-tile layers; it accepts any such layer id, not only the plugin's own, and throws for an unknown one.
+`importLayerStyle` applies a style written in another format to a layer, like the Layers panel's "Import style": an OGC SLD, a QGIS QML, an ArcGIS Pro layer file (`.lyrx`) or a Mapbox GL style JSON, detected from the content. The style is merged over the layer's current one, so fields it does not describe keep their values, and it is saved with the project. Like the Layers panel, it styles only GeoJSON and vector-tile layers; it accepts any such layer id, not only the plugin's own, and throws for an unknown one.
 
 A plugin that adds features from a web service can dress them as the service does. A GeoServer, for example, returns a layer's SLD for WMS `GetStyles`:
 

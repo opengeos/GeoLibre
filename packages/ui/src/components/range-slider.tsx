@@ -34,12 +34,14 @@ export const RangeSlider = React.forwardRef<
       <SliderPrimitive.Range className="absolute h-full bg-primary" />
     </SliderPrimitive.Track>
     <SliderPrimitive.Thumb
+      data-slider-thumb=""
       aria-label={minLabel}
-      className="block h-4 w-4 rounded-full border border-primary/50 bg-background shadow transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="relative block h-4 w-4 rounded-full border border-primary/50 bg-background shadow transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     />
     <SliderPrimitive.Thumb
+      data-slider-thumb=""
       aria-label={maxLabel}
-      className="block h-4 w-4 rounded-full border border-primary/50 bg-background shadow transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="relative block h-4 w-4 rounded-full border border-primary/50 bg-background shadow transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     />
   </SliderPrimitive.Root>
 ));

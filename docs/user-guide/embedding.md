@@ -351,7 +351,7 @@ For a ZIP containing files of the same geometry type, assign different styles by
 
 You do not need to author that JSON by hand. Open the vector layer's **Layer actions → Styles → Export GeoLibre URL style** menu. The downloaded `.geolibre.style.json` contains only symbology—not feature data—and its render-layer `source` is already set to the original GeoJSON filename stem. Built-in fill patterns, their colors, and custom SVG fill patterns are preserved using GeoLibre layer metadata (see [style interchange](styling.md#style-interchange-and-url-styles)); externally hosted SVGs remain external dependencies. Host the file on a CORS-enabled server and pass its URL as `style` alongside the corresponding `data` URL. For a multi-file ZIP, export each layer's GeoLibre URL style and combine their `layers` and `sources` into one style document; layers without `source` can be used for rules shared by every ZIP member.
 
-The same file can be applied interactively to an existing vector layer through **Layer actions → Styles → Import style from file (GeoLibre URL / Mapbox GL / SLD / QML)…**. Interactive import ignores the file's query-param `source` binding and applies its supported symbology to the layer you selected, so the data filename does not need to match.
+The same file can be applied interactively to an existing vector layer through **Layer actions → Styles → Import style from file (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…**. Interactive import ignores the file's query-param `source` binding and applies its supported symbology to the layer you selected, so the data filename does not need to match.
 
 ## Open a STAC catalog
 
@@ -601,9 +601,15 @@ source.
 storing it, and `addLayer` requires a source the map can actually read: a `url`
 or a non-empty `tiles`, or — for the two layer types drawn from inline features,
 `geojson` and `deckgl-viz` — an inline `geojson`. Both report the problem in the
-`ack` rather than reporting success and rendering nothing. `addLayer` also
+`ack` rather than reporting success and rendering nothing. A `geojson` layer
+whose source names its data by URL (`source.data` or `source.url`, an http(s)
+URL or a root-relative path) instead of carrying an inline `geojson` is
+fetched before the layer is added, so an unreachable URL, a reference in
+neither form, or a document that is not a GeoJSON FeatureCollection rejects
+the call. `addLayer` also
 refuses `javascript:`, `vbscript:`, `data:`, `file:`, and `blob:` URLs on a
-source; a custom map protocol such as `pmtiles://` is fine.
+source; a custom map protocol such as `pmtiles://` is fine. The spec has no
+`groupId`; a layer added this way lands outside any layer group.
 
 `addData` uses the same format detection, CORS requirements, safety limits, and
 optional Mapbox/MapLibre style import as the [`data` URL parameter](#open-remote-data).

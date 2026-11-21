@@ -1,6 +1,7 @@
-import { type PointerEvent as ReactPointerEvent, useRef, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
+import { evaluateLayerDragActivation, LAYER_TOUCH_DRAG_HOLD_MS } from "../../../lib/touch-menu-nav";
 
 interface UseLayerDragAndDropOptions {
   /** The project's layers, in store order. */
@@ -15,6 +16,18 @@ interface UseLayerDragAndDropOptions {
 }
 
 type DropTarget = { kind: "layer" | "group"; id: string };
+
+interface DragGesture {
+  pointerId: number;
+  pointerType: string;
+  targetEl: HTMLElement;
+  layerId: string;
+  x: number;
+  y: number;
+  startTime: number;
+  holdTimer: ReturnType<typeof setTimeout> | null;
+  active: boolean;
+}
 
 /**
  * Pointer-captured layer dragging keeps reordering inside the webview. HTML
@@ -33,23 +46,27 @@ export function useLayerDragAndDrop({
   const moveLayersToGroup = useAppStore((s) => s.moveLayersToGroup);
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
-  const gesture = useRef<{
-    pointerId: number;
-    layerId: string;
-    x: number;
-    y: number;
-    active: boolean;
-  } | null>(null);
+  const gesture = useRef<DragGesture | null>(null);
 
   const draggedDisplayIndex = draggedLayerId
     ? visibleLayers.findIndex((layer) => layer.id === draggedLayerId)
     : -1;
 
+  const clearHoldTimer = () => {
+    if (gesture.current?.holdTimer) {
+      clearTimeout(gesture.current.holdTimer);
+      gesture.current.holdTimer = null;
+    }
+  };
+
   const resetDragState = () => {
+    clearHoldTimer();
     gesture.current = null;
     setDraggedLayerId(null);
     setDropTarget(null);
   };
+
+  useEffect(() => () => clearHoldTimer(), []);
 
   const targetAtPointer = (event: ReactPointerEvent<HTMLElement>): DropTarget | null => {
     const list = event.currentTarget.closest("[data-layer-list]");
@@ -61,28 +78,66 @@ export function useLayerDragAndDrop({
     return group?.dataset.groupId ? { kind: "group", id: group.dataset.groupId } : null;
   };
 
+  const activateGesture = (current: DragGesture) => {
+    if (current.active) return;
+    current.active = true;
+    clearHoldTimer();
+    if (!current.targetEl.hasPointerCapture(current.pointerId)) {
+      try {
+        current.targetEl.setPointerCapture(current.pointerId);
+      } catch {
+        // Pointer may have already ended before the hold timer fired.
+      }
+    }
+    setDraggedLayerId(current.layerId);
+  };
+
   const handlePointerDown = (event: ReactPointerEvent<HTMLElement>, layerId: string) => {
     if (!event.isPrimary || event.button !== 0 || gesture.current) return;
-    event.preventDefault();
+    const isTouch = event.pointerType === "touch";
+    if (!isTouch) {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
     event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
     if (!selectedLayerIds.has(layerId)) selectOnlyLayer(layerId);
-    gesture.current = {
+    const entry: DragGesture = {
       pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      targetEl: event.currentTarget,
       layerId,
       x: event.clientX,
       y: event.clientY,
+      startTime: Date.now(),
+      holdTimer: null,
       active: false,
     };
+    if (isTouch) {
+      entry.holdTimer = setTimeout(() => {
+        if (gesture.current === entry) {
+          activateGesture(entry);
+        }
+      }, LAYER_TOUCH_DRAG_HOLD_MS);
+    }
+    gesture.current = entry;
   };
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLElement>) => {
     const current = gesture.current;
     if (!current || current.pointerId !== event.pointerId) return;
     if (!current.active) {
-      if (Math.hypot(event.clientX - current.x, event.clientY - current.y) < 4) return;
-      current.active = true;
-      setDraggedLayerId(current.layerId);
+      const distancePx = Math.hypot(event.clientX - current.x, event.clientY - current.y);
+      const decision = evaluateLayerDragActivation({
+        pointerType: current.pointerType,
+        distancePx,
+        elapsedMs: Date.now() - current.startTime,
+      });
+      if (decision === "cancel") {
+        resetDragState();
+        return;
+      }
+      if (decision === "pending") return;
+      activateGesture(current);
     }
     event.preventDefault();
     const target = targetAtPointer(event);

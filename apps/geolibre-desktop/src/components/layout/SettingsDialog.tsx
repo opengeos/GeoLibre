@@ -46,9 +46,11 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import {
   EXPERIENCE_LEVELS,
+  TOUCH_UI_MODES,
   useDesktopSettingsStore,
   type DesktopLayoutSettings,
   type ExperienceLevel,
+  type TouchUiMode,
   type UiProfileSettings,
 } from "../../hooks/useDesktopSettings";
 import { useLanguage } from "../../hooks/useLanguage";
@@ -83,6 +85,7 @@ import { GeocodingSection } from "./settings/GeocodingSection";
 import { InterfaceSection } from "./settings/InterfaceSection";
 import { LanguageSection } from "./settings/LanguageSection";
 import { LayoutSection } from "./settings/LayoutSection";
+import { GeoEditorSection } from "./settings/GeoEditorSection";
 import { MapSection } from "./settings/MapSection";
 import { StartupSection } from "./settings/StartupSection";
 import { UpdatesSection } from "./settings/UpdatesSection";
@@ -108,6 +111,7 @@ import {
 export type SettingsSection =
   | "language"
   | "map"
+  | "geoEditor"
   | "layout"
   | "appearance"
   | "interface"
@@ -162,6 +166,8 @@ interface SettingsDialogProps {
   themeMode: ThemeMode;
   /** Flip the light/dark mode; the Appearance cards drive the same toggle. */
   onToggleThemeMode: () => void;
+  /** Whether to render the toolbar dropdown trigger. Set false in mobile shell mode. */
+  renderTrigger?: boolean;
 }
 
 const SECTION_ITEMS: Array<{
@@ -171,6 +177,7 @@ const SECTION_ITEMS: Array<{
 }> = [
   { id: "language", labelKey: "settings.section.language", icon: Languages },
   { id: "map", labelKey: "settings.section.map", icon: MapPinned },
+  { id: "geoEditor", labelKey: "settings.section.geoEditor", icon: SlidersHorizontal },
   { id: "layout", labelKey: "settings.section.layout", icon: LayoutPanelTop },
   {
     id: "appearance",
@@ -203,6 +210,7 @@ const SECTION_ITEMS: Array<{
 // stays reachable.
 const SECTION_GATE: Partial<Record<SettingsSection, string>> = {
   map: "settings.mapPreferences",
+  geoEditor: "settings.mapPreferences",
   geocoding: "settings.geocoding",
   environment: "settings.environment",
   cloudStorage: "settings.cloudStorage",
@@ -218,6 +226,7 @@ export function SettingsDialog({
   profilePlugins,
   themeMode,
   onToggleThemeMode,
+  renderTrigger = true,
 }: SettingsDialogProps) {
   const { t } = useTranslation();
   const { language, options: languageOptions, setLanguage } = useLanguage();
@@ -609,343 +618,376 @@ export function SettingsDialog({
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            className={buttonClassName}
-            variant="ghost"
-            size={buttonSize}
-            aria-label={t("settings.title")}
-          >
-            <Settings className={iconClassName} />
-            {showLabels ? <span className="hidden sm:inline">{t("settings.title")}</span> : null}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuLabel>{t("settings.title")}</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <Languages className="h-3.5 w-3.5" />
-              {t("language.label")}
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-44">
-              <DropdownMenuRadioGroup value={language} onValueChange={setLanguage}>
-                {languageOptions.map((option) => (
-                  <DropdownMenuRadioItem key={option.code} value={option.code}>
-                    {option.nativeName === option.englishName
-                      ? option.nativeName
-                      : `${option.nativeName} (${option.englishName})`}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() => {
-                  setSection("language");
-                  setOpen(true);
-                }}
-              >
-                <PackageCheck className="me-2 h-3.5 w-3.5" />
-                {t("settings.languagePack.manage")}
-              </DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          <DropdownMenuSeparator />
-          {showSettingsItem("settings.mapPreferences") && (
-            <DropdownMenuItem
-              onSelect={() => {
-                setSection("map");
-                setOpen(true);
-              }}
+      {renderTrigger ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              className={buttonClassName}
+              variant="ghost"
+              size={buttonSize}
+              aria-label={t("settings.title")}
             >
-              <MapPinned className="me-2 h-3.5 w-3.5" />
-              {t("settings.menu.mapPreferences")}
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <LayoutPanelTop className="h-3.5 w-3.5" />
-              {t("settings.section.layout")}
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="geolibre-layout-submenu w-40 sm:w-72">
-              <DropdownMenuCheckboxItem
-                checked={desktopSettings.layout.toolbarLabels}
-                onCheckedChange={(checked: boolean) =>
-                  updateSavedLayoutSettings({ toolbarLabels: checked === true })
-                }
-                onSelect={(event: Event) => event.preventDefault()}
-              >
-                {t("settings.layout.showToolbarLabels")}
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={desktopSettings.layout.showProjectInfo}
-                onCheckedChange={(checked: boolean) =>
-                  updateSavedLayoutSettings({
-                    showProjectInfo: checked === true,
-                  })
-                }
-                onSelect={(event: Event) => event.preventDefault()}
-              >
-                {t("settings.layout.showProjectInfo")}
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem
-                checked={desktopSettings.layout.layerPanelVisible}
-                onCheckedChange={(checked: boolean) =>
-                  updateSavedLayoutSettings({
-                    layerPanelVisible: checked === true,
-                  })
-                }
-                onSelect={(event: Event) => event.preventDefault()}
-              >
-                {t("settings.layout.showLayersPanel")}
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={desktopSettings.layout.stylePanelVisible}
-                onCheckedChange={(checked: boolean) =>
-                  updateSavedLayoutSettings({
-                    stylePanelVisible: checked === true,
-                  })
-                }
-                onSelect={(event: Event) => event.preventDefault()}
-              >
-                {t("settings.layout.showStylePanel")}
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={browserPanelOpen}
-                onCheckedChange={(checked: boolean) => toggleBrowserPanel(checked === true)}
-                onSelect={(event: Event) => event.preventDefault()}
-              >
-                {t("settings.layout.showBrowserPanel")}
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={commentsPanelOpen}
-                onCheckedChange={(checked: boolean) => toggleCommentsPanel(checked === true)}
-                onSelect={(event: Event) => event.preventDefault()}
-              >
-                {t("settings.layout.showCommentsPanel")}
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={desktopSettings.layout.bottomPanelsUnderMap}
-                onCheckedChange={(checked: boolean) =>
-                  updateSavedLayoutSettings({
-                    bottomPanelsUnderMap: checked === true,
-                  })
-                }
-                onSelect={(event: Event) => event.preventDefault()}
-              >
-                {t("settings.layout.bottomPanelsUnderMap")}
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
+              <Settings className={iconClassName} />
+              {showLabels ? <span className="hidden sm:inline">{t("settings.title")}</span> : null}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuLabel>{t("settings.title")}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <Languages className="h-3.5 w-3.5" />
+                {t("language.label")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-max">
+                <DropdownMenuRadioGroup value={language} onValueChange={setLanguage}>
+                  {languageOptions.map((option) => (
+                    <DropdownMenuRadioItem key={option.code} value={option.code}>
+                      {option.nativeName === option.englishName
+                        ? option.nativeName
+                        : `${option.nativeName} (${option.englishName})`}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setSection("language");
+                    setOpen(true);
+                  }}
+                >
+                  <PackageCheck className="me-2 h-3.5 w-3.5" />
+                  {t("settings.languagePack.manage")}
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSeparator />
+            {showSettingsItem("settings.mapPreferences") && (
               <DropdownMenuItem
                 onSelect={() => {
-                  setSection("layout");
+                  setSection("map");
                   setOpen(true);
                 }}
               >
-                {t("settings.menu.layoutSettings")}
+                <MapPinned className="me-2 h-3.5 w-3.5" />
+                {t("settings.menu.mapPreferences")}
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="px-2 py-1 text-xs font-normal text-muted-foreground">
-                {t("settings.menu.urlOverrideNote")}
-              </DropdownMenuLabel>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <Palette className="h-3.5 w-3.5" />
-              {t("settings.section.appearance")}
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-56">
-              <DropdownMenuLabel className="px-2 py-1 text-xs font-normal text-muted-foreground">
-                {t("settings.appearance.accentColor")}
-              </DropdownMenuLabel>
-              <DropdownMenuRadioGroup
-                value={desktopSettings.theme.scheme}
-                onValueChange={(value: string) => updateSavedThemeScheme(value as ThemeScheme)}
+            )}
+            {showSettingsItem("settings.mapPreferences") && (
+              <DropdownMenuItem
+                onSelect={() => {
+                  setSection("geoEditor");
+                  setOpen(true);
+                }}
               >
-                {THEME_SCHEMES.map((scheme) => (
+                <SlidersHorizontal className="me-2 h-3.5 w-3.5" />
+                {t("settings.section.geoEditor")}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <LayoutPanelTop className="h-3.5 w-3.5" />
+                {t("settings.section.layout")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="geolibre-layout-submenu w-40 sm:w-72">
+                <DropdownMenuCheckboxItem
+                  checked={desktopSettings.layout.toolbarLabels}
+                  onCheckedChange={(checked: boolean) =>
+                    updateSavedLayoutSettings({ toolbarLabels: checked === true })
+                  }
+                  onSelect={(event: Event) => event.preventDefault()}
+                >
+                  {t("settings.layout.showToolbarLabels")}
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={desktopSettings.layout.showProjectInfo}
+                  onCheckedChange={(checked: boolean) =>
+                    updateSavedLayoutSettings({
+                      showProjectInfo: checked === true,
+                    })
+                  }
+                  onSelect={(event: Event) => event.preventDefault()}
+                >
+                  {t("settings.layout.showProjectInfo")}
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem
+                  checked={desktopSettings.layout.layerPanelVisible}
+                  onCheckedChange={(checked: boolean) =>
+                    updateSavedLayoutSettings({
+                      layerPanelVisible: checked === true,
+                    })
+                  }
+                  onSelect={(event: Event) => event.preventDefault()}
+                >
+                  {t("settings.layout.showLayersPanel")}
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={desktopSettings.layout.stylePanelVisible}
+                  onCheckedChange={(checked: boolean) =>
+                    updateSavedLayoutSettings({
+                      stylePanelVisible: checked === true,
+                    })
+                  }
+                  onSelect={(event: Event) => event.preventDefault()}
+                >
+                  {t("settings.layout.showStylePanel")}
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={browserPanelOpen}
+                  onCheckedChange={(checked: boolean) => toggleBrowserPanel(checked === true)}
+                  onSelect={(event: Event) => event.preventDefault()}
+                >
+                  {t("settings.layout.showBrowserPanel")}
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={commentsPanelOpen}
+                  onCheckedChange={(checked: boolean) => toggleCommentsPanel(checked === true)}
+                  onSelect={(event: Event) => event.preventDefault()}
+                >
+                  {t("settings.layout.showCommentsPanel")}
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={desktopSettings.layout.bottomPanelsUnderMap}
+                  onCheckedChange={(checked: boolean) =>
+                    updateSavedLayoutSettings({
+                      bottomPanelsUnderMap: checked === true,
+                    })
+                  }
+                  onSelect={(event: Event) => event.preventDefault()}
+                >
+                  {t("settings.layout.bottomPanelsUnderMap")}
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                  {t("settings.layout.touchUi")}
+                </DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={desktopSettings.layout.touchUiMode}
+                  onValueChange={(value) =>
+                    updateSavedLayoutSettings({ touchUiMode: value as TouchUiMode })
+                  }
+                >
+                  {TOUCH_UI_MODES.map((mode) => (
+                    <DropdownMenuRadioItem
+                      key={mode}
+                      value={mode}
+                      onSelect={(event: Event) => event.preventDefault()}
+                    >
+                      {t(`settings.layout.touchUiMode.${mode}`)}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setSection("layout");
+                    setOpen(true);
+                  }}
+                >
+                  {t("settings.menu.layoutSettings")}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="px-2 py-1 text-xs font-normal text-muted-foreground">
+                  {t("settings.menu.urlOverrideNote")}
+                </DropdownMenuLabel>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <Palette className="h-3.5 w-3.5" />
+                {t("settings.section.appearance")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-56">
+                <DropdownMenuLabel className="px-2 py-1 text-xs font-normal text-muted-foreground">
+                  {t("settings.appearance.accentColor")}
+                </DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={desktopSettings.theme.scheme}
+                  onValueChange={(value: string) => updateSavedThemeScheme(value as ThemeScheme)}
+                >
+                  {THEME_SCHEMES.map((scheme) => (
+                    <DropdownMenuRadioItem
+                      key={scheme.id}
+                      value={scheme.id}
+                      onSelect={(event: Event) => event.preventDefault()}
+                    >
+                      <span
+                        aria-hidden
+                        className="me-2 h-3.5 w-3.5 shrink-0 rounded-full border"
+                        style={{ backgroundColor: scheme.swatch }}
+                      />
+                      {t(scheme.labelKey)}
+                    </DropdownMenuRadioItem>
+                  ))}
                   <DropdownMenuRadioItem
-                    key={scheme.id}
-                    value={scheme.id}
-                    onSelect={(event: Event) => event.preventDefault()}
+                    value="custom"
+                    onSelect={() => {
+                      // Selecting "Custom" from the menu would otherwise be a dead
+                      // end, so open the Appearance pane and jump to its color
+                      // picker instead of nesting a third-level menu (#718).
+                      updateSavedThemeScheme("custom");
+                      setSection("appearance");
+                      setOpen(true);
+                      setPendingFocus("accentColor");
+                    }}
                   >
                     <span
                       aria-hidden
                       className="me-2 h-3.5 w-3.5 shrink-0 rounded-full border"
-                      style={{ backgroundColor: scheme.swatch }}
+                      style={{ backgroundColor: desktopSettings.theme.customColor }}
                     />
-                    {t(scheme.labelKey)}
+                    {t("settings.appearance.custom")}
                   </DropdownMenuRadioItem>
-                ))}
-                <DropdownMenuRadioItem
-                  value="custom"
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
                   onSelect={() => {
-                    // Selecting "Custom" from the menu would otherwise be a dead
-                    // end, so open the Appearance pane and jump to its color
-                    // picker instead of nesting a third-level menu (#718).
-                    updateSavedThemeScheme("custom");
                     setSection("appearance");
                     setOpen(true);
-                    setPendingFocus("accentColor");
                   }}
                 >
-                  <span
-                    aria-hidden
-                    className="me-2 h-3.5 w-3.5 shrink-0 rounded-full border"
-                    style={{ backgroundColor: desktopSettings.theme.customColor }}
-                  />
-                  {t("settings.appearance.custom")}
-                </DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-              <DropdownMenuSeparator />
+                  {t("settings.menu.appearanceSettings")}
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                {t("settings.section.interface")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-56">
+                <DropdownMenuLabel className="px-2 py-1 text-xs font-normal text-muted-foreground">
+                  {t("settings.interface.presets")}
+                </DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={activeInterfaceProfile(desktopSettings.uiProfile)}
+                  onValueChange={(value: string) => {
+                    // The three presets recompute hidden lists; "custom" opts into
+                    // custom mode while keeping the current lists. EXPERIENCE_LEVELS
+                    // excludes "custom", so this guard keeps any stray value from
+                    // reaching presetHiddenSets. Keep EXPERIENCE_LEVELS in sync with
+                    // the selectable preset entries of INTERFACE_PROFILES.
+                    if ((EXPERIENCE_LEVELS as readonly string[]).includes(value)) {
+                      applySavedExperiencePreset(value as ExperienceLevel);
+                    } else if (value === "custom") {
+                      applySavedCustomProfile();
+                    }
+                  }}
+                >
+                  {INTERFACE_PROFILES.map((option) => (
+                    <DropdownMenuRadioItem
+                      key={option}
+                      value={option}
+                      // "custom" lights up automatically when the user hand-edits
+                      // an item, and is also directly selectable to keep the current
+                      // configuration while switching into custom mode.
+                      disabled={desktopSettings.uiProfile.locked}
+                      onSelect={(event: Event) => event.preventDefault()}
+                    >
+                      {t(`settings.interface.level.${option}`)}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setSection("interface");
+                    setOpen(true);
+                  }}
+                >
+                  {t("settings.menu.interfaceSettings")}
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            {showSettingsItem("settings.geocoding") && (
               <DropdownMenuItem
                 onSelect={() => {
-                  setSection("appearance");
+                  setSection("geocoding");
                   setOpen(true);
                 }}
               >
-                {t("settings.menu.appearanceSettings")}
+                <Locate className="me-2 h-3.5 w-3.5" />
+                {t("settings.menu.geocoding")}
               </DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              {t("settings.section.interface")}
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-56">
-              <DropdownMenuLabel className="px-2 py-1 text-xs font-normal text-muted-foreground">
-                {t("settings.interface.presets")}
-              </DropdownMenuLabel>
-              <DropdownMenuRadioGroup
-                value={activeInterfaceProfile(desktopSettings.uiProfile)}
-                onValueChange={(value: string) => {
-                  // The three presets recompute hidden lists; "custom" opts into
-                  // custom mode while keeping the current lists. EXPERIENCE_LEVELS
-                  // excludes "custom", so this guard keeps any stray value from
-                  // reaching presetHiddenSets. Keep EXPERIENCE_LEVELS in sync with
-                  // the selectable preset entries of INTERFACE_PROFILES.
-                  if ((EXPERIENCE_LEVELS as readonly string[]).includes(value)) {
-                    applySavedExperiencePreset(value as ExperienceLevel);
-                  } else if (value === "custom") {
-                    applySavedCustomProfile();
-                  }
-                }}
-              >
-                {INTERFACE_PROFILES.map((option) => (
-                  <DropdownMenuRadioItem
-                    key={option}
-                    value={option}
-                    // "custom" lights up automatically when the user hand-edits
-                    // an item, and is also directly selectable to keep the current
-                    // configuration while switching into custom mode.
-                    disabled={desktopSettings.uiProfile.locked}
-                    onSelect={(event: Event) => event.preventDefault()}
-                  >
-                    {t(`settings.interface.level.${option}`)}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-              <DropdownMenuSeparator />
+            )}
+            {showSettingsItem("settings.ai") && (
               <DropdownMenuItem
                 onSelect={() => {
-                  setSection("interface");
+                  setSection("ai");
                   setOpen(true);
                 }}
               >
-                {t("settings.menu.interfaceSettings")}
+                <Bot className="me-2 h-3.5 w-3.5" />
+                {t("settings.menu.ai")}
               </DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          {showSettingsItem("settings.geocoding") && (
-            <DropdownMenuItem
-              onSelect={() => {
-                setSection("geocoding");
-                setOpen(true);
-              }}
-            >
-              <Locate className="me-2 h-3.5 w-3.5" />
-              {t("settings.menu.geocoding")}
-            </DropdownMenuItem>
-          )}
-          {showSettingsItem("settings.ai") && (
-            <DropdownMenuItem
-              onSelect={() => {
-                setSection("ai");
-                setOpen(true);
-              }}
-            >
-              <Bot className="me-2 h-3.5 w-3.5" />
-              {t("settings.menu.ai")}
-            </DropdownMenuItem>
-          )}
-          {showSettingsItem("settings.environment") && (
-            <DropdownMenuItem
-              onSelect={() => {
-                setSection("environment");
-                setOpen(true);
-              }}
-            >
-              <Braces className="me-2 h-3.5 w-3.5" />
-              {t("settings.menu.environmentVariables")}
-            </DropdownMenuItem>
-          )}
-          {showSettingsItem("settings.cloudStorage") && (
-            <DropdownMenuItem
-              onSelect={() => {
-                setSection("cloudStorage");
-                setOpen(true);
-              }}
-            >
-              <Cloud className="me-2 h-3.5 w-3.5" />
-              {t("settings.menu.cloudStorage")}
-            </DropdownMenuItem>
-          )}
-          {/* Share the same gate as the in-dialog nav/pane so the Store build
+            )}
+            {showSettingsItem("settings.environment") && (
+              <DropdownMenuItem
+                onSelect={() => {
+                  setSection("environment");
+                  setOpen(true);
+                }}
+              >
+                <Braces className="me-2 h-3.5 w-3.5" />
+                {t("settings.menu.environmentVariables")}
+              </DropdownMenuItem>
+            )}
+            {showSettingsItem("settings.cloudStorage") && (
+              <DropdownMenuItem
+                onSelect={() => {
+                  setSection("cloudStorage");
+                  setOpen(true);
+                }}
+              >
+                <Cloud className="me-2 h-3.5 w-3.5" />
+                {t("settings.menu.cloudStorage")}
+              </DropdownMenuItem>
+            )}
+            {/* Share the same gate as the in-dialog nav/pane so the Store build
               (and the web build) hide this shortcut too — otherwise it would
               open the dialog on a fallback section. */}
-          {isSectionVisible("updates") && (
-            <DropdownMenuItem
-              onSelect={() => {
-                setSection("updates");
-                setOpen(true);
-              }}
-            >
-              <DownloadCloud className="me-2 h-3.5 w-3.5" />
-              {t("settings.menu.updates")}
-            </DropdownMenuItem>
-          )}
-          {isSectionVisible("startup") && (
-            <DropdownMenuItem
-              onSelect={() => {
-                setSection("startup");
-                setOpen(true);
-              }}
-            >
-              <FolderOpen className="me-2 h-3.5 w-3.5" />
-              {t("settings.menu.startupSettings")}
-            </DropdownMenuItem>
-          )}
-          {/* The Mac App Store build has no plugin marketplace (external
+            {isSectionVisible("updates") && (
+              <DropdownMenuItem
+                onSelect={() => {
+                  setSection("updates");
+                  setOpen(true);
+                }}
+              >
+                <DownloadCloud className="me-2 h-3.5 w-3.5" />
+                {t("settings.menu.updates")}
+              </DropdownMenuItem>
+            )}
+            {isSectionVisible("startup") && (
+              <DropdownMenuItem
+                onSelect={() => {
+                  setSection("startup");
+                  setOpen(true);
+                }}
+              >
+                <FolderOpen className="me-2 h-3.5 w-3.5" />
+                {t("settings.menu.startupSettings")}
+              </DropdownMenuItem>
+            )}
+            {/* The Mac App Store build has no plugin marketplace (external
               plugin installs are not allowed there), so its entry point is
               dropped; composed with the profile gate like the Store build's
               updates check. */}
-          {!IS_MAS_BUILD && showSettingsItem("settings.managePlugins") && (
-            <DropdownMenuItem onSelect={() => onOpenManagePlugins()}>
-              <Puzzle className="me-2 h-3.5 w-3.5" />
-              {t("settings.menu.managePlugins")}
-            </DropdownMenuItem>
-          )}
-          {showSettingsItem("settings.styleManager") && (
-            <DropdownMenuItem onSelect={() => useAppStore.getState().setStyleManagerOpen(true)}>
-              <Palette className="me-2 h-3.5 w-3.5" />
-              {t("settings.menu.styleManager")}
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+            {!IS_MAS_BUILD && showSettingsItem("settings.managePlugins") && (
+              <DropdownMenuItem onSelect={() => onOpenManagePlugins()}>
+                <Puzzle className="me-2 h-3.5 w-3.5" />
+                {t("settings.menu.managePlugins")}
+              </DropdownMenuItem>
+            )}
+            {showSettingsItem("settings.styleManager") && (
+              <DropdownMenuItem onSelect={() => useAppStore.getState().setStyleManagerOpen(true)}>
+                <Palette className="me-2 h-3.5 w-3.5" />
+                {t("settings.menu.styleManager")}
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           className="max-h-[min(88vh,760px)] max-w-3xl"
@@ -967,6 +1009,7 @@ export function SettingsDialog({
                 {effectiveSection === "map" ? (
                   <MapSection mapControllerRef={mapControllerRef} liveProjection={liveProjection} />
                 ) : null}
+                {effectiveSection === "geoEditor" ? <GeoEditorSection /> : null}
                 {effectiveSection === "layout" ? <LayoutSection /> : null}
                 {effectiveSection === "appearance" ? (
                   <AppearanceSection

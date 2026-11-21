@@ -1,4 +1,12 @@
-import { act, fireEvent, render, screen, useAppStore, within } from "./helpers/dom";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  useAppStore,
+  useDesktopSettingsStore,
+  within,
+} from "./helpers/dom";
 import assert from "node:assert/strict";
 import { describe, it, type TestContext } from "node:test";
 import { createElement } from "react";
@@ -107,6 +115,72 @@ describe("LayerPanel", () => {
     useAppStore.getState().addGeoJsonLayer("Rivers", { type: "FeatureCollection", features: [] });
     renderLayerPanel();
     assert.equal(screen.queryByText("Hover tooltips"), null);
+  });
+
+  // Issue #3474: the empty-panel hint must not point at a menu the deployment
+  // policy withheld.
+  it("shows the full empty-panel hint under the default grant", () => {
+    useAppStore.getState().newProject({ name: "Empty" });
+    renderLayerPanel();
+    assert.ok(screen.getByText("No data layers. Add data from the toolbar."));
+  });
+
+  it("drops the Add data pointer when data:add is withheld", () => {
+    useAppStore.getState().newProject({ name: "Empty" });
+    useAppStore.getState().setDeploymentCapabilities([]);
+    renderLayerPanel();
+    assert.ok(screen.getByText("No data layers."));
+  });
+
+  it("drops the Basemaps pointer when the profile hides the Basemaps plugin", () => {
+    useAppStore.getState().newProject({ name: "Empty" });
+    const settings = useDesktopSettingsStore.getState().desktopSettings;
+    useDesktopSettingsStore.setState({
+      desktopSettings: {
+        ...settings,
+        uiProfile: {
+          ...settings.uiProfile,
+          enabled: true,
+          level: "beginner",
+          hiddenMenus: [],
+          hiddenPlugins: ["maplibre-gl-basemap-control"],
+        },
+      },
+    });
+    renderLayerPanel();
+    assert.ok(screen.getByText("No layers yet. Add your own data via the Add data menu."));
+  });
+
+  it("drops the Add data pointer in the read-only viewer layout", () => {
+    const original = window.location.href;
+    window.history.replaceState(null, "", "/?layout=viewer");
+    try {
+      useAppStore.getState().newProject({ name: "Empty" });
+      renderLayerPanel();
+      assert.ok(screen.getByText("No data layers."));
+    } finally {
+      window.history.replaceState(null, "", original);
+    }
+  });
+
+  it("drops the Plugins pointer from the beginner hint when plugins:install is withheld", () => {
+    useAppStore.getState().newProject({ name: "Empty" });
+    useAppStore.getState().setDeploymentCapabilities(["data:add"]);
+    const settings = useDesktopSettingsStore.getState().desktopSettings;
+    useDesktopSettingsStore.setState({
+      desktopSettings: {
+        ...settings,
+        uiProfile: {
+          ...settings.uiProfile,
+          enabled: true,
+          level: "beginner",
+          hiddenMenus: [],
+        },
+      },
+    });
+    renderLayerPanel();
+    assert.ok(screen.getByText("No layers yet. Add your own data via the Add data menu."));
+    assert.equal(screen.queryByText(/Plugins → Basemaps/), null);
   });
 
   it("lists the store's layers with the topmost map layer first", () => {
@@ -233,6 +307,48 @@ describe("LayerPanel", () => {
     // The button flips to the opposite action once the layer is hidden.
     fireEvent.click(within(row("Parks")).getByRole("button", { name: "Show layer" }));
     assert.equal(layer("parks")?.visible, true);
+  });
+
+  it("disables the eye and opacity of a host-locked layer for a guest (#3477)", () => {
+    useAppStore.setState({
+      layers: [
+        geojsonLayer({ id: "historic", name: "Historic sites" }),
+        geojsonLayer({ id: "worship", name: "Places of worship" }),
+      ],
+    });
+    useAppStore.getState().setCollaboration({
+      isActive: true,
+      role: "guest",
+      mode: "co-edit",
+      clientId: "guest-1",
+      participants: [
+        {
+          clientId: "guest-1",
+          displayName: "Guest",
+          color: "#ff0000",
+          role: "guest",
+          editOverride: null,
+        },
+      ],
+      lockedLayerIds: ["historic"],
+    });
+    renderLayerPanel();
+
+    const lockedEye = within(row("Historic sites")).getByRole("button", { name: "Hide layer" });
+    assert.equal((lockedEye as HTMLButtonElement).disabled, true);
+    fireEvent.click(lockedEye);
+    assert.equal(layer("historic")?.visible, true);
+    assert.equal(
+      within(row("Historic sites")).getByRole("slider").getAttribute("data-disabled"),
+      "",
+    );
+
+    const openEye = within(row("Places of worship")).getByRole("button", { name: "Hide layer" });
+    assert.equal((openEye as HTMLButtonElement).disabled, false);
+    assert.equal(
+      within(row("Places of worship")).getByRole("slider").hasAttribute("data-disabled"),
+      false,
+    );
   });
 
   it("renames a layer on double-click and Enter", () => {

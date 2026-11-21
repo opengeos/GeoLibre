@@ -40,6 +40,7 @@ const fakeCapture = (width = 100): CapturedMap => ({
   metersPerPixel: 2,
   pixelRatio: 1,
   bearingDeg: 0,
+  georef: null,
 });
 
 describe("createPrintLayoutState", () => {

@@ -24,15 +24,27 @@ import {
   layerPanelGroupHeaders,
 } from "@geolibre/core";
 import type { EllipsoidId, GeoLibreLayer, LayerGroup } from "@geolibre/core";
-import { getTemporalLayersVersion, subscribeTemporalLayers } from "@geolibre/plugins";
+import {
+  BASEMAP_CONTROL_PLUGIN_ID,
+  getTemporalLayersVersion,
+  subscribeTemporalLayers,
+} from "@geolibre/plugins";
 import { rendererCapabilities, type MapEngine } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
+import { useSideSheet } from "../../hooks/useSideSheet";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { usePluginRegistry } from "../../hooks/usePlugins";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import { useLayoutOptions } from "../../hooks/useLayoutOptions";
+import { entryMenuOffered } from "../../lib/deployment-gates";
 import { isMobile } from "../../lib/is-mobile";
 import { masHidesDataSource } from "../../lib/mas-build";
-import { activeInterfaceProfile, isDataSourceVisible } from "../../lib/ui-profile";
+import {
+  activeInterfaceProfile,
+  isDataSourceVisible,
+  isMenuVisible,
+  isPluginVisible,
+} from "../../lib/ui-profile";
 import { Button, ScrollArea, Separator } from "@geolibre/ui";
 import { Layers, PanelLeftOpen } from "lucide-react";
 import { PasteStyleDialog } from "./PasteStyleDialog";
@@ -41,7 +53,11 @@ import type { CollaborationApi } from "../../hooks/useCollaboration";
 import { BasemapPickerDialog } from "./BasemapPickerDialog";
 import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
 import { useMapCapabilities } from "../../hooks/useMapCapabilities";
-import { ADD_DATA_DIALOG_SOURCES, BACKGROUND_SELECTION_ID } from "./layer-panel/layer-panel-utils";
+import {
+  ADD_DATA_DIALOG_SOURCES,
+  BACKGROUND_SELECTION_ID,
+  emptyLayersHintKey,
+} from "./layer-panel/layer-panel-utils";
 import { BackgroundAppearanceDialog, BackgroundLayerRow } from "./layer-panel/BackgroundLayerRow";
 import { BindTimeSliderDialog } from "./layer-panel/BindTimeSliderDialog";
 import type { LayerActionsMenuShared } from "./layer-panel/LayerActionsMenu";
@@ -138,6 +154,26 @@ export function LayerPanel({
     (s) => activeInterfaceProfile(s.desktopSettings.uiProfile) === "beginner",
   );
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
+  // The empty-panel hint names the Add data and Plugins menus, so it follows
+  // the same gate TopToolbar applies before rendering them.
+  const deploymentCapabilities = useAppStore((s) => s.deploymentCapabilities);
+  const { viewer } = useLayoutOptions();
+  const emptyHintKey = emptyLayersHintKey({
+    beginner: isBeginnerProfile,
+    canAddData: entryMenuOffered("addData", {
+      viewer,
+      capabilities: deploymentCapabilities,
+      menuVisible: isMenuVisible(uiProfile, "addData"),
+    }),
+    // The hint names Plugins → Basemaps, so the profile must also list that plugin.
+    canAddBasemaps:
+      entryMenuOffered("plugins", {
+        viewer,
+        capabilities: deploymentCapabilities,
+        menuVisible: isMenuVisible(uiProfile, "plugins"),
+      }) && isPluginVisible(uiProfile, BASEMAP_CONTROL_PLUGIN_ID),
+  });
+
   const compactLayerList = useDesktopSettingsStore(
     (s) => s.desktopSettings.layout.compactLayerList,
   );
@@ -292,6 +328,8 @@ export function LayerPanel({
     setLayersPanelCollapsed(isCollapsed);
     return () => setLayersPanelCollapsed(false);
   }, [isCollapsed]);
+  // On a narrow viewport, fold back to the rail when Style opens after us.
+  useSideSheet("layers", isCollapsed, setIsCollapsed);
   const prevAutoCollapse = useRef<boolean | null>(null);
   const collapsedBeforeAuto = useRef(internalCollapsed);
   useEffect(() => {
@@ -571,9 +609,7 @@ export function LayerPanel({
         // targets.
       >
         {layers.length === 0 && (
-          <p className="px-4 pb-2 pt-6 text-xs text-muted-foreground">
-            {isBeginnerProfile ? t("layers.emptyBeginner") : t("layers.empty")}
-          </p>
+          <p className="px-4 pb-2 pt-6 text-xs text-muted-foreground">{t(emptyHintKey)}</p>
         )}
         {/* Rows, group headers and the Background card are listitems carrying
             their nesting depth as aria-level. */}

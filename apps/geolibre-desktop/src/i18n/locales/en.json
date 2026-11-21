@@ -311,10 +311,15 @@
     "bodyNote": "Measured on: {{body}} (spherical approximation)"
   },
   "statusBar": {
+    "coords": "Coords",
     "elevation": "Elev",
     "elevationLong": "Elevation",
     "cameraAltitude": "Eye alt",
     "cameraAltitudeLong": "Camera altitude above sea level",
+    "zoom": "Zoom",
+    "bearing": "Bearing",
+    "pitch": "Pitch",
+    "bbox": "BBox",
     "coordinateFormat": {
       "dd": "Decimal degrees",
       "dms": "Degrees, minutes, seconds",
@@ -489,6 +494,10 @@
       "gpx": {
         "label": "Add GPX layer",
         "description": "Add GPX waypoints, routes, and tracks as one or more vector layers."
+      },
+      "geopdf": {
+        "label": "Add GeoPDF layer",
+        "description": "Add the map frame of a georeferenced PDF (GeoPDF) as an image layer, choosing which PDF layers to include."
       },
       "landxml": {
         "label": "Add LandXML layer",
@@ -872,6 +881,22 @@
       "file": "GPX file",
       "urlPlaceholder": "https://example.com/route.gpx",
       "layerTypes": "Layer types"
+    },
+    "geopdf": {
+      "defaultName": "GeoPDF",
+      "file": "PDF file",
+      "chooseFile": "Choose PDF…",
+      "noFile": "No file chosen",
+      "reading": "Reading the PDF…",
+      "skipped": "Only one PDF opens at a time. Not opened: {{names}}",
+      "hint": "A georeferenced PDF map from Avenza Maps, USGS, QGIS, ArcGIS or a GeoLibre print layout. Only the map frame is added, not the margins or legend.",
+      "page": "Page",
+      "pageOption": "Page {{page}} of {{total}}",
+      "layers": "PDF layers to include",
+      "errorNoFile": "Choose a PDF file first.",
+      "errorNotGeoreferenced": "This PDF has no georeference GeoLibre can read. It needs geospatial PDF (ISO 32000) coordinates in a supported coordinate system.",
+      "errorRender": "Could not render the PDF's map frame onto the map.",
+      "errorRead": "Could not read the PDF: {{message}}"
     },
     "landxml": {
       "defaultName": "LandXML",
@@ -2008,7 +2033,10 @@
     "lockLayer": "Lock layer for guests",
     "unlockLayer": "Unlock layer for guests",
     "layerLocked": "Locked",
-    "layerLockedHint": "This layer is locked by the host and cannot be edited"
+    "layerLockedHint": "This layer is locked by the host and cannot be edited",
+    "viewOnlyHint": "You're view-only in this session, so you can't change this layer",
+    "layerLockedRejected": "That change was not shared because the host has locked the layer. Your map was reset to the session's version.",
+    "viewOnlyLocalChange": "You're view-only in this session, so your changes stay on your screen and are not shared."
   },
   "share": {
     "title": "Share project",
@@ -2159,6 +2187,18 @@
     "resizeDialog": "Resize gallery",
     "scopeFeatured": "Featured",
     "scopeAll": "All projects",
+    "scopeCollections": "Collections",
+    "loadingCollections": "Loading collections…",
+    "collectionsSearchPlaceholder": "Filter collections by title, author, or description",
+    "noCollectionMatches": "No collections match your filter.",
+    "emptyCollections": "No public collections to show yet.",
+    "emptyCollection": "This collection has no public projects.",
+    "untitledCollection": "Untitled collection",
+    "openCollection": "Show the projects in this collection",
+    "openCollectionOnWeb": "View collection on the web",
+    "backToCollections": "All collections",
+    "collectionProjects_one": "{{count}} project",
+    "collectionProjects_other": "{{count}} projects",
     "scopeMine": "My projects",
     "scopeOrganizations": "Organizations",
     "scopeGroups": "Groups",
@@ -2222,6 +2262,12 @@
     "exportPng": "Export PNG",
     "exportSvg": "Export SVG",
     "exportPdf": "Export PDF",
+    "geoPdf": {
+      "georeferenced": "The PDF is georeferenced (GeoPDF): GIS and mobile mapping apps read its map coordinates.",
+      "notGeoreferenced": "This view cannot be georeferenced, so the PDF has no map coordinates. Remove the tilt, and zoom in or switch to the Mercator projection when the map is a globe. A custom CRS needs an EPSG code.",
+      "atlas": "Each page is georeferenced (GeoPDF) when its view can be: not tilted, and flat enough on a globe.",
+      "otherBody": "Maps of the Moon, Mars and other bodies export as plain PDFs: GeoPDF readers take coordinates as Earth's."
+    },
     "titleLabel": "Title",
     "titlePlaceholder": "Map title",
     "subtitleLabel": "Subtitle",
@@ -2334,6 +2380,9 @@
     "footerTextLabel": "Footer text",
     "footerPlaceholder": "Custom footer text",
     "margin": "Margin",
+    "exportDpi": "Export resolution",
+    "exportDpiOption": "{{dpi}} DPI",
+    "exportDpiPixelPage": "Screen sizes export at their exact pixel size.",
     "marginOption": {
       "normal": "Normal",
       "narrow": "Narrow",
@@ -2443,7 +2492,9 @@
   },
   "kml": {
     "importFailed": "Could not import KML/KMZ.",
-    "timeOverlayGroup": "Time overlay animation"
+    "timeOverlayGroup": "Time overlay animation",
+    "dataUrlStyleUnsupported": "A style cannot be applied to a KML document.",
+    "dataUrlNoImporter": "Could not add {{name}} to the map: no KML importer is available."
   },
   "map": {
     "boundsRestricted": "Bounds locked",
@@ -2526,6 +2577,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "Local COG DEM",
     "localSourceDescription": "The file stays on this device and is read in small ranges as terrain tiles are needed.",
+    "fillOutside": "Fill outside the DEM with global terrain",
+    "fillOutsideDescription": "Surrounds the DEM, and fills its no-data gaps, with the global terrain instead of a flat plain. On by default for a DEM from a URL and off for a local file, which otherwise reads nothing from the network.",
     "useCog": "Use COG DEM",
     "ionAssetLabel": "Cesium Ion terrain asset",
     "ionAssetDescription": "Use a quantized-mesh terrain asset from Cesium Ion on the globe. The asset must be available to the configured Ion account.",
@@ -2927,7 +2980,8 @@
       "environment": "Environment",
       "cloudStorage": "Cloud storage",
       "updates": "Updates",
-      "startup": "Startup"
+      "startup": "Startup",
+      "geoEditor": "GeoEditor"
     },
     "cloudStorage": {
       "title": "S3 connections",
@@ -3191,6 +3245,13 @@
       "compactLayerList": "Compact Layers panel (show layer controls only on the selected layer)",
       "bottomPanelsUnderMap": "Keep bottom panels under the map",
       "showAttributePanel": "Show Attribute panel",
+      "touchUi": "Touch interface",
+      "touchUiDescription": "Use larger touch targets and the mobile bottom-sheet layout on phones and tablets.",
+      "touchUiMode": {
+        "auto": "Automatic",
+        "touch": "Touch",
+        "desktop": "Desktop"
+      },
       "urlParamsNote": "URL layout parameters still apply when present in shared viewer links."
     },
     "appearance": {
@@ -3425,7 +3486,9 @@
       "profileCount_other": "{{count}} profiles",
       "noProfiles": "No profiles yet. Add one below to configure the AI assistant.",
       "setDefault": "Set as default",
+      "keepDefault": "Keep as default",
       "defaultProfile": "Default",
+      "proxyIsDefault": "No profile is the default, so the assistant starts on the deployment proxy. Set a profile as the default to start on it instead.",
       "edit": "Edit",
       "deleteProfile": "Delete profile",
       "backToProfiles": "← Back to profiles",
@@ -3455,6 +3518,50 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-… (if required)"
+      },
+      "chatgpt": {
+        "account": "ChatGPT account",
+        "intro": "Use your ChatGPT plan instead of an API key. Your browser opens OpenAI's sign-in page, where you allow GeoLibre to use your plan.",
+        "continue": "Continue with ChatGPT",
+        "waiting": "Waiting for you to finish signing in in the browser…",
+        "openAgain": "Open browser again",
+        "signedInAs": "Signed in as {{email}}",
+        "usingPlan": "Using your ChatGPT plan.",
+        "planDeclined": "GeoLibre isn't allowed to use your ChatGPT plan. Sign in again and allow it.",
+        "signInAgain": "Sign in again",
+        "notRemembered": "The system keychain isn't available, so this sign-in lasts until GeoLibre closes.",
+        "signOut": "Sign out",
+        "useAnotherAccount": "Use another account",
+        "usage": "Usage and connected apps",
+        "revokeUnconfirmed": "Signed out here, but OpenAI didn't confirm ending the session. Disconnect GeoLibre in your ChatGPT settings to be sure.",
+        "desktopOnly": "Sign in with ChatGPT is available in the GeoLibre desktop app."
+      }
+    },
+    "geoEditor": {
+      "title": "GeoEditor",
+      "description": "Choose additional fields and customize field labels and types. Existing layer attributes are included automatically. These settings are saved with the project.",
+      "showAfterDraw": "Open feature properties after drawing",
+      "field": "Field {{number}}",
+      "name": "Property name",
+      "label": "Display label",
+      "type": "Field type",
+      "geometry": "Geometry",
+      "remove": "Remove field",
+      "add": "Add field",
+      "namesHelp": "Use unique property names without quotes, backslashes, or control characters. Invalid, duplicate, and reserved names are omitted when saving.",
+      "types": {
+        "string": "Text",
+        "number": "Number",
+        "boolean": "Checkbox",
+        "color": "Color",
+        "date": "Date",
+        "textarea": "Multiline text"
+      },
+      "geometries": {
+        "all": "All geometries",
+        "polygon": "Polygons",
+        "line": "Lines",
+        "point": "Points"
       }
     }
   },
@@ -3756,6 +3863,8 @@
       "projectOpenUrl": "Open project from URL",
       "projectSave": "Save project",
       "projectSaveAs": "Save project as…",
+      "projectSaveLayerEdits": "Save layer edits to source files…",
+      "projectExportGeojsonZip": "Export layers as GeoJSON ZIP…",
       "projectShare": "Share project…",
       "projectCollaborate": "Collaborate…",
       "projectPrint": "Print…",
@@ -3831,6 +3940,7 @@
       "delimitedText": "Delimited text layer",
       "photos": "Geotagged photos",
       "gpx": "GPX layer",
+      "geopdf": "GeoPDF layer",
       "landxml": "LandXML layer",
       "indoorgml": "IndoorGML layer",
       "polyline": "Encoded polyline",
@@ -3948,6 +4058,7 @@
       "difference": "Difference",
       "union": "Union",
       "spatialJoin": "Spatial join",
+      "summarizeWithin": "Summarize within",
       "attributeJoin": "Attribute join",
       "selectByValue": "Select by value",
       "selectByLocation": "Select by location",
@@ -4241,6 +4352,9 @@
       "importArcgisProjectEllipsis": "Import ArcGIS Pro project…",
       "importLayerStylesEllipsis": "Import layer styles…",
       "arcgisImportComplete": "ArcGIS Pro project imported",
+      "arcgisChooseMapTitle": "Choose a map to import",
+      "arcgisChooseMapDescription": "{{fileName}} contains more than one map. A GeoLibre project holds one map, so choose which to import. 3D scenes are not listed.",
+      "arcgisUnnamedMap": "Map {{number}}",
       "arcgisImportWarnings_one": "The project was imported, but {{count}} layer could not be loaded.",
       "arcgisImportWarnings_other": "The project was imported, but {{count}} layers could not be loaded.",
       "arcgisUnknownLayerType": "unknown",
@@ -4255,7 +4369,8 @@
         "file-geodatabase": "File Geodatabase (.gdb) sources are not loaded from projects. In GeoLibre Desktop, add them with Add data → File geodatabase (GDB).",
         "file-geodatabase-raster": "Raster datasets stored in a File Geodatabase (.gdb) are not supported. Export the raster to GeoTIFF and add it as a raster layer.",
         "network-path": "Network share paths are not loaded for security reasons.",
-        "service": "ArcGIS service layers in projects are not supported yet.",
+        "service": "This ArcGIS service layer could not be imported. Projects can bring in hosted feature layers that name a FeatureServer sublayer, ArcGIS vector tile items and cached map services.",
+        "service-unavailable": "The ArcGIS feature service could not be loaded. It may be offline, or need a sign-in GeoLibre does not have.",
         "browser-local-file": "The local file is referenced, but browsers cannot reopen ArcGIS Pro data paths. Use GeoLibre Desktop to load it.",
         "map-extent": "The saved map extent uses a coordinate system GeoLibre cannot convert, so the map opened at a default view.",
         "nesting": "The group is nested too deeply, or the project refers back to a group that already contains it."
@@ -4270,6 +4385,8 @@
         "missing-source": "The layer has no readable data source.",
         "format": "The layer's file format is not supported.",
         "remote-file": "Remote QGIS file sources are not supported yet.",
+        "remote-unreadable": "The remote file could not be downloaded or read.",
+        "wmts": "WMTS layers are not imported yet. Add the service from the Add data menu instead.",
         "network-path": "Network share paths are not loaded for security reasons.",
         "browser-local-file": "The local file is referenced, but browsers cannot reopen QGIS data paths. Use GeoLibre Desktop to load it.",
         "browser-local-raster": "The raster is referenced by a local path. Use GeoLibre Desktop to load it.",
@@ -4320,6 +4437,28 @@
       "embedVectorEmbedButton": "Embed data",
       "embedVectorReferenceButton": "Save file references",
       "embedVectorSkipButton": "Save without data",
+      "embedVectorOverwriteSourcesButton": "Save edits to sources",
+      "embedVectorSaveCopiesButton": "Save external copies…",
+      "embedVectorExportCopiesZipButton": "Export copies (ZIP)…",
+      "saveLayerEditsEllipsis": "Save layer edits to source files…",
+      "exportGeojsonZipEllipsis": "Export layers as GeoJSON ZIP…",
+      "exportGeojsonZipAsTitle": "Export layers as GeoJSON ZIP",
+      "exportGeojsonZipAsDesc": "Enter a file name. The ZIP archive will download to your browser's downloads folder when you click Save.",
+      "exportGeojsonZipFileName": "File name",
+      "exportGeojsonZipFileNamePlaceholder": "my-map-geojson.zip",
+      "geojsonZipFile": "GeoJSON ZIP Archive",
+      "geojsonZipExported_one": "Exported {{count}} layer to GeoJSON ZIP.",
+      "geojsonZipExported_other": "Exported {{count}} layers to GeoJSON ZIP.",
+      "geojsonZipSkipped_one": "{{count}} layer could not be exported: {{names}}",
+      "geojsonZipSkipped_other": "{{count}} layers could not be exported: {{names}}",
+      "geojsonZipBlockedDrafts_one": "{{count}} layer was skipped because it has unsaved attribute edits that could not be saved: {{names}}",
+      "geojsonZipBlockedDrafts_other": "{{count}} layers were skipped because they have unsaved attribute edits that could not be saved: {{names}}",
+      "saveCopiesWritten_one": "Saved {{count}} GeoJSON copy to the selected folder.",
+      "saveCopiesWritten_other": "Saved {{count}} GeoJSON copies to the selected folder.",
+      "saveLayerEditsSuccess_one": "Saved edits for {{count}} layer to its source.",
+      "saveLayerEditsSuccess_other": "Saved edits for {{count}} layers to their sources.",
+      "saveLayerEditsWarnings_one": "{{count}} layer saved with warnings: {{details}}",
+      "saveLayerEditsWarnings_other": "{{count}} layers saved with warnings: {{details}}",
       "saveProjectFileName": "File name",
       "saveProjectFileNamePlaceholder": "my-project.geolibre.json",
       "exportHtmlAsTitle": "Export as interactive HTML",
@@ -4387,6 +4526,7 @@
       "loadingVtpk": "Opening tile package…",
       "loadingVtpkDesc": "Reading the package directory and its style",
       "projectName": "Project name",
+      "untitledProject": "Untitled project",
       "storymapEllipsis": "Story map…",
       "pointerElevationNoticeTitle": "Elevation uses a public elevation service",
       "pointerElevationNoticeDesc": "The status bar's elevation readout is resolved from the map's own 3D terrain when that is enabled, which sends nothing anywhere. Without 3D terrain it falls back to the public Open-Meteo elevation API, and the coordinates under your pointer leave your device for those requests.",
@@ -4493,6 +4633,27 @@
       "savePromptTitle": "Save changes before closing?",
       "savePromptDescription": "The current project has unsaved changes. Save them before closing GeoLibre?"
     },
+    "saveLayerEdits": {
+      "title": "Save layer edits to source files",
+      "description": "Select the layers to write back to their source files or services. You can also save external copies without modifying the originals.",
+      "emptyDesktop": "No layers in this project have a writable source (local GeoJSON or GeoPackage file, PostGIS or SQL Server table, or writable ArcGIS feature service).",
+      "emptyWeb": "Overwriting local source files directly is available in the desktop app. You can export your vector layers as a GeoJSON ZIP archive instead.",
+      "selectAll": "Select all",
+      "selectEditedOnly": "Select edited ({{count}})",
+      "selectedCount": "{{selected}} of {{total}} selected",
+      "layerListLabel": "Writable layers",
+      "editedBadge": "Edited",
+      "savingLayer": "Saving layer…",
+      "savingButton": "Saving…",
+      "saveButton_one": "Save {{count}} layer",
+      "saveButton_other": "Save {{count}} layers",
+      "saveCopiesToFolder": "Save copies to folder…",
+      "exportZip": "Export ZIP…",
+      "disabledGeometryEdit": "Finish editing geometry before saving to the source file.",
+      "disabledMssqlRefresh": "Refresh this SQL Server layer before saving edits again.",
+      "disabledPostgisRefresh": "Reload this PostGIS layer before saving edits again to avoid duplicating newly inserted features.",
+      "disabledReadOnly": "You do not have permission to edit this layer in the current session."
+    },
     "remoteSave": {
       "signInTitle": "Sign in to save project",
       "signInDescriptionOAuth": "Sign in to {{shareHost}} to save your project on the server.",
@@ -4524,6 +4685,11 @@
       "couldNotImportLayerStyles": "Could not import the layer styles.",
       "noLayerStylesToExport": "This project has no layers with a style to export.",
       "couldNotExportLayers": "Could not export the layers.",
+      "couldNotExportGeojsonZip": "Could not export the layers as a GeoJSON ZIP.",
+      "noGeojsonLayersToExport": "This project has no exportable GeoJSON layers.",
+      "couldNotSaveLayerCopies": "Could not save external copies of the edited layers.",
+      "saveLayerEditsFailed_one": "Could not save {{count}} layer to its source: {{details}}",
+      "saveLayerEditsFailed_other": "Could not save {{count}} layers to their sources: {{details}}",
       "noLayersToExport": "This project has no layers to export.",
       "noReferencedLayersToExport": "None of this project's layers can be exported: a layers file only holds layers that load their data from a URL or a file path.",
       "osmPbfNoFeatures": "No point, line, or polygon features were found in this OSM PBF file.",
@@ -5848,6 +6014,7 @@
     "setupTitle": "Set up the AI assistant",
     "setupStatus": "The assistant needs an AI provider to do the thinking. Add credentials for any one provider below and the panel switches to chat mode as soon as you save.",
     "setupProviders": "Add credentials for any one provider",
+    "setupSignIn": "Sign in under Settings → AI Providers",
     "setupOpenSettings": "Open Settings → AI providers",
     "thinking": "Working…",
     "toolError": "failed",
@@ -6630,6 +6797,26 @@
                 "inner": "Inner (keep only matched features)",
                 "left": "Left (keep all input features)"
               }
+            }
+          }
+        },
+        "summarize-within": {
+          "name": "Summarize within",
+          "description": "Count the features of another layer that intersect each polygon, summarize a numeric field, and measure how much of each polygon they cover",
+          "params": {
+            "layer": {
+              "label": "Polygon layer"
+            },
+            "overlay": {
+              "label": "Layer to summarize"
+            },
+            "field": {
+              "label": "Numeric field",
+              "description": "Optional. Adds the sum, mean, min and max of this field for each polygon."
+            },
+            "min_overlap_pct": {
+              "label": "Ignore overlaps smaller than (%)",
+              "description": "When the layer to summarize has polygons, skip any that cover less than this share of a polygon, such as slivers along shared edges."
             }
           }
         },
@@ -8566,6 +8753,8 @@
     "refreshTitle": "Re-read features from the source to pick up changes made elsewhere",
     "refreshTitleLocalFile": "Reload features from the file on disk",
     "refreshTitlePendingEdits": "Save or discard your edits before refreshing",
+    "discardDraftsConfirm_one": "The attribute table has unsaved edits on {{layers}}. They are not saved with the project and will be lost. Continue?",
+    "discardDraftsConfirm_other": "The attribute table has unsaved edits on {{count}} layers: {{layers}}. They are not saved with the project and will be lost. Continue?",
     "title": "Attribute table",
     "resize": "Resize attribute table",
     "editValues": "Edit attribute values",
@@ -8661,6 +8850,7 @@
     "loadingAttributes": "Loading layer attributes…",
     "requiresVectorLayer": "Attribute table requires a vector or DuckDB query layer.",
     "invalidJson": "Invalid JSON",
+    "nullValue": "NULL",
     "editCellAria": "Edit {{col}} for feature {{featureId}}",
     "resizeColumn": "Resize {{name}} column",
     "renameFieldAria": "Rename field {{name}}",
@@ -8714,7 +8904,8 @@
     "calcCouldNotApply": "Could not apply the calculation to this layer.",
     "calcAppliedWithErrors": "Applied, but {{errors}} of {{evaluated}} feature(s) errored and were written as null.",
     "exportFailed": "Could not export the selected layer.",
-    "saveTitleFormErrors": "Fix attribute form violations before saving"
+    "saveTitleFormErrors": "Fix attribute form violations before saving",
+    "fieldReserved": "This field name is reserved for GeoEditor."
   },
   "styleManager": {
     "title": "Style manager",
@@ -8908,6 +9099,10 @@
       "placement": "Placement",
       "placementPoint": "Centroid / point",
       "placementLine": "Along line / polygon edge",
+      "lineGap": "Cut the line under each label",
+      "lineGapHint": "Prints the text in a gap in its line, like contour values on a topographic map, so it reads without a halo. Set the halo width to 0 for a clean gap.",
+      "lineGapPadding": "Gap padding (px)",
+      "lineSpacing": "Label spacing (px)",
       "textSize": "Text size",
       "haloWidth": "Halo width",
       "textColor": "Text color",
@@ -9456,6 +9651,7 @@
     },
     "searchValues": "Search values",
     "noValues": "This field has no values to choose from.",
+    "blankValue": "(blank)",
     "loadingValues": "Reading values…",
     "noMatchingValues": "No values match your search.",
     "selectAll": "Select all",
@@ -9512,6 +9708,7 @@
     "moveDown": "Move down",
     "zoomToLayer": "Zoom to layer",
     "zoomToLayerUnknownExtent": "The extent of \"{{name}}\" is unknown. Pan the map to where its data is, then try Zoom to layer again.",
+    "zoomToLayerOutsideMapCrs": "\"{{name}}\" lies outside the area this map's coordinate reference system can show. Choose another one in Settings → Map to see it.",
     "layerActions": "Layer actions",
     "exportSketchesAsLayer": "Export Sketches as new layer",
     "exportSketchesKeep": "Keep features in Sketches",
@@ -9535,6 +9732,7 @@
     "selectFeaturesRadius": "Select features by radius",
     "selectFeaturesModifiers": "Shift adds, Alt removes, and Shift+Alt intersects. Press Esc to cancel.",
     "exportGeoTiff": "GeoTIFF (COG)",
+    "exportShapefileZipped": "Shapefile (zipped)",
     "exportLas": "LAS",
     "exportLaz": "LAZ (compressed)",
     "exportCopc": "COPC (cloud optimized)",
@@ -9549,9 +9747,9 @@
     "exportStyleDataNotReady": "Layer data is not ready yet. Try again in a moment.",
     "exportStyleNeedsFeatures": "Style export requires a vector layer with features.",
     "exportStyleError": "Could not export this layer's style.",
-    "importStyle": "Import style from file (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "Import style from file (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Import style from text…",
-    "importStyleFromTextDescription": "Paste a GeoLibre, Mapbox GL, SLD or QML style. The format is read from the text.",
+    "importStyleFromTextDescription": "Paste a GeoLibre, Mapbox GL, SLD, QML or ArcGIS Pro layer file (.lyrx) style. The format is read from the text.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",
     "importStyleFromTextApply": "Import",
     "openStyleManager": "Saved styles (Style manager)…",
@@ -9676,6 +9874,9 @@
     "hiddenByGroup": "Hidden because its group is not visible",
     "empty": "No data layers. Add data from the toolbar.",
     "emptyBeginner": "No layers yet. Add basemaps via Plugins → Basemaps, or your own data via the Add data menu.",
+    "emptyBeginnerBasemapsOnly": "No layers yet. Add basemaps via Plugins → Basemaps.",
+    "emptyBeginnerDataOnly": "No layers yet. Add your own data via the Add data menu.",
+    "emptyNoAdd": "No data layers.",
     "hideAllLayers": "Hide all layers",
     "showAllLayers": "Show all layers",
     "compactView": "Compact view",
@@ -9993,6 +10194,9 @@
     "localRasterNotRestored_other": "{{count}} local raster layers could not be restored",
     "localRasterNotRestoredDesc": "Loaded from a local file: {{names}}. The project does not hold raster data, or the file could not be read. Add the file again."
   },
+  "zarrPanel": {
+    "selectorUnmatched": "Selector value not found ({{values}}). Use a coordinate value, a date on the time axis, or an index."
+  },
   "attributeForm": {
     "error": {
       "required": "A value is required",
@@ -10120,6 +10324,10 @@
     "tableLayerTruncated": "{{layer}} is too long to load in full: only its first {{count}} rows are shown.",
     "localLayersDropped_one": "Removed {{count}} layer: its file could not be read ({{path}}).",
     "localLayersDropped_other": "Removed {{count}} layers: their file could not be read ({{path}}).",
+    "remoteGeoJsonFetchFailed": "Layer \"{{layer}}\" has no data: {{error}}",
+    "remoteGeoJsonNotFetchable": "{{reference}} is not an http(s) URL or a path starting with \"/\".",
+    "remoteGeoJsonNotFetchableDesktop": "{{reference}} is not an http(s) URL.",
+    "remoteGeoJsonTimedOut": "{{url}} did not finish downloading within {{seconds}} seconds.",
     "pluginActivateFailed": "Could not start the plugin \"{{id}}\" from the link.",
     "pluginMenuActionFailed": "The menu action \"{{name}}\" failed.",
     "recordingOverlaysSkipped": "The map panels could not be captured, so the recording shows only the map.",
@@ -10145,7 +10353,8 @@
     "panelRenderFailed": "The panel \"{{name}}\" failed to open.",
     "sharedSettingsFailed": "Could not load the shared settings from the link, so your own settings are in use.",
     "sharedLanguageFailed": "Could not switch to the language the shared settings ask for.",
-    "languageCatalogFailed": "Could not load the {{language}} translation, so GeoLibre is showing English."
+    "languageCatalogFailed": "Could not load the {{language}} translation, so GeoLibre is showing English.",
+    "dataUrlLoadFailed": "Could not load the data URL."
   },
   "shell": {
     "workspaceTitle": "GeoLibre map workspace",
@@ -11411,5 +11620,104 @@
     "updated": "Saved related record {{id}}.",
     "unchanged": "Nothing changed, so nothing was sent.",
     "deleted": "Deleted related record {{id}}."
+  },
+  "mobileShell": {
+    "topBarLabel": "Mobile toolbar",
+    "bottomNavLabel": "Workspace navigation",
+    "resizeSheet": "Resize panel",
+    "openMenu": "Open menu",
+    "searchCommands": "Search commands",
+    "addData": "Add data",
+    "tabs": {
+      "layers": "Layers",
+      "style": "Style",
+      "add": "Add",
+      "field": "Field",
+      "more": "More"
+    },
+    "sheet": {
+      "addTitle": "Add data and basemaps",
+      "fieldTitle": "Field and GPS tools",
+      "moreTitle": "Menu",
+      "pluginTitle": "Panel",
+      "bottomPanelTitle": "Workspace panel",
+      "floatingTitle": "Tool panel"
+    },
+    "add": {
+      "localVector": "Local vector file…",
+      "localRaster": "Local raster file…",
+      "delimitedText": "CSV / delimited text…",
+      "xyz": "XYZ tile URL…",
+      "wms": "WMS / WMTS service…",
+      "geoParquet": "GeoParquet file…",
+      "basemaps": "Basemaps",
+      "gallery": "Project gallery…",
+      "allSources": "All data sources…"
+    },
+    "field": {
+      "crosshairCapture": "Map-center crosshair capture",
+      "fieldCollection": "Field collection…",
+      "gpsTracking": "GPS tracking…",
+      "geoEditor": "Draw and edit geometry",
+      "measure": "Measure distance and area",
+      "offlineBasemap": "Offline basemap…",
+      "addComment": "Add map comment",
+      "keepScreenAwake": "Keep screen awake"
+    },
+    "more": {
+      "project": "Project",
+      "tools": "Tools and panels",
+      "app": "App",
+      "newProject": "New project…",
+      "openFile": "Open project file…",
+      "openUrl": "Open project from URL…",
+      "save": "Save project",
+      "share": "Share project…",
+      "commandPalette": "Search all commands…",
+      "processing": "Processing tools…",
+      "managePlugins": "Manage plugins…",
+      "settings": "Settings…",
+      "diagnostics": "Diagnostics",
+      "about": "About GeoLibre",
+      "switchToDesktopUi": "Switch to desktop layout",
+      "switchToTouchUi": "Touch layout"
+    },
+    "status": {
+      "gpsLabel": "GPS",
+      "diagnosticsLabel": "Open diagnostics ({{count}})"
+    },
+    "menu": {
+      "searchPlaceholder": "Search tools and commands…",
+      "clearSearch": "Clear search",
+      "noResults": "No matching actions found.",
+      "backTo": "Back to {{title}}"
+    },
+    "layerActions": {
+      "quickActions": "Quick actions",
+      "organize": "Organize and export",
+      "manage": "Layer info"
+    },
+    "selectionBar": {
+      "label": "Selection actions",
+      "undo": "Undo",
+      "finish": "Finish"
+    },
+    "crosshair": {
+      "layerName": "Field captures",
+      "dropPoint": "Drop point",
+      "useGps": "Use GPS",
+      "done": "Done",
+      "pointCaptured": "Captured point at {{coords}}."
+    },
+    "attributeCards": {
+      "empty": "No features match the current filter.",
+      "featureIdOption": "#ID",
+      "zoomToFeature": "Zoom to feature",
+      "switchToCards": "Card view",
+      "switchToTable": "Table view",
+      "sortBy": "Sort by",
+      "sortAscending": "Sort ascending",
+      "sortDescending": "Sort descending"
+    }
   }
 }

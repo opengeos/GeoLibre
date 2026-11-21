@@ -14,9 +14,12 @@ import {
   type ProjectedReadout,
 } from "../../lib/coordinate-format";
 import { cn } from "@geolibre/ui";
-import { Bug, DatabaseZap, TriangleAlert } from "lucide-react";
+import { Bug, DatabaseZap, Smartphone, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { setTouchUiMode, useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import { getIsCoarsePointer } from "../../hooks/useTouchUi";
 import { formatAccuracy, formatSpeedKmh } from "../../lib/gps-tracking";
+import { isMobile } from "../../lib/is-mobile";
 import { autosavePausedMessage } from "../../lib/autosave-status";
 
 /**
@@ -68,6 +71,10 @@ export function StatusBar({
   const setPreferences = useAppStore((s) => s.setPreferences);
   const gpsStatus = useAppStore((s) => s.gpsStatus);
   const mapView = useAppStore((s) => s.mapView);
+  const touchUiMode = useDesktopSettingsStore((s) => s.desktopSettings.layout.touchUiMode);
+  const switchToTouchUi = () => {
+    setTouchUiMode(getIsCoarsePointer() || isMobile() ? "auto" : "touch");
+  };
   const diagnosticsCount = diagnosticsErrorCount + diagnosticsWarningCount;
   // The pointer readout re-renders this bar on every mouse move; build the
   // autosave notice only when its inputs change (#2860).
@@ -168,6 +175,17 @@ export function StatusBar({
         compact ? "overflow-hidden" : "overflow-x-auto",
       )}
     >
+      {!compact && touchUiMode === "desktop" ? (
+        <button
+          type="button"
+          data-testid="status-bar-switch-to-touch"
+          onClick={switchToTouchUi}
+          className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 font-sans text-[11px] font-medium text-primary hover:bg-primary/20"
+        >
+          <Smartphone className="h-3 w-3" aria-hidden="true" />
+          <span>{t("mobileShell.more.switchToTouchUi")}</span>
+        </button>
+      ) : null}
       <button
         type="button"
         className="shrink-0 rounded px-1 hover:bg-accent hover:text-accent-foreground"
@@ -178,7 +196,7 @@ export function StatusBar({
           }),
         })}
       >
-        {compact ? "XY" : "Coords"}: {coordText}
+        {compact ? "XY" : t("statusBar.coords")}: {coordText}
       </button>
       {elevationText && (
         <span className="shrink-0" title={t("statusBar.elevationLong")}>
@@ -186,15 +204,25 @@ export function StatusBar({
         </span>
       )}
       {gpsText && <span className="shrink-0">GPS: {gpsText}</span>}
-      <span className="shrink-0">Zoom: {mapView.zoom.toFixed(2)}</span>
+      <span className="shrink-0">
+        {t("statusBar.zoom")}: {mapView.zoom.toFixed(2)}
+      </span>
       {altitudeText && (
         <span className="shrink-0" title={t("statusBar.cameraAltitudeLong")}>
           {t("statusBar.cameraAltitude")}: {altitudeText}
         </span>
       )}
-      <span className="shrink-0">Bearing: {mapView.bearing.toFixed(1)}°</span>
-      <span className="shrink-0">Pitch: {mapView.pitch.toFixed(1)}°</span>
-      {compact ? null : <span className="min-w-0 flex-1 truncate">BBox: {bboxText}</span>}
+      <span className="shrink-0">
+        {t("statusBar.bearing")}: {mapView.bearing.toFixed(1)}°
+      </span>
+      <span className="shrink-0">
+        {t("statusBar.pitch")}: {mapView.pitch.toFixed(1)}°
+      </span>
+      {compact ? null : (
+        <span className="min-w-0 flex-1 truncate">
+          {t("statusBar.bbox")}: {bboxText}
+        </span>
+      )}
       {/* Always mounted so screen readers announce the pause when it starts,
           with the full explanation (the visible label's tooltip is not
           keyboard-reachable). */}
@@ -229,7 +257,7 @@ export function StatusBar({
         onClick={onOpenDiagnostics}
       >
         <Bug className="h-3 w-3" />
-        {compact ? "Diag" : "Diagnostics"}: {diagnosticsCount}
+        {compact ? "Diag" : t("diagnostics.title")}: {diagnosticsCount}
       </button>
     </footer>
   );

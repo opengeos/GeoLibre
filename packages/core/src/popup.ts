@@ -263,7 +263,9 @@ export function formatPopupValue(
 
 /** Whether a row would draw as a picture rather than as text. */
 function rendersAsImage(kind: PopupFieldKind, value: unknown): boolean {
-  return kind === "image" || (kind === "auto" && isInlineImageValue(value));
+  return (
+    kind === "image" || (kind === "auto" && (isInlineImageValue(value) || isInlineImageList(value)))
+  );
 }
 
 /**
@@ -504,6 +506,35 @@ export function resolvePopupBody(
  */
 export function isInlineImageValue(value: unknown): value is string {
   return typeof value === "string" && INLINE_IMAGE_DATA_URL.test(value);
+}
+
+/**
+ * Whether a value is a non-empty array of inline image data URLs, such as the
+ * `geolibre_photos` list Field collection writes for a feature with several
+ * photos. Under `"auto"` the popup draws these as a row of thumbnails instead
+ * of printing the array as JSON, which would be megabytes of base64 (#3477).
+ */
+export function isInlineImageList(value: unknown): boolean {
+  return inlineImageList(value) !== null;
+}
+
+/**
+ * The inline image data URLs of a {@link isInlineImageList} value, or `null`.
+ * Also reads the list from a JSON string, the form a map engine's rendered
+ * features carry nested arrays in.
+ */
+export function inlineImageList(value: unknown): string[] | null {
+  let list = value;
+  if (typeof list === "string" && list.trimStart().startsWith("[")) {
+    try {
+      list = JSON.parse(list);
+    } catch {
+      return null;
+    }
+  }
+  return Array.isArray(list) && list.length > 0 && list.every(isInlineImageValue)
+    ? (list as string[])
+    : null;
 }
 
 /**

@@ -3,6 +3,10 @@
 !!! info "2:00 - 3:00 p.m."
     Lecture 15 min · Hands-on 35 min · Break 2:50 - 3:00
 
+<a class="video-thumb" href="https://www.youtube.com/watch?v=lKYrMMcmSGw&amp;list=PLe4LOpcEE1lU" target="_blank" rel="noopener" title="Watch on YouTube">
+  <img src="https://i.ytimg.com/vi/lKYrMMcmSGw/maxresdefault.jpg" alt="Recording of section 6: Rendering Engines, 3D, and Time" loading="lazy" width="1280" height="720">
+</a>
+
 ## Learning goals
 
 By the end of this section you will be able to:

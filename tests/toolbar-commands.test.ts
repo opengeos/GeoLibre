@@ -4,6 +4,8 @@ import {
   buildToolbarCommands,
   type ToolbarCommandContext,
 } from "../apps/geolibre-desktop/src/components/layout/toolbar/toolbar-commands";
+import { VECTOR_JOIN_TOOL_COMMANDS } from "../apps/geolibre-desktop/src/components/layout/toolbar/constants";
+import { VECTOR_TOOLS } from "../packages/processing/src/vector-tool-registry";
 import { IS_MAS_BUILD } from "../apps/geolibre-desktop/src/lib/build-flags";
 import { useCvdPreviewStore } from "../apps/geolibre-desktop/src/lib/cvd-preview-store";
 import { IS_STORE_BUILD } from "../apps/geolibre-desktop/src/lib/updates";
@@ -62,6 +64,8 @@ const FULL_REGISTRY_IDS = [
   "project.open-url",
   "project.save",
   "project.save-as",
+  "project.save-layer-edits",
+  "project.export-geojson-zip",
   "project.share",
   "project.collaborate",
   "project.print-layout",
@@ -72,6 +76,7 @@ const FULL_REGISTRY_IDS = [
   "add.delimited-text",
   "add.cad",
   "add.gpx",
+  "add.geopdf",
   "add.landxml",
   "add.indoorgml",
   "add.mbtiles",
@@ -130,6 +135,7 @@ const FULL_REGISTRY_IDS = [
   "proc.vector.difference",
   "proc.vector.union",
   "proc.vector.spatial-join",
+  "proc.vector.summarize-within",
   "proc.vector.attribute-join",
   "proc.vector.select-by-value",
   "proc.vector.select-by-location",
@@ -345,5 +351,24 @@ describe("buildToolbarCommands", () => {
       context({ isPluginEngineSupported: () => false }),
     ).filter((entry) => entry.id === "plugin.demo");
     assert.equal(command?.disabledReason, "renderer.pluginUnsupported");
+  });
+});
+
+describe("Processing menu Join group", () => {
+  it("lists the join tools in menu order", () => {
+    assert.deepEqual(
+      VECTOR_JOIN_TOOL_COMMANDS.map(({ kind }) => kind),
+      ["spatial-join", "summarize-within", "attribute-join"],
+    );
+  });
+
+  it("matches the registry's Join group", () => {
+    const registryJoin = VECTOR_TOOLS.filter((tool) => tool.group === "Join").map(
+      (tool) => tool.id,
+    );
+    assert.deepEqual(
+      VECTOR_JOIN_TOOL_COMMANDS.map(({ kind }) => kind).sort(),
+      [...registryJoin].sort(),
+    );
   });
 });

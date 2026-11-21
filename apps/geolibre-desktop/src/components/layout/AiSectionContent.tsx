@@ -5,6 +5,7 @@ import {
   configForProvider,
   defaultModelFor,
   getApiKey,
+  hasManagedAssistantProxy,
   type AssistantProfile,
   type AssistantProviderId,
 } from "../../lib/assistant/provider";
@@ -39,6 +40,19 @@ import { classifyFetchFailure } from "../../lib/fetch-error";
 import { credentialStorageLocation } from "../../lib/credential-store";
 import { bedrockAuthFromConfig, hasModelPicker } from "../../lib/assistant/model-discovery";
 import { ProviderModelPicker } from "../ProviderModelPicker";
+import { ChatGptAccount } from "../ChatGptAccount";
+import { isChatGptSignInAvailable } from "../../lib/assistant/chatgpt";
+import { effectiveDefaultProfileId } from "../../lib/assistant/profiles";
+
+/**
+ * The providers a profile can choose. "ChatGPT (sign in)" needs the desktop
+ * app; a profile that already uses it keeps it listed.
+ */
+function selectableProviders(current: AssistantProviderId): AssistantProviderId[] {
+  return ASSISTANT_PROVIDER_IDS.filter(
+    (id) => id !== "chatgpt" || current === "chatgpt" || isChatGptSignInAvailable(),
+  );
+}
 
 // ── Locally-defined types to avoid circular import with SettingsDialog ──
 
@@ -375,7 +389,16 @@ export function AiSectionContent({
     setEditingProfileId(null);
   };
 
-  const isDefault = (profileId: string) => defaultAiProfileId === profileId;
+  // The badge marks the profile the assistant actually starts on. Without a
+  // saved default that is the first profile (or the deployment proxy), so
+  // comparing against the saved id alone left every row unmarked.
+  const proxyConfigured = hasManagedAssistantProxy();
+  const defaultProfileId = effectiveDefaultProfileId(
+    draftDesktopSettings.aiProfiles,
+    defaultAiProfileId,
+    proxyConfigured,
+  );
+  const isDefault = (profileId: string) => defaultProfileId === profileId;
 
   return (
     <div className="space-y-5">
@@ -433,7 +456,7 @@ export function AiSectionContent({
                 ollamaDiscovery.reset();
               }}
             >
-              {ASSISTANT_PROVIDER_IDS.map((id) => (
+              {selectableProviders(newProfileProvider).map((id) => (
                 <option key={id} value={id}>
                   {PROVIDER_LABELS[id]}
                 </option>
@@ -504,17 +527,21 @@ export function AiSectionContent({
             </div>
           ) : null}
 
-          {/* Secrets note */}
-          <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-              {t(
-                credentialStorageLocation() === "keychain"
-                  ? "settings.ai.secretsNoteKeychain"
-                  : "settings.ai.secretsNote",
-              )}
-            </span>
-          </div>
+          {/* ChatGPT sign-in instead of a key; otherwise the secrets note */}
+          {newProfileProvider === "chatgpt" ? (
+            <ChatGptAccount />
+          ) : (
+            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                {t(
+                  credentialStorageLocation() === "keychain"
+                    ? "settings.ai.secretsNoteKeychain"
+                    : "settings.ai.secretsNote",
+                )}
+              </span>
+            </div>
+          )}
 
           {/* Credential fields for the selected provider */}
           <div className="space-y-4">
@@ -584,6 +611,10 @@ export function AiSectionContent({
             </Button>
           </div>
 
+          {draftDesktopSettings.aiProfiles.length > 0 && defaultProfileId === null ? (
+            <p className="text-xs text-muted-foreground">{t("settings.ai.proxyIsDefault")}</p>
+          ) : null}
+
           {draftDesktopSettings.aiProfiles.length === 0 ? (
             <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
               {t("settings.ai.noProfiles")}
@@ -617,14 +648,22 @@ export function AiSectionContent({
                       <p className="truncate text-xs text-muted-foreground">{profile.modelId}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      {!isDefaultProfile ? (
+                      {/* Hidden on the saved default. An implicit default (the
+                          first profile, with none saved) still needs it, since
+                          a profile picked in the panel or a deployment proxy
+                          overrides it until a default is saved; there it reads
+                          "Keep as default" so it does not contradict the
+                          Default badge beside it (#3492). */}
+                      {defaultAiProfileId !== profile.id ? (
                         <Button
                           size="sm"
                           variant="ghost"
                           className="h-7 px-2 text-xs"
                           onClick={() => setAsDefault(profile.id)}
                         >
-                          {t("settings.ai.setDefault")}
+                          {isDefaultProfile
+                            ? t("settings.ai.keepDefault")
+                            : t("settings.ai.setDefault")}
                         </Button>
                       ) : null}
                       <Button
@@ -790,7 +829,7 @@ function ProfileEditor({
           value={profile.provider}
           onChange={(e) => updateProvider(e.target.value as AssistantProviderId)}
         >
-          {ASSISTANT_PROVIDER_IDS.map((id) => (
+          {selectableProviders(profile.provider).map((id) => (
             <option key={id} value={id}>
               {PROVIDER_LABELS[id]}
             </option>
@@ -843,17 +882,21 @@ function ProfileEditor({
         </div>
       ) : null}
 
-      {/* Secrets note */}
-      <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-        <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-        <span>
-          {t(
-            credentialStorageLocation() === "keychain"
-              ? "settings.ai.secretsNoteKeychain"
-              : "settings.ai.secretsNote",
-          )}
-        </span>
-      </div>
+      {/* ChatGPT sign-in instead of a key; otherwise the secrets note */}
+      {profile.provider === "chatgpt" ? (
+        <ChatGptAccount />
+      ) : (
+        <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            {t(
+              credentialStorageLocation() === "keychain"
+                ? "settings.ai.secretsNoteKeychain"
+                : "settings.ai.secretsNote",
+            )}
+          </span>
+        </div>
+      )}
 
       {/* OS env note */}
       {hasOsEnvNote ? (

@@ -3,6 +3,10 @@
 !!! info "8:00 - 9:00 a.m."
     Lecture 15 min · Hands-on 35 min · Break 8:50 - 9:00
 
+<a class="video-thumb" href="https://www.youtube.com/watch?v=luH-qzkIsU0&amp;list=PLe4LOpcEE1lU" target="_blank" rel="noopener" title="Watch on YouTube">
+  <img src="https://i.ytimg.com/vi/luH-qzkIsU0/maxresdefault.jpg" alt="Recording of section 1: Getting Started with GeoLibre and Cloud-Native GIS" loading="lazy" width="1280" height="720">
+</a>
+
 ## Learning goals
 
 By the end of this section you will be able to:

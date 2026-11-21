@@ -186,6 +186,68 @@ def test_hillshade_writes_single_band_raster(tmp_path: Path) -> None:
 
 
 @requires_rasterio
+@pytest.mark.parametrize("downslope", ["N", "NE", "E", "SE", "S", "SW", "W", "NW"])
+def test_hillshade_lights_the_slope_facing_the_sun(tmp_path: Path, downslope: str) -> None:
+    """A plane is shaded by the angle between its normal and the sun.
+
+    Under the default NW sun (azimuth 315, altitude 45) a 45-degree plane
+    facing NW points straight at the sun and must render 255, the SE-facing
+    one 0, and the rest follow Lambert's cosine law. Aspect and azimuth must
+    share one angle convention, or the light is mirrored about the NE-SW axis.
+    """
+    import math
+
+    import numpy as np
+    import rasterio
+    from rasterio.transform import from_origin
+
+    compass = {"N": 0, "NE": 45, "E": 90, "SE": 135, "S": 180, "SW": 225, "W": 270, "NW": 315}
+    bearing = math.radians(compass[downslope])
+    # Elevation falls by 1 m per metre (a 45-degree slope) towards `downslope`.
+    dz_de, dz_dn = -math.sin(bearing), -math.cos(bearing)
+    rows = cols = 5
+    row, col = np.mgrid[0:rows, 0:cols].astype("float64")
+    # Row index grows southwards, so northing is -row on 1 m cells.
+    elevation = 100.0 + dz_de * col + dz_dn * -row
+    src = tmp_path / "plane.tif"
+    with rasterio.open(
+        src,
+        "w",
+        driver="GTiff",
+        height=rows,
+        width=cols,
+        count=1,
+        dtype="float64",
+        crs="EPSG:32633",
+        transform=from_origin(500000, 4100000, 1, 1),
+    ) as dst:
+        dst.write(elevation, 1)
+    out = tmp_path / "hillshade.tif"
+    _run_script(
+        _RASTER_TOOL_SCRIPTS["hillshade"],
+        {"input_path": str(src), "output_path": str(out), "azimuth": 315, "altitude": 45},
+    )
+    with rasterio.open(out) as ds:
+        shaded = ds.read(1)
+
+    azimuth, altitude = math.radians(315), math.radians(45)
+    normal = np.array([-dz_de, -dz_dn, 1.0]) / math.sqrt(dz_de**2 + dz_dn**2 + 1.0)
+    sun = np.array(
+        [
+            math.sin(azimuth) * math.cos(altitude),
+            math.cos(azimuth) * math.cos(altitude),
+            math.sin(altitude),
+        ]
+    )
+    expected = float(np.clip(255.0 * normal @ sun, 0, 255))
+    assert abs(int(shaded[2, 2]) - expected) <= 1, (downslope, int(shaded[2, 2]), expected)
+    if downslope == "NW":
+        assert shaded[2, 2] >= 254
+    if downslope == "SE":
+        assert shaded[2, 2] == 0
+
+
+@requires_rasterio
 def test_slope_writes_raster(tmp_path: Path) -> None:
     import rasterio
 

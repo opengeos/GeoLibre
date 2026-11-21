@@ -129,6 +129,7 @@ export const ADD_DATA_KIND_COMMANDS: Array<{
   { kind: "delimited-text", titleKey: "toolbar.layerType.delimitedText" },
   { kind: "cad", titleKey: "toolbar.item.cadLayer" },
   { kind: "gpx", titleKey: "toolbar.layerType.gpx" },
+  { kind: "geopdf", titleKey: "toolbar.layerType.geopdf" },
   { kind: "landxml", titleKey: "toolbar.layerType.landxml" },
   { kind: "indoorgml", titleKey: "toolbar.layerType.indoorgml" },
   { kind: "mbtiles", titleKey: "toolbar.layerType.mbtiles" },
@@ -190,6 +191,7 @@ export const VECTOR_TOOL_COMMANDS: Array<{
   { kind: "difference", titleKey: "toolbar.vectorTool.difference" },
   { kind: "union", titleKey: "toolbar.vectorTool.union" },
   { kind: "spatial-join", titleKey: "toolbar.vectorTool.spatialJoin" },
+  { kind: "summarize-within", titleKey: "toolbar.vectorTool.summarizeWithin" },
   { kind: "attribute-join", titleKey: "toolbar.vectorTool.attributeJoin" },
   { kind: "select-by-value", titleKey: "toolbar.vectorTool.selectByValue" },
   {
@@ -211,6 +213,23 @@ export const VECTOR_TOOL_COMMANDS: Array<{
   { kind: "dggs-bin", titleKey: "toolbar.vectorTool.dggsBinning" },
   { kind: "dggs-compact", titleKey: "toolbar.vectorTool.dggsCompact" },
 ];
+
+/**
+ * Tool ids in the registry's Join group. Kept static so this table doesn't pull
+ * in the tool registry. When you add a tool with `group: "Join"`, add its id
+ * here too; "matches the registry's Join group" in
+ * tests/toolbar-commands.test.ts fails until you do.
+ */
+const VECTOR_JOIN_KINDS: ReadonlySet<VectorToolKind> = new Set<VectorToolKind>([
+  "spatial-join",
+  "summarize-within",
+  "attribute-join",
+]);
+
+/** The Processing menu's Join group, in command-list order. */
+export const VECTOR_JOIN_TOOL_COMMANDS = VECTOR_TOOL_COMMANDS.filter(({ kind }) =>
+  VECTOR_JOIN_KINDS.has(kind),
+);
 
 export const RASTER_TOOL_COMMANDS: Array<{
   kind: RasterToolKind;

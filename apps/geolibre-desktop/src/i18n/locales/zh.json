@@ -273,10 +273,15 @@
     "bodyNote": "测量天体：{{body}}（球体近似）"
   },
   "statusBar": {
+    "coords": "坐标",
     "elevation": "高程",
     "elevationLong": "高程",
     "cameraAltitude": "视点高度",
     "cameraAltitudeLong": "相机海拔高度",
+    "zoom": "缩放",
+    "bearing": "方位角",
+    "pitch": "俯仰角",
+    "bbox": "边界框",
     "coordinateFormat": {
       "dd": "十进制度",
       "dms": "度分秒",
@@ -1928,7 +1933,10 @@
     "lockLayer": "为访客锁定图层",
     "unlockLayer": "为访客解锁图层",
     "layerLocked": "已锁定",
-    "layerLockedHint": "此图层已被主持人锁定，无法编辑"
+    "layerLockedHint": "此图层已被主持人锁定，无法编辑",
+    "viewOnlyHint": "您在此会话中为仅查看权限，因此无法更改此图层",
+    "layerLockedRejected": "该更改未被共享，因为主持人已锁定该图层。您的地图已重置为会话中的版本。",
+    "viewOnlyLocalChange": "您在此会话中为仅查看权限，因此您的更改只保留在您的屏幕上，不会被共享。"
   },
   "share": {
     "title": "共享项目",
@@ -2075,6 +2083,17 @@
     "resizeDialog": "调整图库大小",
     "scopeFeatured": "精选",
     "scopeAll": "全部项目",
+    "scopeCollections": "合集",
+    "loadingCollections": "正在加载合集…",
+    "collectionsSearchPlaceholder": "按标题、作者或描述筛选合集",
+    "noCollectionMatches": "没有合集匹配您的筛选条件。",
+    "emptyCollections": "暂无公开合集可供显示。",
+    "emptyCollection": "此合集中没有公开项目。",
+    "untitledCollection": "未命名合集",
+    "openCollection": "显示此合集中的项目",
+    "openCollectionOnWeb": "在网页上查看合集",
+    "backToCollections": "所有合集",
+    "collectionProjects_other": "{{count}} 个项目",
     "scopeMine": "我的项目",
     "scopeOrganizations": "组织",
     "scopeGroups": "群组",
@@ -2355,7 +2374,9 @@
   },
   "kml": {
     "importFailed": "无法导入 KML/KMZ。",
-    "timeOverlayGroup": "时间叠加动画"
+    "timeOverlayGroup": "时间叠加动画",
+    "dataUrlStyleUnsupported": "无法对 KML 文档应用样式。",
+    "dataUrlNoImporter": "无法将 {{name}} 添加到地图：没有可用的 KML 导入器。"
   },
   "map": {
     "boundsRestricted": "范围已锁定",
@@ -2436,6 +2457,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "本地 COG DEM",
     "localSourceDescription": "文件保留在此设备上，并在需要地形切片时按小范围读取。",
+    "fillOutside": "用全球地形填充 DEM 以外的区域",
+    "fillOutsideDescription": "使用全球地形而非平坦平面环绕 DEM，并填补其无数据空隙。对于来自 URL 的 DEM 默认开启，对于本地文件默认关闭，否则本地文件不会从网络读取任何内容。",
     "useCog": "使用 COG DEM",
     "ionAssetLabel": "Cesium Ion 地形资产",
     "ionAssetDescription": "在地球上使用来自 Cesium Ion 的 quantized-mesh 地形资产。该资产必须对已配置的 Ion 账户可用。",
@@ -3330,7 +3353,9 @@
       "profileCount_other": "{{count}} 个配置文件",
       "noProfiles": "尚无配置文件。请在下方添加一个以配置 AI 助手。",
       "setDefault": "设为默认",
+      "keepDefault": "保持为默认",
       "defaultProfile": "默认",
+      "proxyIsDefault": "没有设为默认的配置文件，因此助手将使用部署代理启动。将某个配置文件设为默认即可改为使用它启动。",
       "edit": "编辑",
       "deleteProfile": "删除配置文件",
       "backToProfiles": "← 返回配置文件列表",
@@ -3360,6 +3385,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-…（如需要）"
+      },
+      "chatgpt": {
+        "account": "ChatGPT 账户",
+        "intro": "使用您的 ChatGPT 套餐代替 API 密钥。浏览器将打开 OpenAI 的登录页面，您可在其中允许 GeoLibre 使用您的套餐。",
+        "continue": "使用 ChatGPT 继续",
+        "waiting": "正在等待您在浏览器中完成登录…",
+        "openAgain": "再次打开浏览器",
+        "signedInAs": "已登录为 {{email}}",
+        "usingPlan": "正在使用您的 ChatGPT 套餐。",
+        "planDeclined": "GeoLibre 未获准使用您的 ChatGPT 套餐。请重新登录并允许。",
+        "signInAgain": "重新登录",
+        "notRemembered": "系统钥匙串不可用，因此此次登录仅在 GeoLibre 关闭前有效。",
+        "signOut": "退出登录",
+        "useAnotherAccount": "使用其他账户",
+        "usage": "用量和已连接的应用",
+        "revokeUnconfirmed": "已在此处退出登录，但 OpenAI 未确认结束会话。为确保安全，请在 ChatGPT 设置中断开 GeoLibre 的连接。",
+        "desktopOnly": "使用 ChatGPT 登录功能仅在 GeoLibre 桌面应用中可用。"
       }
     }
   },
@@ -3851,6 +3893,7 @@
       "difference": "差集",
       "union": "联合",
       "spatialJoin": "空间连接",
+      "summarizeWithin": "区域内汇总",
       "attributeJoin": "属性连接",
       "selectByValue": "按属性选择",
       "selectByLocation": "按位置选择",
@@ -4170,6 +4213,8 @@
         "missing-source": "该图层没有可读取的数据源。",
         "format": "不支持该图层的文件格式。",
         "remote-file": "暂不支持远程 QGIS 文件数据源。",
+        "remote-unreadable": "无法下载或读取远程文件。",
+        "wmts": "暂不支持导入 WMTS 图层。请改为通过“添加数据”菜单添加该服务。",
         "network-path": "出于安全原因，不加载网络共享路径。",
         "browser-local-file": "已引用该本地文件，但浏览器无法重新打开 QGIS 数据路径。请使用 GeoLibre Desktop 加载。",
         "browser-local-raster": "该栅格通过本地路径引用。请使用 GeoLibre Desktop 加载。",
@@ -4282,6 +4327,7 @@
       "loadingVtpk": "正在打开瓦片包…",
       "loadingVtpkDesc": "正在读取包目录及其样式",
       "projectName": "项目名称",
+      "untitledProject": "未命名项目",
       "storymapEllipsis": "故事地图...",
       "pointerElevationNoticeTitle": "高程会使用公共服务",
       "pointerElevationNoticeDesc": "启用三维地形时，高程直接由地图计算，不会发送任何数据。未启用时将查询公共 Open-Meteo API，指针下方的坐标会离开您的设备。",
@@ -5659,6 +5705,7 @@
     "setupTitle": "设置 AI 助手",
     "setupStatus": "AI 助手需要一个 AI 提供方来进行思考。请在下方为任一提供方添加凭据，保存后面板将立即切换到聊天模式。",
     "setupProviders": "为任一提供方添加凭据",
+    "setupSignIn": "在“设置 → AI 提供方”中登录",
     "setupOpenSettings": "打开“设置 → AI 提供方”",
     "thinking": "正在处理…",
     "toolError": "失败",
@@ -6438,6 +6485,26 @@
                 "inner": "内连接（仅保留匹配的要素）",
                 "left": "左连接（保留所有输入要素）"
               }
+            }
+          }
+        },
+        "summarize-within": {
+          "name": "区域内汇总",
+          "description": "统计与每个多边形相交的另一图层要素数量，汇总一个数值字段，并测量这些要素覆盖每个多边形的面积比例",
+          "params": {
+            "layer": {
+              "label": "多边形图层"
+            },
+            "overlay": {
+              "label": "要汇总的图层"
+            },
+            "field": {
+              "label": "数值字段",
+              "description": "可选。为每个多边形添加该字段的总和、平均值、最小值和最大值。"
+            },
+            "min_overlap_pct": {
+              "label": "忽略小于此值的重叠 (%)",
+              "description": "当要汇总的图层包含多边形时，跳过覆盖面积小于多边形此比例的要素，例如沿共享边界的碎片多边形。"
             }
           }
         },
@@ -8434,6 +8501,7 @@
     "loadingAttributes": "正在加载图层属性…",
     "requiresVectorLayer": "属性表需要矢量图层或 DuckDB 查询图层。",
     "invalidJson": "无效的 JSON",
+    "nullValue": "NULL",
     "editCellAria": "编辑要素 {{featureId}} 的 {{col}}",
     "resizeColumn": "调整 {{name}} 列宽",
     "renameFieldAria": "重命名字段 {{name}}",
@@ -9314,7 +9382,7 @@
     "exportStyleDataNotReady": "图层数据尚未准备就绪。请稍后重试。",
     "exportStyleNeedsFeatures": "样式导出需要包含要素的矢量图层。",
     "exportStyleError": "无法导出此图层的样式。",
-    "importStyle": "导入样式（GeoLibre URL / Mapbox GL / SLD / QML）…",
+    "importStyle": "导入样式（GeoLibre URL / Mapbox GL / SLD / QML / LYRX）…",
     "importStyleFromText": "从文本导入样式…",
     "importStyleFromTextDescription": "粘贴 GeoLibre、Mapbox GL、SLD 或 QML 样式。格式将根据文本自动识别。",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",
@@ -9441,6 +9509,9 @@
     "hiddenByGroup": "因所属分组不可见而隐藏",
     "empty": "没有数据图层。请从工具栏添加数据。",
     "emptyBeginner": "尚无图层。可通过“插件 → 底图”添加底图，或通过“添加数据”菜单添加您自己的数据。",
+    "emptyBeginnerBasemapsOnly": "暂无图层。请通过“插件 → 底图”添加底图。",
+    "emptyBeginnerDataOnly": "暂无图层。请通过“添加数据”菜单添加您自己的数据。",
+    "emptyNoAdd": "没有数据图层。",
     "hideAllLayers": "隐藏所有图层",
     "showAllLayers": "显示所有图层",
     "compactView": "紧凑视图",
@@ -9755,6 +9826,9 @@
     "localRasterNotRestored_other": "{{count}} 个本地栅格图层无法恢复",
     "localRasterNotRestoredDesc": "从本地文件加载：{{names}}。项目不包含栅格数据，或无法读取该文件。请再次添加该文件。"
   },
+  "zarrPanel": {
+    "selectorUnmatched": "未找到选择器值（{{values}}）。请使用坐标值、时间轴上的日期或索引。"
+  },
   "attributeForm": {
     "error": {
       "required": "必须提供值",
@@ -9900,7 +9974,8 @@
     "panelRenderFailed": "面板“{{name}}”打开失败。",
     "sharedSettingsFailed": "无法从链接加载共享设置，因此将使用您自己的设置。",
     "sharedLanguageFailed": "无法切换到共享设置所要求的语言。",
-    "languageCatalogFailed": "无法加载{{language}}翻译，因此 GeoLibre 将显示英文。"
+    "languageCatalogFailed": "无法加载{{language}}翻译，因此 GeoLibre 将显示英文。",
+    "dataUrlLoadFailed": "无法加载数据 URL。"
   },
   "shell": {
     "workspaceTitle": "GeoLibre 地图工作区",

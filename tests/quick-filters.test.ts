@@ -17,6 +17,11 @@ import {
   QUICK_FILTER_PROFILE_LIMIT,
 } from "../apps/geolibre-desktop/src/lib/quick-filter-profile";
 import {
+  deselectShownValues,
+  selectShownValues,
+  selectedOptionCount,
+} from "../apps/geolibre-desktop/src/lib/quick-filter-selection";
+import {
   ensureQuickFilterProfiles,
   hasQuickFilterProfiles,
   readQuickFilterProfileCache,
@@ -129,6 +134,55 @@ describe("compileQuickFilters", () => {
       keptRows([{ id: "a", field: "code", kind: "categorical", values: [1] }], rows),
       [{ code: 1 }],
     );
+  });
+
+  describe("blank values (issue #3455)", () => {
+    // Every way a feature can have no value, next to values that only look
+    // empty or falsy: whitespace, zero and false are real values.
+    const ROWS = [
+      { id: 1, kind: "A" },
+      { id: 2, kind: "B" },
+      { id: 3, kind: null },
+      { id: 4, kind: "" },
+      { id: 5 },
+      { id: 6, kind: " " },
+      { id: 7, kind: 0 },
+      { id: 8, kind: false },
+    ];
+    const ids = (rows: Record<string, unknown>[]) => rows.map((row) => row.id);
+
+    it("keeps the blanks alongside the chosen values", () => {
+      const kept = keptRows(
+        [{ id: "a", field: "kind", kind: "categorical", values: ["A"], includeBlank: true }],
+        ROWS,
+      );
+      assert.deepEqual(ids(kept), [1, 3, 4, 5]);
+    });
+
+    it("keeps only the blanks when (blank) is the only choice", () => {
+      const kept = keptRows(
+        [{ id: "a", field: "kind", kind: "categorical", values: [], includeBlank: true }],
+        ROWS,
+      );
+      assert.deepEqual(ids(kept), [3, 4, 5]);
+    });
+
+    it("still leaves the blanks out when (blank) is not chosen", () => {
+      const kept = keptRows(
+        [{ id: "a", field: "kind", kind: "categorical", values: ["A", " ", 0, false] }],
+        ROWS,
+      );
+      assert.deepEqual(ids(kept), [1, 6, 7, 8]);
+    });
+
+    it("counts (blank) alone as an active filter", () => {
+      assert.equal(
+        hasActiveQuickFilter(
+          layerWith([{ id: "a", field: "kind", kind: "categorical", includeBlank: true }]),
+        ),
+        true,
+      );
+    });
   });
 
   it("applies inclusive numeric bounds and drops features missing the field", () => {
@@ -400,7 +454,7 @@ describe("active quick filters", () => {
 
   it("clears every selection but keeps the controls", () => {
     const cleared = clearQuickFilterValues([
-      { id: "a", field: "state", kind: "categorical", values: ["OR"] },
+      { id: "a", field: "state", kind: "categorical", values: ["OR"], includeBlank: true },
       { id: "b", field: "pop", kind: "range", min: 1, max: 2 },
       {
         id: "c",
@@ -523,6 +577,25 @@ describe("profileQuickFilterFields", () => {
     const a = byField(profileQuickFilterFields(rows)).get("a");
     assert.equal(a?.sampled, 4);
     assert.equal(a?.present, 2);
+  });
+
+  it("counts the blanks the value list leaves out (issue #3455)", () => {
+    // Null, empty, a feature without the property, and one with no properties
+    // at all: the same four the Dashboard charts group as "(blank)".
+    const rows = [{ a: "x" }, { a: null }, { a: "" }, { b: 1 }, null, { a: "x" }];
+    const a = byField(profileQuickFilterFields(rows)).get("a");
+    assert.equal(a?.blankCount, 4);
+    assert.deepEqual(a?.values, [{ value: "x", count: 2 }]);
+  });
+
+  it("offers checkboxes for a field whose sample is all blank", () => {
+    // Only "(blank)" can be picked, but that is still a filter: a large layer's
+    // first features can be blank while later ones carry values.
+    const a = byField(profileQuickFilterFields([{ a: null }, { a: "" }, { b: 1 }])).get("a");
+    assert.equal(a?.blankCount, 3);
+    assert.deepEqual(a?.values, []);
+    assert.deepEqual(a?.availableKinds, ["categorical", "text"]);
+    assert.equal(a?.kind, "text");
   });
 
   it("counts every feature by default, not a leading sample", () => {
@@ -795,5 +868,50 @@ describe("ensureQuickFilterProfiles (issue #3426)", () => {
     const cached = readQuickFilterProfileCache(rows);
     assert.equal(cached?.profiles.get("state"), null);
     assert.deepEqual(cached?.names, []);
+  });
+});
+
+describe("quick filter selection (issue #3455)", () => {
+  const base: LayerQuickFilter = {
+    id: "a",
+    field: "kind",
+    kind: "categorical",
+    values: ["Park"],
+  };
+
+  it("Select all adds the shown values and (blank)", () => {
+    const next = selectShownValues(base, ["Park", "School"], true);
+    assert.deepEqual(next.values, ["Park", "School"]);
+    assert.equal(next.includeBlank, true);
+    assert.equal(selectedOptionCount(next), 3);
+  });
+
+  it("Select all leaves (blank) alone when a search hides it", () => {
+    assert.equal(selectShownValues(base, ["School"], false).includeBlank, undefined);
+    const withBlank = { ...base, includeBlank: true };
+    assert.equal(selectShownValues(withBlank, ["School"], false).includeBlank, true);
+  });
+
+  it("Select none removes the shown values and (blank)", () => {
+    const next = deselectShownValues(
+      { ...base, values: ["Park", "School"], includeBlank: true },
+      ["Park", "School"],
+      true,
+    );
+    assert.deepEqual(next.values, []);
+    assert.equal(next.includeBlank, undefined);
+    assert.equal(selectedOptionCount(next), 0);
+    assert.equal(compileQuickFilter(next), null);
+  });
+
+  it("Select none keeps (blank) and the values a search hides", () => {
+    const next = deselectShownValues(
+      { ...base, values: ["Park", "School"], includeBlank: true },
+      ["School"],
+      false,
+    );
+    assert.deepEqual(next.values, ["Park"]);
+    assert.equal(next.includeBlank, true);
+    assert.equal(selectedOptionCount(next), 2);
   });
 });

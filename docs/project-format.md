@@ -66,8 +66,16 @@ of a Cloud Optimized GeoTIFF DEM; omitted for the built-in global terrain). A DE
 opened from a local file has no URL, so it is not saved. Like other URLs in a project,
 `terrainSource` passes through [credential redaction](#credential-redaction), so
 a presigned or keyed DEM URL loses its signature and needs re-signing to load
-again. `terrainIonAssetId`
+again. `terrainFillOutside` says whether that DEM is surrounded by the global
+terrain instead of a flat 0 m plain; omitted, it is on for a URL DEM and off for
+a local file. `terrainIonAssetId`
 picks a Cesium Ion terrain asset for the globe.
+
+GeoEditor form settings are stored in optional `preferences.map.geoEditor`.
+`showAfterDraw` controls automatic opening of feature properties, and `fields`
+lists each property's `name`, optional `label`, input `type` (`string`, `number`,
+`boolean`, `color`, `date`, or `textarea`), and `geometry` (`all`, `polygon`,
+`line`, or `point`). Missing settings retain the default polygon height form.
 
 ## Plugin state
 
@@ -154,7 +162,8 @@ carries no `printLayout` key.
 - Page: `paperSize` (`a4`, `a3`, `letter`, `legal`, `tabloid`, `fullhd`, `hd`,
   `uhd4k`, `square`, `custom`), `orientation`, `customWidth` / `customHeight` /
   `customUnit` for `custom`, `pageMargin`, `pageBackground`, `panelTheme`
-  (`light` or `dark`), and the page/map frame colours.
+  (`light` or `dark`), `exportDpi` (`72`, `150` or `300`; the resolution PNG
+  and PDF exports render a paper page at), and the page/map frame colours.
 - Elements: the `show*` toggles for legend, scale bar, north arrow, footer,
   date, attribution, colorbar, custom legend and info block, with their
   per-element settings.
@@ -365,6 +374,37 @@ off in the app does not edit it.
 }
 ```
 
+A `geojson` layer renders from its inline `geojson` FeatureCollection. A layer
+may instead reference its data by URL and leave `geojson` out:
+
+```json
+{
+  "id": "fields",
+  "name": "Field boundaries",
+  "type": "geojson",
+  "source": { "type": "geojson", "data": "https://example.com/fields.geojson" },
+  "visible": true,
+  "opacity": 1,
+  "style": { "fillColor": "#3b82f6" }
+}
+```
+
+When the project opens, GeoLibre fetches `source.data` (or, failing that,
+`source.url`) and draws the result. The reference must be an absolute
+http(s) URL or a root-relative path (`/data/fields.geojson`, resolved against
+the page the app is served from; the desktop app accepts absolute URLs only,
+since a leading `/` is a filesystem path there), and the server must allow
+CORS for a cross-origin URL. Opening such a project contacts every host it
+names, as tile and service layers already do. A layer whose data cannot be
+fetched, or whose reference is in neither form, stays in the project, empty,
+with a warning. Saving the project keeps the URL reference rather than
+embedding the downloaded features, unless they were edited in the app, in
+which case the edited features are embedded. Autosave, Project History and
+collaboration snapshots keep the reference the same way, and fetch the data
+again when they are restored. Share and the standalone HTML export, which must work on
+their own, embed the downloaded features. When a layer has both an inline
+`geojson` and a URL, the inline copy is drawn and the URL is not fetched.
+
 A layer can define an optional `capabilities` set (`query`, `create`, `update`,
 `delete`, `export`) to explicitly declare allowed user and session actions. Each
 flag gates only the actions it names: `query` the identify/attribute-table and
@@ -539,9 +579,11 @@ compiled output, so a saved filter can always be reopened and changed:
 ```
 
 `kind` picks the control and the comparison: `categorical` (checkboxes over
-`values`), `range` (inclusive numeric `min`/`max`, either side `null` for an
-open bound), `date` (inclusive `YYYY-MM-DD` `start`/`end`), and `text`
-(case-insensitive `contains` / `startsWith` / `equals` against `text`).
+`values`, plus `includeBlank: true` to keep features whose value is missing,
+`null`, or empty, the ones the Dashboard charts group as "(blank)"),
+`range` (inclusive numeric `min`/`max`, either side `null` for an open bound),
+`date` (inclusive `YYYY-MM-DD` `start`/`end`), and `text` (case-insensitive
+`contains` / `startsWith` / `equals` against `text`).
 `dateKind` says how the field stores its timestamps — `iso` (the default,
 comparing the leading `YYYY-MM-DD` of ISO text), `epochMs`, or `epochS` — and
 `enabled: false` mutes a control without discarding what it was answered with.

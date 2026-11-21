@@ -1,7 +1,7 @@
-// CDN PGlite loader: used only by the embed (Jupyter wheel) build, which aliases
-// `./pglite-loader` to this module when GEOLIBRE_PGLITE_CDN=1 (see vite.config.ts).
-// It fetches PGlite and its PostGIS extension from jsDelivr at runtime instead of
-// vendoring their ~25 MB of WASM/data/postgis.tar into the wheel. PGlite resolves
+// CDN PGlite loader: every build (web, desktop, embed) aliases `./pglite-loader`
+// to this module unless GEOLIBRE_PGLITE_CDN=0 (see vite.config.ts). It fetches
+// PGlite and its PostGIS extension at runtime instead of vendoring their ~25 MB
+// of WASM/data/postgis.tar into the build output. PGlite resolves
 // its own .wasm/.data/postgis.tar relative to the loaded module URL, so the pinned
 // jsDelivr URL transparently pulls those companion files from the CDN too.
 //
@@ -10,6 +10,7 @@
 // `@vite-ignore` comments keep Vite from trying to resolve/bundle the CDN URLs.
 
 import type { PgliteModules } from "./pglite-loader";
+import { postgisBundleUrls, withMirroredPostgisBundle } from "./pglite-postgis-bundle";
 
 export type { PgliteModules };
 
@@ -23,8 +24,8 @@ export async function loadPgliteModules(): Promise<PgliteModules> {
   // dynamic imports.
   if (!__PGLITE_CDN_URL__ || !__PGLITE_POSTGIS_CDN_URL__) {
     throw new Error(
-      "PGlite CDN URLs were not injected. This loader is only meant for the " +
-        "embed build (GEOLIBRE_PGLITE_CDN=1).",
+      "PGlite CDN URLs were not injected. This loader is only meant for " +
+        "builds that load PGlite from the CDN (GEOLIBRE_PGLITE_CDN is not 0).",
     );
   }
   let modules: { PGlite: unknown; postgis: unknown };
@@ -63,6 +64,15 @@ export async function loadPgliteModules(): Promise<PgliteModules> {
   }
   return {
     PGlite: modules.PGlite as PgliteModules["PGlite"],
-    postgis: modules.postgis,
+    // Fetch the ~20 MB postgis.tar.gz from unpkg first: jsDelivr's cache-miss
+    // path for it is slow enough to time out (issue #3472).
+    postgis: withMirroredPostgisBundle(
+      modules.postgis,
+      postgisBundleUrls(__PGLITE_POSTGIS_CDN_URL__),
+      fetch,
+      typeof __PGLITE_POSTGIS_BUNDLE_SHA256__ === "string"
+        ? __PGLITE_POSTGIS_BUNDLE_SHA256__
+        : null,
+    ),
   };
 }

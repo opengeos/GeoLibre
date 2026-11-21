@@ -161,7 +161,8 @@ override draws Esri World Imagery instead.
   and frames H3 cells with a filled outline. Clearing the search removes its
   highlight without removing a selection made elsewhere.
 - Point heatmaps use the shared color ramp, radius, intensity and optional
-  weight field in both 2D and 3D. Esri's density kernel differs from MapLibre's,
+  weight field in both 2D and 3D, with weights scaled by the field's maximum as
+  on the MapLibre map. Esri's density kernel differs from MapLibre's,
   so the visual density can differ; SceneView caps the radius at 112 points.
   Clustering uses native count labels and the configured radius and maximum
   zoom in 2D. Built-in and custom SVG fill patterns also render in 2D, with

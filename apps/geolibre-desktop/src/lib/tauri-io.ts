@@ -39,6 +39,7 @@ export {
   readLocalFileBytes,
   readLocalFileText,
   writeLocalGeojsonFile,
+  writeNewTextFileToPath,
   writeTextFileToPath,
   type LocalDirectoryEntry,
 } from "./file-io/local-fs";

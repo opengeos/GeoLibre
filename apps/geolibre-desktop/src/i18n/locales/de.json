@@ -280,10 +280,15 @@
     "bodyNote": "Gemessen auf: {{body}} (Kugelnäherung)"
   },
   "statusBar": {
+    "coords": "Koord.",
     "elevation": "Höhe",
     "elevationLong": "Höhe",
     "cameraAltitude": "Kamerahöhe",
     "cameraAltitudeLong": "Kamerahöhe über dem Meeresspiegel",
+    "zoom": "Zoom",
+    "bearing": "Peilung",
+    "pitch": "Neigung",
+    "bbox": "BBox",
     "coordinateFormat": {
       "dd": "Dezimalgrad",
       "dms": "Grad, Minuten, Sekunden",
@@ -1977,7 +1982,10 @@
     "lockLayer": "Ebene für Gäste sperren",
     "unlockLayer": "Ebene für Gäste entsperren",
     "layerLocked": "Gesperrt",
-    "layerLockedHint": "Diese Ebene wurde vom Host gesperrt und kann nicht bearbeitet werden"
+    "layerLockedHint": "Diese Ebene wurde vom Host gesperrt und kann nicht bearbeitet werden",
+    "viewOnlyHint": "Sie haben in dieser Sitzung nur Ansichtsrechte und können diese Ebene daher nicht ändern",
+    "layerLockedRejected": "Diese Änderung wurde nicht geteilt, weil der Host die Ebene gesperrt hat. Ihre Karte wurde auf den Stand der Sitzung zurückgesetzt.",
+    "viewOnlyLocalChange": "Sie haben in dieser Sitzung nur Ansichtsrechte, daher bleiben Ihre Änderungen auf Ihrem Bildschirm und werden nicht geteilt."
   },
   "share": {
     "title": "Projekt teilen",
@@ -2128,6 +2136,18 @@
     "resizeDialog": "Galerie in der Größe ändern",
     "scopeFeatured": "Empfohlen",
     "scopeAll": "Alle Projekte",
+    "scopeCollections": "Sammlungen",
+    "loadingCollections": "Sammlungen werden geladen…",
+    "collectionsSearchPlaceholder": "Sammlungen nach Titel, Autor oder Beschreibung filtern",
+    "noCollectionMatches": "Keine Sammlungen entsprechen Ihrem Filter.",
+    "emptyCollections": "Noch keine öffentlichen Sammlungen vorhanden.",
+    "emptyCollection": "Diese Sammlung enthält keine öffentlichen Projekte.",
+    "untitledCollection": "Unbenannte Sammlung",
+    "openCollection": "Projekte dieser Sammlung anzeigen",
+    "openCollectionOnWeb": "Sammlung im Web ansehen",
+    "backToCollections": "Alle Sammlungen",
+    "collectionProjects_one": "{{count}} Projekt",
+    "collectionProjects_other": "{{count}} Projekte",
     "scopeMine": "Meine Projekte",
     "scopeOrganizations": "Organisationen",
     "scopeGroups": "Gruppen",
@@ -2412,7 +2432,9 @@
   },
   "kml": {
     "importFailed": "KML/KMZ konnte nicht importiert werden.",
-    "timeOverlayGroup": "Animation der Zeitüberlagerung"
+    "timeOverlayGroup": "Animation der Zeitüberlagerung",
+    "dataUrlStyleUnsupported": "Auf ein KML-Dokument kann kein Stil angewendet werden.",
+    "dataUrlNoImporter": "{{name}} konnte nicht zur Karte hinzugefügt werden: Es ist kein KML-Importer verfügbar."
   },
   "map": {
     "boundsRestricted": "Grenzen gesperrt",
@@ -2495,6 +2517,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "Lokales COG-DEM",
     "localSourceDescription": "Die Datei bleibt auf diesem Gerät und wird bei Bedarf in kleinen Bereichen als Geländekacheln gelesen.",
+    "fillOutside": "Bereich außerhalb des DEM mit globalem Gelände füllen",
+    "fillOutsideDescription": "Umgibt das DEM mit dem globalen Gelände statt mit einer flachen Ebene und füllt damit auch seine NoData-Lücken. Standardmäßig aktiviert für ein DEM von einer URL und deaktiviert für eine lokale Datei, die sonst nichts aus dem Netzwerk liest.",
     "useCog": "COG-DEM verwenden",
     "ionAssetLabel": "Cesium-Ion-Geländeasset",
     "ionAssetDescription": "Ein Quantized-Mesh-Geländeasset von Cesium Ion auf dem Globus verwenden. Das Asset muss für das konfigurierte Ion-Konto verfügbar sein.",
@@ -3394,7 +3418,9 @@
       "profileCount_other": "{{count}} Profile",
       "noProfiles": "Noch keine Profile. Fügen Sie unten eines hinzu, um den KI-Assistenten zu konfigurieren.",
       "setDefault": "Als Standard festlegen",
+      "keepDefault": "Als Standard beibehalten",
       "defaultProfile": "Standard",
+      "proxyIsDefault": "Kein Profil ist als Standard festgelegt, daher startet der Assistent mit dem Proxy der Bereitstellung. Legen Sie ein Profil als Standard fest, um stattdessen damit zu starten.",
       "edit": "Bearbeiten",
       "deleteProfile": "Profil löschen",
       "backToProfiles": "← Zurück zu den Profilen",
@@ -3424,6 +3450,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-… (falls erforderlich)"
+      },
+      "chatgpt": {
+        "account": "ChatGPT-Konto",
+        "intro": "Verwenden Sie Ihr ChatGPT-Abo statt eines API-Schlüssels. Ihr Browser öffnet die Anmeldeseite von OpenAI, auf der Sie GeoLibre erlauben, Ihr Abo zu nutzen.",
+        "continue": "Mit ChatGPT fortfahren",
+        "waiting": "Warten, bis Sie die Anmeldung im Browser abgeschlossen haben…",
+        "openAgain": "Browser erneut öffnen",
+        "signedInAs": "Angemeldet als {{email}}",
+        "usingPlan": "Ihr ChatGPT-Abo wird verwendet.",
+        "planDeclined": "GeoLibre darf Ihr ChatGPT-Abo nicht nutzen. Melden Sie sich erneut an und erlauben Sie es.",
+        "signInAgain": "Erneut anmelden",
+        "notRemembered": "Der Schlüsselbund des Systems ist nicht verfügbar, daher gilt diese Anmeldung nur, bis GeoLibre geschlossen wird.",
+        "signOut": "Abmelden",
+        "useAnotherAccount": "Anderes Konto verwenden",
+        "usage": "Nutzung und verbundene Apps",
+        "revokeUnconfirmed": "Hier abgemeldet, aber OpenAI hat das Beenden der Sitzung nicht bestätigt. Trennen Sie GeoLibre zur Sicherheit in Ihren ChatGPT-Einstellungen.",
+        "desktopOnly": "Die Anmeldung mit ChatGPT ist in der GeoLibre-Desktop-App verfügbar."
       }
     }
   },
@@ -3917,6 +3960,7 @@
       "difference": "Differenz",
       "union": "Vereinigung",
       "spatialJoin": "Räumliche Verknüpfung",
+      "summarizeWithin": "Innerhalb zusammenfassen",
       "attributeJoin": "Attributverknüpfung",
       "selectByValue": "Nach Wert auswählen",
       "selectByLocation": "Nach Lage auswählen",
@@ -4238,6 +4282,8 @@
         "missing-source": "Die Ebene hat keine lesbare Datenquelle.",
         "format": "Das Dateiformat der Ebene wird nicht unterstützt.",
         "remote-file": "Entfernte QGIS-Dateiquellen werden noch nicht unterstützt.",
+        "remote-unreadable": "Die entfernte Datei konnte nicht heruntergeladen oder gelesen werden.",
+        "wmts": "WMTS-Ebenen werden noch nicht importiert. Fügen Sie den Dienst stattdessen über das Menü „Daten hinzufügen“ hinzu.",
         "network-path": "Netzwerkfreigabepfade werden aus Sicherheitsgründen nicht geladen.",
         "browser-local-file": "Die lokale Datei wird referenziert, aber Browser können QGIS-Datenpfade nicht erneut öffnen. Verwenden Sie GeoLibre Desktop, um sie zu laden.",
         "browser-local-raster": "Das Raster wird über einen lokalen Pfad referenziert. Verwenden Sie GeoLibre Desktop, um es zu laden.",
@@ -4355,6 +4401,7 @@
       "loadingVtpk": "Kachelpaket wird geöffnet…",
       "loadingVtpkDesc": "Verzeichnis und Stil des Pakets werden gelesen",
       "projectName": "Projektname",
+      "untitledProject": "Unbenanntes Projekt",
       "storymapEllipsis": "Story Map...",
       "pointerElevationNoticeTitle": "Höhe nutzt einen öffentlichen Höhendienst",
       "pointerElevationNoticeDesc": "Die Höhenanzeige wird aus dem 3D-Gelände der Karte berechnet, wenn dieses aktiv ist – dabei werden keine Daten gesendet. Ohne 3D-Gelände wird die öffentliche Open-Meteo-API abgefragt, und die Koordinaten unter dem Zeiger verlassen Ihr Gerät.",
@@ -5752,6 +5799,7 @@
     "setupTitle": "KI-Assistent einrichten",
     "setupStatus": "Der Assistent benötigt einen KI-Anbieter für die eigentliche Verarbeitung. Fügen Sie unten Zugangsdaten für einen beliebigen Anbieter hinzu, und das Panel wechselt sofort nach dem Speichern in den Chat-Modus.",
     "setupProviders": "Zugangsdaten für einen beliebigen Anbieter hinzufügen",
+    "setupSignIn": "Melden Sie sich unter Einstellungen → KI-Anbieter an",
     "setupOpenSettings": "Einstellungen → KI-Anbieter öffnen",
     "thinking": "Arbeitet…",
     "toolError": "fehlgeschlagen",
@@ -6534,6 +6582,26 @@
                 "inner": "Inner (nur übereinstimmende Objekte behalten)",
                 "left": "Left (alle Eingabeobjekte behalten)"
               }
+            }
+          }
+        },
+        "summarize-within": {
+          "name": "Innerhalb zusammenfassen",
+          "description": "Die Features einer anderen Ebene zählen, die jedes Polygon schneiden, ein numerisches Feld zusammenfassen und messen, wie viel von jedem Polygon sie abdecken",
+          "params": {
+            "layer": {
+              "label": "Polygonebene"
+            },
+            "overlay": {
+              "label": "Zusammenzufassende Ebene"
+            },
+            "field": {
+              "label": "Numerisches Feld",
+              "description": "Optional. Fügt für jedes Polygon Summe, Mittelwert, Minimum und Maximum dieses Felds hinzu."
+            },
+            "min_overlap_pct": {
+              "label": "Überlappungen ignorieren kleiner als (%)",
+              "description": "Wenn die zusammenzufassende Ebene Polygone enthält, werden alle übersprungen, die weniger als diesen Anteil eines Polygons abdecken, etwa Splitterflächen entlang gemeinsamer Kanten."
             }
           }
         },
@@ -8565,6 +8633,7 @@
     "loadingAttributes": "Ebenenattribute werden geladen…",
     "requiresVectorLayer": "Die Attributtabelle erfordert eine Vektor- oder DuckDB-Abfrageebene.",
     "invalidJson": "Ungültiges JSON",
+    "nullValue": "NULL",
     "editCellAria": "{{col}} für Objekt {{featureId}} bearbeiten",
     "resizeColumn": "Größe der Spalte {{name}} ändern",
     "renameFieldAria": "Feld {{name}} umbenennen",
@@ -9453,7 +9522,7 @@
     "exportStyleDataNotReady": "Ebenendaten sind noch nicht bereit. Versuchen Sie es gleich noch einmal.",
     "exportStyleNeedsFeatures": "Für den Stilexport ist eine Vektorebene mit Objekten erforderlich.",
     "exportStyleError": "Der Stil dieser Ebene konnte nicht exportiert werden.",
-    "importStyle": "Stil importieren (GeoLibre URL / Mapbox GL / SLD / QML)…",
+    "importStyle": "Stil importieren (GeoLibre URL / Mapbox GL / SLD / QML / LYRX)…",
     "importStyleFromText": "Stil aus Text importieren…",
     "importStyleFromTextDescription": "Fügen Sie einen GeoLibre-, Mapbox GL-, SLD- oder QML-Stil ein. Das Format wird aus dem Text erkannt.",
     "importStyleFromTextPlaceholder": "{ \"version\": 8, \"layers\": [ … ] }",
@@ -9580,6 +9649,9 @@
     "hiddenByGroup": "Ausgeblendet, da die zugehörige Gruppe nicht sichtbar ist",
     "empty": "Keine Datenebenen. Fügen Sie Daten über die Symbolleiste hinzu.",
     "emptyBeginner": "Noch keine Ebenen. Fügen Sie Basiskarten über Plugins → Basiskarten hinzu, oder Ihre eigenen Daten über das Menü Daten hinzufügen.",
+    "emptyBeginnerBasemapsOnly": "Noch keine Ebenen. Fügen Sie Basiskarten über Plugins → Basiskarten hinzu.",
+    "emptyBeginnerDataOnly": "Noch keine Ebenen. Fügen Sie eigene Daten über das Menü „Daten hinzufügen“ hinzu.",
+    "emptyNoAdd": "Keine Datenebenen.",
     "hideAllLayers": "Alle Ebenen ausblenden",
     "showAllLayers": "Alle Ebenen anzeigen",
     "compactView": "Kompakte Ansicht",
@@ -9897,6 +9969,9 @@
     "localRasterNotRestored_other": "{{count}} lokale Rasterebenen konnten nicht wiederhergestellt werden",
     "localRasterNotRestoredDesc": "Aus einer lokalen Datei geladen: {{names}}. Das Projekt enthält keine Rasterdaten, oder die Datei konnte nicht gelesen werden. Fügen Sie die Datei erneut hinzu."
   },
+  "zarrPanel": {
+    "selectorUnmatched": "Selektorwert nicht gefunden ({{values}}). Verwenden Sie einen Koordinatenwert, ein Datum auf der Zeitachse oder einen Index."
+  },
   "attributeForm": {
     "error": {
       "required": "Ein Wert ist erforderlich",
@@ -10049,7 +10124,8 @@
     "panelRenderFailed": "Das Panel „{{name}}“ konnte nicht geöffnet werden.",
     "sharedSettingsFailed": "Die geteilten Einstellungen aus dem Link konnten nicht geladen werden, daher werden Ihre eigenen Einstellungen verwendet.",
     "sharedLanguageFailed": "Der Wechsel zu der Sprache, die die geteilten Einstellungen verlangen, war nicht möglich.",
-    "languageCatalogFailed": "Die Übersetzung für {{language}} konnte nicht geladen werden, daher zeigt GeoLibre Englisch an."
+    "languageCatalogFailed": "Die Übersetzung für {{language}} konnte nicht geladen werden, daher zeigt GeoLibre Englisch an.",
+    "dataUrlLoadFailed": "Die Daten-URL konnte nicht geladen werden."
   },
   "shell": {
     "workspaceTitle": "GeoLibre-Kartenarbeitsbereich",

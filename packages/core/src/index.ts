@@ -1,3 +1,10 @@
+export {
+  DEFAULT_GEO_EDITOR_SETTINGS,
+  normalizeGeoEditorSettings,
+  isGeoEditorFieldName,
+  type GeoEditorSettings,
+  type GeoEditorAttributeField,
+} from "./geo-editor-settings";
 export * from "./types";
 export * from "./tile-address";
 export * from "./diagram";
@@ -11,6 +18,7 @@ export * from "./cesium-imagery";
 export * from "./arcgis-projection";
 export * from "./map-crs";
 export * from "./geojson-z";
+export * from "./antimeridian";
 export * from "./color-ramp";
 export * from "./paths";
 export * from "./routing";
@@ -45,6 +53,7 @@ export * from "./i3s-building-state";
 export * from "./project-diff";
 export * from "./style-library";
 export * from "./layer-library";
+export * from "./remote-geojson";
 export * from "./layer-defaults";
 export * from "./layer-style-clipboard";
 export * from "./layer-style-file";
@@ -93,6 +102,8 @@ export {
   useAppStore,
   useAppCapability,
   type AppState,
+  type AttributeTableDrafts,
+  type AttributeTableDraftTarget,
   type ConversionToolKind,
   type GpsStatusFix,
   type NetworkToolKind,

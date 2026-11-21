@@ -412,6 +412,20 @@ describe("CesiumLayerSync", () => {
     assert.equal(f.calls.dataSourcesAdded.length, 1);
   });
 
+  it("drops a legacy crs member Cesium cannot parse (#3476)", async () => {
+    const sync = newSync(f);
+    // GDAL writes CRS84 as `urn:ogc:def:crs:OGC::CRS84`, a spelling Cesium's
+    // GeoJsonDataSource rejects with "Unknown crs name".
+    const crs = { type: "name", properties: { name: "urn:ogc:def:crs:OGC::CRS84" } };
+    const fc = { type: "FeatureCollection", crs, features: [{}] };
+    sync.sync([mkLayer({ type: "geojson", geojson: fc as never, visible: true })]);
+    await f.flush();
+    assert.equal(f.calls.geojsonLoads.length, 1);
+    assert.equal("crs" in (f.calls.geojsonLoads[0].data as object), false);
+    assert.equal(fc.crs, crs, "the layer's own GeoJSON is not mutated");
+    assert.equal(f.calls.dataSourcesAdded.length, 1);
+  });
+
   it("renders every non-tile layer carrying GeoJSON through the GeoJSON path", async () => {
     const sync = newSync(f);
     const types = ["flatgeobuf", "geoparquet", "duckdb-query"] as const;

@@ -1,3 +1,4 @@
+import type { GeoEditorSettings } from "./geo-editor-settings";
 import type { FeatureCollection } from "geojson";
 import type { GeoArrowBatch } from "./geoarrow";
 export type { GeoArrowBatch };
@@ -289,6 +290,20 @@ export interface LabelStyle {
   expression: string;
   /** `"point"` labels at the feature/centroid; `"line"` places them along lines. */
   placement: "point" | "line";
+  /**
+   * With `"line"` placement, cut a gap in the line under each label and set
+   * the text in it, the way topographic maps print contour values, so the
+   * label reads without a halo. Applies to line layers drawn from inline
+   * GeoJSON in the MapLibre view; elsewhere labels follow the line as usual.
+   */
+  lineGap: boolean;
+  /** Line removed on each side of the text when {@link lineGap} is on, in pixels. */
+  lineGapPadding: number;
+  /**
+   * Distance between repeated labels along one line, in pixels (MapLibre
+   * `symbol-spacing` for line placement).
+   */
+  lineSpacing: number;
   /** Label text size in pixels. */
   size: number;
   /** CSS color string for the label text. */
@@ -719,6 +734,9 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
     field: "",
     expression: "",
     placement: "point",
+    lineGap: false,
+    lineGapPadding: 3,
+    lineSpacing: 250,
     size: 13,
     color: "#111827",
     haloColor: "#ffffff",
@@ -1271,6 +1289,13 @@ export interface LayerQuickFilter {
    * filter rather than emptying the map.
    */
   values?: (string | number | boolean)[];
+  /**
+   * `categorical`: also keep features whose value is blank (a missing
+   * property, `null`, or an empty string), the ones the Dashboard charts group
+   * as "(blank)". Kept apart from `values` so it can never collide with a real
+   * value that happens to read "(blank)". On its own it keeps only the blanks.
+   */
+  includeBlank?: boolean;
   /** `range`: inclusive bounds. `null`/omitted leaves that side open. */
   min?: number | null;
   max?: number | null;
@@ -1881,6 +1906,8 @@ export type MapProjection = "globe" | "mercator";
 export type MapScaleUnit = "metric" | "imperial" | "nautical";
 
 export interface MapPreferences {
+  /** Project-specific GeoEditor form fields and automatic popup preference. */
+  geoEditor?: GeoEditorSettings;
   restrictBounds: boolean;
   bounds: [number, number, number, number];
   minZoom: number;
@@ -1925,6 +1952,13 @@ export interface MapPreferences {
    * from a local file has no URL to save, so it is not kept.
    */
   terrainSource?: string;
+  /**
+   * Whether a custom terrain DEM is surrounded by the global terrain, so it
+   * does not stand as a raised block with vertical walls (#3470). Absent means
+   * the default for the source: on for a DEM read from a URL, off for a local
+   * file, which should not send requests off the device unasked.
+   */
+  terrainFillOutside?: boolean;
   /** Mapbox-only style. New projects use Streets; absent follows the shared basemap. */
   mapboxStyleUrl?: string;
   /**

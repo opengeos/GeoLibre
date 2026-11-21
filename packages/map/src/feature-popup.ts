@@ -1,5 +1,6 @@
 import {
   stringifyPopupValue,
+  inlineImageList,
   isInlineImageValue,
   isSafePopupUrl,
   resolvePopupTitle,
@@ -193,6 +194,23 @@ function renderPopupValue(cell: HTMLElement, row: PopupRow): void {
       image.loading = "lazy";
       image.className = "geolibre-popup-inline-image rounded";
       cell.appendChild(image);
+      return;
+    }
+    // A list of inline images (Field collection's `geolibre_photos`) draws as
+    // a wrapping row of thumbnails, never as the array's JSON (#3477).
+    const imageList = inlineImageList(row.value);
+    if (imageList) {
+      const gallery = document.createElement("div");
+      gallery.className = "geolibre-popup-inline-image-list flex flex-wrap gap-1";
+      imageList.forEach((source, index) => {
+        const image = document.createElement("img");
+        image.src = source;
+        image.alt = `${row.field} ${index + 1}`;
+        image.loading = "lazy";
+        image.className = "geolibre-popup-inline-image rounded";
+        gallery.appendChild(image);
+      });
+      cell.appendChild(gallery);
       return;
     }
   }

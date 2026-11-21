@@ -5,7 +5,7 @@ import {
   remapRowsToMercator,
   tileGeoBounds,
   wmsBboxFor,
-} from "../workers/tiles/src/reproject";
+} from "../packages/map/src/wms-reproject";
 
 // The Web-Mercator latitude clamp (the top/bottom of the tile pyramid).
 const MERC_MAX_LAT = 85.0511287798066;
