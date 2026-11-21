@@ -694,6 +694,16 @@ describe("CIM symbols and defaults as Pro writes them", () => {
     const sizeless = structuredClone(marker([fill()]));
     delete (sizeless.symbol.symbolLayers[0] as Record<string, unknown>).size;
     assert.equal(translatedStyle(simple(sizeless)).circleRadius, 0);
+    // An outline does not turn a size-0 marker into a ring.
+    for (const size of [undefined, 0]) {
+      const outlined = structuredClone(marker([stroke(), fill()]));
+      const markerLayer = outlined.symbol.symbolLayers[0] as Record<string, unknown>;
+      if (size === undefined) delete markerLayer.size;
+      else markerLayer.size = size;
+      const style = translatedStyle(simple(outlined));
+      assert.equal(style.circleRadius, 0, String(size));
+      assert.equal(style.strokeWidth, 0, String(size));
+    }
   });
 
   it("reads an omitted upper bound as 0, as CIM leaves out defaults", () => {

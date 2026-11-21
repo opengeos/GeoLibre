@@ -804,7 +804,9 @@ function markerLook(layers: CimObject[]): SymbolLook | null {
     ...(circle ? {} : { shape: stringValue(marker.type) || "marker" }),
     color: fill.hex,
     fillOpacity: fill.opacity,
-    ...strokeLook(scaledStroke(marker, size, scan.stroke)),
+    // A size-0 marker draws nothing in ArcGIS Pro, outline included, while a
+    // circle's stroke would still draw a ring around a radius of 0.
+    ...strokeLook(size > 0 ? scaledStroke(marker, size, scan.stroke) : undefined),
     ...scanNotes({ dropped, unreadable, effect }),
     // A CIM marker size is its height in points; a GeoLibre circle radius is
     // half the diameter in pixels.
