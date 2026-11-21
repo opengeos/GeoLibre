@@ -252,9 +252,8 @@ export function cimColor(value: unknown): CimColor | null {
 /**
  * Whether a CIM symbol layer draws.
  *
- * The seven public ArcGIS Pro `.lyrx` exports checked (Pro 2.3 to 3.3) write
- * `enable` on every symbol layer, `true` or `false`, so for Pro's files this
- * is just the flag. CIM written by other tools sometimes leaves the flag out on
+ * ArcGIS Pro writes `enable` on every symbol layer, `true` or `false`, so for
+ * Pro's files this is just the flag. CIM written by other tools sometimes leaves the flag out on
  * layers that are meant to draw, so an absent flag counts as enabled and only
  * an explicit `false` switches a layer off.
  */
@@ -387,7 +386,7 @@ function classBreaksRenderer(renderer: CimObject): CimRendererTranslation {
       label: stringValue(classBreak.label) || `${formatBound(lower)} – ${formatBound(upper)}`,
       filter: classBreakFilter(field, lower, index === 0, upper),
       // Unlike a unique value class, a class break has no checkbox: Pro writes
-      // no `visible` on it (none of 243 breaks in 113 public .lyrx files has one).
+      // no `visible` on it, so every break shows.
       visible: true,
     });
   }
@@ -941,14 +940,17 @@ function enabledLayers(symbol: CimObject | undefined): CimObject[] {
 }
 
 /**
- * The stroke part of a look. A symbol with no stroke, or a fully transparent
- * one (Pro's "no colour" outline), gets a zero width: leaving the width out
- * would let the class inherit another class's outline, or GeoLibre's default.
+ * The stroke part of a look. A symbol with no stroke, a fully transparent
+ * one (Pro's "no colour" outline) or a zero-width one gets a zero width:
+ * leaving the width out would let the class inherit another class's outline,
+ * or GeoLibre's default.
  */
 function strokeLook(
   stroke: LayerScan["stroke"],
 ): Pick<SymbolLook, "strokeColor" | "strokeOpacity" | "strokeWidth"> {
-  if (!stroke || stroke.color.opacity === 0) return { strokeWidth: 0 };
+  // A zero-width stroke draws nothing either, so its colour and opacity must
+  // not become the layer's, which other classes' outlines would inherit.
+  if (!stroke || stroke.color.opacity === 0 || stroke.width === 0) return { strokeWidth: 0 };
   return {
     strokeColor: stroke.color.hex,
     ...(stroke.color.opacity !== DEFAULT_LAYER_STYLE.strokeOpacity

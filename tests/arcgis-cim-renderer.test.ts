@@ -677,6 +677,20 @@ describe("CIM symbols and defaults as Pro writes them", () => {
     assert.equal(hairline(clear, "a"), "#ff0000");
   });
 
+  it("does not take the layer's stroke opacity from a zero-width outline", () => {
+    // Pro writes `width: 0` for an outline that draws nothing. Its opacity
+    // must not become the layer's, which every other class's outline uses.
+    const result = translateCimRenderer(
+      twoClasses(
+        polygonWith([stroke(rgb(0, 0, 0, 50), 0), fill()]),
+        polygonWith([stroke(rgb(0, 0, 255), 1.5), fill()]),
+      ),
+    );
+    assert.equal(result.translated, true);
+    assert.equal(result.style.strokeOpacity, undefined);
+    assert.deepEqual(result.issues, []);
+  });
+
   it("reads an omitted stroke width or marker size as 0, as CIM leaves out defaults", () => {
     const { width: _width, ...widthless } = stroke(rgb(0, 0, 255));
     // A class whose outline has no width does not inherit the first class's
