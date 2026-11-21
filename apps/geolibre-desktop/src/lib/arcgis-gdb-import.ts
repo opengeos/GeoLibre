@@ -1,5 +1,6 @@
 import type { VectorDatasetLayer } from "@geolibre/processing";
 import type { FeatureCollection } from "geojson";
+import { untilAborted } from "./abortable";
 import {
   dropArcgisImportLayers,
   type ArcgisFileGeodatabaseImport,
@@ -44,8 +45,11 @@ export async function loadArcgisFileGeodatabaseLayers(
   const outcomes = new Map<string, ReadOutcome>();
   let started = true;
   try {
-    await reader.start();
+    // Starting the sidecar can take seconds; an abandoned import stops
+    // waiting for it at once (the start itself carries on).
+    await untilAborted(reader.start(), signal);
   } catch (error) {
+    if (signal?.aborted) throw error;
     console.error("[GeoLibre] Could not start the sidecar to read File Geodatabase layers", error);
     started = false;
   }

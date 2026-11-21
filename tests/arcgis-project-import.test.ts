@@ -1434,6 +1434,33 @@ describe("ArcGIS Pro File Geodatabase layers", () => {
     });
   }
 
+  it("stops waiting for a sidecar that is still starting when abandoned", async () => {
+    const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {
+      readFileGeodatabase: true,
+    });
+    const controller = new AbortController();
+    const error = mock.method(console, "error", () => {});
+    try {
+      const loading = loadArcgisFileGeodatabaseLayers(
+        result,
+        {
+          // Never settles, like a sidecar still bootstrapping.
+          start: () => new Promise(() => {}),
+          listLayers: async () => assert.fail("must not list"),
+          readLayer: async () => assert.fail("must not read"),
+        },
+        controller.signal,
+      );
+      controller.abort();
+      await assert.rejects(loading, { name: "AbortError" });
+      // Abandoned, not reported as a sidecar that failed to start.
+      assert.equal(error.mock.callCount(), 0);
+      assert.ok(result.project.layers.every((layer) => layer.geojson === undefined));
+    } finally {
+      error.mock.restore();
+    }
+  });
+
   it("reports every layer as unreadable when the sidecar cannot start", async () => {
     const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {
       readFileGeodatabase: true,

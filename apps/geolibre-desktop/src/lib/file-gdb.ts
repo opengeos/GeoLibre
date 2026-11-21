@@ -9,6 +9,7 @@ import { join, tempDir } from "@tauri-apps/api/path";
 import { remove } from "@tauri-apps/plugin-fs";
 import type { FeatureCollection } from "geojson";
 import i18next from "i18next";
+import { untilAborted } from "./abortable";
 import { readLocalFileBytes } from "./tauri-io";
 
 /**
@@ -47,29 +48,6 @@ async function waitForConversionJob(
     job = await untilAborted(fetchConversionJob(job.id), signal);
   }
   return job;
-}
-
-/**
- * Settle with `promise`, or reject with the signal's reason as soon as it
- * aborts. The request itself is not cancelled, only the wait for it.
- */
-function untilAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
-  if (!signal) return promise;
-  return new Promise((resolve, reject) => {
-    const abort = () => reject(signal.reason);
-    if (signal.aborted) abort();
-    else signal.addEventListener("abort", abort, { once: true });
-    promise.then(
-      (value) => {
-        signal.removeEventListener("abort", abort);
-        resolve(value);
-      },
-      (error: unknown) => {
-        signal.removeEventListener("abort", abort);
-        reject(error);
-      },
-    );
-  });
 }
 
 /** Wait one poll interval, cut short when `signal` aborts. */
