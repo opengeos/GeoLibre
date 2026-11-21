@@ -175,8 +175,8 @@ interface ThematicClass {
  */
 export function translateCimRenderer(renderer: unknown): CimRendererTranslation {
   const cim = objectValue(renderer);
-  const type = stringValue(cim?.type);
   if (!cim) return { translated: false, style: {}, issues: [] };
+  const type = stringValue(cim.type);
   // An untyped renderer holding one symbol is read as a simple renderer, as
   // the importer always has.
   if (type === "CIMSimpleRenderer" || (!type && cim.symbol)) return simpleRenderer(cim);
@@ -253,9 +253,9 @@ export function cimColor(value: unknown): CimColor | null {
  * Whether a CIM symbol layer draws.
  *
  * ArcGIS Pro writes `enable` on every symbol layer, `true` or `false`, so for
- * Pro's files this is just the flag. CIM written by other tools sometimes leaves the flag out on
- * layers that are meant to draw, so an absent flag counts as enabled and only
- * an explicit `false` switches a layer off.
+ * Pro's files this is just the flag. CIM written by other tools sometimes
+ * leaves the flag out on layers that are meant to draw, so an absent flag
+ * counts as enabled and only an explicit `false` switches a layer off.
  */
 export function cimSymbolLayerEnabled(layer: unknown): boolean {
   return isObject(layer) && layer.enable !== false;

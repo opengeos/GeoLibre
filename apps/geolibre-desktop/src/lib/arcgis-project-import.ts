@@ -26,6 +26,11 @@ export interface ArcgisProjectImportWarning {
     | "nesting"
     | "symbology"
     | "symbology-partial";
+  /**
+   * The layer's CIM type for an unsupported layer, or, on a `symbology` or
+   * `symbology-partial` warning, the CIM type the issue names (a renderer,
+   * symbol layer or effect type).
+   */
   layerType?: string;
   /**
    * For a `symbology` warning, what kept the renderer from being reproduced;
