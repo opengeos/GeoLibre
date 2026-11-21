@@ -495,7 +495,7 @@ describe("CIM renderer refusals", () => {
       }),
       [{ code: "expression" }],
     ],
-    ["a class without a solid colour", picture, [{ code: "symbol", cimType: "CIMPolygonSymbol" }]],
+    ["a class without a solid colour", picture, [{ code: "symbol", cimType: "CIMPictureFill" }]],
     [
       "another renderer type",
       { type: "CIMHeatMapRenderer" },
@@ -599,7 +599,8 @@ describe("CIM renderer refusals", () => {
         simple(polygonWith([...outline, hatch, fill(rgb(255, 255, 255, 0))])),
       );
       assert.equal(result.translated, false);
-      assert.deepEqual(result.issues, [{ code: "symbol", cimType: "CIMPolygonSymbol" }]);
+      // The warning names the hatch, the layer that could not be drawn.
+      assert.deepEqual(result.issues, [{ code: "symbol", cimType: "CIMHatchFill" }]);
     }
     // A transparent symbol made only of supported layers is carried as it is.
     const clear = translateCimRenderer(simple(polygonWith([fill(rgb(255, 255, 255, 0))])));
@@ -1121,7 +1122,7 @@ describe("what a translated renderer reports leaving out", () => {
   it("refuses an outline-only marker graphic rather than drawing an empty ring", () => {
     const result = translateCimRenderer(simple(marker([stroke()], [solidRed])));
     assert.equal(result.translated, false);
-    assert.deepEqual(result.issues, [{ code: "symbol", cimType: "CIMPointSymbol" }]);
+    assert.deepEqual(result.issues, [{ code: "symbol", cimType: "CIMVectorMarker" }]);
   });
 });
 

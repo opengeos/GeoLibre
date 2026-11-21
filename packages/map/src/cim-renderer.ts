@@ -568,7 +568,15 @@ function untranslated(renderer: CimObject, issue: CimRendererIssue): CimRenderer
 }
 
 function symbolIssue(reference: unknown): CimRendererIssue {
-  const type = stringValue(objectValue(objectValue(reference)?.symbol)?.type);
+  const symbol = objectValue(objectValue(reference)?.symbol);
+  // Name what could not be drawn: the first enabled layer that is not a solid
+  // fill or stroke (a picture or hatch fill, a marker), or else the symbol,
+  // whose solid layers were transparent or unreadable.
+  const solid: readonly string[] = SOLID_LAYERS;
+  const undrawn = enabledLayers(symbol)
+    .map((layer) => stringValue(layer.type))
+    .find((type) => type && !solid.includes(type));
+  const type = undrawn || stringValue(symbol?.type);
   return { code: "symbol", ...(type ? { cimType: type } : {}) };
 }
 
