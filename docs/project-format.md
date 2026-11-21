@@ -447,8 +447,9 @@ and LAN hosts. The host check reads only the URL as written: it does not resolve
 DNS names (a public name can point at a private address) and redirects are
 followed, so a public URL can still lead the request to a local or LAN host.
 Only open projects whose data sources you trust.
-Remote responses must contain a FeatureCollection of valid Features and geometries,
-including valid nested GeometryCollections. Missing feature geometry is normalized
+Remote responses must contain a FeatureCollection of Features whose geometries
+have a known GeoJSON type and array coordinates, including nested
+GeometryCollections; individual positions are not validated. Missing feature geometry is normalized
 to `null` for compatibility with servers that omit it; other malformed features
 reject the entire response and display a layer error instead of partial data.
 GCS URLs use URL syntax: encode literal `?` and `#` in object names

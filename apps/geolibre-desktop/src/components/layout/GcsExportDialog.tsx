@@ -18,6 +18,25 @@ interface HarvestExecution {
   apiKey: string;
 }
 
+/**
+ * A signal that aborts when any of the given signals does. Combined by hand:
+ * AbortSignal.any is missing from older desktop webviews.
+ *
+ * @param signals - The signals to follow.
+ * @returns The combined signal.
+ */
+function anySignal(signals: AbortSignal[]): AbortSignal {
+  const controller = new AbortController();
+  for (const source of signals) {
+    if (source.aborted) {
+      controller.abort(source.reason);
+      break;
+    }
+    source.addEventListener("abort", () => controller.abort(source.reason), { once: true });
+  }
+  return controller.signal;
+}
+
 export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -150,9 +169,16 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
     setStatus("running");
     setError(null);
     setResult(null);
+    const timeoutController = new AbortController();
+    const timer = setTimeout(
+      () => timeoutController.abort(new DOMException("timed out", "TimeoutError")),
+      30 * 60 * 1000,
+    );
+    // Stop the timer once the operation is cancelled, so it does not outlive the run.
+    operation.signal.addEventListener("abort", () => clearTimeout(timer), { once: true });
+    const timeout = timeoutController.signal;
     try {
-      const timeout = AbortSignal.timeout(30 * 60 * 1000);
-      signal = AbortSignal.any([operation.signal, timeout]);
+      signal = anySignal([operation.signal, timeout]);
       let execution = resume?.id;
       submitted = execution !== undefined;
       if (!execution) {
@@ -160,7 +186,7 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
         // already have accepted the job, and its ID is what lets a reopened
         // dialog resume observing it. Only the timeout or an unmount cancels it.
         const submitSignal = mountRef.current
-          ? AbortSignal.any([mountRef.current.signal, timeout])
+          ? anySignal([mountRef.current.signal, timeout])
           : timeout;
         setSubmitting(true);
         let receivedExecution: unknown;
@@ -214,6 +240,8 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
             ? e.message
             : String(e),
       );
+    } finally {
+      clearTimeout(timer);
     }
   };
 

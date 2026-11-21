@@ -252,19 +252,17 @@ it("reports a non-JSON successful submission as a missing execution ID", async (
   await waitFor(() => assert.ok(screen.getByText(/execution ID/i)));
 });
 
-it("shows abort API setup errors without sending a request or leaving the dialog busy", async () => {
+it("submits a harvest when AbortSignal.any is unavailable", async () => {
   mock.method(AbortSignal, "any", () => {
     throw new TypeError("AbortSignal.any is unavailable");
   });
-  const fetcher = mock.method(globalThis, "fetch", async () => Response.json({}));
+  const fetcher = mock.method(globalThis, "fetch", async () =>
+    Response.json({ execution: "run-compat" }),
+  );
   openDialog();
   fireEvent.click(screen.getByRole("button", { name: "Harvest & Export" }));
-  await waitFor(() => assert.ok(screen.getByText("AbortSignal.any is unavailable")));
-  assert.equal(fetcher.mock.callCount(), 0);
-  assert.equal(
-    screen.getByRole("button", { name: "Harvest & Export" }).hasAttribute("disabled"),
-    false,
-  );
+  await waitFor(() => assert.ok(screen.getByText(/run-compat/)));
+  assert.equal(fetcher.mock.callCount(), 1);
 });
 
 it("renders the backend deployment instructions with named links", () => {
