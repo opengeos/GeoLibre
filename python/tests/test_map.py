@@ -1077,7 +1077,8 @@ def test_add_choropleth_builds_graduated_style(m):
     assert style["vectorStyleColorRamp"] == "blues"
     assert len(style["vectorStyleStops"]) == 5
     assert style["vectorStyleStops"][0]["value"] == 0.0
-    assert style["vectorStyleStops"][-1]["value"] == 40.0
+    # Class lower bounds (the app renders a `step`), so the top class opens at 32.
+    assert style["vectorStyleStops"][-1]["value"] == 32.0
 
 
 def test_add_choropleth_missing_column_raises(m):
@@ -1093,7 +1094,7 @@ def test_add_choropleth_tolerates_null_properties(m):
     m.add_choropleth(fc, "pop", class_count=5)
     style = _last_layer(m)["style"]
     assert style["vectorStyleStops"][0]["value"] == 0.0
-    assert style["vectorStyleStops"][-1]["value"] == 40.0
+    assert style["vectorStyleStops"][-1]["value"] == 32.0
 
 
 def test_add_choropleth_non_numeric_column_raises(m):
