@@ -75,6 +75,38 @@ it("reports a submission that fails after the dialog is closed", async () => {
   await waitFor(() => assert.ok(screen.getByText("Bad API key")));
 });
 
+it("times out a hung submission after the dialog is closed", async () => {
+  // Capture only the 30-minute harvest timer; waitFor still needs real timers.
+  const realSetTimeout = globalThis.setTimeout;
+  let fireHarvestTimeout: (() => void) | undefined;
+  mock.method(globalThis, "setTimeout", ((handler: () => void, ms?: number, ...rest: unknown[]) => {
+    if (ms === 30 * 60 * 1000) {
+      fireHarvestTimeout = handler;
+      return realSetTimeout(() => {}, 0);
+    }
+    return realSetTimeout(handler, ms, ...rest);
+  }) as typeof setTimeout);
+  let submitSignal: AbortSignal | undefined;
+  mock.method(globalThis, "fetch", async (_url: unknown, options?: RequestInit) => {
+    submitSignal = options?.signal ?? undefined;
+    return new Promise<Response>((_resolve, reject) => {
+      submitSignal?.addEventListener("abort", () => reject(submitSignal?.reason), { once: true });
+    });
+  });
+  openDialog();
+  fireEvent.click(screen.getByRole("button", { name: "Harvest & Export" }));
+  await waitFor(() => assert.ok(submitSignal));
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  assert.ok(fireHarvestTimeout);
+  await act(async () => fireHarvestTimeout?.());
+  assert.equal(submitSignal?.aborted, true);
+  fireEvent.click(screen.getByRole("button", { name: "Open harvest" }));
+  assert.equal(
+    screen.getByRole("button", { name: "Harvest & Export" }).hasAttribute("disabled"),
+    false,
+  );
+});
+
 it("aborts observation when unmounted", async () => {
   let signal: AbortSignal | undefined;
   mock.method(globalThis, "fetch", async (_url: unknown, options?: RequestInit) => {

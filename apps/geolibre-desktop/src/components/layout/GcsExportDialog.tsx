@@ -174,8 +174,9 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
       () => timeoutController.abort(new DOMException("timed out", "TimeoutError")),
       30 * 60 * 1000,
     );
-    // Stop the timer once the operation is cancelled, so it does not outlive the run.
-    operation.signal.addEventListener("abort", () => clearTimeout(timer), { once: true });
+    // Cleared in `finally` or on unmount, not on close: a hung submission must
+    // still time out after the dialog is closed, or Run and Resume stay disabled.
+    mountRef.current?.signal.addEventListener("abort", () => clearTimeout(timer), { once: true });
     const timeout = timeoutController.signal;
     try {
       signal = anySignal([operation.signal, timeout]);
