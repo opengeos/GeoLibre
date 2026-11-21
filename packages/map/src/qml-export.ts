@@ -571,12 +571,13 @@ function ruleScaleAttributes(rule: VectorRule): string {
  * (outline color/width, opacity, size) are folded into each rule's
  * symbol. The ELSE rule stays a top-level catch-all.
  *
- * Returns null when the style has rules but none could be exported and the
- * ELSE rule is switched off, so the tree would draw nothing; the caller then
- * exports a single symbol, as it does for categorized and graduated styles
- * with no valid classes. Rules the user switched off still export
- * (unchecked), and so does a style whose only rule is a switched-off ELSE,
- * which draws nothing on the map either.
+ * Returns null when nothing could be exported, the ELSE rule is switched off,
+ * and at least one skipped rule draws on the map (it and its ancestors are
+ * switched on): the tree would draw nothing where the map draws something,
+ * so the caller exports a single symbol instead, as it does for categorized
+ * and graduated styles with no valid classes. When every skipped rule is
+ * switched off, or the only rule is a switched-off ELSE, the map draws
+ * nothing either and the tree is kept.
  */
 function ruleRenderer(
   geometry: SymbolGeometry,
@@ -605,8 +606,11 @@ function ruleRenderer(
   }
 
   const emitted = new Set<string>();
-  const emitRule = (entry: VectorRule): string => {
+  // Whether a skipped rule is one the map draws, so skipping it loses features.
+  let skippedDrawn = false;
+  const emitRule = (entry: VectorRule, parentEnabled = true): string => {
     if (emitted.has(entry.id)) return "";
+    const drawn = parentEnabled && entry.enabled !== false;
     emitted.add(entry.id);
     const kids = childrenOf.get(entry.id) ?? [];
     const isGroup = kids.length > 0;
@@ -622,11 +626,12 @@ function ruleRenderer(
         warnings.push(
           `The rule "${entry.label || entry.filter}" uses a filter with no QGIS equivalent and was skipped.`,
         );
+        skippedDrawn ||= drawn;
         return "";
       }
       filterAttribute = ` filter="${xmlEscape(filter)}"`;
     }
-    const children = kids.map(emitRule).join("");
+    const children = kids.map((kid) => emitRule(kid, drawn)).join("");
     // A group whose children were all skipped has nothing to draw, so it is
     // skipped too (its children already warned) and cannot hide that the
     // tree exports no drawable rule.
@@ -637,6 +642,7 @@ function ruleRenderer(
         warnings.push(
           `The rule "${entry.label || entry.filter}" has an invalid color and was skipped.`,
         );
+        skippedDrawn ||= drawn;
         return "";
       }
       const rulePaint = rulePaintFor(entry, paint, style);
@@ -652,8 +658,8 @@ function ruleRenderer(
     return children.length > 0 ? `<rule${attributes}>${children}</rule>` : `<rule${attributes}/>`;
   };
 
-  const ruleXml = roots.map(emitRule).join("");
-  if (!ruleXml && concrete.length > 0 && elseRule?.enabled === false) return null;
+  const ruleXml = roots.map((entry) => emitRule(entry)).join("");
+  if (!ruleXml && skippedDrawn && elseRule?.enabled === false) return null;
   // The ELSE rule catches features no other rule matched; its color falls back
   // to the layer's single-symbol color for the geometry when the else rule has
   // no valid color.

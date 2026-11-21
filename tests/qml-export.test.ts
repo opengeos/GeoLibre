@@ -204,6 +204,18 @@ describe("buildQml", () => {
     const empty = buildQml(layer({ style: elseOnly }), polygons());
     assert.match(compact(empty.qml), /<renderer-v2 type="RuleRenderer"/);
     assert.match(empty.qml, /filter="ELSE"[^>]*checkstate="0"/);
+    // A skipped rule the map does not draw (switched off itself, or under a
+    // switched-off group) loses nothing, so the export keeps drawing nothing.
+    const offUntranslatable = buildQml(layer({ style: rules(false, untranslatable) }), polygons());
+    assert.match(compact(offUntranslatable.qml), /<renderer-v2 type="RuleRenderer"/);
+    const offGroup = rules(true, untranslatable);
+    offGroup.vectorRules = [
+      { id: "g", label: "Group", filter: "", color: "#000000", isElse: false, enabled: false },
+      { ...offGroup.vectorRules[0], parentId: "g" },
+      offGroup.vectorRules[1],
+    ];
+    const offGroupResult = buildQml(layer({ style: offGroup }), polygons());
+    assert.match(compact(offGroupResult.qml), /<renderer-v2 type="RuleRenderer"/);
     // Rules the user switched off still export as unchecked rules.
     const off = buildQml(layer({ style: rules(false, [">", ["get", "pop"], 1000]) }), polygons());
     assert.match(compact(off.qml), /<renderer-v2 type="RuleRenderer"/);
