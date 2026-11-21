@@ -891,8 +891,6 @@ function startArcGISViewportLoader(
   stopArcGISViewportLoader(layerId);
   map.on("moveend", move);
   arcgisFeatureLoaders.set(layerId, loader);
-  // A restored layer registers here without passing through the add path.
-  ensureArcGISFeatureLoaderCleanup();
   ensureArcGISFeatureLoaderCleanup();
   // fitBounds may still be animating. Its moveend will replace this first query.
   if (!map.isMoving()) move();
