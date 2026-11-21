@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createExpression, featureFilter } from "@maplibre/maplibre-gl-style-spec";
+import {
+  createExpression,
+  featureFilter,
+  type StylePropertySpecification,
+} from "@maplibre/maplibre-gl-style-spec";
 import { strToU8, zipSync } from "fflate";
 import {
   DEFAULT_LAYER_STYLE,
@@ -164,13 +168,21 @@ function renderedFill(style: LayerStyle, properties: Record<string, unknown>): s
   return evaluateColor(vectorFillColorValue(style), feature);
 }
 
-function evaluateColor(value: unknown, feature: never): string {
-  if (typeof value === "string") return value;
-  const compiled = createExpression(value, {
-    type: "color",
+/**
+ * Compile a data-driven paint value as MapLibre does for the named property,
+ * so a value of the wrong output type fails to compile.
+ */
+function compilePaint(value: unknown, type: "color" | "number", property: string) {
+  return createExpression(value, `layers[0].paint.${property}`, {
+    type,
     "property-type": "data-driven",
     expression: { interpolated: false, parameters: ["zoom", "feature"] },
-  } as never);
+  } as StylePropertySpecification);
+}
+
+function evaluateColor(value: unknown, feature: never): string {
+  if (typeof value === "string") return value;
+  const compiled = compilePaint(value, "color", "fill-color");
   assert.equal(compiled.result, "success", JSON.stringify(compiled.value));
   const color = (
     compiled.value as {
@@ -385,11 +397,7 @@ describe("CIM class breaks renderer", () => {
 function renderedOutlineWidth(style: LayerStyle, properties: Record<string, unknown>): number {
   const value = vectorStrokeWidthValue(style, lineWidthValue(style));
   if (typeof value === "number") return value;
-  const compiled = createExpression(value, {
-    type: "number",
-    "property-type": "data-driven",
-    expression: { interpolated: false, parameters: ["zoom", "feature"] },
-  } as never);
+  const compiled = compilePaint(value, "number", "line-width");
   assert.equal(compiled.result, "success", JSON.stringify(compiled.value));
   return (compiled.value as { evaluate: (g: unknown, f: unknown) => number }).evaluate(
     { zoom: 10 },
@@ -628,6 +636,17 @@ describe("CIM symbols and defaults as Pro writes them", () => {
     assert.equal(renderedOutlineWidth(fillOnly, { K: "b" }), 0);
   });
 
+  it("compiles paint values against their output type", () => {
+    // Guards the helpers above: a colour where a number belongs, or the
+    // reverse, must fail rather than pass unchecked.
+    const textCase = ["case", ["==", ["get", "K"], "a"], "#ff0000", "#0000ff"];
+    const numberCase = ["case", ["==", ["get", "K"], "a"], 2, 0];
+    assert.equal(compilePaint(textCase, "color", "fill-color").result, "success");
+    assert.equal(compilePaint(numberCase, "number", "line-width").result, "success");
+    assert.equal(compilePaint(textCase, "number", "line-width").result, "error");
+    assert.equal(compilePaint(numberCase, "color", "fill-color").result, "error");
+  });
+
   it("leaves no coloured hairline on a polygon without an outline", () => {
     // The fill's 1px hairline draws even at stroke width 0, so a polygon
     // without an outline must draw it in its own fill colour: the edge
@@ -764,6 +783,23 @@ describe("CIM symbols and defaults as Pro writes them", () => {
     // Text is still compared as text: "1" is not the stored text "1.0".
     assert.equal(renderedFill(style, { ZONE: "1" }), "#c8c8c8");
   });
+
+  it("matches values named like Object.prototype keys", () => {
+    // MapLibre's `match` rejects such labels as duplicates, which would drop
+    // the class's filter, so the values are listed with `in`.
+    const renderer = zoning();
+    renderer.groups[0].classes[2].values = [
+      { type: "CIMUniqueValue", fieldValues: ["toString"] },
+      { type: "CIMUniqueValue", fieldValues: ["constructor"] },
+      { type: "CIMUniqueValue", fieldValues: ["__proto__"] },
+    ];
+    const style = translatedStyle(renderer);
+    for (const value of ["toString", "constructor", "__proto__"]) {
+      assert.equal(renderedFill(style, { ZONE: value }), "#0000ff", value);
+    }
+    assert.equal(renderedFill(style, { ZONE: "R1" }), "#ffff00");
+    assert.equal(renderedFill(style, { ZONE: "valueOf" }), "#c8c8c8");
+  });
 });
 
 describe("what a translated renderer reports leaving out", () => {
@@ -816,7 +852,27 @@ describe("what a translated renderer reports leaving out", () => {
     return symbol;
   };
 
+  const withAlternates = (renderer: ReturnType<typeof density>, alternateSymbols: unknown[]) => {
+    Object.assign(renderer.breaks[1], { alternateSymbols });
+    return renderer;
+  };
+  const uniqueWithAlternates = twoClasses(polygonWith([fill()]), polygonWith([fill()]));
+  Object.assign(uniqueWithAlternates.groups[0].classes[0], {
+    alternateSymbols: [polygonWith([fill(rgb(0, 0, 255))])],
+  });
+
   const cases: [string, unknown, unknown[]][] = [
+    [
+      "a class break's alternate symbols for other scales",
+      withAlternates(density(), [polygon([0, 0, 255])]),
+      [{ code: "alternate-symbols" }],
+    ],
+    [
+      "a unique value class's alternate symbols",
+      uniqueWithAlternates,
+      [{ code: "alternate-symbols" }],
+    ],
+    ["an empty alternate symbol list", withAlternates(density(), []), []],
     [
       "a hatch beside a solid fill",
       twoClasses(

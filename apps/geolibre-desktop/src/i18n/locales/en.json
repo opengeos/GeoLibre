@@ -4341,7 +4341,8 @@
         "color": "The layer's symbology was imported, but a fill or outline colour ({{layerType}}) could not be read, so that fill or outline is not drawn.",
         "transparency": "The layer's symbology was imported, but its classes' different outline or line transparencies are not kept: all outlines and lines use the layer's one shared transparency.",
         "effects": "The layer's symbology was imported, but its symbols' geometric effects ({{layerType}}, such as dashes or offsets) are not drawn: lines draw solid and in place.",
-        "marker-shape": "The layer's symbology was imported, but its point markers ({{layerType}}) are drawn as circles, not in their own shape."
+        "marker-shape": "The layer's symbology was imported, but its point markers ({{layerType}}) are drawn as circles, not in their own shape.",
+        "alternate-symbols": "The layer's symbology was imported, but its alternate symbols for other map scales are not: each class draws its main symbol at every scale."
       },
       "importWarningLayerCount_one": "{{count}} layer",
       "importWarningLayerCount_other": "{{count}} layers",

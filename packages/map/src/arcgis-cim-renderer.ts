@@ -42,8 +42,9 @@
  * not draw (`symbol-layers`), a fill or outline colour it cannot read (`color`),
  * per-class stroke transparency GeoLibre's rules cannot hold
  * (`transparency`), geometric effects such as dashes or offsets
- * (`effects`), and a marker shape other than a circle, which is drawn as a
- * circle (`marker-shape`).
+ * (`effects`), a marker shape other than a circle, which is drawn as a
+ * circle (`marker-shape`), and alternate symbols for other scales, of which
+ * only the primary symbol is drawn (`alternate-symbols`).
  *
  * Thematic renderers become `"rule-based"` styles rather than the native
  * `"categorized"`/`"graduated"` modes, because neither native mode can carry
@@ -89,8 +90,9 @@ const CIM_NULL_VALUE = "<Null>";
  * Why a renderer, or part of it, was not carried over. `renderer` names the
  * renderer type that was left behind; the rest name the feature that made a
  * supported renderer type untranslatable (or, for `visual-variables`,
- * `symbol-layers`, `color`, `transparency` and `effects`, the part that was
- * dropped from an otherwise translated renderer).
+ * `symbol-layers`, `color`, `transparency`, `effects`, `marker-shape` and
+ * `alternate-symbols`, the part that was dropped from an otherwise translated
+ * renderer).
  */
 export type CimRendererIssueCode =
   | "renderer"
@@ -106,7 +108,8 @@ export type CimRendererIssueCode =
   | "color"
   | "transparency"
   | "effects"
-  | "marker-shape";
+  | "marker-shape"
+  | "alternate-symbols";
 
 export interface CimRendererIssue {
   code: CimRendererIssueCode;
@@ -491,8 +494,10 @@ function uniqueValueFilter(field: string, values: string[]): unknown[] {
   const text = [...new Set(values.filter((value) => value !== CIM_NULL_VALUE))];
   if (values.includes(CIM_NULL_VALUE)) conditions.push(["==", get, null]);
   if (text.length > 0) {
-    const match = ["match", ["to-string", get], text, true, false];
-    conditions.push(text.includes("") ? ["all", ["!=", get, null], match] : match);
+    // `in` rather than `match`: `match` keeps its labels in a plain object, so
+    // a value named like an `Object.prototype` key (`toString`) is rejected.
+    const listed = ["in", ["to-string", get], ["literal", text]];
+    conditions.push(text.includes("") ? ["all", ["!=", get, null], listed] : listed);
   }
   // `to-string` spells a number canonically (`1`, `1e+21`, `0`), so a stored
   // number spelled any other way (`1.0`, `1E+21`, `-0`) is also compared as a
@@ -581,6 +586,17 @@ function partialIssues(renderer: CimObject, looks: SymbolLook[]): CimRendererIss
   if (effect) issues.push({ code: "effects", cimType: effect });
   const shape = looks.find((look) => look.shape)?.shape;
   if (shape) issues.push({ code: "marker-shape", cimType: shape });
+  // A renderer, class or break can carry alternate symbols that ArcGIS Pro
+  // draws at other scales; only the primary symbol is imported.
+  const classes = [
+    ...arrayValue(renderer.groups)
+      .filter(isObject)
+      .flatMap((group) => arrayValue(group.classes)),
+    ...arrayValue(renderer.breaks),
+  ].filter(isObject);
+  if ([renderer, ...classes].some((owner) => arrayValue(owner.alternateSymbols).length > 0)) {
+    issues.push({ code: "alternate-symbols" });
+  }
   return issues;
 }
 
