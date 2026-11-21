@@ -30,7 +30,7 @@ export {
   type CimRendererIssue,
   type CimRendererIssueCode,
   type CimRendererTranslation,
-} from "./arcgis-cim-renderer";
+} from "./cim-renderer";
 
 /**
  * Whether an XML style document is a QGIS QML (as opposed to an OGC SLD): a QML has a `<qgis>`
