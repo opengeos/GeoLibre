@@ -659,7 +659,13 @@ function ruleRenderer(
   };
 
   const ruleXml = roots.map((entry) => emitRule(entry)).join("");
-  if (!ruleXml && skippedDrawn && elseRule?.enabled === false) return null;
+  if (!ruleXml && skippedDrawn) {
+    if (elseRule?.enabled === false) return null;
+    // Only the catch-all exports, so QGIS draws every feature in its colour.
+    warnings.push(
+      "None of the rule-based renderer's rules could be exported; the layer is exported with only its ELSE rule, which draws every feature.",
+    );
+  }
   // The ELSE rule catches features no other rule matched; its color falls back
   // to the layer's single-symbol color for the geometry when the else rule has
   // no valid color.

@@ -216,6 +216,15 @@ describe("buildQml", () => {
     ];
     const offGroupResult = buildQml(layer({ style: offGroup }), polygons());
     assert.match(compact(offGroupResult.qml), /<renderer-v2 type="RuleRenderer"/);
+    // With the ELSE rule on, the export keeps the catch-all and says that it
+    // draws every feature.
+    const elseOn = rules(true, untranslatable);
+    elseOn.vectorRules = [elseOn.vectorRules[0], { ...elseOn.vectorRules[1], enabled: true }];
+    const onlyElse = buildQml(layer({ style: elseOn }), polygons());
+    assert.match(compact(onlyElse.qml), /<renderer-v2 type="RuleRenderer"/);
+    assert.ok(
+      onlyElse.warnings.some((w) => /only its ELSE rule, which draws every feature/.test(w)),
+    );
     // Rules the user switched off still export as unchecked rules.
     const off = buildQml(layer({ style: rules(false, [">", ["get", "pop"], 1000]) }), polygons());
     assert.match(compact(off.qml), /<renderer-v2 type="RuleRenderer"/);

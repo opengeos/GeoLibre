@@ -269,10 +269,12 @@ export function pruneArcgisImportGroups(imported: ArcgisProjectImportResult): vo
  * How many layers an import report says could not be loaded. Symbology notes
  * describe a layer that did load, and the map-extent note a view, not a layer,
  * so neither counts; a report with only those notes says instead that the
- * project is not shown exactly as in ArcGIS Pro.
+ * project is not shown exactly as in ArcGIS Pro. A `nesting` warning, about a
+ * group that was not loaded, still counts, as it did before.
  *
  * @param warnings - The import warnings.
- * @returns The number of warnings about a layer that was not loaded.
+ * @returns The number of warnings about an item (a layer, or a group) that
+ *   was not loaded.
  */
 export function countArcgisUnloadedLayers(warnings: readonly ArcgisProjectImportWarning[]): number {
   return warnings.filter((warning) => !warning.symbologyIssue && warning.reason !== "map-extent")
