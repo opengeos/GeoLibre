@@ -184,6 +184,15 @@ describe("buildQml", () => {
     assert.match(compact(skipped.qml), /<renderer-v2 type="singleSymbol"/);
     assert.ok(skipped.warnings.some((w) => /"Low" uses a filter with no QGIS equivalent/.test(w)));
     assert.ok(skipped.warnings.some((w) => /rule-based renderer had no valid classes/.test(w)));
+    // The same holds when the skipped rules sit inside an enabled group.
+    const grouped = rules(true, untranslatable);
+    grouped.vectorRules = [
+      { id: "g", label: "Group", filter: "", color: "#000000", isElse: false },
+      { ...grouped.vectorRules[0], parentId: "g" },
+      grouped.vectorRules[1],
+    ];
+    const groupSkipped = buildQml(layer({ style: grouped }), polygons());
+    assert.match(compact(groupSkipped.qml), /<renderer-v2 type="singleSymbol"/);
     // Rules the user switched off still export as unchecked rules.
     const off = buildQml(layer({ style: rules(false, [">", ["get", "pop"], 1000]) }), polygons());
     assert.match(compact(off.qml), /<renderer-v2 type="RuleRenderer"/);

@@ -625,6 +625,10 @@ function ruleRenderer(
       filterAttribute = ` filter="${xmlEscape(filter)}"`;
     }
     const children = kids.map(emitRule).join("");
+    // A group whose children were all skipped has nothing to draw, so it is
+    // skipped too (its children already warned) and cannot hide that the
+    // tree exports no drawable rule.
+    if (isGroup && !children) return "";
     let symbolAttribute = "";
     if (!isGroup) {
       if (!isHexColor(entry.color)) {
