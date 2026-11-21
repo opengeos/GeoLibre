@@ -13,7 +13,9 @@ const { useProjectFileActions } =
   await import("../apps/geolibre-desktop/src/hooks/useProjectFileActions");
 const { installNativeArcGISFetch } = await import("../apps/geolibre-desktop/src/lib/arcgis-fetch");
 const {
+  ARCGIS_ONLINE_HOSTING,
   cachedOrgIdLookup,
+  PLAIN_SERVICE_PATH,
   placeImportedServiceLayers,
   serviceTokenProvider,
   signInForImportedService,
@@ -423,13 +425,52 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     }
   });
 
+  it("matches only ArcGIS Online's hosting servers and plain service paths", () => {
+    // Called directly: most look-alike hosts never reach the pattern, because
+    // the portal trust check turns away anything outside arcgis.com first.
+    for (const host of [
+      "services.arcgis.com",
+      "services3.arcgis.com",
+      "services-eu1.arcgis.com",
+      "services-ap1.arcgis.com",
+    ]) {
+      assert.equal(ARCGIS_ONLINE_HOSTING.test(host), true, host);
+    }
+    for (const host of [
+      "services-eu1.arcgis.com.",
+      "services-eu1.arcgis.com.evil.example",
+      "evilservices-eu1.arcgis.com",
+      "services-eu1x.arcgis.com",
+      "services-eu.arcgis.com",
+      "services-1.arcgis.com",
+      "services-eu1.evil.arcgis.com",
+      "tiles.arcgis.com",
+    ]) {
+      assert.equal(ARCGIS_ONLINE_HOSTING.test(host), false, host);
+    }
+    for (const path of ["/AbCd_12-3/arcgis/rest/services/Water/FeatureServer/3", "/AbCd/x/"]) {
+      assert.equal(PLAIN_SERVICE_PATH.test(path), true, path);
+    }
+    for (const path of [
+      "",
+      "/",
+      "//AbCd/x",
+      "/AbCd/%2e%2e%2fZzZz/x",
+      "/AbCd/..;/ZzZz/x",
+      "/AbCd/arcgis;x/rest",
+      "/AbCd/x.y",
+    ]) {
+      assert.equal(PLAIN_SERVICE_PATH.test(path), false, path);
+    }
+  });
+
   it("offers a sign-in token only to its own organisation's services", async () => {
     const online = ARCGIS_ONLINE_PORTAL;
     const org = "https://myorg.maps.arcgis.com";
     const enterprise = "https://gis.example.org/portal";
     const ORG = "AbCdEfGh12345678";
-    const hosted = (orgId: string) =>
-      `https://services3.arcgis.com/${orgId}/arcgis/rest/services/Water/FeatureServer/3`;
+    const hosted = (orgId: string, host = "services3.arcgis.com") =>
+      `https://${host}/${orgId}/arcgis/rest/services/Water/FeatureServer/3`;
     const orgIds: Record<string, string> = { [online]: ORG, [org]: ORG };
     const lookups: string[] = [];
     const signIn = (url: string, portals: string[], failing: string[] = []) =>
@@ -453,6 +494,48 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     assert.deepEqual(await signIn(hosted(ORG), [org]), { portal: org, token: `token-for-${org}` });
     // Another organisation's service on the same shared hosting does not.
     assert.equal(await signIn(hosted("ZzZzZzZz87654321"), [online, org]), null);
+    // The same holds on the unnumbered and regional hosting servers.
+    for (const host of [
+      "services.arcgis.com",
+      "services-eu1.arcgis.com",
+      "SERVICES-AP1.arcgis.com",
+    ]) {
+      assert.deepEqual(await signIn(hosted(ORG, host), [online]), {
+        portal: online,
+        token: `token-for-${online}`,
+      });
+      assert.equal(await signIn(hosted("ZzZzZzZz87654321", host), [online, org]), null);
+    }
+    // A host that only looks like the shared hosting never gets the token,
+    // even with the user's own organisation id in its path.
+    for (const host of [
+      "services-eu1.arcgis.com.evil.example",
+      "evilservices-eu1.arcgis.com",
+      "services-eu1x.arcgis.com",
+      "services-eu.arcgis.com",
+      "services-1.arcgis.com",
+      "services-eu1.evil.arcgis.com",
+      "services-eu1.arcgis.com.",
+    ]) {
+      assert.equal(await signIn(hosted(ORG, host), [online, org]), null, host);
+    }
+    // Nor does a path that carries the user's organisation id first but could
+    // be resolved into another organisation's folder by the server.
+    for (const path of [
+      `${ORG}/%2e%2e%2fZzZzZzZz87654321/arcgis/rest/services/Water/FeatureServer/3`,
+      `${ORG}/..;/ZzZzZzZz87654321/arcgis/rest/services/Water/FeatureServer/3`,
+      `${ORG}/%2E%2E%5CZzZzZzZz87654321/arcgis/rest/services/Water/FeatureServer/3`,
+      `${ORG}/arcgis;x/rest/services/Water/FeatureServer/3`,
+      `${ORG}/arcgis/rest/services/Water/FeatureServer/3/%2e%2e%2f%2e%2e%2f%2e%2e%2fZzZz`,
+    ]) {
+      const url = `https://services-eu1.arcgis.com/${path}`;
+      assert.equal(await signIn(url, [online, org]), null, path);
+    }
+    // A trailing slash is still a plain path.
+    assert.deepEqual(await signIn(`${hosted(ORG, "services-eu1.arcgis.com")}/`, [online]), {
+      portal: online,
+      token: `token-for-${online}`,
+    });
     // Nor does any other *.arcgis.com host, an untrusted host, or plain HTTP.
     assert.equal(
       await signIn("https://utility.arcgis.com/usrsvcs/servers/x/rest/services/A/FeatureServer/0", [

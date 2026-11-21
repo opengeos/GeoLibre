@@ -3,6 +3,26 @@ import { isTrustedPortalServiceUrl } from "@geolibre/plugins";
 import { ARCGIS_ONLINE_PORTAL } from "./arcgis-oauth";
 
 /**
+ * Hosts of ArcGIS Online's multi-tenant feature service hosting, where the
+ * first path segment is the publishing organisation's id: `services.arcgis.com`,
+ * numbered hosts such as `services3.arcgis.com`, and regional hosts such as
+ * `services-eu1.arcgis.com` and `services-ap1.arcgis.com`. Anchored at both
+ * ends, so a look-alike such as `services-eu1.arcgis.com.example.org` or
+ * `myservices-eu1.arcgis.com` never matches.
+ */
+export const ARCGIS_ONLINE_HOSTING = /^services(?:\d*|-[a-z]{2}\d+)\.arcgis\.com$/i;
+
+/**
+ * A service path on that hosting that the organisation check can trust: plain
+ * segments of ASCII letters, digits, `_` and `-`, with an optional trailing
+ * slash. `new URL` already resolves literal and `%2e` dot segments, but it
+ * keeps `%2e%2e%2f`, `..;` and other encoded separators inside one segment,
+ * which the server may decode or resolve into another organisation's folder
+ * after the first segment has been checked. Such a path loads anonymously.
+ */
+export const PLAIN_SERVICE_PATH = /^(?:\/[\w-]+)+\/?$/;
+
+/**
  * Puts the feature service layers added so far where project load would have
  * put them had they been file layers: the project's layers and services in
  * ArcGIS order, then the store's own group contiguity pass, exactly as
@@ -51,9 +71,11 @@ export function placeImportedServiceLayers(
  * web map the user opens:
  *
  * - a host the signed-in portal trusts ({@link isTrustedPortalServiceUrl});
- * - on ArcGIS Online's shared hosting (`services*.arcgis.com`), which any
- *   organisation can publish to, only a service whose path carries the signed-in
- *   user's own organisation id, so a crafted project cannot collect the token;
+ * - on ArcGIS Online's shared hosting ({@link ARCGIS_ONLINE_HOSTING}), which
+ *   any organisation can publish to, only a service whose path carries the
+ *   signed-in user's own organisation id and nothing the server could resolve
+ *   elsewhere ({@link PLAIN_SERVICE_PATH}), so a crafted project cannot collect
+ *   the token;
  * - no other `*.arcgis.com` host.
  *
  * Sessions are tried with ArcGIS Online's default portal first. A session whose
@@ -78,9 +100,10 @@ export async function signInForImportedService(
     .sort((a, b) => Number(b === ARCGIS_ONLINE_PORTAL) - Number(a === ARCGIS_ONLINE_PORTAL));
   for (const portal of candidates) {
     const sameHost = service.hostname.toLowerCase() === new URL(portal).hostname.toLowerCase();
-    const hostedOrgId = /^services\d*\.arcgis\.com$/i.test(service.hostname)
-      ? service.pathname.split("/")[1]
-      : undefined;
+    const hostedOrgId =
+      ARCGIS_ONLINE_HOSTING.test(service.hostname) && PLAIN_SERVICE_PATH.test(service.pathname)
+        ? service.pathname.split("/")[1]
+        : undefined;
     if (!sameHost && !hostedOrgId) continue;
     const token = await deps.token(portal).catch(() => undefined);
     if (!token) continue;
