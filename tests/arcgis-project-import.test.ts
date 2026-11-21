@@ -1042,6 +1042,9 @@ describe("ArcGIS Pro File Geodatabase layers", () => {
         gdbLayer("Query", "C:\\data\\city.gdb?mode=x"),
         gdbLayer("Posix", "/data/city.gdb/"),
         gdbLayer("Relative", "..\\data\\City.GDB"),
+        // Names a geodatabase but no feature class: reported as the default
+        // path reports it, not as a missing source.
+        gdbLayer("NoDataset", "C:\\data\\city.gdb", ""),
       ],
     });
     const result = importArcgisProject(project, "C:\\work\\projects\\survey.mapx", {
@@ -1062,6 +1065,7 @@ describe("ArcGIS Pro File Geodatabase layers", () => {
         ["Vsi", "file-geodatabase"],
         ["Zip", "file-geodatabase"],
         ["Query", "file-geodatabase"],
+        ["NoDataset", "file-geodatabase"],
       ],
     );
   });

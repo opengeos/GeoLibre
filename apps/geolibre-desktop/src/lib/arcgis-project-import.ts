@@ -764,8 +764,9 @@ function resolveDataSource(
     // the desktop build can add those feature classes another way. The
     // workspace path is checked as well as the factory because not every
     // connection names one, and a .gdb workspace is a geodatabase either way.
-    if (!readFileGeodatabase) return { reason: "file-geodatabase" };
-    if (!workspace || !dataset) return { reason: "missing-source" };
+    // Without a geodatabase and a feature class to read, report it as the
+    // default path does, so Add Data → File geodatabase is still suggested.
+    if (!readFileGeodatabase || !workspace || !dataset) return { reason: "file-geodatabase" };
     const gdbPath = resolveRelativePath(workspace, projectPath);
     // The path comes from the project file and the desktop sidecar does not
     // confine its reads, so only a local folder named `*.gdb` is handed to it,
@@ -1033,10 +1034,11 @@ function isLocalFileGeodatabasePath(path: string): boolean {
   // UNC paths never get here: `resolveDataSource` refuses the raw workspace as
   // "network-path" first, and normalising collapses the leading `//` anyway.
   if (!isAbsolutePath(path)) return false;
-  const segments = path.replace(/\\/g, "/").split("/");
-  if (/^\/vsi[a-z0-9_]*\//i.test(path)) return false;
+  const normalised = path.replace(/\\/g, "/");
+  if (/^\/vsi[a-z0-9_]*\//i.test(normalised)) return false;
+  const segments = normalised.split("/");
   if (segments.some((segment) => /^[a-z][a-z0-9+.-]+:$/i.test(segment))) return false;
-  return /\.gdb$/i.test(segments[segments.length - 1] ?? "") && !/[?#]/.test(path);
+  return /\.gdb$/i.test(segments[segments.length - 1] ?? "") && !/[?#]/.test(normalised);
 }
 
 function extension(path: string): string {
