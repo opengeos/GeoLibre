@@ -54,6 +54,7 @@ import {
   mbtilesStyleLayerIds,
   externalSourceIdsFor,
   hasPendingExternalNativeFilters,
+  hasLineGapLabels,
   hasZoomDependentClusterFilter,
   removeLayerFromMap,
   styleValuesEqual,
@@ -1493,7 +1494,7 @@ export class MapController implements MapEngine {
 
   /**
    * Keep a `zoomend` resync attached exactly while some clustered layer holds a
-   * zoom-dependent authored filter.
+   * zoom-dependent authored filter, or some layer draws contour-style gap labels.
    *
    * MapLibre clusters at the source, so such a filter is pre-applied to the
    * source data once per sync rather than re-evaluated by the renderer with the
@@ -1506,7 +1507,9 @@ export class MapController implements MapEngine {
    * @param layers The layers just synced.
    */
   private syncClusterZoomListener(layers: GeoLibreLayer[]): void {
-    const wanted = hasZoomDependentClusterFilter(layers);
+    // Contour-style gap labels are placed for one zoom bucket, so they need
+    // the same resync to re-place (and re-cut) when the zoom changes.
+    const wanted = hasZoomDependentClusterFilter(layers) || hasLineGapLabels(layers);
     if (wanted === (this.clusterZoomHandler !== null)) return;
     if (!wanted) {
       this.removeClusterZoomListener();

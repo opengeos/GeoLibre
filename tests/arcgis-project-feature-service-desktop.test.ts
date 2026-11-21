@@ -18,8 +18,13 @@ import {
 const { useProjectFileActions } =
   await import("../apps/geolibre-desktop/src/hooks/useProjectFileActions");
 const { installNativeArcGISFetch } = await import("../apps/geolibre-desktop/src/lib/arcgis-fetch");
-const { cachedOrgIdLookup, serviceTokenProvider, signInForImportedService } =
-  await import("../apps/geolibre-desktop/src/lib/arcgis-project-services");
+const {
+  ARCGIS_ONLINE_HOSTING,
+  cachedOrgIdLookup,
+  PLAIN_SERVICE_PATH,
+  serviceTokenProvider,
+  signInForImportedService,
+} = await import("../apps/geolibre-desktop/src/lib/arcgis-project-services");
 const { ARCGIS_ONLINE_PORTAL } = await import("../apps/geolibre-desktop/src/lib/arcgis-oauth");
 
 /**
@@ -437,8 +442,9 @@ describe("tokens for an imported project's services", () => {
   const online = ARCGIS_ONLINE_PORTAL;
   const org = "https://myorg.maps.arcgis.com";
   const enterprise = "https://gis.example.org/portal";
-  const hostedIn = (orgId: string) =>
-    `https://services3.arcgis.com/${orgId}/arcgis/rest/services/Water/FeatureServer/3`;
+  const hostedIn = (orgId: string, host = "services3.arcgis.com") =>
+    `https://${host}/${orgId}/arcgis/rest/services/Water/FeatureServer/3`;
+  const OTHER = "ZzZzZzZz87654321";
   const orgIds: Record<string, string> = { [online]: ORG, [org]: ORG };
   const cases: {
     name: string;
@@ -452,9 +458,62 @@ describe("tokens for an imported project's services", () => {
     { name: "own organisation, org portal", url: hostedIn(ORG), portals: [org], expected: org },
     {
       name: "another organisation on the shared hosting",
-      url: hostedIn("ZzZzZzZz87654321"),
+      url: hostedIn(OTHER),
       portals: [online, org],
       expected: null,
+    },
+    // The same holds on the unnumbered and regional hosting servers.
+    ...["services.arcgis.com", "services-eu1.arcgis.com", "SERVICES-AP1.arcgis.com"].flatMap(
+      (host) => [
+        {
+          name: `own organisation on ${host}`,
+          url: hostedIn(ORG, host),
+          portals: [online],
+          expected: online,
+        },
+        {
+          name: `another organisation on ${host}`,
+          url: hostedIn(OTHER, host),
+          portals: [online, org],
+          expected: null,
+        },
+      ],
+    ),
+    // A host that only looks like the shared hosting never gets the token,
+    // even with the user's own organisation id in its path.
+    ...[
+      "services-eu1.arcgis.com.evil.example",
+      "evilservices-eu1.arcgis.com",
+      "services-eu1x.arcgis.com",
+      "services-eu.arcgis.com",
+      "services-1.arcgis.com",
+      "services-eu1.evil.arcgis.com",
+      "services-eu1.arcgis.com.",
+    ].map((host) => ({
+      name: `look-alike host ${host}`,
+      url: hostedIn(ORG, host),
+      portals: [online, org],
+      expected: null,
+    })),
+    // Nor does a path that carries the user's organisation id first but could
+    // be resolved into another organisation's folder by the server.
+    ...[
+      `${ORG}/%2e%2e%2f${OTHER}/arcgis/rest/services/Water/FeatureServer/3`,
+      `${ORG}/..;/${OTHER}/arcgis/rest/services/Water/FeatureServer/3`,
+      `${ORG}/%2E%2E%5C${OTHER}/arcgis/rest/services/Water/FeatureServer/3`,
+      `${ORG}/arcgis;x/rest/services/Water/FeatureServer/3`,
+      `${ORG}/arcgis/rest/services/Water/FeatureServer/3/%2e%2e%2f%2e%2e%2f%2e%2e%2fZzZz`,
+    ].map((path) => ({
+      name: `unsafe path ${path}`,
+      url: `https://services-eu1.arcgis.com/${path}`,
+      portals: [online, org],
+      expected: null,
+    })),
+    {
+      name: "a trailing slash is still a plain path",
+      url: `${hostedIn(ORG, "services-eu1.arcgis.com")}/`,
+      portals: [online],
+      expected: online,
     },
     {
       name: "another *.arcgis.com host",
@@ -509,6 +568,45 @@ describe("tokens for an imported project's services", () => {
       if (lookups !== undefined) assert.equal(asked.length, lookups);
     });
   }
+
+  it("matches only ArcGIS Online's hosting servers and plain service paths", () => {
+    // Called directly: most look-alike hosts never reach the pattern, because
+    // the portal trust check turns away anything outside arcgis.com first.
+    for (const host of [
+      "services.arcgis.com",
+      "services3.arcgis.com",
+      "services-eu1.arcgis.com",
+      "services-ap1.arcgis.com",
+    ]) {
+      assert.equal(ARCGIS_ONLINE_HOSTING.test(host), true, host);
+    }
+    for (const host of [
+      "services-eu1.arcgis.com.",
+      "services-eu1.arcgis.com.evil.example",
+      "evilservices-eu1.arcgis.com",
+      "services-eu1x.arcgis.com",
+      "services-eu.arcgis.com",
+      "services-1.arcgis.com",
+      "services-eu1.evil.arcgis.com",
+      "tiles.arcgis.com",
+    ]) {
+      assert.equal(ARCGIS_ONLINE_HOSTING.test(host), false, host);
+    }
+    for (const path of ["/AbCd_12-3/arcgis/rest/services/Water/FeatureServer/3", "/AbCd/x/"]) {
+      assert.equal(PLAIN_SERVICE_PATH.test(path), true, path);
+    }
+    for (const path of [
+      "",
+      "/",
+      "//AbCd/x",
+      "/AbCd/%2e%2e%2fZzZz/x",
+      "/AbCd/..;/ZzZz/x",
+      "/AbCd/arcgis;x/rest",
+      "/AbCd/x.y",
+    ]) {
+      assert.equal(PLAIN_SERVICE_PATH.test(path), false, path);
+    }
+  });
 
   it("looks up a token's organisation once, and again after a failure", async () => {
     let calls = 0;
