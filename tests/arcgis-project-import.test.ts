@@ -1026,6 +1026,46 @@ describe("ArcGIS Pro File Geodatabase layers", () => {
     );
   });
 
+  it("only reads geodatabases that are local .gdb folders", () => {
+    // The path comes from the project file and the desktop sidecar does not
+    // confine its reads, so a crafted connection must not reach an arbitrary
+    // folder, a URL or a GDAL virtual path. Those stay listed, unread.
+    const project = JSON.stringify({
+      type: "CIMMap",
+      name: "Crafted",
+      defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+      layerDefinitions: [
+        gdbLayer("Folder", "C:\\Users\\someone\\Documents"),
+        gdbLayer("Url", "https://example.com/data/city.gdb"),
+        gdbLayer("Vsi", "/vsicurl/https://example.com/city.gdb"),
+        gdbLayer("Zip", "/vsizip/C:/data/city.zip/city.gdb"),
+        gdbLayer("Query", "C:\\data\\city.gdb?mode=x"),
+        gdbLayer("Posix", "/data/city.gdb/"),
+        gdbLayer("Relative", "..\\data\\City.GDB"),
+      ],
+    });
+    const result = importArcgisProject(project, "C:\\work\\projects\\survey.mapx", {
+      readFileGeodatabase: true,
+    });
+    assert.deepEqual(
+      result.fileGeodatabaseLayers.map((entry) => [entry.name, entry.gdbPath]),
+      [
+        ["Posix", "/data/city.gdb"],
+        ["Relative", "C:/work/data/City.GDB"],
+      ],
+    );
+    assert.deepEqual(
+      result.warnings.map((warning) => [warning.layerName, warning.reason]),
+      [
+        ["Folder", "file-geodatabase"],
+        ["Url", "file-geodatabase"],
+        ["Vsi", "file-geodatabase"],
+        ["Zip", "file-geodatabase"],
+        ["Query", "file-geodatabase"],
+      ],
+    );
+  });
+
   it("fills readable layers and drops missing ones with their empty groups", async () => {
     const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {
       readFileGeodatabase: true,

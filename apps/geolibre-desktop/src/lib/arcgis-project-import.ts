@@ -766,9 +766,16 @@ function resolveDataSource(
     // connection names one, and a .gdb workspace is a geodatabase either way.
     if (!readFileGeodatabase) return { reason: "file-geodatabase" };
     if (!workspace || !dataset) return { reason: "missing-source" };
+    const gdbPath = resolveRelativePath(workspace, projectPath);
+    // The path comes from the project file and the desktop sidecar does not
+    // confine its reads, so only a local folder named `*.gdb` is handed to it:
+    // a crafted connection must not read an arbitrary folder, or a URL or GDAL
+    // virtual path (`/vsicurl/`, `/vsizip/`), into the saved project. Anything
+    // else stays listed as a geodatabase the import did not load.
+    if (!isLocalFileGeodatabasePath(gdbPath)) return { reason: "file-geodatabase" };
     return {
       fileGeodatabase: {
-        gdbPath: resolveRelativePath(workspace, projectPath),
+        gdbPath,
         featureClass: dataset,
       },
     };
@@ -1013,6 +1020,19 @@ function isAbsolutePath(path: string): boolean {
 
 function isNetworkPath(path: string): boolean {
   return /^\\\\|^\/\//.test(path);
+}
+
+/**
+ * Whether a resolved geodatabase path is a plain local `.gdb` folder: absolute,
+ * its last segment ending in `.gdb`, with no URL scheme, query or fragment, and
+ * not one of GDAL's `/vsi*` virtual file systems.
+ */
+function isLocalFileGeodatabasePath(path: string): boolean {
+  if (!isAbsolutePath(path) || isNetworkPath(path)) return false;
+  const segments = path.replace(/\\/g, "/").split("/");
+  if (/^\/vsi[a-z0-9_]*\//i.test(path)) return false;
+  if (segments.some((segment) => /^[a-z][a-z0-9+.-]+:$/i.test(segment))) return false;
+  return /\.gdb$/i.test(segments[segments.length - 1] ?? "") && !/[?#]/.test(path);
 }
 
 function extension(path: string): string {

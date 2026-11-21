@@ -952,7 +952,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       // Read before the project loads, so a feature class that cannot be read
       // is dropped (with its now-empty groups) rather than left as an empty
       // layer, and the rest keep their table-of-contents order.
+      // The drafts the user agreed to discard, so the question comes before
+      // the geodatabase reads (which can take minutes) instead of after them,
+      // and is only asked again if the drafts changed while the reads ran.
+      let approvedDrafts: unknown = null;
       if (imported.fileGeodatabaseLayers.length > 0 && !session.superseded()) {
+        if (!confirmDiscardAttributeDrafts()) return;
+        approvedDrafts = useAppStore.getState().ui.attributeTableDrafts;
         // One sidecar job per layer, each a second or more, so say what the
         // wait is for rather than leaving the menu apparently idle.
         const progressId = notify.info(
@@ -977,7 +983,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           dismissNotification(progressId);
         }
       }
-      if (session.superseded() || !confirmDiscardAttributeDrafts()) return;
+      if (session.superseded()) return;
+      if (
+        useAppStore.getState().ui.attributeTableDrafts !== approvedDrafts &&
+        !confirmDiscardAttributeDrafts()
+      ) {
+        return;
+      }
       const mapReady = importedProjectMapReady(
         mapControllerRef,
         useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,

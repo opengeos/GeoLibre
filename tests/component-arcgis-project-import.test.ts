@@ -379,6 +379,69 @@ describe("Import ArcGIS Pro project with File Geodatabase layers (desktop)", () 
     }
   });
 
+  /** Open a project holding one layer with an unsaved attribute table draft. */
+  function projectWithDrafts() {
+    act(() => {
+      const store = useAppStore.getState();
+      store.loadProject({ ...createEmptyProject(), name: "Edited" });
+      const id = store.addGeoJsonLayer("Edited layer", PARCELS);
+      useAppStore.getState().setAttributeTableDrafts(id, { "0": { name: "edited" } });
+    });
+  }
+
+  const parcelsOnly = {
+    type: "CIMMapDocument",
+    mapDefinition: {
+      type: "CIMMap",
+      name: "Imported map",
+      layerDefinitions: [gdbLayer("Parcels", GDB_PATH)],
+    },
+  };
+
+  it("asks about unsaved attribute drafts before reading any geodatabase", async () => {
+    projectWithDrafts();
+    const desktop = desktopImport(parcelsOnly);
+    const originalConfirm = window.confirm;
+    let asked = 0;
+    window.confirm = () => {
+      asked += 1;
+      return false;
+    };
+    try {
+      const actions = renderActions();
+      await act(() => actions().handleImportArcgisProject());
+      assert.equal(asked, 1);
+      // Cancelled before the sidecar did any work, and the project is kept.
+      assert.deepEqual(desktop.requests, []);
+      assert.equal(useAppStore.getState().projectName, "Edited");
+      assert.deepEqual(layerNames(), ["Edited layer"]);
+    } finally {
+      window.confirm = originalConfirm;
+      desktop.restore();
+    }
+  });
+
+  it("does not ask about the same drafts again once the reads finish", async () => {
+    projectWithDrafts();
+    const desktop = desktopImport(parcelsOnly);
+    const originalConfirm = window.confirm;
+    let asked = 0;
+    window.confirm = () => {
+      asked += 1;
+      return true;
+    };
+    try {
+      const actions = renderActions();
+      await act(() => actions().handleImportArcgisProject());
+      assert.equal(asked, 1);
+      assert.deepEqual(desktop.requests, ["vector-layers", "vector-to-vector"]);
+      assert.deepEqual(layerNames(), ["Parcels"]);
+    } finally {
+      window.confirm = originalConfirm;
+      desktop.restore();
+    }
+  });
+
   it("adds nothing to a project opened while a geodatabase was being read", async () => {
     let releaseListing = () => {};
     const listing = new Promise<void>((resolve) => {
