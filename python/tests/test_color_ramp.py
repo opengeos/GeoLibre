@@ -51,14 +51,15 @@ def test_quantile_breaks_empty():
 
 def test_graduated_stops_equal_interval():
     stops = graduated_stops(list(range(11)), class_count=5, classification_scheme="equal-interval")
-    assert [stop["value"] for stop in stops] == [0.0, 2.5, 5.0, 7.5, 10.0]
+    # Class lower bounds: the top class [8, 10] is open-ended above.
+    assert [stop["value"] for stop in stops] == [0.0, 2.0, 4.0, 6.0, 8.0]
     assert stops[0]["color"] == "#440154"
     assert stops[-1]["color"] == "#fde725"
 
 
 def test_graduated_stops_ignores_non_numeric():
     stops = graduated_stops(["1", "2", "bad", None, "4"], class_count=3)
-    assert [stop["value"] for stop in stops] == [1.0, 2.5, 4.0]
+    assert [stop["value"] for stop in stops] == [1.0, 2.0, 3.0]
 
 
 def test_graduated_stops_constant_column_single_stop():
@@ -93,3 +94,35 @@ def test_get_color_ramp_returns_copy():
 def test_graduated_stops_rejects_unknown_scheme():
     with pytest.raises(ValueError, match="classification_scheme"):
         graduated_stops([1, 2, 3], classification_scheme="natural-breaks")
+
+
+def _class_sizes(values, stops):
+    """Count features per class the way the app's MapLibre ``step`` renders them."""
+    bounds = [stop["value"] for stop in stops]
+    sizes = [0] * len(bounds)
+    for value in values:
+        index = max(i for i, bound in enumerate(bounds) if value >= bound)
+        sizes[index] += 1
+    return sizes
+
+
+@pytest.mark.parametrize("scheme", ["equal-interval", "quantile"])
+def test_graduated_stops_are_class_lower_bounds(scheme):
+    # The app renders graduated stops as a `step` expression (class i covers
+    # [stops[i], stops[i + 1]), the last class is open above), so the stops
+    # must be lower bounds like createGraduatedClassBreaks returns, not ramp
+    # edges ending at the maximum (which leaves the top class one feature).
+    values = list(range(1, 101))
+    stops = graduated_stops(values, class_count=5, classification_scheme=scheme)
+    assert [stop["value"] for stop in stops] == [1, 20.8, 40.6, 60.4, 80.2]
+    assert _class_sizes(values, stops) == [20, 20, 20, 20, 20]
+
+
+def test_graduated_stops_collapse_duplicate_quantile_breaks():
+    # A skewed sample pushes several quantiles onto the same value; MapLibre
+    # rejects a `step` whose inputs are not strictly ascending, so duplicates
+    # collapse and the ramp is re-sampled to the surviving breaks.
+    stops = graduated_stops(
+        [0, 0, 0, 0, 0, 0, 0, 1, 2, 3], class_count=4, classification_scheme="quantile"
+    )
+    assert stops == [{"value": 0, "color": "#440154"}, {"value": 0.75, "color": "#fde725"}]

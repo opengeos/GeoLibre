@@ -8,6 +8,7 @@ match ``VECTOR_COLOR_RAMPS`` exactly, so a ramp chosen here renders identically.
 
 from __future__ import annotations
 
+import decimal
 import math
 from typing import Any
 
@@ -136,6 +137,102 @@ def quantile_breaks(values: list[float], count: int) -> list[float]:
     return breaks
 
 
+def _quantile_at_position(sorted_values: list[float], position: float) -> float:
+    """Linearly interpolated order statistic at a fractional index (mirror of TS)."""
+    lower = math.floor(position)
+    upper = min(len(sorted_values) - 1, math.ceil(position))
+    ratio = position - lower
+    return sorted_values[lower] + (sorted_values[upper] - sorted_values[lower]) * ratio
+
+
+def _to_precision(value: float, digits: int) -> float:
+    """Round to ``digits`` significant digits like JS ``Number(x.toPrecision(digits))``.
+
+    ``toPrecision`` rounds the exact binary value half away from zero, which
+    ``ROUND_HALF_UP`` on a :class:`~decimal.Decimal` reproduces (Python's own
+    ``format`` rounds half to even).
+    """
+    context = decimal.Context(prec=digits, rounding=decimal.ROUND_HALF_UP)
+    return float(context.create_decimal(value))
+
+
+def _round_class_breaks(breaks: list[float], values: list[float]) -> list[float]:
+    """Round interior class breaks to a precision that suits the data's range.
+
+    Mirror of ``roundClassBreaks`` in ``packages/core/src/color-ramp.ts``: the
+    first break (the sample minimum) stays exact, and a break keeps its raw
+    value when rounding would move it more than 0.05% of the range or reach a
+    neighbouring break, so rounding never drops a class.
+    """
+    minimum, maximum = min(values), max(values)
+    value_range = maximum - minimum
+    if not (value_range > 0) or not math.isfinite(value_range):
+        return breaks
+    decimals = max(0, 3 - math.floor(math.log10(value_range)))
+    tolerance = value_range * 5e-4
+    previous = -math.inf
+    result = []
+    for index, value in enumerate(breaks):
+        if not math.isfinite(value):
+            result.append(value)
+            continue
+        rounded_value = value
+        if index > 0 and value != 0:
+            digits = math.floor(math.log10(abs(value))) + 1 + decimals
+            rounded = _to_precision(value, min(15, max(4, digits)))
+            following = breaks[index + 1] if index + 1 < len(breaks) else None
+            if (
+                abs(rounded - value) <= tolerance
+                and rounded > previous
+                and not (
+                    following is not None and math.isfinite(following) and rounded >= following
+                )
+            ):
+                rounded_value = rounded
+        previous = rounded_value
+        result.append(rounded_value)
+    return result
+
+
+def graduated_class_breaks(values: list[float], count: int, scheme: str) -> list[float]:
+    """Build the class *lower bounds* for a graduated vector renderer.
+
+    Mirror of ``createGraduatedClassBreaks`` in ``packages/core/src/color-ramp.ts``
+    for the equal-interval and quantile schemes. The app renders graduated stops
+    as a MapLibre ``step`` expression, so with N stops class ``i`` covers
+    ``[stops[i], stops[i + 1])`` and the last class is open-ended above: ``count``
+    classes yield ``count`` breaks starting at the sample minimum, not ramp edges
+    ending at the maximum (which would leave the top class holding only the
+    largest feature). Duplicate breaks are collapsed so the result is strictly
+    ascending, which ``step`` requires; it may hold fewer than ``count`` breaks.
+
+    Args:
+        values: Finite numeric values of the classified property.
+        count: Number of classes requested.
+        scheme: ``"equal-interval"`` or ``"quantile"``.
+
+    Returns:
+        Up to ``count`` strictly ascending class lower bounds.
+    """
+    if count <= 0 or not values:
+        return []
+    sorted_values = sorted(values)
+    minimum, maximum = sorted_values[0], sorted_values[-1]
+    if scheme == "quantile":
+        raw = [
+            _quantile_at_position(sorted_values, (index / count) * (len(sorted_values) - 1))
+            for index in range(count)
+        ]
+    else:
+        raw = [minimum + ((maximum - minimum) * index) / count for index in range(count)]
+    breaks: list[float] = []
+    for value in _round_class_breaks(raw, sorted_values):
+        if not math.isfinite(value) or (breaks and value <= breaks[-1]):
+            continue
+        breaks.append(value)
+    return breaks
+
+
 def graduated_stops(
     values: list[Any],
     *,
@@ -148,7 +245,9 @@ def graduated_stops(
     Mirrors ``createGraduatedStops`` in ``StylePanel.tsx``: non-numeric values
     are dropped, breaks come from the chosen scheme, and colors are sampled from
     the ramp. The result is a list of ``{"value", "color"}`` stop dicts the app
-    renders as an ``interpolate`` expression.
+    renders as a ``step`` expression, so each value is a class *lower bound*
+    (see :func:`graduated_class_breaks`); a skewed sample can yield fewer stops
+    than ``class_count``.
 
     Args:
         values: The column's raw values (non-numeric entries are ignored).
@@ -187,14 +286,12 @@ def graduated_stops(
     if minimum == maximum:
         return [{"value": minimum, "color": colors[-1]}]
 
-    # Both schemes return exactly `count` breaks, so the colors line up 1:1
-    # (unlike the TS natural-breaks path, which can yield fewer).
-    breaks = (
-        quantile_breaks(numeric, count)
-        if classification_scheme == "quantile"
-        else equal_interval_breaks(minimum, maximum, count)
+    # The breaks are class lower bounds, so `count` classes give `count` stops
+    # and the top class is open-ended above (see graduated_class_breaks).
+    # Duplicate breaks collapse on a skewed sample; re-sample the ramp so the
+    # colors line up with the surviving breaks, as createGraduatedStops does.
+    breaks = graduated_class_breaks(numeric, count, classification_scheme)
+    stop_colors = (
+        colors if len(breaks) == count else interpolate_ramp_colors(color_ramp, len(breaks))
     )
-    return [
-        {"value": float(f"{value:.8g}"), "color": colors[index]}
-        for index, value in enumerate(breaks)
-    ]
+    return [{"value": value, "color": stop_colors[index]} for index, value in enumerate(breaks)]
