@@ -1035,8 +1035,9 @@ function isHttpUrl(value: string): boolean {
 
 /**
  * Whether a URL is plain HTTP(S) to a public host, so a layer can hydrate it
- * automatically. Loopback, private, link-local, CGNAT, IPv6 ULA/link-local,
- * IPv4-mapped IPv6, and IANA special-purpose ranges are rejected.
+ * automatically. Rejects loopback, unspecified, RFC 1918 private, link-local,
+ * CGNAT, IPv6 ULA/link-local, IPv4-mapped IPv6, 192.0.0.0/24, 198.18.0.0/15,
+ * and 240.0.0.0/4 literal hosts. Other special-purpose ranges are not checked.
  */
 export function isPublicHttpUrl(url: string): boolean {
   try {

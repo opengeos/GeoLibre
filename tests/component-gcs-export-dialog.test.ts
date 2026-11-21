@@ -31,7 +31,7 @@ function openDialog() {
   });
 }
 
-it("lets a submission finish after dismissal so the job can be resumed", async () => {
+it("lets a submission finish after dismissal without allowing a second job", async () => {
   let submitSignal: AbortSignal | undefined;
   let accept: ((response: Response) => void) | undefined;
   mock.method(globalThis, "fetch", async (_url: unknown, options?: RequestInit) => {
@@ -45,8 +45,9 @@ it("lets a submission finish after dismissal so the job can be resumed", async (
   await waitFor(() => assert.ok(accept));
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   assert.equal(submitSignal?.aborted, false);
-  await act(async () => accept?.(Response.json({ execution: "run-late" })));
   fireEvent.click(screen.getByRole("button", { name: "Open harvest" }));
+  assert.equal(screen.getByRole("button", { name: "Running…" }).hasAttribute("disabled"), true);
+  await act(async () => accept?.(Response.json({ execution: "run-late" })));
   await waitFor(() => assert.ok(screen.getByText(/run-late/)));
   assert.ok(screen.getByRole("button", { name: "Resume job observation" }));
   assert.equal(

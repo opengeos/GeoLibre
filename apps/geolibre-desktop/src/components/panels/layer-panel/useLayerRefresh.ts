@@ -15,7 +15,6 @@ import {
   setLayerConnectionResult,
   setLayerRefreshConfig,
   supportsAutoRefresh,
-  isPublicHttpUrl,
 } from "../../../lib/layer-refresh";
 import { isIcebergLayer, refreshIcebergLayer } from "../../../lib/iceberg";
 import {

@@ -59,6 +59,10 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
   const [dryRun, setDryRun] = useState(true);
   const [skipWherobots, setSkipWherobots] = useState(true);
   const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  // True while a submission is in flight, even after the dialog is closed, so
+  // a reopened dialog cannot send a second job before the first ID arrives.
+  const [submitting, setSubmitting] = useState(false);
+  const busy = status === "running" || submitting;
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastExecution, setLastExecution] = useState<HarvestExecution | null>(null);
@@ -156,28 +160,36 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
         const submitSignal = mountRef.current
           ? AbortSignal.any([mountRef.current.signal, timeout])
           : timeout;
-        const resp = await fetch(`${endpoint}/harvest-large`, {
-          method: "POST",
-          signal: submitSignal,
-          headers: {
-            "Content-Type": "application/json",
-            "X-API-Key": apiKey,
-          },
-          body: JSON.stringify({
-            url: dataUrl.trim(),
-            dry_run: dryRun,
-            skip_wherobots: skipWherobots,
-            refresh_geolibre: true,
-            licence_name: licenceName.trim() || null,
-          }),
-        });
-        if (!resp.ok) {
-          const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-          const detail = typeof err?.detail === "string" ? err.detail : undefined;
-          const message = typeof err?.error === "string" ? err.error : undefined;
-          throw new Error(detail || message || t("gcsExport.errors.http", { status: resp.status }));
+        setSubmitting(true);
+        let receivedExecution: unknown;
+        try {
+          const resp = await fetch(`${endpoint}/harvest-large`, {
+            method: "POST",
+            signal: submitSignal,
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-Key": apiKey,
+            },
+            body: JSON.stringify({
+              url: dataUrl.trim(),
+              dry_run: dryRun,
+              skip_wherobots: skipWherobots,
+              refresh_geolibre: true,
+              licence_name: licenceName.trim() || null,
+            }),
+          });
+          if (!resp.ok) {
+            const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+            const detail = typeof err?.detail === "string" ? err.detail : undefined;
+            const message = typeof err?.error === "string" ? err.error : undefined;
+            throw new Error(
+              detail || message || t("gcsExport.errors.http", { status: resp.status }),
+            );
+          }
+          receivedExecution = (await resp.json().catch(() => null))?.execution;
+        } finally {
+          setSubmitting(false);
         }
-        const receivedExecution = (await resp.json().catch(() => null))?.execution;
         if (typeof receivedExecution !== "string" || !receivedExecution)
           throw new Error(t("gcsExport.errors.missingExecution"));
         execution = receivedExecution;
@@ -342,12 +354,12 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
               {t("common.cancel")}
             </Button>
             {canResume && lastExecution && (
-              <Button onClick={() => void handleRun(lastExecution)} disabled={status === "running"}>
+              <Button onClick={() => void handleRun(lastExecution)} disabled={busy}>
                 {t("gcsExport.resume")}
               </Button>
             )}
-            <Button onClick={() => void handleRun()} disabled={status === "running"}>
-              {status === "running" ? (
+            <Button onClick={() => void handleRun()} disabled={busy}>
+              {busy ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin me-2" /> {t("gcsExport.running")}
                 </>
