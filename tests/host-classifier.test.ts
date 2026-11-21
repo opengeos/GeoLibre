@@ -33,4 +33,9 @@ describe("isPublicHttpUrl", () => {
     assert.equal(isPublicHttpUrl("http://198.18.0.1/x"), false);
     assert.equal(isPublicHttpUrl("http://240.0.0.1/x"), false);
   });
+  it("blocks IPv4-compatible IPv6 literals", () => {
+    assert.equal(isPublicHttpUrl("http://[::127.0.0.1]/x"), false);
+    assert.equal(isPublicHttpUrl("http://[::a00:1]/x"), false);
+    assert.equal(isPublicHttpUrl("http://[2001:db8::1]/x"), true);
+  });
 });

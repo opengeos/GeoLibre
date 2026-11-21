@@ -56,6 +56,25 @@ it("lets a submission finish after dismissal without allowing a second job", asy
   );
 });
 
+it("reports a submission that fails after the dialog is closed", async () => {
+  let reject: ((response: Response) => void) | undefined;
+  mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Promise<Response>((resolve) => {
+        reject = resolve;
+      }),
+  );
+  openDialog();
+  fireEvent.click(screen.getByRole("button", { name: "Harvest & Export" }));
+  await waitFor(() => assert.ok(reject));
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  await act(async () => reject?.(Response.json({ detail: "Bad API key" }, { status: 401 })));
+  fireEvent.click(screen.getByRole("button", { name: "Open harvest" }));
+  await waitFor(() => assert.ok(screen.getByText("Bad API key")));
+});
+
 it("aborts observation when unmounted", async () => {
   let signal: AbortSignal | undefined;
   mock.method(globalThis, "fetch", async (_url: unknown, options?: RequestInit) => {

@@ -271,6 +271,9 @@ it("rejects empty GCS buckets and preserves encoded key delimiters", async () =>
   for (const url of ["gs:///key", "gs://", "gs://?token=x"]) {
     await assert.rejects(resolveReadableUrl(url), /bucket name/);
   }
+  for (const url of ["gs://Bad Bucket/x", "gs://a@b/x", "gs://ab/x", "gs://-bucket/x"]) {
+    await assert.rejects(resolveReadableUrl(url), /valid bucket name/);
+  }
   assert.equal(
     await resolveReadableUrl("gs://bucket/data%231%3F.json?generation=2#part"),
     "https://storage.googleapis.com/bucket/data%231%3F.json?generation=2#part",

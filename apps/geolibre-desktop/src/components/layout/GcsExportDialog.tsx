@@ -146,6 +146,7 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
     const operation = new AbortController();
     operationRef.current = operation;
     let signal = operation.signal;
+    let submitted = false;
     setStatus("running");
     setError(null);
     setResult(null);
@@ -153,6 +154,7 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
       const timeout = AbortSignal.timeout(30 * 60 * 1000);
       signal = AbortSignal.any([operation.signal, timeout]);
       let execution = resume?.id;
+      submitted = execution !== undefined;
       if (!execution) {
         // Closing the dialog must not abort the submission: the backend may
         // already have accepted the job, and its ID is what lets a reopened
@@ -195,14 +197,22 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
         execution = receivedExecution;
         setLastExecution({ id: receivedExecution, endpoint, apiKey });
         setCanResume(true);
+        submitted = true;
         signal.throwIfAborted();
       }
       await observeHarvest(execution, endpoint, resume?.apiKey ?? apiKey, signal);
     } catch (e) {
-      if (operation.signal.aborted) return;
+      // Closing the dialog only stops observation. A submission that failed
+      // after the dialog closed is still reported, so a reopened dialog does
+      // not look idle when no job was created.
+      if (operation.signal.aborted && submitted) return;
       setStatus("error");
       setError(
-        signal.aborted ? t("gcsExport.errors.timeout") : e instanceof Error ? e.message : String(e),
+        signal.aborted && !operation.signal.aborted
+          ? t("gcsExport.errors.timeout")
+          : e instanceof Error
+            ? e.message
+            : String(e),
       );
     }
   };
