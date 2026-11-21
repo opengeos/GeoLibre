@@ -289,9 +289,22 @@ const PARCELS: GeoJSON.FeatureCollection = {
  *
  * @param project - The `.mapx` document the dialog picks.
  * @param holdListing - Resolves when the geodatabase listing may answer.
+ * @param listingNeverFinishes - The listing job stays running on the sidecar.
+ * @param holdRead - When given, the read job runs on the sidecar until it
+ *   resolves.
  */
-function desktopImport(project: unknown, holdListing: Promise<void> = Promise.resolve()) {
+function desktopImport(
+  project: unknown,
+  holdListing: Promise<void> = Promise.resolve(),
+  listingNeverFinishes = false,
+  holdRead?: Promise<void>,
+) {
   const requests: string[] = [];
+  const removed: string[] = [];
+  let readDone = false;
+  void holdRead?.then(() => {
+    readDone = true;
+  });
   const globals = globalThis as { window: Window & { __TAURI_INTERNALS__?: unknown } };
   globals.window.__TAURI_INTERNALS__ = {
     invoke: async (command: string, args: { path?: string; paths?: string[] }) => {
@@ -308,6 +321,9 @@ function desktopImport(project: unknown, holdListing: Promise<void> = Promise.re
           return "/tmp";
         case "plugin:path|join":
           return args.paths?.join("/");
+        case "plugin:fs|remove":
+          removed.push(String(args.path));
+          return null;
         default:
           return null;
       }
@@ -316,6 +332,9 @@ function desktopImport(project: unknown, holdListing: Promise<void> = Promise.re
   mockFetch(async (input) => {
     const url = String(input);
     requests.push(url.replace(/^.*\/conversion\//, ""));
+    if (listingNeverFinishes && (url.endsWith("/vector-layers") || url.endsWith("/jobs/list"))) {
+      return Response.json({ id: "list", status: "running" });
+    }
     if (url.endsWith("/vector-layers")) {
       await holdListing;
       return Response.json({
@@ -326,10 +345,14 @@ function desktopImport(project: unknown, holdListing: Promise<void> = Promise.re
         },
       });
     }
+    if (holdRead && (url.endsWith("/vector-to-vector") || url.endsWith("/jobs/read"))) {
+      return Response.json({ id: "read", status: readDone ? "succeeded" : "running" });
+    }
     return Response.json({ id: "read", status: "succeeded" });
   });
   return {
     requests,
+    removed,
     restore: () => {
       delete globals.window.__TAURI_INTERNALS__;
     },
@@ -376,6 +399,48 @@ describe("Import ArcGIS Pro project with File Geodatabase layers (desktop)", () 
     } finally {
       desktop.restore();
       loader.mock.restore();
+    }
+  });
+
+  it("stops waiting for a sidecar job once another project opens", async () => {
+    const desktop = desktopImport(parcelsOnly, Promise.resolve(), true);
+    try {
+      const actions = renderActions();
+      const importing = actions().handleImportArcgisProject();
+      await waitFor(() => assert.deepEqual(desktop.requests, ["vector-layers"]));
+      act(() => useAppStore.getState().loadProject({ ...createEmptyProject(), name: "Opened" }));
+      // The listing job never finishes, so this only settles if the poll
+      // loop gives up on the abort rather than waiting out its timeout.
+      await act(() => importing);
+      assert.equal(useAppStore.getState().projectName, "Opened");
+      assert.deepEqual(layerNames(), []);
+      assert.equal(actions().arcgisImportWarnings, null);
+      assert.ok(!desktop.requests.includes("vector-to-vector"));
+    } finally {
+      desktop.restore();
+    }
+  });
+
+  it("removes an abandoned read's temporary file once its job finishes", async () => {
+    let releaseRead = () => {};
+    const read = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    const desktop = desktopImport(parcelsOnly, Promise.resolve(), false, read);
+    try {
+      const actions = renderActions();
+      const importing = actions().handleImportArcgisProject();
+      await waitFor(() => assert.ok(desktop.requests.includes("vector-to-vector")));
+      act(() => useAppStore.getState().loadProject({ ...createEmptyProject(), name: "Opened" }));
+      await act(() => importing);
+      assert.deepEqual(layerNames(), []);
+      // The job is still writing its file, so it is not removed yet.
+      assert.deepEqual(desktop.removed, []);
+      releaseRead();
+      await waitFor(() => assert.equal(desktop.removed.length, 1), { timeout: 5000 });
+      assert.match(desktop.removed[0], /^\/tmp\/geolibre-gdb-.*\.geojson$/);
+    } finally {
+      desktop.restore();
     }
   });
 

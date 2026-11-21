@@ -10,8 +10,13 @@ import {
 export interface FileGeodatabaseReader {
   /** Start the sidecar; a throw reports every layer as unreadable. */
   start: () => Promise<unknown>;
-  listLayers: (gdbPath: string) => Promise<VectorDatasetLayer[]>;
-  readLayer: (gdbPath: string, featureClass: string) => Promise<FeatureCollection>;
+  /** `signal` stops the wait when the import is abandoned. */
+  listLayers: (gdbPath: string, signal?: AbortSignal) => Promise<VectorDatasetLayer[]>;
+  readLayer: (
+    gdbPath: string,
+    featureClass: string,
+    signal?: AbortSignal,
+  ) => Promise<FeatureCollection>;
 }
 
 /**
@@ -49,7 +54,7 @@ export async function loadArcgisFileGeodatabaseLayers(
   const listLayers = (gdbPath: string) => {
     let listing = listings.get(gdbPath);
     if (!listing) {
-      listing = reader.listLayers(gdbPath).catch((error: unknown) => {
+      listing = reader.listLayers(gdbPath, signal).catch((error: unknown) => {
         console.warn(`[GeoLibre] Could not read File Geodatabase "${gdbPath}"`, error);
         return null;
       });
@@ -132,7 +137,7 @@ async function readEntry(
   if (!info.crs) return { reason: "file-geodatabase-crs" };
   try {
     return {
-      geojson: await reader.readLayer(entry.gdbPath, info.name),
+      geojson: await reader.readLayer(entry.gdbPath, info.name, signal),
       featureClass: info.name,
       crs: info.crs,
     };

@@ -28,26 +28,52 @@ const POLL_TIMEOUT_MS = 10 * 60 * 1000;
  * Poll a sidecar conversion job until it leaves the pending/running states.
  * Resolves with the finished job (whatever its outcome); the caller decides
  * how to surface a failure.
+ *
+ * @param signal - Stops the wait (rejecting with its reason) between polls.
+ *   The sidecar has no cancel endpoint, so the job itself still finishes.
  */
-async function waitForConversionJob(initial: ConversionJob): Promise<ConversionJob> {
+async function waitForConversionJob(
+  initial: ConversionJob,
+  signal?: AbortSignal,
+): Promise<ConversionJob> {
   const deadline = Date.now() + POLL_TIMEOUT_MS;
   let job = initial;
   while (job.status === "pending" || job.status === "running") {
+    signal?.throwIfAborted();
     if (Date.now() > deadline) throw new Error(i18next.t("addData.gdb.errorTimeout"));
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    await pollDelay(signal);
+    signal?.throwIfAborted();
     job = await fetchConversionJob(job.id);
   }
   return job;
+}
+
+/** Wait one poll interval, cut short when `signal` aborts. */
+function pollDelay(signal: AbortSignal | undefined): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, POLL_INTERVAL_MS);
+    signal?.addEventListener("abort", done, { once: true });
+  });
 }
 
 /**
  * List a geodatabase's feature classes that carry geometry; attribute-only
  * tables cannot become map layers.
  *
- * @throws When the geodatabase cannot be read (moved, deleted, not a .gdb).
+ * @param signal - Stops waiting for the listing when aborted.
+ * @throws When the geodatabase cannot be read (moved, deleted, not a .gdb),
+ *   or with the signal's reason once it aborts.
  */
-export async function listFileGeodatabaseLayers(gdbPath: string): Promise<VectorDatasetLayer[]> {
-  const job = await waitForConversionJob(await runVectorLayers({ input_path: gdbPath }));
+export async function listFileGeodatabaseLayers(
+  gdbPath: string,
+  signal?: AbortSignal,
+): Promise<VectorDatasetLayer[]> {
+  const job = await waitForConversionJob(await runVectorLayers({ input_path: gdbPath }), signal);
   if (job.status !== "succeeded") {
     throw new Error(job.error || i18next.t("addData.gdb.readError"));
   }
@@ -60,11 +86,14 @@ export async function listFileGeodatabaseLayers(gdbPath: string): Promise<Vector
  *
  * @param sourceCrs - Only sent when the layer itself declares no CRS; the
  *   sidecar otherwise reads it from the dataset.
+ * @param signal - Stops waiting for the read when aborted. The job still
+ *   finishes on the sidecar, and its temporary file is removed once it does.
  */
 export async function readFileGeodatabaseLayer(
   gdbPath: string,
   featureClass: string,
   sourceCrs?: string,
+  signal?: AbortSignal,
 ): Promise<FeatureCollection> {
   // The sidecar writes the converted layer into the OS temp directory; the
   // file only serves this one read and is removed afterwards.
@@ -79,15 +108,26 @@ export async function readFileGeodatabaseLayer(
   // file is left for the OS temp cleaner instead.
   let jobFinished = false;
   try {
-    const job = await waitForConversionJob(
-      await runVectorToVector({
-        input_path: gdbPath,
-        output_path: outputPath,
-        input_layer: featureClass,
-        target_srs: "EPSG:4326",
-        ...(sourceCrs ? { source_srs: sourceCrs } : {}),
-      }),
-    );
+    const started = await runVectorToVector({
+      input_path: gdbPath,
+      output_path: outputPath,
+      input_layer: featureClass,
+      target_srs: "EPSG:4326",
+      ...(sourceCrs ? { source_srs: sourceCrs } : {}),
+    });
+    let job: ConversionJob;
+    try {
+      job = await waitForConversionJob(started, signal);
+    } catch (error) {
+      // Abandoned: the caller stops waiting, but the job keeps writing its
+      // file, so keep polling in the background and remove it once done.
+      if (signal?.aborted) {
+        void waitForConversionJob(started)
+          .then(() => remove(outputPath))
+          .catch(() => undefined);
+      }
+      throw error;
+    }
     jobFinished = true;
     if (job.status !== "succeeded") {
       throw new Error(job.error || i18next.t("addData.gdb.convertError"));

@@ -975,7 +975,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
             {
               start: startGeoLibreSidecar,
               listLayers: listFileGeodatabaseLayers,
-              readLayer: readFileGeodatabaseLayer,
+              readLayer: (gdbPath, featureClass, signal) =>
+                readFileGeodatabaseLayer(gdbPath, featureClass, undefined, signal),
             },
             session.signal,
           );
