@@ -70,7 +70,10 @@ export interface ArcgisProjectImportOptions {
   /**
    * Keep File Geodatabase feature classes as layers for the caller to read,
    * rather than reporting them as unsupported. Only the desktop build can read
-   * a geodatabase (through the Python sidecar's GDAL).
+   * a geodatabase (through the Python sidecar's GDAL). The layers come back
+   * without features: the caller fills them, or drops them with a warning, by
+   * passing the result to `loadArcgisFileGeodatabaseLayers`
+   * (`arcgis-gdb-import.ts`) before loading the project.
    */
   readFileGeodatabase?: boolean;
 }
