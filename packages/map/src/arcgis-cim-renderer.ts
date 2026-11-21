@@ -696,7 +696,9 @@ function scanLayers(layers: CimObject[], drawn: readonly string[]): LayerScan {
     const color = cimColor(layer.color);
     if (!color) scan.unreadable ??= colorType(layer);
     else if (type === "CIMSolidFill") scan.fill = color;
-    // An absent width is CIM's default of 0, not GeoLibre's default outline.
+    // ArcGIS Pro always writes a stroke's width, 0 included. An absent one
+    // (from other tools) reads as 0 rather than inheriting another class's
+    // outline or GeoLibre's default.
     else scan.stroke = { color, width: numberValue(layer.width) ?? 0 };
   }
   return scan;
@@ -776,7 +778,9 @@ function markerLook(layers: CimObject[]): SymbolLook | null {
   const fill = markerColor ?? scan.fill;
   if (!fill) return null;
   const outer = layers.find((layer) => layer !== marker);
-  // An absent size is CIM's default of 0: a marker that draws nothing.
+  // ArcGIS Pro always writes a marker's size. An absent one (from other
+  // tools) reads as 0, a marker that draws nothing, rather than inheriting
+  // another class's size or GeoLibre's default.
   const size = numberValue(marker.size) ?? 0;
   const dropped = outer
     ? stringValue(outer.type) || "symbol layer"

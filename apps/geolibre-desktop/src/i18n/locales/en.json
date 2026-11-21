@@ -4328,7 +4328,7 @@
       "arcgisUnknownLayerType": "unknown",
       "arcgisImportSymbologyOnly": "The project was imported, but some of it is not shown exactly as in ArcGIS Pro.",
       "arcgisSymbologyIssue": {
-        "renderer": "The layer was loaded with a single symbol: its {{layerType}} renderer is not supported.",
+        "renderer": "The layer was loaded with a single symbol: its renderer type ({{layerType}}) is not supported.",
         "multiple-fields": "The layer was loaded with a single symbol: unique values are supported only on exactly one field, not on several fields or none.",
         "expression": "The layer was loaded with a single symbol: symbology driven by an Arcade expression is not supported.",
         "normalization": "The layer was loaded with a single symbol: normalised class breaks are not supported.",
