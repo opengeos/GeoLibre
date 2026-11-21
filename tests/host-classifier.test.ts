@@ -38,4 +38,11 @@ describe("isPublicHttpUrl", () => {
     assert.equal(isPublicHttpUrl("http://[::a00:1]/x"), false);
     assert.equal(isPublicHttpUrl("http://[2001:db8::1]/x"), true);
   });
+  it("blocks internal names and IPv6 forms that embed IPv4", () => {
+    assert.equal(isPublicHttpUrl("http://metadata.google.internal/x"), false);
+    assert.equal(isPublicHttpUrl("http://printer.local/x"), false);
+    assert.equal(isPublicHttpUrl("http://[2002:a00:1::]/x"), false);
+    assert.equal(isPublicHttpUrl("http://[64:ff9b::a00:1]/x"), false);
+    assert.equal(isPublicHttpUrl("https://internal.example.com/x"), true);
+  });
 });

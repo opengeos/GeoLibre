@@ -905,7 +905,8 @@ Export Layers reports inline GeoJSON layers that cannot bootstrap automatically
 as skipped, including S3 and private-host non-WFS layers. It does not strip their
 features to write a reference that would reload empty. Editing an observed public URL
 on an already hydrated GeoJSON layer fetches its replacement data automatically.
-That replacement is recorded in undo history; initial hydration is not.
+That replacement fetch runs outside undo history, so the URL edit remains the
+only undo step. Initial hydration is also outside undo history.
 Local saves, autosave snapshots, and undo history may retain signed URLs until
 they are redacted for sharing or export.
 
