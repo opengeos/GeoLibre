@@ -657,6 +657,26 @@ describe("CIM symbols and defaults as Pro writes them", () => {
     assert.equal(hairline(clear, "a"), "#ff0000");
   });
 
+  it("reads an omitted stroke width or marker size as 0, as CIM leaves out defaults", () => {
+    const { width: _width, ...widthless } = stroke(rgb(0, 0, 255));
+    // A class whose outline has no width does not inherit the first class's
+    // outline, and a single symbol does not get GeoLibre's default outline.
+    const classes = translatedStyle(
+      twoClasses(polygonWith([stroke(), fill()]), polygonWith([widthless, fill()])),
+    );
+    assert.equal(renderedOutlineWidth(classes, { K: "a" }), 2);
+    assert.equal(renderedOutlineWidth(classes, { K: "b" }), 0);
+    const single = translatedStyle(simple(polygonWith([widthless, fill()])));
+    assert.equal(single.strokeWidth, 0);
+    // A widthless line and a sizeless marker draw nothing, as in ArcGIS Pro,
+    // rather than GeoLibre's default 2px line or 6px circle.
+    const widthlessLine = translatedStyle(simple(symbolRef("CIMLineSymbol", [widthless])));
+    assert.equal(widthlessLine.strokeWidth, 0);
+    const sizeless = structuredClone(marker([fill()]));
+    delete (sizeless.symbol.symbolLayers[0] as Record<string, unknown>).size;
+    assert.equal(translatedStyle(simple(sizeless)).circleRadius, 0);
+  });
+
   it("reads an omitted upper bound as 0, as CIM leaves out defaults", () => {
     const renderer = density({ minimumBreak: -3 });
     renderer.breaks = [

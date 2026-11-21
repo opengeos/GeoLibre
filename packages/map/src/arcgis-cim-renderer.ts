@@ -36,10 +36,10 @@
  * several fields or none (`multiple-fields`), an Arcade expression
  * (`expression`), normalised breaks (`normalization`), graduated symbols
  * (`graduated-symbols`), an exclusion clause (`exclusion`), a class symbol
- * with no solid colour (`symbol`), or no usable classes (`no-classes`). A
- * translated renderer can still carry issues for what it leaves out: visual
- * variables (`visual-variables`), symbol layers it does not draw
- * (`symbol-layers`), a fill or outline colour it cannot read (`color`),
+ * with no solid colour (`symbol`), or no usable classes or field
+ * (`no-classes`). A translated renderer can still carry issues for what it
+ * leaves out: visual variables (`visual-variables`), symbol layers it does
+ * not draw (`symbol-layers`), a fill or outline colour it cannot read (`color`),
  * per-class stroke transparency GeoLibre's rules cannot hold
  * (`transparency`), geometric effects such as dashes or offsets
  * (`effects`), and a marker shape other than a circle, which is drawn as a
@@ -202,7 +202,8 @@ export function translateCimSymbol(reference: unknown): CimRendererTranslation {
  * spec (Esri/cim-spec docs/v3/CIMColor.md): RGB 0-255, CMYK/Gray/S/V 0-100,
  * hue 0-360, CIELAB L 0-100 with signed a/b, alpha 0-100. RGB, Gray, CMYK,
  * HSV and LAB are read; any other subclass (HSL, XYZ, Spot, ...) and any
- * non-numeric channel return null, so the caller decides what to do rather
+ * channel that is not a JSON number (`null`, `""`, `true`, or a numeric
+ * string such as `"255"`, which Pro never writes) return null, so the caller decides what to do rather
  * than drawing an invented colour.
  */
 export function cimColor(value: unknown): CimColor | null {
@@ -222,7 +223,8 @@ export function cimColor(value: unknown): CimColor | null {
     rgb = values.slice(0, 3);
     alpha = values[3] ?? 100;
   } else if (type === "CIMGrayColor" && values.length >= 1) {
-    rgb = [0, 0, 0].map(() => (values[0] / 100) * 255);
+    const level = (values[0] / 100) * 255;
+    rgb = [level, level, level];
     alpha = values[1] ?? 100;
   } else if (type === "CIMCMYKColor" && values.length >= 4) {
     const k = 1 - values[3] / 100;
@@ -619,7 +621,7 @@ function lookOverrides(look: SymbolLook, base: SymbolLook): Partial<VectorRule> 
 /** What one pass over a symbol's enabled layers found. */
 interface LayerScan {
   fill?: CimColor;
-  stroke?: { color: CimColor; width: number | null };
+  stroke?: { color: CimColor; width: number };
   dropped?: string;
   unreadable?: string;
   effect?: string;
@@ -678,7 +680,8 @@ function scanLayers(layers: CimObject[], drawn: readonly string[]): LayerScan {
     const color = cimColor(layer.color);
     if (!color) scan.unreadable ??= colorType(layer);
     else if (type === "CIMSolidFill") scan.fill = color;
-    else scan.stroke = { color, width: numberValue(layer.width) };
+    // An absent width is CIM's default of 0, not GeoLibre's default outline.
+    else scan.stroke = { color, width: numberValue(layer.width) ?? 0 };
   }
   return scan;
 }
@@ -757,7 +760,8 @@ function markerLook(layers: CimObject[]): SymbolLook | null {
   const fill = markerColor ?? scan.fill;
   if (!fill) return null;
   const outer = layers.find((layer) => layer !== marker);
-  const size = numberValue(marker.size);
+  // An absent size is CIM's default of 0: a marker that draws nothing.
+  const size = numberValue(marker.size) ?? 0;
   const dropped = outer
     ? stringValue(outer.type) || "symbol layer"
     : drawing.length > 1
@@ -788,7 +792,7 @@ function markerLook(layers: CimObject[]): SymbolLook | null {
     ...scanNotes({ dropped, unreadable, effect }),
     // A CIM marker size is its height in points; a GeoLibre circle radius is
     // half the diameter in pixels.
-    ...(size !== null ? { circleRadius: round((size * PIXELS_PER_POINT) / 2) } : {}),
+    circleRadius: round((size * PIXELS_PER_POINT) / 2),
   };
 }
 
@@ -796,19 +800,19 @@ function markerLook(layers: CimObject[]): SymbolLook | null {
  * A vector marker's outline at the marker's size. With
  * `scaleSymbolsProportionally`, the graphic's stroke widths are given at the
  * size of its `frame` and scale with the marker, so a 1pt outline in a 10pt
- * frame is 2pt on a 20pt marker. Without a readable frame or size the width
- * is kept as written.
+ * frame is 2pt on a 20pt marker. Without a readable frame the width is kept
+ * as written.
  */
 function scaledStroke(
   marker: CimObject,
-  size: number | null,
+  size: number,
   stroke: LayerScan["stroke"],
 ): LayerScan["stroke"] {
-  if (!stroke || stroke.width === null || marker.scaleSymbolsProportionally !== true) return stroke;
+  if (!stroke || marker.scaleSymbolsProportionally !== true) return stroke;
   const frame = objectValue(marker.frame);
   const height =
     (numberValue(frame?.ymax) ?? Number.NaN) - (numberValue(frame?.ymin) ?? Number.NaN);
-  if (size === null || !(height > 0)) return stroke;
+  if (!(height > 0)) return stroke;
   return { ...stroke, width: (stroke.width * size) / height };
 }
 
@@ -907,7 +911,7 @@ function strokeLook(
     ...(stroke.color.opacity !== DEFAULT_LAYER_STYLE.strokeOpacity
       ? { strokeOpacity: stroke.color.opacity }
       : {}),
-    ...(stroke.width !== null ? { strokeWidth: round(stroke.width * PIXELS_PER_POINT) } : {}),
+    strokeWidth: round(stroke.width * PIXELS_PER_POINT),
   };
 }
 
