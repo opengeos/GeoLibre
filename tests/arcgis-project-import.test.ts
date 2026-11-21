@@ -1375,35 +1375,45 @@ describe("ArcGIS Pro File Geodatabase layers", () => {
     });
   }
 
-  it("does not log an abandoned listing as a failed read", async () => {
-    const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {
-      readFileGeodatabase: true,
-    });
-    const controller = new AbortController();
-    const warn = mock.method(console, "warn", () => {});
-    try {
-      await assert.rejects(
-        loadArcgisFileGeodatabaseLayers(
-          result,
-          {
-            start: async () => {},
-            // As the sidecar client does: the wait rejects with the abort.
-            listLayers: async (_gdbPath, signal) => {
-              controller.abort();
-              signal?.throwIfAborted();
-              return [];
+  // As the sidecar client does: the wait rejects with the abort.
+  for (const stage of ["listing", "read"] as const) {
+    it(`does not log an abandoned ${stage} as a failed read`, async () => {
+      const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {
+        readFileGeodatabase: true,
+      });
+      const controller = new AbortController();
+      const abandon = (signal?: AbortSignal) => {
+        controller.abort();
+        signal?.throwIfAborted();
+      };
+      const warn = mock.method(console, "warn", () => {});
+      try {
+        await assert.rejects(
+          loadArcgisFileGeodatabaseLayers(
+            result,
+            {
+              start: async () => {},
+              listLayers: async (_gdbPath, signal) => {
+                if (stage === "listing") abandon(signal);
+                return [
+                  { name: "parcels", feature_count: 0, geometry_type: "Polygon", crs: "EPSG:4326" },
+                ];
+              },
+              readLayer: async (_gdbPath, _featureClass, signal) => {
+                abandon(signal);
+                return { type: "FeatureCollection", features: [] };
+              },
             },
-            readLayer: async () => assert.fail("must not read"),
-          },
-          controller.signal,
-        ),
-        { name: "AbortError" },
-      );
-      assert.equal(warn.mock.callCount(), 0);
-    } finally {
-      warn.mock.restore();
-    }
-  });
+            controller.signal,
+          ),
+          { name: "AbortError" },
+        );
+        assert.equal(warn.mock.callCount(), 0);
+      } finally {
+        warn.mock.restore();
+      }
+    });
+  }
 
   it("reports every layer as unreadable when the sidecar cannot start", async () => {
     const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {

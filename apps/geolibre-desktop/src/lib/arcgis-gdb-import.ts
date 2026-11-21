@@ -145,10 +145,13 @@ async function readEntry(
       crs: info.crs,
     };
   } catch (error) {
-    console.warn(
-      `[GeoLibre] Could not read "${info.name}" from File Geodatabase "${entry.gdbPath}"`,
-      error,
-    );
+    // An abandoned import rejects right after this; it is not a failed read.
+    if (!signal?.aborted) {
+      console.warn(
+        `[GeoLibre] Could not read "${info.name}" from File Geodatabase "${entry.gdbPath}"`,
+        error,
+      );
+    }
     return { reason: "file-geodatabase-read" };
   }
 }
