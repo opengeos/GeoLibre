@@ -29,8 +29,9 @@ const POLL_TIMEOUT_MS = 10 * 60 * 1000;
  * Resolves with the finished job (whatever its outcome); the caller decides
  * how to surface a failure.
  *
- * @param signal - Stops the wait (rejecting with its reason) between polls.
- *   The sidecar has no cancel endpoint, so the job itself still finishes.
+ * @param signal - Stops the wait (rejecting with its reason), including while
+ *   a status request is in flight. The sidecar has no cancel endpoint, so the
+ *   job itself still finishes.
  */
 async function waitForConversionJob(
   initial: ConversionJob,
@@ -43,9 +44,32 @@ async function waitForConversionJob(
     if (Date.now() > deadline) throw new Error(i18next.t("addData.gdb.errorTimeout"));
     await pollDelay(signal);
     signal?.throwIfAborted();
-    job = await fetchConversionJob(job.id);
+    job = await untilAborted(fetchConversionJob(job.id), signal);
   }
   return job;
+}
+
+/**
+ * Settle with `promise`, or reject with the signal's reason as soon as it
+ * aborts. The request itself is not cancelled, only the wait for it.
+ */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return promise;
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    if (signal.aborted) abort();
+    else signal.addEventListener("abort", abort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", abort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      },
+    );
+  });
 }
 
 /** Wait one poll interval, cut short when `signal` aborts. */
@@ -73,7 +97,10 @@ export async function listFileGeodatabaseLayers(
   gdbPath: string,
   signal?: AbortSignal,
 ): Promise<VectorDatasetLayer[]> {
-  const job = await waitForConversionJob(await runVectorLayers({ input_path: gdbPath }), signal);
+  const job = await waitForConversionJob(
+    await untilAborted(runVectorLayers({ input_path: gdbPath }), signal),
+    signal,
+  );
   if (job.status !== "succeeded") {
     throw new Error(job.error || i18next.t("addData.gdb.readError"));
   }
@@ -108,7 +135,7 @@ export async function readFileGeodatabaseLayer(
   // file is left for the OS temp cleaner instead.
   let jobFinished = false;
   try {
-    const started = await runVectorToVector({
+    const starting = runVectorToVector({
       input_path: gdbPath,
       output_path: outputPath,
       input_layer: featureClass,
@@ -117,12 +144,14 @@ export async function readFileGeodatabaseLayer(
     });
     let job: ConversionJob;
     try {
-      job = await waitForConversionJob(started, signal);
+      job = await waitForConversionJob(await untilAborted(starting, signal), signal);
     } catch (error) {
-      // Abandoned: the caller stops waiting, but the job keeps writing its
-      // file, so keep polling in the background and remove it once done.
+      // Abandoned (even before the job's id came back): the caller stops
+      // waiting, but the job keeps writing its file, so keep polling in the
+      // background and remove it once the job is done.
       if (signal?.aborted) {
-        void waitForConversionJob(started)
+        void starting
+          .then((started) => waitForConversionJob(started))
           .then(() => remove(outputPath))
           .catch(() => undefined);
       }

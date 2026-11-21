@@ -292,12 +292,15 @@ const PARCELS: GeoJSON.FeatureCollection = {
  * @param listingNeverFinishes - The listing job stays running on the sidecar.
  * @param holdRead - When given, the read job runs on the sidecar until it
  *   resolves.
+ * @param holdReadStart - When given, the request that starts the read job
+ *   does not answer until it resolves.
  */
 function desktopImport(
   project: unknown,
   holdListing: Promise<void> = Promise.resolve(),
   listingNeverFinishes = false,
   holdRead?: Promise<void>,
+  holdReadStart?: Promise<void>,
 ) {
   const requests: string[] = [];
   const removed: string[] = [];
@@ -345,6 +348,7 @@ function desktopImport(
         },
       });
     }
+    if (holdReadStart && url.endsWith("/vector-to-vector")) await holdReadStart;
     if (holdRead && (url.endsWith("/vector-to-vector") || url.endsWith("/jobs/read"))) {
       return Response.json({ id: "read", status: readDone ? "succeeded" : "running" });
     }
@@ -444,6 +448,28 @@ describe("Import ArcGIS Pro project with File Geodatabase layers (desktop)", () 
     }
   });
 
+  it("settles while the read's start request is pending, then removes its file", async () => {
+    let releaseStart = () => {};
+    const start = new Promise<void>((resolve) => {
+      releaseStart = resolve;
+    });
+    const desktop = desktopImport(parcelsOnly, Promise.resolve(), false, undefined, start);
+    try {
+      const actions = renderActions();
+      const importing = actions().handleImportArcgisProject();
+      await waitFor(() => assert.ok(desktop.requests.includes("vector-to-vector")));
+      act(() => useAppStore.getState().loadProject({ ...createEmptyProject(), name: "Opened" }));
+      // Settles before the sidecar has even answered with the job.
+      await act(() => importing);
+      assert.deepEqual(layerNames(), []);
+      assert.deepEqual(desktop.removed, []);
+      releaseStart();
+      await waitFor(() => assert.equal(desktop.removed.length, 1), { timeout: 5000 });
+    } finally {
+      desktop.restore();
+    }
+  });
+
   /** Open a project holding one layer with an unsaved attribute table draft. */
   function projectWithDrafts() {
     act(() => {
@@ -529,8 +555,10 @@ describe("Import ArcGIS Pro project with File Geodatabase layers (desktop)", () 
       await waitFor(() => assert.deepEqual(desktop.requests, ["vector-layers"]));
       act(() => useAppStore.getState().loadProject({ ...createEmptyProject(), name: "Opened" }));
       const history = pastLength();
-      releaseListing();
+      // Settles while the listing's HTTP response is still pending.
       await act(() => importing);
+      releaseListing();
+      await new Promise((resolve) => setTimeout(resolve, 50));
       assert.equal(useAppStore.getState().projectName, "Opened");
       assert.deepEqual(layerNames(), []);
       assert.equal(useAppStore.getState().isDirty, false);
