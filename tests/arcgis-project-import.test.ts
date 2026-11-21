@@ -1070,6 +1070,25 @@ describe("ArcGIS Pro File Geodatabase layers", () => {
     );
   });
 
+  it("refuses a relative geodatabase in a project opened from a network share", () => {
+    const project = JSON.stringify({
+      type: "CIMMap",
+      name: "Shared",
+      defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+      layerDefinitions: [gdbLayer("Parcels", "..\\city.gdb")],
+    });
+    const result = importArcgisProject(project, "\\\\server\\share\\proj\\survey.aprx", {
+      readFileGeodatabase: true,
+    });
+    // Normalising would otherwise turn it into the rooted local path
+    // /server/share/city.gdb.
+    assert.deepEqual(result.fileGeodatabaseLayers, []);
+    assert.deepEqual(
+      result.warnings.map((warning) => [warning.layerName, warning.reason]),
+      [["Parcels", "network-path"]],
+    );
+  });
+
   it("fills readable layers and drops missing ones with their empty groups", async () => {
     const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {
       readFileGeodatabase: true,

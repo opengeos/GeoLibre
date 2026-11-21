@@ -770,6 +770,12 @@ function resolveDataSource(
     // Without a geodatabase and a feature class to read, report it as the
     // default path does, so Add Data → File geodatabase is still suggested.
     if (!readFileGeodatabase || !workspace || !dataset) return { reason: "file-geodatabase" };
+    // A relative workspace in a project opened from a network share lives on
+    // that share too, but normalising drops the leading `//`; refuse it as the
+    // raw UNC workspace is refused above, rather than read a rooted local path.
+    if (!isAbsolutePath(workspace) && isNetworkPath(projectPath)) {
+      return { reason: "network-path" };
+    }
     const gdbPath = resolveRelativePath(workspace, projectPath);
     // The path comes from the project file and the desktop sidecar does not
     // confine its reads, so only a local folder named `*.gdb` is handed to it,
@@ -1034,8 +1040,8 @@ function isNetworkPath(path: string): boolean {
  * not one of GDAL's `/vsi*` virtual file systems.
  */
 function isLocalFileGeodatabasePath(path: string): boolean {
-  // UNC paths never get here: `resolveDataSource` refuses the raw workspace as
-  // "network-path" first, and normalising collapses the leading `//` anyway.
+  // UNC paths never get here: `resolveDataSource` refuses a UNC workspace, and
+  // a relative one in a project on a network share, as "network-path" first.
   if (!isAbsolutePath(path)) return false;
   const normalised = path.replace(/\\/g, "/");
   if (/^\/vsi[a-z0-9_]*\//i.test(normalised)) return false;
