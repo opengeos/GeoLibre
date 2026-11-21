@@ -4,9 +4,15 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import { createElement } from "react";
 import { createEmptyProject, parseProject } from "@geolibre/core";
 import { setArcGISFetch } from "@geolibre/plugins";
+import { strToU8 } from "fflate";
 import { geojsonLayer } from "./helpers/layer-fixtures";
-import { strToU8, zipSync } from "fflate";
 import type { ProjectFileActions } from "../apps/geolibre-desktop/src/hooks/useProjectFileActions";
+import {
+  aprx,
+  groupLayer,
+  hostedFeatureLayer,
+  tiledServiceLayer,
+} from "./helpers/arcgis-aprx-fixtures";
 
 // Loaded after the harness so its CSS imports and Vite globals are handled.
 const { useProjectFileActions } =
@@ -16,7 +22,6 @@ const {
   ARCGIS_ONLINE_HOSTING,
   cachedOrgIdLookup,
   PLAIN_SERVICE_PATH,
-  placeImportedServiceLayers,
   serviceTokenProvider,
   signInForImportedService,
 } = await import("../apps/geolibre-desktop/src/lib/arcgis-project-services");
@@ -29,6 +34,9 @@ const { ARCGIS_ONLINE_PORTAL } = await import("../apps/geolibre-desktop/src/lib/
  * webview's `fetch`. Tauri's IPC is stood in for at `__TAURI_INTERNALS__`, so
  * the hook, the importer, the ArcGIS loader and the native transport are all
  * the shipped code. The browser half is `e2e/arcgis-project-feature-service.spec.ts`.
+ * The import session itself is tested in `tests/project-import-session.test.ts`
+ * and `tests/component-arcgis-project-import.test.ts`; this file checks each
+ * point where this import can be superseded.
  */
 
 const SERVICE = "https://gis.fixture.test/arcgis/rest/services/Water/FeatureServer";
@@ -37,112 +45,28 @@ const SECRET = "fixture-secret-token";
 const APRX_PATH = "/Users/me/projects/water.aprx";
 const SAVED_PATH = "/Users/me/projects/water.geolibre.json";
 
-function hostedLayer(name: string, root: string, dataset: string, extra = {}) {
-  return {
-    type: "CIMFeatureLayer",
-    name,
-    uRI: `CIMPATH=map/${name.toLowerCase()}.json`,
-    visibility: true,
-    featureTable: {
-      dataConnection: {
-        type: "CIMStandardDataConnection",
-        workspaceConnectionString: `URL=${root}?token=${SECRET}`,
-        workspaceFactory: "FeatureService",
-        dataset,
-        datasetType: "esriDTFeatureClass",
-      },
-    },
-    ...extra,
-  };
-}
+/** A hosted layer whose connection string carries a token that must go nowhere. */
+const hosted = (name: string, root: string, dataset: string, extra = {}) =>
+  hostedFeatureLayer(name, `${root}?token=${SECRET}`, dataset, extra);
 
-function tiledLayer(name: string) {
-  return {
-    type: "CIMTiledServiceLayer",
-    name,
-    uRI: `CIMPATH=map/${name.toLowerCase()}.json`,
-    serviceConnection: {
-      objectType: "MapServer",
-      url: `https://tiles.fixture.test/arcgis/rest/services/${name}/MapServer`,
-    },
-  };
-}
-
-const member = (value: unknown) => strToU8(JSON.stringify(value));
-const APRX = zipSync({
-  "GISProject.json": member({
-    projectItems: [{ itemType: "Map", catalogPath: "CIMPATH=map/map.json" }],
-  }),
-  "map/map.json": member({
-    type: "CIMMap",
-    name: "Water network",
-    mapType: "Map",
-    defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
-    layers: [
-      "CIMPATH=map/utilities.json",
-      "CIMPATH=map/treatment.json",
-      "CIMPATH=map/hydrants.json",
-    ],
-  }),
-  "map/utilities.json": member({
-    type: "CIMGroupLayer",
-    name: "Utilities",
-    uRI: "CIMPATH=map/utilities.json",
-    layers: ["CIMPATH=map/streets.json", "CIMPATH=map/network.json", "CIMPATH=map/contours.json"],
-  }),
-  "map/network.json": member({
-    type: "CIMGroupLayer",
-    name: "Network",
-    uRI: "CIMPATH=map/network.json",
-    layers: ["CIMPATH=map/hillshade.json", "CIMPATH=map/mains.json", "CIMPATH=map/valves.json"],
-  }),
-  // Project layers on either side of the services, in the parent group and in
-  // the services' own subgroup, so the services' draw order is checked against
-  // how the store lays out nested groups.
-  // A service as its group's first member, ahead of a subgroup and a later
-  // member: the group's block forms at the service.
-  "map/treatment.json": member({
-    type: "CIMGroupLayer",
-    name: "Treatment",
-    uRI: "CIMPATH=map/treatment.json",
-    layers: [
-      "CIMPATH=map/pumps.json",
-      "CIMPATH=map/storage.json",
-      "CIMPATH=map/intake.json",
-      "CIMPATH=map/outfalls.json",
-    ],
-  }),
-  "map/storage.json": member({
-    type: "CIMGroupLayer",
-    name: "Storage",
-    uRI: "CIMPATH=map/storage.json",
-    layers: ["CIMPATH=map/tanks.json"],
-  }),
-  // A subgroup holding only a service, after another subgroup.
-  "map/intake.json": member({
-    type: "CIMGroupLayer",
-    name: "Intake",
-    uRI: "CIMPATH=map/intake.json",
-    layers: ["CIMPATH=map/filters.json"],
-  }),
-  "map/filters.json": member(hostedLayer("Filters", SERVICE, "9")),
-  "map/pumps.json": member(hostedLayer("Pumps", SERVICE, "7")),
-  "map/tanks.json": member(tiledLayer("Tanks")),
-  "map/outfalls.json": member(tiledLayer("Outfalls")),
-  "map/streets.json": member(tiledLayer("Streets")),
-  "map/hillshade.json": member(tiledLayer("Hillshade")),
-  "map/contours.json": member(tiledLayer("Contours")),
-  "map/mains.json": member(hostedLayer("Mains", SERVICE, "3")),
-  "map/valves.json": member(
-    hostedLayer("Valves", SERVICE, "5", { visibility: false, transparency: 40 }),
-  ),
-  "map/hydrants.json": member(hostedLayer("Hydrants", DOWN, "1")),
+// Top first, as ArcGIS Pro lists them. The services sit between project
+// layers, and inside a nested group below one, so their place is checked
+// against both. Hydrants' service is down.
+const APRX = aprx(["Streets", "Utilities", "Contours", "Hydrants"], {
+  Streets: tiledServiceLayer("Streets"),
+  Utilities: groupLayer("Utilities", ["Network"]),
+  Network: groupLayer("Network", ["Hillshade", "Mains", "Valves"]),
+  Hillshade: tiledServiceLayer("Hillshade"),
+  Mains: hosted("Mains", SERVICE, "3"),
+  Valves: hosted("Valves", SERVICE, "5", { visibility: false, transparency: 40 }),
+  Contours: tiledServiceLayer("Contours"),
+  Hydrants: hosted("Hydrants", DOWN, "1"),
 });
 
 /** The fixture FeatureServer, answered as the Rust command would. */
 function serviceResponse(url: URL): { status: number; body: string; contentType?: string } {
   const match = url.href.startsWith(SERVICE)
-    ? url.pathname.match(/\/FeatureServer\/(3|5|7|9)(\/query)?$/)
+    ? url.pathname.match(/\/FeatureServer\/(3|5)(\/query)?$/)
     : null;
   if (!match) return { status: 503, body: "unavailable" };
   const json = (body: unknown) => ({
@@ -182,44 +106,24 @@ let onServiceRequest: (() => void) | null = null;
 let onRasterRead: (() => void) | null = null;
 let rasterReads: string[] = [];
 let allowRasters = false;
+
+/** A GeoTIFF layer read from `/data`, which only the desktop build loads. */
+const rasterLayer = (name: string) => ({
+  type: "CIMRasterLayer",
+  name,
+  uRI: `CIMPATH=map/${name.toLowerCase()}.json`,
+  dataConnection: { workspaceConnectionString: "DATABASE=/data", dataset: `${name}.tif` },
+});
 const RASTER_APRX_PATH = "/Users/me/projects/rasters.aprx";
-const RASTER_APRX = zipSync({
-  "GISProject.json": member({
-    projectItems: [{ itemType: "Map", catalogPath: "CIMPATH=map/map.json" }],
-  }),
-  "map/map.json": member({
-    type: "CIMMap",
-    name: "Terrain",
-    mapType: "Map",
-    defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
-    layerDefinitions: [
-      ...["dem", "slope"].map((name) => ({
-        type: "CIMRasterLayer",
-        name,
-        uRI: `CIMPATH=map/${name}.json`,
-        dataConnection: { workspaceConnectionString: "DATABASE=/data", dataset: `${name}.tif` },
-      })),
-      hostedLayer("Mains", SERVICE, "3"),
-    ],
-  }),
-});
 const TILED_APRX_PATH = "/Users/me/projects/tiled.aprx";
-const TILED_APRX = zipSync({
-  "GISProject.json": member({
-    projectItems: [{ itemType: "Map", catalogPath: "CIMPATH=map/map.json" }],
-  }),
-  "map/map.json": member({
-    type: "CIMMap",
-    name: "Tiles only",
-    mapType: "Map",
-    defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
-    layerDefinitions: [tiledLayer("Streets")],
-  }),
-});
 const archives: Record<string, Uint8Array> = {
   [APRX_PATH]: APRX,
-  [RASTER_APRX_PATH]: RASTER_APRX,
-  [TILED_APRX_PATH]: TILED_APRX,
+  [RASTER_APRX_PATH]: aprx(["dem", "slope", "Mains"], {
+    dem: rasterLayer("dem"),
+    slope: rasterLayer("slope"),
+    Mains: hosted("Mains", SERVICE, "3"),
+  }),
+  [TILED_APRX_PATH]: aprx(["Streets"], { Streets: tiledServiceLayer("Streets") }),
 };
 
 beforeEach(async () => {
@@ -311,25 +215,18 @@ describe("ArcGIS Pro feature service import on desktop", () => {
       [["Hydrants", "service-unavailable"]],
     );
     const state = useAppStore.getState();
-    const groups = new Map(state.layerGroups.map((group) => [group.name, group]));
-    assert.equal(groups.get("Network")?.parentId, groups.get("Utilities")?.id);
-    const network = groups.get("Network")?.id;
-    const utilities = groups.get("Utilities")?.id;
-    // The store keeps a group's own layers together and each subgroup as its
-    // own block, so Contours (Utilities) sits below the Network block, and the
-    // services follow Hillshade inside it.
+    const groups = new Map(state.layerGroups.map((group) => [group.name, group.id]));
+    const network = groups.get("Network");
+    // ArcGIS Pro's drawing order, bottom first as the store keeps it: the
+    // services land below Hillshade inside their group, not on top.
     assert.deepEqual(
       state.layers.map((layer) => [layer.name, layer.groupId]),
       [
-        ["Streets", utilities],
-        ["Contours", utilities],
-        ["Hillshade", network],
-        ["Mains", network],
+        ["Contours", undefined],
         ["Valves", network],
-        ["Pumps", groups.get("Treatment")?.id],
-        ["Outfalls", groups.get("Treatment")?.id],
-        ["Tanks", groups.get("Storage")?.id],
-        ["Filters", groups.get("Intake")?.id],
+        ["Mains", network],
+        ["Hillshade", network],
+        ["Streets", undefined],
       ],
     );
     const services = state.layers.filter((layer) => layer.source.arcgisQueryUrl);
@@ -340,41 +237,18 @@ describe("ArcGIS Pro feature service import on desktop", () => {
       groupId: layer.groupId,
       arcgisQueryUrl: layer.source.arcgisQueryUrl,
       arcgisLayerUri: layer.metadata.arcgisLayerUri,
+      importedFrom: layer.metadata.importedFrom,
     }));
-    assert.deepEqual(imported, [
-      {
-        name: "Mains",
-        visible: true,
-        opacity: 1,
-        groupId: network,
-        arcgisQueryUrl: `${SERVICE}/3/query`,
-        arcgisLayerUri: "CIMPATH=map/mains.json",
-      },
-      {
-        name: "Valves",
-        visible: false,
-        opacity: 0.6,
-        groupId: network,
-        arcgisQueryUrl: `${SERVICE}/5/query`,
-        arcgisLayerUri: "CIMPATH=map/valves.json",
-      },
-      {
-        name: "Pumps",
-        visible: true,
-        opacity: 1,
-        groupId: groups.get("Treatment")?.id,
-        arcgisQueryUrl: `${SERVICE}/7/query`,
-        arcgisLayerUri: "CIMPATH=map/pumps.json",
-      },
-      {
-        name: "Filters",
-        visible: true,
-        opacity: 1,
-        groupId: groups.get("Intake")?.id,
-        arcgisQueryUrl: `${SERVICE}/9/query`,
-        arcgisLayerUri: "CIMPATH=map/filters.json",
-      },
-    ]);
+    const service = (name: string, sublayer: number, visible: boolean, opacity: number) => ({
+      name,
+      visible,
+      opacity,
+      groupId: network,
+      arcgisQueryUrl: `${SERVICE}/${sublayer}/query`,
+      arcgisLayerUri: `CIMPATH=map/${name.toLowerCase()}.json`,
+      importedFrom: "arcgis-pro",
+    });
+    assert.deepEqual(imported, [service("Valves", 5, false, 0.6), service("Mains", 3, true, 1)]);
     // Every REST request went through Rust, to the explicit sublayers only.
     assert.ok(nativeRequests.some((url) => url.startsWith(`${SERVICE}/3?`)));
     assert.ok(nativeRequests.some((url) => url.startsWith(`${SERVICE}/5?`)));
@@ -382,6 +256,7 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     assert.ok(!nativeRequests.some((url) => /\/FeatureServer\/0\b/.test(url)));
     // The saved extent survived: no service zoomed the map to itself.
     assert.deepEqual(state.mapView.center, [-75, 35]);
+    assert.equal(state.isDirty, true);
 
     // Save and reopen through the desktop dialog.
     await act(() => actions().handleSave());
@@ -389,6 +264,10 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     dialogPath = SAVED_PATH;
     await act(() => actions().handleOpenFromFile());
     const reopened = useAppStore.getState();
+    assert.deepEqual(
+      reopened.layers.map((layer) => layer.name),
+      state.layers.map((layer) => layer.name),
+    );
     assert.deepEqual(
       reopened.layers
         .filter((layer) => layer.source.arcgisQueryUrl)
@@ -411,10 +290,7 @@ describe("ArcGIS Pro feature service import on desktop", () => {
       reopened.layerGroups.map((group) => [group.name, group.parentId ?? null]),
       [
         ["Utilities", null],
-        ["Network", groups.get("Utilities")?.id],
-        ["Treatment", null],
-        ["Storage", groups.get("Treatment")?.id],
-        ["Intake", groups.get("Treatment")?.id],
+        ["Network", groups.get("Utilities")],
       ],
     );
     assert.deepEqual(parseProject(savedText).mapView.center, [-75, 35]);
@@ -424,6 +300,274 @@ describe("ArcGIS Pro feature service import on desktop", () => {
       assert.doesNotMatch(text, new RegExp(SECRET));
     }
   });
+
+  /** Opens another project, with a layer of its own, as the user would mid-import. */
+  let historyAtSwitch = -1;
+  let rasterGranted = false;
+  function switchProject() {
+    const other = createEmptyProject("Other");
+    other.layers = [geojsonLayer({ id: "their-layer", name: "Their layer" })];
+    useAppStore.getState().loadProject(other, null);
+    historyAtSwitch = useAppStore.temporal.getState().pastStates.length;
+  }
+
+  /** Switches project during the first of the two frames the import waits for the map. */
+  function switchOnFirstFrame(): () => void {
+    const originalFrame = globalThis.requestAnimationFrame;
+    let switched = false;
+    globalThis.requestAnimationFrame = (callback) =>
+      originalFrame((time) => {
+        if (!switched) {
+          switched = true;
+          switchProject();
+        }
+        callback(time);
+      });
+    return () => {
+      globalThis.requestAnimationFrame = originalFrame;
+      assert.ok(switched);
+    };
+  }
+
+  // Each point where the import awaits, and so where the user can open another
+  // project. Whatever the import was doing, the replacement keeps its own
+  // layers, stays clean, gains no undo step and shows no import report.
+  const switches: {
+    name: string;
+    path?: string;
+    arm: () => (() => void) | void;
+    mapControllerRef?: Parameters<typeof useProjectFileActions>[0];
+    requests: (urls: string[]) => void;
+    reads?: string[];
+  }[] = [
+    {
+      name: "the first feature service request",
+      arm: () => {
+        onServiceRequest = () => {
+          onServiceRequest = null;
+          switchProject();
+        };
+      },
+      // Only the first service was asked for; the rest of the old import stopped.
+      requests: (urls) => {
+        assert.ok(urls.length > 0);
+        assert.ok(
+          urls.every((url) => url.startsWith(`${SERVICE}/3`)),
+          urls.join(),
+        );
+      },
+    },
+    {
+      name: "the map settling, before any service loads",
+      arm: switchOnFirstFrame,
+      requests: (urls) => assert.deepEqual(urls, []),
+    },
+    {
+      name: "the map settling, with nothing left to load",
+      path: TILED_APRX_PATH,
+      arm: switchOnFirstFrame,
+      requests: (urls) => assert.deepEqual(urls, []),
+    },
+    {
+      // The read is refused, so the import would go on to the next raster.
+      name: "a raster file read",
+      path: RASTER_APRX_PATH,
+      arm: () => {
+        onRasterRead = () => {
+          onRasterRead = null;
+          switchProject();
+        };
+      },
+      requests: (urls) => assert.deepEqual(urls, []),
+      reads: ["/data/dem.tif"],
+    },
+    {
+      name: "a raster load",
+      path: RASTER_APRX_PATH,
+      // The switch lands inside the raster add: the first time the import asks
+      // for the map after the first raster file was granted.
+      arm: () => {
+        allowRasters = true;
+        onRasterRead = () => {
+          onRasterRead = null;
+          rasterGranted = true;
+        };
+      },
+      mapControllerRef: {
+        get current() {
+          if (rasterGranted) {
+            rasterGranted = false;
+            switchProject();
+          }
+          return null;
+        },
+      } as Parameters<typeof useProjectFileActions>[0],
+      requests: (urls) => assert.deepEqual(urls, []),
+      reads: ["/data/dem.tif"],
+    },
+  ];
+
+  for (const { name, path, arm, mapControllerRef, requests, reads } of switches) {
+    it(`adds nothing to a project opened during ${name}`, async () => {
+      if (path) dialogPath = path;
+      historyAtSwitch = -1;
+      rasterGranted = false;
+      const actions = renderActions(mapControllerRef);
+      const disarm = arm();
+      const originalError = console.error;
+      console.error = () => {};
+      try {
+        await act(() => actions().handleImportArcgisProject());
+      } finally {
+        console.error = originalError;
+        disarm?.();
+      }
+      const state = useAppStore.getState();
+      assert.equal(state.projectName, "Other");
+      assert.deepEqual(
+        state.layers.map((layer) => layer.id),
+        ["their-layer"],
+      );
+      assert.equal(state.isDirty, false);
+      assert.equal(useAppStore.temporal.getState().pastStates.length, historyAtSwitch);
+      assert.equal(actions().arcgisImportWarnings, null);
+      requests(nativeRequests);
+      if (reads) assert.deepEqual(rasterReads, reads);
+    });
+  }
+});
+
+describe("tokens for an imported project's services", () => {
+  const ORG = "AbCdEfGh12345678";
+  const online = ARCGIS_ONLINE_PORTAL;
+  const org = "https://myorg.maps.arcgis.com";
+  const enterprise = "https://gis.example.org/portal";
+  const hostedIn = (orgId: string, host = "services3.arcgis.com") =>
+    `https://${host}/${orgId}/arcgis/rest/services/Water/FeatureServer/3`;
+  const OTHER = "ZzZzZzZz87654321";
+  const orgIds: Record<string, string> = { [online]: ORG, [org]: ORG };
+  const cases: {
+    name: string;
+    url: string;
+    portals: string[];
+    failing?: string[];
+    expected: string | null;
+    lookups?: number;
+  }[] = [
+    { name: "own organisation, Online", url: hostedIn(ORG), portals: [online], expected: online },
+    { name: "own organisation, org portal", url: hostedIn(ORG), portals: [org], expected: org },
+    {
+      name: "another organisation on the shared hosting",
+      url: hostedIn(OTHER),
+      portals: [online, org],
+      expected: null,
+    },
+    // The same holds on the unnumbered and regional hosting servers.
+    ...["services.arcgis.com", "services-eu1.arcgis.com", "SERVICES-AP1.arcgis.com"].flatMap(
+      (host) => [
+        {
+          name: `own organisation on ${host}`,
+          url: hostedIn(ORG, host),
+          portals: [online],
+          expected: online,
+        },
+        {
+          name: `another organisation on ${host}`,
+          url: hostedIn(OTHER, host),
+          portals: [online, org],
+          expected: null,
+        },
+      ],
+    ),
+    // A host that only looks like the shared hosting never gets the token,
+    // even with the user's own organisation id in its path.
+    ...[
+      "services-eu1.arcgis.com.evil.example",
+      "evilservices-eu1.arcgis.com",
+      "services-eu1x.arcgis.com",
+      "services-eu.arcgis.com",
+      "services-1.arcgis.com",
+      "services-eu1.evil.arcgis.com",
+      "services-eu1.arcgis.com.",
+    ].map((host) => ({
+      name: `look-alike host ${host}`,
+      url: hostedIn(ORG, host),
+      portals: [online, org],
+      expected: null,
+    })),
+    // Nor does a path that carries the user's organisation id first but could
+    // be resolved into another organisation's folder by the server.
+    ...[
+      `${ORG}/%2e%2e%2f${OTHER}/arcgis/rest/services/Water/FeatureServer/3`,
+      `${ORG}/..;/${OTHER}/arcgis/rest/services/Water/FeatureServer/3`,
+      `${ORG}/%2E%2E%5C${OTHER}/arcgis/rest/services/Water/FeatureServer/3`,
+      `${ORG}/arcgis;x/rest/services/Water/FeatureServer/3`,
+      `${ORG}/arcgis/rest/services/Water/FeatureServer/3/%2e%2e%2f%2e%2e%2f%2e%2e%2fZzZz`,
+    ].map((path) => ({
+      name: `unsafe path ${path}`,
+      url: `https://services-eu1.arcgis.com/${path}`,
+      portals: [online, org],
+      expected: null,
+    })),
+    {
+      name: "a trailing slash is still a plain path",
+      url: `${hostedIn(ORG, "services-eu1.arcgis.com")}/`,
+      portals: [online],
+      expected: online,
+    },
+    {
+      name: "another *.arcgis.com host",
+      url: "https://utility.arcgis.com/usrsvcs/servers/x/rest/services/A/FeatureServer/0",
+      portals: [online],
+      expected: null,
+    },
+    { name: "an untrusted host", url: `${SERVICE}/3`, portals: [online, org], expected: null },
+    {
+      name: "Enterprise portal's own host, without an organisation lookup",
+      url: "https://gis.example.org/server/rest/services/A/FeatureServer/0",
+      portals: [enterprise],
+      expected: enterprise,
+      lookups: 0,
+    },
+    {
+      name: "plain http on the Enterprise host",
+      url: "http://gis.example.org/server/rest/services/A/FeatureServer/0",
+      portals: [enterprise],
+      expected: null,
+    },
+    {
+      name: "a session whose token cannot be read is skipped",
+      url: hostedIn(ORG),
+      portals: [online, org],
+      failing: [online],
+      expected: org,
+    },
+    {
+      name: "no readable session",
+      url: hostedIn(ORG),
+      portals: [online],
+      failing: [online],
+      expected: null,
+    },
+  ];
+  for (const { name, url, portals, failing = [], expected, lookups } of cases) {
+    it(`signInForImportedService: ${name}`, async () => {
+      const asked: string[] = [];
+      const signIn = await signInForImportedService(url, {
+        portals,
+        token: async (portal) => {
+          if (failing.includes(portal)) throw new Error("refresh failed");
+          return `token-for-${portal}`;
+        },
+        orgId: async (portal) => {
+          asked.push(portal);
+          return orgIds[portal];
+        },
+      });
+      assert.deepEqual(signIn, expected && { portal: expected, token: `token-for-${expected}` });
+      if (lookups !== undefined) assert.equal(asked.length, lookups);
+    });
+  }
 
   it("matches only ArcGIS Online's hosting servers and plain service paths", () => {
     // Called directly: most look-alike hosts never reach the pattern, because
@@ -464,230 +608,33 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     }
   });
 
-  it("offers a sign-in token only to its own organisation's services", async () => {
-    const online = ARCGIS_ONLINE_PORTAL;
-    const org = "https://myorg.maps.arcgis.com";
-    const enterprise = "https://gis.example.org/portal";
-    const ORG = "AbCdEfGh12345678";
-    const hosted = (orgId: string, host = "services3.arcgis.com") =>
-      `https://${host}/${orgId}/arcgis/rest/services/Water/FeatureServer/3`;
-    const orgIds: Record<string, string> = { [online]: ORG, [org]: ORG };
-    const lookups: string[] = [];
-    const signIn = (url: string, portals: string[], failing: string[] = []) =>
-      signInForImportedService(url, {
-        portals,
-        token: async (portal) => {
-          if (failing.includes(portal)) throw new Error("refresh failed");
-          return `token-for-${portal}`;
-        },
-        orgId: async (portal) => {
-          lookups.push(portal);
-          return orgIds[portal];
-        },
-      });
-
-    // The user's own organisation's hosted service gets the token.
-    assert.deepEqual(await signIn(hosted(ORG), [online]), {
-      portal: online,
-      token: `token-for-${online}`,
-    });
-    assert.deepEqual(await signIn(hosted(ORG), [org]), { portal: org, token: `token-for-${org}` });
-    // Another organisation's service on the same shared hosting does not.
-    assert.equal(await signIn(hosted("ZzZzZzZz87654321"), [online, org]), null);
-    // The same holds on the unnumbered and regional hosting servers.
-    for (const host of [
-      "services.arcgis.com",
-      "services-eu1.arcgis.com",
-      "SERVICES-AP1.arcgis.com",
-    ]) {
-      assert.deepEqual(await signIn(hosted(ORG, host), [online]), {
-        portal: online,
-        token: `token-for-${online}`,
-      });
-      assert.equal(await signIn(hosted("ZzZzZzZz87654321", host), [online, org]), null);
-    }
-    // A host that only looks like the shared hosting never gets the token,
-    // even with the user's own organisation id in its path.
-    for (const host of [
-      "services-eu1.arcgis.com.evil.example",
-      "evilservices-eu1.arcgis.com",
-      "services-eu1x.arcgis.com",
-      "services-eu.arcgis.com",
-      "services-1.arcgis.com",
-      "services-eu1.evil.arcgis.com",
-      "services-eu1.arcgis.com.",
-    ]) {
-      assert.equal(await signIn(hosted(ORG, host), [online, org]), null, host);
-    }
-    // Nor does a path that carries the user's organisation id first but could
-    // be resolved into another organisation's folder by the server.
-    for (const path of [
-      `${ORG}/%2e%2e%2fZzZzZzZz87654321/arcgis/rest/services/Water/FeatureServer/3`,
-      `${ORG}/..;/ZzZzZzZz87654321/arcgis/rest/services/Water/FeatureServer/3`,
-      `${ORG}/%2E%2E%5CZzZzZzZz87654321/arcgis/rest/services/Water/FeatureServer/3`,
-      `${ORG}/arcgis;x/rest/services/Water/FeatureServer/3`,
-      `${ORG}/arcgis/rest/services/Water/FeatureServer/3/%2e%2e%2f%2e%2e%2f%2e%2e%2fZzZz`,
-    ]) {
-      const url = `https://services-eu1.arcgis.com/${path}`;
-      assert.equal(await signIn(url, [online, org]), null, path);
-    }
-    // A trailing slash is still a plain path.
-    assert.deepEqual(await signIn(`${hosted(ORG, "services-eu1.arcgis.com")}/`, [online]), {
-      portal: online,
-      token: `token-for-${online}`,
-    });
-    // Nor does any other *.arcgis.com host, an untrusted host, or plain HTTP.
-    assert.equal(
-      await signIn("https://utility.arcgis.com/usrsvcs/servers/x/rest/services/A/FeatureServer/0", [
-        online,
-      ]),
-      null,
-    );
-    assert.equal(await signIn(`${SERVICE}/3`, [online, org]), null);
-    // An Enterprise portal's own host gets its token without an organisation check.
-    const lookupsBefore = lookups.length;
-    assert.deepEqual(
-      await signIn("https://gis.example.org/server/rest/services/A/FeatureServer/0", [enterprise]),
-      { portal: enterprise, token: `token-for-${enterprise}` },
-    );
-    assert.equal(lookups.length, lookupsBefore);
-    assert.equal(
-      await signIn("http://gis.example.org/server/rest/services/A/FeatureServer/0", [enterprise]),
-      null,
-    );
-    // A session whose token cannot be read is skipped; the next one is tried.
-    assert.deepEqual(await signIn(hosted(ORG), [online, org], [online]), {
-      portal: org,
-      token: `token-for-${org}`,
-    });
-    assert.equal(await signIn(hosted(ORG), [online], [online]), null);
-  });
-
-  it("keeps a layer placed another way with its group when services move past it", () => {
-    // Project order: services S1 and S2 at the root, then group G holding file
-    // layer A. Raster R was added to G after load, so it is not ranked.
-    const layer = (id: string, groupId?: string) =>
-      geojsonLayer({ id, name: id, ...(groupId ? { groupId } : {}) });
-    useAppStore.setState({
-      layerGroups: [{ id: "g", name: "G", visible: true, collapsed: false, opacity: 1 }],
-      layers: [layer("A", "g"), layer("R", "g"), layer("S1"), layer("S2")],
-    });
-    placeImportedServiceLayers(
-      ["A"],
-      [
-        { layerId: "S1", nextLayerIds: ["A"] },
-        { layerId: "S2", nextLayerIds: ["A"] },
-      ],
-    );
-    assert.deepEqual(
-      useAppStore.getState().layers.map((item) => item.id),
-      ["S1", "S2", "A", "R"],
-    );
-  });
-
-  it("leaves a project opened mid-import untouched", async () => {
-    const actions = renderActions();
-    // The first service request: the user opens another project meanwhile.
-    onServiceRequest = () => {
-      onServiceRequest = null;
-      useAppStore.getState().loadProject(createEmptyProject("Other"), null);
-    };
-    const originalError = console.error;
-    console.error = () => {};
-    try {
-      await act(() => actions().handleImportArcgisProject());
-    } finally {
-      console.error = originalError;
-    }
-    const state = useAppStore.getState();
-    assert.equal(state.projectName, "Other");
-    assert.deepEqual(state.layers, []);
-    assert.equal(actions().arcgisImportWarnings, null);
-    // Only the first service was asked for; the rest of the old import stopped.
-    assert.ok(nativeRequests.length > 0);
-    assert.ok(
-      nativeRequests.every((url) => url.startsWith(`${SERVICE}/3`)),
-      nativeRequests.join(),
-    );
-  });
-
   it("looks up a token's organisation once, and again after a failure", async () => {
     let calls = 0;
-    const orgOf: Record<string, string> = { a: "AbCdEfGh12345678", b: "ZzZzZzZz87654321" };
+    const orgOf: Record<string, string> = { a: ORG, b: "ZzZzZzZz87654321" };
     const orgId = cachedOrgIdLookup(async (_portal, token) => {
       calls += 1;
       if (calls === 1) throw new Error("offline");
       return orgOf[token];
     });
-    assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "a"), undefined);
-    assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "a"), "AbCdEfGh12345678");
-    assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "a"), "AbCdEfGh12345678");
+    assert.equal(await orgId(online, "a"), undefined);
+    assert.equal(await orgId(online, "a"), ORG);
+    assert.equal(await orgId(online, "a"), ORG);
     assert.equal(calls, 2);
     // Another account's token on the same portal is never matched against the
     // first account's organisation.
-    assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "b"), "ZzZzZzZz87654321");
+    assert.equal(await orgId(online, "b"), "ZzZzZzZz87654321");
     assert.equal(calls, 3);
     // Only the portal's latest token is kept, so going back looks up again.
-    assert.equal(await orgId(ARCGIS_ONLINE_PORTAL, "a"), "AbCdEfGh12345678");
+    assert.equal(await orgId(online, "a"), ORG);
     assert.equal(calls, 4);
   });
 
-  it("leaves a project opened while the map settles untouched", async () => {
-    const actions = renderActions();
-    // The import waits two animation frames for the map before any service
-    // loads; the user opens another project during the first of them.
-    const originalFrame = globalThis.requestAnimationFrame;
-    let switched = false;
-    globalThis.requestAnimationFrame = (callback) =>
-      originalFrame((time) => {
-        if (!switched) {
-          switched = true;
-          useAppStore.getState().loadProject(createEmptyProject("Other"), null);
-        }
-        callback(time);
-      });
-    try {
-      await act(() => actions().handleImportArcgisProject());
-    } finally {
-      globalThis.requestAnimationFrame = originalFrame;
-    }
-    assert.ok(switched);
-    assert.equal(useAppStore.getState().projectName, "Other");
-    assert.deepEqual(useAppStore.getState().layers, []);
-    assert.deepEqual(nativeRequests, []);
-    assert.equal(actions().arcgisImportWarnings, null);
-  });
-
-  it("stops reading rasters once another project opens", async () => {
-    dialogPath = RASTER_APRX_PATH;
-    const actions = renderActions();
-    onRasterRead = () => {
-      onRasterRead = null;
-      useAppStore.getState().loadProject(createEmptyProject("Other"), null);
-    };
-    const originalError = console.error;
-    console.error = () => {};
-    try {
-      await act(() => actions().handleImportArcgisProject());
-    } finally {
-      console.error = originalError;
-    }
-    assert.equal(useAppStore.getState().projectName, "Other");
-    assert.deepEqual(useAppStore.getState().layers, []);
-    // The second raster and the service are never asked for.
-    assert.deepEqual(rasterReads, ["/data/dem.tif"]);
-    assert.deepEqual(nativeRequests, []);
-    assert.equal(actions().arcgisImportWarnings, null);
-  });
-
   it("withholds a renewed token from another account's organisation", async () => {
-    const ORG = "AbCdEfGh12345678";
-    const hosted = `https://services3.arcgis.com/${ORG}/arcgis/rest/services/Water/FeatureServer/3`;
     const orgOf: Record<string, string> = { a: ORG, b: "ZzZzZzZz87654321" };
     let current = "a";
     const provider = serviceTokenProvider(
-      hosted,
-      ARCGIS_ONLINE_PORTAL,
+      hostedIn(ORG),
+      online,
       async () => current,
       cachedOrgIdLookup(async (_portal, token) => orgOf[token]),
     );
@@ -696,74 +643,12 @@ describe("ArcGIS Pro feature service import on desktop", () => {
     current = "b";
     assert.equal(await provider(), undefined);
     // An Enterprise portal's own host keeps receiving its renewed token.
-    const enterprise = serviceTokenProvider(
+    const ownHost = serviceTokenProvider(
       "https://gis.example.org/server/rest/services/A/FeatureServer/0",
-      "https://gis.example.org/portal",
+      enterprise,
       async () => current,
       async () => undefined,
     );
-    assert.equal(await enterprise(), "b");
-  });
-
-  it("leaves a project opened mid-import untouched when nothing is left to load", async () => {
-    dialogPath = TILED_APRX_PATH;
-    const actions = renderActions();
-    const originalFrame = globalThis.requestAnimationFrame;
-    let switched = false;
-    globalThis.requestAnimationFrame = (callback) =>
-      originalFrame((time) => {
-        if (!switched) {
-          switched = true;
-          useAppStore.getState().loadProject(createEmptyProject("Other"), null);
-        }
-        callback(time);
-      });
-    try {
-      await act(() => actions().handleImportArcgisProject());
-    } finally {
-      globalThis.requestAnimationFrame = originalFrame;
-    }
-    assert.ok(switched);
-    assert.equal(useAppStore.getState().projectName, "Other");
-    assert.equal(useAppStore.getState().isDirty, false);
-    assert.equal(actions().arcgisImportWarnings, null);
-  });
-
-  it("keeps a project opened while a raster loads, layers and all", async () => {
-    dialogPath = RASTER_APRX_PATH;
-    allowRasters = true;
-    // The switch lands inside the raster load: the first time the import asks
-    // for the map after the first raster file was granted.
-    let armed = false;
-    onRasterRead = () => {
-      onRasterRead = null;
-      armed = true;
-    };
-    const mapControllerRef = {
-      get current() {
-        if (armed) {
-          armed = false;
-          const other = createEmptyProject("Other");
-          other.layers = [geojsonLayer({ id: "their-layer", name: "Their layer" })];
-          useAppStore.getState().loadProject(other, null);
-        }
-        return null;
-      },
-    } as Parameters<typeof useProjectFileActions>[0];
-    const actions = renderActions(mapControllerRef);
-    const originalError = console.error;
-    console.error = () => {};
-    try {
-      await act(() => actions().handleImportArcgisProject());
-    } finally {
-      console.error = originalError;
-    }
-    assert.equal(useAppStore.getState().projectName, "Other");
-    assert.deepEqual(
-      useAppStore.getState().layers.map((layer) => layer.id),
-      ["their-layer"],
-    );
-    assert.deepEqual(rasterReads, ["/data/dem.tif"]);
-    assert.deepEqual(nativeRequests, []);
+    assert.equal(await ownHost(), "b");
   });
 });

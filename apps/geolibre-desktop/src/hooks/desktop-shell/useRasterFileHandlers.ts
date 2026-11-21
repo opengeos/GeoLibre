@@ -18,6 +18,7 @@ import type { TFunction } from "i18next";
 import { useEffect, useRef, type RefObject } from "react";
 import { dismissNotification, notify } from "../../lib/notify";
 import { notifyUnrestorableRasters } from "../../lib/local-raster-notices";
+import { startProjectImportSession } from "../../lib/project-import-session";
 import { isTauri, pickLocalRasterFiles, readRasterFileAtPath } from "../../lib/tauri-io";
 import { createAppAPI } from "../usePlugins";
 
@@ -69,6 +70,13 @@ export function useRasterFileHandlers(
     setNonTiledRasterHandler(async ({ name, bytesAreRemote, readBytes, dismiss }) => {
       const controller = new AbortController();
       conversions.add(controller);
+      // The converted raster belongs to the project it came from: opening
+      // another one cancels the conversion, so the result never lands in (or
+      // reports an error to) the project that replaced it. The session judges
+      // replacement by the same rule as a project import; the controller also
+      // carries the notice's Cancel and the unmount.
+      const session = startProjectImportSession();
+      session.signal.addEventListener("abort", () => controller.abort(), { once: true });
       let notice: string | undefined;
       try {
         // A remote source gets a single up-front prompt that names the download:
@@ -121,6 +129,7 @@ export function useRasterFileHandlers(
           return;
         }
         const info = await readGeoTiffInfo(bytes);
+        controller.signal.throwIfAborted();
         if (!info.ok) throw new Error("Not a readable GeoTIFF.");
         const samples = geoTiffSampleCount(info);
         if (exceedsBrowserCogConversionLimit(samples)) {
@@ -170,7 +179,13 @@ export function useRasterFileHandlers(
         const file = new File([cog as BlobPart], name, {
           type: "image/tiff",
         });
-        await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
+        await addRasterToMap(createAppAPI(mapControllerRef), file, {
+          name,
+          signal: controller.signal,
+        });
+        // A replaced project may reuse the original raster's id, so the
+        // dismissal below must not run against it.
+        controller.signal.throwIfAborted();
         // Drop the failed layer only after the replacement is fully loaded, so
         // any failure above (conversion or re-add) leaves the original errored
         // layer (and its message) in place.
@@ -180,6 +195,7 @@ export function useRasterFileHandlers(
         console.error("[GeoLibre] Failed to convert GeoTIFF to COG", error);
         notify.error(translateRef.current("raster.cogConvertFailed", { name }), { error });
       } finally {
+        session.dispose();
         if (notice) dismissNotification(notice);
         conversions.delete(controller);
       }

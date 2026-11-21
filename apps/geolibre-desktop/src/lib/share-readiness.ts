@@ -334,7 +334,14 @@ function classifyReference(url: string): Classification | null {
   if (value.startsWith("blob:")) {
     return { status: "local", reason: "local-file", probeUrl: null };
   }
-  if (value.startsWith("file://") || isAbsoluteFilesystemPath(value)) {
+  // A UNC share (`//server/share`, or with backslashes) is not an absolute
+  // local path, but it is still a file on this machine's network, not one a
+  // recipient can open. A protocol-relative web URL (`//cdn.example.com/x.json`) reads the same and
+  // is flagged too, as it was when every leading `/` meant a local path: the two
+  // cannot be told apart, and probing a UNC host over HTTP could make Windows
+  // authenticate against it. It does not load on desktop either, where it
+  // resolves against the app's own scheme.
+  if (value.startsWith("file://") || /^[\\/]{2}/.test(value) || isAbsoluteFilesystemPath(value)) {
     return { status: "local", reason: "local-file", probeUrl: null };
   }
   if (!/^https?:\/\//i.test(value)) {

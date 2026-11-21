@@ -179,6 +179,20 @@ export interface LayersSlice {
   reconcileLevelLinks: (updates: { id: string; levelFilter: LayerLevelFilter }[]) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
   moveLayer: (id: string, targetIndex: number) => void;
+  /**
+   * Rearrange layers into `ids` order (store order: bottom first) in one
+   * update. The listed layers take the positions they already occupy between
+   * them, and layers left out of `ids` are not reordered by that step; unknown
+   * and repeated ids are ignored. Group members are then pulled back into one
+   * contiguous block per group, anchored at the group's bottom-most member.
+   * Contiguity wins over `ids`: a group member listed apart from its group
+   * ends up in the group's block, and an unlisted layer between two members
+   * of one group moves out of the way. One `set()`, so it records at most one
+   * undo step; call it
+   * through `withoutHistory` when the order is not the user's own edit (an
+   * import placing the layers it added).
+   */
+  applyLayerOrder: (ids: readonly string[]) => void;
   moveLayersRelative: (
     layerIds: string[],
     targetLayerId: string,
@@ -494,10 +508,35 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
       const [layer] = next.splice(currentIndex, 1);
       const nextIndex = Math.min(Math.max(targetIndex, 0), next.length);
       next.splice(nextIndex, 0, layer);
-      if (next.every((item, index) => item.id === s.layers[index]?.id)) {
+      // Moving a group member out of its block would split the group; pull its
+      // members back together as every other reorder does.
+      const normalized = normalizeGroupContiguity(next);
+      if (normalized.every((item, index) => item.id === s.layers[index]?.id)) {
         return s;
       }
-      return { layers: next, isDirty: true };
+      return { layers: normalized, isDirty: true };
+    }),
+
+  applyLayerOrder: (ids) =>
+    set((s) => {
+      const indexById = new Map(s.layers.map((layer, index) => [layer.id, index]));
+      const listed: number[] = [];
+      const seen = new Set<string>();
+      for (const id of ids) {
+        const index = indexById.get(id);
+        if (index === undefined || seen.has(id)) continue;
+        seen.add(id);
+        listed.push(index);
+      }
+      // The slots the listed layers hold now, filled bottom-up in `ids` order.
+      const slots = [...listed].sort((a, b) => a - b);
+      const next = [...s.layers];
+      slots.forEach((slot, position) => {
+        next[slot] = s.layers[listed[position]];
+      });
+      const normalized = normalizeGroupContiguity(next);
+      if (normalized.every((layer, index) => layer.id === s.layers[index]?.id)) return s;
+      return { layers: normalized, isDirty: true };
     }),
 
   moveLayersRelative: (layerIds, targetLayerId, position) =>

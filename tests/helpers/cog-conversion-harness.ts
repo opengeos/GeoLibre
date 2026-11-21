@@ -28,8 +28,23 @@ export async function readGeoTiffInfo() {
   return { ok: true, width: 32, height: 32, bands: 1, tiled: false };
 }
 
-export async function addRasterToMap() {
+/** Options each `addRasterToMap` call received, in call order. */
+export const rasterAdds: { signal?: AbortSignal }[] = [];
+/** When set, `addRasterToMap` waits until the test resolves its entry here. */
+export const heldRasterAdds: PromiseWithResolvers<void>[] = [];
+let holdRasterAdds = false;
+
+export function setHoldRasterAdds(hold: boolean) {
+  holdRasterAdds = hold;
+}
+
+export async function addRasterToMap(_app: unknown, _file: unknown, options = {}) {
   addedRasters += 1;
+  rasterAdds.push(options);
+  if (!holdRasterAdds) return;
+  const held = Promise.withResolvers<void>();
+  heldRasterAdds.push(held);
+  await held.promise;
 }
 
 export function saveBinaryFileWithFallback() {
@@ -42,6 +57,9 @@ export function resetCogHarness() {
   conversions.length = 0;
   saves.length = 0;
   addedRasters = 0;
+  rasterAdds.length = 0;
+  heldRasterAdds.length = 0;
+  holdRasterAdds = false;
 }
 
 // Substitute only the I/O boundaries of the real hook and dialog. React effects,

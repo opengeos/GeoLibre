@@ -2,7 +2,7 @@ import { expect, test, type Page, type Route } from "./test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { strToU8, zipSync } from "fflate";
+import { aprx, groupLayer, hostedFeatureLayer } from "../tests/helpers/arcgis-aprx-fixtures";
 import { waitForRenderedFeature } from "./helpers";
 
 /**
@@ -24,69 +24,16 @@ const POINTS: Record<string, [number, number]> = {
   "5": [-74, 36],
 };
 
-function hostedLayer(name: string, root: string, dataset: string, extra = {}) {
-  return {
-    type: "CIMFeatureLayer",
-    name,
-    uRI: `CIMPATH=map/${name.toLowerCase()}.json`,
-    visibility: true,
-    featureTable: {
-      type: "CIMFeatureTable",
-      dataConnection: {
-        type: "CIMStandardDataConnection",
-        // A token in the connection string must never be sent or saved.
-        workspaceConnectionString: `URL=${root}?token=${SECRET}`,
-        workspaceFactory: "FeatureService",
-        dataset,
-        datasetType: "esriDTFeatureClass",
-      },
-    },
-    ...extra,
-  };
-}
-
+/** Top first, as ArcGIS Pro lists them. A token in a connection string must never be sent or saved. */
 function buildAprx(): Uint8Array {
-  const member = (value: unknown) => strToU8(JSON.stringify(value));
-  return zipSync({
-    "GISProject.json": member({
-      projectItems: [{ itemType: "Map", catalogPath: "CIMPATH=map/map.json" }],
-    }),
-    "map/map.json": member({
-      type: "CIMMapDocument",
-      mapDefinition: {
-        type: "CIMMap",
-        name: "Water network",
-        mapType: "Map",
-        defaultExtent: {
-          xmin: -80,
-          ymin: 30,
-          xmax: -70,
-          ymax: 40,
-          spatialReference: { wkid: 4326 },
-        },
-        layers: ["CIMPATH=map/utilities.json", "CIMPATH=map/hydrants.json"],
-      },
-    }),
-    "map/utilities.json": member({
-      type: "CIMGroupLayer",
-      name: "Utilities",
-      uRI: "CIMPATH=map/utilities.json",
-      layers: ["CIMPATH=map/network.json"],
-    }),
-    "map/network.json": member({
-      type: "CIMGroupLayer",
-      name: "Network",
-      uRI: "CIMPATH=map/network.json",
-      layers: ["CIMPATH=map/mains.json", "CIMPATH=map/valves.json"],
-    }),
-    "map/mains.json": member(hostedLayer("Mains", SERVICE, "3")),
-    "map/valves.json": member(
-      hostedLayer("Valves", SERVICE, "5", {
-        visibility: false,
-        transparency: 40,
-      }),
-    ),
-    "map/hydrants.json": member(hostedLayer("Hydrants", DOWN_SERVICE, "1")),
+  const hosted = (name: string, root: string, dataset: string, extra = {}) =>
+    hostedFeatureLayer(name, `${root}?token=${SECRET}`, dataset, extra);
+  return aprx(["Utilities", "Hydrants"], {
+    Utilities: groupLayer("Utilities", ["Network"]),
+    Network: groupLayer("Network", ["Mains", "Valves"]),
+    Mains: hosted("Mains", SERVICE, "3"),
+    Valves: hosted("Valves", SERVICE, "5", { visibility: false, transparency: 40 }),
+    Hydrants: hosted("Hydrants", DOWN_SERVICE, "1"),
   });
 }
 
@@ -249,7 +196,8 @@ test("opens FeatureServer sublayers from an ArcGIS Pro project and keeps them ac
     const byName = new Map(saved.layers.map((layer) => [layer.name, layer]));
     const mains = byName.get("Mains")!;
     const valves = byName.get("Valves")!;
-    expect(saved.layers.map((layer) => layer.name)).toEqual(["Mains", "Valves"]);
+    // ArcGIS Pro lists Mains on top; the store and the file keep bottom first.
+    expect(saved.layers.map((layer) => layer.name)).toEqual(["Valves", "Mains"]);
     expect(mains).toMatchObject({
       visible: true,
       opacity: 1,

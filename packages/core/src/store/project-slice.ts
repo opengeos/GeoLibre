@@ -62,6 +62,14 @@ export interface ProjectSlice {
   projectName: string;
   projectPath: string | null;
   projectGeneration: number;
+  /**
+   * Counts the times a whole project replaced the open one (`loadProject`,
+   * `newProject`). Unlike `projectGeneration`, which a collaboration snapshot
+   * also bumps when it refreshes the open project in place, this changes only
+   * on a real replacement, so work that belongs to the open project (an import
+   * still adding layers) can tell the two apart.
+   */
+  projectLoadCount: number;
   projectLoaded: boolean;
   isDirty: boolean;
   projectPlugins: ProjectPluginState | null;
@@ -118,6 +126,7 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
   projectName: DEFAULT_PROJECT_NAME,
   projectPath: null,
   projectGeneration: 0,
+  projectLoadCount: 0,
   projectLoaded: false,
   isDirty: false,
   projectPlugins: null,
@@ -183,6 +192,7 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
       hoverTooltipsEnabled: true,
       projectPath: null,
       projectGeneration: s.projectGeneration + 1,
+      projectLoadCount: s.projectLoadCount + 1,
       projectLoaded: false,
       isDirty: false,
       selectedLayerId: null,
@@ -268,6 +278,7 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
       hoverTooltipsEnabled: true,
       projectPath: path,
       projectGeneration: s.projectGeneration + 1,
+      projectLoadCount: s.projectLoadCount + 1,
       projectLoaded: true,
       isDirty: false,
       selectedLayerId,
