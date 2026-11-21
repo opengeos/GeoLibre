@@ -768,10 +768,12 @@ function resolveDataSource(
     if (!workspace || !dataset) return { reason: "missing-source" };
     const gdbPath = resolveRelativePath(workspace, projectPath);
     // The path comes from the project file and the desktop sidecar does not
-    // confine its reads, so only a local folder named `*.gdb` is handed to it:
-    // a crafted connection must not read an arbitrary folder, or a URL or GDAL
-    // virtual path (`/vsicurl/`, `/vsizip/`), into the saved project. Anything
-    // else stays listed as a geodatabase the import did not load.
+    // confine its reads, so only a local folder named `*.gdb` is handed to it,
+    // never a plain folder, a URL or a GDAL virtual path (`/vsicurl/`,
+    // `/vsizip/`). Any local geodatabase the project names is read, wherever it
+    // is, as with the project's other local files: ArcGIS Pro projects often
+    // use a shared geodatabase outside their own folder. Anything else stays
+    // listed as a geodatabase the import did not load.
     if (!isLocalFileGeodatabasePath(gdbPath)) return { reason: "file-geodatabase" };
     return {
       fileGeodatabase: {

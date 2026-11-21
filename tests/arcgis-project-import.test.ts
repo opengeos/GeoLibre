@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 import { DEFAULT_LAYER_STYLE } from "@geolibre/core";
 import { strToU8, zipSync } from "fflate";
 import {
@@ -1370,6 +1370,36 @@ describe("ArcGIS Pro File Geodatabase layers", () => {
       assert.ok(result.project.layers.every((layer) => layer.geojson === undefined));
     });
   }
+
+  it("does not log an abandoned listing as a failed read", async () => {
+    const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {
+      readFileGeodatabase: true,
+    });
+    const controller = new AbortController();
+    const warn = mock.method(console, "warn", () => {});
+    try {
+      await assert.rejects(
+        loadArcgisFileGeodatabaseLayers(
+          result,
+          {
+            start: async () => {},
+            // As the sidecar client does: the wait rejects with the abort.
+            listLayers: async (_gdbPath, signal) => {
+              controller.abort();
+              signal?.throwIfAborted();
+              return [];
+            },
+            readLayer: async () => assert.fail("must not read"),
+          },
+          controller.signal,
+        ),
+        { name: "AbortError" },
+      );
+      assert.equal(warn.mock.callCount(), 0);
+    } finally {
+      warn.mock.restore();
+    }
+  });
 
   it("reports every layer as unreadable when the sidecar cannot start", async () => {
     const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {

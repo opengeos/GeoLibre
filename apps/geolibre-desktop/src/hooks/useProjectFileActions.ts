@@ -952,10 +952,14 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       // Read before the project loads, so a feature class that cannot be read
       // is dropped (with its now-empty groups) rather than left as an empty
       // layer, and the rest keep their table-of-contents order.
-      // The drafts the user agreed to discard, so the question comes before
-      // the geodatabase reads (which can take minutes) instead of after them,
-      // and is only asked again if the drafts changed while the reads ran.
-      let approvedDrafts: unknown = null;
+      //
+      // The discard-drafts question comes before those reads (which can take
+      // minutes) rather than after them. `approvedDrafts` holds the drafts
+      // object the user agreed to discard; the store replaces it on every
+      // edit, so the check after the reads asks again only if the drafts
+      // changed meanwhile. Without geodatabase layers it stays undefined,
+      // which never matches, and the question is asked once as before.
+      let approvedDrafts: object | undefined;
       if (imported.fileGeodatabaseLayers.length > 0 && !session.superseded()) {
         if (!confirmDiscardAttributeDrafts()) return;
         approvedDrafts = useAppStore.getState().ui.attributeTableDrafts;

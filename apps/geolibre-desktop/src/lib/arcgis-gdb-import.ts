@@ -55,7 +55,10 @@ export async function loadArcgisFileGeodatabaseLayers(
     let listing = listings.get(gdbPath);
     if (!listing) {
       listing = reader.listLayers(gdbPath, signal).catch((error: unknown) => {
-        console.warn(`[GeoLibre] Could not read File Geodatabase "${gdbPath}"`, error);
+        // An abandoned import rejects right after this; it is not a failed read.
+        if (!signal?.aborted) {
+          console.warn(`[GeoLibre] Could not read File Geodatabase "${gdbPath}"`, error);
+        }
         return null;
       });
       listings.set(gdbPath, listing);
