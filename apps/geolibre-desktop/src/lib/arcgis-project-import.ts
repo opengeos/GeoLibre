@@ -1030,7 +1030,9 @@ function isNetworkPath(path: string): boolean {
  * not one of GDAL's `/vsi*` virtual file systems.
  */
 function isLocalFileGeodatabasePath(path: string): boolean {
-  if (!isAbsolutePath(path) || isNetworkPath(path)) return false;
+  // UNC paths never get here: `resolveDataSource` refuses the raw workspace as
+  // "network-path" first, and normalising collapses the leading `//` anyway.
+  if (!isAbsolutePath(path)) return false;
   const segments = path.replace(/\\/g, "/").split("/");
   if (/^\/vsi[a-z0-9_]*\//i.test(path)) return false;
   if (segments.some((segment) => /^[a-z][a-z0-9+.-]+:$/i.test(segment))) return false;
