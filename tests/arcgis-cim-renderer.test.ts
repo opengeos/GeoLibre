@@ -522,6 +522,15 @@ describe("CIM renderer refusals", () => {
     ["a null upper bound", brokenBound(null), [{ code: "no-classes" }]],
     ["a text upper bound", brokenBound("10"), [{ code: "no-classes" }]],
     ["a boolean upper bound", brokenBound(false), [{ code: "no-classes" }]],
+    [
+      "a break entry that is not an object",
+      (() => {
+        const renderer = density();
+        (renderer.breaks as unknown[]).splice(1, 0, "20");
+        return renderer;
+      })(),
+      [{ code: "no-classes" }],
+    ],
     ["a text minimum", density({ minimumBreak: "0" }), [{ code: "no-classes" }]],
   ];
   for (const [name, renderer, issues] of cases) {
@@ -809,6 +818,10 @@ describe("CIM symbols and defaults as Pro writes them", () => {
       assert.equal(result.translated, false);
       assert.deepEqual(result.issues, [{ code: "no-classes" }]);
     }
+    // So is a value entry that is not an object at all.
+    const notAnObject = zoning();
+    (notAnObject.groups[0].classes[2].values as unknown[]).push("R9");
+    assert.deepEqual(translateCimRenderer(notAnObject).issues, [{ code: "no-classes" }]);
   });
 
   it("matches numeric unique values by their text, as ArcGIS stores them", () => {

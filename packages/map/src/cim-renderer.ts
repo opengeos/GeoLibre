@@ -301,9 +301,10 @@ function uniqueValueRenderer(renderer: CimObject): CimRendererTranslation {
       // Pro writes every value as a string (a null as "<Null>"); a number or
       // boolean from hand-written CIM is read as its text, which is what ArcGIS
       // would have stored, and a JSON null as "<Null>".
-      const stored = arrayValue(valueClass.values)
-        .filter(isObject)
-        .map((value) => arrayValue(value.fieldValues)[0]);
+      // An entry that is not a value object reads as unmatchable, below.
+      const stored = arrayValue(valueClass.values).map((value) =>
+        isObject(value) ? arrayValue(value.fieldValues)[0] : undefined,
+      );
       const values = stored.map((value) =>
         value === null
           ? CIM_NULL_VALUE
@@ -357,16 +358,20 @@ function classBreaksRenderer(renderer: CimObject): CimRendererTranslation {
     return untranslated(renderer, { code: "exclusion" });
   }
   const field = stringValue(renderer.field);
-  const breaks = arrayValue(renderer.breaks).filter(isObject);
+  const listed = arrayValue(renderer.breaks);
+  const breaks = listed.filter(isObject);
   // An upper bound or minimum of 0 is left out of the file, like any default.
   // A bound that is present but not a number is refused, not read as 0.
   const bound = (owner: CimObject, key: string) =>
     owner[key] === undefined ? 0 : numberValue(owner[key]);
   const uppers = breaks.map((classBreak) => bound(classBreak, "upperBound"));
   const minimumBreak = bound(renderer, "minimumBreak");
+  // A break that is not an object is refused rather than skipped, since the
+  // breaks after it would take over its range.
   if (
     !field ||
     breaks.length === 0 ||
+    breaks.length !== listed.length ||
     minimumBreak === null ||
     !uppers.every((upper): upper is number => upper !== null) ||
     minimumBreak > uppers[0] ||
