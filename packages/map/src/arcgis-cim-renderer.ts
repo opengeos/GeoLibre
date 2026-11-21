@@ -204,10 +204,10 @@ export function translateCimSymbol(reference: unknown): CimRendererTranslation {
  * triple as RGB silently produces the wrong colour. Channels are per the CIM
  * spec (Esri/cim-spec docs/v3/CIMColor.md): RGB 0-255, CMYK/Gray/S/V 0-100,
  * hue 0-360, CIELAB L 0-100 with signed a/b, alpha 0-100. RGB, Gray, CMYK,
- * HSV and LAB are read; any other subclass (HSL, XYZ, Spot, ...) and any
- * channel that is not a JSON number (`null`, `""`, `true`, or a numeric
- * string such as `"255"`, which Pro never writes) return null, so the caller decides what to do rather
- * than drawing an invented colour.
+ * HSV and LAB are read. Any other subclass (HSL, XYZ, Spot, ...) returns
+ * null, and so does any channel that is not a JSON number: `null`, `""`,
+ * `true`, or a numeric string such as `"255"`, which Pro never writes. The
+ * caller then decides what to do rather than drawing an invented colour.
  */
 export function cimColor(value: unknown): CimColor | null {
   const color = objectValue(value);
