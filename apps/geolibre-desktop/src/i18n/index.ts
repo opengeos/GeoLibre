@@ -16,6 +16,7 @@ import {
   loadInstalledLanguagePack,
   saveInstalledLanguagePack,
 } from "../lib/language-pack-store";
+import { installCountFormatting } from "./count-format";
 import { DEFAULT_LANGUAGE, LANGUAGE_NAMES, languageDirection, resolveLanguage } from "./languages";
 import enTranslation from "./locales/en.json";
 
@@ -368,12 +369,17 @@ export const i18nReady: Promise<unknown> = (async () => {
       // React already escapes rendered values, so i18next double-escaping would
       // mangle any text that legitimately contains `<`, `&`, etc.
       escapeValue: false,
+      // Pass every interpolated value through `format`, so
+      // `installCountFormatting` can group the digits of `{{count}}` and
+      // `{{total}}` by locale without a `, number` on each catalog string.
+      alwaysFormat: true,
     },
     // We gate the first render on `i18nReady`, so the initial catalog is always
     // present by mount — no Suspense boundary needed.
     react: { useSuspense: false },
     returnNull: false,
   });
+  installCountFormatting(i18n);
   await applyPersistedLanguagePack(effectiveLanguage);
   if (catalogFailed) {
     // Otherwise the app simply opens in English with no hint why. Worded in
