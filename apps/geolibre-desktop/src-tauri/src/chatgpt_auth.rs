@@ -834,20 +834,34 @@ impl Session {
         }
     }
 
-    /// Forgets the tokens here and in the keychain, keeping the registration.
-    fn sign_out_locally(&mut self) -> Option<Tokens> {
+    /// Clears in-memory token state and returns the registration snapshot to
+    /// persist (plus keychain deletion) on a blocking worker via
+    /// `spawn_blocking`. Callers hold the async session mutex across that
+    /// persistence so concurrent sign-ins and sign-outs stay strictly ordered
+    /// on the keychain while blocking disk/keychain I/O stays off the Tokio
+    /// executor.
+    fn clear_signed_in_state(
+        &mut self,
+    ) -> (Option<Tokens>, Option<(PathBuf, Option<Registration>)>) {
         let tokens = self.tokens.take();
         if let Some(reg) = self.reg.as_mut() {
             reg.signed_in = false;
         }
-        if let Some(dir) = &self.dir {
-            let _ = write_registration(dir, self.reg.as_ref());
-        }
-        let _ = keychain_delete();
+        let reg_write = self.dir.clone().map(|dir| (dir, self.reg.clone()));
         self.in_keychain = false;
         self.generation += 1;
-        tokens
+        (tokens, reg_write)
     }
+}
+
+async fn persist_sign_out(reg_write: Option<(PathBuf, Option<Registration>)>) {
+    let _ = tauri::async_runtime::spawn_blocking(move || {
+        if let Some((dir, reg)) = reg_write {
+            let _ = write_registration(&dir, reg.as_ref());
+        }
+        let _ = keychain_delete();
+    })
+    .await;
 }
 
 /// A request's cancellation: a flag, and a wake-up for the wait it interrupts.
@@ -999,7 +1013,8 @@ async fn fresh_access_token(session: &mut Session, force: bool) -> Result<String
     let grant = match parse_grant(status, &body) {
         Ok(grant) => grant,
         Err(GrantError::Unusable) => {
-            session.sign_out_locally();
+            let (_, reg_write) = session.clear_signed_in_state();
+            persist_sign_out(reg_write).await;
             return Err(GrantError::Unusable.message("Renewing the ChatGPT sign-in"));
         }
         Err(e) => return Err(e.message("Renewing the ChatGPT sign-in")),
@@ -1331,26 +1346,41 @@ pub async fn chatgpt_sign_in_start(
     let _starting = state.starting.lock().await;
     state.cancel_login();
     let generation = state.login_generation.load(Ordering::SeqCst);
-    let (dir, saved) = {
+    let (dir, saved, old_to_revoke, cleanup_err) = {
         let mut session = state.session.lock().await;
         ensure_loaded(&mut session, &app).await?;
+        let dir = session.dir.clone().ok_or("No config folder")?;
+        let mut revoke_info: Option<(String, Tokens)> = None;
+        let mut cleanup_err: Option<String> = None;
         if another_account.unwrap_or(false) && session.reg.is_some() {
-            let old = session.sign_out_locally();
+            let (old, _) = session.clear_signed_in_state();
             let client_id = session.reg.take().map(|r| r.client_id).unwrap_or_default();
-            if let Some(dir) = &session.dir {
-                write_registration(dir, None)?;
-            }
             if let Some(old) = old {
-                tauri::async_runtime::spawn(async move {
-                    revoke(&client_id, &old.refresh_token).await;
-                });
+                revoke_info = Some((client_id, old));
+            }
+            let reg_dir = dir.clone();
+            let write_result = tauri::async_runtime::spawn_blocking(move || {
+                let _ = keychain_delete();
+                write_registration(&reg_dir, None)?;
+                Ok::<(), String>(())
+            })
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(|res| res);
+            if let Err(err) = write_result {
+                cleanup_err = Some(err);
             }
         }
-        (
-            session.dir.clone().ok_or("No config folder")?,
-            session.reg.clone(),
-        )
+        (dir, session.reg.clone(), revoke_info, cleanup_err)
     };
+    if let Some((client_id, old)) = old_to_revoke {
+        tauri::async_runtime::spawn(async move {
+            revoke(&client_id, &old.refresh_token).await;
+        });
+    }
+    if let Some(err) = cleanup_err {
+        return Err(err);
+    }
     let host = host_id(&dir)?;
     let (listener, port) = TcpListener::bind(("127.0.0.1", PORT))
         .or_else(|_| TcpListener::bind(("127.0.0.1", 0)))
@@ -1442,7 +1472,8 @@ pub async fn chatgpt_sign_out(
     forget: Option<bool>,
 ) -> Result<ChatGptSignOut, String> {
     state.cancel_login();
-    let (client_id, tokens) = {
+    let forget = forget.unwrap_or(false);
+    let (client_id, tokens, cleanup_err) = {
         let mut session = state.session.lock().await;
         ensure_loaded(&mut session, &app).await?;
         let client_id = session
@@ -1450,19 +1481,34 @@ pub async fn chatgpt_sign_out(
             .as_ref()
             .map(|r| r.client_id.clone())
             .unwrap_or_default();
-        let tokens = session.sign_out_locally();
-        if forget.unwrap_or(false) {
+        let (tokens, mut reg_write) = session.clear_signed_in_state();
+        if forget {
             session.reg = None;
-            if let Some(dir) = &session.dir {
-                write_registration(dir, None)?;
-            }
+            reg_write = session.dir.clone().map(|dir| (dir, None));
         }
-        (client_id, tokens)
+        let write_result = tauri::async_runtime::spawn_blocking(move || {
+            let _ = keychain_delete();
+            if let Some((dir, reg)) = reg_write {
+                if forget {
+                    write_registration(&dir, None)?;
+                } else {
+                    let _ = write_registration(&dir, reg.as_ref());
+                }
+            }
+            Ok::<(), String>(())
+        })
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|res| res);
+        (client_id, tokens, write_result.err())
     };
     let revoked = match tokens {
         Some(tokens) => revoke(&client_id, &tokens.refresh_token).await,
         None => true,
     };
+    if let Some(err) = cleanup_err {
+        return Err(err);
+    }
     Ok(ChatGptSignOut { revoked })
 }
 

@@ -15,7 +15,7 @@
 
 use std::collections::HashMap;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use deadpool_postgres::{Hook, HookError, Manager, ManagerConfig, Pool, RecyclingMethod};
@@ -402,7 +402,11 @@ fn evict_idle_pools(pools: &mut HashMap<String, Arc<PoolSlot>>, keep: &Arc<PoolS
 }
 
 async fn connect(connection: &str) -> Result<Arc<PoolEntry>, String> {
-    let entry = build_pool(connection)?;
+    let conn_str = connection.to_string();
+    // Offload OS root-store and custom sslrootcert reads from the Tokio worker.
+    let entry = tauri::async_runtime::spawn_blocking(move || build_pool(&conn_str))
+        .await
+        .map_err(|error| format!("Could not create the PostgreSQL connection pool: {error}"))??;
     // Fail the connect here with a clear message rather than on the first tile.
     let client = entry.pool.get().await.map_err(pool_error)?;
     client
@@ -462,10 +466,25 @@ fn build_pool(connection: &str) -> Result<PoolEntry, String> {
 
 async fn tile_plan(entry: &Arc<PoolEntry>, key: &SourceKey) -> Result<Arc<TilePlan>, String> {
     let cell = Arc::clone(entry.plans.lock().await.entry(key.clone()).or_default());
-    let plan = cell
+    let plan = match cell
         .get_or_try_init(|| build_tile_plan(entry, key, UNCLIPPED_PLAN_RETRY))
         .await
-        .map(Arc::clone)?;
+    {
+        Ok(plan) => Arc::clone(plan),
+        Err(error) => {
+            // Remove the failed empty cell only when no other task holds or
+            // initialized it (only `plans` and our local `cell` remain).
+            let mut plans = entry.plans.lock().await;
+            if plans.get(key).is_some_and(|current| {
+                Arc::ptr_eq(current, &cell)
+                    && !cell.initialized()
+                    && Arc::strong_count(&cell) == 2
+            }) {
+                plans.remove(key);
+            }
+            return Err(error);
+        }
+    };
     // An unclipped plan stays in use while the extent is retried in the
     // background: rebuilding inline would stall every tile of the layer for
     // as long as the (possibly full-scan) extent query runs.
@@ -906,9 +925,7 @@ impl TlsRequirement {
 
     fn roots(&self) -> Result<RootCertStore, String> {
         let Some(path) = &self.root_cert else {
-            return Ok(RootCertStore {
-                roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
-            });
+            return Ok(build_default_root_store(native_root_certs()));
         };
         if !crate::is_safe_absolute_path(path) {
             return Err("sslrootcert must be an absolute local certificate file path".to_string());
@@ -967,6 +984,32 @@ impl TlsRequirement {
         };
         Ok(MakeRustlsConnect::new(config))
     }
+}
+
+fn native_root_certs() -> &'static [CertificateDer<'static>] {
+    static NATIVE_ROOTS: OnceLock<Vec<CertificateDer<'static>>> = OnceLock::new();
+    NATIVE_ROOTS
+        .get_or_init(|| {
+            let loaded = rustls_native_certs::load_native_certs();
+            if !loaded.errors.is_empty() {
+                eprintln!(
+                    "postgis_tiles: encountered {} error(s) loading OS native root certificates",
+                    loaded.errors.len()
+                );
+            }
+            loaded.certs
+        })
+        .as_slice()
+}
+
+fn build_default_root_store(native_certs: &[CertificateDer<'static>]) -> RootCertStore {
+    let mut roots = RootCertStore {
+        roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+    };
+    // Also trust the OS certificate store so enterprise/corporate CAs work
+    // without requiring a manual `sslrootcert` file.
+    roots.add_parsable_certificates(native_certs.iter().cloned());
+    roots
 }
 
 /// Remove the named parameters from a libpq connection string, in either the
@@ -1484,5 +1527,49 @@ mod tests {
         assert_eq!(parse_default_srid(Some("4326")), Ok(Some(4326)));
         assert!(parse_default_srid(Some("0")).is_err());
         assert!(parse_default_srid(Some("abc")).is_err());
+    }
+
+    #[test]
+    fn tls_roots_includes_webpki_and_native_store_without_error() {
+        // Self-signed EC P-256 test CA certificate (no private key retained).
+        const TEST_CA_DER: &[u8] = &[
+            0x30, 0x82, 0x01, 0x6c, 0x30, 0x82, 0x01, 0x12, 0xa0, 0x03, 0x02, 0x01, 0x02, 0x02,
+            0x14, 0x52, 0xe7, 0x24, 0x17, 0xbf, 0x04, 0xd0, 0x12, 0x0f, 0x1b, 0xee, 0x8f, 0x3d,
+            0xab, 0xc0, 0xdb, 0xce, 0x63, 0x3d, 0x47, 0x30, 0x0a, 0x06, 0x08, 0x2a, 0x86, 0x48,
+            0xce, 0x3d, 0x04, 0x03, 0x02, 0x30, 0x1b, 0x31, 0x19, 0x30, 0x17, 0x06, 0x03, 0x55,
+            0x04, 0x03, 0x0c, 0x10, 0x67, 0x65, 0x6f, 0x6c, 0x69, 0x62, 0x72, 0x65, 0x2d, 0x74,
+            0x65, 0x73, 0x74, 0x2d, 0x63, 0x61, 0x30, 0x20, 0x17, 0x0d, 0x32, 0x36, 0x31, 0x31,
+            0x32, 0x32, 0x31, 0x37, 0x33, 0x33, 0x32, 0x34, 0x5a, 0x18, 0x0f, 0x32, 0x31, 0x32,
+            0x36, 0x31, 0x30, 0x32, 0x39, 0x31, 0x37, 0x33, 0x33, 0x32, 0x34, 0x5a, 0x30, 0x1b,
+            0x31, 0x19, 0x30, 0x17, 0x06, 0x03, 0x55, 0x04, 0x03, 0x0c, 0x10, 0x67, 0x65, 0x6f,
+            0x6c, 0x69, 0x62, 0x72, 0x65, 0x2d, 0x74, 0x65, 0x73, 0x74, 0x2d, 0x63, 0x61, 0x30,
+            0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08,
+            0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00, 0x04, 0x7d, 0xda,
+            0x14, 0x28, 0xa3, 0xf3, 0x99, 0x16, 0x23, 0xba, 0x7c, 0x5c, 0xf9, 0xd4, 0x0e, 0xe1,
+            0x2f, 0x7a, 0x59, 0xcf, 0xf2, 0xf3, 0x80, 0x14, 0x09, 0x44, 0xfe, 0x70, 0xfc, 0x8e,
+            0x91, 0x07, 0x69, 0x95, 0xe2, 0xe4, 0xe0, 0x63, 0x43, 0xe2, 0x2e, 0x73, 0xd0, 0xa2,
+            0x7a, 0x9e, 0x93, 0x5d, 0xd5, 0x8d, 0xd9, 0x9b, 0xd1, 0x97, 0x67, 0xe1, 0x56, 0xbd,
+            0x36, 0x83, 0x0a, 0x05, 0x6d, 0xd1, 0xa3, 0x32, 0x30, 0x30, 0x30, 0x1d, 0x06, 0x03,
+            0x55, 0x1d, 0x0e, 0x04, 0x16, 0x04, 0x14, 0x6f, 0x40, 0xed, 0x03, 0xff, 0xba, 0xcf,
+            0xd0, 0x84, 0x54, 0xa7, 0xc7, 0x60, 0xb4, 0xff, 0x03, 0x26, 0xad, 0xe8, 0x59, 0x30,
+            0x0f, 0x06, 0x03, 0x55, 0x1d, 0x13, 0x01, 0x01, 0xff, 0x04, 0x05, 0x30, 0x03, 0x01,
+            0x01, 0xff, 0x30, 0x0a, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02,
+            0x03, 0x48, 0x00, 0x30, 0x45, 0x02, 0x21, 0x00, 0xb5, 0x6f, 0x40, 0xaf, 0xd1, 0xfd,
+            0x26, 0x70, 0x8c, 0x18, 0x05, 0xf6, 0xa9, 0xf1, 0x72, 0xe4, 0x45, 0x25, 0x2f, 0x69,
+            0x99, 0x49, 0x8c, 0x51, 0xf5, 0x49, 0x39, 0x83, 0xda, 0x50, 0x00, 0x00, 0x02, 0x20,
+            0x43, 0x0d, 0xd6, 0xcf, 0xcc, 0xe1, 0x0c, 0xd2, 0xa0, 0xd3, 0x8d, 0xaa, 0x58, 0x45,
+            0x58, 0x49, 0x20, 0x00, 0x58, 0xa6, 0x38, 0x0d, 0x99, 0xeb, 0xc9, 0x57, 0xe3, 0x12,
+            0x7d, 0x69, 0xff, 0x2f,
+        ];
+        let base_only = build_default_root_store(&[]);
+        let merged = build_default_root_store(&[CertificateDer::from(TEST_CA_DER)]);
+        assert_eq!(merged.len(), base_only.len() + 1);
+
+        let tls = TlsRequirement::from_connection_string(
+            "postgresql://localhost/db?sslmode=verify-full",
+        )
+        .expect("parse tls settings");
+        let roots = tls.roots().expect("build root cert store");
+        assert!(roots.len() >= base_only.len());
     }
 }

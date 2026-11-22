@@ -643,6 +643,34 @@ fn has_valid_base64_wkb_values(
     Ok(sample_count > 0 && sample_count == valid_count)
 }
 
+fn source_crs_meta_sql(source_path_literal: &str, layer_name: Option<&str>) -> String {
+    match layer_name.filter(|name| !name.trim().is_empty()) {
+        Some(name) => format!(
+            "SELECT l.geometry_fields[1].crs.auth_name AS auth_name, \
+             l.geometry_fields[1].crs.auth_code AS auth_code \
+             FROM (SELECT UNNEST(layers) AS l FROM ST_Read_Meta({source_path_literal})) \
+             WHERE l.name = {} \
+             LIMIT 1",
+            quote_sql_string(name)
+        ),
+        None => format!(
+            "SELECT layers[1].geometry_fields[1].crs.auth_name AS auth_name, \
+             layers[1].geometry_fields[1].crs.auth_code AS auth_code \
+             FROM ST_Read_Meta({source_path_literal})"
+        ),
+    }
+}
+
+fn parse_auth_crs(auth_name: Option<String>, auth_code: Option<String>) -> Option<String> {
+    let auth_name = auth_name?.trim().to_ascii_uppercase();
+    let auth_code = auth_code?.trim().to_string();
+    if auth_name.is_empty() || auth_code.is_empty() {
+        None
+    } else {
+        Some(format!("{auth_name}:{auth_code}"))
+    }
+}
+
 fn read_source_crs(
     conn: &Connection,
     options: &NativeVectorOptions,
@@ -652,28 +680,38 @@ fn read_source_crs(
     if is_parquet_extension(&options.extension) {
         return read_parquet_source_crs(conn, options, geo_metadata, geometry_column);
     }
-    let meta_sql = format!(
-        "SELECT layers[1].geometry_fields[1].crs.auth_name AS auth_name, \
-         layers[1].geometry_fields[1].crs.auth_code AS auth_code \
-         FROM ST_Read_Meta({})",
-        quote_sql_string(&sql_source_path(&options.path))
-    );
-    let auth_crs = conn
-        .query_row(&meta_sql, [], |row| {
+    let source_path = quote_sql_string(&sql_source_path(&options.path));
+    let query_raw = |sql: &str| {
+        conn.query_row(sql, [], |row| {
             let auth_name: Option<String> = row.get(0)?;
             let auth_code: Option<String> = row.get(1)?;
             Ok((auth_name, auth_code))
         })
-        .ok()
-        .and_then(|(auth_name, auth_code)| {
-            let auth_name = auth_name?.trim().to_ascii_uppercase();
-            let auth_code = auth_code?.trim().to_string();
-            if auth_name.is_empty() || auth_code.is_empty() {
-                None
-            } else {
-                Some(format!("{auth_name}:{auth_code}"))
+    };
+    let explicit_layer = options
+        .layer
+        .as_deref()
+        .filter(|name| !name.trim().is_empty());
+    let auth_crs = if let Some(layer_name) = explicit_layer {
+        let named_sql = source_crs_meta_sql(&source_path, Some(layer_name));
+        match query_raw(&named_sql) {
+            // Layer matched in ST_Read_Meta: honor its CRS even when NULL
+            // rather than borrowing another layer's CRS.
+            Ok((auth_name, auth_code)) => parse_auth_crs(auth_name, auth_code),
+            // Named layer not found in ST_Read_Meta: fall back to the first
+            // layer's CRS for backwards compatibility; real query errors return None.
+            Err(duckdb::Error::QueryReturnedNoRows) => {
+                query_raw(&source_crs_meta_sql(&source_path, None))
+                    .ok()
+                    .and_then(|(a, c)| parse_auth_crs(a, c))
             }
-        });
+            Err(_) => None,
+        }
+    } else {
+        query_raw(&source_crs_meta_sql(&source_path, None))
+            .ok()
+            .and_then(|(a, c)| parse_auth_crs(a, c))
+    };
     if auth_crs.is_some() {
         return auth_crs;
     }
@@ -2167,5 +2205,42 @@ mod tests {
         assert_eq!(features[1]["geometry"]["coordinates"][0], 100.0);
 
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn source_crs_meta_sql_targets_named_layer_without_falling_back_to_first() {
+        let named = source_crs_meta_sql("'/tmp/multi.gpkg'", Some("parcels"));
+        assert!(named.contains("UNNEST(layers) AS l"));
+        assert!(named.contains("WHERE l.name = 'parcels'"));
+        assert!(!named.contains("layers[1]"));
+
+        let default_layer = source_crs_meta_sql("'/tmp/multi.gpkg'", None);
+        assert!(default_layer.contains("layers[1].geometry_fields[1].crs.auth_name"));
+
+        // Exercise the exact UNNEST subquery pattern directly in DuckDB.
+        let conn = Connection::open_in_memory().expect("open duckdb");
+        conn.execute_batch(
+            "CREATE TABLE fake_meta AS SELECT [\
+                {'name': 'roads', 'geometry_fields': [{'crs': {'auth_name': 'EPSG', 'auth_code': '4326'}}]}, \
+                {'name': 'parcels', 'geometry_fields': [{'crs': {'auth_name': 'EPSG', 'auth_code': '32618'}}]}, \
+                {'name': 'local', 'geometry_fields': [{'crs': {'auth_name': NULL, 'auth_code': NULL}}]}\
+            ] AS layers;",
+        )
+        .expect("seed fake_meta");
+        let query_layer = |layer: Option<&str>| -> Option<String> {
+            let sql = source_crs_meta_sql("'/tmp/multi.gpkg'", layer)
+                .replace("ST_Read_Meta('/tmp/multi.gpkg')", "fake_meta");
+            conn.query_row(&sql, [], |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            })
+            .ok()
+            .and_then(|(a, c)| parse_auth_crs(a, c))
+        };
+        assert_eq!(query_layer(Some("parcels")).as_deref(), Some("EPSG:32618"));
+        assert_eq!(query_layer(Some("local")), None);
+        assert_eq!(query_layer(None).as_deref(), Some("EPSG:4326"));
     }
 }
