@@ -665,9 +665,11 @@ function WidgetCard({
           })()}
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col [&>svg]:min-h-0 [&>svg]:flex-1">
+        <div className="flex min-h-0 flex-1 flex-col">
+          {/* `fill` draws the chart at this column's measured size (less the
+              caption), so labels stay readable in a small card. */}
           {data.hasData && result ? (
-            <ChartView result={result} color={widget.color} />
+            <ChartView result={result} color={widget.color} fill />
           ) : (
             <p className="flex flex-1 items-center justify-center py-4 text-center text-xs text-muted-foreground">
               {t("dashboard.noData")}
