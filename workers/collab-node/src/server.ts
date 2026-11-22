@@ -856,15 +856,16 @@ export function createRelay(options: RelayOptions = {}): {
       const rawXff = trustProxy
         ? (request.headers["x-forwarded-for"] as string | undefined)
         : undefined;
-      // Skip `trustProxyHops` rightmost entries appended by trusted proxies
-      // instead of reading the leftmost client-spoofable entry.
+      // Read the entry `trustProxyHops` from the right: the one appended by the
+      // nearest trusted proxy. When fewer entries are present, fall back to the
+      // socket address rather than trusting a leftmost, client-spoofable value.
       const xffParts = rawXff
         ?.split(",")
         .map((part) => part.trim())
         .filter(Boolean);
       const clientIp =
-        (xffParts && xffParts.length > 0
-          ? xffParts[Math.max(0, xffParts.length - trustProxyHops)]
+        (xffParts && xffParts.length >= trustProxyHops
+          ? xffParts[xffParts.length - trustProxyHops]
           : undefined) ||
         request.socket.remoteAddress ||
         "unknown";

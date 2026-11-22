@@ -1168,9 +1168,10 @@ def _run_conversion_job(
     # Set from a marker line when the script rejects the user's input; see
     # _SCRIPT_DRIVER. Anything else stays a generic failure.
     validation_error: str | None = None
-    # Failed or cancelled cleanup only unlinks an output file this job created,
-    # so a pre-existing file at output_path is not deleted when the tool fails
-    # before writing to it.
+    # Failed or cancelled cleanup skips unlinking output_path when a file
+    # already existed there before the job started, preventing cleanup from
+    # deleting a user's existing file on pre-write failures (trade-off: if a tool
+    # overwrote the file in place before failing, that partial write stays on disk).
     output_existed = bool(params.get("output_path")) and Path(params["output_path"]).exists()
     try:
         _job_update(job_id, status="running")

@@ -227,7 +227,16 @@ def redact_layer(layer: dict[str, Any]) -> dict[str, Any]:
 def redact_credentials(
     project: dict[str, Any], *, strip_non_exportable: bool = True
 ) -> dict[str, Any]:
-    """Return a detached project safe to publish, export, or hand to others."""
+    """Return a detached project safe to publish, export, or hand to others.
+
+    Redacts credentials across layers, basemap/map style URLs (including
+    ``mapboxStyleUrl`` and ``terrainSource``), geocoder settings, plugin
+    manifest URLs, and secret environment variables. When
+    ``strip_non_exportable`` is ``True`` (the default), inline GeoJSON data on
+    layers with ``capabilities.export == False`` is also removed; pass
+    ``strip_non_exportable=False`` for read-only in-session previews that still
+    need inline geometry.
+    """
     safe = copy.deepcopy(project)
     if isinstance(safe.get("basemapStyleUrl"), str):
         safe["basemapStyleUrl"] = _redact_url(safe["basemapStyleUrl"])

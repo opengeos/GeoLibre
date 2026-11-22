@@ -29,8 +29,11 @@ m.save_project("counties.geolibre.json")   # a project the app opens
 m.to_html("counties.html", title="Counties")  # a page anyone opens
 ```
 
-`save_project()` and `to_project()` **strip credentials by default**. Pass
-`keep_credentials=True` only for a trusted local file you are not sharing.
+`save_project()`, `to_project()`, and `to_html()` **strip credentials by default**
+(including map style/terrain URL parameters) and drop inline GeoJSON from layers
+marked `capabilities.export: false`. Pass `keep_credentials=True` to
+`save_project()` or `to_project()` only for a trusted local file you are not
+sharing.
 
 ## Adding data
 

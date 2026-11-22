@@ -421,19 +421,6 @@ function checkFilterExpression(
 const INLINE_FEATURE_LAYER_TYPES = ["geojson", "deckgl-viz"];
 
 /**
- * Whether an `addLayer` spec carries anything the map could actually render: a
- * re-fetchable source (`url`, `data`, `tiles[]`, `metadata.originalUrl` — the
- * same predicate the Layer Library uses), or, for an
- * {@link INLINE_FEATURE_LAYER_TYPES} type, inline features on the spec or as a
- * `data` object on the source.
- *
- * Without this a spec whose `source` does not match its `type` (say `xyz` with
- * no `tiles`) would be acked as a success, pushed into the store, listed by
- * `listLayers`, and then quietly render nothing — `layer-sync` has no fallback
- * for a source it cannot read. Rejecting it here turns that into an error the
- * host sees on the call it made.
- */
-/**
  * Validate overlay corners (video/image): four [lng, lat] pairs matching
  * `isCornerCoordinates` in `@geolibre/map`.
  */
@@ -460,6 +447,20 @@ function isCornerCoordinates(value: unknown): boolean {
   return centre >= -180 && centre <= 180 && Math.max(...lngs) - Math.min(...lngs) <= 360;
 }
 
+/**
+ * Whether an `addLayer` spec carries anything the map could actually render: a
+ * re-fetchable source (`url`, `data`, `tiles[]`, `metadata.originalUrl` — the
+ * same predicate the Layer Library uses), a `video` layer with `source.urls`
+ * and valid corner `source.coordinates`, or, for an
+ * {@link INLINE_FEATURE_LAYER_TYPES} type, inline features on the spec or as a
+ * `data` object on the source.
+ *
+ * Without this a spec whose `source` does not match its `type` (say `xyz` with
+ * no `tiles`) would be acked as a success, pushed into the store, listed by
+ * `listLayers`, and then quietly render nothing — `layer-sync` has no fallback
+ * for a source it cannot read. Rejecting it here turns that into an error the
+ * host sees on the call it made.
+ */
 function hasRenderableEmbedSource(spec: Record<string, unknown>): boolean {
   const source = isRecord(spec.source) ? spec.source : {};
   // `syncVideoLayer` renders only when both `source.urls` and valid corner
