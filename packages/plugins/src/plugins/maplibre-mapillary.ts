@@ -708,6 +708,32 @@ function destroyViewer(): void {
   }
 }
 
+let pendingIdleMap: MapLibreMap | null = null;
+let pendingIdleHandler: (() => void) | null = null;
+
+function clearPendingIdleCoverage(): void {
+  if (pendingIdleMap && pendingIdleHandler) {
+    pendingIdleMap.off("idle", pendingIdleHandler);
+  }
+  pendingIdleMap = null;
+  pendingIdleHandler = null;
+}
+
+function scheduleCoverageOnIdle(activeMap: MapLibreMap): void {
+  clearPendingIdleCoverage();
+  const handler = () => {
+    if (pendingIdleHandler === handler) {
+      pendingIdleMap = null;
+      pendingIdleHandler = null;
+    }
+    if (map !== activeMap) return;
+    addCoverage(activeMap);
+  };
+  pendingIdleMap = activeMap;
+  pendingIdleHandler = handler;
+  activeMap.once("idle", handler);
+}
+
 /**
  * Add the coverage layers, deferring to the next idle if the style is still
  * loading. Calling addSource/addLayer before the style is ready throws
@@ -716,7 +742,7 @@ function destroyViewer(): void {
  */
 function ensureCoverageWhenReady(activeMap: MapLibreMap): void {
   if (activeMap.isStyleLoaded()) addCoverage(activeMap);
-  else activeMap.once("idle", () => addCoverage(activeMap));
+  else scheduleCoverageOnIdle(activeMap);
 }
 
 // A single registration object reused across re-registrations, so changing the
@@ -765,10 +791,7 @@ export const maplibreMapillaryPlugin: GeoLibrePlugin = {
     // them once the new style settles.
     unsubscribeBasemap = app.onBasemapChange(() => {
       if (!map) return;
-      map.once("idle", () => {
-        if (!map) return;
-        addCoverage(map);
-      });
+      scheduleCoverageOnIdle(map);
     });
 
     floatingPanelRegistration.position = panelPosition;
@@ -787,6 +810,7 @@ export const maplibreMapillaryPlugin: GeoLibrePlugin = {
     }
   },
   deactivate: (app: GeoLibreAppAPI) => {
+    clearPendingIdleCoverage();
     unsubscribeBasemap?.();
     unsubscribeBasemap = null;
     destroyViewer();

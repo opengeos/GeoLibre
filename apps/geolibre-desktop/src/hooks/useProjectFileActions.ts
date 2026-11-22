@@ -26,7 +26,7 @@ import {
   type ArcGISLayerOptions,
 } from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
-import { type FormEvent, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { confirmDiscardAttributeDrafts } from "../lib/attribute-draft-guard";
 import {
   discardEditedWfsGeometry,
@@ -322,19 +322,51 @@ function isReloadableLocalFileLayer(layer: GeoLibreLayer): boolean {
 function importedProjectMapReady(
   mapControllerRef: MapControllerRef,
   basemapWillChange: boolean,
+  signal?: AbortSignal,
+  timeoutMs = 15_000,
 ): Promise<void> {
   const map = mapControllerRef.current?.getMap();
   const styleReady =
     map && basemapWillChange
-      ? new Promise<void>((resolve) => map.once("style.load", () => resolve()))
+      ? new Promise<void>((resolve) => {
+          if (signal?.aborted) {
+            resolve();
+            return;
+          }
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timer);
+            map.off("style.load", finish);
+            map.off("error", onError);
+            signal?.removeEventListener("abort", finish);
+            resolve();
+          };
+          const onError = (event: unknown) => {
+            // Ignore per-tile or per-source errors so an unrelated failing
+            // layer does not resolve the wait before the new basemap style loads.
+            if (event && typeof event === "object" && ("tile" in event || "sourceId" in event)) {
+              return;
+            }
+            finish();
+          };
+          const timer = window.setTimeout(finish, timeoutMs);
+          map.on("style.load", finish);
+          map.on("error", onError);
+          signal?.addEventListener("abort", finish, { once: true });
+        })
       : Promise.resolve();
 
   return (async () => {
     // Let the project store update commit and its MapCanvas effects run first.
     // Register the style listener above (before loadProject) so a fast inline
     // style cannot finish between the store update and this wait.
+    if (signal?.aborted) return;
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    if (signal?.aborted) return;
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    if (signal?.aborted) return;
     await styleReady;
   })();
 }
@@ -498,6 +530,14 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   );
   const projectUrlAbortRef = useRef<AbortController | null>(null);
   const recentAbortRef = useRef<AbortController | null>(null);
+  const fileOpenAbortRef = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      fileOpenAbortRef.current?.abort();
+      fileOpenAbortRef.current = null;
+    },
+    [],
+  );
   // Separate from projectUrlAbortRef so a gallery open and an Open-from-URL
   // submit can't abort each other's in-flight fetch.
   const shareUrlAbortRef = useRef<AbortController | null>(null);
@@ -509,6 +549,19 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // dialog is open would overwrite the pending prompt and strand the first
   // call's unresolved promise.
   const isSavingRef = useRef(false);
+  // Dedicated guard for batch layer write-back / copy-to-folder UI triggers so
+  // a folder picker never blocks Save Project, while `layerWriteChainRef`
+  // serializes actual local source write-backs across Save Project and batch save.
+  const isBatchSavingLayersRef = useRef(false);
+  const layerWriteChainRef = useRef<Promise<void>>(Promise.resolve());
+  const runSerializedLayerWrite = <T>(task: () => Promise<T>): Promise<T> => {
+    const next = layerWriteChainRef.current.then(task, task);
+    layerWriteChainRef.current = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  };
   const remoteProjectRef = useRef<
     (RemoteSharedProjectTarget & { projectGeneration: number }) | null
   >(null);
@@ -640,21 +693,41 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   };
 
   const handleOpenFromFile = async () => {
-    const result = await openProjectFile();
-    if (result) {
-      try {
-        const project = await resolveProjectXyzLayers(result.project);
-        // Asked after the awaits, so drafts made meanwhile are covered too.
-        if (!confirmDiscardAttributeDrafts()) return;
-        loadProject(project, result.path, {
-          rememberRecent: isTauri(),
-        });
-        rememberStartupProjectSnapshot(result.path, result.text);
-      } catch (error) {
-        console.error("Failed to open project", error);
-        setActionError(
-          error instanceof Error ? error.message : t("toolbar.error.couldNotOpenProject"),
-        );
+    fileOpenAbortRef.current?.abort();
+    const controller = new AbortController();
+    fileOpenAbortRef.current = controller;
+    const startGeneration = useAppStore.getState().projectGeneration;
+    try {
+      const result = await openProjectFile();
+      if (
+        !result ||
+        controller.signal.aborted ||
+        useAppStore.getState().projectGeneration !== startGeneration
+      ) {
+        return;
+      }
+      const project = await resolveProjectXyzLayers(result.project, controller.signal);
+      if (
+        controller.signal.aborted ||
+        useAppStore.getState().projectGeneration !== startGeneration
+      ) {
+        return;
+      }
+      // Asked after the awaits, so drafts made meanwhile are covered too.
+      if (!confirmDiscardAttributeDrafts()) return;
+      loadProject(project, result.path, {
+        rememberRecent: isTauri(),
+      });
+      rememberStartupProjectSnapshot(result.path, result.text);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      console.error("Failed to open project", error);
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotOpenProject"),
+      );
+    } finally {
+      if (fileOpenAbortRef.current === controller) {
+        fileOpenAbortRef.current = null;
       }
     }
   };
@@ -843,10 +916,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       const mapReady = importedProjectMapReady(
         mapControllerRef,
         useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
+        session.signal,
       );
       if (!session.replaceProject(() => loadProject(imported.project, null))) return;
       if (isTauri()) {
         await mapReady;
+        if (session.superseded()) return;
         const app = createAppAPI(mapControllerRef);
         for (const raster of imported.rasters) {
           if (session.superseded()) return;
@@ -998,9 +1073,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       const mapReady = importedProjectMapReady(
         mapControllerRef,
         useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
+        session.signal,
       );
       if (!session.replaceProject(() => loadProject(imported.project, null))) return;
       await mapReady;
+      if (session.superseded()) return;
       const app = createAppAPI(mapControllerRef);
       // Store id of every imported item that made it into the store, by import
       // id: project layers keep theirs, rasters and services get new ones as
@@ -1140,8 +1217,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     } finally {
       if (projectUrlAbortRef.current === controller) {
         projectUrlAbortRef.current = null;
+        setProjectUrlLoading(false);
       }
-      setProjectUrlLoading(false);
     }
   };
 
@@ -1184,8 +1261,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     shareUrlAbortRef.current?.abort();
     const controller = new AbortController();
     shareUrlAbortRef.current = controller;
+    const onAbort = () => controller.abort();
     if (options.signal?.aborted) controller.abort();
-    options.signal?.addEventListener("abort", () => controller.abort(), { once: true });
+    else options.signal?.addEventListener("abort", onAbort, { once: true });
 
     try {
       let project: Awaited<ReturnType<typeof resolveProjectXyzLayers>>;
@@ -1231,6 +1309,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       setRemoteSaveWarning(null);
       return true;
     } finally {
+      options.signal?.removeEventListener("abort", onAbort);
       if (shareUrlAbortRef.current === controller) {
         shareUrlAbortRef.current = null;
       }
@@ -1628,22 +1707,31 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (useAppStore.getState().projectGeneration !== state.projectGeneration) return "cancel";
 
     if (requestedChoice === "overwrite-sources") {
-      const liveState = useAppStore.getState();
-      const liveEdited = liveState.layers.filter(hasEditedGeometry);
-      const targets = listWritableLayerCandidates(liveEdited, {
-        collaboration: liveState.collaboration,
-        geometryEditLayerId: getGeometryEditTargetLayerId(),
-        attributeTableDrafts: liveState.ui.attributeTableDrafts,
-        projectGeneration: state.projectGeneration,
-      })
-        .filter((candidate) => !candidate.disabledReason)
-        .map((candidate) => candidate.layer);
-      const summary = await saveLayerEditsBatch(targets, {
-        map: mapControllerRef.current?.getMap() ?? undefined,
-        t,
-        projectGeneration: state.projectGeneration,
+      const summary = await runSerializedLayerWrite(async () => {
+        if (useAppStore.getState().projectGeneration !== state.projectGeneration) {
+          return null;
+        }
+        const liveState = useAppStore.getState();
+        const liveEdited = liveState.layers.filter(hasEditedGeometry);
+        const targets = listWritableLayerCandidates(liveEdited, {
+          collaboration: liveState.collaboration,
+          geometryEditLayerId: getGeometryEditTargetLayerId(),
+          attributeTableDrafts: liveState.ui.attributeTableDrafts,
+          projectGeneration: state.projectGeneration,
+        })
+          .filter((candidate) => !candidate.disabledReason)
+          .map((candidate) => candidate.layer);
+        return saveLayerEditsBatch(targets, {
+          map: mapControllerRef.current?.getMap() ?? undefined,
+          t,
+          projectGeneration: state.projectGeneration,
+        });
       });
-      if (summary.aborted || useAppStore.getState().projectGeneration !== state.projectGeneration) {
+      if (
+        !summary ||
+        summary.aborted ||
+        useAppStore.getState().projectGeneration !== state.projectGeneration
+      ) {
         return "cancel";
       }
       if (summary.succeeded > 0) {
@@ -2762,30 +2850,42 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       onLayerDone: (result: BatchLayerSaveItemResult) => void;
     },
   ): Promise<{ hasIssues: boolean; aborted: boolean }> => {
-    const startGeneration = useAppStore.getState().projectGeneration;
-    const idSet = new Set(layerIds);
-    const targets = useAppStore.getState().layers.filter((layer) => idSet.has(layer.id));
-    const summary = await saveLayerEditsBatch(targets, {
-      map: mapControllerRef.current?.getMap() ?? undefined,
-      t,
-      projectGeneration: startGeneration,
-      onLayerStart: callbacks.onLayerStart,
-      onLayerDone: callbacks.onLayerDone,
-    });
-    const hasIssues = summary.failed > 0 || summary.warnings > 0;
-    if (!summary.aborted && !hasIssues && summary.succeeded > 0) {
-      notify.success(t("toolbar.item.saveLayerEditsSuccess", { count: summary.succeeded }), {
-        dedupeKey: "save-layer-edits",
+    if (isBatchSavingLayersRef.current) return { hasIssues: false, aborted: true };
+    isBatchSavingLayersRef.current = true;
+    try {
+      const startGeneration = useAppStore.getState().projectGeneration;
+      const summary = await runSerializedLayerWrite(async () => {
+        if (useAppStore.getState().projectGeneration !== startGeneration) {
+          return { succeeded: 0, failed: 0, warnings: 0, aborted: true, results: [] };
+        }
+        const idSet = new Set(layerIds);
+        const targets = useAppStore.getState().layers.filter((layer) => idSet.has(layer.id));
+        return saveLayerEditsBatch(targets, {
+          map: mapControllerRef.current?.getMap() ?? undefined,
+          t,
+          projectGeneration: startGeneration,
+          onLayerStart: callbacks.onLayerStart,
+          onLayerDone: callbacks.onLayerDone,
+        });
       });
+      const hasIssues = summary.failed > 0 || summary.warnings > 0;
+      if (!summary.aborted && !hasIssues && summary.succeeded > 0) {
+        notify.success(t("toolbar.item.saveLayerEditsSuccess", { count: summary.succeeded }), {
+          dedupeKey: "save-layer-edits",
+        });
+      }
+      return { hasIssues, aborted: summary.aborted };
+    } finally {
+      isBatchSavingLayersRef.current = false;
     }
-    return { hasIssues, aborted: summary.aborted };
   };
 
   // Desktop-only: save external GeoJSON copies of selected layers into a chosen folder.
   const handleSaveLayerCopiesToFolder = async (
     layerIds?: ReadonlySet<string>,
   ): Promise<boolean> => {
-    if (!isExportDataAllowed()) return false;
+    if (!isExportDataAllowed() || isBatchSavingLayersRef.current) return false;
+    isBatchSavingLayersRef.current = true;
     const startGeneration = useAppStore.getState().projectGeneration;
     try {
       const directory = await pickLocalDirectory();
@@ -2835,6 +2935,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         error instanceof Error ? error.message : t("toolbar.error.couldNotSaveLayerCopies"),
       );
       return false;
+    } finally {
+      isBatchSavingLayersRef.current = false;
     }
   };
 

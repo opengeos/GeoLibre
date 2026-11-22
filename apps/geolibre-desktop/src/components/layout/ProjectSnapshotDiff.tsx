@@ -179,6 +179,7 @@ export function ProjectSnapshotDiff({
             content: getCurrentProjectContent,
           });
         } catch (error) {
+          if (cancelled) return;
           // Serializing the live project can fail on its own (a project too
           // large to serialize throws RangeError), which is not the
           // snapshot's fault.
@@ -206,7 +207,14 @@ export function ProjectSnapshotDiff({
       }
       // Always read oldest to newest, whichever row was picked first.
       const [older, newer] = other.createdAt < base.createdAt ? [other, base] : [base, other];
-      const outcome = await client.compare(source(older), source(newer));
+      let outcome;
+      try {
+        outcome = await client.compare(source(older), source(newer));
+      } catch {
+        if (cancelled) return;
+        settle({ ok: false, error: "snapshot" });
+        return;
+      }
       settle(
         outcome.ok
           ? {

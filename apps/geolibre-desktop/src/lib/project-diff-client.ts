@@ -60,11 +60,13 @@ export function createProjectDiffClient(
     before: ProjectDiffSource;
     after: ProjectDiffSource;
     resolve: (outcome: ProjectDiffOutcome) => void;
+    reject: (error: Error) => void;
     /** Already re-sent in full once after a "missing" reply. */
     retried?: boolean;
   }
   const pending = new Map<number, Pending>();
   let fallback: ProjectDiffClient | null = null;
+  let disposed = false;
 
   worker.onmessage = (event: MessageEvent<ProjectDiffWorkerResponse>) => {
     const { id, outcome } = event.data;
@@ -123,6 +125,9 @@ export function createProjectDiffClient(
 
   return {
     compare(before, after) {
+      if (disposed) {
+        return Promise.reject(new Error("Project diff client disposed."));
+      }
       if (!worker) {
         fallback ??= inThreadClient();
         return fallback.compare(before, after);
@@ -134,8 +139,8 @@ export function createProjectDiffClient(
         after: toInput(after),
       };
       const active = worker;
-      return new Promise<ProjectDiffOutcome>((resolve) => {
-        pending.set(request.id, { before, after, resolve });
+      return new Promise<ProjectDiffOutcome>((resolve, reject) => {
+        pending.set(request.id, { before, after, resolve, reject });
         active.postMessage(request);
       });
     },
@@ -147,8 +152,14 @@ export function createProjectDiffClient(
       fallback?.retain(keys);
     },
     dispose() {
+      if (disposed) return;
+      disposed = true;
       worker?.terminate();
       worker = null;
+      const error = new Error("Project diff client disposed.");
+      for (const request of pending.values()) {
+        request.reject(error);
+      }
       pending.clear();
     },
   };

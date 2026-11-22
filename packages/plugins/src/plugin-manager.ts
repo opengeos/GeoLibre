@@ -4,29 +4,37 @@ import {
   unregisterAssistantToolsByOwner,
 } from "./assistant-tool-registry";
 import { unregisterFileHandlersByOwner } from "./file-handler-registry";
+import { unregisterFloatingPanelsByOwner } from "./floating-panel-registry";
 import { unregisterMenuContributionsByOwner } from "./menu-contribution-registry";
+import { unregisterRightPanelsByOwner } from "./right-panel-registry";
+import { unregisterToolbarMenusByOwner } from "./toolbar-menu-registry";
 import type { MapRendererKind, ProjectPluginState } from "@geolibre/core";
 import type { IControl } from "maplibre-gl";
 import type {
   GeoLibreAppAPI,
   GeoLibreCredentialLocation,
   GeoLibreFileHandler,
+  GeoLibreFloatingPanelRegistration,
   GeoLibreMapControlPosition,
   GeoLibrePlugin,
   GeoLibreMenuContribution,
+  GeoLibreRightPanelRegistration,
   GeoLibreToolbarMenu,
 } from "./types";
 
 /**
  * Drop the host-side registrations a plugin owns once it stops being active
- * (deactivated, unregistered, or a failed activation). Assistant tools and
- * built-in menu contributions are both keyed by owner, so a plugin that forgets
- * to dispose of them in `deactivate` cannot leave stale entries behind.
+ * (deactivated, unregistered, or a failed activation). Host registries are
+ * keyed by owner so a plugin that forgets to dispose of them in `deactivate`
+ * cannot leave stale entries behind.
  */
 function releaseOwnedRegistrations(id: string): void {
   unregisterAssistantToolsByOwner(id);
   unregisterMenuContributionsByOwner(id);
   unregisterFileHandlersByOwner(id);
+  unregisterToolbarMenusByOwner(id);
+  unregisterRightPanelsByOwner(id);
+  unregisterFloatingPanelsByOwner(id);
 }
 
 export class PluginManager {
@@ -228,6 +236,12 @@ export class PluginManager {
       }
       this.active.delete(id);
     }
+    // Invalidate any watcher or retained scoped callback before releasing owned
+    // registrations (whose `onClose` hooks run synchronously). Keep the counter
+    // monotonic so a re-registered plugin cannot reuse the same generation id.
+    this.nextActivationGeneration(id);
+    this.activationResults.delete(id);
+    this.activating.delete(id);
     releaseOwnedRegistrations(id);
     this.clearUrlParameters(id, app);
     this.plugins.delete(id);
@@ -237,12 +251,6 @@ export class PluginManager {
     this.urlParameterNamesById.delete(id);
     this.writableUrlParameterNamesById.delete(id);
     this.urlPublishingPlugins.delete(id);
-    // Invalidate any watcher retained by an activation Promise from the old
-    // plugin instance. Keep the counter monotonic so a re-registered plugin
-    // cannot reuse the same generation identity.
-    this.nextActivationGeneration(id);
-    this.activationResults.delete(id);
-    this.activating.delete(id);
     for (const handled of this.handledUrlParametersByContext.values()) {
       handled.delete(id);
     }
@@ -471,11 +479,14 @@ export class PluginManager {
     try {
       plugin.deactivate(this.scopeAppToPlugin(app, id));
     } finally {
-      releaseOwnedRegistrations(id);
-      this.clearUrlParameters(id, app);
+      // Invalidate the activation before releasing owned registrations so an
+      // `onClose` callback fired during panel cleanup fails `canAddControl` and
+      // cannot re-register orphaned surfaces under the deactivated plugin.
       this.active.delete(id);
       this.nextActivationGeneration(id);
       this.activationResults.delete(id);
+      releaseOwnedRegistrations(id);
+      this.clearUrlParameters(id, app);
       this.notify();
     }
   }
@@ -645,7 +656,16 @@ export class PluginManager {
       for (const id of Array.from(this.active)) {
         // A session-scoped plugin owns no map controls, so the new map does
         // not need it rebuilt (and the saved project would not bring it back).
-        if (!this.keepsSessionActivation(id, app)) this.deactivate(id, app);
+        if (!this.keepsSessionActivation(id, app)) {
+          try {
+            this.deactivate(id, app);
+          } catch (error) {
+            console.warn(
+              `[GeoLibre] Plugin '${id}' threw while deactivating during renderer swap.`,
+              error,
+            );
+          }
+        }
       }
     }
     this.renderer = renderer;
@@ -718,7 +738,14 @@ export class PluginManager {
       if (targetActive.has(id) || this.keepsSessionActivation(id, app)) continue;
       const plugin = this.plugins.get(id);
       if (!plugin) continue;
-      this.deactivate(id, app);
+      try {
+        this.deactivate(id, app);
+      } catch (error) {
+        console.warn(
+          `[GeoLibre] Plugin '${id}' threw while deactivating during project restore.`,
+          error,
+        );
+      }
       changed = true;
     }
 
@@ -733,10 +760,14 @@ export class PluginManager {
       const defaultPosition = this.defaultMapControlPositions.get(id);
       const targetPosition = state?.mapControlPositions[id] ?? defaultPosition;
       if (targetPosition && plugin.setMapControlPosition) {
-        const currentPosition = plugin.getMapControlPosition?.();
-        if (currentPosition !== targetPosition) {
-          const updated = plugin.setMapControlPosition(scopedApp, targetPosition);
-          if (updated !== false) changed = true;
+        try {
+          const currentPosition = plugin.getMapControlPosition?.();
+          if (currentPosition !== targetPosition) {
+            const updated = plugin.setMapControlPosition(scopedApp, targetPosition);
+            if (updated !== false) changed = true;
+          }
+        } catch (error) {
+          console.warn(`[GeoLibre] Plugin '${id}' threw while restoring control position.`, error);
         }
       }
 
@@ -749,11 +780,15 @@ export class PluginManager {
         plugin.applyProjectState &&
         (hasSetting || options.resetMissingSettings || plugin.clearsStateOnProjectLoad)
       ) {
-        const updated = plugin.applyProjectState(
-          scopedApp,
-          hasSetting ? state.settings[id] : undefined,
-        );
-        if (updated !== false) changed = true;
+        try {
+          const updated = plugin.applyProjectState(
+            scopedApp,
+            hasSetting ? state.settings[id] : undefined,
+          );
+          if (updated !== false) changed = true;
+        } catch (error) {
+          console.warn(`[GeoLibre] Plugin '${id}' threw while restoring project state.`, error);
+        }
       }
     }
 
@@ -768,9 +803,13 @@ export class PluginManager {
       try {
         activated = plugin.activate(scopedApp);
       } catch (error) {
+        console.warn(
+          `[GeoLibre] Plugin '${id}' threw while activating during project restore.`,
+          error,
+        );
         releaseOwnedRegistrations(id);
         this.clearUrlParameters(id, app, true);
-        throw error;
+        continue;
       } finally {
         this.activating.delete(id);
       }
@@ -870,6 +909,7 @@ function scopeAppToPlugin(
   const register = app.registerToolbarMenu;
   const registerContribution = app.registerMenuContribution;
   const registerRightPanel = app.registerRightPanel;
+  const registerFloatingPanel = app.registerFloatingPanel;
   const activatePlugin = app.activatePlugin;
   const deactivatePlugin = app.deactivatePlugin;
   const hasAssistantRegistration = Boolean(
@@ -880,6 +920,8 @@ function scopeAppToPlugin(
     !hasAssistantRegistration &&
     !register &&
     !registerContribution &&
+    !registerRightPanel &&
+    !registerFloatingPanel &&
     !app.unregisterMenuContribution &&
     !app.registerFileHandler &&
     !app.unregisterFileHandler &&
@@ -999,10 +1041,14 @@ function scopeAppToPlugin(
   }
 
   if (registerRightPanel) {
+    const registerRightPanelWithOwner = registerRightPanel as (
+      panel: GeoLibreRightPanelRegistration,
+      ownerPluginId: string,
+    ) => () => void;
     scoped.registerRightPanel = (panel) =>
       canAddControl?.() === false
         ? () => {}
-        : registerRightPanel(
+        : registerRightPanelWithOwner(
             panel.deactivatePluginOnClose
               ? {
                   ...panel,
@@ -1023,7 +1069,17 @@ function scopeAppToPlugin(
                   },
                 }
               : panel,
+            pluginId,
           );
+  }
+
+  if (registerFloatingPanel) {
+    const registerFloatingPanelWithOwner = registerFloatingPanel as (
+      panel: GeoLibreFloatingPanelRegistration,
+      ownerPluginId: string,
+    ) => () => void;
+    scoped.registerFloatingPanel = (panel) =>
+      canAddControl?.() === false ? () => {} : registerFloatingPanelWithOwner(panel, pluginId);
   }
 
   if (app.addMapControl && (onControlAdded || canAddControl)) {

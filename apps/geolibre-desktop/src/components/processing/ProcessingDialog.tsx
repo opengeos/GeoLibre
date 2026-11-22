@@ -462,6 +462,7 @@ export function ProcessingDialog({
   // cannot overwrite the entry a still-draining previous job is reading; the
   // entry is deleted once its outputs are imported.
   const runParametersByJobRef = useRef<Map<string, Record<string, unknown>>>(new Map());
+  const jobGenerationByJobRef = useRef<Map<string, number>>(new Map());
 
   const selectedTool = useMemo(() => {
     const tool = tools.find((item) => item.id === selectedToolId) ?? tools[0] ?? null;
@@ -1019,30 +1020,37 @@ export function ProcessingDialog({
 
   useEffect(() => {
     if (!job || !RUNNING_JOB_STATUSES.has(job.status)) return;
-    // Schedule the next poll only after the current request resolves so a slow
-    // sidecar cannot accumulate overlapping, out-of-order in-flight requests.
     let cancelled = false;
+    let timer: number | undefined;
+    let failures = 0;
     const poll = async () => {
       if (cancelled) return;
       try {
         const next = await fetchWhiteboxJob(job.id);
         if (cancelled) return;
+        failures = 0;
         setJob(next);
-        if (RUNNING_JOB_STATUSES.has(next.status)) {
-          window.setTimeout(poll, 1000);
-        }
+        if (RUNNING_JOB_STATUSES.has(next.status)) timer = window.setTimeout(poll, 1000);
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : t("processing.whitebox.errorPoll"));
+        if (cancelled) return;
+        failures += 1;
+        if (failures < 3) {
+          timer = window.setTimeout(poll, 1000 * failures);
+          return;
         }
+        const message = err instanceof Error ? err.message : t("processing.whitebox.errorPoll");
+        setError(message);
+        setJob((prev) =>
+          prev && prev.id === job.id ? { ...prev, status: "failed", error: message } : prev,
+        );
       }
     };
-    const timer = window.setTimeout(poll, 1000);
+    timer = window.setTimeout(poll, 1000);
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [job]);
+  }, [job, t]);
 
   // Record a History entry once a job reaches a terminal status (#1292). WASM
   // jobs arrive terminal on dispatch; sidecar jobs get here via polling.
@@ -1318,26 +1326,26 @@ export function ProcessingDialog({
     async (nextJob: WhiteboxJob) => {
       if (importedJobIdRef.current === nextJob.id) return;
       importedJobIdRef.current = nextJob.id;
-      // The sidecar returns output paths (fetched over HTTP); the WASM runner
-      // returns the GeoJSON inline. Handle both: keep inline FeatureCollections,
-      // else keep JSON output paths to fetch.
+      const startLoadCount =
+        jobGenerationByJobRef.current.get(nextJob.id) ?? useAppStore.getState().projectLoadCount;
+      jobGenerationByJobRef.current.delete(nextJob.id);
+      if (useAppStore.getState().projectLoadCount !== startLoadCount) {
+        runParametersByJobRef.current.delete(nextJob.id);
+        return;
+      }
       const entries = Object.entries(nextJob.outputs).filter(([, value]) => {
         if (isFeatureCollection(value)) return true;
         const path = outputPath(value);
         return Boolean(path && isJsonOutputPath(path));
       });
-      // Resolve the producing tool from the job itself, not the live
-      // `selectedTool`, so switching tools while a job finishes does not
-      // mislabel the imported layer.
       const jobTool = tools.find((item) => item.id === nextJob.tool_id);
       const jobToolLabel = jobTool ? toolLabel(t, jobTool) : humanize(nextJob.tool_id);
-      // This job's own run parameters (not a shared slot), consumed once here so a
-      // concurrent re-run cannot repoint the output-path lookup below.
       const runParameters = runParametersByJobRef.current.get(nextJob.id) ?? {};
       runParametersByJobRef.current.delete(nextJob.id);
       for (const [name, value] of entries) {
         const path = isFeatureCollection(value) ? "" : (outputPath(value) ?? "");
         const data = isFeatureCollection(value) ? value : await fetchWhiteboxJsonOutput(path);
+        if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
         if (!isFeatureCollection(data)) continue;
         const layerName = uniqueLayerName(
           `${jobToolLabel} ${humanize(name)}`,
@@ -1349,44 +1357,25 @@ export function ProcessingDialog({
         if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
       }
 
-      // Binary outputs come back from the WASM runner inline. Raster (COG) bytes
-      // become a new raster layer; a `file_out` (e.g. write_geoparquet .parquet,
-      // a rendered .png, a .pmtiles) or a CRS-preserving `vector_out`
-      // (GeoParquet/FlatGeobuf/zipped Shapefile, chosen to keep a reprojection's
-      // target CRS) is downloaded instead — unless its bytes turn out to be a
-      // GeoTIFF after all, which several tools declare only as a generic file.
       for (const [name, value] of Object.entries(nextJob.outputs)) {
+        if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
         if (!(value instanceof Uint8Array)) continue;
         const param = jobTool?.params?.find((item) => item.name === name);
         const outKind = param ? parameterKind(param) : "";
-        // A `lidar_out` (a classified/filtered/thinned cloud) goes on the map
-        // as a point cloud layer, named for its own encoding so a COPC output
-        // streams; the download below is only the fallback.
         if (outKind === "lidar_out" && isLas(value) && onAddLidar) {
           const lidarName = `${jobToolLabel} ${humanize(name)}`;
           const fileName = `${outputBaseName(nextJob.tool_id, name)}.${lidarBytesExtension(value)}`;
           if (await onAddLidar(value, lidarName, fileName)) {
+            if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
             historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(lidarName);
             continue;
           }
+          if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
         }
-        // A generic `file_out` can still hold a GeoTIFF — `slope` declares its
-        // output only as "Optional output path" — so sniff the bytes rather
-        // than trust the declared kind, the way the scripting/assistant path
-        // does, and put a raster on the map instead of downloading it.
-        // A `lidar_out` the map could not take is downloaded too; it never
-        // belongs on the raster path.
         const declaredFile =
           outKind === "file_out" || outKind === "vector_out" || outKind === "lidar_out";
         if (declaredFile && (!isTiff(value) || !onAddRaster)) {
           const label = `${jobToolLabel} ${humanize(name)}`.replace(/\s+/g, "_");
-          // Prefer the content signature: a `vector_out` and most binary
-          // `file_out` formats (GeoParquet/FlatGeobuf/zipped Shapefile/PNG/
-          // PMTiles) are identifiable from their magic bytes. Only signature-less
-          // text formats (CSV/JSON/HTML) return `bin`; for those, fall back to
-          // the extension the tool was actually told to write — the user's typed
-          // output path, else the param's declared format (shared with the WASM
-          // runner via `fileOutputTargetExtension`).
           const sniffed = fileOutputExtension(value);
           const extension =
             sniffed !== "bin" || outKind !== "file_out" || !param
@@ -1394,11 +1383,9 @@ export function ProcessingDialog({
               : fileOutputTargetExtension(param, runParameters[name]);
           downloadBytes(value, `${label}.${extension}`);
         } else if (onAddRaster) {
-          // Display name stays human-readable; the file name matches the actual
-          // WASM output path (e.g. fill_depressions_wang_and_liu_output.tif), so
-          // the layer's sourcePath lines up with the path shown in the panel.
           const rasterName = `${jobToolLabel} ${humanize(name)}`;
           await onAddRaster(value, rasterName, `${outputBaseName(nextJob.tool_id, name)}.tif`);
+          if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
           historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(rasterName);
         }
       }
@@ -1415,6 +1402,7 @@ export function ProcessingDialog({
 
   const runSelectedTool = async () => {
     if (!selectedTool || selectedTool.locked) return;
+    const dispatchLoadCount = useAppStore.getState().projectLoadCount;
     setError(null);
     importedJobIdRef.current = null;
     // Flag "running" before any prep so the Run button shows its busy state
@@ -1691,11 +1679,13 @@ export function ProcessingDialog({
       if (runLocal && nextJob.status === "succeeded") {
         runParametersByJobRef.current.set(nextJob.id, parameters);
       }
+      jobGenerationByJobRef.current.set(nextJob.id, dispatchLoadCount);
       historyTrackersRef.current.set(nextJob.id, tracker);
       while (historyTrackersRef.current.size > MAX_TRACKED_HISTORY_JOBS) {
         const oldest = historyTrackersRef.current.keys().next().value;
         if (oldest === undefined) break;
         historyTrackersRef.current.delete(oldest);
+        jobGenerationByJobRef.current.delete(oldest);
       }
       setJob(nextJob);
     } catch (err) {

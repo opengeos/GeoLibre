@@ -6,6 +6,16 @@ import {
   getToolbarMenusSnapshot,
   registerToolbarMenu,
 } from "../packages/plugins/src/toolbar-menu-registry";
+import {
+  __resetRightPanelRegistryForTests,
+  getRightPanel,
+  registerRightPanel,
+} from "../packages/plugins/src/right-panel-registry";
+import {
+  __resetFloatingPanelRegistryForTests,
+  getFloatingPanel,
+  registerFloatingPanel,
+} from "../packages/plugins/src/floating-panel-registry";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../packages/plugins/src/types";
 
 /** The panel a plugin hands to `registerRightPanel`. */
@@ -1888,5 +1898,97 @@ describe("PluginManager restore onto a replaced map", () => {
     manager.restoreProjectState(state, app, { mapReplaced: true });
     assert.deepEqual(calls, ["activate", "deactivate", "activate"]);
     assert.equal(manager.isActive("dock"), true);
+  });
+
+  it("isolates throwing plugins during restoreProjectState and still notifies subscribers", () => {
+    const manager = new PluginManager();
+    const restored: string[] = [];
+    let notifications = 0;
+    manager.subscribe(() => {
+      notifications += 1;
+    });
+    manager.register(
+      testPlugin({
+        id: "throws-restore",
+        applyProjectState: () => {
+          throw new Error("bad state");
+        },
+        activate: () => {
+          throw new Error("bad activate");
+        },
+      }),
+    );
+    manager.register(
+      testPlugin({
+        id: "healthy",
+        applyProjectState: () => {
+          restored.push("state:healthy");
+        },
+        activate: () => {
+          restored.push("activate:healthy");
+        },
+      }),
+    );
+    notifications = 0;
+    manager.restoreProjectState(
+      {
+        manifestUrls: [],
+        activePluginIds: ["throws-restore", "healthy"],
+        mapControlPositions: {},
+        settings: { "throws-restore": { a: 1 }, healthy: { b: 2 } },
+      },
+      app,
+    );
+    assert.deepEqual(restored, ["state:healthy", "activate:healthy"]);
+    assert.equal(manager.isActive("throws-restore"), false);
+    assert.equal(manager.isActive("healthy"), true);
+    assert.ok(notifications > 0);
+  });
+
+  it("releases owned toolbar menus, right panels, and floating panels on deactivate", () => {
+    __resetToolbarMenuRegistryForTests();
+    __resetRightPanelRegistryForTests();
+    __resetFloatingPanelRegistryForTests();
+    try {
+      const manager = new PluginManager();
+      const hostApp = {
+        registerToolbarMenu,
+        registerRightPanel,
+        registerFloatingPanel,
+      } as unknown as GeoLibreAppAPI;
+      manager.register(
+        testPlugin({
+          id: "leaky-ui",
+          activate: (api) => {
+            api.registerToolbarMenu?.({ id: "leaky-menu", label: "Leaky", items: [] });
+            api.registerRightPanel?.({
+              id: "leaky-right",
+              title: "Leaky Right",
+              render: () => undefined,
+            });
+            api.registerFloatingPanel?.({
+              id: "leaky-float",
+              title: "Leaky Float",
+              render: () => undefined,
+            });
+          },
+          // Deliberately forgets to clean up any of its UI registrations.
+          deactivate: () => undefined,
+        }),
+      );
+      manager.activate("leaky-ui", hostApp);
+      assert.equal(getToolbarMenusSnapshot().entries.length, 1);
+      assert.ok(getRightPanel("leaky-right"));
+      assert.ok(getFloatingPanel("leaky-float"));
+
+      manager.deactivate("leaky-ui", hostApp);
+      assert.equal(getToolbarMenusSnapshot().entries.length, 0);
+      assert.equal(getRightPanel("leaky-right"), undefined);
+      assert.equal(getFloatingPanel("leaky-float"), undefined);
+    } finally {
+      __resetToolbarMenuRegistryForTests();
+      __resetRightPanelRegistryForTests();
+      __resetFloatingPanelRegistryForTests();
+    }
   });
 });

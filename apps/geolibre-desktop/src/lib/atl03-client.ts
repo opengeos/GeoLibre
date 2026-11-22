@@ -37,12 +37,12 @@ const REMOTE_WORKERS = 6;
 interface ReaderWorker {
   beams: Atl03Beam[];
   read(options: Atl03ReadOptions): Promise<Atl03Photons>;
-  /** Receives the bytes of each range request this worker makes. */
-  onFetch: ((bytes: number) => void) | null;
+  /** Subscribe to the bytes of each range request this worker makes. */
+  addFetchListener(listener: (bytes: number) => void): () => void;
   close(): void;
 }
 
-async function spawnReader(source: Atl03Source): Promise<ReaderWorker> {
+async function spawnReader(source: Atl03Source, onDead?: () => void): Promise<ReaderWorker> {
   const worker = new Worker(new URL("../workers/atl03.worker.ts", import.meta.url), {
     type: "module",
   });
@@ -51,6 +51,7 @@ async function spawnReader(source: Atl03Source): Promise<ReaderWorker> {
     number,
     { resolve: (value: never) => void; reject: (e: Error) => void }
   >();
+  const fetchListeners = new Set<(bytes: number) => void>();
   let terminalError: Error | null = null;
   let settleReady: ((error?: Error) => void) | null = null;
   const ready = new Promise<void>((resolve, reject) => {
@@ -68,15 +69,22 @@ async function spawnReader(source: Atl03Source): Promise<ReaderWorker> {
   const reader: ReaderWorker = {
     beams: [],
     read: () => Promise.reject(new Error("not open")),
-    onFetch: null,
-    close: () => shutDown(new Error("The ATL03 reader worker was closed.")),
+    addFetchListener(listener) {
+      fetchListeners.add(listener);
+      return () => {
+        fetchListeners.delete(listener);
+      };
+    },
+    close: () => shutDown(new Error("The ATL03 reader worker was closed."), false),
   };
-  const shutDown = (error: Error): void => {
+  const shutDown = (error: Error, unexpected = true): void => {
     if (terminalError) return;
     terminalError = error;
     for (const entry of pending.values()) entry.reject(error);
     pending.clear();
+    fetchListeners.clear();
     worker.terminate();
+    if (unexpected) onDead?.();
   };
   worker.onmessage = (event: MessageEvent<Atl03WorkerResponse>) => {
     const data = event.data;
@@ -85,7 +93,7 @@ async function spawnReader(source: Atl03Source): Promise<ReaderWorker> {
       return;
     }
     if ("progress" in data) {
-      reader.onFetch?.(data.progress);
+      for (const listener of fetchListeners) listener(data.progress);
       return;
     }
     const entry = pending.get(data.id);
@@ -97,7 +105,7 @@ async function spawnReader(source: Atl03Source): Promise<ReaderWorker> {
   worker.onerror = (event) => {
     const error = new Error(event.message || "The ATL03 reader worker failed.");
     settleReady?.(error);
-    shutDown(error);
+    shutDown(error, true);
   };
   const send = <T>(message: Record<string, unknown>): Promise<T> => {
     if (terminalError) return Promise.reject(terminalError);
@@ -157,13 +165,16 @@ export async function openAtl03Granule(source: Atl03Source): Promise<Atl03Granul
       const beams = options.beams ?? primary.beams.map((beam) => beam.name);
       const groups = source.kind === "url" ? splitBeams(beams, REMOTE_WORKERS) : [beams];
       // Open the extra readers on the first read (each opens the file once).
-      // A helper that fails to start is dropped, so the next read retries it.
+      // A helper that fails to start or later crashes is dropped, so the next
+      // read spawns a fresh replacement.
       while (helpers.length < groups.length - 1) {
-        const spawned = spawnReader(source);
-        void spawned.catch(() => {
+        let spawned!: Promise<ReaderWorker>;
+        const evict = () => {
           const index = helpers.indexOf(spawned);
           if (index >= 0) void helpers.splice(index, 1);
-        });
+        };
+        spawned = spawnReader(source, evict);
+        void spawned.catch(evict);
         helpers.push(spawned);
       }
       const readers = [primary, ...(await Promise.all(helpers.slice(0, groups.length - 1)))];
@@ -174,12 +185,11 @@ export async function openAtl03Granule(source: Atl03Source): Promise<Atl03Granul
         throw new Error("The ATL03 granule was closed.");
       }
       let bytes = 0;
-      for (const reader of readers) {
-        reader.onFetch = (n) => {
-          bytes += n;
-          onProgress?.(bytes);
-        };
-      }
+      const onFetch = (n: number) => {
+        bytes += n;
+        onProgress?.(bytes);
+      };
+      const removeListeners = readers.map((reader) => reader.addFetchListener(onFetch));
       try {
         const parts = await Promise.all(
           // Each worker caps its own part (the merge thins to the exact cap),
@@ -188,7 +198,7 @@ export async function openAtl03Granule(source: Atl03Source): Promise<Atl03Granul
         );
         return mergeAtl03Photons(parts, options.maxPoints);
       } finally {
-        for (const reader of readers) reader.onFetch = null;
+        for (const remove of removeListeners) remove();
       }
     },
     close() {
