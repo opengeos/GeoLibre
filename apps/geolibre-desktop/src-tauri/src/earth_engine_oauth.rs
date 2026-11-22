@@ -292,7 +292,18 @@ fn handle_connection(mut stream: TcpStream, shared: &SharedState) {
 }
 
 fn read_request(stream: &TcpStream) -> Result<Request, String> {
+    let deadline = Instant::now() + READ_TIMEOUT;
+    let update_timeout = |sock: &TcpStream| -> Result<(), String> {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err("Request timed out".to_string());
+        }
+        let _ = sock.set_read_timeout(Some(remaining));
+        Ok(())
+    };
     let stream = stream.try_clone().map_err(|error| error.to_string())?;
+    let timeout_sock = stream.try_clone().map_err(|error| error.to_string())?;
+    update_timeout(&timeout_sock)?;
     let mut reader = BufReader::new(stream.take(MAX_REQUEST_BYTES));
     let mut request_line = String::new();
     reader
@@ -304,6 +315,7 @@ fn read_request(stream: &TcpStream) -> Result<Request, String> {
 
     let mut headers = HashMap::new();
     loop {
+        update_timeout(&timeout_sock)?;
         let mut line = String::new();
         reader
             .read_line(&mut line)
@@ -331,6 +343,7 @@ fn read_request(stream: &TcpStream) -> Result<Request, String> {
     }
     let mut body = vec![0; content_length];
     if content_length > 0 {
+        update_timeout(&timeout_sock)?;
         reader
             .read_exact(&mut body)
             .map_err(|error| error.to_string())?;

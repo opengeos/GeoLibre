@@ -306,6 +306,7 @@ async fn transfer(
     headers: HeaderMap,
     destination: PathBuf,
     part_tag: String,
+    is_cached: bool,
     mut placeholder: Option<PartFile>,
     progress: tauri::ipc::Channel<RemoteDownloadProgress>,
 ) -> Result<u64, String> {
@@ -358,6 +359,7 @@ async fn transfer(
     fn spawn_part_writer<B: AsRef<[u8]> + Send + 'static>(
         part: PartFile,
         destination: PathBuf,
+        is_cached: bool,
         aborted: Arc<std::sync::atomic::AtomicBool>,
     ) -> (
         tokio::sync::mpsc::Sender<WriteCommand<B>>,
@@ -399,8 +401,9 @@ async fn transfer(
             fs::rename(&part.path, &destination)
                 .map_err(|error| format!("Could not finish the download: {error}"))?;
             part.done = true;
-            if aborted.load(Ordering::Acquire) {
-                // Cancellation raced with rename: remove the newly placed file.
+            if is_cached && aborted.load(Ordering::Acquire) {
+                // Cached paths are uniquely keyed by request_id, so unlinking on
+                // post-rename cancellation cannot collide with another save path.
                 let _ = fs::remove_file(&destination);
             }
             Ok(())
@@ -412,7 +415,7 @@ async fn transfer(
         aborted: Arc::clone(&aborted),
         done: false,
     };
-    let (tx, writer_handle) = spawn_part_writer(part, destination.clone(), aborted);
+    let (tx, writer_handle) = spawn_part_writer(part, destination.clone(), is_cached, aborted);
     let mut response = response;
     let mut received: u64 = 0;
     let mut reported: u64 = 0;
@@ -457,7 +460,14 @@ async fn transfer(
         let _ = writer_handle.await;
         return Err("The download ended early.".into());
     }
-    let _ = tx.send(WriteCommand::Finish).await;
+    if tx.send(WriteCommand::Finish).await.is_err() {
+        drop(tx);
+        let writer_result = writer_handle
+            .await
+            .map_err(|error| format!("Download writer failed: {error}"))?;
+        writer_result?;
+        return Err("Download writer stopped unexpectedly.".into());
+    }
     drop(tx);
     let writer_result = writer_handle
         .await
@@ -562,6 +572,7 @@ pub(crate) async fn download_remote_file(
             headers,
             destination.clone(),
             request_tag,
+            !saves_to_disk,
             placeholder,
             progress,
         ));

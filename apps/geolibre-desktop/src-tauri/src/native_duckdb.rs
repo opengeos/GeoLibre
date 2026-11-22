@@ -2224,20 +2224,20 @@ mod tests {
             ] AS layers;",
         )
         .expect("seed fake_meta");
-        let query_layer = |layer: &str| -> Option<String> {
-            let sql = format!(
-                "SELECT l.geometry_fields[1].crs.auth_name, l.geometry_fields[1].crs.auth_code \
-                 FROM (SELECT UNNEST(layers) AS l FROM fake_meta) \
-                 WHERE l.name = {} LIMIT 1",
-                quote_sql_string(layer)
-            );
+        let query_layer = |layer: Option<&str>| -> Option<String> {
+            let sql = source_crs_meta_sql("'/tmp/multi.gpkg'", layer)
+                .replace("ST_Read_Meta('/tmp/multi.gpkg')", "fake_meta");
             conn.query_row(&sql, [], |row| {
-                Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<String>>(1)?))
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
             })
             .ok()
-            .and_then(|(a, c)| Some(format!("{}:{}", a?, c?)))
+            .and_then(|(a, c)| parse_auth_crs(a, c))
         };
-        assert_eq!(query_layer("parcels").as_deref(), Some("EPSG:32618"));
-        assert_eq!(query_layer("local"), None);
+        assert_eq!(query_layer(Some("parcels")).as_deref(), Some("EPSG:32618"));
+        assert_eq!(query_layer(Some("local")), None);
+        assert_eq!(query_layer(None).as_deref(), Some("EPSG:4326"));
     }
 }

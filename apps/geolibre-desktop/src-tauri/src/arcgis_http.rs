@@ -3,7 +3,7 @@
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -246,6 +246,15 @@ async fn request(url: String, body: Option<ArcGISBody>) -> Result<ArcGISResponse
     tauri::async_runtime::spawn_blocking(move || validate_url(&checked))
         .await
         .map_err(|error| format!("ArcGIS validation failed: {error}"))??;
+    let deadline = Instant::now() + Duration::from_secs(120);
+    let mut active_auth = (!current_url.username().is_empty() || current_url.password().is_some())
+        .then(|| {
+            (
+                current_url.origin(),
+                current_url.username().to_string(),
+                current_url.password().map(str::to_string),
+            )
+        });
     let client = client()?;
     let initial_request = match body {
         Some(ArcGISBody::Form(body)) => client
@@ -261,8 +270,12 @@ async fn request(url: String, body: Option<ArcGISBody>) -> Result<ArcGISResponse
             .body(bytes),
         None => client.get(current_url.clone()),
     };
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        return Err("ArcGIS request timed out.".into());
+    }
     let mut response = initial_request
-        .timeout(Duration::from_secs(120))
+        .timeout(remaining)
         .send()
         .await
         .map_err(|error| format!("ArcGIS request failed: {}", error.without_url()))?;
@@ -280,22 +293,39 @@ async fn request(url: String, body: Option<ArcGISBody>) -> Result<ArcGISResponse
         let location = location
             .to_str()
             .map_err(|_| "Invalid ArcGIS redirect location.".to_string())?;
-        let next_url = current_url
+        let mut next_url = current_url
             .join(location)
             .map_err(|_| "Invalid ArcGIS redirect URL.".to_string())?;
+        // Carry URL Basic auth across same-HTTPS-origin hops (matching reqwest's
+        // built-in redirect behavior) and drop it on any origin change.
+        if let Some((auth_origin, user, pass)) = &active_auth {
+            if next_url.scheme() == "https" && &next_url.origin() == auth_origin {
+                if next_url.username().is_empty() && next_url.password().is_none() {
+                    let _ = next_url.set_username(user);
+                    let _ = next_url.set_password(pass.as_deref());
+                }
+            } else {
+                active_auth = None;
+            }
+        }
         history.push(current_url);
         validate_redirect(&history, &next_url)?;
-        // Also run full DNS-backed SSRF validation on a blocking worker so
-        // hostnames resolving to private addresses cannot be reached through a
-        // configured HTTP proxy (where `GuardedDnsResolver` only sees the proxy).
+        // Pre-check redirect hostnames via DNS on a blocking worker before
+        // sending through any configured HTTP proxy (where `GuardedDnsResolver`
+        // only resolves the proxy host; a residual DNS-rebinding TOCTOU remains
+        // when an external proxy performs its own final resolution).
         let checked_next = next_url.clone();
         tauri::async_runtime::spawn_blocking(move || validate_url(&checked_next))
             .await
             .map_err(|error| format!("ArcGIS redirect validation failed: {error}"))??;
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err("ArcGIS request timed out.".into());
+        }
         current_url = next_url;
         response = client
             .get(current_url.clone())
-            .timeout(Duration::from_secs(120))
+            .timeout(remaining)
             .send()
             .await
             .map_err(|error| format!("ArcGIS request failed: {}", error.without_url()))?;

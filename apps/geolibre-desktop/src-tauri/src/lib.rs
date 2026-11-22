@@ -3315,8 +3315,12 @@ async fn start_martin_server(
     connection_string: String,
     default_srid: Option<String>,
 ) -> Result<MartinServerInfo, String> {
+    let start_gen = app
+        .state::<MartinServerState>()
+        .generation
+        .load(std::sync::atomic::Ordering::SeqCst);
     tauri::async_runtime::spawn_blocking(move || {
-        start_martin_server_blocking(app, connection_string, default_srid)
+        start_martin_server_blocking(app, connection_string, default_srid, start_gen)
     })
     .await
     .map_err(|error| format!("Could not join Martin startup task: {error}"))?
@@ -3327,18 +3331,24 @@ fn start_martin_server_blocking(
     app: tauri::AppHandle,
     connection_string: String,
     default_srid: Option<String>,
+    start_gen: u64,
 ) -> Result<MartinServerInfo, String> {
     if connection_string.trim().is_empty() {
         return Err("Enter a PostgreSQL connection string.".to_string());
     }
 
-    let binary = ensure_martin_binary_path(&app)?;
     let state = app.state::<MartinServerState>();
+    if state.generation.load(std::sync::atomic::Ordering::SeqCst) != start_gen {
+        return Err("Martin server startup was cancelled.".to_string());
+    }
+    let binary = ensure_martin_binary_path(&app)?;
     let _lifecycle = state
         .lifecycle
         .lock()
         .map_err(|_| "Could not lock Martin lifecycle.".to_string())?;
-    let start_gen = state.generation.load(std::sync::atomic::Ordering::SeqCst);
+    if state.generation.load(std::sync::atomic::Ordering::SeqCst) != start_gen {
+        return Err("Martin server startup was cancelled.".to_string());
+    }
     {
         let mut process = state
             .process
@@ -3368,10 +3378,12 @@ fn start_martin_server_blocking(
                     .lock()
                     .map_err(|_| "Could not lock Martin process state.".to_string())?;
                 if state.generation.load(std::sync::atomic::Ordering::SeqCst) != start_gen {
+                    drop(process);
                     drop(info.process);
                     return Err("Martin server startup was cancelled.".to_string());
                 }
                 if martin_slot_is_busy(&mut process) {
+                    drop(process);
                     drop(info.process);
                     return Err(
                         "A Martin server is already running. Stop it before starting a new one."
@@ -3424,7 +3436,11 @@ fn stop_martin_server_blocking(app: tauri::AppHandle) -> Result<(), String> {
 #[cfg(not(feature = "mas"))]
 #[tauri::command]
 async fn start_geolibre_sidecar(app: tauri::AppHandle) -> Result<SidecarServerInfo, String> {
-    tauri::async_runtime::spawn_blocking(move || start_geolibre_sidecar_blocking(app))
+    let start_gen = app
+        .state::<SidecarServerState>()
+        .generation
+        .load(std::sync::atomic::Ordering::SeqCst);
+    tauri::async_runtime::spawn_blocking(move || start_geolibre_sidecar_blocking(app, start_gen))
         .await
         .map_err(|error| format!("Could not join sidecar startup task: {error}"))?
 }
@@ -3456,14 +3472,19 @@ fn add_main_sidecar_extras(command: &mut Command) {
 }
 
 #[cfg(not(feature = "mas"))]
-fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServerInfo, String> {
+fn start_geolibre_sidecar_blocking(
+    app: tauri::AppHandle,
+    start_gen: u64,
+) -> Result<SidecarServerInfo, String> {
     let base_url = sidecar_base_url();
     let state = app.state::<SidecarServerState>();
     let _lifecycle = state
         .lifecycle
         .lock()
         .map_err(|_| "Could not lock sidecar lifecycle.".to_string())?;
-    let start_gen = state.generation.load(std::sync::atomic::Ordering::SeqCst);
+    if state.generation.load(std::sync::atomic::Ordering::SeqCst) != start_gen {
+        return Err("GeoLibre sidecar startup was cancelled.".to_string());
+    }
     {
         let mut process = state
             .process
@@ -3579,13 +3600,13 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
         .map_err(|_| "Could not lock sidecar process state.".to_string())?;
     if state.generation.load(std::sync::atomic::Ordering::SeqCst) != start_gen {
         drop(process);
-        let mut cancelled = SidecarProcess { child };
-        cancelled.terminate();
+        // Drop triggers `SidecarProcess::drop` -> `terminate()` exactly once.
+        drop(SidecarProcess { child });
         return Err("GeoLibre sidecar startup was cancelled.".to_string());
     }
     if process.is_some() {
-        let mut duplicate = SidecarProcess { child };
-        duplicate.terminate();
+        drop(process);
+        drop(SidecarProcess { child });
     } else {
         *process = Some(SidecarProcess { child });
     }
@@ -3608,13 +3629,13 @@ async fn stop_geolibre_sidecar(app: tauri::AppHandle) -> Result<(), String> {
 #[cfg(not(feature = "mas"))]
 fn stop_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<SidecarServerState>();
+    // Bump generation immediately without blocking on `lifecycle` so Stop stays
+    // responsive during a slow `uv` install or health wait; any in-progress
+    // startup checks `generation` under `process.lock()` and tears down its
+    // child instead of installing it.
     state
         .generation
         .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    let _lifecycle = state
-        .lifecycle
-        .lock()
-        .map_err(|_| "Could not lock sidecar lifecycle.".to_string())?;
     {
         let mut process = state
             .process
@@ -3648,13 +3669,20 @@ fn stop_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<(), String> {
 #[cfg(not(feature = "mas"))]
 #[tauri::command]
 async fn start_jupyter_server(app: tauri::AppHandle) -> Result<JupyterServerInfo, String> {
-    tauri::async_runtime::spawn_blocking(move || start_jupyter_server_blocking(app))
+    let start_gen = app
+        .state::<JupyterServerState>()
+        .generation
+        .load(std::sync::atomic::Ordering::SeqCst);
+    tauri::async_runtime::spawn_blocking(move || start_jupyter_server_blocking(app, start_gen))
         .await
         .map_err(|error| format!("Could not join Jupyter startup task: {error}"))?
 }
 
 #[cfg(not(feature = "mas"))]
-fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerInfo, String> {
+fn start_jupyter_server_blocking(
+    app: tauri::AppHandle,
+    start_gen: u64,
+) -> Result<JupyterServerInfo, String> {
     let state = app.state::<JupyterServerState>();
     // Serialize the whole startup. Concurrent calls (e.g. React StrictMode
     // double-invoking the Notebook panel's mount effect in dev) would otherwise
@@ -3665,7 +3693,9 @@ fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerI
         .startup
         .lock()
         .map_err(|_| "Could not lock Jupyter startup.".to_string())?;
-    let start_gen = state.generation.load(std::sync::atomic::Ordering::SeqCst);
+    if state.generation.load(std::sync::atomic::Ordering::SeqCst) != start_gen {
+        return Err("Jupyter server startup was cancelled.".to_string());
+    }
     // Reuse an already-running server: hand back the same URL + token.
     {
         let mut process = state
@@ -3868,14 +3898,16 @@ fn stop_jupyter_server_blocking(app: tauri::AppHandle) -> Result<(), String> {
             .process
             .lock()
             .map_err(|_| "Could not lock Jupyter process state.".to_string())?;
-        // JupyterProcess::Drop terminates the child's process group; taking the
-        // value out is enough (see stop_geolibre_sidecar_blocking).
+        // Clear the token in the same `process` critical section as taking the
+        // process so a concurrent start cannot publish a fresh token that gets
+        // wiped by a late clear.
         let taken = process.take();
+        if let Ok(mut token) = state.token.lock() {
+            *token = None;
+        }
         drop(process);
+        // JupyterProcess::Drop terminates the child's process group outside the lock.
         drop(taken);
-    }
-    if let Ok(mut token) = state.token.lock() {
-        *token = None;
     }
     // Backstop: reap anything still bound to the port (no-op when nothing of
     // ours is listening). Best-effort, because the child this call exists to
@@ -4396,12 +4428,10 @@ fn hide_console_window(_command: &mut Command) {}
 
 #[cfg(not(feature = "mas"))]
 fn terminate_sidecar_child(child: &mut Child) {
-    // Signal the process group first so grandchildren (such as Jupyter kernels
-    // or uvicorn workers) are still terminated even if the group leader (`uv`
-    // or the wrapper process) already exited. While any descendant remains in
-    // the group, Unix will not reuse that PGID; if the group is already empty,
-    // `kill(-pgid, ...)` returns ESRCH and is ignored. Skip `child.kill()` /
-    // `child.wait()` once `try_wait()` confirms the leader was already reaped.
+    // Signal the process group first so surviving grandchildren (such as
+    // Jupyter kernels or uvicorn workers) are terminated even if the group
+    // leader already exited. Skip `child.kill()` / `child.wait()` once
+    // `try_wait()` confirms the leader was already reaped.
     terminate_sidecar_process_group(child);
     if matches!(child.try_wait(), Ok(Some(_))) {
         return;
