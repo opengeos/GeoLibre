@@ -324,7 +324,7 @@ export function createRelay(options: RelayOptions = {}): {
     }
 
     if (message.type === "presence" && peer.participant) {
-      if (!session.peers.has(peer)) return;
+      if (!session.peers.has(peer) || peer.overflowClosed) return;
       const cursor = sanitizeCursor(message.cursor);
       const view = sanitizeView(message.view);
       const clientId = peer.participant.clientId;
@@ -367,7 +367,7 @@ export function createRelay(options: RelayOptions = {}): {
         message.identityToken,
         identitySecret,
       );
-      if (!session.peers.has(peer)) return;
+      if (!session.peers.has(peer) || peer.overflowClosed) return;
 
       if (persisted.requireIdentity && !identity && role !== "host") {
         send(peer, {
