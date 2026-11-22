@@ -3650,26 +3650,28 @@ fn stop_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<(), String> {
         drop(taken); // terminate() runs here, outside the lock
     }
 
-    let should_reap_port = || {
-        state.generation.load(std::sync::atomic::Ordering::SeqCst) == stop_gen
-            && state
-                .process
-                .lock()
-                .is_ok_and(|process| process.is_none())
-    };
-    let base_url = sidecar_base_url();
-    if should_reap_port() && sidecar_health_is_ready(&base_url) {
-        request_sidecar_shutdown(&base_url);
-        wait_for_sidecar_stop(&base_url);
-    }
-    if should_reap_port() && sidecar_health_is_ready(&base_url) {
-        terminate_sidecar_listeners_on_port(SIDECAR_PORT)?;
-        wait_for_sidecar_stop(&base_url);
-    }
-    if should_reap_port() && sidecar_health_is_ready(&base_url) {
-        return Err(format!(
-            "GeoLibre sidecar is still running on port {SIDECAR_PORT}."
-        ));
+    if let Ok(_lifecycle) = state.lifecycle.try_lock() {
+        let should_reap_port = || {
+            state.generation.load(std::sync::atomic::Ordering::SeqCst) == stop_gen
+                && state
+                    .process
+                    .lock()
+                    .is_ok_and(|process| process.is_none())
+        };
+        let base_url = sidecar_base_url();
+        if should_reap_port() && sidecar_health_is_ready(&base_url) {
+            request_sidecar_shutdown(&base_url);
+            wait_for_sidecar_stop(&base_url);
+        }
+        if should_reap_port() && sidecar_health_is_ready(&base_url) {
+            terminate_sidecar_listeners_on_port(SIDECAR_PORT)?;
+            wait_for_sidecar_stop(&base_url);
+        }
+        if should_reap_port() && sidecar_health_is_ready(&base_url) {
+            return Err(format!(
+                "GeoLibre sidecar is still running on port {SIDECAR_PORT}."
+            ));
+        }
     }
     Ok(())
 }
@@ -3918,17 +3920,19 @@ fn stop_jupyter_server_blocking(app: tauri::AppHandle) -> Result<(), String> {
         // JupyterProcess::Drop terminates the child's process group outside the lock.
         drop(taken);
     }
-    // Backstop: reap anything still bound to the port only when no newer start
-    // has installed a live server in the meantime.
-    if state.generation.load(std::sync::atomic::Ordering::SeqCst) == stop_gen
-        && state.process.lock().is_ok_and(|process| process.is_none())
-    {
-        match app_runtime_dir(&app) {
-            Ok(runtime_dir) => {
-                let _ = terminate_jupyter_listeners_on_port(JUPYTER_PORT, &runtime_dir);
-            }
-            Err(error) => {
-                eprintln!("Jupyter: skipping the port {JUPYTER_PORT} backstop ({error}).")
+    // Backstop: reap anything still bound to the port only when no startup is
+    // in flight and no newer start has installed a live server in the meantime.
+    if let Ok(_startup) = state.startup.try_lock() {
+        if state.generation.load(std::sync::atomic::Ordering::SeqCst) == stop_gen
+            && state.process.lock().is_ok_and(|process| process.is_none())
+        {
+            match app_runtime_dir(&app) {
+                Ok(runtime_dir) => {
+                    let _ = terminate_jupyter_listeners_on_port(JUPYTER_PORT, &runtime_dir);
+                }
+                Err(error) => {
+                    eprintln!("Jupyter: skipping the port {JUPYTER_PORT} backstop ({error}).")
+                }
             }
         }
     }

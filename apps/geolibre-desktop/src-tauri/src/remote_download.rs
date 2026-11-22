@@ -428,7 +428,23 @@ async fn transfer(
     let mut read_error: Option<String> = None;
     let mut writer_closed = false;
     loop {
-        let chunk = match response.chunk().await {
+        let next_chunk = {
+            use std::future::Future as _;
+            let mut chunk_fut = std::pin::pin!(response.chunk());
+            let mut closed_fut = std::pin::pin!(tx.closed());
+            std::future::poll_fn(|cx| {
+                if closed_fut.as_mut().poll(cx).is_ready() {
+                    return std::task::Poll::Ready(None);
+                }
+                chunk_fut.as_mut().poll(cx).map(Some)
+            })
+            .await
+        };
+        let Some(chunk_res) = next_chunk else {
+            writer_closed = true;
+            break;
+        };
+        let chunk = match chunk_res {
             Ok(Some(chunk)) => chunk,
             Ok(None) => break,
             Err(error) => {
@@ -457,12 +473,16 @@ async fn transfer(
     }
     if let Some(error) = read_error {
         drop(tx);
-        let _ = writer_handle.await;
+        if let Ok(Err(write_err)) = writer_handle.await {
+            return Err(write_err);
+        }
         return Err(error);
     }
     if total.is_some_and(|total| total != received) {
         drop(tx);
-        let _ = writer_handle.await;
+        if let Ok(Err(write_err)) = writer_handle.await {
+            return Err(write_err);
+        }
         return Err("The download ended early.".into());
     }
     if tx.send(WriteCommand::Finish).await.is_err() {
