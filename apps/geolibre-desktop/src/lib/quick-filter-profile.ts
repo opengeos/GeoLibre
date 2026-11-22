@@ -76,7 +76,10 @@ export interface ProfileQuickFilterOptions<T = Record<string, unknown> | null | 
    * Profile only these fields instead of every field. A quick filter needs the
    * profile of the one field it is on, so asking for that field alone costs a
    * property read per feature rather than a tally of the whole attribute table.
-   * A requested field that no inspected record carries gets no profile.
+   * A requested field that no inspected record carries is profiled as all
+   * blank (`present: 0`, `blankCount` = every inspected record), the same as
+   * a field that is null everywhere. With no records to inspect, no field
+   * gets a profile.
    */
   fields?: readonly string[];
   /**
@@ -424,6 +427,12 @@ export function createQuickFilterScan<T = Record<string, unknown> | null | undef
   const names = options.names ? new Set<string>() : null;
   const tallies = new Map<string, FieldTally>();
   const inspected = Math.min(records.length, limit);
+  // Every requested field gets a tally up front, so a field that no inspected
+  // record carries is profiled as all blank (its features match "(blank)")
+  // instead of dropped. A saved filter on a field the current sample lacks
+  // still offers the "(blank)" option, like a field that is null everywhere.
+  // With no records there is nothing to count, and no profile.
+  if (wanted && inspected > 0) for (const field of wanted) tallies.set(field, newTally());
   let index = 0;
 
   const tallyField = (field: string, value: unknown): void => {
