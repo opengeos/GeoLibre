@@ -65,9 +65,9 @@ function jsonError(message: string, status: number, headers?: HeadersInit): Resp
   return Response.json({ error: { message, type: "geolibre_proxy_error" } }, { status, headers });
 }
 
-function parseList(value: string): Set<string> {
+function parseList(value: string | undefined): Set<string> {
   return new Set(
-    value
+    (value ?? "")
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean),

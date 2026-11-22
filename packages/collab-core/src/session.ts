@@ -38,6 +38,8 @@ export interface SessionParticipant {
   editOverride?: boolean;
   identity?: ParticipantIdentity | null;
   inviteToken?: string | null;
+  /** True when the invite allows more than one use (unlimited or maxUses > 1). */
+  inviteShared?: boolean;
   lastChatTs?: number;
   lastCommentTs?: number;
 }
@@ -75,12 +77,12 @@ export function participantCanEditLayer(
  * boundary — see the *Moderation* section of `docs/collaboration.md`.
  */
 export function getParticipantKey(
-  participant: Pick<SessionParticipant, "clientId" | "identity" | "inviteToken">,
+  participant: Pick<SessionParticipant, "clientId" | "identity" | "inviteToken" | "inviteShared">,
 ): string {
   if (participant.identity?.userId) {
     return `user:${participant.identity.userId}`;
   }
-  if (participant.inviteToken) {
+  if (participant.inviteToken && !participant.inviteShared) {
     return `invite:${participant.inviteToken}`;
   }
   return `anon:${participant.clientId}`;

@@ -300,9 +300,14 @@ def render_project_html(
     # and a model can pick an argument up from content it is reading. A
     # redacted project still carries inlined features and layer URLs.
     origin = urllib.parse.urlsplit(base_url)
-    if origin.scheme not in ("http", "https") or not origin.netloc:
+    if origin.scheme not in ("http", "https") or not origin.hostname:
         raise ValueError(f"to_html: app_url must be an http(s) URL, got {base_url!r}")
-    app_origin = f"{origin.scheme}://{origin.netloc}"
+    origin_host = f"[{origin.hostname}]" if ":" in origin.hostname else origin.hostname
+    default_port = 80 if origin.scheme == "http" else 443
+    origin_port = (
+        f":{origin.port}" if origin.port is not None and origin.port != default_port else ""
+    )
+    app_origin = f"{origin.scheme}://{origin_host}{origin_port}"
     # Force the embed bridge on (isEmbedded() honours ?embed=1). Insert the
     # parameter into the query string *before* any URL fragment: a "#..."
     # fragment would otherwise swallow a trailing "?embed=1" (browsers read it
@@ -348,7 +353,9 @@ def render_project_html(
     # Inline the project inside a JSON <script> block and escape "<" so a
     # property value can never break out of the script element; "<" is valid
     # JSON that JSON.parse restores to "<".
-    project_json = json.dumps(_project.redact_credentials(project)).replace("<", "\\u003c")
+    project_json = json.dumps(_project.redact_credentials(project), allow_nan=False).replace(
+        "<", "\\u003c"
+    )
     return _HTML_EXPORT_TEMPLATE.format(
         title=_html_escape(title),
         width=_html_escape(width),
@@ -2572,6 +2579,18 @@ class Map(anywidget.AnyWidget):
                     if path.stat().st_size > _MAX_TABULAR_BYTES:
                         raise ValueError(f"CSV file exceeds the 50 MB size limit: {source}")
                     text = path.read_text(encoding="utf-8-sig")
+                elif (
+                    "\n" not in source
+                    and "\r" not in source
+                    and "," not in source
+                    and (
+                        "/" in source
+                        or "\\" in source
+                        or source.startswith(("~", "."))
+                        or path.suffix.lower() in {".csv", ".tsv", ".txt"}
+                    )
+                ):
+                    raise FileNotFoundError(f"CSV file not found: {source}")
                 else:
                     text = source
             reader = csv.DictReader(io.StringIO(text), restkey=_CSV_RESTKEY)

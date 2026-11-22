@@ -110,6 +110,45 @@ def load_project(path: str | Path) -> dict[str, Any]:
     return data
 
 
+_GEOJSON_TYPES = frozenset(
+    {
+        "FeatureCollection",
+        "Feature",
+        "GeometryCollection",
+        "Point",
+        "MultiPoint",
+        "LineString",
+        "MultiLineString",
+        "Polygon",
+        "MultiPolygon",
+    }
+)
+
+
+def _serialize_project_value(value: Any, depth: int) -> str:
+    """Serialize a project value with indented structure and compact GeoJSON."""
+    if isinstance(value, dict):
+        if isinstance(value.get("type"), str) and value["type"] in _GEOJSON_TYPES:
+            return json.dumps(value, separators=(",", ":"), allow_nan=False)
+        if not value:
+            return "{}"
+        pad = "  " * (depth + 1)
+        close_pad = "  " * depth
+        entries = [
+            f"{json.dumps(str(key), allow_nan=False)}: {_serialize_project_value(entry, depth + 1)}"
+            for key, entry in value.items()
+        ]
+        return "{\n" + pad + (",\n" + pad).join(entries) + "\n" + close_pad + "}"
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return "[]"
+        pad = "  " * (depth + 1)
+        close_pad = "  " * depth
+        entries = [_serialize_project_value(entry, depth + 1) for entry in value]
+        return "[\n" + pad + (",\n" + pad).join(entries) + "\n" + close_pad + "]"
+    return json.dumps(value, allow_nan=False)
+
+
 def save_project(path: str | Path, project: dict[str, Any]) -> Path:
     """Write a project dict to disk as formatted JSON.
 
@@ -152,7 +191,9 @@ def save_project(path: str | Path, project: dict[str, Any]) -> Path:
             # other path fails loudly here rather than being written as a bare
             # token the app's JSON.parse rejects. Camera fields are already
             # checked at the setter (see _finite); this is the backstop.
-            handle.write(json.dumps(project, indent=2, allow_nan=False) + "\n")
+            # Embedded GeoJSON subtrees are written compactly to match the app's
+            # serializeProject and avoid multi-fold whitespace bloat.
+            handle.write(_serialize_project_value(project, 0) + "\n")
         # NamedTemporaryFile creates at 0600. Carry the destination's mode over
         # so re-saving an existing project does not quietly make it private —
         # the MCP server calls this on every edit, however small. S_IMODE drops
@@ -466,7 +507,44 @@ def remove_layer(project: dict[str, Any], ref: str) -> str:
     if isinstance(styles, dict):
         styles.pop(layer_id, None)
     _drop_swipe_reference(project, layer)
+    _drop_layer_references(project, layer_id)
     return layer_id
+
+
+def _drop_layer_references(project: dict[str, Any], layer_id: str) -> None:
+    """Scrub a removed layer id from bookmarks, story chapters, and split views."""
+    bookmarks = project.get("bookmarks")
+    if isinstance(bookmarks, list):
+        for bookmark in bookmarks:
+            if not isinstance(bookmark, dict):
+                continue
+            extra = bookmark.get("extra")
+            if isinstance(extra, dict) and isinstance(extra.get("visibleLayerIds"), list):
+                extra["visibleLayerIds"] = [
+                    value for value in extra["visibleLayerIds"] if value != layer_id
+                ]
+    story = project.get("storymap")
+    chapters = story.get("chapters") if isinstance(story, dict) else None
+    if isinstance(chapters, list):
+        for chapter in chapters:
+            if not isinstance(chapter, dict):
+                continue
+            for key in ("onChapterEnter", "onChapterExit"):
+                entries = chapter.get(key)
+                if isinstance(entries, list):
+                    chapter[key] = [
+                        entry
+                        for entry in entries
+                        if not (isinstance(entry, dict) and entry.get("layerId") == layer_id)
+                    ]
+    secondary_views = project.get("secondaryMapViews")
+    if isinstance(secondary_views, list):
+        for pane in secondary_views:
+            if not isinstance(pane, dict):
+                continue
+            vis = pane.get("layerVisibility")
+            if isinstance(vis, dict):
+                vis.pop(layer_id, None)
 
 
 def _drop_swipe_reference(project: dict[str, Any], layer: dict[str, Any]) -> None:
@@ -522,7 +600,7 @@ def update_layer(
     if visible is not None:
         layer["visible"] = bool(visible)
     if opacity is not None:
-        layer["opacity"] = min(1.0, max(0.0, float(opacity)))
+        layer["opacity"] = min(1.0, max(0.0, _finite(opacity, "opacity")))
     if index is not None:
         layers = layers_of(project)
         layers.remove(layer)
@@ -1438,7 +1516,7 @@ def add_colorbar(
         raise ValueError(f"orientation must be one of {sorted(ORIENTATIONS)}, got {orientation!r}")
     if position not in CONTROL_POSITIONS:
         raise ValueError(f"position must be one of {sorted(CONTROL_POSITIONS)}, got {position!r}")
-    vmin_f, vmax_f = float(vmin), float(vmax)
+    vmin_f, vmax_f = _finite(vmin, "vmin"), _finite(vmax, "vmax")
     # The app's normalizer only fixes vmin == vmax; an inverted range would
     # otherwise render a reversed gradient, so reject it here.
     if vmin_f >= vmax_f:
@@ -1830,6 +1908,10 @@ def set_plugin_state(
         # Reposition or (de)activate without touching the stored settings.
         if activate and plugin_id not in plugins["activePluginIds"]:
             plugins["activePluginIds"].append(plugin_id)
+        elif not activate:
+            plugins["activePluginIds"] = [
+                pid for pid in plugins["activePluginIds"] if pid != plugin_id
+            ]
         if position is not None:
             plugins["mapControlPositions"][plugin_id] = position
     else:

@@ -201,7 +201,7 @@ export async function handleEarthdataDownload(
   }
   const range = request.headers.get("range");
   const now = Date.now();
-  const cacheKey = authorization ? await presignedCacheKey(authorization, target) : null;
+  let cacheKey = authorization ? await presignedCacheKey(authorization, target) : null;
 
   let url = target;
   let response: Response | null = null;
@@ -214,7 +214,11 @@ export async function handleEarthdataDownload(
           : { "accept-encoding": "identity" },
         redirect: "manual",
       });
-      if (upstream.ok) response = upstream;
+      if (upstream.ok) {
+        response = upstream;
+      } else {
+        await upstream.body?.cancel();
+      }
     } catch {
       // Fall back to the DAAC below.
     }
@@ -241,6 +245,7 @@ export async function handleEarthdataDownload(
       response = upstream;
       break;
     }
+    await upstream.body?.cancel();
     let next: URL;
     try {
       next = new URL(location, url);
@@ -258,13 +263,16 @@ export async function handleEarthdataDownload(
     }
     url = next.toString();
     // Cache only a presigned target: another Earthdata hop would answer the
-    // tokenless replay with a redirect or 401 and be evicted every time.
-    if (hop === 0 && cacheKey && !isEarthdataDataUrl(url)) {
+    // tokenless replay with a redirect or 401 and be evicted every time. Allow
+    // caching after multi-hop Earthdata redirects as well, once per request.
+    if (cacheKey && !isEarthdataDataUrl(url)) {
       await storePresigned(cacheKey, url, now);
+      cacheKey = null;
     }
   }
   if (!response) return plain(508, "Too many redirects.");
   if (!response.ok) {
+    await response.body?.cancel();
     const status = response.status === 401 || response.status === 403 ? response.status : 502;
     return plain(status, `The Earthdata file host answered ${response.status}.`);
   }

@@ -537,7 +537,8 @@ def verify_password_login(
     allow_expired: bool = False,
 ) -> Account:
     """Verify built-in credentials under the account's effective security policy."""
-    account = session.scalar(select(Account).where(Account.username == username))
+    normalized = username.strip().lower()
+    account = session.scalar(select(Account).where(Account.username == normalized))
     if account is None:
         # Hash anyway before failing. Short-circuiting here would skip the
         # scrypt call that a real username always pays for, and the timing
@@ -1901,6 +1902,7 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
                 fields.get("organization", "").strip().lower(),
                 now_ts,
                 proxy_user=proxy_user,
+                reauth=fields.get("reauth", "").strip().lower() in ("1", "true"),
             )
 
         if identity is not None:
@@ -1953,6 +1955,7 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
         now_ts: int,
         *,
         proxy_user: str | None,
+        reauth: bool = False,
     ) -> Response:
         """Redirect the browser to the named organization's identity provider."""
         provider = None
@@ -1973,7 +1976,11 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
                 proxy_user=proxy_user,
             )
         org_policy = session.get(OrganizationSecurityPolicy, provider.organization_id)
-        max_age = org_policy.admin_reauth_seconds if org_policy is not None else None
+        max_age = (
+            org_policy.admin_reauth_seconds
+            if org_policy is not None and (reauth or interaction.scope == MANAGEMENT_SCOPE)
+            else None
+        )
         state = secrets.token_urlsafe(32)
         nonce = secrets.token_urlsafe(32)
         code_verifier = secrets.token_urlsafe(64)
@@ -2289,6 +2296,8 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
                     family_expires,
                     (code_row.authenticated_at or now_ts) + policy.absolute_lifetime,
                 )
+        if family_expires <= now_ts:
+            return oauth_token_error(400, "invalid_grant")
         access_expires = min(now_ts + config.access_ttl, family_expires)
         oauth_session = OAuthSession(
             id=session_id,

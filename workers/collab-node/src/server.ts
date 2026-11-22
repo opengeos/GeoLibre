@@ -107,6 +107,8 @@ function isAllowedOrigin(
   }
 }
 
+const MAX_PENDING_FRAMES = 64;
+
 interface Peer {
   socket: WebSocket;
   participant?: SessionParticipant;
@@ -118,6 +120,8 @@ interface Peer {
    * overtake it and be rejected with "Send a join message first".
    */
   queue?: Promise<void>;
+  /** Number of frames currently queued or running for this peer. */
+  pendingFrames: number;
 }
 
 interface LiveSession {
@@ -263,7 +267,12 @@ export function createRelay(options: RelayOptions = {}): {
   }
 
   function broadcast(session: LiveSession, message: ServerMessage, except?: Peer): void {
-    for (const peer of session.peers) if (peer !== except) send(peer, message);
+    const payload = JSON.stringify(message);
+    for (const peer of session.peers) {
+      if (peer !== except && peer.socket.readyState === WebSocket.OPEN) {
+        peer.socket.send(payload);
+      }
+    }
   }
 
   function broadcastParticipants(session: LiveSession, except?: Peer): void {
@@ -364,6 +373,7 @@ export function createRelay(options: RelayOptions = {}): {
       }
 
       const socketClientId = randomUUID();
+      const initialInviteShared = matchedInvite ? matchedInvite.maxUses !== 1 : undefined;
       const joiningParticipant: SessionParticipant = {
         clientId: socketClientId,
         displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
@@ -371,6 +381,7 @@ export function createRelay(options: RelayOptions = {}): {
         role,
         identity,
         inviteToken,
+        ...(initialInviteShared ? { inviteShared: true } : {}),
       };
       const participantKey = getParticipantKey(joiningParticipant);
 
@@ -397,7 +408,12 @@ export function createRelay(options: RelayOptions = {}): {
       // Resolve durable override and initial edit rights AFTER claiming the
       // invite, using the participant's final post-claim key, so a claim loser
       // never inherits an invite-keyed override.
-      const finalParticipantKey = getParticipantKey({ ...joiningParticipant, inviteToken });
+      const finalInviteShared = matchedInvite ? matchedInvite.maxUses !== 1 : undefined;
+      const finalParticipantKey = getParticipantKey({
+        ...joiningParticipant,
+        inviteToken,
+        inviteShared: finalInviteShared,
+      });
       const durableOverride = store.getDurableOverride(id, finalParticipantKey);
       let initialOverride: boolean | undefined = undefined;
       if (durableOverride !== undefined) {
@@ -414,6 +430,7 @@ export function createRelay(options: RelayOptions = {}): {
         ...(initialOverride !== undefined ? { editOverride: initialOverride } : {}),
         identity,
         inviteToken,
+        ...(finalInviteShared ? { inviteShared: true } : {}),
       };
 
       const welcomeInvites = role === "host" ? store.getInvites(id) : undefined;
@@ -963,7 +980,7 @@ export function createRelay(options: RelayOptions = {}): {
     const id = match[1];
     wss.handleUpgrade(request, socket, head, (websocket: WebSocket) => {
       const session = live(id);
-      const peer: Peer = { socket: websocket };
+      const peer: Peer = { socket: websocket, pendingFrames: 0 };
       session.peers.add(peer);
       alive.add(websocket);
       websocket.on("pong", () => alive.add(websocket));
@@ -976,6 +993,15 @@ export function createRelay(options: RelayOptions = {}): {
           });
           return;
         }
+        if (peer.pendingFrames >= MAX_PENDING_FRAMES) {
+          send(peer, {
+            type: "error",
+            code: "bad-message",
+            message: "Too many queued messages; slow down.",
+          });
+          return;
+        }
+        peer.pendingFrames += 1;
         // Defence in depth: a throw (or rejection) here would otherwise be an
         // uncaught exception that stops the whole relay. No single session's
         // frame should be able to do that to the others.
@@ -987,6 +1013,9 @@ export function createRelay(options: RelayOptions = {}): {
               code: "bad-message",
               message: "Could not handle message.",
             });
+          })
+          .finally(() => {
+            peer.pendingFrames = Math.max(0, peer.pendingFrames - 1);
           });
       });
       websocket.on("close", () => closePeer(id, session, peer));

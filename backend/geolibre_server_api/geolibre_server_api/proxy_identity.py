@@ -47,9 +47,12 @@ def _parse_ip(value: str | None) -> IPv4Address | IPv6Address | None:
     if value is None:
         return None
     try:
-        return ipaddress.ip_address(value.strip())
+        address = ipaddress.ip_address(value.strip())
     except ValueError:
         return None
+    if isinstance(address, IPv6Address) and address.ipv4_mapped is not None:
+        return address.ipv4_mapped
+    return address
 
 
 def _trusted(config: TrustedProxyConfig, address: IPv4Address | IPv6Address) -> bool:

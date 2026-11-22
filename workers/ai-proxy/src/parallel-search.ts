@@ -15,8 +15,10 @@ export async function parallelSearch(query: string, signal: AbortSignal) {
       if (String(url) !== ENDPOINT) throw new Error("Unexpected Parallel destination");
       const headers = new Headers(init?.headers);
       headers.set("User-Agent", USER_AGENT);
-      const signals = [signal, ...(init?.signal ? [init.signal] : [])];
-      if (init?.method === "DELETE") signals.push(AbortSignal.timeout(500));
+      const signals =
+        init?.method === "DELETE"
+          ? [AbortSignal.timeout(500), ...(init?.signal ? [init.signal] : [])]
+          : [signal, ...(init?.signal ? [init.signal] : [])];
       const response = await fetch(url, {
         ...init,
         headers,

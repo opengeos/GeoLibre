@@ -252,6 +252,11 @@ def is_last_active_admin(session: Session, organization_id: str, account_id: str
     Demoting, removing, or deactivating it would leave the organization without
     an administrator who can sign in.
     """
+    # Lock the organization row on transactional backends (PostgreSQL) so two
+    # concurrent demotions or removals cannot both observe another active admin.
+    session.execute(
+        select(Organization.id).where(Organization.id == organization_id).with_for_update()
+    )
     return (
         organization_role(session, organization_id, account_id) == "administrator"
         and active_admin_count(session, organization_id, excluding=account_id) == 0
