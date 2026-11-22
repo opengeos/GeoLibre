@@ -247,14 +247,17 @@ fresh on every join.
 
 The same key backs a persisted per-participant override, so both carry the same
 caveat: a block or override is durable only for signed-in identities and
-single-use invites. For a shared multi-use invite link, keying on `anon:<clientId>`
+single-use invites (and a single-use invite only scopes that invite's key; when
+`requireIdentity` is off, a blocked guest can still rejoin anonymously without
+an invite). For a shared multi-use invite link, keying on `anon:<clientId>`
 keeps a host's override or kick/block on one guest from affecting every other
 guest sharing the link; to disable a shared link for future joiners, revoke the
 invite with `revoke-invite`. **An anonymous guest (including one on an unrevoked
 multi-use link) can rejoin by reconnecting**, since they receive a fresh
-`clientId`. Blocking is a moderation convenience, not a security boundary; a
-session that needs an enforceable per-user ban should require a single-use
-invite or a signed-in identity.
+`clientId`. Blocking is a moderation convenience, not a security boundary; for
+an enforceable per-user ban, enable `requireIdentity` with a configured identity
+provider so anonymous joins are rejected and `user:<userId>` blocks apply to
+every rejoin.
 
 ## Chat (#754)
 

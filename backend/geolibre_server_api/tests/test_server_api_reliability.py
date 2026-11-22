@@ -107,8 +107,9 @@ def test_sso_max_age_only_requested_for_reauth(oauth_client, fake_idp):
     _, params, _ = start_sso(oauth_client, "acme")
     assert "max_age" not in params
 
-    # Explicit reauth request passes max_age to the IdP.
-    _, _, interaction, csrf = start_authorize(oauth_client)
+    # Step-up /oauth/authorize?max_age=... renders hidden reauth=1 on the SSO form.
+    page, _, interaction, csrf = start_authorize(oauth_client, params_extra={"max_age": "60"})
+    assert "name='reauth' value='1'" in page.text
     redirect = oauth_client.post(
         "/oauth/authorize",
         data={

@@ -987,6 +987,7 @@ def render_consent_form(
     *,
     sso_available: bool = False,
     proxy_user: str | None = None,
+    reauth: bool = False,
 ) -> str:
     scope_items = "".join(
         f"<li>{html.escape(scope_description(s))}</li>" for s in canonical_scope(scope).split()
@@ -1008,11 +1009,13 @@ def render_consent_form(
         allow_text = "Sign in and allow"
     sso_html = ""
     if sso_available and proxy_user is None:
+        reauth_html = "<input type='hidden' name='reauth' value='1'>" if reauth else ""
         sso_html = (
             "<form method='post'>"
             f"<input type='hidden' name='interaction' value='{html.escape(interaction_id)}'>"
             f"<input type='hidden' name='csrf' value='{html.escape(csrf_value)}'>"
             f"<input type='hidden' name='label' value='{html.escape(label)}'>"
+            f"{reauth_html}"
             "<label>Organization <input type='text' name='organization' "
             "autocomplete='organization' required></label>"
             "<button type='submit' name='decision' value='sso'>"
@@ -1671,6 +1674,7 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
             "code_challenge",
             "code_challenge_method",
             "device_label",
+            "max_age",
         ):
             if len(params.getlist(key)) > 1:
                 return oauth_error_page(400, "invalid_request", "duplicate parameter")
@@ -1704,6 +1708,10 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
         label = params.get("device_label", "") or client.name
         if len(label) > 100:
             return oauth_error_redirect(config.issuer, redirect_uri, "invalid_request", state)
+        raw_max_age = params.get("max_age")
+        if raw_max_age is not None and (not raw_max_age.isdigit() or len(raw_max_age) > 10):
+            return oauth_error_redirect(config.issuer, redirect_uri, "invalid_request", state)
+        reauth_requested = raw_max_age is not None
         try:
             identity = proxy_identity(request)
         except ValueError:
@@ -1774,6 +1782,7 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
                 None,
                 sso_available=sso_available,
                 proxy_user=proxy_user,
+                reauth=reauth_requested,
             ),
             form_redirect_uri=redirect_uri,
             sso_form_action=sso_available,
@@ -1974,6 +1983,7 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
                 label,
                 "Single sign-on is not configured for that organization",
                 proxy_user=proxy_user,
+                reauth=reauth,
             )
         org_policy = session.get(OrganizationSecurityPolicy, provider.organization_id)
         max_age = (
@@ -2018,6 +2028,7 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
         message: str,
         *,
         proxy_user: str | None,
+        reauth: bool = False,
     ) -> HTMLResponse:
         """Re-render the consent form for this interaction with an error message."""
         sso_available = _sso_available(session, proxy_user)
@@ -2033,6 +2044,7 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
                 message,
                 sso_available=sso_available,
                 proxy_user=proxy_user,
+                reauth=reauth,
             ),
             form_redirect_uri=interaction.redirect_uri,
             sso_form_action=sso_available,

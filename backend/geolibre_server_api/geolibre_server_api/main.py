@@ -7,6 +7,7 @@ import os
 import re
 import secrets
 import shutil
+import stat
 import tempfile
 import threading
 import time
@@ -280,7 +281,8 @@ class FileStorage:
                 tmp_path.unlink(missing_ok=True)
                 raise
         try:
-            tmp_path.chmod(0o644)
+            if path.exists():
+                os.chmod(tmp_path, stat.S_IMODE(path.stat().st_mode))
             os.replace(tmp_path, path)
         except BaseException:
             tmp_path.unlink(missing_ok=True)
