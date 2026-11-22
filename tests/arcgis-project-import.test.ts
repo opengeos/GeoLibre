@@ -1040,6 +1040,33 @@ describe("ArcGIS Pro File Geodatabase layers", () => {
     );
   });
 
+  it("reports unsupported symbology on a feature class like any other layer", () => {
+    const mapx = {
+      type: "CIMMap",
+      name: "Heat",
+      defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+      layerDefinitions: [
+        {
+          ...gdbLayer("Wells", "C:\\data\\city.gdb"),
+          renderer: { type: "CIMHeatMapRenderer" },
+        },
+      ],
+    };
+    const result = importArcgisProject(JSON.stringify(mapx), "C:\\work\\heat.mapx", {
+      readFileGeodatabase: true,
+    });
+    assert.equal(result.fileGeodatabaseLayers.length, 1);
+    assert.deepEqual(
+      result.warnings.map((warning) => [
+        warning.layerName,
+        warning.layerId,
+        warning.reason,
+        warning.symbologyIssue,
+      ]),
+      [["Wells", result.project.layers[0].id, "symbology", "renderer"]],
+    );
+  });
+
   it("still reports feature classes as unsupported by default", () => {
     const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx");
     assert.deepEqual(result.fileGeodatabaseLayers, []);

@@ -618,7 +618,7 @@ function importLayer(
       source: { type: "geojson" },
       visible,
       opacity: layerOpacity(layer),
-      style: parseStyle(layer),
+      style: parseStyle(layer, id, name, warnings),
       sourcePath: resolved.fileGeodatabase.gdbPath,
       // The same shape the Add data → File geodatabase source saves, so the
       // features are embedded on save (a .gdb cannot be re-read on reopen).
