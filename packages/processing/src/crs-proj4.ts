@@ -163,7 +163,9 @@ export async function reprojectFeatureCollectionToWgs84(
     const { bbox: _dropBbox, ...rest } = feature;
     return {
       ...rest,
-      geometry: feature.geometry ? transformGeometry(feature.geometry, converter) : feature.geometry,
+      geometry: feature.geometry
+        ? transformGeometry(feature.geometry, converter)
+        : feature.geometry,
     };
   });
   return { type: "FeatureCollection", features };

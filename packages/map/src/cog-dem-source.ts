@@ -557,12 +557,7 @@ export function resampleProjectedTile(
   const winOriginY = affine ? affine.originY : winMaxY;
   const winResX = affine ? affine.resX : winSpanX / sourceWidth;
   const winResY = affine ? affine.resY : -winSpanY / sourceHeight;
-  if (
-    !Number.isFinite(winResX) ||
-    !Number.isFinite(winResY) ||
-    winResX === 0 ||
-    winResY === 0
-  ) {
+  if (!Number.isFinite(winResX) || !Number.isFinite(winResY) || winResX === 0 || winResY === 0) {
     return output;
   }
   const [mercMinX, mercMinY, mercMaxX, mercMaxY] = mercatorBounds;

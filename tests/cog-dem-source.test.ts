@@ -288,12 +288,20 @@ describe("projected COG DEM warping", () => {
 
     // RasterPixelIsPoint: postings at x=0 (10 m) and x=10 (20 m); x=7 belongs to posting 1 (20 m).
     const pointGrid = new Float32Array([10, 20]);
-    const ptTile = resampleProjectedTile(pointGrid, 2, 1, [-5, 0, 15, 10], [0, 0, 10, 10], (c) => c, {
-      originX: -5,
-      originY: 10,
-      resX: 10,
-      resY: -10,
-    });
+    const ptTile = resampleProjectedTile(
+      pointGrid,
+      2,
+      1,
+      [-5, 0, 15, 10],
+      [0, 0, 10, 10],
+      (c) => c,
+      {
+        originX: -5,
+        originY: 10,
+        resX: 10,
+        resY: -10,
+      },
+    );
     // col 179 of 256 spans x ≈ 7.0 -> must pick posting 1 (20 m); col 50 spans x ≈ 2.0 -> posting 0 (10 m).
     assert.equal(ptTile[128 * 256 + 50], 10);
     assert.equal(ptTile[128 * 256 + 179], 20);
@@ -347,7 +355,10 @@ describe("projected COG DEM warping", () => {
         else if (elev >= 199 && elev <= 600) insideCount += 1;
       }
       assert.ok(insideCount > 100, `expected >100 DEM pixels inside overlap, got ${insideCount}`);
-      assert.ok(fallbackCount > 100, `expected >100 fallback pixels outside overlap, got ${fallbackCount}`);
+      assert.ok(
+        fallbackCount > 100,
+        `expected >100 fallback pixels outside overlap, got ${fallbackCount}`,
+      );
     } finally {
       reg.dispose();
     }
