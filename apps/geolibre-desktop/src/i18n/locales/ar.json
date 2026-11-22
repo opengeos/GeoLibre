@@ -10614,8 +10614,6 @@
   },
   "commandPalette": {
     "title": "لوحة الأوامر",
-    "searchAria": "البحث في الأوامر",
-    "searchPlaceholder": "البحث في الأوامر…",
     "listAria": "الأوامر",
     "noMatches": "لا توجد أوامر مطابقة"
   },

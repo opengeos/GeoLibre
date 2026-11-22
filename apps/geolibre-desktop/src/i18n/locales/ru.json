@@ -10327,8 +10327,6 @@
   },
   "commandPalette": {
     "title": "Палитра команд",
-    "searchAria": "Поиск команд",
-    "searchPlaceholder": "Поиск команд…",
     "listAria": "Команды",
     "noMatches": "Подходящих команд нет"
   },

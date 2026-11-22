@@ -10039,8 +10039,6 @@
   },
   "commandPalette": {
     "title": "Komut paleti",
-    "searchAria": "Komutlarda ara",
-    "searchPlaceholder": "Komutlarda ara…",
     "listAria": "Komutlar",
     "noMatches": "Eşleşen komut yok"
   },

@@ -9899,8 +9899,6 @@
   },
   "commandPalette": {
     "title": "Palet perintah",
-    "searchAria": "Cari perintah",
-    "searchPlaceholder": "Cari perintah…",
     "listAria": "Perintah",
     "noMatches": "Tidak ada perintah yang cocok"
   },

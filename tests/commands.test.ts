@@ -6,6 +6,8 @@ import {
   filterCommands,
   formatShortcut,
   matchesShortcut,
+  rankCommands,
+  sortRanked,
 } from "../apps/geolibre-desktop/src/lib/commands";
 
 interface KeyEvent {
@@ -156,6 +158,38 @@ describe("filterCommands", () => {
     assert.deepEqual(
       filterCommands(list, "slope").map((c) => c.id),
       ["y", "x", "z"],
+    );
+  });
+});
+
+describe("rankCommands", () => {
+  const list: Command[] = [
+    command({ id: "x", title: "Slope Vs Aspect Plot", group: "G" }),
+    command({ id: "y", title: "Slope", group: "G" }),
+    command({ id: "z", title: "Max Slope", group: "G" }),
+    command({ id: "w", title: "Hillshade", group: "Terrain", keywords: "slope relief" }),
+  ];
+
+  it("ranks each match in registry order: 0 exact, 1 prefix, 2 elsewhere", () => {
+    assert.deepEqual(
+      rankCommands(list, " Slope ").map((entry) => [entry.command.id, entry.rank]),
+      [
+        ["x", 1],
+        ["y", 0],
+        ["z", 2],
+        ["w", 2],
+      ],
+    );
+  });
+
+  it("matches nothing for a blank query", () => {
+    assert.deepEqual(rankCommands(list, "  "), []);
+  });
+
+  it("sorts best rank first and keeps the given order within a rank", () => {
+    assert.deepEqual(
+      sortRanked(rankCommands(list, "slope")).map((c) => c.id),
+      ["y", "x", "z", "w"],
     );
   });
 });

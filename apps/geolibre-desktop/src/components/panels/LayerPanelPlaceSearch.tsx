@@ -25,7 +25,6 @@ import type { MapEngine } from "@geolibre/map";
 import { Input } from "@geolibre/ui";
 import { Hexagon, Loader2, LocateFixed, MapPin, Search, Table2, X } from "lucide-react";
 import { formatLatLon, parseLatLon } from "../../lib/coordinates";
-import { geocodeResultCamera, POINT_RESULT_ZOOM } from "../../lib/geocode-camera";
 import { parseGridReference } from "../../lib/grid-reference";
 import { type H3CellMatch, parseH3Cell } from "../../lib/h3-search";
 import {
@@ -36,6 +35,7 @@ import {
   type OwnedSelection,
   searchLayerFeatures,
 } from "../../lib/feature-search";
+import { flyToGeocodeMatch, selectFeatureMatch } from "../../lib/search-actions";
 
 interface LayerPanelPlaceSearchProps {
   mapControllerRef: RefObject<MapEngine | null>;
@@ -409,23 +409,14 @@ export function LayerPanelPlaceSearch({
       }
 
       if (row.kind === "feature") {
-        // Reuse the attribute table's path: make the feature the live selection
-        // on its layer, then let the shared highlight overlay frame it. The
-        // explicit fit is what the row promises ("fly to it"), regardless of the
-        // "zoom to selected feature" preference the map effect honors.
-        const store = useAppStore.getState();
-        // The row comes from a debounced scan, so the layer can have been
-        // removed since. Bail rather than point `selectedLayerId` at an id that
-        // no longer resolves — `removeLayer` is careful to null that out.
-        const layer = store.layers.find((item) => item.id === row.match.layerId);
-        if (layer) {
-          store.selectLayer(row.match.layerId);
-          store.selectFeature(row.match.featureId);
+        // Reuse the attribute table's path (`selectFeatureMatch`). The row comes
+        // from a debounced scan, so its layer can have been removed since; then
+        // nothing is selected and the box owns no selection.
+        if (selectFeatureMatch(mapControllerRef.current, row.match)) {
           ownedSelection.current = {
             layerId: row.match.layerId,
             featureId: row.match.featureId,
           };
-          mapControllerRef.current?.highlightFeature(layer, row.match.featureId, { fit: true });
         }
         settle(row.match.value);
         return;
@@ -454,30 +445,7 @@ export function LayerPanelPlaceSearch({
           // Frame the place's own extent when the geocoder reports one, so a
           // state or a country is seen whole and an address lands at street
           // level; only a result without one flies to a fixed zoom.
-          const camera = geocodeResultCamera(row.match, engine.readView().zoom);
-          if (camera.kind === "bounds") {
-            // Every engine frames the extent, the globe included, the same way
-            // the H3 row above does: the store's view holds only a center and a
-            // zoom, so it cannot frame a box. On the globe this means a boxed
-            // result flies there (Cesium's fitBounds animates the camera) while
-            // a point-only result below still jumps.
-            engine.fitBounds(camera.bounds);
-          } else {
-            // A point-only result keeps the globe's instant placement through
-            // the store's applyView path: the Cesium camera's flight path
-            // differs in flat scene modes, and with no box there is nothing a
-            // flight would frame.
-            // eslint-disable-next-line local/no-renderer-kind-checks -- the Cesium camera's flight path, not a capability, is why the globe jumps instead
-            if (engine.kind === "cesium") {
-              const store = useAppStore.getState();
-              store.setMapView({
-                center: camera.center,
-                zoom: Math.max(store.mapView.zoom, POINT_RESULT_ZOOM),
-              });
-            } else {
-              engine.flyTo({ center: camera.center, zoom: camera.zoom });
-            }
-          }
+          flyToGeocodeMatch(engine, row.match);
         }
       }
       settle(row.match.displayName);

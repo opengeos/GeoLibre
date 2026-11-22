@@ -61,10 +61,12 @@ test("no critical/serious axe violations across key screens", async ({ page }, t
   // Command palette (Ctrl/Cmd-K). The app picks the modifier from the platform
   // (Meta on macOS, Ctrl elsewhere), so match it here for local macOS runs.
   await page.keyboard.press(process.platform === "darwin" ? "Meta+KeyK" : "Control+KeyK");
-  await expect(page.getByPlaceholder("Search commands…")).toBeVisible();
+  await expect(
+    page.getByPlaceholder("Search commands, layers, features and places…"),
+  ).toBeVisible();
   await expectAccessible(page, "command-palette", testInfo);
   await page.keyboard.press("Escape");
-  await expect(page.getByPlaceholder("Search commands…")).toBeHidden();
+  await expect(page.getByPlaceholder("Search commands, layers, features and places…")).toBeHidden();
 
   // Keyboard shortcuts cheat sheet (?).
   await page.keyboard.press("?");

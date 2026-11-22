@@ -10039,8 +10039,6 @@
   },
   "commandPalette": {
     "title": "Tavolozza dei comandi",
-    "searchAria": "Cerca comandi",
-    "searchPlaceholder": "Cerca comandi…",
     "listAria": "Comandi",
     "noMatches": "Nessun comando corrispondente"
   },

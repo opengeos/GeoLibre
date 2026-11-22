@@ -10103,8 +10103,6 @@
   },
   "commandPalette": {
     "title": "Əmrlər palitrası",
-    "searchAria": "Əmrləri axtar",
-    "searchPlaceholder": "Əmrləri axtar…",
     "listAria": "Əmrlər",
     "noMatches": "Uyğun əmr tapılmadı"
   },

@@ -11,6 +11,7 @@ import type { ProjectFileActions } from "../../../hooks/useProjectFileActions";
 import type { useTilePackageLoader } from "../../../hooks/useTilePackageLoader";
 import type { useAddDataDialogState } from "../../../hooks/toolbar/useAddDataDialogState";
 import type { usePaletteCommands } from "../../../hooks/toolbar/usePaletteCommands";
+import { usePaletteSearch } from "../../../hooks/toolbar/usePaletteSearch";
 import type { ToolbarDialogs } from "../../../hooks/toolbar/useToolbarDialogs";
 import { IS_MAS_BUILD } from "../../../lib/build-flags";
 import { FieldCollectionDialog } from "../FieldCollectionDialog";
@@ -85,6 +86,7 @@ export function ToolbarDialogsHost({
   paletteCommands,
   onProjectCreated,
 }: ToolbarDialogsHostProps) {
+  const paletteSearch = usePaletteSearch(mapControllerRef);
   return (
     <>
       <MountWhenOpened open={dialogs.newProjectDialogOpen}>
@@ -251,6 +253,7 @@ export function ToolbarDialogsHost({
             open={dialogs.commandPaletteOpen}
             commands={paletteCommands.commands}
             searchOnlyCommands={paletteCommands.toolCommands}
+            search={paletteSearch}
             onOpenChange={dialogs.setCommandPaletteOpen}
           />
         </MountWhenOpened>

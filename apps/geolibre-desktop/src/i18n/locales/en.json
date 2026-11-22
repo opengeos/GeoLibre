@@ -10288,10 +10288,17 @@
   },
   "commandPalette": {
     "title": "Command palette",
-    "searchAria": "Search commands",
-    "searchPlaceholder": "Search commands…",
+    "searchAllAria": "Search commands, layers, features and places",
+    "searchPlaceholderAll": "Search commands, layers, features and places…",
     "listAria": "Commands",
-    "noMatches": "No matching commands"
+    "noMatches": "No matching commands",
+    "layersGroup": "Layers",
+    "featuresGroup": "Features in {{layer}}",
+    "featuresGroupPartial": "Features in {{layer}} (partial)",
+    "placesGroup": "Places",
+    "searchPlace": "Search places for “{{query}}”",
+    "placeClosestMatch": "Closest match: {{name}}",
+    "placeNotFound": "No places found for “{{query}}”"
   },
   "shortcuts": {
     "title": "Keyboard shortcuts",

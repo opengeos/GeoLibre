@@ -35,6 +35,8 @@ export interface Command {
   icon?: LucideIcon;
   /** Visible explanation for an action unavailable in the current context. */
   disabledReason?: string;
+  /** Secondary text shown muted after the title, such as the field a value is from. */
+  detail?: string;
   /** Invoked when the command is selected or its shortcut is pressed. */
   run: () => void;
 }
@@ -128,29 +130,65 @@ function formatKey(key: string): string {
 }
 
 /**
- * Filter and rank commands for a palette query. Matching is token-based: every
- * whitespace-separated token in the query must appear in the command's title,
- * group, or keywords. An exact title match ranks first, then title-prefix
- * matches, then the rest, and the original registry order is preserved within
- * each rank. The exact rank matters with the per-tool entries: "slope" must put
- * "Slope" ahead of "Slope Vs Aspect Plot" and the dozen other Slope… tools.
+ * How well a palette entry matches the query, best first: 0 for an exact
+ * title, 1 for a title prefix, 2 for any other match. The palette's search
+ * results (layers, features) reuse the scale, and 3 sits below all of it for an
+ * entry that should only ever come last.
  */
-export function filterCommands(commands: Command[], query: string): Command[] {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) return commands;
-  const tokens = trimmed.split(/\s+/);
+export type CommandRank = 0 | 1 | 2 | 3;
 
-  const scored: Array<{ command: Command; rank: number; index: number }> = [];
-  commands.forEach((command, index) => {
+/** A command matched by a palette query, with how well it matched. */
+export interface RankedCommand {
+  command: Command;
+  rank: CommandRank;
+}
+
+/**
+ * Match commands against a palette query. Matching is token-based: every
+ * whitespace-separated token in the query must appear in the command's title,
+ * group, or keywords. Each match is ranked: an exact title match is 0, a
+ * title-prefix match 1, and the rest 2. Commands keep their registry order; see
+ * {@link filterCommands} for the sorted list.
+ *
+ * @param commands - The commands to search.
+ * @param query - The raw typed query; blank matches nothing.
+ * @returns The matching commands with their rank, in registry order.
+ */
+export function rankCommands(commands: readonly Command[], query: string): RankedCommand[] {
+  const trimmed = query.trim().toLowerCase();
+  if (!trimmed) return [];
+  const tokens = trimmed.split(/\s+/);
+  const ranked: RankedCommand[] = [];
+  for (const command of commands) {
     const title = command.title.toLowerCase();
     const haystack = `${title} ${command.group.toLowerCase()} ${
       command.keywords?.toLowerCase() ?? ""
     }`;
-    if (!tokens.every((token) => haystack.includes(token))) return;
-    const rank = title === trimmed ? 0 : title.startsWith(trimmed) ? 1 : 2;
-    scored.push({ command, rank, index });
-  });
+    if (!tokens.every((token) => haystack.includes(token))) continue;
+    ranked.push({ command, rank: title === trimmed ? 0 : title.startsWith(trimmed) ? 1 : 2 });
+  }
+  return ranked;
+}
 
-  scored.sort((a, b) => a.rank - b.rank || a.index - b.index);
-  return scored.map((entry) => entry.command);
+/**
+ * Sort ranked entries best rank first. The sort is stable, so entries of equal
+ * rank keep the order they were given in.
+ *
+ * @param entries - Ranked entries, in their tie-break order.
+ * @returns The commands, best rank first.
+ */
+export function sortRanked(entries: readonly RankedCommand[]): Command[] {
+  return [...entries].sort((a, b) => a.rank - b.rank).map((entry) => entry.command);
+}
+
+/**
+ * Filter and rank commands for a palette query (see {@link rankCommands}). An
+ * exact title match ranks first, then title-prefix matches, then the rest, and
+ * the original registry order is preserved within each rank. The exact rank
+ * matters with the per-tool entries: "slope" must put "Slope" ahead of "Slope
+ * Vs Aspect Plot" and the dozen other Slope… tools.
+ */
+export function filterCommands(commands: Command[], query: string): Command[] {
+  if (!query.trim()) return commands;
+  return sortRanked(rankCommands(commands, query));
 }
