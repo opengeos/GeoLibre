@@ -15,7 +15,12 @@
  */
 
 import { DEFAULT_LAYER_STYLE, type LabelStyle, type LayerStyle } from "@geolibre/core";
-import { translateCimRenderer, translateCimSymbol, type CimRendererIssue } from "./cim-renderer";
+import {
+  cimColor,
+  translateCimRenderer,
+  translateCimSymbol,
+  type CimRendererIssue,
+} from "./cim-renderer";
 
 /** What a parsed layer file contributes to a layer's symbology. Mirrors the QML/SLD result. */
 export interface LyrxImportResult {
@@ -308,12 +313,15 @@ function readTextSymbol(labelClass: CimObject, warnings: string[]): Partial<Labe
   const textTranslation = translateCimSymbol({ symbol: text.symbol });
   const textLook = textTranslation.style;
   const leftOut = labelParts("text", textTranslation);
-  if (textLook.fillColor) {
+  // Hollow text (an outline, no fill) reads as the outline colour at fill opacity 0; it draws
+  // opaque in that colour, and the outline warning below already names it. The same placeholder
+  // stands in for a fill whose colour could not be read, which keeps the layer's text colour.
+  const textOpacity = textLook.fillOpacity ?? 1;
+  const unreadableFill =
+    textOpacity === 0 && textTranslation.issues.some((issue) => issue.code === "color");
+  if (textLook.fillColor && !unreadableFill) {
     labels.color = textLook.fillColor;
     labels.colorExpression = "";
-    // Hollow text (an outline, no fill) reads as the outline colour at fill opacity 0; it draws
-    // opaque in that colour, and the outline warning below already names it.
-    const textOpacity = textLook.fillOpacity ?? 1;
     translucent ||= textOpacity > 0 && textOpacity < 1;
   } else {
     warnings.push("The .lyrx style's label colour could not be read; labels keep their colour.");
@@ -351,6 +359,14 @@ function readTextSymbol(labelClass: CimObject, warnings: string[]): Partial<Labe
     warnings.push(
       "The .lyrx style's label transparency was not imported; labels are drawn opaque.",
     );
+  }
+  // A drop shadow draws only when it is offset; Pro writes a shadow colour on most text symbols
+  // with both offsets at 0.
+  const shadow = cimColor(text.shadowColor);
+  const offset =
+    (numberOf(text.shadowOffsetX) ?? 0) !== 0 || (numberOf(text.shadowOffsetY) ?? 0) !== 0;
+  if (offset && shadow && shadow.opacity > 0) {
+    warnings.push("The .lyrx style's label shadow was not imported; labels draw without it.");
   }
   const font = stringOf(text.fontFamilyName);
   if (font) {

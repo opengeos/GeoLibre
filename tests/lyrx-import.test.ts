@@ -516,6 +516,21 @@ describe(".lyrx style import", () => {
       assert.equal(style.labels.colorExpression, '["get", "COLOUR"]');
     });
 
+    it("keeps the layer's text colour when the fill is unreadable beside a readable outline", () => {
+      const { style, warnings } = applied(
+        textLabel({
+          symbol: symbol("CIMPolygonSymbol", [
+            solidStroke(rgb(255, 0, 0)),
+            solidFill({ type: "CIMSpotColor", values: [1] }),
+          ]).symbol,
+        }),
+        labelled(),
+      );
+      assert.equal(style.labels.color, DEFAULT_LAYER_STYLE.labels.color);
+      assert.equal(style.labels.colorExpression, '["get", "COLOUR"]');
+      assert.match(warnings.join(" "), /label colour could not be read/);
+    });
+
     it("names an unreadable halo and transparent text, and drops a fully clear halo", () => {
       const spot = { type: "CIMSpotColor", values: [1] };
       for (const [textSymbol, haloWidth, warning] of [
@@ -570,6 +585,17 @@ describe(".lyrx style import", () => {
           { symbol: symbol("CIMPolygonSymbol", [solidStroke(), solidFill(rgb(0, 0, 0))]).symbol },
           0,
           /label symbol was not imported: the text outline\./,
+        ],
+        // A shadow draws only when offset; Pro writes a black shadow colour with no offset.
+        [
+          { symbol: fillSymbol(rgb(0, 0, 0)), shadowColor: rgb(0, 0, 0), shadowOffsetX: 2 },
+          0,
+          /^The \.lyrx style's label shadow was not imported; labels draw without it\.$/,
+        ],
+        [
+          { symbol: fillSymbol(rgb(0, 0, 0)), shadowColor: rgb(0, 0, 0), shadowOffsetX: 0 },
+          0,
+          null,
         ],
         // Hollow text: named as an outline, not as transparency.
         [
