@@ -20,9 +20,13 @@ describe("@geolibre/collab-core shared handlers", () => {
     assert.equal(isAllowedOrigin("https://evil.example"), false);
     assert.equal(isAllowedOrigin("https://custom.example", "https://custom.example"), true);
     assert.equal(isAllowedOrigin("https://geolibre.app", "https://custom.example"), false);
+    // Opaque custom schemes must not match each other via `"null" === "null"`.
+    assert.equal(isAllowedOrigin("tauri://localhost", "tauri://localhost"), true);
+    assert.equal(isAllowedOrigin("evil://other", "tauri://localhost"), false);
+    assert.equal(isAllowedOrigin("tauri://other", "tauri://localhost"), false);
   });
 
-  it("closes invite claim TOCTOU and prevents claim losers from inheriting invite overrides", async () => {
+  it("closes invite claim TOCTOU and distinguishes successful vs lost claims", async () => {
     const invite: CollabInvite = {
       token: "one-shot",
       role: "co-edit",
@@ -31,7 +35,8 @@ describe("@geolibre/collab-core shared handlers", () => {
       useCount: 0,
       revoked: false,
     };
-    const result = await resolveJoin({
+    const claimedTokens: string[] = [];
+    const lost = await resolveJoin({
       message: {
         type: "join",
         clientId: "",
@@ -46,12 +51,37 @@ describe("@geolibre/collab-core shared handlers", () => {
       getInvites: () => [invite],
       isBlockedKey: () => false,
       // Simulate another join claiming the invite during async identity verification.
-      claimInvite: () => null,
+      claimInvite: (token) => {
+        claimedTokens.push(token);
+        return null;
+      },
       getDurableOverride: (key) => (key === "invite:one-shot" ? true : undefined),
     });
-    assert.equal(result.status, "ok");
-    assert.equal(result.participant.inviteToken, undefined);
-    assert.equal(result.participant.editOverride, undefined);
+    assert.deepEqual(claimedTokens, ["one-shot"]);
+    assert.equal(lost.status, "ok");
+    assert.equal(lost.participant.inviteToken, undefined);
+    assert.equal(lost.participant.editOverride, undefined);
+
+    const won = await resolveJoin({
+      message: {
+        type: "join",
+        clientId: "",
+        displayName: "First Guest",
+        color: "#112233",
+        inviteToken: "one-shot",
+      },
+      storedHostToken: "secret-host",
+      requireIdentity: false,
+      identitySecret: undefined,
+      generateClientId: () => "client-2",
+      getInvites: () => [invite],
+      isBlockedKey: () => false,
+      claimInvite: (token) => (token === "one-shot" ? { ...invite, useCount: 1 } : null),
+      getDurableOverride: () => undefined,
+    });
+    assert.equal(won.status, "ok");
+    assert.equal(won.participant.inviteToken, "one-shot");
+    assert.equal(won.participant.editOverride, true);
   });
 
   it("enforces requireIdentity and block list in resolveJoin", async () => {
@@ -120,17 +150,40 @@ describe("@geolibre/collab-core shared handlers", () => {
     assert.equal(prepared.chatMessage.text, "hello");
     assert.deepEqual(prepared.chatMessage.coordinate, { lng: 10, lat: 20 });
 
-    const { history } = appendBoundedChatHistory(
+    // Count-only cap with generous byte budget.
+    const countTrimmed = appendBoundedChatHistory(
       [
-        { ...prepared.chatMessage, id: "old-1", text: "x".repeat(300) },
-        { ...prepared.chatMessage, id: "old-2", text: "y".repeat(300) },
+        { ...prepared.chatMessage, id: "c1", text: "one" },
+        { ...prepared.chatMessage, id: "c2", text: "two" },
+        { ...prepared.chatMessage, id: "c3", text: "three" },
       ],
-      { ...prepared.chatMessage, id: "new-3", text: "z".repeat(100) },
+      { ...prepared.chatMessage, id: "c4", text: "four" },
+      2,
+      100_000,
+    );
+    assert.deepEqual(
+      countTrimmed.history.map((m) => m.id),
+      ["c3", "c4"],
+    );
+    assert.deepEqual(JSON.parse(countTrimmed.serialized), countTrimmed.history);
+
+    // Byte-only cap with multibyte UTF-8 text (3 bytes per CJK character).
+    const utf8Encoder = new TextEncoder();
+    const byteTrimmed = appendBoundedChatHistory(
+      [
+        { ...prepared.chatMessage, id: "old-1", text: "春".repeat(100) },
+        { ...prepared.chatMessage, id: "old-2", text: "夏".repeat(100) },
+      ],
+      { ...prepared.chatMessage, id: "new-3", text: "秋".repeat(40) },
       50,
       400,
     );
-    assert.equal(history.length, 1);
-    assert.equal(history[0].id, "new-3");
+    assert.deepEqual(
+      byteTrimmed.history.map((m) => m.id),
+      ["new-3"],
+    );
+    assert.ok(utf8Encoder.encode(byteTrimmed.serialized).length <= 400);
+    assert.deepEqual(JSON.parse(byteTrimmed.serialized), byteTrimmed.history);
   });
 });
 

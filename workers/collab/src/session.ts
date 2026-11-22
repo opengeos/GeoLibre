@@ -128,6 +128,9 @@ type PresenceState = PresenceEntry;
 export class CollabSession extends DurableObject<Env> {
   // Re-established lazily after a hibernation wake; never persisted.
   private presence = new Map<string, PresenceState>();
+  // Tracks sockets currently awaiting `resolveJoin` so a second `join` frame
+  // cannot race through the duplicate-join guard while identity is verifying.
+  private joiningSockets = new WeakSet<WebSocket>();
 
   private maxSnapshotBytes(): number {
     const configured = Number(this.env.COLLAB_MAX_SNAPSHOT_BYTES);
@@ -508,80 +511,85 @@ export class CollabSession extends DurableObject<Env> {
     ws: WebSocket,
     message: Extract<ClientMessage, { type: "join" }>,
   ): Promise<void> {
-    // Ignore a duplicate join on an already-joined socket: re-running it would
-    // mint a new clientId and orphan the socket's previous presence entry (the
-    // close handler only deletes the current clientId).
-    if (ws.deserializeAttachment()) return;
+    // Ignore a duplicate join on an already-joined or currently-joining socket:
+    // re-running it would mint a new clientId, orphan presence, or consume an
+    // invite twice.
+    if (ws.deserializeAttachment() || this.joiningSockets.has(ws)) return;
+    this.joiningSockets.add(ws);
+    try {
+      const [storedToken, mode, rev, snapshot, chat, requireIdentity, lockedLayerIds] =
+        await Promise.all([
+          this.ctx.storage.get<string>("hostToken"),
+          this.ctx.storage.get<CollaborationMode>("mode"),
+          this.ctx.storage.get<number>("rev"),
+          this.readSnapshot(),
+          this.ctx.storage.get<string>("chat"),
+          this.ctx.storage.get<boolean>("requireIdentity"),
+          this.ctx.storage.get<string[]>("lockedLayerIds"),
+        ]);
 
-    const [storedToken, mode, rev, snapshot, chat, requireIdentity, lockedLayerIds] =
-      await Promise.all([
-        this.ctx.storage.get<string>("hostToken"),
-        this.ctx.storage.get<CollaborationMode>("mode"),
-        this.ctx.storage.get<number>("rev"),
-        this.readSnapshot(),
-        this.ctx.storage.get<string>("chat"),
-        this.ctx.storage.get<boolean>("requireIdentity"),
-        this.ctx.storage.get<string[]>("lockedLayerIds"),
-      ]);
-
-    const joined = await resolveJoin({
-      message,
-      storedHostToken: storedToken,
-      requireIdentity: requireIdentity === true,
-      identitySecret: this.env.COLLAB_IDENTITY_SECRET,
-      generateClientId: () => crypto.randomUUID(),
-      getInvites: () => this.readInvites(),
-      isBlockedKey: (key) => this.isBlockedKey(key),
-      claimInvite: (token) => {
-        const freshInv = this.readInvites().find((i) => i.token === token && !i.revoked);
-        if (!freshInv || (freshInv.maxUses && freshInv.useCount >= freshInv.maxUses)) {
-          return null;
-        }
-        freshInv.useCount += 1;
-        this.writeInvite(freshInv);
-        return freshInv;
-      },
-      getDurableOverride: (key) => this.readDurableOverride(key),
-    });
-    if (joined.status === "aborted") return;
-    if (joined.status === "error") {
-      this.send(ws, {
-        type: "error",
-        code: joined.code,
-        message: joined.message,
+      const joined = await resolveJoin({
+        message,
+        storedHostToken: storedToken,
+        requireIdentity: requireIdentity === true,
+        identitySecret: this.env.COLLAB_IDENTITY_SECRET,
+        generateClientId: () => crypto.randomUUID(),
+        getInvites: () => this.readInvites(),
+        isBlockedKey: (key) => this.isBlockedKey(key),
+        claimInvite: (token) => {
+          const freshInv = this.readInvites().find((i) => i.token === token && !i.revoked);
+          if (!freshInv || (freshInv.maxUses && freshInv.useCount >= freshInv.maxUses)) {
+            return null;
+          }
+          freshInv.useCount += 1;
+          this.writeInvite(freshInv);
+          return freshInv;
+        },
+        getDurableOverride: (key) => this.readDurableOverride(key),
+        isStillConnected: () => ws.readyState === 1,
       });
-      return;
+      if (joined.status === "aborted") return;
+      if (joined.status === "error") {
+        this.send(ws, {
+          type: "error",
+          code: joined.code,
+          message: joined.message,
+        });
+        return;
+      }
+
+      const { participant: attachment, identity, role } = joined;
+      ws.serializeAttachment(attachment);
+
+      await this.appendLog({
+        type: "join",
+        ts: Date.now(),
+        clientId: attachment.clientId,
+        identity,
+      });
+
+      const welcomeInvites = role === "host" ? this.readInvites() : undefined;
+
+      this.send(ws, {
+        type: "welcome",
+        clientId: attachment.clientId,
+        role,
+        mode: mode ?? "co-edit",
+        participants: this.participants(),
+        snapshot: parseStoredSnapshot(snapshot),
+        presence: Object.fromEntries(this.presence),
+        chat: parseStoredChat(chat),
+        rev: rev ?? 0,
+        requireIdentity: requireIdentity ?? false,
+        identitySupported: isIdentityConfigured(this.env.COLLAB_IDENTITY_SECRET),
+        lockedLayerIds: lockedLayerIds ?? [],
+        ...(welcomeInvites ? { invites: welcomeInvites } : {}),
+      });
+
+      this.broadcastParticipants(ws);
+    } finally {
+      this.joiningSockets.delete(ws);
     }
-
-    const { participant: attachment, identity, role } = joined;
-    ws.serializeAttachment(attachment);
-
-    await this.appendLog({
-      type: "join",
-      ts: Date.now(),
-      clientId: attachment.clientId,
-      identity,
-    });
-
-    const welcomeInvites = role === "host" ? this.readInvites() : undefined;
-
-    this.send(ws, {
-      type: "welcome",
-      clientId: attachment.clientId,
-      role,
-      mode: mode ?? "co-edit",
-      participants: this.participants(),
-      snapshot: parseStoredSnapshot(snapshot),
-      presence: Object.fromEntries(this.presence),
-      chat: parseStoredChat(chat),
-      rev: rev ?? 0,
-      requireIdentity: requireIdentity ?? false,
-      identitySupported: isIdentityConfigured(this.env.COLLAB_IDENTITY_SECRET),
-      lockedLayerIds: lockedLayerIds ?? [],
-      ...(welcomeInvites ? { invites: welcomeInvites } : {}),
-    });
-
-    this.broadcastParticipants(ws);
   }
 
   private async handleSnapshot(

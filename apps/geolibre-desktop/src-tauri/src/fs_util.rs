@@ -5,7 +5,6 @@
 //! closes the handle before renaming (Windows requirement), and cleans up the
 //! temp file on any error.
 
-use std::ffi::OsString;
 use std::fs::{self, OpenOptions, Permissions};
 use std::io::Write;
 use std::path::Path;
@@ -59,21 +58,29 @@ pub(crate) fn write_file_atomic(
         }
     }
 
-    let file_name = path.file_name().ok_or_else(|| {
-        AppError::InvalidInput(format!("Path has no file name: {}", path.display()))
-    })?;
+    if path.file_name().is_none() {
+        return Err(AppError::InvalidInput(format!(
+            "Path has no file name: {}",
+            path.display()
+        )));
+    }
+    let parent_dir = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
 
     let mut temp_path = None;
     let mut temp_file = None;
     for _ in 0..16 {
-        let mut temp_name = OsString::from(".");
-        temp_name.push(file_name);
-        temp_name.push(format!(
-            ".geolibre-{}-{}.tmp",
+        // Keep the sibling temporary filename short and independent of the
+        // destination filename so valid near-255-byte Unicode filenames on
+        // ext4/APFS never fail with ENAMETOOLONG.
+        let temp_name = format!(
+            ".geolibre-tmp-{}-{}.tmp",
             random_suffix(),
             ATOMIC_WRITE_COUNTER.fetch_add(1, Ordering::Relaxed)
-        ));
-        let candidate = path.with_file_name(temp_name);
+        );
+        let candidate = parent_dir.join(temp_name);
         let mut open = OpenOptions::new();
         open.write(true).create_new(true);
         #[cfg(unix)]
@@ -159,6 +166,27 @@ mod tests {
         )
         .unwrap();
         assert_eq!(fs::read_to_string(&target).unwrap(), "{\"v\":2}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn supports_near_255_byte_unicode_filenames() {
+        let dir = std::env::temp_dir().join(format!("geolibre-fs-unicode-{}", random_suffix()));
+        let long_unicode_name = format!("{}.json", "春".repeat(80));
+        assert_eq!(long_unicode_name.len(), 245);
+        let target = dir.join(&long_unicode_name);
+        write_file_atomic(
+            &target,
+            b"{\"ok\":true}",
+            AtomicWriteOptions {
+                create_parents: true,
+                owner_only_unix: true,
+                sync: true,
+                preserve_permissions: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(fs::read_to_string(&target).unwrap(), "{\"ok\":true}");
         let _ = fs::remove_dir_all(&dir);
     }
 }

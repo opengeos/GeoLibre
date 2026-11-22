@@ -111,9 +111,19 @@ export function isAllowedOrigin(
       if (allowed === "*") return true;
       try {
         const allowedUrl = new UrlCtor(allowed);
-        return originUrl.origin === allowedUrl.origin;
+        // Never compare opaque origins by their serialized `"null"` string
+        // (which would let any custom scheme match `tauri://localhost`).
+        if (originUrl.origin !== "null" && allowedUrl.origin !== "null") {
+          return originUrl.origin === allowedUrl.origin;
+        }
+        return (
+          originUrl.protocol === allowedUrl.protocol &&
+          originUrl.hostname !== "" &&
+          originUrl.hostname === allowedUrl.hostname &&
+          originUrl.port === allowedUrl.port
+        );
       } catch {
-        return originHeader === allowed || host === allowed;
+        return originHeader === allowed || (host !== "" && host === allowed);
       }
     });
   } catch {

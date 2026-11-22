@@ -188,15 +188,29 @@ export interface PluginModalOptions {
   onClose?: () => void;
 }
 
+let nextModalId = 0;
+
+function getFocusableElements(container: HTMLElement): HTMLElement[] {
+  const selector =
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  return Array.from(container.querySelectorAll<HTMLElement>(selector)).filter(
+    (node) => node.offsetParent !== null || node === document.activeElement,
+  );
+}
+
 /**
  * Create and mount a lightweight accessible modal dialog for plain-DOM plugins.
- * Closes on backdrop click, Escape key, or calling the returned `close()`.
+ * Moves focus into the dialog, traps Tab navigation while open, restores focus
+ * on close, and closes on backdrop click, Escape key, or calling `close()`.
  */
 export function createModalDialog(options: PluginModalOptions): {
   overlay: HTMLDivElement;
   dialog: HTMLDivElement;
   close: () => void;
 } {
+  const previouslyFocused =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
   const overlay = el("div");
   overlay.style.cssText =
     "position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:16px;";
@@ -204,6 +218,9 @@ export function createModalDialog(options: PluginModalOptions): {
   const dialog = el("div");
   dialog.setAttribute("role", "dialog");
   dialog.setAttribute("aria-modal", "true");
+  dialog.tabIndex = -1;
+  const headingId = `geolibre-plugin-modal-title-${++nextModalId}`;
+  dialog.setAttribute("aria-labelledby", headingId);
   const maxWidth = options.maxWidthPx ?? 420;
   dialog.style.cssText = `width:100%;max-width:${maxWidth}px;background:hsl(var(--popover));color:hsl(var(--popover-foreground));border:1px solid hsl(var(--border));border-radius:10px;padding:16px;box-shadow:0 12px 32px rgba(0,0,0,0.3);display:flex;flex-direction:column;gap:12px;font-family:inherit;font-size:13px;`;
 
@@ -213,10 +230,36 @@ export function createModalDialog(options: PluginModalOptions): {
     closed = true;
     window.removeEventListener("keydown", onKeyDown);
     overlay.remove();
+    if (previouslyFocused && previouslyFocused.isConnected) {
+      previouslyFocused.focus();
+    }
     options.onClose?.();
   };
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "Escape") close();
+    if (event.key === "Escape") {
+      close();
+      return;
+    }
+    if (event.key === "Tab") {
+      const focusable = getFocusableElements(dialog);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey) {
+        if (active === first || !dialog.contains(active)) {
+          event.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !dialog.contains(active)) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
   };
   overlay.addEventListener("click", (event) => {
     if (event.target === overlay) close();
@@ -226,6 +269,7 @@ export function createModalDialog(options: PluginModalOptions): {
   const header = el("div");
   header.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;";
   const heading = el("h3", options.title);
+  heading.id = headingId;
   heading.style.cssText = "margin:0;font-size:14px;font-weight:600;";
   const closeButton = createButton("×", {
     variant: "ghost",
@@ -244,5 +288,7 @@ export function createModalDialog(options: PluginModalOptions): {
 
   overlay.appendChild(dialog);
   document.body.appendChild(overlay);
+  const initialFocus = getFocusableElements(dialog)[0] ?? dialog;
+  initialFocus.focus();
   return { overlay, dialog, close };
 }
