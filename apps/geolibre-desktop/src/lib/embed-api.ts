@@ -441,6 +441,13 @@ function hasRenderableEmbedSource(spec: Record<string, unknown>): boolean {
     return true;
   }
   if (typeof spec.type !== "string" || !INLINE_FEATURE_LAYER_TYPES.includes(spec.type)) {
+    // `syncVideoLayer` draws from `source.urls`, which the core check above does not read.
+    if (spec.type === "video") {
+      return (
+        Array.isArray(source.urls) &&
+        source.urls.some((url) => typeof url === "string" && url.trim() !== "")
+      );
+    }
     return false;
   }
   // Inline GeoJSON is an object, on the spec's `geojson` or on `source.data`;

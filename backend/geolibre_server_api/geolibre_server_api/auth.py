@@ -1341,6 +1341,9 @@ def build_identity_router() -> APIRouter:
         error = password_policy_error(body.new_password, effective_policy(session, account.id))
         if error:
             raise HTTPException(422, error)
+        # Lock the account row so concurrent OAuth code exchanges serialize
+        # against password rotation on READ COMMITTED backends (PostgreSQL).
+        session.execute(select(Account.id).where(Account.id == account.id).with_for_update())
         account.password_hash = password_hash(body.new_password)
         ensure_account_security(session, account.id).password_changed_at = now_ts
         # Revoke active OAuth sessions on password change so compromised or
@@ -2241,6 +2244,14 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
         if not hmac.compare_digest(computed, code_row.code_challenge):
             # Wrong verifier: not an authenticated replay, so no revocation.
             return oauth_token_error(400, "invalid_grant")
+        if code_row.account_id is not None:
+            # Serialize with change_password (which locks the same account row
+            # before revoking sessions and consuming outstanding codes) so a
+            # concurrent exchange cannot commit a live session after rotation.
+            session.execute(
+                select(Account.id).where(Account.id == code_row.account_id).with_for_update()
+            )
+            session.refresh(code_row)
         if code_row.consumed_at is not None:
             # Authenticated replay (correct verifier + binding): revoke the
             # family previously issued for this code, then report invalid_grant.

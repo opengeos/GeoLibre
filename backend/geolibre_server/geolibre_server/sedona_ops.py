@@ -174,15 +174,26 @@ def _strip_sql_comments_and_strings(sql: str) -> tuple[str, bool]:
             if saw_semicolon:
                 has_trailing_after_semicolon = True
             i += 1
+            start = i
             while i < n:
                 if sql[i] == '"' and i + 1 < n and sql[i + 1] == '"':
                     i += 2
                 elif sql[i] == '"':
+                    end = i
                     i += 1
                     break
                 else:
                     i += 1
-            out.append('""')
+            else:
+                end = n
+            ident = sql[start:end]
+            # Mark path-like double-quoted identifiers (containing /, \, or .)
+            # so FROM/JOIN checks reject file table references like "/etc/passwd"
+            # or "data.parquet" while still allowing ordinary quoted layer names.
+            if "/" in ident or "\\" in ident or "." in ident:
+                out.append('"/"')
+            else:
+                out.append('""')
             continue
         if ch == ";":
             if saw_semicolon:
@@ -210,50 +221,60 @@ _CLAUSE_END_KEYWORDS = frozenset(
         "UNION",
         "INTERSECT",
         "EXCEPT",
-        "ON",
-        "USING",
         "WINDOW",
         "QUALIFY",
         "SET",
         "VALUES",
         "SELECT",
+        "WITH",
     }
 )
 
 
 def _has_string_table_reference(stripped_sql: str) -> bool:
-    """Return True if a blanked string literal ``''`` appears as a table ref in FROM/JOIN."""
-    # Tokenize words, blanked string literals (''), commas, and parens.
-    tokens = re.findall(r"''|[A-Za-z_][A-Za-z0-9_]*|[(),]", stripped_sql)
-    in_from_list = False
-    expect_table = False
+    """Return True if a quoted file-path literal/identifier appears as a table ref in FROM/JOIN."""
+    # Tokenize words, blanked single-quoted strings (''), path-like double-quoted
+    # identifiers ("/"), commas, and parentheses.
+    tokens = re.findall(r"''|\"/\"|[A-Za-z_][A-Za-z0-9_]*|[(),]", stripped_sql)
+    depth = 0
+    # Maps paren depth -> whether the FROM/JOIN clause active at that depth is
+    # currently expecting a table reference. Tracking by depth ensures nested
+    # subqueries, function calls in ON/USING, and closing parens never clear an
+    # enclosing FROM list.
+    from_depths: dict[int, bool] = {}
     for tok in tokens:
         upper = tok.upper()
-        if upper in {"FROM", "JOIN"}:
-            in_from_list = True
-            expect_table = True
-            continue
-        if not in_from_list:
-            continue
         if tok == "(":
-            # Subquery or parenthesized join; reset until an inner FROM/JOIN.
-            expect_table = False
+            was_expecting = from_depths.get(depth, False)
+            if depth in from_depths:
+                from_depths[depth] = False
+            depth += 1
+            if was_expecting:
+                # Could be a parenthesized table/join (e.g. FROM ('/etc/passwd'))
+                # or a derived subquery (FROM (SELECT ...)). If SELECT/WITH/VALUES
+                # follows, _CLAUSE_END_KEYWORDS clears this inner depth while
+                # keeping the outer FROM depth active.
+                from_depths[depth] = True
             continue
         if tok == ")":
-            in_from_list = False
-            expect_table = False
+            from_depths.pop(depth, None)
+            depth = max(0, depth - 1)
+            continue
+        if upper in {"FROM", "JOIN"}:
+            from_depths[depth] = True
+            continue
+        if depth not in from_depths:
             continue
         if tok == ",":
-            expect_table = True
+            from_depths[depth] = True
             continue
         if upper in _CLAUSE_END_KEYWORDS:
-            in_from_list = False
-            expect_table = False
+            from_depths.pop(depth, None)
             continue
-        if tok == "''" and expect_table:
+        if tok in {"''", '"/"'} and from_depths[depth]:
             return True
         if upper not in {"ONLY", "LATERAL"}:
-            expect_table = False
+            from_depths[depth] = False
     return False
 
 

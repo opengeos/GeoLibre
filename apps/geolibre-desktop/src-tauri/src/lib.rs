@@ -1059,16 +1059,20 @@ pub(crate) fn is_allowed_local_vector_path(path: &str) -> bool {
     has_allowed_local_vector_extension(path)
 }
 
-/// Convert a canonicalized local path to a string usable by native libraries
+/// Convert a canonicalized local path to a UTF-8 string usable by native libraries
 /// and asset-protocol scopes (stripping Windows' `\\?\` verbatim drive prefix
-/// while preserving POSIX paths). Callers must check `is_unc_resolved_path` first.
-pub(crate) fn canonical_local_path_string(canonical: &Path) -> String {
-    let raw = canonical.to_string_lossy();
+/// while preserving POSIX paths). Rejects non-UTF-8 canonical paths rather than
+/// substituting replacement characters that could alias a different file.
+/// Callers must check `is_unc_resolved_path` first.
+pub(crate) fn canonical_local_path_string(canonical: &Path) -> Result<String, String> {
+    let raw = canonical
+        .to_str()
+        .ok_or_else(|| "resolved path is not valid UTF-8".to_string())?;
     #[cfg(windows)]
     if let Some(stripped) = raw.strip_prefix(r"\\?\") {
-        return stripped.to_string();
+        return Ok(stripped.to_string());
     }
-    raw.into_owned()
+    Ok(raw.to_string())
 }
 
 /// Read a local file's raw bytes so a project's file-referenced vector layers
@@ -1354,7 +1358,10 @@ fn allow_raster_asset(
     }
     let canonical = fs::canonicalize(&path)
         .map_err(|error| format!("Could not authorize local raster: {error}"))?;
-    let resolved = canonical.to_string_lossy().to_ascii_lowercase();
+    let resolved = canonical
+        .to_str()
+        .ok_or_else(|| format!("Refusing to expose \"{path}\": resolved path is not valid UTF-8"))?
+        .to_ascii_lowercase();
     if is_unc_resolved_path(&resolved) {
         return Err(format!(
             "Refusing to expose \"{path}\": resolves to a network path"
@@ -1365,7 +1372,10 @@ fn allow_raster_asset(
             "Refusing to expose \"{path}\": resolves to a non-GeoTIFF file"
         ));
     }
-    let allowed_path = PathBuf::from(canonical_local_path_string(&canonical));
+    let allowed_path = PathBuf::from(
+        canonical_local_path_string(&canonical)
+            .map_err(|error| format!("Refusing to expose \"{path}\": {error}"))?,
+    );
     app.asset_protocol_scope()
         .allow_file(&allowed_path)
         .map_err(|error| format!("Could not authorize local raster: {error}"))

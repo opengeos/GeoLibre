@@ -1253,4 +1253,33 @@ describe("parseEmbedRequest: addLayer video source.urls scheme validation", () =
       assert.equal((result as { requestId: string | null }).requestId, "r-vid");
     }
   });
+
+  it("accepts a video layer with an HTTPS source.urls entry", () => {
+    const result = parseEmbedRequest(
+      message(
+        "addLayer",
+        {
+          spec: {
+            id: "vid-ok",
+            name: "Video",
+            type: "video",
+            source: {
+              type: "video",
+              urls: ["https://cdn.example/clip.mp4"],
+              coordinates: [
+                [0, 1],
+                [1, 1],
+                [1, 0],
+                [0, 0],
+              ],
+            },
+          },
+        },
+        { requestId: "r-vid-ok" },
+      ),
+    );
+    assert.ok(result && "command" in result, "expected HTTPS video layer spec to be accepted");
+    assert.equal(result.command.type, "addLayer");
+    assert.equal(result.requestId, "r-vid-ok");
+  });
 });

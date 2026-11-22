@@ -115,13 +115,15 @@ fn native_options(
     }
     let canonical = std::fs::canonicalize(&path)
         .map_err(|error| format!("Could not resolve vector file \"{path}\": {error}"))?;
-    let resolved = canonical.to_string_lossy();
-    if crate::is_unc_resolved_path(&resolved) {
+    let resolved = canonical
+        .to_str()
+        .ok_or_else(|| format!("Refusing to read \"{path}\": resolved path is not valid UTF-8"))?;
+    if crate::is_unc_resolved_path(resolved) {
         return Err(format!(
             "Refusing to read \"{path}\": resolves to a network path"
         ));
     }
-    if !crate::has_allowed_local_vector_extension(&resolved) {
+    if !crate::has_allowed_local_vector_extension(resolved) {
         return Err(format!(
             "Refusing to read \"{path}\": resolves to a non-vector file"
         ));
@@ -129,7 +131,8 @@ fn native_options(
     if !canonical.is_file() {
         return Err(format!("Refusing to read \"{path}\": not a regular file"));
     }
-    let canonical_path = crate::canonical_local_path_string(&canonical);
+    let canonical_path = crate::canonical_local_path_string(&canonical)
+        .map_err(|error| format!("Refusing to read \"{path}\": {error}"))?;
     if has_duckdb_glob_metacharacter(&canonical_path) {
         return Err(format!(
             "Refusing to read \"{path}\": glob paths are not allowed"
@@ -172,9 +175,14 @@ fn vector_extension(path: &str) -> String {
 }
 
 fn has_duckdb_glob_metacharacter(path: &str) -> bool {
+    // DuckDB's `read_parquet` always expands `[...]` as a glob pattern even
+    // when a literal file with that exact name exists on disk, whereas GDAL's
+    // `ST_Read` opens literal paths. Reject bracket globs unconditionally for
+    // parquet/geoparquet so `read_parquet` can never expand to sibling files.
     path.contains('*')
         || path.contains('?')
-        || (has_duckdb_bracket_glob(path) && !Path::new(path).is_file())
+        || (has_duckdb_bracket_glob(path)
+            && (is_parquet_extension(&vector_extension(path)) || !Path::new(path).is_file()))
 }
 
 fn has_duckdb_bracket_glob(path: &str) -> bool {
@@ -1613,19 +1621,70 @@ mod tests {
     }
 
     #[test]
-    fn native_options_allows_literal_brackets_in_existing_paths() {
+    fn native_options_allows_literal_brackets_in_existing_non_parquet_paths() {
         let path = format!(
-            "{}/geolibre-native-duckdb-[literal]-{}.parquet",
+            "{}/geolibre-native-duckdb-[literal]-{}.geojson",
             std::env::temp_dir().display(),
             std::process::id()
         );
         std::fs::write(&path, []).expect("create literal bracket file");
         let expected = crate::canonical_local_path_string(
             &std::fs::canonicalize(&path).expect("canonicalize literal bracket file"),
-        );
+        )
+        .expect("utf-8 canonical path");
         let options = native_options(path.clone(), None, None).expect("native options");
         assert_eq!(options.path, expected);
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn load_native_vector_file_rejects_existing_bracket_parquet_paths() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-native-bracket-{suffix}-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let sibling = dir.join("batch1.parquet");
+        let literal = dir.join("batch[12].parquet");
+        create_declared_primary_column_parquet(&sibling.to_string_lossy());
+        create_declared_primary_column_parquet(&literal.to_string_lossy());
+
+        let direct_err = tauri::async_runtime::block_on(load_native_vector_file(
+            literal.to_string_lossy().into_owned(),
+            None,
+            None,
+        ))
+        .expect_err("bracket parquet path must be rejected before read_parquet");
+        assert!(direct_err.contains("glob paths are not allowed"));
+
+        #[cfg(unix)]
+        {
+            let link = dir.join("alias.parquet");
+            std::os::unix::fs::symlink(&literal, &link).expect("create bracket symlink");
+            let link_err = tauri::async_runtime::block_on(load_native_vector_file(
+                link.to_string_lossy().into_owned(),
+                None,
+                None,
+            ))
+            .expect_err("symlink to bracket parquet path must be rejected");
+            assert!(link_err.contains("glob paths are not allowed"));
+
+            use std::ffi::OsString;
+            use std::os::unix::ffi::OsStringExt;
+            let non_utf8 = dir.join(OsString::from_vec(b"roads-\xff.parquet".to_vec()));
+            std::fs::write(&non_utf8, []).expect("write non-utf8 parquet");
+            let non_utf8_link = dir.join("non-utf8-alias.parquet");
+            std::os::unix::fs::symlink(&non_utf8, &non_utf8_link).expect("create non-utf8 symlink");
+            let utf8_err = native_options(non_utf8_link.to_string_lossy().into_owned(), None, None)
+                .expect_err("symlink to non-utf8 canonical path must be rejected");
+            assert!(utf8_err.contains("not valid UTF-8"));
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

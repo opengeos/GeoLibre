@@ -613,7 +613,7 @@ def test_start_job_rolls_back_when_thread_start_fails(monkeypatch) -> None:
 
 
 def test_failed_conversion_preserves_preexisting_output(monkeypatch, tmp_path: Path) -> None:
-    """A failing job must not delete a pre-existing file at output_path."""
+    """Cleanup must not unlink a pre-existing output_path when a tool fails before writing."""
     existing = tmp_path / "out.parquet"
     existing.write_bytes(b"original-data")
     job_id = "test-preserve-existing-output"

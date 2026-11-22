@@ -108,6 +108,7 @@ def _validate_postgis_target(conninfo: dict[str, str]) -> Optional[tuple[str, st
         )
     for forbidden in (
         "passfile",
+        "servicefile",
         "sslcert",
         "sslkey",
         "sslkeylogfile",

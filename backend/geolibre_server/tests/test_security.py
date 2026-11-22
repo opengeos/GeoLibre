@@ -476,6 +476,7 @@ def test_postgis_rejects_local_file_libpq_parameters(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "db.example")
     for key in (
         "passfile",
+        "servicefile",
         "sslcert",
         "sslkey",
         "sslkeylogfile",
