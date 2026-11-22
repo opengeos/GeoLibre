@@ -316,13 +316,19 @@ function readTextSymbol(labelClass: CimObject, warnings: string[]): Partial<Labe
   // Hollow text (an outline, no fill) reads as the outline colour at fill opacity 0; it draws
   // opaque in that colour, and the outline warning below already names it. The same placeholder
   // stands in for a fill whose colour could not be read, which keeps the layer's text colour.
-  // Clear text with no outline is transparency, which labels cannot draw, so it is named.
+  // Clear text with no outline draws nothing in ArcGIS Pro; a label cannot be invisible, so the
+  // layer keeps its own text colour rather than gaining a colour the file never shows.
   const textOpacity = textLook.fillOpacity ?? 1;
   const hollow = textOpacity === 0 && (textLook.strokeWidth ?? 0) > 0;
   const unreadableFill =
     textOpacity === 0 && textTranslation.issues.some((issue) => issue.code === "color");
   const textLayer = refusedLayer(textTranslation);
-  if (textLook.fillColor && !unreadableFill) {
+  const clear = textOpacity === 0 && !hollow && !unreadableFill;
+  if (clear && textLook.fillColor) {
+    warnings.push(
+      "The .lyrx style's label text is fully transparent, which GeoLibre labels cannot draw; labels keep their colour.",
+    );
+  } else if (textLook.fillColor && !unreadableFill) {
     labels.color = textLook.fillColor;
     labels.colorExpression = "";
     translucent ||= textOpacity < 1 && !hollow;

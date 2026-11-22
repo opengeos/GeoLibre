@@ -531,6 +531,18 @@ describe(".lyrx style import", () => {
       assert.match(warnings.join(" "), /label colour could not be read/);
     });
 
+    it("keeps the layer's text colour for clear text, which ArcGIS Pro does not draw", () => {
+      const { style, warnings } = applied(
+        textLabel({ symbol: fillSymbol(rgb(255, 0, 0, 0)) }),
+        labelled(),
+      );
+      assert.equal(style.labels.color, DEFAULT_LAYER_STYLE.labels.color);
+      assert.equal(style.labels.colorExpression, '["get", "COLOUR"]');
+      assert.deepEqual(warnings, [
+        "The .lyrx style's label text is fully transparent, which GeoLibre labels cannot draw; labels keep their colour.",
+      ]);
+    });
+
     it("names an unreadable halo and transparent text, and drops a fully clear halo", () => {
       const spot = { type: "CIMSpotColor", values: [1] };
       for (const [textSymbol, haloWidth, warning] of [
@@ -596,12 +608,6 @@ describe(".lyrx style import", () => {
           { symbol: fillSymbol(rgb(0, 0, 0)), shadowColor: rgb(0, 0, 0), shadowOffsetX: 0 },
           0,
           null,
-        ],
-        // Clear text with no outline: named as transparency, which labels cannot draw.
-        [
-          { symbol: fillSymbol(rgb(255, 0, 0, 0)) },
-          0,
-          /^The \.lyrx style's label transparency was not imported; labels are drawn opaque\.$/,
         ],
         // A refused text or halo symbol names what could not be drawn.
         [
