@@ -83,8 +83,10 @@ Deployment protections remain the operator's responsibility:
   `GEOLIBRE_DB_MAX_OVERFLOW=20` (up to 30 connections per worker process), and
   `GEOLIBRE_DB_POOL_RECYCLE=1800`; tune these to stay within PostgreSQL's
   `max_connections` across all workers. In multi-worker deployments, run
-  `alembic upgrade head` before startup and set `GEOLIBRE_SKIP_DDL_CREATE_ALL=1`
-  so workers skip startup DDL.
+  `alembic upgrade head` (from `/app` inside the container image or from
+  `backend/geolibre_server_api/` in a source checkout with the `migrations`
+  extra installed) before startup and set `GEOLIBRE_SKIP_DDL_CREATE_ALL=1` so
+  workers skip startup DDL.
 
 The reference implementation is a correctness baseline, not a hardened
 deployment.

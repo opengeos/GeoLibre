@@ -12,7 +12,7 @@ import geolibre_server_api.org_models  # noqa: F401
 import geolibre_server_api.project_models  # noqa: F401
 from alembic import context
 from geolibre_server_api.auth_models import Base
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, event, pool
 
 config = context.config
 if config.config_file_name is not None:
@@ -53,6 +53,19 @@ def run_migrations_online() -> None:
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
+    if connectable.dialect.name == "sqlite":
+
+        @event.listens_for(connectable, "connect")
+        def _disable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+            # Ensure PRAGMA foreign_keys=OFF before any transaction begins so
+            # legacy SQLite table rebuilds never cascade deletes even on SQLite
+            # builds compiled with SQLITE_DEFAULT_FOREIGN_KEYS=1.
+            cursor = dbapi_connection.cursor()
+            try:
+                cursor.execute("PRAGMA foreign_keys=OFF")
+            finally:
+                cursor.close()
+
     with connectable.connect() as connection:
         context.configure(
             connection=connection,

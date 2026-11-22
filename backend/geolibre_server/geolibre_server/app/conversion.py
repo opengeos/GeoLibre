@@ -13,15 +13,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from geolibre_server.workers import (
-    ERROR_MARKER as _ERROR_MARKER,
-)
-from geolibre_server.workers import (
-    RESULT_MARKER as _RESULT_MARKER,
-)
-from geolibre_server.workers import (
-    load_worker_source,
-)
+from geolibre_server.workers import ERROR_MARKER, RESULT_MARKER, load_worker_source
 
 from .job_manager import JobManager
 from .runtime import (
@@ -39,6 +31,9 @@ from .runtime import (
 from .runtime import (
     _utc_now as _utc_now,
 )
+
+_ERROR_MARKER = ERROR_MARKER
+_RESULT_MARKER = RESULT_MARKER
 
 router = APIRouter(prefix="/conversion", tags=["conversion"])
 logger = logging.getLogger(__name__)
