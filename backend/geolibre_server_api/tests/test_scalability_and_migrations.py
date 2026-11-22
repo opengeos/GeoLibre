@@ -177,9 +177,7 @@ def test_scim_list_groups_batches_member_queries(client) -> None:
         res = client.post(
             f"/scim/v2/{org_id}/Groups",
             headers=headers,
-            content=json.dumps(
-                {"displayName": f"Team {idx}", "members": [{"value": user_id}]}
-            ),
+            content=json.dumps({"displayName": f"Team {idx}", "members": [{"value": user_id}]}),
         )
         assert res.status_code == 201, res.text
 
