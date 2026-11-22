@@ -2251,7 +2251,13 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
             session.execute(
                 select(Account.id).where(Account.id == code_row.account_id).with_for_update()
             )
-            session.refresh(code_row)
+            code_row = session.scalar(
+                select(OAuthAuthorizationCode)
+                .where(OAuthAuthorizationCode.id == code_row.id)
+                .execution_options(populate_existing=True)
+            )
+            if code_row is None:
+                return oauth_token_error(400, "invalid_grant")
         if code_row.consumed_at is not None:
             # Authenticated replay (correct verifier + binding): revoke the
             # family previously issued for this code, then report invalid_grant.

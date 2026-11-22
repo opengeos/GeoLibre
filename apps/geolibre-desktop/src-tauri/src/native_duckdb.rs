@@ -308,7 +308,7 @@ fn ensure_spatial_extension(conn: &Connection) -> Result<(), String> {
     if let Some(path) = trusted_spatial_extension_path()? {
         conn.execute_batch(&format!(
             "LOAD {}",
-            quote_sql_string(&path.replace('\\', "/"))
+            quote_sql_string(&sql_source_path(&path))
         ))
         .map_err(|error| {
             format!("Could not load DuckDB spatial extension from \"{path}\": {error}")
@@ -318,6 +318,17 @@ fn ensure_spatial_extension(conn: &Connection) -> Result<(), String> {
 
     conn.execute_batch("LOAD spatial;")
         .map_err(|error| format!("Could not load DuckDB spatial extension: {error}"))
+}
+
+fn sql_source_path(path: &str) -> String {
+    #[cfg(windows)]
+    {
+        path.replace('\\', "/")
+    }
+    #[cfg(not(windows))]
+    {
+        path.to_string()
+    }
 }
 
 fn trusted_spatial_extension_path() -> Result<Option<String>, String> {
@@ -345,7 +356,7 @@ fn is_parquet_extension(extension: &str) -> bool {
 }
 
 fn source_sql(options: &NativeVectorOptions) -> String {
-    let quoted_path = quote_sql_string(&options.path.replace('\\', "/"));
+    let quoted_path = quote_sql_string(&sql_source_path(&options.path));
     if is_parquet_extension(&options.extension) {
         return format!("SELECT * FROM read_parquet({quoted_path})");
     }
@@ -645,7 +656,7 @@ fn read_source_crs(
         "SELECT layers[1].geometry_fields[1].crs.auth_name AS auth_name, \
          layers[1].geometry_fields[1].crs.auth_code AS auth_code \
          FROM ST_Read_Meta({})",
-        quote_sql_string(&options.path.replace('\\', "/"))
+        quote_sql_string(&sql_source_path(&options.path))
     );
     let auth_crs = conn
         .query_row(&meta_sql, [], |row| {
@@ -777,7 +788,7 @@ struct GeoParquetMetadata {
 fn read_geoparquet_metadata_json(conn: &Connection, path: &str) -> Option<String> {
     let metadata_sql = format!(
         "SELECT decode(value) FROM parquet_kv_metadata({}) WHERE key = encode('geo') LIMIT 1",
-        quote_sql_string(&path.replace('\\', "/"))
+        quote_sql_string(&sql_source_path(path))
     );
     conn.query_row(&metadata_sql, [], |row| row.get(0)).ok()
 }
@@ -948,7 +959,7 @@ fn read_native_geometry_logical_type(
 ) -> Option<Option<String>> {
     let schema_sql = format!(
         "SELECT name, logical_type FROM parquet_schema({}) WHERE logical_type IS NOT NULL",
-        quote_sql_string(&path.replace('\\', "/"))
+        quote_sql_string(&sql_source_path(path))
     );
     // `parquet_schema` is available in every DuckDB build the app ships, but a
     // file it cannot parse must still load through the CRS84 assumption.
@@ -1682,6 +1693,27 @@ mod tests {
             let utf8_err = native_options(non_utf8_link.to_string_lossy().into_owned(), None, None)
                 .expect_err("symlink to non-utf8 canonical path must be rejected");
             assert!(utf8_err.contains("not valid UTF-8"));
+
+            // On Unix, a literal backslash in a filename must not be rewritten to `/`.
+            let backslash_file = dir.join(r"a\b.parquet");
+            let slash_dir = dir.join("a");
+            std::fs::create_dir_all(&slash_dir).expect("create slash subdir");
+            let slash_file = slash_dir.join("b.parquet");
+            create_declared_primary_column_parquet(&backslash_file.to_string_lossy());
+            create_lon_lat_columns_parquet(&slash_file.to_string_lossy());
+            let backslash_link = dir.join("backslash-alias.parquet");
+            std::os::unix::fs::symlink(&backslash_file, &backslash_link)
+                .expect("create backslash symlink");
+            let collection = tauri::async_runtime::block_on(load_native_vector_file(
+                backslash_link.to_string_lossy().into_owned(),
+                None,
+                None,
+            ))
+            .expect("load literal backslash file on unix");
+            let features = collection["features"].as_array().expect("features array");
+            assert_eq!(features.len(), 1);
+            assert_eq!(features[0]["geometry"]["coordinates"][0], 3.0);
+            assert_eq!(features[0]["geometry"]["coordinates"][1], 4.0);
         }
 
         let _ = std::fs::remove_dir_all(&dir);

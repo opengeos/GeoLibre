@@ -169,16 +169,17 @@ def _strip_sql_comments_and_strings(sql: str) -> tuple[str, bool]:
                     i += 1
             out.append("''")
             continue
-        # Double-quoted identifier
-        if ch == '"':
+        # Double-quoted or backtick-quoted identifier
+        if ch in {'"', "`"}:
+            quote = ch
             if saw_semicolon:
                 has_trailing_after_semicolon = True
             i += 1
             start = i
             while i < n:
-                if sql[i] == '"' and i + 1 < n and sql[i + 1] == '"':
+                if sql[i] == quote and i + 1 < n and sql[i + 1] == quote:
                     i += 2
-                elif sql[i] == '"':
+                elif sql[i] == quote:
                     end = i
                     i += 1
                     break
@@ -187,9 +188,10 @@ def _strip_sql_comments_and_strings(sql: str) -> tuple[str, bool]:
             else:
                 end = n
             ident = sql[start:end]
-            # Mark path-like double-quoted identifiers (containing /, \, or .)
-            # so FROM/JOIN checks reject file table references like "/etc/passwd"
-            # or "data.parquet" while still allowing ordinary quoted layer names.
+            # Mark path-like quoted identifiers (containing /, \, or .) so
+            # FROM/JOIN checks reject file table references like "/etc/passwd",
+            # `/tmp/private.parquet`, or "data.parquet" while still allowing
+            # ordinary quoted layer names.
             if "/" in ident or "\\" in ident or "." in ident:
                 out.append('"/"')
             else:
@@ -233,48 +235,54 @@ _CLAUSE_END_KEYWORDS = frozenset(
 
 def _has_string_table_reference(stripped_sql: str) -> bool:
     """Return True if a quoted file-path literal/identifier appears as a table ref in FROM/JOIN."""
-    # Tokenize words, blanked single-quoted strings (''), path-like double-quoted
-    # identifiers ("/"), commas, and parentheses.
-    tokens = re.findall(r"''|\"/\"|[A-Za-z_][A-Za-z0-9_]*|[(),]", stripped_sql)
+    # Tokenize words (including `$` allowed by DataFusion identifiers), blanked
+    # single-quoted strings (''), path-like quoted identifiers ("/"), commas,
+    # dots (for qualified names like parquet.`/path`), and parentheses.
+    tokens = re.findall(r"''|\"/\"|[A-Za-z_][A-Za-z0-9_$]*|[(),.]", stripped_sql)
     depth = 0
-    # Maps paren depth -> whether the FROM/JOIN clause active at that depth is
-    # currently expecting a table reference. Tracking by depth ensures nested
-    # subqueries, function calls in ON/USING, and closing parens never clear an
-    # enclosing FROM list.
-    from_depths: dict[int, bool] = {}
+    # Maps paren depth -> state of the FROM/JOIN clause active at that depth:
+    # - "expect": expecting a table reference next
+    # - "after_table": just read a table identifier (a following `.` continues it)
+    # - "rest": inside alias or ON/USING clause until `,` or clause end
+    from_depths: dict[int, str] = {}
     for tok in tokens:
         upper = tok.upper()
         if tok == "(":
-            was_expecting = from_depths.get(depth, False)
+            was_expecting = from_depths.get(depth) == "expect"
             if depth in from_depths:
-                from_depths[depth] = False
+                from_depths[depth] = "rest"
             depth += 1
             if was_expecting:
                 # Could be a parenthesized table/join (e.g. FROM ('/etc/passwd'))
                 # or a derived subquery (FROM (SELECT ...)). If SELECT/WITH/VALUES
                 # follows, _CLAUSE_END_KEYWORDS clears this inner depth while
                 # keeping the outer FROM depth active.
-                from_depths[depth] = True
+                from_depths[depth] = "expect"
             continue
         if tok == ")":
             from_depths.pop(depth, None)
             depth = max(0, depth - 1)
             continue
         if upper in {"FROM", "JOIN"}:
-            from_depths[depth] = True
+            from_depths[depth] = "expect"
             continue
         if depth not in from_depths:
             continue
         if tok == ",":
-            from_depths[depth] = True
+            from_depths[depth] = "expect"
+            continue
+        if tok == ".":
+            if from_depths[depth] == "after_table":
+                from_depths[depth] = "expect"
             continue
         if upper in _CLAUSE_END_KEYWORDS:
             from_depths.pop(depth, None)
             continue
-        if tok in {"''", '"/"'} and from_depths[depth]:
+        if tok in {"''", '"/"'} and from_depths[depth] == "expect":
             return True
-        if upper not in {"ONLY", "LATERAL"}:
-            from_depths[depth] = False
+        if upper in {"ONLY", "LATERAL"} and from_depths[depth] == "expect":
+            continue
+        from_depths[depth] = "after_table" if from_depths[depth] == "expect" else "rest"
     return False
 
 

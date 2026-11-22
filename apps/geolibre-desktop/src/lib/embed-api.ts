@@ -433,21 +433,51 @@ const INLINE_FEATURE_LAYER_TYPES = ["geojson", "deckgl-viz"];
  * for a source it cannot read. Rejecting it here turns that into an error the
  * host sees on the call it made.
  */
+/**
+ * Validate overlay corners (video/image): four [lng, lat] pairs matching
+ * `isCornerCoordinates` in `@geolibre/map`.
+ */
+function isCornerCoordinates(value: unknown): boolean {
+  if (
+    !Array.isArray(value) ||
+    value.length !== 4 ||
+    !value.every(
+      (corner) =>
+        Array.isArray(corner) &&
+        corner.length === 2 &&
+        Number.isFinite(corner[0]) &&
+        Number.isFinite(corner[1]) &&
+        corner[0] >= -360 &&
+        corner[0] <= 360 &&
+        corner[1] >= -90 &&
+        corner[1] <= 90,
+    )
+  ) {
+    return false;
+  }
+  const lngs = (value as [number, number][]).map((corner) => corner[0]);
+  const centre = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+  return centre >= -180 && centre <= 180 && Math.max(...lngs) - Math.min(...lngs) <= 360;
+}
+
 function hasRenderableEmbedSource(spec: Record<string, unknown>): boolean {
   const source = isRecord(spec.source) ? spec.source : {};
+  // `syncVideoLayer` renders only when both `source.urls` and valid corner
+  // `source.coordinates` are present, so check video specs before the generic
+  // `hasRestorableLayerSource` fallback.
+  if (spec.type === "video") {
+    return (
+      Array.isArray(source.urls) &&
+      source.urls.some((url) => typeof url === "string" && url.trim() !== "") &&
+      isCornerCoordinates(source.coordinates)
+    );
+  }
   if (
     hasRestorableLayerSource({ source, metadata: isRecord(spec.metadata) ? spec.metadata : {} })
   ) {
     return true;
   }
   if (typeof spec.type !== "string" || !INLINE_FEATURE_LAYER_TYPES.includes(spec.type)) {
-    // `syncVideoLayer` draws from `source.urls`, which the core check above does not read.
-    if (spec.type === "video") {
-      return (
-        Array.isArray(source.urls) &&
-        source.urls.some((url) => typeof url === "string" && url.trim() !== "")
-      );
-    }
     return false;
   }
   // Inline GeoJSON is an object, on the spec's `geojson` or on `source.data`;
