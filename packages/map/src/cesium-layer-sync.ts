@@ -349,10 +349,14 @@ interface LayerEntry {
   tileHealth?: () => void;
   documentCleanup?: () => void;
   overlayContainer?: HTMLElement;
-  /** Live HTMLVideoElement draped onto a ground polygon for `video` layers. */
+  /** Live HTMLVideoElement draped onto a quad for `video` layers. */
   videoElement?: HTMLVideoElement;
   /** Video polygon entity whose material alpha tracks layer opacity. */
   videoEntity?: Entity;
+  /** True once the video element has decoded its first frame (readyState >= 2). */
+  videoReady?: boolean;
+  /** Detaches media event listeners attached to {@link videoElement}. */
+  videoCleanup?: () => void;
   /** Static attribution registered for this layer while it is in the scene. */
   credit?: Credit;
   /** Set when the entry is removed mid-load so the resolved handle is discarded. */
@@ -2499,6 +2503,10 @@ export class CesiumLayerSync {
         if (ds.isLoading || !entry.added) {
           pending.push(layer.name);
         }
+      } else if (entry.kind === "video") {
+        if (!entry.added || !entry.videoReady) {
+          pending.push(layer.name);
+        }
       } else if (entry.kind === "imagery" && !(entry.handle as ImageryLayer).ready)
         pending.push(layer.name);
     }
@@ -2625,7 +2633,7 @@ export class CesiumLayerSync {
           ).__GEOLIBRE_DUCKDB__?.getLayerGeoJson
         : undefined);
     const geojson = provider?.(layer.id);
-    if (!geojson || geojson.features.length === 0) return layer;
+    if (!geojson) return layer;
     return { ...layer, geojson };
   }
 
@@ -3232,6 +3240,22 @@ export class CesiumLayerSync {
     const dataSource = new CustomDataSourceCtor(entry.layer.name);
     const flatCoords = corners.flatMap(([lng, lat]) => [lng, lat]);
     const hierarchy = Cesium.Cartesian3.fromDegreesArray(flatCoords);
+    // MapLibre video `coordinates` are ordered [topLeft, topRight, bottomRight, bottomLeft].
+    // Explicit `textureCoordinates` with `height: 0` (ellipsoid PolygonGeometry, not a
+    // GroundPrimitive which ignores textureCoordinates) preserves exact 4-corner
+    // correspondence for rotated and skewed quadrilaterals.
+    const uvCoords = [
+      Cesium.Cartesian2 ? new Cesium.Cartesian2(0, 1) : ({ x: 0, y: 1 } as Cartesian2),
+      Cesium.Cartesian2 ? new Cesium.Cartesian2(1, 1) : ({ x: 1, y: 1 } as Cartesian2),
+      Cesium.Cartesian2 ? new Cesium.Cartesian2(1, 0) : ({ x: 1, y: 0 } as Cartesian2),
+      Cesium.Cartesian2 ? new Cesium.Cartesian2(0, 0) : ({ x: 0, y: 0 } as Cartesian2),
+    ];
+    const PolygonHierarchyCtor = (
+      Cesium as unknown as { PolygonHierarchy?: new (positions: unknown[]) => unknown }
+    ).PolygonHierarchy;
+    const textureCoordinates = PolygonHierarchyCtor
+      ? new PolygonHierarchyCtor(uvCoords)
+      : { positions: uvCoords, holes: [] };
     const opacity = this.effectiveOpacity(entry);
     const ImageMatCtor = (
       Cesium as unknown as {
@@ -3253,28 +3277,77 @@ export class CesiumLayerSync {
       name: entry.layer.name,
       polygon: {
         hierarchy,
+        height: 0,
+        heightReference: Cesium.HeightReference?.NONE ?? 0,
+        textureCoordinates,
         material,
-        classificationType: (Cesium as unknown as { ClassificationType?: { BOTH?: unknown } })
-          .ClassificationType?.BOTH,
       },
     });
     entry.videoElement = video;
     entry.videoEntity = entity;
+    entry.videoReady =
+      typeof video.readyState === "number"
+        ? video.readyState >= 2
+        : typeof video.addEventListener !== "function";
     entry.handle = dataSource;
+
+    const detachListeners = () => {
+      if (typeof video.removeEventListener === "function") {
+        video.removeEventListener("loadeddata", onVideoReady);
+        video.removeEventListener("canplay", onVideoReady);
+        video.removeEventListener("error", onVideoError);
+      }
+    };
+    const onVideoReady = () => {
+      if (entry.cancelled) return;
+      entry.videoReady = true;
+      viewer.scene?.requestRender?.();
+    };
+    const onVideoError = () => {
+      if (entry.cancelled) return;
+      const code = video.error?.code;
+      const detail = video.error?.message?.trim();
+      entry.loadError ??= detail
+        ? `Video load error: ${detail}`
+        : code !== undefined
+          ? `Video load error (code ${code})`
+          : "Video failed to load.";
+      this.settleEntry(entry);
+    };
+    if (typeof video.addEventListener === "function") {
+      video.addEventListener("loadeddata", onVideoReady);
+      video.addEventListener("canplay", onVideoReady);
+      video.addEventListener("error", onVideoError);
+      entry.videoCleanup = detachListeners;
+    }
+
     if (entry.cancelled) {
+      entry.videoCleanup?.();
+      entry.videoCleanup = undefined;
       this.teardownVideoElement(video);
       return;
     }
     await viewer.dataSources.add(dataSource);
     if (entry.cancelled) {
       viewer.dataSources.remove(dataSource, true);
+      entry.videoCleanup?.();
+      entry.videoCleanup = undefined;
       this.teardownVideoElement(video);
       return;
     }
     entry.added = true;
     this.applyAppearance(entry);
     if (entry.layer.visible) {
-      void Promise.resolve(video.play?.()).catch(() => {});
+      void Promise.resolve(video.play?.()).catch((error: unknown) => {
+        if (entry.cancelled) return;
+        const name = error instanceof Error ? error.name : "";
+        if (name === "AbortError") return;
+        entry.loadError ??=
+          error instanceof Error && error.message
+            ? `Video playback error: ${error.message}`
+            : "Video playback failed.";
+        this.settleEntry(entry);
+      });
     }
     viewer.scene?.requestRender?.();
   }
@@ -4837,10 +4910,13 @@ export class CesiumLayerSync {
     entry.documentCleanup = undefined;
     entry.overlayContainer?.remove();
     entry.overlayContainer = undefined;
+    entry.videoCleanup?.();
+    entry.videoCleanup = undefined;
     if (entry.videoElement) {
       this.teardownVideoElement(entry.videoElement);
       entry.videoElement = undefined;
       entry.videoEntity = undefined;
+      entry.videoReady = undefined;
     }
     if (entry.credit) {
       this.viewer.creditDisplay?.removeStaticCredit?.(entry.credit);

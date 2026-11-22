@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import { ARCGIS_CAPABILITIES } from "../packages/map/src/arcgis-engine";
-import { compileArcgisLayer } from "../packages/map/src/arcgis-layers";
+import { compileArcgisLayer, isArcgisSupportedLayer } from "../packages/map/src/arcgis-layers";
 import { ArcgisControlHost } from "../packages/map/src/arcgis-control-host";
-import { MAPBOX_CAPABILITIES } from "../packages/map/src/mapbox-engine";
+import { MAPBOX_CAPABILITIES, MapboxEngine } from "../packages/map/src/mapbox-engine";
 import {
   pngBytesToDataUrl,
   registerMapboxCogDem,
@@ -127,6 +127,23 @@ describe("PR 5b: ArcGIS parity (measureTool + native 3D SceneView layers)", () =
     });
     assert.equal(compileArcgisLayer(arcgisScene, { scene: true }).kind, "scene-layer");
     assert.throws(() => compileArcgisLayer(arcgisScene, { scene: false }), /SceneView/);
+
+    const arcgisSceneSublayer = makeLayer({
+      id: "scene-sub-1",
+      type: "arcgis",
+      source: {
+        type: "arcgis",
+        url: "https://tiles.arcgis.com/tiles/x/arcgis/rest/services/City/SceneServer/layers/0",
+      },
+    });
+    assert.equal(compileArcgisLayer(arcgisSceneSublayer, { scene: true }).kind, "scene-layer");
+    assert.throws(() => compileArcgisLayer(arcgisSceneSublayer, { scene: false }), /SceneView/);
+
+    // isArcgisSupportedLayer must reflect scene context and cache 2D vs 3D independently.
+    assert.equal(isArcgisSupportedLayer(arcgisSceneSublayer, false, false), false);
+    assert.equal(isArcgisSupportedLayer(arcgisSceneSublayer, false, true), true);
+    assert.equal(isArcgisSupportedLayer(i3s, false, false), false);
+    assert.equal(isArcgisSupportedLayer(i3s, false, true), true);
   });
 });
 
@@ -170,6 +187,120 @@ describe("PR 5b: Mapbox custom COG DEM terrain", () => {
       () => Promise.resolve(transformMapboxCogDemRequest(staleUrl)),
       /no longer available/,
     );
+  });
+
+  it("defers releasing the previous COG DEM binding until the style is ready to swap sources", async () => {
+    let styleLoaded = true;
+    const sources = new Map<string, Record<string, unknown>>();
+    const listeners = new Map<string, Set<() => void>>();
+    const fakeMap = {
+      isStyleLoaded: () => styleLoaded,
+      getSource: (id: string) => sources.get(id),
+      addSource: (id: string, spec: Record<string, unknown>) => {
+        sources.set(id, spec);
+      },
+      removeSource: (id: string) => {
+        sources.delete(id);
+      },
+      getLayer: () => undefined,
+      addLayer() {},
+      removeLayer() {},
+      setLayoutProperty() {},
+      setPaintProperty() {},
+      setFilter() {},
+      setProjection() {},
+      stop() {},
+      setTerrain() {},
+      getStyle: () => ({ layers: [] }),
+      on: (event: string, fn: () => void) => {
+        if (!listeners.has(event)) listeners.set(event, new Set());
+        listeners.get(event)!.add(fn);
+      },
+      off: (event: string, fn: () => void) => {
+        listeners.get(event)?.delete(fn);
+      },
+      addControl() {},
+      removeControl() {},
+      getCanvas: () => ({}),
+      getCanvasContainer: () => ({ addEventListener() {}, removeEventListener() {} }),
+      getContainer: () => ({}),
+      getBearing: () => 0,
+      getPitch: () => 0,
+      getZoom: () => 2,
+      getCenter: () => ({ toArray: () => [0, 0] }),
+      project: () => ({ x: 0, y: 0 }),
+      unproject: () => ({ lng: 0, lat: 0 }),
+      remove() {},
+    };
+    const fakeGl = {
+      FullscreenControl: class {},
+      NavigationControl: class {},
+      GeolocateControl: class {},
+      ScaleControl: class {},
+      AttributionControl: class {},
+    };
+
+    let disposedA = 0;
+    let disposedB = 0;
+    const regA: CogDemSourceRegistration = {
+      tiles: ["cog-dem://a/{z}/{x}/{y}"],
+      bounds: [-84, 35, -83, 36],
+      renderTile: async () => new Uint8ClampedArray(4),
+      dispose: () => {
+        disposedA += 1;
+      },
+    };
+    const regB: CogDemSourceRegistration = {
+      tiles: ["cog-dem://b/{z}/{x}/{y}"],
+      bounds: [-84, 35, -83, 36],
+      renderTile: async () => new Uint8ClampedArray(4),
+      dispose: () => {
+        disposedB += 1;
+      },
+    };
+
+    const engine = new MapboxEngine(fakeMap as never, fakeGl as never, "", {
+      controlVisibility: {
+        fullscreen: false,
+        compass: false,
+        navigation: false,
+        geolocate: false,
+        globe: false,
+        scale: false,
+        attribution: false,
+        "layer-control": false,
+      },
+      ownsLayerLabels: false,
+    });
+    (engine as unknown as { openCogDem: (src: string) => Promise<CogDemSourceRegistration> }).openCogDem =
+      async (src) => (src === "https://example.com/a.tif" ? regA : regB);
+
+    await engine.setTerrainCogSource("https://example.com/a.tif");
+    engine.setTerrainEnabled(true);
+    const sourceA = sources.get("geolibre-mapbox-dem") as { tiles?: string[] } | undefined;
+    assert.ok(sourceA?.tiles?.[0], "expected COG A source to be added");
+    const urlA = sourceA.tiles[0];
+
+    // Style temporarily not loaded while switching from A to B: A must NOT be disposed yet.
+    styleLoaded = false;
+    await engine.setTerrainCogSource("https://example.com/b.tif");
+    assert.equal(disposedA, 0, "old COG DEM must stay alive while native source still references it");
+    assert.equal(
+      (sources.get("geolibre-mapbox-dem") as { tiles?: string[] })?.tiles?.[0],
+      urlA,
+    );
+
+    // Once style settles (idle), the native source swaps to B and A is disposed.
+    styleLoaded = true;
+    for (const fn of listeners.get("idle") ?? []) fn();
+    assert.equal(disposedA, 1, "old COG DEM must be disposed after native source swap");
+    assert.notEqual(
+      (sources.get("geolibre-mapbox-dem") as { tiles?: string[] })?.tiles?.[0],
+      urlA,
+    );
+
+    engine.destroy();
+    assert.equal(disposedB, 1);
   });
 });
 
@@ -320,5 +451,143 @@ describe("PR 5b: Cesium video overlay and DuckDB query parity", () => {
     assert.equal(videoPaused, true);
     assert.equal(fakeVideo.src, "");
     assert.equal(removedDataSources.length, 2);
+  });
+
+  it("tracks video readiness, preserves rotated quad textureCoordinates, and settles empty DuckDB results", async () => {
+    const rotatedVideo = makeLayer({
+      id: "vid-rot",
+      name: "Rotated Video",
+      type: "video",
+      source: {
+        type: "video",
+        urls: ["https://example.com/rotated.mp4"],
+        coordinates: [
+          [-84.0, 36.05],
+          [-83.88, 36.0],
+          [-83.92, 35.88],
+          [-84.04, 35.93],
+        ],
+      },
+    });
+    const emptyDuck = makeLayer({
+      id: "duck-empty",
+      name: "Empty DuckDB",
+      type: "duckdb-query",
+      metadata: { sourceKind: "duckdb-query" },
+    });
+
+    const videoListeners = new Map<string, Set<() => void>>();
+    const fakeVideo = {
+      crossOrigin: "",
+      muted: false,
+      loop: false,
+      playsInline: false,
+      autoplay: false,
+      src: "",
+      readyState: 0,
+      firstChild: null,
+      addEventListener(type: string, fn: () => void) {
+        if (!videoListeners.has(type)) videoListeners.set(type, new Set());
+        videoListeners.get(type)!.add(fn);
+      },
+      removeEventListener(type: string, fn: () => void) {
+        videoListeners.get(type)?.delete(fn);
+      },
+      play: () => Promise.resolve(),
+      pause() {},
+      removeAttribute() {},
+      load() {},
+    };
+
+    const createdEntities: Record<string, unknown>[] = [];
+    class FakeCustomDataSource {
+      show = true;
+      entities = {
+        values: createdEntities,
+        add(spec: Record<string, unknown>) {
+          createdEntities.push(spec);
+          return spec;
+        },
+      };
+      constructor(public name: string) {}
+    }
+
+    const fakeCesium = {
+      CustomDataSource: FakeCustomDataSource,
+      ImageMaterialProperty: class {
+        constructor(public opts: Record<string, unknown>) {}
+      },
+      HeightReference: { NONE: 0 },
+      Cartesian2: class {
+        constructor(
+          public x: number,
+          public y: number,
+        ) {}
+      },
+      PolygonHierarchy: class {
+        constructor(public positions: unknown[]) {}
+      },
+      Cartesian3: { fromDegreesArray: (coords: number[]) => coords },
+      Color: {
+        WHITE: { withAlpha: (a: number) => ({ alpha: a }) },
+        fromCssColorString: (s: string) => ({ css: s, withAlpha: (a: number) => ({ css: s, a }) }),
+      },
+      GeoJsonDataSource: {
+        load: async () => ({ show: true, entities: { values: [] } }),
+      },
+    };
+    const fakeViewer = {
+      dataSources: { add: async (ds: unknown) => ds, remove: () => true },
+      imageryLayers: { addImageryProvider: () => ({}), remove() {}, raiseToTop() {} },
+      scene: {
+        primitives: { add() {}, remove() {} },
+        requestRender() {},
+        canvas: { clientWidth: 800, clientHeight: 600 },
+        mode: 3,
+      },
+      camera: { moveEnd: { addEventListener: () => () => {} } },
+    };
+
+    const sync = new CesiumLayerSync(fakeCesium as never, fakeViewer as never, () => 1, {
+      createVideoElement: () => fakeVideo as unknown as HTMLVideoElement,
+      getDuckDBGeoJson: (id) =>
+        id === "duck-empty" ? { type: "FeatureCollection", features: [] } : null,
+    });
+
+    sync.sync([rotatedVideo, emptyDuck]);
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Rotated quad must use height: 0 + explicit 4-corner textureCoordinates (not GroundPrimitive).
+    const poly = createdEntities[0]?.polygon as Record<string, unknown> | undefined;
+    assert.equal(poly?.height, 0);
+    assert.equal(poly?.classificationType, undefined);
+    const uvPositions = (poly?.textureCoordinates as { positions?: Array<{ x: number; y: number }> })
+      ?.positions;
+    assert.deepEqual(
+      uvPositions?.map((p) => [p.x, p.y]),
+      [
+        [0, 1],
+        [1, 1],
+        [1, 0],
+        [0, 0],
+      ],
+    );
+
+    // Before loadeddata, video is pending while empty DuckDB query settles with zero errors.
+    const statusBefore = sync.getRenderStatus();
+    assert.deepEqual(statusBefore.errors, []);
+    assert.deepEqual(statusBefore.pending, ["Rotated Video"]);
+
+    // Firing loadeddata settles the video overlay.
+    fakeVideo.readyState = 2;
+    for (const fn of videoListeners.get("loadeddata") ?? []) fn();
+    const statusAfter = sync.getRenderStatus();
+    assert.deepEqual(statusAfter.pending, []);
+    assert.deepEqual(statusAfter.errors, []);
+
+    // Removing the layer detaches all media event listeners.
+    sync.sync([]);
+    assert.equal(videoListeners.get("loadeddata")?.size ?? 0, 0);
+    assert.equal(videoListeners.get("error")?.size ?? 0, 0);
   });
 });

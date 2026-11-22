@@ -1,5 +1,11 @@
-import { isCesiumOnlyLayer, useAppStore, type MapRendererKind } from "@geolibre/core";
 import {
+  isCesiumOnlyLayer,
+  normalizeArcgisWkid,
+  useAppStore,
+  type MapRendererKind,
+} from "@geolibre/core";
+import {
+  arcgisSceneMode,
   CesiumCanvas,
   isArcgisSupportedLayer,
   isCesiumSupportedLayerType,
@@ -236,6 +242,14 @@ function PaneLayerToggle({ viewId, index, renderer }: PaneLayerToggleProps) {
   // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine layer support table
   const is3d = renderer === "cesium";
   const layers = useAppStore((s) => s.layers);
+  const arcgisScene = useAppStore(
+    (s) =>
+      arcgisSceneMode(
+        s.preferences.map.projection,
+        s.preferences.map.terrainEnabled,
+        normalizeArcgisWkid(s.preferences.map.arcgisWkid) !== undefined,
+      ) !== "2d",
+  );
   const layerVisibility = useAppStore(
     (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.layerVisibility,
   );
@@ -275,7 +289,7 @@ function PaneLayerToggle({ viewId, index, renderer }: PaneLayerToggleProps) {
             // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine layer support table
             const noMapbox = renderer === "mapbox" && !isMapboxSupportedLayer(layer);
             // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine layer support table
-            const noArcgis = renderer === "arcgis" && !isArcgisSupportedLayer(layer, false);
+            const noArcgis = renderer === "arcgis" && !isArcgisSupportedLayer(layer, false, arcgisScene);
             return (
               <DropdownMenuCheckboxItem
                 key={layer.id}

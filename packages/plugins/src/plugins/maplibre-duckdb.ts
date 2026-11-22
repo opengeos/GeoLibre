@@ -323,6 +323,7 @@ export function getDuckDBLayerGeoJson(layerId: string): FeatureCollection | null
 
   const rows = getDuckDBRenderedRows(layerId);
   const features: Feature[] = [];
+  const singleResult = renderedLayer.results.length === 1;
   for (const result of renderedLayer.results) {
     const geomCol = result.table?.getChild?.("geometry");
     if (!geomCol || typeof geomCol.get !== "function") continue;
@@ -333,12 +334,16 @@ export function getDuckDBLayerGeoJson(layerId: string): FeatureCollection | null
       const geometry = duckDBGeometryToGeoJson(result.geometryType, geomCol.get(localIndex));
       if (!geometry) continue;
       const rawIdx = indexCol?.get?.(localIndex);
-      const globalIndex =
-        typeof rawIdx === "number" && Number.isFinite(rawIdx)
+      const parsedIdx =
+        typeof rawIdx === "number" && Number.isInteger(rawIdx) && rawIdx >= 0
           ? rawIdx
-          : typeof rawIdx === "bigint" && rawIdx <= BigInt(Number.MAX_SAFE_INTEGER)
+          : typeof rawIdx === "bigint" &&
+              rawIdx >= 0n &&
+              rawIdx <= BigInt(Number.MAX_SAFE_INTEGER)
             ? Number(rawIdx)
-            : localIndex;
+            : null;
+      const globalIndex = parsedIdx ?? (singleResult ? localIndex : null);
+      if (globalIndex === null) continue;
       const rawProps = rows[globalIndex] ?? {};
       features.push({
         type: "Feature",
@@ -410,6 +415,9 @@ export function updateDuckDBLayerRows(
       ...properties,
     };
   }
+
+  const renderedLayer = duckdbRenderedLayers.get(layerId);
+  if (renderedLayer) duckdbGeoJsonCache.delete(renderedLayer);
 
   const control = getMutableDuckDBControl();
   if (control?.layer?.id === layerId) {
@@ -928,7 +936,10 @@ function patchDuckDBRenderer(renderer: DuckDBRendererLike | null | undefined) {
       // render the full ordered set instead.
       for (const incoming of layers) {
         const cached = duckdbRenderedLayers.get(incoming.id);
-        if (cached) cached.results = incoming.results;
+        if (cached) {
+          cached.results = incoming.results;
+          duckdbGeoJsonCache.delete(cached);
+        }
       }
       renderer.__geolibreOriginalSetData?.(getOrderedDuckDBRenderedLayers());
     };

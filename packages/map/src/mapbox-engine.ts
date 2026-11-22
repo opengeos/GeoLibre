@@ -214,6 +214,11 @@ export class MapboxEngine implements MapEngine {
   private cogDemTileBinding: RegisteredMapboxCogDem | null = null;
   private cogDemUrl: string | null = null;
   private cogDemGeneration = 0;
+  private terrainSourcePending = false;
+  private retiredCogDems: Array<{
+    registration: CogDemSourceRegistration | null;
+    binding: RegisteredMapboxCogDem | null;
+  }> = [];
   private openCogDem: typeof registerCogDemSource = registerCogDemSource;
   private preferences: MapPreferences | null = null;
   private pluginControls = new Map<maplibregl.IControl, mapboxgl.IControl>();
@@ -275,6 +280,7 @@ export class MapboxEngine implements MapEngine {
   private syncPending = false;
   private basemapPending = false;
   private flushLayers = () => {
+    if (this.terrainSourcePending) this.reconcileTerrainSource();
     if (this.syncPending) this.syncLayers(this.layers);
     if (this.basemapPending) this.applyBasemap();
   };
@@ -466,6 +472,10 @@ export class MapboxEngine implements MapEngine {
     if (this.preferences) this.applyMapPreferences(this.preferences);
     this.applyBasemap();
     this.setBlankBackgroundColor(this.blankColor);
+    // A fresh style dropped any previous native terrain source, so pending
+    // source swaps are already superseded and retired COG DEM bindings can be released.
+    this.terrainSourcePending = false;
+    this.releaseRetiredCogDems();
     this.setTerrainEnabled(this.terrain);
     this.syncLayers(this.layers);
     if (this.layerControlVisible) this.layerControlHost.add();
@@ -493,6 +503,8 @@ export class MapboxEngine implements MapEngine {
     // for the pane that owns the bridge; see `ownsLayerLabels`.
     if (this.ownsLayerLabels) clearLayerLabels();
     this.cogDemGeneration++;
+    this.terrainSourcePending = false;
+    this.releaseRetiredCogDems();
     this.cogDemTileBinding?.unregister();
     this.cogDemTileBinding = null;
     this.cogDemRegistration?.dispose();
@@ -2007,18 +2019,32 @@ export class MapboxEngine implements MapEngine {
     this.cogDemRegistration = registration;
     this.cogDemTileBinding = nextBinding;
     this.cogDemUrl = typeof normalized === "string" ? normalized : null;
-
-    const map = this.map;
-    if (map.isStyleLoaded()) {
-      const wasEnabled = this.terrain;
-      if (wasEnabled) map.setTerrain(null);
-      if (map.getSource("geolibre-mapbox-dem")) map.removeSource("geolibre-mapbox-dem");
-      if (wasEnabled) this.setTerrainEnabled(true);
+    if (previousReg || previousBinding) {
+      this.retiredCogDems.push({ registration: previousReg, binding: previousBinding });
     }
-
-    previousBinding?.unregister();
-    previousReg?.dispose();
+    this.terrainSourcePending = true;
+    this.reconcileTerrainSource();
     return true;
+  }
+
+  private reconcileTerrainSource(): void {
+    if (!this.terrainSourcePending) return;
+    const map = this.map;
+    if (!map || !map.isStyleLoaded()) return;
+    this.terrainSourcePending = false;
+    const wasEnabled = this.terrain;
+    if (wasEnabled) map.setTerrain(null);
+    if (map.getSource("geolibre-mapbox-dem")) map.removeSource("geolibre-mapbox-dem");
+    if (wasEnabled) this.setTerrainEnabled(true);
+    this.releaseRetiredCogDems();
+  }
+
+  private releaseRetiredCogDems(): void {
+    const retired = this.retiredCogDems.splice(0);
+    for (const item of retired) {
+      item.binding?.unregister();
+      item.registration?.dispose();
+    }
   }
 }
 

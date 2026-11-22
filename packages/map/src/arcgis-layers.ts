@@ -1960,27 +1960,39 @@ function isArcgisExternalDeckLayer(layer: GeoLibreLayer): boolean {
   }
 }
 
-/** Store layers are immutable records, so the answer is memoized per object. */
-const supportedLayerCache = new WeakMap<GeoLibreLayer, boolean>();
+/** Store layers are immutable records, so the answer is memoized per `(deckOverlay, scene)` pair. */
+const supportedLayerCaches = [
+  new WeakMap<GeoLibreLayer, boolean>(),
+  new WeakMap<GeoLibreLayer, boolean>(),
+  new WeakMap<GeoLibreLayer, boolean>(),
+  new WeakMap<GeoLibreLayer, boolean>(),
+] as const;
 
 /**
  * Whether the ArcGIS engine can draw a layer. The layer panels badge the rest
  * before the engine's error banner would report them.
  */
-export function isArcgisSupportedLayer(layer: GeoLibreLayer, deckOverlay = true): boolean {
-  if (isArcgisExternalDeckLayer(layer)) return deckOverlay;
-  const cached = supportedLayerCache.get(layer);
+export function isArcgisSupportedLayer(
+  layer: GeoLibreLayer,
+  deckOverlay = true,
+  scene = false,
+): boolean {
+  const cache = supportedLayerCaches[(scene ? 2 : 0) | (deckOverlay ? 1 : 0)];
+  const cached = cache.get(layer);
   if (cached !== undefined) return cached;
   let supported = true;
-  if (isArcgisPluginLayer(layer)) supported = false;
-  else {
+  if (!scene && isArcgisExternalDeckLayer(layer)) {
+    supported = deckOverlay;
+  } else if (!scene && isArcgisPluginLayer(layer)) {
+    supported = false;
+  } else {
     try {
-      compileArcgisLayer(layer, { probe: true });
+      compileArcgisLayer(layer, { probe: true, deckOverlay, scene });
     } catch {
       supported = false;
     }
   }
-  supportedLayerCache.set(layer, supported);
+  cache.set(layer, supported);
   return supported;
 }
 
@@ -2031,8 +2043,9 @@ function tileTemplateToken(template: string | undefined): string | undefined {
   }
 }
 
-const ARCGIS_SERVICE = /\/(FeatureServer|MapServer|ImageServer|SceneServer)(?:\/\d+)?\/?(?:\?|$)/i;
-const ARCGIS_SCENE_SERVER = /\/SceneServer(?:\/\d+)?\/?(?:\?|$)/i;
+const ARCGIS_SERVICE =
+  /\/(FeatureServer|MapServer|ImageServer|SceneServer)(?:\/(?:layers\/)?\d+)?\/?(?:\?|$)/i;
+const ARCGIS_SCENE_SERVER = /\/SceneServer(?:\/(?:layers\/)?\d+)?\/?(?:\?|$)/i;
 
 const zarrSignatures = new WeakMap<GeoLibreLayer["source"], string>();
 const zarrManifestIds = new WeakMap<object, number>();
