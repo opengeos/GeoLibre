@@ -141,6 +141,40 @@ describe("ArcGIS Pro import report", () => {
     }
   });
 
+  it("lets a new report locate while a retired Locate is still listing", async () => {
+    const desktop = stubDesktop();
+    try {
+      const report = renderReport();
+      showReport(report);
+      const retired = report().locate(report().repairGroups[0].key);
+      await act(async () => {});
+      desktop.answer("/Users/analyst/moved");
+      await act(async () => {});
+      // The first Locate is waiting on its listing when another import
+      // replaces the project and shows its own report.
+      openOther();
+      showReport(report);
+      assert.equal(report().repairBusy, false);
+      const next = report().locate(report().repairGroups[0].key);
+      await act(async () => {});
+      assert.equal(report().repairBusy, true);
+      assert.deepEqual(desktop.commands, [
+        "plugin:dialog|open",
+        "plugin:fs|read_dir",
+        "plugin:dialog|open",
+      ]);
+      // The retired Locate finishing does not clear the new one's busy state.
+      desktop.list([]);
+      await act(() => retired);
+      assert.equal(report().repairBusy, true);
+      desktop.answer(null);
+      await act(() => next);
+      assert.equal(report().repairBusy, false);
+    } finally {
+      desktop.restore();
+    }
+  });
+
   it("refuses a network-share folder without reading it", async () => {
     const desktop = stubDesktop();
     try {

@@ -71,14 +71,18 @@ export function useArcgisImportReport(onError: (message: string) => void): Arcgi
   const repairRef = useRef<ArcgisWorkspaceRepairSession | null>(null);
   // `projectLoadCount` of the project the open report describes.
   const reportLoadCountRef = useRef<number | null>(null);
-  // Set synchronously, so a second click before the busy state renders does
-  // not open a second picker.
-  const busyRef = useRef(false);
+  // The repair session a Locate is running for. Set synchronously, so a second
+  // click before the busy state renders does not open a second picker; a new
+  // or closed report clears it, so a Locate the report retired never blocks
+  // the next report's.
+  const busyRef = useRef<ArcgisWorkspaceRepairSession | null>(null);
   const projectLoadCount = useAppStore((s) => s.projectLoadCount);
 
   const close = useCallback(() => {
     repairRef.current = null;
     reportLoadCountRef.current = null;
+    busyRef.current = null;
+    setRepairBusy(false);
     setWarnings(null);
     setRepairGroups([]);
     setRepairResult(null);
@@ -92,6 +96,8 @@ export function useArcgisImportReport(onError: (message: string) => void): Arcgi
   const show = useCallback<ArcgisImportReport["show"]>((nextWarnings, repair) => {
     const ownRepair = repair && repair.pending.size > 0 ? repair : null;
     repairRef.current = ownRepair;
+    busyRef.current = null;
+    setRepairBusy(false);
     reportLoadCountRef.current = useAppStore.getState().projectLoadCount;
     setRepairGroups(ownRepair ? arcgisRepairGroups(ownRepair) : []);
     setRepairResult(null);
@@ -107,7 +113,7 @@ export function useArcgisImportReport(onError: (message: string) => void): Arcgi
       const current = () =>
         repairRef.current === session &&
         useAppStore.getState().projectLoadCount === session.projectLoadCount;
-      busyRef.current = true;
+      busyRef.current = session;
       setRepairBusy(true);
       setRepairResult(null);
       try {
@@ -152,8 +158,11 @@ export function useArcgisImportReport(onError: (message: string) => void): Arcgi
         console.error("Failed to locate ArcGIS project data", error);
         onError(error instanceof Error ? error.message : String(error));
       } finally {
-        busyRef.current = false;
-        setRepairBusy(false);
+        // Only the Locate the report is still waiting on clears the busy state.
+        if (busyRef.current === session) {
+          busyRef.current = null;
+          setRepairBusy(false);
+        }
       }
     },
     [onError],

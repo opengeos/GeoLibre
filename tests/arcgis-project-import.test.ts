@@ -374,6 +374,45 @@ describe("ArcGIS Pro project import", () => {
     );
   });
 
+  it("reads a vector file from a folder whose name has a dot in it", () => {
+    // `Survey.2025` is a folder, not a file with a `.2025` extension, so the
+    // dataset is joined onto it and a moved copy can still be located.
+    const layer = (name: string, workspace: string, dataset: string) => ({
+      type: "CIMFeatureLayer",
+      name,
+      featureTable: {
+        dataConnection: { workspaceConnectionString: `DATABASE=${workspace}`, dataset },
+      },
+    });
+    const mapx = {
+      type: "CIMMap",
+      name: "Survey",
+      defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+      layerDefinitions: [
+        layer("Roads", "C:\\GIS\\Survey.2025", "roads.geojson"),
+        layer("Shared", "\\\\server\\gis\\Survey.2025", "rivers.geojson"),
+        // A GeoPackage workspace is a file, not a folder to join onto.
+        layer("Packed", "C:\\GIS\\city.gpkg", "parcels"),
+      ],
+    };
+    const result = importArcgisProject(JSON.stringify(mapx), "C:\\projects\\main.mapx");
+    assert.equal(
+      result.project.layers.find((entry) => entry.name === "Roads")?.sourcePath,
+      "C:/GIS/Survey.2025/roads.geojson",
+    );
+    assert.equal(
+      result.project.layers.find((entry) => entry.name === "Packed")?.sourcePath,
+      "C:/GIS/city.gpkg",
+    );
+    assert.deepEqual(
+      [...result.repair.folderSources.values()],
+      [
+        { workspace: "C:\\GIS\\Survey.2025", file: "roads.geojson" },
+        { workspace: "\\\\server\\gis\\Survey.2025", file: "rivers.geojson" },
+      ],
+    );
+  });
+
   it("still loads a GeoTIFF from a plain folder whose name ends in .gdb", () => {
     // The workspace suffix is a last resort, not a short circuit: a readable
     // dataset wins over a folder that merely looks like a geodatabase. ArcGIS

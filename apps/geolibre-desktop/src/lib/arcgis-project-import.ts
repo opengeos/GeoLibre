@@ -886,7 +886,7 @@ function resolveDataSource(
     path = workspace;
   } else if (!path && dataset) {
     path = dataset;
-  } else if (folderFile && !extension(workspace)) {
+  } else if (folderFile && isFolderWorkspace(workspace)) {
     // A workspace with no extension is a containing folder, so the dataset
     // carries the file name -- the shape shapefile and delimited-text
     // connections use. Joining them generically lets the other file formats in
@@ -922,7 +922,19 @@ function folderDatasetFile(
   if (workspaceFactory.includes("shapefile")) {
     return /\.[a-z0-9]+$/i.test(dataset) ? dataset : `${dataset}.shp`;
   }
-  return workspaceFactory.includes("text") || !extension(workspace) ? dataset : undefined;
+  return workspaceFactory.includes("text") || isFolderWorkspace(workspace) ? dataset : undefined;
+}
+
+/** Workspace extensions that name a file or container rather than a folder. */
+const CONTAINER_EXTENSIONS = new Set(["gdb", "sde", "mdb", "accdb", "sqlite", "zip"]);
+
+/**
+ * Whether a workspace is a plain folder: no extension, or a dot in a folder
+ * name (`Survey.2025`) rather than a geodatabase, database or data file.
+ */
+function isFolderWorkspace(workspace: string): boolean {
+  const ext = extension(workspace);
+  return !ext || !(CONTAINER_EXTENSIONS.has(ext) || SUPPORTED_VECTOR_EXTENSIONS.has(ext));
 }
 
 /**
@@ -944,7 +956,15 @@ function folderSource(
   // joined with it: a `..` would read outside the folder the user picked, and
   // a drive (`C:`, `C:name`) would name another drive. A leading separator was
   // dropped above, so `/etc/x.shp` can only mean `etc/x.shp` inside the folder.
-  if (segments.length === 0 || segments.some((part) => part === ".." || part.includes(":"))) {
+  // A Windows device name (`CON.shp`, `NUL`, `COM1.csv`) opens the device, not
+  // a file, whatever its extension, so it is never offered either.
+  if (
+    segments.length === 0 ||
+    segments.some(
+      (part) =>
+        part === ".." || part.includes(":") || /^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(part),
+    )
+  ) {
     return undefined;
   }
   const relative = segments.join("/");

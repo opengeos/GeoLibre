@@ -265,6 +265,11 @@ describe("ArcGIS Pro workspace repair: import", () => {
     ["sub\\..\\..\\roads", null],
     ["C:\\Other\\roads", null],
     ["C:roads", null],
+    // A Windows device name opens the device whatever its extension.
+    ["CON", null],
+    ["sub\\nul.shp", null],
+    ["Com1.csv", null],
+    ["console", "console.shp"],
     // Leading, repeated and `.` separators collapse to a path under the
     // folder, so even a `\\server\share` dataset names subfolders of the pick.
     ["/etc/roads", "etc/roads.shp"],
@@ -526,6 +531,24 @@ describe("ArcGIS Pro workspace repair: Locate folder", () => {
     const ids = useAppStore.getState().layers.map((layer) => layer.id);
     assert.equal(new Set(ids).size, 2);
     assert.equal(session.storeIds.get(importId), `${importId}-2`);
+  });
+
+  it("never gives a located layer the store id of a removed imported layer", async () => {
+    const { session } = await importAndLoad(map([shp("Kept"), shp("Missing")]), (path) =>
+      path.endsWith("missing.shp"),
+    );
+    const [importId] = session.pending.keys();
+    const kept = session.order.find((id) => id !== importId)!;
+    // The kept layer's store id is the one a suffix would pick next, and the
+    // user has since removed it, so its id is free on the map but still mapped.
+    session.storeIds.set(kept, `${importId}-2`);
+    useAppStore.setState((state) => ({
+      layers: state.layers.filter((layer) => layer.id !== kept && layer.id !== `${importId}-2`),
+    }));
+    useAppStore.getState().addLayer(geojsonLayer({ id: importId, name: "Someone else's" }));
+    await locate(session, MOVED, () => true);
+    assert.equal(session.storeIds.get(importId), `${importId}-3`);
+    assert.equal(session.storeIds.get(kept), `${importId}-2`);
   });
 
   it("leaves a layer the user added since the import where it is", async () => {

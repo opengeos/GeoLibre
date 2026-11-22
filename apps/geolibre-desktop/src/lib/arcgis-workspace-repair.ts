@@ -310,6 +310,8 @@ export function commitLocatedArcgisLayers(
   // The group each layer on the map is in, by store id; located layers join
   // as they are added.
   const live = new Map(getStore().layers.map((layer) => [layer.id, layer.groupId]));
+  // Store ids that other import entries map to, whether or not still on the map.
+  const mapped = new Set(storeIds.values());
   const onMap = (id: string) => {
     const storeId = storeIds.get(id);
     return storeId !== undefined && live.has(storeId) ? storeId : undefined;
@@ -379,9 +381,12 @@ export function commitLocatedArcgisLayers(
     else if (any !== undefined) beforeId = getStore().layers.find(sameBlock(any))!.id;
     else if (below !== undefined) beforeId = after(below, sameBlock(below));
     const { groupId: _savedGroupId, ...rest } = layer;
-    // The import id is normally free; a layer added since could hold it.
+    // The import id is normally free; a layer added since could hold it. An
+    // id another import entry still maps to is not reused either, even once
+    // that layer is removed, so the two never share a drawing-order anchor.
     let storeId = id;
-    for (let n = 2; live.has(storeId); n++) storeId = `${id}-${n}`;
+    for (let n = 2; live.has(storeId) || mapped.has(storeId); n++) storeId = `${id}-${n}`;
+    mapped.add(storeId);
     // The project's saved name, not one derived from the file, so it is kept.
     getStore().addLayer(
       { ...rest, id: storeId, ...(group !== undefined ? { groupId: group } : {}) },
