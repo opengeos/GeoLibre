@@ -571,6 +571,12 @@ describe(".lyrx style import", () => {
           0,
           /label symbol was not imported: the text outline\./,
         ],
+        // Hollow text: named as an outline, not as transparency.
+        [
+          { symbol: symbol("CIMPolygonSymbol", [solidStroke(rgb(0, 0, 255))]).symbol },
+          0,
+          /^Part of the \.lyrx style's label symbol was not imported: the text outline\.$/,
+        ],
       ] as const) {
         const { style, warnings } = applied(textLabel(textSymbol), labelled());
         assert.equal(style.labels.haloWidth, haloWidth);

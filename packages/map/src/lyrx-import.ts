@@ -311,7 +311,10 @@ function readTextSymbol(labelClass: CimObject, warnings: string[]): Partial<Labe
   if (textLook.fillColor) {
     labels.color = textLook.fillColor;
     labels.colorExpression = "";
-    translucent ||= (textLook.fillOpacity ?? 1) < 1;
+    // Hollow text (an outline, no fill) reads as the outline colour at fill opacity 0; it draws
+    // opaque in that colour, and the outline warning below already names it.
+    const textOpacity = textLook.fillOpacity ?? 1;
+    translucent ||= textOpacity > 0 && textOpacity < 1;
   } else {
     warnings.push("The .lyrx style's label colour could not be read; labels keep their colour.");
   }
