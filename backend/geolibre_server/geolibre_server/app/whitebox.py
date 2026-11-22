@@ -1002,8 +1002,7 @@ def _extract_outputs(
                 if not output_param_names or name in output_param_names:
                     outputs[str(name)] = _resolve_output_value(value, working_directory)
         elif not output_param_names:
-            for name, value in result.items():
-                outputs[str(name)] = _resolve_output_value(value, working_directory)
+            outputs.update(result)
 
     for param in (tool or {}).get("params", []):
         if not isinstance(param, dict):

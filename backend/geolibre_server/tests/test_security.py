@@ -440,6 +440,15 @@ def test_whitebox_tilde_and_relative_output_stay_confined(
     assert not tilde_out.startswith("~")
     assert tilde_out.endswith("result.geojson")
 
+    # Scalar result keys for tools with no declared _out params pass through untouched.
+    scalar_outputs = whitebox._extract_outputs(
+        {"message": "done", "count": "42"},
+        {},
+        {"params": []},
+        working_directory=str(root.resolve()),
+    )
+    assert scalar_outputs == {"message": "done", "count": "42"}
+
     # Even if a recorded job somehow held an outside path, /output still enforces roots.
     job_id = "test-outside-output"
     now = whitebox._utc_now()
