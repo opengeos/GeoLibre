@@ -322,6 +322,11 @@ describe(".lyrx style import", () => {
         /\(RGB colour\) could not be read/,
       ],
       [
+        "a colour with no colour model",
+        simple(polygon(solidStroke(), solidFill({ values: [1, 2, 3, 100] }))),
+        /^A fill or outline colour in the \.lyrx style could not be read, so that fill or outline is not drawn\.$/,
+      ],
+      [
         "dashes",
         simple(
           symbol("CIMLineSymbol", [
@@ -376,7 +381,7 @@ describe(".lyrx style import", () => {
       [
         "alternate symbols for other scales",
         { ...simple(), alternateSymbols: [polygon(solidFill(rgb(0, 0, 255)))] },
-        /^The \.lyrx style's alternate symbols for other map scales were not imported; each class draws its main symbol at every scale\.$/,
+        /^The \.lyrx style's alternate symbols for other map scales were not imported; the main symbols draw at every scale\.$/,
       ],
     ];
     for (const [label, renderer, warning] of cases) {

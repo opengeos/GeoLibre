@@ -197,20 +197,22 @@ function partial(issue: CimRendererIssue): string {
       return `${article(
         name,
       )} ${name} in the .lyrx style's symbols was not imported, so the symbols draw without it.`;
-    case "color":
-      return `A fill or outline colour in the .lyrx style (${
-        colourName(issue.cimType) || name
-      }) could not be read, so that fill or outline is not drawn.`;
+    case "color": {
+      const kind = colourName(issue.cimType);
+      return `A fill or outline colour in the .lyrx style${
+        kind ? ` (${kind})` : ""
+      } could not be read, so that fill or outline is not drawn.`;
+    }
     case "transparency":
       return "The .lyrx style's classes have different line or outline transparencies; all lines and outlines were imported at one shared transparency.";
     case "effects":
       return `A geometric effect in the .lyrx style (${
         typeName(issue.cimType, /^GeometricEffect/) || "unnamed"
-      }) was not imported, so lines and outlines draw solid and in place.`;
+      }) was not imported, so the symbols draw solid and in place.`;
     case "marker-shape":
       return `The .lyrx style's ${name} is drawn as a circle, not in its own shape.`;
     case "alternate-symbols":
-      return "The .lyrx style's alternate symbols for other map scales were not imported; each class draws its main symbol at every scale.";
+      return "The .lyrx style's alternate symbols for other map scales were not imported; the main symbols draw at every scale.";
     default:
       return `Part of the .lyrx style (${issue.code}) was not imported.`;
   }
