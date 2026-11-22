@@ -245,6 +245,10 @@ def _has_string_table_reference(stripped_sql: str) -> bool:
     # - "after_table": just read a table identifier (a following `.` continues it)
     # - "rest": inside alias or ON/USING clause until `,` or clause end
     from_depths: dict[int, str] = {}
+    # Depths that contain a query (top-level depth 0 or a parenthesized SELECT),
+    # so function-argument FROM syntax such as TRIM(' ' FROM ' abc ') or
+    # EXTRACT(YEAR FROM '2020-01-01'::date) is not mistaken for a FROM clause.
+    query_depths: set[int] = {0}
     for tok in tokens:
         upper = tok.upper()
         if tok == "(":
@@ -261,9 +265,12 @@ def _has_string_table_reference(stripped_sql: str) -> bool:
             continue
         if tok == ")":
             from_depths.pop(depth, None)
+            query_depths.discard(depth)
             depth = max(0, depth - 1)
             continue
-        if upper in {"FROM", "JOIN"}:
+        if upper == "SELECT":
+            query_depths.add(depth)
+        if upper == "JOIN" or (upper == "FROM" and depth in query_depths):
             from_depths[depth] = "expect"
             continue
         if depth not in from_depths:

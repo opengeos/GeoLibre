@@ -256,6 +256,7 @@ def test_run_does_not_leak_exception_detail(monkeypatch: pytest.MonkeyPatch) -> 
         "SELECT * FROM (SELECT 1) AS t, '/tmp/private.parquet'",
         "SELECT * FROM ('/tmp/private.parquet')",
         "SELECT * FROM (SELECT * FROM '/tmp/private.parquet') AS t",
+        "SELECT TRIM(' ' FROM (SELECT * FROM '/tmp/private.parquet'))",
         "EXPLAIN COPY (SELECT 1) TO '/tmp/pwn.csv'",
     ],
 )
@@ -276,6 +277,8 @@ def test_validate_read_only_sql_rejects_unsafe_statements(statement: str) -> Non
         "SELECT * FROM cities a JOIN cities b ON ST_Intersects(a.geom, 'POINT(0 0)')",
         "SELECT * FROM cities a JOIN cities b ON a.name IN ('x', 'y')",
         'SELECT * FROM cities a JOIN cities b ON a."col.x" = b."col.x"',
+        "SELECT EXTRACT(YEAR FROM '2020-01-01'::date)",
+        "SELECT TRIM(' ' FROM ' abc ')",
         "EXPLAIN SELECT 1",
         "VALUES (1, 2)",
     ],
