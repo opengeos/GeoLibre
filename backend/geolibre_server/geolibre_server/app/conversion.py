@@ -547,9 +547,7 @@ def _run_conversion_job(
             bufsize=1,
             **_subprocess_startup_kwargs(),
         )
-        with _JOBS_LOCK:
-            _PROCESSES[job_id] = process
-            cancelled_early = job_id in _CANCELLED
+        cancelled_early = _JOB_MANAGER.register_process(job_id, process)
         if cancelled_early:
             process.kill()
         # A watchdog kills the subprocess if it exceeds the deadline. Reading
@@ -593,8 +591,7 @@ def _run_conversion_job(
         if returncode != 0:
             if validation_error:
                 raise RuntimeError(validation_error)
-            with _JOBS_LOCK:
-                messages = list(_JOBS[job_id].messages)
+            messages = _JOB_MANAGER.snapshot_messages(job_id)
             raise RuntimeError(messages[-1] if messages else f"Conversion exited with {returncode}")
         # Metadata-only jobs (layer listing) have no output file to report.
         output_path = params.get("output_path")
@@ -619,8 +616,7 @@ def _run_conversion_job(
         # those too would leave a user who mistyped a band-math expression or
         # picked mismatched rasters with nothing actionable and no way to read
         # the sidecar log (desktop and Docker builds both hide it).
-        with _JOBS_LOCK:
-            leaked = list(_JOBS.get(job_id).messages) if job_id in _JOBS else []
+        leaked = _JOB_MANAGER.snapshot_messages(job_id)
         logger.warning(
             "Conversion job %s failed: %s; subprocess output=%r",
             job_id,
@@ -645,9 +641,7 @@ def _run_conversion_job(
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 pass
-        with _JOBS_LOCK:
-            _PROCESSES.pop(job_id, None)
-            _CANCELLED.discard(job_id)
+        _JOB_MANAGER.clear_process(job_id)
 
 
 def _start_job(

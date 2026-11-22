@@ -33,13 +33,14 @@ def upgrade() -> None:
         # emitting them again creates duplicate CREATE INDEX statements.
         return
     if bind.dialect.name == "sqlite":
-        upgrade_sqlite_schema(bind.engine)
+        upgrade_sqlite_schema(bind)
     elif bind.dialect.name == "postgresql":
-        upgrade_postgresql_schema(bind.engine)
+        upgrade_postgresql_schema(bind)
     for index in (*OAUTH_INDEXES, PENDING_TRANSFER_INDEX, *FEDERATED_IDENTITY_INDEXES):
         index.create(bind=bind, checkfirst=True)
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    Base.metadata.drop_all(bind=bind, checkfirst=True)
+    raise NotImplementedError(
+        "Downgrading the baseline schema would drop all data; restore from backup instead."
+    )

@@ -1028,11 +1028,13 @@ Deleting a project also removes its pending transfers and its redirect rows.
 
 ### `GET /api/shares`
 
-Requires `read:projects`. Returns `{"shares": [<project>, ...]}`, newest-updated
-first: the projects the caller manages whose `visibility` is `public` or `unlisted`
-(organization-visible projects are not link shares). Each
-entry is a project representation plus `projectSlug`. A share's `id` is its
-project id. Expired links stay listed so they can be revoked.
+Requires `read:projects`. Accepts optional pagination query parameters
+`limit` (1 to 100, default 100) and `offset` (default 0). Returns
+`{"shares": [<project>, ...], "limit": 100, "offset": 0, "total": N}`,
+newest-updated first: the projects the caller manages whose `visibility` is
+`public` or `unlisted` (organization-visible projects are not link shares).
+Each entry is a project representation plus `projectSlug`. A share's `id` is
+its project id. Expired links stay listed so they can be revoked.
 
 ### `DELETE /api/shares/{id}`
 
@@ -1149,9 +1151,11 @@ Refusals use stable phrases so clients can explain them:
 Receiving and managing:
 
 - `GET /api/transfers/incoming` lists the caller's pending offers, newest
-  first: `{"transfers": [...]}`.
-- `GET /api/transfers/outgoing` lists the pending transfers the caller started:
-  `{"transfers": [...]}`.
+  first, with optional `limit` (1 to 100, default 100) and `offset` (default 0):
+  `{"transfers": [...], "limit": 100, "offset": 0, "total": N}`.
+- `GET /api/transfers/outgoing` lists the pending transfers the caller started,
+  with optional `limit` (1 to 100, default 100) and `offset` (default 0):
+  `{"transfers": [...], "limit": 100, "offset": 0, "total": N}`.
 - `POST /api/transfers/{id}/accept` (recipient only) moves the project. Its body
   is optional: `{"slug": "..."}` overrides the destination slug, which is how a
   recipient resolves a slug conflict (`409 slug already exists for the new

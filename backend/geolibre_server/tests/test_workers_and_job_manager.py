@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import importlib
+import json
+import sys
 import threading
 import time
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
@@ -135,3 +138,221 @@ def test_job_manager_enforces_in_flight_cap_chronological_eviction_and_message_b
         manager.evict_finished_locked()
         assert "old" not in manager.jobs
         assert len(manager.jobs) == 2
+
+
+def test_job_manager_process_lifecycle_and_snapshot() -> None:
+    manager = JobManager()
+    state = JobState(
+        id="job-1",
+        status="running",
+        tool_id="tool-x",
+        created_at="2026-01-01T00:00:00+00:00",
+        updated_at="2026-01-01T00:00:00+00:00",
+    )
+    with manager.lock:
+        manager.jobs[state.id] = state
+    manager.append_message(state.id, "step 1")
+    assert manager.snapshot_messages(state.id) == ["step 1"]
+    assert manager.snapshot_messages("missing") == []
+
+    killed = False
+
+    class FakeProc:
+        def poll(self):
+            return None
+
+        def kill(self):
+            nonlocal killed
+            killed = True
+
+    proc = FakeProc()
+    assert manager.register_process(state.id, proc) is False  # type: ignore[arg-type]
+    manager.cancel(state.id)
+    assert killed is True
+    assert manager.is_cancelled(state.id) is True
+    manager.clear_process(state.id)
+    assert manager.is_cancelled(state.id) is False
+
+
+def _write_test_dem(path: Path, data) -> Path:
+    rasterio = pytest.importorskip("rasterio")
+    from rasterio.transform import from_origin
+
+    arr = data
+    if arr.ndim == 2:
+        arr = arr[None, :, :]
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=arr.shape[1],
+        width=arr.shape[2],
+        count=arr.shape[0],
+        dtype="float32",
+        crs="EPSG:3857",
+        transform=from_origin(0.0, 100.0, 10.0, 10.0),
+        nodata=-9999.0,
+    ) as dst:
+        dst.write(arr.astype("float32"))
+    return path
+
+
+def _run_worker(monkeypatch: pytest.MonkeyPatch, module_name: str, params: dict) -> None:
+    mod = importlib.import_module(f"geolibre_server.workers.{module_name}")
+    monkeypatch.setattr(sys, "argv", [module_name, json.dumps(params)])
+    mod.main()
+
+
+def test_raster_workers_in_process_terrain_and_masking(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    np = pytest.importorskip("numpy")
+    rasterio = pytest.importorskip("rasterio")
+
+    # Ramp with a steep shadow face and one explicit nodata pixel.
+    grid = np.array(
+        [
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 10.0, 20.0, 30.0, 40.0, 50.0],
+            [0.0, 20.0, 40.0, 60.0, 80.0, 100.0],
+            [0.0, 30.0, 60.0, -9999.0, 120.0, 150.0],
+            [0.0, 40.0, 80.0, 120.0, 160.0, 200.0],
+            [0.0, 50.0, 100.0, 150.0, 200.0, 250.0],
+        ],
+        dtype="float32",
+    )
+    dem = _write_test_dem(tmp_path / "dem.tif", grid)
+
+    hs_out = tmp_path / "hillshade.tif"
+    _run_worker(
+        monkeypatch,
+        "raster_tools.hillshade",
+        {"input_path": str(dem), "output_path": str(hs_out), "azimuth": 315, "altitude": 45},
+    )
+    with rasterio.open(hs_out) as ds:
+        assert ds.nodata is None
+        mask = ds.dataset_mask()
+        assert mask[3, 3] == 0
+        assert mask[1, 1] == 255
+
+    for units in ("degrees", "percent"):
+        slope_out = tmp_path / f"slope_{units}.tif"
+        _run_worker(
+            monkeypatch,
+            "raster_tools.slope",
+            {"input_path": str(dem), "output_path": str(slope_out), "units": units},
+        )
+        with rasterio.open(slope_out) as ds:
+            arr = ds.read(1)
+            assert arr[3, 3] == -9999.0
+            assert arr[1, 1] > 0
+
+    aspect_out = tmp_path / "aspect.tif"
+    _run_worker(
+        monkeypatch,
+        "raster_tools.aspect",
+        {"input_path": str(dem), "output_path": str(aspect_out)},
+    )
+    with rasterio.open(aspect_out) as ds:
+        arr = ds.read(1)
+        assert arr[3, 3] == -9999.0
+        assert 0.0 <= arr[1, 1] <= 360.0
+
+
+def test_raster_workers_in_process_analysis_and_geometry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    np = pytest.importorskip("numpy")
+    rasterio = pytest.importorskip("rasterio")
+
+    base = np.arange(1, 37, dtype="float32").reshape((6, 6))
+    a_path = _write_test_dem(tmp_path / "a.tif", base)
+    b_path = _write_test_dem(tmp_path / "b.tif", base * 2.0)
+
+    # Reclassify
+    reclass_out = tmp_path / "reclass.tif"
+    _run_worker(
+        monkeypatch,
+        "raster_tools.reclassify",
+        {
+            "input_path": str(a_path),
+            "output_path": str(reclass_out),
+            "band": 1,
+            "table": "0:10:1, 10:25:2",
+            "unmatched": "original",
+        },
+    )
+    with rasterio.open(reclass_out) as ds:
+        arr = ds.read(1)
+        assert arr[0, 0] == 1.0
+        assert arr[5, 5] == 36.0
+
+    # Focal (streaming + median)
+    for stat in ("mean", "median", "min", "max", "sum", "std", "range"):
+        focal_out = tmp_path / f"focal_{stat}.tif"
+        _run_worker(
+            monkeypatch,
+            "raster_tools.focal",
+            {
+                "input_path": str(a_path),
+                "output_path": str(focal_out),
+                "size": 3,
+                "statistic": stat,
+            },
+        )
+        assert focal_out.is_file()
+
+    # Raster calculator (multi-raster + functions)
+    calc_out = tmp_path / "calc.tif"
+    _run_worker(
+        monkeypatch,
+        "raster_tools.raster_calc",
+        {
+            "input_path": str(a_path),
+            "b_path": str(b_path),
+            "output_path": str(calc_out),
+            "expression": "where(A > 10, B - A, abs(A) * 2)",
+        },
+    )
+    with rasterio.open(calc_out) as ds:
+        arr = ds.read(1)
+        assert arr[0, 0] == pytest.approx(2.0)
+        assert arr[5, 5] == pytest.approx(36.0)
+
+    # Clip extent
+    clip_out = tmp_path / "clip.tif"
+    _run_worker(
+        monkeypatch,
+        "raster_tools.clip_extent",
+        {
+            "input_path": str(a_path),
+            "output_path": str(clip_out),
+            "minx": 10.0,
+            "miny": 60.0,
+            "maxx": 40.0,
+            "maxy": 90.0,
+        },
+    )
+    with rasterio.open(clip_out) as ds:
+        assert ds.width == 3
+        assert ds.height == 3
+
+    # Resample + Reproject
+    resample_out = tmp_path / "resample.tif"
+    _run_worker(
+        monkeypatch,
+        "raster_tools.resample",
+        {"input_path": str(a_path), "output_path": str(resample_out), "resolution": 20.0},
+    )
+    with rasterio.open(resample_out) as ds:
+        assert ds.width == 3
+        assert ds.height == 3
+
+    reproj_out = tmp_path / "reproj.tif"
+    _run_worker(
+        monkeypatch,
+        "raster_tools.reproject",
+        {"input_path": str(a_path), "output_path": str(reproj_out), "dst_crs": "EPSG:4326"},
+    )
+    with rasterio.open(reproj_out) as ds:
+        assert ds.crs.to_epsg() == 4326

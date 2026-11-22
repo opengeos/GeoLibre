@@ -35,6 +35,7 @@ from sqlalchemy import (
     text,
     update,
 )
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 from starlette.concurrency import run_in_threadpool
@@ -507,20 +508,26 @@ def postgresql_upgrade_statements() -> list[str]:
     ]
 
 
-def upgrade_postgresql_schema(engine) -> None:
-    with engine.begin() as connection:
+def upgrade_postgresql_schema(bind) -> None:
+    if isinstance(bind, Connection):
+        for statement in postgresql_upgrade_statements():
+            bind.execute(text(statement))
+        return
+    with bind.begin() as connection:
         for statement in postgresql_upgrade_statements():
             connection.execute(text(statement))
 
 
-def upgrade_sqlite_schema(engine) -> None:
+def upgrade_sqlite_schema(bind) -> None:
     """Add nullable columns introduced after the initial SQLite release.
 
     SQLAlchemy's create_all creates new tables but deliberately does not alter
     existing ones. These additive changes keep old installations bootable; a
     fresh database still receives the complete constraints from the models.
+    Accepts either a SQLAlchemy ``Engine`` or an active ``Connection`` (for
+    Alembic migrations running inside an existing transaction).
     """
-    inspector = inspect(engine)
+    inspector = inspect(bind)
     tables = set(inspector.get_table_names())
     additions = {
         "accounts": [("email", "VARCHAR(320)")],
@@ -539,7 +546,8 @@ def upgrade_sqlite_schema(engine) -> None:
             ("share_password_hash", "VARCHAR(200)"),
         ],
     }
-    with engine.begin() as connection:
+
+    def _apply_additive(connection: Connection) -> None:
         for table_name, columns in additions.items():
             if table_name not in tables:
                 continue
@@ -600,7 +608,13 @@ def upgrade_sqlite_schema(engine) -> None:
                 )
             )
 
-    inspector = inspect(engine)
+    if isinstance(bind, Connection):
+        _apply_additive(bind)
+    else:
+        with bind.begin() as connection:
+            _apply_additive(connection)
+
+    inspector = inspect(bind)
     if "projects" not in tables:
         return
     owner_column = next(
@@ -624,7 +638,7 @@ def upgrade_sqlite_schema(engine) -> None:
     # SQLite cannot alter nullability or an FK action. Keep child tables in
     # place and rebuild only projects with legacy rename behavior enabled so
     # versions/project_groups continue to reference the new `projects` table.
-    raw = engine.raw_connection()
+    raw = (bind.engine if isinstance(bind, Connection) else bind).raw_connection()
     try:
         cursor = raw.cursor()
         cursor.execute("PRAGMA foreign_keys=OFF")
@@ -759,11 +773,12 @@ def create_app(
             if not is_sqlite_memory:
                 dbapi_connection.execute("PRAGMA journal_mode=WAL")
 
-    if os.getenv("GEOLIBRE_SKIP_DDL_CREATE_ALL", "").strip().lower() not in {
+    skip_ddl = os.getenv("GEOLIBRE_SKIP_DDL_CREATE_ALL", "").strip().lower() in {
         "1",
         "true",
         "yes",
-    }:
+    }
+    if not skip_ddl:
         Base.metadata.create_all(engine)
         if database_url.startswith("sqlite"):
             upgrade_sqlite_schema(engine)
@@ -778,11 +793,26 @@ def create_app(
         # Nor the federated identity indexes to a table from an earlier release.
         for index in FEDERATED_IDENTITY_INDEXES:
             index.create(engine, checkfirst=True)
-    legacy_project_owner_required = database_url.startswith("sqlite") and not next(
-        column["nullable"]
-        for column in inspect(engine).get_columns("projects")
-        if column["name"] == "owner_id"
+    db_inspector = inspect(engine)
+    if skip_ddl and not db_inspector.has_table("projects"):
+        engine.dispose()
+        raise RuntimeError(
+            "Database schema is not initialized (missing 'projects' table). "
+            "Run 'alembic upgrade head' before starting with GEOLIBRE_SKIP_DDL_CREATE_ALL."
+        )
+    owner_col = (
+        next(
+            (
+                column
+                for column in db_inspector.get_columns("projects")
+                if column["name"] == "owner_id"
+            ),
+            None,
+        )
+        if database_url.startswith("sqlite")
+        else None
     )
+    legacy_project_owner_required = owner_col is not None and not owner_col["nullable"]
     sessions = sessionmaker(engine, expire_on_commit=False)
     oauth_config = make_oauth_config(public_url)
     clock_fn = clock or (lambda: int(datetime.now(UTC).timestamp()))

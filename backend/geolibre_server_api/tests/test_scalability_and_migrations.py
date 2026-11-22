@@ -6,6 +6,7 @@ import json
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
 from alembic import command
 from alembic.config import Config
 from geolibre_server_api.main import _build_engine_kwargs, create_app
@@ -243,3 +244,27 @@ def test_alembic_upgrade_head_builds_full_schema(tmp_path: Path, monkeypatch) ->
     monkeypatch.setenv("GEOLIBRE_SKIP_DDL_CREATE_ALL", "1")
     app = create_app(database_url=db_url)
     app.state.engine.dispose()
+
+    # Baseline revision refuses destructive downgrade.
+    with pytest.raises(NotImplementedError, match="restore from backup"):
+        command.downgrade(cfg, "base")
+
+    # Unmigrated database with GEOLIBRE_SKIP_DDL_CREATE_ALL=1 fails with actionable message.
+    empty_url = f"sqlite:///{tmp_path / 'empty.db'}"
+    with pytest.raises(RuntimeError, match="alembic upgrade head"):
+        create_app(database_url=empty_url)
+
+
+def test_schema_upgrade_helpers_run_on_active_connection(tmp_path: Path) -> None:
+    from geolibre_server_api.auth_models import Base
+    from geolibre_server_api.main import upgrade_sqlite_schema
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'conn-upgrade.db'}")
+    try:
+        with engine.begin() as conn:
+            Base.metadata.create_all(bind=conn, checkfirst=True)
+            # Runs inside the same connection/transaction without opening a second connection.
+            upgrade_sqlite_schema(conn)
+            assert "projects" in set(inspect(conn).get_table_names())
+    finally:
+        engine.dispose()
