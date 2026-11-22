@@ -6,7 +6,11 @@ export function buildGeoLibreUrl(datasets, baseUrl = GEOLIBRE_WEB_URL) {
     throw new Error("Select at least one dataset.");
   }
   const target = new URL(baseUrl);
+  if (target.protocol !== "http:" && target.protocol !== "https:") {
+    throw new Error("The GeoLibre base URL must start with http:// or https://.");
+  }
   target.search = "";
+  target.hash = "";
   const serviceKinds = {
     "XYZ / TMS": "xyz",
     WMS: "wms",

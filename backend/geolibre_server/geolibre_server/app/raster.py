@@ -1125,15 +1125,69 @@ for node in ast.walk(tree):
                     f"Exponent may not exceed {MAX_POW_EXPONENT} "
                     "(band math caps '**' to keep evaluation bounded)"
                 )
+            left_band_backed = any(
+                isinstance(inner, (ast.Name, ast.Call)) for inner in ast.walk(node.left)
+            )
+            if not left_band_backed and any(
+                isinstance(inner, ast.Pow) for inner in ast.walk(node.left)
+            ):
+                raise SystemExit(
+                    "Nested constant exponentiation is not allowed "
+                    "(band math caps '**' to keep evaluation bounded)"
+                )
     if isinstance(node, ast.Call):
         # ``np.where(...)`` / ``A.tofile(...)`` parse as Attribute-backed calls;
         # Attribute is already rejected above, but keep an explicit Name check.
         if not isinstance(node.func, ast.Name) or node.func.id not in allowed_calls:
             name = node.func.id if isinstance(node.func, ast.Name) else type(node.func).__name__
             raise SystemExit(f"Call to '{name}' is not allowed in band math")
+# Convert integer literals (excluding bools and the integer `decimals` argument
+# of `round(...)`) to float so arbitrary-precision integer chains cannot exhaust
+# CPU or memory while keeping `np.round(A, 2)` / `np.round(A, decimals=2)` valid.
+def _is_int_literal(expr):
+    if isinstance(expr, ast.UnaryOp) and isinstance(expr.op, (ast.UAdd, ast.USub)):
+        expr = expr.operand
+    return (
+        isinstance(expr, ast.Constant)
+        and isinstance(expr.value, int)
+        and not isinstance(expr.value, bool)
+    )
+
+
+class _IntToFloat(ast.NodeTransformer):
+    def visit_Call(self, node):
+        is_round = isinstance(node.func, ast.Name) and node.func.id == "round"
+        new_args = []
+        for idx, arg in enumerate(node.args):
+            if is_round and idx == 1 and _is_int_literal(arg):
+                new_args.append(arg)
+            else:
+                new_args.append(self.visit(arg))
+        node.args = new_args
+        new_keywords = []
+        for kw in node.keywords:
+            if is_round and kw.arg == "decimals" and _is_int_literal(kw.value):
+                new_keywords.append(kw)
+            else:
+                kw.value = self.visit(kw.value)
+                new_keywords.append(kw)
+        node.keywords = new_keywords
+        return node
+
+    def visit_Constant(self, node):
+        if isinstance(node.value, int) and not isinstance(node.value, bool):
+            try:
+                converted = float(node.value)
+            except OverflowError as exc:
+                raise SystemExit("Numeric literal is too large for band math") from exc
+            return ast.copy_location(ast.Constant(value=converted), node)
+        return node
+
+
 try:
+    tree = ast.fix_missing_locations(_IntToFloat().visit(tree))
     with np.errstate(all="ignore"):
-        result = eval(expression, {"__builtins__": {}}, namespace)
+        result = eval(compile(tree, "<band_math>", "eval"), {"__builtins__": {}}, namespace)
 except SystemExit:
     raise
 except Exception as exc:
@@ -1490,21 +1544,27 @@ def _validate_extra_input(path: str, label: str, allowed_extensions: set[str] | 
     if not path.strip():
         raise HTTPException(status_code=400, detail=f"{label} is required")
     source = Path(path).expanduser()
-    if not source.is_file():
-        raise HTTPException(status_code=400, detail=f"{label} not found: {path}")
-    if not _is_within_roots(source):
+    resolved = source.resolve()
+    # Confine to allowed roots BEFORE probing existence so callers cannot use
+    # 400 vs 403 as a filesystem existence oracle, and check extensions on the
+    # resolved path so symlinks cannot bypass the format filter.
+    if not _is_within_roots(resolved):
         raise HTTPException(
             status_code=403,
             detail="Path is outside the allowed conversion directories",
         )
-    if allowed_extensions and source.suffix.lower() not in allowed_extensions:
+    if not resolved.is_file():
+        raise HTTPException(status_code=400, detail=f"{label} not found: {path}")
+    if allowed_extensions and resolved.suffix.lower() not in allowed_extensions:
         # Catch a wrong file type here with a clear 400 rather than letting
         # json.load fail inside the job with an opaque error.
         raise HTTPException(
             status_code=400,
-            detail=(f"{label} must be one of {sorted(allowed_extensions)}, got '{source.suffix}'"),
+            detail=(
+                f"{label} must be one of {sorted(allowed_extensions)}, got '{resolved.suffix}'"
+            ),
         )
-    return str(source.resolve())
+    return str(resolved)
 
 
 def _check_raster_import(python_executable: str) -> None:

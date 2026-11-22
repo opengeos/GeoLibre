@@ -176,17 +176,22 @@ async fn send(request: PluginHttpRequest) -> Result<PluginHttpResponse, String> 
     let url = Url::parse(&request.url).map_err(|_| "Invalid request URL.".to_string())?;
     let method = method(&request.method)?;
     let headers = request_headers(request.headers)?;
-    let body = request
-        .body
-        .map(|body| STANDARD.decode(body))
-        .transpose()
-        .map_err(|_| "Invalid request body encoding.".to_string())?;
-    if body
-        .as_ref()
-        .is_some_and(|body| body.len() > MAX_BODY_BYTES)
-    {
-        return Err("Request body exceeds the 64 MiB limit.".into());
-    }
+    const MAX_BASE64_LEN: usize = MAX_BODY_BYTES.div_ceil(3) * 4;
+    let body = match request.body {
+        Some(encoded) => {
+            if encoded.len() > MAX_BASE64_LEN {
+                return Err("Request body exceeds the 64 MiB limit.".into());
+            }
+            let decoded = STANDARD
+                .decode(encoded)
+                .map_err(|_| "Invalid request body encoding.".to_string())?;
+            if decoded.len() > MAX_BODY_BYTES {
+                return Err("Request body exceeds the 64 MiB limit.".into());
+            }
+            Some(decoded)
+        }
+        None => None,
+    };
     let checked = url.clone();
     tauri::async_runtime::spawn_blocking(move || url_is_fetchable(&checked))
         .await

@@ -145,11 +145,16 @@ def password_hash(password: str, salt: bytes | None = None) -> str:
 def password_matches(password: str, encoded: str) -> bool:
     """Return whether ``password`` matches an scrypt-encoded hash, in constant time."""
     try:
-        _, salt, expected = encoded.split("$")
+        scheme, salt, expected = encoded.split("$")
+        if scheme != "scrypt":
+            raise ValueError("unsupported password scheme")
         return hmac.compare_digest(
             password_hash(password, bytes.fromhex(salt)).split("$")[2], expected
         )
     except (ValueError, TypeError):
+        # Always perform an scrypt derivation on non-password/sentinel hashes
+        # (such as "!sso") so response timing matches built-in accounts.
+        password_hash(password or "unused")
         return False
 
 
@@ -543,10 +548,14 @@ def verify_password_login(
     security = session.get(AccountSecurity, account.id)
     locked_until = security.locked_until if security is not None else None
     if locked_until is not None and locked_until > now_ts:
+        password_hash(password or "unused")
         raise PasswordLoginError("locked")
     policy = effective_policy(session, account.id)
     if not password_matches(password, account.password_hash):
-        record_failed_login(session, account.id, now_ts, policy)
+        # Federated/SCIM/proxy accounts carry a sentinel hash ("!sso") and
+        # cannot log in by password; do not accumulate lockout state on them.
+        if account.password_hash.startswith("scrypt$"):
+            record_failed_login(session, account.id, now_ts, policy)
         raise PasswordLoginError("invalid")
     if is_deactivated(session, account.id):
         raise PasswordLoginError("invalid")
@@ -1182,7 +1191,7 @@ class RevokeOtherSessionsRequest(BaseModel):
 class PasswordChangeRequest(BaseModel):
     """Body for ``POST /api/account/password``."""
 
-    username: str
+    username: str = Field(max_length=39)
     current_password: str = Field(alias="currentPassword", max_length=1024)
     new_password: str = Field(alias="newPassword", max_length=1024)
 
@@ -1332,8 +1341,28 @@ def build_identity_router() -> APIRouter:
         error = password_policy_error(body.new_password, effective_policy(session, account.id))
         if error:
             raise HTTPException(422, error)
+        # Lock the account row so concurrent OAuth code exchanges serialize
+        # against password rotation on READ COMMITTED backends (PostgreSQL).
+        session.execute(select(Account.id).where(Account.id == account.id).with_for_update())
         account.password_hash = password_hash(body.new_password)
         ensure_account_security(session, account.id).password_changed_at = now_ts
+        # Revoke active OAuth sessions on password change so compromised or
+        # stale interactive sessions cannot survive credential rotation.
+        session.execute(
+            update(OAuthSession)
+            .where(OAuthSession.account_id == account.id, OAuthSession.revoked_at.is_(None))
+            .values(revoked_at=now_ts)
+        )
+        # Consume outstanding authorization codes approved before rotation so
+        # they cannot be exchanged for a fresh session after the password changes.
+        session.execute(
+            update(OAuthAuthorizationCode)
+            .where(
+                OAuthAuthorizationCode.account_id == account.id,
+                OAuthAuthorizationCode.consumed_at.is_(None),
+            )
+            .values(consumed_at=now_ts)
+        )
         session.commit()
         return Response(status_code=204)
 
@@ -2215,6 +2244,20 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
         if not hmac.compare_digest(computed, code_row.code_challenge):
             # Wrong verifier: not an authenticated replay, so no revocation.
             return oauth_token_error(400, "invalid_grant")
+        if code_row.account_id is not None:
+            # Serialize with change_password (which locks the same account row
+            # before revoking sessions and consuming outstanding codes) so a
+            # concurrent exchange cannot commit a live session after rotation.
+            session.execute(
+                select(Account.id).where(Account.id == code_row.account_id).with_for_update()
+            )
+            code_row = session.scalar(
+                select(OAuthAuthorizationCode)
+                .where(OAuthAuthorizationCode.id == code_row.id)
+                .execution_options(populate_existing=True)
+            )
+            if code_row is None:
+                return oauth_token_error(400, "invalid_grant")
         if code_row.consumed_at is not None:
             # Authenticated replay (correct verifier + binding): revoke the
             # family previously issued for this code, then report invalid_grant.

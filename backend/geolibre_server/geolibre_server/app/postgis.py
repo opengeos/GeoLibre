@@ -106,6 +106,21 @@ def _validate_postgis_target(conninfo: dict[str, str]) -> Optional[tuple[str, st
         raise HTTPException(
             status_code=400, detail="PostgreSQL hostaddr connection strings are not supported"
         )
+    for forbidden in (
+        "passfile",
+        "servicefile",
+        "sslcert",
+        "sslkey",
+        "sslkeylogfile",
+        "sslrootcert",
+        "sslcrl",
+        "sslcrldir",
+    ):
+        if conninfo.get(forbidden):
+            raise HTTPException(
+                status_code=400,
+                detail=f"PostgreSQL {forbidden} connection parameter is not supported",
+            )
     # Strip each host before rejoining overrides; libpq treats whitespace in
     # a quoted multi-host value as part of the hostname.
     hosts = [host.strip() for host in conninfo.get("host", "").split(",")]

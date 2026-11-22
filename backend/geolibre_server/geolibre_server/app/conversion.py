@@ -1168,8 +1168,10 @@ def _run_conversion_job(
     # Set from a marker line when the script rejects the user's input; see
     # _SCRIPT_DRIVER. Anything else stays a generic failure.
     validation_error: str | None = None
-    # A cancelled job removes only an output it created, not a file that was
-    # already there when it started.
+    # Failed or cancelled cleanup skips unlinking output_path when a file
+    # already existed there before the job started, preventing cleanup from
+    # deleting a user's existing file on pre-write failures (trade-off: if a tool
+    # overwrote the file in place before failing, that partial write stays on disk).
     output_existed = bool(params.get("output_path")) and Path(params["output_path"]).exists()
     try:
         _job_update(job_id, status="running")
@@ -1272,12 +1274,17 @@ def _run_conversion_job(
             error=validation_error or "Conversion failed. See the sidecar logs for details.",
             messages=[],
         )
-        _remove_partial_output(params)
+        if not output_existed:
+            _remove_partial_output(params)
     finally:
         # Guard against leaking a still-running subprocess if an exception is
         # raised before it exits (e.g. during streaming or a job-state update).
         if process is not None and process.poll() is None:
             process.kill()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
         with _JOBS_LOCK:
             _PROCESSES.pop(job_id, None)
             _CANCELLED.discard(job_id)

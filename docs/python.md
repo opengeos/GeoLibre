@@ -189,12 +189,14 @@ m2.load_project("my-map.geolibre.json")
 m2
 ```
 
-`to_project()`, `save_project()`, and `to_html()` redact credentials — API keys,
-tokens, authenticated request headers, secret environment variables (every row
-not marked `"secret": false`), geocoder keys, and
-credential URL parameters — so anything you serialize, commit, or share is safe
-by default. Pass `keep_credentials=True` to `to_project()` or `save_project()`
-for a trusted local file that must keep working without re-entering them:
+`to_project()`, `save_project()`, and `to_html()` redact credentials (API keys,
+tokens, authenticated request headers, secret environment variables not marked
+`"secret": false`, geocoder keys, and credential URL parameters across layers,
+basemaps, `mapboxStyleUrl`, and `terrainSource`) and strip inline GeoJSON from
+layers marked `capabilities.export: false`, so anything you serialize, commit,
+or share is safe by default. Pass `keep_credentials=True` to `to_project()` or
+`save_project()` for a trusted local file that must keep working without
+re-entering them:
 
 ```python
 m.save_project("private.geolibre.json", keep_credentials=True)

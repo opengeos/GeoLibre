@@ -284,12 +284,22 @@ pub(crate) async fn fetch_arcgis_response(
 ) -> Result<ArcGISResponse, String> {
     let body = match (body, body_base64, content_type) {
         (Some(text), None, None) => Some(ArcGISBody::Form(text)),
-        (None, Some(encoded), Some(content_type)) => Some(ArcGISBody::Multipart {
-            bytes: STANDARD
+        (None, Some(encoded), Some(content_type)) => {
+            const MAX_BASE64_LEN: usize = MAX_ARCGIS_BODY_BYTES.div_ceil(3) * 4;
+            if encoded.len() > MAX_BASE64_LEN {
+                return Err("ArcGIS request body exceeds the 64 MiB limit.".into());
+            }
+            let bytes = STANDARD
                 .decode(encoded)
-                .map_err(|_| "Invalid ArcGIS request body.".to_string())?,
-            content_type,
-        }),
+                .map_err(|_| "Invalid ArcGIS request body.".to_string())?;
+            if bytes.len() > MAX_ARCGIS_BODY_BYTES {
+                return Err("ArcGIS request body exceeds the 64 MiB limit.".into());
+            }
+            Some(ArcGISBody::Multipart {
+                bytes,
+                content_type,
+            })
+        }
         (None, None, None) => None,
         _ => return Err("Invalid ArcGIS request body.".into()),
     };

@@ -897,4 +897,49 @@ describe("GeoLibre Chrome extension request history", () => {
     );
     assert.equal(collectServiceCandidates(urls).length, 100);
   });
+
+  it("rejects non-http(s) baseUrl and bounds recursive ?data= unpacking", () => {
+    assert.throws(
+      () =>
+        buildGeoLibreUrl(
+          [{ url: "https://example.com/a.geojson", format: "GeoJSON" }],
+          "javascript:alert(1)",
+        ),
+      /http:\/\/ or https:\/\//,
+    );
+    const built = buildGeoLibreUrl(
+      [{ url: "https://example.com/a.geojson", format: "GeoJSON" }],
+      "https://web.geolibre.app/#old-hash",
+    );
+    assert.ok(!built.includes("#old-hash"));
+
+    // Beyond-limit nested GeoLibre deep link must stop without throwing and return no datasets.
+    let tooDeep = "https://example.com/leaf.geojson";
+    for (let i = 0; i < 12; i += 1) {
+      tooDeep = `https://web.geolibre.app/?data=${encodeURIComponent(tooDeep)}`;
+    }
+    assert.deepEqual(scan(`<a href="${tooDeep}">nested</a>`, "https://example.com/"), []);
+
+    // Within-limit nesting still unpacks to its leaf dataset.
+    const withinLimit = `https://web.geolibre.app/?data=${encodeURIComponent(
+      `https://web.geolibre.app/?data=${encodeURIComponent("https://example.com/leaf.geojson")}`,
+    )}`;
+    assert.deepEqual(
+      scan(`<a href="${withinLimit}">ok</a>`, "https://example.com/").map((d) => d.url),
+      ["https://example.com/leaf.geojson"],
+    );
+
+    // Deep-first then shallow-second occurrence of the same deep link still expands the shallow one.
+    const t = `https://web.geolibre.app/?data=${encodeURIComponent("https://example.com/shallow-leaf.geojson")}`;
+    const s = `https://web.geolibre.app/?data=${encodeURIComponent(t)}`;
+    const b = `https://web.geolibre.app/?data=${encodeURIComponent(s)}`;
+    const a = `https://web.geolibre.app/?data=${encodeURIComponent(b)}`;
+    const rootDeep = `https://web.geolibre.app/?data=${encodeURIComponent(a)}`;
+    assert.deepEqual(
+      scan(`<a href="${rootDeep}">deep</a><a href="${s}">shallow</a>`, "https://example.com/").map(
+        (d) => d.url,
+      ),
+      ["https://example.com/shallow-leaf.geojson"],
+    );
+  });
 });

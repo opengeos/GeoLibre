@@ -134,22 +134,23 @@ def _validate_write_path(path: str) -> Path:
     if not path or not path.strip():
         raise HTTPException(status_code=400, detail="path is required")
     target = Path(path).expanduser()
-    if target.suffix.lower() not in _WRITABLE_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Write-back is not supported for '{target.suffix}' files yet.",
-        )
-    if not target.is_file():
-        raise HTTPException(status_code=400, detail=f"Source file not found: {path}")
     resolved = target.resolve()
     # Confine writes (and the temp files beside the target) to the allowlisted
-    # roots so a same-origin caller cannot overwrite arbitrary files. Shares the
-    # conversion allowlist so both endpoints honor GEOLIBRE_CONVERSION_ROOTS.
+    # roots BEFORE checking existence so callers cannot probe files outside
+    # GEOLIBRE_CONVERSION_ROOTS, and validate the extension on the resolved path
+    # so a symlink cannot bypass the format check.
     if not _is_within_roots(resolved):
         raise HTTPException(
             status_code=403,
             detail="Path is outside the allowed directories",
         )
+    if resolved.suffix.lower() not in _WRITABLE_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Write-back is not supported for '{resolved.suffix}' files yet.",
+        )
+    if not resolved.is_file():
+        raise HTTPException(status_code=400, detail=f"Source file not found: {path}")
     if not os.access(resolved, os.W_OK):
         raise HTTPException(status_code=403, detail=f"Source file is not writable: {path}")
     return resolved

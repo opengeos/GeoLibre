@@ -224,8 +224,19 @@ def redact_layer(layer: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
-def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
-    """Return a detached project safe to publish, export, or hand to others."""
+def redact_credentials(
+    project: dict[str, Any], *, strip_non_exportable: bool = True
+) -> dict[str, Any]:
+    """Return a detached project safe to publish, export, or hand to others.
+
+    Redacts credentials across layers, basemap/map style URLs (including
+    ``mapboxStyleUrl`` and ``terrainSource``), geocoder settings, plugin
+    manifest URLs, and secret environment variables. When
+    ``strip_non_exportable`` is ``True`` (the default), inline GeoJSON data on
+    layers with ``capabilities.export == False`` is also removed; pass
+    ``strip_non_exportable=False`` for read-only in-session previews that still
+    need inline geometry.
+    """
     safe = copy.deepcopy(project)
     if isinstance(safe.get("basemapStyleUrl"), str):
         safe["basemapStyleUrl"] = _redact_url(safe["basemapStyleUrl"])
@@ -245,12 +256,30 @@ def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
             for field in ("forwardEndpoint", "reverseEndpoint"):
                 if isinstance(geocoding.get(field), str):
                     geocoding[field] = _redact_url(geocoding[field])
+        map_prefs = preferences.get("map")
+        if isinstance(map_prefs, dict):
+            for field in ("mapboxStyleUrl", "terrainSource"):
+                if isinstance(map_prefs.get(field), str):
+                    map_prefs[field] = _redact_url(map_prefs[field])
     layers = safe.get("layers")
     if isinstance(layers, list):
         for layer in layers:
             if not isinstance(layer, dict):
                 continue
             _sweep_layer_credentials(layer)
+            # Mirror packages/core/src/credentials.ts: strip carried feature
+            # data when the layer marks export as disallowed (skipped for
+            # in-session read-only previews that need inline geometry).
+            capabilities = layer.get("capabilities")
+            if (
+                strip_non_exportable
+                and isinstance(capabilities, dict)
+                and capabilities.get("export") is False
+            ):
+                layer.pop("geojson", None)
+                layer_metadata = layer.get("metadata")
+                if isinstance(layer_metadata, dict):
+                    layer_metadata.pop("embeddedGeoJSON", None)
     plugins = safe.get("plugins")
     if isinstance(plugins, dict):
         manifest_urls = plugins.get("manifestUrls")
@@ -282,8 +311,32 @@ _ENCODE_URI_SAFE = "!*'()"
 _MAX_GEOJSON_BYTES = 50 * 1024 * 1024  # 50 MB
 
 
+_NAT64_WELL_KNOWN = ipaddress.IPv6Network("64:ff9b::/96")
+_NAT64_LOCAL = ipaddress.IPv6Network("64:ff9b:1::/48")
+
+
+def _is_public_ip(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Return True only for globally routable unicast IP addresses."""
+    if isinstance(address, ipaddress.IPv6Address):
+        if address.ipv4_mapped is not None:
+            return _is_public_ip(address.ipv4_mapped)
+        if address in _NAT64_WELL_KNOWN:
+            return _is_public_ip(ipaddress.IPv4Address(int(address) & 0xFFFFFFFF))
+        if (
+            address in _NAT64_LOCAL
+            or address.sixtofour is not None
+            or address.teredo is not None
+            or address.is_site_local
+        ):
+            return False
+        # ISATAP embeds an IPv4 address in the interface identifier.
+        if int(address) & 0xFFFFFFFF00000000 in {0x00005EFE00000000, 0x02005EFE00000000}:
+            return False
+    return address.is_global and not address.is_multicast and not address.is_reserved
+
+
 def _assert_public_url(url: str) -> None:
-    """Reject a URL whose host resolves to a non-public address.
+    """Reject a URL with a non-HTTP(S) scheme or a host resolving to a non-public address.
 
     Guards the kernel-side fetch against SSRF: without this a redirect (or a
     crafted URL) could reach a private/loopback/link-local address such as a
@@ -294,20 +347,24 @@ def _assert_public_url(url: str) -> None:
         url: The URL about to be fetched (or a redirect target).
 
     Raises:
-        ValueError: If the host is missing, unresolvable, or maps to any
-            non-public address.
+        ValueError: If the scheme is not HTTP(S), or the host is missing,
+            unresolvable, or maps to any non-public address.
     """
-    host = urlsplit(url).hostname
+    safe_url = _redact_url(url)
+    parsed = urlsplit(url)
+    if parsed.scheme.lower() not in {"http", "https"}:
+        raise ValueError(f"Refusing to fetch non-HTTP(S) URL: {safe_url}")
+    host = parsed.hostname
     if not host:
-        raise ValueError(f"URL has no host: {url}")
+        raise ValueError(f"URL has no host: {safe_url}")
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror as exc:
-        raise ValueError(f"Could not resolve host for URL: {url}") from exc
+        raise ValueError(f"Could not resolve host for URL: {safe_url}") from exc
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
-        if not ip.is_global:
-            raise ValueError(f"Refusing to fetch from a non-public address ({ip}): {url}")
+        if not _is_public_ip(ip):
+            raise ValueError(f"Refusing to fetch from a non-public address ({ip}): {safe_url}")
 
 
 class _PublicOnlyRedirectHandler(HTTPRedirectHandler):

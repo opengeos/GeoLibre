@@ -136,7 +136,7 @@ async function hmacSha256(secret: string, message: string): Promise<Uint8Array> 
  * signatures. Compared as strings rather than bytes so a malformed signature
  * segment (which never decodes) still takes the same path.
  */
-function timingSafeEqual(a: string, b: string): boolean {
+export function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
   for (let i = 0; i < a.length; i++) {

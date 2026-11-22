@@ -26,6 +26,7 @@ import {
   sanitizeColor,
   sanitizeView,
   setParticipantOverride,
+  timingSafeEqual,
   toWireParticipant,
   validateComment,
   validateReply,
@@ -133,6 +134,12 @@ export interface RelayOptions {
   idleTtlMs?: number;
   trustProxy?: boolean;
   /**
+   * Number of trusted reverse-proxy hops in front of the relay when
+   * `trustProxy` is enabled (defaults to `1`, or `TRUST_PROXY_HOPS`).
+   * The client IP is read that many entries from the right of `X-Forwarded-For`.
+   */
+  trustProxyHops?: number;
+  /**
    * HMAC-SHA256 secret shared with this deployment's identity issuer, normally
    * from `COLLAB_IDENTITY_SECRET`. Unset disables identity: `identityToken` is
    * ignored, every joiner is anonymous, and "require a signed-in account"
@@ -181,6 +188,10 @@ export function createRelay(options: RelayOptions = {}): {
     options.idleTtlMs ?? positive(process.env.COLLAB_IDLE_TTL_MS, DEFAULT_IDLE_TTL_MS);
   const trustProxy =
     options.trustProxy ?? (process.env.TRUST_PROXY === "true" || process.env.TRUST_PROXY === "1");
+  const trustProxyHops = Math.max(
+    1,
+    Math.floor(options.trustProxyHops ?? positive(process.env.TRUST_PROXY_HOPS, 1)),
+  );
   const identitySecret = options.identitySecret ?? process.env.COLLAB_IDENTITY_SECRET;
   const identitySupported = isIdentityConfigured(identitySecret);
   const store = new SessionStore(dbPath);
@@ -317,7 +328,9 @@ export function createRelay(options: RelayOptions = {}): {
     if (message.type === "join") {
       if (peer.participant) return;
       let role: CollaborationRole =
-        message.hostToken && persisted.hostToken && message.hostToken === persisted.hostToken
+        message.hostToken &&
+        persisted.hostToken &&
+        timingSafeEqual(message.hostToken, persisted.hostToken)
           ? "host"
           : "guest";
 
@@ -370,23 +383,27 @@ export function createRelay(options: RelayOptions = {}): {
         return;
       }
 
-      const durableOverride = store.getDurableOverride(id, participantKey);
-      let initialOverride: boolean | undefined = undefined;
-      if (durableOverride !== undefined) {
-        initialOverride = durableOverride;
-      } else if (matchedInvite) {
-        initialOverride = matchedInvite.role === "co-edit";
-      }
-
       if (matchedInvite) {
         // Use an atomic SQL UPDATE to close the TOCTOU window: the initial
-        // maxUses check (line 312) happened before `await verifyIdentityToken`,
+        // maxUses check happened before `await verifyIdentityToken`,
         // and another join could have consumed the invite in the meantime.
         if (!store.atomicClaimInvite(id, matchedInvite.token)) {
           // Invite was consumed or revoked between the initial check and now.
           matchedInvite = undefined;
           inviteToken = undefined;
         }
+      }
+
+      // Resolve durable override and initial edit rights AFTER claiming the
+      // invite, using the participant's final post-claim key, so a claim loser
+      // never inherits an invite-keyed override.
+      const finalParticipantKey = getParticipantKey({ ...joiningParticipant, inviteToken });
+      const durableOverride = store.getDurableOverride(id, finalParticipantKey);
+      let initialOverride: boolean | undefined = undefined;
+      if (durableOverride !== undefined) {
+        initialOverride = durableOverride;
+      } else if (matchedInvite) {
+        initialOverride = matchedInvite.role === "co-edit";
       }
 
       peer.participant = {
@@ -839,7 +856,19 @@ export function createRelay(options: RelayOptions = {}): {
       const rawXff = trustProxy
         ? (request.headers["x-forwarded-for"] as string | undefined)
         : undefined;
-      const clientIp = rawXff?.split(",")[0].trim() || request.socket.remoteAddress || "unknown";
+      // Read the entry `trustProxyHops` from the right: the one appended by the
+      // nearest trusted proxy. When fewer entries are present, fall back to the
+      // socket address rather than trusting a leftmost, client-spoofable value.
+      const xffParts = rawXff
+        ?.split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      const clientIp =
+        (xffParts && xffParts.length >= trustProxyHops
+          ? xffParts[xffParts.length - trustProxyHops]
+          : undefined) ||
+        request.socket.remoteAddress ||
+        "unknown";
       if (!checkRateLimit(clientIp, 10, 60_000)) {
         return json(response, 429, { error: "Too many session creation requests" });
       }

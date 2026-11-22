@@ -45,6 +45,7 @@ import {
   sanitizeDisplayName,
   sanitizeView,
   setParticipantOverride,
+  timingSafeEqual,
   toWireParticipant,
   verifyIdentityToken,
   type SessionParticipant,
@@ -363,7 +364,7 @@ export class CollabSession extends DurableObject<Env> {
       const clientToken = authorization.startsWith("Bearer ")
         ? authorization.slice("Bearer ".length).trim()
         : "";
-      if (!hostToken || !clientToken || hostToken !== clientToken) {
+      if (!hostToken || !clientToken || !timingSafeEqual(hostToken, clientToken)) {
         return new Response("Forbidden", { status: 403 });
       }
       if (request.method === "DELETE") {
@@ -525,7 +526,9 @@ export class CollabSession extends DurableObject<Env> {
       ]);
 
     let role: CollaborationRole =
-      message.hostToken && storedToken && message.hostToken === storedToken ? "host" : "guest";
+      message.hostToken && storedToken && timingSafeEqual(message.hostToken, storedToken)
+        ? "host"
+        : "guest";
 
     let inviteToken: string | undefined = undefined;
     let matchedInvite: CollabInvite | undefined = undefined;
@@ -576,14 +579,6 @@ export class CollabSession extends DurableObject<Env> {
       return;
     }
 
-    const durableOverride = this.readDurableOverride(participantKey);
-    let initialOverride: boolean | undefined = undefined;
-    if (durableOverride !== undefined) {
-      initialOverride = durableOverride;
-    } else if (matchedInvite) {
-      initialOverride = matchedInvite.role === "co-edit";
-    }
-
     if (matchedInvite) {
       // Re-read the invite after the `await verifyIdentityToken` above to close
       // a TOCTOU window: two concurrent joins on a maxUses:1 invite could both
@@ -601,6 +596,18 @@ export class CollabSession extends DurableObject<Env> {
         this.writeInvite(freshInv);
         matchedInvite = freshInv;
       }
+    }
+
+    // Resolve durable override and initial edit rights AFTER claiming the
+    // invite, using the participant's final post-claim key, so a claim loser
+    // never inherits an invite-keyed override.
+    const finalParticipantKey = getParticipantKey({ ...joiningParticipant, inviteToken });
+    const durableOverride = this.readDurableOverride(finalParticipantKey);
+    let initialOverride: boolean | undefined = undefined;
+    if (durableOverride !== undefined) {
+      initialOverride = durableOverride;
+    } else if (matchedInvite) {
+      initialOverride = matchedInvite.role === "co-edit";
     }
 
     const attachment: SocketAttachment = {

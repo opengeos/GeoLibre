@@ -143,6 +143,8 @@ def health():
 @app.post("/shutdown")
 def shutdown():
     """Request graceful shutdown of the local sidecar process."""
+    if os.environ.get("GEOLIBRE_DISABLE_SHUTDOWN") == "1":
+        raise HTTPException(status_code=403, detail="Sidecar shutdown is disabled")
     # Stop the launched samgeo-api child (if any) so the heavy model server
     # does not outlive this sidecar.
     stop_child_server()

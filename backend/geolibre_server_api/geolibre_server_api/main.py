@@ -2144,8 +2144,21 @@ def create_app(
     ):
         account = principal.account
         group = require_group(session, group_id)
+        member = group_membership(session, group_id, account.id)
+        if member is None:
+            org_role = (
+                organization_role(session, group.organization_id, account.id)
+                if group.organization_id is not None
+                else None
+            )
+            allowed = org_role == "administrator" or (
+                group.join_policy in {"open", "request"}
+                and (group.organization_id is None or org_role is not None)
+            )
+            if not allowed:
+                raise HTTPException(404, "group not found")
         response.headers["Cache-Control"] = "private, no-store"
-        return {"group": group_json(group, group_membership(session, group_id, account.id))}
+        return {"group": group_json(group, member)}
 
     @app.patch("/api/groups/{group_id}")
     def patch_group(
@@ -2568,7 +2581,11 @@ def create_app(
         except KeyError:
             raise HTTPException(404, "thumbnail not found")
         cache = "private, no-store" if confined else "public, max-age=3600"
-        return Response(data, media_type=group.thumbnail_type, headers={"Cache-Control": cache})
+        return Response(
+            data,
+            media_type=group.thumbnail_type,
+            headers={"Cache-Control": cache, "X-Content-Type-Options": "nosniff"},
+        )
 
     @app.delete("/api/groups/{group_id}/thumbnail", status_code=204)
     def delete_group_thumbnail(
@@ -3473,7 +3490,11 @@ def create_app(
         except KeyError:
             raise HTTPException(404, "thumbnail not found")
         cache = "private, no-store" if protected(project) else "public, max-age=3600"
-        return Response(data, media_type=project.thumbnail_type, headers={"Cache-Control": cache})
+        return Response(
+            data,
+            media_type=project.thumbnail_type,
+            headers={"Cache-Control": cache, "X-Content-Type-Options": "nosniff"},
+        )
 
     @app.delete("/api/projects/{project_id}/thumbnail", status_code=204)
     def delete_thumbnail(

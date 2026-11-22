@@ -165,8 +165,8 @@ export function isEarthdataRedirectUrl(value: string): boolean {
   if (url.protocol !== "https:" || url.username || url.password || url.port) return false;
   const host = url.hostname.toLowerCase();
   // CloudFront fronts the DAACs' presigned URLs; S3 hosts are matched by
-  // their `s3.` / `s3-` endpoint label, not every amazonaws.com service.
-  return hostIn(host, "cloudfront.net") || /(^|\.)s3[.-][a-z0-9.-]*amazonaws\.com$/.test(host);
+  // their `s3.` / `s3-` endpoint label, with a mandatory dot before amazonaws.com.
+  return hostIn(host, "cloudfront.net") || /(^|\.)s3(?:[.-][a-z0-9]+)*\.amazonaws\.com$/.test(host);
 }
 
 function plain(status: number, message: string): Response {
