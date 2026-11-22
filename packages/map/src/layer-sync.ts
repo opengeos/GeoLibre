@@ -1486,13 +1486,19 @@ function getStyleLayerSpec(
   layerId: string,
 ): maplibregl.LayerSpecification | null {
   const live = map.getLayer(layerId) as
-    | (maplibregl.StyleLayer & { serialize?: () => maplibregl.LayerSpecification })
+    | (maplibregl.StyleLayer & {
+        serialize?: () => maplibregl.LayerSpecification;
+        source?: string;
+      })
     | undefined;
   if (live) {
     if (typeof live.serialize === "function") {
       return live.serialize();
     }
-    if (typeof live.type === "string") {
+    if (
+      typeof live.type === "string" &&
+      (typeof live.source === "string" || live.type === "background")
+    ) {
       return live as unknown as maplibregl.LayerSpecification;
     }
   }

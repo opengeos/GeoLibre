@@ -1051,7 +1051,10 @@ describe("cesium / @cesium/widgets", () => {
     const cesiumCss = paths
       .map((css) => readPackageFile("cesium", `Build/Cesium${css}`, "apps/geolibre-desktop"))
       .join("\n");
-    const appCss = readRepoFile("apps/geolibre-desktop/src/index.css");
+    const appCss = [
+      readRepoFile("apps/geolibre-desktop/src/index.css"),
+      readRepoFile("apps/geolibre-desktop/src/styles/plugins/cesium-toolbar.css"),
+    ].join("\n");
     const restyled = [...new Set([...appCss.matchAll(/\.(cesium-[\w-]+)/g)].map((m) => m[1]))];
     assert.ok(restyled.length > 0);
     for (const cls of restyled) {
@@ -1060,7 +1063,7 @@ describe("cesium / @cesium/widgets", () => {
         contractMessage(
           "cesium",
           section,
-          `index.css restyles .${cls}, which no linked Cesium stylesheet defines any more`,
+          `Cesium CSS overrides restyle .${cls}, which no linked Cesium stylesheet defines any more`,
           "apps/geolibre-desktop",
         ),
       );
