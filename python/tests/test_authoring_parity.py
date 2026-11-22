@@ -571,9 +571,9 @@ def test_project_constants_json_in_sync_with_core():
     core_json = (REPO / "packages" / "core" / "src" / "project-constants.json").read_text(
         encoding="utf-8"
     )
-    py_json = (
-        REPO / "python" / "src" / "geolibre" / "project-constants.json"
-    ).read_text(encoding="utf-8")
+    py_json = (REPO / "python" / "src" / "geolibre" / "project-constants.json").read_text(
+        encoding="utf-8"
+    )
     assert py_json == core_json, (
         "Run `node scripts/sync-project-constants.mjs` to sync project-constants.json"
     )
@@ -592,9 +592,7 @@ def test_project_constants_json_in_sync_with_core():
 def test_label_defaults_match_types_ts():
     """DEFAULT_LABEL_STYLE mirrors project-constants.json DEFAULT_LAYER_STYLE.labels exactly."""
     data = json.loads(
-        (REPO / "packages" / "core" / "src" / "project-constants.json").read_text(
-            encoding="utf-8"
-        )
+        (REPO / "packages" / "core" / "src" / "project-constants.json").read_text(encoding="utf-8")
     )
     assert data["DEFAULT_LAYER_STYLE"]["labels"] == project.DEFAULT_LABEL_STYLE
 
@@ -615,9 +613,7 @@ def test_label_and_story_vocabularies_match_types_ts():
 def test_story_defaults_match_types_ts():
     """DEFAULT_STORY_MAP mirrors project-constants.json DEFAULT_STORY_MAP."""
     data = json.loads(
-        (REPO / "packages" / "core" / "src" / "project-constants.json").read_text(
-            encoding="utf-8"
-        )
+        (REPO / "packages" / "core" / "src" / "project-constants.json").read_text(encoding="utf-8")
     )
     assert data["DEFAULT_STORY_MAP"] == project.DEFAULT_STORY_MAP
 
