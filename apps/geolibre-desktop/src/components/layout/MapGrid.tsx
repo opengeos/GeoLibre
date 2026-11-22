@@ -289,7 +289,8 @@ function PaneLayerToggle({ viewId, index, renderer }: PaneLayerToggleProps) {
             // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine layer support table
             const noMapbox = renderer === "mapbox" && !isMapboxSupportedLayer(layer);
             // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine layer support table
-            const noArcgis = renderer === "arcgis" && !isArcgisSupportedLayer(layer, false, arcgisScene);
+            const noArcgis =
+              renderer === "arcgis" && !isArcgisSupportedLayer(layer, false, arcgisScene);
             return (
               <DropdownMenuCheckboxItem
                 key={layer.id}

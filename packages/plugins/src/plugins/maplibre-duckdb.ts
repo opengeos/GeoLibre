@@ -337,9 +337,7 @@ export function getDuckDBLayerGeoJson(layerId: string): FeatureCollection | null
       const parsedIdx =
         typeof rawIdx === "number" && Number.isInteger(rawIdx) && rawIdx >= 0
           ? rawIdx
-          : typeof rawIdx === "bigint" &&
-              rawIdx >= 0n &&
-              rawIdx <= BigInt(Number.MAX_SAFE_INTEGER)
+          : typeof rawIdx === "bigint" && rawIdx >= 0n && rawIdx <= BigInt(Number.MAX_SAFE_INTEGER)
             ? Number(rawIdx)
             : null;
       const globalIndex = parsedIdx ?? (singleResult ? localIndex : null);

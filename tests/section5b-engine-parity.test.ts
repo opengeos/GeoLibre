@@ -272,8 +272,9 @@ describe("PR 5b: Mapbox custom COG DEM terrain", () => {
       },
       ownsLayerLabels: false,
     });
-    (engine as unknown as { openCogDem: (src: string) => Promise<CogDemSourceRegistration> }).openCogDem =
-      async (src) => (src === "https://example.com/a.tif" ? regA : regB);
+    (
+      engine as unknown as { openCogDem: (src: string) => Promise<CogDemSourceRegistration> }
+    ).openCogDem = async (src) => (src === "https://example.com/a.tif" ? regA : regB);
 
     await engine.setTerrainCogSource("https://example.com/a.tif");
     engine.setTerrainEnabled(true);
@@ -284,20 +285,18 @@ describe("PR 5b: Mapbox custom COG DEM terrain", () => {
     // Style temporarily not loaded while switching from A to B: A must NOT be disposed yet.
     styleLoaded = false;
     await engine.setTerrainCogSource("https://example.com/b.tif");
-    assert.equal(disposedA, 0, "old COG DEM must stay alive while native source still references it");
     assert.equal(
-      (sources.get("geolibre-mapbox-dem") as { tiles?: string[] })?.tiles?.[0],
-      urlA,
+      disposedA,
+      0,
+      "old COG DEM must stay alive while native source still references it",
     );
+    assert.equal((sources.get("geolibre-mapbox-dem") as { tiles?: string[] })?.tiles?.[0], urlA);
 
     // Once style settles (idle), the native source swaps to B and A is disposed.
     styleLoaded = true;
     for (const fn of listeners.get("idle") ?? []) fn();
     assert.equal(disposedA, 1, "old COG DEM must be disposed after native source swap");
-    assert.notEqual(
-      (sources.get("geolibre-mapbox-dem") as { tiles?: string[] })?.tiles?.[0],
-      urlA,
-    );
+    assert.notEqual((sources.get("geolibre-mapbox-dem") as { tiles?: string[] })?.tiles?.[0], urlA);
 
     engine.destroy();
     assert.equal(disposedB, 1);
@@ -561,8 +560,9 @@ describe("PR 5b: Cesium video overlay and DuckDB query parity", () => {
     const poly = createdEntities[0]?.polygon as Record<string, unknown> | undefined;
     assert.equal(poly?.height, 0);
     assert.equal(poly?.classificationType, undefined);
-    const uvPositions = (poly?.textureCoordinates as { positions?: Array<{ x: number; y: number }> })
-      ?.positions;
+    const uvPositions = (
+      poly?.textureCoordinates as { positions?: Array<{ x: number; y: number }> }
+    )?.positions;
     assert.deepEqual(
       uvPositions?.map((p) => [p.x, p.y]),
       [
