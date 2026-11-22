@@ -31,7 +31,7 @@ def test_parse_ip_unwraps_ipv4_mapped_ipv6():
 
 def test_trusted_proxy_and_allowlist_match_ipv4_mapped_ipv6(tmp_path, monkeypatch, clock):
     monkeypatch.setenv("GEOLIBRE_OAUTH_CLIENTS", json.dumps(OAUTH_CLIENTS))
-    monkeypatch.setenv("GEOLIBRE_TRUSTED_PROXIES", "10.0.0.0/8")
+    monkeypatch.setenv("GEOLIBRE_TRUSTED_PROXIES", "::ffff:10.0.0.0/104")
     app = _make_app(tmp_path / "dualstack", PUBLIC_URL, clock=clock.now)
     forwarded = {"X-Forwarded-For": "::ffff:203.0.113.50"}
     with TestClient(
@@ -84,6 +84,17 @@ def test_exchange_code_rejects_expired_absolute_session_from_old_auth_time(
     exchanged = exchange_code(oauth_client, code, verifier=verifier)
     assert exchanged.status_code == 400
     assert exchanged.json()["error"] == "invalid_grant"
+
+    # auth_time=0 must also be treated as expired, not replaced with now_ts.
+    zero_claims = fake_idp.base_claims("u-epoch", preferred_username="epochuser")
+    zero_claims["auth_time"] = 0
+    zero_cb, zero_verifier = sso_sign_in(oauth_client, fake_idp, "acme", zero_claims)
+    assert zero_cb.status_code == 303
+    zero_exchanged = exchange_code(
+        oauth_client, redirect_params(zero_cb)["code"], verifier=zero_verifier
+    )
+    assert zero_exchanged.status_code == 400
+    assert zero_exchanged.json()["error"] == "invalid_grant"
 
 
 def test_sso_max_age_only_requested_for_reauth(oauth_client, fake_idp):

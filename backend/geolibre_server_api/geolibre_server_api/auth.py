@@ -2292,9 +2292,12 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
         if not management:
             policy = effective_policy(session, code_row.account_id)
             if policy.absolute_lifetime:
+                auth_ts = (
+                    code_row.authenticated_at if code_row.authenticated_at is not None else now_ts
+                )
                 family_expires = min(
                     family_expires,
-                    (code_row.authenticated_at or now_ts) + policy.absolute_lifetime,
+                    auth_ts + policy.absolute_lifetime,
                 )
         if family_expires <= now_ts:
             return oauth_token_error(400, "invalid_grant")

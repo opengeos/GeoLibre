@@ -154,7 +154,7 @@ export async function fetchAllowlistedUpstream(
     if (!location) {
       return response;
     }
-    await response.body?.cancel();
+    await response.body?.cancel().catch(() => {});
     const next = new URL(location, target).toString();
     if (!isAllowedTilesUpstreamUrl(next)) {
       throw new Error(`Refused redirect to non-allowlisted upstream: ${next}`);

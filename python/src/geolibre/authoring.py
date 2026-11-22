@@ -125,6 +125,19 @@ _GEOJSON_TYPES = frozenset(
 )
 
 
+def _serialize_json_key(key: Any) -> str:
+    """Encode a dict key matching Python's standard ``json.dumps`` semantics."""
+    if isinstance(key, str):
+        return json.dumps(key, allow_nan=False)
+    if isinstance(key, bool):
+        return '"true"' if key else '"false"'
+    if key is None:
+        return '"null"'
+    if isinstance(key, (int, float)):
+        return json.dumps(json.dumps(key, allow_nan=False))
+    raise TypeError(f"keys must be str, int, float, bool or None, not {type(key).__name__}")
+
+
 def _serialize_project_value(value: Any, depth: int) -> str:
     """Serialize a project value with indented structure and compact GeoJSON."""
     if isinstance(value, dict):
@@ -135,7 +148,7 @@ def _serialize_project_value(value: Any, depth: int) -> str:
         pad = "  " * (depth + 1)
         close_pad = "  " * depth
         entries = [
-            f"{json.dumps(str(key), allow_nan=False)}: {_serialize_project_value(entry, depth + 1)}"
+            f"{_serialize_json_key(key)}: {_serialize_project_value(entry, depth + 1)}"
             for key, entry in value.items()
         ]
         return "{\n" + pad + (",\n" + pad).join(entries) + "\n" + close_pad + "}"

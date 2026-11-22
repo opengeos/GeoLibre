@@ -14,7 +14,6 @@ from geolibre import Map, authoring
 from geolibre._server import _QuietHandler
 from geolibre.geolibre import render_project_html
 from geolibre.mcp import live as mcp_live
-from geolibre.mcp.server import build_server
 
 
 def _empty_project() -> dict:
@@ -22,6 +21,9 @@ def _empty_project() -> dict:
 
 
 def test_live_set_identify_accepts_list_of_layer_ids(tmp_path):
+    pytest.importorskip("mcp", reason="the mcp SDK is an optional extra")
+    from geolibre.mcp.server import build_server
+
     mcp = build_server(tmp_path)
     tools = {tool.name: tool for tool in mcp._tool_manager.list_tools()}
     tool = tools["live_set_identify"]
@@ -143,7 +145,7 @@ def test_render_project_html_normalizes_app_origin():
     project = _empty_project()
     html_https = render_project_html(project, app_url="https://user:pass@geolibre.app:443/map")
     assert '"https://geolibre.app"' in html_https
-    assert "user:pass" not in html_https.split('"https://geolibre.app"')[1][:40]
+    assert "user:pass" not in html_https
 
     html_http = render_project_html(project, app_url="http://localhost:80/")
     assert '"http://localhost"' in html_http

@@ -17,7 +17,7 @@ export async function parallelSearch(query: string, signal: AbortSignal) {
       headers.set("User-Agent", USER_AGENT);
       const signals =
         init?.method === "DELETE"
-          ? [AbortSignal.timeout(500), ...(init?.signal ? [init.signal] : [])]
+          ? [AbortSignal.timeout(500)]
           : [signal, ...(init?.signal ? [init.signal] : [])];
       const response = await fetch(url, {
         ...init,

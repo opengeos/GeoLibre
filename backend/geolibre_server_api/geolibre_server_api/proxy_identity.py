@@ -18,6 +18,19 @@ class TrustedProxyConfig:
     email_header: str
 
 
+def normalize_ip_network(
+    network: IPv4Network | IPv6Network,
+) -> IPv4Network | IPv6Network:
+    """Convert an IPv4-mapped IPv6 network (e.g. ``::ffff:10.0.0.0/104``) to IPv4."""
+    if (
+        isinstance(network, IPv6Network)
+        and network.prefixlen >= 96
+        and network.network_address.ipv4_mapped is not None
+    ):
+        return IPv4Network((network.network_address.ipv4_mapped, network.prefixlen - 96))
+    return network
+
+
 def parse_networks(variable: str) -> tuple[IPv4Network | IPv6Network, ...]:
     """Parse the comma-separated IPs or CIDRs in env *variable*; an invalid entry fails startup."""
     networks: list[IPv4Network | IPv6Network] = []
@@ -26,7 +39,7 @@ def parse_networks(variable: str) -> tuple[IPv4Network | IPv6Network, ...]:
         if not entry:
             continue
         try:
-            networks.append(ipaddress.ip_network(entry, strict=False))
+            networks.append(normalize_ip_network(ipaddress.ip_network(entry, strict=False)))
         except ValueError as exc:
             raise RuntimeError(f"{variable} entry {entry!r} is not an IP network") from exc
     return tuple(networks)

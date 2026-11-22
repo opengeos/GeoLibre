@@ -308,6 +308,13 @@ def render_project_html(
         f":{origin.port}" if origin.port is not None and origin.port != default_port else ""
     )
     app_origin = f"{origin.scheme}://{origin_host}{origin_port}"
+    # Strip any embedded credentials from base_url before building iframe_src
+    # so userinfo never leaks into the exported HTML document.
+    if origin.username is not None or origin.password is not None:
+        safe_netloc = f"{origin_host}:{origin.port}" if origin.port is not None else origin_host
+        base_url = urllib.parse.urlunsplit(
+            (origin.scheme, safe_netloc, origin.path, origin.query, origin.fragment)
+        )
     # Force the embed bridge on (isEmbedded() honours ?embed=1). Insert the
     # parameter into the query string *before* any URL fragment: a "#..."
     # fragment would otherwise swallow a trailing "?embed=1" (browsers read it

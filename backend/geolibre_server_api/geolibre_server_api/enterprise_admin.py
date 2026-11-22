@@ -35,7 +35,7 @@ from geolibre_server_api.enterprise_models import (
 from geolibre_server_api.oidc import OidcError, fetch_json
 from geolibre_server_api.org_models import Group, OrganizationRole
 from geolibre_server_api.policy import organization_role, require_organization_admin
-from geolibre_server_api.proxy_identity import client_ip
+from geolibre_server_api.proxy_identity import client_ip, normalize_ip_network
 
 SCOPE_TOKEN_RE = re.compile(r"^[A-Za-z0-9:._-]{1,64}$")
 
@@ -273,7 +273,9 @@ def build_enterprise_admin_router() -> APIRouter:
         networks = []
         for entry in body.admin_ip_allowlist:
             try:
-                networks.append(ipaddress.ip_network(entry.strip(), strict=False))
+                networks.append(
+                    normalize_ip_network(ipaddress.ip_network(entry.strip(), strict=False))
+                )
             except ValueError:
                 raise HTTPException(
                     422, "adminIpAllowlist entries must be IP addresses or networks"

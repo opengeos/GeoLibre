@@ -508,6 +508,18 @@ def test_gzip_responses_are_decompressed_and_bounded(monkeypatch):
         assert base64.b64decode(result["data"]) == raw_tile
         assert result["mimeType"] == "application/x-protobuf"
 
+    multi_member = gzip.compress(b"first-half-") + gzip.compress(b"second-half")
+    with resource_server(
+        payload=multi_member,
+        headers={"Content-Encoding": "gzip", "Content-Type": "application/octet-stream"},
+    ) as port:
+        patch_public_dns(monkeypatch, port)
+        sessions, preview, grant = authorized_session()
+        result = asyncio.run(
+            network.fetch_resource(sessions, preview, grant, "http://tiles.example.test/multi.pbf")
+        )
+        assert base64.b64decode(result["data"]) == b"first-half-second-half"
+
     bomb = gzip.compress(b"0" * (network.MAX_RESPONSE_BYTES + 1024))
     with resource_server(payload=bomb, headers={"Content-Encoding": "gzip"}) as port:
         patch_public_dns(monkeypatch, port)

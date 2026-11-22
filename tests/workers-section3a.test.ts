@@ -3,7 +3,11 @@ import { timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import WebSocket from "ws";
-import { getParticipantKey, type SessionParticipant } from "../packages/collab-core/src/index.ts";
+import {
+  getParticipantKey,
+  signIdentityToken,
+  type SessionParticipant,
+} from "../packages/collab-core/src/index.ts";
 import { createRelay } from "../workers/collab-node/src/server.ts";
 import { parallelSearch } from "../workers/ai-proxy/src/parallel-search.ts";
 import { handler as aiProxyWorker } from "../workers/ai-proxy/src/index.ts";
@@ -167,6 +171,125 @@ describe("Section 3a worker reliability fixes", () => {
     }
   });
 
+  it("durably blocks a signed-in guest on a multi-use invite without blocking other signed-in guests", async () => {
+    const secret = "test-collab-secret";
+    const relay = createRelay({ dbPath: ":memory:", identitySecret: secret });
+    await new Promise<void>((resolve) => relay.server.listen(0, "127.0.0.1", resolve));
+    const addr = relay.server.address();
+    assert.ok(addr && typeof addr === "object");
+    const baseHttp = `http://127.0.0.1:${addr.port}`;
+    const baseWs = `ws://127.0.0.1:${addr.port}`;
+
+    try {
+      const created = (await (
+        await fetch(`${baseHttp}/sessions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "view-only" }),
+        })
+      ).json()) as { sessionId: string; hostToken: string };
+
+      const connect = () =>
+        new Promise<WebSocket>((resolve, reject) => {
+          const ws = new WebSocket(`${baseWs}/sessions/${created.sessionId}/ws`);
+          ws.once("open", () => resolve(ws));
+          ws.once("error", reject);
+        });
+      const nextMessage = (ws: WebSocket, predicate: (m: Record<string, unknown>) => boolean) =>
+        new Promise<Record<string, unknown>>((resolve) => {
+          const onMsg = (raw: WebSocket.RawData) => {
+            const parsed = JSON.parse(raw.toString()) as Record<string, unknown>;
+            if (predicate(parsed)) {
+              ws.off("message", onMsg);
+              resolve(parsed);
+            }
+          };
+          ws.on("message", onMsg);
+        });
+
+      const host = await connect();
+      const hostWelcome = nextMessage(host, (m) => m.type === "welcome");
+      host.send(
+        JSON.stringify({
+          type: "join",
+          clientId: "h1",
+          displayName: "Host",
+          color: "#000000",
+          hostToken: created.hostToken,
+        }),
+      );
+      await hostWelcome;
+
+      const inviteMsg = nextMessage(host, (m) => m.type === "invite-created");
+      host.send(JSON.stringify({ type: "mint-invite", role: "co-edit", maxUses: 5 }));
+      const inviteToken = ((await inviteMsg).invite as { token: string }).token;
+
+      const aliceToken = await signIdentityToken({ userId: "u-alice", username: "Alice" }, secret);
+      const bobToken = await signIdentityToken({ userId: "u-bob", username: "Bob" }, secret);
+
+      const alice = await connect();
+      const aliceWelcomeP = nextMessage(alice, (m) => m.type === "welcome");
+      alice.send(
+        JSON.stringify({
+          type: "join",
+          clientId: "a1",
+          displayName: "Alice",
+          color: "#111111",
+          inviteToken,
+          identityToken: aliceToken,
+        }),
+      );
+      const aliceClientId = (await aliceWelcomeP).clientId as string;
+
+      const aliceKickedP = nextMessage(alice, (m) => m.type === "kicked");
+      host.send(JSON.stringify({ type: "block-participant", clientId: aliceClientId }));
+      await aliceKickedP;
+
+      // Alice reconnecting with the same multi-use invite is durably rejected via user:u-alice.
+      const aliceReconnect = await connect();
+      const aliceRejectP = nextMessage(
+        aliceReconnect,
+        (m) => m.type === "welcome" || m.type === "error",
+      );
+      aliceReconnect.send(
+        JSON.stringify({
+          type: "join",
+          clientId: "a2",
+          displayName: "Alice",
+          color: "#111111",
+          inviteToken,
+          identityToken: aliceToken,
+        }),
+      );
+      const aliceReject = await aliceRejectP;
+      assert.equal(aliceReject.type, "error");
+      assert.equal(aliceReject.code, "forbidden");
+
+      // Bob joining with the same multi-use invite is still welcomed.
+      const bob = await connect();
+      const bobWelcomeP = nextMessage(bob, (m) => m.type === "welcome" || m.type === "error");
+      bob.send(
+        JSON.stringify({
+          type: "join",
+          clientId: "b1",
+          displayName: "Bob",
+          color: "#222222",
+          inviteToken,
+          identityToken: bobToken,
+        }),
+      );
+      const bobMsg = await bobWelcomeP;
+      assert.equal(bobMsg.type, "welcome");
+
+      host.close();
+      alice.close();
+      aliceReconnect.close();
+      bob.close();
+    } finally {
+      await relay.close();
+    }
+  });
+
   it("ai-proxy parallelSearch sends DELETE with fresh timeout even after caller abort", async () => {
     const originalFetch = globalThis.fetch;
     let deleteSignalAborted: boolean | null = null;
@@ -244,15 +367,38 @@ describe("Section 3a worker reliability fixes", () => {
     assert.equal(res.status, 400);
   });
 
-  it("tiles worker rejects zoom > 24 and tolerates missing global caches", async () => {
-    const res = await tilesWorker.fetch(
-      new Request("https://tiles.example.test/mars-viking/25/0/0.png"),
+  it("tiles worker rejects zoom > 24 and serves tiles cleanly when global caches is undefined", async () => {
+    const tooDeep = await tilesWorker.fetch(
+      new Request("https://tiles.example.test/opm/mars-viking-mdim21/25/0/0.png"),
       {} as Parameters<typeof tilesWorker.fetch>[1],
       { waitUntil() {}, passThroughOnException() {} } as unknown as Parameters<
         typeof tilesWorker.fetch
       >[2],
     );
-    assert.equal(res.status, 404);
+    assert.equal(tooDeep.status, 404);
+
+    const originalCaches = (globalThis as { caches?: unknown }).caches;
+    const originalFetch = globalThis.fetch;
+    (globalThis as { caches?: unknown }).caches = undefined;
+    globalThis.fetch = (async () =>
+      new Response(new Uint8Array([137, 80, 78, 71]), {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      })) as typeof fetch;
+    try {
+      const ok = await tilesWorker.fetch(
+        new Request("https://tiles.example.test/opm/mars-viking-mdim21/0/0/0.png"),
+        {} as Parameters<typeof tilesWorker.fetch>[1],
+        { waitUntil() {}, passThroughOnException() {} } as unknown as Parameters<
+          typeof tilesWorker.fetch
+        >[2],
+      );
+      assert.equal(ok.status, 200);
+      assert.equal(ok.headers.get("content-type"), "image/png");
+    } finally {
+      (globalThis as { caches?: unknown }).caches = originalCaches;
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("allowlisted-fetch cancels redirect response bodies", async () => {

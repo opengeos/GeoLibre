@@ -217,7 +217,7 @@ export async function handleEarthdataDownload(
       if (upstream.ok) {
         response = upstream;
       } else {
-        await upstream.body?.cancel();
+        await upstream.body?.cancel().catch(() => {});
       }
     } catch {
       // Fall back to the DAAC below.
@@ -245,7 +245,7 @@ export async function handleEarthdataDownload(
       response = upstream;
       break;
     }
-    await upstream.body?.cancel();
+    await upstream.body?.cancel().catch(() => {});
     let next: URL;
     try {
       next = new URL(location, url);
@@ -265,7 +265,7 @@ export async function handleEarthdataDownload(
   }
   if (!response) return plain(508, "Too many redirects.");
   if (!response.ok) {
-    await response.body?.cancel();
+    await response.body?.cancel().catch(() => {});
     const status = response.status === 401 || response.status === 403 ? response.status : 502;
     return plain(status, `The Earthdata file host answered ${response.status}.`);
   }

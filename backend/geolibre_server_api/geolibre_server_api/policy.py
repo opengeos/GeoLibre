@@ -19,7 +19,7 @@ from geolibre_server_api.enterprise_models import (
     OrganizationSecurityPolicy,
 )
 from geolibre_server_api.org_models import Organization, OrganizationMember
-from geolibre_server_api.proxy_identity import client_ip
+from geolibre_server_api.proxy_identity import client_ip, normalize_ip_network
 
 if TYPE_CHECKING:
     from geolibre_server_api.auth import AuthPrincipal
@@ -95,7 +95,8 @@ def require_organization_admin(
     if allowlist:
         address = client_ip(request)
         if address is None or not any(
-            address in ipaddress.ip_network(entry, strict=False) for entry in allowlist
+            address in normalize_ip_network(ipaddress.ip_network(entry, strict=False))
+            for entry in allowlist
         ):
             raise HTTPException(403, "administrative access is not allowed from this network")
     max_age = org_policy.admin_reauth_seconds
@@ -252,10 +253,13 @@ def is_last_active_admin(session: Session, organization_id: str, account_id: str
     Demoting, removing, or deactivating it would leave the organization without
     an administrator who can sign in.
     """
-    # Lock the organization row on transactional backends (PostgreSQL) so two
-    # concurrent demotions or removals cannot both observe another active admin.
+    # Lock the organization row on transactional backends (PostgreSQL) with
+    # FOR NO KEY UPDATE so concurrent demotions/removals serialize without
+    # deadlocking against foreign-key FOR KEY SHARE locks (e.g. SCIM inserts).
     session.execute(
-        select(Organization.id).where(Organization.id == organization_id).with_for_update()
+        select(Organization.id)
+        .where(Organization.id == organization_id)
+        .with_for_update(key_share=True)
     )
     return (
         organization_role(session, organization_id, account_id) == "administrator"
