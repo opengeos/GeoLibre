@@ -81,7 +81,7 @@ import {
   isExportableGeojsonLayer,
 } from "../lib/geojson-zip-export";
 import { pickLayerStylesFile } from "../lib/layer-style-files";
-import { notify } from "../lib/notify";
+import { dismissNotification, notify } from "../lib/notify";
 import { notifyUnsavedLocalRasters } from "../lib/local-raster-notices";
 import { APP_LAYERS_FILE_HOST, buildLayersFileContent } from "../lib/startup-layers";
 import { mergeStringLists } from "../lib/string-lists";
@@ -144,6 +144,9 @@ import {
   serviceTokenProvider,
   signInForImportedService,
 } from "../lib/arcgis-project-services";
+import { loadArcgisFileGeodatabaseLayers } from "../lib/arcgis-gdb-import";
+import { listFileGeodatabaseLayers, readFileGeodatabaseLayer } from "../lib/file-gdb";
+import { startGeoLibreSidecar } from "../lib/sidecar";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 import { IS_MAS_BUILD } from "../lib/build-flags";
 import { resolveDroppedProjectIfCurrent } from "../lib/dropped-project";
@@ -908,7 +911,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     try {
       const result = await openArcgisProjectFile();
       if (!result || session.superseded()) return;
-      const reader = readArcgisProject(result.data, result.path);
+      // Only the desktop build can read a File Geodatabase, through the Python
+      // sidecar the Mac App Store build compiles out; elsewhere the importer
+      // keeps reporting those layers as unsupported.
+      const reader = readArcgisProject(result.data, result.path, {
+        readFileGeodatabase: isTauri() && !IS_MAS_BUILD,
+      });
       // One GeoLibre project holds one map, so a project with several 2D maps
       // asks which to bring across rather than silently taking the first.
       let mapIndex = 0;
@@ -924,6 +932,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         if (chosen === null) return;
         mapIndex = chosen;
       }
+      // Only the chosen map's File Geodatabase layers are listed, so the
+      // sidecar reads below never touch another map's data.
       const imported = reader.importMap(mapIndex);
       if (!isTauri()) {
         // The browser build can read neither local files nor rasters (which
@@ -939,7 +949,52 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           imported.warnings.push({ layerName: item.name, reason: "browser-local-file" });
         }
       }
-      if (session.superseded() || !confirmDiscardAttributeDrafts()) return;
+      // Read before the project loads, so a feature class that cannot be read
+      // is dropped (with its now-empty groups) rather than left as an empty
+      // layer, and the rest keep their table-of-contents order.
+      //
+      // The discard-drafts question comes before those reads (which can take
+      // minutes) rather than after them. `approvedDrafts` holds the drafts
+      // object the user agreed to discard; the store replaces it on every
+      // edit, so the check after the reads asks again only if the drafts
+      // changed meanwhile. Without geodatabase layers it stays undefined,
+      // which never matches, and the question is asked once as before.
+      let approvedDrafts: object | undefined;
+      if (imported.fileGeodatabaseLayers.length > 0 && !session.superseded()) {
+        if (!confirmDiscardAttributeDrafts()) return;
+        approvedDrafts = useAppStore.getState().ui.attributeTableDrafts;
+        // One sidecar job per layer, each a second or more, so say what the
+        // wait is for rather than leaving the menu apparently idle.
+        const progressId = notify.info(
+          t("toolbar.item.arcgisImportReadingGdb", {
+            count: imported.fileGeodatabaseLayers.length,
+          }),
+          // Its own key: an abandoned import showing the same text would
+          // otherwise share this notice, and dismiss it when it finishes.
+          { durationMs: null, dedupeKey: `arcgis-gdb-read:${crypto.randomUUID()}` },
+        );
+        try {
+          await loadArcgisFileGeodatabaseLayers(
+            imported,
+            {
+              start: startGeoLibreSidecar,
+              listLayers: listFileGeodatabaseLayers,
+              readLayer: (gdbPath, featureClass, signal) =>
+                readFileGeodatabaseLayer(gdbPath, featureClass, undefined, signal),
+            },
+            session.signal,
+          );
+        } finally {
+          dismissNotification(progressId);
+        }
+      }
+      if (session.superseded()) return;
+      if (
+        useAppStore.getState().ui.attributeTableDrafts !== approvedDrafts &&
+        !confirmDiscardAttributeDrafts()
+      ) {
+        return;
+      }
       const mapReady = importedProjectMapReady(
         mapControllerRef,
         useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,

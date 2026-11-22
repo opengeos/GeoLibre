@@ -45,6 +45,18 @@ describe("isVectorControlRefreshLayer / isRefreshableLayer", () => {
     assert.equal(isRefreshableLayer(layer), true);
   });
 
+  it("keeps cloud-scheme vector-control layers out of the control refresh path", () => {
+    for (const url of ["s3://bucket/a.geojson", "gs://bucket/a.geojson"]) {
+      const layer = makeLayer({
+        type: "geojson",
+        source: { type: "geojson", url },
+        metadata: { sourceKind: "maplibre-gl-vector", externalNativeLayer: true },
+      });
+      assert.equal(isVectorControlRefreshLayer(layer), false);
+      assert.equal(isRefreshableLayer(layer), false);
+    }
+  });
+
   it("does not treat a file-backed vector-control layer (no url) as a vector-control refresh layer", () => {
     const layer = makeLayer({
       type: "geojson",
@@ -561,4 +573,80 @@ describe("fetchWfsGeoJson GML fallback (issue #2746)", () => {
     );
     assert.deepEqual((data.features[0].geometry as Point).coordinates, [14.11, 54.44]);
   });
+});
+
+describe("remote geometry validation", () => {
+  it("normalizes missing geometry to null while preserving feature properties", async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () =>
+        Response.json({
+          type: "FeatureCollection",
+          features: [{ type: "Feature", id: "missing", properties: { name: "no geometry" } }],
+        });
+      const result = await fetchGeoJsonFeatureCollection("https://example.com/data.json");
+      assert.deepEqual(result.features, [
+        {
+          type: "Feature",
+          id: "missing",
+          properties: { name: "no geometry" },
+          geometry: null,
+        },
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+  it("rejects malformed features and nested collections before storing data", async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      for (const feature of [
+        null,
+        { type: "Feature", geometry: { type: "GeometryCollection", geometries: [null] } },
+        { type: "Feature", geometry: { type: "GeometryCollection" } },
+        {
+          type: "Feature",
+          geometry: {
+            type: "GeometryCollection",
+            geometries: [{ type: "GeometryCollection", geometries: [null] }],
+          },
+        },
+      ]) {
+        globalThis.fetch = async () =>
+          Response.json({ type: "FeatureCollection", features: [feature] });
+        await assert.rejects(
+          fetchGeoJsonFeatureCollection("https://example.com/data.json"),
+          /FeatureCollection/,
+        );
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+it("accepts valid nested GeometryCollections and null top-level geometry", async () => {
+  const originalFetch = globalThis.fetch;
+  const data = {
+    type: "FeatureCollection",
+    features: [
+      { type: "Feature", properties: {}, geometry: null },
+      {
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "GeometryCollection",
+          geometries: [
+            { type: "GeometryCollection", geometries: [{ type: "Point", coordinates: [1, 2] }] },
+          ],
+        },
+      },
+    ],
+  };
+  try {
+    globalThis.fetch = async () => Response.json(data);
+    assert.deepEqual(await fetchGeoJsonFeatureCollection("https://example.com/nested.json"), data);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
