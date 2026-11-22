@@ -123,8 +123,6 @@ export function useStylePanelDrafts(
     /** Attribute samples keyed by property name (classification and/or size field). */
     byProperty: Record<string, unknown[]>;
   } | null>(null);
-  const loadedVectorPropertyValuesRef = useRef(loadedVectorPropertyValues);
-  loadedVectorPropertyValuesRef.current = loadedVectorPropertyValues;
   const [vectorPropertyValuesLoading, setVectorPropertyValuesLoading] = useState(false);
   const [vectorPropertyValuesUnavailable, setVectorPropertyValuesUnavailable] = useState(false);
 
@@ -260,21 +258,6 @@ export function useStylePanelDrafts(
 
     if (propertiesToLoad.length === 0) {
       setLoadedVectorPropertyValues(null);
-      setVectorPropertyValuesLoading(false);
-      setVectorPropertyValuesUnavailable(false);
-      return;
-    }
-
-    // Reuse cached samples when all requested properties for this layer are
-    // already loaded (e.g. when toggling between graduated/categorized on the
-    // same attribute without changing the field).
-    const cached = loadedVectorPropertyValuesRef.current;
-    if (
-      cached?.layerId === layer.id &&
-      propertiesToLoad.every((property) =>
-        Object.prototype.hasOwnProperty.call(cached.byProperty, property),
-      )
-    ) {
       setVectorPropertyValuesLoading(false);
       setVectorPropertyValuesUnavailable(false);
       return;

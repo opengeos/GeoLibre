@@ -3245,8 +3245,7 @@ COMPONENTS_PLUGIN_ID = "maplibre-gl-components"
 #: The components plugin's ``html`` sub-key is deliberately absent: it holds a
 #: custom HTML panel the user authored by hand, so it can carry anything,
 #: including a URL with a token in it. It is dropped like any unknown blob.
-#: Mirrored by ``PUBLISHABLE_PLUGIN_SETTINGS`` in
-#: ``packages/core/src/credentials.ts``; the two must agree.
+#: Loaded from ``project-constants.json`` (shared with ``@geolibre/core``).
 PUBLISHABLE_PLUGIN_SETTINGS: dict[str, tuple[str, ...] | None] = {
     plugin_id: tuple(keys) if isinstance(keys, list) else None
     for plugin_id, keys in _PROJECT_CONSTANTS["PUBLISHABLE_PLUGIN_SETTINGS"].items()
@@ -3794,7 +3793,7 @@ def level_filter(
 
 # -- labels --------------------------------------------------------------------
 
-#: Mirror of ``DEFAULT_LAYER_STYLE.labels`` in ``packages/core/src/types.ts``.
+#: Loaded from ``project-constants.json`` ``DEFAULT_LAYER_STYLE["labels"]``.
 #: The app merges a stored ``labels`` object over these field by field when it
 #: renders, so a written object carries every key to stay stable on round trip.
 DEFAULT_LABEL_STYLE: dict[str, Any] = copy.deepcopy(
@@ -4026,7 +4025,7 @@ def json_compatible(value: Any, what: str) -> Any:
 
 # -- story maps ----------------------------------------------------------------
 
-#: Mirror of ``DEFAULT_STORY_MAP`` in packages/core/src/types.ts.
+#: Loaded from ``project-constants.json`` (shared with ``@geolibre/core``).
 DEFAULT_STORY_MAP: dict[str, Any] = copy.deepcopy(_PROJECT_CONSTANTS["DEFAULT_STORY_MAP"])
 
 STORY_THEMES = frozenset({"light", "dark"})

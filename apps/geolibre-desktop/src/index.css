@@ -783,66 +783,6 @@ body,
   direction: ltr;
 }
 
-.geoagent-control .geoagent-control-toggle {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-}
-
-.geoagent-control .geoagent-control-icon {
-  align-items: center;
-  display: flex;
-  height: 100%;
-  justify-content: center;
-  width: 100%;
-}
-
-.geoagent-control .geoagent-control-icon svg {
-  transform: translateX(1px);
-}
-
-.geoagent-panel input:focus,
-.geoagent-panel select:focus,
-.geoagent-panel textarea:focus,
-.geoagent-panel input:focus-visible,
-.geoagent-panel select:focus-visible,
-.geoagent-panel textarea:focus-visible {
-  border-color: #2f8f85;
-  box-shadow: inset 0 0 0 1px #2f8f85;
-  outline: none;
-}
-
-/* The Earth Engine "Sign in" button is injected between the project grid and
-   the status text inside the (un-padded) details element, so inset it to match
-   the 10px gutter of the surrounding content and space it from the status. */
-.geoagent-panel button.geolibre-ee-sign-in {
-  margin: 0 10px 8px;
-  min-height: 32px;
-  padding: 0 12px;
-  border: 1px solid #d7dde5;
-  border-radius: 6px;
-  background: #fff;
-  color: #17202a;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.geoagent-panel button.geolibre-ee-sign-in:hover {
-  border-color: #b0bec5;
-  background: #f1f5f9;
-}
-
-.geoagent-panel button.geolibre-ee-sign-in:focus-visible {
-  border-color: #2f8f85;
-  box-shadow: inset 0 0 0 1px #2f8f85;
-  outline: none;
-}
-
-.geoagent-panel button.geolibre-ee-sign-in:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
 .geolibre-components-control .maplibregl-ctrl-group,
 .geolibre-components-control .maplibregl-ctrl {
   align-items: center;
@@ -3994,8 +3934,8 @@ html
 }
 
 .basemap-control-result[data-geolibre-basemap-preview="pending"]:not(
-  :has(.geolibre-basemap-thumbnail)
-)::before {
+    :has(.geolibre-basemap-thumbnail)
+  )::before {
   content: "";
   width: 56px;
   height: 42px;
@@ -5223,5 +5163,26 @@ body:has([data-testid="field-crosshair-bar"]) [data-testid="notification-region"
     .geolibre-attribute-table-panel
     [role="separator"][aria-orientation="vertical"] {
     display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Vertical sidebar labels: CJK scripts (zh, ja, ko) read upright in
+ * writing-mode: vertical-rl, so the 180deg rotation used for Latin scripts
+ * would make them upside-down.  The :lang() pseudo-class handles regional
+ * variants (zh-TW, zh-CN, etc.) natively.  The rule matches the same `md:`
+ * breakpoint that Tailwind generates md:rotate-180 at.
+ *
+ * Upright CJK glyphs also stack tightly, so the small `tracking-wide`
+ * letter-spacing meant for rotated Latin text leaves them touching (e.g.
+ * 图层 reads as one block).  In vertical-rl, letter-spacing runs down the
+ * inline axis, so a larger value opens up the gap between stacked glyphs.
+ * ------------------------------------------------------------------------- */
+@media (min-width: 768px) {
+  :lang(zh) .md\:rotate-180,
+  :lang(ja) .md\:rotate-180,
+  :lang(ko) .md\:rotate-180 {
+    rotate: 0deg;
+    letter-spacing: 0.15em;
   }
 }

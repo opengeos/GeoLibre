@@ -275,3 +275,27 @@
   border-color: rgba(40, 167, 69, 0.4);
   color: #7fd493;
 }
+
+.geo-editor-control .geo-editor-tool-button {
+  align-items: center;
+  box-sizing: border-box;
+  display: flex !important;
+  justify-content: center;
+  line-height: 0;
+  padding: 0;
+}
+
+.geo-editor-control .geo-editor-tool-button svg {
+  display: block;
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.geo-editor-control .geo-editor-tool-button[data-mode="text_marker"] svg {
+  height: 24px;
+  width: 24px;
+}
+
+.geo-editor-control .geo-editor-tool-button[data-mode="text_marker"] svg text {
+  font-size: 18px;
+}

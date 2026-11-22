@@ -784,9 +784,10 @@ export function AttributeTable({
       })),
     [features, layer?.metadata.sourceKind],
   );
-  const attributeRows: AttributeTableRow[] = isDuckDBLayer
-    ? duckDBRowsToAttributeRows(duckdbRows)
-    : geojsonRows;
+  const attributeRows: AttributeTableRow[] = useMemo(
+    () => (isDuckDBLayer ? duckDBRowsToAttributeRows(duckdbRows) : geojsonRows),
+    [duckdbRows, geojsonRows, isDuckDBLayer],
+  );
   const layerCaps = resolveLayerCapabilities(layer);
   // ArcGIS service attachments of the one selected record, keyed by its object
   // ID; a feature not yet saved to the service has none to show.

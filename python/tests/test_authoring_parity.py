@@ -597,6 +597,23 @@ def test_label_defaults_match_types_ts():
     assert data["DEFAULT_LAYER_STYLE"]["labels"] == project.DEFAULT_LABEL_STYLE
 
 
+def test_set_labels_preserves_configured_hidden_style(proj):
+    """Updating a configured hidden label style preserves enabled=False and prior options."""
+    first = authoring.set_labels(proj, "Cities", enabled=False, size=20)
+    assert first["enabled"] is False
+    assert first["size"] == 20
+
+    second = authoring.set_labels(proj, "Cities", color="#ff0000")
+    assert second["enabled"] is False
+    assert second["size"] == 20
+    assert second["color"] == "#ff0000"
+
+    third = authoring.set_labels(proj, "Cities", "name")
+    assert third["enabled"] is False
+    assert third["size"] == 20
+    assert third["field"] == "name"
+
+
 @needs_repo
 def test_label_and_story_vocabularies_match_types_ts():
     """The enum sets the builders validate against are the app's own."""

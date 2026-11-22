@@ -1844,16 +1844,15 @@ def set_labels(
         if isinstance(top_level, dict) and isinstance(top_level.get("labels"), dict)
         else style.get("labels")
     )
-    # A freshly created layer carries DEFAULT_LABEL_STYLE (`enabled: False`,
-    # empty `field`/`expression`). Treat that unconfigured default as "no prior
-    # labels" so `set_labels(proj, ref, "name")` enables labels automatically.
-    if (
-        isinstance(current, dict)
-        and not current.get("enabled")
-        and not current.get("field")
-        and not current.get("expression")
-    ):
-        current = None
+    # A freshly created layer carries an untouched DEFAULT_LABEL_STYLE
+    # (`enabled: False`, empty `field`/`expression`, default styling). Treat
+    # that untouched default as "no prior labels" when enabling or supplying a
+    # field/expression so `set_labels(proj, ref, "name")` enables labels
+    # automatically, while preserving explicitly configured hidden labels
+    # (e.g. `set_labels(proj, ref, enabled=False, size=20)`).
+    if isinstance(current, dict) and current == _project.DEFAULT_LABEL_STYLE:
+        if not (enabled is None and field is None and expression is None and options):
+            current = None
     labels = _project.label_style(
         field,
         expression=expression,

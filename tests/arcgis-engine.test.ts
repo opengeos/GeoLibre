@@ -1400,6 +1400,104 @@ describe("ArcgisEngine layer sync", () => {
       .symbol.outline?.width;
     assert.notEqual(widthAtZoom9, widthAtZoom5);
   });
+  it("rebuilds when a rule-based filter switches to a different equal-count feature subset", () => {
+    const { engine, created } = makeEngine();
+    const twoPolygons = geojsonLayer({
+      id: "rule-polys",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "a",
+            properties: { kind: "A" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+          {
+            type: "Feature",
+            id: "b",
+            properties: { kind: "B" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [2, 2],
+                  [3, 2],
+                  [3, 3],
+                  [2, 3],
+                  [2, 2],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        vectorStyleMode: "rule-based",
+        vectorRules: [
+          {
+            id: "r1",
+            label: "Only A",
+            enabled: true,
+            isElse: false,
+            filter: JSON.stringify(["==", ["get", "kind"], "A"]),
+            color: "#ff0000",
+          },
+          {
+            id: "else",
+            label: "Else",
+            enabled: false,
+            isElse: true,
+            filter: "",
+            color: "#cccccc",
+          },
+        ],
+      },
+    });
+    engine.syncLayers([twoPolygons]);
+    const count = created.length;
+    const firstNative = created[count - 1];
+    engine.syncLayers([
+      {
+        ...twoPolygons,
+        style: {
+          ...twoPolygons.style,
+          vectorRules: [
+            {
+              id: "r1",
+              label: "Only B",
+              enabled: true,
+              isElse: false,
+              filter: JSON.stringify(["==", ["get", "kind"], "B"]),
+              color: "#0000ff",
+            },
+            {
+              id: "else",
+              label: "Else",
+              enabled: false,
+              isElse: true,
+              filter: "",
+              color: "#cccccc",
+            },
+          ],
+        },
+      },
+    ]);
+    assert.ok(created.length > count, "expected equal-count rule change to rebuild native layer");
+    assert.equal(firstNative.destroyed, true);
+  });
 });
 
 describe("ArcgisEngine basemap", () => {

@@ -18,6 +18,7 @@ import type { Feature, FeatureCollection, Geometry, Point, Polygon, Position } f
 import {
   compileLayerFilters,
   portableWmsTileUrl,
+  ruleBasedVisibilityFilter,
   type GeoLibreLayer,
   type MapPreferences,
   type MapProjection,
@@ -1497,7 +1498,13 @@ export class ArcgisEngine implements MapEngine {
         const signature = reusable && entry ? entry.signature : planSignature(plan, layer);
         const filterSignature =
           plan.kind === "geojson"
-            ? JSON.stringify([layer.timeFilter, layer.embedFilter, compileLayerFilters(layer)])
+            ? JSON.stringify([
+                layer.timeFilter,
+                layer.embedFilter,
+                compileLayerFilters(layer),
+                ruleBasedVisibilityFilter(layer.style),
+                layer.metadata.sourceKind === "annotation",
+              ])
             : undefined;
         if (entry && (entry.signature !== signature || entry.geojson !== layer.geojson)) {
           // For simple single-symbol GeoJSON style edits (color, stroke, radius,
@@ -3128,13 +3135,49 @@ function stripSyntheticFields(attributes: Record<string, unknown>): Record<strin
   );
 }
 
+function sameBakedProperties(
+  a: Record<string, unknown> | null | undefined,
+  b: Record<string, unknown> | null | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (const key of keysA) {
+    if (!Object.prototype.hasOwnProperty.call(b, key) || a[key] !== b[key]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function sameBakedFeatures(
+  previous: FeatureCollection | undefined,
+  next: FeatureCollection | undefined,
+): boolean {
+  if (previous === next) return true;
+  if (!previous || !next) return false;
+  if (previous.features.length !== next.features.length) return false;
+  for (let i = 0; i < previous.features.length; i += 1) {
+    const a = previous.features[i];
+    const b = next.features[i];
+    if (a.id !== b.id || !sameBakedProperties(a.properties, b.properties)) {
+      return false;
+    }
+    if (a.geometry !== b.geometry) {
+      if (JSON.stringify(a.geometry) !== JSON.stringify(b.geometry)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 /**
- * Everything about a plan that requires rebuilding the native layers when it
- * changes: the kind, the source, the symbology. Visibility, opacity and the
- * scale range are applied in place, so they are left out. For GeoJSON plans
- * the features themselves are replaced by their count and the store record's
- * identity, so a re-style rebuilds (the symbols are baked into the data) but
- * a visibility toggle does not.
+ * True when only simple GeoJSON renderers changed (with identical baked
+ * features and no companion/label/elevation changes), so native renderers can
+ * be swapped in place without rebuilding the GeoJSONLayer or Blob URLs.
  */
 function canUpdateGeoJsonRenderersInPlace(
   previous: ArcgisLayerPlan,
@@ -3165,7 +3208,7 @@ function canUpdateGeoJsonRenderersInPlace(
       nextPart.labelingInfo ||
       prevPart.elevationInfo ||
       nextPart.elevationInfo ||
-      prevPart.features?.features.length !== nextPart.features?.features.length ||
+      !sameBakedFeatures(prevPart.features, nextPart.features) ||
       JSON.stringify(prevPart.featureReduction ?? null) !==
         JSON.stringify(nextPart.featureReduction ?? null)
     ) {
@@ -3175,6 +3218,14 @@ function canUpdateGeoJsonRenderersInPlace(
   return true;
 }
 
+/**
+ * Everything about a plan that requires rebuilding the native layers when it
+ * changes: the kind, the source, the symbology. Visibility, opacity and the
+ * scale range are applied in place, so they are left out. For GeoJSON plans
+ * the features themselves are replaced by their count and the store record's
+ * identity, so a visibility toggle skips rebuilding while renderer-only edits
+ * can be updated in place when {@link canUpdateGeoJsonRenderersInPlace} holds.
+ */
 function planSignature(plan: ArcgisLayerPlan, layer: GeoLibreLayer): string {
   const {
     title: _t,
