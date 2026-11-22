@@ -66,8 +66,8 @@ const WHOLE_SYMBOL_FIELDS = [
 ] as const satisfies readonly (keyof LayerStyle)[];
 
 /**
- * Renderer names that read better than the CIM type spelled out. A class breaks renderer of a kind
- * other than graduated colours or symbols is named by its `classBreakType`.
+ * Renderer names that read better than the CIM type spelled out. A class breaks renderer of another
+ * break type is named by that type.
  */
 const RENDERER_NAMES = new Map([
   ["CIMProportionalRenderer", "proportional symbols"],
@@ -321,10 +321,15 @@ function readTextSymbol(labelClass: CimObject, warnings: string[]): Partial<Labe
   const hollow = textOpacity === 0 && (textLook.strokeWidth ?? 0) > 0;
   const unreadableFill =
     textOpacity === 0 && textTranslation.issues.some((issue) => issue.code === "color");
+  const textLayer = refusedLayer(textTranslation);
   if (textLook.fillColor && !unreadableFill) {
     labels.color = textLook.fillColor;
     labels.colorExpression = "";
     translucent ||= textOpacity < 1 && !hollow;
+  } else if (textLayer) {
+    warnings.push(
+      `The .lyrx style's label text symbol has nothing GeoLibre can draw (its ${textLayer} cannot be drawn); labels keep their colour.`,
+    );
   } else {
     warnings.push("The .lyrx style's label colour could not be read; labels keep their colour.");
   }
@@ -343,7 +348,12 @@ function readTextSymbol(labelClass: CimObject, warnings: string[]): Partial<Labe
     translucent ||= haloOpacity < 1;
   } else {
     labels.haloWidth = 0;
-    if (haloLook && !haloLook.fillColor) {
+    const haloLayer = haloTranslation ? refusedLayer(haloTranslation) : "";
+    if (haloLayer) {
+      warnings.push(
+        `The .lyrx style's label halo has nothing GeoLibre can draw (its ${haloLayer} cannot be drawn), so labels have no halo.`,
+      );
+    } else if (haloLook && !haloLook.fillColor) {
       warnings.push(
         "The .lyrx style's label halo colour could not be read, so labels have no halo.",
       );
@@ -402,6 +412,17 @@ function labelParts(
     parts.push(`the ${part} ${name}`);
   }
   return parts;
+}
+
+/**
+ * The symbol layer that made the shared reader refuse a label's text or halo symbol, in plain words
+ * ("hatch fill"), or "" when the symbol was read or the reader names only the symbol (an unreadable
+ * colour, or no layers at all).
+ */
+function refusedLayer(translation: ReturnType<typeof translateCimSymbol>): string {
+  if (translation.translated) return "";
+  const type = translation.issues.find((issue) => issue.code === "symbol")?.cimType;
+  return type && !type.endsWith("Symbol") ? typeName(type) : "";
 }
 
 /** Rounded so `0.75 * 96 / 72` is written as 1, not 0.9999999999999999. */

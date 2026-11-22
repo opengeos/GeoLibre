@@ -603,6 +603,22 @@ describe(".lyrx style import", () => {
           0,
           /^The \.lyrx style's label transparency was not imported; labels are drawn opaque\.$/,
         ],
+        // A refused text or halo symbol names what could not be drawn.
+        [
+          { symbol: symbol("CIMPolygonSymbol", [{ type: "CIMHatchFill", enable: true }]).symbol },
+          0,
+          /^The \.lyrx style's label text symbol has nothing GeoLibre can draw \(its hatch fill cannot be drawn\); labels keep their colour\.$/,
+        ],
+        [
+          {
+            symbol: fillSymbol(rgb(0, 0, 0)),
+            haloSize: 1,
+            haloSymbol: symbol("CIMPolygonSymbol", [{ type: "CIMPictureFill", enable: true }])
+              .symbol,
+          },
+          0,
+          /^The \.lyrx style's label halo has nothing GeoLibre can draw \(its picture fill cannot be drawn\), so labels have no halo\.$/,
+        ],
         // Hollow text: named as an outline, not as transparency.
         [
           { symbol: symbol("CIMPolygonSymbol", [solidStroke(rgb(0, 0, 255))]).symbol },
