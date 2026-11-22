@@ -114,7 +114,7 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
   // so visibleCells is at least 1 by construction.
 
   const url = await rgbaToPngDataUrl(viewshedToRgba(result), result.width, result.height);
-  if (!url) return null;
+  if (!url || options.signal?.aborted) return null;
 
   const [west, south, east, north] = result.bbox;
   // The store's own image-overlay action rather than a hand-rolled layer: it

@@ -834,7 +834,26 @@ describe("WORKER_VECTOR_TOOL_IDS", () => {
     assert.equal(captured.features.length, 1);
     const geom = captured.features[0].geometry;
     assert.equal(geom.type, "Polygon");
-    assert.ok(geom.coordinates[0].length >= 4);
+    const ring = geom.coordinates[0];
+    assert.ok(ring.length >= 4);
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let signedTwiceArea = 0;
+    for (let i = 0; i < ring.length; i += 1) {
+      const [x, y] = ring[i];
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+      if (i + 1 < ring.length) {
+        const [nx, ny] = ring[i + 1];
+        signedTwiceArea += x * ny - nx * y;
+      }
+    }
+    assert.deepEqual([minX, minY, maxX, maxY], [0, 0, 2, 1]);
+    assert.ok(Math.abs(Math.abs(signedTwiceArea) / 2 - 2) < 1e-9);
   });
 });
 

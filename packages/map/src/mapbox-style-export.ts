@@ -205,12 +205,10 @@ function buildLabelLayer(
   }
 
   // Labels at the default 0/24 inherit the layer's own zoom window, so
-  // intersect the label range with the normalized style range (tighter bound
-  // on each end), matching the live map's intersectZoomRange behavior.
-  const rawLabelMin = clampZoom(labels.minZoom, MIN_LAYER_ZOOM);
-  const rawLabelMax = clampZoom(labels.maxZoom, MAX_LAYER_ZOOM);
-  const labelMin = Math.min(rawLabelMin, rawLabelMax);
-  const labelMax = Math.max(rawLabelMin, rawLabelMax);
+  // intersect the raw label range with the normalized style range (tighter
+  // bound on each end), matching the live map's intersectZoomRange behavior.
+  const labelMin = clampZoom(labels.minZoom, MIN_LAYER_ZOOM);
+  const labelMax = clampZoom(labels.maxZoom, MAX_LAYER_ZOOM);
   const rawStyleMin = clampZoom(styleValue(style, "minZoom"), MIN_LAYER_ZOOM);
   const rawStyleMax = clampZoom(styleValue(style, "maxZoom"), MAX_LAYER_ZOOM);
   const styleMin = Math.min(rawStyleMin, rawStyleMax);
@@ -223,7 +221,7 @@ function buildLabelLayer(
   const zoomMax = intersectedMin > intersectedMax ? zoomMin : intersectedMax;
   const range: { minzoom?: number; maxzoom?: number } = {};
   if (zoomMin > MIN_LAYER_ZOOM) range.minzoom = zoomMin;
-  if (zoomMax < MAX_LAYER_ZOOM) range.maxzoom = zoomMax;
+  if (zoomMax < MAX_LAYER_ZOOM || zoomMax === zoomMin) range.maxzoom = zoomMax;
 
   return {
     id: `${idBase}-label`,

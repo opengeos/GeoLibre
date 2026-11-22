@@ -297,10 +297,18 @@ export async function decodeTile(
   // Promise.all with no recovery, since fetch has no default timeout.
   const timeout = new AbortController();
   const timer = setTimeout(() => timeout.abort(), timeoutMs);
-  const composed =
-    signal && typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function"
-      ? AbortSignal.any([signal, timeout.signal])
-      : (signal ?? timeout.signal);
+  let composed: AbortSignal = timeout.signal;
+  let onCallerAbort: (() => void) | null = null;
+  if (signal) {
+    if (typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function") {
+      composed = AbortSignal.any([signal, timeout.signal]);
+    } else if (signal.aborted) {
+      timeout.abort();
+    } else {
+      onCallerAbort = () => timeout.abort();
+      signal.addEventListener("abort", onCallerAbort, { once: true });
+    }
+  }
   try {
     const response = await fetch(url, { signal: composed });
     if (!response.ok) return null;
@@ -327,6 +335,7 @@ export async function decodeTile(
     return null;
   } finally {
     clearTimeout(timer);
+    if (onCallerAbort && signal) signal.removeEventListener("abort", onCallerAbort);
   }
 }
 

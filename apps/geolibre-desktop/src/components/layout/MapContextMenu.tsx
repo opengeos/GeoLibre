@@ -258,26 +258,15 @@ export function MapContextMenu({
 
   const [viewshedBusy, setViewshedBusy] = useState(false);
   const viewshedAbortRef = useRef<AbortController | null>(null);
-  useEffect(() => {
-    return () => {
-      viewshedAbortRef.current?.abort();
-      viewshedAbortRef.current = null;
-    };
-  }, []);
+  useEffect(() => () => viewshedAbortRef.current?.abort(), []);
   const viewshedHere = useCallback(
     (radiusMeters: number) => {
       if (!menu || viewshedBusy) return;
       const { lng, lat } = menu;
-      viewshedAbortRef.current?.abort();
       const controller = new AbortController();
       viewshedAbortRef.current = controller;
       setViewshedBusy(true);
       const toolName = t("quickAnalysis.viewshedToolName");
-      // Reported through the Quick Analysis banner like every other action in
-      // this menu rather than failing silently: the terrain fetch takes seconds
-      // and can fail, and a click with no feedback either way reads as a broken
-      // menu item. The returned setter is bound to this run, so a slow viewshed
-      // cannot overwrite the status of a faster action started after it.
       const reportStatus = beginQuickAnalysisRun(toolName);
       void runViewshed({
         lng,
@@ -290,30 +279,28 @@ export function MapContextMenu({
         }),
       })
         .then((result) => {
-          if (controller.signal.aborted) return;
           reportStatus(
-            result
+            controller.signal.aborted || result
               ? { phase: "idle" }
               : { phase: "error", toolName, message: t("quickAnalysis.viewshedNoResult") },
           );
         })
         .catch((error: unknown) => {
-          if (
-            controller.signal.aborted ||
-            (error instanceof Error && error.name === "AbortError")
-          ) {
-            return;
-          }
-          reportStatus({
-            phase: "error",
-            toolName,
-            message: error instanceof Error ? error.message : t("quickAnalysis.viewshedNoResult"),
-          });
+          const aborted =
+            controller.signal.aborted || (error instanceof Error && error.name === "AbortError");
+          reportStatus(
+            aborted
+              ? { phase: "idle" }
+              : {
+                  phase: "error",
+                  toolName,
+                  message:
+                    error instanceof Error ? error.message : t("quickAnalysis.viewshedNoResult"),
+                },
+          );
         })
         .finally(() => {
-          if (viewshedAbortRef.current === controller) {
-            viewshedAbortRef.current = null;
-          }
+          if (viewshedAbortRef.current === controller) viewshedAbortRef.current = null;
           setViewshedBusy(false);
         });
     },
