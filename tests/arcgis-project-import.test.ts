@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 import { DEFAULT_LAYER_STYLE } from "@geolibre/core";
 import { strToU8, zipSync } from "fflate";
 import {
@@ -8,6 +8,9 @@ import {
   readArcgisProject,
 } from "../apps/geolibre-desktop/src/lib/arcgis-project-import";
 import { aprx, groupLayer, hostedFeatureLayer } from "./helpers/arcgis-aprx-fixtures";
+import { loadArcgisFileGeodatabaseLayers } from "../apps/geolibre-desktop/src/lib/arcgis-gdb-import";
+import { useAppStore, withoutHistory } from "../packages/core/src/store";
+import { geojsonLayer } from "./helpers/layer-fixtures";
 
 function featureLayer(name: string, path: string) {
   return {
@@ -927,5 +930,555 @@ describe("ArcGIS Pro project import", () => {
         cases.map(([name]) => [name, "service"]),
       );
     });
+  });
+});
+
+describe("ArcGIS Pro File Geodatabase layers", () => {
+  function gdbLayer(name: string, workspace: string, dataset = name.toLowerCase()) {
+    return {
+      ...featureLayer(name, ""),
+      featureTable: {
+        dataConnection: {
+          workspaceFactory: "FileGDB",
+          workspaceConnectionString: `DATABASE=${workspace}`,
+          dataset,
+        },
+      },
+    };
+  }
+
+  function gdbProject() {
+    return JSON.stringify({
+      type: "CIMMap",
+      name: "Survey",
+      defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+      layerDefinitions: [
+        featureLayer("Roads", "../data"),
+        {
+          type: "CIMGroupLayer",
+          name: "Cadastre",
+          visibility: false,
+          layerDefinitions: [gdbLayer("Parcels", "..\\data\\city.gdb")],
+        },
+        {
+          type: "CIMGroupLayer",
+          name: "Missing",
+          layerDefinitions: [gdbLayer("Gone", "C:\\data\\gone.gdb")],
+        },
+        gdbLayer("Wells", "..\\data\\city.gdb", "WELLS"),
+        gdbLayer("Shared", "\\\\server\\share\\city.gdb"),
+      ],
+    });
+  }
+
+  it("keeps feature classes as ordered, grouped, styled layers when asked", () => {
+    const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {
+      readFileGeodatabase: true,
+    });
+    // Bottom first, as the store keeps them: ArcGIS lists Roads at the top.
+    assert.deepEqual(
+      result.project.layers.map((layer) => [layer.name, layer.sourcePath]),
+      [
+        ["Wells", "C:/work/data/city.gdb"],
+        ["Gone", "C:/data/gone.gdb"],
+        ["Parcels", "C:/work/data/city.gdb"],
+        ["Roads", "C:/work/data/roads.shp"],
+      ],
+    );
+    const parcels = result.project.layers[2];
+    assert.equal(parcels.groupId, result.project.layerGroups?.[0].id);
+    assert.equal(result.project.layerGroups?.[0].visible, false);
+    assert.equal(parcels.style.fillColor, "#0a141e");
+    assert.equal(parcels.geojson, undefined);
+    // Saved like an Add data → File geodatabase layer: features embedded, not
+    // re-read from a path the reopen code cannot open.
+    assert.equal(parcels.metadata.sourceKind, "gdb");
+    assert.equal(parcels.metadata.localFileReloadable, undefined);
+    assert.deepEqual(
+      result.fileGeodatabaseLayers.map((entry) => [entry.name, entry.gdbPath, entry.featureClass]),
+      [
+        ["Parcels", "C:/work/data/city.gdb", "parcels"],
+        ["Gone", "C:/data/gone.gdb", "gone"],
+        ["Wells", "C:/work/data/city.gdb", "WELLS"],
+      ],
+    );
+    assert.deepEqual(
+      result.warnings.map((warning) => [warning.layerName, warning.reason]),
+      [["Shared", "network-path"]],
+    );
+  });
+
+  it("still reports feature classes as unsupported by default", () => {
+    const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx");
+    assert.deepEqual(result.fileGeodatabaseLayers, []);
+    assert.deepEqual(
+      result.project.layers.map((layer) => layer.name),
+      ["Roads"],
+    );
+    assert.deepEqual(
+      result.warnings.map((warning) => [warning.layerName, warning.reason]),
+      [
+        ["Parcels", "file-geodatabase"],
+        ["Gone", "file-geodatabase"],
+        ["Wells", "file-geodatabase"],
+        ["Shared", "network-path"],
+      ],
+    );
+  });
+
+  it("only reads geodatabases that are local .gdb folders", () => {
+    // The path comes from the project file and the desktop sidecar does not
+    // confine its reads, so a crafted connection must not reach an arbitrary
+    // folder, a URL or a GDAL virtual path. Those stay listed, unread.
+    const project = JSON.stringify({
+      type: "CIMMap",
+      name: "Crafted",
+      defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+      layerDefinitions: [
+        gdbLayer("Folder", "C:\\Users\\someone\\Documents"),
+        gdbLayer("Url", "https://example.com/data/city.gdb"),
+        gdbLayer("Vsi", "/vsicurl/https://example.com/city.gdb"),
+        gdbLayer("Zip", "/vsizip/C:/data/city.zip/city.gdb"),
+        gdbLayer("Query", "C:\\data\\city.gdb?mode=x"),
+        gdbLayer("Posix", "/data/city.gdb/"),
+        gdbLayer("Relative", "..\\data\\City.GDB"),
+        // Names a geodatabase but no feature class: reported as the default
+        // path reports it, not as a missing source.
+        gdbLayer("NoDataset", "C:\\data\\city.gdb", ""),
+      ],
+    });
+    const result = importArcgisProject(project, "C:\\work\\projects\\survey.mapx", {
+      readFileGeodatabase: true,
+    });
+    assert.deepEqual(
+      result.fileGeodatabaseLayers.map((entry) => [entry.name, entry.gdbPath]),
+      [
+        ["Posix", "/data/city.gdb"],
+        ["Relative", "C:/work/data/City.GDB"],
+      ],
+    );
+    assert.deepEqual(
+      result.warnings.map((warning) => [warning.layerName, warning.reason]),
+      [
+        ["Folder", "file-geodatabase"],
+        ["Url", "file-geodatabase"],
+        ["Vsi", "file-geodatabase"],
+        ["Zip", "file-geodatabase"],
+        ["Query", "file-geodatabase"],
+        ["NoDataset", "file-geodatabase"],
+      ],
+    );
+  });
+
+  it("refuses a relative geodatabase in a project opened from a network share", () => {
+    const project = JSON.stringify({
+      type: "CIMMap",
+      name: "Shared",
+      defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+      layerDefinitions: [gdbLayer("Parcels", "..\\city.gdb")],
+    });
+    const result = importArcgisProject(project, "\\\\server\\share\\proj\\survey.aprx", {
+      readFileGeodatabase: true,
+    });
+    // Normalising would otherwise turn it into the rooted local path
+    // /server/share/city.gdb.
+    assert.deepEqual(result.fileGeodatabaseLayers, []);
+    assert.deepEqual(
+      result.warnings.map((warning) => [warning.layerName, warning.reason]),
+      [["Parcels", "network-path"]],
+    );
+  });
+
+  it("fills readable layers and drops missing ones with their empty groups", async () => {
+    const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {
+      readFileGeodatabase: true,
+    });
+    const reads: string[] = [];
+    let listings = 0;
+    await loadArcgisFileGeodatabaseLayers(result, {
+      start: async () => undefined,
+      listLayers: async (gdbPath) => {
+        listings += 1;
+        if (gdbPath === "C:/data/gone.gdb") throw new Error("not found");
+        return [
+          { name: "parcels", feature_count: 1, geometry_type: "Polygon", crs: "EPSG:2193" },
+          { name: "wells", feature_count: 1, geometry_type: "Point", crs: "EPSG:4326" },
+        ];
+      },
+      readLayer: async (gdbPath, featureClass) => {
+        reads.push(`${gdbPath}|${featureClass}`);
+        return { type: "FeatureCollection", features: [] };
+      },
+    });
+    // Parcels and Wells share a geodatabase, so it is listed once; the
+    // listing's casing ("wells") is what is read, not the connection's.
+    assert.equal(listings, 2);
+    assert.deepEqual(reads, ["C:/work/data/city.gdb|parcels", "C:/work/data/city.gdb|wells"]);
+    assert.deepEqual(
+      result.project.layers.map((layer) => [layer.name, layer.geojson !== undefined]),
+      [
+        ["Wells", true],
+        ["Parcels", true],
+        ["Roads", false],
+      ],
+    );
+    assert.equal(result.project.layers[1].metadata.sourceCrs, "EPSG:2193");
+    assert.equal(result.project.layers[0].metadata.gdbLayer, "wells");
+    assert.deepEqual(
+      result.project.layerGroups?.map((group) => group.name),
+      ["Cadastre"],
+    );
+    assert.deepEqual(
+      result.warnings.map((warning) => [warning.layerName, warning.reason]),
+      [
+        ["Shared", "network-path"],
+        // A failed listing is reported as unreadable: it may be a moved
+        // geodatabase, but also a busy or failed sidecar.
+        ["Gone", "file-geodatabase-read"],
+      ],
+    );
+  });
+
+  it("warns instead of misplacing a layer with no CRS, or a failed read", async () => {
+    const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {
+      readFileGeodatabase: true,
+    });
+    await loadArcgisFileGeodatabaseLayers(result, {
+      start: async () => undefined,
+      listLayers: async () => [
+        { name: "parcels", feature_count: 1, geometry_type: "Polygon", crs: null },
+        { name: "gone", feature_count: 1, geometry_type: "Point", crs: "EPSG:4326" },
+      ],
+      readLayer: async () => {
+        throw new Error("boom");
+      },
+    });
+    assert.deepEqual(
+      result.project.layers.map((layer) => layer.name),
+      ["Roads"],
+    );
+    assert.deepEqual(result.project.layerGroups, []);
+    assert.deepEqual(
+      result.warnings.map((warning) => [warning.layerName, warning.reason]),
+      [
+        ["Shared", "network-path"],
+        ["Parcels", "file-geodatabase-crs"],
+        ["Gone", "file-geodatabase-read"],
+        ["Wells", "missing-source"],
+      ],
+    );
+  });
+
+  it("reads only the chosen map's geodatabase layers from a multi-map project", async () => {
+    const mapItem = (name: string) => ({
+      type: "CIMProjectItem",
+      itemType: "Map",
+      catalogPath: `CIMPATH=Maps/${name}.json`,
+    });
+    const archive = zipSync({
+      "GISProject.json": strToU8(
+        JSON.stringify({ projectItems: [mapItem("Overview"), mapItem("Assets")] }),
+      ),
+      "Maps/Overview.json": strToU8(
+        JSON.stringify({
+          type: "CIMMap",
+          name: "Overview",
+          layerDefinitions: [gdbLayer("Boundary", "..\\data\\overview.gdb")],
+        }),
+      ),
+      "Maps/Assets.json": strToU8(
+        JSON.stringify({
+          type: "CIMMap",
+          name: "Assets",
+          layers: ["CIMPATH=Layers/Pipes.lyrx", "CIMPATH=Layers/Valves.lyrx"],
+        }),
+      ),
+      "Layers/Pipes.lyrx": strToU8(JSON.stringify(gdbLayer("Pipes", "..\\data\\assets.gdb"))),
+      "Layers/Valves.lyrx": strToU8(JSON.stringify(featureLayer("Valves", "..\\data"))),
+    });
+
+    const reader = readArcgisProject(archive, "C:\\work\\projects\\city.aprx", {
+      readFileGeodatabase: true,
+    });
+    assert.deepEqual(
+      reader.maps.map((map) => map.name),
+      ["Overview", "Assets"],
+    );
+    const assets = reader.importMap(1);
+    // The other map's geodatabase is never queued, so it is never listed or read.
+    assert.deepEqual(
+      assets.fileGeodatabaseLayers.map((entry) => [entry.name, entry.gdbPath]),
+      [["Pipes", "C:/work/data/assets.gdb"]],
+    );
+    const listed: string[] = [];
+    await loadArcgisFileGeodatabaseLayers(assets, {
+      start: async () => undefined,
+      listLayers: async (gdbPath) => {
+        listed.push(gdbPath);
+        return [{ name: "pipes", feature_count: 0, geometry_type: "LineString", crs: "EPSG:4326" }];
+      },
+      readLayer: async () => ({ type: "FeatureCollection", features: [] }),
+    });
+    assert.deepEqual(listed, ["C:/work/data/assets.gdb"]);
+    assert.equal(assets.project.name, "Assets");
+    assert.deepEqual(
+      assets.project.layers.map((layer) => [layer.name, layer.geojson !== undefined]),
+      [
+        ["Valves", false],
+        ["Pipes", true],
+      ],
+    );
+    // Only the missing extent is reported (the fixture saves none); no
+    // geodatabase layer was dropped.
+    assert.deepEqual(
+      assets.warnings.map((warning) => warning.reason),
+      ["map-extent"],
+    );
+    // The picker's default (first) map still gets its own layer, and the
+    // option carries through importArcgisProject too.
+    assert.deepEqual(
+      importArcgisProject(archive, "C:\\work\\projects\\city.aprx", {
+        readFileGeodatabase: true,
+      }).fileGeodatabaseLayers.map((entry) => entry.name),
+      ["Boundary"],
+    );
+  });
+
+  it("keeps ArcGIS Pro's order across geodatabase layers, rasters and services", async () => {
+    const featureRoot =
+      "https://services3.example.com/abc/arcgis/rest/services/Water/FeatureServer";
+    const result = importArcgisProject(
+      JSON.stringify({
+        type: "CIMMap",
+        name: "Mixed",
+        layerDefinitions: [
+          gdbLayer("Parcels", "C:\\data\\city.gdb"),
+          hostedFeatureLayer("Mains", featureRoot, "3"),
+          {
+            type: "CIMGroupLayer",
+            name: "Base",
+            layerDefinitions: [
+              {
+                type: "CIMVectorTileLayer",
+                name: "Streets",
+                sourceURI: "0123456789abcdef0123456789abcdef",
+              },
+              {
+                type: "CIMRasterLayer",
+                name: "Imagery",
+                dataConnection: {
+                  workspaceConnectionString: "DATABASE=C:\\rasters",
+                  dataset: "ortho.tif",
+                },
+              },
+            ],
+          },
+          gdbLayer("Lots", "C:\\data\\city.gdb"),
+          featureLayer("Roads", "C:\\data"),
+        ],
+      }),
+      "C:\\work\\mixed.mapx",
+      { readFileGeodatabase: true },
+    );
+    const id = (name: string) =>
+      [...result.project.layers, ...result.rasters, ...result.services].find(
+        (item) => item.name === name,
+      )?.id;
+    // Bottom first: Roads, Lots, then the group (Imagery below Streets), then
+    // the Mains service, then Parcels on top.
+    assert.deepEqual(
+      result.layerOrder,
+      ["Roads", "Lots", "Imagery", "Streets", "Mains", "Parcels"].map(id),
+    );
+    const lots = id("Lots");
+    await loadArcgisFileGeodatabaseLayers(result, {
+      start: async () => undefined,
+      listLayers: async () => [
+        { name: "parcels", feature_count: 0, geometry_type: "Polygon", crs: "EPSG:4326" },
+      ],
+      readLayer: async () => ({ type: "FeatureCollection", features: [] }),
+    });
+    // The unreadable feature class leaves the order with its layer.
+    assert.ok(lots && !result.layerOrder.includes(lots));
+    assert.deepEqual(
+      result.layerOrder,
+      ["Roads", "Imagery", "Streets", "Mains", "Parcels"].map(id),
+    );
+
+    // As the desktop hook does: load the project, then add the raster and the
+    // services on top of the stack under new store ids as each lands (here in
+    // an order unlike ArcGIS Pro's), and apply the import order once.
+    useAppStore.getState().loadProject(result.project, null);
+    const storeIds = new Map(result.project.layers.map((layer) => [layer.id, layer.id]));
+    for (const [name, storeId] of [
+      ["Mains", "arcgis-layer-1"],
+      ["Imagery", "raster-1"],
+      ["Streets", "arcgis-layer-2"],
+    ]) {
+      useAppStore.getState().addLayer(geojsonLayer({ id: storeId, name }));
+      const importId = id(name);
+      assert.ok(importId);
+      storeIds.set(importId, storeId);
+    }
+    const order = result.layerOrder.flatMap((importId) => storeIds.get(importId) ?? []);
+    withoutHistory(() => useAppStore.getState().applyLayerOrder(order));
+    assert.deepEqual(
+      useAppStore.getState().layers.map((layer) => layer.name),
+      ["Roads", "Imagery", "Streets", "Mains", "Parcels"],
+    );
+  });
+
+  // When another project opens: before the reads, while the only layer is
+  // read (whether that read then succeeds or fails), or during the first of
+  // several reads. None of them may hand back layers.
+  for (const { when, project, abortAt, readFails, expectedCalls } of [
+    { when: "before the reads", project: "one", abortAt: "start", expectedCalls: [] },
+    {
+      when: "during the last read",
+      project: "one",
+      abortAt: "read",
+      expectedCalls: ["start", "read"],
+    },
+    {
+      when: "during a last read that fails",
+      project: "one",
+      abortAt: "read",
+      readFails: true,
+      expectedCalls: ["start", "read"],
+    },
+    {
+      when: "during an earlier read",
+      project: "many",
+      abortAt: "read",
+      expectedCalls: ["start", "read"],
+    },
+  ]) {
+    it(`rejects without filling layers when abandoned ${when}`, async () => {
+      const result = importArcgisProject(
+        project === "one"
+          ? JSON.stringify({
+              type: "CIMMap",
+              name: "One",
+              layerDefinitions: [gdbLayer("Parcels", "C:\\data\\city.gdb")],
+            })
+          : gdbProject(),
+        "C:\\work\\projects\\survey.mapx",
+        { readFileGeodatabase: true },
+      );
+      const controller = new AbortController();
+      if (abortAt === "start") controller.abort();
+      const calls: string[] = [];
+      await assert.rejects(
+        loadArcgisFileGeodatabaseLayers(
+          result,
+          {
+            start: async () => {
+              calls.push("start");
+            },
+            listLayers: async () => [
+              { name: "parcels", feature_count: 0, geometry_type: "Polygon", crs: "EPSG:4326" },
+            ],
+            readLayer: async () => {
+              calls.push("read");
+              controller.abort();
+              if (readFails) throw new Error("sidecar stopped");
+              return { type: "FeatureCollection", features: [] };
+            },
+          },
+          controller.signal,
+        ),
+        { name: "AbortError" },
+      );
+      assert.deepEqual(calls, expectedCalls);
+      assert.ok(result.project.layers.every((layer) => layer.geojson === undefined));
+    });
+  }
+
+  // As the sidecar client does: the wait rejects with the abort.
+  for (const stage of ["listing", "read"] as const) {
+    it(`does not log an abandoned ${stage} as a failed read`, async () => {
+      const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {
+        readFileGeodatabase: true,
+      });
+      const controller = new AbortController();
+      const abandon = (signal?: AbortSignal) => {
+        controller.abort();
+        signal?.throwIfAborted();
+      };
+      const warn = mock.method(console, "warn", () => {});
+      try {
+        await assert.rejects(
+          loadArcgisFileGeodatabaseLayers(
+            result,
+            {
+              start: async () => {},
+              listLayers: async (_gdbPath, signal) => {
+                if (stage === "listing") abandon(signal);
+                return [
+                  { name: "parcels", feature_count: 0, geometry_type: "Polygon", crs: "EPSG:4326" },
+                ];
+              },
+              readLayer: async (_gdbPath, _featureClass, signal) => {
+                abandon(signal);
+                return { type: "FeatureCollection", features: [] };
+              },
+            },
+            controller.signal,
+          ),
+          { name: "AbortError" },
+        );
+        assert.equal(warn.mock.callCount(), 0);
+      } finally {
+        warn.mock.restore();
+      }
+    });
+  }
+
+  it("stops waiting for a sidecar that is still starting when abandoned", async () => {
+    const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {
+      readFileGeodatabase: true,
+    });
+    const controller = new AbortController();
+    const error = mock.method(console, "error", () => {});
+    try {
+      const loading = loadArcgisFileGeodatabaseLayers(
+        result,
+        {
+          // Never settles, like a sidecar still bootstrapping.
+          start: () => new Promise(() => {}),
+          listLayers: async () => assert.fail("must not list"),
+          readLayer: async () => assert.fail("must not read"),
+        },
+        controller.signal,
+      );
+      controller.abort();
+      await assert.rejects(loading, { name: "AbortError" });
+      // Abandoned, not reported as a sidecar that failed to start.
+      assert.equal(error.mock.callCount(), 0);
+      assert.ok(result.project.layers.every((layer) => layer.geojson === undefined));
+    } finally {
+      error.mock.restore();
+    }
+  });
+
+  it("reports every layer as unreadable when the sidecar cannot start", async () => {
+    const result = importArcgisProject(gdbProject(), "C:\\work\\projects\\survey.mapx", {
+      readFileGeodatabase: true,
+    });
+    await loadArcgisFileGeodatabaseLayers(result, {
+      start: async () => {
+        throw new Error("no sidecar");
+      },
+      listLayers: async () => assert.fail("must not list"),
+      readLayer: async () => assert.fail("must not read"),
+    });
+    assert.deepEqual(
+      result.warnings.slice(1).map((warning) => [warning.layerName, warning.reason]),
+      [
+        ["Parcels", "file-geodatabase-read"],
+        ["Gone", "file-geodatabase-read"],
+        ["Wells", "file-geodatabase-read"],
+      ],
+    );
   });
 });
