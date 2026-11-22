@@ -1287,3 +1287,48 @@ def test_raster_calculator_allows_ordinary_exponents(tmp_path: Path) -> None:
     with rasterio.open(out) as ds:
         result = ds.read(1).astype("float64")
     assert np.allclose(result, (a**2) ** 0.5 * 0.25, atol=1e-4)
+
+
+@requires_rasterio
+def test_raster_calculator_preserves_round_decimals_and_caps_huge_ints(tmp_path: Path) -> None:
+    """``round(A, 2)`` keeps integer ``decimals`` while oversized integer literals fail cleanly."""
+    import numpy as np
+    import rasterio
+
+    src = _write_dem(tmp_path / "dem.tif")
+    with rasterio.open(src) as ds:
+        a = ds.read(1).astype("float64")
+
+    for expression in ("round(A / 3, 2)", "round(A / 3, decimals=2)", "round(A, -1)"):
+        out = tmp_path / f"round_{abs(hash(expression))}.tif"
+        _run_script(
+            _RASTER_TOOL_SCRIPTS["raster-calc"],
+            {"input_path": str(src), "output_path": str(out), "expression": expression},
+        )
+        with rasterio.open(out) as ds:
+            result = ds.read(1).astype("float64")
+        expected = np.round(a, -1) if "-1" in expression else np.round(a / 3.0, 2)
+        assert np.allclose(result, expected, atol=1e-4), expression
+
+    out_huge = tmp_path / "huge.tif"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _RASTER_TOOL_SCRIPTS["raster-calc"],
+            json.dumps(
+                {
+                    "input_path": str(src),
+                    "output_path": str(out_huge),
+                    "expression": f"{'9' * 400} + A",
+                }
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert completed.returncode != 0
+    assert "Numeric literal is too large" in (completed.stdout + completed.stderr)
+    assert not out_huge.exists()

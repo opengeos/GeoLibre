@@ -1022,6 +1022,14 @@ const RESTORABLE_VECTOR_EXTENSIONS: [&str; 17] = [
     "zip",
 ];
 
+/// Whether `path` ends in one of the known restorable local vector extensions.
+pub(crate) fn has_allowed_local_vector_extension(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower
+        .rsplit_once('.')
+        .is_some_and(|(_, extension)| RESTORABLE_VECTOR_EXTENSIONS.contains(&extension))
+}
+
 /// Whether the renderer is permitted to re-read `path` through `read_local_file`:
 /// an absolute local path (POSIX `/...` or a Windows drive-letter `C:\...`, never
 /// a UNC `\\host\share`), free of `..` traversal segments, ending in a known
@@ -1038,13 +1046,6 @@ const RESTORABLE_VECTOR_EXTENSIONS: [&str; 17] = [
 /// byte-oriented rather than `std::path` based so they behave identically for the
 /// Windows-style paths a project may carry regardless of the host the binary
 /// runs on.
-pub(crate) fn has_allowed_local_vector_extension(path: &str) -> bool {
-    let lower = path.to_ascii_lowercase();
-    lower
-        .rsplit_once('.')
-        .is_some_and(|(_, extension)| RESTORABLE_VECTOR_EXTENSIONS.contains(&extension))
-}
-
 pub(crate) fn is_allowed_local_vector_path(path: &str) -> bool {
     // Absolute, non-UNC, no `..` traversal — split into `is_safe_absolute_path`
     // so the security-relevant byte-parsing lives in one place rather than being
@@ -1059,9 +1060,8 @@ pub(crate) fn is_allowed_local_vector_path(path: &str) -> bool {
 }
 
 /// Convert a canonicalized local path to a string usable by native libraries
-/// (stripping Windows' `\\?\` verbatim drive prefix while preserving POSIX
-/// paths). Callers must check `is_unc_resolved_path` first.
-#[cfg(feature = "native-duckdb")]
+/// and asset-protocol scopes (stripping Windows' `\\?\` verbatim drive prefix
+/// while preserving POSIX paths). Callers must check `is_unc_resolved_path` first.
 pub(crate) fn canonical_local_path_string(canonical: &Path) -> String {
     let raw = canonical.to_string_lossy();
     #[cfg(windows)]
@@ -1365,8 +1365,9 @@ fn allow_raster_asset(
             "Refusing to expose \"{path}\": resolves to a non-GeoTIFF file"
         ));
     }
+    let allowed_path = PathBuf::from(canonical_local_path_string(&canonical));
     app.asset_protocol_scope()
-        .allow_file(&canonical)
+        .allow_file(&allowed_path)
         .map_err(|error| format!("Could not authorize local raster: {error}"))
 }
 
@@ -1460,7 +1461,10 @@ fn read_shapefile_siblings(path: String) -> Result<Vec<ShapefileSibling>, String
     let Some(canonical_parent) = canonical_shp.parent() else {
         return Ok(Vec::new());
     };
-    let Some(stem) = Path::new(&path).file_stem().and_then(|stem| stem.to_str()) else {
+    let Some(canonical_stem) = canonical_shp.file_stem().and_then(|stem| stem.to_str()) else {
+        return Ok(Vec::new());
+    };
+    let Some(requested_stem) = Path::new(&path).file_stem().and_then(|stem| stem.to_str()) else {
         return Ok(Vec::new());
     };
     let entries = match fs::read_dir(canonical_parent) {
@@ -1478,7 +1482,7 @@ fn read_shapefile_siblings(path: String) -> Result<Vec<ShapefileSibling>, String
         ) else {
             continue;
         };
-        if !entry_stem.eq_ignore_ascii_case(stem) {
+        if !entry_stem.eq_ignore_ascii_case(canonical_stem) {
             continue;
         }
         let extension = extension.to_ascii_lowercase();
@@ -1509,7 +1513,7 @@ fn read_shapefile_siblings(path: String) -> Result<Vec<ShapefileSibling>, String
         }
         if let Ok(data) = fs::read(&canonical_entry) {
             siblings.push(ShapefileSibling {
-                name: format!("{stem}.{extension}"),
+                name: format!("{requested_stem}.{extension}"),
                 data,
             });
         }

@@ -134,6 +134,12 @@ export interface RelayOptions {
   idleTtlMs?: number;
   trustProxy?: boolean;
   /**
+   * Number of trusted reverse-proxy hops in front of the relay when
+   * `trustProxy` is enabled (defaults to `1`, or `TRUST_PROXY_HOPS`).
+   * The client IP is read that many entries from the right of `X-Forwarded-For`.
+   */
+  trustProxyHops?: number;
+  /**
    * HMAC-SHA256 secret shared with this deployment's identity issuer, normally
    * from `COLLAB_IDENTITY_SECRET`. Unset disables identity: `identityToken` is
    * ignored, every joiner is anonymous, and "require a signed-in account"
@@ -182,6 +188,10 @@ export function createRelay(options: RelayOptions = {}): {
     options.idleTtlMs ?? positive(process.env.COLLAB_IDLE_TTL_MS, DEFAULT_IDLE_TTL_MS);
   const trustProxy =
     options.trustProxy ?? (process.env.TRUST_PROXY === "true" || process.env.TRUST_PROXY === "1");
+  const trustProxyHops = Math.max(
+    1,
+    Math.floor(options.trustProxyHops ?? positive(process.env.TRUST_PROXY_HOPS, 1)),
+  );
   const identitySecret = options.identitySecret ?? process.env.COLLAB_IDENTITY_SECRET;
   const identitySupported = isIdentityConfigured(identitySecret);
   const store = new SessionStore(dbPath);
@@ -373,8 +383,6 @@ export function createRelay(options: RelayOptions = {}): {
         return;
       }
 
-      const durableOverride = store.getDurableOverride(id, participantKey);
-
       if (matchedInvite) {
         // Use an atomic SQL UPDATE to close the TOCTOU window: the initial
         // maxUses check happened before `await verifyIdentityToken`,
@@ -386,8 +394,11 @@ export function createRelay(options: RelayOptions = {}): {
         }
       }
 
-      // Compute initial edit override AFTER claiming the invite so a joiner
-      // who loses the maxUses race on a co-edit invite never receives edit rights.
+      // Resolve durable override and initial edit rights AFTER claiming the
+      // invite, using the participant's final post-claim key, so a claim loser
+      // never inherits an invite-keyed override.
+      const finalParticipantKey = getParticipantKey({ ...joiningParticipant, inviteToken });
+      const durableOverride = store.getDurableOverride(id, finalParticipantKey);
       let initialOverride: boolean | undefined = undefined;
       if (durableOverride !== undefined) {
         initialOverride = durableOverride;
@@ -845,14 +856,16 @@ export function createRelay(options: RelayOptions = {}): {
       const rawXff = trustProxy
         ? (request.headers["x-forwarded-for"] as string | undefined)
         : undefined;
-      // Use the rightmost X-Forwarded-For entry appended by the trusted proxy
-      // rather than the leftmost client-supplied value, which can be spoofed.
+      // Skip `trustProxyHops` rightmost entries appended by trusted proxies
+      // instead of reading the leftmost client-spoofable entry.
       const xffParts = rawXff
         ?.split(",")
         .map((part) => part.trim())
         .filter(Boolean);
       const clientIp =
-        (xffParts && xffParts.length > 0 ? xffParts[xffParts.length - 1] : undefined) ||
+        (xffParts && xffParts.length > 0
+          ? xffParts[Math.max(0, xffParts.length - trustProxyHops)]
+          : undefined) ||
         request.socket.remoteAddress ||
         "unknown";
       if (!checkRateLimit(clientIp, 10, 60_000)) {

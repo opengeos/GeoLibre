@@ -467,7 +467,9 @@ const BLOCKED_SOURCE_URL_SCHEME = /^\s*(?:javascript|vbscript|data|file|blob):/i
  * check should not depend on which sink reads the field later.
  */
 function normalizedUrl(value: string): string {
-  return value.replace(/[\t\n\r]/g, "");
+  // Strip ASCII tab/CR/LF anywhere and leading C0 controls/spaces, matching
+  // WHATWG URL parsing before checking the scheme.
+  return value.replace(/[\t\n\r]/g, "").replace(/^[\u0000-\u0020]+/, "");
 }
 
 /**

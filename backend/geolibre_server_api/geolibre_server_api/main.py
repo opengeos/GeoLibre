@@ -2152,7 +2152,7 @@ def create_app(
                 else None
             )
             allowed = org_role == "administrator" or (
-                group.join_policy == "open"
+                group.join_policy in {"open", "request"}
                 and (group.organization_id is None or org_role is not None)
             )
             if not allowed:

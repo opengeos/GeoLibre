@@ -1350,6 +1350,16 @@ def build_identity_router() -> APIRouter:
             .where(OAuthSession.account_id == account.id, OAuthSession.revoked_at.is_(None))
             .values(revoked_at=now_ts)
         )
+        # Consume outstanding authorization codes approved before rotation so
+        # they cannot be exchanged for a fresh session after the password changes.
+        session.execute(
+            update(OAuthAuthorizationCode)
+            .where(
+                OAuthAuthorizationCode.account_id == account.id,
+                OAuthAuthorizationCode.consumed_at.is_(None),
+            )
+            .values(consumed_at=now_ts)
+        )
         session.commit()
         return Response(status_code=204)
 

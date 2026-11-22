@@ -224,7 +224,9 @@ def redact_layer(layer: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
-def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
+def redact_credentials(
+    project: dict[str, Any], *, strip_non_exportable: bool = True
+) -> dict[str, Any]:
     """Return a detached project safe to publish, export, or hand to others."""
     safe = copy.deepcopy(project)
     if isinstance(safe.get("basemapStyleUrl"), str):
@@ -257,9 +259,14 @@ def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
                 continue
             _sweep_layer_credentials(layer)
             # Mirror packages/core/src/credentials.ts: strip carried feature
-            # data when the layer marks export as disallowed.
+            # data when the layer marks export as disallowed (skipped for
+            # in-session read-only previews that need inline geometry).
             capabilities = layer.get("capabilities")
-            if isinstance(capabilities, dict) and capabilities.get("export") is False:
+            if (
+                strip_non_exportable
+                and isinstance(capabilities, dict)
+                and capabilities.get("export") is False
+            ):
                 layer.pop("geojson", None)
                 layer_metadata = layer.get("metadata")
                 if isinstance(layer_metadata, dict):

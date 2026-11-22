@@ -211,11 +211,22 @@ def test_sqlite_schema_upgrade_adds_legacy_columns(oauth_client, tmp_path, clock
 
 
 def test_password_change_revokes_active_oauth_sessions(oauth_client):
+    from helpers import approve, exchange_code, redirect_params, start_authorize
+
+    def _approve_code(password: str = "correct horse") -> tuple[str, str]:
+        resp, verifier, interaction, csrf = start_authorize(oauth_client)
+        assert resp.status_code == 200
+        approved = approve(oauth_client, interaction, csrf, username="bob", password=password)
+        assert approved.status_code == 303
+        return redirect_params(approved)["code"], verifier
+
     _org_with_policy(oauth_client, passwordMinLength=10)
     tokens = sign_in(oauth_client, username="bob")
     assert (
         oauth_client.get("/api/users/me", headers=auth(tokens["access_token"])).status_code == 200
     )
+    # An authorization code approved BEFORE the password change must be invalidated.
+    stale_code, stale_verifier = _approve_code()
     assert (
         _change_password(oauth_client, "correct horse", "new-strong-passphrase").status_code == 204
     )
@@ -223,6 +234,12 @@ def test_password_change_revokes_active_oauth_sessions(oauth_client):
         oauth_client.get("/api/users/me", headers=auth(tokens["access_token"])).status_code == 401
     )
     assert refresh(oauth_client, tokens["refresh_token"]).status_code == 400
+    stale_exchange = exchange_code(oauth_client, stale_code, verifier=stale_verifier)
+    assert stale_exchange.status_code == 400
+    assert stale_exchange.json()["error"] == "invalid_grant"
+    # A code approved AFTER the password change still exchanges normally.
+    fresh_code, fresh_verifier = _approve_code(password="new-strong-passphrase")
+    assert exchange_code(oauth_client, fresh_code, verifier=fresh_verifier).status_code == 200
 
 
 def test_sso_sentinel_account_does_not_accumulate_lockout(oauth_client):

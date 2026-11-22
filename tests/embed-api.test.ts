@@ -1218,30 +1218,39 @@ describe("createFeaturesChangeTracker", () => {
 });
 
 describe("parseEmbedRequest: addLayer video source.urls scheme validation", () => {
-  it("blocks dangerous URL schemes inside source.urls", () => {
-    for (const badUrl of ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,hi"]) {
+  it("blocks dangerous URL schemes and leading C0 controls inside source.urls", () => {
+    for (const badUrl of [
+      "javascript:alert(1)",
+      "file:///etc/passwd",
+      "data:text/html,hi",
+      "\u0001data:video/mp4;base64,AAAA",
+    ]) {
       const result = parseEmbedRequest(
         message(
           "addLayer",
           {
-            id: "vid",
-            name: "Video",
-            type: "video",
-            source: {
+            spec: {
+              id: "vid",
+              name: "Video",
               type: "video",
-              urls: [badUrl],
-              coordinates: [
-                [0, 1],
-                [1, 1],
-                [1, 0],
-                [0, 0],
-              ],
+              source: {
+                type: "video",
+                urls: [badUrl],
+                coordinates: [
+                  [0, 1],
+                  [1, 1],
+                  [1, 0],
+                  [0, 0],
+                ],
+              },
             },
           },
           { requestId: "r-vid" },
         ),
       );
-      assert.ok(result && "error" in result, `expected ${badUrl} in source.urls to be blocked`);
+      assert.ok(result && "error" in result, `expected ${JSON.stringify(badUrl)} to be blocked`);
+      assert.match((result as { error: string }).error, /blocked URL scheme|scheme/i);
+      assert.equal((result as { requestId: string | null }).requestId, "r-vid");
     }
   });
 });

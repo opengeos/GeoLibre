@@ -959,17 +959,19 @@ def _prepare_arguments(
 
 
 def _resolve_output_value(value: Any, working_directory: str | None) -> Any:
-    """Resolve a relative output path against the job's working directory."""
-    if not working_directory:
-        return value
+    """Resolve an output path, expanding ``~`` and joining relative paths to ``working_directory``."""
     if isinstance(value, str) and value.strip():
-        expanded = os.path.expanduser(value.strip())
-        if not os.path.isabs(expanded):
+        expanded = os.path.expanduser(value)
+        if os.path.isabs(expanded):
+            return os.path.normpath(expanded)
+        if working_directory:
             return os.path.normpath(os.path.join(working_directory, expanded))
         return value
     if isinstance(value, dict) and isinstance(value.get("path"), str) and value["path"].strip():
-        expanded = os.path.expanduser(value["path"].strip())
-        if not os.path.isabs(expanded):
+        expanded = os.path.expanduser(value["path"])
+        if os.path.isabs(expanded):
+            return {**value, "path": os.path.normpath(expanded)}
+        if working_directory:
             return {
                 **value,
                 "path": os.path.normpath(os.path.join(working_directory, expanded)),

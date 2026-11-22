@@ -428,11 +428,17 @@ def test_whitebox_tilde_and_relative_output_stay_confined(
         whitebox._prepare_arguments(tilde_req, [])
     assert excinfo.value.status_code == 403
 
-    # Relative output resolves against the pinned working directory, not process cwd.
+    # Relative output resolves against the pinned working directory, not process cwd,
+    # preserving significant whitespace in the filename.
     outputs = whitebox._extract_outputs(
-        {}, {"output": "nested/result.geojson"}, tool, working_directory=str(root.resolve())
+        {}, {"output": " nested/ result.geojson"}, tool, working_directory=str(root.resolve())
     )
-    assert outputs["output"]["path"] == str((root / "nested" / "result.geojson").resolve())
+    assert outputs["output"]["path"] == str((root / " nested" / " result.geojson").resolve())
+
+    # Tilde-prefixed absolute outputs expand to the user's home directory rather than staying raw.
+    tilde_out = whitebox._resolve_output_value("~/result.geojson", str(root.resolve()))
+    assert not tilde_out.startswith("~")
+    assert tilde_out.endswith("result.geojson")
 
     # Even if a recorded job somehow held an outside path, /output still enforces roots.
     job_id = "test-outside-output"
@@ -468,7 +474,15 @@ def test_postgis_rejects_local_file_libpq_parameters(monkeypatch: pytest.MonkeyP
     from geolibre_server.app.postgis import _validate_postgis_target
 
     monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "db.example")
-    for key in ("passfile", "sslcert", "sslkey", "sslrootcert", "sslcrl", "sslcrldir"):
+    for key in (
+        "passfile",
+        "sslcert",
+        "sslkey",
+        "sslkeylogfile",
+        "sslrootcert",
+        "sslcrl",
+        "sslcrldir",
+    ):
         with pytest.raises(HTTPException) as excinfo:
             _validate_postgis_target({"host": "db.example", key: "/etc/passwd"})
         assert excinfo.value.status_code == 400

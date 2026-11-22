@@ -243,6 +243,10 @@ def test_run_does_not_leak_exception_detail(monkeypatch: pytest.MonkeyPatch) -> 
         "SELECT 1; SELECT 2",
         "SELECT * FROM read_parquet('/etc/passwd')",
         "SELECT * FROM read_csv('/etc/passwd')",
+        "SELECT * FROM '/etc/passwd'",
+        "SELECT * FROM cities, '/tmp/private.parquet'",
+        "SELECT * FROM cities JOIN '/tmp/private.parquet' ON 1 = 1",
+        "SELECT * FROM (SELECT * FROM '/tmp/private.parquet') AS t",
         "EXPLAIN COPY (SELECT 1) TO '/tmp/pwn.csv'",
     ],
 )

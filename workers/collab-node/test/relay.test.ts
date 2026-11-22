@@ -625,4 +625,32 @@ describe("Node collaboration relay", () => {
     assert.equal(self?.identity, null);
     guest.close();
   });
+
+  it("uses rightmost trusted X-Forwarded-For hop for rate limiting when trustProxy is enabled", async () => {
+    const { http } = await start({
+      trustProxy: true,
+      trustProxyHops: 1,
+    });
+    // Spoofed left-most IPs change on every request, while the rightmost proxy-appended client IP stays constant.
+    for (let i = 0; i < 10; i++) {
+      const res = await fetch(`${http}/sessions`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": `198.51.100.${i + 1}, 203.0.113.9`,
+        },
+        body: JSON.stringify({ mode: "co-edit" }),
+      });
+      assert.equal(res.status, 200);
+    }
+    const eleventh = await fetch(`${http}/sessions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": "198.51.100.99, 203.0.113.9",
+      },
+      body: JSON.stringify({ mode: "co-edit" }),
+    });
+    assert.equal(eleventh.status, 429);
+  });
 });

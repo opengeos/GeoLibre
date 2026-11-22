@@ -106,7 +106,15 @@ def _validate_postgis_target(conninfo: dict[str, str]) -> Optional[tuple[str, st
         raise HTTPException(
             status_code=400, detail="PostgreSQL hostaddr connection strings are not supported"
         )
-    for forbidden in ("passfile", "sslcert", "sslkey", "sslrootcert", "sslcrl", "sslcrldir"):
+    for forbidden in (
+        "passfile",
+        "sslcert",
+        "sslkey",
+        "sslkeylogfile",
+        "sslrootcert",
+        "sslcrl",
+        "sslcrldir",
+    ):
         if conninfo.get(forbidden):
             raise HTTPException(
                 status_code=400,

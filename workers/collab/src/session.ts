@@ -579,8 +579,6 @@ export class CollabSession extends DurableObject<Env> {
       return;
     }
 
-    const durableOverride = this.readDurableOverride(participantKey);
-
     if (matchedInvite) {
       // Re-read the invite after the `await verifyIdentityToken` above to close
       // a TOCTOU window: two concurrent joins on a maxUses:1 invite could both
@@ -600,8 +598,11 @@ export class CollabSession extends DurableObject<Env> {
       }
     }
 
-    // Compute the initial edit override AFTER claiming the invite so a joiner
-    // who loses the maxUses race on a co-edit invite never receives edit rights.
+    // Resolve durable override and initial edit rights AFTER claiming the
+    // invite, using the participant's final post-claim key, so a claim loser
+    // never inherits an invite-keyed override.
+    const finalParticipantKey = getParticipantKey({ ...joiningParticipant, inviteToken });
+    const durableOverride = this.readDurableOverride(finalParticipantKey);
     let initialOverride: boolean | undefined = undefined;
     if (durableOverride !== undefined) {
       initialOverride = durableOverride;

@@ -198,6 +198,65 @@ def _strip_sql_comments_and_strings(sql: str) -> tuple[str, bool]:
     return "".join(out), has_trailing_after_semicolon
 
 
+_CLAUSE_END_KEYWORDS = frozenset(
+    {
+        "WHERE",
+        "GROUP",
+        "HAVING",
+        "ORDER",
+        "LIMIT",
+        "OFFSET",
+        "FETCH",
+        "UNION",
+        "INTERSECT",
+        "EXCEPT",
+        "ON",
+        "USING",
+        "WINDOW",
+        "QUALIFY",
+        "SET",
+        "VALUES",
+        "SELECT",
+    }
+)
+
+
+def _has_string_table_reference(stripped_sql: str) -> bool:
+    """Return True if a blanked string literal ``''`` appears as a table ref in FROM/JOIN."""
+    # Tokenize words, blanked string literals (''), commas, and parens.
+    tokens = re.findall(r"''|[A-Za-z_][A-Za-z0-9_]*|[(),]", stripped_sql)
+    in_from_list = False
+    expect_table = False
+    for tok in tokens:
+        upper = tok.upper()
+        if upper in {"FROM", "JOIN"}:
+            in_from_list = True
+            expect_table = True
+            continue
+        if not in_from_list:
+            continue
+        if tok == "(":
+            # Subquery or parenthesized join; reset until an inner FROM/JOIN.
+            expect_table = False
+            continue
+        if tok == ")":
+            in_from_list = False
+            expect_table = False
+            continue
+        if tok == ",":
+            expect_table = True
+            continue
+        if upper in _CLAUSE_END_KEYWORDS:
+            in_from_list = False
+            expect_table = False
+            continue
+        if tok == "''" and expect_table:
+            return True
+        if upper not in {"ONLY", "LATERAL"}:
+            expect_table = False
+    return False
+
+
 def _validate_read_only_sql(sql: str) -> None:
     """Ensure only a single read-only query statement is executed on SedonaDB."""
     stripped, has_multiple = _strip_sql_comments_and_strings(sql)
@@ -219,6 +278,8 @@ def _validate_read_only_sql(sql: str) -> None:
             )
     if _FORBIDDEN_FILE_TABLE_FUNCTIONS.search(stripped):
         raise ValueError("Direct filesystem table functions are not allowed in Sedona SQL.")
+    if _has_string_table_reference(stripped):
+        raise ValueError("Direct file paths in FROM/JOIN clauses are not allowed in Sedona SQL.")
 
 
 def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:

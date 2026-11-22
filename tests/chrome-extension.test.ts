@@ -913,12 +913,33 @@ describe("GeoLibre Chrome extension request history", () => {
     );
     assert.ok(!built.includes("#old-hash"));
 
-    // Deeply nested GeoLibre deep link must terminate without throwing RangeError.
-    let nested = "https://example.com/leaf.geojson";
+    // Beyond-limit nested GeoLibre deep link must stop without throwing and return no datasets.
+    let tooDeep = "https://example.com/leaf.geojson";
     for (let i = 0; i < 12; i += 1) {
-      nested = `https://web.geolibre.app/?data=${encodeURIComponent(nested)}`;
+      tooDeep = `https://web.geolibre.app/?data=${encodeURIComponent(tooDeep)}`;
     }
-    const found = scan(`<a href="${nested}">nested</a>`, "https://example.com/");
-    assert.ok(Array.isArray(found));
+    assert.deepEqual(scan(`<a href="${tooDeep}">nested</a>`, "https://example.com/"), []);
+
+    // Within-limit nesting still unpacks to its leaf dataset.
+    const withinLimit = `https://web.geolibre.app/?data=${encodeURIComponent(
+      `https://web.geolibre.app/?data=${encodeURIComponent("https://example.com/leaf.geojson")}`,
+    )}`;
+    assert.deepEqual(
+      scan(`<a href="${withinLimit}">ok</a>`, "https://example.com/").map((d) => d.url),
+      ["https://example.com/leaf.geojson"],
+    );
+
+    // Deep-first then shallow-second occurrence of the same deep link still expands the shallow one.
+    const t = `https://web.geolibre.app/?data=${encodeURIComponent("https://example.com/shallow-leaf.geojson")}`;
+    const s = `https://web.geolibre.app/?data=${encodeURIComponent(t)}`;
+    const b = `https://web.geolibre.app/?data=${encodeURIComponent(s)}`;
+    const a = `https://web.geolibre.app/?data=${encodeURIComponent(b)}`;
+    const rootDeep = `https://web.geolibre.app/?data=${encodeURIComponent(a)}`;
+    assert.deepEqual(
+      scan(`<a href="${rootDeep}">deep</a><a href="${s}">shallow</a>`, "https://example.com/").map(
+        (d) => d.url,
+      ),
+      ["https://example.com/shallow-leaf.geojson"],
+    );
   });
 });

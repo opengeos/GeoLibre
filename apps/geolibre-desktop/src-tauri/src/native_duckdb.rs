@@ -130,6 +130,11 @@ fn native_options(
         return Err(format!("Refusing to read \"{path}\": not a regular file"));
     }
     let canonical_path = crate::canonical_local_path_string(&canonical);
+    if has_duckdb_glob_metacharacter(&canonical_path) {
+        return Err(format!(
+            "Refusing to read \"{path}\": glob paths are not allowed"
+        ));
+    }
     Ok(NativeVectorOptions {
         extension: vector_extension(&canonical_path),
         path: canonical_path,
@@ -1651,6 +1656,15 @@ mod tests {
             let err = native_options(link.to_string_lossy().into_owned(), None, None)
                 .expect_err("symlink to non-vector file must be rejected");
             assert!(err.contains("resolves to a non-vector file"));
+
+            let wildcard_target = dir.join("batch*.parquet");
+            std::fs::write(&wildcard_target, []).expect("write wildcard file");
+            let wildcard_link = dir.join("alias.parquet");
+            std::os::unix::fs::symlink(&wildcard_target, &wildcard_link)
+                .expect("create wildcard symlink");
+            let err = native_options(wildcard_link.to_string_lossy().into_owned(), None, None)
+                .expect_err("symlink to wildcard target must be rejected");
+            assert!(err.contains("glob paths are not allowed"));
             let _ = std::fs::remove_dir_all(&dir);
         }
     }

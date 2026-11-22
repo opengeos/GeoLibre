@@ -2189,7 +2189,7 @@ def build_server(workspace: Workspace) -> MCPServer:
         _require_previewable(file, project)
         return {
             "path": str(file),
-            "project": _project.redact_credentials(project),
+            "project": _project.redact_credentials(project, strip_non_exportable=False),
             "previewId": preview_sessions.create(),
         }
 

@@ -2359,14 +2359,22 @@ def test_get_group_enforces_visibility_and_thumbnails_set_nosniff(client):
         headers=auth(owner),
         json={"name": "Open Team", "joinPolicy": "open"},
     ).json()["group"]
+    request_group = client.post(
+        "/api/groups",
+        headers=auth(owner),
+        json={"name": "Request Team", "joinPolicy": "request"},
+    ).json()["group"]
 
     assert (
         client.get(f"/api/groups/{private_group['id']}", headers=auth(outsider)).status_code == 404
     )
     assert client.get(f"/api/groups/{private_group['id']}", headers=auth(owner)).status_code == 200
     assert client.get(f"/api/groups/{open_group['id']}", headers=auth(outsider)).status_code == 200
+    assert (
+        client.get(f"/api/groups/{request_group['id']}", headers=auth(outsider)).status_code == 200
+    )
 
-    # Org-scoped open groups remain confined to organization members.
+    # Org-scoped open/request groups remain confined to organization members.
     org = client.post(
         "/api/organizations",
         headers=auth(owner),
@@ -2377,7 +2385,13 @@ def test_get_group_enforces_visibility_and_thumbnails_set_nosniff(client):
         headers=auth(owner),
         json={"name": "Org Open", "organizationId": org["id"], "joinPolicy": "open"},
     ).json()["group"]
+    org_request = client.post(
+        "/api/groups",
+        headers=auth(owner),
+        json={"name": "Org Request", "organizationId": org["id"], "joinPolicy": "request"},
+    ).json()["group"]
     assert client.get(f"/api/groups/{org_open['id']}", headers=auth(outsider)).status_code == 404
+    assert client.get(f"/api/groups/{org_request['id']}", headers=auth(outsider)).status_code == 404
 
     # Thumbnails include X-Content-Type-Options: nosniff.
     png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16

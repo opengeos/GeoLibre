@@ -1141,16 +1141,51 @@ for node in ast.walk(tree):
         if not isinstance(node.func, ast.Name) or node.func.id not in allowed_calls:
             name = node.func.id if isinstance(node.func, ast.Name) else type(node.func).__name__
             raise SystemExit(f"Call to '{name}' is not allowed in band math")
-# Convert integer literals (excluding bools) to float so arbitrary-precision
-# integer chains cannot exhaust CPU or memory.
+# Convert integer literals (excluding bools and the integer `decimals` argument
+# of `round(...)`) to float so arbitrary-precision integer chains cannot exhaust
+# CPU or memory while keeping `np.round(A, 2)` / `np.round(A, decimals=2)` valid.
+def _is_int_literal(expr):
+    if isinstance(expr, ast.UnaryOp) and isinstance(expr.op, (ast.UAdd, ast.USub)):
+        expr = expr.operand
+    return (
+        isinstance(expr, ast.Constant)
+        and isinstance(expr.value, int)
+        and not isinstance(expr.value, bool)
+    )
+
+
 class _IntToFloat(ast.NodeTransformer):
-    def visit_Constant(self, node):
-        if isinstance(node.value, int) and not isinstance(node.value, bool):
-            return ast.copy_location(ast.Constant(value=float(node.value)), node)
+    def visit_Call(self, node):
+        is_round = isinstance(node.func, ast.Name) and node.func.id == "round"
+        new_args = []
+        for idx, arg in enumerate(node.args):
+            if is_round and idx == 1 and _is_int_literal(arg):
+                new_args.append(arg)
+            else:
+                new_args.append(self.visit(arg))
+        node.args = new_args
+        new_keywords = []
+        for kw in node.keywords:
+            if is_round and kw.arg == "decimals" and _is_int_literal(kw.value):
+                new_keywords.append(kw)
+            else:
+                kw.value = self.visit(kw.value)
+                new_keywords.append(kw)
+        node.keywords = new_keywords
         return node
 
-tree = ast.fix_missing_locations(_IntToFloat().visit(tree))
+    def visit_Constant(self, node):
+        if isinstance(node.value, int) and not isinstance(node.value, bool):
+            try:
+                converted = float(node.value)
+            except OverflowError as exc:
+                raise SystemExit("Numeric literal is too large for band math") from exc
+            return ast.copy_location(ast.Constant(value=converted), node)
+        return node
+
+
 try:
+    tree = ast.fix_missing_locations(_IntToFloat().visit(tree))
     with np.errstate(all="ignore"):
         result = eval(compile(tree, "<band_math>", "eval"), {"__builtins__": {}}, namespace)
 except SystemExit:
