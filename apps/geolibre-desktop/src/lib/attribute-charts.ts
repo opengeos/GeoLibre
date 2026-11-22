@@ -361,10 +361,9 @@ export function computeHistogram(
   }
 
   const range = options.clipOutliers ? typicalRange(values) : null;
-  const clipped = range?.clipped === true;
   const extentMin = min;
   const extentMax = max;
-  if (range && clipped) {
+  if (range?.clipped) {
     min = range.low;
     max = range.high;
   }

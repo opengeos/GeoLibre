@@ -277,10 +277,14 @@ function RangeControl({
       : null;
 
   // Where each thumb is drawn. A saved bound outside the slider's domain (typed
-  // past it, or saved before the data changed) is pinned to the nearer end
-  // without being rewritten.
-  const shownMin = bounds ? Math.max(bounds.min, filter.min ?? bounds.min) : null;
-  const shownMax = bounds ? Math.min(bounds.max, filter.max ?? bounds.max) : null;
+  // past either end, or saved before the data changed) is pinned to the nearer
+  // end without being rewritten.
+  const shownMin = bounds
+    ? Math.min(bounds.max, Math.max(bounds.min, filter.min ?? bounds.min))
+    : null;
+  const shownMax = bounds
+    ? Math.max(bounds.min, Math.min(bounds.max, filter.max ?? bounds.max))
+    : null;
 
   // A handle at an end of the slider means "no bound on that side", so it
   // saves `null` rather than the end value: writing the domain's end back as an
@@ -347,7 +351,7 @@ function RangeControl({
           inputMode="decimal"
           className="h-7 text-xs"
           value={filter.min ?? ""}
-          placeholder={bounds ? String(profile?.min ?? bounds.min) : t("quickFilters.rangeMin")}
+          placeholder={bounds ? format(profile?.min ?? bounds.min) : t("quickFilters.rangeMin")}
           aria-label={t("quickFilters.rangeMin")}
           onChange={(event) => onChange({ ...filter, min: parseBound(event.target.value) })}
         />
@@ -358,7 +362,7 @@ function RangeControl({
           inputMode="decimal"
           className="h-7 text-xs"
           value={filter.max ?? ""}
-          placeholder={bounds ? String(profile?.max ?? bounds.max) : t("quickFilters.rangeMax")}
+          placeholder={bounds ? format(profile?.max ?? bounds.max) : t("quickFilters.rangeMax")}
           aria-label={t("quickFilters.rangeMax")}
           onChange={(event) => onChange({ ...filter, max: parseBound(event.target.value) })}
         />

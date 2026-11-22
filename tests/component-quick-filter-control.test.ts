@@ -236,6 +236,18 @@ describe("QuickFilterControl range with outliers (#3455)", () => {
     });
     assert.equal(changes.at(-1)?.max, 5e11);
   });
+
+  it("pins a minimum typed past the far end to that end, not beyond the slider", () => {
+    renderRange({ min: 5000 }, OUTLIER_PROFILE);
+    assert.equal(thumbValue("Minimum"), "4680");
+    assert.equal(thumbValue("Maximum"), "4680");
+  });
+
+  it("pins a maximum typed below the near end to that end, not beyond the slider", () => {
+    renderRange({ max: 0.1 }, OUTLIER_PROFILE);
+    assert.equal(thumbValue("Minimum"), "0.3");
+    assert.equal(thumbValue("Maximum"), "0.3");
+  });
 });
 
 describe("QuickFilterControl range without outliers", () => {

@@ -204,6 +204,7 @@ function HistogramChart({
   const gap = Math.min(4, slot * 0.15);
   const barHeight = (count: number) => (maxCount === 0 ? 0 : (count / maxCount) * INNER_H);
   const bound = (value: number) => formatRangeBound(value, i18n.language);
+  const countFormat = new Intl.NumberFormat(i18n.language);
   const overflowBar = (bin: HistogramBin, index: number, title: string) => {
     const height = barHeight(bin.count);
     return (
@@ -248,7 +249,7 @@ function HistogramChart({
             0,
             t("dashboard.chart.underflowTitle", {
               count: underflow.count,
-              formattedCount: underflow.count.toLocaleString(),
+              formattedCount: countFormat.format(underflow.count),
               value: bound(underflow.x1),
             }),
           )}
@@ -276,7 +277,7 @@ function HistogramChart({
             lead + bins.length,
             t("dashboard.chart.overflowTitle", {
               count: overflow.count,
-              formattedCount: overflow.count.toLocaleString(),
+              formattedCount: countFormat.format(overflow.count),
               value: bound(overflow.x0),
             }),
           )}

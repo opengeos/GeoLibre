@@ -268,9 +268,13 @@ describe("computeHistogram", () => {
       }
     });
 
-    it("scales maxCount over the overflow bins too", () => {
-      const lopsided = [...typical, ...Array(400).fill(1e12)];
-      const result = computeHistogram(lopsided, 20, { clipOutliers: true });
+    it("counts the outliers beyond the typical range in the overflow bin", () => {
+      // Five values at 1e12 are under 1% of 1,287, so the 99th percentile stays
+      // a typical value and the bins clip to the typical range.
+      const sparse = [...typical, ...Array(5).fill(1e12)];
+      const result = computeHistogram(sparse, 20, { clipOutliers: true });
+      // The 8 typical values above the 99th percentile, plus the 5 outliers.
+      assert.equal(result?.overflow?.count, 13);
       const tallest = Math.max(
         ...(result?.bins ?? []).map((bin) => bin.count),
         result?.underflow?.count ?? 0,
