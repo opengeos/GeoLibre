@@ -68,13 +68,14 @@ export function participantCanEditLayer(
  * Stable-ish key a host's block and persisted edit override are recorded
  * against.
  *
- * Only the signed-in identity (`user:`) and single-use invite (`invite:`) forms
- * are durable across reconnects. Anonymous guests and anonymous joins on shared
- * multi-use invite links (`inviteShared: true`) fall back to `anon:<clientId>`
- * so blocking or setting an edit override on one guest does not affect other
- * guests sharing the same link. Blocking is a moderation convenience, not a
- * security boundary; to disable a shared invite link for future joins, revoke
- * the invite or require signed-in identity (see *Moderation* in
+ * Only the signed-in identity (`user:`) form is durable across reconnects.
+ * Single-use invites (`maxUses: 1`) key on `invite:<token>` only while unclaimed
+ * (exhausted invites are ignored on reconnect), and anonymous guests including
+ * those joining via shared multi-use invite links (`inviteShared: true`) fall
+ * back to `anon:<clientId>` so blocking or setting an edit override on one guest
+ * does not affect other guests sharing the same link. Blocking is a moderation
+ * convenience, not a security boundary; enforceable per-user bans require
+ * `requireIdentity` with a configured identity provider (see *Moderation* in
  * `docs/collaboration.md`).
  */
 export function getParticipantKey(

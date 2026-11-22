@@ -1715,9 +1715,13 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
         if len(label) > 100:
             return oauth_error_redirect(config.issuer, redirect_uri, "invalid_request", state)
         raw_max_age = params.get("max_age")
-        if raw_max_age is not None and (not raw_max_age.isdigit() or len(raw_max_age) > 10):
-            return oauth_error_redirect(config.issuer, redirect_uri, "invalid_request", state)
-        requested_max_age = int(raw_max_age) if raw_max_age is not None else None
+        requested_max_age: int | None = None
+        if raw_max_age is not None:
+            if not (raw_max_age.isascii() and raw_max_age.isdigit()) or len(raw_max_age) > 10:
+                return oauth_error_redirect(config.issuer, redirect_uri, "invalid_request", state)
+            requested_max_age = int(raw_max_age)
+            if requested_max_age > 2_147_483_647:
+                return oauth_error_redirect(config.issuer, redirect_uri, "invalid_request", state)
         reauth_requested = requested_max_age is not None
         try:
             identity = proxy_identity(request)
@@ -1904,11 +1908,15 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
         proxy_user = identity.user if identity is not None else None
 
         raw_form_max_age = fields.get("max_age", "").strip()
-        form_max_age = (
-            int(raw_form_max_age)
-            if raw_form_max_age.isdigit() and len(raw_form_max_age) <= 10
-            else None
-        )
+        form_max_age: int | None = None
+        if (
+            raw_form_max_age.isascii()
+            and raw_form_max_age.isdigit()
+            and len(raw_form_max_age) <= 10
+        ):
+            parsed_max_age = int(raw_form_max_age)
+            if parsed_max_age <= 2_147_483_647:
+                form_max_age = parsed_max_age
         form_reauth = form_max_age is not None or fields.get("reauth", "").strip().lower() in (
             "1",
             "true",

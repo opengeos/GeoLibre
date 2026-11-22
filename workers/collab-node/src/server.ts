@@ -122,6 +122,8 @@ interface Peer {
   queue?: Promise<void>;
   /** Number of frames currently queued or running for this peer. */
   pendingFrames: number;
+  /** Set when the relay closes this peer due to frame-queue overflow. */
+  overflowClosed?: boolean;
 }
 
 interface LiveSession {
@@ -996,6 +998,7 @@ export function createRelay(options: RelayOptions = {}): {
           return;
         }
         if (peer.pendingFrames >= MAX_PENDING_FRAMES) {
+          peer.overflowClosed = true;
           send(peer, {
             type: "error",
             code: "bad-message",
@@ -1010,7 +1013,7 @@ export function createRelay(options: RelayOptions = {}): {
         // frame should be able to do that to the others.
         peer.queue = (peer.queue ?? Promise.resolve())
           .then(() => {
-            if (peer.socket.readyState !== WebSocket.OPEN) return;
+            if (peer.overflowClosed) return;
             return handleMessage(id, session, peer, raw);
           })
           .catch(() => {
