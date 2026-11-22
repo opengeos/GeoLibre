@@ -115,7 +115,8 @@ if real_ip:
 token = os.environ["GEOLIBRE_AI_PROXY_TOKEN"]
 config = f"""
 location ^~ /ai/ {{
-{real_ip}    client_max_body_size 10m;
+{real_ip}
+    client_max_body_size 10m;
     proxy_pass {upstream}/;
     proxy_http_version 1.1;
     proxy_ssl_server_name on;

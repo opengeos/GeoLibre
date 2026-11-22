@@ -183,12 +183,6 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             return
         except Exception as exc:  # pragma: no cover - rio-tiler error text varies
-            if type(exc).__name__ == "TileOutsideBounds":
-                self.send_response(204)
-                self.send_header("Cache-Control", "no-store")
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                return
             self.send_error(500, f"Could not render raster tile: {exc}")
             return
         self.send_response(200)

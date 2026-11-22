@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 from geolibre_server_api.main import FileStorage
 from geolibre_server_api.proxy_identity import _parse_ip
 from helpers import (
-    add_member,
     admin_token,
     auth,
     configure_idp,
@@ -19,6 +18,7 @@ from helpers import (
     redirect_params,
     set_policy,
     sso_sign_in,
+    start_authorize,
     start_sso,
 )
 
@@ -97,8 +97,6 @@ def test_sso_max_age_only_requested_for_reauth(oauth_client, fake_idp):
     assert "max_age" not in params
 
     # Explicit reauth request passes max_age to the IdP.
-    from helpers import start_authorize
-
     _, _, interaction, csrf = start_authorize(oauth_client)
     redirect = oauth_client.post(
         "/oauth/authorize",
@@ -115,4 +113,3 @@ def test_sso_max_age_only_requested_for_reauth(oauth_client, fake_idp):
     )
     assert redirect.status_code == 303
     assert redirect_params(redirect).get("max_age") == "60"
-    add_member(oauth_client, token, org_id, "bob")

@@ -240,15 +240,20 @@ are in place for a deployment that fronts the relay with its own issuer.
 
 `kick-participant` disconnects a participant. `block-participant` also records
 their **participant key** so the relay refuses the next join. That key is
-`user:<userId>` for a verified identity, `invite:<token>` for an invite-based
-join, and otherwise `anon:<clientId>` — where `clientId` is minted fresh on
-every join.
+`user:<userId>` for a verified identity, `invite:<token>` for a single-use
+invite join (`maxUses: 1`), and otherwise `anon:<clientId>` (including anonymous
+guests who join via a shared multi-use invite link), where `clientId` is minted
+fresh on every join.
 
 The same key backs a persisted per-participant override, so both carry the same
-caveat: a block is durable only for identity- and invite-based joins. **An anonymous
-guest can rejoin simply by reconnecting**, since they arrive with a new
-`clientId` and therefore a new key. Blocking is a moderation convenience, not a
-security boundary; a session that needs an enforceable ban has to require an
+caveat: a block or override is durable only for signed-in identities and
+single-use invites. For a shared multi-use invite link, keying on `anon:<clientId>`
+keeps a host's override or kick/block on one guest from affecting every other
+guest sharing the link; to disable a shared link for future joiners, revoke the
+invite with `revoke-invite`. **An anonymous guest (including one on an unrevoked
+multi-use link) can rejoin by reconnecting**, since they receive a fresh
+`clientId`. Blocking is a moderation convenience, not a security boundary; a
+session that needs an enforceable per-user ban should require a single-use
 invite or a signed-in identity.
 
 ## Chat (#754)

@@ -275,10 +275,12 @@ class FileStorage:
             try:
                 handle.write(data)
                 handle.flush()
+                os.fsync(handle.fileno())
             except BaseException:
                 tmp_path.unlink(missing_ok=True)
                 raise
         try:
+            tmp_path.chmod(0o644)
             os.replace(tmp_path, path)
         except BaseException:
             tmp_path.unlink(missing_ok=True)
