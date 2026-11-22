@@ -23,6 +23,7 @@ export { PluginManager } from "./plugin-manager";
 export {
   registerRightPanel,
   unregisterRightPanel,
+  unregisterRightPanelsByOwner,
   openRightPanel,
   collapseRightPanel,
   closeRightPanel,
@@ -43,6 +44,7 @@ export {
 export {
   registerToolbarMenu,
   unregisterToolbarMenu,
+  unregisterToolbarMenusByOwner,
   listToolbarMenus,
   getToolbarMenusSnapshot,
   subscribeToolbarMenus,
@@ -70,6 +72,7 @@ export {
 export {
   registerFloatingPanel,
   unregisterFloatingPanel,
+  unregisterFloatingPanelsByOwner,
   openFloatingPanel,
   closeFloatingPanel,
   focusFloatingPanel,

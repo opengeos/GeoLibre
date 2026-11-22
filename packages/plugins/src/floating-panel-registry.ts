@@ -23,6 +23,7 @@ export interface FloatingPanelsSnapshot {
 }
 
 const registry = new Map<string, GeoLibreFloatingPanelRegistration>();
+const owners = new Map<string, string>();
 // Title resolution (string/getter normalization, throw/empty fallback, and the
 // per-id warning dedup the accessor relies on because it is called unmemoized
 // in FloatingPanelCard's render body, which re-renders on every pointermove
@@ -57,7 +58,10 @@ function runHook(id: string, hookName: "onOpen" | "onClose", hook: (() => void) 
  * {@link openFloatingPanel} is called. Returns an unregister function (call it
  * from the plugin's `deactivate` hook); it closes the panel if open.
  */
-export function registerFloatingPanel(panel: GeoLibreFloatingPanelRegistration): () => void {
+export function registerFloatingPanel(
+  panel: GeoLibreFloatingPanelRegistration,
+  ownerPluginId?: string,
+): () => void {
   if (!panel || typeof panel.id !== "string" || panel.id.length === 0) {
     throw new Error("registerFloatingPanel requires a panel with a non-empty id.");
   }
@@ -75,6 +79,8 @@ export function registerFloatingPanel(panel: GeoLibreFloatingPanelRegistration):
   // Normalize title to a resolver so both strings and getters update live.
   titleResolver.set(panel);
   registry.set(panel.id, panel);
+  if (ownerPluginId !== undefined) owners.set(panel.id, ownerPluginId);
+  else owners.delete(panel.id);
   emit();
   return () => {
     if (registry.get(panel.id) === panel) unregisterFloatingPanel(panel.id);
@@ -90,9 +96,21 @@ export function unregisterFloatingPanel(id: string): void {
   const wasOpen = openIds.includes(id);
   if (wasOpen) openIds = openIds.filter((openId) => openId !== id);
   registry.delete(id);
+  owners.delete(id);
   titleResolver.delete(id);
   emit();
   if (wasOpen) runHook(id, "onClose", panel.onClose);
+}
+
+/** Remove every floating panel owned by `ownerPluginId`. */
+export function unregisterFloatingPanelsByOwner(ownerPluginId: string): void {
+  const ownedIds: string[] = [];
+  for (const [id, owner] of owners) {
+    if (owner === ownerPluginId) ownedIds.push(id);
+  }
+  for (const id of ownedIds) {
+    unregisterFloatingPanel(id);
+  }
 }
 
 /**
@@ -183,6 +201,7 @@ export function subscribeFloatingPanels(listener: () => void): () => void {
  */
 export function __resetFloatingPanelRegistryForTests(): void {
   registry.clear();
+  owners.clear();
   titleResolver.clear();
   listeners.clear();
   openIds = [];

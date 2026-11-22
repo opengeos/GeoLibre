@@ -367,6 +367,8 @@ export function ModelBuilderPanel({
   /** The sample workflow being fetched, so the menu can show progress and ignore repeats. */
   const [loadingSampleId, setLoadingSampleId] = useState<string | null>(null);
   const [graph, setGraph] = useState<ProcessingModelGraph>(emptyModelGraph);
+  const graphRef = useRef(graph);
+  graphRef.current = graph;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<ModelToolDescriptor[]>([]);
   const [catalogFailed, setCatalogFailed] = useState(false);
@@ -387,6 +389,8 @@ export function ModelBuilderPanel({
    * own in-flight state in {@link linking}.
    */
   const [armedPort, setArmedPort] = useState<{ nodeId: string; portId: string } | null>(null);
+  const armedPortRef = useRef(armedPort);
+  armedPortRef.current = armedPort;
   const abortRef = useRef<AbortController | null>(null);
   const sectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -731,6 +735,7 @@ export function ModelBuilderPanel({
         const parsed = parseModelFile(await file.text());
         if (!parsed.ok) throw new Error(t(MODEL_FILE_ERROR_KEYS[parsed.error]));
         const { graph } = parsed;
+        setModelId(createId());
         setModelName(parsed.name);
         setGraph(autoLayout(graph, layoutOptions()));
         setSelectedNodeId(null);
@@ -1027,24 +1032,22 @@ export function ModelBuilderPanel({
    */
   const connectPorts = useCallback(
     (from: { nodeId: string; portId: string }, to: { nodeId: string; portId: string }) => {
-      setGraph((current) => {
-        // connectNodes does not check that both endpoints still exist, and an
-        // edge onto a deleted node renders nowhere — GraphEdges resolves no
-        // anchor for it, so neither the curve nor its click-to-remove hit area
-        // is drawn, leaving a dangling-edge issue with no way to clear it.
-        if (!current.nodes.some((node) => node.id === from.nodeId)) return current;
-        if (!current.nodes.some((node) => node.id === to.nodeId)) return current;
-        const result = connectNodes(current, from, to, createId);
-        if ("rejected" in result) {
-          appendLog(
-            result.rejected === "cycle"
-              ? t("processing.modelBuilder.connectCycle")
-              : t("processing.modelBuilder.connectSameNode"),
-          );
-          return current;
-        }
-        return result.graph;
-      });
+      const current = graphRef.current;
+      // connectNodes does not check that both endpoints still exist, and an
+      // edge onto a deleted node renders nowhere.
+      if (!current.nodes.some((node) => node.id === from.nodeId)) return;
+      if (!current.nodes.some((node) => node.id === to.nodeId)) return;
+      const result = connectNodes(current, from, to, createId);
+      if ("rejected" in result) {
+        appendLog(
+          result.rejected === "cycle"
+            ? t("processing.modelBuilder.connectCycle")
+            : t("processing.modelBuilder.connectSameNode"),
+        );
+        return;
+      }
+      graphRef.current = result.graph;
+      setGraph(result.graph);
     },
     [appendLog, t],
   );
@@ -1070,19 +1073,17 @@ export function ModelBuilderPanel({
         );
         return;
       }
-      setArmedPort((current) => {
-        if (current) {
-          connectPorts(current, { nodeId, portId });
-        } else {
-          setGraph((graphNow) => {
-            const wired = graphNow.edges.find(
-              (edge) => edge.to === nodeId && edge.toPort === portId,
-            );
-            return wired ? removeEdge(graphNow, wired.id) : graphNow;
-          });
-        }
-        return null;
-      });
+      const current = armedPortRef.current;
+      armedPortRef.current = null;
+      setArmedPort(null);
+      if (current) {
+        connectPorts(current, { nodeId, portId });
+      } else {
+        setGraph((graphNow) => {
+          const wired = graphNow.edges.find((edge) => edge.to === nodeId && edge.toPort === portId);
+          return wired ? removeEdge(graphNow, wired.id) : graphNow;
+        });
+      }
     },
     [connectPorts],
   );
@@ -1435,6 +1436,7 @@ export function ModelBuilderPanel({
     event.stopPropagation();
     const handle = event.currentTarget;
     handle.setPointerCapture(event.pointerId);
+    const dirSign = getComputedStyle(handle).direction === "rtl" ? -1 : 1;
     const startX = event.clientX;
     const startY = event.clientY;
     const start = size;
@@ -1445,7 +1447,11 @@ export function ModelBuilderPanel({
       const maxWidth = bounds ? bounds.width - position.x - EDGE_MARGIN : Infinity;
       const maxHeight = bounds ? bounds.height - position.y - EDGE_MARGIN : Infinity;
       setSize({
-        width: clamp(start.width + (move.clientX - startX), minWidth, Math.max(minWidth, maxWidth)),
+        width: clamp(
+          start.width + (move.clientX - startX) * dirSign,
+          minWidth,
+          Math.max(minWidth, maxWidth),
+        ),
         height: clamp(
           start.height + (move.clientY - startY),
           minHeight,

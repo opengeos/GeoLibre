@@ -1031,7 +1031,6 @@ async function reloadExternalUrlPluginUncoalesced(
       break;
     }
   }
-  const wasActive = existingId ? manager.isActive(existingId) : false;
   if (existingId !== null) {
     enforcePluginPolicy(
       existingId,
@@ -1134,6 +1133,9 @@ async function reloadExternalUrlPluginUncoalesced(
     );
   }
 
+  // Read active state right before unregistering rather than before the
+  // network fetch so a user toggling the plugin mid-download is respected.
+  const wasActive = manager.isActive(existingId);
   manager.unregister(existingId, app);
   removeExternalPluginStyle(existingId);
   externallyLoadedPluginSources.delete(existingId);

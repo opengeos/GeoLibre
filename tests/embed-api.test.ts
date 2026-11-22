@@ -489,6 +489,11 @@ describe("parseEmbedRequest: addLayer", () => {
     assert.ok(parsed && "error" in parsed);
     assert.equal(parsed.error, 'addLayer: unsupported URL scheme in "javascript:"');
   });
+
+  it("parses the readiness ping command", () => {
+    const parsed = parseEmbedRequest({ ...message("ping", {}), requestId: "req-1" });
+    assert.deepEqual(parsed, { command: { type: "ping" }, requestId: "req-1" });
+  });
 });
 
 describe("requireEmbedLayer", () => {

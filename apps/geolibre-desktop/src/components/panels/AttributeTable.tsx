@@ -139,6 +139,7 @@ import {
   type ColumnMoveDirection,
   type NewColumnType,
   inferColumnTypes,
+  attributeValuesMatchQuery,
   formatAttributeCellText,
   numericColumnSet,
 } from "../../lib/attribute-columns";
@@ -1063,8 +1064,8 @@ export function AttributeTable({
       // "Show Selected Features" restricts the table to the current selection.
       if (featureView === "selected" && !selectedIdSet.has(featureId)) return false;
       if (!filterLower) return true;
-      const props = JSON.stringify(properties).toLowerCase();
-      return featureId.includes(filterLower) || props.includes(filterLower);
+      if (featureId.toLowerCase().includes(filterLower)) return true;
+      return attributeValuesMatchQuery(properties, filterLower);
     });
   }, [attributeFilter, attributeRows, featureView, selectedIdSet]);
 
@@ -1313,9 +1314,18 @@ export function AttributeTable({
           min: MIN_ATTRIBUTE_COLUMN_WIDTH,
         };
 
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    return () => {
+      resizeCleanupRef.current?.();
+      resizeCleanupRef.current = null;
+    };
+  }, []);
+
   const startColumnResize = (key: SortKey, event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
+    resizeCleanupRef.current?.();
 
     const startX = event.clientX;
     const startWidth = columnWidth(key);
@@ -1334,11 +1344,17 @@ export function AttributeTable({
       setColumnWidths((current) => ({ ...current, [key]: nextWidth }));
     };
 
-    const onMouseUp = () => {
+    const cleanup = () => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+      if (resizeCleanupRef.current === cleanup) resizeCleanupRef.current = null;
     };
 
+    const onMouseUp = () => {
+      cleanup();
+    };
+
+    resizeCleanupRef.current = cleanup;
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
   };
@@ -1346,6 +1362,7 @@ export function AttributeTable({
   const startTableResize = (event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
+    resizeCleanupRef.current?.();
 
     const startY = event.clientY;
     const startHeight = tableHeight;
@@ -1380,23 +1397,29 @@ export function AttributeTable({
       });
     };
 
-    const onMouseUp = () => {
+    const teardown = () => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
       if (resizeFrame !== null) {
         window.cancelAnimationFrame(resizeFrame);
         resizeFrame = null;
       }
-      if (tableSectionRef.current) {
-        tableSectionRef.current.style.height = `${nextHeight}px`;
-      }
       tableResizeGuideRef.current?.classList.add("hidden");
-      setTableHeight(nextHeight);
       window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
       document.body.style.cursor = previousCursor;
       document.body.style.userSelect = previousUserSelect;
+      if (resizeCleanupRef.current === teardown) resizeCleanupRef.current = null;
     };
 
+    const onMouseUp = () => {
+      teardown();
+      if (tableSectionRef.current) {
+        tableSectionRef.current.style.height = `${nextHeight}px`;
+      }
+      setTableHeight(nextHeight);
+    };
+
+    resizeCleanupRef.current = teardown;
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
   };
@@ -1884,8 +1907,12 @@ export function AttributeTable({
     updateLayer(layer.id, markAttributeEdit(layer, result.patch));
     if (result.errors > 0) {
       // The calculation was applied, but some rows threw and were written as
-      // null. Keep the dialog open and report it rather than showing a silent
-      // success over a column of nulls.
+      // null. If we just created the column, switch to update mode targeting it
+      // so the user can refine the expression without hitting a name collision.
+      if (calcMode === "create") {
+        setCalcMode("update");
+        setCalcTargetField(targetName);
+      }
       setCalcError(
         t("attributeTable.calcAppliedWithErrors", {
           errors: result.errors,

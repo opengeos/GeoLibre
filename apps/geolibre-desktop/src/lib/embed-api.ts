@@ -173,7 +173,8 @@ export type EmbedCommand =
     }
   | { type: "exportImage" }
   | { type: "getLayerFeatures"; layerId: string }
-  | { type: "getDrawnFeatures" };
+  | { type: "getDrawnFeatures" }
+  | { type: "ping" };
 
 /** A parsed inbound message: the command plus the host's correlation id. */
 export interface EmbedRequest {
@@ -719,6 +720,8 @@ export function parseEmbedRequest(
       return { command: { type: "getLayerFeatures", layerId: payload.layerId }, requestId };
     case "getDrawnFeatures":
       return { command: { type: "getDrawnFeatures" }, requestId };
+    case "ping":
+      return { command: { type: "ping" }, requestId };
     default:
       return null;
   }

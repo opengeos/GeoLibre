@@ -4,6 +4,7 @@ import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import {
   addColumn,
+  attributeValuesMatchQuery,
   deleteColumn,
   getColumnSettings,
   hiddenColumns,
@@ -376,5 +377,21 @@ describe("rename/delete of a maintained editor tracking column", () => {
     });
     assert.ok(renameColumn(untracked, discovered, "created_by", "author"));
     assert.ok(deleteColumn(untracked, "edited_by"));
+  });
+});
+
+describe("attributeValuesMatchQuery", () => {
+  it("handles BigInt values without throwing and matches values rather than JSON keys", () => {
+    const props = {
+      object_id: 9007199254740993n,
+      nested: { big: 1234567890123456789n },
+      label: "River Basin",
+    };
+    assert.equal(attributeValuesMatchQuery(props, "9007199254740993"), true);
+    assert.equal(attributeValuesMatchQuery(props, "1234567890123456789"), true);
+    assert.equal(attributeValuesMatchQuery(props, "river"), true);
+    // Must not match property key names or JSON syntax punctuation.
+    assert.equal(attributeValuesMatchQuery(props, "object_id"), false);
+    assert.equal(attributeValuesMatchQuery(props, '{"label"'), false);
   });
 });

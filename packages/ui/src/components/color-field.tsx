@@ -277,6 +277,7 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
         const result = await new window.EyeDropper().open({
           signal: controller.signal,
         });
+        if (controller.signal.aborted) return;
         if (result?.sRGBHex) {
           discardDrag();
           onChange(result.sRGBHex);
@@ -334,6 +335,7 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
             />
           ) : null}
           <Input
+            {...props}
             ref={ref}
             type="color"
             name={transparent ? undefined : name}
@@ -344,7 +346,7 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
             // The swatch shows the remembered opaque color while transparent, so
             // give assistive tech an accessible name that conveys the "no color"
             // state instead of letting it announce that opaque value.
-            aria-label={transparent ? transparentSwatchLabel : undefined}
+            aria-label={transparent ? transparentSwatchLabel : props["aria-label"]}
             onChange={handleSwatchChange}
             onBlur={(event) => {
               endDrag();
@@ -353,7 +355,6 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
             // `peer` so the overlay (which covers the input's own
             // focus-visible border) can re-expose the focus ring below.
             className={cn("peer", fill && "w-full", className)}
-            {...props}
           />
           {transparent ? (
             <span

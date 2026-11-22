@@ -30,9 +30,11 @@ export function useDialogResize(dispatch: Dispatch<PrintLayoutAction>, controlsW
     (event: React.PointerEvent<HTMLDivElement>) => {
       event.preventDefault();
       event.stopPropagation();
+      resizeCleanupRef.current?.();
       event.currentTarget.setPointerCapture?.(event.pointerId);
       const el = dialogRef.current;
       if (!el) return;
+      const dirSign = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
       const rect = el.getBoundingClientRect();
       const startX = event.clientX;
       const startY = event.clientY;
@@ -47,7 +49,10 @@ export function useDialogResize(dispatch: Dispatch<PrintLayoutAction>, controlsW
 
       const onMove = (e: PointerEvent) => {
         next = {
-          width: Math.max(480, Math.min(window.innerWidth - 16, startW + (e.clientX - startX) * 2)),
+          width: Math.max(
+            480,
+            Math.min(window.innerWidth - 16, startW + (e.clientX - startX) * dirSign * 2),
+          ),
           height: Math.max(
             360,
             Math.min(window.innerHeight - 16, startH + (e.clientY - startY) * 2),
@@ -66,7 +71,7 @@ export function useDialogResize(dispatch: Dispatch<PrintLayoutAction>, controlsW
         if (frame !== null) window.cancelAnimationFrame(frame);
         document.body.style.cursor = prevCursor;
         document.body.style.userSelect = prevSelect;
-        resizeCleanupRef.current = null;
+        if (resizeCleanupRef.current === cleanup) resizeCleanupRef.current = null;
       };
       const onUp = () => {
         cleanup();
@@ -86,7 +91,9 @@ export function useDialogResize(dispatch: Dispatch<PrintLayoutAction>, controlsW
   const startSplitterResize = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       event.preventDefault();
+      resizeCleanupRef.current?.();
       event.currentTarget.setPointerCapture?.(event.pointerId);
+      const dirSign = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
       const startX = event.clientX;
       const startWidth = controlsWidthRef.current;
       let nextWidth = startWidth;
@@ -99,7 +106,7 @@ export function useDialogResize(dispatch: Dispatch<PrintLayoutAction>, controlsW
       const onMove = (e: PointerEvent) => {
         nextWidth = Math.max(
           CONTROLS_MIN_WIDTH,
-          Math.min(CONTROLS_MAX_WIDTH, startWidth + e.clientX - startX),
+          Math.min(CONTROLS_MAX_WIDTH, startWidth + (e.clientX - startX) * dirSign),
         );
         if (frame !== null) return;
         frame = window.requestAnimationFrame(() => {
@@ -114,7 +121,7 @@ export function useDialogResize(dispatch: Dispatch<PrintLayoutAction>, controlsW
         if (frame !== null) window.cancelAnimationFrame(frame);
         document.body.style.cursor = prevCursor;
         document.body.style.userSelect = prevSelect;
-        resizeCleanupRef.current = null;
+        if (resizeCleanupRef.current === cleanup) resizeCleanupRef.current = null;
       };
       const onUp = () => {
         cleanup();

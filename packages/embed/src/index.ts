@@ -197,6 +197,17 @@ export function connect(
 
   let readyResolve: ((client: GeoLibreEmbedClient) => void) | null = null;
   let readyReject: ((error: Error) => void) | null = null;
+  let readySettled = false;
+  const resolveReady = () => {
+    if (readySettled) return;
+    readySettled = true;
+    readyResolve?.(client);
+  };
+  const rejectReady = (error: Error) => {
+    if (readySettled) return;
+    readySettled = true;
+    readyReject?.(error);
+  };
   const ready = new Promise<GeoLibreEmbedClient>((resolve, reject) => {
     readyResolve = resolve;
     readyReject = reject;
@@ -254,15 +265,27 @@ export function connect(
         else request.reject(new Error(String(payload.error ?? "GeoLibre request failed")));
       }
     } else if (type === "ready") {
-      readyResolve?.(client);
+      resolveReady();
     }
     for (const listener of listeners.get(type) ?? []) listener(payload as never);
   };
   window.addEventListener("message", receive);
 
+  // If the iframe already finished booting (e.g. connect() called from
+  // iframe.onload), send a readiness ping so the app replies immediately with
+  // `ready` instead of letting connect() wait until timeout.
+  try {
+    target.postMessage(
+      { v: EMBED_API_VERSION, type: "ping", payload: {}, requestId: null },
+      origin,
+    );
+  } catch {
+    // Ignore transient postMessage failures; ready listener still waits until timeout.
+  }
+
   const timer = window.setTimeout(() => {
     client.disconnect();
-    readyReject?.(new Error("Timed out waiting for GeoLibre"));
+    rejectReady(new Error("Timed out waiting for GeoLibre"));
   }, options.timeoutMs ?? 15_000);
   return ready.finally(() => window.clearTimeout(timer));
 }

@@ -599,3 +599,36 @@ export function formatAttributeCellText(value: unknown, locale?: string): string
   }
   return formatAttributeValue(value);
 }
+
+/**
+ * Case-insensitive substring search across a feature's attribute values.
+ * Handles DuckDB BigInt values and nested objects without crashing like raw
+ * `JSON.stringify(properties)`, and matches values only (not JSON keys or
+ * punctuation).
+ */
+export function attributeValuesMatchQuery(
+  properties: Record<string, unknown> | null | undefined,
+  queryLower: string,
+): boolean {
+  if (!queryLower) return true;
+  if (!properties) return false;
+  for (const value of Object.values(properties)) {
+    if (value == null) continue;
+    if (typeof value === "string") {
+      if (value.toLowerCase().includes(queryLower)) return true;
+    } else if (typeof value === "bigint") {
+      if (value.toString().includes(queryLower)) return true;
+    } else if (typeof value === "number" || typeof value === "boolean") {
+      if (String(value).toLowerCase().includes(queryLower)) return true;
+    } else if (typeof value === "object") {
+      let text: string;
+      try {
+        text = JSON.stringify(value, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
+      } catch {
+        text = String(value);
+      }
+      if (text.toLowerCase().includes(queryLower)) return true;
+    }
+  }
+  return false;
+}
