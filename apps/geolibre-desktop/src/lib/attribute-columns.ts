@@ -607,6 +607,9 @@ function valueMatchesQuery(value: unknown, queryLower: string, seen: WeakSet<obj
   if (typeof value === "number" || typeof value === "boolean") {
     return String(value).toLowerCase().includes(queryLower);
   }
+  if (value instanceof Date) {
+    return !Number.isNaN(value.getTime()) && value.toISOString().toLowerCase().includes(queryLower);
+  }
   if (typeof value === "object") {
     if (seen.has(value)) return false;
     seen.add(value);

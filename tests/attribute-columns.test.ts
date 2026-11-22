@@ -385,10 +385,12 @@ describe("attributeValuesMatchQuery", () => {
     const props = {
       object_id: 9007199254740993n,
       nested: { secretKey: 1234567890123456789n, tags: ["Delta", 42n] },
+      recorded_at: new Date("2026-05-15T12:30:00.000Z"),
       label: "River Basin",
     };
     assert.equal(attributeValuesMatchQuery(props, "9007199254740993"), true);
     assert.equal(attributeValuesMatchQuery(props, "1234567890123456789"), true);
+    assert.equal(attributeValuesMatchQuery(props, "2026-05-15"), true);
     assert.equal(attributeValuesMatchQuery(props, "delta"), true);
     assert.equal(attributeValuesMatchQuery(props, "river"), true);
     // Must not match top-level keys, nested keys, or JSON syntax punctuation.

@@ -1326,10 +1326,10 @@ export function ProcessingDialog({
     async (nextJob: WhiteboxJob) => {
       if (importedJobIdRef.current === nextJob.id) return;
       importedJobIdRef.current = nextJob.id;
-      const startGen =
-        jobGenerationByJobRef.current.get(nextJob.id) ?? useAppStore.getState().projectGeneration;
+      const startLoadCount =
+        jobGenerationByJobRef.current.get(nextJob.id) ?? useAppStore.getState().projectLoadCount;
       jobGenerationByJobRef.current.delete(nextJob.id);
-      if (useAppStore.getState().projectGeneration !== startGen) {
+      if (useAppStore.getState().projectLoadCount !== startLoadCount) {
         runParametersByJobRef.current.delete(nextJob.id);
         return;
       }
@@ -1345,7 +1345,7 @@ export function ProcessingDialog({
       for (const [name, value] of entries) {
         const path = isFeatureCollection(value) ? "" : (outputPath(value) ?? "");
         const data = isFeatureCollection(value) ? value : await fetchWhiteboxJsonOutput(path);
-        if (useAppStore.getState().projectGeneration !== startGen) return;
+        if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
         if (!isFeatureCollection(data)) continue;
         const layerName = uniqueLayerName(
           `${jobToolLabel} ${humanize(name)}`,
@@ -1358,7 +1358,7 @@ export function ProcessingDialog({
       }
 
       for (const [name, value] of Object.entries(nextJob.outputs)) {
-        if (useAppStore.getState().projectGeneration !== startGen) return;
+        if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
         if (!(value instanceof Uint8Array)) continue;
         const param = jobTool?.params?.find((item) => item.name === name);
         const outKind = param ? parameterKind(param) : "";
@@ -1366,11 +1366,11 @@ export function ProcessingDialog({
           const lidarName = `${jobToolLabel} ${humanize(name)}`;
           const fileName = `${outputBaseName(nextJob.tool_id, name)}.${lidarBytesExtension(value)}`;
           if (await onAddLidar(value, lidarName, fileName)) {
-            if (useAppStore.getState().projectGeneration !== startGen) return;
+            if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
             historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(lidarName);
             continue;
           }
-          if (useAppStore.getState().projectGeneration !== startGen) return;
+          if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
         }
         const declaredFile =
           outKind === "file_out" || outKind === "vector_out" || outKind === "lidar_out";
@@ -1385,7 +1385,7 @@ export function ProcessingDialog({
         } else if (onAddRaster) {
           const rasterName = `${jobToolLabel} ${humanize(name)}`;
           await onAddRaster(value, rasterName, `${outputBaseName(nextJob.tool_id, name)}.tif`);
-          if (useAppStore.getState().projectGeneration !== startGen) return;
+          if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
           historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(rasterName);
         }
       }
@@ -1402,7 +1402,7 @@ export function ProcessingDialog({
 
   const runSelectedTool = async () => {
     if (!selectedTool || selectedTool.locked) return;
-    const dispatchGeneration = useAppStore.getState().projectGeneration;
+    const dispatchLoadCount = useAppStore.getState().projectLoadCount;
     setError(null);
     importedJobIdRef.current = null;
     // Flag "running" before any prep so the Run button shows its busy state
@@ -1679,7 +1679,7 @@ export function ProcessingDialog({
       if (runLocal && nextJob.status === "succeeded") {
         runParametersByJobRef.current.set(nextJob.id, parameters);
       }
-      jobGenerationByJobRef.current.set(nextJob.id, dispatchGeneration);
+      jobGenerationByJobRef.current.set(nextJob.id, dispatchLoadCount);
       historyTrackersRef.current.set(nextJob.id, tracker);
       while (historyTrackersRef.current.size > MAX_TRACKED_HISTORY_JOBS) {
         const oldest = historyTrackersRef.current.keys().next().value;

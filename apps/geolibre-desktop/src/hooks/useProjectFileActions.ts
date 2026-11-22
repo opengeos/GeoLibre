@@ -339,13 +339,21 @@ function importedProjectMapReady(
             settled = true;
             window.clearTimeout(timer);
             map.off("style.load", finish);
-            map.off("error", finish);
+            map.off("error", onError);
             signal?.removeEventListener("abort", finish);
             resolve();
           };
+          const onError = (event: unknown) => {
+            // Ignore per-tile or per-source errors so an unrelated failing
+            // layer does not resolve the wait before the new basemap style loads.
+            if (event && typeof event === "object" && ("tile" in event || "sourceId" in event)) {
+              return;
+            }
+            finish();
+          };
           const timer = window.setTimeout(finish, timeoutMs);
           map.on("style.load", finish);
-          map.on("error", finish);
+          map.on("error", onError);
           signal?.addEventListener("abort", finish, { once: true });
         })
       : Promise.resolve();
@@ -541,9 +549,19 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // dialog is open would overwrite the pending prompt and strand the first
   // call's unresolved promise.
   const isSavingRef = useRef(false);
-  // Dedicated guard for batch layer write-back / copy-to-folder so a layer
-  // folder picker or batch export never silently blocks Save Project.
+  // Dedicated guard for batch layer write-back / copy-to-folder UI triggers so
+  // a folder picker never blocks Save Project, while `layerWriteChainRef`
+  // serializes actual local source write-backs across Save Project and batch save.
   const isBatchSavingLayersRef = useRef(false);
+  const layerWriteChainRef = useRef<Promise<void>>(Promise.resolve());
+  const runSerializedLayerWrite = <T>(task: () => Promise<T>): Promise<T> => {
+    const next = layerWriteChainRef.current.then(task, task);
+    layerWriteChainRef.current = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  };
   const remoteProjectRef = useRef<
     (RemoteSharedProjectTarget & { projectGeneration: number }) | null
   >(null);
@@ -1689,22 +1707,31 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (useAppStore.getState().projectGeneration !== state.projectGeneration) return "cancel";
 
     if (requestedChoice === "overwrite-sources") {
-      const liveState = useAppStore.getState();
-      const liveEdited = liveState.layers.filter(hasEditedGeometry);
-      const targets = listWritableLayerCandidates(liveEdited, {
-        collaboration: liveState.collaboration,
-        geometryEditLayerId: getGeometryEditTargetLayerId(),
-        attributeTableDrafts: liveState.ui.attributeTableDrafts,
-        projectGeneration: state.projectGeneration,
-      })
-        .filter((candidate) => !candidate.disabledReason)
-        .map((candidate) => candidate.layer);
-      const summary = await saveLayerEditsBatch(targets, {
-        map: mapControllerRef.current?.getMap() ?? undefined,
-        t,
-        projectGeneration: state.projectGeneration,
+      const summary = await runSerializedLayerWrite(async () => {
+        if (useAppStore.getState().projectGeneration !== state.projectGeneration) {
+          return null;
+        }
+        const liveState = useAppStore.getState();
+        const liveEdited = liveState.layers.filter(hasEditedGeometry);
+        const targets = listWritableLayerCandidates(liveEdited, {
+          collaboration: liveState.collaboration,
+          geometryEditLayerId: getGeometryEditTargetLayerId(),
+          attributeTableDrafts: liveState.ui.attributeTableDrafts,
+          projectGeneration: state.projectGeneration,
+        })
+          .filter((candidate) => !candidate.disabledReason)
+          .map((candidate) => candidate.layer);
+        return saveLayerEditsBatch(targets, {
+          map: mapControllerRef.current?.getMap() ?? undefined,
+          t,
+          projectGeneration: state.projectGeneration,
+        });
       });
-      if (summary.aborted || useAppStore.getState().projectGeneration !== state.projectGeneration) {
+      if (
+        !summary ||
+        summary.aborted ||
+        useAppStore.getState().projectGeneration !== state.projectGeneration
+      ) {
         return "cancel";
       }
       if (summary.succeeded > 0) {
@@ -2827,14 +2854,19 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     isBatchSavingLayersRef.current = true;
     try {
       const startGeneration = useAppStore.getState().projectGeneration;
-      const idSet = new Set(layerIds);
-      const targets = useAppStore.getState().layers.filter((layer) => idSet.has(layer.id));
-      const summary = await saveLayerEditsBatch(targets, {
-        map: mapControllerRef.current?.getMap() ?? undefined,
-        t,
-        projectGeneration: startGeneration,
-        onLayerStart: callbacks.onLayerStart,
-        onLayerDone: callbacks.onLayerDone,
+      const summary = await runSerializedLayerWrite(async () => {
+        if (useAppStore.getState().projectGeneration !== startGeneration) {
+          return { succeeded: 0, failed: 0, warnings: 0, aborted: true, results: [] };
+        }
+        const idSet = new Set(layerIds);
+        const targets = useAppStore.getState().layers.filter((layer) => idSet.has(layer.id));
+        return saveLayerEditsBatch(targets, {
+          map: mapControllerRef.current?.getMap() ?? undefined,
+          t,
+          projectGeneration: startGeneration,
+          onLayerStart: callbacks.onLayerStart,
+          onLayerDone: callbacks.onLayerDone,
+        });
       });
       const hasIssues = summary.failed > 0 || summary.warnings > 0;
       if (!summary.aborted && !hasIssues && summary.succeeded > 0) {
