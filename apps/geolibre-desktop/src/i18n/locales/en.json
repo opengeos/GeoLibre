@@ -5990,7 +5990,14 @@
       "pieCaptionCount_one": "row count · {{count}} category",
       "pieCaptionCount_other": "row count · {{count}} categories",
       "pieCaptionSum_one": "sum · {{count}} category",
-      "pieCaptionSum_other": "sum · {{count}} categories"
+      "pieCaptionSum_other": "sum · {{count}} categories",
+      "underflowLabel": "< {{value}}",
+      "overflowLabel": "> {{value}}",
+      "underflowTitle_one": "Below {{value}}: {{formattedCount}} value",
+      "underflowTitle_other": "Below {{value}}: {{formattedCount}} values",
+      "overflowTitle_one": "Above {{value}}: {{formattedCount}} value",
+      "overflowTitle_other": "Above {{value}}: {{formattedCount}} values",
+      "outliersCaption": "end bars hold the values outside the 1st–99th percentile"
     },
     "editor": {
       "addTitle": "Add widget",
@@ -9686,6 +9693,11 @@
     "rangeMin": "Minimum",
     "rangeMax": "Maximum",
     "rangeSeparator": "to",
+    "belowTypical_one": "{{formattedCount}} value below {{value}}",
+    "belowTypical_other": "{{formattedCount}} values below {{value}}",
+    "aboveTypical_one": "{{formattedCount}} value above {{value}}",
+    "aboveTypical_other": "{{formattedCount}} values above {{value}}",
+    "outliersHint": "The slider spans the 1st–99th percentile. While a handle sits at its end, the values beyond it stay included.",
     "dateFrom": "From",
     "dateTo": "To",
     "textOperator": "Match",

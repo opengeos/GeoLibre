@@ -6,6 +6,8 @@
  * already builds for both GeoJSON and DuckDB query layers.
  */
 
+import { typicalRange } from "./typical-range";
+
 export type ChartType = "histogram" | "scatter" | "bar" | "line" | "box" | "pie";
 
 /** A row as seen by the chart helpers — only its property bag matters. */
@@ -296,20 +298,49 @@ export interface HistogramBin {
 
 export interface HistogramResult {
   bins: HistogramBin[];
+  /** The span the equal-width bins cover (the 1st–99th percentile when clipped). */
   min: number;
   max: number;
-  /** How many values were binned. */
+  /** How many values were binned, overflow bins included. */
   total: number;
-  /** The tallest bin's count, for scaling the y axis. */
+  /** The tallest bin's count (overflow bins included), for scaling the y axis. */
   maxCount: number;
+  /**
+   * Values below `min`, from the field's true minimum. Present only when
+   * outliers clipped the bins to the typical range (see
+   * {@link HistogramOptions.clipOutliers}) and some value lies below it.
+   */
+  underflow?: HistogramBin;
+  /** Values above `max`, up to the field's true maximum. As {@link underflow}. */
+  overflow?: HistogramBin;
+}
+
+export interface HistogramOptions {
+  /**
+   * Span the bins over the 1st–99th percentile when a few outliers would
+   * otherwise crowd every typical value into one bar (#3455), gathering the
+   * values beyond it into {@link HistogramResult.underflow} and
+   * {@link HistogramResult.overflow}. Values without outliers bin over their
+   * exact extent either way.
+   */
+  clipOutliers?: boolean;
 }
 
 /**
  * Bin a set of values into `binCount` equal-width buckets. Returns null when
  * there are no values. When every value is identical (min === max) a single
  * bin holding them all is returned, avoiding a zero-width divide.
+ *
+ * With `clipOutliers`, the buckets span the values' typical range instead of
+ * their extent when outliers stretch it (see `typicalRange`), and the values
+ * beyond it are counted in an underflow and an overflow bin, so the counts
+ * still add up to `total`.
  */
-export function computeHistogram(values: number[], binCount: number): HistogramResult | null {
+export function computeHistogram(
+  values: number[],
+  binCount: number,
+  options: HistogramOptions = {},
+): HistogramResult | null {
   if (values.length === 0) return null;
 
   let min = values[0];
@@ -329,6 +360,14 @@ export function computeHistogram(values: number[], binCount: number): HistogramR
     };
   }
 
+  const range = options.clipOutliers ? typicalRange(values) : null;
+  const extentMin = min;
+  const extentMax = max;
+  if (range?.clipped) {
+    min = range.low;
+    max = range.high;
+  }
+
   const requested = Math.trunc(binCount);
   // Clamp a finite request into range (so 0 → 1, not the default); fall back to
   // the default only for a non-finite request (NaN/Infinity).
@@ -341,19 +380,30 @@ export function computeHistogram(values: number[], binCount: number): HistogramR
     x1: i === count - 1 ? max : min + (i + 1) * width,
     count: 0,
   }));
+  let below = 0;
+  let above = 0;
 
   for (const value of values) {
-    // Clamp so the maximum value lands in the last bin rather than index `count`.
-    const index = Math.min(count - 1, Math.floor((value - min) / width));
-    bins[index].count += 1;
+    if (value < min) {
+      below += 1;
+    } else if (value > max) {
+      above += 1;
+    } else {
+      // Clamp so the maximum value lands in the last bin rather than index `count`.
+      const index = Math.min(count - 1, Math.floor((value - min) / width));
+      bins[index].count += 1;
+    }
   }
 
-  let maxCount = 0;
+  let maxCount = Math.max(below, above);
   for (const bin of bins) {
     if (bin.count > maxCount) maxCount = bin.count;
   }
 
-  return { bins, min, max, total: values.length, maxCount };
+  const result: HistogramResult = { bins, min, max, total: values.length, maxCount };
+  if (below > 0) result.underflow = { x0: extentMin, x1: min, count: below };
+  if (above > 0) result.overflow = { x0: max, x1: extentMax, count: above };
+  return result;
 }
 
 export interface ScatterPoint {

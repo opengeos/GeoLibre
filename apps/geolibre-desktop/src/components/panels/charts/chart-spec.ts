@@ -88,7 +88,11 @@ export function computeChart(rows: ChartRow[], spec: ChartSpec): ChartResult {
         type: "histogram",
         field,
         result: field
-          ? computeHistogram(numericValues(rows, field), spec.bins ?? DEFAULT_HISTOGRAM_BINS)
+          ? // Outliers get end bars rather than flattening every typical value
+            // into the first one (#3455).
+            computeHistogram(numericValues(rows, field), spec.bins ?? DEFAULT_HISTOGRAM_BINS, {
+              clipOutliers: true,
+            })
           : null,
       };
     }

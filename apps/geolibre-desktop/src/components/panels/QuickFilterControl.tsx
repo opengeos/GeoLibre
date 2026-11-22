@@ -21,6 +21,7 @@ import {
   selectShownValues,
   selectedOptionCount,
 } from "../../lib/quick-filter-selection";
+import { formatRangeBound } from "../../lib/typical-range";
 
 /** Options above which the value list gets its own search box. */
 const SEARCH_THRESHOLD = 8;
@@ -256,40 +257,57 @@ function RangeControl({
   idPrefix,
   onChange,
 }: Pick<QuickFilterControlProps, "filter" | "profile" | "idPrefix" | "onChange">) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const countFormatter = useCountFormatter();
+  const typical = profile?.typical;
+  // The slider spans the 1st–99th percentile when a few outliers would
+  // otherwise squash every typical value into its first pixel (#3455), and the
+  // exact extent otherwise.
+  const domainMin = typical ? typical.min : profile?.min;
+  const domainMax = typical ? typical.max : profile?.max;
   // A degenerate extent (a constant column, or a single-feature layer) has no
   // slider to draw: Radix positions each thumb at `(value - min) / (max - min)`,
   // which is `0 / 0` when the ends coincide. The typed bounds below still work,
   // so the control stays usable.
   const bounds =
-    profile &&
-    Number.isFinite(profile.min ?? NaN) &&
-    Number.isFinite(profile.max ?? NaN) &&
-    (profile.min as number) < (profile.max as number)
-      ? { min: profile.min as number, max: profile.max as number }
+    Number.isFinite(domainMin ?? NaN) &&
+    Number.isFinite(domainMax ?? NaN) &&
+    (domainMin as number) < (domainMax as number)
+      ? { min: domainMin as number, max: domainMax as number }
       : null;
 
-  // Writing the full extent back as an explicit bound would keep the filter
-  // "on" (and so keep dropping features that have no value for the field), so
-  // dragging the handles back to the ends clears the filter instead.
-  const commit = (min: number | null, max: number | null): void => {
-    const atExtent =
-      bounds !== null && min !== null && max !== null && min <= bounds.min && max >= bounds.max;
-    onChange({
-      ...filter,
-      min: atExtent ? null : min,
-      max: atExtent ? null : max,
-    });
+  // Where each thumb is drawn. A saved bound outside the slider's domain (typed
+  // past either end, or saved before the data changed) is pinned to the nearer
+  // end without being rewritten.
+  const shownMin = bounds
+    ? Math.min(bounds.max, Math.max(bounds.min, filter.min ?? bounds.min))
+    : null;
+  const shownMax = bounds
+    ? Math.max(bounds.min, Math.min(bounds.max, filter.max ?? bounds.max))
+    : null;
+
+  // A handle at an end of the slider means "no bound on that side", so it
+  // saves `null` rather than the end value: writing the domain's end back as an
+  // explicit bound would exclude the outliers beyond a clipped domain, and keep
+  // the filter "on" (dropping features that have no value) for an exact one.
+  // A handle the drag did not move keeps its saved bound, so moving one handle
+  // never rewrites a bound the other side was clamped from.
+  const commit = (nextMin: number, nextMax: number): void => {
+    if (!bounds) return;
+    const min =
+      nextMin === shownMin ? (filter.min ?? null) : nextMin <= bounds.min ? null : nextMin;
+    const max =
+      nextMax === shownMax ? (filter.max ?? null) : nextMax >= bounds.max ? null : nextMax;
+    onChange({ ...filter, min, max });
   };
 
-  const lower = filter.min ?? bounds?.min ?? null;
-  const upper = filter.max ?? bounds?.max ?? null;
+  const format = (value: number): string => formatRangeBound(value, i18n.language);
 
   return (
     <div className="space-y-2">
-      {bounds && lower !== null && upper !== null && (
+      {bounds && shownMin !== null && shownMax !== null && (
         <RangeSlider
-          value={[Math.max(bounds.min, lower), Math.min(bounds.max, upper)]}
+          value={[shownMin, shownMax]}
           min={bounds.min}
           max={bounds.max}
           step={sliderStep(bounds.min, bounds.max)}
@@ -298,14 +316,42 @@ function RangeControl({
           onValueChange={([nextMin, nextMax]) => commit(nextMin, nextMax)}
         />
       )}
+      {bounds && typical && (
+        <div
+          className="flex items-center gap-2 text-[11px] leading-tight text-muted-foreground"
+          title={t("quickFilters.outliersHint")}
+          data-testid="quick-filter-outliers"
+        >
+          {typical.below > 0 && (
+            <span className="tabular-nums">
+              {t("quickFilters.belowTypical", {
+                count: typical.below,
+                formattedCount: countFormatter.format(typical.below),
+                value: format(typical.min),
+              })}
+            </span>
+          )}
+          {typical.above > 0 && (
+            <span className="ms-auto tabular-nums">
+              {t("quickFilters.aboveTypical", {
+                count: typical.above,
+                formattedCount: countFormatter.format(typical.above),
+                value: format(typical.max),
+              })}
+            </span>
+          )}
+        </div>
+      )}
       <div className="flex items-center gap-2">
+        {/* The typed bounds take any value, including one beyond a clipped
+            slider's ends; their placeholders name the field's exact extent. */}
         <Input
           id={`${idPrefix}-${filter.id}-min`}
           type="number"
           inputMode="decimal"
           className="h-7 text-xs"
           value={filter.min ?? ""}
-          placeholder={bounds ? String(bounds.min) : t("quickFilters.rangeMin")}
+          placeholder={bounds ? String(profile?.min ?? bounds.min) : t("quickFilters.rangeMin")}
           aria-label={t("quickFilters.rangeMin")}
           onChange={(event) => onChange({ ...filter, min: parseBound(event.target.value) })}
         />
@@ -316,7 +362,7 @@ function RangeControl({
           inputMode="decimal"
           className="h-7 text-xs"
           value={filter.max ?? ""}
-          placeholder={bounds ? String(bounds.max) : t("quickFilters.rangeMax")}
+          placeholder={bounds ? String(profile?.max ?? bounds.max) : t("quickFilters.rangeMax")}
           aria-label={t("quickFilters.rangeMax")}
           onChange={(event) => onChange({ ...filter, max: parseBound(event.target.value) })}
         />

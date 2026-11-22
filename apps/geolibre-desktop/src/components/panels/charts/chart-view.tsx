@@ -14,6 +14,7 @@
 import {
   createContext,
   useContext,
+  useId,
   useLayoutEffect,
   useState,
   type ReactNode,
@@ -23,6 +24,7 @@ import { useTranslation } from "react-i18next";
 import {
   formatAxisValue,
   type BarAggregation,
+  type HistogramBin,
   type BarResult,
   type BoxResult,
   type HistogramResult,
@@ -30,6 +32,7 @@ import {
   type PieResult,
   type ScatterResult,
 } from "../../../lib/attribute-charts";
+import { formatRangeBound } from "../../../lib/typical-range";
 import { type ChartResult } from "./chart-spec";
 import { categoryColors, isHexColor } from "./chart-colors";
 import {
@@ -432,26 +435,75 @@ function HistogramChart({
   field: string;
   color: string;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const frame = useChartSize();
+  const hatchId = `histogram-overflow-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   if (!result) return <EmptyChart message={t("dashboard.chart.emptyNumeric")} />;
 
-  const { bins, maxCount, min, max, total } = result;
+  const { bins, maxCount, min, max, total, underflow, overflow } = result;
   const plot = plotArea(frame.size, axisMargin(frame.sizing, { yTicks: ["0", String(maxCount)] }));
-  const slot = plot.innerW / bins.length;
+  // Outliers beyond the typical range get a hatched bar at each end (#3455),
+  // so the regular bars shift one slot in when there is an underflow bar.
+  const lead = underflow ? 1 : 0;
+  const slot = plot.innerW / (bins.length + lead + (overflow ? 1 : 0));
   const gap = Math.min(4, slot * 0.15);
+  const barHeight = (count: number) => (maxCount === 0 ? 0 : (count / maxCount) * plot.innerH);
+  const bound = (value: number) => formatRangeBound(value, i18n.language);
+  const countFormat = new Intl.NumberFormat(i18n.language);
+  const overflowBar = (bin: HistogramBin, index: number, title: string) => {
+    const height = barHeight(bin.count);
+    return (
+      <rect
+        x={plot.left + index * slot + gap / 2}
+        y={plot.top + plot.innerH - height}
+        width={Math.max(1, slot - gap)}
+        height={height}
+        fill={`url(#${hatchId})`}
+        stroke={color}
+        strokeOpacity={0.6}
+        strokeDasharray="3 2"
+        data-overflow="true"
+      >
+        <title>{title}</title>
+      </rect>
+    );
+  };
 
   return (
     <>
       <ChartFrame label={`Histogram of ${field}`} frame={frame} plot={plot}>
+        {(underflow || overflow) && (
+          <defs>
+            <pattern
+              id={hatchId}
+              width={6}
+              height={6}
+              patternUnits="userSpaceOnUse"
+              patternTransform="rotate(45)"
+            >
+              <rect width={6} height={6} fill={color} opacity={0.15} />
+              <line x1={0} y1={0} x2={0} y2={6} stroke={color} strokeWidth={2} opacity={0.6} />
+            </pattern>
+          </defs>
+        )}
         {tickText(plot.left - 6, plot.top + plot.innerH, "0", "end", "middle")}
         {tickText(plot.left - 6, plot.top, String(maxCount), "end", "middle")}
+        {underflow &&
+          overflowBar(
+            underflow,
+            0,
+            t("dashboard.chart.underflowTitle", {
+              count: underflow.count,
+              formattedCount: countFormat.format(underflow.count),
+              value: bound(underflow.x1),
+            }),
+          )}
         {bins.map((bin, index) => {
-          const height = maxCount === 0 ? 0 : (bin.count / maxCount) * plot.innerH;
+          const height = barHeight(bin.count);
           return (
             <rect
               key={index}
-              x={plot.left + index * slot + gap / 2}
+              x={plot.left + (index + lead) * slot + gap / 2}
               y={plot.top + plot.innerH - height}
               width={Math.max(1, slot - gap)}
               height={height}
@@ -464,13 +516,34 @@ function HistogramChart({
             </rect>
           );
         })}
+        {overflow &&
+          overflowBar(
+            overflow,
+            lead + bins.length,
+            t("dashboard.chart.overflowTitle", {
+              count: overflow.count,
+              formattedCount: countFormat.format(overflow.count),
+              value: bound(overflow.x0),
+            }),
+          )}
         {/* A collapsed (min === max) histogram spans the full width, so show a
-            single centered label instead of identical min/max labels. */}
-        {xRangeTicks(plot, formatAxisValue(min), formatAxisValue(max), min === max)}
+            single centered label instead of identical min/max labels. An
+            overflow bar's end is labelled with the bound it lies beyond. */}
+        {xRangeTicks(
+          plot,
+          underflow
+            ? t("dashboard.chart.underflowLabel", { value: bound(min) })
+            : formatAxisValue(min),
+          overflow
+            ? t("dashboard.chart.overflowLabel", { value: bound(max) })
+            : formatAxisValue(max),
+          min === max,
+        )}
         {axisTitle(plot, field)}
       </ChartFrame>
       <Caption>
         {total.toLocaleString()} value{total === 1 ? "" : "s"} · count on y
+        {(underflow || overflow) && ` · ${t("dashboard.chart.outliersCaption")}`}
       </Caption>
     </>
   );
