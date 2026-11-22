@@ -20,6 +20,7 @@ import booleanIntersects from "@turf/boolean-intersects";
 import booleanContains from "@turf/boolean-contains";
 import booleanWithin from "@turf/boolean-within";
 import { featureCollection } from "@turf/helpers";
+import { reprojectFeatureCollectionToWgs84 } from "./crs-proj4";
 import type {
   BBox,
   Feature,
@@ -2092,10 +2093,9 @@ export const reprojectTool: ProcessingAlgorithm = {
   id: "reproject",
   name: "Reproject",
   description:
-    "Reinterpret a layer's coordinates as a source CRS and transform them to WGS84 so they display in the correct location. Requires the Sidecar or Python engine.",
+    "Reinterpret a layer's coordinates as a source CRS and transform them to WGS84 so they display in the correct location.",
   group: "Geometry",
   supportsSidecar: true,
-  requiresSidecar: true,
   parameters: [
     { id: "layer", label: "Input layer", type: "layer", required: true },
     {
@@ -2105,17 +2105,26 @@ export const reprojectTool: ProcessingAlgorithm = {
       required: true,
       default: "EPSG:3857",
       description:
-        "The CRS the layer's coordinates are really in (e.g. EPSG:3857). The result is transformed to WGS84 (EPSG:4326).",
+        "The CRS the layer's coordinates are really in (e.g. EPSG:3857, EPSG:32617). The result is transformed to WGS84 (EPSG:4326).",
     },
   ],
-  run: (ctx) => {
-    // GeoLibre layers are WGS84 GeoJSON, and real CRS math needs pyproj, so the
-    // client (Turf.js) engine cannot reproject. Point the user at the engines
-    // that share the backend's _reproject (Sidecar/GeoPandas or Pyodide).
-    ctx.log(
-      'Reproject runs on the Python engine. Choose "Sidecar (GeoPandas)" or ' +
-        '"Python (Pyodide)" in the Engine selector above, then run again.',
-    );
+  run: async (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const sourceCrs = String(ctx.parameters.source_crs ?? "").trim();
+    if (!sourceCrs) {
+      ctx.log("Reproject requires a source CRS (e.g. EPSG:3857).");
+      return;
+    }
+    try {
+      const reprojected = await reprojectFeatureCollectionToWgs84(fc, sourceCrs);
+      ctx.log(
+        `Reprojected ${reprojected.features.length} feature(s) from ${sourceCrs} to EPSG:4326.`,
+      );
+      ctx.addResultLayer?.("Reproject", reprojected);
+    } catch (error) {
+      ctx.log(error instanceof Error ? error.message : String(error));
+    }
   },
 };
 

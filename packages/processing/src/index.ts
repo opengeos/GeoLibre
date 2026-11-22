@@ -165,6 +165,16 @@ export {
   type BuiltSpectralIndex,
 } from "./spectral-indices";
 export {
+  resolveCrsDefinition,
+  reprojectFeatureCollectionToWgs84,
+  type ResolvedCrs,
+} from "./crs-proj4";
+export {
+  compileRasterExpression,
+  type BandRef,
+  type CompiledRasterExpression,
+} from "./raster-expr";
+export {
   CLIENT_RASTER_TOOL_IDS,
   TERRAIN_NODATA,
   supportsClientRaster,

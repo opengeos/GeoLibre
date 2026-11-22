@@ -8,8 +8,11 @@ import {
   fillMissingElevations,
   isDemOverviewIfd,
   normalizeNoData,
+  projectedBoundsFromTransform,
   projectionFromGeoKeys,
+  resampleProjectedTile,
 } from "../packages/map/src/cog-dem-source";
+import { resolveEpsgProjection } from "../packages/map/src/epsg-proj4";
 
 describe("COG DEM terrain encoding", () => {
   it("encodes metre and sub-metre elevations as Terrarium RGB", () => {
@@ -177,14 +180,14 @@ describe("fillMissingElevations", () => {
 });
 
 describe("projectionFromGeoKeys", () => {
-  it("does not misclassify projected WGS84 DEMs (e.g. UTM) as EPSG:4326", () => {
+  it("resolves projected EPSG codes and never misclassifies user-defined projected DEMs as EPSG:4326", () => {
     assert.equal(
       projectionFromGeoKeys({
         GTModelTypeGeoKey: 1,
         ProjectedCSTypeGeoKey: 32617,
         GeographicTypeGeoKey: 4326,
       }),
-      null,
+      "EPSG:32617",
     );
     assert.equal(
       projectionFromGeoKeys({
@@ -209,5 +212,61 @@ describe("projectionFromGeoKeys", () => {
       }),
       "EPSG:4326",
     );
+    assert.equal(
+      projectionFromGeoKeys({
+        GTModelTypeGeoKey: 2,
+        GeographicTypeGeoKey: 4269,
+      }),
+      "EPSG:4269",
+    );
+  });
+});
+
+describe("projected COG DEM warping", () => {
+  it("projects UTM 17N DEM bounds to WGS84 and resamples elevation into Web Mercator tiles", async () => {
+    const utm17n = await resolveEpsgProjection(32617);
+    assert.ok(utm17n, "EPSG:32617 should resolve from bundled EPSG tables");
+    const toWgs84 = utm17n.proj4(utm17n.definition, "EPSG:4326");
+    const mercToUtm = utm17n.proj4("EPSG:3857", utm17n.definition);
+    const utmToMerc = utm17n.proj4(utm17n.definition, "EPSG:3857");
+
+    // A 10 km x 10 km UTM 17N DEM around Knoxville, TN (~83.9°W, 35.9°N).
+    const utmBounds: [number, number, number, number] = [230_000, 3_970_000, 240_000, 3_980_000];
+    const wgs = projectedBoundsFromTransform(utmBounds, (c) => toWgs84.forward(c));
+    assert.ok(wgs);
+    assert.ok(wgs[0] > -85 && wgs[2] < -83, `unexpected lon bounds: ${wgs}`);
+    assert.ok(wgs[1] > 35 && wgs[3] < 37, `unexpected lat bounds: ${wgs}`);
+
+    // Build a synthetic 64x64 ramp DEM in UTM meters: elevation = 500 + 2 * col.
+    const width = 64;
+    const height = 64;
+    const dem = new Float32Array(width * height);
+    for (let r = 0; r < height; r += 1) {
+      for (let c = 0; c < width; c += 1) {
+        dem[r * width + c] = 500 + c * 2;
+      }
+    }
+    const mercCenter = utmToMerc.forward([235_000, 3_975_000]);
+    const halfSpan = 2_000;
+    const mercBounds: [number, number, number, number] = [
+      mercCenter[0] - halfSpan,
+      mercCenter[1] - halfSpan,
+      mercCenter[0] + halfSpan,
+      mercCenter[1] + halfSpan,
+    ];
+    const tile = resampleProjectedTile(dem, width, height, utmBounds, mercBounds, (c) =>
+      mercToUtm.forward(c),
+    );
+    assert.equal(tile.length, 256 * 256);
+    // Center pixel maps to UTM x=235,000 -> halfway across the 64-col ramp (~564 m).
+    const centerElev = tile[128 * 256 + 128];
+    assert.ok(
+      Number.isFinite(centerElev) && Math.abs(centerElev - 564) <= 6,
+      `expected ~564 m at center, got ${centerElev}`,
+    );
+    // East edge of the Mercator tile must be higher than west edge.
+    const westElev = tile[128 * 256 + 16];
+    const eastElev = tile[128 * 256 + 240];
+    assert.ok(eastElev > westElev + 20, `expected east (${eastElev}) > west (${westElev})`);
   });
 });

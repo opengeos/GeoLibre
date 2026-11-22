@@ -289,9 +289,38 @@ describe("raster-client compute", () => {
     assert.deepEqual([...out.bands[0]], [0, 0, 1, 1]);
   });
 
-  it("rejects multi-raster references in client band math", () => {
+  it("rejects unprovided secondary raster references in client band math", () => {
     const raster = makeRaster([[1, 2]], 2, 1);
-    assert.throws(() => rasterCalc(raster, { expression: "A + B" }), /single input/);
+    assert.throws(() => rasterCalc(raster, { expression: "A + B" }), /Raster B is referenced/);
+  });
+
+  it("evaluates multi-raster expressions across A, B, and C without eval or new Function", () => {
+    const a = makeRaster(
+      [
+        [10, 20, 30, -9999],
+        [2, 4, 6, 8],
+      ],
+      4,
+      1,
+      { nodata: -9999 },
+    );
+    const b = makeRaster([[1, 2, -9999, 4]], 4, 1, { nodata: -9999 });
+    const c = makeRaster([[5, 5, 5, 5]], 4, 1, { nodata: -9999 });
+    const out = rasterCalc(a, {
+      expression: "where(A1 > 15, (A2 ** 2 + B) * C, A1 + B1)",
+      additionalInputs: { B: b, C: c },
+    });
+    assert.equal(out.bands[0][0], 11); // A1=10 <= 15 -> 10 + 1
+    assert.equal(out.bands[0][1], (16 + 2) * 5); // A1=20 > 15 -> (4**2 + 2) * 5 = 90
+    assert.equal(out.bands[0][2], -9999); // B is nodata
+    assert.equal(out.bands[0][3], -9999); // A1 is nodata
+
+    // Dimension mismatch between A and B must be rejected cleanly.
+    const wrongSize = makeRaster([[1, 2]], 2, 1);
+    assert.throws(
+      () => rasterCalc(a, { expression: "A + B", additionalInputs: { B: wrongSize } }),
+      /do not match/,
+    );
   });
 
   it("rejects expressions that reach browser globals", () => {
