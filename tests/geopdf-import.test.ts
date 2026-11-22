@@ -6,6 +6,7 @@ import { geoPdfCrsConverters } from "../apps/geolibre-desktop/src/lib/geopdf/crs
 import {
   applyUserToCrs,
   fitViewportTransform,
+  lptsMeasuredDown,
   primaryViewport,
   readGeoPdfPages,
   viewportsByArea,
@@ -403,6 +404,99 @@ describe("viewport reading", () => {
     const wkt = 'PROJCS["x",GEOGCS["y"],UNIT["metre",1,AUTHORITY["EPSG","9001"]]]';
     assert.equal(wktEpsg(wkt), null);
     assert.equal(wktEpsg('PROJCS["a [b]",AUTHORITY["EPSG","2100"]]'), 2100);
+  });
+});
+
+// GH #3556: Global Mapper measures /LPTS downward from the top of the /BBox,
+// so read by the spec its frames land on the map upside down.
+describe("LPTS measured downward", () => {
+  /** A latitude/longitude frame's corners, `[lat, lon]`: north 10, south 9, west 20, east 22. */
+  const NW = [10, 20];
+  const SW = [9, 20];
+  const SE = [9, 22];
+  const NE = [10, 22];
+  const WGS84 = "<< /Type /GEOGCS /EPSG 4326 >>";
+  const geographic = (lat: number, lon: number): [number, number] => [lon, lat];
+
+  /** A one-viewport page over {@link BBOX} with the given LPTS, GPTS and optional /Bounds. */
+  function page(lpts: number[], corners: number[][], bounds = ""): Uint8Array {
+    return classicPdf(
+      `/VP [<< /Type /Viewport /BBox [${BBOX.join(" ")}] /Measure << /Type /Measure ` +
+        `/Subtype /GEO ${bounds}/LPTS [${lpts.join(" ")}] ` +
+        `/GPTS [${corners.flat().join(" ")}] /GCS ${WGS84} >> >>]`,
+    );
+  }
+
+  /** The frame's top-left and bottom-right corners as `[lon, lat]`. */
+  function frameCorners(bytes: Uint8Array) {
+    const vp = primaryViewport(readGeoPdfPages(bytes)[0])!;
+    const t = fitViewportTransform(vp, geographic)!;
+    const [x0, y0, x1, y1] = vp.bbox;
+    return { vp, topLeft: applyUserToCrs(t, x0, y1), bottomRight: applyUserToCrs(t, x1, y0) };
+  }
+
+  const near = (a: number[], b: number[]) =>
+    assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-9, `${a} != ${b}`);
+
+  it("puts a Global Mapper frame north up", () => {
+    // Global Mapper's corner order: (0, 1) is the south-west corner.
+    const { vp, topLeft, bottomRight } = frameCorners(
+      page([0, 1, 0, 0, 1, 0, 1, 1], [SW, NW, NE, SE]),
+    );
+    assert.equal(vp.lptsMeasuredDown, true);
+    assert.deepEqual(vp.lpts, [0, 0, 0, 1, 1, 1, 1, 0]);
+    near(topLeft, [20, 10]);
+    near(bottomRight, [22, 9]);
+  });
+
+  it("leaves a spec-conforming frame alone", () => {
+    const { vp, topLeft, bottomRight } = frameCorners(
+      page([0, 1, 0, 0, 1, 0, 1, 1], [NW, SW, SE, NE]),
+    );
+    assert.equal(vp.lptsMeasuredDown, false);
+    assert.deepEqual(vp.lpts, [0, 1, 0, 0, 1, 0, 1, 1]);
+    near(topLeft, [20, 10]);
+    near(bottomRight, [22, 9]);
+  });
+
+  it("keeps a south-up sheet south up, since it is rotated, not mirrored", () => {
+    const { vp, topLeft } = frameCorners(page([0, 1, 0, 0, 1, 0, 1, 1], [SE, NE, NW, SW]));
+    assert.equal(vp.lptsMeasuredDown, false);
+    near(topLeft, [22, 9]);
+  });
+
+  it("keeps a frame rotated a quarter turn", () => {
+    // East up: the top-left corner is the north-east one.
+    const { vp, topLeft } = frameCorners(page([0, 1, 0, 0, 1, 0, 1, 1], [NE, NW, SW, SE]));
+    assert.equal(vp.lptsMeasuredDown, false);
+    near(topLeft, [22, 10]);
+  });
+
+  it("flips the neatline with the control points", () => {
+    // A triangle along the top edge, written measured downward.
+    const { vp } = frameCorners(
+      page([0, 1, 0, 0, 1, 0, 1, 1], [SW, NW, NE, SE], "/Bounds [0 0 1 0 0.5 0.5] "),
+    );
+    assert.deepEqual(vp.bounds, [0, 1, 1, 1, 0.5, 0.5]);
+  });
+
+  it("reads a frame across the antimeridian", () => {
+    const west = [-5, 179];
+    const east = [-5, -179];
+    const southWest = [-6, 179];
+    const southEast = [-6, -179];
+    assert.equal(
+      lptsMeasuredDown([0, 1, 0, 0, 1, 0, 1, 1], [west, southWest, southEast, east].flat()),
+      false,
+    );
+    assert.equal(
+      lptsMeasuredDown([0, 1, 0, 0, 1, 0, 1, 1], [southWest, west, east, southEast].flat()),
+      true,
+    );
+  });
+
+  it("does not guess from collinear points", () => {
+    assert.equal(lptsMeasuredDown([0, 0, 0.5, 0.5, 1, 1], [10, 10, 11, 11, 12, 12]), false);
   });
 });
 

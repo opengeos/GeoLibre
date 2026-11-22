@@ -175,7 +175,7 @@ Drag a vector file (GeoJSON, zipped Shapefile, KMZ, and similar) or a GeoTIFF/CO
 
 - **PDF layers to include** lists the PDF's layers (its optional content groups) when it has any, ticked the way the PDF opens. Untick a layer to leave it out of the image. The choice is made when the layer is added; to change it, add the PDF again.
 - **Page** appears when more than one page is georeferenced.
-- The georeference must be in the ISO 32000 geospatial format, which GDAL, QGIS, ArcGIS, Avenza Maps, and GeoLibre's own [Print Layout](print-layout.md) PDF exports write. The older OGC "LGIDict" encoding and encrypted PDFs are not supported.
+- The georeference must be in the ISO 32000 geospatial format, which GDAL, QGIS, ArcGIS, Avenza Maps, and GeoLibre's own [Print Layout](print-layout.md) PDF exports write. Global Mapper's GeoPDFs measure the frame's control points from the top rather than the bottom; GeoLibre recognizes that and places them upright too. The older OGC "LGIDict" encoding and encrypted PDFs are not supported.
 - The PDF's coordinate system is read from its EPSG code (with the datum shift GeoLibre's EPSG tables carry), or from its WKT when there is no code. A frame that the map's Web Mercator would bend between its corners (a large latitude/longitude sheet, say) is reprojected into Web Mercator first, so its interior lands in place too.
 - The frame is rendered at up to 4096 pixels on its longest side and saved in the project.
 

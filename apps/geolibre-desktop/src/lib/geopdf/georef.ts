@@ -36,6 +36,13 @@ export interface GeoPdfViewport {
    * {@link bbox}, `[x, y, x, y, ...]`. The whole square when the PDF gives none.
    */
   bounds: number[];
+  /**
+   * True when the file measured `/LPTS` and `/Bounds` downward from the top
+   * of {@link bbox}, so they were flipped on reading to the standard y-up
+   * unit square that {@link lpts} and {@link bounds} now hold (see
+   * {@link lptsMeasuredDown}).
+   */
+  lptsMeasuredDown: boolean;
   crs: GeoPdfCrs;
 }
 
@@ -95,6 +102,9 @@ function readViewports(doc: PdfDocument, page: PdfDict): GeoPdfViewport[] {
           ? wktEpsg(wkt)
           : null;
     const name = doc.resolve(vp.get("Name"));
+    const neatline =
+      bounds.length >= 6 && bounds.length % 2 === 0 ? bounds : [0, 0, 0, 1, 1, 1, 1, 0];
+    const yDown = lptsMeasuredDown(lpts, gpts);
     out.push({
       name: typeof name === "string" ? name : null,
       bbox: [
@@ -103,9 +113,10 @@ function readViewports(doc: PdfDocument, page: PdfDict): GeoPdfViewport[] {
         Math.max(bbox[0], bbox[2]),
         Math.max(bbox[1], bbox[3]),
       ],
-      lpts,
+      lpts: yDown ? flipUnitY(lpts) : lpts,
       gpts,
-      bounds: bounds.length >= 6 && bounds.length % 2 === 0 ? bounds : [0, 0, 0, 1, 1, 1, 1, 0],
+      bounds: yDown ? flipUnitY(neatline) : neatline,
+      lptsMeasuredDown: yDown,
       crs: {
         geographic: nameOf(doc.resolve(gcs.get("Type"))) === "GEOGCS",
         epsg,
@@ -114,6 +125,57 @@ function readViewports(doc: PdfDocument, page: PdfDict): GeoPdfViewport[] {
     });
   }
   return out;
+}
+
+/**
+ * Whether a viewport's `/LPTS` are measured downward from the top of its
+ * `/BBox` rather than upward from the bottom as ISO 32000 specifies (GH #3556).
+ *
+ * Global Mapper writes them that way: its `/LPTS [0 1 0 0 1 0 1 1]` pairs
+ * `(0, 1)` with the frame's south-west corner, where the spec makes `(0, 1)`
+ * the top left. Read by the spec, such a frame lands on the map mirrored top
+ * to bottom. A printed map is never a mirror image, so the pairs give the
+ * convention away: fitted to longitude and latitude, the standard reading has
+ * a negative determinant (a reflection) exactly when the points were measured
+ * downward. Rotated frames, south-up sheets and every spec-conforming file
+ * keep a positive determinant and are left alone.
+ *
+ * Args:
+ *   lpts: Unit-square points, `[x, y, x, y, ...]`.
+ *   gpts: The paired latitude/longitude, `[lat, lon, lat, lon, ...]`.
+ *
+ * Returns:
+ *   True when the pairs only make an unmirrored map with y measured downward;
+ *   false otherwise, including for degenerate (collinear) points.
+ */
+export function lptsMeasuredDown(lpts: readonly number[], gpts: readonly number[]): boolean {
+  if (lpts.length !== gpts.length || lpts.length < 6) return false;
+  // Longitudes relative to the first point, so a frame across the
+  // antimeridian doesn't read as a 360-degree jump.
+  const lon0 = gpts[1];
+  const unitSquare: GeoPdfViewport = {
+    name: null,
+    bbox: [0, 0, 1, 1],
+    lpts: [...lpts],
+    gpts: [...gpts],
+    bounds: [0, 0, 0, 1, 1, 1, 1, 0],
+    lptsMeasuredDown: false,
+    crs: { geographic: true, epsg: null, wkt: null },
+  };
+  const fit = fitViewportTransform(unitSquare, (lat, lon) => [
+    lon0 + ((((lon - lon0 + 180) % 360) + 360) % 360) - 180,
+    lat,
+  ]);
+  if (!fit) return false;
+  // x = lon, y = lat: b*f - c*e is the determinant of the linear part.
+  const det = fit[1] * fit[5] - fit[2] * fit[4];
+  const scale = Math.max(Math.abs(fit[1] * fit[5]), Math.abs(fit[2] * fit[4]));
+  return det < -1e-9 * scale;
+}
+
+/** Flip the y of each `[x, y, ...]` unit-square point: `y -> 1 - y`. */
+function flipUnitY(points: readonly number[]): number[] {
+  return points.map((value, i) => (i % 2 === 1 ? 1 - value : value));
 }
 
 /**
