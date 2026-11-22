@@ -90,7 +90,7 @@ describe("Earthdata download proxy", () => {
     assert.equal(hops[3].url, FILE);
   });
 
-  it("does not cache a first hop to another Earthdata host", async () => {
+  it("caches the final presigned URL across a multi-hop Earthdata redirect without caching the intermediate hop", async () => {
     const MIDDLE = "https://data.ornldaac.earthdata.nasa.gov/protected/next.h5";
     const hops: string[] = [];
     const upstream = async (input: RequestInfo | URL) => {
@@ -104,7 +104,7 @@ describe("Earthdata download proxy", () => {
     const auth = { authorization: "Bearer hop" };
     await handleEarthdataDownload(request(FILE, auth), upstream);
     await handleEarthdataDownload(request(FILE, auth), upstream);
-    assert.deepEqual(hops, [FILE, MIDDLE, PRESIGNED, FILE, MIDDLE, PRESIGNED]);
+    assert.deepEqual(hops, [FILE, MIDDLE, PRESIGNED, PRESIGNED]);
   });
 
   it("falls back to the DAAC when a cached presigned URL stops working", async () => {

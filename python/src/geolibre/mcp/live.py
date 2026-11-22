@@ -77,7 +77,8 @@ class Relay:
     @property
     def redacted_url(self) -> str:
         """The relay URL with no token, safe to return to a model."""
-        return f"http://{self.host}:{self.port}/geolibre/relay"
+        host = f"[{self.host}]" if ":" in self.host else self.host
+        return f"http://{host}:{self.port}/geolibre/relay"
 
     def listeners(self) -> int:
         """Return how many GeoLibre windows are subscribed."""
@@ -114,7 +115,7 @@ class Relay:
         data = None
         headers = {"Accept": "application/json"}
         if body is not None:
-            data = json.dumps(body).encode("utf-8")
+            data = json.dumps(body, allow_nan=False).encode("utf-8")
             if len(data) > MAX_COMMAND_BYTES:
                 raise LiveError(
                     f"Live command is {len(data)} bytes; the limit is {MAX_COMMAND_BYTES}."
@@ -256,10 +257,16 @@ def _loopback_host(url: str) -> bool:
 
 
 def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
     if os.name == "nt":
         return _windows_pid_alive(pid)
     try:
         os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
     except OSError:
         return False
     return True

@@ -1084,6 +1084,9 @@ def _job_update(job_id: str, **patch: Any) -> None:
         _JOBS[job_id] = JobState(**data)
 
 
+MAX_JOB_MESSAGES = 500
+
+
 def _append_job_message(job_id: str, event: Any) -> None:
     """Append a runtime event to a job message log."""
     parsed = _parse_json_maybe(event) if isinstance(event, str) else event
@@ -1094,6 +1097,8 @@ def _append_job_message(job_id: str, event: Any) -> None:
     with _JOBS_LOCK:
         job = _JOBS[job_id]
         messages = [*job.messages, message]
+        if len(messages) > MAX_JOB_MESSAGES:
+            messages = messages[-MAX_JOB_MESSAGES:]
         _JOBS[job_id] = job.model_copy(update={"messages": messages, "updated_at": _utc_now()})
 
 

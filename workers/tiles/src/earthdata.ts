@@ -214,7 +214,11 @@ export async function handleEarthdataDownload(
           : { "accept-encoding": "identity" },
         redirect: "manual",
       });
-      if (upstream.ok) response = upstream;
+      if (upstream.ok) {
+        response = upstream;
+      } else {
+        await upstream.body?.cancel().catch(() => {});
+      }
     } catch {
       // Fall back to the DAAC below.
     }
@@ -241,6 +245,7 @@ export async function handleEarthdataDownload(
       response = upstream;
       break;
     }
+    await upstream.body?.cancel().catch(() => {});
     let next: URL;
     try {
       next = new URL(location, url);
@@ -257,16 +262,18 @@ export async function handleEarthdataDownload(
       return plain(502, "The Earthdata file host redirected somewhere unexpected.");
     }
     url = next.toString();
-    // Cache only a presigned target: another Earthdata hop would answer the
-    // tokenless replay with a redirect or 401 and be evicted every time.
-    if (hop === 0 && cacheKey && !isEarthdataDataUrl(url)) {
-      await storePresigned(cacheKey, url, now);
-    }
   }
   if (!response) return plain(508, "Too many redirects.");
   if (!response.ok) {
+    await response.body?.cancel().catch(() => {});
     const status = response.status === 401 || response.status === 403 ? response.status : 502;
     return plain(status, `The Earthdata file host answered ${response.status}.`);
+  }
+  // Cache only the final presigned URL that actually succeeded without Earthdata
+  // auth, across single- or multi-hop redirects. Intermediate Earthdata hops are
+  // never cached because tokenless replay would fail or redirect.
+  if (cacheKey && url !== target && !isEarthdataDataUrl(url)) {
+    await storePresigned(cacheKey, url, now);
   }
 
   const headers = new Headers(EARTHDATA_CORS_HEADERS);

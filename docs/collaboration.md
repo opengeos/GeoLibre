@@ -240,16 +240,25 @@ are in place for a deployment that fronts the relay with its own issuer.
 
 `kick-participant` disconnects a participant. `block-participant` also records
 their **participant key** so the relay refuses the next join. That key is
-`user:<userId>` for a verified identity, `invite:<token>` for an invite-based
-join, and otherwise `anon:<clientId>` — where `clientId` is minted fresh on
-every join.
+`user:<userId>` for a verified identity, `invite:<token>` for a single-use
+invite join (`maxUses: 1`), and otherwise `anon:<clientId>` (including anonymous
+guests who join via a shared multi-use invite link), where `clientId` is minted
+fresh on every join.
 
 The same key backs a persisted per-participant override, so both carry the same
-caveat: a block is durable only for identity- and invite-based joins. **An anonymous
-guest can rejoin simply by reconnecting**, since they arrive with a new
-`clientId` and therefore a new key. Blocking is a moderation convenience, not a
-security boundary; a session that needs an enforceable ban has to require an
-invite or a signed-in identity.
+caveat: a block or override is durable across reconnects only for signed-in
+identities (`user:<userId>`). A `maxUses: 1` invite is exhausted on its first
+join, so reconnecting with that exhausted token does not match the invite and
+receives a fresh `anon:<clientId>` key. For a shared multi-use invite link,
+keying on `anon:<clientId>` keeps a host's override or kick/block on one guest
+from affecting every other guest sharing the link; revoking the invite with
+`revoke-invite` stops the token from granting its invite role, while anonymous
+joins remain open whenever `requireIdentity` is off. **An anonymous guest
+(including one on an unrevoked or revoked invite link) can rejoin by
+reconnecting**, since they receive a fresh `clientId`. Blocking is a moderation
+convenience, not a security boundary; for an enforceable per-user ban, enable
+`requireIdentity` with a configured identity provider so anonymous joins are
+rejected and `user:<userId>` blocks apply to every rejoin.
 
 ## Chat (#754)
 

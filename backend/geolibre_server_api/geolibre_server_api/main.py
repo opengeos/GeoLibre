@@ -7,13 +7,15 @@ import os
 import re
 import secrets
 import shutil
+import stat
+import tempfile
 import threading
 import time
 import uuid
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Callable, Literal
+from typing import Annotated, Any, Callable, Literal
 from urllib.parse import quote, urlparse
 
 import httpx
@@ -35,6 +37,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session, selectinload, sessionmaker
+from starlette.concurrency import run_in_threadpool
 
 from geolibre_server_api.auth import (
     AuthPrincipal,
@@ -266,7 +269,24 @@ class FileStorage:
     def put(self, key: str, data: bytes, content_type: str) -> None:
         path = self.root / key
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
+        with tempfile.NamedTemporaryFile(
+            mode="wb", dir=path.parent, prefix=f".{path.name}.", delete=False
+        ) as handle:
+            tmp_path = Path(handle.name)
+            try:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+            except BaseException:
+                tmp_path.unlink(missing_ok=True)
+                raise
+        try:
+            if path.exists():
+                os.chmod(tmp_path, stat.S_IMODE(path.stat().st_mode))
+            os.replace(tmp_path, path)
+        except BaseException:
+            tmp_path.unlink(missing_ok=True)
+            raise
 
     def get(self, key: str) -> bytes:
         try:
@@ -689,16 +709,27 @@ def create_app(
     database_url = database_url or os.getenv(
         "GEOLIBRE_DATABASE_URL", "sqlite:///./geolibre-server-api.db"
     )
-    connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
-    engine = create_engine(database_url, connect_args=connect_args)
-    if database_url.startswith("sqlite"):
+    is_sqlite = database_url.startswith("sqlite")
+    is_sqlite_memory = is_sqlite and (
+        database_url == "sqlite:///:memory:" or ":memory:" in database_url
+    )
+    connect_args = {"check_same_thread": False} if is_sqlite else {}
+    engine_kwargs: dict[str, Any] = {"connect_args": connect_args}
+    if not is_sqlite:
+        engine_kwargs["pool_pre_ping"] = True
+    engine = create_engine(database_url, **engine_kwargs)
+    if is_sqlite:
         # SQLite disables foreign keys per connection, which makes every
         # ondelete="CASCADE" inert. The ORM cascade covers projects and versions,
         # but tokens have no relationship, so deleting an account would otherwise
-        # strand its tokens.
+        # strand its tokens. Also enable busy_timeout (and WAL for file DBs) so
+        # concurrent readers and writers do not fail immediately with database locked.
         @event.listens_for(engine, "connect")
-        def _enable_foreign_keys(dbapi_connection, _record):  # pragma: no cover - driver hook
+        def _configure_sqlite(dbapi_connection, _record):  # pragma: no cover - driver hook
             dbapi_connection.execute("PRAGMA foreign_keys=ON")
+            dbapi_connection.execute("PRAGMA busy_timeout=5000")
+            if not is_sqlite_memory:
+                dbapi_connection.execute("PRAGMA journal_mode=WAL")
 
     Base.metadata.create_all(engine)
     if database_url.startswith("sqlite"):
@@ -2552,9 +2583,22 @@ def create_app(
             data.extend(chunk)
             if len(data) > max_thumbnail_bytes:
                 raise HTTPException(413, f"thumbnail exceeds the {max_thumbnail_bytes} byte limit")
-        object_storage.put(f"groups/{group.id}/thumbnail", bytes(data), content_type)
-        group.thumbnail_type = content_type
-        session.commit()
+        payload = bytes(data)
+
+        def _store_and_commit() -> None:
+            # Lock the group row, write the object, and issue an explicit UPDATE
+            # inside the threadpool so the event loop never blocks and concurrent
+            # uploads always persist matching bytes and thumbnail_type.
+            session.execute(
+                select(Group.id).where(Group.id == group.id).with_for_update(key_share=True)
+            )
+            object_storage.put(f"groups/{group.id}/thumbnail", payload, content_type)
+            session.execute(
+                update(Group).where(Group.id == group.id).values(thumbnail_type=content_type)
+            )
+            session.commit()
+
+        await run_in_threadpool(_store_and_commit)
 
     @app.get("/api/groups/{group_id}/thumbnail", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def get_group_thumbnail(
@@ -3470,10 +3514,23 @@ def create_app(
                 raise HTTPException(413, f"thumbnail exceeds the {max_thumbnail_bytes} byte limit")
             chunks.append(chunk)
         data = b"".join(chunks)
-        object_storage.put(f"projects/{project.id}/thumbnail", data, content_type)
-        project.thumbnail_type = content_type
-        project.updated_at = now()
-        session.commit()
+
+        def _store_and_commit() -> None:
+            # Lock the project row, write the object, and issue an explicit UPDATE
+            # inside the threadpool so the event loop never blocks and concurrent
+            # uploads always persist matching bytes and thumbnail_type.
+            session.execute(
+                select(Project.id).where(Project.id == project.id).with_for_update(key_share=True)
+            )
+            object_storage.put(f"projects/{project.id}/thumbnail", data, content_type)
+            session.execute(
+                update(Project)
+                .where(Project.id == project.id)
+                .values(thumbnail_type=content_type, updated_at=now())
+            )
+            session.commit()
+
+        await run_in_threadpool(_store_and_commit)
 
     @app.get("/api/projects/{project_id}/thumbnail", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def get_thumbnail(

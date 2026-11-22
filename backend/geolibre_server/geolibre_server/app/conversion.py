@@ -1068,19 +1068,29 @@ def _job_update(job_id: str, **patch: Any) -> None:
         _JOBS[job_id] = job.model_copy(update={**patch, "updated_at": _utc_now()})
 
 
+MAX_JOB_MESSAGES = 500
+
+
 def _append_job_message(job_id: str, message: str) -> None:
     """Append a progress line to a job message log."""
     with _JOBS_LOCK:
         job = _JOBS[job_id]
-        _JOBS[job_id] = job.model_copy(
-            update={"messages": [*job.messages, message], "updated_at": _utc_now()}
-        )
+        messages = [*job.messages, message]
+        if len(messages) > MAX_JOB_MESSAGES:
+            messages = messages[-MAX_JOB_MESSAGES:]
+        _JOBS[job_id] = job.model_copy(update={"messages": messages, "updated_at": _utc_now()})
 
 
 # Running job subprocesses, so a job can be cancelled; and jobs cancelled
 # before their subprocess started.
 _PROCESSES: dict[str, subprocess.Popen[str]] = {}
 _CANCELLED: set[str] = set()
+
+
+def _is_cancelled(job_id: str) -> bool:
+    """Return True if *job_id* has been marked for cancellation."""
+    with _JOBS_LOCK:
+        return job_id in _CANCELLED
 
 
 def _job_state(job_id: str) -> JobState | None:
@@ -1225,7 +1235,7 @@ def _run_conversion_job(
             watchdog.cancel()
         if timed_out.is_set():
             raise RuntimeError(f"Conversion timed out after {CONVERSION_RUN_TIMEOUT_SECS} seconds")
-        if job_id in _CANCELLED:
+        if _is_cancelled(job_id):
             _job_update(job_id, status="cancelled", error="Cancelled.", messages=[])
             if not output_existed:
                 _remove_partial_output(params)
@@ -1245,7 +1255,7 @@ def _run_conversion_job(
             outputs={output_name: {"path": output_path}} if output_path else {},
         )
     except Exception as exc:
-        if job_id in _CANCELLED:
+        if _is_cancelled(job_id):
             _job_update(job_id, status="cancelled", error="Cancelled.", messages=[])
             if not output_existed:
                 _remove_partial_output(params)

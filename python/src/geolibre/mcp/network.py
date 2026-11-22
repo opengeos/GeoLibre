@@ -14,6 +14,7 @@ import socket
 import ssl
 import threading
 import time
+import zlib
 from dataclasses import dataclass, field
 from typing import Any, Callable
 from urllib.parse import parse_qsl, urlsplit
@@ -390,16 +391,72 @@ async def fetch_resource(
                     )
                 headers = {key.lower(): value for key, value in response.headers}
                 encoding = headers.get(b"content-encoding", b"identity").strip().lower()
-                if encoding not in {b"", b"identity"}:
+                if encoding not in {b"", b"identity", b"gzip"}:
                     raise PreviewNetworkError("Compressed resource responses are not supported.")
                 if int(headers.get(b"content-length", b"0")) > MAX_RESPONSE_BYTES:
                     raise PreviewNetworkError("The resource response exceeds the 4 MiB limit.")
-                async for chunk in response.aiter_stream():
-                    if time.monotonic() - started > TOTAL_TIMEOUT:
-                        raise PreviewNetworkError("The resource response exceeded its time limit.")
-                    if len(body) + len(chunk) > MAX_RESPONSE_BYTES:
-                        raise PreviewNetworkError("The resource response exceeds the 4 MiB limit.")
-                    body.extend(chunk)
+                if encoding == b"gzip":
+                    decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+                    compressed_seen = 0
+                    had_data = False
+                    try:
+                        async for chunk in response.aiter_stream():
+                            if time.monotonic() - started > TOTAL_TIMEOUT:
+                                raise PreviewNetworkError(
+                                    "The resource response exceeded its time limit."
+                                )
+                            if not chunk:
+                                continue
+                            had_data = True
+                            compressed_seen += len(chunk)
+                            if compressed_seen > MAX_RESPONSE_BYTES:
+                                raise PreviewNetworkError(
+                                    "The resource response exceeds the 4 MiB limit."
+                                )
+                            pending = chunk
+                            while pending:
+                                remaining = MAX_RESPONSE_BYTES - len(body)
+                                piece = decompressor.decompress(pending, remaining + 1)
+                                if (
+                                    len(body) + len(piece) > MAX_RESPONSE_BYTES
+                                    or decompressor.unconsumed_tail
+                                ):
+                                    raise PreviewNetworkError(
+                                        "The resource response exceeds the 4 MiB limit."
+                                    )
+                                body.extend(piece)
+                                if decompressor.eof:
+                                    pending = decompressor.unused_data
+                                    if pending:
+                                        decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+                                else:
+                                    pending = b""
+                        remaining = MAX_RESPONSE_BYTES - len(body)
+                        tail = decompressor.flush(remaining + 1)
+                        if len(body) + len(tail) > MAX_RESPONSE_BYTES:
+                            raise PreviewNetworkError(
+                                "The resource response exceeds the 4 MiB limit."
+                            )
+                        body.extend(tail)
+                        if not had_data or not decompressor.eof:
+                            raise PreviewNetworkError(
+                                "The resource response could not be decompressed."
+                            )
+                    except zlib.error as exc:
+                        raise PreviewNetworkError(
+                            "The resource response could not be decompressed."
+                        ) from exc
+                else:
+                    async for chunk in response.aiter_stream():
+                        if time.monotonic() - started > TOTAL_TIMEOUT:
+                            raise PreviewNetworkError(
+                                "The resource response exceeded its time limit."
+                            )
+                        if len(body) + len(chunk) > MAX_RESPONSE_BYTES:
+                            raise PreviewNetworkError(
+                                "The resource response exceeds the 4 MiB limit."
+                            )
+                        body.extend(chunk)
                 mime = (
                     headers.get(b"content-type", b"application/octet-stream")
                     .decode("ascii", "ignore")

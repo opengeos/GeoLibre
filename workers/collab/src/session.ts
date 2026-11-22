@@ -330,6 +330,7 @@ export class CollabSession extends DurableObject<Env> {
         lockedLayerIds: [] as string[],
         rev: 0,
       });
+      await this.ctx.storage.setAlarm(Date.now() + EMPTY_SESSION_TTL_MS);
       return Response.json({ ok: true });
     }
 
@@ -560,6 +561,7 @@ export class CollabSession extends DurableObject<Env> {
     }
 
     const socketClientId = crypto.randomUUID();
+    const initialInviteShared = matchedInvite ? matchedInvite.maxUses !== 1 : undefined;
     const joiningParticipant: SessionParticipant = {
       clientId: socketClientId,
       displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
@@ -567,6 +569,7 @@ export class CollabSession extends DurableObject<Env> {
       role,
       identity,
       inviteToken,
+      ...(initialInviteShared ? { inviteShared: true } : {}),
     };
     const participantKey = getParticipantKey(joiningParticipant);
 
@@ -601,7 +604,12 @@ export class CollabSession extends DurableObject<Env> {
     // Resolve durable override and initial edit rights AFTER claiming the
     // invite, using the participant's final post-claim key, so a claim loser
     // never inherits an invite-keyed override.
-    const finalParticipantKey = getParticipantKey({ ...joiningParticipant, inviteToken });
+    const finalInviteShared = matchedInvite ? matchedInvite.maxUses !== 1 : undefined;
+    const finalParticipantKey = getParticipantKey({
+      ...joiningParticipant,
+      inviteToken,
+      inviteShared: finalInviteShared,
+    });
     const durableOverride = this.readDurableOverride(finalParticipantKey);
     let initialOverride: boolean | undefined = undefined;
     if (durableOverride !== undefined) {
@@ -618,6 +626,7 @@ export class CollabSession extends DurableObject<Env> {
       ...(initialOverride !== undefined ? { editOverride: initialOverride } : {}),
       identity,
       inviteToken,
+      ...(finalInviteShared ? { inviteShared: true } : {}),
     };
     ws.serializeAttachment(attachment);
 

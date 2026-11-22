@@ -107,6 +107,8 @@ function isAllowedOrigin(
   }
 }
 
+const MAX_PENDING_FRAMES = 64;
+
 interface Peer {
   socket: WebSocket;
   participant?: SessionParticipant;
@@ -118,6 +120,10 @@ interface Peer {
    * overtake it and be rejected with "Send a join message first".
    */
   queue?: Promise<void>;
+  /** Number of frames currently queued or running for this peer. */
+  pendingFrames: number;
+  /** Set when the relay closes this peer due to frame-queue overflow. */
+  overflowClosed?: boolean;
 }
 
 interface LiveSession {
@@ -162,8 +168,12 @@ function randomToken(): string {
   return randomBytes(24).toString("hex");
 }
 
+function sendRaw(peer: Peer, payload: string): void {
+  if (peer.socket.readyState === WebSocket.OPEN) peer.socket.send(payload);
+}
+
 function send(peer: Peer, message: ServerMessage): void {
-  if (peer.socket.readyState === WebSocket.OPEN) peer.socket.send(JSON.stringify(message));
+  sendRaw(peer, JSON.stringify(message));
 }
 
 function json(response: import("node:http").ServerResponse, status: number, body: unknown): void {
@@ -263,7 +273,10 @@ export function createRelay(options: RelayOptions = {}): {
   }
 
   function broadcast(session: LiveSession, message: ServerMessage, except?: Peer): void {
-    for (const peer of session.peers) if (peer !== except) send(peer, message);
+    const payload = JSON.stringify(message);
+    for (const peer of session.peers) {
+      if (peer !== except) sendRaw(peer, payload);
+    }
   }
 
   function broadcastParticipants(session: LiveSession, except?: Peer): void {
@@ -311,6 +324,7 @@ export function createRelay(options: RelayOptions = {}): {
     }
 
     if (message.type === "presence" && peer.participant) {
+      if (!session.peers.has(peer) || peer.overflowClosed) return;
       const cursor = sanitizeCursor(message.cursor);
       const view = sanitizeView(message.view);
       const clientId = peer.participant.clientId;
@@ -353,6 +367,7 @@ export function createRelay(options: RelayOptions = {}): {
         message.identityToken,
         identitySecret,
       );
+      if (!session.peers.has(peer) || peer.overflowClosed) return;
 
       if (persisted.requireIdentity && !identity && role !== "host") {
         send(peer, {
@@ -364,6 +379,7 @@ export function createRelay(options: RelayOptions = {}): {
       }
 
       const socketClientId = randomUUID();
+      const initialInviteShared = matchedInvite ? matchedInvite.maxUses !== 1 : undefined;
       const joiningParticipant: SessionParticipant = {
         clientId: socketClientId,
         displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
@@ -371,6 +387,7 @@ export function createRelay(options: RelayOptions = {}): {
         role,
         identity,
         inviteToken,
+        ...(initialInviteShared ? { inviteShared: true } : {}),
       };
       const participantKey = getParticipantKey(joiningParticipant);
 
@@ -397,7 +414,12 @@ export function createRelay(options: RelayOptions = {}): {
       // Resolve durable override and initial edit rights AFTER claiming the
       // invite, using the participant's final post-claim key, so a claim loser
       // never inherits an invite-keyed override.
-      const finalParticipantKey = getParticipantKey({ ...joiningParticipant, inviteToken });
+      const finalInviteShared = matchedInvite ? matchedInvite.maxUses !== 1 : undefined;
+      const finalParticipantKey = getParticipantKey({
+        ...joiningParticipant,
+        inviteToken,
+        inviteShared: finalInviteShared,
+      });
       const durableOverride = store.getDurableOverride(id, finalParticipantKey);
       let initialOverride: boolean | undefined = undefined;
       if (durableOverride !== undefined) {
@@ -414,6 +436,7 @@ export function createRelay(options: RelayOptions = {}): {
         ...(initialOverride !== undefined ? { editOverride: initialOverride } : {}),
         identity,
         inviteToken,
+        ...(finalInviteShared ? { inviteShared: true } : {}),
       };
 
       const welcomeInvites = role === "host" ? store.getInvites(id) : undefined;
@@ -963,7 +986,7 @@ export function createRelay(options: RelayOptions = {}): {
     const id = match[1];
     wss.handleUpgrade(request, socket, head, (websocket: WebSocket) => {
       const session = live(id);
-      const peer: Peer = { socket: websocket };
+      const peer: Peer = { socket: websocket, pendingFrames: 0 };
       session.peers.add(peer);
       alive.add(websocket);
       websocket.on("pong", () => alive.add(websocket));
@@ -976,17 +999,34 @@ export function createRelay(options: RelayOptions = {}): {
           });
           return;
         }
+        if (peer.pendingFrames >= MAX_PENDING_FRAMES) {
+          peer.overflowClosed = true;
+          send(peer, {
+            type: "error",
+            code: "bad-message",
+            message: "Too many queued messages; reconnecting.",
+          });
+          peer.socket.close(1008, "Too many queued messages");
+          return;
+        }
+        peer.pendingFrames += 1;
         // Defence in depth: a throw (or rejection) here would otherwise be an
         // uncaught exception that stops the whole relay. No single session's
         // frame should be able to do that to the others.
         peer.queue = (peer.queue ?? Promise.resolve())
-          .then(() => handleMessage(id, session, peer, raw))
+          .then(() => {
+            if (peer.overflowClosed) return;
+            return handleMessage(id, session, peer, raw);
+          })
           .catch(() => {
             send(peer, {
               type: "error",
               code: "bad-message",
               message: "Could not handle message.",
             });
+          })
+          .finally(() => {
+            peer.pendingFrames = Math.max(0, peer.pendingFrames - 1);
           });
       });
       websocket.on("close", () => closePeer(id, session, peer));

@@ -1513,16 +1513,22 @@ export const tilesWorker = {
     // Reject coordinates outside the tile pyramid for this zoom (x, y < 2**z)
     // before touching upstream, so out-of-range /z/x/y can't be looped over to
     // hammer the third-party OPM S3 buckets through this Worker.
-    const dim = 2 ** Number(z);
+    const zoom = Number(z);
+    if (!Number.isInteger(zoom) || zoom < 0 || zoom > 24) {
+      return new Response("Not Found", { status: 404, headers: CORS_HEADERS });
+    }
+    const dim = 2 ** zoom;
     if (Number(x) >= dim || Number(y) >= dim) {
       return new Response("Not Found", { status: 404, headers: CORS_HEADERS });
     }
 
     // Serve from the edge cache when we can; the cache key is the incoming
     // request URL (method + path), which uniquely identifies the tile.
-    const cache = caches.default;
-    const cached = await cache.match(request);
-    if (cached) return cached;
+    const cache = typeof caches === "undefined" ? null : caches.default;
+    if (cache) {
+      const cached = await cache.match(request);
+      if (cached) return cached;
+    }
 
     const upstream = `${base}/${z}/${x}/${y}.png`;
     let originResponse: Response;
@@ -1552,7 +1558,7 @@ export const tilesWorker = {
     // isn't pinned as a blank tile for the negative TTL — only genuine 403/404
     // past-native-zoom misses are worth caching. Only GET reaches here, so the
     // request is always a valid Cache API key.
-    if (originResponse.status < 500 && originResponse.status !== 429) {
+    if (cache && originResponse.status < 500 && originResponse.status !== 429) {
       ctx.waitUntil(cache.put(request, response.clone()));
     }
     return response;
