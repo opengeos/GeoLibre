@@ -1,7 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { gridPixelAt, type LocalNetcdfGrid, type LocalNetcdfWindow } from "@geolibre/plugins";
-import { Button, ColorRampSelect, Label } from "@geolibre/ui";
+import { Button, ColorRampSelect, Label, Select } from "@geolibre/ui";
 import { Boxes, GripVertical, Settings2, X } from "lucide-react";
 import {
   lazy,
@@ -454,9 +454,10 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
               // NetCDF dialog's band pickers use. A single-option select would
               // leave the channel with nothing to pick.
               return rgbAxis.values && rgbAxis.size <= MAX_AXIS_OPTIONS ? (
-                <select
+                <Select
                   key={channel}
-                  className="max-w-40 rounded-md border bg-background px-1.5 py-1"
+                  compact
+                  className="max-w-40"
                   value={String(activeRgb[channel])}
                   disabled={recomposing}
                   aria-label={label}
@@ -467,7 +468,7 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
                       {bandLabel(rgbAxis, index)}
                     </option>
                   ))}
-                </select>
+                </Select>
               ) : (
                 <input
                   key={channel}

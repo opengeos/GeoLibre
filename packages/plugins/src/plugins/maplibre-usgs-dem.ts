@@ -28,6 +28,7 @@ import {
   type UsgsDemItem,
   type UsgsDemSearchResult,
 } from "./usgs-dem-api";
+import { withSelectChevron } from "../panel-dom";
 
 export const USGS_DEM_PLUGIN_ID = "maplibre-gl-usgs-dem";
 const PANEL_ID = USGS_DEM_PLUGIN_ID;
@@ -526,7 +527,7 @@ function mountPanel(container: HTMLElement): () => void {
   const filterRow = document.createElement("div");
   filterRow.style.cssText =
     "display:flex;gap:8px;align-items:center;justify-content:space-between;";
-  const formatSelect = document.createElement("select");
+  const formatSelect = withSelectChevron(document.createElement("select"));
   formatSelect.style.cssText =
     "padding:4px 6px;border-radius:4px;border:1px solid hsl(var(--border));background:hsl(var(--background));font-size:11px;";
   ["GeoTIFF", "IMG", "All"].forEach((fmt) => {

@@ -2419,11 +2419,11 @@ export function AttributeTable({
           />
           {t("attributeTable.zoomToSelection")}
         </label>
-        {/* A native <select> (not the @geolibre/ui Select, which hardcodes h-9
-            and w-full) so it matches the h-7 toolbar and self-sizes to its
-            content instead of clipping the longest label. */}
-        <select
-          className="h-7 shrink-0 rounded-md border border-input bg-background px-2 text-xs shadow-xs transition-colors focus-visible:border-ring focus-visible:outline-none"
+        {/* Compact so it matches the h-7 toolbar. As a flex item the wrapper
+            sizes to the longest label rather than clipping it. */}
+        <Select
+          compact
+          className="shrink-0"
           aria-label={t("attributeTable.featureViewAria")}
           value={featureView}
           onChange={(event) => setFeatureView(event.target.value as "all" | "selected")}
@@ -2436,7 +2436,7 @@ export function AttributeTable({
               count: selectedFeatureIds.length,
             })}
           </option>
-        </select>
+        </Select>
         <Button
           variant="outline"
           size="icon"

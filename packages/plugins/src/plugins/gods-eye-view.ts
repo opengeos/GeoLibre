@@ -57,6 +57,7 @@ import {
   AisStreamClient,
   vesselsToCzml,
 } from "./gods-eye-view-vessel-feeds";
+import { withSelectChevron } from "../panel-dom";
 
 export const GODS_EYE_VIEW_PLUGIN_ID = "gods-eye-view";
 export const GODS_EYE_VIEW_EARTHQUAKES_FLAG = "godsEyeViewEarthquakes";
@@ -1107,7 +1108,7 @@ function speedRow(): HTMLElement {
   label.htmlFor = "gods-eye-view-speed";
   label.textContent = translate("panel.godsEyeView.speed", "Speed");
   label.style.cssText = "font-weight:600";
-  const select = document.createElement("select");
+  const select = withSelectChevron(document.createElement("select"));
   select.id = "gods-eye-view-speed";
   select.disabled = !cesiumRef;
   for (const option of SPEED_OPTIONS) {
@@ -1138,7 +1139,7 @@ function optionRow(feed: FeedId, option: FeedOptionDescriptor): HTMLElement {
   label.htmlFor = id;
   label.textContent = translate(...option.label);
   label.style.cssText = "font-size:11px;color:hsl(var(--muted-foreground))";
-  const select = document.createElement("select");
+  const select = withSelectChevron(document.createElement("select"));
   select.id = id;
   select.disabled = !cesiumRef;
   const current = feedOptions(feed)[option.id];

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { parseHTML } from "linkedom";
-import { el, setDisabled } from "../packages/plugins/src/panel-dom";
+import {
+  el,
+  SELECT_CHEVRON_CLASS,
+  setDisabled,
+  withSelectChevron,
+} from "../packages/plugins/src/panel-dom";
+import { readFileSync } from "node:fs";
 
 /**
  * Plugin panels are built by hand against the ambient `document`, so these run
@@ -86,5 +92,37 @@ describe("setDisabled", () => {
     setDisabled(button, true);
     assert.equal(button.style.opacity, "0.5");
     assert.equal(button.style.cursor, "not-allowed");
+  });
+});
+
+describe("withSelectChevron", () => {
+  it("tags the select and returns it, keeping its other classes", () => {
+    const select = document.createElement("select");
+    select.className = "panel-field";
+    assert.equal(withSelectChevron(select), select);
+    assert.ok(select.classList.contains(SELECT_CHEVRON_CLASS));
+    assert.ok(select.classList.contains("panel-field"));
+  });
+
+  it("survives a later style.cssText assignment", () => {
+    const select = withSelectChevron(document.createElement("select"));
+    select.style.cssText = "padding:6px;background:hsl(var(--background));";
+    assert.ok(select.classList.contains(SELECT_CHEVRON_CLASS));
+  });
+
+  it("has a matching rule in the app stylesheet that beats inline styles", () => {
+    const css = readFileSync(
+      new URL("../apps/geolibre-desktop/src/index.css", import.meta.url),
+      "utf8",
+    );
+    const rule = new RegExp(
+      `select\\.${SELECT_CHEVRON_CLASS}:not\\(\\[multiple\\]\\):not\\(\\[size\\]\\) \\{([^}]*)\\}`,
+    ).exec(css)?.[1];
+    assert.ok(rule, "index.css has the chevron rule");
+    for (const prop of ["appearance", "background-image", "padding-inline-end"]) {
+      assert.match(rule, new RegExp(`${prop}: [^;]+!important;`), prop);
+    }
+    assert.match(css, new RegExp(`\\[dir="rtl"\\] select\\.${SELECT_CHEVRON_CLASS}`));
+    assert.match(css, new RegExp(`\\.dark select\\.${SELECT_CHEVRON_CLASS}`));
   });
 });

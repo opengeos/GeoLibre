@@ -1272,8 +1272,8 @@ export function BasemapExtractPanel({
                           </p>
                           <div className="flex items-center gap-1.5">
                             {entry.tileType === "vector" && entry.flavor != null ? (
-                              <select
-                                className="h-6 rounded border border-input bg-background px-1 text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                              <Select
+                                compact
                                 value={(entry.flavor as ProtomapsFlavor) || "light"}
                                 onChange={(e) =>
                                   handleSavedFlavorChange(entry, e.target.value as ProtomapsFlavor)
@@ -1285,7 +1285,7 @@ export function BasemapExtractPanel({
                                     {t(`basemapExtract.flavor.${f}`)}
                                   </option>
                                 ))}
-                              </select>
+                              </Select>
                             ) : null}
                             <span className="truncate text-[11px] text-muted-foreground">
                               {formatBytes(entry.bytes)} · z{entry.minZoom}–{entry.maxZoom}
