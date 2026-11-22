@@ -489,39 +489,61 @@ export async function fetchProjectShares(options: FetchSharesOptions): Promise<A
   }
   const base = resolved.replace(/\/+$/, "");
   const fetchImpl = options.fetchImpl ?? getShareFetch();
-  const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
-  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+  const MAX_SHARE_PAGES = 100;
+  const rawShares: unknown[] = [];
+  let offset = 0;
+  let limit = 100;
 
-  let response: Response;
-  try {
-    response = await fetchImpl(`${base}/api/shares`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        // A 404 means "not supported" (ShareLinksUnsupportedError above), so
-        // Diagnostics records it as info. The Diagnostics fetch wrapper strips
-        // this client-only marker before the request leaves.
-        [EXPECTED_STATUS_HEADER]: "404",
-      },
-      signal,
-    });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new Error(`Could not reach ${hostOf(base)}. Check your internet connection.`);
+  for (let page = 0; page < MAX_SHARE_PAGES; page += 1) {
+    const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
+    const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+    const url =
+      offset === 0 ? `${base}/api/shares` : `${base}/api/shares?limit=${limit}&offset=${offset}`;
+    let response: Response;
+    try {
+      response = await fetchImpl(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          // A 404 means "not supported" (ShareLinksUnsupportedError above), so
+          // Diagnostics records it as info. The Diagnostics fetch wrapper strips
+          // this client-only marker before the request leaves.
+          [EXPECTED_STATUS_HEADER]: "404",
+        },
+        signal,
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") throw error;
+      throw new Error(`Could not reach ${hostOf(base)}. Check your internet connection.`);
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Invalid or expired API token.");
+    }
+    if (response.status === 404) {
+      throw new ShareLinksUnsupportedError(hostOf(base));
+    }
+    if (!response.ok) {
+      throw new Error(`Failed to fetch shares (HTTP ${response.status}).`);
+    }
+
+    const payload = (await response.json().catch(() => ({}))) as {
+      shares?: unknown[];
+      total?: unknown;
+      limit?: unknown;
+    };
+    const pageShares = Array.isArray(payload.shares) ? payload.shares : [];
+    rawShares.push(...pageShares);
+    const total = typeof payload.total === "number" ? payload.total : null;
+    if (typeof payload.limit === "number" && payload.limit > 0) {
+      limit = payload.limit;
+    }
+    offset += pageShares.length;
+    if (total === null || pageShares.length === 0 || offset >= total) {
+      break;
+    }
   }
 
-  if (response.status === 401 || response.status === 403) {
-    throw new Error("Invalid or expired API token.");
-  }
-  if (response.status === 404) {
-    throw new ShareLinksUnsupportedError(hostOf(base));
-  }
-  if (!response.ok) {
-    throw new Error(`Failed to fetch shares (HTTP ${response.status}).`);
-  }
-
-  const payload = (await response.json().catch(() => ({}))) as { shares?: unknown[] };
-  const rawShares = Array.isArray(payload.shares) ? payload.shares : [];
   return rawShares
     .map((raw) => {
       const item = (raw ?? {}) as Record<string, unknown>;

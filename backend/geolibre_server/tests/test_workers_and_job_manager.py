@@ -427,3 +427,23 @@ def test_raster_workers_in_process_analysis_and_geometry(
     )
     with rasterio.open(reproj_out) as ds:
         assert ds.crs.to_epsg() == 4326
+
+
+def test_worker_modules_match_canonical_markers() -> None:
+    """Every extracted worker script that emits a marker must match RESULT_MARKER / ERROR_MARKER."""
+    import geolibre_server.workers as workers_pkg
+    from geolibre_server.workers import ERROR_MARKER, RESULT_MARKER
+
+    workers_root = Path(workers_pkg.__file__).resolve().parent
+    worker_files = [p for p in sorted(workers_root.rglob("*.py")) if p.name != "__init__.py"]
+    assert len(worker_files) >= 15
+
+    matched_any_result = False
+    for path in worker_files:
+        text = path.read_text(encoding="utf-8")
+        if "__GEOLIBRE_CONVERSION_RESULT__" in text:
+            assert RESULT_MARKER in text, f"{path} drifted from RESULT_MARKER"
+            matched_any_result = True
+        if "__GEOLIBRE_CONVERSION_ERROR__" in text:
+            assert ERROR_MARKER in text, f"{path} drifted from ERROR_MARKER"
+    assert matched_any_result
