@@ -15,12 +15,7 @@
  */
 
 import { DEFAULT_LAYER_STYLE, type LabelStyle, type LayerStyle } from "@geolibre/core";
-import {
-  cimSymbolLayerEnabled,
-  translateCimRenderer,
-  translateCimSymbol,
-  type CimRendererIssue,
-} from "./arcgis-cim-renderer";
+import { translateCimRenderer, translateCimSymbol, type CimRendererIssue } from "./cim-renderer";
 
 /** What a parsed layer file contributes to a layer's symbology. Mirrors the QML/SLD result. */
 export interface LyrxImportResult {
@@ -117,14 +112,6 @@ export function parseLyrx(document: unknown): LyrxImportResult {
   // replace the user's own style with a fraction of the file's.
   if (!translation.translated) {
     result.warnings.push(...translation.issues.map(refusal));
-    // A symbol refused for having nothing drawable is followed by what it does draw, such as a
-    // picture or hatch fill, so the user knows what to change in ArcGIS Pro.
-    const undrawn = translation.issues.some((issue) => issue.code === "symbol")
-      ? undrawnLayerTypes(layer.renderer)
-      : [];
-    if (undrawn.length > 0) {
-      result.warnings.push(`Not imported from the .lyrx style: ${undrawn.join(", ")}.`);
-    }
     return result;
   }
   result.style = translation.style;
@@ -171,10 +158,18 @@ function refusal(issue: CimRendererIssue): string {
     case "exclusion":
       return `The .lyrx style's class breaks exclude values with a clause, which GeoLibre cannot import; ${KEEPS_STYLE}`;
     case "symbol": {
-      const kind = typeName(issue.cimType, /Symbol$/);
-      return `The .lyrx style's ${
-        kind ? `${kind} symbol` : "symbol"
-      } has no fill, outline or marker GeoLibre can import; ${KEEPS_STYLE}`;
+      // The reader names the symbol, or the first enabled layer it cannot draw flat (a picture
+      // or hatch fill, a picture marker), so the user knows what to change in ArcGIS Pro.
+      if (issue.cimType?.endsWith("Symbol")) {
+        return `The .lyrx style's ${typeName(
+          issue.cimType,
+          /Symbol$/,
+        )} symbol has no fill, outline or marker GeoLibre can import; ${KEEPS_STYLE}`;
+      }
+      const layer = typeName(issue.cimType);
+      return layer
+        ? `A symbol in the .lyrx style has nothing GeoLibre can import (its ${layer} cannot be drawn); ${KEEPS_STYLE}`
+        : `The .lyrx style's symbol has no fill, outline or marker GeoLibre can import; ${KEEPS_STYLE}`;
     }
     case "no-classes":
       return `The .lyrx style's renderer has no classes GeoLibre can import; ${KEEPS_STYLE}`;
@@ -185,32 +180,6 @@ function refusal(issue: CimRendererIssue): string {
       return `The .lyrx style uses the ${name} renderer, which GeoLibre cannot import; ${KEEPS_STYLE}`;
     }
   }
-}
-
-/** Symbol layer types the shared reader can draw as a flat style. */
-const FLAT_LAYERS = new Set(["CIMSolidFill", "CIMSolidStroke", "CIMVectorMarker"]);
-
-/**
- * The enabled symbol layer types anywhere in a renderer's symbols that GeoLibre does not draw
- * flat (a picture or hatch fill, a picture marker), in plain words and without repeats.
- */
-function undrawnLayerTypes(renderer: unknown): string[] {
-  const names = new Set<string>();
-  const visit = (value: unknown, depth: number): void => {
-    if (depth > 32 || typeof value !== "object" || value === null) return;
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item, depth + 1);
-      return;
-    }
-    const object = value as CimObject;
-    for (const layer of arrayOf(object.symbolLayers)) {
-      const type = stringOf(layer.type);
-      if (cimSymbolLayerEnabled(layer) && type && !FLAT_LAYERS.has(type)) names.add(typeName(type));
-    }
-    for (const child of Object.values(object)) visit(child, depth + 1);
-  };
-  visit(renderer, 0);
-  return [...names];
 }
 
 /** The warning for something an imported renderer left out. */
@@ -235,6 +204,8 @@ function partial(issue: CimRendererIssue): string {
       }) was not imported, so lines and outlines draw solid and in place.`;
     case "marker-shape":
       return `The .lyrx style's ${name} is drawn as a circle, not in its own shape.`;
+    case "alternate-symbols":
+      return "The .lyrx style's alternate symbols for other map scales were not imported; each class draws its main symbol at every scale.";
     default:
       return `Part of the .lyrx style (${issue.code}) was not imported.`;
   }

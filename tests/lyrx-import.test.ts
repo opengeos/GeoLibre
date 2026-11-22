@@ -238,7 +238,12 @@ describe(".lyrx style import", () => {
       [
         "a symbol with nothing drawable",
         simple(hatchOnly),
-        /polygon symbol has no fill, outline or marker/,
+        /has nothing GeoLibre can import \(its hatch fill cannot be drawn\)/,
+      ],
+      [
+        "a symbol with no symbol layers",
+        simple(symbol("CIMPolygonSymbol", [])),
+        /^The \.lyrx style's polygon symbol has no fill, outline or marker GeoLibre can import/,
       ],
       ["no usable classes", zoning({ groups: [] }), /no classes GeoLibre can import/],
     ];
@@ -257,18 +262,18 @@ describe(".lyrx style import", () => {
       for (const [fill, name] of [
         [
           { type: "CIMPictureFill", enable: true },
-          /^Not imported from the \.lyrx style: picture fill\.$/,
+          /^A symbol in the \.lyrx style has nothing GeoLibre can import \(its picture fill cannot be drawn\)/,
         ],
         [
           { type: "CIMHatchFill", enable: true },
-          /^Not imported from the \.lyrx style: hatch fill\.$/,
+          /^A symbol in the \.lyrx style has nothing GeoLibre can import \(its hatch fill cannot be drawn\)/,
         ],
       ] as const) {
         const result = importStyleText(lyrx(simple(polygon(fill))));
         assert.equal(result.ok, false);
         if (result.ok) return;
-        assert.match(result.warnings[0], /has no fill, outline or marker GeoLibre can import/);
-        assert.match(result.warnings[1], name);
+        assert.equal(result.warnings.length, 1);
+        assert.match(result.warnings[0], name);
       }
     });
 
@@ -367,6 +372,11 @@ describe(".lyrx style import", () => {
         "per-class outline transparency",
         transparencies,
         /different line or outline transparencies/,
+      ],
+      [
+        "alternate symbols for other scales",
+        { ...simple(), alternateSymbols: [polygon(solidFill(rgb(0, 0, 255)))] },
+        /^The \.lyrx style's alternate symbols for other map scales were not imported; each class draws its main symbol at every scale\.$/,
       ],
     ];
     for (const [label, renderer, warning] of cases) {
