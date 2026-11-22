@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   activeLayerFilterExpression,
+  applyLayerFilters,
   compileLayerFilters,
   hasActiveLayerFilter,
   type GeoLibreLayer,
@@ -48,5 +49,26 @@ describe("persistent layer filters", () => {
     assert.equal(compileLayerFilters(layer()), null);
     assert.equal(compileLayerFilters(layer({ filterExpression: [] })), null);
     assert.equal(hasActiveLayerFilter(layer({ filterExpression: [] })), false);
+  });
+
+  it("does not misclassify null-geometry features as Point in applyLayerFilters", () => {
+    const filtered = applyLayerFilters(
+      layer({ filterExpression: ["==", ["geometry-type"], "Point"] }),
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { id: 1 },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+          { type: "Feature", properties: { id: 2 }, geometry: null as unknown as GeoJSON.Geometry },
+        ],
+      },
+    );
+    assert.deepEqual(
+      filtered.features.map((f) => f.properties?.id),
+      [1],
+    );
   });
 });

@@ -441,6 +441,31 @@ describe("labels", () => {
     assert.equal(label.minzoom, undefined);
   });
 
+  it("collapses disjoint label and layer zoom ranges to an empty interval instead of the gap", () => {
+    const { style: doc } = buildMapboxStyle(
+      layer({
+        style: style({
+          minZoom: 0,
+          maxZoom: 8,
+          labels: {
+            ...DEFAULT_LAYER_STYLE.labels,
+            enabled: true,
+            field: "category",
+            minZoom: 12,
+            maxZoom: 24,
+          },
+        }),
+      }),
+      points(),
+    );
+    const label = layerById(doc, "my-layer-label") as {
+      maxzoom?: number;
+      minzoom?: number;
+    };
+    assert.equal(label.minzoom, 12);
+    assert.equal(label.maxzoom, 12);
+  });
+
   it("suppresses labels on extruded layers, matching the live map", () => {
     const { style: doc } = buildMapboxStyle(
       layer({
@@ -637,5 +662,56 @@ describe("switched-off else rule (#1312)", () => {
       true,
       false,
     ]);
+  });
+
+  it("normalizes reversed style zoom bounds before intersecting with label zoom range", () => {
+    const labels = {
+      ...DEFAULT_LAYER_STYLE.labels,
+      enabled: true,
+      field: "name",
+      minZoom: 0,
+      maxZoom: 24,
+    };
+    const { style: doc } = buildMapboxStyle(
+      layer({ style: style({ minZoom: 12, maxZoom: 4, labels }) }),
+      points(),
+    );
+    const labelLayer = layerById(doc, "my-layer-label") as { minzoom?: number; maxzoom?: number };
+    assert.equal(labelLayer.minzoom, 4);
+    assert.equal(labelLayer.maxzoom, 12);
+  });
+
+  it("emits empty [24, 24) when label and style zoom ranges are disjoint at MAX_LAYER_ZOOM", () => {
+    const labels = {
+      ...DEFAULT_LAYER_STYLE.labels,
+      enabled: true,
+      field: "name",
+      minZoom: 24,
+      maxZoom: 24,
+    };
+    const { style: doc } = buildMapboxStyle(
+      layer({ style: style({ minZoom: 0, maxZoom: 10, labels }) }),
+      points(),
+    );
+    const labelLayer = layerById(doc, "my-layer-label") as { minzoom?: number; maxzoom?: number };
+    assert.equal(labelLayer.minzoom, 24);
+    assert.equal(labelLayer.maxzoom, 24);
+  });
+
+  it("collapses reversed label zoom bounds to an empty range matching the live map", () => {
+    const labels = {
+      ...DEFAULT_LAYER_STYLE.labels,
+      enabled: true,
+      field: "name",
+      minZoom: 12,
+      maxZoom: 4,
+    };
+    const { style: doc } = buildMapboxStyle(
+      layer({ style: style({ minZoom: 0, maxZoom: 24, labels }) }),
+      points(),
+    );
+    const labelLayer = layerById(doc, "my-layer-label") as { minzoom?: number; maxzoom?: number };
+    assert.equal(labelLayer.minzoom, 12);
+    assert.equal(labelLayer.maxzoom, 12);
   });
 });

@@ -61,6 +61,7 @@ import {
   syncLayer,
   vectorTileStyleLayerIds,
 } from "./layer-sync";
+import { unregisterAllGeoJsonVtSourcesForOwner } from "./geojson-vt-protocol";
 import { globeSafeMaxZoom } from "./globe-fit-bounds";
 import { drawExtentOnCanvas } from "./extent-drawing";
 import { captureEngineImage } from "./map-capture";
@@ -1063,6 +1064,7 @@ export class MapController implements MapEngine {
     this.selectionDragGuardDispose = null;
     this.pixelRatioWatchDispose?.();
     this.pixelRatioWatchDispose = null;
+    if (this.map) unregisterAllGeoJsonVtSourcesForOwner(this.map);
     this.map?.remove();
     this.map = null;
     this.styleReady = false;

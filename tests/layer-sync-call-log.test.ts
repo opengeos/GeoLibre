@@ -9,7 +9,7 @@ import {
   type GeoLibreLayer,
   type LayerStyle,
 } from "@geolibre/core";
-import { syncLayer } from "../packages/map/src/layer-sync";
+import { intersectZoomRange, syncLayer } from "../packages/map/src/layer-sync";
 
 // A golden call log for the vector render path of MapLibre's layer sync. The
 // render-layer builders create, update and drop a dozen native layers per
@@ -437,5 +437,32 @@ describe("layer-sync KML icon layer resync", () => {
     syncLayer(map, layer, ANCHOR);
     const churn = calls.filter(([method]) => method === "removeLayer" || method === "addLayer");
     assert.deepEqual(churn, []);
+  });
+});
+
+describe("intersectZoomRange", () => {
+  it("collapses disjoint ranges to an empty interval instead of swapping into the excluded gap", () => {
+    assert.deepEqual(
+      intersectZoomRange(
+        { minzoom: 12, maxzoom: 24 },
+        {
+          ...DEFAULT_LAYER_STYLE,
+          minZoom: 0,
+          maxZoom: 8,
+        },
+      ),
+      { minzoom: 12, maxzoom: 12 },
+    );
+    assert.deepEqual(
+      intersectZoomRange(
+        { minzoom: 4, maxzoom: 16 },
+        {
+          ...DEFAULT_LAYER_STYLE,
+          minZoom: 6,
+          maxZoom: 12,
+        },
+      ),
+      { minzoom: 6, maxzoom: 12 },
+    );
   });
 });

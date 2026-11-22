@@ -8,6 +8,7 @@ import {
   fillMissingElevations,
   isDemOverviewIfd,
   normalizeNoData,
+  projectionFromGeoKeys,
 } from "../packages/map/src/cog-dem-source";
 
 describe("COG DEM terrain encoding", () => {
@@ -172,5 +173,41 @@ describe("fillMissingElevations", () => {
     const tile = Float64Array.from([Number.NaN]);
     fillMissingElevations(tile, null, [Number.NaN]);
     assert.ok(Number.isNaN(tile[0]));
+  });
+});
+
+describe("projectionFromGeoKeys", () => {
+  it("does not misclassify projected WGS84 DEMs (e.g. UTM) as EPSG:4326", () => {
+    assert.equal(
+      projectionFromGeoKeys({
+        GTModelTypeGeoKey: 1,
+        ProjectedCSTypeGeoKey: 32617,
+        GeographicTypeGeoKey: 4326,
+      }),
+      null,
+    );
+    assert.equal(
+      projectionFromGeoKeys({
+        GTModelTypeGeoKey: 1,
+        ProjectedCSTypeGeoKey: 32767,
+        GeographicTypeGeoKey: 4326,
+      }),
+      null,
+    );
+    assert.equal(
+      projectionFromGeoKeys({
+        GTModelTypeGeoKey: 1,
+        ProjectedCSTypeGeoKey: 3857,
+        GeographicTypeGeoKey: 4326,
+      }),
+      "EPSG:3857",
+    );
+    assert.equal(
+      projectionFromGeoKeys({
+        GTModelTypeGeoKey: 2,
+        GeographicTypeGeoKey: 4326,
+      }),
+      "EPSG:4326",
+    );
   });
 });

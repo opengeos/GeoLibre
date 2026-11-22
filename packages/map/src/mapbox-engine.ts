@@ -52,6 +52,7 @@ import {
   styleLayerLabel,
 } from "./layer-labels";
 import { mapboxSourceId } from "./style-layer-ids";
+import { unregisterAllGeoJsonVtSourcesForOwner } from "./geojson-vt-protocol";
 import { ensureGeneratedImageHandler } from "./generated-images";
 import { installSelectionDragGuard } from "./selection-drag-guard";
 import { hasZoomDependentClusterFilter } from "./cluster-input";
@@ -484,6 +485,7 @@ export class MapboxEngine implements MapEngine {
     // Leave no stale names behind for whichever engine mounts next — but only
     // for the pane that owns the bridge; see `ownsLayerLabels`.
     if (this.ownsLayerLabels) clearLayerLabels();
+    unregisterAllGeoJsonVtSourcesForOwner(this.map);
     this.map.remove();
     this.pluginControls.clear();
     this.builtInControls.clear();

@@ -1774,6 +1774,7 @@ export class ArcgisEngine implements MapEngine {
             ];
           };
           image.onerror = () => {
+            if (layer.destroyed) return;
             this.errors.set(`layer:${plan.id}`, this.messages.imageFailed(plan.title));
           };
           image.src = plan.url;

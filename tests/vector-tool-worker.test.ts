@@ -696,6 +696,165 @@ describe("WORKER_VECTOR_TOOL_IDS", () => {
       assert.ok(tool && canRunVectorToolOnWorkerWhenAvailable(tool), id);
     }
   });
+
+  it("renames exact and case-insensitive colliding overlay fields in intersectionTool", async () => {
+    const tool = getVectorTool("intersection")!;
+    const a: GeoLibreLayer = {
+      id: "a",
+      name: "A",
+      type: "geojson",
+      visible: true,
+      opacity: 1,
+      source: {},
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: {},
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { Name: "input-a", Code: "A1" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [2, 0],
+                  [2, 2],
+                  [0, 2],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    };
+    const b: GeoLibreLayer = {
+      ...a,
+      id: "b",
+      name: "B",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { Name: "overlay-exact", code: "b2", extra: 7 },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [1, 1],
+                  [3, 1],
+                  [3, 3],
+                  [1, 3],
+                  [1, 1],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    };
+    const captured = await runAlgorithmCapture(
+      tool,
+      { layer: "a", overlay: "b" },
+      { layers: [a, b], log: () => {} },
+    );
+    assert.ok(captured);
+    assert.equal(captured.features.length, 1);
+    const props = captured.features[0].properties ?? {};
+    assert.equal(props.Name, "input-a");
+    assert.equal(props.Name_right, "overlay-exact");
+    assert.equal(props.Code, "A1");
+    assert.equal(props.code_right, "b2");
+    assert.equal(props.extra, 7);
+  });
+
+  it("skips a malformed first polygon during mergePolygons pairwise fallback and merges valid ones", async () => {
+    const tool = getVectorTool("aggregate")!;
+    const mixed: GeoLibreLayer = {
+      id: "mixed",
+      name: "Mixed",
+      type: "geojson",
+      visible: true,
+      opacity: 1,
+      source: {},
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: {},
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { grp: "g1" },
+            geometry: { type: "Polygon", coordinates: [[]] },
+          },
+          {
+            type: "Feature",
+            properties: { grp: "g1" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+          {
+            type: "Feature",
+            properties: { grp: "g1" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [1, 0],
+                  [2, 0],
+                  [2, 1],
+                  [1, 1],
+                  [1, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    };
+    const captured = await runAlgorithmCapture(
+      tool,
+      { layer: "mixed", group_field: "grp", statistic: "count" },
+      { layers: [mixed], log: () => {} },
+    );
+    assert.ok(captured);
+    assert.equal(captured.features.length, 1);
+    const geom = captured.features[0].geometry;
+    assert.equal(geom.type, "Polygon");
+    const ring = geom.coordinates[0];
+    assert.ok(ring.length >= 4);
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let signedTwiceArea = 0;
+    for (let i = 0; i < ring.length; i += 1) {
+      const [x, y] = ring[i];
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+      if (i + 1 < ring.length) {
+        const [nx, ny] = ring[i + 1];
+        signedTwiceArea += x * ny - nx * y;
+      }
+    }
+    assert.deepEqual([minX, minY, maxX, maxY], [0, 0, 2, 1]);
+    assert.ok(Math.abs(Math.abs(signedTwiceArea) / 2 - 2) < 1e-9);
+  });
 });
 
 /** canRunVectorToolOnWorker with a Worker constructor present. */

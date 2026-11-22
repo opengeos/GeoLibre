@@ -2125,6 +2125,9 @@ export class CesiumLayerSync {
     if (!text) return;
     const C = this.Cesium;
     const collection = new C.LabelCollection({ scene: this.viewer.scene });
+    const offsetRight = new C.Cartesian2(-16, -19);
+    const offsetLeft = new C.Cartesian2(16, -19);
+    const screenScratch = new C.Cartesian2();
     const label = collection.add({
       position: point.position,
       text,
@@ -2137,19 +2140,23 @@ export class CesiumLayerSync {
       backgroundColor: C.Color.BLACK.withAlpha(0.82),
       backgroundPadding: new C.Cartesian2(6, 4),
       horizontalOrigin: C.HorizontalOrigin.RIGHT,
-      pixelOffset: new C.Cartesian2(-16, -19),
+      pixelOffset: offsetRight,
     });
     const followPoint = () => {
       label.position = point.position;
-      const screen = C.SceneTransforms.worldToWindowCoordinates(this.viewer.scene, point.position);
+      const screen = C.SceneTransforms.worldToWindowCoordinates(
+        this.viewer.scene,
+        point.position,
+        screenScratch,
+      );
       // Dense popups are about 300 px wide. They flip to the left when the
       // right side is tight; keep the label on the other side of the point.
+      // worldToWindowCoordinates returns canvas-local CSS pixel coordinates,
+      // so compare directly against clientWidth without a per-frame layout reflow.
       const canvas = this.viewer.scene.canvas;
-      const canvasBounds = canvas.getBoundingClientRect?.();
-      const screenX = screen && canvasBounds ? screen.x - canvasBounds.left : screen?.x;
-      const popupFitsRight = screenX === undefined || screenX <= canvas.clientWidth / 2;
+      const popupFitsRight = !screen || screen.x <= canvas.clientWidth / 2;
       label.horizontalOrigin = popupFitsRight ? C.HorizontalOrigin.RIGHT : C.HorizontalOrigin.LEFT;
-      label.pixelOffset = popupFitsRight ? new C.Cartesian2(-16, -19) : new C.Cartesian2(16, -19);
+      label.pixelOffset = popupFitsRight ? offsetRight : offsetLeft;
     };
     followPoint();
     this.viewer.scene.preRender.addEventListener(followPoint);
@@ -3673,11 +3680,15 @@ export class CesiumLayerSync {
           : source;
       if (entry.cancelled) {
         ds.destroy();
+        container.remove();
+        entry.overlayContainer = undefined;
         return;
       }
       await ds.load(target, { screenOverlayContainer: container });
       if (entry.cancelled) {
         ds.destroy();
+        container.remove();
+        entry.overlayContainer = undefined;
         return;
       }
       entry.handle = ds;
@@ -3686,13 +3697,22 @@ export class CesiumLayerSync {
       await viewer.dataSources.add(ds);
       if (entry.cancelled) {
         viewer.dataSources.remove(ds, true);
+        entry.documentCleanup?.();
+        entry.documentCleanup = undefined;
+        container.remove();
+        entry.overlayContainer = undefined;
+        entry.handle = null;
         return;
       }
       entry.added = true;
       viewer.scene.requestRender();
     } catch (error) {
+      entry.documentCleanup?.();
+      entry.documentCleanup = undefined;
+      entry.handle = null;
       ds.destroy();
       container.remove();
+      entry.overlayContainer = undefined;
       if (!entry.cancelled)
         entry.loadError = error instanceof Error ? error.message : String(error);
     }
@@ -3805,6 +3825,7 @@ export class CesiumLayerSync {
         const resource = await Cesium.IonResource.fromAssetId(ionAsset, {
           accessToken: this.ionAccessToken(),
         });
+        if (entry.cancelled) return;
         const tileset = await Cesium.Cesium3DTileset.fromUrl(resource, {});
         if (entry.cancelled) {
           tileset.destroy();
@@ -3815,7 +3836,9 @@ export class CesiumLayerSync {
         this.discoverTilesetFields(entry, tileset);
         this.applyAppearance(entry);
       } catch (error) {
-        entry.loadError = error instanceof Error ? error.message : String(error);
+        if (!entry.cancelled) {
+          entry.loadError = error instanceof Error ? error.message : String(error);
+        }
       }
       return;
     }

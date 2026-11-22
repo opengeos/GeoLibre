@@ -240,10 +240,17 @@ function executeOnWorker(
     ackTimer = setTimeout(() => {
       // Never acknowledged, so it died while parked. Replace it and re-post;
       // the request has not started, so nothing is lost by retrying once.
+      ackTimer = undefined;
       cleanup();
       busyWorkers.delete(currentWorker);
       currentWorker.terminate();
-      currentWorker = spawnWorker();
+      try {
+        currentWorker = spawnWorker();
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+        dispatchNext();
+        return;
+      }
       isCurrentReused = false;
       busyWorkers.set(currentWorker, fail);
       attach();

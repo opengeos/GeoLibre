@@ -257,42 +257,52 @@ export function MapContextMenu({
   );
 
   const [viewshedBusy, setViewshedBusy] = useState(false);
+  const viewshedAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => viewshedAbortRef.current?.abort(), []);
   const viewshedHere = useCallback(
     (radiusMeters: number) => {
       if (!menu || viewshedBusy) return;
       const { lng, lat } = menu;
+      const controller = new AbortController();
+      viewshedAbortRef.current = controller;
       setViewshedBusy(true);
       const toolName = t("quickAnalysis.viewshedToolName");
-      // Reported through the Quick Analysis banner like every other action in
-      // this menu rather than failing silently: the terrain fetch takes seconds
-      // and can fail, and a click with no feedback either way reads as a broken
-      // menu item. The returned setter is bound to this run, so a slow viewshed
-      // cannot overwrite the status of a faster action started after it.
       const reportStatus = beginQuickAnalysisRun(toolName);
       void runViewshed({
         lng,
         lat,
         radiusMeters,
         mapControllerRef,
+        signal: controller.signal,
         layerName: t("quickAnalysis.viewshedLayerName", {
           radius: formatViewshedRadius(radiusMeters),
         }),
       })
         .then((result) => {
           reportStatus(
-            result
+            controller.signal.aborted || result
               ? { phase: "idle" }
               : { phase: "error", toolName, message: t("quickAnalysis.viewshedNoResult") },
           );
         })
         .catch((error: unknown) => {
-          reportStatus({
-            phase: "error",
-            toolName,
-            message: error instanceof Error ? error.message : t("quickAnalysis.viewshedNoResult"),
-          });
+          const aborted =
+            controller.signal.aborted || (error instanceof Error && error.name === "AbortError");
+          reportStatus(
+            aborted
+              ? { phase: "idle" }
+              : {
+                  phase: "error",
+                  toolName,
+                  message:
+                    error instanceof Error ? error.message : t("quickAnalysis.viewshedNoResult"),
+                },
+          );
         })
-        .finally(() => setViewshedBusy(false));
+        .finally(() => {
+          if (viewshedAbortRef.current === controller) viewshedAbortRef.current = null;
+          setViewshedBusy(false);
+        });
     },
     [menu, viewshedBusy, t, formatViewshedRadius, mapControllerRef],
   );

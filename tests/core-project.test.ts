@@ -2262,3 +2262,94 @@ it("keeps projects with an unaddressable GCS layer loadable", () => {
     assert.equal(parsed.layers[0].source.url, url);
   }
 });
+
+describe("parseProject and applyProjectToStore hardening", () => {
+  it("rejects non-object JSON inputs cleanly and clamps invalid opacities", () => {
+    for (const raw of ["null", "[]", '"hello"', "42"]) {
+      assert.throws(() => parseProject(raw), /Invalid GeoLibre project/);
+    }
+    const project = {
+      ...createEmptyProject(),
+      basemapOpacity: 5,
+      layers: [
+        geojsonLayer({
+          id: "l1",
+          opacity: -3,
+          style: { labels: { enabled: true, field: "name" } } as unknown as ReturnType<
+            typeof geojsonLayer
+          >["style"],
+        }),
+      ],
+    };
+    const parsed = parseProject(JSON.stringify(project));
+    assert.equal(parsed.basemapOpacity, 1);
+    assert.equal(parsed.layers[0].opacity, 0);
+    assert.equal(parsed.layers[0].style.labels.enabled, true);
+    assert.equal(parsed.layers[0].style.labels.field, "name");
+    assert.equal(parsed.layers[0].style.labels.size, DEFAULT_LAYER_STYLE.labels.size);
+  });
+
+  it("scrubs orphan layer IDs from secondaryMapViews and storymap in applyProjectToStore", () => {
+    const project = createEmptyProject();
+    project.layers = [geojsonLayer({ id: "kept" })];
+    project.mapLayout = { rows: 1, cols: 2, syncView: false };
+    project.secondaryMapViews = [
+      {
+        id: "pane-2",
+        view: project.mapView,
+        layerVisibility: { kept: true, ghost: false },
+      },
+    ];
+    project.storymap = {
+      title: "Demo",
+      chapters: [
+        chapter({
+          id: "ch1",
+          onChapterEnter: [
+            { layerId: "kept", opacity: 1 },
+            { layerId: "ghost", opacity: 0.5 },
+          ],
+          onChapterExit: [{ layerId: "ghost", opacity: 0 }],
+        }),
+      ],
+    } as unknown as typeof project.storymap;
+    const applied = applyProjectToStore(project);
+    assert.deepEqual(applied.secondaryMapViews[0].layerVisibility, { kept: true });
+    assert.deepEqual(applied.storymap?.chapters[0].onChapterEnter, [
+      { layerId: "kept", opacity: 1 },
+    ]);
+    assert.deepEqual(applied.storymap?.chapters[0].onChapterExit, []);
+  });
+
+  it("preserves group contiguity in addLayer(beforeLayerId) and moves across groups in reorderLayer", () => {
+    useAppStore.getState().newProject();
+    const gid = useAppStore.getState().addLayerGroup("Group");
+    useAppStore.getState().addLayer(geojsonLayer({ id: "g1", groupId: gid }));
+    useAppStore.getState().addLayer(geojsonLayer({ id: "g2", groupId: gid }));
+    useAppStore.getState().addLayer(geojsonLayer({ id: "free" }), "g2");
+    const afterAdd = useAppStore.getState().layers.map((l) => l.id);
+    // Group members g1 and g2 remain adjacent after inserting an ungrouped layer before g2.
+    assert.deepEqual(afterAdd, ["g1", "g2", "free"]);
+
+    // Moving an ungrouped layer down toward a group skips the entire group.
+    useAppStore.getState().reorderLayer("free", "down");
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      ["free", "g1", "g2"],
+    );
+
+    // Moving it back up skips past the entire group again.
+    useAppStore.getState().reorderLayer("free", "up");
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      ["g1", "g2", "free"],
+    );
+
+    // Moving a layer within the same group stays a single-position swap.
+    useAppStore.getState().reorderLayer("g1", "up");
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      ["g2", "g1", "free"],
+    );
+  });
+});

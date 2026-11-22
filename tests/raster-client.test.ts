@@ -308,11 +308,17 @@ describe("raster-client compute", () => {
     assert.throws(() => rasterCalc(raster, { expression: "[]+[]" }), /unsupported characters/);
   });
 
-  it("allows numeric literals including scientific notation", () => {
+  it("allows numeric literals including leading-dot decimals and scientific notation", () => {
     const raster = makeRaster([[1, 2]], 2, 1);
-    const out = rasterCalc(raster, { expression: "A * 1e3 + 0.5" });
+    const out = rasterCalc(raster, { expression: "A * 1e3 + .5" });
     assert.equal(out.bands[0][0], 1 * 1e3 + 0.5);
     assert.equal(out.bands[0][1], 2 * 1e3 + 0.5);
+  });
+
+  it("rejects out-of-range band references before evaluating pixels", () => {
+    const raster = makeRaster([[1, 2]], 2, 1);
+    assert.throws(() => rasterCalc(raster, { expression: "A10 + 1" }), /out of range/);
+    assert.throws(() => rasterCalc(raster, { expression: "A0 + 1" }), /out of range/);
   });
 
   it("computes a focal mean over a neighbourhood", () => {
