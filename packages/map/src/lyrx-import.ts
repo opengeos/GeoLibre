@@ -66,8 +66,9 @@ const WHOLE_SYMBOL_FIELDS = [
 ] as const satisfies readonly (keyof LayerStyle)[];
 
 /**
- * Renderer names that read better than the CIM type spelled out. A class breaks renderer of another
- * break type is named by that type.
+ * Renderer names that read better than the CIM type spelled out, keyed by the `cimType` the shared
+ * reader reports: the renderer type, or for a class breaks renderer of a break type other than
+ * graduated colours its `classBreakType` (such as `UnclassedColor`).
  */
 const RENDERER_NAMES = new Map([
   ["CIMProportionalRenderer", "proportional symbols"],
@@ -337,7 +338,10 @@ function readTextSymbol(labelClass: CimObject, warnings: string[]): Partial<Labe
       `The .lyrx style's label text symbol has nothing GeoLibre can draw (its ${textLayer} cannot be drawn); labels keep their colour.`,
     );
   } else {
-    warnings.push("The .lyrx style's label colour could not be read; labels keep their colour.");
+    // The reader reports an empty text symbol and one whose colour it cannot read alike.
+    warnings.push(
+      "The .lyrx style's label text has no fill colour GeoLibre can read; labels keep their colour.",
+    );
   }
   const haloSize = numberOf(text.haloSize) ?? 0;
   // ArcGIS Pro draws a halo only from a halo symbol. Its default text symbol keeps a halo size

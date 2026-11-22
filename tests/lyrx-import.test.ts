@@ -511,7 +511,7 @@ describe(".lyrx style import", () => {
       assert.equal(style.labels.haloWidth, 0);
       assert.equal(style.labels.color, DEFAULT_LAYER_STYLE.labels.color);
       assert.equal(style.labels.size, 20);
-      assert.match(warnings.join(" "), /label colour could not be read/);
+      assert.match(warnings.join(" "), /label text has no fill colour GeoLibre can read/);
       // The colour it could not read keeps the layer's data-defined colour too.
       assert.equal(style.labels.colorExpression, '["get", "COLOUR"]');
     });
@@ -528,7 +528,7 @@ describe(".lyrx style import", () => {
       );
       assert.equal(style.labels.color, DEFAULT_LAYER_STYLE.labels.color);
       assert.equal(style.labels.colorExpression, '["get", "COLOUR"]');
-      assert.match(warnings.join(" "), /label colour could not be read/);
+      assert.match(warnings.join(" "), /label text has no fill colour GeoLibre can read/);
     });
 
     it("keeps the layer's text colour for clear text, which ArcGIS Pro does not draw", () => {
@@ -624,6 +624,12 @@ describe(".lyrx style import", () => {
           },
           0,
           /^The \.lyrx style's label halo has nothing GeoLibre can draw \(its picture fill cannot be drawn\), so labels have no halo\.$/,
+        ],
+        // A text symbol with no layers has no colour to read.
+        [
+          { symbol: symbol("CIMPolygonSymbol", []).symbol },
+          0,
+          /^The \.lyrx style's label text has no fill colour GeoLibre can read; labels keep their colour\.$/,
         ],
         // Hollow text: named as an outline, not as transparency.
         [
