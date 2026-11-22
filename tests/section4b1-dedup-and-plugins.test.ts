@@ -237,7 +237,7 @@ describe("plugin panel-dom UI helpers", () => {
     });
     try {
       const trigger = createButton("Open", { variant: "primary", title: "Open dialog" });
-      win.document.body.appendChild(trigger);
+      document.body.appendChild(trigger);
       trigger.focus();
 
       let selected = "";
@@ -254,7 +254,7 @@ describe("plugin panel-dom UI helpers", () => {
       });
       assert.equal(select.value, "geojson");
       select.value = "gpkg";
-      select.dispatchEvent(new win.Event("change"));
+      select.dispatchEvent(new Event("change"));
       assert.equal(selected, "gpkg");
 
       const okButton = createButton("Confirm", { variant: "primary" });
@@ -286,25 +286,25 @@ describe("plugin panel-dom UI helpers", () => {
 
       // Focus on the dialog container itself must still wrap into the first/last control on Tab.
       modal.dialog.focus();
-      assert.equal(win.document.activeElement, modal.dialog);
-      win.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Tab", cancelable: true }));
-      assert.equal(win.document.activeElement, closeBtn);
+      assert.equal(document.activeElement, modal.dialog);
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", cancelable: true }));
+      assert.equal(document.activeElement, closeBtn);
 
       // Shift+Tab from first focusable element wraps to last focusable element (Confirm).
-      win.dispatchEvent(
-        new win.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, cancelable: true }),
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, cancelable: true }),
       );
-      assert.equal(win.document.activeElement, okButton);
+      assert.equal(document.activeElement, okButton);
 
       // Dragging from inside the dialog and releasing on the overlay must NOT close the modal.
-      modal.dialog.dispatchEvent(new win.Event("pointerdown", { bubbles: true }));
-      modal.overlay.dispatchEvent(new win.Event("click", { bubbles: true }));
+      modal.dialog.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      modal.overlay.dispatchEvent(new Event("click", { bubbles: true }));
       assert.equal(closedCount, 0);
 
       // Escape closes the modal and restores focus to the trigger.
-      win.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
       assert.equal(closedCount, 1);
-      assert.equal(win.document.activeElement, trigger);
+      assert.equal(document.activeElement, trigger);
     } finally {
       Object.assign(globalThis, {
         window: prevWindow,

@@ -184,8 +184,8 @@ export interface PluginModalOptions {
   body: HTMLElement | string;
   actions?: readonly HTMLElement[];
   maxWidthPx?: number;
-  /** Localized accessible label for the close button (callers should pass a translated string). */
-  closeLabel?: string;
+  /** Localized accessible label for the close button (must be translated by the caller). */
+  closeLabel: string;
   onClose?: () => void;
 }
 
@@ -283,10 +283,10 @@ export function createModalDialog(options: PluginModalOptions): {
   heading.style.cssText = "margin:0;font-size:14px;font-weight:600;";
   const closeButton = createButton("×", {
     variant: "ghost",
-    title: options.closeLabel ?? "Close",
+    title: options.closeLabel,
     onClick: close,
   });
-  closeButton.setAttribute("aria-label", options.closeLabel ?? "Close");
+  closeButton.setAttribute("aria-label", options.closeLabel);
   header.append(heading, closeButton);
 
   const content = typeof options.body === "string" ? el("p", options.body) : options.body;
