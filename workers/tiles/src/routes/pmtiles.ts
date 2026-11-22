@@ -53,7 +53,9 @@ async function resolveLatestBuildDate(): Promise<string> {
         return null;
       }
     })();
-    if (probe?.status === 206) {
+    const status = probe?.status;
+    await probe?.body?.cancel().catch(() => undefined);
+    if (status === 206) {
       latestCache = { date: ymd, at: now };
       return ymd;
     }

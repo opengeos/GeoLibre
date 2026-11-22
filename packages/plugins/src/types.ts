@@ -1409,9 +1409,10 @@ export interface GeoLibreAppAPI {
    * The host handles platform specifics (a native save dialog under Tauri, a
    * File System Access picker or browser download on the web). Resolves to the
    * saved file path/name, or `null` when the user cancels on desktop or in
-   * browsers with `showSaveFilePicker`; browsers using the download fallback
-   * cannot detect cancellation and resolve to the file name unless
-   * `options.promptName` is cancelled first.
+   * browsers with `showSaveFilePicker`. On download-fallback browsers, a
+   * cancelled `options.promptName` dialog resolves to `null`; otherwise the
+   * fallback cannot detect browser download cancellation and resolves to the
+   * file name.
    */
   saveBinaryFile?: (
     filename: string,
