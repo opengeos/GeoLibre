@@ -94,6 +94,27 @@ impl CancelRegistry {
         self.0.try_insert_unique(id, cancel).map_err(|_| ())
     }
 
+    /// Atomically check uniqueness of `id`, invoke `create` while holding the
+    /// registry lock so duplicate IDs can never spawn concurrently, and store
+    /// the returned cancellation callback.
+    pub(crate) fn try_register_with<T>(
+        &self,
+        id: String,
+        create: impl FnOnce() -> (T, CancelCallback),
+    ) -> Result<T, ()> {
+        let mut map = self
+            .0
+            .entries
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if map.contains_key(&id) {
+            return Err(());
+        }
+        let (value, cancel) = create();
+        map.insert(id, cancel);
+        Ok(value)
+    }
+
     pub(crate) fn contains_key(&self, id: &str) -> bool {
         self.0.contains_key(id)
     }

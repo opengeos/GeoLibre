@@ -348,22 +348,14 @@ pub(crate) async fn fetch_arcgis_response(
         (None, None, None) => None,
         _ => return Err("Invalid ArcGIS request body.".into()),
     };
-    let task = {
-        if requests.0.contains_key(&request_id) {
-            return Err("Duplicate ArcGIS request ID.".into());
-        }
-        let task = tauri::async_runtime::spawn(request(url, body));
-        let abort = task.inner().abort_handle();
-        if requests
-            .0
-            .try_register(request_id.clone(), Box::new(move || abort.abort()))
-            .is_err()
-        {
-            task.abort();
-            return Err("Duplicate ArcGIS request ID.".into());
-        }
-        task
-    };
+    let task = requests
+        .0
+        .try_register_with(request_id.clone(), || {
+            let task = tauri::async_runtime::spawn(request(url, body));
+            let abort = task.inner().abort_handle();
+            (task, Box::new(move || abort.abort()))
+        })
+        .map_err(|()| "Duplicate ArcGIS request ID.".to_string())?;
     let _guard = crate::in_flight::CancelGuard::new(requests.inner().0.clone(), request_id);
     ready
         .send(())

@@ -90,6 +90,15 @@ async function handleOpmTile(
   return response;
 }
 
+function rateLimitGroup(pathname: string): string | null {
+  if (pathname === OVERPASS_PATH) return "overpass";
+  if (PMTILES_PATH.test(pathname)) return "pmtiles";
+  if (pathname.startsWith("/firms/viirs/")) return "firms";
+  if (pathname === "/github-raw") return "github-raw";
+  if (pathname === EARTHDATA_DOWNLOAD_PATH) return "earthdata";
+  return null;
+}
+
 export const tilesWorker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -103,13 +112,20 @@ export const tilesWorker = {
       return new Response(null, { status: 204, headers });
     }
 
-    if (env?.TILES_RATE_LIMITER) {
-      const key = request.headers.get("CF-Connecting-IP") ?? "anonymous";
-      const outcome = await env.TILES_RATE_LIMITER.limit({ key });
+    const limitGroup = rateLimitGroup(url.pathname);
+    if (limitGroup && env?.TILES_RATE_LIMITER) {
+      const ip = request.headers.get("CF-Connecting-IP") ?? "anonymous";
+      const outcome = await env.TILES_RATE_LIMITER.limit({ key: `${limitGroup}:${ip}` });
       if (!outcome.success) {
+        const headers =
+          url.pathname === OVERPASS_PATH
+            ? OVERPASS_CORS_HEADERS
+            : url.pathname === EARTHDATA_DOWNLOAD_PATH
+              ? EARTHDATA_CORS_HEADERS
+              : CORS_HEADERS;
         return new Response("Too Many Requests", {
           status: 429,
-          headers: { ...CORS_HEADERS, "retry-after": "60" },
+          headers: { ...headers, "retry-after": "60" },
         });
       }
     }

@@ -21,10 +21,7 @@ use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
-    sync::{
-        atomic::Ordering,
-        Arc, Mutex, OnceLock,
-    },
+    sync::{atomic::Ordering, Arc, Mutex, OnceLock},
     time::Duration,
 };
 
@@ -569,30 +566,22 @@ pub(crate) async fn download_remote_file(
         cache_dir(&app)?.join(format!("{request_tag}-{file_name}"))
     };
 
-    let task = {
-        if downloads.active.contains_key(&request_id) {
-            return Err("Duplicate request ID.".into());
-        }
-        let task = tauri::async_runtime::spawn(transfer(
-            url,
-            headers,
-            destination.clone(),
-            request_tag,
-            !saves_to_disk,
-            placeholder,
-            progress,
-        ));
-        let abort = task.inner().abort_handle();
-        if downloads
-            .active
-            .try_register(request_id.clone(), Box::new(move || abort.abort()))
-            .is_err()
-        {
-            task.abort();
-            return Err("Duplicate request ID.".into());
-        }
-        task
-    };
+    let task = downloads
+        .active
+        .try_register_with(request_id.clone(), || {
+            let task = tauri::async_runtime::spawn(transfer(
+                url,
+                headers,
+                destination.clone(),
+                request_tag,
+                !saves_to_disk,
+                placeholder,
+                progress,
+            ));
+            let abort = task.inner().abort_handle();
+            (task, Box::new(move || abort.abort()))
+        })
+        .map_err(|()| "Duplicate request ID.".to_string())?;
     let _guard =
         crate::in_flight::CancelGuard::new(downloads.inner().active.clone(), request_id.clone());
     let mut cache_guard = PartFile {
