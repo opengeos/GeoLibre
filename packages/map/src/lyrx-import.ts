@@ -437,7 +437,10 @@ function refusedLayer(translation: ReturnType<typeof translateCimSymbol>): strin
   return type && !type.endsWith("Symbol") ? typeName(type) : "";
 }
 
-/** Rounded so `0.75 * 96 / 72` is written as 1, not 0.9999999999999999. */
+/**
+ * Rounds away float noise from the point-to-pixel conversion (`0.3 * 96 / 72` is
+ * 0.39999999999999997), to four places as the shared CIM reader rounds its widths.
+ */
 function round(value: number): number {
   return Math.round(value * 10000) / 10000;
 }
