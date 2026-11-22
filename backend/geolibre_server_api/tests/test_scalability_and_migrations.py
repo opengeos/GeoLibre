@@ -344,3 +344,70 @@ def test_schema_upgrade_helpers_run_on_active_connection(tmp_path: Path) -> None
             assert conn.execute(text("SELECT COUNT(*) FROM project_versions")).scalar() == 1
     finally:
         verify_engine.dispose()
+
+    # Passing a Connection with PRAGMA foreign_keys=ON must reject before
+    # touching the legacy projects table so child rows and FK targets stay intact.
+    fk_db = tmp_path / "legacy-fk-on.db"
+    fk_engine = create_engine(f"sqlite:///{fk_db}")
+    try:
+        with fk_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE TABLE accounts (id VARCHAR(36) NOT NULL PRIMARY KEY, "
+                    "username VARCHAR(40) NOT NULL, password_hash VARCHAR(200) NOT NULL, "
+                    "created_at VARCHAR(32) NOT NULL)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE TABLE projects (id VARCHAR(36) NOT NULL PRIMARY KEY, "
+                    "owner_id VARCHAR(36) NOT NULL REFERENCES accounts(id), "
+                    "slug VARCHAR(100) NOT NULL, title VARCHAR(100) NOT NULL, "
+                    "description TEXT NOT NULL DEFAULT '', visibility VARCHAR(16) NOT NULL, "
+                    "tags_json TEXT NOT NULL DEFAULT '[]', thumbnail_type VARCHAR(20), "
+                    "views INTEGER NOT NULL DEFAULT 0, fork_count INTEGER NOT NULL DEFAULT 0, "
+                    "featured BOOLEAN NOT NULL DEFAULT 0, created_at VARCHAR(32) NOT NULL, "
+                    "updated_at VARCHAR(32) NOT NULL)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE TABLE project_versions (id VARCHAR(36) NOT NULL PRIMARY KEY, "
+                    "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE CASCADE, "
+                    "version INTEGER NOT NULL, storage_key VARCHAR(200) NOT NULL, "
+                    "size_bytes INTEGER NOT NULL, created_at VARCHAR(32) NOT NULL)"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO accounts (id, username, password_hash, created_at) "
+                    "VALUES ('a1', 'ada', 'h', '2026-01-01T00:00:00Z')"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO projects "
+                    "(id, owner_id, slug, title, visibility, created_at, updated_at) "
+                    "VALUES ('p1', 'a1', 'map', 'Map', 'private', "
+                    "'2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO project_versions "
+                    "(id, project_id, version, storage_key, size_bytes, created_at) "
+                    "VALUES ('v1', 'p1', 1, 'k1', 10, '2026-01-01T00:00:00Z')"
+                )
+            )
+        with fk_engine.connect() as conn:
+            conn.execute(text("PRAGMA foreign_keys=ON"))
+            conn.commit()
+            with conn.begin():
+                with pytest.raises(RuntimeError, match="foreign_keys=ON"):
+                    upgrade_sqlite_schema(conn)
+        with fk_engine.connect() as conn:
+            assert conn.execute(text("SELECT COUNT(*) FROM project_versions")).scalar() == 1
+            fks = inspect(conn).get_foreign_keys("project_versions")
+            assert fks and fks[0]["referred_table"] == "projects"
+    finally:
+        fk_engine.dispose()

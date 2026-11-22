@@ -385,6 +385,40 @@ def test_raster_workers_in_process_analysis_and_geometry(
         assert mask[0, 0] == 255  # valid zero sample stays valid
         assert mask[0, 2] == 0  # uncovered outward-rounded border marked invalid
 
+    # Average resampling over a 4x4 grid with one masked cell keeps output valid
+    # when valid contributing pixels exist, while nearest at the masked cell masks it.
+    avg_src = tmp_path / "avg_mask.tif"
+    with rasterio.open(
+        avg_src,
+        "w",
+        driver="GTiff",
+        height=4,
+        width=4,
+        count=1,
+        dtype="float32",
+        crs="EPSG:3857",
+        transform=from_origin(0.0, 4.0, 1.0, 1.0),
+        nodata=None,
+    ) as dst:
+        dst.write(np.full((1, 4, 4), 7.0, dtype="float32"))
+        src_mask = np.full((4, 4), 255, dtype="uint8")
+        src_mask[2, 2] = 0
+        dst.write_mask(src_mask)
+    avg_out = tmp_path / "resample_avg.tif"
+    _run_worker(
+        monkeypatch,
+        "raster_tools.resample",
+        {
+            "input_path": str(avg_src),
+            "output_path": str(avg_out),
+            "resolution": 4.0,
+            "resampling": "average",
+        },
+    )
+    with rasterio.open(avg_out) as ds:
+        assert ds.read(1)[0, 0] == pytest.approx(7.0)
+        assert ds.dataset_mask()[0, 0] == 255
+
     reproj_out = tmp_path / "reproj.tif"
     _run_worker(
         monkeypatch,

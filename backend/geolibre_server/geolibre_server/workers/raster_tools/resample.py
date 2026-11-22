@@ -8,7 +8,9 @@ def main() -> None:
 
     import numpy as np
     import rasterio
+    from rasterio.enums import ColorInterp
     from rasterio.transform import from_origin
+    from rasterio.vrt import WarpedVRT
     from rasterio.warp import Resampling, reproject
 
     params = json.loads(sys.argv[1])
@@ -30,35 +32,38 @@ def main() -> None:
         profile = src.profile.copy()
         profile.update(transform=transform, width=width, height=height, compress="deflate")
         with rasterio.open(output_path, "w", **profile) as dst:
-            for i in range(1, src.count + 1):
-                reproject(
-                    source=rasterio.band(src, i),
-                    destination=rasterio.band(dst, i),
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=transform,
-                    dst_crs=src.crs,
+            if src.nodata is None and ColorInterp.alpha not in src.colorinterp:
+                # Stream data and warp validity mask block-by-block via WarpedVRT
+                # so memory stays bounded on large rasters and validity matches
+                # the selected resampling method (marking uncovered borders invalid
+                # while keeping valid source zeros valid).
+                data_indexes = list(range(1, src.count + 1))
+                with WarpedVRT(
+                    src,
+                    crs=src.crs,
+                    transform=transform,
+                    width=width,
+                    height=height,
                     resampling=method,
-                )
-            if src.nodata is None:
-                # Outward-rounded destination borders can extend past the source
-                # extent; persist a validity mask so uncovered border cells are
-                # marked invalid while valid source zeros remain valid.
-                src_mask = src.dataset_mask()
-                dst_mask = np.zeros((height, width), dtype="uint8")
-                reproject(
-                    source=src_mask,
-                    destination=dst_mask,
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=transform,
-                    dst_crs=src.crs,
-                    resampling=Resampling.nearest,
-                    src_nodata=0,
-                    dst_nodata=0,
-                )
-                if (dst_mask == 0).any():
-                    dst.write_mask(dst_mask)
+                    add_alpha=True,
+                ) as vrt:
+                    alpha_index = vrt.count
+                    for _, window in dst.block_windows(1):
+                        dst.write(vrt.read(data_indexes, window=window), window=window)
+                        alpha = vrt.read(alpha_index, window=window)
+                        mask = np.where(alpha > 0, 255, 0).astype("uint8")
+                        dst.write_mask(mask, window=window)
+            else:
+                for i in range(1, src.count + 1):
+                    reproject(
+                        source=rasterio.band(src, i),
+                        destination=rasterio.band(dst, i),
+                        src_transform=src.transform,
+                        src_crs=src.crs,
+                        dst_transform=transform,
+                        dst_crs=src.crs,
+                        resampling=method,
+                    )
     print(f"Resampled to {resolution} units/pixel ({width}x{height}) -> {output_path}")
     print("__GEOLIBRE_CONVERSION_RESULT__" + json.dumps({"output_path": output_path}))
 

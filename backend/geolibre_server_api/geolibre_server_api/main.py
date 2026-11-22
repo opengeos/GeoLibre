@@ -688,9 +688,17 @@ def upgrade_sqlite_schema(bind) -> None:
         "CREATE INDEX ix_projects_updated_at ON projects (updated_at)",
     ]
     if isinstance(bind, Connection):
+        # SQLite ignores PRAGMA foreign_keys inside an active transaction, and
+        # renaming `projects` while FK enforcement is ON rewrites child FKs to
+        # `projects_legacy` so the subsequent DROP fires ON DELETE CASCADE.
+        if bind.execute(text("PRAGMA foreign_keys")).scalar():
+            raise RuntimeError(
+                "upgrade_sqlite_schema cannot rebuild legacy 'projects' on a "
+                "Connection with PRAGMA foreign_keys=ON; disable foreign keys "
+                "before starting the migration transaction or pass an Engine."
+            )
         # Run atomically inside the active Alembic migration transaction without
         # opening a competing SQLite writer connection.
-        bind.execute(text("PRAGMA defer_foreign_keys=ON"))
         bind.execute(text("PRAGMA legacy_alter_table=ON"))
         try:
             for statement in rebuild_statements:
@@ -2928,7 +2936,7 @@ def create_app(
                 select(Project)
                 .options(*LISTING_EAGER_LOADS)
                 .where(*where_clauses)
-                .order_by(Project.updated_at.desc())
+                .order_by(Project.updated_at.desc(), Project.id.desc())
                 .offset(offset)
                 .limit(limit)
             ).all()
@@ -3473,7 +3481,7 @@ def create_app(
             select(ProjectTransfer)
             .options(*TRANSFER_EAGER_LOADS)
             .where(*where_clauses)
-            .order_by(ProjectTransfer.created_at.desc())
+            .order_by(ProjectTransfer.created_at.desc(), ProjectTransfer.id.desc())
             .offset(offset)
             .limit(limit)
         ).all()
@@ -3506,7 +3514,7 @@ def create_app(
             select(ProjectTransfer)
             .options(*TRANSFER_EAGER_LOADS)
             .where(*where_clauses)
-            .order_by(ProjectTransfer.created_at.desc())
+            .order_by(ProjectTransfer.created_at.desc(), ProjectTransfer.id.desc())
             .offset(offset)
             .limit(limit)
         ).all()
