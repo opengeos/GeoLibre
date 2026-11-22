@@ -2583,16 +2583,20 @@ def create_app(
             data.extend(chunk)
             if len(data) > max_thumbnail_bytes:
                 raise HTTPException(413, f"thumbnail exceeds the {max_thumbnail_bytes} byte limit")
-        # Serialize concurrent thumbnail uploads on this group so the stored
-        # object bytes and thumbnail_type metadata commit in the same order.
-        session.execute(
-            select(Group.id).where(Group.id == group.id).with_for_update(key_share=True)
-        )
-        await run_in_threadpool(
-            object_storage.put, f"groups/{group.id}/thumbnail", bytes(data), content_type
-        )
-        group.thumbnail_type = content_type
-        session.commit()
+        payload = bytes(data)
+
+        def _store_and_commit() -> None:
+            # Lock the group row, write the object, and commit as one blocking
+            # unit inside the threadpool so the event loop never blocks on the
+            # row lock or storage I/O and concurrent uploads serialize cleanly.
+            session.execute(
+                select(Group.id).where(Group.id == group.id).with_for_update(key_share=True)
+            )
+            object_storage.put(f"groups/{group.id}/thumbnail", payload, content_type)
+            group.thumbnail_type = content_type
+            session.commit()
+
+        await run_in_threadpool(_store_and_commit)
 
     @app.get("/api/groups/{group_id}/thumbnail", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def get_group_thumbnail(
@@ -3508,17 +3512,20 @@ def create_app(
                 raise HTTPException(413, f"thumbnail exceeds the {max_thumbnail_bytes} byte limit")
             chunks.append(chunk)
         data = b"".join(chunks)
-        # Serialize concurrent thumbnail uploads on this project so the stored
-        # object bytes and thumbnail_type metadata commit in the same order.
-        session.execute(
-            select(Project.id).where(Project.id == project.id).with_for_update(key_share=True)
-        )
-        await run_in_threadpool(
-            object_storage.put, f"projects/{project.id}/thumbnail", data, content_type
-        )
-        project.thumbnail_type = content_type
-        project.updated_at = now()
-        session.commit()
+
+        def _store_and_commit() -> None:
+            # Lock the project row, write the object, and commit as one blocking
+            # unit inside the threadpool so the event loop never blocks on the
+            # row lock or storage I/O and concurrent uploads serialize cleanly.
+            session.execute(
+                select(Project.id).where(Project.id == project.id).with_for_update(key_share=True)
+            )
+            object_storage.put(f"projects/{project.id}/thumbnail", data, content_type)
+            project.thumbnail_type = content_type
+            project.updated_at = now()
+            session.commit()
+
+        await run_in_threadpool(_store_and_commit)
 
     @app.get("/api/projects/{project_id}/thumbnail", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def get_thumbnail(

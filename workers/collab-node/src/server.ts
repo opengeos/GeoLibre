@@ -166,8 +166,12 @@ function randomToken(): string {
   return randomBytes(24).toString("hex");
 }
 
+function sendRaw(peer: Peer, payload: string): void {
+  if (peer.socket.readyState === WebSocket.OPEN) peer.socket.send(payload);
+}
+
 function send(peer: Peer, message: ServerMessage): void {
-  if (peer.socket.readyState === WebSocket.OPEN) peer.socket.send(JSON.stringify(message));
+  sendRaw(peer, JSON.stringify(message));
 }
 
 function json(response: import("node:http").ServerResponse, status: number, body: unknown): void {
@@ -269,9 +273,7 @@ export function createRelay(options: RelayOptions = {}): {
   function broadcast(session: LiveSession, message: ServerMessage, except?: Peer): void {
     const payload = JSON.stringify(message);
     for (const peer of session.peers) {
-      if (peer !== except && peer.socket.readyState === WebSocket.OPEN) {
-        peer.socket.send(payload);
-      }
+      if (peer !== except) sendRaw(peer, payload);
     }
   }
 
@@ -997,8 +999,9 @@ export function createRelay(options: RelayOptions = {}): {
           send(peer, {
             type: "error",
             code: "bad-message",
-            message: "Too many queued messages; slow down.",
+            message: "Too many queued messages; reconnecting.",
           });
+          peer.socket.close(1008, "Too many queued messages");
           return;
         }
         peer.pendingFrames += 1;
