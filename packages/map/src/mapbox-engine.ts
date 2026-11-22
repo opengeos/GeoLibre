@@ -72,6 +72,8 @@ import { arcgisOpacity } from "./vector-style";
 import { LayerControlHost, normalizeLayerBounds } from "./layer-control-host";
 import { ResetBearingControl } from "./reset-bearing-control";
 import { MapboxGlobeControl } from "./mapbox-globe-control";
+import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
+import { registerMapboxCogDem, type RegisteredMapboxCogDem } from "./mapbox-cog-terrain";
 
 export const MAPBOX_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   styleSpec: true,
@@ -87,9 +89,9 @@ export const MAPBOX_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   domControls: true,
   screenOverlays: true,
   flatProjection: true,
-  // mapbox-gl has no `raster-dem` source a COG can back, so the terrain
-  // source controls stay hidden here (#2475).
-  terrainSource: false,
+  // Custom COG DEMs are served to mapbox-gl's `raster-dem` source as Terrarium
+  // PNG tiles via the async `transformRequest` hook in `mapbox-cog-terrain.ts`.
+  terrainSource: true,
   ionTerrain: false,
   nativeZarr: false,
   nativeDataSources: false,
@@ -208,6 +210,11 @@ export class MapboxEngine implements MapEngine {
   private blankColor: string | null = null;
   private terrain = false;
   private exaggeration = 1;
+  private cogDemRegistration: CogDemSourceRegistration | null = null;
+  private cogDemTileBinding: RegisteredMapboxCogDem | null = null;
+  private cogDemUrl: string | null = null;
+  private cogDemGeneration = 0;
+  private openCogDem: typeof registerCogDemSource = registerCogDemSource;
   private preferences: MapPreferences | null = null;
   private pluginControls = new Map<maplibregl.IControl, mapboxgl.IControl>();
   private controlVisibility: Record<BuiltInMapControl, boolean>;
@@ -485,6 +492,12 @@ export class MapboxEngine implements MapEngine {
     // Leave no stale names behind for whichever engine mounts next — but only
     // for the pane that owns the bridge; see `ownsLayerLabels`.
     if (this.ownsLayerLabels) clearLayerLabels();
+    this.cogDemGeneration++;
+    this.cogDemTileBinding?.unregister();
+    this.cogDemTileBinding = null;
+    this.cogDemRegistration?.dispose();
+    this.cogDemRegistration = null;
+    this.cogDemUrl = null;
     unregisterAllGeoJsonVtSourcesForOwner(this.map);
     this.map.remove();
     this.pluginControls.clear();
@@ -1935,13 +1948,25 @@ export class MapboxEngine implements MapEngine {
     this.terrain = enabled;
     const map = this.map;
     if (!map?.isStyleLoaded()) return false;
-    if (enabled && !map.getSource("geolibre-mapbox-dem"))
-      map.addSource("geolibre-mapbox-dem", {
-        type: "raster-dem",
-        url: "mapbox://mapbox.mapbox-terrain-dem-v1",
-        tileSize: 512,
-        maxzoom: 14,
-      });
+    if (enabled && !map.getSource("geolibre-mapbox-dem")) {
+      if (this.cogDemRegistration && this.cogDemTileBinding) {
+        map.addSource("geolibre-mapbox-dem", {
+          type: "raster-dem",
+          tiles: [this.cogDemTileBinding.tileUrlTemplate],
+          encoding: "terrarium",
+          tileSize: 256,
+          maxzoom: 16,
+          ...(this.cogDemRegistration.bounds ? { bounds: this.cogDemRegistration.bounds } : {}),
+        });
+      } else {
+        map.addSource("geolibre-mapbox-dem", {
+          type: "raster-dem",
+          url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+          tileSize: 512,
+          maxzoom: 14,
+        });
+      }
+    }
     map.setTerrain(
       enabled ? { source: "geolibre-mapbox-dem", exaggeration: this.exaggeration } : null,
     );
@@ -1954,14 +1979,46 @@ export class MapboxEngine implements MapEngine {
     this.exaggeration = Math.max(0, Math.min(10, value));
     this.setTerrainEnabled(this.terrain);
   }
-  getTerrainCogSource(): null {
-    return null;
+  getTerrainCogSource(): string | null {
+    return this.cogDemUrl;
   }
   hasCustomTerrainSource(): boolean {
-    return false;
+    return this.cogDemRegistration !== null;
   }
-  async setTerrainCogSource(source: string | Blob | null): Promise<boolean> {
-    return source === null;
+  async setTerrainCogSource(source: string | Blob | null, band = 1): Promise<boolean> {
+    const normalized = typeof source === "string" ? source.trim() || null : source;
+    const generation = ++this.cogDemGeneration;
+    let registration: CogDemSourceRegistration | null = null;
+    try {
+      registration = normalized ? await this.openCogDem(normalized, band) : null;
+    } catch (error) {
+      if (generation === this.cogDemGeneration) throw error;
+      return false;
+    }
+    if (generation !== this.cogDemGeneration || !this.map) {
+      registration?.dispose();
+      return false;
+    }
+
+    const previousReg = this.cogDemRegistration;
+    const previousBinding = this.cogDemTileBinding;
+    const nextBinding = registration ? registerMapboxCogDem(registration) : null;
+
+    this.cogDemRegistration = registration;
+    this.cogDemTileBinding = nextBinding;
+    this.cogDemUrl = typeof normalized === "string" ? normalized : null;
+
+    const map = this.map;
+    if (map.isStyleLoaded()) {
+      const wasEnabled = this.terrain;
+      if (wasEnabled) map.setTerrain(null);
+      if (map.getSource("geolibre-mapbox-dem")) map.removeSource("geolibre-mapbox-dem");
+      if (wasEnabled) this.setTerrainEnabled(true);
+    }
+
+    previousBinding?.unregister();
+    previousReg?.dispose();
+    return true;
   }
 }
 

@@ -513,6 +513,10 @@ async function readTile(
     : tile;
 }
 
+export async function encodeRgbaToPng(rgba: Uint8ClampedArray): Promise<ArrayBuffer> {
+  return rgbaToPng(rgba);
+}
+
 async function rgbaToPng(rgba: Uint8ClampedArray): Promise<ArrayBuffer> {
   const imageData = new ImageData(
     new Uint8ClampedArray(

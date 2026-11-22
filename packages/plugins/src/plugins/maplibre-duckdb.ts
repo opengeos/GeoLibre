@@ -19,6 +19,7 @@ import type {
   DuckDBLayerState,
   DuckDBState,
 } from "maplibre-gl-duckdb";
+import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 import {
   asRecord,
@@ -165,6 +166,7 @@ type DuckDBArrowTableLike = {
 
 type DuckDBGlobalBridge = {
   getFeatureBounds: typeof getDuckDBFeatureBounds;
+  getLayerGeoJson: typeof getDuckDBLayerGeoJson;
   getLayerRows: typeof getDuckDBLayerRows;
   identifyLayerAtPoint: typeof identifyDuckDBLayerAtPoint;
   setSelectedFeature: typeof setDuckDBSelectedFeature;
@@ -201,6 +203,7 @@ const warnedMissingRowsLayerIds = new Set<string>();
 // Global row index → local Arrow row index, built lazily per result chunk.
 // Keyed weakly so replaced query results release their maps automatically.
 const duckdbResultRowIndexMaps = new WeakMap<DuckDBResultLike, Map<number, number>>();
+const duckdbGeoJsonCache = new WeakMap<DuckDBRenderedLayerLike, FeatureCollection>();
 const DUCKDB_SELECTED_FILL_COLOR: [number, number, number, number] = [250, 204, 21, 230];
 const DUCKDB_SELECTED_STROKE_COLOR: [number, number, number, number] = [17, 24, 39, 255];
 
@@ -216,6 +219,7 @@ if (typeof window !== "undefined") {
   // cannot be swapped out by other scripts after construction.
   window.__GEOLIBRE_DUCKDB__ = Object.freeze({
     getFeatureBounds: getDuckDBFeatureBounds,
+    getLayerGeoJson: getDuckDBLayerGeoJson,
     getLayerRows: getDuckDBLayerRows,
     identifyLayerAtPoint: identifyDuckDBLayerAtPoint,
     setSelectedFeature: setDuckDBSelectedFeature,
@@ -253,6 +257,97 @@ export function getDuckDBLayerRows(layerId: string): DuckDBAttributeRow[] {
       };
     })
     .sort((first, second) => first.index - second.index);
+}
+
+function arrowToPlainCoordinates(value: unknown, depth = 0): unknown {
+  if (value == null || depth > 10) return null;
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      typeof item === "number" ? item : arrowToPlainCoordinates(item, depth + 1),
+    );
+  }
+  const vector = value as DuckDBArrowVectorLike;
+  if (typeof vector.get === "function" && typeof vector.length === "number") {
+    const out: unknown[] = new Array(vector.length);
+    for (let i = 0; i < vector.length; i += 1) {
+      const item = vector.get(i);
+      out[i] = typeof item === "number" ? item : arrowToPlainCoordinates(item, depth + 1);
+    }
+    return out;
+  }
+  return null;
+}
+
+function duckDBGeometryToGeoJson(geometryType: string | undefined, value: unknown): Geometry | null {
+  const coords = arrowToPlainCoordinates(value);
+  if (!Array.isArray(coords) || coords.length === 0) return null;
+  const normalized = (geometryType ?? "").toLowerCase();
+  if (normalized === "point") {
+    if (coords.length < 2 || !isFiniteNumber(coords[0]) || !isFiniteNumber(coords[1])) return null;
+    return { type: "Point", coordinates: coords as number[] };
+  }
+  if (normalized === "multipoint") {
+    return { type: "MultiPoint", coordinates: coords as number[][] };
+  }
+  if (normalized === "linestring") {
+    return { type: "LineString", coordinates: coords as number[][] };
+  }
+  if (normalized === "multilinestring") {
+    return { type: "MultiLineString", coordinates: coords as number[][][] };
+  }
+  if (normalized === "polygon") {
+    return { type: "Polygon", coordinates: coords as number[][][] };
+  }
+  if (normalized === "multipolygon") {
+    return { type: "MultiPolygon", coordinates: coords as number[][][][] };
+  }
+  // Fallback heuristic when geometryType was omitted: infer from nesting depth.
+  if (isFiniteNumber(coords[0]) && isFiniteNumber(coords[1])) {
+    return { type: "Point", coordinates: coords as number[] };
+  }
+  return null;
+}
+
+/**
+ * Materialize an active DuckDB query layer into a GeoJSON FeatureCollection so
+ * engines without a deck.gl overlay (e.g. Cesium globe) can render it natively.
+ */
+export function getDuckDBLayerGeoJson(layerId: string): FeatureCollection | null {
+  const renderedLayer = duckdbRenderedLayers.get(layerId);
+  if (!renderedLayer) return null;
+  const cached = duckdbGeoJsonCache.get(renderedLayer);
+  if (cached) return cached;
+
+  const rows = getDuckDBRenderedRows(layerId);
+  const features: Feature[] = [];
+  for (const result of renderedLayer.results) {
+    const geomCol = result.table?.getChild?.("geometry");
+    if (!geomCol || typeof geomCol.get !== "function") continue;
+    const indexCol = result.table?.getChild?.("__index");
+    const rowCount =
+      typeof result.table?.numRows === "number" ? result.table.numRows : (geomCol.length ?? 0);
+    for (let localIndex = 0; localIndex < rowCount; localIndex += 1) {
+      const geometry = duckDBGeometryToGeoJson(result.geometryType, geomCol.get(localIndex));
+      if (!geometry) continue;
+      const rawIdx = indexCol?.get?.(localIndex);
+      const globalIndex =
+        typeof rawIdx === "number" && Number.isFinite(rawIdx)
+          ? rawIdx
+          : typeof rawIdx === "bigint" && rawIdx <= BigInt(Number.MAX_SAFE_INTEGER)
+            ? Number(rawIdx)
+            : localIndex;
+      const rawProps = rows[globalIndex] ?? {};
+      features.push({
+        type: "Feature",
+        id: globalIndex,
+        geometry,
+        properties: publicDuckDBProperties(rawProps),
+      });
+    }
+  }
+  const fc: FeatureCollection = { type: "FeatureCollection", features };
+  duckdbGeoJsonCache.set(renderedLayer, fc);
+  return fc;
 }
 
 export function setDuckDBSelectedFeature(layerId: string, featureId: string | null): void {

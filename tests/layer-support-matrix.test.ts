@@ -212,13 +212,13 @@ const MATRIX: Record<string, Row> = {
   "cog (raster control)":         { maplibre: "plugin", mapbox: true,  arcgis: true,  cesium: true },
   flatgeobuf:                     { maplibre: "plugin", mapbox: false, arcgis: false, cesium: false },
   geoparquet:                     { maplibre: "plugin", mapbox: false, arcgis: false, cesium: false },
-  "duckdb-query":                 { maplibre: "plugin", mapbox: true,  arcgis: true,  cesium: false },
+  "duckdb-query":                 { maplibre: "plugin", mapbox: true,  arcgis: true,  cesium: true  },
   "duckdb-query (no plugin)":     { maplibre: "plugin", mapbox: false, arcgis: false, cesium: false },
   "deckgl-viz":                   { maplibre: "plugin", mapbox: true,  arcgis: true,  cesium: false },
   "deckgl-viz (no plugin)":       { maplibre: "plugin", mapbox: false, arcgis: false, cesium: false },
   "deckgl-viz (arc)":             { maplibre: "plugin", mapbox: true,  arcgis: true,  cesium: true },
   "deckgl-viz (heatmap)":         { maplibre: "plugin", mapbox: true,  arcgis: true,  cesium: false },
-  video:                          { maplibre: "sync",   mapbox: true,  arcgis: false, cesium: false },
+  video:                          { maplibre: "sync",   mapbox: true,  arcgis: false, cesium: true  },
   image:                          { maplibre: "sync",   mapbox: true,  arcgis: true,  cesium: true },
 };
 

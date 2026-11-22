@@ -259,7 +259,15 @@ const BOUNDING_SPHERE_STATE_PENDING = 1;
  */
 const ARCGIS_MAP_SERVICE_KIND = "arcgis-map-service";
 
-type EntryKind = "imagery" | "geojson" | "3dtiles" | "points" | "pointcloud" | "czml" | "kml";
+type EntryKind =
+  | "imagery"
+  | "geojson"
+  | "3dtiles"
+  | "points"
+  | "pointcloud"
+  | "czml"
+  | "kml"
+  | "video";
 
 /** The `clock` packet a loaded CZML data source carries, as Cesium exposes it. */
 interface CzmlDocumentClock {
@@ -341,6 +349,10 @@ interface LayerEntry {
   tileHealth?: () => void;
   documentCleanup?: () => void;
   overlayContainer?: HTMLElement;
+  /** Live HTMLVideoElement draped onto a ground polygon for `video` layers. */
+  videoElement?: HTMLVideoElement;
+  /** Video polygon entity whose material alpha tracks layer opacity. */
+  videoEntity?: Entity;
   /** Static attribution registered for this layer while it is in the scene. */
   credit?: Credit;
   /** Set when the entry is removed mid-load so the resolved handle is discarded. */
@@ -663,6 +675,45 @@ function wmtsCapabilities(
  * `"unsupported"` kinds stay in the 2D panes, unless their record carries a
  * FeatureCollection, CZML or KML, which the globe draws whatever the kind.
  */
+function videoUrls(layer: GeoLibreLayer): string[] {
+  const urls = Array.isArray(layer.source.urls)
+    ? layer.source.urls.filter(
+        (value): value is string => typeof value === "string" && value.trim().length > 0,
+      )
+    : [];
+  if (urls.length > 0) return urls;
+  const single = str(layer.source.url);
+  return single ? [single] : [];
+}
+
+function videoCorners(layer: GeoLibreLayer): [number, number][] | null {
+  const coords = layer.source.coordinates;
+  if (!Array.isArray(coords) || coords.length !== 4) return null;
+  const parsed: [number, number][] = [];
+  for (const pt of coords) {
+    if (
+      !Array.isArray(pt) ||
+      pt.length < 2 ||
+      typeof pt[0] !== "number" ||
+      typeof pt[1] !== "number" ||
+      !Number.isFinite(pt[0]) ||
+      !Number.isFinite(pt[1])
+    ) {
+      return null;
+    }
+    parsed.push([pt[0], pt[1]]);
+  }
+  return parsed;
+}
+
+function hasVideoSource(layer: GeoLibreLayer): boolean {
+  return layer.type === "video" && videoUrls(layer).length > 0 && videoCorners(layer) !== null;
+}
+
+function isDuckDBPluginLayer(layer: GeoLibreLayer): boolean {
+  return layer.type === "duckdb-query" && layer.metadata?.sourceKind === "duckdb-query";
+}
+
 export const CESIUM_SUPPORTED_LAYER_KINDS = Object.freeze({
   geojson: "native",
   "raster-tiles": "native",
@@ -675,9 +726,9 @@ export const CESIUM_SUPPORTED_LAYER_KINDS = Object.freeze({
   "3d-tiles": "native",
   cog: "native",
   "vector-file": "unsupported",
-  "duckdb-query": "unsupported",
+  "duckdb-query": "plugin",
   "deckgl-viz": "plugin",
-  video: "unsupported",
+  video: "native",
   image: "native",
 } as const satisfies SupportedLayerKinds);
 
@@ -691,8 +742,7 @@ export function isCesiumSupportedLayerType(layer: GeoLibreLayer): boolean {
   // FeatureCollection on a kind that takes the GeoJSON path.
   if (isCzmlLayer(layer) || isCesiumKmlLayer(layer) || hasGeoJsonCollection(layer)) return true;
   const kind = classifyLayer(layer);
-  // No globe renderer (vector files, DuckDB queries, video), or an unknown
-  // type: these stay in the 2D panes.
+  // No globe renderer (vector files), or an unknown type: these stay in the 2D panes.
   if (hasLayerKindSupport(CESIUM_SUPPORTED_LAYER_KINDS, kind, "unsupported")) return false;
   switch (kind) {
     // GeoJSON (loaded or not yet), imagery (tile templates and a georeferenced
@@ -703,6 +753,10 @@ export function isCesiumSupportedLayerType(layer: GeoLibreLayer): boolean {
     case "cog":
     case "zarr":
       return true;
+    case "video":
+      return hasVideoSource(layer);
+    case "duckdb-query":
+      return isDuckDBPluginLayer(layer);
     case "3d-tiles":
     case "gaussian-splat":
       return isTilesetLayer(layer);
@@ -728,13 +782,15 @@ function isSupported(layer: GeoLibreLayer): boolean {
     const src = czmlSource(layer);
     return Boolean(src && (src.url || src.data));
   }
+  if (layer.type === "video") return hasVideoSource(layer);
   if (hasRenderableGeoJson(layer)) return true;
   // A layer that carries a FeatureCollection renders from it or not at all.
   // Falling through to the imagery checks below would let an incidental
   // `source.tiles` draw a layer whose features are empty or still loading.
-  // `"geojson"` is named explicitly for the case where nothing has loaded yet
-  // and there is no collection to recognize it by.
-  if (hasGeoJsonCollection(layer) || layer.type === "geojson") return false;
+  // `"geojson"` and `"duckdb-query"` are named explicitly for the case where
+  // nothing has loaded yet and there is no collection to recognize them by.
+  if (hasGeoJsonCollection(layer) || layer.type === "geojson" || layer.type === "duckdb-query")
+    return false;
   // An Ion asset (issue #2290) needs only its id; the token is runtime config
   // and its absence is reported as a layer error, not as "unsupported".
   if (cesiumIonAssetId(layer) !== null) return true;
@@ -857,6 +913,7 @@ function pmtilesArchiveUrl(layer: GeoLibreLayer): string | undefined {
 function entryKind(layer: GeoLibreLayer): EntryKind {
   if (isCesiumKmlLayer(layer)) return "kml";
   if (isCzmlLayer(layer)) return "czml";
+  if (layer.type === "video") return "video";
   if (hasRenderableGeoJson(layer)) return planPointRendering(layer).batched ? "points" : "geojson";
   if (isTilesetLayer(layer)) return "3dtiles";
   if (isDecodedPointCloudLayer(layer)) return "pointcloud";
@@ -1020,6 +1077,11 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
         str(prev.source.attribution) !== str(next.source.attribution) ||
         str(prev.sourcePath) !== str(next.sourcePath)
       );
+    case "video":
+      return (
+        JSON.stringify(videoUrls(prev)) !== JSON.stringify(videoUrls(next)) ||
+        JSON.stringify(videoCorners(prev)) !== JSON.stringify(videoCorners(next))
+      );
   }
 }
 
@@ -1058,6 +1120,10 @@ export interface CesiumLayerSyncDeps {
   lasOptions?: Omit<LoadLasOptions, "signal" | "fallbackWkt">;
   /** Overrides for the EPT decoder (the module, the fetchers, the projector). */
   eptOptions?: Omit<LoadEptOptions, "signal">;
+  /** Materialize a DuckDB query layer's rows into GeoJSON; defaults to the global DuckDB bridge. */
+  getDuckDBGeoJson?: (layerId: string) => FeatureCollection | null;
+  /** Create an HTMLVideoElement for draped `video` layers; defaults to `document.createElement("video")`. */
+  createVideoElement?: () => HTMLVideoElement | null;
   /**
    * Publishes the attribute names read off a tileset's first rendered tile
    * (issue #2290). A 3D Tiles layer has no `layer.geojson` for the Style panel
@@ -2547,11 +2613,29 @@ export class CesiumLayerSync {
   }
 
   /** Reconcile the globe to `layers` (order preserved for imagery stacking). */
+  private resolveDuckDBLayer(layer: GeoLibreLayer): GeoLibreLayer {
+    if (layer.type !== "duckdb-query" || layer.geojson) return layer;
+    const provider =
+      this.deps.getDuckDBGeoJson ??
+      (typeof window !== "undefined"
+        ? (
+            window as unknown as {
+              __GEOLIBRE_DUCKDB__?: { getLayerGeoJson?: (id: string) => FeatureCollection | null };
+            }
+          ).__GEOLIBRE_DUCKDB__?.getLayerGeoJson
+        : undefined);
+    const geojson = provider?.(layer.id);
+    if (!geojson || geojson.features.length === 0) return layer;
+    return { ...layer, geojson };
+  }
+
   sync(storeLayers: GeoLibreLayer[]): void {
     // deck.gl has no globe renderer: a Deck.gl Layer builder record is drawn
-    // as the GeoJSON or CZML record it rewrites to (issue #2261). The rewrite
-    // is memoized per record, so an unchanged layer maps to the same object.
-    const layers = storeLayers.map((layer) => deckVizGlobeLayer(layer) ?? layer);
+    // as the GeoJSON or CZML record it rewrites to (issue #2261), and active
+    // DuckDB query layers materialize their GeoArrow rows into GeoJSON.
+    const layers = storeLayers.map(
+      (layer) => deckVizGlobeLayer(layer) ?? this.resolveDuckDBLayer(layer),
+    );
     this.restoreHighlight();
     this.currentLayers = layers;
     this.watchEnvironment();
@@ -3081,6 +3165,7 @@ export class CesiumLayerSync {
     else if (kind === "geojson") created = this.createGeoJson(entry);
     else if (kind === "kml") created = this.createKml(entry);
     else if (kind === "czml") created = this.createCzml(entry);
+    else if (kind === "video") created = this.createVideo(entry);
     else if (kind === "pointcloud") created = this.createPointCloud(entry);
     else if (kind === "points") this.createPointBatch(entry);
     else created = this.createTileset(entry);
@@ -3103,6 +3188,106 @@ export class CesiumLayerSync {
         layerName: entry.layer.name,
         message: entry.loadError,
       });
+    }
+  }
+
+  private async createVideo(entry: LayerEntry): Promise<void> {
+    const { Cesium, viewer } = this;
+    const urls = videoUrls(entry.layer);
+    const corners = videoCorners(entry.layer);
+    if (urls.length === 0 || !corners) return;
+
+    const createEl =
+      this.deps.createVideoElement ??
+      (() => (typeof document !== "undefined" ? document.createElement("video") : null));
+    const video = createEl();
+    if (!video) {
+      entry.loadError = "Video layers require a browser DOM.";
+      return;
+    }
+    video.crossOrigin = "anonymous";
+    video.muted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.autoplay = true;
+    if (urls.length === 1) {
+      video.src = urls[0];
+    } else if (typeof document !== "undefined") {
+      for (const srcUrl of urls) {
+        const sourceEl = document.createElement("source");
+        sourceEl.src = srcUrl;
+        video.appendChild(sourceEl);
+      }
+    } else {
+      video.src = urls[0];
+    }
+
+    const CustomDataSourceCtor = (
+      Cesium as unknown as { CustomDataSource?: new (name?: string) => DataSource }
+    ).CustomDataSource;
+    if (!CustomDataSourceCtor) {
+      entry.loadError = "Cesium CustomDataSource is unavailable for video overlays.";
+      return;
+    }
+    const dataSource = new CustomDataSourceCtor(entry.layer.name);
+    const flatCoords = corners.flatMap(([lng, lat]) => [lng, lat]);
+    const hierarchy = Cesium.Cartesian3.fromDegreesArray(flatCoords);
+    const opacity = this.effectiveOpacity(entry);
+    const ImageMatCtor = (
+      Cesium as unknown as {
+        ImageMaterialProperty?: new (options: Record<string, unknown>) => unknown;
+      }
+    ).ImageMaterialProperty;
+    const material = ImageMatCtor
+      ? new ImageMatCtor({
+          image: video,
+          transparent: true,
+          color: Cesium.Color.WHITE.withAlpha(opacity),
+        })
+      : video;
+
+    const entity = (
+      dataSource.entities as unknown as { add: (spec: Record<string, unknown>) => Entity }
+    ).add({
+      id: `video:${entry.layer.id}`,
+      name: entry.layer.name,
+      polygon: {
+        hierarchy,
+        material,
+        classificationType: (
+          Cesium as unknown as { ClassificationType?: { BOTH?: unknown } }
+        ).ClassificationType?.BOTH,
+      },
+    });
+    entry.videoElement = video;
+    entry.videoEntity = entity;
+    entry.handle = dataSource;
+    if (entry.cancelled) {
+      this.teardownVideoElement(video);
+      return;
+    }
+    await viewer.dataSources.add(dataSource);
+    if (entry.cancelled) {
+      viewer.dataSources.remove(dataSource, true);
+      this.teardownVideoElement(video);
+      return;
+    }
+    entry.added = true;
+    this.applyAppearance(entry);
+    if (entry.layer.visible) {
+      void Promise.resolve(video.play?.()).catch(() => {});
+    }
+    viewer.scene?.requestRender?.();
+  }
+
+  private teardownVideoElement(video: HTMLVideoElement): void {
+    try {
+      video.pause?.();
+      while (video.firstChild) video.removeChild(video.firstChild);
+      video.removeAttribute?.("src");
+      video.load?.();
+    } catch {
+      // Best-effort teardown on synthetic or already-detached elements.
     }
   }
 
@@ -4078,6 +4263,19 @@ export class CesiumLayerSync {
         entry.overlayContainer.style.display = layer.visible ? "" : "none";
         entry.overlayContainer.style.opacity = String(this.effectiveOpacity(entry));
       }
+    } else if (entry.kind === "video") {
+      (handle as DataSource).show = layer.visible;
+      const opacity = this.effectiveOpacity(entry);
+      const polygonMat = entry.videoEntity?.polygon?.material as
+        | { color?: unknown }
+        | undefined;
+      if (polygonMat && "color" in polygonMat) {
+        polygonMat.color = this.Cesium.Color.WHITE.withAlpha(opacity);
+      }
+      if (entry.videoElement) {
+        if (layer.visible) void Promise.resolve(entry.videoElement.play?.()).catch(() => {});
+        else entry.videoElement.pause?.();
+      }
     } else if (entry.kind === "pointcloud") {
       const collection = handle as PointPrimitiveCollection;
       collection.show = layer.visible;
@@ -4642,6 +4840,11 @@ export class CesiumLayerSync {
     entry.documentCleanup = undefined;
     entry.overlayContainer?.remove();
     entry.overlayContainer = undefined;
+    if (entry.videoElement) {
+      this.teardownVideoElement(entry.videoElement);
+      entry.videoElement = undefined;
+      entry.videoEntity = undefined;
+    }
     if (entry.credit) {
       this.viewer.creditDisplay?.removeStaticCredit?.(entry.credit);
       entry.credit = undefined;
@@ -4664,7 +4867,12 @@ export class CesiumLayerSync {
       if (provider instanceof ProtocolImageryProvider) provider.destroy();
       // zarr-cesium aborts its pending chunk reads and drops its tile cache.
       if (isZarrImageryProvider(provider)) provider.destroy();
-    } else if (entry.kind === "geojson" || entry.kind === "czml" || entry.kind === "kml") {
+    } else if (
+      entry.kind === "geojson" ||
+      entry.kind === "czml" ||
+      entry.kind === "kml" ||
+      entry.kind === "video"
+    ) {
       // `cancelled` is already set, so the election skips this entry.
       if (this.czmlClockOwner === entry.layer.id) this.electCzmlClockOwner();
       entry.cluster?.dispose();

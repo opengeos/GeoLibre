@@ -115,15 +115,14 @@ export const ARCGIS_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   flatProjection: true,
   terrainSource: true,
   ionTerrain: false,
-  // The SDK draws Zarr from the record. The raster and PMTiles panels are
-  // MapLibre controls this view does not host, so those formats go through the
-  // Add Data forms; the measure control draws through the MapLibre/Mapbox style
-  // API, which the SDK has no equivalent of.
+  // The SDK draws Zarr from the record, and ArcgisControlHost renders the
+  // MeasureControl shadow-style overlay onto its GraphicsLayer. The raster and
+  // PMTiles panels remain MapLibre controls, so those go through Add Data.
   nativeZarr: true,
   nativeDataSources: false,
   // The engine is published once its view is ready.
   deferredEngineReady: true,
-  measureTool: false,
+  measureTool: true,
   controlLayerPanels: false,
   supportedLayerKinds: ARCGIS_SUPPORTED_LAYER_KINDS,
 });
@@ -1763,6 +1762,22 @@ export class ArcgisEngine implements MapEngine {
         return [new layers.MapImageLayer({ ...common, url: plan.url })];
       case "imagery":
         return [new layers.ImageryLayer({ ...common, url: plan.url })];
+      case "scene-layer": {
+        const SceneLayer = this.options.scene?.SceneLayer;
+        if (!SceneLayer) throw new Error("SceneLayer requires an ArcGIS 3D SceneView");
+        return [new SceneLayer({ ...common, url: plan.url })];
+      }
+      case "integrated-mesh-3d-tiles": {
+        const IntegratedMesh3DTilesLayer = this.options.scene?.IntegratedMesh3DTilesLayer;
+        if (!IntegratedMesh3DTilesLayer)
+          throw new Error("IntegratedMesh3DTilesLayer requires an ArcGIS 3D SceneView");
+        return [new IntegratedMesh3DTilesLayer({ ...common, url: plan.url })];
+      }
+      case "point-cloud-layer": {
+        const PointCloudLayer = this.options.scene?.PointCloudLayer;
+        if (!PointCloudLayer) throw new Error("PointCloudLayer requires an ArcGIS 3D SceneView");
+        return [new PointCloudLayer({ ...common, url: plan.url })];
+      }
       case "imagery-tile":
         return [
           new layers.ImageryTileLayer({

@@ -205,9 +205,10 @@ export class ArcgisControlHost {
     );
     this.cleanup.push(() => frame.remove());
     // Pointer events carry MapLibre's `lngLat` and `point`, for click-driven
-    // controls and pointer readouts.
+    // controls (including the measurement tool) and pointer readouts.
     const pointer =
-      (type: "click" | "mousemove" | "mousedown" | "mouseup") => (event: ArcgisViewEvent) => {
+      (type: "click" | "dblclick" | "mousemove" | "mousedown" | "mouseup") =>
+      (event: ArcgisViewEvent) => {
         const point = new Point(event.x, event.y);
         const lngLat = surface().unproject([event.x, event.y]);
         if (!lngLat) return;
@@ -222,6 +223,7 @@ export class ArcgisControlHost {
       };
     for (const handle of [
       view.on("click", pointer("click")),
+      view.on("double-click", pointer("dblclick")),
       view.on("pointer-move", pointer("mousemove")),
       view.on("pointer-down", pointer("mousedown")),
       view.on("pointer-up", pointer("mouseup")),
