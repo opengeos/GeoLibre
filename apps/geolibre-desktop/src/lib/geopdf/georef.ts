@@ -103,7 +103,9 @@ function readViewports(doc: PdfDocument, page: PdfDict): GeoPdfViewport[] {
           : null;
     const name = doc.resolve(vp.get("Name"));
     // /LPTS and /Bounds are fractions of the BBox measured from its first
-    // corner towards its second, as GDAL reads them. Writers disagree on the
+    // corner towards its second, as GDAL reads them (PDFDataset::ParseMeasure
+    // in frmts/pdf/pdfdataset.cpp interpolates BBox[0]..BBox[2] and
+    // BBox[1]..BBox[3] without sorting them). Writers disagree on the
     // corner order (Global Mapper writes the top edge first), so flip each
     // axis written high-to-low into the normalized box rather than mirroring
     // the map.

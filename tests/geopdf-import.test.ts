@@ -212,17 +212,22 @@ describe("readGeoPdfPages", () => {
     };
     // Corner indices into frameGpts (UL, LL, LR, UR) that LPTS (0,1) (0,0)
     // (1,0) (1,1) land on for each written corner order.
-    const cases: [number[], number[]][] = [
+    // The last element is the /Bounds [0 0.25 0 0 1 0 1 0.25] neatline in the
+    // normalized box: a strip along the first-written y edge (the top, for a
+    // top-first BBox) or starting at the first-written x edge.
+    const cases: [number[], number[], number[]][] = [
       [
         [BBOX[0], BBOX[3], BBOX[2], BBOX[1]],
         [1, 0, 3, 2],
+        [0, 0.75, 0, 1, 1, 1, 1, 0.75],
       ],
       [
         [BBOX[2], BBOX[1], BBOX[0], BBOX[3]],
         [3, 2, 1, 0],
+        [1, 0.25, 1, 0, 0, 0, 0, 0.25],
       ],
     ];
-    for (const [bbox, order] of cases) {
+    for (const [bbox, order, bounds] of cases) {
       const entry = viewportEntry(undefined, {
         bbox,
         bounds: "/Bounds [0 0.25 0 0 1 0 1 0.25] ",
@@ -233,14 +238,7 @@ describe("readGeoPdfPages", () => {
       const ul = applyUserToCrs(t, BBOX[0], BBOX[3]);
       assert.ok(Math.abs(ul[0] - UL[0]) < 1e-3 && Math.abs(ul[1] - UL[1]) < 1e-3, `${bbox}`);
       // The neatline is flipped the same way as the control points.
-      const flipU = bbox[0] > bbox[2];
-      const flipV = bbox[1] > bbox[3];
-      assert.deepEqual(
-        vp.bounds,
-        [0, 0.25, 0, 0, 1, 0, 1, 0.25].map((value, i) =>
-          (i % 2 === 0 ? flipU : flipV) ? 1 - value : value,
-        ),
-      );
+      assert.deepEqual(vp.bounds, bounds);
     }
   });
 
