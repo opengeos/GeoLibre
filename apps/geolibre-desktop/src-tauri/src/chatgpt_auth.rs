@@ -1349,6 +1349,7 @@ pub async fn chatgpt_sign_in_start(
     let (dir, saved, old_to_revoke, cleanup_err) = {
         let mut session = state.session.lock().await;
         ensure_loaded(&mut session, &app).await?;
+        let dir = session.dir.clone().ok_or("No config folder")?;
         let mut revoke_info: Option<(String, Tokens)> = None;
         let mut cleanup_err: Option<String> = None;
         if another_account.unwrap_or(false) && session.reg.is_some() {
@@ -1357,12 +1358,10 @@ pub async fn chatgpt_sign_in_start(
             if let Some(old) = old {
                 revoke_info = Some((client_id, old));
             }
-            let reg_dir = session.dir.clone();
+            let reg_dir = dir.clone();
             let write_result = tauri::async_runtime::spawn_blocking(move || {
                 let _ = keychain_delete();
-                if let Some(dir) = reg_dir {
-                    write_registration(&dir, None)?;
-                }
+                write_registration(&reg_dir, None)?;
                 Ok::<(), String>(())
             })
             .await
@@ -1372,12 +1371,7 @@ pub async fn chatgpt_sign_in_start(
                 cleanup_err = Some(err);
             }
         }
-        (
-            session.dir.clone(),
-            session.reg.clone(),
-            revoke_info,
-            cleanup_err,
-        )
+        (dir, session.reg.clone(), revoke_info, cleanup_err)
     };
     if let Some((client_id, old)) = old_to_revoke {
         tauri::async_runtime::spawn(async move {
@@ -1387,7 +1381,6 @@ pub async fn chatgpt_sign_in_start(
     if let Some(err) = cleanup_err {
         return Err(err);
     }
-    let dir = dir.ok_or("No config folder")?;
     let host = host_id(&dir)?;
     let (listener, port) = TcpListener::bind(("127.0.0.1", PORT))
         .or_else(|_| TcpListener::bind(("127.0.0.1", 0)))

@@ -365,8 +365,11 @@ unsafe extern "C" {
 #[cfg(not(feature = "mas"))]
 struct MartinServerState {
     process: Mutex<Option<MartinProcess>>,
-    // Serialize start and stop so a stop cannot race with an in-progress startup.
+    // Serialize concurrent starts so two callers do not race to bind ports.
     lifecycle: Mutex<()>,
+    // Bumped immediately on stop/exit so an in-progress startup drops its child
+    // instead of installing it, without making Stop wait for startup to finish.
+    generation: std::sync::atomic::AtomicU64,
 }
 
 #[cfg(not(feature = "mas"))]
@@ -376,6 +379,9 @@ struct SidecarServerState {
     // sidecar. Without this, two callers can both pass the reuse check and race
     // to bind the fixed port, or a restart can overlap the previous teardown.
     lifecycle: Mutex<()>,
+    // Bumped on exit so an in-progress startup drops its child instead of
+    // storing it after teardown.
+    generation: std::sync::atomic::AtomicU64,
 }
 
 #[cfg(not(feature = "mas"))]
@@ -387,6 +393,9 @@ struct JupyterServerState {
     // Held for the whole of start_jupyter_server_blocking so two concurrent
     // start calls can't both spawn on the same port (the loser would exit 1).
     startup: Mutex<()>,
+    // Bumped immediately on stop/exit so Stop returns immediately while any
+    // in-progress startup discards its child instead of installing it.
+    generation: std::sync::atomic::AtomicU64,
 }
 
 #[cfg(not(feature = "mas"))]
@@ -587,15 +596,18 @@ pub fn run() {
         .manage(MartinServerState {
             process: Mutex::new(None),
             lifecycle: Mutex::new(()),
+            generation: std::sync::atomic::AtomicU64::new(0),
         })
         .manage(SidecarServerState {
             process: Mutex::new(None),
             lifecycle: Mutex::new(()),
+            generation: std::sync::atomic::AtomicU64::new(0),
         })
         .manage(JupyterServerState {
             process: Mutex::new(None),
             token: Mutex::new(None),
             startup: Mutex::new(()),
+            generation: std::sync::atomic::AtomicU64::new(0),
         });
 
     let app = builder
@@ -708,9 +720,23 @@ pub fn run() {
         let _ = (&app, &event);
         #[cfg(not(feature = "mas"))]
         if let tauri::RunEvent::Exit = event {
-            take_and_drop(&app.state::<MartinServerState>().process);
-            take_and_drop(&app.state::<SidecarServerState>().process);
-            take_and_drop(&app.state::<JupyterServerState>().process);
+            let martin = app.state::<MartinServerState>();
+            martin
+                .generation
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            take_and_drop(&martin.process);
+
+            let sidecar = app.state::<SidecarServerState>();
+            sidecar
+                .generation
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            take_and_drop(&sidecar.process);
+
+            let jupyter = app.state::<JupyterServerState>();
+            jupyter
+                .generation
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            take_and_drop(&jupyter.process);
         }
         // macOS delivers associated files as native open events instead
         // of argv. Queue them through the same path as a second desktop launch.
@@ -3312,6 +3338,7 @@ fn start_martin_server_blocking(
         .lifecycle
         .lock()
         .map_err(|_| "Could not lock Martin lifecycle.".to_string())?;
+    let start_gen = state.generation.load(std::sync::atomic::Ordering::SeqCst);
     {
         let mut process = state
             .process
@@ -3327,6 +3354,9 @@ fn start_martin_server_blocking(
 
     let mut last_error = "Could not start Martin.".to_string();
     for _ in 0..MARTIN_START_ATTEMPTS {
+        if state.generation.load(std::sync::atomic::Ordering::SeqCst) != start_gen {
+            return Err("Martin server startup was cancelled.".to_string());
+        }
         match spawn_martin_server(
             &binary.path,
             connection_string.trim(),
@@ -3337,6 +3367,10 @@ fn start_martin_server_blocking(
                     .process
                     .lock()
                     .map_err(|_| "Could not lock Martin process state.".to_string())?;
+                if state.generation.load(std::sync::atomic::Ordering::SeqCst) != start_gen {
+                    drop(info.process);
+                    return Err("Martin server startup was cancelled.".to_string());
+                }
                 if martin_slot_is_busy(&mut process) {
                     drop(info.process);
                     return Err(
@@ -3371,10 +3405,12 @@ async fn stop_martin_server(app: tauri::AppHandle) -> Result<(), String> {
 #[cfg(not(feature = "mas"))]
 fn stop_martin_server_blocking(app: tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<MartinServerState>();
-    let _lifecycle = state
-        .lifecycle
-        .lock()
-        .map_err(|_| "Could not lock Martin lifecycle.".to_string())?;
+    // Bump generation without blocking on `lifecycle` so Stop is immediate even
+    // while a startup attempt is in flight; the startup checks `generation`
+    // under `process.lock()` before storing any child.
+    state
+        .generation
+        .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let mut process = state
         .process
         .lock()
@@ -3427,6 +3463,7 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
         .lifecycle
         .lock()
         .map_err(|_| "Could not lock sidecar lifecycle.".to_string())?;
+    let start_gen = state.generation.load(std::sync::atomic::Ordering::SeqCst);
     {
         let mut process = state
             .process
@@ -3540,6 +3577,12 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
         .process
         .lock()
         .map_err(|_| "Could not lock sidecar process state.".to_string())?;
+    if state.generation.load(std::sync::atomic::Ordering::SeqCst) != start_gen {
+        drop(process);
+        let mut cancelled = SidecarProcess { child };
+        cancelled.terminate();
+        return Err("GeoLibre sidecar startup was cancelled.".to_string());
+    }
     if process.is_some() {
         let mut duplicate = SidecarProcess { child };
         duplicate.terminate();
@@ -3565,6 +3608,9 @@ async fn stop_geolibre_sidecar(app: tauri::AppHandle) -> Result<(), String> {
 #[cfg(not(feature = "mas"))]
 fn stop_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<SidecarServerState>();
+    state
+        .generation
+        .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let _lifecycle = state
         .lifecycle
         .lock()
@@ -3619,6 +3665,7 @@ fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerI
         .startup
         .lock()
         .map_err(|_| "Could not lock Jupyter startup.".to_string())?;
+    let start_gen = state.generation.load(std::sync::atomic::Ordering::SeqCst);
     // Reuse an already-running server: hand back the same URL + token.
     {
         let mut process = state
@@ -3772,17 +3819,24 @@ fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerI
         return Err(error);
     }
 
-    // We hold the startup lock, so no concurrent start could have stored a
-    // process; record ours as the live server.
-    *state
-        .process
-        .lock()
-        .map_err(|_| "Could not lock Jupyter process state.".to_string())? =
-        Some(JupyterProcess { child });
-    *state
-        .token
-        .lock()
-        .map_err(|_| "Could not lock Jupyter token.".to_string())? = Some(token.clone());
+    // Record our server unless a concurrent stop or app exit bumped
+    // `generation` while startup was running.
+    {
+        let mut process = state
+            .process
+            .lock()
+            .map_err(|_| "Could not lock Jupyter process state.".to_string())?;
+        if state.generation.load(std::sync::atomic::Ordering::SeqCst) != start_gen {
+            drop(process);
+            terminate_sidecar_child(&mut child);
+            return Err("Jupyter server startup was cancelled.".to_string());
+        }
+        *process = Some(JupyterProcess { child });
+        *state
+            .token
+            .lock()
+            .map_err(|_| "Could not lock Jupyter token.".to_string())? = Some(token.clone());
+    }
 
     Ok(JupyterServerInfo {
         url: base_url,
@@ -3802,12 +3856,13 @@ async fn stop_jupyter_server(app: tauri::AppHandle) -> Result<(), String> {
 #[cfg(not(feature = "mas"))]
 fn stop_jupyter_server_blocking(app: tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<JupyterServerState>();
-    // Serialize stop with any in-progress startup so a concurrent start cannot
-    // install a newly spawned server after stop has cleared state.
-    let _startup = state
-        .startup
-        .lock()
-        .map_err(|_| "Could not lock Jupyter startup.".to_string())?;
+    // Bump generation immediately without blocking on `startup` so Stop stays
+    // responsive even during a slow `uv sync` or health wait; any in-progress
+    // startup checks `generation` under `process.lock()` and tears down its
+    // child instead of installing it.
+    state
+        .generation
+        .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     {
         let mut process = state
             .process
@@ -7854,7 +7909,9 @@ mod tests {
         let mut child = std::process::Command::new("true")
             .spawn()
             .expect("spawn true");
-        let _ = child.wait();
+        let status = child.wait().expect("wait for true");
+        assert!(status.success());
         super::terminate_sidecar_child(&mut child);
+        assert!(matches!(child.try_wait(), Ok(Some(s)) if s.success()));
     }
 }

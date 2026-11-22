@@ -26,7 +26,9 @@ const STATE_HEX_LEN: usize = 32;
 // `vec![0; content_length]` would abort the whole app) or park threads forever.
 const MAX_REQUEST_BYTES: u64 = 64 * 1024;
 const MAX_BODY_BYTES: usize = 16 * 1024;
-const READ_TIMEOUT: Duration = Duration::from_secs(10);
+// Loopback browser callbacks deliver their request within milliseconds; a short
+// timeout keeps idle local connections from holding permits for long.
+const READ_TIMEOUT: Duration = Duration::from_secs(2);
 // Sign-ins the user started but has not finished. Each start is a user action,
 // so a small bound only ever drops long-abandoned attempts.
 const MAX_PENDING_STATES: usize = 16;
