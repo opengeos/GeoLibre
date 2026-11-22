@@ -703,39 +703,37 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building GeoLibre Desktop");
 
-    app.run(|_app, _event| {
+    app.run(|app, event| {
+        let _ = (&app, &event);
         #[cfg(not(feature = "mas"))]
-        if let tauri::RunEvent::Exit = _event {
-            if let Ok(mut process) = _app.state::<MartinServerState>().process.lock() {
-                let taken = process.take();
-                drop(process);
-                drop(taken);
-            }
-            if let Ok(mut process) = _app.state::<SidecarServerState>().process.lock() {
-                let taken = process.take();
-                drop(process);
-                drop(taken);
-            }
-            if let Ok(mut process) = _app.state::<JupyterServerState>().process.lock() {
-                let taken = process.take();
-                drop(process);
-                drop(taken);
-            }
+        if let tauri::RunEvent::Exit = event {
+            take_and_drop(&app.state::<MartinServerState>().process);
+            take_and_drop(&app.state::<SidecarServerState>().process);
+            take_and_drop(&app.state::<JupyterServerState>().process);
         }
         // macOS delivers associated files as native open events instead
         // of argv. Queue them through the same path as a second desktop launch.
         #[cfg(target_os = "macos")]
-        if let tauri::RunEvent::Opened { urls } = _event {
+        if let tauri::RunEvent::Opened { urls } = event {
             let paths = project_paths_from_args(
                 urls.into_iter()
                     .filter_map(|url| url.to_file_path().ok())
                     .map(std::ffi::OsString::from),
                 Path::new("/"),
             );
-            enqueue_project_paths(_app, paths);
-            focus_main_window(_app);
+            enqueue_project_paths(app, paths);
+            focus_main_window(app);
         }
     });
+}
+
+#[cfg(not(feature = "mas"))]
+fn take_and_drop<T>(slot: &Mutex<Option<T>>) {
+    if let Ok(mut guard) = slot.lock() {
+        let taken = guard.take();
+        drop(guard);
+        drop(taken);
+    }
 }
 
 #[cfg(any(target_os = "linux", windows))]
@@ -4343,7 +4341,10 @@ fn hide_console_window(_command: &mut Command) {}
 #[cfg(not(feature = "mas"))]
 fn terminate_sidecar_child(child: &mut Child) {
     // If the child has already exited and been reaped, do not signal its PID
-    // or process group, which the OS may already have recycled.
+    // or process group, which the OS may already have recycled. Note that
+    // `std::process::Child::try_wait` caches exit status without distinguishing
+    // a newly reaped zombie from a child reaped earlier, so returning here
+    // prioritizes never signaling a recycled PGID of an unrelated process.
     if matches!(child.try_wait(), Ok(Some(_))) {
         return;
     }
@@ -7742,8 +7743,13 @@ mod tests {
 
     #[test]
     fn read_mbtiles_tile_rejects_excessive_zoom() {
-        let err = super::read_mbtiles_tile_blocking("/tmp/nonexistent.mbtiles".to_string(), 63, 0, 0)
-            .expect_err("zoom 63 must be rejected");
+        let err = super::read_mbtiles_tile_blocking(
+            "/tmp/nonexistent.mbtiles".to_string(),
+            63,
+            0,
+            0,
+        )
+        .expect_err("zoom 63 must be rejected");
         assert!(err.contains("zoom level is too large"));
     }
 

@@ -331,40 +331,80 @@ async fn transfer(
             .unwrap_or_default()
     );
     let part_path = destination.with_file_name(part_name);
-    let mut part = PartFile {
-        path: part_path.clone(),
+    let part = PartFile {
+        path: part_path,
         done: false,
     };
-    // Stream chunks to a blocking writer task so writing multi-GB granules
-    // never stalls a Tokio worker thread.
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(16);
-    let writer_path = part_path.clone();
-    let writer_handle = tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
-        let mut file = fs::File::create(&writer_path)
-            .map_err(|error| format!("Could not create the download file: {error}"))?;
-        while let Some(chunk) = rx.blocking_recv() {
-            file.write_all(&chunk)
+    // Stream chunks directly as `Bytes` (no per-chunk copy) into a blocking
+    // writer task that owns `PartFile`, so creating/writing/syncing/renaming
+    // never stalls a Tokio worker AND cancelling/aborting drops the file handle
+    // before `PartFile::drop` unlinks `.part` (avoiding orphan files and
+    // Windows sharing violations).
+    enum WriteCommand<B> {
+        Chunk(B),
+        Finish,
+    }
+    fn spawn_part_writer<B: AsRef<[u8]> + Send + 'static>(
+        part: PartFile,
+        destination: PathBuf,
+    ) -> (
+        tokio::sync::mpsc::Sender<WriteCommand<B>>,
+        tauri::async_runtime::JoinHandle<Result<(), String>>,
+    ) {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<WriteCommand<B>>(16);
+        let handle = tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+            let mut part = part;
+            if rx.is_closed() {
+                return Ok(());
+            }
+            let mut file = fs::File::create(&part.path)
+                .map_err(|error| format!("Could not create the download file: {error}"))?;
+            let mut finish = false;
+            while let Some(command) = rx.blocking_recv() {
+                match command {
+                    WriteCommand::Chunk(chunk) => {
+                        file.write_all(chunk.as_ref())
+                            .map_err(|error| format!("Could not write the download: {error}"))?;
+                    }
+                    WriteCommand::Finish => {
+                        finish = true;
+                        break;
+                    }
+                }
+            }
+            if !finish {
+                // Close the handle before `part` drops so Windows can unlink `.part`.
+                drop(file);
+                return Ok(());
+            }
+            file.flush()
+                .and_then(|()| file.sync_all())
                 .map_err(|error| format!("Could not write the download: {error}"))?;
-        }
-        file.flush()
-            .and_then(|()| file.sync_all())
-            .map_err(|error| format!("Could not write the download: {error}"))?;
-        Ok(())
-    });
+            drop(file);
+            fs::rename(&part.path, &destination)
+                .map_err(|error| format!("Could not finish the download: {error}"))?;
+            part.done = true;
+            Ok(())
+        });
+        (tx, handle)
+    }
+    let (tx, writer_handle) = spawn_part_writer(part, destination.clone());
     let mut response = response;
     let mut received: u64 = 0;
     let mut reported: u64 = 0;
     let _ = progress.send(RemoteDownloadProgress { received, total });
     let mut read_error: Option<String> = None;
-    while let Some(chunk) = match response.chunk().await {
-        Ok(chunk) => chunk,
-        Err(error) => {
-            read_error = Some(format!("Download interrupted: {}", error.without_url()));
-            None
-        }
-    } {
+    loop {
+        let chunk = match response.chunk().await {
+            Ok(Some(chunk)) => chunk,
+            Ok(None) => break,
+            Err(error) => {
+                read_error = Some(format!("Download interrupted: {}", error.without_url()));
+                break;
+            }
+        };
         let len = chunk.len() as u64;
-        if tx.send(chunk.to_vec()).await.is_err() {
+        if tx.send(WriteCommand::Chunk(chunk)).await.is_err() {
             break;
         }
         received += len;
@@ -373,24 +413,22 @@ async fn transfer(
             let _ = progress.send(RemoteDownloadProgress { received, total });
         }
     }
+    if let Some(error) = read_error {
+        drop(tx);
+        let _ = writer_handle.await;
+        return Err(error);
+    }
+    if total.is_some_and(|total| total != received) {
+        drop(tx);
+        let _ = writer_handle.await;
+        return Err("The download ended early.".into());
+    }
+    let _ = tx.send(WriteCommand::Finish).await;
     drop(tx);
     let writer_result = writer_handle
         .await
         .map_err(|error| format!("Download writer failed: {error}"))?;
-    if let Some(error) = read_error {
-        return Err(error);
-    }
     writer_result?;
-    if total.is_some_and(|total| total != received) {
-        return Err("The download ended early.".into());
-    }
-    let rename_from = part.path.clone();
-    let rename_to = destination.clone();
-    tauri::async_runtime::spawn_blocking(move || fs::rename(&rename_from, &rename_to))
-        .await
-        .map_err(|error| format!("Could not finish the download: {error}"))?
-        .map_err(|error| format!("Could not finish the download: {error}"))?;
-    part.done = true;
     if let Some(placeholder) = placeholder.as_mut() {
         placeholder.done = true;
     }

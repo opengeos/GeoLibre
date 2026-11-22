@@ -643,6 +643,24 @@ fn has_valid_base64_wkb_values(
     Ok(sample_count > 0 && sample_count == valid_count)
 }
 
+fn source_crs_meta_sql(source_path_literal: &str, layer_name: Option<&str>) -> String {
+    match layer_name.map(str::trim).filter(|name| !name.is_empty()) {
+        Some(name) => format!(
+            "SELECT l.geometry_fields[1].crs.auth_name AS auth_name, \
+             l.geometry_fields[1].crs.auth_code AS auth_code \
+             FROM (SELECT UNNEST(layers) AS l FROM ST_Read_Meta({source_path_literal})) \
+             WHERE l.name = {} \
+             LIMIT 1",
+            quote_sql_string(name)
+        ),
+        None => format!(
+            "SELECT layers[1].geometry_fields[1].crs.auth_name AS auth_name, \
+             layers[1].geometry_fields[1].crs.auth_code AS auth_code \
+             FROM ST_Read_Meta({source_path_literal})"
+        ),
+    }
+}
+
 fn read_source_crs(
     conn: &Connection,
     options: &NativeVectorOptions,
@@ -653,8 +671,9 @@ fn read_source_crs(
         return read_parquet_source_crs(conn, options, geo_metadata, geometry_column);
     }
     let source_path = quote_sql_string(&sql_source_path(&options.path));
-    let query_crs = |sql: &str| -> Option<String> {
-        conn.query_row(sql, [], |row| {
+    let meta_sql = source_crs_meta_sql(&source_path, options.layer.as_deref());
+    let auth_crs = conn
+        .query_row(&meta_sql, [], |row| {
             let auth_name: Option<String> = row.get(0)?;
             let auth_code: Option<String> = row.get(1)?;
             Ok((auth_name, auth_code))
@@ -668,32 +687,7 @@ fn read_source_crs(
             } else {
                 Some(format!("{auth_name}:{auth_code}"))
             }
-        })
-    };
-    let layer_crs = options
-        .layer
-        .as_deref()
-        .map(str::trim)
-        .filter(|name| !name.is_empty())
-        .and_then(|layer_name| {
-            let layer_sql = format!(
-                "SELECT l.geometry_fields[1].crs.auth_name AS auth_name, \
-                 l.geometry_fields[1].crs.auth_code AS auth_code \
-                 FROM ST_Read_Meta({source_path}), UNNEST(layers) AS t(l) \
-                 WHERE l.name = {} \
-                 LIMIT 1",
-                quote_sql_string(layer_name)
-            );
-            query_crs(&layer_sql)
         });
-    let auth_crs = layer_crs.or_else(|| {
-        let meta_sql = format!(
-            "SELECT layers[1].geometry_fields[1].crs.auth_name AS auth_name, \
-             layers[1].geometry_fields[1].crs.auth_code AS auth_code \
-             FROM ST_Read_Meta({source_path})"
-        );
-        query_crs(&meta_sql)
-    });
     if auth_crs.is_some() {
         return auth_crs;
     }
@@ -2187,5 +2181,42 @@ mod tests {
         assert_eq!(features[1]["geometry"]["coordinates"][0], 100.0);
 
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn source_crs_meta_sql_targets_named_layer_without_falling_back_to_first() {
+        let named = source_crs_meta_sql("'/tmp/multi.gpkg'", Some("parcels"));
+        assert!(named.contains("UNNEST(layers) AS l"));
+        assert!(named.contains("WHERE l.name = 'parcels'"));
+        assert!(!named.contains("layers[1]"));
+
+        let default_layer = source_crs_meta_sql("'/tmp/multi.gpkg'", None);
+        assert!(default_layer.contains("layers[1].geometry_fields[1].crs.auth_name"));
+
+        // Exercise the exact UNNEST subquery pattern directly in DuckDB.
+        let conn = Connection::open_in_memory().expect("open duckdb");
+        conn.execute_batch(
+            "CREATE TABLE fake_meta AS SELECT [\
+                {'name': 'roads', 'geometry_fields': [{'crs': {'auth_name': 'EPSG', 'auth_code': '4326'}}]}, \
+                {'name': 'parcels', 'geometry_fields': [{'crs': {'auth_name': 'EPSG', 'auth_code': '32618'}}]}, \
+                {'name': 'local', 'geometry_fields': [{'crs': {'auth_name': NULL, 'auth_code': NULL}}]}\
+            ] AS layers;",
+        )
+        .expect("seed fake_meta");
+        let query_layer = |layer: &str| -> Option<String> {
+            let sql = format!(
+                "SELECT l.geometry_fields[1].crs.auth_name, l.geometry_fields[1].crs.auth_code \
+                 FROM (SELECT UNNEST(layers) AS l FROM fake_meta) \
+                 WHERE l.name = {} LIMIT 1",
+                quote_sql_string(layer)
+            );
+            conn.query_row(&sql, [], |row| {
+                Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<String>>(1)?))
+            })
+            .ok()
+            .and_then(|(a, c)| Some(format!("{}:{}", a?, c?)))
+        };
+        assert_eq!(query_layer("parcels").as_deref(), Some("EPSG:32618"));
+        assert_eq!(query_layer("local"), None);
     }
 }

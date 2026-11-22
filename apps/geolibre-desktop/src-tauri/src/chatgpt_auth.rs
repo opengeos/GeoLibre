@@ -835,9 +835,14 @@ impl Session {
     }
 
     /// Clears in-memory token state and returns the registration snapshot to
-    /// persist (plus keychain deletion) on a blocking worker without holding
-    /// the async session mutex across blocking I/O.
-    fn clear_signed_in_state(&mut self) -> (Option<Tokens>, Option<(PathBuf, Option<Registration>)>) {
+    /// persist (plus keychain deletion) on a blocking worker via
+    /// `spawn_blocking`. Callers hold the async session mutex across that
+    /// persistence so concurrent sign-ins and sign-outs stay strictly ordered
+    /// on the keychain while blocking disk/keychain I/O stays off the Tokio
+    /// executor.
+    fn clear_signed_in_state(
+        &mut self,
+    ) -> (Option<Tokens>, Option<(PathBuf, Option<Registration>)>) {
         let tokens = self.tokens.take();
         if let Some(reg) = self.reg.as_mut() {
             reg.signed_in = false;
@@ -1341,37 +1346,38 @@ pub async fn chatgpt_sign_in_start(
     let _starting = state.starting.lock().await;
     state.cancel_login();
     let generation = state.login_generation.load(Ordering::SeqCst);
-    let (dir, saved, sign_out_cleanup) = {
+    let (dir, saved, old_to_revoke) = {
         let mut session = state.session.lock().await;
         ensure_loaded(&mut session, &app).await?;
-        let mut cleanup: Option<(Option<PathBuf>, String, Option<Tokens>)> = None;
+        let mut revoke_info: Option<(String, Tokens)> = None;
         if another_account.unwrap_or(false) && session.reg.is_some() {
             let (old, _) = session.clear_signed_in_state();
             let client_id = session.reg.take().map(|r| r.client_id).unwrap_or_default();
-            cleanup = Some((session.dir.clone(), client_id, old));
+            let reg_dir = session.dir.clone();
+            let write_result = tauri::async_runtime::spawn_blocking(move || {
+                let _ = keychain_delete();
+                if let Some(dir) = reg_dir {
+                    write_registration(&dir, None)?;
+                }
+                Ok::<(), String>(())
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+            write_result?;
+            if let Some(old) = old {
+                revoke_info = Some((client_id, old));
+            }
         }
         (
             session.dir.clone().ok_or("No config folder")?,
             session.reg.clone(),
-            cleanup,
+            revoke_info,
         )
     };
-    if let Some((reg_dir, client_id, old)) = sign_out_cleanup {
-        let write_result = tauri::async_runtime::spawn_blocking(move || {
-            let _ = keychain_delete();
-            if let Some(dir) = reg_dir {
-                write_registration(&dir, None)?;
-            }
-            Ok::<(), String>(())
-        })
-        .await
-        .map_err(|e| e.to_string())?;
-        write_result?;
-        if let Some(old) = old {
-            tauri::async_runtime::spawn(async move {
-                revoke(&client_id, &old.refresh_token).await;
-            });
-        }
+    if let Some((client_id, old)) = old_to_revoke {
+        tauri::async_runtime::spawn(async move {
+            revoke(&client_id, &old.refresh_token).await;
+        });
     }
     let host = host_id(&dir)?;
     let (listener, port) = TcpListener::bind(("127.0.0.1", PORT))
@@ -1465,7 +1471,7 @@ pub async fn chatgpt_sign_out(
 ) -> Result<ChatGptSignOut, String> {
     state.cancel_login();
     let forget = forget.unwrap_or(false);
-    let (client_id, tokens, reg_write) = {
+    let (client_id, tokens) = {
         let mut session = state.session.lock().await;
         ensure_loaded(&mut session, &app).await?;
         let client_id = session
@@ -1478,22 +1484,22 @@ pub async fn chatgpt_sign_out(
             session.reg = None;
             reg_write = session.dir.clone().map(|dir| (dir, None));
         }
-        (client_id, tokens, reg_write)
-    };
-    let write_result = tauri::async_runtime::spawn_blocking(move || {
-        let _ = keychain_delete();
-        if let Some((dir, reg)) = reg_write {
-            if forget {
-                write_registration(&dir, None)?;
-            } else {
-                let _ = write_registration(&dir, reg.as_ref());
+        let write_result = tauri::async_runtime::spawn_blocking(move || {
+            let _ = keychain_delete();
+            if let Some((dir, reg)) = reg_write {
+                if forget {
+                    write_registration(&dir, None)?;
+                } else {
+                    let _ = write_registration(&dir, reg.as_ref());
+                }
             }
-        }
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|e| e.to_string())?;
-    write_result?;
+            Ok::<(), String>(())
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        write_result?;
+        (client_id, tokens)
+    };
     let revoked = match tokens {
         Some(tokens) => revoke(&client_id, &tokens.refresh_token).await,
         None => true,
