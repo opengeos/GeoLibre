@@ -5619,9 +5619,6 @@ const MAX_DECOMPRESSED_TILE_BYTES: u64 = 32 * 1024 * 1024;
 
 #[tauri::command]
 async fn read_mbtiles_tile(path: String, z: u32, x: u32, y: u32) -> Result<Vec<u8>, String> {
-    if z > MAX_MBTILES_ZOOM {
-        return Err("Tile zoom level is too large".to_string());
-    }
     tauri::async_runtime::spawn_blocking(move || read_mbtiles_tile_blocking(path, z, x, y))
         .await
         .map_err(|error| format!("Could not join MBTiles tile task: {error}"))?

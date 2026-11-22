@@ -402,7 +402,11 @@ fn evict_idle_pools(pools: &mut HashMap<String, Arc<PoolSlot>>, keep: &Arc<PoolS
 }
 
 async fn connect(connection: &str) -> Result<Arc<PoolEntry>, String> {
-    let entry = build_pool(connection)?;
+    let conn_str = connection.to_string();
+    // Offload OS root-store and custom sslrootcert reads from the Tokio worker.
+    let entry = tauri::async_runtime::spawn_blocking(move || build_pool(&conn_str))
+        .await
+        .map_err(|error| format!("Could not create the PostgreSQL connection pool: {error}"))??;
     // Fail the connect here with a clear message rather than on the first tile.
     let client = entry.pool.get().await.map_err(pool_error)?;
     client

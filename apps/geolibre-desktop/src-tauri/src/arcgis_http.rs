@@ -235,10 +235,12 @@ fn check_write(url: &Url, body: &ArcGISBody) -> Result<(), String> {
 
 async fn request(url: String, body: Option<ArcGISBody>) -> Result<ArcGISResponse, String> {
     let mut current_url = Url::parse(&url).map_err(|_| "Invalid ArcGIS URL.".to_string())?;
-    let is_write = body.is_some() || write_kind(&current_url).is_some();
     if let Some(body) = &body {
         check_write(&current_url, body)?;
     }
+    // `check_write` already rejects any body sent to a non-write endpoint, so
+    // `write_kind` is the exact condition for write requests.
+    let is_write = write_kind(&current_url).is_some();
     let binary = body.is_none() && is_attachment_download(&current_url);
     let checked = current_url.clone();
     tauri::async_runtime::spawn_blocking(move || validate_url(&checked))
