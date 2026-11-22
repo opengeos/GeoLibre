@@ -278,7 +278,10 @@ function arrowToPlainCoordinates(value: unknown, depth = 0): unknown {
   return null;
 }
 
-function duckDBGeometryToGeoJson(geometryType: string | undefined, value: unknown): Geometry | null {
+function duckDBGeometryToGeoJson(
+  geometryType: string | undefined,
+  value: unknown,
+): Geometry | null {
   const coords = arrowToPlainCoordinates(value);
   if (!Array.isArray(coords) || coords.length === 0) return null;
   const normalized = (geometryType ?? "").toLowerCase();

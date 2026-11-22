@@ -3254,9 +3254,8 @@ export class CesiumLayerSync {
       polygon: {
         hierarchy,
         material,
-        classificationType: (
-          Cesium as unknown as { ClassificationType?: { BOTH?: unknown } }
-        ).ClassificationType?.BOTH,
+        classificationType: (Cesium as unknown as { ClassificationType?: { BOTH?: unknown } })
+          .ClassificationType?.BOTH,
       },
     });
     entry.videoElement = video;
@@ -4266,9 +4265,7 @@ export class CesiumLayerSync {
     } else if (entry.kind === "video") {
       (handle as DataSource).show = layer.visible;
       const opacity = this.effectiveOpacity(entry);
-      const polygonMat = entry.videoEntity?.polygon?.material as
-        | { color?: unknown }
-        | undefined;
+      const polygonMat = entry.videoEntity?.polygon?.material as { color?: unknown } | undefined;
       if (polygonMat && "color" in polygonMat) {
         polygonMat.color = this.Cesium.Color.WHITE.withAlpha(opacity);
       }
