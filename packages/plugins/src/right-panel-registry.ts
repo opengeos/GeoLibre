@@ -211,7 +211,11 @@ export function unregisterRightPanelsByOwner(ownerPluginId: string): void {
     if (owner === ownerPluginId) ownedIds.push(id);
   }
   for (const id of ownedIds) {
-    unregisterRightPanel(id);
+    // Recheck ownership in case an earlier panel's `onClose` replaced `id`
+    // under a different owner.
+    if (owners.get(id) === ownerPluginId) {
+      unregisterRightPanel(id);
+    }
   }
 }
 

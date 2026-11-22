@@ -368,7 +368,9 @@ export function ModelBuilderPanel({
   const [loadingSampleId, setLoadingSampleId] = useState<string | null>(null);
   const [graph, setGraph] = useState<ProcessingModelGraph>(emptyModelGraph);
   const graphRef = useRef(graph);
-  graphRef.current = graph;
+  useLayoutEffect(() => {
+    graphRef.current = graph;
+  }, [graph]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<ModelToolDescriptor[]>([]);
   const [catalogFailed, setCatalogFailed] = useState(false);
@@ -390,7 +392,9 @@ export function ModelBuilderPanel({
    */
   const [armedPort, setArmedPort] = useState<{ nodeId: string; portId: string } | null>(null);
   const armedPortRef = useRef(armedPort);
-  armedPortRef.current = armedPort;
+  useLayoutEffect(() => {
+    armedPortRef.current = armedPort;
+  }, [armedPort]);
   const abortRef = useRef<AbortController | null>(null);
   const sectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -1436,27 +1440,40 @@ export function ModelBuilderPanel({
     event.stopPropagation();
     const handle = event.currentTarget;
     handle.setPointerCapture(event.pointerId);
-    const dirSign = getComputedStyle(handle).direction === "rtl" ? -1 : 1;
+    const isRtl = getComputedStyle(handle).direction === "rtl";
     const startX = event.clientX;
     const startY = event.clientY;
     const start = size;
+    const startLeft = position.x;
+    const startRight = startLeft + start.width;
     const handleMove = (move: PointerEvent) => {
       const bounds = (
         handle.closest("section") as HTMLElement
       )?.parentElement?.getBoundingClientRect();
-      const maxWidth = bounds ? bounds.width - position.x - EDGE_MARGIN : Infinity;
       const maxHeight = bounds ? bounds.height - position.y - EDGE_MARGIN : Infinity;
-      setSize({
-        width: clamp(
-          start.width + (move.clientX - startX) * dirSign,
+      const nextHeight = clamp(
+        start.height + (move.clientY - startY),
+        minHeight,
+        Math.max(minHeight, maxHeight),
+      );
+      if (isRtl) {
+        // In RTL the `end-0` grip sits on the left edge while the panel is
+        // positioned with `left: position.x`: keep the right edge anchored and
+        // shift `position.x` as the clamped width changes.
+        const maxWidth = bounds ? startRight - EDGE_MARGIN : Infinity;
+        const nextWidth = clamp(
+          start.width - (move.clientX - startX),
           minWidth,
           Math.max(minWidth, maxWidth),
-        ),
-        height: clamp(
-          start.height + (move.clientY - startY),
-          minHeight,
-          Math.max(minHeight, maxHeight),
-        ),
+        );
+        setSize({ width: nextWidth, height: nextHeight });
+        setPosition((current) => ({ ...current, x: startRight - nextWidth }));
+        return;
+      }
+      const maxWidth = bounds ? bounds.width - startLeft - EDGE_MARGIN : Infinity;
+      setSize({
+        width: clamp(start.width + (move.clientX - startX), minWidth, Math.max(minWidth, maxWidth)),
+        height: nextHeight,
       });
     };
     const handleEnd = () => {

@@ -236,6 +236,12 @@ export class PluginManager {
       }
       this.active.delete(id);
     }
+    // Invalidate any watcher or retained scoped callback before releasing owned
+    // registrations (whose `onClose` hooks run synchronously). Keep the counter
+    // monotonic so a re-registered plugin cannot reuse the same generation id.
+    this.nextActivationGeneration(id);
+    this.activationResults.delete(id);
+    this.activating.delete(id);
     releaseOwnedRegistrations(id);
     this.clearUrlParameters(id, app);
     this.plugins.delete(id);
@@ -245,12 +251,6 @@ export class PluginManager {
     this.urlParameterNamesById.delete(id);
     this.writableUrlParameterNamesById.delete(id);
     this.urlPublishingPlugins.delete(id);
-    // Invalidate any watcher retained by an activation Promise from the old
-    // plugin instance. Keep the counter monotonic so a re-registered plugin
-    // cannot reuse the same generation identity.
-    this.nextActivationGeneration(id);
-    this.activationResults.delete(id);
-    this.activating.delete(id);
     for (const handled of this.handledUrlParametersByContext.values()) {
       handled.delete(id);
     }
@@ -479,11 +479,14 @@ export class PluginManager {
     try {
       plugin.deactivate(this.scopeAppToPlugin(app, id));
     } finally {
-      releaseOwnedRegistrations(id);
-      this.clearUrlParameters(id, app);
+      // Invalidate the activation before releasing owned registrations so an
+      // `onClose` callback fired during panel cleanup fails `canAddControl` and
+      // cannot re-register orphaned surfaces under the deactivated plugin.
       this.active.delete(id);
       this.nextActivationGeneration(id);
       this.activationResults.delete(id);
+      releaseOwnedRegistrations(id);
+      this.clearUrlParameters(id, app);
       this.notify();
     }
   }

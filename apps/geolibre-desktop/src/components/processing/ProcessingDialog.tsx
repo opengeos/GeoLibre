@@ -462,6 +462,7 @@ export function ProcessingDialog({
   // cannot overwrite the entry a still-draining previous job is reading; the
   // entry is deleted once its outputs are imported.
   const runParametersByJobRef = useRef<Map<string, Record<string, unknown>>>(new Map());
+  const jobGenerationByJobRef = useRef<Map<string, number>>(new Map());
 
   const selectedTool = useMemo(() => {
     const tool = tools.find((item) => item.id === selectedToolId) ?? tools[0] ?? null;
@@ -1325,7 +1326,13 @@ export function ProcessingDialog({
     async (nextJob: WhiteboxJob) => {
       if (importedJobIdRef.current === nextJob.id) return;
       importedJobIdRef.current = nextJob.id;
-      const startGen = useAppStore.getState().projectGeneration;
+      const startGen =
+        jobGenerationByJobRef.current.get(nextJob.id) ?? useAppStore.getState().projectGeneration;
+      jobGenerationByJobRef.current.delete(nextJob.id);
+      if (useAppStore.getState().projectGeneration !== startGen) {
+        runParametersByJobRef.current.delete(nextJob.id);
+        return;
+      }
       const entries = Object.entries(nextJob.outputs).filter(([, value]) => {
         if (isFeatureCollection(value)) return true;
         const path = outputPath(value);
@@ -1395,6 +1402,7 @@ export function ProcessingDialog({
 
   const runSelectedTool = async () => {
     if (!selectedTool || selectedTool.locked) return;
+    const dispatchGeneration = useAppStore.getState().projectGeneration;
     setError(null);
     importedJobIdRef.current = null;
     // Flag "running" before any prep so the Run button shows its busy state
@@ -1671,11 +1679,13 @@ export function ProcessingDialog({
       if (runLocal && nextJob.status === "succeeded") {
         runParametersByJobRef.current.set(nextJob.id, parameters);
       }
+      jobGenerationByJobRef.current.set(nextJob.id, dispatchGeneration);
       historyTrackersRef.current.set(nextJob.id, tracker);
       while (historyTrackersRef.current.size > MAX_TRACKED_HISTORY_JOBS) {
         const oldest = historyTrackersRef.current.keys().next().value;
         if (oldest === undefined) break;
         historyTrackersRef.current.delete(oldest);
+        jobGenerationByJobRef.current.delete(oldest);
       }
       setJob(nextJob);
     } catch (err) {

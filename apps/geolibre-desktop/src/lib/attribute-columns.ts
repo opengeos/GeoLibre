@@ -600,11 +600,35 @@ export function formatAttributeCellText(value: unknown, locale?: string): string
   return formatAttributeValue(value);
 }
 
+function valueMatchesQuery(value: unknown, queryLower: string, seen: WeakSet<object>): boolean {
+  if (value == null) return false;
+  if (typeof value === "string") return value.toLowerCase().includes(queryLower);
+  if (typeof value === "bigint") return value.toString().includes(queryLower);
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value).toLowerCase().includes(queryLower);
+  }
+  if (typeof value === "object") {
+    if (seen.has(value)) return false;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (valueMatchesQuery(item, queryLower, seen)) return true;
+      }
+      return false;
+    }
+    for (const nested of Object.values(value)) {
+      if (valueMatchesQuery(nested, queryLower, seen)) return true;
+    }
+    return false;
+  }
+  return false;
+}
+
 /**
  * Case-insensitive substring search across a feature's attribute values.
- * Handles DuckDB BigInt values and nested objects without crashing like raw
- * `JSON.stringify(properties)`, and matches values only (not JSON keys or
- * punctuation).
+ * Handles DuckDB BigInt values and nested objects/arrays without crashing like
+ * raw `JSON.stringify(properties)`, and matches primitive values only (never
+ * property keys or JSON punctuation).
  */
 export function attributeValuesMatchQuery(
   properties: Record<string, unknown> | null | undefined,
@@ -612,23 +636,10 @@ export function attributeValuesMatchQuery(
 ): boolean {
   if (!queryLower) return true;
   if (!properties) return false;
+  const seen = new WeakSet<object>();
+  seen.add(properties);
   for (const value of Object.values(properties)) {
-    if (value == null) continue;
-    if (typeof value === "string") {
-      if (value.toLowerCase().includes(queryLower)) return true;
-    } else if (typeof value === "bigint") {
-      if (value.toString().includes(queryLower)) return true;
-    } else if (typeof value === "number" || typeof value === "boolean") {
-      if (String(value).toLowerCase().includes(queryLower)) return true;
-    } else if (typeof value === "object") {
-      let text: string;
-      try {
-        text = JSON.stringify(value, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
-      } catch {
-        text = String(value);
-      }
-      if (text.toLowerCase().includes(queryLower)) return true;
-    }
+    if (valueMatchesQuery(value, queryLower, seen)) return true;
   }
   return false;
 }

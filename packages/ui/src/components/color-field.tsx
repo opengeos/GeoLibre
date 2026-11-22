@@ -301,6 +301,12 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
       [discardDrag, onChange, onCommit],
     );
 
+    const transparentDescriptionId = React.useId();
+    const callerDescribedBy = props["aria-describedby"];
+    const describedBy = transparent
+      ? [callerDescribedBy, transparentDescriptionId].filter(Boolean).join(" ")
+      : callerDescribedBy;
+
     return (
       <div className={cn("flex items-center gap-2", !fill && "inline-flex")}>
         {/* The native swatch stays mounted even while transparent so the
@@ -334,6 +340,11 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
               value={TRANSPARENT_COLOR}
             />
           ) : null}
+          {transparent ? (
+            <span id={transparentDescriptionId} className="sr-only">
+              {transparentSwatchLabel}
+            </span>
+          ) : null}
           <Input
             {...props}
             ref={ref}
@@ -343,10 +354,11 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
             value={draft ?? (transparent ? lastOpaqueRef.current : value)}
             disabled={disabled}
             title={transparent ? transparentSwatchLabel : title}
-            // The swatch shows the remembered opaque color while transparent, so
-            // give assistive tech an accessible name that conveys the "no color"
-            // state instead of letting it announce that opaque value.
-            aria-label={transparent ? transparentSwatchLabel : props["aria-label"]}
+            // Keep caller-supplied `aria-label` (e.g. "Fill color" vs "Stroke color")
+            // so fields remain distinguishable while transparent; the "no color"
+            // state is conveyed via `aria-describedby` above.
+            aria-label={props["aria-label"] ?? (transparent ? transparentSwatchLabel : undefined)}
+            aria-describedby={describedBy}
             onChange={handleSwatchChange}
             onBlur={(event) => {
               endDrag();

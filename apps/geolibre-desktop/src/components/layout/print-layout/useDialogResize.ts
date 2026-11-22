@@ -34,7 +34,6 @@ export function useDialogResize(dispatch: Dispatch<PrintLayoutAction>, controlsW
       event.currentTarget.setPointerCapture?.(event.pointerId);
       const el = dialogRef.current;
       if (!el) return;
-      const dirSign = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
       const rect = el.getBoundingClientRect();
       const startX = event.clientX;
       const startY = event.clientY;
@@ -49,10 +48,7 @@ export function useDialogResize(dispatch: Dispatch<PrintLayoutAction>, controlsW
 
       const onMove = (e: PointerEvent) => {
         next = {
-          width: Math.max(
-            480,
-            Math.min(window.innerWidth - 16, startW + (e.clientX - startX) * dirSign * 2),
-          ),
+          width: Math.max(480, Math.min(window.innerWidth - 16, startW + (e.clientX - startX) * 2)),
           height: Math.max(
             360,
             Math.min(window.innerHeight - 16, startH + (e.clientY - startY) * 2),

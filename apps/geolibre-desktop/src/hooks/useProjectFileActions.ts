@@ -541,6 +541,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // dialog is open would overwrite the pending prompt and strand the first
   // call's unresolved promise.
   const isSavingRef = useRef(false);
+  // Dedicated guard for batch layer write-back / copy-to-folder so a layer
+  // folder picker or batch export never silently blocks Save Project.
+  const isBatchSavingLayersRef = useRef(false);
   const remoteProjectRef = useRef<
     (RemoteSharedProjectTarget & { projectGeneration: number }) | null
   >(null);
@@ -2820,8 +2823,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       onLayerDone: (result: BatchLayerSaveItemResult) => void;
     },
   ): Promise<{ hasIssues: boolean; aborted: boolean }> => {
-    if (isSavingRef.current) return { hasIssues: false, aborted: true };
-    isSavingRef.current = true;
+    if (isBatchSavingLayersRef.current) return { hasIssues: false, aborted: true };
+    isBatchSavingLayersRef.current = true;
     try {
       const startGeneration = useAppStore.getState().projectGeneration;
       const idSet = new Set(layerIds);
@@ -2841,7 +2844,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       }
       return { hasIssues, aborted: summary.aborted };
     } finally {
-      isSavingRef.current = false;
+      isBatchSavingLayersRef.current = false;
     }
   };
 
@@ -2849,8 +2852,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const handleSaveLayerCopiesToFolder = async (
     layerIds?: ReadonlySet<string>,
   ): Promise<boolean> => {
-    if (!isExportDataAllowed() || isSavingRef.current) return false;
-    isSavingRef.current = true;
+    if (!isExportDataAllowed() || isBatchSavingLayersRef.current) return false;
+    isBatchSavingLayersRef.current = true;
     const startGeneration = useAppStore.getState().projectGeneration;
     try {
       const directory = await pickLocalDirectory();
@@ -2901,7 +2904,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       );
       return false;
     } finally {
-      isSavingRef.current = false;
+      isBatchSavingLayersRef.current = false;
     }
   };
 
