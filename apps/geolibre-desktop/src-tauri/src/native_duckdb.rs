@@ -652,14 +652,9 @@ fn read_source_crs(
     if is_parquet_extension(&options.extension) {
         return read_parquet_source_crs(conn, options, geo_metadata, geometry_column);
     }
-    let meta_sql = format!(
-        "SELECT layers[1].geometry_fields[1].crs.auth_name AS auth_name, \
-         layers[1].geometry_fields[1].crs.auth_code AS auth_code \
-         FROM ST_Read_Meta({})",
-        quote_sql_string(&sql_source_path(&options.path))
-    );
-    let auth_crs = conn
-        .query_row(&meta_sql, [], |row| {
+    let source_path = quote_sql_string(&sql_source_path(&options.path));
+    let query_crs = |sql: &str| -> Option<String> {
+        conn.query_row(sql, [], |row| {
             let auth_name: Option<String> = row.get(0)?;
             let auth_code: Option<String> = row.get(1)?;
             Ok((auth_name, auth_code))
@@ -673,7 +668,32 @@ fn read_source_crs(
             } else {
                 Some(format!("{auth_name}:{auth_code}"))
             }
+        })
+    };
+    let layer_crs = options
+        .layer
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .and_then(|layer_name| {
+            let layer_sql = format!(
+                "SELECT l.geometry_fields[1].crs.auth_name AS auth_name, \
+                 l.geometry_fields[1].crs.auth_code AS auth_code \
+                 FROM ST_Read_Meta({source_path}), UNNEST(layers) AS t(l) \
+                 WHERE l.name = {} \
+                 LIMIT 1",
+                quote_sql_string(layer_name)
+            );
+            query_crs(&layer_sql)
         });
+    let auth_crs = layer_crs.or_else(|| {
+        let meta_sql = format!(
+            "SELECT layers[1].geometry_fields[1].crs.auth_name AS auth_name, \
+             layers[1].geometry_fields[1].crs.auth_code AS auth_code \
+             FROM ST_Read_Meta({source_path})"
+        );
+        query_crs(&meta_sql)
+    });
     if auth_crs.is_some() {
         return auth_crs;
     }

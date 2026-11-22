@@ -1822,6 +1822,7 @@ dependencies = [
  "ring",
  "rusqlite",
  "rustls",
+ "rustls-native-certs",
  "serde",
  "serde_json",
  "sha1 0.11.0",

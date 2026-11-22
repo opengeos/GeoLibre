@@ -35,6 +35,7 @@ use reqwest::{
 };
 use percent_encoding::percent_decode_str;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 
@@ -329,37 +330,65 @@ async fn transfer(
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default()
     );
+    let part_path = destination.with_file_name(part_name);
     let mut part = PartFile {
-        path: destination.with_file_name(part_name),
+        path: part_path.clone(),
         done: false,
     };
-    let mut file = fs::File::create(&part.path)
-        .map_err(|error| format!("Could not create the download file: {error}"))?;
+    // Stream chunks to a blocking writer task so writing multi-GB granules
+    // never stalls a Tokio worker thread.
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(16);
+    let writer_path = part_path.clone();
+    let writer_handle = tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        let mut file = fs::File::create(&writer_path)
+            .map_err(|error| format!("Could not create the download file: {error}"))?;
+        while let Some(chunk) = rx.blocking_recv() {
+            file.write_all(&chunk)
+                .map_err(|error| format!("Could not write the download: {error}"))?;
+        }
+        file.flush()
+            .and_then(|()| file.sync_all())
+            .map_err(|error| format!("Could not write the download: {error}"))?;
+        Ok(())
+    });
     let mut response = response;
     let mut received: u64 = 0;
     let mut reported: u64 = 0;
     let _ = progress.send(RemoteDownloadProgress { received, total });
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|error| format!("Download interrupted: {}", error.without_url()))?
-    {
-        file.write_all(&chunk)
-            .map_err(|error| format!("Could not write the download: {error}"))?;
-        received += chunk.len() as u64;
+    let mut read_error: Option<String> = None;
+    while let Some(chunk) = match response.chunk().await {
+        Ok(chunk) => chunk,
+        Err(error) => {
+            read_error = Some(format!("Download interrupted: {}", error.without_url()));
+            None
+        }
+    } {
+        let len = chunk.len() as u64;
+        if tx.send(chunk.to_vec()).await.is_err() {
+            break;
+        }
+        received += len;
         if received - reported >= PROGRESS_STEP_BYTES {
             reported = received;
             let _ = progress.send(RemoteDownloadProgress { received, total });
         }
     }
+    drop(tx);
+    let writer_result = writer_handle
+        .await
+        .map_err(|error| format!("Download writer failed: {error}"))?;
+    if let Some(error) = read_error {
+        return Err(error);
+    }
+    writer_result?;
     if total.is_some_and(|total| total != received) {
         return Err("The download ended early.".into());
     }
-    file.flush()
-        .and_then(|()| file.sync_all())
-        .map_err(|error| format!("Could not write the download: {error}"))?;
-    drop(file);
-    fs::rename(&part.path, &destination)
+    let rename_from = part.path.clone();
+    let rename_to = destination.clone();
+    tauri::async_runtime::spawn_blocking(move || fs::rename(&rename_from, &rename_to))
+        .await
+        .map_err(|error| format!("Could not finish the download: {error}"))?
         .map_err(|error| format!("Could not finish the download: {error}"))?;
     part.done = true;
     if let Some(placeholder) = placeholder.as_mut() {
@@ -433,6 +462,7 @@ pub(crate) async fn download_remote_file(
     let is_folder = folder.is_some();
     let saves_to_disk = request.save || is_folder;
     let mut placeholder = None;
+    let request_tag = request_id_tag(&request_id);
     let destination = if let Some(folder) = folder {
         let reserved = reserve_unique_path(&folder, &file_name)?;
         placeholder = Some(PartFile {
@@ -446,7 +476,7 @@ pub(crate) async fn download_remote_file(
             None => return Ok(None),
         }
     } else {
-        cache_dir(&app)?.join(format!("{}-{file_name}", sanitize_file_name(&request_id)))
+        cache_dir(&app)?.join(format!("{request_tag}-{file_name}"))
     };
 
     let task = {
@@ -458,7 +488,7 @@ pub(crate) async fn download_remote_file(
             url,
             headers,
             destination.clone(),
-            sanitize_file_name(&request_id),
+            request_tag,
             placeholder,
             progress,
         ));
@@ -701,11 +731,15 @@ fn write_file_to_folder_in_dir(
     let write_result = (|| -> Result<(), std::io::Error> {
         temp_file.write_all(data)?;
         temp_file.sync_all()?;
-        fs::rename(&temp_path, &destination)?;
         Ok(())
     })();
+    // Close the temporary file handle before renaming or unlinking; Windows
+    // refuses both while a write handle is still open.
+    drop(temp_file);
 
-    if let Err(error) = write_result {
+    let finish_result = write_result.and_then(|()| fs::rename(&temp_path, &destination));
+
+    if let Err(error) = finish_result {
         let _ = fs::remove_file(&temp_path);
         return Err(format!("Could not write file to folder: {error}"));
     }
@@ -808,9 +842,20 @@ pub(crate) fn cancel_remote_download(
     downloads.cancel(&request_id);
 }
 
+/// Collision-free filesystem tag derived from a caller-supplied request ID.
+fn request_id_tag(request_id: &str) -> String {
+    let digest = Sha256::digest(request_id.as_bytes());
+    let mut hex = String::with_capacity(32);
+    for byte in &digest[..16] {
+        use std::fmt::Write as _;
+        let _ = write!(&mut hex, "{byte:02x}");
+    }
+    hex
+}
+
 /// Read a cached download's bytes once, then delete the file.
 #[tauri::command]
-pub(crate) fn take_cached_download(
+pub(crate) async fn take_cached_download(
     request_id: String,
     downloads: tauri::State<'_, RemoteDownloads>,
 ) -> Result<tauri::ipc::Response, String> {
@@ -820,8 +865,10 @@ pub(crate) fn take_cached_download(
         .unwrap()
         .remove(&request_id)
         .ok_or_else(|| "No cached download with that ID.".to_string())?;
-    let bytes = read_and_remove(&path);
-    bytes.map(tauri::ipc::Response::new)
+    let bytes = tauri::async_runtime::spawn_blocking(move || read_and_remove(&path))
+        .await
+        .map_err(|error| format!("Could not read the download: {error}"))??;
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
 fn read_and_remove(path: &Path) -> Result<Vec<u8>, String> {
@@ -1231,5 +1278,14 @@ mod tests {
         assert_eq!(fs::read(dir.join("escape.txt")).unwrap(), b"safe");
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn request_id_tag_avoids_sanitization_collisions() {
+        let a = request_id_tag("req/1");
+        let b = request_id_tag("req_1");
+        assert_ne!(a, b);
+        assert_eq!(a.len(), 32);
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
     }
 }

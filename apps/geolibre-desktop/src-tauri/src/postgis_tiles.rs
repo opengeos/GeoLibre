@@ -462,10 +462,24 @@ fn build_pool(connection: &str) -> Result<PoolEntry, String> {
 
 async fn tile_plan(entry: &Arc<PoolEntry>, key: &SourceKey) -> Result<Arc<TilePlan>, String> {
     let cell = Arc::clone(entry.plans.lock().await.entry(key.clone()).or_default());
-    let plan = cell
+    let plan = match cell
         .get_or_try_init(|| build_tile_plan(entry, key, UNCLIPPED_PLAN_RETRY))
         .await
-        .map(Arc::clone)?;
+    {
+        Ok(plan) => Arc::clone(plan),
+        Err(error) => {
+            // Remove the failed empty cell so transient errors do not leak
+            // entries in `entry.plans`.
+            let mut plans = entry.plans.lock().await;
+            if plans
+                .get(key)
+                .is_some_and(|current| Arc::ptr_eq(current, &cell))
+            {
+                plans.remove(key);
+            }
+            return Err(error);
+        }
+    };
     // An unclipped plan stays in use while the extent is retried in the
     // background: rebuilding inline would stall every tile of the layer for
     // as long as the (possibly full-scan) extent query runs.
@@ -906,9 +920,14 @@ impl TlsRequirement {
 
     fn roots(&self) -> Result<RootCertStore, String> {
         let Some(path) = &self.root_cert else {
-            return Ok(RootCertStore {
+            let mut roots = RootCertStore {
                 roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
-            });
+            };
+            // Also trust the OS certificate store so enterprise/corporate CAs
+            // work without requiring a manual `sslrootcert` file.
+            let native = rustls_native_certs::load_native_certs();
+            roots.add_parsable_certificates(native.certs);
+            return Ok(roots);
         };
         if !crate::is_safe_absolute_path(path) {
             return Err("sslrootcert must be an absolute local certificate file path".to_string());
@@ -1484,5 +1503,15 @@ mod tests {
         assert_eq!(parse_default_srid(Some("4326")), Ok(Some(4326)));
         assert!(parse_default_srid(Some("0")).is_err());
         assert!(parse_default_srid(Some("abc")).is_err());
+    }
+
+    #[test]
+    fn tls_roots_includes_webpki_and_native_store_without_error() {
+        let tls = TlsRequirement::from_connection_string(
+            "postgresql://localhost/db?sslmode=verify-full",
+        )
+        .expect("parse tls settings");
+        let roots = tls.roots().expect("build root cert store");
+        assert!(!roots.is_empty());
     }
 }

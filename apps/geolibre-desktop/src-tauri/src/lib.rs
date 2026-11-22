@@ -365,6 +365,8 @@ unsafe extern "C" {
 #[cfg(not(feature = "mas"))]
 struct MartinServerState {
     process: Mutex<Option<MartinProcess>>,
+    // Serialize start and stop so a stop cannot race with an in-progress startup.
+    lifecycle: Mutex<()>,
 }
 
 #[cfg(not(feature = "mas"))]
@@ -584,6 +586,7 @@ pub fn run() {
     let builder = builder
         .manage(MartinServerState {
             process: Mutex::new(None),
+            lifecycle: Mutex::new(()),
         })
         .manage(SidecarServerState {
             process: Mutex::new(None),
@@ -701,6 +704,24 @@ pub fn run() {
         .expect("error while building GeoLibre Desktop");
 
     app.run(|_app, _event| {
+        #[cfg(not(feature = "mas"))]
+        if let tauri::RunEvent::Exit = _event {
+            if let Ok(mut process) = _app.state::<MartinServerState>().process.lock() {
+                let taken = process.take();
+                drop(process);
+                drop(taken);
+            }
+            if let Ok(mut process) = _app.state::<SidecarServerState>().process.lock() {
+                let taken = process.take();
+                drop(process);
+                drop(taken);
+            }
+            if let Ok(mut process) = _app.state::<JupyterServerState>().process.lock() {
+                let taken = process.take();
+                drop(process);
+                drop(taken);
+            }
+        }
         // macOS delivers associated files as native open events instead
         // of argv. Queue them through the same path as a second desktop launch.
         #[cfg(target_os = "macos")]
@@ -2069,10 +2090,20 @@ impl reqwest::dns::Resolve for GuardedDnsResolver {
         use std::net::ToSocketAddrs;
         Box::pin(async move {
             let host = name.as_str().to_string();
-            // std getaddrinfo blocks, but these are low-volume tile/URL fetches.
-            let resolved = (host.as_str(), 0u16).to_socket_addrs();
+            // Offload blocking std getaddrinfo onto Tokio's blocking pool so
+            // slow or unreachable DNS never stalls async workers.
+            let resolved = tauri::async_runtime::spawn_blocking(move || {
+                (host.as_str(), 0u16)
+                    .to_socket_addrs()
+                    .map(|iter| iter.collect::<Vec<_>>())
+            })
+            .await
+            .map_err(|error| Box::new(error) as Box<dyn std::error::Error + Send + Sync>)?;
             let addrs: Vec<std::net::SocketAddr> = match resolved {
-                Ok(iter) => iter.filter(|addr| !is_disallowed_ip(addr.ip())).collect(),
+                Ok(list) => list
+                    .into_iter()
+                    .filter(|addr| !is_disallowed_ip(addr.ip()))
+                    .collect(),
                 Err(error) => {
                     return Err(Box::new(error) as Box<dyn std::error::Error + Send + Sync>);
                 }
@@ -3161,7 +3192,7 @@ struct JupyterServerInfo {
 // plugins bundled into the app are unaffected.
 #[cfg(feature = "mas")]
 #[tauri::command]
-fn ensure_martin_binary(_app: tauri::AppHandle) -> Result<MartinBinaryInfo, String> {
+async fn ensure_martin_binary(_app: tauri::AppHandle) -> Result<MartinBinaryInfo, String> {
     Err("The Martin tile server is not available in the Mac App Store build.".to_string())
 }
 
@@ -3180,7 +3211,7 @@ async fn start_martin_server(
 // frontend passes none; state is injected server-side).
 #[cfg(feature = "mas")]
 #[tauri::command]
-fn stop_martin_server() -> Result<(), String> {
+async fn stop_martin_server() -> Result<(), String> {
     Err("The Martin tile server is not available in the Mac App Store build.".to_string())
 }
 
@@ -3246,8 +3277,10 @@ async fn read_external_plugin_asset(
 
 #[cfg(not(feature = "mas"))]
 #[tauri::command]
-fn ensure_martin_binary(app: tauri::AppHandle) -> Result<MartinBinaryInfo, String> {
-    ensure_martin_binary_path(&app)
+async fn ensure_martin_binary(app: tauri::AppHandle) -> Result<MartinBinaryInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || ensure_martin_binary_path(&app))
+        .await
+        .map_err(|error| format!("Could not join Martin binary check task: {error}"))?
 }
 
 #[cfg(not(feature = "mas"))]
@@ -3276,6 +3309,10 @@ fn start_martin_server_blocking(
 
     let binary = ensure_martin_binary_path(&app)?;
     let state = app.state::<MartinServerState>();
+    let _lifecycle = state
+        .lifecycle
+        .lock()
+        .map_err(|_| "Could not lock Martin lifecycle.".to_string())?;
     {
         let mut process = state
             .process
@@ -3326,12 +3363,26 @@ fn start_martin_server_blocking(
 
 #[cfg(not(feature = "mas"))]
 #[tauri::command]
-fn stop_martin_server(state: tauri::State<MartinServerState>) -> Result<(), String> {
+async fn stop_martin_server(app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || stop_martin_server_blocking(app))
+        .await
+        .map_err(|error| format!("Could not join Martin stop task: {error}"))?
+}
+
+#[cfg(not(feature = "mas"))]
+fn stop_martin_server_blocking(app: tauri::AppHandle) -> Result<(), String> {
+    let state = app.state::<MartinServerState>();
+    let _lifecycle = state
+        .lifecycle
+        .lock()
+        .map_err(|_| "Could not lock Martin lifecycle.".to_string())?;
     let mut process = state
         .process
         .lock()
         .map_err(|_| "Could not lock Martin process state.".to_string())?;
-    *process = None;
+    let taken = process.take();
+    drop(process);
+    drop(taken);
     Ok(())
 }
 
@@ -3752,6 +3803,12 @@ async fn stop_jupyter_server(app: tauri::AppHandle) -> Result<(), String> {
 #[cfg(not(feature = "mas"))]
 fn stop_jupyter_server_blocking(app: tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<JupyterServerState>();
+    // Serialize stop with any in-progress startup so a concurrent start cannot
+    // install a newly spawned server after stop has cleared state.
+    let _startup = state
+        .startup
+        .lock()
+        .map_err(|_| "Could not lock Jupyter startup.".to_string())?;
     {
         let mut process = state
             .process
@@ -4285,6 +4342,11 @@ fn hide_console_window(_command: &mut Command) {}
 
 #[cfg(not(feature = "mas"))]
 fn terminate_sidecar_child(child: &mut Child) {
+    // If the child has already exited and been reaped, do not signal its PID
+    // or process group, which the OS may already have recycled.
+    if matches!(child.try_wait(), Ok(Some(_))) {
+        return;
+    }
     terminate_sidecar_process_group(child);
     let _ = child.kill();
     let _ = child.wait();
@@ -4807,8 +4869,10 @@ fn terminate_sidecar_listeners_on_port(_port: u16) -> Result<(), String> {
 #[cfg(all(target_os = "linux", not(feature = "mas")))]
 fn listening_tcp_inodes(port: u16) -> Result<HashSet<String>, String> {
     let mut inodes = HashSet::new();
-    collect_listening_tcp_inodes("/proc/net/tcp", port, &mut inodes)?;
-    collect_listening_tcp_inodes("/proc/net/tcp6", port, &mut inodes)?;
+    collect_listening_tcp_inodes("/proc/net/tcp", port, &mut inodes, false)?;
+    // Systems booted with `ipv6.disable=1` have no `/proc/net/tcp6`; treat a
+    // missing IPv6 table as empty rather than failing IPv4 port reclaim.
+    collect_listening_tcp_inodes("/proc/net/tcp6", port, &mut inodes, true)?;
     Ok(inodes)
 }
 
@@ -4817,9 +4881,13 @@ fn collect_listening_tcp_inodes(
     path: &str,
     port: u16,
     inodes: &mut HashSet<String>,
+    optional: bool,
 ) -> Result<(), String> {
-    let content =
-        fs::read_to_string(path).map_err(|error| format!("Could not read {path}: {error}"))?;
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(error) if optional && error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(format!("Could not read {path}: {error}")),
+    };
     let expected_port = format!("{port:04X}");
     for line in content.lines().skip(1) {
         let fields: Vec<&str> = line.split_whitespace().collect();
@@ -5413,7 +5481,13 @@ struct MbtilesMetadata {
 }
 
 #[tauri::command]
-fn read_mbtiles_metadata(path: String) -> Result<MbtilesMetadata, String> {
+async fn read_mbtiles_metadata(path: String) -> Result<MbtilesMetadata, String> {
+    tauri::async_runtime::spawn_blocking(move || read_mbtiles_metadata_blocking(path))
+        .await
+        .map_err(|error| format!("Could not join MBTiles metadata task: {error}"))?
+}
+
+fn read_mbtiles_metadata_blocking(path: String) -> Result<MbtilesMetadata, String> {
     let connection = open_mbtiles(&path)?;
     let metadata = read_metadata_rows(&connection)?;
     let metadata_min_zoom = metadata
@@ -5486,7 +5560,16 @@ const MAX_MBTILES_ZOOM: u32 = 30;
 const MAX_DECOMPRESSED_TILE_BYTES: u64 = 32 * 1024 * 1024;
 
 #[tauri::command]
-fn read_mbtiles_tile(path: String, z: u32, x: u32, y: u32) -> Result<Vec<u8>, String> {
+async fn read_mbtiles_tile(path: String, z: u32, x: u32, y: u32) -> Result<Vec<u8>, String> {
+    if z > MAX_MBTILES_ZOOM {
+        return Err("Tile zoom level is too large".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || read_mbtiles_tile_blocking(path, z, x, y))
+        .await
+        .map_err(|error| format!("Could not join MBTiles tile task: {error}"))?
+}
+
+fn read_mbtiles_tile_blocking(path: String, z: u32, x: u32, y: u32) -> Result<Vec<u8>, String> {
     if z > MAX_MBTILES_ZOOM {
         return Err("Tile zoom level is too large".to_string());
     }
@@ -7659,7 +7742,7 @@ mod tests {
 
     #[test]
     fn read_mbtiles_tile_rejects_excessive_zoom() {
-        let err = super::read_mbtiles_tile("/tmp/nonexistent.mbtiles".to_string(), 63, 0, 0)
+        let err = super::read_mbtiles_tile_blocking("/tmp/nonexistent.mbtiles".to_string(), 63, 0, 0)
             .expect_err("zoom 63 must be rejected");
         assert!(err.contains("zoom level is too large"));
     }
@@ -7733,5 +7816,37 @@ mod tests {
             .expect_err("symlink escaping plugin dir must fail");
         assert!(err.contains("resolves outside the plugin directory"));
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[cfg(all(target_os = "linux", not(feature = "mas")))]
+    #[test]
+    fn collect_listening_tcp_inodes_ignores_missing_optional_table() {
+        let mut inodes = std::collections::HashSet::new();
+        let result = super::collect_listening_tcp_inodes(
+            "/proc/net/geolibre_nonexistent_tcp6",
+            8080,
+            &mut inodes,
+            true,
+        );
+        assert!(result.is_ok());
+        assert!(inodes.is_empty());
+
+        let required = super::collect_listening_tcp_inodes(
+            "/proc/net/geolibre_nonexistent_tcp",
+            8080,
+            &mut inodes,
+            false,
+        );
+        assert!(required.is_err());
+    }
+
+    #[cfg(all(unix, not(feature = "mas")))]
+    #[test]
+    fn terminate_sidecar_child_handles_already_exited_process() {
+        let mut child = std::process::Command::new("true")
+            .spawn()
+            .expect("spawn true");
+        let _ = child.wait();
+        super::terminate_sidecar_child(&mut child);
     }
 }

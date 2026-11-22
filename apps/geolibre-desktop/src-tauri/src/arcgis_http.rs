@@ -10,7 +10,10 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use reqwest::{redirect::Policy, Url};
 use serde::Serialize;
 
-use super::{guarded_async_client_builder, url_is_fetchable, MAX_HTTP_REDIRECTS};
+use super::{
+    guarded_async_client_builder, plugin_http::redirect_target_allowed, url_is_fetchable,
+    MAX_HTTP_REDIRECTS,
+};
 
 const MAX_ARCGIS_BODY_BYTES: usize = 64 * 1024 * 1024;
 const BODY_TOO_LARGE: &str =
@@ -94,7 +97,12 @@ fn validate_redirect(previous: &[Url], target: &Url) -> Result<(), String> {
             );
         }
     }
-    validate_url(target)
+    if has_token(target) && target.scheme() != "https" {
+        return Err("ArcGIS access tokens require HTTPS.".into());
+    }
+    // Check scheme and literal IPs without blocking DNS on the Tokio worker;
+    // hostname SSRF enforcement runs asynchronously in `GuardedDnsResolver`.
+    redirect_target_allowed(target)
 }
 
 fn client() -> Result<reqwest::Client, String> {
