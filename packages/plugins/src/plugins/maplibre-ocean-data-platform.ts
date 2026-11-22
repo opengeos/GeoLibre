@@ -234,7 +234,7 @@ async function saveBlob(
   return saveBinaryFileWithHost(appRef, options.defaultName, blob, {
     extensions: [options.extension],
     mimeType: options.mimeType,
-    filterName: options.description,
+    description: options.description,
   });
 }
 

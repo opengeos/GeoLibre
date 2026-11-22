@@ -380,7 +380,7 @@ function exportFootprintsAsGeoJson(items: UsgsDemItem[]): void {
   void saveBinaryFileWithHost(appRef, "usgs-dem-footprints.geojson", blob, {
     extensions: ["geojson"],
     mimeType: "application/geo+json",
-    filterName: "GeoJSON",
+    description: "GeoJSON",
   });
 }
 
