@@ -135,6 +135,33 @@ describe("ChartView sizing", () => {
     }
   });
 
+  it("lays a clipped histogram's outlier bars inside a fill card", () => {
+    stubLayout(320, 140);
+    const data = rows();
+    data.push({ properties: { kind: "Park", area: 1e12 } });
+    data.push({ properties: { kind: "Park", area: -1e9 } });
+    const { container } = render(
+      createElement(ChartView, {
+        result: computeChart(data, { type: "histogram", field: "area", bins: 10 }),
+        fill: true,
+      }),
+    );
+    const bars = Array.from(container.querySelectorAll("svg rect")).filter(
+      (rect) => rect.closest("pattern") === null,
+    );
+    // 10 bins plus a hatched underflow and overflow bar at either end.
+    assert.equal(bars.length, 12);
+    assert.equal(bars[0].getAttribute("data-overflow"), "true");
+    assert.equal(bars[11].getAttribute("data-overflow"), "true");
+    for (const bar of bars) {
+      const x = Number(bar.getAttribute("x"));
+      const width = Number(bar.getAttribute("width"));
+      assert.ok(x >= 0 && x + width <= 320 + 0.01, "bar stays inside the card");
+    }
+    const labels = Array.from(container.querySelectorAll("svg text"), (t) => t.textContent);
+    assert.ok(labels.some((label) => label?.startsWith("< ")), "underflow axis label");
+  });
+
   it("keeps a fill pie's legend inside a narrow card", () => {
     stubLayout(160, 240);
     const { container } = render(
