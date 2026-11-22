@@ -176,7 +176,10 @@ def _atomic_write(target: Path, write: Any) -> None:
 
     ``write`` receives a temp :class:`Path` to write to; on success it is
     ``os.replace``d onto ``target`` (atomic on the same filesystem, so the
-    original is never left half-written). The temp directory is always removed.
+    original is never left half-written). The target's permission bits are
+    copied onto the temp file first, so the replacement does not reset them to
+    the umask default (a private 0600 file must not come back 0644). The temp
+    directory is always removed.
 
     Args:
         target: The destination path to replace.
@@ -186,6 +189,8 @@ def _atomic_write(target: Path, write: Any) -> None:
     try:
         tmp = Path(tmpdir) / target.name
         write(tmp)
+        if target.exists():
+            shutil.copymode(target, tmp)
         os.replace(tmp, target)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
