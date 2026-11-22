@@ -651,65 +651,130 @@ export function resampleProjectedTile(
   return output;
 }
 
-async function readProjectedWindowBounded(
+/**
+ * Read a projected DEM window at `(readWidth x readHeight)` using exact
+ * cell-centred nearest sampling while keeping every `image.readRasters` call
+ * within `MAX_NATIVE_WARP_PIXELS` native pixels and grouping sampled rows into
+ * storage-block-aligned chunks so compressed tiles are decoded at most once.
+ */
+export async function readProjectedWindowBounded(
   image: GeoTIFFImage,
   window: [number, number, number, number],
   readWidth: number,
   readHeight: number,
   band: number,
+  maxNativePixels = MAX_NATIVE_WARP_PIXELS,
 ): Promise<ArrayLike<number>> {
   const [left, top, right, bottom] = window;
   const winW = right - left;
   const winH = bottom - top;
-  if (winW * winH <= MAX_NATIVE_WARP_PIXELS) {
-    const rasters = await image.readRasters({
-      window,
-      width: readWidth,
-      height: readHeight,
-      samples: [band],
-      interleave: true,
-      resampleMethod: "nearest",
-      fillValue: Number.NaN,
-    });
-    return rasters as TypedArrayWithDimensions;
+  if (winW <= 0 || winH <= 0 || readWidth <= 0 || readHeight <= 0) {
+    return new Float64Array(Math.max(0, readWidth * readHeight)).fill(Number.NaN);
   }
 
-  // Fallback for huge un-pyramided GeoTIFFs: sample each destination row's exact
-  // nearest native row (chunked horizontally if a single row exceeds budget) so
-  // every readRasters call allocates <= MAX_NATIVE_WARP_PIXELS native samples.
-  const combined = new Float64Array(readWidth * readHeight).fill(Number.NaN);
+  // Exact cell-centred native coordinates matching the affine transform.
+  const nativeRows = new Int32Array(readHeight);
   for (let dstRow = 0; dstRow < readHeight; dstRow += 1) {
-    const nativeRow = top + Math.min(winH - 1, Math.floor(((dstRow + 0.5) / readHeight) * winH));
-    if (winW <= MAX_NATIVE_WARP_PIXELS) {
+    nativeRows[dstRow] = top + Math.min(winH - 1, Math.floor(((dstRow + 0.5) / readHeight) * winH));
+  }
+  const nativeCols = new Int32Array(readWidth);
+  for (let dstCol = 0; dstCol < readWidth; dstCol += 1) {
+    nativeCols[dstCol] = left + Math.min(winW - 1, Math.floor(((dstCol + 0.5) / readWidth) * winW));
+  }
+
+  // Single-read fast path for small windows: read native pixels once and
+  // sample with exact centred coordinates (no horizontal geotiff resize bias).
+  if (winW * winH <= maxNativePixels) {
+    const native = (await image.readRasters({
+      window,
+      samples: [band],
+      interleave: true,
+      fillValue: Number.NaN,
+    })) as TypedArrayWithDimensions;
+    if (readWidth === winW && readHeight === winH) {
+      return native;
+    }
+    const combined = new Float64Array(readWidth * readHeight).fill(Number.NaN);
+    for (let dstRow = 0; dstRow < readHeight; dstRow += 1) {
+      const srcRowOffset = (nativeRows[dstRow] - top) * winW;
+      const dstRowOffset = dstRow * readWidth;
+      for (let dstCol = 0; dstCol < readWidth; dstCol += 1) {
+        combined[dstRowOffset + dstCol] = Number(native[srcRowOffset + (nativeCols[dstCol] - left)]);
+      }
+    }
+    return combined;
+  }
+
+  const combined = new Float64Array(readWidth * readHeight).fill(Number.NaN);
+  const blockH = Math.max(1, typeof image.getTileHeight === "function" ? image.getTileHeight() : 1);
+
+  if (winW <= maxNativePixels) {
+    // Group destination rows into storage-block-aligned native strips that fit
+    // within maxNativePixels so each compressed tile row is decoded once.
+    const maxChunkRows = Math.max(1, Math.floor(maxNativePixels / winW));
+    let startIdx = 0;
+    while (startIdx < readHeight) {
+      const firstRow = nativeRows[startIdx];
+      // Cap the chunk so it stays within maxChunkRows and ends on a storage-block
+      // boundary when multiple blocks fit (preventing a straddling tile decode).
+      const alignedLimit =
+        blockH <= maxChunkRows
+          ? Math.floor((firstRow + maxChunkRows) / blockH) * blockH
+          : firstRow + maxChunkRows;
+      const rowCeiling = Math.max(firstRow + 1, Math.min(bottom, alignedLimit));
+      let endIdx = startIdx + 1;
+      while (endIdx < readHeight && nativeRows[endIdx] < rowCeiling) {
+        endIdx += 1;
+      }
+      const chunkTop = firstRow;
+      const chunkBottom = nativeRows[endIdx - 1] + 1;
       const strip = (await image.readRasters({
-        window: [left, nativeRow, right, nativeRow + 1],
-        width: readWidth,
-        height: 1,
+        window: [left, chunkTop, right, chunkBottom],
         samples: [band],
         interleave: true,
-        resampleMethod: "nearest",
         fillValue: Number.NaN,
       })) as TypedArrayWithDimensions;
-      const offset = dstRow * readWidth;
-      for (let i = 0; i < strip.length && i < readWidth; i += 1) {
-        combined[offset + i] = Number(strip[i]);
+      for (let dstRow = startIdx; dstRow < endIdx; dstRow += 1) {
+        const srcRowOffset = (nativeRows[dstRow] - chunkTop) * winW;
+        const dstRowOffset = dstRow * readWidth;
+        for (let dstCol = 0; dstCol < readWidth; dstCol += 1) {
+          combined[dstRowOffset + dstCol] = Number(strip[srcRowOffset + (nativeCols[dstCol] - left)]);
+        }
       }
-    } else {
-      const offset = dstRow * readWidth;
-      for (let dstCol = 0; dstCol < readWidth; dstCol += 1) {
-        const nativeCol =
-          left + Math.min(winW - 1, Math.floor(((dstCol + 0.5) / readWidth) * winW));
-        const sample = (await image.readRasters({
-          window: [nativeCol, nativeRow, nativeCol + 1, nativeRow + 1],
-          width: 1,
-          height: 1,
-          samples: [band],
-          interleave: true,
-          resampleMethod: "nearest",
-          fillValue: Number.NaN,
-        })) as TypedArrayWithDimensions;
-        combined[offset + dstCol] = Number(sample[0]);
+      startIdx = endIdx;
+    }
+    return combined;
+  }
+
+  // Ultra-wide single-row fallback: chunk horizontally within maxNativePixels.
+  const blockW = Math.max(1, typeof image.getTileWidth === "function" ? image.getTileWidth() : 1);
+  for (let dstRow = 0; dstRow < readHeight; dstRow += 1) {
+    const nativeRow = nativeRows[dstRow];
+    const dstRowOffset = dstRow * readWidth;
+    let colStart = 0;
+    while (colStart < readWidth) {
+      const firstCol = nativeCols[colStart];
+      const alignedColLimit =
+        blockW <= maxNativePixels
+          ? Math.floor((firstCol + maxNativePixels) / blockW) * blockW
+          : firstCol + maxNativePixels;
+      const colCeiling = Math.max(firstCol + 1, Math.min(right, alignedColLimit));
+      let colEnd = colStart + 1;
+      while (colEnd < readWidth && nativeCols[colEnd] < colCeiling) {
+        colEnd += 1;
       }
+      const chunkLeft = firstCol;
+      const chunkRight = nativeCols[colEnd - 1] + 1;
+      const span = (await image.readRasters({
+        window: [chunkLeft, nativeRow, chunkRight, nativeRow + 1],
+        samples: [band],
+        interleave: true,
+        fillValue: Number.NaN,
+      })) as TypedArrayWithDimensions;
+      for (let dstCol = colStart; dstCol < colEnd; dstCol += 1) {
+        combined[dstRowOffset + dstCol] = Number(span[nativeCols[dstCol] - chunkLeft]);
+      }
+      colStart = colEnd;
     }
   }
   return combined;

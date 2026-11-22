@@ -10,6 +10,7 @@ import {
   normalizeNoData,
   projectedBoundsFromTransform,
   projectionFromGeoKeys,
+  readProjectedWindowBounded,
   registerCogDemSource,
   resampleProjectedTile,
 } from "../packages/map/src/cog-dem-source";
@@ -420,5 +421,59 @@ describe("projected COG DEM warping", () => {
       () => registerCogDemSource(new Blob([rotatedBuffer])),
       /without rotation or shear/,
     );
+  });
+
+  it("groups chunked DEM reads by storage block and samples exact centred columns without resize bias", async () => {
+    const imgW = 32;
+    const imgH = 16;
+    const calls: Array<{ window: [number, number, number, number]; width?: number; height?: number }> =
+      [];
+    const fakeImage = {
+      getTileHeight: () => 4,
+      getTileWidth: () => 8,
+      readRasters: async (opts: {
+        window: [number, number, number, number];
+        width?: number;
+        height?: number;
+      }) => {
+        calls.push({ window: opts.window, width: opts.width, height: opts.height });
+        const [l, t, r, b] = opts.window;
+        const w = r - l;
+        const h = b - t;
+        const out = new Float32Array(w * h);
+        for (let row = 0; row < h; row += 1) {
+          for (let col = 0; col < w; col += 1) {
+            // Encode exact native (row, col) into value: row * 1000 + col.
+            out[row * w + col] = (t + row) * 1000 + (l + col);
+          }
+        }
+        return out;
+      },
+    };
+
+    // Budget = 256 native pixels -> for winW=32, maxChunkRows=8 (2 storage blocks of height 4).
+    // Reading 32x16 -> 4x4 should take 2 storage-block-aligned chunk reads, NOT 4 row reads,
+    // and never request geotiff horizontal/vertical resize.
+    const out = await readProjectedWindowBounded(
+      fakeImage as never,
+      [0, 0, imgW, imgH],
+      4,
+      4,
+      0,
+      256,
+    );
+    assert.equal(calls.length, 2, `expected 2 block-aligned chunk reads, got ${calls.length}`);
+    for (const c of calls) {
+      assert.equal(c.width, undefined, "must read native resolution without geotiff horizontal resize");
+      assert.equal(c.height, undefined, "must read native resolution without geotiff vertical resize");
+      const [l, t, r, b] = c.window;
+      assert.ok((r - l) * (b - t) <= 256, "each read must stay within native pixel budget");
+    }
+    // Cell (0, 0) centre is at native col floor(0.5/4 * 32)=4, native row floor(0.5/4 * 16)=2 -> 2004.
+    assert.equal(out[0], 2004);
+    // Cell (0, 1) centre is at native col floor(1.5/4 * 32)=12, native row 2 -> 2012.
+    assert.equal(out[1], 2012);
+    // Cell (3, 3) centre is at native col floor(3.5/4 * 32)=28, native row floor(3.5/4 * 16)=14 -> 14028.
+    assert.equal(out[15], 14028);
   });
 });
