@@ -519,6 +519,53 @@ describe("Import ArcGIS Pro project with File Geodatabase layers (desktop)", () 
     }
   });
 
+  it("asks about unsaved attribute drafts before reading any folder layer", async () => {
+    projectWithDrafts();
+    const desktop = desktopImport({
+      type: "CIMMap",
+      name: "Imported map",
+      layerDefinitions: [
+        {
+          type: "CIMFeatureLayer",
+          name: "Roads",
+          featureTable: {
+            dataConnection: {
+              workspaceConnectionString: "DATABASE=/work/data",
+              dataset: "roads.geojson",
+            },
+          },
+        },
+      ],
+    });
+    const tauri = (window as Window & { __TAURI_INTERNALS__?: { invoke: Function } })
+      .__TAURI_INTERNALS__!;
+    const invoke = tauri.invoke;
+    const reads: string[] = [];
+    tauri.invoke = async (command: string, args: { path?: string }) => {
+      if (command === "plugin:fs|read_file" && args.path !== PROJECT_PATH) {
+        reads.push(String(args.path));
+      }
+      return invoke(command, args);
+    };
+    const originalConfirm = window.confirm;
+    let asked = 0;
+    window.confirm = () => {
+      asked += 1;
+      return false;
+    };
+    try {
+      const actions = renderActions();
+      await act(() => actions().handleImportArcgisProject());
+      assert.equal(asked, 1);
+      // Cancelled before any data file was read, and the project is kept.
+      assert.deepEqual(reads, []);
+      assert.deepEqual(layerNames(), ["Edited layer"]);
+    } finally {
+      window.confirm = originalConfirm;
+      desktop.restore();
+    }
+  });
+
   it("does not ask about the same drafts again once the reads finish", async () => {
     projectWithDrafts();
     const desktop = desktopImport(parcelsOnly);

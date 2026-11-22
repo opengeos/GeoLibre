@@ -1039,16 +1039,27 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       // is dropped (with its now-empty groups) rather than left as an empty
       // layer, and the rest keep their table-of-contents order.
       //
-      // The discard-drafts question comes before those reads (which can take
-      // minutes) rather than after them. `approvedDrafts` holds the drafts
-      // object the user agreed to discard; the store replaces it on every
-      // edit, so the check after the reads asks again only if the drafts
-      // changed meanwhile. Without geodatabase layers it stays undefined,
-      // which never matches, and the question is asked once as before.
+      // The discard-drafts question comes before those reads, and before the
+      // folder-layer reads below (both can take minutes), rather than after
+      // them. `approvedDrafts` holds the drafts object the user agreed to
+      // discard; the store replaces it on every edit, so the check after the
+      // reads asks again only if the drafts changed meanwhile. With nothing to
+      // read it stays undefined, which never matches, and the question is
+      // asked once as before.
+      const folderLayerCount = isTauri()
+        ? imported.project.layers.filter(
+            (layer) => layer.sourcePath && imported.repair.folderSources.has(layer.id),
+          ).length
+        : 0;
       let approvedDrafts: object | undefined;
-      if (imported.fileGeodatabaseLayers.length > 0 && !session.superseded()) {
+      if (
+        (imported.fileGeodatabaseLayers.length > 0 || folderLayerCount > 0) &&
+        !session.superseded()
+      ) {
         if (!confirmDiscardAttributeDrafts()) return;
         approvedDrafts = useAppStore.getState().ui.attributeTableDrafts;
+      }
+      if (imported.fileGeodatabaseLayers.length > 0 && !session.superseded()) {
         // One sidecar job per layer, each a second or more, so say what the
         // wait is for rather than leaving the menu apparently idle.
         const progressId = notify.info(
@@ -1079,9 +1090,6 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       // instead of appearing and then being dropped by the reopen restore.
       let pending: Awaited<ReturnType<typeof loadArcgisFolderLayers>> | null = null;
       if (isTauri() && !session.superseded()) {
-        const folderLayerCount = imported.project.layers.filter(
-          (layer) => layer.sourcePath && imported.repair.folderSources.has(layer.id),
-        ).length;
         // A project with many shapefiles can take a while to read; say so,
         // as the geodatabase reads above do.
         const progressId =

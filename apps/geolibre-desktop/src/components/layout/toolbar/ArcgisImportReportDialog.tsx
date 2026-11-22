@@ -79,6 +79,9 @@ export function ArcgisImportReportDialog({ report }: { report: ArcgisImportRepor
                     size="sm"
                     variant="outline"
                     disabled={report.repairBusy}
+                    aria-label={t("toolbar.item.arcgisRepairLocateFolderFor", {
+                      folder: group.label,
+                    })}
                     onClick={() => void report.locate(group.key)}
                   >
                     {t("toolbar.item.arcgisRepairLocateFolder")}

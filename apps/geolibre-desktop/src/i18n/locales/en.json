@@ -4383,6 +4383,7 @@
       "arcgisRepairHeading": "Locate moved data",
       "arcgisRepairDescription": "These layers could not be loaded from the folders the project saved. Choose where each folder is now to load its layers. Only the folder you choose is read. Layers not located before you close this report are left out of the project.",
       "arcgisRepairLocateFolder": "Locate folder…",
+      "arcgisRepairLocateFolderFor": "Locate folder {{folder}}…",
       "arcgisRepairAllRestored": "All layers listed for repair were loaded.",
       "arcgisRepairRestored_one": "Loaded {{count}} layer from the chosen folder.",
       "arcgisRepairRestored_other": "Loaded {{count}} layers from the chosen folder.",

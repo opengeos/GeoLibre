@@ -929,8 +929,11 @@ function folderDatasetFile(
 const CONTAINER_EXTENSIONS = new Set(["gdb", "sde", "mdb", "accdb", "sqlite", "zip"]);
 
 /**
- * Whether a workspace is a plain folder: no extension, or a dot in a folder
- * name (`Survey.2025`) rather than a geodatabase, database or data file.
+ * Whether a workspace is treated as a plain folder: anything without a
+ * geodatabase, database or supported vector-file extension, so `Survey.2025`
+ * is a folder. Another extension (`.tif`, `.xlsx`) is treated as a folder too:
+ * its dataset is joined under it, and if no such file exists the layer is
+ * reported as not found and offered for Locate rather than as a format error.
  */
 function isFolderWorkspace(workspace: string): boolean {
   const ext = extension(workspace);

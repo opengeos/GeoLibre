@@ -222,7 +222,7 @@ describe("ArcGIS Pro import report", () => {
     screen.getByText("The project was imported, but 1 layer could not be loaded.");
     screen.getByText("Locate moved data");
     screen.getByText("C:\\Old");
-    screen.getByRole("button", { name: "Locate folder…" });
+    screen.getByRole("button", { name: "Locate folder C:\\Old…" });
   });
 
   it("says only the drawing differs once every layer has loaded", () => {
@@ -247,6 +247,6 @@ describe("ArcGIS Pro import report", () => {
       "The project was imported, but some of it is not shown exactly as in ArcGIS Pro.",
     );
     screen.getByText("Loaded 1 layer from the chosen folder.");
-    assert.equal(screen.queryByRole("button", { name: "Locate folder…" }), null);
+    assert.equal(screen.queryByRole("button", { name: /^Locate folder/ }), null);
   });
 });
