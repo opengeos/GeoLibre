@@ -19,14 +19,11 @@ interface Env {
   VIEWER_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
 }
 
-/** Static bundle assets bypass the IP rate limiter so shared NATs never break mid-load. */
-const STATIC_ASSET_RE =
-  /^\/assets\/|\.(?:js|mjs|css|wasm|png|jpe?g|webp|svg|ico|woff2?|map|json)$/i;
-
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
-    const pathname = new URL(request.url).pathname;
-    if (env?.VIEWER_RATE_LIMITER && !STATIC_ASSET_RE.test(pathname)) {
+    // Apply the generous per-IP ceiling (2000/min) across all paths rather than
+    // exempting client-controlled extensions, which would allow origin-flood bypasses.
+    if (env?.VIEWER_RATE_LIMITER) {
       const key = request.headers.get("CF-Connecting-IP") ?? "anonymous";
       try {
         const outcome = await env.VIEWER_RATE_LIMITER.limit({ key });
