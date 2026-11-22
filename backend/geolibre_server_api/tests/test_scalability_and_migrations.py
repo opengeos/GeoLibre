@@ -225,6 +225,20 @@ def test_alembic_upgrade_head_builds_full_schema(tmp_path: Path, monkeypatch) ->
     finally:
         engine.dispose()
 
+    # Offline SQL generation must not emit duplicate CREATE INDEX statements.
+    import io
+    import re
+    from contextlib import redirect_stdout
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        command.upgrade(cfg, "head", sql=True)
+    sql_out = buf.getvalue()
+    created_indexes = re.findall(r"CREATE\s+(?:UNIQUE\s+)?INDEX\s+(\S+)", sql_out, flags=re.I)
+    assert len(created_indexes) == len(set(created_indexes)), (
+        f"Duplicate CREATE INDEX in offline SQL: {created_indexes}"
+    )
+
     # App boots cleanly with GEOLIBRE_SKIP_DDL_CREATE_ALL=1 against Alembic-migrated DB.
     monkeypatch.setenv("GEOLIBRE_SKIP_DDL_CREATE_ALL", "1")
     app = create_app(database_url=db_url)

@@ -146,7 +146,8 @@ def main() -> None:
         count = copy_result[0] if copy_result else None
         if output_format == "shapefile":
             with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as archive:
-                for sidecar in sorted(glob.glob(os.path.join(tmp_dir, stem + ".*"))):
+                pattern = glob.escape(os.path.join(tmp_dir, stem)) + ".*"
+                for sidecar in sorted(glob.glob(pattern)):
                     archive.write(sidecar, os.path.basename(sidecar))
     finally:
         if tmp_dir:

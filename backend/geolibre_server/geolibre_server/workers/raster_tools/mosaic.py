@@ -53,7 +53,21 @@ def main() -> None:
                     f"Warning: inputs have different nodata values "
                     f"({base_nodata} vs {s.nodata}); output nodata will be {base_nodata}."
                 )
-        mosaic, out_transform = merge(sources, method=method)
+        import math
+
+        xres, yres = sources[0].res
+        min_x = min(s.bounds.left for s in sources)
+        min_y = min(s.bounds.bottom for s in sources)
+        max_x = max(s.bounds.right for s in sources)
+        max_y = max(s.bounds.top for s in sources)
+        # Align outer edges outward to whole pixels so the union footprint is
+        # never truncated when total span is not an exact multiple of pixel size.
+        cols = max(1, int(math.ceil((max_x - min_x) / xres - 1e-9)))
+        rows = max(1, int(math.ceil((max_y - min_y) / yres - 1e-9)))
+        aligned_bounds = (min_x, max_y - rows * yres, min_x + cols * xres, max_y)
+        mosaic, out_transform = merge(
+            sources, bounds=aligned_bounds, res=(xres, yres), method=method
+        )
         profile = sources[0].profile.copy()
     finally:
         for s in sources:

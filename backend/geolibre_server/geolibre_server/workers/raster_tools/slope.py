@@ -22,6 +22,7 @@ def main() -> None:
         xres, yres = src.res
         profile = src.profile.copy()
 
+    input_invalid = np.ma.getmaskarray(elev) | ~np.isfinite(np.ma.filled(elev, np.nan))
     elev = np.ma.filled(elev, np.nan) * z_factor
     dy, dx = np.gradient(elev, yres, xres)
     rise_run = np.sqrt(dx * dx + dy * dy)
@@ -29,7 +30,7 @@ def main() -> None:
         out = rise_run * 100.0
     else:
         out = np.degrees(np.arctan(rise_run))
-    out = np.where(np.isnan(out), nodata, out).astype("float32")
+    out = np.where(input_invalid | np.isnan(out), nodata, out).astype("float32")
 
     profile.update(dtype="float32", count=1, nodata=nodata, compress="deflate")
     with rasterio.open(output_path, "w", **profile) as dst:

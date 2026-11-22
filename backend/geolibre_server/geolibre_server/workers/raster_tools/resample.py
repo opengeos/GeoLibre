@@ -3,6 +3,7 @@
 
 def main() -> None:
     import json
+    import math
     import sys
 
     import rasterio
@@ -22,8 +23,8 @@ def main() -> None:
 
     with rasterio.open(input_path) as src:
         bounds = src.bounds
-        width = max(1, int(round((bounds.right - bounds.left) / resolution)))
-        height = max(1, int(round((bounds.top - bounds.bottom) / resolution)))
+        width = max(1, int(math.ceil((bounds.right - bounds.left) / resolution - 1e-9)))
+        height = max(1, int(math.ceil((bounds.top - bounds.bottom) / resolution - 1e-9)))
         transform = from_origin(bounds.left, bounds.top, resolution, resolution)
         profile = src.profile.copy()
         profile.update(transform=transform, width=width, height=height, compress="deflate")

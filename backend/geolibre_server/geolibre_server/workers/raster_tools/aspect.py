@@ -20,6 +20,7 @@ def main() -> None:
 
     # Aspect is a direction, so a z_factor would cancel inside arctan2; it is
     # intentionally not applied here (and not exposed as a parameter).
+    input_invalid = np.ma.getmaskarray(elev) | ~np.isfinite(np.ma.filled(elev, np.nan))
     elev = np.ma.filled(elev, np.nan)
     dy, dx = np.gradient(elev, yres, xres)
     aspect = np.degrees(np.arctan2(dy, -dx))
@@ -31,7 +32,7 @@ def main() -> None:
     # Flat cells (no appreciable gradient) have an undefined aspect; flag them with
     # nodata. A small tolerance catches float32 interpolation artifacts too.
     flat = np.hypot(dx, dy) < 1e-10
-    aspect = np.where(flat | np.isnan(aspect), nodata, aspect).astype("float32")
+    aspect = np.where(input_invalid | flat | np.isnan(aspect), nodata, aspect).astype("float32")
 
     profile.update(dtype="float32", count=1, nodata=nodata, compress="deflate")
     with rasterio.open(output_path, "w", **profile) as dst:

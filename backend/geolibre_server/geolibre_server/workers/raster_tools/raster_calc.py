@@ -28,10 +28,11 @@ def main() -> None:
     nodata = -9999.0
 
     def load_bands(path, letter, namespace, base):
-        # ``base`` is None for raster A, else (shape, crs) of A to validate against.
+        # ``base`` is None for raster A, else (shape, crs, transform) of A to validate against.
         with rasterio.open(path) as ds:
             shape = (ds.height, ds.width)
             crs = ds.crs
+            transform = ds.transform
             if base is not None:
                 if shape != base[0]:
                     raise SystemExit(
@@ -46,6 +47,11 @@ def main() -> None:
                         f"Raster {letter} CRS ({crs}) does not match raster A "
                         f"({base[1]}); reproject before running the calculator."
                     )
+                if not transform.almost_equals(base[2]):
+                    raise SystemExit(
+                        f"Raster {letter} geotransform does not match raster A; "
+                        "align grids before running the calculator."
+                    )
             bands = [
                 np.ma.filled(ds.read(i, masked=True).astype("float64"), np.nan)
                 for i in range(1, ds.count + 1)
@@ -55,13 +61,13 @@ def main() -> None:
         namespace[letter] = bands[0]
         for i, arr in enumerate(bands, start=1):
             namespace[f"{letter}{i}"] = arr
-        return profile, shape, crs
+        return profile, shape, crs, transform
 
     namespace = {}
-    profile, base_shape, base_crs = load_bands(input_path, "A", namespace, None)
+    profile, base_shape, base_crs, base_transform = load_bands(input_path, "A", namespace, None)
     for letter, path in (("B", b_path), ("C", c_path)):
         if path:
-            load_bands(path, letter, namespace, (base_shape, base_crs))
+            load_bands(path, letter, namespace, (base_shape, base_crs, base_transform))
         # An expression that references B/C without a supplied path would otherwise
         # fail deep in eval with an opaque "name 'B' is not defined". Catch the
         # common case up front. The word-boundary match avoids false positives from

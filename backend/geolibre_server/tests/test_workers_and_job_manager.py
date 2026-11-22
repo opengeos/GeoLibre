@@ -64,6 +64,14 @@ def test_worker_path_rejects_traversal() -> None:
         worker_path("..app.main")
 
 
+def test_helper_worker_loader_does_not_mutate_sys_path() -> None:
+    """Loaded worker scripts with sibling helpers must not prepend site-packages to sys.path."""
+    for name in ("conversion_vector", "obia_segment"):
+        source = load_worker_source(name)
+        assert "sys.path" not in source
+        assert "spec_from_file_location" in source
+
+
 def test_shapefile_field_warnings_reports_truncation_and_collisions() -> None:
     assert shapefile_field_warnings(["short", "id"]) == []
     warnings = shapefile_field_warnings(["population_2020", "population_2025", "ok"])

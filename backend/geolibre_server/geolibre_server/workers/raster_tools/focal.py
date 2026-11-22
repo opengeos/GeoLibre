@@ -75,7 +75,7 @@ def main() -> None:
             vmin = np.full((height, width), np.inf, dtype="float64")
             vmax = np.full((height, width), -np.inf, dtype="float64")
             for dy, dx in offsets:
-                nb = neighbor(dy, dx)
+                nb = neighbor(dy, dx).astype("float64")
                 valid = np.isfinite(nb)
                 count += valid
                 contrib = np.where(valid, nb, 0.0)

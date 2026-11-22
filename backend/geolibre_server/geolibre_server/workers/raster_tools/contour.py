@@ -50,7 +50,10 @@ def main() -> None:
         for line in gen.lines(value):
             coords = []
             for col, row in line:
-                x, y = transform * (float(col), float(row))
+                # ContourPy places samples at integer indices (pixel centers),
+                # while Rasterio's affine transform maps integer indices to
+                # pixel corners; shift by +0.5 in both axes.
+                x, y = transform * (float(col) + 0.5, float(row) + 0.5)
                 coords.append([x, y])
             if len(coords) >= 2:
                 features.append(
@@ -61,11 +64,15 @@ def main() -> None:
                     }
                 )
     fc = {"type": "FeatureCollection", "features": features}
-    if crs is not None and crs.to_epsg() and crs.to_epsg() != 4326:
-        fc["crs"] = {
-            "type": "name",
-            "properties": {"name": f"urn:ogc:def:crs:EPSG::{crs.to_epsg()}"},
-        }
+    if crs is not None:
+        epsg = crs.to_epsg()
+        if epsg and epsg != 4326:
+            fc["crs"] = {
+                "type": "name",
+                "properties": {"name": f"urn:ogc:def:crs:EPSG::{epsg}"},
+            }
+        elif epsg is None:
+            fc["crs"] = {"type": "name", "properties": {"name": crs.to_wkt()}}
     with open(output_path, "w") as f:
         json.dump(fc, f)
     print(

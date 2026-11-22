@@ -222,7 +222,8 @@ def main() -> None:
         ).fetchone()
         count = copy_result[0] if copy_result else None
         if is_shapefile:
-            produced = sorted(glob.glob(os.path.join(tmp_dir, stem + ".*")))
+            pattern = glob.escape(os.path.join(tmp_dir, stem)) + ".*"
+            produced = sorted(glob.glob(pattern))
             if zip_shapefile:
                 with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as archive:
                     for sidecar in produced:

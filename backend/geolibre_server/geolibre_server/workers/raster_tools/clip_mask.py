@@ -65,7 +65,13 @@ def main() -> None:
         # the mask CRS differs so a WGS84 mask over a projected raster still works.
         if mask_crs != src.crs:
             shapes = [transform_geom(mask_crs, src.crs, geom) for geom in shapes]
-        out_image, out_transform = rio_mask(src, shapes, crop=crop, all_touched=all_touched)
+        import numpy as np
+
+        out_masked, out_transform = rio_mask(
+            src, shapes, crop=crop, all_touched=all_touched, filled=False
+        )
+        fill_val = src.nodata if src.nodata is not None else 0
+        out_image = np.ma.filled(out_masked, fill_val)
         profile = src.profile.copy()
         profile.update(
             height=out_image.shape[1],
@@ -75,6 +81,9 @@ def main() -> None:
         )
         with rasterio.open(output_path, "w", **profile) as dst:
             dst.write(out_image)
+            if src.nodata is None:
+                valid_mask = (~np.any(np.ma.getmaskarray(out_masked), axis=0)).astype("uint8") * 255
+                dst.write_mask(valid_mask)
     print(f"Clipped by {len(shapes)} mask geometry(ies) -> {output_path}")
     print("__GEOLIBRE_CONVERSION_RESULT__" + json.dumps({"output_path": output_path}))
 

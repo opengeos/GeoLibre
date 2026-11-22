@@ -147,17 +147,18 @@ class JobManager:
         """Reserve an in-flight slot, launch *target(job_id, *args)*, and return state."""
         job_id = str(uuid.uuid4())
         now = _utc_now()
+        job = JobState(
+            id=job_id,
+            status="pending",
+            tool_id=tool_id,
+            created_at=now,
+            updated_at=now,
+        )
         with self.lock:
             if self.count_in_flight_locked() >= self._in_flight_limit():
                 raise HTTPException(status_code=429, detail=self.busy_detail)
             store = self._store()
-            store[job_id] = JobState(
-                id=job_id,
-                status="pending",
-                tool_id=tool_id,
-                created_at=now,
-                updated_at=now,
-            )
+            store[job_id] = job
             self.evict_finished_locked()
         thread = threading.Thread(target=target, args=(job_id, *args), daemon=True)
         try:
@@ -166,5 +167,7 @@ class JobManager:
             with self.lock:
                 self._store().pop(job_id, None)
             raise
-        with self.lock:
-            return self._store()[job_id]
+        # Return the captured reserved JobState rather than re-reading the
+        # registry: if the worker finishes and another submission evicts it
+        # before the lock is re-acquired, looking up job_id would KeyError.
+        return job

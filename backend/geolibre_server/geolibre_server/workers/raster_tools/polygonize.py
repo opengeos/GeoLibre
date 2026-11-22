@@ -19,15 +19,10 @@ def main() -> None:
 
     with rasterio.open(input_path) as src:
         arr = src.read(band)
-        valid = None
-        if src.nodata is not None:
-            # NaN nodata needs np.isnan: ``arr != nan`` is True for every pixel
-            # (NaN != NaN), which would otherwise mask nothing. rio_shapes wants a
-            # uint8/bool mask.
-            if isinstance(src.nodata, float) and math.isnan(src.nodata):
-                valid = (~np.isnan(arr)).astype("uint8")
-            else:
-                valid = (arr != src.nodata).astype("uint8")
+        mask = src.read_masks(band)
+        valid = (mask > 0).astype("uint8")
+        if src.nodata is not None and isinstance(src.nodata, float) and math.isnan(src.nodata):
+            valid = (valid & (~np.isnan(arr)).astype("uint8")).astype("uint8")
         transform = src.transform
         crs = src.crs
 
@@ -60,11 +55,15 @@ def main() -> None:
     # (issue #3335). Largest first keeps every enclosed region drawn on top.
     features.sort(key=lambda feature: _outer_ring_area(feature["geometry"]), reverse=True)
     fc = {"type": "FeatureCollection", "features": features}
-    if crs is not None and crs.to_epsg() and crs.to_epsg() != 4326:
-        fc["crs"] = {
-            "type": "name",
-            "properties": {"name": f"urn:ogc:def:crs:EPSG::{crs.to_epsg()}"},
-        }
+    if crs is not None:
+        epsg = crs.to_epsg()
+        if epsg and epsg != 4326:
+            fc["crs"] = {
+                "type": "name",
+                "properties": {"name": f"urn:ogc:def:crs:EPSG::{epsg}"},
+            }
+        elif epsg is None:
+            fc["crs"] = {"type": "name", "properties": {"name": crs.to_wkt()}}
     with open(output_path, "w") as f:
         json.dump(fc, f)
     print(f"Polygonized into {len(features)} feature(s) -> {output_path}")

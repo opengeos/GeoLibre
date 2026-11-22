@@ -22,6 +22,7 @@ def main() -> None:
         xres, yres = src.res
         profile = src.profile.copy()
 
+    input_invalid = np.ma.getmaskarray(elev) | ~np.isfinite(np.ma.filled(elev, np.nan))
     elev = np.ma.filled(elev, np.nan) * z_factor
     dy, dx = np.gradient(elev, yres, xres)
     slope = np.pi / 2.0 - np.arctan(np.sqrt(dx * dx + dy * dy))
@@ -34,12 +35,16 @@ def main() -> None:
     shaded = np.sin(alt) * np.sin(slope) + np.cos(alt) * np.cos(slope) * np.cos(az - aspect)
     # Match the GDAL/QGIS convention: clip back-facing (negative) illumination to
     # black and scale [0, 1] -> [0, 255], rather than a symmetric [-1, 1] remap.
+    invalid = input_invalid | np.isnan(shaded)
     shaded = np.clip(shaded * 255.0, 0, 255)
-    shaded = np.where(np.isnan(shaded), 0, shaded).astype("uint8")
+    shaded = np.where(invalid, 0, shaded).astype("uint8")
 
-    profile.update(dtype="uint8", count=1, nodata=0, compress="deflate")
+    # Use an explicit validity mask rather than nodata=0 so valid shadow pixels
+    # with illumination 0 remain valid data.
+    profile.update(dtype="uint8", count=1, nodata=None, compress="deflate")
     with rasterio.open(output_path, "w", **profile) as dst:
         dst.write(shaded, 1)
+        dst.write_mask(np.where(invalid, 0, 255).astype("uint8"))
     print(f"Wrote hillshade to {output_path}")
     print("__GEOLIBRE_CONVERSION_RESULT__" + json.dumps({"output_path": output_path}))
 

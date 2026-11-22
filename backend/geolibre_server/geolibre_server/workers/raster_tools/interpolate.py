@@ -154,14 +154,20 @@ def main() -> None:
             dx = gp[:, 0:1] - px[None, :]
             dy = gp[:, 1:2] - py[None, :]
             d2 = dx * dx + dy * dy
-            with np.errstate(divide="ignore"):
-                w = 1.0 / np.power(d2, half_power)
-            wsum = w.sum(axis=1)
-            res = (w * pz[None, :]).sum(axis=1) / wsum
-            # Cells coinciding with a sample produce inf/inf -> NaN; assign the
-            # value of the (first) coincident sample exactly.
             hit = d2 == 0
             hit_rows = hit.any(axis=1)
+            # Normalize squared distances by each row's minimum nonzero distance
+            # before exponentiation so high power values cannot overflow/underflow.
+            nonzero_d2 = np.where(hit, np.inf, d2)
+            row_scale = np.min(nonzero_d2, axis=1, keepdims=True)
+            row_scale = np.where(np.isfinite(row_scale) & (row_scale > 0), row_scale, 1.0)
+            scaled_d2 = d2 / row_scale
+            with np.errstate(divide="ignore", over="ignore"):
+                w = np.where(hit, 0.0, 1.0 / np.power(scaled_d2, half_power))
+            wsum = w.sum(axis=1)
+            safe_wsum = np.where(wsum > 0, wsum, 1.0)
+            res = np.where(wsum > 0, (w * pz[None, :]).sum(axis=1) / safe_wsum, np.nan)
+            # Cells coinciding with a sample assign the (first) coincident sample exactly.
             if hit_rows.any():
                 res[hit_rows] = pz[np.argmax(hit[hit_rows], axis=1)]
             out[i : i + chunk] = res

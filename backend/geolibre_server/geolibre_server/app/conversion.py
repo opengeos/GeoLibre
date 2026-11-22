@@ -13,7 +13,15 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from geolibre_server.workers import load_worker_source
+from geolibre_server.workers import (
+    ERROR_MARKER as _ERROR_MARKER,
+)
+from geolibre_server.workers import (
+    RESULT_MARKER as _RESULT_MARKER,
+)
+from geolibre_server.workers import (
+    load_worker_source,
+)
 
 from .job_manager import JobManager
 from .runtime import (
@@ -97,9 +105,6 @@ def _output_extension(path: str) -> str:
 
 COG_COMPRESSIONS = {"deflate", "zstd", "lzw", "webp", "jpeg", "packbits", "raw"}
 DEFAULT_COG_COMPRESSION = "deflate"
-
-_RESULT_MARKER = "__GEOLIBRE_CONVERSION_RESULT__"
-_ERROR_MARKER = "__GEOLIBRE_CONVERSION_ERROR__"
 
 # Conversion and raster scripts report input mistakes the user can act on with
 # ``raise SystemExit("...")`` — curated text such as "Expression may not use
