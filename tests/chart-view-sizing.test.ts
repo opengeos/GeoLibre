@@ -159,7 +159,10 @@ describe("ChartView sizing", () => {
       assert.ok(x >= 0 && x + width <= 320 + 0.01, "bar stays inside the card");
     }
     const labels = Array.from(container.querySelectorAll("svg text"), (t) => t.textContent);
-    assert.ok(labels.some((label) => label?.startsWith("< ")), "underflow axis label");
+    assert.ok(
+      labels.some((label) => label?.startsWith("< ")),
+      "underflow axis label",
+    );
   });
 
   it("keeps a fill pie's legend inside a narrow card", () => {
