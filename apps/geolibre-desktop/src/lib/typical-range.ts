@@ -54,8 +54,8 @@ export interface TypicalRange {
  *
  * The percentiles are taken at data ranks rounded inward (the 1st percentile
  * rounds up, the 99th down), so both ends of a clipped domain are real values
- * from the field rather than interpolated ones, and a label such as "> 4,615"
- * names a value that exists.
+ * from the field rather than interpolated ones. Labels built from them with
+ * {@link formatRangeBound} are rounded for display.
  *
  * @param values - The values to scan. Anything that is not a finite number
  *   (`null`, `NaN`, text, `Infinity`) is ignored.

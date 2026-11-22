@@ -243,6 +243,17 @@ describe("QuickFilterControl range with outliers (#3455)", () => {
     assert.equal(thumbValue("Maximum"), "4680");
   });
 
+  it("saves the range the thumbs show when both are pinned to one end and one moves", () => {
+    // min 5000 pins both thumbs at 4680. Radix can't tell them apart there, so
+    // a step left reads as the lower thumb moving: saving max < 5000 instead
+    // would leave an inverted, empty range.
+    const changes = renderRange({ min: 5000 }, OUTLIER_PROFILE);
+    pressOnThumb("Maximum", "ArrowLeft");
+    const last = changes.at(-1);
+    assert.ok(typeof last?.min === "number" && last.min < 4680, `min ${last?.min}`);
+    assert.equal(last?.max, null);
+  });
+
   it("pins a maximum typed below the near end to that end, not beyond the slider", () => {
     renderRange({ max: 0.1 }, OUTLIER_PROFILE);
     assert.equal(thumbValue("Minimum"), "0.3");

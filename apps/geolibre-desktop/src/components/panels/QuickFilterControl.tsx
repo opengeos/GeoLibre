@@ -344,14 +344,14 @@ function RangeControl({
       )}
       <div className="flex items-center gap-2">
         {/* The typed bounds take any value, including one beyond a clipped
-            slider's ends; their placeholders name the field's full extent. */}
+            slider's ends; their placeholders name the field's exact extent. */}
         <Input
           id={`${idPrefix}-${filter.id}-min`}
           type="number"
           inputMode="decimal"
           className="h-7 text-xs"
           value={filter.min ?? ""}
-          placeholder={bounds ? format(profile?.min ?? bounds.min) : t("quickFilters.rangeMin")}
+          placeholder={bounds ? String(profile?.min ?? bounds.min) : t("quickFilters.rangeMin")}
           aria-label={t("quickFilters.rangeMin")}
           onChange={(event) => onChange({ ...filter, min: parseBound(event.target.value) })}
         />
@@ -362,7 +362,7 @@ function RangeControl({
           inputMode="decimal"
           className="h-7 text-xs"
           value={filter.max ?? ""}
-          placeholder={bounds ? format(profile?.max ?? bounds.max) : t("quickFilters.rangeMax")}
+          placeholder={bounds ? String(profile?.max ?? bounds.max) : t("quickFilters.rangeMax")}
           aria-label={t("quickFilters.rangeMax")}
           onChange={(event) => onChange({ ...filter, max: parseBound(event.target.value) })}
         />

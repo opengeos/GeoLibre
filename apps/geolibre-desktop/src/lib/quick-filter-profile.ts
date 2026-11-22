@@ -52,7 +52,10 @@ export interface QuickFilterFieldProfile {
    * Set when a few outliers stretch the numeric extent far past where the
    * values typically fall (#3455): the 1st–99th percentile the range slider
    * scales to, and how many values lie below and above it. Absent for a field
-   * without outliers, whose slider spans `min`–`max` exactly.
+   * without outliers, whose slider spans `min`–`max` exactly. Like `min`,
+   * `max` and {@link blankCount}, it covers the inspected features only (see
+   * {@link sampled}), so on a layer past the profile limit the below/above
+   * counts are counts within that sample.
    */
   typical?: { min: number; max: number; below: number; above: number };
   /** How a date field stores its values, and its `YYYY-MM-DD` extent. */
