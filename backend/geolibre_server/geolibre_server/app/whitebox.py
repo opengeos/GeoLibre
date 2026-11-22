@@ -20,8 +20,10 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from geolibre_server.vector_ops import MAX_FEATURES as MAX_LAYER_FEATURES
+from geolibre_server.workers import load_worker_source, worker_path
 
 from . import conversion
+from .job_manager import JobManager
 from .runtime import (
     RUNTIME_CATALOG_TIMEOUT_SECS,
     RUNTIME_DISCOVERY_TIMEOUT_SECS,
@@ -32,9 +34,11 @@ from .runtime import (
     _runtime_cache_root,
     _runtime_setup_env,
     _subprocess_startup_kwargs,
-    _utc_now,
     _uv_executable,
     _venv_python,
+)
+from .runtime import (
+    _utc_now as _utc_now,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,35 +50,7 @@ WHITEBOX_RUNTIME_PACKAGE = os.environ.get(
 )
 WHITEBOX_PYTHON_VERSION = os.environ.get("GEOLIBRE_WHITEBOX_PYTHON_VERSION", "3.12")
 
-_ENSURE_COG_SCRIPT = """
-import json, os, stat, sys
-
-from rio_cogeo.cogeo import cog_translate, cog_validate
-from rio_cogeo.profiles import cog_profiles
-
-path = sys.argv[1]
-temporary = sys.argv[2]
-original_mode = stat.S_IMODE(os.stat(path).st_mode)
-valid, _, _ = cog_validate(path, quiet=True)
-if valid:
-    print("{marker}" + json.dumps({"converted": False}))
-    raise SystemExit(0)
-
-cog_translate(
-    path,
-    temporary,
-    cog_profiles.get("deflate"),
-    in_memory=False,
-    quiet=True,
-    use_cog_driver=False,
-)
-valid, errors, _ = cog_validate(temporary, quiet=True)
-if not valid:
-    raise RuntimeError("COG validation failed: " + "; ".join(errors))
-os.chmod(temporary, original_mode)
-os.replace(temporary, path)
-print("{marker}" + json.dumps({"converted": True}))
-""".replace("{marker}", conversion._RESULT_MARKER)
+_ENSURE_COG_SCRIPT = load_worker_source("whitebox_ensure_cog")
 
 
 def _whitebox_run_timeout_secs() -> int:
@@ -116,14 +92,25 @@ class WhiteboxRunRequest(BaseModel):
     tier: str = "open"
 
 
-_JOBS: dict[str, JobState] = {}
-_JOBS_LOCK = threading.Lock()
-_RUNTIME_SETUP_LOCK = threading.Lock()
 MAX_RETAINED_JOBS = 100
 # Concurrent pending/running Whitebox jobs. Finished jobs are retained up to
 # MAX_RETAINED_JOBS; in-flight work is refused with HTTP 429 once this cap is
 # hit so a burst of /run calls cannot spawn unbounded tool sessions.
 MAX_IN_FLIGHT_JOBS = 8
+MAX_JOB_MESSAGES = 500
+
+_JOB_MANAGER = JobManager(
+    busy_detail="Too many Whitebox jobs in progress; try again shortly.",
+    max_retained=MAX_RETAINED_JOBS,
+    max_in_flight=MAX_IN_FLIGHT_JOBS,
+    max_messages=MAX_JOB_MESSAGES,
+    get_jobs=lambda: _JOBS,
+    get_max_retained=lambda: MAX_RETAINED_JOBS,
+    get_max_in_flight=lambda: MAX_IN_FLIGHT_JOBS,
+)
+_JOBS: dict[str, JobState] = _JOB_MANAGER.jobs
+_JOBS_LOCK = _JOB_MANAGER.lock
+_RUNTIME_SETUP_LOCK = threading.Lock()
 
 
 def _check_python_import(python_executable: str) -> None:
@@ -244,23 +231,6 @@ def _runtime_import_status() -> tuple[str, str]:
     return python, "Configured Whitebox runtime is available."
 
 
-def _runtime_session_factory_script() -> str:
-    """Return Python source that constructs a Whitebox runtime session."""
-    return (
-        "import os\n"
-        "def _env_first(*names):\n"
-        "    for name in names:\n"
-        "        value=os.environ.get(name)\n"
-        "        if value not in (None, ''):\n"
-        "            return str(value)\n"
-        "    return ''\n"
-        "def _make_session(wbw, include_pro, tier):\n"
-        "    if hasattr(wbw, 'RuntimeSession'):\n"
-        "        return wbw.RuntimeSession(include_pro=include_pro, tier=tier)\n"
-        "    return None\n"
-    )
-
-
 class ExternalRuntimeSession:
     """Whitebox runtime accessed through a Python subprocess."""
 
@@ -289,35 +259,10 @@ class ExternalRuntimeSession:
             "tier": self.tier,
             **kwargs,
         }
-        runner = (
-            "import json, sys\n"
-            "try:\n"
-            "    sys.stdout.reconfigure(encoding='utf-8')\n"
-            "except Exception:\n"
-            "    pass\n"
-        )
-        runner += _runtime_session_factory_script()
-        runner += (
-            "import whitebox_workflows as wbw\n"
-            "p=json.loads(sys.argv[1])\n"
-            "include_pro=bool(p.get('include_pro', False)); tier=str(p.get('tier','open'))\n"
-            "m=p.get('method')\n"
-            "if hasattr(wbw, 'RuntimeSession'):\n"
-            "    s=_make_session(wbw, include_pro, tier)\n"
-            "    if m=='capabilities': out=s.get_runtime_capabilities_json()\n"
-            "    elif m=='catalog': out=s.list_tool_catalog_json()\n"
-            "    elif m=='metadata': out=s.get_tool_metadata_json(str(p.get('tool_id','')))\n"
-            "    else: raise RuntimeError('unknown method')\n"
-            "else:\n"
-            "    if m=='capabilities': out=wbw.get_runtime_capabilities_json_with_options(include_pro, tier)\n"
-            "    elif m=='catalog': out=wbw.list_tool_catalog_json_with_options(include_pro, tier)\n"
-            "    elif m=='metadata': out=wbw.get_tool_metadata_json_with_options(str(p.get('tool_id','')), include_pro, tier)\n"
-            "    else: raise RuntimeError('unknown method')\n"
-            "sys.stdout.write(out if isinstance(out, str) else json.dumps(out))\n"
-        )
+        runner_script = str(worker_path("whitebox_runner"))
         try:
             completed = subprocess.run(
-                [self.python_executable, "-c", runner, json.dumps(payload)],
+                [self.python_executable, runner_script, "invoke", json.dumps(payload)],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -363,43 +308,13 @@ class ExternalRuntimeSession:
             "tool_id": tool_id,
             "args_json": args_json,
         }
-        runner = (
-            "import base64, json, sys, traceback\n"
-            "try:\n"
-            "    sys.stdout.reconfigure(encoding='utf-8')\n"
-            "except Exception:\n"
-            "    pass\n"
-        )
-        runner += _runtime_session_factory_script()
-        runner += (
-            "import whitebox_workflows as wbw\n"
-            "p=json.loads(sys.argv[1])\n"
-            "def emit(evt):\n"
-            "    txt=evt if isinstance(evt,str) else json.dumps(evt)\n"
-            "    sys.stdout.write('__WBW_EVENT__'+base64.b64encode(txt.encode()).decode()+'\\n'); sys.stdout.flush()\n"
-            "include_pro=bool(p.get('include_pro', False)); tier=str(p.get('tier','open'))\n"
-            "tool_id=str(p.get('tool_id','')); args_json=str(p.get('args_json','{}'))\n"
-            "try:\n"
-            "    if hasattr(wbw, 'RuntimeSession'):\n"
-            "        s=_make_session(wbw, include_pro, tier)\n"
-            "        method=getattr(s, 'run_tool_json_stream', None)\n"
-            "        if callable(method): out=method(tool_id, args_json, emit)\n"
-            "        else: out=s.run_tool_json_with_progress(tool_id, args_json)\n"
-            "    elif hasattr(wbw, 'run_tool_json_stream_options'):\n"
-            "        out=wbw.run_tool_json_stream_options(tool_id, args_json, emit, include_pro, tier)\n"
-            "    else:\n"
-            "        out=wbw.run_tool_json_with_progress_options(tool_id, args_json, include_pro, tier)\n"
-            "    txt=out if isinstance(out,str) else json.dumps(out)\n"
-            "    sys.stdout.write('__WBW_RESULT__'+base64.b64encode(txt.encode()).decode()+'\\n')\n"
-            "except Exception:\n"
-            "    sys.stdout.write('__WBW_ERROR__'+base64.b64encode(traceback.format_exc().encode()).decode()+'\\n')\n"
-        )
         completed_result = ""
         errors: list[str] = []
         timeout = _whitebox_run_timeout_secs()
         timed_out = threading.Event()
+        runner_script = str(worker_path("whitebox_runner"))
         process = subprocess.Popen(
-            [self.python_executable, "-c", runner, json.dumps(payload)],
+            [self.python_executable, runner_script, "stream", json.dumps(payload)],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -1076,15 +991,7 @@ def _ensure_raster_outputs_are_cogs(
 
 def _job_update(job_id: str, **patch: Any) -> None:
     """Update an in-memory Whitebox job."""
-    with _JOBS_LOCK:
-        job = _JOBS[job_id]
-        data = job.model_dump()
-        data.update(patch)
-        data["updated_at"] = _utc_now()
-        _JOBS[job_id] = JobState(**data)
-
-
-MAX_JOB_MESSAGES = 500
+    _JOB_MANAGER.update(job_id, **patch)
 
 
 def _append_job_message(job_id: str, event: Any) -> None:
@@ -1094,12 +1001,7 @@ def _append_job_message(job_id: str, event: Any) -> None:
         message = parsed.get("message") or parsed.get("type") or json.dumps(parsed)
     else:
         message = str(parsed)
-    with _JOBS_LOCK:
-        job = _JOBS[job_id]
-        messages = [*job.messages, message]
-        if len(messages) > MAX_JOB_MESSAGES:
-            messages = messages[-MAX_JOB_MESSAGES:]
-        _JOBS[job_id] = job.model_copy(update={"messages": messages, "updated_at": _utc_now()})
+    _JOB_MANAGER.append_message(job_id, message)
 
 
 def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
@@ -1200,22 +1102,13 @@ def whitebox_tool(tool_id: str, include_pro: bool = False, tier: str = "open"):
 
 
 def _evict_finished_jobs_locked() -> None:
-    """Drop the oldest finished jobs once the retention cap is exceeded.
-
-    The caller must hold ``_JOBS_LOCK``. Running and pending jobs are never
-    evicted; only ``succeeded``/``failed`` jobs are removed, oldest first.
-    """
-    excess = len(_JOBS) - MAX_RETAINED_JOBS
-    if excess <= 0:
-        return
-    finished = [job_id for job_id, job in _JOBS.items() if job.status in {"succeeded", "failed"}]
-    for job_id in finished[:excess]:
-        _JOBS.pop(job_id, None)
+    """Drop the oldest finished jobs once the retention cap is exceeded."""
+    _JOB_MANAGER.evict_finished_locked()
 
 
 def _count_in_flight_jobs_locked() -> int:
     """Return how many jobs are pending or running. Caller must hold ``_JOBS_LOCK``."""
-    return sum(1 for job in _JOBS.values() if job.status in {"pending", "running"})
+    return _JOB_MANAGER.count_in_flight_locked()
 
 
 @router.post("/run")
@@ -1241,33 +1134,7 @@ def whitebox_run(request: WhiteboxRunRequest):
                         f"Layer input for {name} exceeds the {MAX_LAYER_FEATURES}-feature limit"
                     ),
                 )
-    job_id = str(uuid.uuid4())
-    now = _utc_now()
-    with _JOBS_LOCK:
-        if _count_in_flight_jobs_locked() >= MAX_IN_FLIGHT_JOBS:
-            raise HTTPException(
-                status_code=429,
-                detail="Too many Whitebox jobs in progress; try again shortly.",
-            )
-        _JOBS[job_id] = JobState(
-            id=job_id,
-            status="pending",
-            tool_id=tool_id,
-            created_at=now,
-            updated_at=now,
-        )
-        _evict_finished_jobs_locked()
-    thread = threading.Thread(target=_run_job, args=(job_id, request), daemon=True)
-    try:
-        thread.start()
-    except RuntimeError:
-        # Drop the reserved pending slot so a failed Thread.start does not
-        # permanently consume an in-flight capacity slot (and force 429s).
-        with _JOBS_LOCK:
-            _JOBS.pop(job_id, None)
-        raise
-    with _JOBS_LOCK:
-        return _JOBS[job_id]
+    return _JOB_MANAGER.start_thread_job(tool_id, _run_job, (request,))
 
 
 @router.get("/jobs/{job_id}")

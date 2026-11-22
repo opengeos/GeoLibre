@@ -566,9 +566,39 @@ def _group_member_rows(session: Session, group_id: str) -> list[tuple[str, str |
     )
 
 
-def _group_json(request: Request, session: Session, group: Group, scim_group: ScimGroup) -> dict:
+def _group_member_rows_by_group(
+    session: Session, group_ids: list[str]
+) -> dict[str, list[tuple[str, str | None]]]:
+    """Batch-load accepted SCIM group members for multiple groups in a single query."""
+    grouped: dict[str, list[tuple[str, str | None]]] = {gid: [] for gid in group_ids}
+    if not group_ids:
+        return grouped
+    rows = session.execute(
+        select(GroupMember.group_id, GroupMember.account_id, Account.username)
+        .join(Account, Account.id == GroupMember.account_id)
+        .where(
+            GroupMember.group_id.in_(group_ids),
+            GroupMember.role == "member",
+            GroupMember.status == "accepted",
+        )
+        .order_by(GroupMember.group_id, GroupMember.created_at, GroupMember.account_id)
+    ).all()
+    for group_id, account_id, username in rows:
+        grouped.setdefault(group_id, []).append((account_id, username))
+    return grouped
+
+
+def _group_json(
+    request: Request,
+    session: Session,
+    group: Group,
+    scim_group: ScimGroup,
+    *,
+    member_rows: list[tuple[str, str | None]] | None = None,
+) -> dict:
     members = []
-    for account_id, username in _group_member_rows(session, group.id):
+    rows = member_rows if member_rows is not None else _group_member_rows(session, group.id)
+    for account_id, username in rows:
         member = {"value": account_id}
         if username is not None:
             member["display"] = username
@@ -1018,7 +1048,17 @@ def build_scim_router() -> APIRouter:
         rows = session.execute(
             query.order_by(ScimGroup.created_at, Group.id).offset(start - 1).limit(count)
         ).all()
-        resources = [_group_json(request, session, group, scim_group) for group, scim_group in rows]
+        members_by_group = _group_member_rows_by_group(session, [group.id for group, _ in rows])
+        resources = [
+            _group_json(
+                request,
+                session,
+                group,
+                scim_group,
+                member_rows=members_by_group.get(group.id, []),
+            )
+            for group, scim_group in rows
+        ]
         return scim_response(_list_response(resources, total or 0, start))
 
     @router.post("/Groups")
