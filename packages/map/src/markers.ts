@@ -406,6 +406,11 @@ function loadRasterMarker(url: string): Promise<GeneratedImageResult | null> {
   });
 }
 
+const kmlFeatureIconPairsCache = new WeakMap<
+  GeoJSON.FeatureCollection,
+  readonly (readonly [string, string])[]
+>();
+
 /**
  * Register embedded KMZ raster icons and return an icon-image expression for
  * the features that carry them.
@@ -414,17 +419,24 @@ export function prepareKmlFeatureIcons(
   collection: GeoJSON.FeatureCollection,
   fallbackImage: unknown = "",
 ): unknown[] | null {
+  let pairs = kmlFeatureIconPairsCache.get(collection);
+  if (!pairs) {
+    const discovered: [string, string][] = [];
+    const seen = new Set<string>();
+    for (const feature of collection.features) {
+      const url = feature.properties?.[KML_ICON_URL_PROPERTY];
+      if (typeof url !== "string" || seen.has(url)) continue;
+      seen.add(url);
+      discovered.push([url, `geolibre-kml-icon-${hashText(url)}`]);
+    }
+    pairs = discovered;
+    kmlFeatureIconPairsCache.set(collection, pairs);
+  }
+  if (pairs.length === 0) return null;
   const matches: unknown[] = [];
-  const seen = new Set<string>();
-  for (const feature of collection.features) {
-    const url = feature.properties?.[KML_ICON_URL_PROPERTY];
-    if (typeof url !== "string" || seen.has(url)) continue;
-    seen.add(url);
-    const id = `geolibre-kml-icon-${hashText(url)}`;
+  for (const [url, id] of pairs) {
     registerGeneratedImage(id, () => loadRasterMarker(url));
     matches.push(url, id);
   }
-  return matches.length
-    ? ["match", ["get", KML_ICON_URL_PROPERTY], ...matches, fallbackImage]
-    : null;
+  return ["match", ["get", KML_ICON_URL_PROPERTY], ...matches, fallbackImage];
 }

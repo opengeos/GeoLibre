@@ -223,6 +223,11 @@ const DEFAULT_TABLE_HEIGHT = 240;
 const MIN_TABLE_HEIGHT = 96;
 const MAX_TABLE_HEIGHT = 520;
 
+const ATTRIBUTE_COLLATOR = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
+
 function compareAttributeValues(a: unknown, b: unknown): number {
   if (a == null && b == null) return 0;
   if (a == null) return -1;
@@ -236,10 +241,7 @@ function compareAttributeValues(a: unknown, b: unknown): number {
     return aNumber - bNumber;
   }
 
-  return String(a).localeCompare(String(b), undefined, {
-    numeric: true,
-    sensitivity: "base",
-  });
+  return ATTRIBUTE_COLLATOR.compare(String(a), String(b));
 }
 
 function parseAttributeDraft(draft: string, previousValue: unknown, columnType?: string): unknown {
@@ -782,9 +784,10 @@ export function AttributeTable({
       })),
     [features, layer?.metadata.sourceKind],
   );
-  const attributeRows: AttributeTableRow[] = isDuckDBLayer
-    ? duckDBRowsToAttributeRows(duckdbRows)
-    : geojsonRows;
+  const attributeRows: AttributeTableRow[] = useMemo(
+    () => (isDuckDBLayer ? duckDBRowsToAttributeRows(duckdbRows) : geojsonRows),
+    [duckdbRows, geojsonRows, isDuckDBLayer],
+  );
   const layerCaps = resolveLayerCapabilities(layer);
   // ArcGIS service attachments of the one selected record, keyed by its object
   // ID; a feature not yet saved to the service has none to show.
@@ -1153,12 +1156,16 @@ export function AttributeTable({
     if (!adaptAnalysisRows || selectedIdSet.size === 0) return [];
     return pickAnalysisRows(analysisRows, attributeRows, selectedIdSet);
   }, [adaptAnalysisRows, analysisRows, attributeRows, selectedIdSet]);
-  const sorted = [...filtered].sort((a, b) => {
-    const aValue = sort.key === "__featureId" ? a.featureId : a.properties[sort.key];
-    const bValue = sort.key === "__featureId" ? b.featureId : b.properties[sort.key];
-    const result = compareAttributeValues(aValue, bValue);
-    return sort.direction === "asc" ? result : -result;
-  });
+  const sorted = useMemo(
+    () =>
+      [...filtered].sort((a, b) => {
+        const aValue = sort.key === "__featureId" ? a.featureId : a.properties[sort.key];
+        const bValue = sort.key === "__featureId" ? b.featureId : b.properties[sort.key];
+        const result = compareAttributeValues(aValue, bValue);
+        return sort.direction === "asc" ? result : -result;
+      }),
+    [filtered, sort.direction, sort.key],
+  );
 
   // Row selection with keyboard modifiers (plain / Ctrl-toggle / Shift-range /
   // Shift+Ctrl merge). The branching lives in the pure `computeRowSelection`
@@ -1252,19 +1259,21 @@ export function AttributeTable({
     isCardViewActive,
   ]);
 
-  const propKeys = new Set<string>();
-  for (const row of attributeRows) {
-    for (const k of Object.keys(row.properties)) {
-      // The inline photo/full-resolution image keys are multi-KB-to-MB data
-      // URLs (the map popup and Identify render them as thumbnails instead); a
-      // table cell would dump the raw base64 as text and jank on large photos.
-      if (!RESERVED_IMAGE_KEYS.has(k)) propKeys.add(k);
+  const discoveredColumns = useMemo(() => {
+    const propKeys = new Set<string>();
+    for (const row of attributeRows) {
+      for (const k of Object.keys(row.properties)) {
+        // The inline photo/full-resolution image keys are multi-KB-to-MB data
+        // URLs (the map popup and Identify render them as thumbnails instead); a
+        // table cell would dump the raw base64 as text and jank on large photos.
+        if (!RESERVED_IMAGE_KEYS.has(k)) propKeys.add(k);
+      }
     }
-  }
-  // Tracking columns are listed even before any feature carries one, so a layer
-  // that just turned tracking on shows what it is about to maintain (and the
-  // Field Calculator's "new field" name check sees them as taken).
-  const discoveredColumns = ensureEditorTrackingFields(Array.from(propKeys), layer?.editorTracking);
+    // Tracking columns are listed even before any feature carries one, so a layer
+    // that just turned tracking on shows what it is about to maintain (and the
+    // Field Calculator's "new field" name check sees them as taken).
+    return ensureEditorTrackingFields(Array.from(propKeys), layer?.editorTracking);
+  }, [attributeRows, layer?.editorTracking]);
   // Displayed columns omit engine metadata and large inline photos; mutation
   // validation still needs every stored key to avoid overwriting hidden data.
   const mutationColumns = useMemo(
@@ -1335,22 +1344,42 @@ export function AttributeTable({
     // both, so invert the delta under RTL: dragging the (left-side) RTL handle
     // outward lowers clientX but should widen the column.
     const directionSign = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
+    let pendingWidth = startWidth;
+    let resizeFrame: number | null = null;
+
+    const flushWidth = () => {
+      resizeFrame = null;
+      const width = pendingWidth;
+      setColumnWidths((current) =>
+        current[key] === width ? current : { ...current, [key]: width },
+      );
+    };
 
     const onMouseMove = (moveEvent: MouseEvent) => {
-      const nextWidth = Math.min(
+      pendingWidth = Math.min(
         max,
         Math.max(min, startWidth + directionSign * (moveEvent.clientX - startX)),
       );
-      setColumnWidths((current) => ({ ...current, [key]: nextWidth }));
+      if (resizeFrame === null) {
+        resizeFrame = window.requestAnimationFrame(flushWidth);
+      }
     };
 
     const cleanup = () => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame);
+        resizeFrame = null;
+      }
       if (resizeCleanupRef.current === cleanup) resizeCleanupRef.current = null;
     };
 
     const onMouseUp = () => {
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame);
+        flushWidth();
+      }
       cleanup();
     };
 

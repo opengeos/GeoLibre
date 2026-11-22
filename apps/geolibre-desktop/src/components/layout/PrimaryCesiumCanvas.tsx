@@ -4,9 +4,10 @@ import {
   type MapDiagnosticEvent,
   type MapEngine,
 } from "@geolibre/map";
-import { useMemo, type ComponentType, type ReactElement, type RefObject } from "react";
+import { useEffect, useMemo, type ComponentType, type ReactElement, type RefObject } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { useCesiumIonToken } from "../../hooks/useCesiumIonToken";
+import { ensureCesiumToolbarStylesLoaded } from "../../lib/lazy-plugin-styles";
 import { openSettingsSection } from "./SettingsDialog";
 
 // `Trans` is typed against the catalog's key union; the cast keeps the rich
@@ -82,6 +83,9 @@ export function PrimaryCesiumCanvas({
 }: PrimaryCesiumCanvasProps) {
   const { t } = useTranslation();
   const ionToken = useCesiumIonToken();
+  useEffect(() => {
+    void ensureCesiumToolbarStylesLoaded();
+  }, []);
   // Cesium's toolbar widgets render outside React and hardcode English, so the
   // translated tooltips are handed to the canvas the way `MapController`'s
   // compass and terrain labels are pushed in. Memoized on the language rather

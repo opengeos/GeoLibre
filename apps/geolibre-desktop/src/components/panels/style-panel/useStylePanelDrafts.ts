@@ -117,6 +117,7 @@ export function useStylePanelDrafts(
     min: number;
     max: number;
   } | null>(null);
+  const [draftLayerId, setDraftLayerId] = useState<string | null>(layer?.id ?? null);
   const [loadedVectorPropertyValues, setLoadedVectorPropertyValues] = useState<{
     layerId: string;
     /** Attribute samples keyed by property name (classification and/or size field). */
@@ -127,6 +128,7 @@ export function useStylePanelDrafts(
 
   useEffect(() => {
     if (!layer) {
+      setDraftLayerId(null);
       setDraftBeforeId("");
       setDraftColorExpression("");
       setDraftHeightExpression("");
@@ -153,6 +155,7 @@ export function useStylePanelDrafts(
       return;
     }
 
+    setDraftLayerId(layer.id);
     setDraftBeforeId(layer.beforeId ?? "");
     setDraftColorExpression(styleValue(layer.style, "extrusionColorExpression"));
     setDraftHeightExpression(styleValue(layer.style, "extrusionHeightExpression"));
@@ -228,6 +231,10 @@ export function useStylePanelDrafts(
   // graduated colors load field A.
   useEffect(() => {
     if (!layer) return;
+    // Wait until draftVectorStyleMode/draftVectorStyleProperty have been
+    // re-seeded for this layer so switching layers never fires a wasted DuckDB
+    // query with the previous layer's attribute name.
+    if (draftLayerId !== layer.id) return;
     const usesDuckDbVector = layer.metadata.sourceKind === "maplibre-gl-vector";
     const usesVectorTiles =
       layer.type === "vector-tiles" || layer.type === "pmtiles" || layer.type === "mbtiles";
@@ -352,6 +359,7 @@ export function useStylePanelDrafts(
       cancelled = true;
     };
   }, [
+    draftLayerId,
     draftVectorStyleMode,
     draftVectorStyleProperty,
     layer?.geojson,

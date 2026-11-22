@@ -1,0 +1,218 @@
+/*
+ * GeoAgent layout and dark theme overrides. Loaded lazily after
+ * `maplibre-gl-geoagent/style.css` by `lazy-plugin-styles.ts`, so these rules
+ * win the cascade over the upstream stylesheet.
+ */
+.geoagent-control .geoagent-control-toggle {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+.geoagent-control .geoagent-control-icon {
+  align-items: center;
+  display: flex;
+  height: 100%;
+  justify-content: center;
+  width: 100%;
+}
+
+.geoagent-control .geoagent-control-icon svg {
+  transform: translateX(1px);
+}
+
+.geoagent-panel input:focus,
+.geoagent-panel select:focus,
+.geoagent-panel textarea:focus,
+.geoagent-panel input:focus-visible,
+.geoagent-panel select:focus-visible,
+.geoagent-panel textarea:focus-visible {
+  border-color: #2f8f85;
+  box-shadow: inset 0 0 0 1px #2f8f85;
+  outline: none;
+}
+
+/* The Earth Engine "Sign in" button is injected between the project grid and
+   the status text inside the (un-padded) details element, so inset it to match
+   the 10px gutter of the surrounding content and space it from the status. */
+.geoagent-panel button.geolibre-ee-sign-in {
+  margin: 0 10px 8px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d7dde5;
+  border-radius: 6px;
+  background: #fff;
+  color: #17202a;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.geoagent-panel button.geolibre-ee-sign-in:hover {
+  border-color: #b0bec5;
+  background: #f1f5f9;
+}
+
+.geoagent-panel button.geolibre-ee-sign-in:focus-visible {
+  border-color: #2f8f85;
+  box-shadow: inset 0 0 0 1px #2f8f85;
+  outline: none;
+}
+
+.geoagent-panel button.geolibre-ee-sign-in:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/*
+ * GeoAgent dark theme. The upstream stylesheet hardcodes light literal colors
+ * (and pins `color-scheme: light`) with no `.dark` / prefers-color-scheme rules,
+ * so remap the panel onto the app's design tokens under `.dark` so it tracks
+ * GeoLibre's in-app light/dark toggle.
+ */
+.dark .geoagent-panel {
+  background: hsl(var(--background));
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+  color-scheme: dark;
+}
+
+.dark .geoagent-settings > summary,
+.dark .geoagent-earth-engine summary,
+.dark .geoagent-model-suggestion {
+  color: hsl(var(--foreground));
+}
+
+.dark .geoagent-panel label,
+.dark .geoagent-role,
+.dark .geoagent-earth-engine-status,
+.dark .geoagent-text.markdown blockquote {
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .geoagent-panel input,
+.dark .geoagent-panel select,
+.dark .geoagent-panel textarea {
+  background: hsl(var(--background));
+  border-color: hsl(var(--input));
+  color: hsl(var(--foreground));
+}
+
+.dark .geoagent-panel input::placeholder,
+.dark .geoagent-panel textarea::placeholder {
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .geoagent-settings,
+.dark .geoagent-earth-engine {
+  background: hsl(var(--muted));
+  border-color: hsl(var(--border));
+}
+
+.dark .geoagent-icon-button,
+.dark .geoagent-panel button.secondary,
+.dark .geoagent-panel .geoagent-checkbox-row,
+.dark .geoagent-panel button.geolibre-ee-sign-in {
+  background: hsl(var(--background));
+  border-color: hsl(var(--input));
+  color: hsl(var(--foreground));
+}
+
+.dark .geoagent-icon-button:hover,
+.dark .geoagent-panel button.secondary:hover:not(:disabled),
+.dark .geoagent-panel button.geolibre-ee-sign-in:hover {
+  background: hsl(var(--accent));
+}
+
+.dark .geoagent-status {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .geoagent-status.connected,
+.dark .geoagent-config-note.success {
+  background: rgb(16 185 129 / 0.16);
+  color: #6ee7b7;
+}
+
+.dark .geoagent-status.setup {
+  background: rgb(245 158 11 / 0.16);
+  color: #fcd34d;
+}
+
+.dark .geoagent-status.connecting {
+  background: rgb(59 130 246 / 0.18);
+  color: #93c5fd;
+}
+
+.dark .geoagent-status.error,
+.dark .geoagent-config-note.error {
+  background: rgb(239 68 68 / 0.16);
+  color: #fca5a5;
+}
+
+.dark .geoagent-config-note.info {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .geoagent-model-suggestions {
+  background: hsl(var(--popover));
+  border-color: hsl(var(--border));
+}
+
+.dark .geoagent-model-suggestion:hover,
+.dark .geoagent-model-suggestion.active {
+  background: hsl(var(--accent));
+}
+
+.dark .geoagent-log {
+  background: hsl(var(--muted));
+  border-color: hsl(var(--border));
+}
+
+.dark .geoagent-entry {
+  border-bottom-color: hsl(var(--border));
+}
+
+.dark .geoagent-log,
+.dark .geoagent-model-suggestions,
+.dark .geoagent-panel textarea,
+.dark .geoagent-text.markdown pre,
+.dark .geoagent-text.markdown table {
+  scrollbar-color: hsl(var(--muted-foreground)) hsl(var(--muted));
+}
+
+.dark .geoagent-log::-webkit-scrollbar-track,
+.dark .geoagent-panel textarea::-webkit-scrollbar-track,
+.dark .geoagent-text.markdown pre::-webkit-scrollbar-track,
+.dark .geoagent-text.markdown table::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+}
+
+.dark .geoagent-log::-webkit-scrollbar-thumb,
+.dark .geoagent-panel textarea::-webkit-scrollbar-thumb,
+.dark .geoagent-text.markdown pre::-webkit-scrollbar-thumb,
+.dark .geoagent-text.markdown table::-webkit-scrollbar-thumb {
+  border-color: hsl(var(--muted));
+  background: hsl(var(--muted-foreground));
+}
+
+.dark .geoagent-text.markdown a {
+  color: #5eead4;
+}
+
+.dark .geoagent-text.markdown code {
+  background: hsl(var(--accent));
+  color: hsl(var(--foreground));
+}
+
+.dark .geoagent-text.markdown pre {
+  border-color: hsl(var(--border));
+  background: hsl(var(--background));
+}
+
+.dark .geoagent-text.markdown blockquote,
+.dark .geoagent-text.markdown th,
+.dark .geoagent-text.markdown td {
+  border-color: hsl(var(--border));
+}

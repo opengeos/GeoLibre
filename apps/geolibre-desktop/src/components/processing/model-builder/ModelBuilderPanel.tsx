@@ -424,6 +424,9 @@ export function ModelBuilderPanel({
    * shrinks to fit instead of hanging off the edge with its buttons out of
    * reach.
    */
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
+
   const fitToContainer = useCallback(() => {
     const bounds = sectionRef.current?.parentElement?.getBoundingClientRect();
     if (!bounds) return;
@@ -432,16 +435,17 @@ export function ModelBuilderPanel({
       setSize({ width: bounds.width, height: bounds.height });
       return;
     }
+    const currentSize = sizeRef.current;
     const maxWidth = Math.max(FLOOR_WIDTH, bounds.width - EDGE_MARGIN * 2);
     const maxHeight = Math.max(FLOOR_HEIGHT, bounds.height - EDGE_MARGIN * 2);
-    const width = clamp(size.width, Math.min(MIN_WIDTH, maxWidth), maxWidth);
-    const height = clamp(size.height, Math.min(MIN_HEIGHT, maxHeight), maxHeight);
-    if (width !== size.width || height !== size.height) setSize({ width, height });
+    const width = clamp(currentSize.width, Math.min(MIN_WIDTH, maxWidth), maxWidth);
+    const height = clamp(currentSize.height, Math.min(MIN_HEIGHT, maxHeight), maxHeight);
+    if (width !== currentSize.width || height !== currentSize.height) setSize({ width, height });
     setPosition((current) => ({
       x: clamp(current.x, 0, Math.max(0, bounds.width - width - EDGE_MARGIN)),
       y: clamp(current.y, 0, Math.max(0, bounds.height - height - EDGE_MARGIN)),
     }));
-  }, [maximized, size.width, size.height]);
+  }, [maximized]);
 
   // Re-fit whenever the map area changes, not just when the panel opens: a
   // resized window or a side panel opening would otherwise leave the panel

@@ -4,7 +4,7 @@
       "step": 0,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
           "addSource",
@@ -167,7 +167,7 @@
       "step": 1,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -327,7 +327,7 @@
       "step": 2,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -487,7 +487,7 @@
       "step": 3,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -624,7 +624,7 @@
       "step": 4,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -800,7 +800,7 @@
       "step": 5,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -957,7 +957,7 @@
       "step": 6,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -1121,7 +1121,7 @@
       "step": 7,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -1254,7 +1254,7 @@
       "step": 8,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -1427,7 +1427,7 @@
       "step": 9,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -1600,7 +1600,7 @@
       "step": 10,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -1743,6 +1743,7 @@
             }
           }
         ],
+        ["getSource", "source-poly-inverted"],
         ["getLayer", "layer-poly-inverted-fill"],
         ["getLayer", "anchor-layer"],
         [
@@ -1801,7 +1802,7 @@
       "step": 11,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -1982,7 +1983,7 @@
       "step": 12,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -2154,6 +2155,7 @@
             }
           }
         ],
+        ["getSource", "source-poly-generator"],
         ["getLayer", "layer-poly-generator-fill"],
         ["getLayer", "layer-poly-generator-line"],
         ["getLayer", "layer-poly-generator-circle"],
@@ -2190,7 +2192,7 @@
       "step": 13,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -2440,7 +2442,7 @@
       "step": 14,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -2575,7 +2577,7 @@
       "step": 15,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -2722,7 +2724,7 @@
       "step": 16,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -2872,7 +2874,7 @@
       "step": 17,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -3010,7 +3012,7 @@
       "step": 18,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -3168,7 +3170,7 @@
       "step": 19,
       "calls": [
         ["getSource", "source-poly"],
-        ["getStyle"],
+        ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         ["getSource", "source-poly"],
         [
@@ -3318,7 +3320,7 @@
       "step": 0,
       "calls": [
         ["getSource", "source-line"],
-        ["getStyle"],
+        ["getSource", "source-line"],
         ["getSource", "source-line"],
         [
           "addSource",
@@ -3415,7 +3417,7 @@
       "step": 1,
       "calls": [
         ["getSource", "source-line"],
-        ["getStyle"],
+        ["getSource", "source-line"],
         ["getSource", "source-line"],
         ["getSource", "source-line"],
         [
@@ -3503,7 +3505,7 @@
       "step": 2,
       "calls": [
         ["getSource", "source-line"],
-        ["getStyle"],
+        ["getSource", "source-line"],
         ["getSource", "source-line"],
         ["getSource", "source-line"],
         [
@@ -3660,7 +3662,7 @@
       "step": 3,
       "calls": [
         ["getSource", "source-line"],
-        ["getStyle"],
+        ["getSource", "source-line"],
         ["getSource", "source-line"],
         ["getSource", "source-line"],
         [
@@ -3850,6 +3852,7 @@
             }
           }
         ],
+        ["getSource", "source-line-generator"],
         ["getLayer", "layer-line-generator-fill"],
         ["getLayer", "anchor-layer"],
         [
@@ -3906,7 +3909,7 @@
       "step": 4,
       "calls": [
         ["getSource", "source-line"],
-        ["getStyle"],
+        ["getSource", "source-line"],
         ["getSource", "source-line"],
         ["getSource", "source-line"],
         [
@@ -3988,7 +3991,7 @@
       "step": 0,
       "calls": [
         ["getSource", "source-pts"],
-        ["getStyle"],
+        ["getSource", "source-pts"],
         ["getSource", "source-pts"],
         [
           "addSource",
@@ -4148,7 +4151,7 @@
       "step": 1,
       "calls": [
         ["getSource", "source-pts"],
-        ["getStyle"],
+        ["getSource", "source-pts"],
         ["getSource", "source-pts"],
         ["getSource", "source-pts"],
         [
@@ -4265,7 +4268,7 @@
       "step": 2,
       "calls": [
         ["getSource", "source-pts"],
-        ["getStyle"],
+        ["getSource", "source-pts"],
         ["getSource", "source-pts"],
         ["getSource", "source-pts"],
         [
@@ -4400,7 +4403,7 @@
       "step": 3,
       "calls": [
         ["getSource", "source-pts"],
-        ["getStyle"],
+        ["getSource", "source-pts"],
         ["getSource", "source-pts"],
         ["getSource", "source-pts"],
         [
@@ -4553,7 +4556,7 @@
       "calls": [
         ["getZoom"],
         ["getSource", "source-pts"],
-        ["getStyle"],
+        ["getSource", "source-pts"],
         ["getLayer", "layer-pts-fill"],
         ["getLayer", "layer-pts-extrusion"],
         ["getLayer", "layer-pts-line"],
@@ -4780,7 +4783,7 @@
       "step": 5,
       "calls": [
         ["getSource", "source-pts"],
-        ["getStyle"],
+        ["getSource", "source-pts"],
         ["getLayer", "layer-pts-fill"],
         ["getLayer", "layer-pts-extrusion"],
         ["getLayer", "layer-pts-line"],
@@ -4974,6 +4977,7 @@
             }
           }
         ],
+        ["getSource", "source-pts-label"],
         ["getLayer", "layer-pts-label"],
         ["getLayer", "layer-pts-label"],
         ["getLayer", "anchor-layer"],
@@ -5018,7 +5022,7 @@
       "step": 6,
       "calls": [
         ["getSource", "source-pts"],
-        ["getStyle"],
+        ["getSource", "source-pts"],
         ["getSource", "source-pts"],
         ["getSource", "source-pts"],
         [
@@ -5182,7 +5186,7 @@
       "step": 7,
       "calls": [
         ["getSource", "source-pts"],
-        ["getStyle"],
+        ["getSource", "source-pts"],
         ["getSource", "source-pts"],
         ["getSource", "source-pts"],
         [
@@ -5337,7 +5341,7 @@
       "step": 8,
       "calls": [
         ["getSource", "source-pts"],
-        ["getStyle"],
+        ["getSource", "source-pts"],
         ["getSource", "source-pts"],
         ["getSource", "source-pts"],
         [
@@ -5644,6 +5648,7 @@
             }
           }
         ],
+        ["getSource", "source-pts-generator"],
         ["getLayer", "layer-pts-generator-fill"],
         ["getLayer", "anchor-layer"],
         [
@@ -5700,7 +5705,7 @@
       "step": 9,
       "calls": [
         ["getSource", "source-pts"],
-        ["getStyle"],
+        ["getSource", "source-pts"],
         ["getSource", "source-pts"],
         ["getSource", "source-pts"],
         [
@@ -5816,7 +5821,7 @@
       "step": 0,
       "calls": [
         ["getSource", "source-kml"],
-        ["getStyle"],
+        ["getSource", "source-kml"],
         ["getSource", "source-kml"],
         [
           "addSource",
@@ -5935,7 +5940,7 @@
       "step": 1,
       "calls": [
         ["getSource", "source-kml"],
-        ["getStyle"],
+        ["getSource", "source-kml"],
         ["getSource", "source-kml"],
         ["getSource", "source-kml"],
         [
@@ -6019,7 +6024,7 @@
       "step": 0,
       "calls": [
         ["getSource", "source-mix"],
-        ["getStyle"],
+        ["getSource", "source-mix"],
         ["getSource", "source-mix"],
         [
           "addSource",
@@ -6271,7 +6276,7 @@
       "step": 1,
       "calls": [
         ["getSource", "source-mix"],
-        ["getStyle"],
+        ["getSource", "source-mix"],
         ["getSource", "source-mix"],
         ["getSource", "source-mix"],
         [
@@ -6557,7 +6562,7 @@
       "step": 2,
       "calls": [
         ["getSource", "source-mix"],
-        ["getStyle"],
+        ["getSource", "source-mix"],
         ["getSource", "source-mix"],
         ["getSource", "source-mix"],
         [
@@ -6785,7 +6790,7 @@
       "step": 3,
       "calls": [
         ["getSource", "source-mix"],
-        ["getStyle"],
+        ["getSource", "source-mix"],
         ["getSource", "source-mix"],
         ["getSource", "source-mix"],
         [
@@ -7017,7 +7022,7 @@
       "step": 4,
       "calls": [
         ["getSource", "source-mix"],
-        ["getStyle"],
+        ["getSource", "source-mix"],
         ["getSource", "source-mix"],
         ["getSource", "source-mix"],
         [

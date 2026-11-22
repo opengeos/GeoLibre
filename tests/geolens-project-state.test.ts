@@ -135,13 +135,14 @@ describe("layer key mapping", () => {
 
 describe("Python mirror of the publishable sub-keys", () => {
   it("lists the same sub-keys as the TypeScript entry and the state module", () => {
-    const source = readFileSync(
-      new URL("../python/src/geolibre/project.py", import.meta.url),
-      "utf8",
-    );
-    const match = /"maplibre-gl-geolens": \(([^)]*)\)/.exec(source);
-    assert.ok(match, "the Python entry is missing");
-    const python = [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    const constants = JSON.parse(
+      readFileSync(
+        new URL("../python/src/geolibre/project-constants.json", import.meta.url),
+        "utf8",
+      ),
+    ) as { PUBLISHABLE_PLUGIN_SETTINGS?: Record<string, string[]> };
+    const python = constants.PUBLISHABLE_PLUGIN_SETTINGS?.[GEOLENS_PLUGIN_ID];
+    assert.ok(Array.isArray(python), "the Python project-constants.json entry is missing");
     assert.deepEqual(python, [...GEOLENS_PROJECT_STATE_KEYS]);
     assert.deepEqual(PUBLISHABLE_PLUGIN_SETTINGS[GEOLENS_PLUGIN_ID], python);
   });
