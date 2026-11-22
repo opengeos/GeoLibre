@@ -845,10 +845,11 @@ function resolveDataSource(
   if (isNetworkPath(workspace)) return { reason: "network-path", ...(folder ? { folder } : {}) };
 
   let path = workspace;
-  if (workspaceFactory.includes("shapefile") && dataset) {
-    path = joinPath(workspace, /\.[a-z0-9]+$/i.test(dataset) ? dataset : `${dataset}.shp`);
-  } else if (workspaceFactory.includes("text") && dataset) {
-    path = joinPath(workspace, dataset);
+  // The same file name `folderSource` offers for Locate, so a located layer
+  // reads the file the import would have.
+  const folderFile = folderDatasetFile(workspace, dataset, workspaceFactory);
+  if ((workspaceFactory.includes("shapefile") || workspaceFactory.includes("text")) && folderFile) {
+    path = joinPath(workspace, folderFile);
   } else if (workspaceFactory.includes("filegdb") || extension(workspace) === "gdb") {
     // Reported distinctly from a plain unsupported "format" because a File
     // Geodatabase backs whole projects at a time -- a .gdb-based project can
@@ -885,7 +886,7 @@ function resolveDataSource(
     path = workspace;
   } else if (!path && dataset) {
     path = dataset;
-  } else if (dataset && !extension(workspace)) {
+  } else if (folderFile && !extension(workspace)) {
     // A workspace with no extension is a containing folder, so the dataset
     // carries the file name -- the shape shapefile and delimited-text
     // connections use. Joining them generically lets the other file formats in
@@ -906,25 +907,35 @@ function resolveDataSource(
 }
 
 /**
+ * The file a connection names inside a folder workspace: the dataset, with
+ * `.shp` added for a shapefile dataset that has no extension. Geodatabases and
+ * GeoPackages are containers rather than folders, so they name none. Shared by
+ * {@link resolveDataSource} and {@link folderSource}, so the file an import
+ * reads and the one a Locate folder looks for cannot drift apart.
+ */
+function folderDatasetFile(
+  workspace: string,
+  dataset: string,
+  workspaceFactory: string,
+): string | undefined {
+  if (!dataset || workspaceFactory.includes("filegdb")) return undefined;
+  if (workspaceFactory.includes("shapefile")) {
+    return /\.[a-z0-9]+$/i.test(dataset) ? dataset : `${dataset}.shp`;
+  }
+  return workspaceFactory.includes("text") || !extension(workspace) ? dataset : undefined;
+}
+
+/**
  * The folder reference of a connection whose data is one file inside a
- * workspace folder, mirroring the joins {@link resolveDataSource} makes.
- * Geodatabases and GeoPackages are containers rather than folders, so they
- * have none.
+ * workspace folder (see {@link folderDatasetFile}).
  */
 function folderSource(
   workspace: string,
   dataset: string,
   workspaceFactory: string,
 ): ArcgisFolderSource | undefined {
-  if (!workspace || !dataset || workspaceFactory.includes("filegdb")) return undefined;
-  let file: string;
-  if (workspaceFactory.includes("shapefile")) {
-    file = /\.[a-z0-9]+$/i.test(dataset) ? dataset : `${dataset}.shp`;
-  } else if (workspaceFactory.includes("text") || !extension(workspace)) {
-    file = dataset;
-  } else {
-    return undefined;
-  }
+  const file = workspace ? folderDatasetFile(workspace, dataset, workspaceFactory) : undefined;
+  if (!file) return undefined;
   const segments = file
     .replace(/\\/g, "/")
     .split("/")
@@ -936,8 +947,10 @@ function folderSource(
   if (segments.length === 0 || segments.some((part) => part === ".." || part.includes(":"))) {
     return undefined;
   }
-  file = segments.join("/");
-  return SUPPORTED_VECTOR_EXTENSIONS.has(extension(file)) ? { workspace, file } : undefined;
+  const relative = segments.join("/");
+  return SUPPORTED_VECTOR_EXTENSIONS.has(extension(relative))
+    ? { workspace, file: relative }
+    : undefined;
 }
 
 /**

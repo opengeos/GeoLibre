@@ -1077,10 +1077,26 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       // Folder-backed layers are read before the project loads too, so a file
       // that is not where the project says is reported with a Locate folder
       // instead of appearing and then being dropped by the reopen restore.
-      const pending =
-        isTauri() && !session.superseded()
-          ? await loadArcgisFolderLayers(imported, result.path, readLocalVectorFeatures)
-          : null;
+      let pending: Awaited<ReturnType<typeof loadArcgisFolderLayers>> | null = null;
+      if (isTauri() && !session.superseded()) {
+        const folderLayerCount = imported.project.layers.filter(
+          (layer) => layer.sourcePath && imported.repair.folderSources.has(layer.id),
+        ).length;
+        // A project with many shapefiles can take a while to read; say so,
+        // as the geodatabase reads above do.
+        const progressId =
+          folderLayerCount > 0
+            ? notify.info(t("toolbar.item.arcgisImportReadingFiles", { count: folderLayerCount }), {
+                durationMs: null,
+                dedupeKey: `arcgis-folder-read:${crypto.randomUUID()}`,
+              })
+            : null;
+        try {
+          pending = await loadArcgisFolderLayers(imported, result.path, readLocalVectorFeatures);
+        } finally {
+          if (progressId !== null) dismissNotification(progressId);
+        }
+      }
       if (session.superseded()) return;
       if (
         useAppStore.getState().ui.attributeTableDrafts !== approvedDrafts &&

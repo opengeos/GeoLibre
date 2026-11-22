@@ -4357,6 +4357,8 @@
       "arcgisUnnamedMap": "Map {{number}}",
       "arcgisImportReadingGdb_one": "Reading {{count}} File Geodatabase layer…",
       "arcgisImportReadingGdb_other": "Reading {{count}} File Geodatabase layers…",
+      "arcgisImportReadingFiles_one": "Reading {{count}} local data layer…",
+      "arcgisImportReadingFiles_other": "Reading {{count}} local data layers…",
       "arcgisImportWarnings_one": "The project was imported, but {{count}} layer could not be loaded.",
       "arcgisImportWarnings_other": "The project was imported, but {{count}} layers could not be loaded.",
       "arcgisUnknownLayerType": "unknown",

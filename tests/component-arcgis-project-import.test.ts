@@ -9,6 +9,7 @@ import type { ProjectFileActions } from "../apps/geolibre-desktop/src/hooks/useP
 const { useProjectFileActions } =
   await import("../apps/geolibre-desktop/src/hooks/useProjectFileActions");
 const { VectorTileLayer } = await import("@esri/maplibre-arcgis");
+const { useNotificationStore } = await import("../apps/geolibre-desktop/src/lib/notify");
 
 /** Render the hook and hand back its latest actions. */
 function renderActions(): () => ProjectFileActions {
@@ -572,6 +573,70 @@ describe("Import ArcGIS Pro project with File Geodatabase layers (desktop)", () 
       assert.equal(actions().arcgisImportReport.warnings, null);
       // The feature class is not read once the import is abandoned.
       assert.deepEqual(desktop.requests, ["vector-layers"]);
+    } finally {
+      desktop.restore();
+    }
+  });
+
+  it("says it is reading local data files while a project's folder layers load", async () => {
+    const desktop = desktopImport({
+      type: "CIMMap",
+      name: "Imported map",
+      layerDefinitions: [
+        {
+          type: "CIMFeatureLayer",
+          name: "Roads",
+          featureTable: {
+            dataConnection: {
+              workspaceConnectionString: "DATABASE=/work/data",
+              dataset: "roads.geojson",
+            },
+          },
+        },
+      ],
+    });
+    // Hold the data file's read until the test has seen the notice.
+    const tauri = (window as Window & { __TAURI_INTERNALS__?: { invoke: Function } })
+      .__TAURI_INTERNALS__!;
+    const invoke = tauri.invoke;
+    let releaseRead = () => {};
+    const held = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    tauri.invoke = async (command: string, args: { path?: string }) => {
+      if (command === "plugin:fs|read_file" && args.path === "/work/data/roads.geojson") {
+        await held;
+      }
+      return invoke(command, args);
+    };
+    const reading = () =>
+      useNotificationStore
+        .getState()
+        .notifications.filter((entry) => entry.message === "Reading 1 local data layer…");
+    try {
+      const actions = renderActions();
+      const importing = actions().handleImportArcgisProject();
+      await waitFor(() => assert.equal(reading().length, 1));
+      releaseRead();
+      await act(() => importing);
+      assert.deepEqual(reading(), []);
+      // The harness cannot parse the file, so the layer is held back and
+      // offered for a Locate folder rather than loaded empty.
+      assert.deepEqual(layerNames(), []);
+      assert.deepEqual(
+        actions().arcgisImportReport.warnings?.map((warning) => [
+          warning.layerName,
+          warning.reason,
+        ]),
+        [
+          ["Imported map", "map-extent"],
+          ["Roads", "data-not-found"],
+        ],
+      );
+      assert.deepEqual(
+        actions().arcgisImportReport.repairGroups.map((group) => [group.label, group.layerNames]),
+        [["/work/data", ["Roads"]]],
+      );
     } finally {
       desktop.restore();
     }
