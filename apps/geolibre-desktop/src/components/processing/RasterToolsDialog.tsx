@@ -1139,9 +1139,7 @@ function RasterParameterField({
             id={param.id}
             value={(value as string) ?? ""}
             placeholder={
-              readOnly
-                ? t("toolbar.rasterTool.chooseGeoTiff")
-                : t("processing.filePicker.filePath")
+              readOnly ? t("toolbar.rasterTool.chooseGeoTiff") : t("processing.filePicker.filePath")
             }
             readOnly={readOnly}
             onChange={readOnly ? undefined : (e) => onChange(e.target.value)}

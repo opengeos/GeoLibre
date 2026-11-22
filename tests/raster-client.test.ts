@@ -360,7 +360,8 @@ describe("raster-client compute", () => {
     const userDefinedA = { ...a, geoKeys: { ProjectedCSTypeGeoKey: 32767 } };
     const userDefinedB = { ...b, geoKeys: { ProjectedCSTypeGeoKey: 32767 } };
     assert.throws(
-      () => rasterCalc(userDefinedA, { expression: "A + B", additionalInputs: { B: userDefinedB } }),
+      () =>
+        rasterCalc(userDefinedA, { expression: "A + B", additionalInputs: { B: userDefinedB } }),
       /user-defined CRS/,
     );
     const otherCrs = { ...b, geoKeys: { ProjectedCSTypeGeoKey: 32617 } };
