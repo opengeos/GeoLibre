@@ -22,6 +22,7 @@ import {
   loadArcgisFolderLayers,
   locatedFilePath,
   readLocatedArcgisLayers,
+  withoutLocatedWarnings,
   type ArcgisWorkspaceRepairSession,
 } from "../apps/geolibre-desktop/src/lib/arcgis-workspace-repair";
 import { hostedFeatureLayer } from "./helpers/arcgis-aprx-fixtures";
@@ -697,6 +698,33 @@ describe("ArcGIS Pro workspace repair: Locate folder", () => {
       assert.deepEqual(placed(), full);
     });
   }
+});
+
+describe("ArcGIS Pro workspace repair: report warnings", () => {
+  it("drops a located layer's load failure but keeps its symbology notes", () => {
+    const warnings = withoutLocatedWarnings(
+      [
+        { layerName: "Roads", reason: "data-not-found", layerId: "roads" },
+        {
+          layerName: "Roads",
+          reason: "symbology-partial",
+          symbologyIssue: "visual-variables",
+          layerId: "roads",
+        },
+        { layerName: "Rivers", reason: "network-path", layerId: "rivers" },
+        { layerName: "Basemap", reason: "service" },
+      ],
+      new Set(["roads"]),
+    );
+    assert.deepEqual(
+      warnings.map((warning) => [warning.layerName, warning.reason]),
+      [
+        ["Roads", "symbology-partial"],
+        ["Rivers", "network-path"],
+        ["Basemap", "service"],
+      ],
+    );
+  });
 });
 
 describe("ArcGIS Pro workspace repair: random projects", () => {

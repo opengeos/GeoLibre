@@ -1,4 +1,4 @@
-import { act, cleanup, render, resetStores, useAppStore } from "./helpers/dom";
+import { act, cleanup, render, resetStores, screen, useAppStore } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { createElement } from "react";
@@ -10,6 +10,8 @@ import { geojsonLayer } from "./helpers/layer-fixtures";
 // Loaded after the harness so its CSS imports and Vite globals are handled.
 const { useArcgisImportReport } =
   await import("../apps/geolibre-desktop/src/hooks/useArcgisImportReport");
+const { ArcgisImportReportDialog } =
+  await import("../apps/geolibre-desktop/src/components/layout/toolbar/ArcgisImportReportDialog");
 
 /** Render the hook and hand back its latest state. */
 function renderReport(): () => ArcgisImportReport {
@@ -159,5 +161,58 @@ describe("ArcGIS Pro import report", () => {
     } finally {
       desktop.restore();
     }
+  });
+
+  it("offers a Locate folder and counts only layers that did not load", () => {
+    const report: ArcgisImportReport = {
+      warnings: [
+        { layerName: "Roads", reason: "data-not-found", layerId: "roads" },
+        {
+          layerName: "Roads",
+          reason: "symbology-partial",
+          symbologyIssue: "visual-variables",
+          layerId: "roads",
+        },
+      ],
+      repairGroups: [
+        { key: "c:\\old", label: "C:\\Old", layerIds: ["roads"], layerNames: ["Roads"] },
+      ],
+      repairBusy: false,
+      repairResult: null,
+      show: () => {},
+      close: () => {},
+      locate: async () => {},
+    };
+    render(createElement(ArcgisImportReportDialog, { report }));
+    // One layer did not load; its symbology note is not counted as another.
+    screen.getByText("The project was imported, but 1 layer could not be loaded.");
+    screen.getByText("Locate moved data");
+    screen.getByText("C:\\Old");
+    screen.getByRole("button", { name: "Locate folder…" });
+  });
+
+  it("says only the drawing differs once every layer has loaded", () => {
+    const report: ArcgisImportReport = {
+      warnings: [
+        {
+          layerName: "Roads",
+          reason: "symbology-partial",
+          symbologyIssue: "visual-variables",
+          layerId: "roads",
+        },
+      ],
+      repairGroups: [],
+      repairBusy: false,
+      repairResult: { folder: "C:\\New", restored: 1, remaining: 0 },
+      show: () => {},
+      close: () => {},
+      locate: async () => {},
+    };
+    render(createElement(ArcgisImportReportDialog, { report }));
+    screen.getByText(
+      "The project was imported, but some of it is not shown exactly as in ArcGIS Pro.",
+    );
+    screen.getByText("Loaded 1 layer from the chosen folder.");
+    assert.equal(screen.queryByRole("button", { name: "Locate folder…" }), null);
   });
 });

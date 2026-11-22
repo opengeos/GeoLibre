@@ -19,6 +19,7 @@ import {
   arcgisWorkspaceIdentity,
   type ArcgisFolderSource,
   type ArcgisProjectImportResult,
+  type ArcgisProjectImportWarning,
 } from "./arcgis-project-import";
 import { joinLocalPath } from "./file-io/paths";
 
@@ -121,6 +122,23 @@ export async function loadArcgisFolderLayers(
     return false;
   });
   return pending;
+}
+
+/**
+ * The import warnings left once a Locate folder has loaded some layers: each
+ * loaded layer's load failure goes, but its symbology notes stay, since they
+ * describe how the now-visible layer is drawn.
+ *
+ * @param warnings - The warnings the report shows.
+ * @param loaded - Import ids of the layers the Locate folder added.
+ */
+export function withoutLocatedWarnings(
+  warnings: readonly ArcgisProjectImportWarning[],
+  loaded: ReadonlySet<string>,
+): ArcgisProjectImportWarning[] {
+  return warnings.filter(
+    (warning) => warning.symbologyIssue || !warning.layerId || !loaded.has(warning.layerId),
+  );
 }
 
 /**

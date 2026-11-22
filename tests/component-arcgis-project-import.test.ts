@@ -395,7 +395,10 @@ describe("Import ArcGIS Pro project with File Geodatabase layers (desktop)", () 
       // The group held only the missing feature class.
       assert.deepEqual(useAppStore.getState().layerGroups, []);
       assert.deepEqual(
-        actions().arcgisImportWarnings?.map((warning) => [warning.layerName, warning.reason]),
+        actions().arcgisImportReport.warnings?.map((warning) => [
+          warning.layerName,
+          warning.reason,
+        ]),
         [
           ["Imported map", "map-extent"],
           ["Gone", "missing-source"],
@@ -421,7 +424,7 @@ describe("Import ArcGIS Pro project with File Geodatabase layers (desktop)", () 
       await act(() => importing);
       assert.equal(useAppStore.getState().projectName, "Opened");
       assert.deepEqual(layerNames(), []);
-      assert.equal(actions().arcgisImportWarnings, null);
+      assert.equal(actions().arcgisImportReport.warnings, null);
       assert.ok(!desktop.requests.includes("vector-to-vector"));
     } finally {
       desktop.restore();
@@ -566,7 +569,7 @@ describe("Import ArcGIS Pro project with File Geodatabase layers (desktop)", () 
       assert.deepEqual(layerNames(), []);
       assert.equal(useAppStore.getState().isDirty, false);
       assert.equal(pastLength(), history);
-      assert.equal(actions().arcgisImportWarnings, null);
+      assert.equal(actions().arcgisImportReport.warnings, null);
       // The feature class is not read once the import is abandoned.
       assert.deepEqual(desktop.requests, ["vector-layers"]);
     } finally {

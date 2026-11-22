@@ -1139,7 +1139,9 @@ function isLocalFileGeodatabasePath(path: string): boolean {
   // accepts UNC paths, so refuse them here too rather than rely on that.
   if (isNetworkPath(path) || !isAbsolutePath(path)) return false;
   const normalised = path.replace(/\\/g, "/");
-  if (/^\/vsi[a-z0-9_]*\//i.test(normalised)) return false;
+  // A leading `/` in a project saved on Windows resolves to the project's
+  // drive root, so `/vsizip/...` arrives as `C:/vsizip/...`.
+  if (/^(?:[a-z]:)?\/vsi[a-z0-9_]*\//i.test(normalised)) return false;
   const segments = normalised.split("/");
   if (segments.some((segment) => /^[a-z][a-z0-9+.-]+:$/i.test(segment))) return false;
   return /\.gdb$/i.test(segments[segments.length - 1] ?? "") && !/[?#]/.test(normalised);

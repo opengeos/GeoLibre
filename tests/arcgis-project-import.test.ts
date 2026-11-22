@@ -1112,7 +1112,8 @@ describe("ArcGIS Pro File Geodatabase layers", () => {
     assert.deepEqual(
       result.fileGeodatabaseLayers.map((entry) => [entry.name, entry.gdbPath]),
       [
-        ["Posix", "/data/city.gdb"],
+        // A single leading separator is the root of the project's own drive.
+        ["Posix", "C:/data/city.gdb"],
         ["Relative", "C:/work/data/City.GDB"],
       ],
     );

@@ -1025,7 +1025,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         // Their symbology notes go with them: the layers will not be shown.
         const unresolved = new Set(imported.repair.unresolvedLayers.map((layer) => layer.id));
         imported.warnings = imported.warnings.filter(
-          (warning) => !warning.symbologyIssue || !warning.layerId || !unresolved.has(warning.layerId),
+          (warning) =>
+            !warning.symbologyIssue || !warning.layerId || !unresolved.has(warning.layerId),
         );
         imported.repair.unresolvedLayers = [];
         dropArcgisImportLayers(imported, new Set(unavailable.map((item) => item.id)));

@@ -5,6 +5,7 @@ import {
   arcgisRepairGroups,
   commitLocatedArcgisLayers,
   readLocatedArcgisLayers,
+  withoutLocatedWarnings,
   type ArcgisRepairGroup,
   type ArcgisWorkspaceRepairSession,
 } from "../lib/arcgis-workspace-repair";
@@ -142,14 +143,7 @@ export function useArcgisImportReport(onError: (message: string) => void): Arcgi
         if (!current()) return;
         const added = new Set(commitLocatedArcgisLayers(session, restored, useAppStore.getState));
         const remaining = group.layerIds.filter((id) => session.pending.has(id)).length;
-        // The layer's load failure goes; its symbology notes still apply now
-        // that it is shown.
-        setWarnings((previous) =>
-          (previous ?? []).filter(
-            (warning) =>
-              warning.symbologyIssue || !warning.layerId || !added.has(warning.layerId),
-          ),
-        );
+        setWarnings((previous) => withoutLocatedWarnings(previous ?? [], added));
         setRepairGroups(arcgisRepairGroups(session));
         setRepairResult({ folder, restored: added.size, remaining });
       } catch (error) {
