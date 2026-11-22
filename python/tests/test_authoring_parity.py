@@ -566,12 +566,37 @@ def _ts_union(name: str) -> set[str]:
 
 
 @needs_repo
+def test_project_constants_json_in_sync_with_core():
+    """Python and core project-constants.json files match byte-for-byte."""
+    core_json = (REPO / "packages" / "core" / "src" / "project-constants.json").read_text(
+        encoding="utf-8"
+    )
+    py_json = (
+        REPO / "python" / "src" / "geolibre" / "project-constants.json"
+    ).read_text(encoding="utf-8")
+    assert py_json == core_json, (
+        "Run `node scripts/sync-project-constants.mjs` to sync project-constants.json"
+    )
+    data = json.loads(core_json)
+    assert project.PROJECT_VERSION == data["PROJECT_VERSION"]
+    assert project.DEFAULT_LAYER_STYLE == data["DEFAULT_LAYER_STYLE"]
+    assert project.DEFAULT_LABEL_STYLE == data["DEFAULT_LAYER_STYLE"]["labels"]
+    assert project.DEFAULT_PROJECT_PREFERENCES == data["DEFAULT_PROJECT_PREFERENCES"]
+    assert project.DEFAULT_STORY_MAP == data["DEFAULT_STORY_MAP"]
+    assert project.PLUGIN_STATE_IDS == frozenset(data["PLUGIN_STATE_IDS"])
+    assert "maplibre-gl-geolens" in project.PLUGIN_STATE_IDS
+    assert list(project.VECTOR_COLOR_RAMPS) == data["VECTOR_COLOR_RAMPS"]
+
+
+@needs_repo
 def test_label_defaults_match_types_ts():
-    """DEFAULT_LABEL_STYLE mirrors DEFAULT_LAYER_STYLE.labels exactly."""
-    source = TYPES_TS.read_text(encoding="utf-8")
-    style = _ts_object_literal(source, "export const DEFAULT_LAYER_STYLE: LayerStyle =")
-    labels = _ts_literal_values(_ts_object_literal(style, "labels:"))
-    assert labels == project.DEFAULT_LABEL_STYLE
+    """DEFAULT_LABEL_STYLE mirrors project-constants.json DEFAULT_LAYER_STYLE.labels exactly."""
+    data = json.loads(
+        (REPO / "packages" / "core" / "src" / "project-constants.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert data["DEFAULT_LAYER_STYLE"]["labels"] == project.DEFAULT_LABEL_STYLE
 
 
 @needs_repo
@@ -588,10 +613,13 @@ def test_label_and_story_vocabularies_match_types_ts():
 
 @needs_repo
 def test_story_defaults_match_types_ts():
-    """DEFAULT_STORY_MAP mirrors the app's DEFAULT_STORY_MAP."""
-    source = TYPES_TS.read_text(encoding="utf-8")
-    body = _ts_object_literal(source, "export const DEFAULT_STORY_MAP: StoryMap =")
-    assert _ts_literal_values(body) == project.DEFAULT_STORY_MAP
+    """DEFAULT_STORY_MAP mirrors project-constants.json DEFAULT_STORY_MAP."""
+    data = json.loads(
+        (REPO / "packages" / "core" / "src" / "project-constants.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert data["DEFAULT_STORY_MAP"] == project.DEFAULT_STORY_MAP
 
 
 @needs_repo

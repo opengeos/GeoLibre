@@ -226,6 +226,8 @@ interface NativePlan {
   urls: string[];
   /** The store record's GeoJSON the features were baked from, by identity. */
   geojson: FeatureCollection | undefined;
+  /** Serialized filter state when `plan` was built, for in-place renderer updates. */
+  filterSignature?: string;
   /**
    * Everything but the display fields of the record the plan was compiled
    * from, with the zoom it was compiled at; an unchanged key reuses the plan
@@ -1493,14 +1495,44 @@ export class ArcgisEngine implements MapEngine {
                 deckOverlay: this.capabilities.deckOverlay,
               });
         const signature = reusable && entry ? entry.signature : planSignature(plan, layer);
+        const filterSignature =
+          plan.kind === "geojson"
+            ? JSON.stringify([layer.timeFilter, layer.embedFilter, compileLayerFilters(layer)])
+            : undefined;
         if (entry && (entry.signature !== signature || entry.geojson !== layer.geojson)) {
-          // Anything but the display fields changed (a re-style, a filter, an
-          // edit to the features): rebuild the native layers.
-          this.removeLayer(layer.id);
-          entry = undefined;
+          // For simple single-symbol GeoJSON style edits (color, stroke, radius,
+          // fillOpacity) where features, filters, labels, and companions are
+          // unchanged, update `native.renderer` in place instead of revoking and
+          // recreating the Blob URL and GeoJSONLayer.
+          if (
+            entry.geojson === layer.geojson &&
+            entry.filterSignature === filterSignature &&
+            canUpdateGeoJsonRenderersInPlace(entry.plan, plan, entry.layers.length)
+          ) {
+            for (let i = 0; i < plan.parts.length; i += 1) {
+              const native = entry.layers[i];
+              if (native) {
+                native.renderer = rendererWithFallbackMarkers(plan.parts[i].renderer);
+              }
+            }
+            entry.signature = signature;
+          } else {
+            // Anything else changed (filter, labels, markers, features, geometry):
+            // rebuild the native layers.
+            this.removeLayer(layer.id);
+            entry = undefined;
+          }
         }
         if (!entry) {
-          entry = { plan, signature, layers: [], urls: [], disposers: [], geojson: layer.geojson };
+          entry = {
+            plan,
+            signature,
+            filterSignature,
+            layers: [],
+            urls: [],
+            disposers: [],
+            geojson: layer.geojson,
+          };
           this.natives.set(layer.id, entry);
           for (const native of this.instantiate(plan, entry.urls, entry.disposers)) {
             // A mixed-geometry GeoJSON record has several native layers but
@@ -3104,6 +3136,45 @@ function stripSyntheticFields(attributes: Record<string, unknown>): Record<strin
  * identity, so a re-style rebuilds (the symbols are baked into the data) but
  * a visibility toggle does not.
  */
+function canUpdateGeoJsonRenderersInPlace(
+  previous: ArcgisLayerPlan,
+  next: ArcgisLayerPlan,
+  nativeLayerCount: number,
+): next is Extract<ArcgisLayerPlan, { kind: "geojson" }> {
+  if (previous.kind !== "geojson" || next.kind !== "geojson") return false;
+  if (previous.parts.length !== next.parts.length || nativeLayerCount !== next.parts.length) {
+    return false;
+  }
+  for (let i = 0; i < next.parts.length; i += 1) {
+    const prevPart = previous.parts[i];
+    const nextPart = next.parts[i];
+    if (
+      prevPart.geometryType !== nextPart.geometryType ||
+      prevPart.url !== nextPart.url ||
+      prevPart.interactive === false ||
+      nextPart.interactive === false ||
+      prevPart.hasZ ||
+      nextPart.hasZ ||
+      prevPart.renderer.type !== "simple" ||
+      nextPart.renderer.type !== "simple" ||
+      prevPart.markerStyle ||
+      nextPart.markerStyle ||
+      prevPart.patternStyle ||
+      nextPart.patternStyle ||
+      prevPart.labelingInfo ||
+      nextPart.labelingInfo ||
+      prevPart.elevationInfo ||
+      nextPart.elevationInfo ||
+      prevPart.features?.features.length !== nextPart.features?.features.length ||
+      JSON.stringify(prevPart.featureReduction ?? null) !==
+        JSON.stringify(nextPart.featureReduction ?? null)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function planSignature(plan: ArcgisLayerPlan, layer: GeoLibreLayer): string {
   const {
     title: _t,

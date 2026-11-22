@@ -15,6 +15,8 @@ export interface GeometryProfile {
   hasPolygon: boolean;
 }
 
+const geometryProfileCache = new WeakMap<FeatureCollection | GeoArrowBatch, GeometryProfile>();
+
 export function detectGeometryProfile(
   data: FeatureCollection | GeoArrowBatch | undefined,
 ): GeometryProfile {
@@ -25,17 +27,26 @@ export function detectGeometryProfile(
   };
   if (!data) return profile;
 
+  const cached = geometryProfileCache.get(data);
+  if (cached) return { ...cached };
+
   if (isGeoArrowBatch(data)) {
     const t = data.geometryType;
     if (t === "Point" || t === "MultiPoint") profile.hasPoint = true;
     if (t === "LineString" || t === "MultiLineString") profile.hasLine = true;
     if (t === "Polygon" || t === "MultiPolygon") profile.hasPolygon = true;
+    geometryProfileCache.set(data, { ...profile });
     return profile;
   }
 
   for (const feature of data.features ?? []) {
-    if (feature.geometry) addGeometryToProfile(profile, feature.geometry);
+    const geometry = feature.geometry;
+    if (geometry) {
+      addGeometryToProfile(profile, geometry);
+      if (profile.hasPoint && profile.hasLine && profile.hasPolygon) break;
+    }
   }
+  geometryProfileCache.set(data, { ...profile });
   return profile;
 }
 

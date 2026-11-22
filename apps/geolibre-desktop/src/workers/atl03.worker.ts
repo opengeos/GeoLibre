@@ -82,15 +82,46 @@ async function handle(request: Request): Promise<unknown> {
   }
 }
 
+function collectTransferables(value: unknown, seen: Set<ArrayBuffer>, out: Transferable[]): void {
+  if (!value || typeof value !== "object") return;
+  if (ArrayBuffer.isView(value)) {
+    const buffer = value.buffer;
+    if (buffer instanceof ArrayBuffer && !seen.has(buffer)) {
+      seen.add(buffer);
+      out.push(buffer);
+    }
+    return;
+  }
+  if (value instanceof ArrayBuffer) {
+    if (!seen.has(value)) {
+      seen.add(value);
+      out.push(value);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectTransferables(item, seen, out);
+    return;
+  }
+  for (const field of Object.values(value)) {
+    collectTransferables(field, seen, out);
+  }
+}
+
 self.onmessage = async (event: MessageEvent<Request>) => {
   const request = event.data;
   try {
     const result = await handle(request);
-    (self as DedicatedWorkerGlobalScope).postMessage({
-      id: request.id,
-      ok: true,
-      result,
-    } satisfies Atl03WorkerResponse);
+    const transfer: Transferable[] = [];
+    collectTransferables(result, new Set(), transfer);
+    (self as DedicatedWorkerGlobalScope).postMessage(
+      {
+        id: request.id,
+        ok: true,
+        result,
+      } satisfies Atl03WorkerResponse,
+      transfer,
+    );
   } catch (error) {
     (self as DedicatedWorkerGlobalScope).postMessage({
       id: request.id,

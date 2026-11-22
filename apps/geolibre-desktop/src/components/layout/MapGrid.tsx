@@ -18,12 +18,13 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import { Globe, Layers, Map as MapIcon, X } from "lucide-react";
-import { type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { PrimaryMapboxCanvas } from "./PrimaryMapboxCanvas";
 import { PrimaryArcgisCanvas } from "./PrimaryArcgisCanvas";
 import { CesiumTokenHint } from "./PrimaryCesiumCanvas";
 import { useCesiumIonToken } from "../../hooks/useCesiumIonToken";
+import { ensureCesiumToolbarStylesLoaded } from "../../lib/lazy-plugin-styles";
 
 /**
  * An editable label shown centered at the top of a map pane. Empty by default;
@@ -133,6 +134,9 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
   );
   // eslint-disable-next-line local/no-renderer-kind-checks -- picks which engine's canvas to mount
   const is3d = renderer === "cesium";
+  useEffect(() => {
+    if (is3d) void ensureCesiumToolbarStylesLoaded();
+  }, [is3d]);
   // eslint-disable-next-line local/no-renderer-kind-checks -- picks which engine's canvas to mount
   const mapboxPane = renderer === "mapbox";
   // eslint-disable-next-line local/no-renderer-kind-checks -- picks which engine's canvas to mount

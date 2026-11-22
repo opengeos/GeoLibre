@@ -2642,6 +2642,9 @@ export class CesiumLayerSync {
       .map((l) => l.id)
       .join("\n");
     if (imageryRebuilt || imageryOrder !== this.lastImageryOrder) {
+      // Cancel any deferred async reorder since sync() is reordering now.
+      this.imageryReorderGeneration += 1;
+      this.imageryReorderScheduled = false;
       this.reorderImagery();
       this.lastImageryOrder = imageryOrder;
     }
@@ -2677,8 +2680,14 @@ export class CesiumLayerSync {
 
   /** The KML overlay stacking order {@link reorderKmlOverlays} last asserted. */
   private lastKmlOverlayOrder = "";
+  private imageryReorderScheduled = false;
+  private imageryReorderGeneration = 0;
+  private destroyed = false;
 
   destroy(): void {
+    this.destroyed = true;
+    this.imageryReorderGeneration += 1;
+    this.imageryReorderScheduled = false;
     this.restoreHighlight();
     this.selection = null;
     this.movingPointLayers.clear();
@@ -2976,6 +2985,17 @@ export class CesiumLayerSync {
     } catch {
       return 0;
     }
+  }
+
+  private scheduleImageryReorder(): void {
+    if (this.imageryReorderScheduled || this.destroyed) return;
+    this.imageryReorderScheduled = true;
+    const generation = this.imageryReorderGeneration;
+    queueMicrotask(() => {
+      this.imageryReorderScheduled = false;
+      if (this.destroyed || this.imageryReorderGeneration !== generation) return;
+      this.reorderImagery();
+    });
   }
 
   private reorderImagery(): void {
@@ -3503,13 +3523,9 @@ export class CesiumLayerSync {
       });
     this.applyAppearance(entry);
     if (isAsync) {
-      // Unlike sync()'s reorder this one is unguarded, since the store order
-      // key can't tell whether an async layer has landed yet. Each resolve
-      // therefore costs its own O(n) raiseToTop sweep, so a project loading
-      // many ArcGIS/image layers at once pays O(n^2) overall. Fine for the
-      // handful a project typically has; worth coalescing into one deferred
-      // reorder if that stops being true.
-      this.reorderImagery();
+      // Coalesce concurrent async imagery resolutions into a single microtask
+      // reorder pass instead of running an O(n) raiseToTop sweep per layer.
+      this.scheduleImageryReorder();
     }
   }
 

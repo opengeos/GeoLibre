@@ -149,6 +149,7 @@ export class PluginManager {
   private writableUrlParameterNamesById = new Map<string, string[]>();
   private urlPublishingPlugins = new Set<string>();
   private listeners = new Set<() => void>();
+  private beforeActivateListeners = new Set<(pluginId: string) => void>();
   private activationGenerations = new Map<string, number>();
   private activationResults = new Map<string, Promise<boolean>>();
   private activating = new Set<string>();
@@ -354,12 +355,29 @@ export class PluginManager {
     return () => this.listeners.delete(listener);
   }
 
+  /**
+   * Register a synchronous hook invoked whenever a plugin is about to activate
+   * (used by the host to kick off lazy stylesheet chunks before the plugin
+   * mounts its DOM).
+   */
+  onBeforeActivate(listener: (pluginId: string) => void): () => void {
+    this.beforeActivateListeners.add(listener);
+    return () => this.beforeActivateListeners.delete(listener);
+  }
+
   activate(id: string, app: GeoLibreAppAPI): boolean | Promise<boolean> {
     const plugin = this.plugins.get(id);
     if (!plugin || !this.supportsEngine(id, app) || this.activating.has(id)) return false;
     const pendingResult = this.activationResults.get(id);
     if (pendingResult) return pendingResult;
     if (this.active.has(id)) return true;
+    for (const listener of this.beforeActivateListeners) {
+      try {
+        listener(id);
+      } catch (error) {
+        console.warn(`[GeoLibre] onBeforeActivate listener failed for "${id}"`, error);
+      }
+    }
     const displaced = this.deactivateExclusiveSiblings(id, plugin, app);
     const restoreDisplaced = () => {
       for (const displacedId of displaced) this.activate(displacedId, app);

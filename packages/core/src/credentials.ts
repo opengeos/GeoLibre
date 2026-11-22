@@ -1,4 +1,5 @@
 import { isHeaderReferenceOnly } from "./header-references";
+import projectConstants from "./project-constants.json";
 import type { GeoLibreProject, LayerConnection } from "./types";
 
 /**
@@ -49,31 +50,8 @@ export const PROJECT_CREDENTIAL_FIELDS = {
  * like any unknown blob. Mirrored by `PUBLISHABLE_PLUGIN_SETTINGS` in
  * `python/src/geolibre/project.py`; the two must agree.
  */
-export const PUBLISHABLE_PLUGIN_SETTINGS: Readonly<Record<string, readonly string[] | null>> = {
-  "maplibre-gl-swipe": null,
-  "maplibre-gl-components": ["legend", "colorbar"],
-  // This is the source of truth for dock-owned temporal layers. Dropping it
-  // leaves only their external-native store mirrors in a shared project; those
-  // mirrors contain a MapLibre source id, not enough information to recreate
-  // the COG/mosaic/tiles for a recipient. The retained blob is still passed
-  // through redactConfigurationValue below, including every source URL.
-  "maplibre-gl-time-slider": null,
-  // Feed toggles (one boolean per feed) plus a numeric clock speed — no URLs,
-  // no keys, nothing user-authored. Listed as a whole blob rather than by key
-  // because the feed set grows with every new feed; an enumerated list would
-  // silently start counting each new toggle as a credential, which is the bug
-  // this entry fixes. Still swept by redactConfigurationValue below.
-  "gods-eye-view": null,
-  // Point class edits keyed by (node key, index): compressed numbers, no
-  // user text. Source URLs are values, so the sweep below still scrubs a
-  // credentialed one.
-  "geolibre-point-cloud-annotation": null,
-  // The server URL, the map's publish key and a layer-id-to-dataset-key map.
-  // The sub-keys are listed rather than the blob, so a key a later change stores
-  // here is dropped instead of published. Publish keys are identifiers, not
-  // credentials.
-  "maplibre-gl-geolens": ["serverUrl", "mapKey", "layerKeys"],
-};
+export const PUBLISHABLE_PLUGIN_SETTINGS: Readonly<Record<string, readonly string[] | null>> =
+  projectConstants.PUBLISHABLE_PLUGIN_SETTINGS;
 
 export interface CredentialRedactionResult {
   project: GeoLibreProject;

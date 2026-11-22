@@ -117,16 +117,20 @@ export function useStylePanelDrafts(
     min: number;
     max: number;
   } | null>(null);
+  const [draftLayerId, setDraftLayerId] = useState<string | null>(layer?.id ?? null);
   const [loadedVectorPropertyValues, setLoadedVectorPropertyValues] = useState<{
     layerId: string;
     /** Attribute samples keyed by property name (classification and/or size field). */
     byProperty: Record<string, unknown[]>;
   } | null>(null);
+  const loadedVectorPropertyValuesRef = useRef(loadedVectorPropertyValues);
+  loadedVectorPropertyValuesRef.current = loadedVectorPropertyValues;
   const [vectorPropertyValuesLoading, setVectorPropertyValuesLoading] = useState(false);
   const [vectorPropertyValuesUnavailable, setVectorPropertyValuesUnavailable] = useState(false);
 
   useEffect(() => {
     if (!layer) {
+      setDraftLayerId(null);
       setDraftBeforeId("");
       setDraftColorExpression("");
       setDraftHeightExpression("");
@@ -153,6 +157,7 @@ export function useStylePanelDrafts(
       return;
     }
 
+    setDraftLayerId(layer.id);
     setDraftBeforeId(layer.beforeId ?? "");
     setDraftColorExpression(styleValue(layer.style, "extrusionColorExpression"));
     setDraftHeightExpression(styleValue(layer.style, "extrusionHeightExpression"));
@@ -228,6 +233,10 @@ export function useStylePanelDrafts(
   // graduated colors load field A.
   useEffect(() => {
     if (!layer) return;
+    // Wait until draftVectorStyleMode/draftVectorStyleProperty have been
+    // re-seeded for this layer so switching layers never fires a wasted DuckDB
+    // query with the previous layer's attribute name.
+    if (draftLayerId !== layer.id) return;
     const usesDuckDbVector = layer.metadata.sourceKind === "maplibre-gl-vector";
     const usesVectorTiles =
       layer.type === "vector-tiles" || layer.type === "pmtiles" || layer.type === "mbtiles";
@@ -251,6 +260,21 @@ export function useStylePanelDrafts(
 
     if (propertiesToLoad.length === 0) {
       setLoadedVectorPropertyValues(null);
+      setVectorPropertyValuesLoading(false);
+      setVectorPropertyValuesUnavailable(false);
+      return;
+    }
+
+    // Reuse cached samples when all requested properties for this layer are
+    // already loaded (e.g. when toggling between graduated/categorized on the
+    // same attribute without changing the field).
+    const cached = loadedVectorPropertyValuesRef.current;
+    if (
+      cached?.layerId === layer.id &&
+      propertiesToLoad.every((property) =>
+        Object.prototype.hasOwnProperty.call(cached.byProperty, property),
+      )
+    ) {
       setVectorPropertyValuesLoading(false);
       setVectorPropertyValuesUnavailable(false);
       return;
@@ -352,6 +376,7 @@ export function useStylePanelDrafts(
       cancelled = true;
     };
   }, [
+    draftLayerId,
     draftVectorStyleMode,
     draftVectorStyleProperty,
     layer?.geojson,

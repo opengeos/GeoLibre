@@ -28,6 +28,11 @@ from urllib.request import HTTPRedirectHandler, build_opener
 
 from .basemaps import DEFAULT_BASEMAP
 
+# Shared TS/Python constants synced from packages/core/src/project-constants.json.
+_PROJECT_CONSTANTS: dict[str, Any] = json.loads(
+    Path(__file__).with_name("project-constants.json").read_text(encoding="utf-8")
+)
+
 
 def _normalize_credential_name(name: str) -> str:
     """Fold the spellings of one credential name together.
@@ -299,7 +304,7 @@ def redact_credentials(
     return safe
 
 
-PROJECT_VERSION = "0.1.0"
+PROJECT_VERSION: str = _PROJECT_CONSTANTS["PROJECT_VERSION"]
 
 # Characters JavaScript's encodeURIComponent leaves unescaped on top of the
 # always-unreserved set (alphanumerics and ``-_.~``), so _append_query produces
@@ -379,77 +384,18 @@ class _PublicOnlyRedirectHandler(HTTPRedirectHandler):
 # hop that points at a non-public address (SSRF defence).
 _GEOJSON_OPENER = build_opener(_PublicOnlyRedirectHandler)
 
-# Mirror of DEFAULT_LAYER_STYLE in packages/core/src/types.ts. The app fills in
-# any missing fields on load, so layers only need to override what differs, but
-# carrying the full default keeps round-tripped projects stable.
-DEFAULT_LAYER_STYLE: dict[str, Any] = {
-    "minZoom": 0,
-    "maxZoom": 24,
-    "fillColor": "#3b82f6",
-    "strokeColor": "#1e40af",
-    "strokeWidth": 2,
-    "strokeOpacity": 1,
-    "strokeDash": [],
-    "strokeBlur": 0,
-    "fillOpacity": 0.6,
-    "circleRadius": 6,
-    "textColor": "#111827",
-    "textHaloColor": "#ffffff",
-    "textHaloWidth": 2,
-    "textSize": 16,
-    "extrusionEnabled": False,
-    "extrusionColor": "#3b82f6",
-    "extrusionOpacity": 0.8,
-    "extrusionHeightProperty": "height",
-    "extrusionHeightScale": 1,
-    "extrusionBase": 0,
-    "extrusionBaseProperty": "",
-    "extrusionBaseScale": 1,
-    "extrusionFloorHeight": 0,
-    "extrusionAdvancedStyleEnabled": False,
-    "extrusionColorExpression": "",
-    "extrusionHeightExpression": "",
-    "extrusionBaseExpression": "",
-    "vectorStyleMode": "single",
-    "vectorStyleProperty": "",
-    "vectorStyleClassCount": 5,
-    "vectorStyleColorRamp": "viridis",
-    "vectorStyleClassificationScheme": "equal-interval",
-    "vectorStyleStops": [
-        {"value": 0, "color": "#dbeafe"},
-        {"value": 1, "color": "#2563eb"},
-    ],
-    "vectorStyleExpression": "",
-    "pointRenderer": "single",
-    "heatmapRadius": 30,
-    "heatmapIntensity": 1,
-    "heatmapColorRamp": "turbo",
-    "heatmapWeightProperty": "",
-    "clusterRadius": 50,
-    "clusterMaxZoom": 14,
-    "rasterBrightnessMin": 0,
-    "rasterBrightnessMax": 1,
-    "rasterSaturation": 0,
-    "rasterContrast": 0,
-    "rasterHueRotate": 0,
-    # How the layer composites onto the map beneath it. "normal" is ordinary
-    # alpha compositing; see BLEND_MODES in packages/core/src/types.ts for the
-    # full set the app accepts.
-    "blendMode": "normal",
-}
+# Loaded from project-constants.json (synced with packages/core/src/project-constants.json).
+DEFAULT_LAYER_STYLE: dict[str, Any] = copy.deepcopy(_PROJECT_CONSTANTS["DEFAULT_LAYER_STYLE"])
 
-# Mirror of DEFAULT_PROJECT_PREFERENCES in packages/core/src/types.ts.
-DEFAULT_PROJECT_PREFERENCES: dict[str, Any] = {
-    "map": {
-        "restrictBounds": False,
-        "bounds": [-180, -85, 180, 85],
-        "minZoom": 0,
-        "maxZoom": 24,
-        "maxPitch": 85,
-        "renderWorldCopies": True,
-    },
-    "environmentVariables": [],
-}
+# Loaded from project-constants.json (synced with packages/core/src/project-constants.json).
+DEFAULT_PROJECT_PREFERENCES: dict[str, Any] = copy.deepcopy(
+    _PROJECT_CONSTANTS["DEFAULT_PROJECT_PREFERENCES"]
+)
+
+# Built-in vector/raster color ramps shared with @geolibre/core.
+VECTOR_COLOR_RAMPS: tuple[dict[str, Any], ...] = tuple(
+    copy.deepcopy(_PROJECT_CONSTANTS["VECTOR_COLOR_RAMPS"])
+)
 
 
 def default_map_view() -> dict[str, Any]:
@@ -3302,26 +3248,8 @@ COMPONENTS_PLUGIN_ID = "maplibre-gl-components"
 #: Mirrored by ``PUBLISHABLE_PLUGIN_SETTINGS`` in
 #: ``packages/core/src/credentials.ts``; the two must agree.
 PUBLISHABLE_PLUGIN_SETTINGS: dict[str, tuple[str, ...] | None] = {
-    SWIPE_PLUGIN_ID: None,
-    COMPONENTS_PLUGIN_ID: ("legend", "colorbar"),
-    # The timeline config owns its temporal source definitions. Its mirrored
-    # store layers only carry internal source ids, so dropping this state makes
-    # shared Time Slider layers impossible to reconstruct. The retained value
-    # is still recursively credential-scrubbed by the caller.
-    "maplibre-gl-time-slider": None,
-    # Feed toggles (one boolean per feed) plus a numeric clock speed — no URLs,
-    # no keys, nothing user-authored. Listed as a whole blob rather than by key
-    # because the feed set grows with every new feed; an enumerated list would
-    # silently start counting each new toggle as a credential. The retained
-    # value is still recursively credential-scrubbed by the caller.
-    "gods-eye-view": None,
-    # Point class edits keyed by (node key, index): compressed numbers, no user
-    # text. Source URLs are values, so the caller's scrub still covers them.
-    "geolibre-point-cloud-annotation": None,
-    # The server URL, the map's publish key and a layer-id-to-dataset-key map.
-    # The sub-keys are listed rather than the blob, so a key a later change
-    # stores here is dropped instead of published.
-    "maplibre-gl-geolens": ("serverUrl", "mapKey", "layerKeys"),
+    plugin_id: tuple(keys) if isinstance(keys, list) else None
+    for plugin_id, keys in _PROJECT_CONSTANTS["PUBLISHABLE_PLUGIN_SETTINGS"].items()
 }
 
 # Plugins the app activates by default (``activeByDefault: true`` in
@@ -3869,37 +3797,9 @@ def level_filter(
 #: Mirror of ``DEFAULT_LAYER_STYLE.labels`` in ``packages/core/src/types.ts``.
 #: The app merges a stored ``labels`` object over these field by field when it
 #: renders, so a written object carries every key to stay stable on round trip.
-DEFAULT_LABEL_STYLE: dict[str, Any] = {
-    "enabled": False,
-    "field": "",
-    "expression": "",
-    "placement": "point",
-    "lineGap": False,
-    "lineGapPadding": 3,
-    "lineSpacing": 250,
-    "size": 13,
-    "color": "#111827",
-    "haloColor": "#ffffff",
-    "haloWidth": 1.5,
-    "minZoom": 0,
-    "maxZoom": 24,
-    "allowOverlap": False,
-    "anchor": "center",
-    "offsetX": 0,
-    "offsetY": 0,
-    "rotation": 0,
-    "maxWidth": 10,
-    "transform": "none",
-    "numberFormatEnabled": False,
-    "numberDecimals": 0,
-    "numberLocale": "",
-    "dedupe": "off",
-    "sizeExpression": "",
-    "colorExpression": "",
-    "opacityExpression": "",
-    "visibilityExpression": "",
-    "priorityExpression": "",
-}
+DEFAULT_LABEL_STYLE: dict[str, Any] = copy.deepcopy(
+    _PROJECT_CONSTANTS["DEFAULT_LAYER_STYLE"]["labels"]
+)
 
 LABEL_PLACEMENTS = frozenset({"point", "line"})
 LABEL_ANCHORS = frozenset(
@@ -4097,32 +3997,7 @@ def label_style(
 #: with that id is loaded from a manifest URL, so callers refuse unknown ids
 #: unless asked not to. A repo test checks every id here still appears in the
 #: plugin sources.
-PLUGIN_STATE_IDS = frozenset(
-    {
-        "geolibre-elevation-profile",
-        "geolibre-flight-simulator",
-        "geolibre-point-cloud-annotation",
-        "geolibre-route-animation",
-        "geolibre-sun",
-        "geolibre-timelapse",
-        "gods-eye-view",
-        "maplibre-a5-grid",
-        "maplibre-atmosphere-effects",
-        "maplibre-dggal",
-        "maplibre-dggrid",
-        "maplibre-geohash",
-        "maplibre-gl-components",
-        "maplibre-gl-graticule",
-        "maplibre-gl-overture-maps",
-        "maplibre-gl-swipe",
-        "maplibre-gl-time-slider",
-        "maplibre-h3-grid",
-        "maplibre-olc",
-        "maplibre-s2-grid",
-        "maplibre-samgeo",
-        "maplibre-tilecode",
-    }
-)
+PLUGIN_STATE_IDS: frozenset[str] = frozenset(_PROJECT_CONSTANTS["PLUGIN_STATE_IDS"])
 
 
 def json_compatible(value: Any, what: str) -> Any:
@@ -4152,21 +4027,7 @@ def json_compatible(value: Any, what: str) -> Any:
 # -- story maps ----------------------------------------------------------------
 
 #: Mirror of ``DEFAULT_STORY_MAP`` in packages/core/src/types.ts.
-DEFAULT_STORY_MAP: dict[str, Any] = {
-    "title": "",
-    "subtitle": "",
-    "byline": "",
-    "footer": "",
-    "theme": "dark",
-    "showMarkers": False,
-    "markerColor": "#3fb1ce",
-    "inset": False,
-    "insetPosition": "bottom-left",
-    "hideChapterNav": False,
-    "startSlide": "none",
-    "endSlide": "none",
-    "chapters": [],
-}
+DEFAULT_STORY_MAP: dict[str, Any] = copy.deepcopy(_PROJECT_CONSTANTS["DEFAULT_STORY_MAP"])
 
 STORY_THEMES = frozenset({"light", "dark"})
 STORY_ALIGNMENTS = frozenset({"left", "center", "right", "full"})

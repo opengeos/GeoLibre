@@ -1485,7 +1485,18 @@ function getStyleLayerSpec(
   map: maplibregl.Map,
   layerId: string,
 ): maplibregl.LayerSpecification | null {
-  return map.getStyle().layers?.find((layer) => layer.id === layerId) ?? null;
+  const live = map.getLayer(layerId) as
+    | (maplibregl.StyleLayer & { serialize?: () => maplibregl.LayerSpecification })
+    | undefined;
+  if (live) {
+    if (typeof live.serialize === "function") {
+      return live.serialize();
+    }
+    if (typeof live.type === "string") {
+      return live as unknown as maplibregl.LayerSpecification;
+    }
+  }
+  return map.getStyle?.()?.layers?.find((layer) => layer.id === layerId) ?? null;
 }
 
 function isFillStyleLayerSpec(
@@ -1812,6 +1823,7 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
   if (existingSource && existingSource.type !== "geojson") {
     removeGeoJsonRenderLayers(map, layer.id);
     map.removeSource(src);
+    forgetGeoJsonSourceClusterState(map, src);
     if (hasGeoJsonVtSource(layer.id)) unregisterGeoJsonVtSource(layer.id, map);
   }
 
@@ -1827,6 +1839,7 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
   if (needsSourceRecreate) {
     removeGeoJsonRenderLayers(map, layer.id);
     map.removeSource(src);
+    forgetGeoJsonSourceClusterState(map, src);
   }
 
   if (!map.getSource(src)) {
@@ -1850,6 +1863,11 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
             ...(attribution ? { attribution } : {}),
           },
     );
+    rememberGeoJsonSourceClusterState(map, src, {
+      cluster: wantCluster,
+      radius: wantCluster ? clusterRadius : DEFAULT_LAYER_STYLE.clusterRadius,
+      maxZoom: wantCluster ? clusterMaxZoom : DEFAULT_LAYER_STYLE.clusterMaxZoom,
+    });
     rememberGeoJsonData(map, src, sourceGeoJson);
   } else {
     setGeoJsonData(map.getSource(src) as maplibregl.GeoJSONSource, sourceGeoJson);
@@ -1897,6 +1915,7 @@ function syncGeoJsonVtLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?
   if (existing && (existing.type !== "vector" || rebuilt)) {
     removeGeoJsonRenderLayers(map, layer.id);
     map.removeSource(src);
+    forgetGeoJsonSourceClusterState(map, src);
   }
 
   if (!map.getSource(src)) {
@@ -2151,9 +2170,10 @@ function applyFlatPolygonFillLayers(
     removeIfExists(map, fillLayerId(layer.id));
     const maskSrc = invertedSourceId(layer.id);
     if (map.getSource(maskSrc)) {
-      (map.getSource(maskSrc) as maplibregl.GeoJSONSource).setData(invertedMask);
+      setGeoJsonData(map.getSource(maskSrc) as maplibregl.GeoJSONSource, invertedMask);
     } else {
       map.addSource(maskSrc, { type: "geojson", data: invertedMask });
+      rememberGeoJsonData(map, maskSrc, invertedMask);
     }
     ensureLayer(
       map,
@@ -2859,12 +2879,13 @@ function ensureAttributeLabelLayer(
   // other render layers draw.
   if (dedupedLabelFc) {
     if (map.getSource(dedupSourceId)) {
-      (map.getSource(dedupSourceId) as maplibregl.GeoJSONSource).setData(dedupedLabelFc);
+      setGeoJsonData(map.getSource(dedupSourceId) as maplibregl.GeoJSONSource, dedupedLabelFc);
     } else {
       map.addSource(dedupSourceId, {
         type: "geojson",
         data: dedupedLabelFc,
       });
+      rememberGeoJsonData(map, dedupSourceId, dedupedLabelFc);
     }
   }
   // A layer's source is immutable, so when the label source switches between
@@ -3017,9 +3038,10 @@ function applyGeometryGeneratorLayers(
 
   const genSrc = generatorSourceId(layer.id);
   if (map.getSource(genSrc)) {
-    (map.getSource(genSrc) as maplibregl.GeoJSONSource).setData(generated);
+    setGeoJsonData(map.getSource(genSrc) as maplibregl.GeoJSONSource, generated);
   } else {
     map.addSource(genSrc, { type: "geojson", data: generated });
+    rememberGeoJsonData(map, genSrc, generated);
   }
 
   const kinds = generatedGeometryKinds(generated);
@@ -3100,7 +3122,10 @@ function applyGeometryGeneratorLayers(
 }
 
 function removeSourceIfExists(map: maplibregl.Map, id: string): void {
-  if (map.getSource(id)) map.removeSource(id);
+  if (map.getSource(id)) {
+    map.removeSource(id);
+    forgetGeoJsonSourceClusterState(map, id);
+  }
 }
 
 // getStyle() deep-clones the whole style, and syncs can fire rapidly (e.g.
@@ -3894,23 +3919,58 @@ function removeIfExists(map: maplibregl.Map, id: string): void {
   if (map.getLayer(id)) map.removeLayer(id);
 }
 
-/**
- * Read a GeoJSON source's clustering config from the current style, or null if
- * the source doesn't exist yet (or isn't a GeoJSON source). Used to decide
- * whether a cluster toggle requires recreating the source.
- */
-function geojsonSourceClusterState(
+type GeoJsonClusterState = { cluster: boolean; radius: number; maxZoom: number };
+
+const geojsonSourceClusterStates = new WeakMap<maplibregl.Map, Map<string, GeoJsonClusterState>>();
+
+function rememberGeoJsonSourceClusterState(
   map: maplibregl.Map,
   src: string,
-): { cluster: boolean; radius: number; maxZoom: number } | null {
-  const spec = map.getStyle()?.sources?.[src];
+  state: GeoJsonClusterState,
+): void {
+  let bySource = geojsonSourceClusterStates.get(map);
+  if (!bySource) {
+    bySource = new Map();
+    geojsonSourceClusterStates.set(map, bySource);
+  }
+  bySource.set(src, state);
+}
+
+function forgetGeoJsonSourceClusterState(map: maplibregl.Map, src: string): void {
+  geojsonSourceClusterStates.get(map)?.delete(src);
+}
+
+/**
+ * Read a GeoJSON source's clustering config without cloning the whole style on
+ * every sync. Uses the tracked per-map cluster state (falling back to
+ * `source.serialize()` or `map.getStyle()` only on cache miss).
+ */
+function geojsonSourceClusterState(map: maplibregl.Map, src: string): GeoJsonClusterState | null {
+  const liveSource = map.getSource(src) as
+    | (maplibregl.Source & { serialize?: () => maplibregl.SourceSpecification })
+    | undefined;
+  if (!liveSource) {
+    forgetGeoJsonSourceClusterState(map, src);
+    return null;
+  }
+  if (liveSource.type !== "geojson") {
+    forgetGeoJsonSourceClusterState(map, src);
+    return null;
+  }
+  const cached = geojsonSourceClusterStates.get(map)?.get(src);
+  if (cached) return cached;
+
+  const spec =
+    typeof liveSource.serialize === "function"
+      ? liveSource.serialize()
+      : map.getStyle?.()?.sources?.[src];
   if (!spec || spec.type !== "geojson") return null;
   const clusterSpec = spec as {
     cluster?: boolean;
     clusterRadius?: number;
     clusterMaxZoom?: number;
   };
-  return {
+  const state: GeoJsonClusterState = {
     cluster: Boolean(clusterSpec.cluster),
     radius:
       typeof clusterSpec.clusterRadius === "number"
@@ -3921,6 +3981,8 @@ function geojsonSourceClusterState(
         ? clusterSpec.clusterMaxZoom
         : DEFAULT_LAYER_STYLE.clusterMaxZoom,
   };
+  rememberGeoJsonSourceClusterState(map, src, state);
+  return state;
 }
 
 /** Remove every style layer a GeoJSON layer can own (all renderer variants). */
@@ -4029,6 +4091,7 @@ export function removeLayerFromMap(
     if (!src || stillInUse.has(src) || !map.getSource(src)) continue;
     if (shareable.has(src) && stillDrawn(src)) continue;
     map.removeSource(src);
+    forgetGeoJsonSourceClusterState(map, src);
   }
   // Drop radius-override tracking for the removed layer's native ids so a
   // later layer reusing an id never inherits a stale restore.
