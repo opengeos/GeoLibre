@@ -338,16 +338,20 @@ function getReader(url: string): Promise<AefTileReader> {
   return reader;
 }
 
-/** Saves a generated blob through the host saver, or an anchor download. */
+/**
+ * Saves a generated blob through the host saver, or an anchor download.
+ *
+ * @returns False when the user cancelled the save dialog (the host saver
+ *   resolves to null then).
+ */
 async function saveBlob(
   blob: Blob,
   options: { defaultName: string; extension: string; mimeType: string; description: string },
-): Promise<void> {
+): Promise<boolean> {
   if (fileSaver) {
-    await fileSaver(blob, options);
-    return;
+    return (await fileSaver(blob, options)) !== null;
   }
-  await saveBinaryFileWithHost(appRef, options.defaultName, blob, {
+  return saveBinaryFileWithHost(appRef, options.defaultName, blob, {
     extensions: [options.extension],
     mimeType: options.mimeType,
     description: options.description,
@@ -974,12 +978,16 @@ async function downloadAlphaEarthClip(
   const stem = row.subtitle.replace(/[^\w.-]+/g, "_");
   const defaultName = `alphaearth_${tile.year}_${tile.utmZone}_${stem}_clip.tif`;
   signal.throwIfAborted();
-  await saveBlob(new Blob(parts, { type: "image/tiff" }), {
+  const saved = await saveBlob(new Blob(parts, { type: "image/tiff" }), {
     defaultName,
     extension: "tif",
     mimeType: "image/tiff",
     description: "GeoTIFF",
   });
+  if (!saved) {
+    setStatus(tr("saveCancelled", "Save cancelled."));
+    return;
+  }
   setStatus(
     tr("downloaded", "Saved {{name}} ({{size}}).", { name: defaultName, size: formatBytes(bytes) }),
   );

@@ -29,6 +29,10 @@ const DEFAULT_ALLOWED_ORIGINS = [
   "tauri://localhost",
 ] as const;
 
+// The package's tsconfig narrows `lib` to ES2022 on purpose (see index.ts) so
+// this code cannot reach for a browser-only global by accident. `URL` and
+// `TextEncoder` are present in both Cloudflare Workers and Node 22, so declare
+// only the exact minimal surface used here (matching identity.ts).
 interface UrlLike {
   readonly hostname: string;
   readonly origin: string;
@@ -36,23 +40,12 @@ interface UrlLike {
   readonly protocol: string;
 }
 
-interface RuntimeGlobals {
-  URL?: new (input: string) => UrlLike;
-  TextEncoder?: new () => { encode(input: string): Uint8Array };
-}
+declare const URL: new (input: string) => UrlLike;
+declare const TextEncoder: new () => { encode(input: string): Uint8Array };
 
-function runtimeGlobals(): RuntimeGlobals {
-  return globalThis as unknown as RuntimeGlobals;
-}
-
-let cachedEncoder: { encode(input: string): Uint8Array } | null = null;
+const UTF8_ENCODER = new TextEncoder();
 function utf8ByteLength(value: string): number {
-  if (!cachedEncoder) {
-    const Encoder = runtimeGlobals().TextEncoder;
-    if (!Encoder) throw new Error("TextEncoder is unavailable");
-    cachedEncoder = new Encoder();
-  }
-  return cachedEncoder.encode(value).length;
+  return UTF8_ENCODER.encode(value).length;
 }
 
 /**
@@ -64,8 +57,6 @@ export function isAllowedOrigin(
   envAllowed?: string,
 ): boolean {
   if (!originHeader) return true;
-  const UrlCtor = runtimeGlobals().URL;
-  if (!UrlCtor) return false;
 
   const allowedList: readonly string[] = envAllowed
     ? envAllowed
@@ -75,7 +66,7 @@ export function isAllowedOrigin(
     : DEFAULT_ALLOWED_ORIGINS;
 
   try {
-    const originUrl = new UrlCtor(originHeader);
+    const originUrl = new URL(originHeader);
     const host = originUrl.hostname;
     if (!envAllowed) {
       if (host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost")) {
@@ -95,7 +86,7 @@ export function isAllowedOrigin(
     return allowedList.some((allowed) => {
       if (allowed === "*") return true;
       try {
-        const allowedUrl = new UrlCtor(allowed);
+        const allowedUrl = new URL(allowed);
         // Never compare opaque origins by their serialized `"null"` string
         // (which would let any custom scheme match `tauri://localhost`).
         if (originUrl.origin !== "null" && allowedUrl.origin !== "null") {
