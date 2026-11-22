@@ -107,7 +107,10 @@ describe("formatRangeBound", () => {
   });
 
   it("switches to scientific notation at extreme magnitudes", () => {
-    assert.equal(formatRangeBound(1e12, "en"), "1E12");
+    assert.equal(formatRangeBound(1e16, "en"), "1E16");
+    assert.equal(formatRangeBound(0.0001, "en"), "1E-4");
+    // Areas, populations and epoch-ms timestamps stay grouped.
+    assert.equal(formatRangeBound(1.7e12, "en"), "1,700,000,000,000");
     assert.equal(formatRangeBound(Number.NaN, "en"), "");
   });
 });
