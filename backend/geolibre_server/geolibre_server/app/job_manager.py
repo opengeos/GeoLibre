@@ -167,7 +167,7 @@ class JobManager:
             with self.lock:
                 self._store().pop(job_id, None)
             raise
-        # Return the captured reserved JobState rather than re-reading the
-        # registry: if the worker finishes and another submission evicts it
-        # before the lock is re-acquired, looking up job_id would KeyError.
-        return job
+        # Re-read under the lock so callers observe an immediate transition to
+        # running, falling back to the reserved snapshot if already evicted.
+        with self.lock:
+            return self._store().get(job_id, job)

@@ -285,7 +285,9 @@ def test_raster_workers_in_process_analysis_and_geometry(
     with rasterio.open(reclass_out) as ds:
         arr = ds.read(1)
         assert arr[0, 0] == 1.0
-        assert arr[5, 5] == 36.0
+        assert arr[0, 1] == 1.0  # input 2 -> mapped to class 1
+        assert arr[2, 0] == 2.0  # input 13 -> mapped to class 2
+        assert arr[5, 5] == 36.0  # unmatched -> kept original
 
     # Focal (streaming + median)
     for stat in ("mean", "median", "min", "max", "sum", "std", "range"):
@@ -347,6 +349,41 @@ def test_raster_workers_in_process_analysis_and_geometry(
     with rasterio.open(resample_out) as ds:
         assert ds.width == 3
         assert ds.height == 3
+
+    # Resample with nodata=None and outward-rounded border marks uncovered edge invalid
+    from rasterio.transform import from_origin
+
+    no_nd_path = tmp_path / "no_nodata.tif"
+    with rasterio.open(
+        no_nd_path,
+        "w",
+        driver="GTiff",
+        height=3,
+        width=3,
+        count=1,
+        dtype="float32",
+        crs="EPSG:3857",
+        transform=from_origin(0.0, 9.0, 3.0, 3.0),
+        nodata=None,
+    ) as dst:
+        dst.write(np.zeros((1, 3, 3), dtype="float32"))
+    border_out = tmp_path / "resample_border.tif"
+    _run_worker(
+        monkeypatch,
+        "raster_tools.resample",
+        {
+            "input_path": str(no_nd_path),
+            "output_path": str(border_out),
+            "resolution": 4.0,
+            "resampling": "nearest",
+        },
+    )
+    with rasterio.open(border_out) as ds:
+        assert ds.nodata is None
+        assert ds.width == 3
+        mask = ds.dataset_mask()
+        assert mask[0, 0] == 255  # valid zero sample stays valid
+        assert mask[0, 2] == 0  # uncovered outward-rounded border marked invalid
 
     reproj_out = tmp_path / "reproj.tif"
     _run_worker(

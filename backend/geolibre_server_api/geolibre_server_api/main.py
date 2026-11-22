@@ -136,9 +136,12 @@ def _positive_int_env(name: str, default: int) -> int:
         return default
     try:
         parsed = int(raw)
-        return parsed if parsed > 0 else default
+        if parsed > 0:
+            return parsed
     except ValueError:
-        return default
+        pass
+    logger.warning("Ignoring invalid %s=%r; using default %d", name, raw, default)
+    return default
 
 
 def _build_engine_kwargs(database_url: str) -> dict[str, Any]:
@@ -638,14 +641,9 @@ def upgrade_sqlite_schema(bind) -> None:
     # SQLite cannot alter nullability or an FK action. Keep child tables in
     # place and rebuild only projects with legacy rename behavior enabled so
     # versions/project_groups continue to reference the new `projects` table.
-    raw = (bind.engine if isinstance(bind, Connection) else bind).raw_connection()
-    try:
-        cursor = raw.cursor()
-        cursor.execute("PRAGMA foreign_keys=OFF")
-        cursor.execute("PRAGMA legacy_alter_table=ON")
-        cursor.execute("BEGIN")
-        cursor.execute("ALTER TABLE projects RENAME TO projects_legacy")
-        cursor.execute("""
+    rebuild_statements = [
+        "ALTER TABLE projects RENAME TO projects_legacy",
+        """
             CREATE TABLE projects (
                 id VARCHAR(36) NOT NULL PRIMARY KEY,
                 owner_id VARCHAR(36) REFERENCES accounts(id) ON DELETE SET NULL,
@@ -669,8 +667,8 @@ def upgrade_sqlite_schema(bind) -> None:
                 CONSTRAINT uq_project_owner_slug UNIQUE (owner_id, slug),
                 CONSTRAINT uq_project_org_slug UNIQUE (organization_id, slug)
             )
-        """)
-        cursor.execute("""
+        """,
+        """
             INSERT INTO projects (
                 id, owner_id, created_by_id, organization_id, slug, title,
                 description, visibility, tags_json, thumbnail_type, views,
@@ -682,12 +680,33 @@ def upgrade_sqlite_schema(bind) -> None:
                 views, fork_count, featured, delete_protected, share_role, share_expires_at,
                 share_password_hash, created_at, updated_at
             FROM projects_legacy
-        """)
-        cursor.execute("DROP TABLE projects_legacy")
-        cursor.execute("CREATE INDEX ix_projects_owner_id ON projects (owner_id)")
-        cursor.execute("CREATE INDEX ix_projects_created_by_id ON projects (created_by_id)")
-        cursor.execute("CREATE INDEX ix_projects_organization_id ON projects (organization_id)")
-        cursor.execute("CREATE INDEX ix_projects_updated_at ON projects (updated_at)")
+        """,
+        "DROP TABLE projects_legacy",
+        "CREATE INDEX ix_projects_owner_id ON projects (owner_id)",
+        "CREATE INDEX ix_projects_created_by_id ON projects (created_by_id)",
+        "CREATE INDEX ix_projects_organization_id ON projects (organization_id)",
+        "CREATE INDEX ix_projects_updated_at ON projects (updated_at)",
+    ]
+    if isinstance(bind, Connection):
+        # Run atomically inside the active Alembic migration transaction without
+        # opening a competing SQLite writer connection.
+        bind.execute(text("PRAGMA defer_foreign_keys=ON"))
+        bind.execute(text("PRAGMA legacy_alter_table=ON"))
+        try:
+            for statement in rebuild_statements:
+                bind.execute(text(statement))
+        finally:
+            bind.execute(text("PRAGMA legacy_alter_table=OFF"))
+        return
+
+    raw = bind.raw_connection()
+    try:
+        cursor = raw.cursor()
+        cursor.execute("PRAGMA foreign_keys=OFF")
+        cursor.execute("PRAGMA legacy_alter_table=ON")
+        cursor.execute("BEGIN")
+        for statement in rebuild_statements:
+            cursor.execute(statement)
         raw.commit()
         cursor.execute("PRAGMA foreign_keys=ON")
     except Exception:

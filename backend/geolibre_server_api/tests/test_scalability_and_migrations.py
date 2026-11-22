@@ -258,6 +258,7 @@ def test_alembic_upgrade_head_builds_full_schema(tmp_path: Path, monkeypatch) ->
 def test_schema_upgrade_helpers_run_on_active_connection(tmp_path: Path) -> None:
     from geolibre_server_api.auth_models import Base
     from geolibre_server_api.main import upgrade_sqlite_schema
+    from sqlalchemy import text
 
     engine = create_engine(f"sqlite:///{tmp_path / 'conn-upgrade.db'}")
     try:
@@ -268,3 +269,78 @@ def test_schema_upgrade_helpers_run_on_active_connection(tmp_path: Path) -> None
             assert "projects" in set(inspect(conn).get_table_names())
     finally:
         engine.dispose()
+
+    # Legacy SQLite file DB (owner_id NOT NULL + child version row) must rebuild
+    # atomically inside Alembic's migration transaction without locking.
+    legacy_db = tmp_path / "legacy-alembic.db"
+    legacy_url = f"sqlite:///{legacy_db}"
+    legacy_engine = create_engine(legacy_url)
+    try:
+        with legacy_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE TABLE accounts (id VARCHAR(36) NOT NULL PRIMARY KEY, "
+                    "username VARCHAR(40) NOT NULL, password_hash VARCHAR(200) NOT NULL, "
+                    "created_at VARCHAR(32) NOT NULL)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE TABLE projects (id VARCHAR(36) NOT NULL PRIMARY KEY, "
+                    "owner_id VARCHAR(36) NOT NULL REFERENCES accounts(id), "
+                    "slug VARCHAR(100) NOT NULL, title VARCHAR(100) NOT NULL, "
+                    "description TEXT NOT NULL DEFAULT '', visibility VARCHAR(16) NOT NULL, "
+                    "tags_json TEXT NOT NULL DEFAULT '[]', thumbnail_type VARCHAR(20), "
+                    "views INTEGER NOT NULL DEFAULT 0, fork_count INTEGER NOT NULL DEFAULT 0, "
+                    "featured BOOLEAN NOT NULL DEFAULT 0, created_at VARCHAR(32) NOT NULL, "
+                    "updated_at VARCHAR(32) NOT NULL)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE TABLE project_versions (id VARCHAR(36) NOT NULL PRIMARY KEY, "
+                    "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE CASCADE, "
+                    "version INTEGER NOT NULL, storage_key VARCHAR(200) NOT NULL, "
+                    "size_bytes INTEGER NOT NULL, created_at VARCHAR(32) NOT NULL)"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO accounts (id, username, password_hash, created_at) "
+                    "VALUES ('a1', 'ada', 'h', '2026-01-01T00:00:00Z')"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO projects "
+                    "(id, owner_id, slug, title, visibility, created_at, updated_at) "
+                    "VALUES ('p1', 'a1', 'map', 'Map', 'private', "
+                    "'2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO project_versions "
+                    "(id, project_id, version, storage_key, size_bytes, created_at) "
+                    "VALUES ('v1', 'p1', 1, 'k1', 10, '2026-01-01T00:00:00Z')"
+                )
+            )
+    finally:
+        legacy_engine.dispose()
+
+    alembic_ini = Path(__file__).resolve().parents[1] / "alembic.ini"
+    cfg = Config(str(alembic_ini))
+    cfg.set_main_option("sqlalchemy.url", legacy_url)
+    command.upgrade(cfg, "head")
+
+    verify_engine = create_engine(legacy_url)
+    try:
+        owner_col = next(
+            c for c in inspect(verify_engine).get_columns("projects") if c["name"] == "owner_id"
+        )
+        assert owner_col["nullable"] is True
+        with verify_engine.connect() as conn:
+            assert conn.execute(text("SELECT COUNT(*) FROM projects")).scalar() == 1
+            assert conn.execute(text("SELECT COUNT(*) FROM project_versions")).scalar() == 1
+    finally:
+        verify_engine.dispose()

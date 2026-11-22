@@ -1,5 +1,11 @@
 """Initial baseline schema for geolibre-server-api.
 
+Existing pre-Alembic databases can adopt Alembic either by stamping this
+revision (``alembic stamp 0001_initial_schema``) or running
+``alembic upgrade head`` (all operations here are idempotent). All future
+revisions (``0002+``) must use explicit ``op.*`` DDL rather than
+``Base.metadata.create_all`` so historical upgrades remain deterministic.
+
 Revision ID: 0001_initial_schema
 Revises:
 Create Date: 2026-11-22 00:00:00.000000

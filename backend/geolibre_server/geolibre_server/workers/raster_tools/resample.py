@@ -6,6 +6,7 @@ def main() -> None:
     import math
     import sys
 
+    import numpy as np
     import rasterio
     from rasterio.transform import from_origin
     from rasterio.warp import Resampling, reproject
@@ -39,6 +40,25 @@ def main() -> None:
                     dst_crs=src.crs,
                     resampling=method,
                 )
+            if src.nodata is None:
+                # Outward-rounded destination borders can extend past the source
+                # extent; persist a validity mask so uncovered border cells are
+                # marked invalid while valid source zeros remain valid.
+                src_mask = src.dataset_mask()
+                dst_mask = np.zeros((height, width), dtype="uint8")
+                reproject(
+                    source=src_mask,
+                    destination=dst_mask,
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs=src.crs,
+                    resampling=Resampling.nearest,
+                    src_nodata=0,
+                    dst_nodata=0,
+                )
+                if (dst_mask == 0).any():
+                    dst.write_mask(dst_mask)
     print(f"Resampled to {resolution} units/pixel ({width}x{height}) -> {output_path}")
     print("__GEOLIBRE_CONVERSION_RESULT__" + json.dumps({"output_path": output_path}))
 
