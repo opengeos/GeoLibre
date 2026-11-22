@@ -1009,7 +1009,10 @@ export function createRelay(options: RelayOptions = {}): {
         // uncaught exception that stops the whole relay. No single session's
         // frame should be able to do that to the others.
         peer.queue = (peer.queue ?? Promise.resolve())
-          .then(() => handleMessage(id, session, peer, raw))
+          .then(() => {
+            if (peer.socket.readyState !== WebSocket.OPEN) return;
+            return handleMessage(id, session, peer, raw);
+          })
           .catch(() => {
             send(peer, {
               type: "error",

@@ -988,6 +988,7 @@ def render_consent_form(
     sso_available: bool = False,
     proxy_user: str | None = None,
     reauth: bool = False,
+    requested_max_age: int | None = None,
 ) -> str:
     scope_items = "".join(
         f"<li>{html.escape(scope_description(s))}</li>" for s in canonical_scope(scope).split()
@@ -1007,15 +1008,19 @@ def render_consent_form(
             "autocomplete='current-password' required></label>"
         )
         allow_text = "Sign in and allow"
+    reauth_inputs = ""
+    if requested_max_age is not None:
+        reauth_inputs += f"<input type='hidden' name='max_age' value='{requested_max_age}'>"
+    if reauth or requested_max_age is not None:
+        reauth_inputs += "<input type='hidden' name='reauth' value='1'>"
     sso_html = ""
     if sso_available and proxy_user is None:
-        reauth_html = "<input type='hidden' name='reauth' value='1'>" if reauth else ""
         sso_html = (
             "<form method='post'>"
             f"<input type='hidden' name='interaction' value='{html.escape(interaction_id)}'>"
             f"<input type='hidden' name='csrf' value='{html.escape(csrf_value)}'>"
             f"<input type='hidden' name='label' value='{html.escape(label)}'>"
-            f"{reauth_html}"
+            f"{reauth_inputs}"
             "<label>Organization <input type='text' name='organization' "
             "autocomplete='organization' required></label>"
             "<button type='submit' name='decision' value='sso'>"
@@ -1035,6 +1040,7 @@ def render_consent_form(
         "<form method='post'>"
         f"<input type='hidden' name='interaction' value='{html.escape(interaction_id)}'>"
         f"<input type='hidden' name='csrf' value='{html.escape(csrf_value)}'>"
+        f"{reauth_inputs}"
         "<label>Device label <input type='text' name='label' maxlength='100' "
         f"value='{html.escape(label)}'></label>"
         f"{credentials_html}"
@@ -1711,7 +1717,8 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
         raw_max_age = params.get("max_age")
         if raw_max_age is not None and (not raw_max_age.isdigit() or len(raw_max_age) > 10):
             return oauth_error_redirect(config.issuer, redirect_uri, "invalid_request", state)
-        reauth_requested = raw_max_age is not None
+        requested_max_age = int(raw_max_age) if raw_max_age is not None else None
+        reauth_requested = requested_max_age is not None
         try:
             identity = proxy_identity(request)
         except ValueError:
@@ -1783,6 +1790,7 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
                 sso_available=sso_available,
                 proxy_user=proxy_user,
                 reauth=reauth_requested,
+                requested_max_age=requested_max_age,
             ),
             form_redirect_uri=redirect_uri,
             sso_form_action=sso_available,
@@ -1895,6 +1903,17 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
             return oauth_error_page(400, "invalid_request", "invalid proxy identity")
         proxy_user = identity.user if identity is not None else None
 
+        raw_form_max_age = fields.get("max_age", "").strip()
+        form_max_age = (
+            int(raw_form_max_age)
+            if raw_form_max_age.isdigit() and len(raw_form_max_age) <= 10
+            else None
+        )
+        form_reauth = form_max_age is not None or fields.get("reauth", "").strip().lower() in (
+            "1",
+            "true",
+        )
+
         if decision == "sso":
             if identity is not None:
                 # The proxy's identity is authoritative; the consent form never
@@ -1911,7 +1930,8 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
                 fields.get("organization", "").strip().lower(),
                 now_ts,
                 proxy_user=proxy_user,
-                reauth=fields.get("reauth", "").strip().lower() in ("1", "true"),
+                reauth=form_reauth,
+                requested_max_age=form_max_age,
             )
 
         if identity is not None:
@@ -1931,6 +1951,8 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
                     label,
                     DEACTIVATED_MESSAGE,
                     proxy_user=proxy_user,
+                    reauth=form_reauth,
+                    requested_max_age=form_max_age,
                 )
             return _approve_interaction(
                 session, interaction, account.id, label, now_ts, authenticated_at=now_ts
@@ -1949,6 +1971,8 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
                 label,
                 CONSENT_LOGIN_ERRORS[exc.code],
                 proxy_user=proxy_user,
+                reauth=form_reauth,
+                requested_max_age=form_max_age,
             )
         return _approve_interaction(
             session, interaction, account.id, label, now_ts, authenticated_at=now_ts
@@ -1965,6 +1989,7 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
         *,
         proxy_user: str | None,
         reauth: bool = False,
+        requested_max_age: int | None = None,
     ) -> Response:
         """Redirect the browser to the named organization's identity provider."""
         provider = None
@@ -1984,13 +2009,18 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
                 "Single sign-on is not configured for that organization",
                 proxy_user=proxy_user,
                 reauth=reauth,
+                requested_max_age=requested_max_age,
             )
         org_policy = session.get(OrganizationSecurityPolicy, provider.organization_id)
-        max_age = (
-            org_policy.admin_reauth_seconds
-            if org_policy is not None and (reauth or interaction.scope == MANAGEMENT_SCOPE)
-            else None
-        )
+        policy_max_age = org_policy.admin_reauth_seconds if org_policy is not None else None
+        if requested_max_age is not None and policy_max_age is not None:
+            max_age = min(requested_max_age, policy_max_age)
+        elif requested_max_age is not None:
+            max_age = requested_max_age
+        elif reauth or interaction.scope == MANAGEMENT_SCOPE:
+            max_age = policy_max_age
+        else:
+            max_age = None
         state = secrets.token_urlsafe(32)
         nonce = secrets.token_urlsafe(32)
         code_verifier = secrets.token_urlsafe(64)
@@ -2029,6 +2059,7 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
         *,
         proxy_user: str | None,
         reauth: bool = False,
+        requested_max_age: int | None = None,
     ) -> HTMLResponse:
         """Re-render the consent form for this interaction with an error message."""
         sso_available = _sso_available(session, proxy_user)
@@ -2045,6 +2076,7 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
                 sso_available=sso_available,
                 proxy_user=proxy_user,
                 reauth=reauth,
+                requested_max_age=requested_max_age,
             ),
             form_redirect_uri=interaction.redirect_uri,
             sso_form_action=sso_available,

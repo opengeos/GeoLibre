@@ -107,9 +107,28 @@ def test_sso_max_age_only_requested_for_reauth(oauth_client, fake_idp):
     _, params, _ = start_sso(oauth_client, "acme")
     assert "max_age" not in params
 
-    # Step-up /oauth/authorize?max_age=... renders hidden reauth=1 on the SSO form.
-    page, _, interaction, csrf = start_authorize(oauth_client, params_extra={"max_age": "60"})
+    # Step-up /oauth/authorize?max_age=30 preserves requested max_age across a
+    # failed password attempt and sends min(requested, policy) to the IdP.
+    page, _, interaction, csrf = start_authorize(oauth_client, params_extra={"max_age": "30"})
     assert "name='reauth' value='1'" in page.text
+    assert "name='max_age' value='30'" in page.text
+    retry_page = oauth_client.post(
+        "/oauth/authorize",
+        data={
+            "interaction": interaction,
+            "csrf": csrf,
+            "label": "Test device",
+            "decision": "allow",
+            "username": "ada",
+            "password": "wrong password",
+            "reauth": "1",
+            "max_age": "30",
+        },
+        headers={"Origin": PUBLIC_URL},
+        follow_redirects=False,
+    )
+    assert retry_page.status_code == 200
+    assert "name='max_age' value='30'" in retry_page.text
     redirect = oauth_client.post(
         "/oauth/authorize",
         data={
@@ -119,9 +138,10 @@ def test_sso_max_age_only_requested_for_reauth(oauth_client, fake_idp):
             "decision": "sso",
             "organization": "acme",
             "reauth": "1",
+            "max_age": "30",
         },
         headers={"Origin": PUBLIC_URL},
         follow_redirects=False,
     )
     assert redirect.status_code == 303
-    assert redirect_params(redirect).get("max_age") == "60"
+    assert redirect_params(redirect).get("max_age") == "30"

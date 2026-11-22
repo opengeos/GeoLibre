@@ -2586,14 +2586,16 @@ def create_app(
         payload = bytes(data)
 
         def _store_and_commit() -> None:
-            # Lock the group row, write the object, and commit as one blocking
-            # unit inside the threadpool so the event loop never blocks on the
-            # row lock or storage I/O and concurrent uploads serialize cleanly.
+            # Lock the group row, write the object, and issue an explicit UPDATE
+            # inside the threadpool so the event loop never blocks and concurrent
+            # uploads always persist matching bytes and thumbnail_type.
             session.execute(
                 select(Group.id).where(Group.id == group.id).with_for_update(key_share=True)
             )
             object_storage.put(f"groups/{group.id}/thumbnail", payload, content_type)
-            group.thumbnail_type = content_type
+            session.execute(
+                update(Group).where(Group.id == group.id).values(thumbnail_type=content_type)
+            )
             session.commit()
 
         await run_in_threadpool(_store_and_commit)
@@ -3514,15 +3516,18 @@ def create_app(
         data = b"".join(chunks)
 
         def _store_and_commit() -> None:
-            # Lock the project row, write the object, and commit as one blocking
-            # unit inside the threadpool so the event loop never blocks on the
-            # row lock or storage I/O and concurrent uploads serialize cleanly.
+            # Lock the project row, write the object, and issue an explicit UPDATE
+            # inside the threadpool so the event loop never blocks and concurrent
+            # uploads always persist matching bytes and thumbnail_type.
             session.execute(
                 select(Project.id).where(Project.id == project.id).with_for_update(key_share=True)
             )
             object_storage.put(f"projects/{project.id}/thumbnail", data, content_type)
-            project.thumbnail_type = content_type
-            project.updated_at = now()
+            session.execute(
+                update(Project)
+                .where(Project.id == project.id)
+                .values(thumbnail_type=content_type, updated_at=now())
+            )
             session.commit()
 
         await run_in_threadpool(_store_and_commit)
