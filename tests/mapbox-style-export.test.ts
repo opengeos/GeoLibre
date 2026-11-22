@@ -663,4 +663,21 @@ describe("switched-off else rule (#1312)", () => {
       false,
     ]);
   });
+
+  it("normalizes reversed style zoom bounds before intersecting with label zoom range", () => {
+    const labels = {
+      ...DEFAULT_LAYER_STYLE.labels,
+      enabled: true,
+      field: "name",
+      minZoom: 0,
+      maxZoom: 24,
+    };
+    const { style: doc } = buildMapboxStyle(
+      layer({ style: style({ minZoom: 12, maxZoom: 4, labels }) }),
+      points(),
+    );
+    const labelLayer = layerById(doc, "my-layer-label") as { minzoom?: number; maxzoom?: number };
+    assert.equal(labelLayer.minzoom, 4);
+    assert.equal(labelLayer.maxzoom, 12);
+  });
 });

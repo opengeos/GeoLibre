@@ -100,6 +100,7 @@ export function applyLayerFilters(
   } catch {
     return geojson;
   }
+  let warned = false;
   const result: FeatureCollection = {
     ...geojson,
     features: geojson.features.filter((feature) => {
@@ -114,8 +115,12 @@ export function applyLayerFilters(
             ...(feature.id !== undefined ? { id: feature.id } : {}),
           } as never,
         );
-      } catch {
-        return false;
+      } catch (error) {
+        if (!warned) {
+          warned = true;
+          console.warn("[GeoLibre] Failed to evaluate layer filter expression.", error);
+        }
+        return true;
       }
     }),
   };

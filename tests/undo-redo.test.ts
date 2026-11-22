@@ -457,7 +457,7 @@ describe("undo/redo behavior", () => {
     assert.equal(futureLen(), 0);
   });
 
-  it("tracks nesting depth in withoutHistory and preserves active coalesce bursts", () => {
+  it("tracks nesting depth in withoutHistory and cancels active coalesce bursts on outermost entry", () => {
     setHistoryCoalesceMs(50);
     try {
       const id = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
@@ -470,10 +470,13 @@ describe("undo/redo behavior", () => {
         useAppStore.getState().setLayerOpacity(id, 0.5);
       });
       assert.equal(pastLen(), 1);
-      // Coalesce burst from the initial edit is still active, so a follow-up
-      // edit within the window does not split into an extra undo step.
+      // Outermost withoutHistory cancelled the prior coalesce window so the
+      // next user edit records its own step instead of rolling back the
+      // unrecorded change on undo.
       useAppStore.getState().setLayerOpacity(id, 0.4);
-      assert.equal(pastLen(), 1);
+      assert.equal(pastLen(), 2);
+      undo();
+      assert.equal(useAppStore.getState().layers[0].opacity, 0.5);
     } finally {
       setHistoryCoalesceMs(0);
     }

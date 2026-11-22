@@ -400,6 +400,17 @@ export function unregisterGeoJsonVtSource(layerId: string, owner?: object): void
   }
 }
 
+/** Release every GeoJSON-VT source owned by a map being destroyed. */
+export function unregisterAllGeoJsonVtSourcesForOwner(owner: object): void {
+  const ownedLayerIds: string[] = [];
+  for (const [layerId, entry] of registry) {
+    if (entry.owners.has(owner)) ownedLayerIds.push(layerId);
+  }
+  for (const layerId of ownedLayerIds) {
+    unregisterGeoJsonVtSource(layerId, owner);
+  }
+}
+
 /** Whether a tile index is currently registered for this layer. */
 export function hasGeoJsonVtSource(layerId: string): boolean {
   return registry.has(layerId);
@@ -441,11 +452,12 @@ async function geojsonVtProtocolHandler(
     await entry.posted;
     if (signal?.aborted || registry.get(layerId) !== entry) return empty;
     const data = await worker.requestTile(layerId, z, x, y, signal);
-    if (data) return { data };
     // If the layer was removed or replaced while the tile was in flight (e.g.
-    // unregisterGeoJsonVtSource terminated the worker), do not fall back to
+    // unregisterGeoJsonVtSource terminated the worker, or a new registration
+    // superseded this entry), discard stale worker data and do not fall back to
     // building a synchronous index on the main thread for the stale entry.
     if (registry.get(layerId) !== entry) return empty;
+    if (data) return { data };
     // The worker failed while the entry is still live: tile here from now on.
   }
 

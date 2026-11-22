@@ -257,10 +257,20 @@ export function MapContextMenu({
   );
 
   const [viewshedBusy, setViewshedBusy] = useState(false);
+  const viewshedAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => {
+      viewshedAbortRef.current?.abort();
+      viewshedAbortRef.current = null;
+    };
+  }, []);
   const viewshedHere = useCallback(
     (radiusMeters: number) => {
       if (!menu || viewshedBusy) return;
       const { lng, lat } = menu;
+      viewshedAbortRef.current?.abort();
+      const controller = new AbortController();
+      viewshedAbortRef.current = controller;
       setViewshedBusy(true);
       const toolName = t("quickAnalysis.viewshedToolName");
       // Reported through the Quick Analysis banner like every other action in
@@ -274,11 +284,13 @@ export function MapContextMenu({
         lat,
         radiusMeters,
         mapControllerRef,
+        signal: controller.signal,
         layerName: t("quickAnalysis.viewshedLayerName", {
           radius: formatViewshedRadius(radiusMeters),
         }),
       })
         .then((result) => {
+          if (controller.signal.aborted) return;
           reportStatus(
             result
               ? { phase: "idle" }
@@ -286,13 +298,24 @@ export function MapContextMenu({
           );
         })
         .catch((error: unknown) => {
+          if (
+            controller.signal.aborted ||
+            (error instanceof Error && error.name === "AbortError")
+          ) {
+            return;
+          }
           reportStatus({
             phase: "error",
             toolName,
             message: error instanceof Error ? error.message : t("quickAnalysis.viewshedNoResult"),
           });
         })
-        .finally(() => setViewshedBusy(false));
+        .finally(() => {
+          if (viewshedAbortRef.current === controller) {
+            viewshedAbortRef.current = null;
+          }
+          setViewshedBusy(false);
+        });
     },
     [menu, viewshedBusy, t, formatViewshedRadius, mapControllerRef],
   );

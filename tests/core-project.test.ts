@@ -2321,7 +2321,7 @@ describe("parseProject and applyProjectToStore hardening", () => {
     assert.deepEqual(applied.storymap?.chapters[0].onChapterExit, []);
   });
 
-  it("preserves group contiguity in addLayer(beforeLayerId) and reorderLayer", () => {
+  it("preserves group contiguity in addLayer(beforeLayerId) and moves across groups in reorderLayer", () => {
     useAppStore.getState().newProject();
     const gid = useAppStore.getState().addLayerGroup("Group");
     useAppStore.getState().addLayer(geojsonLayer({ id: "g1", groupId: gid }));
@@ -2329,10 +2329,27 @@ describe("parseProject and applyProjectToStore hardening", () => {
     useAppStore.getState().addLayer(geojsonLayer({ id: "free" }), "g2");
     const afterAdd = useAppStore.getState().layers.map((l) => l.id);
     // Group members g1 and g2 remain adjacent after inserting an ungrouped layer before g2.
-    assert.equal(Math.abs(afterAdd.indexOf("g1") - afterAdd.indexOf("g2")), 1);
+    assert.deepEqual(afterAdd, ["g1", "g2", "free"]);
 
+    // Moving an ungrouped layer down toward a group skips the entire group.
     useAppStore.getState().reorderLayer("free", "down");
-    const afterReorder = useAppStore.getState().layers.map((l) => l.id);
-    assert.equal(Math.abs(afterReorder.indexOf("g1") - afterReorder.indexOf("g2")), 1);
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      ["free", "g1", "g2"],
+    );
+
+    // Moving it back up skips past the entire group again.
+    useAppStore.getState().reorderLayer("free", "up");
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      ["g1", "g2", "free"],
+    );
+
+    // Moving a layer within the same group stays a single-position swap.
+    useAppStore.getState().reorderLayer("g1", "up");
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      ["g2", "g1", "free"],
+    );
   });
 });

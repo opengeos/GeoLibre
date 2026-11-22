@@ -697,7 +697,7 @@ describe("WORKER_VECTOR_TOOL_IDS", () => {
     }
   });
 
-  it("renames case-insensitively colliding overlay fields in intersectionTool", async () => {
+  it("renames exact and case-insensitive colliding overlay fields in intersectionTool", async () => {
     const tool = getVectorTool("intersection")!;
     const a: GeoLibreLayer = {
       id: "a",
@@ -713,7 +713,7 @@ describe("WORKER_VECTOR_TOOL_IDS", () => {
         features: [
           {
             type: "Feature",
-            properties: { Name: "input-a" },
+            properties: { Name: "input-a", Code: "A1" },
             geometry: {
               type: "Polygon",
               coordinates: [
@@ -739,7 +739,7 @@ describe("WORKER_VECTOR_TOOL_IDS", () => {
         features: [
           {
             type: "Feature",
-            properties: { name: "overlay-b" },
+            properties: { Name: "overlay-exact", code: "b2", extra: 7 },
             geometry: {
               type: "Polygon",
               coordinates: [
@@ -765,7 +765,76 @@ describe("WORKER_VECTOR_TOOL_IDS", () => {
     assert.equal(captured.features.length, 1);
     const props = captured.features[0].properties ?? {};
     assert.equal(props.Name, "input-a");
-    assert.equal(props.name_right, "overlay-b");
+    assert.equal(props.Name_right, "overlay-exact");
+    assert.equal(props.Code, "A1");
+    assert.equal(props.code_right, "b2");
+    assert.equal(props.extra, 7);
+  });
+
+  it("skips a malformed first polygon during mergePolygons pairwise fallback and merges valid ones", async () => {
+    const tool = getVectorTool("aggregate")!;
+    const mixed: GeoLibreLayer = {
+      id: "mixed",
+      name: "Mixed",
+      type: "geojson",
+      visible: true,
+      opacity: 1,
+      source: {},
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: {},
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { grp: "g1" },
+            geometry: { type: "Polygon", coordinates: [[]] },
+          },
+          {
+            type: "Feature",
+            properties: { grp: "g1" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+          {
+            type: "Feature",
+            properties: { grp: "g1" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [1, 0],
+                  [2, 0],
+                  [2, 1],
+                  [1, 1],
+                  [1, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    };
+    const captured = await runAlgorithmCapture(
+      tool,
+      { layer: "mixed", group_field: "grp", statistic: "count" },
+      { layers: [mixed], log: () => {} },
+    );
+    assert.ok(captured);
+    assert.equal(captured.features.length, 1);
+    const geom = captured.features[0].geometry;
+    assert.equal(geom.type, "Polygon");
+    assert.ok(geom.coordinates[0].length >= 4);
   });
 });
 

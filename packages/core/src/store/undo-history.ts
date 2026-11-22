@@ -408,6 +408,7 @@ let withoutHistoryDepth = 0;
  */
 export function withoutHistory(change: () => void): void {
   const isOutermost = withoutHistoryDepth === 0;
+  if (isOutermost) cancelHistoryCoalesce(); // a burst left open would record this change
   withoutHistoryDepth += 1;
   const temporal = boundStore().temporal.getState();
   if (isOutermost) {

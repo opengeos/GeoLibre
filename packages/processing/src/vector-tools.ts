@@ -165,10 +165,23 @@ function mergePolygons(fc: FeatureCollection): Feature<Polygon | MultiPolygon> |
   } catch {
     // Fall back to pairwise union if a degenerate polygon throws during batching.
   }
-  let merged: Feature<Polygon | MultiPolygon> = polys[0];
-  for (let i = 1; i < polys.length; i += 1) {
+  let merged: Feature<Polygon | MultiPolygon> | null = null;
+  for (let i = 0; i < polys.length; i += 1) {
+    const candidate = polys[i];
+    if (!merged) {
+      // Probe whether this candidate is valid for Turf before seeding `merged`
+      // so an invalid first polygon (e.g. `[[]]`) is skipped instead of being
+      // returned as the merged output while dropping later valid polygons.
+      try {
+        const seeded = union(featureCollection([candidate, candidate]));
+        if (seeded) merged = seeded as Feature<Polygon | MultiPolygon>;
+      } catch {
+        // Skip malformed candidate and try the next polygon as seed.
+      }
+      continue;
+    }
     try {
-      const next = union(featureCollection([merged, polys[i]]));
+      const next = union(featureCollection([merged, candidate]));
       // Turf can return null for degenerate/self-intersecting geometry; keep the
       // last good accumulation rather than aborting the whole merge.
       if (next) merged = next as Feature<Polygon | MultiPolygon>;
@@ -833,7 +846,7 @@ export const intersectionTool: ProcessingAlgorithm = {
     // are not clobbered or duplicated.
     const inputBoxes = inputPolys.map((f) => horizontalBbox(bbox(f, { recompute: true })));
     const overlayBoxes = overlayPolys.map((f) => horizontalBbox(bbox(f, { recompute: true })));
-    const overlayOutputNames = joinFieldOutputNames(
+    const overlayOutputNames = overlayFieldOutputNames(
       propertyKeys(inputPolys),
       propertyKeys(overlayPolys),
     );
@@ -1014,6 +1027,31 @@ export function joinFieldOutputNames(
       names.set(key, key);
       continue;
     }
+    let name = key;
+    if (taken.has(name.toLowerCase())) {
+      name = `${key}${JOIN_FIELD_SUFFIX}`;
+      for (let n = 2; taken.has(name.toLowerCase()); n += 1) {
+        name = `${key}${JOIN_FIELD_SUFFIX}_${n}`;
+      }
+    }
+    taken.add(name.toLowerCase());
+    names.set(key, name);
+  }
+  return names;
+}
+
+/**
+ * Map overlay property names for intersection results so neither exact-name nor
+ * case-insensitive collisions overwrite input properties.
+ */
+function overlayFieldOutputNames(
+  inputKeys: Iterable<string>,
+  overlayKeys: Iterable<string>,
+): Map<string, string> {
+  const taken = new Set([...inputKeys].map((key) => key.toLowerCase()));
+  const names = new Map<string, string>();
+  for (const key of overlayKeys) {
+    if (names.has(key)) continue;
     let name = key;
     if (taken.has(name.toLowerCase())) {
       name = `${key}${JOIN_FIELD_SUFFIX}`;
