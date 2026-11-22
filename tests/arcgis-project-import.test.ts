@@ -3,6 +3,7 @@ import { describe, it, mock } from "node:test";
 import { DEFAULT_LAYER_STYLE } from "@geolibre/core";
 import { strToU8, zipSync } from "fflate";
 import {
+  countArcgisUnloadedLayers,
   dropArcgisImportLayers,
   importArcgisProject,
   readArcgisProject,
@@ -37,6 +38,22 @@ function featureLayer(name: string, path: string) {
               type: "CIMVectorMarker",
               size: 9,
               color: { type: "CIMRGBColor", values: [10, 20, 30, 80] },
+              // ArcGIS Pro's circle: one curve ring, one arc back to its start.
+              markerGraphics: [
+                {
+                  geometry: { curveRings: [[[0, 5], { a: [[0, 5], [0, 0], 0, 1] }]] },
+                  symbol: {
+                    type: "CIMPolygonSymbol",
+                    symbolLayers: [
+                      {
+                        type: "CIMSolidFill",
+                        enable: true,
+                        color: { type: "CIMRGBColor", values: [10, 20, 30, 80] },
+                      },
+                    ],
+                  },
+                },
+              ],
             },
           ],
         },
@@ -735,6 +752,21 @@ describe("ArcGIS Pro project import", () => {
     );
   });
 
+  it("counts only layers that were not loaded in the import headline", () => {
+    const extent = { layerName: "Map", reason: "map-extent" } as const;
+    const symbology = {
+      layerName: "Zoning",
+      layerId: "zoning",
+      reason: "symbology-partial",
+      symbologyIssue: "effects",
+    } as const;
+    const unloaded = { layerName: "Roads", reason: "format" } as const;
+    // A map-extent or symbology note alone is not an unloaded layer.
+    assert.equal(countArcgisUnloadedLayers([extent]), 0);
+    assert.equal(countArcgisUnloadedLayers([extent, symbology]), 0);
+    assert.equal(countArcgisUnloadedLayers([extent, symbology, unloaded]), 1);
+  });
+
   it("reports a raster on a network share as a network path, not a bad format", () => {
     const mapx = {
       type: "CIMMap",
@@ -1005,6 +1037,33 @@ describe("ArcGIS Pro File Geodatabase layers", () => {
     assert.deepEqual(
       result.warnings.map((warning) => [warning.layerName, warning.reason]),
       [["Shared", "network-path"]],
+    );
+  });
+
+  it("reports unsupported symbology on a feature class like any other layer", () => {
+    const mapx = {
+      type: "CIMMap",
+      name: "Heat",
+      defaultExtent: { xmin: -80, ymin: 30, xmax: -70, ymax: 40, spatialReference: { wkid: 4326 } },
+      layerDefinitions: [
+        {
+          ...gdbLayer("Wells", "C:\\data\\city.gdb"),
+          renderer: { type: "CIMHeatMapRenderer" },
+        },
+      ],
+    };
+    const result = importArcgisProject(JSON.stringify(mapx), "C:\\work\\heat.mapx", {
+      readFileGeodatabase: true,
+    });
+    assert.equal(result.fileGeodatabaseLayers.length, 1);
+    assert.deepEqual(
+      result.warnings.map((warning) => [
+        warning.layerName,
+        warning.layerId,
+        warning.reason,
+        warning.symbologyIssue,
+      ]),
+      [["Wells", result.project.layers[0].id, "symbology", "renderer"]],
     );
   });
 

@@ -570,6 +570,14 @@ function ruleScaleAttributes(rule: VectorRule): string {
  * gets `checkstate="0"` (the QGIS rule checkbox); per-rule symbol overrides
  * (outline color/width, opacity, size) are folded into each rule's
  * symbol. The ELSE rule stays a top-level catch-all.
+ *
+ * Returns null when nothing could be exported, the ELSE rule is switched off,
+ * and at least one skipped rule draws on the map (it and its ancestors are
+ * switched on): the tree would draw nothing where the map draws something,
+ * so the caller exports a single symbol instead, as it does for categorized
+ * and graduated styles with no valid classes. When every skipped rule is
+ * switched off, or the only rule is a switched-off ELSE, the map draws
+ * nothing either and the tree is kept.
  */
 function ruleRenderer(
   geometry: SymbolGeometry,
@@ -577,7 +585,7 @@ function ruleRenderer(
   opacity: number,
   rules: VectorRule[],
   warnings: string[],
-): string {
+): string | null {
   const paint = basePaint(style);
   const symbols: string[] = [];
   const elseRule = rules.find((entry) => entry.isElse);
@@ -598,8 +606,11 @@ function ruleRenderer(
   }
 
   const emitted = new Set<string>();
-  const emitRule = (entry: VectorRule): string => {
+  // Whether a skipped rule is one the map draws, so skipping it loses features.
+  let skippedDrawn = false;
+  const emitRule = (entry: VectorRule, parentEnabled = true): string => {
     if (emitted.has(entry.id)) return "";
+    const drawn = parentEnabled && entry.enabled !== false;
     emitted.add(entry.id);
     const kids = childrenOf.get(entry.id) ?? [];
     const isGroup = kids.length > 0;
@@ -615,17 +626,23 @@ function ruleRenderer(
         warnings.push(
           `The rule "${entry.label || entry.filter}" uses a filter with no QGIS equivalent and was skipped.`,
         );
+        skippedDrawn ||= drawn;
         return "";
       }
       filterAttribute = ` filter="${xmlEscape(filter)}"`;
     }
-    const children = kids.map(emitRule).join("");
+    const children = kids.map((kid) => emitRule(kid, drawn)).join("");
+    // A group whose children were all skipped has nothing to draw, so it is
+    // skipped too (its children already warned) and cannot hide that the
+    // tree exports no drawable rule.
+    if (isGroup && !children) return "";
     let symbolAttribute = "";
     if (!isGroup) {
       if (!isHexColor(entry.color)) {
         warnings.push(
           `The rule "${entry.label || entry.filter}" has an invalid color and was skipped.`,
         );
+        skippedDrawn ||= drawn;
         return "";
       }
       const rulePaint = rulePaintFor(entry, paint, style);
@@ -641,7 +658,14 @@ function ruleRenderer(
     return children.length > 0 ? `<rule${attributes}>${children}</rule>` : `<rule${attributes}/>`;
   };
 
-  const ruleXml = roots.map(emitRule).join("");
+  const ruleXml = roots.map((entry) => emitRule(entry)).join("");
+  if (!ruleXml && skippedDrawn) {
+    if (elseRule?.enabled === false) return null;
+    // Only the catch-all exports, so QGIS draws every feature in its colour.
+    warnings.push(
+      "None of the rule-based renderer's rules could be exported; the layer is exported with only its ELSE rule, which draws every feature.",
+    );
+  }
   // The ELSE rule catches features no other rule matched; its color falls back
   // to the layer's single-symbol color for the geometry when the else rule has
   // no valid color.
@@ -751,17 +775,31 @@ export function buildQml(
       ),
   ).length;
 
+  const rules = styleValue(style, "vectorRules");
+  const ruleXml =
+    mode === "rule-based" && rules.length > 0
+      ? ruleRenderer(geometry, style, opacity, rules, warnings)
+      : null;
+
   let renderer: string;
   if (mode === "categorized" && property && validCategorized > 0) {
     renderer = categorizedRenderer(geometry, style, opacity, property, stops, warnings);
   } else if (mode === "graduated" && property && validGraduated >= 2) {
     renderer = graduatedRenderer(geometry, style, opacity, property, stops, warnings);
-  } else if (mode === "rule-based" && styleValue(style, "vectorRules").length > 0) {
-    renderer = ruleRenderer(geometry, style, opacity, styleValue(style, "vectorRules"), warnings);
+  } else if (ruleXml) {
+    renderer = ruleXml;
   } else {
     if (mode === "expression") {
       warnings.push(
         "The custom color expression has no QML equivalent; the layer is exported with its fallback color.",
+      );
+    } else if (mode === "rule-based" && rules.length > 0) {
+      // Only reached when rules exist but none exported and ELSE is off. QGIS
+      // cannot express the skipped filters, so neither an empty tree nor a
+      // single symbol matches the map; the single symbol keeps the layer
+      // visible, as the flat export did, and says that it draws everything.
+      warnings.push(
+        "None of the rule-based renderer's rules could be exported; the layer is exported as a single symbol that draws every feature.",
       );
     } else if (mode === "categorized" || mode === "graduated" || mode === "rule-based") {
       warnings.push(

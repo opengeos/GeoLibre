@@ -7,6 +7,7 @@ import {
   type LayerStyle,
   type MapViewState,
 } from "@geolibre/core";
+import { translateCimRenderer, type CimRendererIssueCode } from "@geolibre/map/style-import";
 import { strFromU8, unzipSync } from "fflate";
 
 export interface ArcgisProjectImportWarning {
@@ -24,8 +25,20 @@ export interface ArcgisProjectImportWarning {
     | "service-unavailable"
     | "browser-local-file"
     | "map-extent"
-    | "nesting";
+    | "nesting"
+    | "symbology"
+    | "symbology-partial";
+  /**
+   * The layer's CIM type for an unsupported layer, or, on a `symbology` or
+   * `symbology-partial` warning, the CIM type the issue names (a renderer,
+   * symbol layer or effect type).
+   */
   layerType?: string;
+  /**
+   * For a `symbology` warning, what kept the renderer from being reproduced;
+   * for `symbology-partial`, what was left out of a reproduced one.
+   */
+  symbologyIssue?: CimRendererIssueCode;
   /**
    * Import id of the layer, raster or service the warning is about, when that
    * item was imported (a note on a layer that still loads). Lets
@@ -287,6 +300,22 @@ export function pruneArcgisImportGroups(imported: ArcgisProjectImportResult): vo
   imported.project.layerGroups = imported.project.layerGroups?.filter((group) =>
     usedGroupIds.has(group.id),
   );
+}
+
+/**
+ * How many layers an import report says could not be loaded. Symbology notes
+ * describe a layer that did load, and the map-extent note a view, not a layer,
+ * so neither counts; a report with only those notes says instead that the
+ * project is not shown exactly as in ArcGIS Pro. A `nesting` warning, about a
+ * group that was not loaded, still counts, as it did before.
+ *
+ * @param warnings - The import warnings.
+ * @returns The number of warnings about an item (a layer, or a group) that
+ *   was not loaded.
+ */
+export function countArcgisUnloadedLayers(warnings: readonly ArcgisProjectImportWarning[]): number {
+  return warnings.filter((warning) => !warning.symbologyIssue && warning.reason !== "map-extent")
+    .length;
 }
 
 /**
@@ -589,7 +618,7 @@ function importLayer(
       source: { type: "geojson" },
       visible,
       opacity: layerOpacity(layer),
-      style: parseStyle(layer),
+      style: parseStyle(layer, id, name, warnings),
       sourcePath: resolved.fileGeodatabase.gdbPath,
       // The same shape the Add data → File geodatabase source saves, so the
       // features are embedded on save (a .gdb cannot be re-read on reopen).
@@ -622,7 +651,7 @@ function importLayer(
     source: { type: "geojson" },
     visible,
     opacity: layerOpacity(layer),
-    style: parseStyle(layer),
+    style: parseStyle(layer, id, name, warnings),
     sourcePath: resolved.path,
     metadata: {
       localFileReloadable: true,
@@ -810,29 +839,27 @@ function resolveDataSource(
   return SUPPORTED_VECTOR_EXTENSIONS.has(extension(path)) ? { path } : { reason: "format" };
 }
 
-function parseStyle(layer: CimObject): LayerStyle {
-  const style: LayerStyle = structuredClone(DEFAULT_LAYER_STYLE);
-  const renderer = objectValue(layer.renderer);
-  const symbol =
-    objectValue(objectValue(renderer?.symbol)?.symbol) ??
-    objectValue(objectValue(renderer?.defaultSymbol)?.symbol);
-  const symbolLayers = arrayValue(symbol?.symbolLayers).filter(isObject);
-  for (const symbolLayer of symbolLayers) {
-    const type = stringValue(symbolLayer.type);
-    const color = cimColor(objectValue(symbolLayer.color));
-    if (type === "CIMSolidFill" && color) {
-      style.fillColor = color.hex;
-      style.fillOpacity = color.opacity;
-    } else if (type === "CIMSolidStroke" && color) {
-      style.strokeColor = color.hex;
-      const width = numberValue(symbolLayer.width);
-      if (width !== null) style.strokeWidth = width * (96 / 72);
-    } else if (/Marker$/.test(type) && color) {
-      style.fillColor = color.hex;
-      style.fillOpacity = color.opacity;
-      const size = numberValue(symbolLayer.size);
-      if (size !== null) style.circleRadius = (size * 96) / 144;
-    }
+function parseStyle(
+  layer: CimObject,
+  id: string,
+  name: string,
+  warnings: ArcgisProjectImportWarning[],
+): LayerStyle {
+  const renderer = translateCimRenderer(layer.renderer);
+  const style: LayerStyle = {
+    ...structuredClone(DEFAULT_LAYER_STYLE),
+    ...renderer.style,
+  };
+  // The layer still loads when its renderer cannot be reproduced, but the user
+  // is told rather than shown a single colour that passes for the real map.
+  for (const issue of renderer.issues) {
+    warnings.push({
+      layerName: name,
+      layerId: id,
+      reason: renderer.translated ? "symbology-partial" : "symbology",
+      symbologyIssue: issue.code,
+      ...(issue.cimType ? { layerType: issue.cimType } : {}),
+    });
   }
 
   const labelClass = arrayValue(layer.labelClasses).find(isObject);
@@ -842,86 +869,6 @@ function parseStyle(layer: CimObject): LayerStyle {
     style.labels = { ...style.labels, enabled: true, field };
   }
   return style;
-}
-
-/**
- * Convert a CIM color to hex plus opacity.
- *
- * Every CIMColor subclass stores its channels in a `values` array with alpha
- * last, but the channel meaning and scale differ per subclass, so the type has
- * to be read before `values` can be interpreted -- treating a CMYK or HSV
- * triple as RGB silently produces the wrong colour. Channels are per the CIM
- * spec (Esri/cim-spec docs/v3/CIMColor.md): RGB 0-255, CMYK/Gray/S/V 0-100,
- * hue 0-360, alpha 0-100. An unrecognized subclass returns null so the layer
- * keeps GeoLibre's default style rather than an invented colour.
- */
-function cimColor(color: CimObject | undefined): { hex: string; opacity: number } | null {
-  if (!color) return null;
-  const type = stringValue(color.type);
-  const values = arrayValue(color.values).map(Number);
-  if (values.some((value) => !Number.isFinite(value))) return null;
-
-  let rgb: [number, number, number] | null = null;
-  let alpha = 100;
-  if (type === "CIMRGBColor" && values.length >= 3) {
-    rgb = [values[0], values[1], values[2]];
-    alpha = values[3] ?? 100;
-  } else if (type === "CIMGrayColor" && values.length >= 1) {
-    const level = (values[0] / 100) * 255;
-    rgb = [level, level, level];
-    alpha = values[1] ?? 100;
-  } else if (type === "CIMCMYKColor" && values.length >= 4) {
-    const [c, m, y, k] = values;
-    rgb = [
-      255 * (1 - c / 100) * (1 - k / 100),
-      255 * (1 - m / 100) * (1 - k / 100),
-      255 * (1 - y / 100) * (1 - k / 100),
-    ];
-    alpha = values[4] ?? 100;
-  } else if (type === "CIMHSVColor" && values.length >= 3) {
-    rgb = hsvToRgb(values[0], values[1] / 100, values[2] / 100);
-    alpha = values[3] ?? 100;
-  }
-  if (!rgb) return null;
-
-  const hex = `#${rgb
-    .map((value) =>
-      Math.max(0, Math.min(255, Math.round(value)))
-        .toString(16)
-        .padStart(2, "0"),
-    )
-    .join("")}`;
-  return { hex, opacity: Math.max(0, Math.min(1, alpha / 100)) };
-}
-
-/**
- * Standard HSV to RGB conversion for {@link cimColor}.
- *
- * @param hue - Hue in degrees; wrapped into 0-360.
- * @param saturation - Saturation as a 0-1 fraction.
- * @param value - Value as a 0-1 fraction.
- * @returns Red, green, and blue channels on a 0-255 scale.
- */
-function hsvToRgb(hue: number, saturation: number, value: number): [number, number, number] {
-  const h = (((hue % 360) + 360) % 360) / 60;
-  const s = Math.max(0, Math.min(1, saturation));
-  const v = Math.max(0, Math.min(1, value));
-  const chroma = v * s;
-  const second = chroma * (1 - Math.abs((h % 2) - 1));
-  const [r, g, b] =
-    h < 1
-      ? [chroma, second, 0]
-      : h < 2
-        ? [second, chroma, 0]
-        : h < 3
-          ? [0, chroma, second]
-          : h < 4
-            ? [0, second, chroma]
-            : h < 5
-              ? [second, 0, chroma]
-              : [chroma, 0, second];
-  const match = v - chroma;
-  return [(r + match) * 255, (g + match) * 255, (b + match) * 255];
 }
 
 /**

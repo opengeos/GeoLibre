@@ -17,7 +17,10 @@ import type {
   RemoteSharedProjectTarget,
   ProjectFileActions,
 } from "../../../hooks/useProjectFileActions";
-import type { ArcgisProjectImportWarning } from "../../../lib/arcgis-project-import";
+import {
+  countArcgisUnloadedLayers,
+  type ArcgisProjectImportWarning,
+} from "../../../lib/arcgis-project-import";
 import {
   fetchSharedProjectVersions,
   shareHostLabel,
@@ -57,12 +60,18 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
 
   // Stable identities so the warning lists regroup only when the warnings change.
   const describeArcgisWarning = useCallback(
-    (warning: ArcgisProjectImportWarning) =>
-      t(`toolbar.item.arcgisImportReason.${warning.reason}`, {
-        layerType: warning.layerType || t("toolbar.item.arcgisUnknownLayerType"),
-      }),
+    (warning: ArcgisProjectImportWarning) => {
+      const layerType = warning.layerType || t("toolbar.item.arcgisUnknownLayerType");
+      // The importer gives every symbology warning an issue code, so the
+      // `symbology`/`symbology-partial` reason texts are only a fallback; the
+      // typed key below still needs one entry per reason.
+      return warning.symbologyIssue
+        ? t(`toolbar.item.arcgisSymbologyIssue.${warning.symbologyIssue}`, { layerType })
+        : t(`toolbar.item.arcgisImportReason.${warning.reason}`, { layerType });
+    },
     [t],
   );
+  const arcgisUnloadedCount = countArcgisUnloadedLayers(projectFiles.arcgisImportWarnings ?? []);
   return (
     <>
       <Dialog
@@ -221,9 +230,9 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           <DialogHeader>
             <DialogTitle>{t("toolbar.item.arcgisImportComplete")}</DialogTitle>
             <DialogDescription>
-              {t("toolbar.item.arcgisImportWarnings", {
-                count: projectFiles.arcgisImportWarnings?.length ?? 0,
-              })}
+              {arcgisUnloadedCount > 0
+                ? t("toolbar.item.arcgisImportWarnings", { count: arcgisUnloadedCount })
+                : t("toolbar.item.arcgisImportSymbologyOnly")}
             </DialogDescription>
           </DialogHeader>
           <ImportWarningList
