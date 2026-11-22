@@ -214,14 +214,25 @@ describe("plugin host binary file saver", () => {
 });
 
 describe("Cloudflare Worker observability and rate-limiting config", () => {
-  for (const worker of ["collab", "tiles", "viewer"]) {
-    it(`workers/${worker}/wrangler.toml configures observability and ratelimits`, () => {
+  const expectedBindings: ReadonlyArray<{ worker: string; binding: string }> = [
+    { worker: "collab", binding: "COLLAB_RATE_LIMITER" },
+    { worker: "tiles", binding: "TILES_RATE_LIMITER" },
+    { worker: "viewer", binding: "VIEWER_RATE_LIMITER" },
+  ];
+  for (const { worker, binding } of expectedBindings) {
+    it(`workers/${worker}/wrangler.toml configures observability and ${binding}`, () => {
       const toml = readFileSync(
         new URL(`../workers/${worker}/wrangler.toml`, import.meta.url),
         "utf8",
       );
+      const source = readFileSync(
+        new URL(`../workers/${worker}/src/index.ts`, import.meta.url),
+        "utf8",
+      );
       assert.match(toml, /\[observability\]/);
       assert.match(toml, /\[\[ratelimits\]\]/);
+      assert.match(toml, new RegExp(`name\\s*=\\s*"${binding}"`));
+      assert.ok(source.includes(binding), `workers/${worker}/src/index.ts must read ${binding}`);
     });
   }
 });

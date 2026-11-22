@@ -27,15 +27,7 @@ impl<T> Clone for InFlightRegistry<T> {
     }
 }
 
-#[allow(dead_code)]
 impl<T> InFlightRegistry<T> {
-    pub(crate) fn insert(&self, id: String, value: T) -> Option<T> {
-        self.entries
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .insert(id, value)
-    }
-
     pub(crate) fn try_insert_unique(&self, id: String, value: T) -> Result<(), T> {
         let mut map = self
             .entries
@@ -73,6 +65,7 @@ impl<T> InFlightRegistry<T> {
             .cloned()
     }
 
+    #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool {
         self.entries
             .lock()
@@ -87,9 +80,9 @@ pub(crate) type CancelCallback = Box<dyn Fn() + Send + Sync>;
 #[derive(Default, Clone)]
 pub(crate) struct CancelRegistry(InFlightRegistry<CancelCallback>);
 
-#[allow(dead_code)]
 impl CancelRegistry {
     /// Insert a cancellation callback for `id`, rejecting duplicate active IDs.
+    #[cfg(test)]
     pub(crate) fn try_register(&self, id: String, cancel: CancelCallback) -> Result<(), ()> {
         self.0.try_insert_unique(id, cancel).map_err(|_| ())
     }
@@ -119,6 +112,7 @@ impl CancelRegistry {
         self.0.contains_key(id)
     }
 
+    #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -128,11 +122,6 @@ impl CancelRegistry {
         if let Some(cancel) = self.0.remove(id) {
             cancel();
         }
-    }
-
-    /// Remove the entry without invoking its cancellation callback (used on clean finish).
-    pub(crate) fn finish(&self, id: &str) {
-        let _ = self.0.remove(id);
     }
 }
 

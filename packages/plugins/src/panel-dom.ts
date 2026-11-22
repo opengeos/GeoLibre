@@ -151,7 +151,7 @@ export function createSelectField(config: SelectFieldConfig): {
   title.style.cssText = "font-weight:500;color:hsl(var(--muted-foreground));";
   const select = withSelectChevron(el("select"));
   select.style.cssText =
-    "width:100%;height:30px;padding:0 26px 0 8px;border-radius:6px;border:1px solid hsl(var(--border));background:hsl(var(--background));color:hsl(var(--foreground));font-size:12px;";
+    "width:100%;height:30px;padding-block:0;padding-inline-start:8px;padding-inline-end:26px;border-radius:6px;border:1px solid hsl(var(--border));background:hsl(var(--background));color:hsl(var(--foreground));font-size:12px;";
   for (const item of config.options) {
     const opt = el("option", item.label);
     opt.value = item.value;

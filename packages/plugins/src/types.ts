@@ -1408,7 +1408,10 @@ export interface GeoLibreAppAPI {
    * Save binary content (`Blob` or `Uint8Array`) to a file chosen by the user.
    * The host handles platform specifics (a native save dialog under Tauri, a
    * File System Access picker or browser download on the web). Resolves to the
-   * saved file path/name, or `null` when the user cancels the save dialog.
+   * saved file path/name, or `null` when the user cancels on desktop or in
+   * browsers with `showSaveFilePicker`; browsers using the download fallback
+   * cannot detect cancellation and resolve to the file name unless
+   * `options.promptName` is cancelled first.
    */
   saveBinaryFile?: (
     filename: string,

@@ -14,10 +14,10 @@ cpu_ms = 200
 pattern = "tiles.geolibre.app"
 custom_domain = true
 
-# Scoped in src/index.ts to abuse-prone routes (/overpass, /pmtiles/*,
-# /firms/viirs/*, /github-raw, /earthdata/download) keyed by "<route>:<ip>",
-# so lightweight tile, CCTV, and catalog traffic is never throttled and one
-# route group cannot starve another behind a shared NAT.
+# Scoped in src/index.ts to abuse-prone routes (/overpass, /firms/viirs/*,
+# /github-raw, /earthdata/download) keyed by "<route>:<ip>", so lightweight
+# tile, PMTiles range extraction, CCTV, and catalog traffic is never throttled
+# and one route group cannot starve another behind a shared NAT.
 [[ratelimits]]
 name = "TILES_RATE_LIMITER"
 namespace_id = "54703"

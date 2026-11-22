@@ -1,19 +1,14 @@
-//! Structured error type for desktop backend modules.
+//! Structured error type for shared desktop backend helpers (`fs_util`, `http_client`).
 //!
 //! Serializes as its human-readable `Display` string so existing Tauri IPC
-//! callers (which catch string errors from `invoke(...)`) remain 100%
-//! backward-compatible while Rust modules get typed error variants instead of
-//! bare `Result<T, String>`.
+//! callers remain backward-compatible while shared helpers use typed variants
+//! instead of bare `Result<T, String>`.
 
 use std::fmt;
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub(crate) enum AppError {
     InvalidInput(String),
-    NotFound(String),
-    Unauthorized(String),
-    Cancelled,
     Io {
         context: String,
         source: std::io::Error,
@@ -34,12 +29,7 @@ impl AppError {
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidInput(msg)
-            | Self::NotFound(msg)
-            | Self::Unauthorized(msg)
-            | Self::Http(msg)
-            | Self::Internal(msg) => f.write_str(msg),
-            Self::Cancelled => f.write_str("Operation cancelled."),
+            Self::InvalidInput(msg) | Self::Http(msg) | Self::Internal(msg) => f.write_str(msg),
             Self::Io { context, source } => {
                 if context.is_empty() {
                     write!(f, "{source}")
@@ -69,18 +59,6 @@ impl serde::Serialize for AppError {
 impl From<AppError> for String {
     fn from(error: AppError) -> Self {
         error.to_string()
-    }
-}
-
-impl From<String> for AppError {
-    fn from(message: String) -> Self {
-        Self::Internal(message)
-    }
-}
-
-impl From<&str> for AppError {
-    fn from(message: &str) -> Self {
-        Self::Internal(message.to_string())
     }
 }
 
@@ -115,11 +93,12 @@ mod tests {
     }
 
     #[test]
-    fn cancelled_and_variant_display() {
-        assert_eq!(AppError::Cancelled.to_string(), "Operation cancelled.");
+    fn displays_structured_variants() {
         assert_eq!(
             AppError::InvalidInput("bad url".into()).to_string(),
             "bad url"
         );
+        assert_eq!(AppError::Http("timeout".into()).to_string(), "timeout");
+        assert_eq!(AppError::Internal("oops".into()).to_string(), "oops");
     }
 }

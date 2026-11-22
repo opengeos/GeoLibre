@@ -49,25 +49,10 @@ let cachedEncoder: { encode(input: string): Uint8Array } | null = null;
 function utf8ByteLength(value: string): number {
   if (!cachedEncoder) {
     const Encoder = runtimeGlobals().TextEncoder;
-    if (Encoder) {
-      cachedEncoder = new Encoder();
-    }
+    if (!Encoder) throw new Error("TextEncoder is unavailable");
+    cachedEncoder = new Encoder();
   }
-  if (cachedEncoder) {
-    return cachedEncoder.encode(value).length;
-  }
-  // Pure ES2022 UTF-8 byte count fallback when TextEncoder is unavailable.
-  let bytes = 0;
-  for (let i = 0; i < value.length; i += 1) {
-    const code = value.charCodeAt(i);
-    if (code < 0x80) bytes += 1;
-    else if (code < 0x800) bytes += 2;
-    else if (code >= 0xd800 && code <= 0xdbff && i + 1 < value.length) {
-      bytes += 4;
-      i += 1;
-    } else bytes += 3;
-  }
-  return bytes;
+  return cachedEncoder.encode(value).length;
 }
 
 /**

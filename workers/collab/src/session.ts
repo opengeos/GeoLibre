@@ -1,14 +1,11 @@
 import { DurableObject } from "cloudflare:workers";
 import type {
-  CollabChatMessage,
   CollabInvite,
   CollabParticipant,
   ClientMessage,
   CollaborationMode,
-  CollaborationRole,
   PresenceEntry,
   ServerMessage,
-  ParticipantIdentity,
   SessionLogEntry,
 } from "./protocol";
 import {

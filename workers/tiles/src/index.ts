@@ -92,7 +92,6 @@ async function handleOpmTile(
 
 function rateLimitGroup(pathname: string): string | null {
   if (pathname === OVERPASS_PATH) return "overpass";
-  if (PMTILES_PATH.test(pathname)) return "pmtiles";
   if (pathname.startsWith("/firms/viirs/")) return "firms";
   if (pathname === "/github-raw") return "github-raw";
   if (pathname === EARTHDATA_DOWNLOAD_PATH) return "earthdata";

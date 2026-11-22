@@ -14,7 +14,7 @@ name = "VIEWER_RATE_LIMITER"
 namespace_id = "54704"
 
 [ratelimits.simple]
-limit = 300
+limit = 2000
 period = 60
 
 [observability]
