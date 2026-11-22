@@ -344,9 +344,21 @@ async fn transfer(
         Chunk(B),
         Finish,
     }
+    struct AbortFlagGuard {
+        aborted: Arc<std::sync::atomic::AtomicBool>,
+        done: bool,
+    }
+    impl Drop for AbortFlagGuard {
+        fn drop(&mut self) {
+            if !self.done {
+                self.aborted.store(true, Ordering::Release);
+            }
+        }
+    }
     fn spawn_part_writer<B: AsRef<[u8]> + Send + 'static>(
         part: PartFile,
         destination: PathBuf,
+        aborted: Arc<std::sync::atomic::AtomicBool>,
     ) -> (
         tokio::sync::mpsc::Sender<WriteCommand<B>>,
         tauri::async_runtime::JoinHandle<Result<(), String>>,
@@ -354,7 +366,7 @@ async fn transfer(
         let (tx, mut rx) = tokio::sync::mpsc::channel::<WriteCommand<B>>(16);
         let handle = tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
             let mut part = part;
-            if rx.is_closed() {
+            if rx.is_closed() || aborted.load(Ordering::Acquire) {
                 return Ok(());
             }
             let mut file = fs::File::create(&part.path)
@@ -372,7 +384,7 @@ async fn transfer(
                     }
                 }
             }
-            if !finish {
+            if !finish || aborted.load(Ordering::Acquire) {
                 // Close the handle before `part` drops so Windows can unlink `.part`.
                 drop(file);
                 return Ok(());
@@ -381,19 +393,32 @@ async fn transfer(
                 .and_then(|()| file.sync_all())
                 .map_err(|error| format!("Could not write the download: {error}"))?;
             drop(file);
+            if aborted.load(Ordering::Acquire) {
+                return Ok(());
+            }
             fs::rename(&part.path, &destination)
                 .map_err(|error| format!("Could not finish the download: {error}"))?;
             part.done = true;
+            if aborted.load(Ordering::Acquire) {
+                // Cancellation raced with rename: remove the newly placed file.
+                let _ = fs::remove_file(&destination);
+            }
             Ok(())
         });
         (tx, handle)
     }
-    let (tx, writer_handle) = spawn_part_writer(part, destination.clone());
+    let aborted = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut abort_guard = AbortFlagGuard {
+        aborted: Arc::clone(&aborted),
+        done: false,
+    };
+    let (tx, writer_handle) = spawn_part_writer(part, destination.clone(), aborted);
     let mut response = response;
     let mut received: u64 = 0;
     let mut reported: u64 = 0;
     let _ = progress.send(RemoteDownloadProgress { received, total });
     let mut read_error: Option<String> = None;
+    let mut writer_closed = false;
     loop {
         let chunk = match response.chunk().await {
             Ok(Some(chunk)) => chunk,
@@ -405,6 +430,7 @@ async fn transfer(
         };
         let len = chunk.len() as u64;
         if tx.send(WriteCommand::Chunk(chunk)).await.is_err() {
+            writer_closed = true;
             break;
         }
         received += len;
@@ -412,6 +438,14 @@ async fn transfer(
             reported = received;
             let _ = progress.send(RemoteDownloadProgress { received, total });
         }
+    }
+    if writer_closed {
+        drop(tx);
+        let writer_result = writer_handle
+            .await
+            .map_err(|error| format!("Download writer failed: {error}"))?;
+        writer_result?;
+        return Err("Download writer stopped unexpectedly.".into());
     }
     if let Some(error) = read_error {
         drop(tx);
@@ -429,6 +463,7 @@ async fn transfer(
         .await
         .map_err(|error| format!("Download writer failed: {error}"))?;
     writer_result?;
+    abort_guard.done = true;
     if let Some(placeholder) = placeholder.as_mut() {
         placeholder.done = true;
     }
@@ -538,6 +573,10 @@ pub(crate) async fn download_remote_file(
         downloads: downloads.inner().clone(),
         id: request_id.clone(),
     };
+    let mut cache_guard = PartFile {
+        path: destination.clone(),
+        done: saves_to_disk,
+    };
     let size = task.await.map_err(|error| match error {
         tauri::Error::JoinError(join) if join.is_cancelled() => "Download cancelled.".to_string(),
         other => format!("The download task failed: {other}"),
@@ -553,6 +592,7 @@ pub(crate) async fn download_remote_file(
             .lock()
             .unwrap()
             .insert(request_id, destination);
+        cache_guard.done = true;
         Ok(Some(RemoteDownloadResult { path: None, size }))
     }
 }

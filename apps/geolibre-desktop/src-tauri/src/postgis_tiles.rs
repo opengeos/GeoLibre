@@ -468,13 +468,14 @@ async fn tile_plan(entry: &Arc<PoolEntry>, key: &SourceKey) -> Result<Arc<TilePl
     {
         Ok(plan) => Arc::clone(plan),
         Err(error) => {
-            // Remove the failed empty cell so transient errors do not leak
-            // entries in `entry.plans`.
+            // Remove the failed empty cell only when no other task holds or
+            // initialized it (only `plans` and our local `cell` remain).
             let mut plans = entry.plans.lock().await;
-            if plans
-                .get(key)
-                .is_some_and(|current| Arc::ptr_eq(current, &cell))
-            {
+            if plans.get(key).is_some_and(|current| {
+                Arc::ptr_eq(current, &cell)
+                    && !cell.initialized()
+                    && Arc::strong_count(&cell) == 2
+            }) {
                 plans.remove(key);
             }
             return Err(error);

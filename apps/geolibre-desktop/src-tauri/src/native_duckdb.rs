@@ -644,7 +644,7 @@ fn has_valid_base64_wkb_values(
 }
 
 fn source_crs_meta_sql(source_path_literal: &str, layer_name: Option<&str>) -> String {
-    match layer_name.map(str::trim).filter(|name| !name.is_empty()) {
+    match layer_name.filter(|name| !name.trim().is_empty()) {
         Some(name) => format!(
             "SELECT l.geometry_fields[1].crs.auth_name AS auth_name, \
              l.geometry_fields[1].crs.auth_code AS auth_code \
@@ -661,6 +661,16 @@ fn source_crs_meta_sql(source_path_literal: &str, layer_name: Option<&str>) -> S
     }
 }
 
+fn parse_auth_crs(auth_name: Option<String>, auth_code: Option<String>) -> Option<String> {
+    let auth_name = auth_name?.trim().to_ascii_uppercase();
+    let auth_code = auth_code?.trim().to_string();
+    if auth_name.is_empty() || auth_code.is_empty() {
+        None
+    } else {
+        Some(format!("{auth_name}:{auth_code}"))
+    }
+}
+
 fn read_source_crs(
     conn: &Connection,
     options: &NativeVectorOptions,
@@ -671,23 +681,34 @@ fn read_source_crs(
         return read_parquet_source_crs(conn, options, geo_metadata, geometry_column);
     }
     let source_path = quote_sql_string(&sql_source_path(&options.path));
-    let meta_sql = source_crs_meta_sql(&source_path, options.layer.as_deref());
-    let auth_crs = conn
-        .query_row(&meta_sql, [], |row| {
+    let query_raw = |sql: &str| {
+        conn.query_row(sql, [], |row| {
             let auth_name: Option<String> = row.get(0)?;
             let auth_code: Option<String> = row.get(1)?;
             Ok((auth_name, auth_code))
         })
-        .ok()
-        .and_then(|(auth_name, auth_code)| {
-            let auth_name = auth_name?.trim().to_ascii_uppercase();
-            let auth_code = auth_code?.trim().to_string();
-            if auth_name.is_empty() || auth_code.is_empty() {
-                None
-            } else {
-                Some(format!("{auth_name}:{auth_code}"))
-            }
-        });
+    };
+    let explicit_layer = options
+        .layer
+        .as_deref()
+        .filter(|name| !name.trim().is_empty());
+    let auth_crs = if let Some(layer_name) = explicit_layer {
+        let named_sql = source_crs_meta_sql(&source_path, Some(layer_name));
+        match query_raw(&named_sql) {
+            // Layer matched in ST_Read_Meta: honor its CRS even when NULL
+            // rather than borrowing another layer's CRS.
+            Ok((auth_name, auth_code)) => parse_auth_crs(auth_name, auth_code),
+            // No row matched (or ST_Read_Meta query differed): fall back to
+            // the first layer's CRS as before.
+            Err(_) => query_raw(&source_crs_meta_sql(&source_path, None))
+                .ok()
+                .and_then(|(a, c)| parse_auth_crs(a, c)),
+        }
+    } else {
+        query_raw(&source_crs_meta_sql(&source_path, None))
+            .ok()
+            .and_then(|(a, c)| parse_auth_crs(a, c))
+    };
     if auth_crs.is_some() {
         return auth_crs;
     }

@@ -704,6 +704,7 @@ pub fn run() {
         .expect("error while building GeoLibre Desktop");
 
     app.run(|app, event| {
+        #[cfg(all(feature = "mas", not(target_os = "macos")))]
         let _ = (&app, &event);
         #[cfg(not(feature = "mas"))]
         if let tauri::RunEvent::Exit = event {
@@ -4340,15 +4341,16 @@ fn hide_console_window(_command: &mut Command) {}
 
 #[cfg(not(feature = "mas"))]
 fn terminate_sidecar_child(child: &mut Child) {
-    // If the child has already exited and been reaped, do not signal its PID
-    // or process group, which the OS may already have recycled. Note that
-    // `std::process::Child::try_wait` caches exit status without distinguishing
-    // a newly reaped zombie from a child reaped earlier, so returning here
-    // prioritizes never signaling a recycled PGID of an unrelated process.
+    // Signal the process group first so grandchildren (such as Jupyter kernels
+    // or uvicorn workers) are still terminated even if the group leader (`uv`
+    // or the wrapper process) already exited. While any descendant remains in
+    // the group, Unix will not reuse that PGID; if the group is already empty,
+    // `kill(-pgid, ...)` returns ESRCH and is ignored. Skip `child.kill()` /
+    // `child.wait()` once `try_wait()` confirms the leader was already reaped.
+    terminate_sidecar_process_group(child);
     if matches!(child.try_wait(), Ok(Some(_))) {
         return;
     }
-    terminate_sidecar_process_group(child);
     let _ = child.kill();
     let _ = child.wait();
 }

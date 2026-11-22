@@ -1346,13 +1346,17 @@ pub async fn chatgpt_sign_in_start(
     let _starting = state.starting.lock().await;
     state.cancel_login();
     let generation = state.login_generation.load(Ordering::SeqCst);
-    let (dir, saved, old_to_revoke) = {
+    let (dir, saved, old_to_revoke, cleanup_err) = {
         let mut session = state.session.lock().await;
         ensure_loaded(&mut session, &app).await?;
         let mut revoke_info: Option<(String, Tokens)> = None;
+        let mut cleanup_err: Option<String> = None;
         if another_account.unwrap_or(false) && session.reg.is_some() {
             let (old, _) = session.clear_signed_in_state();
             let client_id = session.reg.take().map(|r| r.client_id).unwrap_or_default();
+            if let Some(old) = old {
+                revoke_info = Some((client_id, old));
+            }
             let reg_dir = session.dir.clone();
             let write_result = tauri::async_runtime::spawn_blocking(move || {
                 let _ = keychain_delete();
@@ -1362,16 +1366,17 @@ pub async fn chatgpt_sign_in_start(
                 Ok::<(), String>(())
             })
             .await
-            .map_err(|e| e.to_string())?;
-            write_result?;
-            if let Some(old) = old {
-                revoke_info = Some((client_id, old));
+            .map_err(|e| e.to_string())
+            .and_then(|res| res);
+            if let Err(err) = write_result {
+                cleanup_err = Some(err);
             }
         }
         (
-            session.dir.clone().ok_or("No config folder")?,
+            session.dir.clone(),
             session.reg.clone(),
             revoke_info,
+            cleanup_err,
         )
     };
     if let Some((client_id, old)) = old_to_revoke {
@@ -1379,6 +1384,10 @@ pub async fn chatgpt_sign_in_start(
             revoke(&client_id, &old.refresh_token).await;
         });
     }
+    if let Some(err) = cleanup_err {
+        return Err(err);
+    }
+    let dir = dir.ok_or("No config folder")?;
     let host = host_id(&dir)?;
     let (listener, port) = TcpListener::bind(("127.0.0.1", PORT))
         .or_else(|_| TcpListener::bind(("127.0.0.1", 0)))
@@ -1471,7 +1480,7 @@ pub async fn chatgpt_sign_out(
 ) -> Result<ChatGptSignOut, String> {
     state.cancel_login();
     let forget = forget.unwrap_or(false);
-    let (client_id, tokens) = {
+    let (client_id, tokens, cleanup_err) = {
         let mut session = state.session.lock().await;
         ensure_loaded(&mut session, &app).await?;
         let client_id = session
@@ -1496,14 +1505,17 @@ pub async fn chatgpt_sign_out(
             Ok::<(), String>(())
         })
         .await
-        .map_err(|e| e.to_string())?;
-        write_result?;
-        (client_id, tokens)
+        .map_err(|e| e.to_string())
+        .and_then(|res| res);
+        (client_id, tokens, write_result.err())
     };
     let revoked = match tokens {
         Some(tokens) => revoke(&client_id, &tokens.refresh_token).await,
         None => true,
     };
+    if let Some(err) = cleanup_err {
+        return Err(err);
+    }
     Ok(ChatGptSignOut { revoked })
 }
 
