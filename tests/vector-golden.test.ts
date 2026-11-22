@@ -200,9 +200,8 @@ describe("vector golden fixtures (client engine)", () => {
   for (const testCase of cases) {
     const tool = getVectorTool(testCase.tool);
 
-    // reproject's client run defers to the Python engine (requiresSidecar), so
-    // the client engine produces nothing — that tool is asserted by the Python
-    // harness only.
+    // Tools flagged `requiresSidecar` defer to the Python engine and are
+    // asserted by the Python harness only.
     const clientDefers = tool?.requiresSidecar === true;
 
     it(testCase.name, { skip: clientDefers }, async () => {

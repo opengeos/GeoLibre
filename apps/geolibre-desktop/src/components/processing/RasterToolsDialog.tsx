@@ -167,6 +167,10 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     name: string;
     bytes: ArrayBuffer;
   } | null>(null);
+  // Secondary inputs for client-side multi-raster tools (Raster Calculator B/C).
+  const [clientAdditionalInputs, setClientAdditionalInputs] = useState<
+    Record<string, { name: string; bytes: ArrayBuffer }>
+  >({});
   const [clientLog, setClientLog] = useState<string[]>([]);
   const [clientRunning, setClientRunning] = useState(false);
   // True while fetching a picked layer's bytes for the client engine.
@@ -219,6 +223,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     setError(null);
     setJob(null);
     setClientInput(null);
+    setClientAdditionalInputs({});
     setClientLog([]);
     setClientResult(null);
     setEngine(tool.supportsClient && !desktopServer ? "client" : "sidecar");
@@ -294,10 +299,18 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     clientLogEndRef.current?.scrollIntoView({ block: "end" });
   }, [clientLog.length]);
 
-  const setParam = useCallback(
-    (id: string, value: unknown) => setParams((prev) => ({ ...prev, [id]: value })),
-    [],
-  );
+  const setParam = useCallback((id: string, value: unknown) => {
+    setParams((prev) => ({ ...prev, [id]: value }));
+    if ((id === "b_path" || id === "c_path") && !String(value ?? "").trim()) {
+      const letter = id === "b_path" ? "B" : "C";
+      setClientAdditionalInputs((prev) => {
+        if (!(letter in prev)) return prev;
+        const next = { ...prev };
+        delete next[letter];
+        return next;
+      });
+    }
+  }, []);
 
   // Whether a parameter is shown, given another parameter's value (e.g. hide
   // the IDW power field when the kriging method is selected).
@@ -331,12 +344,28 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
 
   const pickPathParam = useCallback(
     async (param: AlgorithmParameter) => {
+      if (engine === "client" && (param.id === "b_path" || param.id === "c_path")) {
+        const picked = await openLocalDataFileWithFallback({
+          filters: param.fileFilters ?? tool.inputFilters,
+          accept: ".tif,.tiff,image/tiff",
+          readBinary: true,
+        });
+        if (picked?.data) {
+          const letter = param.id === "b_path" ? "B" : "C";
+          setClientAdditionalInputs((prev) => ({
+            ...prev,
+            [letter]: { name: picked.path, bytes: picked.data! },
+          }));
+          setParam(param.id, picked.path);
+        }
+        return;
+      }
       const path = await pickLocalPathWithFallback({
         filters: param.fileFilters,
       });
       if (path) setParam(param.id, path);
     },
-    [setParam],
+    [engine, setParam, tool.inputFilters],
   );
 
   const startServer = useCallback(async () => {
@@ -562,7 +591,19 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         ]);
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
       }
-      const { raster: result, bytes } = runRasterToolClient(tool.id, raster, params);
+      let additionalInputs: Record<string, Awaited<ReturnType<typeof readRasterData>>> | undefined;
+      if (tool.id === "raster-calc" && Object.keys(clientAdditionalInputs).length > 0) {
+        additionalInputs = {};
+        for (const [letter, entry] of Object.entries(clientAdditionalInputs)) {
+          additionalInputs[letter] = await readRasterData(entry.bytes);
+        }
+      }
+      const { raster: result, bytes } = runRasterToolClient(
+        tool.id,
+        raster,
+        params,
+        additionalInputs,
+      );
       setClientLog((prev) => [
         ...prev,
         t("toolbar.rasterTool.computedInBrowser", { tool: tool.name }),
@@ -620,7 +661,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     } finally {
       setClientRunning(false);
     }
-  }, [tool, params, clientInput, validateParams, mapControllerRef, t]);
+  }, [tool, params, clientInput, clientAdditionalInputs, validateParams, mapControllerRef, t]);
 
   const handleRun = useCallback(
     () => (engine === "client" ? runClient() : runSidecar()),

@@ -321,6 +321,65 @@ describe("raster-client compute", () => {
       () => rasterCalc(a, { expression: "A + B", additionalInputs: { B: wrongSize } }),
       /do not match/,
     );
+
+    // Georeferencing mismatch (same size, different origin/CRS/orientation) must be rejected.
+    const shifted = { ...b, originX: b.originX + 10 };
+    assert.throws(
+      () => rasterCalc(a, { expression: "A + B", additionalInputs: { B: shifted } }),
+      /origin does not match/,
+    );
+    const flipped = { ...b, flipY: true };
+    assert.throws(
+      () => rasterCalc(a, { expression: "A + B", additionalInputs: { B: flipped } }),
+      /axis orientation does not match/,
+    );
+    const otherCrs = { ...b, geoKeys: { ProjectedCSTypeGeoKey: 32617 } };
+    const aWithCrs = { ...a, geoKeys: { ProjectedCSTypeGeoKey: 3857 } };
+    assert.throws(
+      () => rasterCalc(aWithCrs, { expression: "A + B", additionalInputs: { B: otherCrs } }),
+      /CRS .* does not match/,
+    );
+
+    // Duplicate normalized secondary raster keys must be rejected.
+    assert.throws(
+      () => rasterCalc(a, { expression: "A + B", additionalInputs: { B: b, " b ": b } }),
+      /Duplicate secondary raster key/,
+    );
+  });
+
+  it("ignores NoData in unreferenced bands and propagates distinct NoData sentinels from B", () => {
+    const a = makeRaster(
+      [
+        [10, 20, 30],
+        [-9999, 5, 6], // A2 is NoData at pixel 0, but expression only reads A1 and B
+      ],
+      3,
+      1,
+      { nodata: -9999 },
+    );
+    const b = makeRaster([[1, -32768, 3]], 3, 1, { nodata: -32768 });
+    const out = rasterCalc(a, { expression: "A + B", additionalInputs: { B: b } });
+    assert.equal(out.bands[0][0], 11); // A2 NoData ignored
+    assert.equal(out.bands[0][1], -9999); // B's -32768 NoData propagated to A's sentinel
+    assert.equal(out.bands[0][2], 33);
+  });
+
+  it("preserves unary-power precedence, bitwise/logical JS semantics, and handles long flat sums", () => {
+    const r = makeRaster([[0, 2, 3, 4]], 4, 1);
+    // NumPy/Python precedence: -A ** 2 == -(A ** 2)
+    assert.deepEqual(
+      [...rasterCalc(r, { expression: "-A ** 2" }).bands[0]].map((v) => v + 0),
+      [0, -4, -9, -16],
+    );
+    assert.deepEqual([...rasterCalc(r, { expression: "2 ** -1" }).bands[0]], [0.5, 0.5, 0.5, 0.5]);
+    // JS-compatible logical && / || and bitwise & / |
+    assert.deepEqual([...rasterCalc(r, { expression: "A && 5" }).bands[0]], [0, 5, 5, 5]);
+    assert.deepEqual([...rasterCalc(r, { expression: "A || 5" }).bands[0]], [5, 2, 3, 4]);
+    assert.deepEqual([...rasterCalc(r, { expression: "A | 2" }).bands[0]], [2, 2, 3, 6]);
+    assert.deepEqual([...rasterCalc(r, { expression: "A & 4" }).bands[0]], [0, 0, 0, 4]);
+    // Long flat sum (200 terms) must evaluate iteratively without stack overflow
+    const longExpr = Array.from({ length: 200 }, () => "A").join(" + ");
+    assert.deepEqual([...rasterCalc(r, { expression: longExpr }).bands[0]], [0, 400, 600, 800]);
   });
 
   it("rejects expressions that reach browser globals", () => {

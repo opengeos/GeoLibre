@@ -31,6 +31,7 @@ interface Token {
 }
 
 const MAX_DEPTH = 64;
+const MAX_NODES = 1024;
 
 const ALLOWED_FUNCTIONS: Readonly<Record<string, { minArgs: number; maxArgs: number }>> = {
   where: { minArgs: 3, maxArgs: 3 },
@@ -170,10 +171,17 @@ export function compileRasterExpression(
   const tokens = tokenize(expr);
   let cursor = 0;
   let depth = 0;
+  let nodeCount = 0;
   const referencedMap = new Map<string, BandRef>();
 
   const peek = (): Token => tokens[cursor];
   const consume = (): Token => tokens[cursor++];
+  const countNode = (): void => {
+    nodeCount += 1;
+    if (nodeCount > MAX_NODES) {
+      throw new Error("Expression is too complex.");
+    }
+  };
 
   const withDepth = <T>(fn: () => T): T => {
     depth += 1;
@@ -188,99 +196,173 @@ export function compileRasterExpression(
   };
 
   function parseOr(): EvalNode {
-    let left = parseAnd();
-    while (peek().kind === "op" && (peek().value === "||" || peek().value === "|")) {
+    const first = parseAnd();
+    if (peek().kind !== "op" || peek().value !== "||") return first;
+    const terms: EvalNode[] = [first];
+    while (peek().kind === "op" && peek().value === "||") {
       consume();
-      const right = parseAnd();
-      const l = left;
-      const r = right;
-      left = (p) => (l(p) !== 0 || r(p) !== 0 ? 1 : 0);
+      countNode();
+      terms.push(parseAnd());
     }
-    return left;
+    return (p) => {
+      let acc = terms[0](p);
+      for (let i = 1; i < terms.length; i += 1) {
+        if (acc) return acc;
+        acc = terms[i](p);
+      }
+      return acc;
+    };
   }
 
   function parseAnd(): EvalNode {
-    let left = parseEquality();
-    while (peek().kind === "op" && (peek().value === "&&" || peek().value === "&")) {
+    const first = parseBitOr();
+    if (peek().kind !== "op" || peek().value !== "&&") return first;
+    const terms: EvalNode[] = [first];
+    while (peek().kind === "op" && peek().value === "&&") {
       consume();
-      const right = parseEquality();
-      const l = left;
-      const r = right;
-      left = (p) => (l(p) !== 0 && r(p) !== 0 ? 1 : 0);
+      countNode();
+      terms.push(parseBitOr());
     }
-    return left;
+    return (p) => {
+      let acc = terms[0](p);
+      for (let i = 1; i < terms.length; i += 1) {
+        if (!acc) return acc;
+        acc = terms[i](p);
+      }
+      return acc;
+    };
+  }
+
+  function parseBitOr(): EvalNode {
+    const first = parseBitAnd();
+    if (peek().kind !== "op" || peek().value !== "|") return first;
+    const terms: EvalNode[] = [first];
+    while (peek().kind === "op" && peek().value === "|") {
+      consume();
+      countNode();
+      terms.push(parseBitAnd());
+    }
+    return (p) => {
+      let acc = terms[0](p);
+      for (let i = 1; i < terms.length; i += 1) {
+        acc = acc | terms[i](p);
+      }
+      return acc;
+    };
+  }
+
+  function parseBitAnd(): EvalNode {
+    const first = parseEquality();
+    if (peek().kind !== "op" || peek().value !== "&") return first;
+    const terms: EvalNode[] = [first];
+    while (peek().kind === "op" && peek().value === "&") {
+      consume();
+      countNode();
+      terms.push(parseEquality());
+    }
+    return (p) => {
+      let acc = terms[0](p);
+      for (let i = 1; i < terms.length; i += 1) {
+        acc = acc & terms[i](p);
+      }
+      return acc;
+    };
   }
 
   function parseEquality(): EvalNode {
-    let left = parseRelational();
+    const first = parseRelational();
+    if (peek().kind !== "op" || (peek().value !== "==" && peek().value !== "!=")) return first;
+    const ops: string[] = [];
+    const terms: EvalNode[] = [first];
     while (peek().kind === "op" && (peek().value === "==" || peek().value === "!=")) {
-      const op = consume().value;
-      const right = parseRelational();
-      const l = left;
-      const r = right;
-      left = op === "==" ? (p) => (l(p) === r(p) ? 1 : 0) : (p) => (l(p) !== r(p) ? 1 : 0);
+      ops.push(consume().value);
+      countNode();
+      terms.push(parseRelational());
     }
-    return left;
+    return (p) => {
+      let acc = terms[0](p);
+      for (let i = 0; i < ops.length; i += 1) {
+        const rhs = terms[i + 1](p);
+        acc = ops[i] === "==" ? (acc === rhs ? 1 : 0) : acc !== rhs ? 1 : 0;
+      }
+      return acc;
+    };
   }
 
   function parseRelational(): EvalNode {
-    let left = parseAdditive();
-    while (
+    const first = parseAdditive();
+    const isRel = () =>
       peek().kind === "op" &&
       (peek().value === "<" ||
         peek().value === "<=" ||
         peek().value === ">" ||
-        peek().value === ">=")
-    ) {
-      const op = consume().value;
-      const right = parseAdditive();
-      const l = left;
-      const r = right;
-      if (op === "<") left = (p) => (l(p) < r(p) ? 1 : 0);
-      else if (op === "<=") left = (p) => (l(p) <= r(p) ? 1 : 0);
-      else if (op === ">") left = (p) => (l(p) > r(p) ? 1 : 0);
-      else left = (p) => (l(p) >= r(p) ? 1 : 0);
+        peek().value === ">=");
+    if (!isRel()) return first;
+    const ops: string[] = [];
+    const terms: EvalNode[] = [first];
+    while (isRel()) {
+      ops.push(consume().value);
+      countNode();
+      terms.push(parseAdditive());
     }
-    return left;
+    return (p) => {
+      let acc = terms[0](p);
+      for (let i = 0; i < ops.length; i += 1) {
+        const rhs = terms[i + 1](p);
+        const op = ops[i];
+        if (op === "<") acc = acc < rhs ? 1 : 0;
+        else if (op === "<=") acc = acc <= rhs ? 1 : 0;
+        else if (op === ">") acc = acc > rhs ? 1 : 0;
+        else acc = acc >= rhs ? 1 : 0;
+      }
+      return acc;
+    };
   }
 
   function parseAdditive(): EvalNode {
-    let left = parseMultiplicative();
+    const first = parseMultiplicative();
+    if (peek().kind !== "op" || (peek().value !== "+" && peek().value !== "-")) return first;
+    const ops: string[] = [];
+    const terms: EvalNode[] = [first];
     while (peek().kind === "op" && (peek().value === "+" || peek().value === "-")) {
-      const op = consume().value;
-      const right = parseMultiplicative();
-      const l = left;
-      const r = right;
-      left = op === "+" ? (p) => l(p) + r(p) : (p) => l(p) - r(p);
+      ops.push(consume().value);
+      countNode();
+      terms.push(parseMultiplicative());
     }
-    return left;
+    return (p) => {
+      let acc = terms[0](p);
+      for (let i = 0; i < ops.length; i += 1) {
+        const rhs = terms[i + 1](p);
+        acc = ops[i] === "+" ? acc + rhs : acc - rhs;
+      }
+      return acc;
+    };
   }
 
   function parseMultiplicative(): EvalNode {
-    let left = parsePower();
-    while (
+    const first = parseUnary();
+    const isMul = () =>
       peek().kind === "op" &&
-      (peek().value === "*" || peek().value === "/" || peek().value === "%")
-    ) {
-      const op = consume().value;
-      const right = parsePower();
-      const l = left;
-      const r = right;
-      if (op === "*") left = (p) => l(p) * r(p);
-      else if (op === "/") left = (p) => l(p) / r(p);
-      else left = (p) => l(p) % r(p);
+      (peek().value === "*" || peek().value === "/" || peek().value === "%");
+    if (!isMul()) return first;
+    const ops: string[] = [];
+    const terms: EvalNode[] = [first];
+    while (isMul()) {
+      ops.push(consume().value);
+      countNode();
+      terms.push(parseUnary());
     }
-    return left;
-  }
-
-  function parsePower(): EvalNode {
-    const base = parseUnary();
-    if (peek().kind === "op" && peek().value === "**") {
-      consume();
-      const exp = withDepth(() => parsePower());
-      return (p) => Math.pow(base(p), exp(p));
-    }
-    return base;
+    return (p) => {
+      let acc = terms[0](p);
+      for (let i = 0; i < ops.length; i += 1) {
+        const rhs = terms[i + 1](p);
+        const op = ops[i];
+        if (op === "*") acc *= rhs;
+        else if (op === "/") acc /= rhs;
+        else acc %= rhs;
+      }
+      return acc;
+    };
   }
 
   function parseUnary(): EvalNode {
@@ -289,12 +371,24 @@ export function compileRasterExpression(
       (peek().value === "+" || peek().value === "-" || peek().value === "!")
     ) {
       const op = consume().value;
+      countNode();
       const operand = withDepth(() => parseUnary());
       if (op === "+") return (p) => +operand(p);
       if (op === "-") return (p) => -operand(p);
-      return (p) => (operand(p) === 0 ? 1 : 0);
+      return (p) => (operand(p) ? 0 : 1);
     }
-    return parsePrimary();
+    return parsePower();
+  }
+
+  function parsePower(): EvalNode {
+    const base = parsePrimary();
+    if (peek().kind === "op" && peek().value === "**") {
+      consume();
+      countNode();
+      const exp = withDepth(() => parseUnary());
+      return (p) => Math.pow(base(p), exp(p));
+    }
+    return base;
   }
 
   function buildCall(name: string, args: EvalNode[]): EvalNode {

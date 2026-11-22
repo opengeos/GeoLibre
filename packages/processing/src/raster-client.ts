@@ -587,6 +587,33 @@ export interface RasterCalcParams {
   additionalInputs?: Record<string, RasterData>;
 }
 
+function gridsMatch(a: RasterData, b: RasterData): string | null {
+  if (a.width !== b.width || a.height !== b.height) {
+    return `dimensions (${b.width}×${b.height}) do not match raster A (${a.width}×${a.height})`;
+  }
+  if (Boolean(a.flipX) !== Boolean(b.flipX) || Boolean(a.flipY) !== Boolean(b.flipY)) {
+    return "axis orientation does not match raster A";
+  }
+  const tolX = 1e-6 * Math.max(1, Math.abs(a.resX), Math.abs(a.originX));
+  const tolY = 1e-6 * Math.max(1, Math.abs(a.resY), Math.abs(a.originY));
+  if (Math.abs(a.originX - b.originX) > tolX || Math.abs(a.originY - b.originY) > tolY) {
+    return "origin does not match raster A";
+  }
+  const resTolX = 1e-6 * Math.max(1, Math.abs(a.resX));
+  const resTolY = 1e-6 * Math.max(1, Math.abs(a.resY));
+  if (Math.abs(a.resX - b.resX) > resTolX || Math.abs(a.resY - b.resY) > resTolY) {
+    return "pixel resolution does not match raster A";
+  }
+  for (const crsKey of ["GTModelTypeGeoKey", "GeographicTypeGeoKey", "ProjectedCSTypeGeoKey"]) {
+    const av = a.geoKeys?.[crsKey];
+    const bv = b.geoKeys?.[crsKey];
+    if (av != null && bv != null && av !== bv) {
+      return `CRS (${crsKey}=${String(bv)}) does not match raster A (${crsKey}=${String(av)})`;
+    }
+  }
+  return null;
+}
+
 /**
  * Evaluate a CSP-safe band-math expression over one or more rasters.
  * Band 1 of each input is `A`, `B`, `C`, ... and specific bands are `A1`, `A2`,
@@ -603,9 +630,13 @@ export function rasterCalc(input: RasterData, params: RasterCalcParams): RasterD
       if (!/^[B-Z]$/.test(key)) {
         throw new Error(`Invalid secondary raster key "${rawKey}". Expected a single letter B–Z.`);
       }
-      if (extra.width !== input.width || extra.height !== input.height) {
+      if (key in rasters) {
+        throw new Error(`Duplicate secondary raster key "${key}".`);
+      }
+      const mismatch = gridsMatch(input, extra);
+      if (mismatch) {
         throw new Error(
-          `Raster ${key} dimensions (${extra.width}×${extra.height}) do not match raster A (${input.width}×${input.height}).`,
+          `Raster ${key} ${mismatch}; align or reproject inputs before running the calculator.`,
         );
       }
       rasters[key] = extra;

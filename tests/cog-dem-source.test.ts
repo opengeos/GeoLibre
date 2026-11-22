@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ImageFileDirectory } from "geotiff";
+import { ImageFileDirectory, writeArrayBuffer } from "geotiff";
 import {
   demTilePlacement,
   encodeTerrariumDem,
@@ -10,6 +10,7 @@ import {
   normalizeNoData,
   projectedBoundsFromTransform,
   projectionFromGeoKeys,
+  registerCogDemSource,
   resampleProjectedTile,
 } from "../packages/map/src/cog-dem-source";
 import { resolveEpsgProjection } from "../packages/map/src/epsg-proj4";
@@ -268,5 +269,87 @@ describe("projected COG DEM warping", () => {
     const westElev = tile[128 * 256 + 16];
     const eastElev = tile[128 * 256 + 240];
     assert.ok(eastElev > westElev + 20, `expected east (${eastElev}) > west (${westElev})`);
+  });
+
+  it("preserves south-up orientation and RasterPixelIsPoint half-pixel alignment", () => {
+    // South-up 2x2 grid: row 0 is south (100 m), row 1 is north (300 m).
+    const southUp = new Float32Array([100, 110, 300, 310]);
+    const mercBounds: [number, number, number, number] = [0, 0, 20, 20];
+    const tile = resampleProjectedTile(southUp, 2, 2, mercBounds, mercBounds, (c) => c, {
+      originX: 0,
+      originY: 0,
+      resX: 10,
+      resY: 10,
+    });
+    // Row 0 of the Mercator tile is north (y ≈ 20) -> must sample south-up row 1 (300 m).
+    assert.equal(tile[10 * 256 + 10], 300);
+    // Row 245 of the Mercator tile is south (y ≈ 0) -> must sample south-up row 0 (100 m).
+    assert.equal(tile[245 * 256 + 10], 100);
+
+    // RasterPixelIsPoint: postings at x=0 (10 m) and x=10 (20 m); x=7 belongs to posting 1 (20 m).
+    const pointGrid = new Float32Array([10, 20]);
+    const ptTile = resampleProjectedTile(pointGrid, 2, 1, [-5, 0, 15, 10], [0, 0, 10, 10], (c) => c, {
+      originX: -5,
+      originY: 10,
+      resX: 10,
+      resY: -10,
+    });
+    // col 179 of 256 spans x ≈ 7.0 -> must pick posting 1 (20 m); col 50 spans x ≈ 2.0 -> posting 0 (10 m).
+    assert.equal(ptTile[128 * 256 + 50], 10);
+    assert.equal(ptTile[128 * 256 + 179], 20);
+  });
+
+  it("registers a north-up UTM GeoTIFF via registerCogDemSource and renders a partially overlapping tile with fallback", async () => {
+    const width = 16;
+    const height = 16;
+    const scale = 500; // 500 m pixels -> 8 km x 8 km
+    const originX = 230_000;
+    const originY = 3_980_000;
+    const values = new Float32Array(width * height);
+    for (let r = 0; r < height; r += 1) {
+      for (let c = 0; c < width; c += 1) {
+        values[r * width + c] = 200 + r * 20 + c * 5;
+      }
+    }
+    const tiffBuffer = await writeArrayBuffer(values, {
+      width,
+      height,
+      GTModelTypeGeoKey: 1,
+      GTRasterTypeGeoKey: 1,
+      ProjectedCSTypeGeoKey: 32617,
+      ModelTiepoint: [0, 0, 0, originX, originY, 0],
+      ModelPixelScale: [scale, scale, 0],
+    });
+    const reg = await registerCogDemSource(new Blob([tiffBuffer]));
+    try {
+      assert.ok(reg.bounds);
+      // Fill outside-DEM pixels with a known 42 m fallback elevation.
+      reg.setFallback?.(async () => new Float64Array(256 * 256).fill(42));
+      // Zoom 11 tile covering Knoxville (~-83.95°, 35.9°) partially overlaps the 8 km DEM.
+      const z = 11;
+      const lon = (reg.bounds[0] + reg.bounds[2]) / 2;
+      const lat = (reg.bounds[1] + reg.bounds[3]) / 2;
+      const n = 2 ** z;
+      const tileX = Math.floor(((lon + 180) / 360) * n);
+      const latRad = (lat * Math.PI) / 180;
+      const tileY = Math.floor(
+        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n,
+      );
+      const rgba = await reg.renderTile(z, tileX, tileY);
+      const decodeTerrarium = (idx: number) =>
+        rgba[idx * 4] * 256 + rgba[idx * 4 + 1] + rgba[idx * 4 + 2] / 256 - 32768;
+
+      let insideCount = 0;
+      let fallbackCount = 0;
+      for (let i = 0; i < 256 * 256; i += 1) {
+        const elev = decodeTerrarium(i);
+        if (Math.abs(elev - 42) < 0.05) fallbackCount += 1;
+        else if (elev >= 199 && elev <= 600) insideCount += 1;
+      }
+      assert.ok(insideCount > 100, `expected >100 DEM pixels inside overlap, got ${insideCount}`);
+      assert.ok(fallbackCount > 100, `expected >100 fallback pixels outside overlap, got ${fallbackCount}`);
+    } finally {
+      reg.dispose();
+    }
   });
 });
