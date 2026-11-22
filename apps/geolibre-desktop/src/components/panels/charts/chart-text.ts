@@ -11,6 +11,8 @@ export const CHART_LABEL_FONT_SIZE = 11;
 export type TextMeasurer = (text: string) => number;
 
 const ELLIPSIS = "…";
+/** Upper bound on cached label widths before the cache is reset. */
+const MAX_CACHED_WIDTHS = 2000;
 
 // Code points that render about one em wide: CJK ideographs, kana, Hangul and
 // the fullwidth forms.
@@ -68,6 +70,9 @@ export function createTextMeasurer(fontSize = CHART_LABEL_FONT_SIZE): TextMeasur
   const family = document.body ? getComputedStyle(document.body).fontFamily : "";
   const font = `${fontSize}px ${family || "sans-serif"}`;
   const cache = new Map<string, number>();
+  // Widths measured before a web font finishes loading would keep the fallback
+  // font's metrics, so drop them when loading completes.
+  document.fonts?.addEventListener("loadingdone", () => cache.clear());
   return (text) => {
     const cached = cache.get(text);
     if (cached !== undefined) return cached;
@@ -75,18 +80,26 @@ export function createTextMeasurer(fontSize = CHART_LABEL_FONT_SIZE): TextMeasur
     const width = ctx.measureText(text).width;
     // A context that reports nothing (no font backend) is no better than none.
     const result = Number.isFinite(width) && (width > 0 || text === "") ? width : fallback(text);
+    if (cache.size >= MAX_CACHED_WIDTHS) cache.clear();
     cache.set(text, result);
     return result;
   };
 }
 
-/** Split `text` into user-perceived characters so truncation never cuts a
- * surrogate pair, a combining sequence or an emoji in half. */
+let segmenter: Intl.Segmenter | null | undefined;
+
+/** Split `text` into user-perceived characters so truncation keeps surrogate
+ * pairs, combining sequences and emoji whole where `Intl.Segmenter` exists.
+ * Without it the split falls back to code points, which can still cut a ZWJ
+ * emoji sequence or a decomposed accent. */
 function graphemes(text: string): string[] {
-  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
-    const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-    return Array.from(segmenter.segment(text), (part) => part.segment);
+  if (segmenter === undefined) {
+    segmenter =
+      typeof Intl !== "undefined" && "Segmenter" in Intl
+        ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+        : null;
   }
+  if (segmenter) return Array.from(segmenter.segment(text), (part) => part.segment);
   return Array.from(text);
 }
 

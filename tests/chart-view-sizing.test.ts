@@ -6,6 +6,9 @@ import { act, render, stubLayout } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { createElement } from "react";
+import {
+  approximateTextWidth,
+} from "../apps/geolibre-desktop/src/components/panels/charts/chart-text";
 
 const { ChartView, computeChart } =
   await import("../apps/geolibre-desktop/src/components/panels/charts/chart-view");
@@ -131,6 +134,24 @@ describe("ChartView sizing", () => {
       );
       assert.deepEqual([...sizes], ["11"], spec.type);
       unmount();
+    }
+  });
+
+  it("keeps a fill pie's legend inside a narrow card", () => {
+    stubLayout(160, 240);
+    const { container } = render(
+      createElement(ChartView, {
+        result: computeChart(rows(), { type: "pie", category: "kind" }),
+        fill: true,
+      }),
+    );
+    const legend = Array.from(container.querySelectorAll("svg text"));
+    assert.ok(legend.length > 0, "legend rendered");
+    for (const text of legend) {
+      const x = Number(text.getAttribute("x"));
+      const drawn = text.firstChild?.textContent ?? "";
+      // The text, share included, ends at the 4px inset from the right edge.
+      assert.ok(x + approximateTextWidth(drawn) <= 156 + 0.01, `"${drawn}" overflows the card`);
     }
   });
 });

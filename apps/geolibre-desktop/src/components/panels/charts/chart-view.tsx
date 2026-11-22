@@ -126,6 +126,8 @@ const X_TICK_OFFSET = 14;
 const ROTATE_SIN = Math.sin((40 * Math.PI) / 180);
 const ROTATE_COS = Math.cos((40 * Math.PI) / 180);
 const MIN_ROTATED_SLOT = 20;
+/** Text width a fill-mode pie keeps free for its legend beside the pie. */
+const PIE_LEGEND_MIN_TEXT = 72;
 
 interface ChartSize {
   width: number;
@@ -895,9 +897,13 @@ function PieChart({
   const colors = categoryColors(color, slices.length);
   const fixed = frame.sizing === "fixed";
   const plot = plotArea(frame.size, fixed ? MARGIN : { top: 8, right: 8, bottom: 8, left: 8 });
+  // In fill mode the legend sits right of the pie, starting 2r + 32px from the
+  // plot's left edge and ending 4px short of the right: cap the radius so the
+  // legend keeps PIE_LEGEND_MIN_TEXT px for its text.
+  const legendRoom = (plot.width - plot.left - 36 - PIE_LEGEND_MIN_TEXT) / 2;
   const radius = fixed
     ? plot.innerH / 2 - 6
-    : Math.max(4, Math.min(plot.innerH / 2 - 2, plot.innerW * 0.32));
+    : Math.max(4, Math.min(plot.innerH / 2 - 2, plot.innerW * 0.32, legendRoom));
   const cx = plot.left + radius;
   const cy = plot.top + plot.innerH / 2;
   const legendX = cx + radius + (fixed ? 24 : 16);
