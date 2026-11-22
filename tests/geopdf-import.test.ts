@@ -202,6 +202,46 @@ describe("readGeoPdfPages", () => {
     assertFrame(encoder.encode(text));
   });
 
+  // GH #3556: Global Mapper writes the BBox top edge first, and LPTS/Bounds
+  // count from the first corner as written. Sorting the corners without
+  // flipping the points drew the map upside down.
+  it("measures LPTS from the BBox corners in the order they are written", () => {
+    const pairs = (order: number[]) => {
+      const gpts = frameGpts();
+      return order.flatMap((i) => [gpts[2 * i], gpts[2 * i + 1]]);
+    };
+    // Corner indices into frameGpts (UL, LL, LR, UR) that LPTS (0,1) (0,0)
+    // (1,0) (1,1) land on for each written corner order.
+    // The last element is the /Bounds [0 0.25 0 0 1 0 1 0.25] neatline in the
+    // normalized box: a strip along the first-written y edge (the top, for a
+    // top-first BBox) or starting at the first-written x edge.
+    const cases: [number[], number[], number[]][] = [
+      [
+        [BBOX[0], BBOX[3], BBOX[2], BBOX[1]],
+        [1, 0, 3, 2],
+        [0, 0.75, 0, 1, 1, 1, 1, 0.75],
+      ],
+      [
+        [BBOX[2], BBOX[1], BBOX[0], BBOX[3]],
+        [3, 2, 1, 0],
+        [1, 0.25, 1, 0, 0, 0, 0, 0.25],
+      ],
+    ];
+    for (const [bbox, order, bounds] of cases) {
+      const entry = viewportEntry(undefined, {
+        bbox,
+        bounds: "/Bounds [0 0.25 0 0 1 0 1 0.25] ",
+      }).replace(/\/GPTS \[[^\]]*\]/, `/GPTS [${pairs(order).join(" ")}]`);
+      const vp = primaryViewport(readGeoPdfPages(classicPdf(entry))[0])!;
+      assert.deepEqual(vp.bbox, BBOX);
+      const t = fitViewportTransform(vp, mercator)!;
+      const ul = applyUserToCrs(t, BBOX[0], BBOX[3]);
+      assert.ok(Math.abs(ul[0] - UL[0]) < 1e-3 && Math.abs(ul[1] - UL[1]) < 1e-3, `${bbox}`);
+      // The neatline is flipped the same way as the control points.
+      assert.deepEqual(vp.bounds, bounds);
+    }
+  });
+
   it("reports a page without a georeference", () => {
     const pages = readGeoPdfPages(classicPdf("/MediaBox [0 0 10 10]"));
     assert.equal(primaryViewport(pages[0]), null);

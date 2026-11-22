@@ -13,8 +13,8 @@ import {
   useDesktopSettingsStore,
 } from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
 import {
+  APP_LAYERS_FILE_HOST,
   buildLayersFileContent,
-  fetchStartupLayerFeatures,
   withStartupLayers,
   type LayersFileHost,
 } from "../apps/geolibre-desktop/src/lib/startup-layers";
@@ -75,6 +75,53 @@ beforeEach(() => {
 });
 
 describe("buildLayersFileContent", () => {
+  it("does not strip snapshots from sources that cannot bootstrap on reload", () => {
+    const urls = [
+      "s3://private-bucket/data.json",
+      "s3a://private-bucket/data.json",
+      "https://private-bucket.s3.amazonaws.com/data.json",
+      "http://localhost/data.json",
+      "http://192.168.1.2/data.json",
+    ];
+    const layers = urls.map((url, index) =>
+      layer({
+        id: `blocked-${index}`,
+        name: url,
+        geojson: features,
+        source: { type: "geojson", url },
+      }),
+    );
+    useAppStore.setState({ layers });
+    for (const entry of layers) assert.equal(APP_LAYERS_FILE_HOST.canRefetch(entry), false);
+    const build = buildLayersFileContent(APP_LAYERS_FILE_HOST);
+    assert.deepEqual(build.content.layers, []);
+    assert.deepEqual(build.skipped, urls);
+    assert.ok(useAppStore.getState().layers.every((entry) => entry.geojson === features));
+  });
+
+  it("exports public GeoJSON and private-host WFS as bootstrapable references", () => {
+    useAppStore.setState({
+      layers: [
+        layer({
+          id: "public",
+          name: "Public",
+          geojson: features,
+          source: { type: "geojson", url: "https://example.test/data.json" },
+        }),
+        layer({
+          id: "wfs",
+          name: "WFS",
+          geojson: features,
+          source: { type: "geojson", url: "http://localhost/wfs" },
+          metadata: { sourceKind: "wfs-getfeature" },
+        }),
+      ],
+    });
+    const build = buildLayersFileContent(APP_LAYERS_FILE_HOST);
+    assert.deepEqual(build.skipped, []);
+    assert.equal(build.content.layers.length, 2);
+    assert.ok(build.content.layers.every((entry) => entry.geojson === undefined));
+  });
   it("writes references without features or credentials, and reports the rest", () => {
     useAppStore.setState({ layers: [tiles, fromUrl, fromDisk, drawn] });
     const build = buildLayersFileContent(host);
@@ -117,34 +164,6 @@ describe("startup layers", () => {
       withStartupLayers(createEmptyProject()).layers.map((entry) => entry.name),
       ["Tiles", "From disk"],
     );
-  });
-
-  it("fetch URL features into a clean workspace and keep it clean", async () => {
-    const bare = { ...fromUrl, geojson: undefined };
-    useAppStore.getState().loadProject({ ...createEmptyProject(), layers: [bare] }, null);
-    assert.equal(useAppStore.getState().isDirty, false);
-    await fetchStartupLayerFeatures(
-      (entry) => !entry.geojson,
-      async () => features,
-    );
-    const state = useAppStore.getState();
-    assert.equal(state.layers[0].geojson?.features.length, 1);
-    assert.equal(state.isDirty, false);
-    // The fetch is not an undo step.
-    assert.equal(useAppStore.temporal.getState().pastStates.length, 0);
-  });
-
-  it("drop a fetch that lands after the workspace changed", async () => {
-    const bare = { ...fromUrl, geojson: undefined };
-    useAppStore.getState().loadProject({ ...createEmptyProject(), layers: [bare] }, null);
-    await fetchStartupLayerFeatures(
-      (entry) => !entry.geojson,
-      async () => {
-        useAppStore.getState().newProject();
-        return features;
-      },
-    );
-    assert.equal(useAppStore.getState().layers.length, 0);
   });
 });
 

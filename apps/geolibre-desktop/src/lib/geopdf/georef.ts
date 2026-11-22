@@ -25,15 +25,22 @@ export interface GeoPdfCrs {
 export interface GeoPdfViewport {
   /** Viewport name (`/Name`), when given. */
   name: string | null;
-  /** The viewport rectangle in PDF user space, `[x0, y0, x1, y1]`. */
+  /**
+   * The viewport rectangle in PDF user space, `[x0, y0, x1, y1]`, normalized
+   * so `x0 <= x1` and `y0 <= y1` whatever corner order the PDF wrote.
+   */
   bbox: [number, number, number, number];
-  /** Unit-square points paired with {@link gpts}, as `[x, y, x, y, ...]`. */
+  /**
+   * Unit-square points of {@link bbox} paired with {@link gpts}, as
+   * `[x, y, x, y, ...]`, measured from its `(x0, y0)` corner.
+   */
   lpts: number[];
   /** Latitude/longitude pairs on the CRS's datum, as `[lat, lon, lat, lon, ...]`. */
   gpts: number[];
   /**
    * The neatline: the georeferenced area as a polygon in the unit square of
-   * {@link bbox}, `[x, y, x, y, ...]`. The whole square when the PDF gives none.
+   * {@link bbox}, `[x, y, x, y, ...]`, measured like {@link lpts}. The whole
+   * square when the PDF gives none.
    */
   bounds: number[];
   crs: GeoPdfCrs;
@@ -95,6 +102,17 @@ function readViewports(doc: PdfDocument, page: PdfDict): GeoPdfViewport[] {
           ? wktEpsg(wkt)
           : null;
     const name = doc.resolve(vp.get("Name"));
+    // /LPTS and /Bounds are fractions of the BBox measured from its first
+    // corner towards its second, as GDAL reads them (PDFDataset::ParseMeasure
+    // in frmts/pdf/pdfdataset.cpp interpolates BBox[0]..BBox[2] and
+    // BBox[1]..BBox[3] without sorting them). Writers disagree on the
+    // corner order (Global Mapper writes the top edge first), so flip each
+    // axis written high-to-low into the normalized box rather than mirroring
+    // the map.
+    const flipU = bbox[0] > bbox[2];
+    const flipV = bbox[1] > bbox[3];
+    const toNormalized = (points: number[]) =>
+      points.map((value, i) => ((i % 2 === 0 ? flipU : flipV) ? 1 - value : value));
     out.push({
       name: typeof name === "string" ? name : null,
       bbox: [
@@ -103,9 +121,11 @@ function readViewports(doc: PdfDocument, page: PdfDict): GeoPdfViewport[] {
         Math.max(bbox[0], bbox[2]),
         Math.max(bbox[1], bbox[3]),
       ],
-      lpts,
+      lpts: toNormalized(lpts),
       gpts,
-      bounds: bounds.length >= 6 && bounds.length % 2 === 0 ? bounds : [0, 0, 0, 1, 1, 1, 1, 0],
+      bounds: toNormalized(
+        bounds.length >= 6 && bounds.length % 2 === 0 ? bounds : [0, 0, 0, 1, 1, 1, 1, 0],
+      ),
       crs: {
         geographic: nameOf(doc.resolve(gcs.get("Type"))) === "GEOGCS",
         epsg,

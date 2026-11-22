@@ -6,9 +6,9 @@
  * The index reaches MapLibre's stylesheet, which `node --test` cannot load, so a test for the
  * format detection would need a browser; and `packages/plugins` cannot import from `apps/`, so
  * anything living in the desktop app is out of reach of the STAC and PMTiles doors that need to
- * apply a catalog's published style. The parsers below pull only `@geolibre/core`,
- * `fast-xml-parser` and sibling pure modules — no `maplibre-gl` — so this entry stays resolvable
- * under the test runner.
+ * apply a catalog's published style. The parsers below, and the ArcGIS CIM symbology reader
+ * re-exported here for CIM importers, pull only `@geolibre/core`, `fast-xml-parser` and sibling
+ * pure modules — no `maplibre-gl` — so this entry stays resolvable under the test runner.
  *
  * `StyleManagerPanel` still sniffs formats itself. It routes JSON to `parseStyleLibrary` rather
  * than `parseMapboxStyle`, so folding it in here is a behaviour change, not a move.
@@ -21,6 +21,16 @@ import { applyQmlImport, parseQml } from "./qml-import";
 import { applyLyrxImport, isLyrxDocument, parseLyrx } from "./lyrx-import";
 
 export { qgisLengthToPixels } from "./qml-import";
+export {
+  cimColor,
+  cimSymbolLayerEnabled,
+  translateCimRenderer,
+  translateCimSymbol,
+  type CimColor,
+  type CimRendererIssue,
+  type CimRendererIssueCode,
+  type CimRendererTranslation,
+} from "./cim-renderer";
 
 /**
  * Whether an XML style document is a QGIS QML (as opposed to an OGC SLD): a QML has a `<qgis>`

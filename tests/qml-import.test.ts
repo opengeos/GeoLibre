@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type LayerStyle } from "@geolibre/core";
 import { applyQmlImport, parseQml } from "../packages/map/src/qml-import";
+import { fillPaint } from "../packages/map/src/style-mapper";
 
 /** Wrap renderer/labeling XML in a minimal <qgis> document. */
 function qgis(body: string): string {
@@ -46,6 +47,19 @@ describe("parseQml", () => {
     assert.ok(Math.abs((result.style.fillOpacity ?? 0) - 0.4) < 0.01);
     assert.equal(result.style.strokeColor, "#004488");
     assert.equal(result.style.strokeWidth, 3);
+  });
+
+  // QGIS draws a solid outline of width 0 as a 1px cosmetic pen, which GeoLibre's fill hairline
+  // reproduces, so the import must keep it.
+  it("keeps a zero-width QGIS outline as a 1px hairline", () => {
+    const result = parseQml(
+      qgis(
+        `<renderer-v2 type="singleSymbol"><symbols>${fillSymbol("0", "255,136,0,255", "0,0,0,255", "0")}</symbols></renderer-v2>`,
+      ),
+    );
+    const style = { ...structuredClone(DEFAULT_LAYER_STYLE), ...result.style } as LayerStyle;
+    assert.equal(style.strokeWidth, 0);
+    assert.equal(fillPaint(style, 1)["fill-outline-color"], "#000000");
   });
 
   // QGIS writes the Layer Styling panel's opacity slider onto <symbol alpha=…>, not into the

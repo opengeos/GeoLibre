@@ -1,20 +1,12 @@
-import {
-  fetchConversionJob,
-  runVectorLayers,
-  runVectorToVector,
-  type ConversionJob,
-  type VectorDatasetLayer,
-} from "@geolibre/processing";
+import type { VectorDatasetLayer } from "@geolibre/processing";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { FolderOpen, Layers } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { FeatureCollection } from "geojson";
-import { tempDir, join } from "@tauri-apps/api/path";
-import { remove } from "@tauri-apps/plugin-fs";
 import { startGeoLibreSidecar } from "../../../../lib/sidecar";
 import { IS_MAS_BUILD } from "../../../../lib/build-flags";
-import { isTauri, pickLocalDirectory, readLocalFileBytes } from "../../../../lib/tauri-io";
+import { listFileGeodatabaseLayers, readFileGeodatabaseLayer } from "../../../../lib/file-gdb";
+import { isTauri, pickLocalDirectory } from "../../../../lib/tauri-io";
 import { LAST_GEODATABASE_STORAGE_KEY } from "../constants";
 import {
   createBaseLayer,
@@ -24,31 +16,6 @@ import {
   normalizeCrs,
 } from "../helpers";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
-
-const POLL_INTERVAL_MS = 1000;
-// Reading a File Geodatabase layer is a local disk read plus a GeoJSON write,
-// but the sidecar's managed runtime may bootstrap itself (download DuckDB) on
-// the very first conversion, so the ceiling is generous.
-const POLL_TIMEOUT_MS = 10 * 60 * 1000;
-
-/**
- * Poll a sidecar conversion job until it leaves the pending/running states.
- * Resolves with the finished job (whatever its outcome); the caller decides
- * how to surface a failure.
- */
-async function waitForConversionJob(
-  initial: ConversionJob,
-  timeoutMessage: string,
-): Promise<ConversionJob> {
-  const deadline = Date.now() + POLL_TIMEOUT_MS;
-  let job = initial;
-  while (job.status === "pending" || job.status === "running") {
-    if (Date.now() > deadline) throw new Error(timeoutMessage);
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-    job = await fetchConversionJob(job.id);
-  }
-  return job;
-}
 
 interface StoredGdbSelection {
   path: string;
@@ -121,17 +88,8 @@ export function GdbSource() {
     setIsReadingLayers(true);
     try {
       await startGeoLibreSidecar();
-      const job = await waitForConversionJob(
-        await runVectorLayers({ input_path: path }),
-        t("addData.gdb.errorTimeout"),
-      );
+      const spatialLayers = await listFileGeodatabaseLayers(path);
       if (requestId !== loadSeq.current) return; // superseded by a newer pick
-      if (job.status !== "succeeded") {
-        throw new Error(job.error || t("addData.gdb.readError"));
-      }
-      const result = job.result as { layers?: VectorDatasetLayer[] } | undefined;
-      // Attribute-only tables (no geometry) cannot become map layers.
-      const spatialLayers = (result?.layers ?? []).filter((layer) => layer.geometry_type);
       if (spatialLayers.length === 0) {
         throw new Error(t("addData.gdb.errorNoLayers"));
       }
@@ -194,47 +152,14 @@ export function GdbSource() {
     const sourceCrs = selectedInfo?.crs ?? normalizeCrs(crsOverride);
     if (!sourceCrs) throw new Error(t("addData.gdb.errorMissingCrs"));
 
-    // The sidecar writes the converted layer into the OS temp directory; the
-    // file only serves this one add and is removed after the read below.
-    const outputPath = await join(
-      await tempDir(),
-      `geolibre-gdb-${Date.now()}-${Math.random().toString(36).slice(2)}.geojson`,
-    );
-
     await startGeoLibreSidecar();
-    let featureCollection: FeatureCollection;
-    // Set once the job is known to have finished on the sidecar; cleanup is
-    // gated on it because after a poll timeout (or a mid-poll network error)
-    // the job may still be running and writing outputPath — removing it then
-    // would unlink the file out from under the write. In that rare case the
-    // file is left for the OS temp cleaner instead.
-    let jobFinished = false;
-    try {
-      const job = await waitForConversionJob(
-        await runVectorToVector({
-          input_path: gdbPath,
-          output_path: outputPath,
-          input_layer: selectedLayer,
-          target_srs: "EPSG:4326",
-          // Only sent when the layer itself declares nothing; the backend
-          // otherwise reads the CRS from the dataset.
-          ...(selectedInfo?.crs ? {} : { source_srs: sourceCrs }),
-        }),
-        t("addData.gdb.errorTimeout"),
-      );
-      jobFinished = true;
-      if (job.status !== "succeeded") {
-        throw new Error(job.error || t("addData.gdb.convertError"));
-      }
-      const bytes = await readLocalFileBytes(outputPath);
-      featureCollection = JSON.parse(new TextDecoder("utf-8").decode(bytes)) as FeatureCollection;
-    } finally {
-      // Best-effort cleanup so repeated imports cannot pile up in temp (the
-      // capability grants remove for exactly this filename pattern). A failed
-      // conversion already unlinked its partial output server-side, so a
-      // missing file here is the normal failure-path outcome.
-      if (jobFinished) await remove(outputPath).catch(() => undefined);
-    }
+    // The source CRS is only sent when the layer itself declares nothing; the
+    // backend otherwise reads the CRS from the dataset.
+    const featureCollection = await readFileGeodatabaseLayer(
+      gdbPath,
+      selectedLayer,
+      selectedInfo?.crs ? undefined : sourceCrs,
+    );
 
     // Remember the layer that was actually added (it may differ from the
     // listing default), so reopening the panel preselects it.

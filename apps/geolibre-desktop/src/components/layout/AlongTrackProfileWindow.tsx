@@ -1,6 +1,6 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { Button } from "@geolibre/ui";
+import { Button, Select } from "@geolibre/ui";
 import { Download, GripVertical, Image as ImageIcon, LineChart, RotateCcw, X } from "lucide-react";
 import {
   useCallback,
@@ -431,32 +431,24 @@ function ProfileWindow({
       <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 text-xs">
         <label className="flex items-center gap-1">
           {t("alongTrackProfile.beam")}
-          <select
-            className="rounded border bg-background px-1 py-0.5"
-            value={beam}
-            onChange={(event) => setBeam(event.target.value)}
-          >
+          <Select compact value={beam} onChange={(event) => setBeam(event.target.value)}>
             {beams.map((entry) => (
               <option key={entry.name} value={entry.name}>
                 {entry.type ? `${entry.name} (${entry.type})` : entry.name} · {entry.count}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="flex items-center gap-1">
           {t("alongTrackProfile.show")}
-          <select
-            className="rounded border bg-background px-1 py-0.5"
-            value={mode}
-            onChange={(event) => setMode(event.target.value)}
-          >
+          <Select compact value={mode} onChange={(event) => setMode(event.target.value)}>
             {presets.map((preset) => (
               <option key={preset.id} value={preset.id}>
                 {t(`alongTrackProfile.preset.${preset.labelKey}`)}
               </option>
             ))}
             <option value="fields">{t("alongTrackProfile.preset.fields")}</option>
-          </select>
+          </Select>
         </label>
         {mode === "fields" && (
           <div

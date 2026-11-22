@@ -2,6 +2,7 @@ import type { Feature, FeatureCollection, Polygon } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { getControlMap } from "./style-map";
+import { withSelectChevron } from "../panel-dom";
 
 export const DGGAL_PLUGIN_ID = "maplibre-dggal";
 
@@ -863,7 +864,7 @@ function renderPanel(container: HTMLElement): void {
     return element;
   };
 
-  const typeSelect = document.createElement("select");
+  const typeSelect = withSelectChevron(document.createElement("select"));
   for (const name of DGGAL_TYPE_NAMES) {
     const option = document.createElement("option");
     option.value = name;

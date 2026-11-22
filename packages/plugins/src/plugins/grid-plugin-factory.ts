@@ -2,6 +2,7 @@ import type { Feature, FeatureCollection, Polygon } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { getControlMap } from "./style-map";
+import { withSelectChevron } from "../panel-dom";
 
 /**
  * Shared skeleton of the viewport-driven DGGS grid plugins (S2, H3, A5, OLC,
@@ -617,7 +618,7 @@ export function createGridPlugin<S extends GridSettingsBase, L extends GridLabel
     if (control.kind === "select") {
       // Valid values are not contiguous (OLC: …8, 10, 11…), so a dropdown
       // replaces the range slider.
-      const resolutionSelect = document.createElement("select");
+      const resolutionSelect = withSelectChevron(document.createElement("select"));
       for (const value of control.options) {
         const option = document.createElement("option");
         option.value = String(value);

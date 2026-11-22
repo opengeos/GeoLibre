@@ -2,6 +2,7 @@ import type { Feature, FeatureCollection, Polygon, Position } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { getControlMap } from "./style-map";
+import { withSelectChevron } from "../panel-dom";
 
 export const DGGRID_PLUGIN_ID = "maplibre-dggrid";
 
@@ -1048,7 +1049,7 @@ function renderPanel(container: HTMLElement): void {
     onChange: (value: string) => void,
     disabled = false,
   ): HTMLSelectElement => {
-    const element = document.createElement("select");
+    const element = withSelectChevron(document.createElement("select"));
     for (const [optionValue, optionLabel] of options) {
       const option = document.createElement("option");
       option.value = optionValue;

@@ -3,6 +3,7 @@ import type { Map as MapLibreMap, MapLayerMouseEvent, MapMouseEvent } from "mapl
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { createMapPopup } from "./map-popup";
 import { getControlMap } from "./style-map";
+import { withSelectChevron } from "../panel-dom";
 
 export const USGS_NLDI_PLUGIN_ID = "maplibre-usgs-nldi";
 export const NLDI_API = "https://api.water.usgs.gov/nldi";
@@ -581,7 +582,7 @@ export const maplibreUsgsNldiPlugin: GeoLibrePlugin = {
     let disposed = false;
     let requestId = 0;
     let activeAbortController: AbortController | null = null;
-    const direction = document.createElement("select");
+    const direction = withSelectChevron(document.createElement("select"));
     direction.append(
       new Option(labels.directionComplete, "none"),
       new Option(labels.directionUp, "up"),
@@ -592,7 +593,7 @@ export const maplibreUsgsNldiPlugin: GeoLibrePlugin = {
     status.style.cssText = "line-height:1.4;color:hsl(var(--muted-foreground));";
     const basinButton = button(labels.basinButton);
     basinButton.disabled = true;
-    const navigation = document.createElement("select");
+    const navigation = withSelectChevron(document.createElement("select"));
     navigation.append(
       new Option(labels.navigationPlaceholder, ""),
       new Option(labels.navigationUpstreamMain, "upstreamMain"),
@@ -601,7 +602,7 @@ export const maplibreUsgsNldiPlugin: GeoLibrePlugin = {
       new Option(labels.navigationDownstreamDiversions, "downstreamDiversions"),
     );
     styleThemedSelect(navigation);
-    const source = document.createElement("select");
+    const source = withSelectChevron(document.createElement("select"));
     source.append(new Option(labels.sourcePlaceholder, ""));
     source.disabled = true;
     styleThemedSelect(source);

@@ -21,6 +21,7 @@ import { resolveExportCrs, safeFileStem } from "./las-writer";
 import { getOverlayViewport, getRenderZOffset } from "./lidar-access";
 import { ObjectViews, boxFramePoints } from "./object-views";
 import { createOffsetProjector } from "./selection";
+import { withSelectChevron } from "../../panel-dom";
 
 /** Review status of a labelled object. */
 export type ObjectStatus = "new" | "reviewed" | "flagged";
@@ -523,7 +524,7 @@ export class CuboidSection {
       title.append(swatch, label);
       title.title = tr("editBox", "Edit in the side views");
       title.addEventListener("click", () => this.select(object.id));
-      const classSelect = document.createElement("select");
+      const classSelect = withSelectChevron(document.createElement("select"));
       classSelect.style.cssText =
         "padding:4px;border:1px solid hsl(var(--border));border-radius:4px;background:hsl(var(--background));min-width:0;";
       classSelect.style.setProperty("color", "hsl(var(--foreground))", "important");
@@ -539,7 +540,7 @@ export class CuboidSection {
         this.host.changed();
         this.render();
       });
-      const statusSelect = document.createElement("select");
+      const statusSelect = withSelectChevron(document.createElement("select"));
       statusSelect.style.cssText = classSelect.style.cssText;
       statusSelect.dataset.status = String(object.id);
       for (const status of OBJECT_STATUSES) {

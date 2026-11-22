@@ -160,6 +160,77 @@ describe("buildQml", () => {
     assert.match(qml, /filter="ELSE"/);
   });
 
+  it("exports a single symbol when no rule exports and the ELSE rule is off", () => {
+    // As an ArcGIS class breaks import without a default symbol: class
+    // filters QML cannot express, and a switched-off catch-all.
+    const rules = (classEnabled: boolean, filter: unknown) =>
+      style({
+        vectorStyleMode: "rule-based",
+        fillColor: "#ff0000",
+        vectorRules: [
+          {
+            id: "c1",
+            label: "Low",
+            filter: JSON.stringify(filter),
+            color: "#ff0000",
+            isElse: false,
+            enabled: classEnabled,
+          },
+          { id: "else", label: "", filter: "", color: "#dddddd", isElse: true, enabled: false },
+        ],
+      });
+    const untranslatable = ["match", ["to-string", ["get", "k"]], ["a"], true, false];
+    const skipped = buildQml(layer({ style: rules(true, untranslatable) }), polygons());
+    assert.match(compact(skipped.qml), /<renderer-v2 type="singleSymbol"/);
+    assert.ok(skipped.warnings.some((w) => /"Low" uses a filter with no QGIS equivalent/.test(w)));
+    assert.ok(
+      skipped.warnings.some((w) =>
+        /None of the rule-based renderer's rules could be exported; .* draws every feature/.test(w),
+      ),
+    );
+    // The same holds when the skipped rules sit inside an enabled group.
+    const grouped = rules(true, untranslatable);
+    grouped.vectorRules = [
+      { id: "g", label: "Group", filter: "", color: "#000000", isElse: false },
+      { ...grouped.vectorRules[0], parentId: "g" },
+      grouped.vectorRules[1],
+    ];
+    const groupSkipped = buildQml(layer({ style: grouped }), polygons());
+    assert.match(compact(groupSkipped.qml), /<renderer-v2 type="singleSymbol"/);
+    // A style whose only rule is a switched-off ELSE draws nothing on the map,
+    // and its export keeps it that way.
+    const elseOnly = rules(true, untranslatable);
+    elseOnly.vectorRules = [elseOnly.vectorRules[1]];
+    const empty = buildQml(layer({ style: elseOnly }), polygons());
+    assert.match(compact(empty.qml), /<renderer-v2 type="RuleRenderer"/);
+    assert.match(empty.qml, /filter="ELSE"[^>]*checkstate="0"/);
+    // A skipped rule the map does not draw (switched off itself, or under a
+    // switched-off group) loses nothing, so the export keeps drawing nothing.
+    const offUntranslatable = buildQml(layer({ style: rules(false, untranslatable) }), polygons());
+    assert.match(compact(offUntranslatable.qml), /<renderer-v2 type="RuleRenderer"/);
+    const offGroup = rules(true, untranslatable);
+    offGroup.vectorRules = [
+      { id: "g", label: "Group", filter: "", color: "#000000", isElse: false, enabled: false },
+      { ...offGroup.vectorRules[0], parentId: "g" },
+      offGroup.vectorRules[1],
+    ];
+    const offGroupResult = buildQml(layer({ style: offGroup }), polygons());
+    assert.match(compact(offGroupResult.qml), /<renderer-v2 type="RuleRenderer"/);
+    // With the ELSE rule on, the export keeps the catch-all and says that it
+    // draws every feature.
+    const elseOn = rules(true, untranslatable);
+    elseOn.vectorRules = [elseOn.vectorRules[0], { ...elseOn.vectorRules[1], enabled: true }];
+    const onlyElse = buildQml(layer({ style: elseOn }), polygons());
+    assert.match(compact(onlyElse.qml), /<renderer-v2 type="RuleRenderer"/);
+    assert.ok(
+      onlyElse.warnings.some((w) => /only its ELSE rule, which draws every feature/.test(w)),
+    );
+    // Rules the user switched off still export as unchecked rules.
+    const off = buildQml(layer({ style: rules(false, [">", ["get", "pop"], 1000]) }), polygons());
+    assert.match(compact(off.qml), /<renderer-v2 type="RuleRenderer"/);
+    assert.match(off.qml, /checkstate="0" label="Low"/);
+  });
+
   it("degrades an expression renderer to a single symbol with a warning", () => {
     const { qml, warnings } = buildQml(
       layer({

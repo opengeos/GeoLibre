@@ -2,6 +2,7 @@ import type { EventInfo, StacItem, ItemProperties, VantorTranslate } from "./typ
 import { formatDate } from "./utils";
 import { StacClient } from "./stac-client";
 import type { CogRenderEngine } from "./cog-layer";
+import { withSelectChevron } from "../../panel-dom";
 
 export type PanelEventType =
   | "search"
@@ -233,7 +234,7 @@ export class PanelUI extends EventTarget {
     eventField.appendChild(eventLabel);
 
     const eventRow = this.el("div", "vantor-panel__select-row");
-    this.eventSelect = document.createElement("select");
+    this.eventSelect = withSelectChevron(document.createElement("select"));
     this.eventSelect.id = "vantor-event-select";
     const loadingOption = document.createElement("option");
     loadingOption.value = "";
@@ -258,7 +259,7 @@ export class PanelUI extends EventTarget {
     this.localizeText(phaseLabel, "vantor.phase", "Phase");
     phaseField.appendChild(phaseLabel);
 
-    this.phaseSelect = document.createElement("select");
+    this.phaseSelect = withSelectChevron(document.createElement("select"));
     this.phaseSelect.id = "vantor-phase-select";
     for (const [value, key, text] of [
       ["all", "vantor.phaseAll", "All"],
@@ -280,7 +281,7 @@ export class PanelUI extends EventTarget {
     this.localizeText(engineLabel, "vantor.renderingEngine", "Rendering engine");
     engineField.appendChild(engineLabel);
 
-    this.renderEngineSelect = document.createElement("select");
+    this.renderEngineSelect = withSelectChevron(document.createElement("select"));
     this.renderEngineSelect.id = "vantor-render-engine-select";
     for (const [value, key, text] of [
       ["maplibre-gl-raster", "vantor.engineGpu", "GPU (faster)"],

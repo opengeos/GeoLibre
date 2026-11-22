@@ -7,6 +7,7 @@ import {
   type LayerStyle,
   type MapViewState,
 } from "@geolibre/core";
+import { translateCimRenderer, type CimRendererIssueCode } from "@geolibre/map/style-import";
 import { strFromU8, unzipSync } from "fflate";
 
 export interface ArcgisProjectImportWarning {
@@ -17,13 +18,27 @@ export interface ArcgisProjectImportWarning {
     | "format"
     | "file-geodatabase"
     | "file-geodatabase-raster"
+    | "file-geodatabase-read"
+    | "file-geodatabase-crs"
     | "network-path"
     | "service"
     | "service-unavailable"
     | "browser-local-file"
     | "map-extent"
-    | "nesting";
+    | "nesting"
+    | "symbology"
+    | "symbology-partial";
+  /**
+   * The layer's CIM type for an unsupported layer, or, on a `symbology` or
+   * `symbology-partial` warning, the CIM type the issue names (a renderer,
+   * symbol layer or effect type).
+   */
   layerType?: string;
+  /**
+   * For a `symbology` warning, what kept the renderer from being reproduced;
+   * for `symbology-partial`, what was left out of a reproduced one.
+   */
+  symbologyIssue?: CimRendererIssueCode;
   /**
    * Import id of the layer, raster or service the warning is about, when that
    * item was imported (a note on a layer that still loads). Lets
@@ -38,6 +53,13 @@ export interface ArcgisProjectImportResult {
   rasters: ArcgisRasterImport[];
   services: ArcgisServiceImport[];
   /**
+   * Feature classes read from a local File Geodatabase. Each is already in
+   * `project.layers` (in table-of-contents order, grouped and styled) as a
+   * GeoJSON layer with no features yet; the caller fills it through the
+   * desktop sidecar or drops it. Empty unless `readFileGeodatabase` was set.
+   */
+  fileGeodatabaseLayers: ArcgisFileGeodatabaseImport[];
+  /**
    * Import ids of every layer, raster and service, bottom first as the store
    * keeps them (ArcGIS Pro lists them top first). Rasters and services join
    * the store only after the project loads, each on top, so the caller puts
@@ -45,6 +67,28 @@ export interface ArcgisProjectImportResult {
    */
   layerOrder: string[];
   warnings: ArcgisProjectImportWarning[];
+}
+
+export interface ArcgisFileGeodatabaseImport {
+  /** Id of the placeholder layer in `project.layers`. */
+  id: string;
+  name: string;
+  /** Absolute path of the `.gdb` folder. */
+  gdbPath: string;
+  /** Feature class name inside the geodatabase. */
+  featureClass: string;
+}
+
+export interface ArcgisProjectImportOptions {
+  /**
+   * Keep File Geodatabase feature classes as layers for the caller to read,
+   * rather than reporting them as unsupported. Only the desktop build can read
+   * a geodatabase (through the Python sidecar's GDAL). The layers come back
+   * without features: the caller fills them, or drops them with a warning, by
+   * passing the result to `loadArcgisFileGeodatabaseLayers`
+   * (`arcgis-gdb-import.ts`) before loading the project.
+   */
+  readFileGeodatabase?: boolean;
 }
 
 export interface ArcgisRasterImport {
@@ -151,6 +195,7 @@ export interface ArcgisProjectReader {
 export function readArcgisProject(
   data: ArrayBuffer | Uint8Array | string,
   sourcePath: string,
+  options: ArcgisProjectImportOptions = {},
 ): ArcgisProjectReader {
   const files = readCimFiles(data, sourcePath);
   const maps = findMaps(files);
@@ -160,7 +205,7 @@ export function readArcgisProject(
     importMap: (index = 0) => {
       const map = maps[index];
       if (!map) throw new Error("This ArcGIS Pro project has no such map.");
-      return importMap(map, files, sourcePath);
+      return importMap(map, files, sourcePath, options);
     },
   };
 }
@@ -172,14 +217,16 @@ export function readArcgisProject(
 export function importArcgisProject(
   data: ArrayBuffer | Uint8Array | string,
   sourcePath: string,
+  options: ArcgisProjectImportOptions = {},
 ): ArcgisProjectImportResult {
-  return readArcgisProject(data, sourcePath).importMap();
+  return readArcgisProject(data, sourcePath, options).importMap();
 }
 
 function importMap(
   map: CimObject,
   files: Map<string, CimObject>,
   sourcePath: string,
+  options: ArcgisProjectImportOptions,
 ): ArcgisProjectImportResult {
   const projectName = stringValue(map.name) || fileStem(sourcePath) || "Imported ArcGIS Project";
   const { view: mapView, extentRestored } = parseMapView(map);
@@ -192,9 +239,11 @@ function importMap(
   const context: ImportContext = {
     files,
     sourcePath,
+    readFileGeodatabase: options.readFileGeodatabase === true,
     layers: [],
     rasters: [],
     services: [],
+    fileGeodatabaseLayers: [],
     order: [],
     groups: [],
     warnings,
@@ -217,6 +266,7 @@ function importMap(
     project,
     rasters: context.rasters,
     services: context.services,
+    fileGeodatabaseLayers: context.fileGeodatabaseLayers,
     layerOrder: context.order.reverse(),
     warnings,
   };
@@ -253,6 +303,22 @@ export function pruneArcgisImportGroups(imported: ArcgisProjectImportResult): vo
 }
 
 /**
+ * How many layers an import report says could not be loaded. Symbology notes
+ * describe a layer that did load, and the map-extent note a view, not a layer,
+ * so neither counts; a report with only those notes says instead that the
+ * project is not shown exactly as in ArcGIS Pro. A `nesting` warning, about a
+ * group that was not loaded, still counts, as it did before.
+ *
+ * @param warnings - The import warnings.
+ * @returns The number of warnings about an item (a layer, or a group) that
+ *   was not loaded.
+ */
+export function countArcgisUnloadedLayers(warnings: readonly ArcgisProjectImportWarning[]): number {
+  return warnings.filter((warning) => !warning.symbologyIssue && warning.reason !== "map-extent")
+    .length;
+}
+
+/**
  * Remove imported layers, rasters and services the caller cannot load, along
  * with the warnings tagged with their ids and any group left empty, so the
  * import report never describes a layer the user will not see.
@@ -269,6 +335,7 @@ export function dropArcgisImportLayers(
   imported.project.layers = kept(imported.project.layers);
   imported.rasters = kept(imported.rasters);
   imported.services = kept(imported.services);
+  imported.fileGeodatabaseLayers = kept(imported.fileGeodatabaseLayers);
   imported.layerOrder = imported.layerOrder.filter((id) => !ids.has(id));
   imported.warnings = imported.warnings.filter(
     (warning) => warning.layerId === undefined || !ids.has(warning.layerId),
@@ -280,10 +347,13 @@ export function dropArcgisImportLayers(
 interface ImportContext {
   files: Map<string, CimObject>;
   sourcePath: string;
+  /** Keep File Geodatabase feature classes for the caller to read. */
+  readFileGeodatabase: boolean;
   /** Layers, rasters and services in CIM (top-first) order. */
   layers: GeoLibreLayer[];
   rasters: ArcgisRasterImport[];
   services: ArcgisServiceImport[];
+  fileGeodatabaseLayers: ArcgisFileGeodatabaseImport[];
   /** Ids of layers, rasters and services in CIM (top-first) order. */
   order: string[];
   groups: LayerGroup[];
@@ -537,7 +607,33 @@ function importLayer(
     });
     return;
   }
-  const resolved = resolveDataSource(connection, sourcePath);
+  const resolved = resolveDataSource(connection, sourcePath, context.readFileGeodatabase);
+  if (resolved.fileGeodatabase) {
+    context.fileGeodatabaseLayers.push({ id, name, ...resolved.fileGeodatabase });
+    context.order.push(id);
+    layers.push({
+      id,
+      name,
+      type: "geojson",
+      source: { type: "geojson" },
+      visible,
+      opacity: layerOpacity(layer),
+      style: parseStyle(layer, id, name, warnings),
+      sourcePath: resolved.fileGeodatabase.gdbPath,
+      // The same shape the Add data → File geodatabase source saves, so the
+      // features are embedded on save (a .gdb cannot be re-read on reopen).
+      metadata: {
+        sourceKind: "gdb",
+        gdbLayer: resolved.fileGeodatabase.featureClass,
+        importedFrom: "arcgis-pro",
+        arcgisLayerUri: stringValue(layer.uRI),
+        arcgisDataset: stringValue(connection?.dataset),
+        arcgisWorkspaceFactory: stringValue(connection?.workspaceFactory),
+      },
+      ...(parentId ? { groupId: parentId } : {}),
+    });
+    return;
+  }
   if (!resolved.path) {
     warnings.push({
       layerName: name,
@@ -555,7 +651,7 @@ function importLayer(
     source: { type: "geojson" },
     visible,
     opacity: layerOpacity(layer),
-    style: parseStyle(layer),
+    style: parseStyle(layer, id, name, warnings),
     sourcePath: resolved.path,
     metadata: {
       localFileReloadable: true,
@@ -670,7 +766,12 @@ function isFeatureServiceFactory(connection: CimObject): boolean {
 function resolveDataSource(
   connection: CimObject | undefined,
   projectPath: string,
-): { path?: string; reason?: ArcgisProjectImportWarning["reason"] } {
+  readFileGeodatabase: boolean,
+): {
+  path?: string;
+  fileGeodatabase?: { gdbPath: string; featureClass: string };
+  reason?: ArcgisProjectImportWarning["reason"];
+} {
   if (!connection) return { reason: "missing-source" };
   if (stringValue(connection.url) || isFeatureServiceFactory(connection)) {
     return { reason: "service" };
@@ -695,7 +796,30 @@ function resolveDataSource(
     // the desktop build can add those feature classes another way. The
     // workspace path is checked as well as the factory because not every
     // connection names one, and a .gdb workspace is a geodatabase either way.
-    return { reason: "file-geodatabase" };
+    // Without a geodatabase and a feature class to read, report it as the
+    // default path does, so Add Data → File geodatabase is still suggested.
+    if (!readFileGeodatabase || !workspace || !dataset) return { reason: "file-geodatabase" };
+    // A relative workspace in a project opened from a network share lives on
+    // that share too, but normalising drops the leading `//`; refuse it as the
+    // raw UNC workspace is refused above, rather than read a rooted local path.
+    if (!isAbsolutePath(workspace) && isNetworkPath(projectPath)) {
+      return { reason: "network-path" };
+    }
+    const gdbPath = resolveRelativePath(workspace, projectPath);
+    // The path comes from the project file and the desktop sidecar does not
+    // confine its reads, so only a local folder named `*.gdb` is handed to it,
+    // never a plain folder, a URL or a GDAL virtual path (`/vsicurl/`,
+    // `/vsizip/`). Any local geodatabase the project names is read, wherever it
+    // is, as with the project's other local files: ArcGIS Pro projects often
+    // use a shared geodatabase outside their own folder. Anything else stays
+    // listed as a geodatabase the import did not load.
+    if (!isLocalFileGeodatabasePath(gdbPath)) return { reason: "file-geodatabase" };
+    return {
+      fileGeodatabase: {
+        gdbPath,
+        featureClass: dataset,
+      },
+    };
   } else if (dataset && extension(workspace) === "gpkg") {
     path = workspace;
   } else if (!path && dataset) {
@@ -715,29 +839,27 @@ function resolveDataSource(
   return SUPPORTED_VECTOR_EXTENSIONS.has(extension(path)) ? { path } : { reason: "format" };
 }
 
-function parseStyle(layer: CimObject): LayerStyle {
-  const style: LayerStyle = structuredClone(DEFAULT_LAYER_STYLE);
-  const renderer = objectValue(layer.renderer);
-  const symbol =
-    objectValue(objectValue(renderer?.symbol)?.symbol) ??
-    objectValue(objectValue(renderer?.defaultSymbol)?.symbol);
-  const symbolLayers = arrayValue(symbol?.symbolLayers).filter(isObject);
-  for (const symbolLayer of symbolLayers) {
-    const type = stringValue(symbolLayer.type);
-    const color = cimColor(objectValue(symbolLayer.color));
-    if (type === "CIMSolidFill" && color) {
-      style.fillColor = color.hex;
-      style.fillOpacity = color.opacity;
-    } else if (type === "CIMSolidStroke" && color) {
-      style.strokeColor = color.hex;
-      const width = numberValue(symbolLayer.width);
-      if (width !== null) style.strokeWidth = width * (96 / 72);
-    } else if (/Marker$/.test(type) && color) {
-      style.fillColor = color.hex;
-      style.fillOpacity = color.opacity;
-      const size = numberValue(symbolLayer.size);
-      if (size !== null) style.circleRadius = (size * 96) / 144;
-    }
+function parseStyle(
+  layer: CimObject,
+  id: string,
+  name: string,
+  warnings: ArcgisProjectImportWarning[],
+): LayerStyle {
+  const renderer = translateCimRenderer(layer.renderer);
+  const style: LayerStyle = {
+    ...structuredClone(DEFAULT_LAYER_STYLE),
+    ...renderer.style,
+  };
+  // The layer still loads when its renderer cannot be reproduced, but the user
+  // is told rather than shown a single colour that passes for the real map.
+  for (const issue of renderer.issues) {
+    warnings.push({
+      layerName: name,
+      layerId: id,
+      reason: renderer.translated ? "symbology-partial" : "symbology",
+      symbologyIssue: issue.code,
+      ...(issue.cimType ? { layerType: issue.cimType } : {}),
+    });
   }
 
   const labelClass = arrayValue(layer.labelClasses).find(isObject);
@@ -747,86 +869,6 @@ function parseStyle(layer: CimObject): LayerStyle {
     style.labels = { ...style.labels, enabled: true, field };
   }
   return style;
-}
-
-/**
- * Convert a CIM color to hex plus opacity.
- *
- * Every CIMColor subclass stores its channels in a `values` array with alpha
- * last, but the channel meaning and scale differ per subclass, so the type has
- * to be read before `values` can be interpreted -- treating a CMYK or HSV
- * triple as RGB silently produces the wrong colour. Channels are per the CIM
- * spec (Esri/cim-spec docs/v3/CIMColor.md): RGB 0-255, CMYK/Gray/S/V 0-100,
- * hue 0-360, alpha 0-100. An unrecognized subclass returns null so the layer
- * keeps GeoLibre's default style rather than an invented colour.
- */
-function cimColor(color: CimObject | undefined): { hex: string; opacity: number } | null {
-  if (!color) return null;
-  const type = stringValue(color.type);
-  const values = arrayValue(color.values).map(Number);
-  if (values.some((value) => !Number.isFinite(value))) return null;
-
-  let rgb: [number, number, number] | null = null;
-  let alpha = 100;
-  if (type === "CIMRGBColor" && values.length >= 3) {
-    rgb = [values[0], values[1], values[2]];
-    alpha = values[3] ?? 100;
-  } else if (type === "CIMGrayColor" && values.length >= 1) {
-    const level = (values[0] / 100) * 255;
-    rgb = [level, level, level];
-    alpha = values[1] ?? 100;
-  } else if (type === "CIMCMYKColor" && values.length >= 4) {
-    const [c, m, y, k] = values;
-    rgb = [
-      255 * (1 - c / 100) * (1 - k / 100),
-      255 * (1 - m / 100) * (1 - k / 100),
-      255 * (1 - y / 100) * (1 - k / 100),
-    ];
-    alpha = values[4] ?? 100;
-  } else if (type === "CIMHSVColor" && values.length >= 3) {
-    rgb = hsvToRgb(values[0], values[1] / 100, values[2] / 100);
-    alpha = values[3] ?? 100;
-  }
-  if (!rgb) return null;
-
-  const hex = `#${rgb
-    .map((value) =>
-      Math.max(0, Math.min(255, Math.round(value)))
-        .toString(16)
-        .padStart(2, "0"),
-    )
-    .join("")}`;
-  return { hex, opacity: Math.max(0, Math.min(1, alpha / 100)) };
-}
-
-/**
- * Standard HSV to RGB conversion for {@link cimColor}.
- *
- * @param hue - Hue in degrees; wrapped into 0-360.
- * @param saturation - Saturation as a 0-1 fraction.
- * @param value - Value as a 0-1 fraction.
- * @returns Red, green, and blue channels on a 0-255 scale.
- */
-function hsvToRgb(hue: number, saturation: number, value: number): [number, number, number] {
-  const h = (((hue % 360) + 360) % 360) / 60;
-  const s = Math.max(0, Math.min(1, saturation));
-  const v = Math.max(0, Math.min(1, value));
-  const chroma = v * s;
-  const second = chroma * (1 - Math.abs((h % 2) - 1));
-  const [r, g, b] =
-    h < 1
-      ? [chroma, second, 0]
-      : h < 2
-        ? [second, chroma, 0]
-        : h < 3
-          ? [0, chroma, second]
-          : h < 4
-            ? [0, second, chroma]
-            : h < 5
-              ? [second, 0, chroma]
-              : [chroma, 0, second];
-  const match = v - chroma;
-  return [(r + match) * 255, (g + match) * 255, (b + match) * 255];
 }
 
 /**
@@ -937,6 +979,22 @@ function isAbsolutePath(path: string): boolean {
 
 function isNetworkPath(path: string): boolean {
   return /^\\\\|^\/\//.test(path);
+}
+
+/**
+ * Whether a resolved geodatabase path is a plain local `.gdb` folder: absolute,
+ * its last segment ending in `.gdb`, with no URL scheme, query or fragment, and
+ * not one of GDAL's `/vsi*` virtual file systems.
+ */
+function isLocalFileGeodatabasePath(path: string): boolean {
+  // UNC paths never get here: `resolveDataSource` refuses a UNC workspace, and
+  // a relative one in a project on a network share, as "network-path" first.
+  if (!isAbsolutePath(path)) return false;
+  const normalised = path.replace(/\\/g, "/");
+  if (/^\/vsi[a-z0-9_]*\//i.test(normalised)) return false;
+  const segments = normalised.split("/");
+  if (segments.some((segment) => /^[a-z][a-z0-9+.-]+:$/i.test(segment))) return false;
+  return /\.gdb$/i.test(segments[segments.length - 1] ?? "") && !/[?#]/.test(normalised);
 }
 
 function extension(path: string): string {

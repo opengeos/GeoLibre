@@ -1,3 +1,5 @@
+import stat
+import sys
 from typing import NoReturn
 
 import pytest
@@ -262,6 +264,25 @@ def test_write_geojson_overwrites_in_place(tmp_path) -> None:
     assert result["feature_count"] == 1
     reread = gpd.read_file(src)
     assert list(reread["name"]) == ["edited"]
+
+
+@requires_geopandas
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
+@pytest.mark.parametrize("mode", [0o600, 0o640, 0o664])
+def test_write_geojson_preserves_file_mode(tmp_path, mode: int) -> None:
+    # The atomic write replaces the file with a freshly created temp file; the
+    # target's permission bits must carry over rather than reset to the
+    # umask default (a private 0600 layer must not come back world-readable).
+    import geopandas as gpd
+
+    src = tmp_path / "layer.geojson"
+    gpd.GeoDataFrame.from_features(_edited("original")["features"], crs="EPSG:4326").to_file(
+        src, driver="GeoJSON"
+    )
+    src.chmod(mode)
+
+    vector_write(WriteVectorRequest(path=str(src), geojson=_edited("edited")))
+    assert stat.S_IMODE(src.stat().st_mode) == mode
 
 
 @requires_geopandas
