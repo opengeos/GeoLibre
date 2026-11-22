@@ -118,10 +118,9 @@ export function parseLyrx(document: unknown): LyrxImportResult {
   result.matchedCount = 1;
   result.warnings.push(...translation.issues.map(partial));
   if (featureLayers.length > 1) {
+    const name = stringOf(layer.name);
     result.warnings.push(
-      `The .lyrx style holds ${featureLayers.length} feature layers; only the first, "${stringOf(
-        layer.name,
-      )}", was imported.`,
+      `The .lyrx style holds ${featureLayers.length} feature layers; only the first, "${name}", was imported.`,
     );
   }
   result.labels = readLabels(layer, result.warnings);
@@ -317,6 +316,8 @@ function readTextSymbol(labelClass: CimObject, warnings: string[]): Partial<Labe
     warnings.push("The .lyrx style's label colour could not be read; labels keep their colour.");
   }
   const haloSize = numberOf(text.haloSize) ?? 0;
+  // ArcGIS Pro draws a halo only from a halo symbol. Its default text symbol keeps a halo size
+  // (usually 1) with no halo symbol, which draws none, so that reads as no halo, without a warning.
   const haloTranslation =
     haloSize > 0 && text.haloSymbol !== undefined
       ? translateCimSymbol({ symbol: text.haloSymbol })

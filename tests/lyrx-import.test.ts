@@ -525,6 +525,8 @@ describe(".lyrx style import", () => {
           /halo colour could not be read/,
         ],
         [{ symbol: fillSymbol(rgb(0, 0, 0, 40)) }, 0, /label transparency was not imported/],
+        // ArcGIS Pro's default text symbol: a halo size with no halo symbol draws no halo.
+        [{ symbol: fillSymbol(rgb(0, 0, 0)), haloSize: 1 }, 0, null],
         [
           {
             symbol: fillSymbol(rgb(0, 0, 0)),
