@@ -102,7 +102,9 @@ export function typicalRange(values: Iterable<unknown>): TypicalRange | null {
 /**
  * Format a domain bound for a label such as "< 0.2" or "> 4,615": grouped
  * thousands, no decimals once a value is in the thousands, three significant
- * digits below that, and exponent notation at extreme magnitudes.
+ * digits below that, and exponent notation at extreme magnitudes (below
+ * 0.001, or 1e15 and up, so areas, populations and epoch-ms timestamps stay
+ * grouped).
  *
  * @param value - The bound to format.
  * @param locale - The locale to group digits for; the runtime locale if omitted.
@@ -111,7 +113,7 @@ export function typicalRange(values: Iterable<unknown>): TypicalRange | null {
 export function formatRangeBound(value: number, locale?: string): string {
   if (!Number.isFinite(value)) return "";
   const abs = Math.abs(value);
-  if (abs !== 0 && (abs < 1e-3 || abs >= 1e9)) {
+  if (abs !== 0 && (abs < 1e-3 || abs >= 1e15)) {
     return new Intl.NumberFormat(locale, {
       notation: "scientific",
       maximumSignificantDigits: 3,

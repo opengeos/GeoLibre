@@ -290,8 +290,13 @@ function RangeControl({
   // saves `null` rather than the end value: writing the domain's end back as an
   // explicit bound would exclude the outliers beyond a clipped domain, and keep
   // the filter "on" (dropping features that have no value) for an exact one.
-  // A handle the drag did not move keeps its saved bound, so moving one handle
-  // never rewrites a bound the other side was clamped from.
+  // "Moved" is read by comparing each value with where its thumb was drawn, so
+  // a thumb the drag did not move keeps its saved bound, even one pinned from
+  // outside the domain. The exception is both thumbs pinned to the same end
+  // (say a typed minimum past the slider's top): Radix sorts the pair, so the
+  // thumb that leaves the end reads as the lower one, and the saved range
+  // follows the drawn thumbs rather than an inverted one. A pinned bound that
+  // Home/End can't move is cleared from its typed box.
   const commit = (nextMin: number, nextMax: number): void => {
     if (!bounds) return;
     const min =
@@ -322,6 +327,8 @@ function RangeControl({
           title={t("quickFilters.outliersHint")}
           data-testid="quick-filter-outliers"
         >
+          {/* The tooltip is hover-only, so screen readers get it as text. */}
+          <span className="sr-only">{t("quickFilters.outliersHint")}</span>
           {typical.below > 0 && (
             <span className="tabular-nums">
               {t("quickFilters.belowTypical", {
