@@ -6,9 +6,7 @@ import { act, render, stubLayout } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { createElement } from "react";
-import {
-  approximateTextWidth,
-} from "../apps/geolibre-desktop/src/components/panels/charts/chart-text";
+import { approximateTextWidth } from "../apps/geolibre-desktop/src/components/panels/charts/chart-text";
 
 const { ChartView, computeChart } =
   await import("../apps/geolibre-desktop/src/components/panels/charts/chart-view");
