@@ -306,20 +306,23 @@ export async function decodeTile(
     if (!response.ok) return null;
     const blob = await response.blob();
     const bitmap = await createImageBitmap(blob);
-    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-    const context = canvas.getContext("2d");
-    if (!context) return null;
-    context.drawImage(bitmap, 0, 0);
-    // Dimensions are read before close(), which zeroes them. Passing them into
-    // decodeTerrariumRgba rather than reading bitmap.width again afterwards is
-    // what keeps that ordering hazard from returning -- a 0x0 tile decodes
-    // without error and is then silently discarded by the assembly loop as the
-    // wrong size, which is how it broke the first time.
-    const width = bitmap.width;
-    const height = bitmap.height;
-    const { data } = context.getImageData(0, 0, width, height);
-    bitmap.close();
-    return { width, height, values: decodeTerrariumRgba(data, width, height) };
+    try {
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const context = canvas.getContext("2d");
+      if (!context) return null;
+      context.drawImage(bitmap, 0, 0);
+      // Dimensions are read before close(), which zeroes them. Passing them into
+      // decodeTerrariumRgba rather than reading bitmap.width again afterwards is
+      // what keeps that ordering hazard from returning -- a 0x0 tile decodes
+      // without error and is then silently discarded by the assembly loop as the
+      // wrong size, which is how it broke the first time.
+      const width = bitmap.width;
+      const height = bitmap.height;
+      const { data } = context.getImageData(0, 0, width, height);
+      return { width, height, values: decodeTerrariumRgba(data, width, height) };
+    } finally {
+      bitmap.close();
+    }
   } catch {
     return null;
   } finally {
@@ -482,11 +485,21 @@ export async function assembleTerrainDem(
  * bounded by the grid, not the clock, and cutting off work that would have
  * finished is worse than waiting.
  */
+function viewshedAbortError(): Error {
+  const err = new Error("Viewshed computation was cancelled.");
+  err.name = "AbortError";
+  return err;
+}
+
 export function computeViewshedAsync(
   dem: TerrainDem,
   observer: ViewshedObserver,
   radiusMeters = 0,
+  signal?: AbortSignal,
 ): Promise<ViewshedResult> {
+  if (signal?.aborted) {
+    return Promise.reject(viewshedAbortError());
+  }
   if (typeof Worker === "undefined") {
     return Promise.resolve(computeViewshed(dem, observer, radiusMeters));
   }
@@ -499,13 +512,25 @@ export function computeViewshedAsync(
     } catch {
       // A bundler or runtime that cannot construct the worker should still
       // produce a viewshed rather than an error.
+      if (signal?.aborted) {
+        reject(viewshedAbortError());
+        return;
+      }
       resolve(computeViewshed(dem, observer, radiusMeters));
       return;
     }
+    let settled = false;
+    const onAbort = () => {
+      settle(() => reject(viewshedAbortError()));
+    };
     const settle = (fn: () => void): void => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", onAbort);
       worker.terminate();
       fn();
     };
+    signal?.addEventListener("abort", onAbort, { once: true });
     worker.addEventListener("message", (event: MessageEvent<ViewshedWorkerResponse>) => {
       const data = event.data;
       settle(() => {

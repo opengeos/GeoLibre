@@ -601,9 +601,9 @@ export function rasterCalc(input: RasterData, params: RasterCalcParams): RasterD
       "The client raster calculator supports a single input (A, A1, A2 …). Use the sidecar engine for multi-raster math.",
     );
   }
-  // Strip numeric literals (incl. scientific notation) and check nothing
-  // identifier-like remains.
-  const residual = withoutBands.replace(/\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g, " ");
+  // Strip numeric literals (including leading-dot decimals like `.5` and
+  // scientific notation) and check nothing identifier-like remains.
+  const residual = withoutBands.replace(/(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/g, " ");
   if (/[A-Za-z$_]/.test(residual)) {
     throw new Error(
       "Expression contains unsupported identifiers. Only A, A1, A2 … and the math helpers " +
@@ -624,6 +624,15 @@ export function rasterCalc(input: RasterData, params: RasterCalcParams): RasterD
   }
 
   const bandCount = input.bands.length;
+  for (const match of expr.matchAll(/\bA(\d+)\b/g)) {
+    const bandIndex = Number(match[1]);
+    if (bandIndex < 1 || bandIndex > bandCount) {
+      throw new Error(
+        `Band A${match[1]} is out of range (input raster has ${bandCount} band${bandCount === 1 ? "" : "s"}).`,
+      );
+    }
+  }
+
   const argNames = ["A", ...input.bands.map((_, i) => `A${i + 1}`)];
   const helperNames = [
     "where",
@@ -638,15 +647,6 @@ export function rasterCalc(input: RasterData, params: RasterCalcParams): RasterD
     "cos",
     "tan",
   ];
-  let fn: (...args: number[]) => number;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    fn = new Function(...argNames, ...helperNames, `"use strict"; return (${expr});`) as (
-      ...args: number[]
-    ) => number;
-  } catch (error) {
-    throw new Error(`Invalid expression: ${(error as Error).message}`);
-  }
   const helpers = [
     (c: number, a: number, b: number) => (c ? a : b),
     (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi),
@@ -660,6 +660,19 @@ export function rasterCalc(input: RasterData, params: RasterCalcParams): RasterD
     Math.cos,
     Math.tan,
   ];
+  let fn: (...args: number[]) => number;
+  try {
+    // Bind helpers once via a closure factory so the per-pixel loop does not
+    // spread-allocate helper arguments on every pixel.
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function(
+      ...helperNames,
+      `"use strict"; return function(${argNames.join(", ")}) { return (${expr}); };`,
+    ) as (...boundHelpers: unknown[]) => (...args: number[]) => number;
+    fn = factory(...helpers);
+  } catch (error) {
+    throw new Error(`Invalid expression: ${(error as Error).message}`);
+  }
 
   const pixels = input.width * input.height;
   const out = new Float32Array(pixels);
@@ -680,7 +693,7 @@ export function rasterCalc(input: RasterData, params: RasterCalcParams): RasterD
       continue;
     }
     args[0] = args[1]; // A === band 1
-    const value = Number(fn(...args, ...(helpers as unknown as number[])));
+    const value = Number(fn.apply(null, args));
     out[p] = Number.isFinite(value) ? value : outNoData;
   }
   return singleBandResult(input, out, outNoData);

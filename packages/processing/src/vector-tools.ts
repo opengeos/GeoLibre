@@ -158,12 +158,23 @@ function collectDissolveParts(
 function mergePolygons(fc: FeatureCollection): Feature<Polygon | MultiPolygon> | null {
   const polys = polygonFeatures(fc);
   if (!polys.length) return null;
+  if (polys.length === 1) return polys[0];
+  try {
+    const batched = union(featureCollection(polys));
+    if (batched) return batched as Feature<Polygon | MultiPolygon>;
+  } catch {
+    // Fall back to pairwise union if a degenerate polygon throws during batching.
+  }
   let merged: Feature<Polygon | MultiPolygon> = polys[0];
   for (let i = 1; i < polys.length; i += 1) {
-    const next = union(featureCollection([merged, polys[i]]));
-    // Turf can return null for degenerate/self-intersecting geometry; keep the
-    // last good accumulation rather than aborting the whole merge.
-    if (next) merged = next as Feature<Polygon | MultiPolygon>;
+    try {
+      const next = union(featureCollection([merged, polys[i]]));
+      // Turf can return null for degenerate/self-intersecting geometry; keep the
+      // last good accumulation rather than aborting the whole merge.
+      if (next) merged = next as Feature<Polygon | MultiPolygon>;
+    } catch {
+      // Keep the last good accumulation rather than aborting the whole merge.
+    }
   }
   return merged;
 }
@@ -817,18 +828,41 @@ export const intersectionTool: ProcessingAlgorithm = {
     // Unlike Clip (which keeps only input attributes), Intersection carries
     // merged attributes from both layers, so pair each input feature with each
     // overlay feature rather than a dissolved overlay geometry. This mirrors
-    // the sidecar's gpd.overlay(how="intersection").
+    // the sidecar's gpd.overlay(how="intersection"). Pre-filter pairs by bbox
+    // and rename case-insensitively colliding overlay columns so input fields
+    // are not clobbered or duplicated.
+    const inputBoxes = inputPolys.map((f) => horizontalBbox(bbox(f, { recompute: true })));
+    const overlayBoxes = overlayPolys.map((f) => horizontalBbox(bbox(f, { recompute: true })));
+    const overlayOutputNames = joinFieldOutputNames(
+      propertyKeys(inputPolys),
+      propertyKeys(overlayPolys),
+    );
     const results: Feature[] = [];
-    for (const a of inputPolys) {
-      for (const b of overlayPolys) {
-        const piece = intersect(featureCollection([a, b])) as Feature<
-          Polygon | MultiPolygon
-        > | null;
+    for (let i = 0; i < inputPolys.length; i += 1) {
+      const a = inputPolys[i];
+      const boxA = inputBoxes[i];
+      for (let j = 0; j < overlayPolys.length; j += 1) {
+        if (!bboxesOverlap(boxA, overlayBoxes[j])) continue;
+        const b = overlayPolys[j];
+        let piece: Feature<Polygon | MultiPolygon> | null = null;
+        try {
+          piece = intersect(featureCollection([a, b])) as Feature<Polygon | MultiPolygon> | null;
+        } catch {
+          continue;
+        }
         if (piece?.geometry) {
-          piece.properties = {
-            ...(a.properties ?? {}),
-            ...(b.properties ?? {}),
-          };
+          const mergedProps: Record<string, unknown> = Object.create(null);
+          if (a.properties) {
+            for (const [key, value] of Object.entries(a.properties)) {
+              mergedProps[key] = value;
+            }
+          }
+          if (b.properties) {
+            for (const [key, value] of Object.entries(b.properties)) {
+              mergedProps[overlayOutputNames.get(key) ?? key] = value;
+            }
+          }
+          piece.properties = { ...mergedProps };
           results.push(piece);
         }
       }
@@ -1560,9 +1594,11 @@ export const attributeJoinTool: ProcessingAlgorithm = {
     // First-match lookup: when several join rows share a key, the first wins.
     const lookup = new Map<string, GeoJsonProperties>();
     for (const jf of joinFeatures) {
-      const key = attributeJoinKey(jf.properties?.[joinField]);
+      const jfProps = jf.properties;
+      const key =
+        jfProps && Object.hasOwn(jfProps, joinField) ? attributeJoinKey(jfProps[joinField]) : null;
       if (key === null) continue;
-      if (!lookup.has(key)) lookup.set(key, jf.properties ?? {});
+      if (!lookup.has(key)) lookup.set(key, jfProps);
     }
 
     // Null-fill the brought-over columns for unmatched left-join rows so the
@@ -1577,7 +1613,9 @@ export const attributeJoinTool: ProcessingAlgorithm = {
     let matched = 0;
     const results: Feature[] = [];
     for (const feature of input.features) {
-      const key = attributeJoinKey(feature.properties?.[targetField]);
+      const fProps = feature.properties;
+      const key =
+        fProps && Object.hasOwn(fProps, targetField) ? attributeJoinKey(fProps[targetField]) : null;
       const joinProps = key === null ? undefined : lookup.get(key);
       if (!joinProps) {
         if (how === "left") {

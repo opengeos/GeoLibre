@@ -322,6 +322,34 @@ describe("geojson-vt tiling worker", () => {
     );
     assert.equal(data.byteLength, 0);
   });
+
+  it("does not fall back to main-thread indexing when unregistered while a tile is pending", async () => {
+    installFakeWorker();
+    register("L", points(100), PLAIN);
+    const pending = tile("L", [0, 0, 0]);
+    // Unregistering the last layer terminates the worker while the tile is in flight.
+    unregisterGeoJsonVtSource("L");
+    assert.equal(terminated, 1);
+    const data = await pending;
+    assert.equal(data.byteLength, 0);
+  });
+
+  it("refcounts shared layers across split-pane map owners", async () => {
+    installFakeWorker();
+    const primaryMap = {};
+    const secondaryMap = {};
+    const data = points(200);
+    registerGeoJsonVtSource("L", data, PLAIN, primaryMap);
+    // Secondary pane reuses the existing index without rebuilding.
+    assert.equal(registerGeoJsonVtSource("L", data, PLAIN, secondaryMap), false);
+    // Closing the secondary pane leaves the index live for the primary map.
+    unregisterGeoJsonVtSource("L", secondaryMap);
+    assert.equal(terminated, 0);
+    assert.ok((await tile("L", [0, 0, 0])).byteLength > 0);
+    // Removing from the primary map drops the layer and terminates the idle worker.
+    unregisterGeoJsonVtSource("L", primaryMap);
+    assert.equal(terminated, 1);
+  });
 });
 
 describe("createTileIndexSession", () => {

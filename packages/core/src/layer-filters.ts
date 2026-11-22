@@ -102,16 +102,22 @@ export function applyLayerFilters(
   }
   const result: FeatureCollection = {
     ...geojson,
-    features: geojson.features.filter((feature) =>
-      compiled.filter(
-        { zoom } as never,
-        {
-          type: FEATURE_TYPE_CODES[feature.geometry?.type ?? ""] ?? 1,
-          properties: feature.properties ?? {},
-          ...(feature.id !== undefined ? { id: feature.id } : {}),
-        } as never,
-      ),
-    ),
+    features: geojson.features.filter((feature) => {
+      try {
+        return compiled.filter(
+          { zoom } as never,
+          {
+            // MapLibre's Unknown geometry type code is 0 (not 1/Point).
+            type: FEATURE_TYPE_CODES[feature.geometry?.type ?? ""] ?? 0,
+            properties: feature.properties ?? {},
+            ...(feature.geometry ? { geometry: feature.geometry } : {}),
+            ...(feature.id !== undefined ? { id: feature.id } : {}),
+          } as never,
+        );
+      } catch {
+        return false;
+      }
+    }),
   };
   filteredCollections.set(geojson, { key, result });
   return result;

@@ -696,6 +696,77 @@ describe("WORKER_VECTOR_TOOL_IDS", () => {
       assert.ok(tool && canRunVectorToolOnWorkerWhenAvailable(tool), id);
     }
   });
+
+  it("renames case-insensitively colliding overlay fields in intersectionTool", async () => {
+    const tool = getVectorTool("intersection")!;
+    const a: GeoLibreLayer = {
+      id: "a",
+      name: "A",
+      type: "geojson",
+      visible: true,
+      opacity: 1,
+      source: {},
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: {},
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { Name: "input-a" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [2, 0],
+                  [2, 2],
+                  [0, 2],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    };
+    const b: GeoLibreLayer = {
+      ...a,
+      id: "b",
+      name: "B",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { name: "overlay-b" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [1, 1],
+                  [3, 1],
+                  [3, 3],
+                  [1, 3],
+                  [1, 1],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    };
+    const captured = await runAlgorithmCapture(
+      tool,
+      { layer: "a", overlay: "b" },
+      { layers: [a, b], log: () => {} },
+    );
+    assert.ok(captured);
+    assert.equal(captured.features.length, 1);
+    const props = captured.features[0].properties ?? {};
+    assert.equal(props.Name, "input-a");
+    assert.equal(props.name_right, "overlay-b");
+  });
 });
 
 /** canRunVectorToolOnWorker with a Worker constructor present. */

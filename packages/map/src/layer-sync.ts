@@ -450,11 +450,18 @@ function applyExternalNativeFeatureFilters(
   }
 }
 
-// Native layer ids whose zoom range GeoLibre has taken over. A pristine external
-// layer keeps its source-declared range, but once the user sets a non-default
-// range we keep applying the style range on every sync, including a later reset
-// back to the full [0, 24] window.
-const managedZoomRangeLayerIds = new Set<string>();
+// Native layer ids whose zoom range GeoLibre has taken over, scoped per map so
+// split-pane maps and project reloads never leak or cross-contaminate ids.
+const managedZoomRangeLayerIds = new WeakMap<maplibregl.Map, Set<string>>();
+
+function managedZoomRangeLayerIdsFor(map: maplibregl.Map): Set<string> {
+  let ids = managedZoomRangeLayerIds.get(map);
+  if (!ids) {
+    ids = new Set<string>();
+    managedZoomRangeLayerIds.set(map, ids);
+  }
+  return ids;
+}
 const geoJsonSourceData = new WeakMap<maplibregl.GeoJSONSource, GeoJSON>();
 
 function rememberGeoJsonData(map: maplibregl.Map, sourceId: string, data: GeoJSON): void {
@@ -486,21 +493,21 @@ function styleLayerZoomRange(style: LayerStyle): {
 }
 
 // Intersect a native layer's source-declared zoom range with the user-configured
-// style range, taking the tighter bound on each end. This keeps a tile
-// service's zoom floor/ceiling intact while still letting the user narrow the
-// window from the Style panel. When the two ranges do not overlap the bounds
-// are swapped so MapLibre never receives an inverted (minzoom > maxzoom) range.
-function intersectZoomRange(
+// style range, taking the tighter bound on each end. When the two ranges do not
+// overlap (minzoom > maxzoom), collapse to an empty half-open interval
+// `[minzoom, minzoom)` rather than swapping bounds into the excluded gap.
+export function intersectZoomRange(
   nativeSpec: { minzoom?: number; maxzoom?: number },
   style: LayerStyle,
 ): { minzoom: number; maxzoom: number } {
   const styleRange = styleLayerZoomRange(style);
   const minzoom = Math.max(nativeSpec.minzoom ?? MIN_LAYER_ZOOM, styleRange.minzoom);
   const maxzoom = Math.min(nativeSpec.maxzoom ?? MAX_LAYER_ZOOM, styleRange.maxzoom);
-  return {
-    minzoom: Math.min(minzoom, maxzoom),
-    maxzoom: Math.max(minzoom, maxzoom),
-  };
+  if (minzoom > maxzoom) {
+    const emptyZoom = Math.min(MAX_LAYER_ZOOM, minzoom);
+    return { minzoom: emptyZoom, maxzoom: emptyZoom };
+  }
+  return { minzoom, maxzoom };
 }
 
 export function syncLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: string): void {
@@ -722,10 +729,11 @@ function syncExternalNativeLayer(
     const zoomRange = styleLayerZoomRange(layer.style);
     const isDefaultRange =
       zoomRange.minzoom === MIN_LAYER_ZOOM && zoomRange.maxzoom === MAX_LAYER_ZOOM;
+    const managedIds = managedZoomRangeLayerIdsFor(map);
     if (!isDefaultRange) {
-      managedZoomRangeLayerIds.add(nativeLayerId);
+      managedIds.add(nativeLayerId);
     }
-    if (managedZoomRangeLayerIds.has(nativeLayerId)) {
+    if (managedIds.has(nativeLayerId)) {
       setLayerZoomRange(map, nativeLayerId, zoomRange);
     }
 
@@ -1804,7 +1812,7 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
   if (existingSource && existingSource.type !== "geojson") {
     removeGeoJsonRenderLayers(map, layer.id);
     map.removeSource(src);
-    if (hasGeoJsonVtSource(layer.id)) unregisterGeoJsonVtSource(layer.id);
+    if (hasGeoJsonVtSource(layer.id)) unregisterGeoJsonVtSource(layer.id, map);
   }
 
   // Clustering is a source-level option, so toggling it (or changing its params)
@@ -1872,11 +1880,16 @@ function syncGeoJsonVtLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?
   // (Re)build the tile index when the data or clustering config changed. A
   // rebuild also means cached tiles are stale, so drop the source to force
   // MapLibre to refetch them.
-  const rebuilt = registerGeoJsonVtSource(layer.id, sourceData, {
-    cluster: wantCluster,
-    clusterRadius,
-    clusterMaxZoom,
-  });
+  const rebuilt = registerGeoJsonVtSource(
+    layer.id,
+    sourceData,
+    {
+      cluster: wantCluster,
+      clusterRadius,
+      clusterMaxZoom,
+    },
+    map,
+  );
 
   const existing = map.getSource(src) as maplibregl.Source | undefined;
   // The source must be recreated when switching in from the inline geojson path
@@ -3916,6 +3929,7 @@ function removeGeoJsonRenderLayers(map: maplibregl.Map, layerId: string): void {
     fillLayerId(layerId),
     fillExtrusionLayerId(layerId),
     lineLayerId(layerId),
+    lineDecorationLayerId(layerId),
     circleLayerId(layerId),
     heatmapLayerId(layerId),
     clusterLayerId(layerId),
@@ -4024,8 +4038,14 @@ export function removeLayerFromMap(
       overriddenRadiusIds.delete(id);
     }
   }
+  const managedIds = managedZoomRangeLayerIds.get(map);
+  if (managedIds) {
+    for (const id of getExternalNativeLayerIds(layer)) {
+      managedIds.delete(id);
+    }
+  }
   // Free any client-side tile index built for this layer's tiled render path.
-  unregisterGeoJsonVtSource(layerId);
+  unregisterGeoJsonVtSource(layerId, map);
   // Free an in-memory PMTiles archive (an offline basemap extract) this layer
   // referenced; a no-op for remote pmtiles:// URLs.
   //

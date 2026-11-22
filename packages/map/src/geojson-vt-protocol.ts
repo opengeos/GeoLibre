@@ -50,7 +50,11 @@ interface RegistryEntry {
   index: TileIndex | null;
   /** Settles once the worker has been sent everything it needs to build. */
   posted: Promise<void> | null;
+  /** Maps/owners currently referencing this layer's tile index. */
+  owners: Set<object>;
 }
+
+const DEFAULT_OWNER = {};
 
 // Keyed by layer id. Module-level rather than on the Zustand record because tile
 // indexes are large, non-serializable objects that must not enter app state or
@@ -309,6 +313,7 @@ export function registerGeoJsonVtSource(
   layerId: string,
   data: GeoJSON.FeatureCollection | GeoArrowBatch,
   options: GeoJsonVtSourceOptions,
+  owner: object = DEFAULT_OWNER,
 ): boolean {
   const isBinary = isGeoArrowBatch(data);
   const existing = registry.get(layerId);
@@ -318,7 +323,13 @@ export function registerGeoJsonVtSource(
     existing.cluster === options.cluster &&
     existing.clusterRadius === options.clusterRadius &&
     existing.clusterMaxZoom === options.clusterMaxZoom;
-  if (unchanged) return false;
+  if (unchanged) {
+    existing.owners.add(owner);
+    return false;
+  }
+
+  const owners = existing ? new Set(existing.owners) : new Set<object>();
+  owners.add(owner);
 
   const worker = getTileWorker();
   if (!worker) {
@@ -330,6 +341,7 @@ export function registerGeoJsonVtSource(
       ...options,
       index,
       posted: null,
+      owners,
     });
     return true;
   }
@@ -338,6 +350,7 @@ export function registerGeoJsonVtSource(
     ...options,
     index: null,
     posted: null,
+    owners,
   };
   registry.set(layerId, entry);
   const generation = ++buildGeneration;
@@ -367,9 +380,15 @@ export function registerGeoJsonVtSource(
   return true;
 }
 
-/** Drop a layer's tile index. Safe to call when none is registered. */
-export function unregisterGeoJsonVtSource(layerId: string): void {
-  if (!registry.delete(layerId)) return;
+/** Drop a layer's tile index (or release one map's reference in split-pane mode). */
+export function unregisterGeoJsonVtSource(layerId: string, owner?: object): void {
+  const existing = registry.get(layerId);
+  if (!existing) return;
+  if (owner !== undefined) {
+    existing.owners.delete(owner);
+    if (existing.owners.size > 0) return;
+  }
+  registry.delete(layerId);
   if (!tileWorker) return;
   if (registry.size === 0) {
     // Nothing left to tile: free the worker and the copies it holds.
@@ -420,15 +439,19 @@ async function geojsonVtProtocolHandler(
     // Wait for the layer's features to reach the worker, so the tile is cut
     // from this build rather than an earlier one.
     await entry.posted;
-    if (signal?.aborted) return empty;
+    if (signal?.aborted || registry.get(layerId) !== entry) return empty;
     const data = await worker.requestTile(layerId, z, x, y, signal);
     if (data) return { data };
-    // The worker failed: tile this layer here from now on.
+    // If the layer was removed or replaced while the tile was in flight (e.g.
+    // unregisterGeoJsonVtSource terminated the worker), do not fall back to
+    // building a synchronous index on the main thread for the stale entry.
+    if (registry.get(layerId) !== entry) return empty;
+    // The worker failed while the entry is still live: tile here from now on.
   }
 
   // MapLibre cancels tiles scrolled off-screen; skip the CPU-heavy encode when
-  // the request was already aborted (the result would be discarded anyway).
-  if (signal?.aborted) return empty;
+  // the request was already aborted or the entry is no longer active.
+  if (signal?.aborted || registry.get(layerId) !== entry) return empty;
   entry.index ??= entry.batchRef
     ? buildTileIndexFromBinary(entry.batchRef, entry)
     : entry.geojsonRef

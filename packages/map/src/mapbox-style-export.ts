@@ -213,9 +213,10 @@ function buildLabelLayer(
   const styleMax = clampZoom(styleValue(style, "maxZoom"), MAX_LAYER_ZOOM);
   const intersectedMin = Math.max(labelMin, styleMin);
   const intersectedMax = Math.min(labelMax, styleMax);
-  // Swap if the two ranges do not overlap so the spec never gets min > max.
-  const zoomMin = Math.min(intersectedMin, intersectedMax);
-  const zoomMax = Math.max(intersectedMin, intersectedMax);
+  // Collapse disjoint ranges into an empty half-open interval [z, z) rather
+  // than swapping bounds into the excluded gap.
+  const zoomMin = Math.min(MAX_LAYER_ZOOM, intersectedMin);
+  const zoomMax = intersectedMin > intersectedMax ? zoomMin : intersectedMax;
   const range: { minzoom?: number; maxzoom?: number } = {};
   if (zoomMin > MIN_LAYER_ZOOM) range.minzoom = zoomMin;
   if (zoomMax < MAX_LAYER_ZOOM) range.maxzoom = zoomMax;

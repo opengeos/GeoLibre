@@ -254,8 +254,37 @@ function finishHistoryStep(previousBasemapStyleUrl: string): void {
       ? { ui: { ...s.ui, attributeTableDrafts } }
       : {}),
   };
-  const selectionDangling =
-    s.selectedLayerId !== null && !s.layers.some((layer) => layer.id === s.selectedLayerId);
+  const selectedLayer =
+    s.selectedLayerId !== null
+      ? (s.layers.find((layer) => layer.id === s.selectedLayerId) ?? null)
+      : null;
+  const selectionDangling = s.selectedLayerId !== null && selectedLayer === null;
+  // When the selected layer survives an undo/redo step, prune any selected
+  // feature IDs that no longer exist in its restored GeoJSON collection.
+  let featureSelectionPatch: Partial<AppState> = {};
+  if (
+    !selectionDangling &&
+    selectedLayer?.geojson &&
+    (s.selectedFeatureId !== null || s.selectedFeatureIds.length > 0)
+  ) {
+    const validFeatureIds = new Set(
+      selectedLayer.geojson.features.map((feature, index) => String(feature.id ?? index)),
+    );
+    const survivingFeatureIds = s.selectedFeatureIds.filter((id) => validFeatureIds.has(id));
+    const survivingAnchor =
+      s.selectedFeatureId !== null && validFeatureIds.has(s.selectedFeatureId)
+        ? s.selectedFeatureId
+        : (survivingFeatureIds[0] ?? null);
+    if (
+      survivingFeatureIds.length !== s.selectedFeatureIds.length ||
+      survivingAnchor !== s.selectedFeatureId
+    ) {
+      featureSelectionPatch = {
+        selectedFeatureIds: survivingFeatureIds,
+        selectedFeatureId: survivingAnchor,
+      };
+    }
+  }
   // The basemap is in the undo history but the ellipsoid preference is not, so a
   // step that restores a *different* basemap can leave the two out of sync (e.g.
   // undoing a switch to Mars would keep the Mars radius under an Earth basemap).
@@ -291,7 +320,7 @@ function finishHistoryStep(previousBasemapStyleUrl: string): void {
           ...ellipsoidPatch,
           ...referencePatch,
         }
-      : { isDirty: true, ...ellipsoidPatch, ...referencePatch },
+      : { isDirty: true, ...featureSelectionPatch, ...ellipsoidPatch, ...referencePatch },
   );
   // The basemap is tracked, so recording this correction as an edit would
   // clear the redo stack and leave the regional basemap one undo step back.
@@ -367,6 +396,9 @@ export function redo(): void {
   finishHistoryStep(previousBasemapStyleUrl);
 }
 
+/** Nesting depth for {@link withoutHistory} so inner calls never resume prematurely. */
+let withoutHistoryDepth = 0;
+
 /**
  * Apply a store change that is not the user's (data loading in behind a
  * project) without recording an undo step for it. The history stays as it
@@ -375,13 +407,19 @@ export function redo(): void {
  * @param change - The store updates to apply.
  */
 export function withoutHistory(change: () => void): void {
-  cancelHistoryCoalesce(); // a burst left open would record this change
+  const isOutermost = withoutHistoryDepth === 0;
+  withoutHistoryDepth += 1;
   const temporal = boundStore().temporal.getState();
-  temporal.pause();
+  if (isOutermost) {
+    temporal.pause();
+  }
   try {
     change();
   } finally {
-    temporal.resume();
+    withoutHistoryDepth -= 1;
+    if (withoutHistoryDepth === 0) {
+      temporal.resume();
+    }
   }
 }
 

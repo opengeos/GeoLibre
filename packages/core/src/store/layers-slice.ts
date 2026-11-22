@@ -286,7 +286,7 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
         layers.push(layerWithBeforeId);
       }
       return {
-        layers,
+        layers: normalizeGroupContiguity(layers),
         selectedLayerId: layer.id,
         isDirty: true,
       };
@@ -497,7 +497,11 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
       const next = [...s.layers];
       const [item] = next.splice(idx, 1);
       next.splice(target, 0, item);
-      return { layers: next, isDirty: true };
+      const normalized = normalizeGroupContiguity(next);
+      if (normalized.every((layer, index) => layer.id === s.layers[index]?.id)) {
+        return s;
+      }
+      return { layers: normalized, isDirty: true };
     }),
 
   moveLayer: (id, targetIndex) =>

@@ -287,9 +287,18 @@ function geographicBounds(
   ];
 }
 
-function projectionFromGeoKeys(geoKeys: Record<string, unknown> | null): DemProjection | null {
+/** Determine the DEM projection from GeoTIFF GeoKeys. Exported for tests. */
+export function projectionFromGeoKeys(
+  geoKeys: Record<string, unknown> | null,
+): DemProjection | null {
   const projected = Number(geoKeys?.ProjectedCSTypeGeoKey);
   if (projected === 3857 || projected === 900913 || projected === 102100) return "EPSG:3857";
+  // Any other projected CRS (e.g. UTM 32617 or user-defined projected CRS)
+  // must not fall through to GeographicTypeGeoKey === 4326 even though its
+  // underlying datum is WGS84.
+  if ((Number.isFinite(projected) && projected > 0) || Number(geoKeys?.GTModelTypeGeoKey) === 1) {
+    return null;
+  }
   const geographic = Number(geoKeys?.GeographicTypeGeoKey);
   if (geographic === 4326) return "EPSG:4326";
   return null;
@@ -598,6 +607,9 @@ export async function registerCogDemSource(
   }
   ensureCogDemProtocol();
   let images: GeoTIFFImage[];
+  let sourceBounds: [number, number, number, number];
+  let bounds: [number, number, number, number];
+  let nodata: number | null;
   try {
     // imageCount comes from the file's own IFD chain, so a corrupt or crafted
     // one can advertise an enormous pyramid and fan out into that many
@@ -613,26 +625,28 @@ export async function registerCogDemSource(
         index === 0 ||
         isDemOverviewIfd(fileDirectoryValue(candidate.getFileDirectory(), "NewSubfileType")),
     );
+    sourceBounds = image.getBoundingBox() as [number, number, number, number];
+    bounds = geographicBounds(sourceBounds, projection);
+    nodata = normalizeNoData(fileDirectoryValue(image.getFileDirectory(), "GDAL_NODATA"));
   } catch (error) {
-    // A truncated or corrupt overview IFD must not leak the open reader.
+    // A truncated or corrupt overview IFD or missing georeferencing tags must
+    // not leak the open reader.
     closeQuietly(tiff);
     throw error;
   }
   const key = String(++datasetSequence);
-  datasets.set(key, {
+  const dataset: CogDemDataset = {
     tiff,
     images,
-    sourceBounds: image.getBoundingBox() as [number, number, number, number],
+    sourceBounds,
     projection,
-    nodata: normalizeNoData(fileDirectoryValue(image.getFileDirectory(), "GDAL_NODATA")),
+    nodata,
     band: band - 1,
     pendingReads: 0,
     disposed: false,
     fallback: null,
-  });
-  const sourceBounds = image.getBoundingBox();
-  const bounds = geographicBounds(sourceBounds, projection);
-  const dataset = datasets.get(key)!;
+  };
+  datasets.set(key, dataset);
   return {
     tiles: [`${PROTOCOL}://${key}/{z}/{x}/{y}`],
     bounds,

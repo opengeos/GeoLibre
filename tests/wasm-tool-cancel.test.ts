@@ -96,4 +96,44 @@ describe("runWasmToolInBackground cancellation", () => {
       mock.timers.reset();
     }
   });
+
+  it("rejects cleanly instead of hanging when respawning a dead parked worker throws", async () => {
+    let spawned = 0;
+    class ThrowOnSecondSpawnWorker {
+      private listeners = new Set<(event: MessageEvent) => void>();
+      private answered = false;
+      readonly n: number;
+      constructor() {
+        this.n = ++spawned;
+        if (this.n === 2) throw new Error("worker spawn boom");
+      }
+      addEventListener(type: string, listener: (event: MessageEvent) => void) {
+        if (type === "message") this.listeners.add(listener);
+      }
+      removeEventListener(type: string, listener: (event: MessageEvent) => void) {
+        if (type === "message") this.listeners.delete(listener);
+      }
+      postMessage() {
+        if (this.n !== 1 || this.answered) return;
+        this.answered = true;
+        const data = { ok: true, result: { exitCode: 0, stdout: [], files: {} } };
+        queueMicrotask(() => {
+          for (const listener of this.listeners) listener({ data } as MessageEvent);
+        });
+      }
+      terminate() {
+        terminated += 1;
+      }
+    }
+    globalThis.Worker = ThrowOnSecondSpawnWorker as unknown as typeof Worker;
+    await runWasmToolInBackground({ tool: "first", args: [], input: {} });
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      const run = runWasmToolInBackground({ tool: "second", args: [], input: {} });
+      mock.timers.tick(10_000);
+      await assert.rejects(run, /worker spawn boom/);
+    } finally {
+      mock.timers.reset();
+    }
+  });
 });

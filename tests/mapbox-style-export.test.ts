@@ -441,6 +441,31 @@ describe("labels", () => {
     assert.equal(label.minzoom, undefined);
   });
 
+  it("collapses disjoint label and layer zoom ranges to an empty interval instead of the gap", () => {
+    const { style: doc } = buildMapboxStyle(
+      layer({
+        style: style({
+          minZoom: 0,
+          maxZoom: 8,
+          labels: {
+            ...DEFAULT_LAYER_STYLE.labels,
+            enabled: true,
+            field: "category",
+            minZoom: 12,
+            maxZoom: 24,
+          },
+        }),
+      }),
+      points(),
+    );
+    const label = layerById(doc, "my-layer-label") as {
+      maxzoom?: number;
+      minzoom?: number;
+    };
+    assert.equal(label.minzoom, 12);
+    assert.equal(label.maxzoom, 12);
+  });
+
   it("suppresses labels on extruded layers, matching the live map", () => {
     const { style: doc } = buildMapboxStyle(
       layer({
