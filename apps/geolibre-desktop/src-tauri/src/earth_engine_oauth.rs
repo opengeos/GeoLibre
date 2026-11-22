@@ -291,20 +291,32 @@ fn handle_connection(mut stream: TcpStream, shared: &SharedState) {
     }
 }
 
-fn read_request(stream: &TcpStream) -> Result<Request, String> {
-    let deadline = Instant::now() + READ_TIMEOUT;
-    let update_timeout = |sock: &TcpStream| -> Result<(), String> {
-        let remaining = deadline.saturating_duration_since(Instant::now());
+struct DeadlineStream {
+    stream: TcpStream,
+    deadline: Instant,
+}
+
+impl Read for DeadlineStream {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let remaining = self.deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            return Err("Request timed out".to_string());
+            return Err(std::io::Error::new(
+                ErrorKind::TimedOut,
+                "Request timed out",
+            ));
         }
-        let _ = sock.set_read_timeout(Some(remaining));
-        Ok(())
-    };
+        let _ = self.stream.set_read_timeout(Some(remaining));
+        self.stream.read(buf)
+    }
+}
+
+fn read_request(stream: &TcpStream) -> Result<Request, String> {
     let stream = stream.try_clone().map_err(|error| error.to_string())?;
-    let timeout_sock = stream.try_clone().map_err(|error| error.to_string())?;
-    update_timeout(&timeout_sock)?;
-    let mut reader = BufReader::new(stream.take(MAX_REQUEST_BYTES));
+    let deadline_stream = DeadlineStream {
+        stream,
+        deadline: Instant::now() + READ_TIMEOUT,
+    };
+    let mut reader = BufReader::new(deadline_stream.take(MAX_REQUEST_BYTES));
     let mut request_line = String::new();
     reader
         .read_line(&mut request_line)
@@ -315,7 +327,6 @@ fn read_request(stream: &TcpStream) -> Result<Request, String> {
 
     let mut headers = HashMap::new();
     loop {
-        update_timeout(&timeout_sock)?;
         let mut line = String::new();
         reader
             .read_line(&mut line)
@@ -343,7 +354,6 @@ fn read_request(stream: &TcpStream) -> Result<Request, String> {
     }
     let mut body = vec![0; content_length];
     if content_length > 0 {
-        update_timeout(&timeout_sock)?;
         reader
             .read_exact(&mut body)
             .map_err(|error| error.to_string())?;
@@ -840,12 +850,15 @@ mod tests {
 
     #[test]
     fn prune_tokens_expires_stale_and_enforces_cap() {
-        let now = Instant::now();
+        // Construct timestamps forward from `base` so this never underflows
+        // `Instant` on a freshly booted system.
+        let base = Instant::now();
+        let now = base + TOKEN_TTL + Duration::from_secs(MAX_STORED_TOKENS as u64 + 10);
         let mut tokens = HashMap::new();
         tokens.insert(
             "expired".to_string(),
             (
-                now - TOKEN_TTL - Duration::from_secs(1),
+                base,
                 EarthEngineOAuthToken {
                     state: "expired".to_string(),
                     access_token: Some("old".to_string()),
@@ -859,7 +872,7 @@ mod tests {
             tokens.insert(
                 format!("fresh-{i}"),
                 (
-                    now - Duration::from_secs(i as u64),
+                    base + TOKEN_TTL + Duration::from_secs((MAX_STORED_TOKENS + 10 - i) as u64),
                     EarthEngineOAuthToken {
                         state: format!("fresh-{i}"),
                         access_token: Some(format!("tok-{i}")),

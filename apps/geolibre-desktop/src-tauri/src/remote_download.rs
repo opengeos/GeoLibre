@@ -307,7 +307,7 @@ async fn transfer(
     destination: PathBuf,
     part_tag: String,
     is_cached: bool,
-    mut placeholder: Option<PartFile>,
+    placeholder: Option<PartFile>,
     progress: tauri::ipc::Channel<RemoteDownloadProgress>,
 ) -> Result<u64, String> {
     let response = client(!headers.is_empty())?
@@ -358,6 +358,7 @@ async fn transfer(
     }
     fn spawn_part_writer<B: AsRef<[u8]> + Send + 'static>(
         part: PartFile,
+        mut placeholder: Option<PartFile>,
         destination: PathBuf,
         is_cached: bool,
         aborted: Arc<std::sync::atomic::AtomicBool>,
@@ -401,6 +402,9 @@ async fn transfer(
             fs::rename(&part.path, &destination)
                 .map_err(|error| format!("Could not finish the download: {error}"))?;
             part.done = true;
+            if let Some(reserved) = placeholder.as_mut() {
+                reserved.done = true;
+            }
             if is_cached && aborted.load(Ordering::Acquire) {
                 // Cached paths are uniquely keyed by request_id, so unlinking on
                 // post-rename cancellation cannot collide with another save path.
@@ -415,7 +419,8 @@ async fn transfer(
         aborted: Arc::clone(&aborted),
         done: false,
     };
-    let (tx, writer_handle) = spawn_part_writer(part, destination.clone(), is_cached, aborted);
+    let (tx, writer_handle) =
+        spawn_part_writer(part, placeholder, destination.clone(), is_cached, aborted);
     let mut response = response;
     let mut received: u64 = 0;
     let mut reported: u64 = 0;
@@ -474,9 +479,6 @@ async fn transfer(
         .map_err(|error| format!("Download writer failed: {error}"))?;
     writer_result?;
     abort_guard.done = true;
-    if let Some(placeholder) = placeholder.as_mut() {
-        placeholder.done = true;
-    }
     let _ = progress.send(RemoteDownloadProgress { received, total });
     Ok(received)
 }

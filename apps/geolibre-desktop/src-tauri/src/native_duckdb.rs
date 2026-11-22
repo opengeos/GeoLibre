@@ -698,11 +698,14 @@ fn read_source_crs(
             // Layer matched in ST_Read_Meta: honor its CRS even when NULL
             // rather than borrowing another layer's CRS.
             Ok((auth_name, auth_code)) => parse_auth_crs(auth_name, auth_code),
-            // No row matched (or ST_Read_Meta query differed): fall back to
-            // the first layer's CRS as before.
-            Err(_) => query_raw(&source_crs_meta_sql(&source_path, None))
-                .ok()
-                .and_then(|(a, c)| parse_auth_crs(a, c)),
+            // Named layer not found in ST_Read_Meta: fall back to the first
+            // layer's CRS for backwards compatibility; real query errors return None.
+            Err(duckdb::Error::QueryReturnedNoRows) => {
+                query_raw(&source_crs_meta_sql(&source_path, None))
+                    .ok()
+                    .and_then(|(a, c)| parse_auth_crs(a, c))
+            }
+            Err(_) => None,
         }
     } else {
         query_raw(&source_crs_meta_sql(&source_path, None))

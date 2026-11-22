@@ -3633,9 +3633,10 @@ fn stop_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<(), String> {
     // responsive during a slow `uv` install or health wait; any in-progress
     // startup checks `generation` under `process.lock()` and tears down its
     // child instead of installing it.
-    state
+    let stop_gen = state
         .generation
-        .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+        + 1;
     {
         let mut process = state
             .process
@@ -3649,16 +3650,23 @@ fn stop_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<(), String> {
         drop(taken); // terminate() runs here, outside the lock
     }
 
+    let should_reap_port = || {
+        state.generation.load(std::sync::atomic::Ordering::SeqCst) == stop_gen
+            && state
+                .process
+                .lock()
+                .is_ok_and(|process| process.is_none())
+    };
     let base_url = sidecar_base_url();
-    if sidecar_health_is_ready(&base_url) {
+    if should_reap_port() && sidecar_health_is_ready(&base_url) {
         request_sidecar_shutdown(&base_url);
         wait_for_sidecar_stop(&base_url);
     }
-    if sidecar_health_is_ready(&base_url) {
+    if should_reap_port() && sidecar_health_is_ready(&base_url) {
         terminate_sidecar_listeners_on_port(SIDECAR_PORT)?;
         wait_for_sidecar_stop(&base_url);
     }
-    if sidecar_health_is_ready(&base_url) {
+    if should_reap_port() && sidecar_health_is_ready(&base_url) {
         return Err(format!(
             "GeoLibre sidecar is still running on port {SIDECAR_PORT}."
         ));
@@ -3890,9 +3898,10 @@ fn stop_jupyter_server_blocking(app: tauri::AppHandle) -> Result<(), String> {
     // responsive even during a slow `uv sync` or health wait; any in-progress
     // startup checks `generation` under `process.lock()` and tears down its
     // child instead of installing it.
-    state
+    let stop_gen = state
         .generation
-        .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+        + 1;
     {
         let mut process = state
             .process
@@ -3909,18 +3918,19 @@ fn stop_jupyter_server_blocking(app: tauri::AppHandle) -> Result<(), String> {
         // JupyterProcess::Drop terminates the child's process group outside the lock.
         drop(taken);
     }
-    // Backstop: reap anything still bound to the port (no-op when nothing of
-    // ours is listening). Best-effort, because the child this call exists to
-    // clean up after is already gone by now: returning an error here would
-    // leave the frontend believing the server it just stopped is still running
-    // (stopJupyterServer only clears its state once this invoke resolves).
-    // Best-effort, but not silent: skipping the backstop is what a later
-    // "stale Jupyter still holding the port" report would trace back to.
-    match app_runtime_dir(&app) {
-        Ok(runtime_dir) => {
-            let _ = terminate_jupyter_listeners_on_port(JUPYTER_PORT, &runtime_dir);
+    // Backstop: reap anything still bound to the port only when no newer start
+    // has installed a live server in the meantime.
+    if state.generation.load(std::sync::atomic::Ordering::SeqCst) == stop_gen
+        && state.process.lock().is_ok_and(|process| process.is_none())
+    {
+        match app_runtime_dir(&app) {
+            Ok(runtime_dir) => {
+                let _ = terminate_jupyter_listeners_on_port(JUPYTER_PORT, &runtime_dir);
+            }
+            Err(error) => {
+                eprintln!("Jupyter: skipping the port {JUPYTER_PORT} backstop ({error}).")
+            }
         }
-        Err(error) => eprintln!("Jupyter: skipping the port {JUPYTER_PORT} backstop ({error})."),
     }
     Ok(())
 }
