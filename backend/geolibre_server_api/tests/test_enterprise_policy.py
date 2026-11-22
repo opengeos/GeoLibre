@@ -208,3 +208,32 @@ def test_sqlite_schema_upgrade_adds_legacy_columns(oauth_client, tmp_path, clock
             assert sign_in(client)["access_token"]
     finally:
         upgraded.state.engine.dispose()
+
+
+def test_password_change_revokes_active_oauth_sessions(oauth_client):
+    _org_with_policy(oauth_client, passwordMinLength=10)
+    tokens = sign_in(oauth_client, username="bob")
+    assert (
+        oauth_client.get("/api/users/me", headers=auth(tokens["access_token"])).status_code == 200
+    )
+    assert (
+        _change_password(oauth_client, "correct horse", "new-strong-passphrase").status_code == 204
+    )
+    assert (
+        oauth_client.get("/api/users/me", headers=auth(tokens["access_token"])).status_code == 401
+    )
+    assert refresh(oauth_client, tokens["refresh_token"]).status_code == 400
+
+
+def test_sso_sentinel_account_does_not_accumulate_lockout(oauth_client):
+    from geolibre_server_api.auth_models import Account
+
+    _org_with_policy(oauth_client, lockoutThreshold=3, lockoutSeconds=60)
+    with oauth_client.app.state.session_factory() as session:
+        bob = session.query(Account).filter_by(username="bob").one()
+        bob.password_hash = "!sso"
+        session.commit()
+    for _ in range(5):
+        response = _login(oauth_client, "wrong password")
+        assert response.status_code == 401
+        assert response.json() == {"error": "invalid username or password"}

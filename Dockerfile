@@ -161,7 +161,8 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
 # outputs); override GEOLIBRE_CONVERSION_ROOTS to widen or disable.
 ENV GEOLIBRE_CONVERSION_PYTHON=/usr/local/bin/python \
     WBW_EXTERNAL_PYTHON=/usr/local/bin/python \
-    GEOLIBRE_CONVERSION_ROOTS=/data
+    GEOLIBRE_CONVERSION_ROOTS=/data \
+    GEOLIBRE_DISABLE_SHUTDOWN=1
 RUN mkdir -p /data
 
 # For the same reason, the sidecar's PostGIS endpoints refuse every destination

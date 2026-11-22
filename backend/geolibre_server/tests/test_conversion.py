@@ -610,3 +610,23 @@ def test_start_job_rolls_back_when_thread_start_fails(monkeypatch) -> None:
     with pytest.raises(RuntimeError, match="thread start failed"):
         conversion._start_job("vector-to-geoparquet", "pass", {}, "output")
     assert conversion._JOBS == {}
+
+
+def test_failed_conversion_preserves_preexisting_output(monkeypatch, tmp_path: Path) -> None:
+    """A failing job must not delete a pre-existing file at output_path."""
+    existing = tmp_path / "out.parquet"
+    existing.write_bytes(b"original-data")
+    job_id = "test-preserve-existing-output"
+    try:
+        job = _run_script_job(
+            monkeypatch,
+            tmp_path,
+            job_id,
+            'raise SystemExit("simulated conversion failure")\n',
+        )
+        assert job.status == "failed"
+        assert existing.exists()
+        assert existing.read_bytes() == b"original-data"
+    finally:
+        with conversion._JOBS_LOCK:
+            conversion._JOBS.pop(job_id, None)

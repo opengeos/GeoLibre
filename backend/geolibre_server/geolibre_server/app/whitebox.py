@@ -811,7 +811,7 @@ def _looks_like_fs_path(value: str) -> bool:
     text = value.strip()
     if not text:
         return False
-    if text.startswith(("/", "\\")):
+    if text.startswith(("/", "\\", "~")):
         return True
     if len(text) >= 2 and text[1] == ":" and text[0].isascii() and text[0].isalpha():
         return True
@@ -958,8 +958,30 @@ def _prepare_arguments(
     return args, working_directory
 
 
+def _resolve_output_value(value: Any, working_directory: str | None) -> Any:
+    """Resolve a relative output path against the job's working directory."""
+    if not working_directory:
+        return value
+    if isinstance(value, str) and value.strip():
+        expanded = os.path.expanduser(value.strip())
+        if not os.path.isabs(expanded):
+            return os.path.normpath(os.path.join(working_directory, expanded))
+        return value
+    if isinstance(value, dict) and isinstance(value.get("path"), str) and value["path"].strip():
+        expanded = os.path.expanduser(value["path"].strip())
+        if not os.path.isabs(expanded):
+            return {
+                **value,
+                "path": os.path.normpath(os.path.join(working_directory, expanded)),
+            }
+    return value
+
+
 def _extract_outputs(
-    result: Any, args: dict[str, Any], tool: dict[str, Any] | None
+    result: Any,
+    args: dict[str, Any],
+    tool: dict[str, Any] | None,
+    working_directory: str | None = None,
 ) -> dict[str, Any]:
     """Extract output paths from runtime result JSON and output parameters."""
     outputs: dict[str, Any] = {}
@@ -976,16 +998,17 @@ def _extract_outputs(
         if isinstance(raw_outputs, dict):
             for name, value in raw_outputs.items():
                 if not output_param_names or name in output_param_names:
-                    outputs[str(name)] = value
+                    outputs[str(name)] = _resolve_output_value(value, working_directory)
         elif not output_param_names:
-            outputs.update(result)
+            for name, value in result.items():
+                outputs[str(name)] = _resolve_output_value(value, working_directory)
 
     for param in (tool or {}).get("params", []):
         if not isinstance(param, dict):
             continue
         name = str(param.get("name") or "")
         if str(param.get("kind") or "").endswith("_out") and name in args:
-            outputs.setdefault(name, {"path": args[name]})
+            outputs.setdefault(name, _resolve_output_value({"path": args[name]}, working_directory))
     return outputs
 
 
@@ -1100,7 +1123,9 @@ def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
             job_id,
             status="succeeded",
             result=result,
-            outputs=_extract_outputs(result, args, request.tool),
+            outputs=_extract_outputs(
+                result, args, request.tool, working_directory=working_directory
+            ),
         )
     except Exception:
         # The exception (a RuntimeBootstrapError) carries the subprocess's full
@@ -1299,6 +1324,19 @@ def whitebox_output(path: str):
         raise HTTPException(status_code=400, detail="Only JSON outputs can be read")
     if output_path not in _known_output_paths():
         raise HTTPException(status_code=403, detail="Path is not a known Whitebox output")
+    if conversion._CONVERSION_ROOTS:
+        # Allow server-generated default outputs under the Whitebox temp dir as
+        # well as paths confined within GEOLIBRE_CONVERSION_ROOTS.
+        default_temp_dir = Path(tempfile.gettempdir()) / "geolibre-whitebox"
+        resolved_output = Path(output_path).resolve()
+        in_default_tmp = (
+            resolved_output == default_temp_dir.resolve()
+            or resolved_output.is_relative_to(default_temp_dir.resolve())
+        )
+        if not in_default_tmp and not conversion._is_within_roots(resolved_output):
+            raise HTTPException(
+                status_code=403, detail="Output path is outside the allowed directories"
+            )
     # Reject a symlinked final component before reading. Combined with the
     # O_NOFOLLOW open this closes the symlink-swap TOCTOU on POSIX; on Windows
     # it is the sole mitigation. A swapped intermediate directory is out of

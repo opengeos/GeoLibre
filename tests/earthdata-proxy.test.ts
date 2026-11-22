@@ -6,6 +6,7 @@ import {
   isEarthdataDataUrl,
   isEarthdataRedirectUrl,
 } from "../workers/tiles/src/earthdata";
+import { isAllowedTilesUpstreamUrl } from "../workers/tiles/src/allowlisted-fetch";
 import { tilesWorker } from "../workers/tiles/src/index";
 
 const FILE =
@@ -233,6 +234,9 @@ describe("Earthdata download proxy", () => {
     assert.equal(isEarthdataRedirectUrl(PRESIGNED), true);
     assert.equal(isEarthdataRedirectUrl("https://bucket.s3.us-west-2.amazonaws.com/x"), true);
     assert.equal(isEarthdataRedirectUrl("https://s3.us-west-2.amazonaws.com/bucket/x"), true);
+    assert.equal(isEarthdataRedirectUrl("https://s3.evilamazonaws.com/x"), false);
+    assert.equal(isEarthdataRedirectUrl("https://s3-attackeramazonaws.com/x"), false);
+    assert.equal(isAllowedTilesUpstreamUrl("https://user:pass@data.source.coop/x"), false);
     assert.equal(isEarthdataRedirectUrl("https://lambda-url.us-east-1.on.aws/x"), false);
     assert.equal(
       isEarthdataRedirectUrl("https://abc.execute-api.us-east-1.amazonaws.com/x"),

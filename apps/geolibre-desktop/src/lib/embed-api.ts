@@ -485,6 +485,7 @@ function blockedSpecUrl(spec: Record<string, unknown>): string | null {
     source.data,
     metadata.originalUrl,
     ...(Array.isArray(source.tiles) ? source.tiles : []),
+    ...(Array.isArray(source.urls) ? source.urls : []),
   ];
   for (const candidate of candidates) {
     if (typeof candidate !== "string") continue;

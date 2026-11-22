@@ -145,11 +145,16 @@ def password_hash(password: str, salt: bytes | None = None) -> str:
 def password_matches(password: str, encoded: str) -> bool:
     """Return whether ``password`` matches an scrypt-encoded hash, in constant time."""
     try:
-        _, salt, expected = encoded.split("$")
+        scheme, salt, expected = encoded.split("$")
+        if scheme != "scrypt":
+            raise ValueError("unsupported password scheme")
         return hmac.compare_digest(
             password_hash(password, bytes.fromhex(salt)).split("$")[2], expected
         )
     except (ValueError, TypeError):
+        # Always perform an scrypt derivation on non-password/sentinel hashes
+        # (such as "!sso") so response timing matches built-in accounts.
+        password_hash(password or "unused")
         return False
 
 
@@ -543,10 +548,14 @@ def verify_password_login(
     security = session.get(AccountSecurity, account.id)
     locked_until = security.locked_until if security is not None else None
     if locked_until is not None and locked_until > now_ts:
+        password_hash(password or "unused")
         raise PasswordLoginError("locked")
     policy = effective_policy(session, account.id)
     if not password_matches(password, account.password_hash):
-        record_failed_login(session, account.id, now_ts, policy)
+        # Federated/SCIM/proxy accounts carry a sentinel hash ("!sso") and
+        # cannot log in by password; do not accumulate lockout state on them.
+        if account.password_hash.startswith("scrypt$"):
+            record_failed_login(session, account.id, now_ts, policy)
         raise PasswordLoginError("invalid")
     if is_deactivated(session, account.id):
         raise PasswordLoginError("invalid")
@@ -1182,7 +1191,7 @@ class RevokeOtherSessionsRequest(BaseModel):
 class PasswordChangeRequest(BaseModel):
     """Body for ``POST /api/account/password``."""
 
-    username: str
+    username: str = Field(max_length=39)
     current_password: str = Field(alias="currentPassword", max_length=1024)
     new_password: str = Field(alias="newPassword", max_length=1024)
 
@@ -1334,6 +1343,13 @@ def build_identity_router() -> APIRouter:
             raise HTTPException(422, error)
         account.password_hash = password_hash(body.new_password)
         ensure_account_security(session, account.id).password_changed_at = now_ts
+        # Revoke active OAuth sessions on password change so compromised or
+        # stale interactive sessions cannot survive credential rotation.
+        session.execute(
+            update(OAuthSession)
+            .where(OAuthSession.account_id == account.id, OAuthSession.revoked_at.is_(None))
+            .values(revoked_at=now_ts)
+        )
         session.commit()
         return Response(status_code=204)
 

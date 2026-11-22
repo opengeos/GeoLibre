@@ -1216,3 +1216,32 @@ describe("createFeaturesChangeTracker", () => {
     assert.deepEqual(reports, []);
   });
 });
+
+describe("parseEmbedRequest: addLayer video source.urls scheme validation", () => {
+  it("blocks dangerous URL schemes inside source.urls", () => {
+    for (const badUrl of ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,hi"]) {
+      const result = parseEmbedRequest(
+        message(
+          "addLayer",
+          {
+            id: "vid",
+            name: "Video",
+            type: "video",
+            source: {
+              type: "video",
+              urls: [badUrl],
+              coordinates: [
+                [0, 1],
+                [1, 1],
+                [1, 0],
+                [0, 0],
+              ],
+            },
+          },
+          { requestId: "r-vid" },
+        ),
+      );
+      assert.ok(result && "error" in result, `expected ${badUrl} in source.urls to be blocked`);
+    }
+  });
+});

@@ -231,3 +231,35 @@ def test_run_does_not_leak_exception_detail(monkeypatch: pytest.MonkeyPatch) -> 
     assert exc.value.status_code == 400
     assert sensitive_path not in str(exc.value.detail)
     assert exc.value.detail == "Spatial SQL failed due to an internal error."
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "CREATE EXTERNAL TABLE t STORED AS CSV LOCATION '/etc/passwd'",
+        "COPY (SELECT 1) TO '/tmp/pwn.csv'",
+        "DROP TABLE cities",
+        "SET datafusion.execution.target_partitions = 1",
+        "SELECT 1; SELECT 2",
+        "SELECT * FROM read_parquet('/etc/passwd')",
+        "SELECT * FROM read_csv('/etc/passwd')",
+        "EXPLAIN COPY (SELECT 1) TO '/tmp/pwn.csv'",
+    ],
+)
+def test_validate_read_only_sql_rejects_unsafe_statements(statement: str) -> None:
+    with pytest.raises(ValueError):
+        sedona_ops._validate_read_only_sql(statement)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "SELECT 1;",
+        "/* leading comment */ WITH cte AS (SELECT 1 AS a) SELECT a FROM cte",
+        "-- comment with ; inside\nSELECT 'read_parquet(' AS txt",
+        "EXPLAIN SELECT 1",
+        "VALUES (1, 2)",
+    ],
+)
+def test_validate_read_only_sql_allows_read_only_queries(statement: str) -> None:
+    sedona_ops._validate_read_only_sql(statement)

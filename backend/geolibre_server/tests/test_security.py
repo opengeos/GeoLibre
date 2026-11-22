@@ -401,3 +401,96 @@ def test_whitebox_paths_unconfined_without_roots(
     )
     args, _ = _prepare_arguments(request, [])
     assert args["input"] == "/anywhere/on/disk.tif"
+
+
+def test_whitebox_tilde_and_relative_output_stay_confined(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """Tilde paths are treated as escape-shaped and relative outputs resolve under workdir."""
+    from geolibre_server.app import conversion, whitebox
+
+    root = tmp_path / "data"
+    root.mkdir()
+    outside = tmp_path / "outside.json"
+    outside.write_text('{"secret": true}', encoding="utf-8")
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(root.resolve())])
+
+    tool = {
+        "id": "t",
+        "params": [{"name": "output", "kind": "vector_out"}],
+    }
+    tilde_req = whitebox.WhiteboxRunRequest(
+        tool_id="t",
+        parameters={"output": "~/secret.json"},
+        tool=tool,
+    )
+    with pytest.raises(HTTPException) as excinfo:
+        whitebox._prepare_arguments(tilde_req, [])
+    assert excinfo.value.status_code == 403
+
+    # Relative output resolves against the pinned working directory, not process cwd.
+    outputs = whitebox._extract_outputs(
+        {}, {"output": "nested/result.geojson"}, tool, working_directory=str(root.resolve())
+    )
+    assert outputs["output"]["path"] == str((root / "nested" / "result.geojson").resolve())
+
+    # Even if a recorded job somehow held an outside path, /output still enforces roots.
+    job_id = "test-outside-output"
+    now = whitebox._utc_now()
+    with whitebox._JOBS_LOCK:
+        whitebox._JOBS[job_id] = whitebox.JobState(
+            id=job_id,
+            status="succeeded",
+            tool_id="t",
+            created_at=now,
+            updated_at=now,
+            outputs={"output": {"path": str(outside)}},
+        )
+    try:
+        with pytest.raises(HTTPException) as excinfo:
+            whitebox.whitebox_output(str(outside))
+        assert excinfo.value.status_code == 403
+    finally:
+        with whitebox._JOBS_LOCK:
+            whitebox._JOBS.pop(job_id, None)
+
+
+def test_shutdown_endpoint_disabled_in_container_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GEOLIBRE_DISABLE_SHUTDOWN=1 blocks remote /shutdown requests with 403."""
+    monkeypatch.setenv("GEOLIBRE_DISABLE_SHUTDOWN", "1")
+    main = _reload_app(monkeypatch, None)
+    client = TestClient(main.app)
+    assert client.post("/shutdown").status_code == 403
+
+
+def test_postgis_rejects_local_file_libpq_parameters(monkeypatch: pytest.MonkeyPatch) -> None:
+    """File-reading libpq keywords are rejected when GEOLIBRE_POSTGIS_HOSTS is active."""
+    from geolibre_server.app.postgis import _validate_postgis_target
+
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "db.example")
+    for key in ("passfile", "sslcert", "sslkey", "sslrootcert", "sslcrl", "sslcrldir"):
+        with pytest.raises(HTTPException) as excinfo:
+            _validate_postgis_target({"host": "db.example", key: "/etc/passwd"})
+        assert excinfo.value.status_code == 400
+
+
+def test_raster_and_vector_confine_before_existence_probe(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """Missing paths outside GEOLIBRE_CONVERSION_ROOTS return 403, not 400."""
+    from geolibre_server.app import conversion
+    from geolibre_server.app.raster import _validate_extra_input
+    from geolibre_server.app.vector import _validate_write_path
+
+    root = tmp_path / "data"
+    root.mkdir()
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(root.resolve())])
+    missing_outside = str(tmp_path / "does-not-exist.geojson")
+
+    with pytest.raises(HTTPException) as raster_exc:
+        _validate_extra_input(missing_outside, "Mask")
+    assert raster_exc.value.status_code == 403
+
+    with pytest.raises(HTTPException) as vector_exc:
+        _validate_write_path(missing_outside)
+    assert vector_exc.value.status_code == 403

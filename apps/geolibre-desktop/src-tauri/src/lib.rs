@@ -20,7 +20,8 @@ mod earth_engine_oauth;
 // message instead of an "unknown command" error) but no socket is ever bound.
 #[cfg(any(feature = "mas", target_os = "ios"))]
 mod earth_engine_oauth {
-    const UNAVAILABLE: &str = "Earth Engine sign-in is not available in the App Store build of GeoLibre.";
+    const UNAVAILABLE: &str =
+        "Earth Engine sign-in is not available in the App Store build of GeoLibre.";
 
     #[tauri::command]
     pub fn start_earth_engine_oauth(_client_id: String) -> Result<serde_json::Value, String> {
@@ -129,7 +130,9 @@ mod secure_store {
     const UNAVAILABLE: &str = "Secure credential storage is not available on this platform.";
 
     #[tauri::command]
-    pub async fn secure_store_get_many(_accounts: Vec<String>) -> Result<HashMap<String, String>, String> {
+    pub async fn secure_store_get_many(
+        _accounts: Vec<String>,
+    ) -> Result<HashMap<String, String>, String> {
         Err(UNAVAILABLE.to_string())
     }
 
@@ -150,9 +153,9 @@ mod secure_store {
     }
 }
 
-use earth_engine_oauth::{poll_earth_engine_oauth, start_earth_engine_oauth};
 #[cfg(not(any(feature = "mas", target_os = "ios")))]
 use earth_engine_oauth::EarthEngineOAuthState;
+use earth_engine_oauth::{poll_earth_engine_oauth, start_earth_engine_oauth};
 use flate2::read::{GzDecoder, ZlibDecoder};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -178,8 +181,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tauri_plugin_dialog::DialogExt;
 
 const PERSISTED_SCOPE_FILES: [&str; 2] = [".persisted-scope", ".persisted-scope-asset"];
-const PERSISTED_PHOTO_EXTENSIONS: [&str; 6] =
-    [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"];
+const PERSISTED_PHOTO_EXTENSIONS: [&str; 6] = [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"];
 const IMAGE_PICKER_EXTENSIONS: [&str; 8] =
     ["jpg", "jpeg", "png", "webp", "heic", "heif", "tif", "tiff"];
 
@@ -214,7 +216,10 @@ impl LoadedPluginBundles {
             .into_iter()
             .filter_map(|source| source.as_ref().canonicalize().ok())
             .collect::<HashSet<_>>();
-        *self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = canonical;
+        *self
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = canonical;
     }
 
     /// The canonical path of `source` when it is a recorded bundle, else None.
@@ -1033,6 +1038,13 @@ const RESTORABLE_VECTOR_EXTENSIONS: [&str; 17] = [
 /// byte-oriented rather than `std::path` based so they behave identically for the
 /// Windows-style paths a project may carry regardless of the host the binary
 /// runs on.
+pub(crate) fn has_allowed_local_vector_extension(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower
+        .rsplit_once('.')
+        .is_some_and(|(_, extension)| RESTORABLE_VECTOR_EXTENSIONS.contains(&extension))
+}
+
 pub(crate) fn is_allowed_local_vector_path(path: &str) -> bool {
     // Absolute, non-UNC, no `..` traversal — split into `is_safe_absolute_path`
     // so the security-relevant byte-parsing lives in one place rather than being
@@ -1043,11 +1055,20 @@ pub(crate) fn is_allowed_local_vector_path(path: &str) -> bool {
 
     // Known vector extension, case-insensitive, matching the JS
     // `RESTORABLE_VECTOR_PATH` regex (built from `VECTOR_FILE_DIALOG_EXTENSIONS`).
-    // `rsplit_once` takes the text after the final dot without allocating.
-    let lower = path.to_ascii_lowercase();
-    lower
-        .rsplit_once('.')
-        .is_some_and(|(_, extension)| RESTORABLE_VECTOR_EXTENSIONS.contains(&extension))
+    has_allowed_local_vector_extension(path)
+}
+
+/// Convert a canonicalized local path to a string usable by native libraries
+/// (stripping Windows' `\\?\` verbatim drive prefix while preserving POSIX
+/// paths). Callers must check `is_unc_resolved_path` first.
+#[cfg(feature = "native-duckdb")]
+pub(crate) fn canonical_local_path_string(canonical: &Path) -> String {
+    let raw = canonical.to_string_lossy();
+    #[cfg(windows)]
+    if let Some(stripped) = raw.strip_prefix(r"\\?\") {
+        return stripped.to_string();
+    }
+    raw.into_owned()
 }
 
 /// Read a local file's raw bytes so a project's file-referenced vector layers
@@ -1060,10 +1081,10 @@ pub(crate) fn is_allowed_local_vector_path(path: &str) -> bool {
 /// mirroring `read_project_file` (which bypasses the same scope to read the
 /// project file itself). The path is validated here by
 /// `is_allowed_local_vector_path` (absolute, no `..` traversal, known vector
-/// extension) so the command cannot be abused to read arbitrary files even if
-/// the frontend guard is bypassed. Bytes are returned as a raw IPC response (an
-/// `ArrayBuffer` on the JS side) so a large GeoJSON does not pay the cost of a
-/// JSON number array.
+/// extension) and canonicalized so symlinks cannot redirect the read to
+/// arbitrary files or network shares. Bytes are returned as a raw IPC response
+/// (an `ArrayBuffer` on the JS side) so a large GeoJSON does not pay the cost
+/// of a JSON number array.
 #[tauri::command]
 fn read_local_file(path: String) -> Result<tauri::ipc::Response, String> {
     if !is_allowed_local_vector_path(&path) {
@@ -1071,7 +1092,23 @@ fn read_local_file(path: String) -> Result<tauri::ipc::Response, String> {
             "Refusing to read \"{path}\": not an absolute local vector file path"
         ));
     }
-    fs::read(&path)
+    let canonical =
+        fs::canonicalize(&path).map_err(|error| format!("Could not read local file: {error}"))?;
+    let resolved = canonical.to_string_lossy();
+    if is_unc_resolved_path(&resolved) {
+        return Err(format!(
+            "Refusing to read \"{path}\": resolves to a network path"
+        ));
+    }
+    if !has_allowed_local_vector_extension(&resolved) {
+        return Err(format!(
+            "Refusing to read \"{path}\": resolves to a non-vector file"
+        ));
+    }
+    if !canonical.is_file() {
+        return Err(format!("Refusing to read \"{path}\": not a file"));
+    }
+    fs::read(&canonical)
         .map(tauri::ipc::Response::new)
         .map_err(|error| format!("Could not read local file: {error}"))
 }
@@ -1113,7 +1150,7 @@ fn is_geojson_feature_collection(bytes: &[u8]) -> bool {
 /// Windows returns a verbatim path, `\\?\C:\…` for a local drive but
 /// `\\?\UNC\host\share\…` for a share; a symlink or junction can resolve to
 /// one even when the path the caller passed was local.
-fn is_unc_resolved_path(resolved: &str) -> bool {
+pub(crate) fn is_unc_resolved_path(resolved: &str) -> bool {
     let rest = resolved
         .strip_prefix(r"\\?\")
         .or_else(|| resolved.strip_prefix(r"\\.\"));
@@ -1315,8 +1352,21 @@ fn allow_raster_asset(
             "Refusing to expose \"{path}\": neither the file nor its imported project was selected by the user"
         ));
     }
+    let canonical = fs::canonicalize(&path)
+        .map_err(|error| format!("Could not authorize local raster: {error}"))?;
+    let resolved = canonical.to_string_lossy().to_ascii_lowercase();
+    if is_unc_resolved_path(&resolved) {
+        return Err(format!(
+            "Refusing to expose \"{path}\": resolves to a network path"
+        ));
+    }
+    if !(resolved.ends_with(".tif") || resolved.ends_with(".tiff")) || !canonical.is_file() {
+        return Err(format!(
+            "Refusing to expose \"{path}\": resolves to a non-GeoTIFF file"
+        ));
+    }
     app.asset_protocol_scope()
-        .allow_file(&path)
+        .allow_file(&canonical)
         .map_err(|error| format!("Could not authorize local raster: {error}"))
 }
 
@@ -1391,23 +1441,35 @@ struct ShapefileSibling {
 /// siblings are skipped; an unreadable directory yields an empty list.
 #[tauri::command]
 fn read_shapefile_siblings(path: String) -> Result<Vec<ShapefileSibling>, String> {
-    let shp = Path::new(&path);
-    let Some(parent) = shp.parent() else {
+    if !is_safe_absolute_path(&path) || !path.to_ascii_lowercase().ends_with(".shp") {
+        return Err(format!(
+            "Refusing to read siblings for \"{path}\": not an absolute local shapefile path"
+        ));
+    }
+    let canonical_shp = match fs::canonicalize(&path) {
+        Ok(canonical) => canonical,
+        Err(_) => return Ok(Vec::new()),
+    };
+    let resolved_shp = canonical_shp.to_string_lossy();
+    if is_unc_resolved_path(&resolved_shp)
+        || !resolved_shp.to_ascii_lowercase().ends_with(".shp")
+        || !canonical_shp.is_file()
+    {
+        return Ok(Vec::new());
+    }
+    let Some(canonical_parent) = canonical_shp.parent() else {
         return Ok(Vec::new());
     };
-    let Some(stem) = shp.file_stem().and_then(|stem| stem.to_str()) else {
+    let Some(stem) = Path::new(&path).file_stem().and_then(|stem| stem.to_str()) else {
         return Ok(Vec::new());
     };
-    let entries = match fs::read_dir(parent) {
+    let entries = match fs::read_dir(canonical_parent) {
         Ok(entries) => entries,
         Err(_) => return Ok(Vec::new()),
     };
     let mut siblings = Vec::new();
     for entry in entries.flatten() {
         let entry_path = entry.path();
-        if !entry_path.is_file() {
-            continue;
-        }
         let (Some(entry_stem), Some(extension)) = (
             entry_path.file_stem().and_then(|stem| stem.to_str()),
             entry_path
@@ -1423,7 +1485,29 @@ fn read_shapefile_siblings(path: String) -> Result<Vec<ShapefileSibling>, String
         if !SHAPEFILE_SIDECAR_EXTENSIONS.contains(&extension.as_str()) {
             continue;
         }
-        if let Ok(data) = fs::read(&entry_path) {
+        // Canonicalize each sibling and verify it remains a regular sidecar
+        // file inside the shapefile's directory so symlinks cannot escape.
+        let Ok(canonical_entry) = fs::canonicalize(&entry_path) else {
+            continue;
+        };
+        let resolved_entry = canonical_entry.to_string_lossy();
+        if is_unc_resolved_path(&resolved_entry)
+            || !canonical_entry.starts_with(canonical_parent)
+            || !canonical_entry.is_file()
+        {
+            continue;
+        }
+        let canonical_ext = canonical_entry
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.to_ascii_lowercase());
+        if !canonical_ext
+            .as_deref()
+            .is_some_and(|ext| SHAPEFILE_SIDECAR_EXTENSIONS.contains(&ext))
+        {
+            continue;
+        }
+        if let Ok(data) = fs::read(&canonical_entry) {
             siblings.push(ShapefileSibling {
                 name: format!("{stem}.{extension}"),
                 data,
@@ -1438,7 +1522,7 @@ fn read_shapefile_siblings(path: String) -> Result<Vec<ShapefileSibling>, String
 /// free of `..` traversal segments. The shared absolute/non-UNC/no-traversal
 /// guard behind [`is_allowed_local_vector_path`], kept separate so that
 /// byte-parsing lives in one place rather than being duplicated per caller.
-fn is_safe_absolute_path(path: &str) -> bool {
+pub(crate) fn is_safe_absolute_path(path: &str) -> bool {
     let bytes = path.as_bytes();
     let is_separator = |byte: u8| byte == b'/' || byte == b'\\';
     if bytes.len() >= 2 && is_separator(bytes[0]) && is_separator(bytes[1]) {
@@ -1508,7 +1592,9 @@ fn machine_deployment_policy_path() -> Option<std::path::PathBuf> {
     }
     #[cfg(target_os = "macos")]
     {
-        Some(std::path::PathBuf::from("/Library/Application Support/GeoLibre/deployment.json"))
+        Some(std::path::PathBuf::from(
+            "/Library/Application Support/GeoLibre/deployment.json",
+        ))
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
@@ -1558,7 +1644,11 @@ fn read_deployment_policy(app: tauri::AppHandle) -> Result<Option<String>, Strin
 /// escapes.
 #[tauri::command]
 fn read_allowed_file(plugin_id: String, path: String) -> Result<String, String> {
-    read_allowed_file_impl(&plugin_id, &path, machine_deployment_policy_path().as_deref())
+    read_allowed_file_impl(
+        &plugin_id,
+        &path,
+        machine_deployment_policy_path().as_deref(),
+    )
 }
 
 /// The `plugins.fileAccess` entries for `plugin_id`, validated with the UI
@@ -1622,12 +1712,16 @@ fn read_allowed_file_impl(
     }
 
     let Some(policy_path) = policy_path else {
-        return Err("No machine deployment policy configured; plugin fileAccess is denied".to_string());
+        return Err(
+            "No machine deployment policy configured; plugin fileAccess is denied".to_string(),
+        );
     };
     let Some(policy_contents) = read_optional_config_file(policy_path)
         .map_err(|error| format!("Could not read machine deployment policy: {error}"))?
     else {
-        return Err("Machine deployment policy does not exist; plugin fileAccess is denied".to_string());
+        return Err(
+            "Machine deployment policy does not exist; plugin fileAccess is denied".to_string(),
+        );
     };
 
     // The UI parser accepts a leading UTF-8 BOM, so the native gate must too.
@@ -1638,7 +1732,10 @@ fn read_allowed_file_impl(
         .map_err(|error| format!("Could not parse machine deployment policy: {error}"))?;
     // The UI ignores a policy with an unsupported version; never grant from one.
     if policy.get("version").and_then(Value::as_u64) != Some(1) {
-        return Err("Machine deployment policy has an unsupported version; plugin fileAccess is denied".to_string());
+        return Err(
+            "Machine deployment policy has an unsupported version; plugin fileAccess is denied"
+                .to_string(),
+        );
     }
 
     let allowlist = machine_file_access_allowlist(&policy, trimmed_id)?;
@@ -1836,6 +1933,8 @@ fn is_disallowed_ip(ip: std::net::IpAddr) -> bool {
                 || v6.is_multicast()
                 // fe80::/10 link-local
                 || (segments[0] & 0xffc0) == 0xfe80
+                // fd00:ec2::/32 AWS IPv6 IMDS (fd00:ec2::254) and EKS Pod Identity (fd00:ec2::23)
+                || (segments[0] == 0xfd00 && segments[1] == 0x0ec2)
         }
     }
 }
@@ -2323,15 +2422,29 @@ fn install_external_plugin_archive_blocking(
     app: &tauri::AppHandle,
     source_path: String,
 ) -> Result<String, String> {
+    if !is_safe_absolute_path(&source_path) {
+        return Err(format!(
+            "Refusing to install \"{source_path}\": plugin path must be an absolute local path"
+        ));
+    }
     let source = PathBuf::from(&source_path);
     if !is_zip_path(&source) {
         return Err("Plugin file must be a .zip archive".to_string());
+    }
+    let canonical_source = fs::canonicalize(&source)
+        .map_err(|error| format!("Could not resolve plugin archive: {error}"))?;
+    let resolved = canonical_source.to_string_lossy();
+    if is_unc_resolved_path(&resolved)
+        || !is_zip_path(&canonical_source)
+        || !canonical_source.is_file()
+    {
+        return Err("Plugin file must resolve to a local .zip archive".to_string());
     }
 
     // Validate the archive up front by loading it the same way the startup scan
     // does; this rejects a malformed manifest, a missing/oversized entry, or an
     // unsafe asset path before any file is written.
-    let bundle = load_external_plugin_archive(&source, &source_path)?;
+    let bundle = load_external_plugin_archive(&canonical_source, &source_path)?;
     let plugin_id = bundle.manifest.id;
 
     let plugins_dir = app
@@ -2347,14 +2460,12 @@ fn install_external_plugin_archive_blocking(
     // Reinstalling from a file already inside the plugins directory (e.g. the
     // user re-selects the installed copy) would otherwise truncate the source
     // mid-copy. Treat the no-op copy as a successful install.
-    let same_file = source
+    let same_file = destination
         .canonicalize()
         .ok()
-        .zip(destination.canonicalize().ok())
-        .map(|(from, to)| from == to)
-        .unwrap_or(false);
+        .is_some_and(|to| canonical_source == to);
     if !same_file {
-        fs::copy(&source, &destination)
+        fs::copy(&canonical_source, &destination)
             .map_err(|error| format!("Could not install plugin archive: {error}"))?;
     }
 
@@ -2429,8 +2540,11 @@ fn load_external_plugin_bundles_blocking(
     }
     // Remember exactly what loaded, so read_external_plugin_asset can refuse
     // any source the scan did not itself find.
-    app.state::<LoadedPluginBundles>()
-        .replace(bundles.iter().map(|bundle| PathBuf::from(&bundle.archive_name)));
+    app.state::<LoadedPluginBundles>().replace(
+        bundles
+            .iter()
+            .map(|bundle| PathBuf::from(&bundle.archive_name)),
+    );
 
     Ok(ExternalPluginBundleLoadResult {
         plugins_directories: plugin_dirs
@@ -2504,10 +2618,9 @@ fn read_external_plugin_asset_blocking(
         .map_err(|error| format!("Plugin source is unavailable: {error}"))?
         .is_dir();
     if is_directory {
-        Ok(tauri::ipc::Response::new(read_directory_plugin_asset_bytes(
-            &canonical_source,
-            relative_path,
-        )?))
+        Ok(tauri::ipc::Response::new(
+            read_directory_plugin_asset_bytes(&canonical_source, relative_path)?,
+        ))
     } else {
         Ok(tauri::ipc::Response::new(read_zip_plugin_asset_bytes(
             &canonical_source,
@@ -2521,10 +2634,10 @@ fn read_zip_plugin_asset_bytes(
     archive_path: &Path,
     relative_path: &str,
 ) -> Result<Vec<u8>, String> {
-    let file = File::open(archive_path)
-        .map_err(|error| format!("Could not open plugin zip: {error}"))?;
-    let mut archive =
-        zip::ZipArchive::new(file).map_err(|error| format!("Could not read plugin zip: {error}"))?;
+    let file =
+        File::open(archive_path).map_err(|error| format!("Could not open plugin zip: {error}"))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|error| format!("Could not read plugin zip: {error}"))?;
     // Assets resolve against the manifest's own directory, mirroring how the
     // entry/style paths resolve at load time (a wrapping folder is tolerated).
     let manifest_path = find_zip_manifest_path(&archive)
@@ -2778,14 +2891,23 @@ fn load_external_plugin_directory(
 
 #[cfg(not(feature = "mas"))]
 fn read_fs_text_entry(root: &Path, entry_name: &str, label: &str) -> Result<String, String> {
-    let entry_path = root.join(entry_name);
-    if !entry_path.is_file() {
+    let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let entry_path = canonical_root.join(entry_name);
+    let canonical_entry = entry_path
+        .canonicalize()
+        .map_err(|_| format!("Could not read {label} '{entry_name}': file does not exist"))?;
+    if !canonical_entry.starts_with(&canonical_root) {
+        return Err(format!(
+            "Refusing to read {label} '{entry_name}': resolves outside the plugin directory"
+        ));
+    }
+    if !canonical_entry.is_file() {
         return Err(format!(
             "Could not read {label} '{entry_name}': file does not exist"
         ));
     }
 
-    let file = File::open(&entry_path)
+    let file = File::open(&canonical_entry)
         .map_err(|error| format!("Could not read {label} '{entry_name}': {error}"))?;
     let mut text = String::new();
     file.take(MAX_PLUGIN_ENTRY_BYTES + 1)
@@ -5346,8 +5468,14 @@ fn read_mbtiles_zoom_range(
     ))
 }
 
+const MAX_MBTILES_ZOOM: u32 = 30;
+const MAX_DECOMPRESSED_TILE_BYTES: u64 = 32 * 1024 * 1024;
+
 #[tauri::command]
 fn read_mbtiles_tile(path: String, z: u32, x: u32, y: u32) -> Result<Vec<u8>, String> {
+    if z > MAX_MBTILES_ZOOM {
+        return Err("Tile zoom level is too large".to_string());
+    }
     let connection = open_mbtiles(&path)?;
     let scheme = read_metadata_value(&connection, "scheme")?
         .map(|value| value.to_ascii_lowercase())
@@ -5380,11 +5508,26 @@ fn read_mbtiles_tile(path: String, z: u32, x: u32, y: u32) -> Result<Vec<u8>, St
 }
 
 fn open_mbtiles(path: &str) -> Result<Connection, String> {
-    if !Path::new(path).exists() {
-        return Err("The selected MBTiles file does not exist".to_string());
+    if !is_safe_absolute_path(path) || !path.to_ascii_lowercase().ends_with(".mbtiles") {
+        return Err(format!(
+            "Refusing to open \"{path}\": not an absolute local MBTiles file path"
+        ));
+    }
+    let canonical = fs::canonicalize(path)
+        .map_err(|_| "The selected MBTiles file does not exist".to_string())?;
+    let resolved = canonical.to_string_lossy();
+    if is_unc_resolved_path(&resolved) {
+        return Err(format!(
+            "Refusing to open \"{path}\": resolves to a network path"
+        ));
+    }
+    if !resolved.to_ascii_lowercase().ends_with(".mbtiles") || !canonical.is_file() {
+        return Err(format!(
+            "Refusing to open \"{path}\": resolves to a non-MBTiles file"
+        ));
     }
 
-    Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    Connection::open_with_flags(&canonical, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|error| format!("Could not open MBTiles file: {error}"))
 }
 
@@ -5465,18 +5608,29 @@ fn parse_number_list(value: &str) -> Vec<f64> {
 
 fn decompress_tile_data(data: Vec<u8>) -> Result<Vec<u8>, String> {
     if data.starts_with(&[0x1f, 0x8b]) {
-        let mut decoder = GzDecoder::new(data.as_slice());
+        let decoder = GzDecoder::new(data.as_slice());
         let mut decoded = Vec::new();
         decoder
+            .take(MAX_DECOMPRESSED_TILE_BYTES + 1)
             .read_to_end(&mut decoded)
             .map_err(|error| format!("Could not decompress gzip tile: {error}"))?;
+        if decoded.len() as u64 > MAX_DECOMPRESSED_TILE_BYTES {
+            return Err("Decompressed gzip tile exceeds the size limit".to_string());
+        }
         return Ok(decoded);
     }
 
     if data.len() > 2 && data[0] == 0x78 {
-        let mut decoder = ZlibDecoder::new(data.as_slice());
+        let decoder = ZlibDecoder::new(data.as_slice());
         let mut decoded = Vec::new();
-        if decoder.read_to_end(&mut decoded).is_ok() {
+        if decoder
+            .take(MAX_DECOMPRESSED_TILE_BYTES + 1)
+            .read_to_end(&mut decoded)
+            .is_ok()
+        {
+            if decoded.len() as u64 > MAX_DECOMPRESSED_TILE_BYTES {
+                return Err("Decompressed zlib tile exceeds the size limit".to_string());
+            }
             return Ok(decoded);
         }
     }
@@ -5770,12 +5924,12 @@ mod tests {
     // tests that exercise it (and their scaffolding) are gated with it.
     #[cfg(not(feature = "mas"))]
     use super::{
-        add_main_sidecar_extras, add_sidecar_python_pin, child_failure_message, clear_appimage_python_env,
-        find_zip_manifest_path, plugin_archive_file_name, read_directory_plugin_asset_bytes,
-        LoadedPluginBundles,
-        read_zip_plugin_asset_bytes, resolve_sidecar_in_resource_dir,
-        sidecar_accepts_token, sidecar_health_is_ready, CapturedOutput, CAPTURED_LOG_MAX_LINES,
-        CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
+        add_main_sidecar_extras, add_sidecar_python_pin, child_failure_message,
+        clear_appimage_python_env, find_zip_manifest_path, plugin_archive_file_name,
+        read_directory_plugin_asset_bytes, read_zip_plugin_asset_bytes,
+        resolve_sidecar_in_resource_dir, sidecar_accepts_token, sidecar_health_is_ready,
+        CapturedOutput, LoadedPluginBundles, CAPTURED_LOG_MAX_LINES, CAPTURED_LOG_REPORTED_LINES,
+        CAPTURED_LOG_SETTLE,
     };
     // Only the unix-only Martin tests (they spawn `sh`) use these.
     #[cfg(all(unix, not(feature = "mas")))]
@@ -5950,28 +6104,48 @@ mod tests {
         assert_eq!(res.unwrap(), "{\"hello\":\"world\"}");
 
         // 2. Unlisted path is rejected
-        let res_unlisted = super::read_allowed_file_impl("my-plugin", &unlisted_str, Some(&policy_path));
+        let res_unlisted =
+            super::read_allowed_file_impl("my-plugin", &unlisted_str, Some(&policy_path));
         assert!(res_unlisted.is_err());
-        assert!(res_unlisted.unwrap_err().contains("not in the fileAccess allowlist"));
+        assert!(res_unlisted
+            .unwrap_err()
+            .contains("not in the fileAccess allowlist"));
 
         // 3. Wrong plugin id is rejected
-        let res_wrong_id = super::read_allowed_file_impl("other-plugin", &allowed_str, Some(&policy_path));
+        let res_wrong_id =
+            super::read_allowed_file_impl("other-plugin", &allowed_str, Some(&policy_path));
         assert!(res_wrong_id.is_err());
-        assert!(res_wrong_id.unwrap_err().contains("has no fileAccess allowlist"));
+        assert!(res_wrong_id
+            .unwrap_err()
+            .contains("has no fileAccess allowlist"));
 
         // 4. Traversal using .. is rejected
-        let traversal_str = format!("{}/../secret.json", allowed_file.parent().unwrap().to_str().unwrap().replace('\\', "/"));
-        let res_traversal = super::read_allowed_file_impl("my-plugin", &traversal_str, Some(&policy_path));
+        let traversal_str = format!(
+            "{}/../secret.json",
+            allowed_file
+                .parent()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .replace('\\', "/")
+        );
+        let res_traversal =
+            super::read_allowed_file_impl("my-plugin", &traversal_str, Some(&policy_path));
         assert!(res_traversal.is_err());
-        assert!(res_traversal.unwrap_err().contains("not a safe absolute local file path"));
+        assert!(res_traversal
+            .unwrap_err()
+            .contains("not a safe absolute local file path"));
 
         // 5. No machine-wide policy (None, or an absent file) denies every read
         let res_none = super::read_allowed_file_impl("my-plugin", &allowed_str, None);
         assert!(res_none.is_err());
-        assert!(res_none.unwrap_err().contains("No machine deployment policy configured"));
+        assert!(res_none
+            .unwrap_err()
+            .contains("No machine deployment policy configured"));
 
         let absent_policy = root.path().join("absent.json");
-        let res_absent = super::read_allowed_file_impl("my-plugin", &allowed_str, Some(&absent_policy));
+        let res_absent =
+            super::read_allowed_file_impl("my-plugin", &allowed_str, Some(&absent_policy));
         assert!(res_absent.is_err());
         assert!(res_absent.unwrap_err().contains("does not exist"));
 
@@ -5985,7 +6159,8 @@ mod tests {
             ),
         )
         .unwrap();
-        let res_padded = super::read_allowed_file_impl("my-plugin", &allowed_str, Some(&padded_policy));
+        let res_padded =
+            super::read_allowed_file_impl("my-plugin", &allowed_str, Some(&padded_policy));
         assert_eq!(res_padded.unwrap(), "{\"hello\":\"world\"}");
 
         // 7. A BOM-prefixed policy parses, as it does in the UI.
@@ -6017,7 +6192,9 @@ mod tests {
         // 9. A fileAccess section the UI would drop grants nothing natively.
         for bad in [
             format!(r#"{{"my-plugin":["{allowed_str}",""]}}"#),
-            format!(r#"{{"my-plugin":["{allowed_str}"],"other":[" {allowed_str} ","{allowed_str}"]}}"#),
+            format!(
+                r#"{{"my-plugin":["{allowed_str}"],"other":[" {allowed_str} ","{allowed_str}"]}}"#
+            ),
             format!(r#"{{"my-plugin":["{allowed_str}"]," my-plugin":["{allowed_str}"]}}"#),
             format!(r#"{{"my-plugin":["{allowed_str}"],"   ":[]}}"#),
             r#"["not-an-object"]"#.to_string(),
@@ -6028,7 +6205,8 @@ mod tests {
                 format!(r#"{{"version":1,"plugins":{{"fileAccess":{bad}}}}}"#),
             )
             .unwrap();
-            let res_bad = super::read_allowed_file_impl("my-plugin", &allowed_str, Some(&bad_policy));
+            let res_bad =
+                super::read_allowed_file_impl("my-plugin", &allowed_str, Some(&bad_policy));
             assert!(
                 res_bad.unwrap_err().contains("invalid plugins.fileAccess"),
                 "{bad}"
@@ -6040,7 +6218,10 @@ mod tests {
         let dir_policy = root.path().join("dir.json");
         fs::write(
             &dir_policy,
-            format!(r#"{{"version":1,"plugins":{{"fileAccess":{{"my-plugin":["{}"]}}}}}}"#, dir_str),
+            format!(
+                r#"{{"version":1,"plugins":{{"fileAccess":{{"my-plugin":["{}"]}}}}}}"#,
+                dir_str
+            ),
         )
         .unwrap();
         let res_dir = super::read_allowed_file_impl("my-plugin", &dir_str, Some(&dir_policy));
@@ -6392,7 +6573,10 @@ mod tests {
         let cpuinfo = std::fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
         let mut flag_lines = cpuinfo.lines().filter(|line| line.starts_with("flags"));
         if let Some(flags) = flag_lines.next() {
-            assert_eq!(supported, flags.split_whitespace().any(|flag| flag == "avx"));
+            assert_eq!(
+                supported,
+                flags.split_whitespace().any(|flag| flag == "avx")
+            );
         }
     }
 
@@ -6471,6 +6655,8 @@ mod tests {
             "255.255.255.255",        // broadcast
             "::",                     // unspecified
             "fe80::1",                // link-local
+            "fd00:ec2::254",          // AWS IPv6 IMDS
+            "fd00:ec2::23",           // AWS EKS Pod Identity
             "::ffff:169.254.169.254", // IPv4-mapped metadata
             "::169.254.169.254",      // IPv4-compatible metadata (deprecated)
         ] {
@@ -6795,8 +6981,12 @@ mod tests {
         // A directory the scan never loaded is refused, even one that contains
         // the bundle (the caller-chosen-root attack: `$HOME` + `.ssh/id_rsa`).
         assert!(bundles.canonical_known_source(&root).is_none());
-        assert!(bundles.canonical_known_source(&root.join("plugins")).is_none());
-        assert!(bundles.canonical_known_source(&root.join("missing")).is_none());
+        assert!(bundles
+            .canonical_known_source(&root.join("plugins"))
+            .is_none());
+        assert!(bundles
+            .canonical_known_source(&root.join("missing"))
+            .is_none());
         // A rescan replaces the set rather than adding to it.
         bundles.replace(Vec::<PathBuf>::new());
         assert!(bundles.canonical_known_source(&plugin).is_none());
@@ -7320,9 +7510,15 @@ mod tests {
         assert_eq!(resolve_fetch_timeout_secs(Some(180)), 180);
         // Zero would mean "no timeout" to reqwest, so it is raised to the floor
         // rather than letting a stalled request hang forever.
-        assert_eq!(resolve_fetch_timeout_secs(Some(0)), REMOTE_TILE_TIMEOUT_SECS);
+        assert_eq!(
+            resolve_fetch_timeout_secs(Some(0)),
+            REMOTE_TILE_TIMEOUT_SECS
+        );
         // Below the floor is raised; above the ceiling is capped.
-        assert_eq!(resolve_fetch_timeout_secs(Some(1)), REMOTE_TILE_TIMEOUT_SECS);
+        assert_eq!(
+            resolve_fetch_timeout_secs(Some(1)),
+            REMOTE_TILE_TIMEOUT_SECS
+        );
         assert_eq!(
             resolve_fetch_timeout_secs(Some(u64::MAX)),
             MAX_FETCH_TIMEOUT_SECS
@@ -7437,5 +7633,91 @@ mod tests {
     #[test]
     fn stale_sidecar_error_keeps_the_phrase_the_frontend_matches() {
         assert!(super::STALE_SIDECAR_ERROR.contains("does not accept this session's token"));
+    }
+
+    #[test]
+    fn open_mbtiles_rejects_non_mbtiles_and_unc_paths() {
+        assert!(super::open_mbtiles("relative.mbtiles").is_err());
+        assert!(super::open_mbtiles("/etc/passwd").is_err());
+        assert!(super::open_mbtiles(r"\\evil\share\tiles.mbtiles").is_err());
+        assert!(super::open_mbtiles("/tmp/../etc/tiles.mbtiles").is_err());
+    }
+
+    #[test]
+    fn read_mbtiles_tile_rejects_excessive_zoom() {
+        let err = super::read_mbtiles_tile("/tmp/nonexistent.mbtiles".to_string(), 63, 0, 0)
+            .expect_err("zoom 63 must be rejected");
+        assert!(err.contains("zoom level is too large"));
+    }
+
+    #[test]
+    fn decompress_tile_data_caps_decompressed_size() {
+        use flate2::{write::GzEncoder, Compression};
+        use std::io::Write;
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
+        let chunk = vec![0u8; 1024 * 1024];
+        for _ in 0..33 {
+            encoder.write_all(&chunk).unwrap();
+        }
+        let bomb = encoder.finish().unwrap();
+        let err = super::decompress_tile_data(bomb).expect_err("oversized gzip tile must fail");
+        assert!(err.contains("exceeds the size limit"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_local_file_and_siblings_reject_symlink_escapes() {
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-symlink-guard-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let secret = dir.join("secret.txt");
+        std::fs::write(&secret, b"secret").unwrap();
+        let link = dir.join("evil.geojson");
+        std::os::unix::fs::symlink(&secret, &link).unwrap();
+        let err = match super::read_local_file(link.to_string_lossy().into_owned()) {
+            Ok(_) => panic!("symlink to non-vector file must fail"),
+            Err(err) => err,
+        };
+        assert!(err.contains("non-vector file"));
+
+        let shp = dir.join("roads.shp");
+        std::fs::write(&shp, b"shp").unwrap();
+        let dbf_link = dir.join("roads.dbf");
+        std::os::unix::fs::symlink(&secret, &dbf_link).unwrap();
+        let siblings = super::read_shapefile_siblings(shp.to_string_lossy().into_owned()).unwrap();
+        assert!(
+            siblings.is_empty(),
+            "symlinked non-sidecar sibling must be skipped"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(all(unix, not(feature = "mas")))]
+    #[test]
+    fn read_fs_text_entry_rejects_symlink_escape() {
+        let base = std::env::temp_dir().join(format!(
+            "geolibre-plugin-symlink-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let plugin_dir = base.join("plugin");
+        std::fs::create_dir_all(&plugin_dir).unwrap();
+        let outside = base.join("outside.txt");
+        std::fs::write(&outside, "outside").unwrap();
+        std::os::unix::fs::symlink(&outside, plugin_dir.join("entry.js")).unwrap();
+        let err = super::read_fs_text_entry(&plugin_dir, "entry.js", "plugin entry")
+            .expect_err("symlink escaping plugin dir must fail");
+        assert!(err.contains("resolves outside the plugin directory"));
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

@@ -672,17 +672,23 @@ async fn mercator_extent(
         .query_opt(&sql, &[&srid.value()])
         .await
         .map_err(|error| query_error("compute the table extent", &error))?;
-    Ok(row.map(|row| {
-        let [west, south, east, north] = [0, 1, 2, 3].map(|index| row.get::<_, f64>(index));
+    Ok(row.and_then(|row| {
+        let west = row.try_get::<_, Option<f64>>(0).ok()??;
+        let south = row.try_get::<_, Option<f64>>(1).ok()??;
+        let east = row.try_get::<_, Option<f64>>(2).ok()??;
+        let north = row.try_get::<_, Option<f64>>(3).ok()??;
+        if !(west.is_finite() && south.is_finite() && east.is_finite() && north.is_finite()) {
+            return None;
+        }
         // A point table has a zero-size extent; give it a few metres so the
         // clipped tile envelope is never degenerate.
         let pad = ((east - west).max(north - south) * 0.01).max(10.0);
-        [
+        Some([
             (west - pad).clamp(-WEB_MERCATOR_HALF, WEB_MERCATOR_HALF),
             (south - pad).clamp(-WEB_MERCATOR_HALF, WEB_MERCATOR_HALF),
             (east + pad).clamp(-WEB_MERCATOR_HALF, WEB_MERCATOR_HALF),
             (north + pad).clamp(-WEB_MERCATOR_HALF, WEB_MERCATOR_HALF),
-        ]
+        ])
     }))
 }
 
@@ -904,16 +910,31 @@ impl TlsRequirement {
                 roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
             });
         };
-        let unreadable =
-            |error: &dyn std::fmt::Display| format!("Could not read sslrootcert {path}: {error}");
+        if !crate::is_safe_absolute_path(path) {
+            return Err("sslrootcert must be an absolute local certificate file path".to_string());
+        }
+        let canonical = std::fs::canonicalize(path)
+            .map_err(|_| "Could not read sslrootcert file".to_string())?;
+        let resolved = canonical.to_string_lossy();
+        let lower = resolved.to_ascii_lowercase();
+        if crate::is_unc_resolved_path(&resolved)
+            || !canonical.is_file()
+            || !(lower.ends_with(".pem") || lower.ends_with(".crt") || lower.ends_with(".cer"))
+        {
+            return Err(
+                "sslrootcert must resolve to a local .pem, .crt, or .cer certificate file"
+                    .to_string(),
+            );
+        }
+        let unreadable = || "Could not read sslrootcert certificates".to_string();
         let mut roots = RootCertStore::empty();
-        for cert in CertificateDer::pem_file_iter(path).map_err(|error| unreadable(&error))? {
+        for cert in CertificateDer::pem_file_iter(&canonical).map_err(|_| unreadable())? {
             roots
-                .add(cert.map_err(|error| unreadable(&error))?)
-                .map_err(|error| unreadable(&error))?;
+                .add(cert.map_err(|_| unreadable())?)
+                .map_err(|_| unreadable())?;
         }
         if roots.is_empty() {
-            return Err(unreadable(&"no certificates found"));
+            return Err("No certificates found in sslrootcert".to_string());
         }
         Ok(roots)
     }

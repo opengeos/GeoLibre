@@ -115,6 +115,112 @@ def _is_missing(value: Any) -> bool:
     return value is None or (isinstance(value, float) and math.isnan(value))
 
 
+_FORBIDDEN_FILE_TABLE_FUNCTIONS = re.compile(
+    r"\b(?:read_parquet|read_csv|read_json|read_avro|read_arrow|parquet_scan|csv_scan)\s*\(",
+    re.IGNORECASE,
+)
+_ALLOWED_LEADING_KEYWORDS = frozenset({"SELECT", "WITH", "VALUES", "EXPLAIN"})
+
+
+def _strip_sql_comments_and_strings(sql: str) -> tuple[str, bool]:
+    """Return SQL with comments stripped and string literals blanked, plus multi-stmt flag."""
+    out: list[str] = []
+    i = 0
+    n = len(sql)
+    saw_semicolon = False
+    has_trailing_after_semicolon = False
+    while i < n:
+        ch = sql[i]
+        nxt = sql[i + 1] if i + 1 < n else ""
+        # Single-line comment
+        if ch == "-" and nxt == "-":
+            i += 2
+            while i < n and sql[i] != "\n":
+                i += 1
+            out.append(" ")
+            continue
+        # Block comment
+        if ch == "/" and nxt == "*":
+            i += 2
+            depth = 1
+            while i < n and depth > 0:
+                if sql[i] == "/" and i + 1 < n and sql[i + 1] == "*":
+                    depth += 1
+                    i += 2
+                elif sql[i] == "*" and i + 1 < n and sql[i + 1] == "/":
+                    depth -= 1
+                    i += 2
+                else:
+                    i += 1
+            out.append(" ")
+            continue
+        # Single-quoted string literal
+        if ch == "'":
+            if saw_semicolon:
+                has_trailing_after_semicolon = True
+            i += 1
+            while i < n:
+                if sql[i] == "'" and i + 1 < n and sql[i + 1] == "'":
+                    i += 2
+                elif sql[i] == "'":
+                    i += 1
+                    break
+                else:
+                    i += 1
+            out.append("''")
+            continue
+        # Double-quoted identifier
+        if ch == '"':
+            if saw_semicolon:
+                has_trailing_after_semicolon = True
+            i += 1
+            while i < n:
+                if sql[i] == '"' and i + 1 < n and sql[i + 1] == '"':
+                    i += 2
+                elif sql[i] == '"':
+                    i += 1
+                    break
+                else:
+                    i += 1
+            out.append('""')
+            continue
+        if ch == ";":
+            if saw_semicolon:
+                has_trailing_after_semicolon = True
+            saw_semicolon = True
+            out.append(";")
+            i += 1
+            continue
+        if saw_semicolon and not ch.isspace():
+            has_trailing_after_semicolon = True
+        out.append(ch)
+        i += 1
+    return "".join(out), has_trailing_after_semicolon
+
+
+def _validate_read_only_sql(sql: str) -> None:
+    """Ensure only a single read-only query statement is executed on SedonaDB."""
+    stripped, has_multiple = _strip_sql_comments_and_strings(sql)
+    if has_multiple:
+        raise ValueError("Only a single SQL statement is allowed.")
+    tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", stripped)
+    if not tokens:
+        raise ValueError("A SQL statement is required.")
+    first = tokens[0].upper()
+    if first not in _ALLOWED_LEADING_KEYWORDS:
+        raise ValueError("Only read-only SELECT, WITH, VALUES, or EXPLAIN queries are supported.")
+    if first == "EXPLAIN":
+        idx = 1
+        while idx < len(tokens) and tokens[idx].upper() in {"ANALYZE", "VERBOSE", "FORMAT"}:
+            idx += 2 if tokens[idx].upper() == "FORMAT" else 1
+        if idx >= len(tokens) or tokens[idx].upper() not in {"SELECT", "WITH", "VALUES"}:
+            raise ValueError(
+                "EXPLAIN is only allowed for read-only SELECT, WITH, or VALUES queries."
+            )
+    if _FORBIDDEN_FILE_TABLE_FUNCTIONS.search(stripped):
+        raise ValueError("Direct filesystem table functions are not allowed in Sedona SQL.")
+
+
 def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
     """Run a single spatial SQL statement against the registered layers.
 
@@ -139,6 +245,7 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
         ValueError: Invalid input.
         Exception: Whatever SedonaDB raises for an invalid SQL statement.
     """
+    _validate_read_only_sql(sql)
     sedona_db = _import_sedona()
     import geopandas as gpd  # noqa: PLC0415
 

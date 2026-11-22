@@ -26,6 +26,7 @@ import {
   sanitizeColor,
   sanitizeView,
   setParticipantOverride,
+  timingSafeEqual,
   toWireParticipant,
   validateComment,
   validateReply,
@@ -317,7 +318,9 @@ export function createRelay(options: RelayOptions = {}): {
     if (message.type === "join") {
       if (peer.participant) return;
       let role: CollaborationRole =
-        message.hostToken && persisted.hostToken && message.hostToken === persisted.hostToken
+        message.hostToken &&
+        persisted.hostToken &&
+        timingSafeEqual(message.hostToken, persisted.hostToken)
           ? "host"
           : "guest";
 
@@ -371,22 +374,25 @@ export function createRelay(options: RelayOptions = {}): {
       }
 
       const durableOverride = store.getDurableOverride(id, participantKey);
-      let initialOverride: boolean | undefined = undefined;
-      if (durableOverride !== undefined) {
-        initialOverride = durableOverride;
-      } else if (matchedInvite) {
-        initialOverride = matchedInvite.role === "co-edit";
-      }
 
       if (matchedInvite) {
         // Use an atomic SQL UPDATE to close the TOCTOU window: the initial
-        // maxUses check (line 312) happened before `await verifyIdentityToken`,
+        // maxUses check happened before `await verifyIdentityToken`,
         // and another join could have consumed the invite in the meantime.
         if (!store.atomicClaimInvite(id, matchedInvite.token)) {
           // Invite was consumed or revoked between the initial check and now.
           matchedInvite = undefined;
           inviteToken = undefined;
         }
+      }
+
+      // Compute initial edit override AFTER claiming the invite so a joiner
+      // who loses the maxUses race on a co-edit invite never receives edit rights.
+      let initialOverride: boolean | undefined = undefined;
+      if (durableOverride !== undefined) {
+        initialOverride = durableOverride;
+      } else if (matchedInvite) {
+        initialOverride = matchedInvite.role === "co-edit";
       }
 
       peer.participant = {
@@ -839,7 +845,16 @@ export function createRelay(options: RelayOptions = {}): {
       const rawXff = trustProxy
         ? (request.headers["x-forwarded-for"] as string | undefined)
         : undefined;
-      const clientIp = rawXff?.split(",")[0].trim() || request.socket.remoteAddress || "unknown";
+      // Use the rightmost X-Forwarded-For entry appended by the trusted proxy
+      // rather than the leftmost client-supplied value, which can be spoofed.
+      const xffParts = rawXff
+        ?.split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      const clientIp =
+        (xffParts && xffParts.length > 0 ? xffParts[xffParts.length - 1] : undefined) ||
+        request.socket.remoteAddress ||
+        "unknown";
       if (!checkRateLimit(clientIp, 10, 60_000)) {
         return json(response, 429, { error: "Too many session creation requests" });
       }

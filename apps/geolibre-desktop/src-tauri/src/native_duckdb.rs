@@ -103,14 +103,36 @@ fn native_options(
             "Refusing to read \"{path}\": not an absolute local vector file path"
         ));
     }
+    if path.to_ascii_lowercase().starts_with("/vsi") {
+        return Err(format!(
+            "Refusing to read \"{path}\": virtual filesystem paths are not allowed"
+        ));
+    }
     if has_duckdb_glob_metacharacter(&path) {
         return Err(format!(
             "Refusing to read \"{path}\": glob paths are not allowed"
         ));
     }
+    let canonical = std::fs::canonicalize(&path)
+        .map_err(|error| format!("Could not resolve vector file \"{path}\": {error}"))?;
+    let resolved = canonical.to_string_lossy();
+    if crate::is_unc_resolved_path(&resolved) {
+        return Err(format!(
+            "Refusing to read \"{path}\": resolves to a network path"
+        ));
+    }
+    if !crate::has_allowed_local_vector_extension(&resolved) {
+        return Err(format!(
+            "Refusing to read \"{path}\": resolves to a non-vector file"
+        ));
+    }
+    if !canonical.is_file() {
+        return Err(format!("Refusing to read \"{path}\": not a regular file"));
+    }
+    let canonical_path = crate::canonical_local_path_string(&canonical);
     Ok(NativeVectorOptions {
-        extension: vector_extension(&path),
-        path,
+        extension: vector_extension(&canonical_path),
+        path: canonical_path,
         layer: blank_to_none(layer),
         override_source_crs: blank_to_none(override_source_crs),
     })
@@ -1593,9 +1615,44 @@ mod tests {
             std::process::id()
         );
         std::fs::write(&path, []).expect("create literal bracket file");
+        let expected = crate::canonical_local_path_string(
+            &std::fs::canonicalize(&path).expect("canonicalize literal bracket file"),
+        );
         let options = native_options(path.clone(), None, None).expect("native options");
-        assert_eq!(options.path, path);
+        assert_eq!(options.path, expected);
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn native_options_rejects_gdal_vsi_paths_and_non_vector_symlinks() {
+        let err = native_options(
+            "/vsicurl/http://169.254.169.254/latest/meta-data/x.geojson".to_string(),
+            None,
+            None,
+        )
+        .expect_err("vsicurl path must be rejected");
+        assert!(err.contains("virtual filesystem paths are not allowed"));
+
+        #[cfg(unix)]
+        {
+            let suffix = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos();
+            let dir = std::env::temp_dir().join(format!(
+                "geolibre-native-symlink-{suffix}-{}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&dir).expect("create temp dir");
+            let secret = dir.join("secret.txt");
+            std::fs::write(&secret, b"top-secret").expect("write secret");
+            let link = dir.join("alias.geojson");
+            std::os::unix::fs::symlink(&secret, &link).expect("create symlink");
+            let err = native_options(link.to_string_lossy().into_owned(), None, None)
+                .expect_err("symlink to non-vector file must be rejected");
+            assert!(err.contains("resolves to a non-vector file"));
+            let _ = std::fs::remove_dir_all(&dir);
+        }
     }
 
     #[test]

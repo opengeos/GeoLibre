@@ -45,6 +45,7 @@ import {
   sanitizeDisplayName,
   sanitizeView,
   setParticipantOverride,
+  timingSafeEqual,
   toWireParticipant,
   verifyIdentityToken,
   type SessionParticipant,
@@ -363,7 +364,7 @@ export class CollabSession extends DurableObject<Env> {
       const clientToken = authorization.startsWith("Bearer ")
         ? authorization.slice("Bearer ".length).trim()
         : "";
-      if (!hostToken || !clientToken || hostToken !== clientToken) {
+      if (!hostToken || !clientToken || !timingSafeEqual(hostToken, clientToken)) {
         return new Response("Forbidden", { status: 403 });
       }
       if (request.method === "DELETE") {
@@ -525,7 +526,9 @@ export class CollabSession extends DurableObject<Env> {
       ]);
 
     let role: CollaborationRole =
-      message.hostToken && storedToken && message.hostToken === storedToken ? "host" : "guest";
+      message.hostToken && storedToken && timingSafeEqual(message.hostToken, storedToken)
+        ? "host"
+        : "guest";
 
     let inviteToken: string | undefined = undefined;
     let matchedInvite: CollabInvite | undefined = undefined;
@@ -577,12 +580,6 @@ export class CollabSession extends DurableObject<Env> {
     }
 
     const durableOverride = this.readDurableOverride(participantKey);
-    let initialOverride: boolean | undefined = undefined;
-    if (durableOverride !== undefined) {
-      initialOverride = durableOverride;
-    } else if (matchedInvite) {
-      initialOverride = matchedInvite.role === "co-edit";
-    }
 
     if (matchedInvite) {
       // Re-read the invite after the `await verifyIdentityToken` above to close
@@ -601,6 +598,15 @@ export class CollabSession extends DurableObject<Env> {
         this.writeInvite(freshInv);
         matchedInvite = freshInv;
       }
+    }
+
+    // Compute the initial edit override AFTER claiming the invite so a joiner
+    // who loses the maxUses race on a co-edit invite never receives edit rights.
+    let initialOverride: boolean | undefined = undefined;
+    if (durableOverride !== undefined) {
+      initialOverride = durableOverride;
+    } else if (matchedInvite) {
+      initialOverride = matchedInvite.role === "co-edit";
     }
 
     const attachment: SocketAttachment = {

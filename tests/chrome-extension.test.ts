@@ -897,4 +897,28 @@ describe("GeoLibre Chrome extension request history", () => {
     );
     assert.equal(collectServiceCandidates(urls).length, 100);
   });
+
+  it("rejects non-http(s) baseUrl and bounds recursive ?data= unpacking", () => {
+    assert.throws(
+      () =>
+        buildGeoLibreUrl(
+          [{ url: "https://example.com/a.geojson", format: "GeoJSON" }],
+          "javascript:alert(1)",
+        ),
+      /http:\/\/ or https:\/\//,
+    );
+    const built = buildGeoLibreUrl(
+      [{ url: "https://example.com/a.geojson", format: "GeoJSON" }],
+      "https://web.geolibre.app/#old-hash",
+    );
+    assert.ok(!built.includes("#old-hash"));
+
+    // Deeply nested GeoLibre deep link must terminate without throwing RangeError.
+    let nested = "https://example.com/leaf.geojson";
+    for (let i = 0; i < 12; i += 1) {
+      nested = `https://web.geolibre.app/?data=${encodeURIComponent(nested)}`;
+    }
+    const found = scan(`<a href="${nested}">nested</a>`, "https://example.com/");
+    assert.ok(Array.isArray(found));
+  });
 });

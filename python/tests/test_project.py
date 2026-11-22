@@ -1473,3 +1473,47 @@ def test_apply_point_labels_rejects_a_negative_index():
     with pytest.raises(ValueError):
         p.apply_point_labels(classification, {"file": {-1: 6}})
     assert classification == [1] * 3
+
+
+def test_redact_credentials_covers_map_prefs_and_no_export_layers():
+    raw = {
+        "preferences": {
+            "map": {
+                "mapboxStyleUrl": "https://api.mapbox.com/styles/v1/x?access_token=pk.secret",
+                "terrainSource": "https://user:pass@dem.example.com/dem.tif?api_key=abc",
+            }
+        },
+        "layers": [
+            {
+                "id": "private-layer",
+                "type": "geojson",
+                "capabilities": {"export": False},
+                "geojson": {"type": "FeatureCollection", "features": []},
+                "metadata": {"embeddedGeoJSON": {"type": "FeatureCollection", "features": []}},
+                "source": {"type": "geojson", "url": "https://example.com/data.geojson?token=xyz"},
+            }
+        ],
+    }
+    redacted = project.redact_credentials(raw)
+    assert "pk.secret" not in redacted["preferences"]["map"]["mapboxStyleUrl"]
+    assert "pass" not in redacted["preferences"]["map"]["terrainSource"]
+    assert "api_key" not in redacted["preferences"]["map"]["terrainSource"]
+    layer = redacted["layers"][0]
+    assert "geojson" not in layer
+    assert "embeddedGeoJSON" not in layer["metadata"]
+    assert "token" not in layer["source"]["url"]
+
+
+def test_assert_public_url_rejects_bad_schemes_and_special_ips(monkeypatch):
+    with pytest.raises(ValueError, match="non-HTTP"):
+        project._assert_public_url("ftp://user:secret@example.com/data.geojson")
+
+    for addr in ("64:ff9b::169.254.169.254", "224.0.0.1", "::ffff:169.254.169.254"):
+        monkeypatch.setattr(
+            project.socket,
+            "getaddrinfo",
+            lambda _host, _port, _addr=addr: [(0, 0, 0, "", (_addr, 0))],
+        )
+        with pytest.raises(ValueError, match="non-public address") as exc:
+            project._assert_public_url("https://example.com/a.geojson?token=supersecret")
+        assert "supersecret" not in str(exc.value)

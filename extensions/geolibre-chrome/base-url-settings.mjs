@@ -31,10 +31,16 @@ export function parseBaseUrl(raw) {
   return href;
 }
 
-/** The configured base URL, or the default when none is stored. */
+/** The configured base URL, or the default when none is stored or valid. */
 export async function loadBaseUrl() {
   const stored = await chrome.storage.sync.get(STORAGE_KEY);
-  return stored[STORAGE_KEY] || GEOLIBRE_WEB_URL;
+  const raw = stored[STORAGE_KEY];
+  if (typeof raw !== "string" || !raw.trim()) return GEOLIBRE_WEB_URL;
+  try {
+    return parseBaseUrl(raw);
+  } catch {
+    return GEOLIBRE_WEB_URL;
+  }
 }
 
 /** Persist a validated base URL. */

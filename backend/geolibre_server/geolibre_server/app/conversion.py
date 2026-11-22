@@ -1272,12 +1272,17 @@ def _run_conversion_job(
             error=validation_error or "Conversion failed. See the sidecar logs for details.",
             messages=[],
         )
-        _remove_partial_output(params)
+        if not output_existed:
+            _remove_partial_output(params)
     finally:
         # Guard against leaking a still-running subprocess if an exception is
         # raised before it exits (e.g. during streaming or a job-state update).
         if process is not None and process.poll() is None:
             process.kill()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
         with _JOBS_LOCK:
             _PROCESSES.pop(job_id, None)
             _CANCELLED.discard(job_id)

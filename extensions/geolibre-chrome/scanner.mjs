@@ -158,6 +158,8 @@ export function scanDocumentForDatasets() {
     label = "",
     explicitStyle = null,
     explicitDataType = null,
+    depth = 0,
+    visitedDeepLinks = new Set(),
   ) => {
     const url = canonicalHttpUrl(raw);
     if (!url) return;
@@ -169,9 +171,12 @@ export function scanDocumentForDatasets() {
     if (url.hostname === "source.coop") return;
 
     // A page may link to an existing GeoLibre deep link. Unpack it so users can
-    // combine its datasets with other links found on the same page.
+    // combine its datasets with other links found on the same page. Cap depth
+    // and track visited URLs so self-referencing links cannot overflow the stack.
     const nestedData = url.searchParams.getAll("data");
     if (nestedData.length && /(?:^|\.)geolibre\.app$/i.test(url.hostname)) {
+      if (depth >= 4 || visitedDeepLinks.has(url.href)) return;
+      visitedDeepLinks.add(url.href);
       const nestedStyles = url.searchParams.getAll("style");
       const nestedDataTypes = url.searchParams.getAll("dataType");
       nestedData.forEach((dataUrl, index) =>
@@ -181,6 +186,8 @@ export function scanDocumentForDatasets() {
           "",
           nestedStyles[index] || null,
           nestedDataTypes[index]?.trim().toLowerCase() || null,
+          depth + 1,
+          visitedDeepLinks,
         ),
       );
       return;

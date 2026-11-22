@@ -2344,3 +2344,51 @@ def test_role_change_under_open_policy_keeps_public_projects(client):
     )
     response = client.get(f"/api/projects/{project['id']}", headers=auth(tokens["admin"]))
     assert response.json()["project"]["visibility"] == "public"
+
+
+def test_get_group_enforces_visibility_and_thumbnails_set_nosniff(client):
+    owner = account(client, "grp-owner")
+    outsider = account(client, "grp-outsider")
+    private_group = client.post(
+        "/api/groups",
+        headers=auth(owner),
+        json={"name": "Private Team", "joinPolicy": "invite"},
+    ).json()["group"]
+    open_group = client.post(
+        "/api/groups",
+        headers=auth(owner),
+        json={"name": "Open Team", "joinPolicy": "open"},
+    ).json()["group"]
+
+    assert (
+        client.get(f"/api/groups/{private_group['id']}", headers=auth(outsider)).status_code == 404
+    )
+    assert client.get(f"/api/groups/{private_group['id']}", headers=auth(owner)).status_code == 200
+    assert client.get(f"/api/groups/{open_group['id']}", headers=auth(outsider)).status_code == 200
+
+    # Org-scoped open groups remain confined to organization members.
+    org = client.post(
+        "/api/organizations",
+        headers=auth(owner),
+        json={"slug": "confined-org", "name": "Confined Org"},
+    ).json()["organization"]
+    org_open = client.post(
+        "/api/groups",
+        headers=auth(owner),
+        json={"name": "Org Open", "organizationId": org["id"], "joinPolicy": "open"},
+    ).json()["group"]
+    assert client.get(f"/api/groups/{org_open['id']}", headers=auth(outsider)).status_code == 404
+
+    # Thumbnails include X-Content-Type-Options: nosniff.
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+    assert (
+        client.put(
+            f"/api/groups/{open_group['id']}/thumbnail",
+            headers={**auth(owner), "Content-Type": "image/png"},
+            content=png,
+        ).status_code
+        == 204
+    )
+    thumb = client.get(f"/api/groups/{open_group['id']}/thumbnail")
+    assert thumb.status_code == 200
+    assert thumb.headers["x-content-type-options"] == "nosniff"
