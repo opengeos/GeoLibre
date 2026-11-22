@@ -316,13 +316,15 @@ function readTextSymbol(labelClass: CimObject, warnings: string[]): Partial<Labe
   // Hollow text (an outline, no fill) reads as the outline colour at fill opacity 0; it draws
   // opaque in that colour, and the outline warning below already names it. The same placeholder
   // stands in for a fill whose colour could not be read, which keeps the layer's text colour.
+  // Clear text with no outline is transparency, which labels cannot draw, so it is named.
   const textOpacity = textLook.fillOpacity ?? 1;
+  const hollow = textOpacity === 0 && (textLook.strokeWidth ?? 0) > 0;
   const unreadableFill =
     textOpacity === 0 && textTranslation.issues.some((issue) => issue.code === "color");
   if (textLook.fillColor && !unreadableFill) {
     labels.color = textLook.fillColor;
     labels.colorExpression = "";
-    translucent ||= textOpacity > 0 && textOpacity < 1;
+    translucent ||= textOpacity < 1 && !hollow;
   } else {
     warnings.push("The .lyrx style's label colour could not be read; labels keep their colour.");
   }

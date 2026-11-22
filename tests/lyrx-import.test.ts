@@ -597,6 +597,12 @@ describe(".lyrx style import", () => {
           0,
           null,
         ],
+        // Clear text with no outline: named as transparency, which labels cannot draw.
+        [
+          { symbol: fillSymbol(rgb(255, 0, 0, 0)) },
+          0,
+          /^The \.lyrx style's label transparency was not imported; labels are drawn opaque\.$/,
+        ],
         // Hollow text: named as an outline, not as transparency.
         [
           { symbol: symbol("CIMPolygonSymbol", [solidStroke(rgb(0, 0, 255))]).symbol },
