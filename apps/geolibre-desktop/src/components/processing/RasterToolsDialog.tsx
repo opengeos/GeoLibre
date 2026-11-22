@@ -9,6 +9,8 @@ import {
   fetchConversionJob,
   runRasterTool,
   readRasterData,
+  estimateRasterDataBytes,
+  MAX_CLIENT_RASTER_BYTES,
   runRasterToolClient,
   convertRasterDataToCog,
   exceedsBrowserCogConversionLimit,
@@ -39,6 +41,7 @@ import {
   Play,
   Save,
   Server,
+  X,
 } from "lucide-react";
 import {
   useCallback,
@@ -155,6 +158,9 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   // Aborts an in-flight layer-bytes fetch when the dialog closes/unmounts or a
   // new pick supersedes it, so its state setters never fire on a dead component.
   const layerFetchAbortRef = useRef<AbortController | null>(null);
+  // Incremented whenever the dialog resets (open/tool switch) so an in-flight
+  // async secondary file read from an earlier session is discarded.
+  const formSessionRef = useRef(0);
   // History trackers per dispatched sidecar job id (#1292). Entries stay after
   // finish (finish is idempotent); the map is capped (oldest evicted) so a
   // long session cannot grow it without bound.
@@ -217,6 +223,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   // without a sidecar, otherwise sidecar.
   useEffect(() => {
     if (!open) return;
+    formSessionRef.current += 1;
     setInputPath("");
     setOutputPath("");
     setParams(toolDefaults(tool));
@@ -299,17 +306,19 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     clientLogEndRef.current?.scrollIntoView({ block: "end" });
   }, [clientLog.length]);
 
-  const setParam = useCallback((id: string, value: unknown) => {
-    setParams((prev) => ({ ...prev, [id]: value }));
-    if ((id === "b_path" || id === "c_path") && !String(value ?? "").trim()) {
-      const letter = id === "b_path" ? "B" : "C";
-      setClientAdditionalInputs((prev) => {
-        if (!(letter in prev)) return prev;
-        const next = { ...prev };
-        delete next[letter];
-        return next;
-      });
-    }
+  const setParam = useCallback(
+    (id: string, value: unknown) => setParams((prev) => ({ ...prev, [id]: value })),
+    [],
+  );
+
+  const clearClientSecondaryInput = useCallback((letter: string, paramId: string) => {
+    setClientAdditionalInputs((prev) => {
+      if (!(letter in prev)) return prev;
+      const next = { ...prev };
+      delete next[letter];
+      return next;
+    });
+    setParams((prev) => ({ ...prev, [paramId]: "" }));
   }, []);
 
   // Whether a parameter is shown, given another parameter's value (e.g. hide
@@ -345,18 +354,26 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   const pickPathParam = useCallback(
     async (param: AlgorithmParameter) => {
       if (engine === "client" && (param.id === "b_path" || param.id === "c_path")) {
-        const picked = await openLocalDataFileWithFallback({
-          filters: param.fileFilters ?? tool.inputFilters,
-          accept: ".tif,.tiff,image/tiff",
-          readBinary: true,
-        });
-        if (picked?.data) {
-          const letter = param.id === "b_path" ? "B" : "C";
-          setClientAdditionalInputs((prev) => ({
-            ...prev,
-            [letter]: { name: picked.path, bytes: picked.data! },
-          }));
-          setParam(param.id, picked.path);
+        const session = formSessionRef.current;
+        try {
+          const picked = await openLocalDataFileWithFallback({
+            filters: param.fileFilters ?? tool.inputFilters,
+            accept: ".tif,.tiff,image/tiff",
+            readBinary: true,
+          });
+          if (session !== formSessionRef.current) return;
+          if (picked?.data) {
+            const letter = param.id === "b_path" ? "B" : "C";
+            setError(null);
+            setClientAdditionalInputs((prev) => ({
+              ...prev,
+              [letter]: { name: picked.path, bytes: picked.data! },
+            }));
+            setParam(param.id, picked.path);
+          }
+        } catch (err) {
+          if (session !== formSessionRef.current) return;
+          setError(err instanceof Error ? err.message : t("toolbar.rasterTool.layerLoadError"));
         }
         return;
       }
@@ -365,7 +382,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       });
       if (path) setParam(param.id, path);
     },
-    [engine, setParam, tool.inputFilters],
+    [engine, setParam, tool.inputFilters, t],
   );
 
   const startServer = useCallback(async () => {
@@ -593,6 +610,21 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       }
       let additionalInputs: Record<string, Awaited<ReturnType<typeof readRasterData>>> | undefined;
       if (tool.id === "raster-calc" && Object.keys(clientAdditionalInputs).length > 0) {
+        // Bound the combined decoded size of primary + secondary inputs + output
+        // before materializing secondary band arrays in browser memory.
+        const primaryBytes =
+          raster.width * raster.height * raster.bands.length * Float32Array.BYTES_PER_ELEMENT;
+        const outputBytes = raster.width * raster.height * Float32Array.BYTES_PER_ELEMENT;
+        let combinedBytes = primaryBytes + outputBytes;
+        for (const entry of Object.values(clientAdditionalInputs)) {
+          combinedBytes += await estimateRasterDataBytes(entry.bytes);
+          if (!Number.isFinite(combinedBytes) || combinedBytes > MAX_CLIENT_RASTER_BYTES) {
+            throw new Error(
+              "The combined calculator inputs are too large for the in-browser engine. " +
+                "Use the sidecar (rasterio/GDAL) engine instead.",
+            );
+          }
+        }
         additionalInputs = {};
         for (const [letter, entry] of Object.entries(clientAdditionalInputs)) {
           additionalInputs[letter] = await readRasterData(entry.bytes);
@@ -891,15 +923,32 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
             )}
 
             {/* Operation parameters */}
-            {tool.parameters.filter(isParamVisible).map((param) => (
-              <RasterParameterField
-                key={param.id}
-                param={translateParameter(t, "raster", tool.id, param)}
-                value={params[param.id]}
-                onChange={(value) => setParam(param.id, value)}
-                onPick={() => void pickPathParam(param)}
-              />
-            ))}
+            {tool.parameters.filter(isParamVisible).map((param) => {
+              const clientSecondaryLetter =
+                engine === "client" && (param.id === "b_path" || param.id === "c_path")
+                  ? param.id === "b_path"
+                    ? "B"
+                    : "C"
+                  : null;
+              const secondaryEntry = clientSecondaryLetter
+                ? clientAdditionalInputs[clientSecondaryLetter]
+                : undefined;
+              return (
+                <RasterParameterField
+                  key={param.id}
+                  param={translateParameter(t, "raster", tool.id, param)}
+                  value={clientSecondaryLetter ? (secondaryEntry?.name ?? "") : params[param.id]}
+                  onChange={(value) => setParam(param.id, value)}
+                  onPick={() => void pickPathParam(param)}
+                  readOnly={clientSecondaryLetter !== null}
+                  onClear={
+                    clientSecondaryLetter && secondaryEntry
+                      ? () => clearClientSecondaryInput(clientSecondaryLetter, param.id)
+                      : undefined
+                  }
+                />
+              );
+            })}
 
             <div>
               <Button
@@ -1001,6 +1050,8 @@ interface RasterParameterFieldProps {
   value: unknown;
   onChange: (value: unknown) => void;
   onPick: () => void;
+  readOnly?: boolean;
+  onClear?: () => void;
 }
 
 function RasterParameterField({
@@ -1008,6 +1059,8 @@ function RasterParameterField({
   value,
   onChange,
   onPick,
+  readOnly = false,
+  onClear,
 }: RasterParameterFieldProps): ReactElement {
   const { t } = useTranslation();
   const label = (
@@ -1075,12 +1128,23 @@ function RasterParameterField({
     return (
       <div className="flex flex-col gap-1">
         {label}
-        <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
+        <div
+          className={
+            onClear
+              ? "grid grid-cols-[minmax(0,1fr)_2.25rem_2.25rem] gap-2"
+              : "grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2"
+          }
+        >
           <Input
             id={param.id}
             value={(value as string) ?? ""}
-            placeholder={t("processing.filePicker.filePath")}
-            onChange={(e) => onChange(e.target.value)}
+            placeholder={
+              readOnly
+                ? t("toolbar.rasterTool.chooseGeoTiff")
+                : t("processing.filePicker.filePath")
+            }
+            readOnly={readOnly}
+            onChange={readOnly ? undefined : (e) => onChange(e.target.value)}
           />
           <Button
             type="button"
@@ -1091,6 +1155,17 @@ function RasterParameterField({
           >
             <FolderOpen className="h-4 w-4" />
           </Button>
+          {onClear ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              title={t("common.remove")}
+              onClick={onClear}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          ) : null}
         </div>
         {param.description ? (
           <p className="text-xs text-muted-foreground">{param.description}</p>

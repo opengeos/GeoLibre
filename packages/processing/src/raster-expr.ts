@@ -476,6 +476,7 @@ export function compileRasterExpression(
       const name = token.value;
       const fnSpec = ALLOWED_FUNCTIONS[name];
       if (fnSpec) {
+        countNode();
         if (peek().kind !== "lparen") {
           throw new Error(`Function "${name}" must be called with parentheses.`);
         }

@@ -322,16 +322,46 @@ describe("raster-client compute", () => {
       /do not match/,
     );
 
-    // Georeferencing mismatch (same size, different origin/CRS/orientation) must be rejected.
+    // Georeferencing mismatch (same size, different origin/resolution/registration/CRS/rotation) must be rejected.
     const shifted = { ...b, originX: b.originX + 10 };
     assert.throws(
       () => rasterCalc(a, { expression: "A + B", additionalInputs: { B: shifted } }),
       /origin does not match/,
     );
+    // Pixel-scaled origin tolerance: 25 cm pixels at 600,000 m shifted by 0.5 m (2 pixels) must reject.
+    const fineA = { ...a, originX: 600_000, resX: 0.25, resY: 0.25 };
+    const fineB = { ...b, originX: 600_000.5, resX: 0.25, resY: 0.25 };
+    assert.throws(
+      () => rasterCalc(fineA, { expression: "A + B", additionalInputs: { B: fineB } }),
+      /origin does not match/,
+    );
+    // Accumulated far-edge resolution drift across width must reject.
+    const resDriftA = { ...a, resX: 0.00001, resY: 0.00001 };
+    const resDriftB = { ...b, resX: 0.000015, resY: 0.00001 };
+    assert.throws(
+      () => rasterCalc(resDriftA, { expression: "A + B", additionalInputs: { B: resDriftB } }),
+      /pixel resolution does not match/,
+    );
     const flipped = { ...b, flipY: true };
     assert.throws(
       () => rasterCalc(a, { expression: "A + B", additionalInputs: { B: flipped } }),
       /axis orientation does not match/,
+    );
+    const rotatedB = { ...b, rotated: true };
+    assert.throws(
+      () => rasterCalc(a, { expression: "A + B", additionalInputs: { B: rotatedB } }),
+      /rotated or sheared/,
+    );
+    const pointRegB = { ...b, geoKeys: { GTRasterTypeGeoKey: 2 } };
+    assert.throws(
+      () => rasterCalc(a, { expression: "A + B", additionalInputs: { B: pointRegB } }),
+      /pixel registration/,
+    );
+    const userDefinedA = { ...a, geoKeys: { ProjectedCSTypeGeoKey: 32767 } };
+    const userDefinedB = { ...b, geoKeys: { ProjectedCSTypeGeoKey: 32767 } };
+    assert.throws(
+      () => rasterCalc(userDefinedA, { expression: "A + B", additionalInputs: { B: userDefinedB } }),
+      /user-defined CRS/,
     );
     const otherCrs = { ...b, geoKeys: { ProjectedCSTypeGeoKey: 32617 } };
     const aWithCrs = { ...a, geoKeys: { ProjectedCSTypeGeoKey: 3857 } };
@@ -380,6 +410,12 @@ describe("raster-client compute", () => {
     // Long flat sum (200 terms) must evaluate iteratively without stack overflow
     const longExpr = Array.from({ length: 200 }, () => "A").join(" + ");
     assert.deepEqual([...rasterCalc(r, { expression: longExpr }).bands[0]], [0, 400, 600, 800]);
+    // Balanced binary tree of 2,047 function calls must hit MAX_NODES complexity budget
+    let balanced = "A";
+    for (let level = 0; level < 11; level += 1) {
+      balanced = `minimum(${balanced}, ${balanced})`;
+    }
+    assert.throws(() => rasterCalc(r, { expression: balanced }), /too complex/);
   });
 
   it("rejects expressions that reach browser globals", () => {

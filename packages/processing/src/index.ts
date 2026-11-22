@@ -179,6 +179,8 @@ export {
   TERRAIN_NODATA,
   supportsClientRaster,
   readRasterData,
+  estimateRasterDataBytes,
+  MAX_CLIENT_RASTER_BYTES,
   writeUint8Bands,
   writeRasterData,
   writeRasterBands,

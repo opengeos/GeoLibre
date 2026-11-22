@@ -31,6 +31,10 @@ interface CogDemDataset {
   sourceBounds: [number, number, number, number];
   /** Native CRS origin `[originX, originY]` of pixel (0, 0) from the base image. */
   origin: [number, number];
+  /** Signed `[resX, resY]` of the base image (preserves ModelTransformation Y sign). */
+  baseResolution: [number, number];
+  /** Base image pixel dimensions `[width, height]` for scaling overview resolutions. */
+  baseDimensions: [number, number];
   /** True when the GeoTIFF declares `GTRasterTypeGeoKey === 2` (`RasterPixelIsPoint`). */
   pixelIsPoint: boolean;
   projection: DemProjection;
@@ -670,33 +674,76 @@ async function readProjectedWindowBounded(
     return rasters as TypedArrayWithDimensions;
   }
 
-  // Fallback for huge un-pyramided GeoTIFFs: read in horizontal strips whose
-  // native allocation stays within MAX_NATIVE_WARP_PIXELS.
+  // Fallback for huge un-pyramided GeoTIFFs: sample each destination row's exact
+  // nearest native row (chunked horizontally if a single row exceeds budget) so
+  // every readRasters call allocates <= MAX_NATIVE_WARP_PIXELS native samples.
   const combined = new Float64Array(readWidth * readHeight).fill(Number.NaN);
-  const maxNativeRows = Math.max(1, Math.floor(MAX_NATIVE_WARP_PIXELS / Math.max(1, winW)));
-  const destRowsPerStrip = Math.max(1, Math.floor((maxNativeRows / winH) * readHeight));
-  for (let dstRow = 0; dstRow < readHeight; dstRow += destRowsPerStrip) {
-    const stripOutRows = Math.min(destRowsPerStrip, readHeight - dstRow);
-    const stripTop = top + Math.floor((dstRow / readHeight) * winH);
-    const stripBottom = Math.min(
-      bottom,
-      Math.max(stripTop + 1, top + Math.ceil(((dstRow + stripOutRows) / readHeight) * winH)),
-    );
-    const strip = (await image.readRasters({
-      window: [left, stripTop, right, stripBottom],
-      width: readWidth,
-      height: stripOutRows,
-      samples: [band],
-      interleave: true,
-      resampleMethod: "nearest",
-      fillValue: Number.NaN,
-    })) as TypedArrayWithDimensions;
-    const offset = dstRow * readWidth;
-    for (let i = 0; i < strip.length && offset + i < combined.length; i += 1) {
-      combined[offset + i] = Number(strip[i]);
+  for (let dstRow = 0; dstRow < readHeight; dstRow += 1) {
+    const nativeRow = top + Math.min(winH - 1, Math.floor(((dstRow + 0.5) / readHeight) * winH));
+    if (winW <= MAX_NATIVE_WARP_PIXELS) {
+      const strip = (await image.readRasters({
+        window: [left, nativeRow, right, nativeRow + 1],
+        width: readWidth,
+        height: 1,
+        samples: [band],
+        interleave: true,
+        resampleMethod: "nearest",
+        fillValue: Number.NaN,
+      })) as TypedArrayWithDimensions;
+      const offset = dstRow * readWidth;
+      for (let i = 0; i < strip.length && i < readWidth; i += 1) {
+        combined[offset + i] = Number(strip[i]);
+      }
+    } else {
+      const offset = dstRow * readWidth;
+      for (let dstCol = 0; dstCol < readWidth; dstCol += 1) {
+        const nativeCol =
+          left + Math.min(winW - 1, Math.floor(((dstCol + 0.5) / readWidth) * winW));
+        const sample = (await image.readRasters({
+          window: [nativeCol, nativeRow, nativeCol + 1, nativeRow + 1],
+          width: 1,
+          height: 1,
+          samples: [band],
+          interleave: true,
+          resampleMethod: "nearest",
+          fillValue: Number.NaN,
+        })) as TypedArrayWithDimensions;
+        combined[offset + dstCol] = Number(sample[0]);
+      }
     }
   }
   return combined;
+}
+
+/**
+ * Extract signed axis-aligned `[resX, resY]` from an image, reading exact
+ * coefficients from `ModelTransformation` when present (avoiding geotiff.js
+ * dropping the negative Y sign on matrix transforms) and returning `null` for
+ * rotated or sheared transforms.
+ */
+function extractAxisAlignedResolution(image: GeoTIFFImage): [number, number] | null {
+  const matrix = fileDirectoryValue(image.getFileDirectory(), "ModelTransformation") as
+    | ArrayLike<number>
+    | undefined;
+  if (matrix && matrix.length >= 16) {
+    if (Math.abs(matrix[1]) > 1e-12 || Math.abs(matrix[4]) > 1e-12) {
+      return null;
+    }
+    const rx = Number(matrix[0]);
+    const ry = Number(matrix[5]);
+    if (!Number.isFinite(rx) || !Number.isFinite(ry) || rx === 0 || ry === 0) return null;
+    return [rx, ry];
+  }
+  const rawRes = image.getResolution();
+  if (
+    !Number.isFinite(rawRes[0]) ||
+    !Number.isFinite(rawRes[1]) ||
+    rawRes[0] === 0 ||
+    rawRes[1] === 0
+  ) {
+    return null;
+  }
+  return [rawRes[0], rawRes[1]];
 }
 
 async function readProjectedTile(
@@ -722,9 +769,16 @@ async function readProjectedTile(
     Math.abs(sourceTileBounds[2] - sourceTileBounds[0]) / TILE_SIZE,
     Math.abs(sourceTileBounds[3] - sourceTileBounds[1]) / TILE_SIZE,
   );
+  const [baseResX, baseResY] = dataset.baseResolution;
+  const [baseWidth, baseHeight] = dataset.baseDimensions;
+  const resolutionFor = (candidate: GeoTIFFImage): [number, number] => [
+    baseResX * (baseWidth / candidate.getWidth()),
+    baseResY * (baseHeight / candidate.getHeight()),
+  ];
+
   let imageIndex = 0;
   for (let i = 0; i < dataset.images.length; i += 1) {
-    const resolution = dataset.images[i].getResolution(dataset.images[0]);
+    const resolution = resolutionFor(dataset.images[i]);
     if (Math.max(Math.abs(resolution[0]), Math.abs(resolution[1])) <= requestedResolution) {
       imageIndex = i;
     } else {
@@ -737,7 +791,7 @@ async function readProjectedTile(
   const computeWindowForImage = (candidate: GeoTIFFImage) => {
     const imageWidth = candidate.getWidth();
     const imageHeight = candidate.getHeight();
-    const [resX, resY] = candidate.getResolution(dataset.images[0]);
+    const [resX, resY] = resolutionFor(candidate);
     const c0 = (clipped[0] - originX) / resX + pointShift;
     const c1 = (clipped[2] - originX) / resX + pointShift;
     const r0 = (clipped[1] - originY) / resY + pointShift;
@@ -991,6 +1045,8 @@ export async function registerCogDemSource(
   let images: GeoTIFFImage[];
   let sourceBounds: [number, number, number, number];
   let origin: [number, number];
+  let baseResolution: [number, number];
+  let baseDimensions: [number, number];
   let bounds: [number, number, number, number];
   let nodata: number | null;
   try {
@@ -1009,21 +1065,16 @@ export async function registerCogDemSource(
         isDemOverviewIfd(fileDirectoryValue(candidate.getFileDirectory(), "NewSubfileType")),
     );
     const rawOrigin = image.getOrigin();
-    const rawRes = image.getResolution();
-    if (
-      !Number.isFinite(rawOrigin[0]) ||
-      !Number.isFinite(rawOrigin[1]) ||
-      !Number.isFinite(rawRes[0]) ||
-      !Number.isFinite(rawRes[1]) ||
-      rawRes[0] === 0 ||
-      rawRes[1] === 0
-    ) {
+    const resolvedRes = extractAxisAlignedResolution(image);
+    if (!Number.isFinite(rawOrigin[0]) || !Number.isFinite(rawOrigin[1]) || !resolvedRes) {
       throw new CogDemError(
         "unsupported-projection",
-        "COG terrain requires an axis-aligned GeoTIFF with non-zero pixel resolution.",
+        "COG terrain requires an axis-aligned GeoTIFF without rotation or shear.",
       );
     }
     origin = [rawOrigin[0], rawOrigin[1]];
+    baseResolution = resolvedRes;
+    baseDimensions = [image.getWidth(), image.getHeight()];
     sourceBounds = image.getBoundingBox() as [number, number, number, number];
     bounds = geographicBounds(sourceBounds, projection, toWgs84);
     nodata = normalizeNoData(fileDirectoryValue(image.getFileDirectory(), "GDAL_NODATA"));
@@ -1039,6 +1090,8 @@ export async function registerCogDemSource(
     images,
     sourceBounds,
     origin,
+    baseResolution,
+    baseDimensions,
     pixelIsPoint,
     projection,
     mercatorToSource,

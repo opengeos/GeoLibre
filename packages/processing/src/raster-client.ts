@@ -45,6 +45,8 @@ export interface RasterData {
    * increases with pixel row. Absent/false = normal north-up (originY is the
    * northern edge). Lets georeferencing consumers handle flipped rasters. */
   flipY?: boolean;
+  /** True when the source GeoTIFF carried non-zero ModelTransformation rotation/shear terms. */
+  rotated?: boolean;
   /** NoData value, or null when the source declares none. */
   nodata: number | null;
   /** GeoTIFF GeoKeys carried through to the output so the CRS is preserved. */
@@ -122,6 +124,22 @@ export function padShortSampleFormat(image: GeoTiffImage): void {
 }
 
 /**
+ * Inspect only the GeoTIFF header to estimate the Float32 buffer size needed
+ * to decode this raster, without allocating or reading pixel data.
+ */
+export async function estimateRasterDataBytes(
+  bytes: ArrayBuffer,
+  options: { samples?: readonly number[] } = {},
+): Promise<number> {
+  const tiff = await fromArrayBuffer(bytes);
+  const image = await tiff.getImage();
+  const width = image.getWidth();
+  const height = image.getHeight();
+  const sampleCount = options.samples?.length ?? image.getSamplesPerPixel();
+  return width * height * sampleCount * Float32Array.BYTES_PER_ELEMENT;
+}
+
+/**
  * Decode GeoTIFF bytes into a {@link RasterData}.
  *
  * @param bytes GeoTIFF bytes.
@@ -151,7 +169,24 @@ export async function readRasterData(
     );
   }
   const [originX, originY] = image.getOrigin();
-  const [resolutionX, resolutionY] = image.getResolution();
+  let [resolutionX, resolutionY] = image.getResolution();
+  let rotated = false;
+  const modelTransform = image.fileDirectory.getValue("ModelTransformation") as
+    | ArrayLike<number>
+    | undefined;
+  if (modelTransform && modelTransform.length >= 16) {
+    if (Math.abs(modelTransform[1]) > 1e-12 || Math.abs(modelTransform[4]) > 1e-12) {
+      rotated = true;
+    } else if (
+      Number.isFinite(modelTransform[0]) &&
+      Number.isFinite(modelTransform[5]) &&
+      modelTransform[0] !== 0 &&
+      modelTransform[5] !== 0
+    ) {
+      resolutionX = modelTransform[0];
+      resolutionY = modelTransform[5];
+    }
+  }
 
   const result = await image.readRasters(
     options.samples ? { samples: [...options.samples] } : undefined,
@@ -173,6 +208,7 @@ export async function readRasterData(
     // placing features at the wrong location.
     flipX: resolutionX < 0,
     flipY: resolutionY > 0,
+    ...(rotated ? { rotated: true } : {}),
     nodata: noData != null && Number.isFinite(noData) ? noData : null,
     geoKeys: (image.getGeoKeys() as Record<string, unknown>) ?? {},
   };
@@ -588,21 +624,43 @@ export interface RasterCalcParams {
 }
 
 function gridsMatch(a: RasterData, b: RasterData): string | null {
+  if (a.rotated || b.rotated) {
+    return "uses a rotated or sheared transform that the in-browser calculator cannot combine";
+  }
   if (a.width !== b.width || a.height !== b.height) {
     return `dimensions (${b.width}×${b.height}) do not match raster A (${a.width}×${a.height})`;
   }
   if (Boolean(a.flipX) !== Boolean(b.flipX) || Boolean(a.flipY) !== Boolean(b.flipY)) {
     return "axis orientation does not match raster A";
   }
-  const tolX = 1e-6 * Math.max(1, Math.abs(a.resX), Math.abs(a.originX));
-  const tolY = 1e-6 * Math.max(1, Math.abs(a.resY), Math.abs(a.originY));
-  if (Math.abs(a.originX - b.originX) > tolX || Math.abs(a.originY - b.originY) > tolY) {
+  const absResX = Math.abs(a.resX);
+  const absResY = Math.abs(a.resY);
+  // Measure origin shift in pixel fractions independent of absolute CRS coordinates.
+  const originTolX = 1e-3 * (absResX > 0 ? absResX : 1);
+  const originTolY = 1e-3 * (absResY > 0 ? absResY : 1);
+  if (
+    Math.abs(a.originX - b.originX) > originTolX ||
+    Math.abs(a.originY - b.originY) > originTolY
+  ) {
     return "origin does not match raster A";
   }
-  const resTolX = 1e-6 * Math.max(1, Math.abs(a.resX));
-  const resTolY = 1e-6 * Math.max(1, Math.abs(a.resY));
-  if (Math.abs(a.resX - b.resX) > resTolX || Math.abs(a.resY - b.resY) > resTolY) {
+  // Check accumulated pixel displacement across the full raster width and height.
+  const farEdgeShiftX = Math.abs(a.resX - b.resX) * a.width;
+  const farEdgeShiftY = Math.abs(a.resY - b.resY) * a.height;
+  if (farEdgeShiftX > originTolX || farEdgeShiftY > originTolY) {
     return "pixel resolution does not match raster A";
+  }
+  const regA = a.geoKeys?.GTRasterTypeGeoKey ?? 1;
+  const regB = b.geoKeys?.GTRasterTypeGeoKey ?? 1;
+  if (regA !== regB) {
+    return "pixel registration (PixelIsArea vs PixelIsPoint) does not match raster A";
+  }
+  for (const crsKey of ["GeographicTypeGeoKey", "ProjectedCSTypeGeoKey"]) {
+    const av = a.geoKeys?.[crsKey];
+    const bv = b.geoKeys?.[crsKey];
+    if (av === 32767 || bv === 32767) {
+      return `uses a user-defined CRS (${crsKey}=32767) that the in-browser calculator cannot verify`;
+    }
   }
   for (const crsKey of ["GTModelTypeGeoKey", "GeographicTypeGeoKey", "ProjectedCSTypeGeoKey"]) {
     const av = a.geoKeys?.[crsKey];

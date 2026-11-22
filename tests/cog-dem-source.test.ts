@@ -363,4 +363,62 @@ describe("projected COG DEM warping", () => {
       reg.dispose();
     }
   });
+
+  it("reads signed ModelTransformation north-up DEMs and rejects rotated/sheared transforms", async () => {
+    const width = 8;
+    const height = 8;
+    const values = new Float32Array(width * height);
+    for (let r = 0; r < height; r += 1) {
+      for (let c = 0; c < width; c += 1) {
+        values[r * width + c] = 300 + r * 15 + c * 5;
+      }
+    }
+    // North-up UTM 17N DEM encoded via 4x4 ModelTransformation with negative Y scale (-500).
+    const northUpMatrixBuffer = await writeArrayBuffer(values, {
+      width,
+      height,
+      GTModelTypeGeoKey: 1,
+      GTRasterTypeGeoKey: 1,
+      ProjectedCSTypeGeoKey: 32617,
+      ModelTransformation: [500, 0, 0, 230_000, 0, -500, 0, 3_980_000, 0, 0, 0, 0, 0, 0, 0, 1],
+    });
+    const reg = await registerCogDemSource(new Blob([northUpMatrixBuffer]));
+    try {
+      assert.ok(reg.bounds);
+      const z = 12;
+      const lon = (reg.bounds[0] + reg.bounds[2]) / 2;
+      const lat = (reg.bounds[1] + reg.bounds[3]) / 2;
+      const n = 2 ** z;
+      const tileX = Math.floor(((lon + 180) / 360) * n);
+      const latRad = (lat * Math.PI) / 180;
+      const tileY = Math.floor(
+        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n,
+      );
+      const rgba = await reg.renderTile(z, tileX, tileY);
+      const decodeTerrarium = (idx: number) =>
+        rgba[idx * 4] * 256 + rgba[idx * 4 + 1] + rgba[idx * 4 + 2] / 256 - 32768;
+      let valid = 0;
+      for (let i = 0; i < 256 * 256; i += 1) {
+        const elev = decodeTerrarium(i);
+        if (elev >= 299 && elev <= 500) valid += 1;
+      }
+      assert.ok(valid > 100, `expected >100 DEM pixels from ModelTransformation, got ${valid}`);
+    } finally {
+      reg.dispose();
+    }
+
+    // Rotated/sheared ModelTransformation (off-diagonal terms != 0) must be rejected.
+    const rotatedBuffer = await writeArrayBuffer(values, {
+      width,
+      height,
+      GTModelTypeGeoKey: 1,
+      GTRasterTypeGeoKey: 1,
+      ProjectedCSTypeGeoKey: 32617,
+      ModelTransformation: [500, 50, 0, 230_000, 50, -500, 0, 3_980_000, 0, 0, 0, 0, 0, 0, 0, 1],
+    });
+    await assert.rejects(
+      () => registerCogDemSource(new Blob([rotatedBuffer])),
+      /without rotation or shear/,
+    );
+  });
 });
