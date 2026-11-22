@@ -93,6 +93,20 @@ function status(): string {
   return screen.getByTestId("attribute-table-status").textContent ?? "";
 }
 
+/** The toolbar's overflow menu, opened the way Radix listens for it (a primary-button press). */
+function openMoreMenu(): HTMLElement {
+  const trigger = screen.getByRole("button", { name: "More table actions" });
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+  return screen.getByRole("menu");
+}
+
+/** The visible text of each entry in an open menu, top to bottom. */
+function menuEntries(menu: HTMLElement): string[] {
+  return [...menu.querySelectorAll('[role="menuitem"], [role="menuitemcheckbox"]')].map(
+    (item) => item.textContent?.trim() ?? "",
+  );
+}
+
 describe("AttributeTable", () => {
   it("renders a column per attribute and a row per feature", () => {
     renderTable();
@@ -249,18 +263,25 @@ describe("AttributeTable", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh features" }));
+    fireEvent.click(within(openMoreMenu()).getByRole("menuitem", { name: "Refresh features" }));
 
     assert.deepEqual(refreshed, ["cities"]);
   });
 
   it("offers no Refresh for a layer with nothing to re-read", () => {
-    renderTable();
-    assert.equal(screen.queryByRole("button", { name: "Refresh features" }), null);
+    const view = renderTable();
+    assert.equal(
+      within(openMoreMenu()).queryByRole("menuitem", { name: "Refresh features" }),
+      null,
+    );
+    view.unmount();
 
     // Nor without a handler, even when the layer has a source URL.
     renderRefreshableTable({});
-    assert.equal(screen.queryByRole("button", { name: "Refresh features" }), null);
+    assert.equal(
+      within(openMoreMenu()).queryByRole("menuitem", { name: "Refresh features" }),
+      null,
+    );
   });
 
   it("disables Refresh while one is running and shows the layer's refresh note", () => {
@@ -270,8 +291,9 @@ describe("AttributeTable", () => {
         refreshStatuses: { cities: { type: "refreshing", message: "Refreshing..." } },
       },
     });
-    const button = screen.getByRole("button", { name: "Refresh features" });
-    assert.equal((button as HTMLButtonElement).disabled, true);
+    const item = within(openMoreMenu()).getByRole("menuitem", { name: "Refresh features" });
+    assert.equal(item.getAttribute("aria-disabled"), "true");
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
 
     view.rerender(
       createElement(AttributeTable, {
@@ -282,9 +304,96 @@ describe("AttributeTable", () => {
         },
       }),
     );
-    const settled = screen.getByRole("button", { name: "Refresh features" });
-    assert.equal((settled as HTMLButtonElement).disabled, false);
+    const settled = within(openMoreMenu()).getByRole("menuitem", { name: "Refresh features" });
+    assert.equal(settled.getAttribute("aria-disabled"), null);
     assert.ok(screen.getByText("HTTP 503"));
+  });
+
+  it("keeps the table's own controls in the toolbar and the rest in one overflow menu", () => {
+    renderTable();
+    const panel = screen.getByRole("region", { name: "Attribute table" });
+
+    for (const name of [
+      "Edit attribute values",
+      "Save attribute edits",
+      "Clear selection",
+      "More table actions",
+      "Collapse attribute table",
+      "Close attribute table",
+    ]) {
+      assert.ok(within(panel).getByRole("button", { name }), `missing ${name}`);
+    }
+    assert.ok(within(panel).getByRole("combobox", { name: "Feature view" }));
+    assert.ok(within(panel).getByRole("textbox", { name: "Search attributes" }));
+    // The moved actions are no longer toolbar buttons.
+    for (const name of [
+      "Add field",
+      "Calculate field values from an expression",
+      "Manage fields",
+      "Explore all fields at a glance",
+      "Field statistics",
+      "Charts",
+      "Dashboard",
+      "Export selected layer",
+    ]) {
+      assert.equal(within(panel).queryByRole("button", { name }), null, `${name} still a button`);
+    }
+    assert.equal(within(panel).queryByRole("checkbox", { name: "Zoom to selection" }), null);
+
+    assert.deepEqual(menuEntries(openMoreMenu()), [
+      "Add field",
+      "Field calculator",
+      "Manage fields",
+      "Column explorer",
+      "Field statistics",
+      "Charts",
+      "Dashboard",
+      "Export",
+      "Zoom to selection",
+    ]);
+  });
+
+  it("toggles Zoom to selection from the overflow menu", () => {
+    renderTable();
+    useAppStore.getState().setZoomToSelectedFeature(false);
+
+    const toggle = within(openMoreMenu()).getByRole("menuitemcheckbox", {
+      name: "Zoom to selection",
+    });
+    assert.equal(toggle.getAttribute("aria-checked"), "false");
+    fireEvent.click(toggle);
+    assert.equal(useAppStore.getState().ui.zoomToSelectedFeature, true);
+
+    const reopened = within(openMoreMenu()).getByRole("menuitemcheckbox", {
+      name: "Zoom to selection",
+    });
+    assert.equal(reopened.getAttribute("aria-checked"), "true");
+    fireEvent.click(reopened);
+    assert.equal(useAppStore.getState().ui.zoomToSelectedFeature, false);
+  });
+
+  it("opens the field and analysis dialogs from the overflow menu", () => {
+    renderTable();
+
+    fireEvent.click(within(openMoreMenu()).getByRole("menuitem", { name: "Add field" }));
+    assert.ok(screen.getByRole("dialog", { name: "Add field" }));
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+
+    fireEvent.click(within(openMoreMenu()).getByRole("menuitem", { name: "Field calculator" }));
+    assert.ok(screen.getByRole("dialog", { name: "Field calculator" }));
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+
+    fireEvent.click(within(openMoreMenu()).getByRole("menuitem", { name: "Field statistics" }));
+    assert.ok(screen.getByRole("dialog", { name: "Field statistics" }));
+  });
+
+  it("keeps only Export and Zoom to selection in the menu while editing", () => {
+    renderTable();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit attribute values" }));
+
+    assert.ok(screen.getByRole("button", { name: "Cancel attribute edits" }));
+    assert.deepEqual(menuEntries(openMoreMenu()), ["Export", "Zoom to selection"]);
   });
 
   it("closes from its close button", () => {
@@ -596,7 +705,7 @@ describe("draft target edge cases", () => {
 describe("GeoEditor Sketches attributes (#3534)", () => {
   it("adds a styling field and saves edits on the sketches layer", () => {
     renderTable(cities, { metadata: { sourceKind: "geoeditor-sketches" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+    fireEvent.click(within(openMoreMenu()).getByRole("menuitem", { name: "Add field" }));
     const dialog = screen.getByRole("dialog", { name: "Add field" });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Field name" }), {
       target: { value: "stroke" },
@@ -672,7 +781,7 @@ describe("protect hidden Sketches fields", () => {
   };
   it("rejects existing and new internal names when adding a field while allowing stroke", () => {
     renderTable(sketch, { metadata: { sourceKind: "geoeditor-sketches" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+    fireEvent.click(within(openMoreMenu()).getByRole("menuitem", { name: "Add field" }));
     const dialog = screen.getByRole("dialog", { name: "Add field" });
     const name = within(dialog).getByRole("textbox", { name: "Field name" });
     for (const value of ["__gm_shape", "__gm_custom"]) {
@@ -694,9 +803,7 @@ describe("protect hidden Sketches fields", () => {
   });
   it("rejects internal calculator targets while allowing ordinary fields", () => {
     renderTable(sketch, { metadata: { sourceKind: "geoeditor-sketches" } });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Calculate field values from an expression" }),
-    );
+    fireEvent.click(within(openMoreMenu()).getByRole("menuitem", { name: "Field calculator" }));
     const dialog = screen.getByRole("dialog", { name: "Field calculator" });
     fireEvent.change(dialog.querySelector("#calc-target-mode")!, { target: { value: "create" } });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Expression" }), {

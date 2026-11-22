@@ -55,7 +55,8 @@ test("Sketches attribute saves preserve unfinished drawing and GeoEditor undo hi
   const table = page.getByTestId("attribute-table");
   await expect(table).toBeVisible();
   await expect(table.getByRole("columnheader").filter({ hasText: "__gm_" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Add field", exact: true }).click();
+  await page.getByRole("button", { name: "More table actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Add field", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Add field", exact: true });
   await dialog.getByRole("textbox", { name: "Field name", exact: true }).fill("category");
   await dialog.getByRole("textbox", { name: "Default value", exact: true }).fill("Original");
@@ -241,7 +242,8 @@ test("Sketches table edits survive another layer's edit session", async ({ page 
   await expect(other.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
   await layerRow(page, "Sketches").getByRole("button", { name: "Layer actions" }).click();
   await page.getByRole("menuitem", { name: "Open attribute table", exact: true }).click();
-  await page.getByRole("button", { name: "Add field", exact: true }).click();
+  await page.getByRole("button", { name: "More table actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Add field", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Add field", exact: true });
   await dialog.getByRole("textbox", { name: "Field name", exact: true }).fill("category");
   await dialog.getByRole("textbox", { name: "Default value", exact: true }).fill("During session");

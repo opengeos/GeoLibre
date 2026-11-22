@@ -8815,6 +8815,7 @@
     "charts": "Charts",
     "dashboardTitle": "Open the dashboard to build chart widgets",
     "dashboard": "Dashboard",
+    "moreActions": "More table actions",
     "exportSelectedLayer": "Export selected layer",
     "exportTitleDisabled": "Export requires a GeoJSON-backed layer",
     "exportTitleCapabilityDisabled": "Export is disabled for this layer",

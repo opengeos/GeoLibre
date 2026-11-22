@@ -179,7 +179,8 @@ async function setUpIdentifyOverContextSelection(page: Page): Promise<Camera> {
     .getByRole("button", { name: "Collapse Layers", exact: true })
     .click();
 
-  await page.getByLabel("Zoom to selection").check();
+  await page.getByRole("button", { name: "More table actions", exact: true }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Zoom to selection", exact: true }).click();
   await attributeRows(page).first().click();
   await expect(page.getByTestId("attribute-table-status")).toContainText("1 selected");
   await waitForCameraIdle(page);
