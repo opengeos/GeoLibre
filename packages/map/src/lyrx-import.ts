@@ -208,7 +208,7 @@ function partial(issue: CimRendererIssue): string {
     case "effects":
       return `A geometric effect in the .lyrx style (${
         typeName(issue.cimType, /^GeometricEffect/) || "unnamed"
-      }) was not imported, so the symbols draw solid and in place.`;
+      }) was not imported, so the symbols draw without it.`;
     case "marker-shape":
       return `The .lyrx style's ${name} is drawn as a circle, not in its own shape.`;
     case "alternate-symbols":
