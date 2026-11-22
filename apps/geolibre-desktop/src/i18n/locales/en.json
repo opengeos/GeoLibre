@@ -1,4 +1,35 @@
 {
+  "gcsExport": {
+    "title": "Harvest & Export to GCS",
+    "backendUrl": "Backend URL (Cloud Run)",
+    "apiKey": "API Key",
+    "dataUrl": "Data URL (portal or direct file)",
+    "licence": "Licence (direct downloads)",
+    "dryRun": "Dry run (no GCS/Wherobots writes)",
+    "skipWherobots": "Skip Wherobots",
+    "lastExecution": "Last job: {{id}}",
+    "backendContinues": "Closing this dialog stops local polling only; the backend job keeps running.",
+    "running": "Running…",
+    "run": "Harvest & Export",
+    "resume": "Resume job observation",
+    "helpTitle": "What is this and how do I use it?",
+    "helpWhat": "This harvests a public portal dataset (CKAN, Opendatasoft, ArcGIS REST, or a direct GeoJSON/GeoPackage/Shapefile/KML/CSV file) into a GeoParquet file in your own Google Cloud Storage bucket, with QA and optional Wherobots loading.",
+    "helpBackend": "You bring your own backend (BYOK): deploy the harvester service into your own GCP project, then paste its HTTPS URL and API key here. No shared bucket or key is provided.",
+    "helpStep1": "Deploy the backend: see <deployLink>deploy/harvester_service</deployLink> and <scriptLink>tools/harvest_portal_dataset.py</scriptLink>.",
+    "helpStep2": "Set OIC_GCP_PROJECT, OIC_GCS_BUCKET, HARVESTER_API_KEY (and optionally WHEROBOTS_API_KEY) as Cloud Run env vars / secrets.",
+    "helpStep3": "Paste the resulting Cloud Run URL and API key above.",
+    "helpStep4": "Enter a portal or direct data URL, choose dry-run or live, and run.",
+    "helpByok": "Your data and credentials stay in your own GCP project; this app only talks to the backend you configure.",
+    "errors": {
+      "dataUrlRequired": "Data URL is required",
+      "httpsBackendRequired": "Enter an HTTPS backend URL without credentials, query, or fragment.",
+      "http": "HTTP {{status}}",
+      "missingExecution": "Missing harvest execution ID",
+      "harvestFailed": "Harvest failed",
+      "invalidStatus": "The backend returned an unknown harvest status.",
+      "timeout": "Harvest observation timed out. Check the backend for its final status."
+    }
+  },
   "mcpPreview": {
     "networkConsent": {
       "previewLabel": "GeoLibre map preview",
@@ -4216,6 +4247,7 @@
       "vtpkLayer": "ArcGIS VTPK/TPKX layer",
       "stacLayer": "STAC layer",
       "geoparquetLayer": "GeoParquet layer",
+      "harvestToGcs": "Harvest to Google Cloud Storage (GCS)",
       "flatgeobufLayer": "FlatGeobuf layer",
       "pmtilesLayer": "PMTiles layer",
       "basemapExtract": "Offline basemap extract",

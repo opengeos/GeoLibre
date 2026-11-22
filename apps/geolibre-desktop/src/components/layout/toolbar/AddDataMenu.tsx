@@ -40,6 +40,7 @@ interface AddDataMenuProps {
   onAddGltfModel: () => void;
   onOpenOsmPbfDialog: () => void;
   onOpenTilePackageDialog: () => void;
+  onOpenGcsHarvest?: () => void;
 }
 
 interface AddDataItem {
@@ -58,6 +59,7 @@ export function AddDataMenu({
   onAddGltfModel,
   onOpenOsmPbfDialog,
   onOpenTilePackageDialog,
+  onOpenGcsHarvest,
 }: AddDataMenuProps) {
   const { t } = useTranslation();
   const uiProfile = useDesktopSettingsStore((state) => state.desktopSettings.uiProfile);
@@ -207,6 +209,11 @@ export function AddDataMenu({
                 </DropdownMenuItem>
               );
             })}
+            {group.section === "cloud" && onOpenGcsHarvest ? (
+              <DropdownMenuItem onSelect={onOpenGcsHarvest}>
+                {t("toolbar.item.harvestToGcs")}
+              </DropdownMenuItem>
+            ) : null}
           </Fragment>
         ))}
         <PluginMenuContributions target="addData" />
