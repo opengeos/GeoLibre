@@ -426,8 +426,11 @@ describe("projected COG DEM warping", () => {
   it("groups chunked DEM reads by storage block and samples exact centred columns without resize bias", async () => {
     const imgW = 32;
     const imgH = 16;
-    const calls: Array<{ window: [number, number, number, number]; width?: number; height?: number }> =
-      [];
+    const calls: Array<{
+      window: [number, number, number, number];
+      width?: number;
+      height?: number;
+    }> = [];
     const fakeImage = {
       getTileHeight: () => 4,
       getTileWidth: () => 8,
@@ -464,8 +467,16 @@ describe("projected COG DEM warping", () => {
     );
     assert.equal(calls.length, 2, `expected 2 block-aligned chunk reads, got ${calls.length}`);
     for (const c of calls) {
-      assert.equal(c.width, undefined, "must read native resolution without geotiff horizontal resize");
-      assert.equal(c.height, undefined, "must read native resolution without geotiff vertical resize");
+      assert.equal(
+        c.width,
+        undefined,
+        "must read native resolution without geotiff horizontal resize",
+      );
+      assert.equal(
+        c.height,
+        undefined,
+        "must read native resolution without geotiff vertical resize",
+      );
       const [l, t, r, b] = c.window;
       assert.ok((r - l) * (b - t) <= 256, "each read must stay within native pixel budget");
     }

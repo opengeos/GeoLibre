@@ -562,11 +562,8 @@ describe("readRasterData with a short SampleFormat tag", () => {
 
 describe("client-raster-inputs helper", () => {
   it("maps secondary parameter ids, omits cleared inputs, and enforces combined memory budget", async () => {
-    const {
-      loadClientAdditionalRasters,
-      omitClientSecondaryInput,
-      secondaryRasterLetterForParam,
-    } = await import("../apps/geolibre-desktop/src/lib/client-raster-inputs");
+    const { loadClientAdditionalRasters, omitClientSecondaryInput, secondaryRasterLetterForParam } =
+      await import("../apps/geolibre-desktop/src/lib/client-raster-inputs");
 
     assert.equal(secondaryRasterLetterForParam("b_path"), "B");
     assert.equal(secondaryRasterLetterForParam("c_path"), "C");
@@ -594,11 +591,15 @@ describe("client-raster-inputs helper", () => {
     );
     assert.equal(readCalls, 0, "must reject oversized combined inputs before decoding bytes");
 
-    const decoded = await loadClientAdditionalRasters(primary, { B: inputs.B }, {
-      maxBytes: 1024,
-      estimateBytes: async () => 16,
-      readRaster: async () => primary,
-    });
+    const decoded = await loadClientAdditionalRasters(
+      primary,
+      { B: inputs.B },
+      {
+        maxBytes: 1024,
+        estimateBytes: async () => 16,
+        readRaster: async () => primary,
+      },
+    );
     assert.deepEqual(Object.keys(decoded ?? {}), ["B"]);
   });
 });

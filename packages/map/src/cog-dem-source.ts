@@ -699,7 +699,9 @@ export async function readProjectedWindowBounded(
       const srcRowOffset = (nativeRows[dstRow] - top) * winW;
       const dstRowOffset = dstRow * readWidth;
       for (let dstCol = 0; dstCol < readWidth; dstCol += 1) {
-        combined[dstRowOffset + dstCol] = Number(native[srcRowOffset + (nativeCols[dstCol] - left)]);
+        combined[dstRowOffset + dstCol] = Number(
+          native[srcRowOffset + (nativeCols[dstCol] - left)],
+        );
       }
     }
     return combined;
@@ -738,7 +740,9 @@ export async function readProjectedWindowBounded(
         const srcRowOffset = (nativeRows[dstRow] - chunkTop) * winW;
         const dstRowOffset = dstRow * readWidth;
         for (let dstCol = 0; dstCol < readWidth; dstCol += 1) {
-          combined[dstRowOffset + dstCol] = Number(strip[srcRowOffset + (nativeCols[dstCol] - left)]);
+          combined[dstRowOffset + dstCol] = Number(
+            strip[srcRowOffset + (nativeCols[dstCol] - left)],
+          );
         }
       }
       startIdx = endIdx;
