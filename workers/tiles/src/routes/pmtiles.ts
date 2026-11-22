@@ -38,6 +38,11 @@ async function resolveLatestBuildDate(): Promise<string> {
   }
   for (let i = 0; i <= LATEST_MAX_LOOKBACK_DAYS; i++) {
     const ymd = utcYmd(now - i * 86_400_000);
+    // Deliberately NOT edge-cached: `cacheEverything` would cache this 1-byte
+    // 206 under the URL-only cache key for `<ymd>.pmtiles` (the very URL
+    // handlePmtilesRange fetches next), so a later real range read could be
+    // served this 1-byte body instead of its bytes. The resolved date is
+    // memoized in `latestCache` already.
     const probe = await (async () => {
       try {
         return await fetchAllowlistedUpstream(`${PMTILES_UPSTREAM}/${ymd}.pmtiles`, {
@@ -56,7 +61,13 @@ async function resolveLatestBuildDate(): Promise<string> {
   throw new Error("no recent Protomaps build found");
 }
 
-/** Range-proxy a bounded byte span from Protomaps daily planet builds. */
+/**
+ * Range-proxy a bounded byte span from Protomaps daily planet builds.
+ *
+ * Deliberately not origin-gated: Jupyter and embed builds run on arbitrary
+ * origins and legitimately extract offline basemaps through this route. Abuse
+ * is instead bounded by the per-request 32 MiB range cap above.
+ */
 export async function handlePmtilesRange(request: Request, name: string): Promise<Response> {
   const range = request.headers.get("range");
   if (!range) {
@@ -85,6 +96,10 @@ export async function handlePmtilesRange(request: Request, name: string): Promis
   }
   let originResponse: Response;
   try {
+    // Deliberately no `cf.cacheEverything`: Cloudflare's default cache key is
+    // URL-only and ignores `Range`, so a cached 206 for one range could be
+    // served for another range of the same file, corrupting the bytes a PMTiles
+    // reader assembles.
     originResponse = await fetchAllowlistedUpstream(`${PMTILES_UPSTREAM}/${target}`, {
       headers: { range },
     });

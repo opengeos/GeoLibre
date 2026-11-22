@@ -566,7 +566,7 @@ pub(crate) async fn download_remote_file(
         cache_dir(&app)?.join(format!("{request_tag}-{file_name}"))
     };
 
-    let task = downloads
+    let (task, _guard) = downloads
         .active
         .try_register_with(request_id.clone(), || {
             let task = tauri::async_runtime::spawn(transfer(
@@ -582,8 +582,6 @@ pub(crate) async fn download_remote_file(
             (task, Box::new(move || abort.abort()))
         })
         .map_err(|()| "Duplicate request ID.".to_string())?;
-    let _guard =
-        crate::in_flight::CancelGuard::new(downloads.inner().active.clone(), request_id.clone());
     let mut cache_guard = PartFile {
         path: destination.clone(),
         done: saves_to_disk,

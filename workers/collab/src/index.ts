@@ -100,15 +100,22 @@ export default {
       }
 
       const clientKey = request.headers.get("CF-Connecting-IP") ?? origin ?? "anonymous";
+      let rateLimited = false;
       if (env.COLLAB_RATE_LIMITER) {
-        const outcome = await env.COLLAB_RATE_LIMITER.limit({ key: clientKey });
-        if (!outcome.success) {
-          return json(
-            { error: "Too many session creation requests. Please try again later." },
-            429,
+        try {
+          const outcome = await env.COLLAB_RATE_LIMITER.limit({ key: clientKey });
+          rateLimited = !outcome.success;
+        } catch (err) {
+          console.warn(
+            "[collab] COLLAB_RATE_LIMITER.limit failed; falling back to in-memory limiter:",
+            err,
           );
+          rateLimited = !checkRateLimit(clientKey);
         }
-      } else if (!checkRateLimit(clientKey)) {
+      } else {
+        rateLimited = !checkRateLimit(clientKey);
+      }
+      if (rateLimited) {
         return json({ error: "Too many session creation requests. Please try again later." }, 429);
       }
 

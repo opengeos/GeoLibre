@@ -30,7 +30,7 @@ period = 60
 enabled = true
 
 [observability.logs]
-head_sampling_rate = 1
+head_sampling_rate = 0.05
 
 [observability.traces]
 enabled = true

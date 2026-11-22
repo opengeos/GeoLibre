@@ -874,7 +874,7 @@ export function createAppAPI(
       data: Blob | Uint8Array,
       options?: GeoLibreFileDialogOptions,
     ) => {
-      const extensions = options?.extensions ?? ["bin"];
+      const extensions = options?.extensions?.length ? options.extensions : ["bin"];
       const description = options?.description ?? (extensions[0]?.toUpperCase() || "BIN");
       const mimeType = options?.mimeType ?? "application/octet-stream";
       const acceptMime = mimeType.split(";")[0].trim() || "application/octet-stream";

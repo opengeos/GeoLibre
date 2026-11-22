@@ -128,7 +128,7 @@ pub(crate) fn write_file_atomic(
 
     if let Err(err) = finish_result {
         let _ = fs::remove_file(&temp_path);
-        return Err(AppError::io("Could not replace target file", err));
+        return Err(AppError::from(err));
     }
     Ok(())
 }

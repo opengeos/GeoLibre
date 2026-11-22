@@ -233,15 +233,14 @@ pub(crate) async fn plugin_http_request(
     ready: tauri::ipc::Channel<()>,
     requests: tauri::State<'_, PluginHttpRequests>,
 ) -> Result<PluginHttpResponse, String> {
-    let task = requests
+    let (task, _guard) = requests
         .0
-        .try_register_with(request_id.clone(), || {
+        .try_register_with(request_id, || {
             let task = tauri::async_runtime::spawn(send(request));
             let abort = task.inner().abort_handle();
             (task, Box::new(move || abort.abort()))
         })
         .map_err(|()| "Duplicate request ID.".to_string())?;
-    let _guard = crate::in_flight::CancelGuard::new(requests.inner().0.clone(), request_id);
     ready
         .send(())
         .map_err(|_| "Request caller disconnected.".to_string())?;

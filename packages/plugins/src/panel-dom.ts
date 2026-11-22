@@ -184,6 +184,7 @@ export interface PluginModalOptions {
   body: HTMLElement | string;
   actions?: readonly HTMLElement[];
   maxWidthPx?: number;
+  /** Localized accessible label for the close button (callers should pass a translated string). */
   closeLabel?: string;
   onClose?: () => void;
 }
@@ -194,7 +195,8 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
   const selector =
     'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
   return Array.from(container.querySelectorAll<HTMLElement>(selector)).filter(
-    (node) => node.offsetParent !== null || node === document.activeElement,
+    (node) =>
+      !node.matches(":disabled") && (node.offsetParent !== null || node === document.activeElement),
   );
 }
 
@@ -261,8 +263,15 @@ export function createModalDialog(options: PluginModalOptions): {
       }
     }
   };
+  // Close only when the press also started on the backdrop, so dragging a text
+  // selection from inside the dialog and releasing outside does not dismiss it.
+  let pressStartedOnOverlay = false;
+  overlay.addEventListener("pointerdown", (event) => {
+    pressStartedOnOverlay = event.target === overlay;
+  });
   overlay.addEventListener("click", (event) => {
-    if (event.target === overlay) close();
+    if (pressStartedOnOverlay && event.target === overlay) close();
+    pressStartedOnOverlay = false;
   });
   window.addEventListener("keydown", onKeyDown);
 

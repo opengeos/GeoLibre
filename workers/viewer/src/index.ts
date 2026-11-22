@@ -21,14 +21,18 @@ interface Env {
 
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
-    if (env.VIEWER_RATE_LIMITER) {
+    if (env?.VIEWER_RATE_LIMITER) {
       const key = request.headers.get("CF-Connecting-IP") ?? "anonymous";
-      const outcome = await env.VIEWER_RATE_LIMITER.limit({ key });
-      if (!outcome.success) {
-        return new Response("Too many requests", {
-          status: 429,
-          headers: { "Retry-After": "60" },
-        });
+      try {
+        const outcome = await env.VIEWER_RATE_LIMITER.limit({ key });
+        if (!outcome.success) {
+          return new Response("Too many requests", {
+            status: 429,
+            headers: { "Retry-After": "60" },
+          });
+        }
+      } catch (err) {
+        console.warn("VIEWER_RATE_LIMITER error:", err);
       }
     }
     return proxyViewerRequest(request);

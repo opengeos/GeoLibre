@@ -1,8 +1,11 @@
 // tiles.geolibre.app
 //
 // A CORS-adding, edge-caching tile and service proxy for GeoLibre, keyed to a
-// tight allowlist so it is never an open proxy. Route handlers are organized by
-// upstream domain under `./routes/`.
+// tight allowlist so it is never an open proxy. OpenPlanetaryMap S3 buckets
+// send no CORS headers (and use TMS flipped Y, handled client-side by MapLibre;
+// USGS planetary WMS moved client-side via `usgs-wms://` because USGS blocks
+// Worker egress with 403). Service routes are organized by upstream domain
+// under `./routes/`.
 
 import { fetchAllowlistedUpstream } from "./allowlisted-fetch";
 import {
@@ -44,6 +47,9 @@ async function handleOpmTile(
   match: RegExpExecArray,
 ): Promise<Response> {
   const [, dataset, z, x, y] = match;
+  // Own properties only: a bare object literal inherits keys like "constructor"
+  // from Object.prototype (and `[a-z0-9-]+` matches it), which would otherwise
+  // resolve to a truthy function and slip past the 404 check below.
   const base = Object.hasOwn(DATASETS, dataset) ? DATASETS[dataset] : undefined;
   if (!base) {
     return new Response(`Unknown dataset: ${dataset}`, {
@@ -114,18 +120,23 @@ export const tilesWorker = {
     const limitGroup = rateLimitGroup(url.pathname);
     if (limitGroup && env?.TILES_RATE_LIMITER) {
       const ip = request.headers.get("CF-Connecting-IP") ?? "anonymous";
-      const outcome = await env.TILES_RATE_LIMITER.limit({ key: `${limitGroup}:${ip}` });
-      if (!outcome.success) {
-        const headers =
-          url.pathname === OVERPASS_PATH
-            ? OVERPASS_CORS_HEADERS
-            : url.pathname === EARTHDATA_DOWNLOAD_PATH
-              ? EARTHDATA_CORS_HEADERS
-              : CORS_HEADERS;
-        return new Response("Too Many Requests", {
-          status: 429,
-          headers: { ...headers, "retry-after": "60" },
-        });
+      try {
+        const outcome = await env.TILES_RATE_LIMITER.limit({ key: `${limitGroup}:${ip}` });
+        if (!outcome.success) {
+          const headers =
+            url.pathname === OVERPASS_PATH
+              ? OVERPASS_CORS_HEADERS
+              : url.pathname === EARTHDATA_DOWNLOAD_PATH
+                ? EARTHDATA_CORS_HEADERS
+                : CORS_HEADERS;
+          return new Response("Too Many Requests", {
+            status: 429,
+            headers: { ...headers, "retry-after": "60" },
+          });
+        }
+      } catch (err) {
+        // Fail open on transient binding errors rather than returning 500.
+        console.warn("TILES_RATE_LIMITER error:", err);
       }
     }
 
