@@ -8,3 +8,21 @@ compatibility_date = "2025-03-01"
 [[routes]]
 pattern = "viewer.geolibre.app"
 custom_domain = true
+
+[[ratelimits]]
+name = "VIEWER_RATE_LIMITER"
+namespace_id = "54704"
+
+[ratelimits.simple]
+limit = 2000
+period = 60
+
+[observability]
+enabled = true
+
+[observability.logs]
+head_sampling_rate = 0.05
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 0.01

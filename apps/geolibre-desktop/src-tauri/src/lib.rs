@@ -1,6 +1,10 @@
+mod app_error;
 mod arcgis_http;
 mod aws_credentials;
 mod aws_sts;
+mod fs_util;
+mod http_client;
+mod in_flight;
 mod plugin_http;
 mod remote_download;
 // Earth Engine sign-in uses Google's OAuth loopback-redirect flow, which binds
@@ -1210,10 +1214,6 @@ pub(crate) fn is_unc_resolved_path(resolved: &str) -> bool {
     }
 }
 
-/// Distinguishes concurrent writes to the same file (a double-clicked save), so
-/// they never share a temporary file.
-static GEOJSON_WRITE_COUNTER: AtomicU64 = AtomicU64::new(0);
-
 /// Overwrite an existing local GeoJSON file with edited contents, for Layer
 /// actions > Save edits to source file (GeoLibre#2439).
 ///
@@ -1274,38 +1274,17 @@ fn write_local_geojson_file(path: String, contents: String) -> Result<(), String
     let permissions = fs::metadata(&canonical)
         .map_err(|error| format!("Could not save to source file: {error}"))?
         .permissions();
-    let file_name = canonical
-        .file_name()
-        .ok_or_else(|| format!("Refusing to write \"{path}\": no file name"))?;
-    let mut temp_name = std::ffi::OsString::from(".");
-    temp_name.push(file_name);
-    temp_name.push(format!(
-        ".geolibre-{}-{}.tmp",
-        std::process::id(),
-        GEOJSON_WRITE_COUNTER.fetch_add(1, Ordering::Relaxed)
-    ));
-    let temp = canonical.with_file_name(temp_name);
-    // `create_new` refuses a path that already exists, so a symlink planted at
-    // the temporary name cannot redirect the write. The file starts owner-only
-    // (Unix) so the contents are never readable more widely than intended, and
-    // takes the target's permissions before the rename so a restrictive (e.g.
-    // 0600) source is not loosened.
-    let mut options = fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    let write = options
-        .open(&temp)
-        .and_then(|mut file| {
-            std::io::Write::write_all(&mut file, contents.as_bytes())?;
-            file.sync_all()
-        })
-        .and_then(|()| fs::set_permissions(&temp, permissions))
-        .and_then(|()| fs::rename(&temp, &canonical));
-    if let Err(error) = write {
-        let _ = fs::remove_file(&temp);
-        return Err(format!("Could not save to source file: {error}"));
-    }
+    fs_util::write_file_atomic(
+        &canonical,
+        contents.as_bytes(),
+        fs_util::AtomicWriteOptions {
+            create_parents: false,
+            owner_only_unix: true,
+            sync: true,
+            preserve_permissions: Some(permissions),
+        },
+    )
+    .map_err(|error| format!("Could not save to source file: {error}"))?;
     Ok(())
 }
 
@@ -3653,10 +3632,7 @@ fn stop_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<(), String> {
     if let Ok(_lifecycle) = state.lifecycle.try_lock() {
         let should_reap_port = || {
             state.generation.load(std::sync::atomic::Ordering::SeqCst) == stop_gen
-                && state
-                    .process
-                    .lock()
-                    .is_ok_and(|process| process.is_none())
+                && state.process.lock().is_ok_and(|process| process.is_none())
         };
         let base_url = sidecar_base_url();
         if should_reap_port() && sidecar_health_is_ready(&base_url) {
@@ -7841,13 +7817,9 @@ mod tests {
 
     #[test]
     fn read_mbtiles_tile_rejects_excessive_zoom() {
-        let err = super::read_mbtiles_tile_blocking(
-            "/tmp/nonexistent.mbtiles".to_string(),
-            63,
-            0,
-            0,
-        )
-        .expect_err("zoom 63 must be rejected");
+        let err =
+            super::read_mbtiles_tile_blocking("/tmp/nonexistent.mbtiles".to_string(), 63, 0, 0)
+                .expect_err("zoom 63 must be rejected");
         assert!(err.contains("zoom level is too large"));
     }
 

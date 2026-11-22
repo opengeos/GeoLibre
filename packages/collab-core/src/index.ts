@@ -8,6 +8,7 @@
 // reaching for a browser global should be a type error, not a runtime crash.
 
 export * from "./comment-validate";
+export * from "./handlers";
 export * from "./identity";
 export * from "./protocol";
 export * from "./session";

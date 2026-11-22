@@ -1,10 +1,6 @@
 //! ArcGIS REST transport, separate from the host-scoped HTTP plugin.
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use reqwest::{redirect::Policy, Url};
@@ -122,26 +118,12 @@ fn client() -> Result<reqwest::Client, String> {
         .clone()
 }
 
-type CancelRequest = Box<dyn Fn() + Send + Sync>;
-
 #[derive(Default, Clone)]
-pub(crate) struct ArcGISRequests(Arc<Mutex<HashMap<String, CancelRequest>>>);
+pub(crate) struct ArcGISRequests(crate::in_flight::CancelRegistry);
 
 impl ArcGISRequests {
     fn cancel(&self, id: &str) {
-        if let Some(cancel) = self.0.lock().unwrap().remove(id) {
-            cancel();
-        }
-    }
-}
-
-struct RequestGuard {
-    requests: ArcGISRequests,
-    id: String,
-}
-impl Drop for RequestGuard {
-    fn drop(&mut self) {
-        self.requests.cancel(&self.id);
+        self.0.cancel(id);
     }
 }
 
@@ -366,20 +348,14 @@ pub(crate) async fn fetch_arcgis_response(
         (None, None, None) => None,
         _ => return Err("Invalid ArcGIS request body.".into()),
     };
-    let task = {
-        let mut active = requests.0.lock().unwrap();
-        if active.contains_key(&request_id) {
-            return Err("Duplicate ArcGIS request ID.".into());
-        }
-        let task = tauri::async_runtime::spawn(request(url, body));
-        let abort = task.inner().abort_handle();
-        active.insert(request_id.clone(), Box::new(move || abort.abort()));
-        task
-    };
-    let _guard = RequestGuard {
-        requests: requests.inner().clone(),
-        id: request_id,
-    };
+    let (task, _guard) = requests
+        .0
+        .try_register_with(request_id, || {
+            let task = tauri::async_runtime::spawn(request(url, body));
+            let abort = task.inner().abort_handle();
+            (task, Box::new(move || abort.abort()))
+        })
+        .map_err(|()| "Duplicate ArcGIS request ID.".to_string())?;
     ready
         .send(())
         .map_err(|_| "ArcGIS caller disconnected.".to_string())?;
@@ -578,16 +554,15 @@ mod tests {
         let task = tauri::async_runtime::spawn(request(url, None));
         let abort = task.inner().abort_handle();
         let requests = ArcGISRequests::default();
-        requests
+        let _guard = requests
             .0
-            .lock()
-            .unwrap()
-            .insert("test".into(), Box::new(move || abort.abort()));
+            .try_register("test".into(), Box::new(move || abort.abort()))
+            .unwrap();
         started_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         requests.cancel("test");
         assert!(tauri::async_runtime::block_on(task).is_err());
         assert!(closed_rx.recv_timeout(Duration::from_secs(5)).unwrap());
-        assert!(requests.0.lock().unwrap().is_empty());
+        assert!(requests.0.is_empty());
         server.join().unwrap();
     }
 }

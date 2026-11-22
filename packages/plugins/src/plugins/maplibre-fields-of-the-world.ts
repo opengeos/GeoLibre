@@ -8,6 +8,7 @@ import type {
   MapLayerMouseEvent,
   MapMouseEvent,
 } from "maplibre-gl";
+import { saveBinaryFileWithHost } from "../panel-dom";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
   FTW_COVERAGE_BINS,
@@ -377,16 +378,11 @@ async function saveBlob(
   if (fileSaver) {
     return (await fileSaver(blob, options)) !== null;
   }
-  const url = URL.createObjectURL(blob);
-  try {
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = options.defaultName;
-    anchor.click();
-  } finally {
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-  return true;
+  return saveBinaryFileWithHost(appRef, options.defaultName, blob, {
+    extensions: [options.extension],
+    mimeType: options.mimeType,
+    description: options.description,
+  });
 }
 
 /** Fetches a file into memory, reporting progress as bytes arrive. */

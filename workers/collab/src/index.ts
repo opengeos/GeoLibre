@@ -11,7 +11,7 @@
 // The session code namespaces the Durable Object (idFromName), so every
 // participant of a session lands on the same actor and gets fanned out to.
 
-import { isIdentityConfigured } from "@geolibre/collab-core";
+import { isAllowedOrigin, isIdentityConfigured } from "@geolibre/collab-core";
 import { CollabSession, type Env } from "./session";
 
 export { CollabSession };
@@ -42,54 +42,6 @@ function cleanupRateLimitMap(now: number): void {
     rateLimitMap.delete(oldestKey);
   }
   lastRateLimitSweep = now;
-}
-
-function isAllowedOrigin(originHeader: string | null, envAllowed?: string): boolean {
-  if (!originHeader) return true;
-  const allowedList = envAllowed
-    ? envAllowed
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [
-        "https://geolibre.app",
-        "https://web.geolibre.app",
-        "https://viewer.geolibre.app",
-        "https://studio.geolibre.app",
-        "https://collab.geolibre.app",
-        "http://localhost",
-        "http://127.0.0.1",
-        "tauri://localhost",
-      ];
-
-  try {
-    const originUrl = new URL(originHeader);
-    const host = originUrl.hostname;
-    if (!envAllowed) {
-      if (host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost")) return true;
-      const previewSuffix = ".geolibre-preview.pages.dev";
-      const previewLabel = host.endsWith(previewSuffix) ? host.slice(0, -previewSuffix.length) : "";
-      if (
-        originUrl.protocol === "https:" &&
-        !originUrl.port &&
-        previewLabel &&
-        !previewLabel.includes(".")
-      ) {
-        return true;
-      }
-    }
-    return allowedList.some((allowed) => {
-      if (allowed === "*") return true;
-      try {
-        const allowedUrl = new URL(allowed);
-        return originUrl.origin === allowedUrl.origin;
-      } catch {
-        return originHeader === allowed || host === allowed;
-      }
-    });
-  } catch {
-    return false;
-  }
 }
 
 function checkRateLimit(key: string, maxRequests = 10, windowMs = 60_000): boolean {
@@ -148,7 +100,22 @@ export default {
       }
 
       const clientKey = request.headers.get("CF-Connecting-IP") ?? origin ?? "anonymous";
-      if (!checkRateLimit(clientKey)) {
+      let rateLimited = false;
+      if (env.COLLAB_RATE_LIMITER) {
+        try {
+          const outcome = await env.COLLAB_RATE_LIMITER.limit({ key: clientKey });
+          rateLimited = !outcome.success;
+        } catch (err) {
+          console.warn(
+            "[collab] COLLAB_RATE_LIMITER.limit failed; falling back to in-memory limiter:",
+            err,
+          );
+          rateLimited = !checkRateLimit(clientKey);
+        }
+      } else {
+        rateLimited = !checkRateLimit(clientKey);
+      }
+      if (rateLimited) {
         return json({ error: "Too many session creation requests. Please try again later." }, 429);
       }
 

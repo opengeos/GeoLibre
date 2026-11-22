@@ -268,6 +268,17 @@ export interface GeoLibreAppAPI {
     content: string,
     options?: GeoLibreFileDialogOptions
   ) => void;
+  // Save binary plugin output (`Blob` or `Uint8Array`) through the host's
+  // native or browser file dialog. Resolves to the saved path/name, or null
+  // when the user cancels on desktop or in browsers with the File System Access
+  // picker (`showSaveFilePicker`); browsers using the download fallback cannot
+  // detect cancellation and resolve to the file name unless `promptName` is
+  // cancelled first.
+  saveBinaryFile?: (
+    filename: string,
+    data: Blob | Uint8Array,
+    options?: GeoLibreFileDialogOptions
+  ) => Promise<string | null>;
   // Convert WGS84 GeoJSON to GeoParquet with the host's established writer.
   // The filename is a base name without an extension.
   exportGeoParquetFile?: (

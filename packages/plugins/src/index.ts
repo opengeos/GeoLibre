@@ -87,6 +87,22 @@ export {
 // reuse the title-resolve-or-fallback + per-id warning-dedup behavior instead
 // of re-implementing (and drifting from) it.
 export { PanelTitleResolver } from "./panel-title";
+export {
+  el,
+  setDisabled,
+  SELECT_CHEVRON_CLASS,
+  withSelectChevron,
+  downloadBlobFallback,
+  saveBinaryFileWithHost,
+  createButton,
+  createSelectField,
+  createActionRow,
+  createModalDialog,
+  type PluginButtonOptions,
+  type SelectFieldOption,
+  type SelectFieldConfig,
+  type PluginModalOptions,
+} from "./panel-dom";
 // Same rationale as PanelTitleResolver: the toolbar-menu label resolver is the
 // one place that decides how a `string | (() => string)` label becomes display
 // text, so hosts rendering plugin menus share its fallback/dedup behavior.

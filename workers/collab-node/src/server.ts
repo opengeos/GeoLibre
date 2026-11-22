@@ -2,42 +2,35 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import { randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import {
-  CHAT_HISTORY_LIMIT,
-  MAX_CHAT_STORAGE_BYTES,
-  MAX_CHAT_TEXT_LENGTH,
   MAX_COMMENTS_PER_SESSION,
   MAX_REPLIES_PER_COMMENT,
   MAX_SNAPSHOT_BYTES,
   MIN_COMMENT_INTERVAL_MS,
-  MIN_CHAT_INTERVAL_MS,
+  appendBoundedChatHistory,
   authorizeHostAction,
   authorizeSnapshot,
   RELAY_SNAPSHOT_ORIGIN,
+  resolveJoin,
   shouldResyncRejectedSnapshot,
   clearParticipantOverrides,
   diffLockedLayers,
   getParticipantKey,
+  isAllowedOrigin,
   isIdentityConfigured,
   normalizeMode,
   participantCanEdit,
+  prepareChatMessage,
   preserveStoredComments,
   sanitizeCursor,
-  sanitizeDisplayName,
-  sanitizeColor,
   sanitizeView,
   setParticipantOverride,
-  timingSafeEqual,
   toWireParticipant,
   validateComment,
   validateReply,
-  verifyIdentityToken,
   isBoundedId,
   type ClientMessage,
-  type CollabChatMessage,
   type CollabInvite,
   type CollaborationMode,
-  type CollaborationRole,
-  type ParticipantIdentity,
   type PresenceEntry,
   type ServerMessage,
   type SessionParticipant,
@@ -56,57 +49,6 @@ const ENCODER = new TextEncoder();
 const MAX_RATE_LIMIT_KEYS = 10_000;
 const SWEEP_INTERVAL_MS = 60_000;
 
-function isAllowedOrigin(
-  originHeader: string | undefined,
-  envAllowed = process.env.ALLOWED_ORIGINS,
-): boolean {
-  if (!originHeader) return true;
-  const allowedList = envAllowed
-    ? envAllowed
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [
-        "https://geolibre.app",
-        "https://web.geolibre.app",
-        "https://viewer.geolibre.app",
-        "https://studio.geolibre.app",
-        "https://collab.geolibre.app",
-        "http://localhost",
-        "http://127.0.0.1",
-        "tauri://localhost",
-      ];
-
-  try {
-    const originUrl = new URL(originHeader);
-    const host = originUrl.hostname;
-    if (!envAllowed) {
-      if (host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost")) return true;
-      const previewSuffix = ".geolibre-preview.pages.dev";
-      const previewLabel = host.endsWith(previewSuffix) ? host.slice(0, -previewSuffix.length) : "";
-      if (
-        originUrl.protocol === "https:" &&
-        !originUrl.port &&
-        previewLabel &&
-        !previewLabel.includes(".")
-      ) {
-        return true;
-      }
-    }
-    return allowedList.some((allowed) => {
-      if (allowed === "*") return true;
-      try {
-        const allowedUrl = new URL(allowed);
-        return originUrl.origin === allowedUrl.origin;
-      } catch {
-        return originHeader === allowed || host === allowed;
-      }
-    });
-  } catch {
-    return false;
-  }
-}
-
 const MAX_PENDING_FRAMES = 64;
 
 interface Peer {
@@ -122,6 +64,8 @@ interface Peer {
   queue?: Promise<void>;
   /** Number of frames currently queued or running for this peer. */
   pendingFrames: number;
+  /** Set when a `join` frame is currently awaiting async verification on this socket. */
+  joining?: boolean;
   /** Set when the relay closes this peer due to frame-queue overflow. */
   overflowClosed?: boolean;
 }
@@ -340,105 +284,40 @@ export function createRelay(options: RelayOptions = {}): {
     }
 
     if (message.type === "join") {
-      if (peer.participant) return;
-      let role: CollaborationRole =
-        message.hostToken &&
-        persisted.hostToken &&
-        timingSafeEqual(message.hostToken, persisted.hostToken)
-          ? "host"
-          : "guest";
-
-      let inviteToken: string | undefined = undefined;
-      let matchedInvite: CollabInvite | undefined = undefined;
-      if (role === "guest" && message.inviteToken && typeof message.inviteToken === "string") {
-        const invites = store.getInvites(id);
-        const inv = invites.find((i) => i.token === message.inviteToken && !i.revoked);
-        if (inv && (!inv.maxUses || inv.useCount < inv.maxUses)) {
-          inviteToken = inv.token;
-          matchedInvite = inv;
-        }
+      if (peer.participant || peer.joining) return;
+      peer.joining = true;
+      let joined;
+      try {
+        joined = await resolveJoin({
+          message,
+          storedHostToken: persisted.hostToken,
+          requireIdentity: persisted.requireIdentity,
+          identitySecret,
+          generateClientId: () => randomUUID(),
+          getInvites: () => store.getInvites(id),
+          isBlockedKey: (key) => store.isBlockedKey(id, key),
+          claimInvite: (token) => {
+            if (!store.atomicClaimInvite(id, token)) return null;
+            return store.getInvites(id).find((i) => i.token === token) ?? null;
+          },
+          getDurableOverride: (key) => store.getDurableOverride(id, key),
+          isStillConnected: () => session.peers.has(peer) && !peer.overflowClosed,
+        });
+      } finally {
+        peer.joining = false;
       }
-
-      // Signature-checked against the configured issuer secret, so `identity`
-      // is only ever non-null for a credential this deployment actually minted.
-      // With no secret configured it is null for every token, making every
-      // joiner anonymous rather than trusting self-reported claims.
-      const identity: ParticipantIdentity | null = await verifyIdentityToken(
-        message.identityToken,
-        identitySecret,
-      );
-      if (!session.peers.has(peer) || peer.overflowClosed) return;
-
-      if (persisted.requireIdentity && !identity && role !== "host") {
+      if (joined.status === "aborted") return;
+      if (joined.status === "error") {
         send(peer, {
           type: "error",
-          code: "identity-required",
-          message: "Sign-in required to join this session.",
+          code: joined.code,
+          message: joined.message,
         });
         return;
       }
 
-      const socketClientId = randomUUID();
-      const initialInviteShared = matchedInvite ? matchedInvite.maxUses !== 1 : undefined;
-      const joiningParticipant: SessionParticipant = {
-        clientId: socketClientId,
-        displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
-        color: sanitizeColor(message.color),
-        role,
-        identity,
-        inviteToken,
-        ...(initialInviteShared ? { inviteShared: true } : {}),
-      };
-      const participantKey = getParticipantKey(joiningParticipant);
-
-      if (store.isBlockedKey(id, participantKey)) {
-        send(peer, {
-          type: "error",
-          code: "forbidden",
-          message: "You have been blocked from this session by the host.",
-        });
-        return;
-      }
-
-      if (matchedInvite) {
-        // Use an atomic SQL UPDATE to close the TOCTOU window: the initial
-        // maxUses check happened before `await verifyIdentityToken`,
-        // and another join could have consumed the invite in the meantime.
-        if (!store.atomicClaimInvite(id, matchedInvite.token)) {
-          // Invite was consumed or revoked between the initial check and now.
-          matchedInvite = undefined;
-          inviteToken = undefined;
-        }
-      }
-
-      // Resolve durable override and initial edit rights AFTER claiming the
-      // invite, using the participant's final post-claim key, so a claim loser
-      // never inherits an invite-keyed override.
-      const finalInviteShared = matchedInvite ? matchedInvite.maxUses !== 1 : undefined;
-      const finalParticipantKey = getParticipantKey({
-        ...joiningParticipant,
-        inviteToken,
-        inviteShared: finalInviteShared,
-      });
-      const durableOverride = store.getDurableOverride(id, finalParticipantKey);
-      let initialOverride: boolean | undefined = undefined;
-      if (durableOverride !== undefined) {
-        initialOverride = durableOverride;
-      } else if (matchedInvite) {
-        initialOverride = matchedInvite.role === "co-edit";
-      }
-
-      peer.participant = {
-        clientId: socketClientId,
-        displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
-        color: sanitizeColor(message.color),
-        role,
-        ...(initialOverride !== undefined ? { editOverride: initialOverride } : {}),
-        identity,
-        inviteToken,
-        ...(finalInviteShared ? { inviteShared: true } : {}),
-      };
-
+      peer.participant = joined.participant;
+      const { role } = joined;
       const welcomeInvites = role === "host" ? store.getInvites(id) : undefined;
 
       send(peer, {
@@ -683,32 +562,17 @@ export function createRelay(options: RelayOptions = {}): {
     }
 
     if (message.type === "chat") {
-      const chatText =
-        typeof message.text === "string" ? message.text.trim().slice(0, MAX_CHAT_TEXT_LENGTH) : "";
-      if (!chatText) return;
-      const now = Date.now();
-      if (
-        participant.lastChatTs !== undefined &&
-        now - participant.lastChatTs < MIN_CHAT_INTERVAL_MS
-      )
-        return;
-      participant.lastChatTs = now;
-      const chatMessage: CollabChatMessage = {
-        id: randomUUID(),
-        clientId: participant.clientId,
-        displayName: participant.displayName,
-        color: participant.color,
-        text: chatText,
-        coordinate: sanitizeCursor(message.coordinate),
-        ts: now,
-      };
-      let chat = [...persisted.chat, chatMessage].slice(-CHAT_HISTORY_LIMIT);
-      while (
-        chat.length > 1 &&
-        ENCODER.encode(JSON.stringify(chat)).length > MAX_CHAT_STORAGE_BYTES
-      )
-        chat = chat.slice(1);
-      store.saveChat(id, chat);
+      const prepared = prepareChatMessage({
+        participant,
+        message,
+        now: Date.now(),
+        generateId: () => randomUUID(),
+      });
+      if (!prepared) return;
+      participant.lastChatTs = prepared.nextLastChatTs;
+      const { chatMessage } = prepared;
+      const { history } = appendBoundedChatHistory(persisted.chat, chatMessage);
+      store.saveChat(id, history);
       broadcast(session, { type: "chat", message: chatMessage });
       return;
     }
@@ -872,7 +736,7 @@ export function createRelay(options: RelayOptions = {}): {
       return json(response, 200, { ok: true, service: "geolibre-collab", identitySupported });
     if (url.pathname === "/sessions" && request.method === "POST") {
       const origin = request.headers["origin"] ?? request.headers["referer"];
-      if (!isAllowedOrigin(origin)) {
+      if (!isAllowedOrigin(origin, process.env.ALLOWED_ORIGINS)) {
         return json(response, 403, { error: "Forbidden origin" });
       }
 

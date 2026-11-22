@@ -21,7 +21,6 @@
 //! the access and id tokens only in this process's memory.
 
 use std::{
-    collections::HashMap,
     io::{ErrorKind, Read, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
@@ -581,28 +580,17 @@ fn read_registration(dir: &Path) -> Option<Registration> {
 
 /// Writes a file atomically, owner-only on Unix.
 fn write_private(path: &Path, text: &str) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("Can't save the sign-in: {e}"))?;
-    }
-    let tmp = path.with_extension("tmp");
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let result = options
-        .open(&tmp)
-        .and_then(|mut file| {
-            file.write_all(text.as_bytes())
-                .and_then(|()| file.sync_all())
-        })
-        .and_then(|()| std::fs::rename(&tmp, path));
-    if result.is_err() {
-        let _ = std::fs::remove_file(&tmp);
-    }
-    result.map_err(|e| format!("Can't save the sign-in: {e}"))
+    crate::fs_util::write_file_atomic(
+        path,
+        text.as_bytes(),
+        crate::fs_util::AtomicWriteOptions {
+            create_parents: true,
+            owner_only_unix: true,
+            sync: true,
+            preserve_permissions: None,
+        },
+    )
+    .map_err(|e| format!("Can't save the sign-in: {e}"))
 }
 
 fn write_registration(dir: &Path, reg: Option<&Registration>) -> Result<(), String> {
@@ -921,7 +909,7 @@ pub struct ChatGptAuthState {
     /// Held for a whole `chatgpt_sign_in_start`, so overlapping starts run in
     /// turn and each one cancels the attempt the previous one installed.
     starting: tokio::sync::Mutex<()>,
-    requests: Mutex<HashMap<String, Arc<Cancel>>>,
+    requests: crate::in_flight::InFlightRegistry<Arc<Cancel>>,
 }
 
 impl ChatGptAuthState {
@@ -1531,21 +1519,17 @@ pub async fn chatgpt_request(
         return Err("The request has no body.".into());
     }
     let cancel = Arc::new(Cancel::default());
+    if state
+        .requests
+        .try_insert_unique(request_id.clone(), cancel.clone())
+        .is_err()
     {
-        let mut requests = state.requests.lock().unwrap_or_else(|p| p.into_inner());
-        if requests.contains_key(&request_id) {
-            return Err("Duplicate request id.".into());
-        }
-        requests.insert(request_id.clone(), cancel.clone());
+        return Err("Duplicate request id.".into());
     }
     struct Done<'a>(&'a ChatGptAuthState, String);
     impl Drop for Done<'_> {
         fn drop(&mut self) {
-            self.0
-                .requests
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .remove(&self.1);
+            let _ = self.0.requests.remove(&self.1);
         }
     }
     let _done = Done(&state, request_id);
@@ -1628,12 +1612,7 @@ pub async fn chatgpt_request(
 /// Stops a [`chatgpt_request`] in progress.
 #[tauri::command]
 pub fn chatgpt_request_cancel(state: tauri::State<'_, ChatGptAuthState>, request_id: String) {
-    if let Some(cancel) = state
-        .requests
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .get(&request_id)
-    {
+    if let Some(cancel) = state.requests.get_cloned(&request_id) {
         cancel.cancel();
     }
 }

@@ -476,9 +476,7 @@ async fn tile_plan(entry: &Arc<PoolEntry>, key: &SourceKey) -> Result<Arc<TilePl
             // initialized it (only `plans` and our local `cell` remain).
             let mut plans = entry.plans.lock().await;
             if plans.get(key).is_some_and(|current| {
-                Arc::ptr_eq(current, &cell)
-                    && !cell.initialized()
-                    && Arc::strong_count(&cell) == 2
+                Arc::ptr_eq(current, &cell) && !cell.initialized() && Arc::strong_count(&cell) == 2
             }) {
                 plans.remove(key);
             }
@@ -1101,26 +1099,7 @@ fn parse_key_value_pairs(input: &str) -> Option<Vec<(String, String, std::ops::R
 }
 
 fn percent_decode(value: &str) -> String {
-    let bytes = value.as_bytes();
-    let mut decoded = Vec::with_capacity(bytes.len());
-    let mut index = 0;
-    while index < bytes.len() {
-        let hex = bytes
-            .get(index + 1..index + 3)
-            .and_then(|hex| std::str::from_utf8(hex).ok())
-            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
-        match (bytes[index], hex) {
-            (b'%', Some(byte)) => {
-                decoded.push(byte);
-                index += 3;
-            }
-            (byte, _) => {
-                decoded.push(byte);
-                index += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&decoded).into_owned()
+    crate::http_client::percent_decode_lossy(value)
 }
 
 /// libpq `sslmode=verify-ca`: the chain must lead to a trusted root, but the
@@ -1565,10 +1544,9 @@ mod tests {
         let merged = build_default_root_store(&[CertificateDer::from(TEST_CA_DER)]);
         assert_eq!(merged.len(), base_only.len() + 1);
 
-        let tls = TlsRequirement::from_connection_string(
-            "postgresql://localhost/db?sslmode=verify-full",
-        )
-        .expect("parse tls settings");
+        let tls =
+            TlsRequirement::from_connection_string("postgresql://localhost/db?sslmode=verify-full")
+                .expect("parse tls settings");
         let roots = tls.roots().expect("build root cert store");
         assert!(roots.len() >= base_only.len());
     }
