@@ -366,7 +366,7 @@ async fn transfer(
         let (tx, mut rx) = tokio::sync::mpsc::channel::<WriteCommand<B>>(16);
         let handle = tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
             let mut part = part;
-            if rx.is_closed() || aborted.load(Ordering::Acquire) {
+            if aborted.load(Ordering::Acquire) {
                 return Ok(());
             }
             let mut file = fs::File::create(&part.path)
