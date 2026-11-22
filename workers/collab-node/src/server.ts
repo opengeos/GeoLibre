@@ -64,6 +64,8 @@ interface Peer {
   queue?: Promise<void>;
   /** Number of frames currently queued or running for this peer. */
   pendingFrames: number;
+  /** Set when a `join` frame is currently awaiting async verification on this socket. */
+  joining?: boolean;
   /** Set when the relay closes this peer due to frame-queue overflow. */
   overflowClosed?: boolean;
 }
@@ -282,22 +284,28 @@ export function createRelay(options: RelayOptions = {}): {
     }
 
     if (message.type === "join") {
-      if (peer.participant) return;
-      const joined = await resolveJoin({
-        message,
-        storedHostToken: persisted.hostToken,
-        requireIdentity: persisted.requireIdentity,
-        identitySecret,
-        generateClientId: () => randomUUID(),
-        getInvites: () => store.getInvites(id),
-        isBlockedKey: (key) => store.isBlockedKey(id, key),
-        claimInvite: (token) => {
-          if (!store.atomicClaimInvite(id, token)) return null;
-          return store.getInvites(id).find((i) => i.token === token) ?? null;
-        },
-        getDurableOverride: (key) => store.getDurableOverride(id, key),
-        isStillConnected: () => session.peers.has(peer) && !peer.overflowClosed,
-      });
+      if (peer.participant || peer.joining) return;
+      peer.joining = true;
+      let joined;
+      try {
+        joined = await resolveJoin({
+          message,
+          storedHostToken: persisted.hostToken,
+          requireIdentity: persisted.requireIdentity,
+          identitySecret,
+          generateClientId: () => randomUUID(),
+          getInvites: () => store.getInvites(id),
+          isBlockedKey: (key) => store.isBlockedKey(id, key),
+          claimInvite: (token) => {
+            if (!store.atomicClaimInvite(id, token)) return null;
+            return store.getInvites(id).find((i) => i.token === token) ?? null;
+          },
+          getDurableOverride: (key) => store.getDurableOverride(id, key),
+          isStillConnected: () => session.peers.has(peer) && !peer.overflowClosed,
+        });
+      } finally {
+        peer.joining = false;
+      }
       if (joined.status === "aborted") return;
       if (joined.status === "error") {
         send(peer, {

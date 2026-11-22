@@ -9,7 +9,14 @@ import {
   type CollabInvite,
   type SessionParticipant,
 } from "@geolibre/collab-core";
-import { saveBinaryFileWithHost } from "../packages/plugins/src/panel-dom";
+import {
+  createActionRow,
+  createButton,
+  createModalDialog,
+  createSelectField,
+  saveBinaryFileWithHost,
+} from "../packages/plugins/src/panel-dom";
+import { Window } from "happy-dom";
 
 describe("@geolibre/collab-core shared handlers", () => {
   it("validates allowed origins consistently for both relays", () => {
@@ -210,6 +217,104 @@ describe("plugin host binary file saver", () => {
       new Uint8Array([1]),
     );
     assert.equal(cancelled, false);
+  });
+});
+
+describe("plugin panel-dom UI helpers", () => {
+  it("builds buttons, select fields, action rows, and traps focus in modals", () => {
+    const win = new Window();
+    const prevWindow = globalThis.window;
+    const prevDocument = globalThis.document;
+    const prevHTMLElement = globalThis.HTMLElement;
+    const prevKeyboardEvent = globalThis.KeyboardEvent;
+    const prevEvent = globalThis.Event;
+    Object.assign(globalThis, {
+      window: win,
+      document: win.document,
+      HTMLElement: win.HTMLElement,
+      KeyboardEvent: win.KeyboardEvent,
+      Event: win.Event,
+    });
+    try {
+      const trigger = createButton("Open", { variant: "primary", title: "Open dialog" });
+      win.document.body.appendChild(trigger);
+      trigger.focus();
+
+      let selected = "";
+      const { wrapper, select } = createSelectField({
+        label: "Format",
+        options: [
+          { value: "geojson", label: "GeoJSON" },
+          { value: "gpkg", label: "GeoPackage", disabled: true },
+        ],
+        value: "geojson",
+        onChange: (value) => {
+          selected = value;
+        },
+      });
+      assert.equal(select.value, "geojson");
+      select.value = "gpkg";
+      select.dispatchEvent(new win.Event("change"));
+      assert.equal(selected, "gpkg");
+
+      const okButton = createButton("Confirm", { variant: "primary" });
+      const row = createActionRow([okButton], "between");
+      assert.equal(row.children.length, 1);
+
+      let closedCount = 0;
+      const modal = createModalDialog({
+        title: "Export Options",
+        body: wrapper,
+        actions: [okButton],
+        closeLabel: "Dismiss",
+        onClose: () => {
+          closedCount += 1;
+        },
+      });
+      // Mark interactive controls as visible under happy-dom (which has no layout engine).
+      for (const el of modal.dialog.querySelectorAll<HTMLElement>("button, select")) {
+        Object.defineProperty(el, "offsetParent", { value: modal.dialog, configurable: true });
+      }
+      const closeBtn = modal.dialog.querySelector<HTMLButtonElement>(
+        'button[aria-label="Dismiss"]',
+      )!;
+      assert.ok(closeBtn);
+      assert.equal(
+        modal.dialog.getAttribute("aria-labelledby"),
+        modal.dialog.querySelector("h3")?.id,
+      );
+
+      // Focus on the dialog container itself must still wrap into the first/last control on Tab.
+      modal.dialog.focus();
+      assert.equal(win.document.activeElement, modal.dialog);
+      win.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Tab", cancelable: true }));
+      assert.equal(win.document.activeElement, closeBtn);
+
+      // Shift+Tab from first focusable element wraps to last focusable element (Confirm).
+      win.dispatchEvent(
+        new win.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, cancelable: true }),
+      );
+      assert.equal(win.document.activeElement, okButton);
+
+      // Dragging from inside the dialog and releasing on the overlay must NOT close the modal.
+      modal.dialog.dispatchEvent(new win.Event("pointerdown", { bubbles: true }));
+      modal.overlay.dispatchEvent(new win.Event("click", { bubbles: true }));
+      assert.equal(closedCount, 0);
+
+      // Escape closes the modal and restores focus to the trigger.
+      win.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+      assert.equal(closedCount, 1);
+      assert.equal(win.document.activeElement, trigger);
+    } finally {
+      Object.assign(globalThis, {
+        window: prevWindow,
+        document: prevDocument,
+        HTMLElement: prevHTMLElement,
+        KeyboardEvent: prevKeyboardEvent,
+        Event: prevEvent,
+      });
+      win.close();
+    }
   });
 });
 

@@ -1,7 +1,7 @@
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { Feature, FeatureCollection } from "geojson";
 import { createLayerId } from "../layer-ids";
-import { downloadBlobFallback } from "../panel-dom";
+import { saveBinaryFileWithHost } from "../panel-dom";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { isTauriRuntime } from "./earth-engine-auth";
 import {
@@ -231,8 +231,11 @@ async function saveBlob(
   if (fileSaver) {
     return (await fileSaver(blob, options)) !== null;
   }
-  downloadBlobFallback(options.defaultName, blob, options.mimeType);
-  return true;
+  return saveBinaryFileWithHost(appRef, options.defaultName, blob, {
+    extensions: [options.extension],
+    mimeType: options.mimeType,
+    filterName: options.description,
+  });
 }
 
 /** A filesystem-safe file name stem for a dataset. */

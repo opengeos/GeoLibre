@@ -252,12 +252,13 @@ export function createModalDialog(options: PluginModalOptions): {
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       const active = document.activeElement;
+      const outside = !dialog.contains(active) || active === dialog;
       if (event.shiftKey) {
-        if (active === first || !dialog.contains(active)) {
+        if (active === first || outside) {
           event.preventDefault();
           last.focus();
         }
-      } else if (active === last || !dialog.contains(active)) {
+      } else if (active === last || outside) {
         event.preventDefault();
         first.focus();
       }

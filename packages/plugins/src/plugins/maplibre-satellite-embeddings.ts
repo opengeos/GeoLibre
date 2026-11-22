@@ -7,7 +7,7 @@ import type {
   MapLayerMouseEvent,
   MapMouseEvent,
 } from "maplibre-gl";
-import { downloadBlobFallback } from "../panel-dom";
+import { saveBinaryFileWithHost } from "../panel-dom";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
   AEF_BAND_COUNT,
@@ -347,7 +347,11 @@ async function saveBlob(
     await fileSaver(blob, options);
     return;
   }
-  downloadBlobFallback(options.defaultName, blob, options.mimeType);
+  await saveBinaryFileWithHost(appRef, options.defaultName, blob, {
+    extensions: [options.extension],
+    mimeType: options.mimeType,
+    filterName: options.description,
+  });
 }
 
 /** Opens a remote file for download without leaving the app. */

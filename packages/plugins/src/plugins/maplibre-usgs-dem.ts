@@ -14,7 +14,7 @@ import type {
   MapLayerMouseEvent,
   MapMouseEvent,
 } from "maplibre-gl";
-import { downloadBlobFallback } from "../panel-dom";
+import { saveBinaryFileWithHost, withSelectChevron } from "../panel-dom";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { getControlMap } from "./style-map";
 import {
@@ -29,7 +29,6 @@ import {
   type UsgsDemItem,
   type UsgsDemSearchResult,
 } from "./usgs-dem-api";
-import { withSelectChevron } from "../panel-dom";
 
 export const USGS_DEM_PLUGIN_ID = "maplibre-gl-usgs-dem";
 const PANEL_ID = USGS_DEM_PLUGIN_ID;
@@ -378,7 +377,11 @@ function downloadDemItem(item: UsgsDemItem): void {
 function exportFootprintsAsGeoJson(items: UsgsDemItem[]): void {
   const fc = footprintCollection(items);
   const blob = new Blob([JSON.stringify(fc, null, 2)], { type: "application/geo+json" });
-  downloadBlobFallback("usgs-dem-footprints.geojson", blob, "application/geo+json");
+  void saveBinaryFileWithHost(appRef, "usgs-dem-footprints.geojson", blob, {
+    extensions: ["geojson"],
+    mimeType: "application/geo+json",
+    filterName: "GeoJSON",
+  });
 }
 
 function mountPanel(container: HTMLElement): () => void {
