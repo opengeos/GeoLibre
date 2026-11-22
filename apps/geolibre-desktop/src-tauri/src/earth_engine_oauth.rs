@@ -639,43 +639,11 @@ fn auth_page(client_id: &str, state: &str, nonce: &str) -> String {
 }
 
 fn url_encode(value: &str) -> String {
-    let mut encoded = String::new();
-    for byte in value.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
-                encoded.push(byte as char);
-            }
-            _ => encoded.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    encoded
+    crate::http_client::percent_encode_rfc3986(value)
 }
 
 fn url_decode(value: &str) -> String {
-    let mut decoded = Vec::new();
-    let bytes = value.as_bytes();
-    let mut index = 0;
-    while index < bytes.len() {
-        if bytes[index] == b'%' && index + 2 < bytes.len() {
-            // Parse the hex digits from bytes: slicing the &str here would
-            // panic when a multi-byte UTF-8 character follows the `%`.
-            let hex = std::str::from_utf8(&bytes[index + 1..index + 3])
-                .ok()
-                .and_then(|digits| u8::from_str_radix(digits, 16).ok());
-            if let Some(hex) = hex {
-                decoded.push(hex);
-                index += 3;
-                continue;
-            }
-        }
-        decoded.push(if bytes[index] == b'+' {
-            b' '
-        } else {
-            bytes[index]
-        });
-        index += 1;
-    }
-    String::from_utf8_lossy(&decoded).into_owned()
+    crate::http_client::form_url_decode_lossy(value)
 }
 
 #[cfg(test)]
@@ -835,11 +803,11 @@ mod tests {
         let error_result = post_token(&shared, OAUTH_ORIGIN, "application/json", &error_body);
         assert!(error_result.starts_with("HTTP/1.1 204"));
         assert!(!is_pending_state(&shared, &state));
-        let stored_error = shared
-            .tokens
-            .lock()
-            .ok()
-            .and_then(|tokens| tokens.get(&state).and_then(|(_, token)| token.error.clone()));
+        let stored_error = shared.tokens.lock().ok().and_then(|tokens| {
+            tokens
+                .get(&state)
+                .and_then(|(_, token)| token.error.clone())
+        });
         assert_eq!(stored_error.as_deref(), Some("access_denied"));
 
         // The app stops polling at the error, so a later token has no taker.

@@ -1405,6 +1405,17 @@ export interface GeoLibreAppAPI {
    */
   exportTextFile?: (filename: string, content: string, options?: GeoLibreFileDialogOptions) => void;
   /**
+   * Save binary content (`Blob` or `Uint8Array`) to a file chosen by the user.
+   * The host handles platform specifics (a native save dialog under Tauri, a
+   * File System Access picker or browser download on the web). Resolves to the
+   * saved file path/name, or `null` when the user cancels the save dialog.
+   */
+  saveBinaryFile?: (
+    filename: string,
+    data: Blob | Uint8Array,
+    options?: GeoLibreFileDialogOptions,
+  ) => Promise<string | null>;
+  /**
    * Convert WGS84 GeoJSON features to GeoParquet and save them through the
    * host's native or browser file dialog. `filename` is the base name without
    * an extension. Resolves to the saved path/name, or null when cancelled.

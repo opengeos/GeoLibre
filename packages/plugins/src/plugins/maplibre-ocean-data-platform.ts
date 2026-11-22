@@ -1,6 +1,7 @@
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { Feature, FeatureCollection } from "geojson";
 import { createLayerId } from "../layer-ids";
+import { downloadBlobFallback } from "../panel-dom";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { isTauriRuntime } from "./earth-engine-auth";
 import {
@@ -230,15 +231,7 @@ async function saveBlob(
   if (fileSaver) {
     return (await fileSaver(blob, options)) !== null;
   }
-  const url = URL.createObjectURL(blob);
-  try {
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = options.defaultName;
-    anchor.click();
-  } finally {
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
+  downloadBlobFallback(options.defaultName, blob, options.mimeType);
   return true;
 }
 

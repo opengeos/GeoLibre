@@ -15,10 +15,22 @@
 
 import { proxyViewerRequest } from "./proxy";
 
-interface Env {}
+interface Env {
+  VIEWER_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+}
 
 export default {
-  async fetch(request: Request, _env: Env, _ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+    if (env.VIEWER_RATE_LIMITER) {
+      const key = request.headers.get("CF-Connecting-IP") ?? "anonymous";
+      const outcome = await env.VIEWER_RATE_LIMITER.limit({ key });
+      if (!outcome.success) {
+        return new Response("Too many requests", {
+          status: 429,
+          headers: { "Retry-After": "60" },
+        });
+      }
+    }
     return proxyViewerRequest(request);
   },
 };

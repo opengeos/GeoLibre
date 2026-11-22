@@ -21,33 +21,29 @@ import {
   validateReply,
 } from "./comment-validate";
 import {
+  appendBoundedChatHistory,
   authorizeHostAction,
   authorizeSnapshot,
   RELAY_SNAPSHOT_ORIGIN,
+  resolveJoin,
   shouldResyncRejectedSnapshot,
-  CHAT_HISTORY_LIMIT,
   clearParticipantOverrides,
   diffLockedLayers,
   EMPTY_SESSION_TTL_MS,
   getParticipantKey,
   isIdentityConfigured,
-  MAX_CHAT_STORAGE_BYTES,
-  MAX_CHAT_TEXT_LENGTH,
   MAX_SESSION_LOG_STORAGE_BYTES,
   MAX_SNAPSHOT_BYTES,
   parseStoredChat,
-  MIN_CHAT_INTERVAL_MS,
+  prepareChatMessage,
   normalizeMode,
   participantCanEdit,
-  sanitizeColor,
   sanitizeCursor,
   SESSION_LOG_LIMIT,
-  sanitizeDisplayName,
   sanitizeView,
   setParticipantOverride,
   timingSafeEqual,
   toWireParticipant,
-  verifyIdentityToken,
   type SessionParticipant,
 } from "@geolibre/collab-core";
 
@@ -75,6 +71,8 @@ export interface Env {
    * Set it with `wrangler secret put COLLAB_IDENTITY_SECRET`.
    */
   COLLAB_IDENTITY_SECRET?: string;
+  /** Optional Cloudflare Rate Limiting binding for `POST /sessions`. */
+  COLLAB_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
 }
 
 // The snapshot cap, empty-session TTL, and chat limits now live in
@@ -526,114 +524,42 @@ export class CollabSession extends DurableObject<Env> {
         this.ctx.storage.get<string[]>("lockedLayerIds"),
       ]);
 
-    let role: CollaborationRole =
-      message.hostToken && storedToken && timingSafeEqual(message.hostToken, storedToken)
-        ? "host"
-        : "guest";
-
-    let inviteToken: string | undefined = undefined;
-    let matchedInvite: CollabInvite | undefined = undefined;
-    if (role === "guest" && message.inviteToken && typeof message.inviteToken === "string") {
-      const invites = this.readInvites();
-      const inv = invites.find((i) => i.token === message.inviteToken && !i.revoked);
-      if (inv && (!inv.maxUses || inv.useCount < inv.maxUses)) {
-        inviteToken = inv.token;
-        matchedInvite = inv;
-      }
-    }
-
-    // Signature-checked against COLLAB_IDENTITY_SECRET, so `identity` is only
-    // ever non-null for a credential this deployment's issuer actually minted.
-    // A relay with no secret configured yields null for every token, making
-    // every joiner anonymous rather than trusting self-reported claims.
-    const identity: ParticipantIdentity | null = await verifyIdentityToken(
-      message.identityToken,
-      this.env.COLLAB_IDENTITY_SECRET,
-    );
-
-    if (requireIdentity && !identity && role !== "host") {
-      this.send(ws, {
-        type: "error",
-        code: "identity-required",
-        message: "Sign-in required to join this session.",
-      });
-      return;
-    }
-
-    const socketClientId = crypto.randomUUID();
-    const initialInviteShared = matchedInvite ? matchedInvite.maxUses !== 1 : undefined;
-    const joiningParticipant: SessionParticipant = {
-      clientId: socketClientId,
-      displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
-      color: sanitizeColor(message.color),
-      role,
-      identity,
-      inviteToken,
-      ...(initialInviteShared ? { inviteShared: true } : {}),
-    };
-    const participantKey = getParticipantKey(joiningParticipant);
-
-    if (this.isBlockedKey(participantKey)) {
-      this.send(ws, {
-        type: "error",
-        code: "forbidden",
-        message: "You have been blocked from this session by the host.",
-      });
-      return;
-    }
-
-    if (matchedInvite) {
-      // Re-read the invite after the `await verifyIdentityToken` above to close
-      // a TOCTOU window: two concurrent joins on a maxUses:1 invite could both
-      // have read useCount:0 before either writes. Re-validating here narrows
-      // the race to the synchronous path between read and write.
-      const inviteTokenToCheck = matchedInvite.token;
-      const freshInvites = this.readInvites();
-      const freshInv = freshInvites.find((i) => i.token === inviteTokenToCheck && !i.revoked);
-      if (!freshInv || (freshInv.maxUses && freshInv.useCount >= freshInv.maxUses)) {
-        // Invite was consumed or revoked between the initial check and now.
-        matchedInvite = undefined;
-        inviteToken = undefined;
-      } else {
+    const joined = await resolveJoin({
+      message,
+      storedHostToken: storedToken,
+      requireIdentity: requireIdentity === true,
+      identitySecret: this.env.COLLAB_IDENTITY_SECRET,
+      generateClientId: () => crypto.randomUUID(),
+      getInvites: () => this.readInvites(),
+      isBlockedKey: (key) => this.isBlockedKey(key),
+      claimInvite: (token) => {
+        const freshInv = this.readInvites().find((i) => i.token === token && !i.revoked);
+        if (!freshInv || (freshInv.maxUses && freshInv.useCount >= freshInv.maxUses)) {
+          return null;
+        }
         freshInv.useCount += 1;
         this.writeInvite(freshInv);
-        matchedInvite = freshInv;
-      }
-    }
-
-    // Resolve durable override and initial edit rights AFTER claiming the
-    // invite, using the participant's final post-claim key, so a claim loser
-    // never inherits an invite-keyed override.
-    const finalInviteShared = matchedInvite ? matchedInvite.maxUses !== 1 : undefined;
-    const finalParticipantKey = getParticipantKey({
-      ...joiningParticipant,
-      inviteToken,
-      inviteShared: finalInviteShared,
+        return freshInv;
+      },
+      getDurableOverride: (key) => this.readDurableOverride(key),
     });
-    const durableOverride = this.readDurableOverride(finalParticipantKey);
-    let initialOverride: boolean | undefined = undefined;
-    if (durableOverride !== undefined) {
-      initialOverride = durableOverride;
-    } else if (matchedInvite) {
-      initialOverride = matchedInvite.role === "co-edit";
+    if (joined.status === "aborted") return;
+    if (joined.status === "error") {
+      this.send(ws, {
+        type: "error",
+        code: joined.code,
+        message: joined.message,
+      });
+      return;
     }
 
-    const attachment: SocketAttachment = {
-      clientId: socketClientId,
-      displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
-      color: sanitizeColor(message.color),
-      role,
-      ...(initialOverride !== undefined ? { editOverride: initialOverride } : {}),
-      identity,
-      inviteToken,
-      ...(finalInviteShared ? { inviteShared: true } : {}),
-    };
+    const { participant: attachment, identity, role } = joined;
     ws.serializeAttachment(attachment);
 
     await this.appendLog({
       type: "join",
       ts: Date.now(),
-      clientId: socketClientId,
+      clientId: attachment.clientId,
       identity,
     });
 
@@ -849,49 +775,21 @@ export class CollabSession extends DurableObject<Env> {
     attachment: SocketAttachment,
     message: Extract<ClientMessage, { type: "chat" }>,
   ): Promise<void> {
-    // Chat is open to everyone in the session, including view-only guests; only
-    // project edits are gated. Reject an empty or non-string body.
-    const text =
-      typeof message.text === "string" ? message.text.trim().slice(0, MAX_CHAT_TEXT_LENGTH) : "";
-    if (!text) return;
-    // Per-socket rate limit: silently drop a burst that arrives faster than the
-    // floor so one client can't flood the storage-op budget / fan-out. The last
-    // accepted timestamp rides on the attachment, so it survives a hibernation.
-    const now = Date.now();
-    if (attachment.lastChatTs !== undefined && now - attachment.lastChatTs < MIN_CHAT_INTERVAL_MS) {
-      return;
-    }
-    attachment.lastChatTs = now;
+    const prepared = prepareChatMessage({
+      participant: attachment,
+      message,
+      now: Date.now(),
+      generateId: () => crypto.randomUUID(),
+    });
+    if (!prepared) return;
+    attachment.lastChatTs = prepared.nextLastChatTs;
     ws.serializeAttachment(attachment);
-    const chatMessage: CollabChatMessage = {
-      id: crypto.randomUUID(),
-      clientId: attachment.clientId,
-      displayName: attachment.displayName,
-      color: attachment.color,
-      text,
-      // Reuse the cursor sanitizer so a crafted coordinate can't reach peers'
-      // map APIs as NaN/strings.
-      coordinate: sanitizeCursor(message.coordinate),
-      ts: now,
-    };
+    const { chatMessage } = prepared;
     // Persist a bounded history so a late joiner (or a post-hibernation welcome)
     // sees the recent conversation. Read-modify-write is safe: a Durable Object
     // processes one message at a time and input-gates across the await.
     const log = parseStoredChat(await this.ctx.storage.get<string>("chat"));
-    log.push(chatMessage);
-    // Bound by count AND serialized bytes: 50 messages can still exceed the
-    // ~128 KiB per-value storage cap when they hold long multi-byte (e.g. CJK)
-    // text, so drop the oldest until the JSON fits a safe budget. Track the byte
-    // length incrementally (encode once, then subtract each evicted entry plus
-    // its comma separator) so the loop stays O(n) rather than re-encoding the
-    // whole array each iteration.
-    let trimmed = log.slice(-CHAT_HISTORY_LIMIT);
-    let byteLen = ENCODER.encode(JSON.stringify(trimmed)).length;
-    while (trimmed.length > 1 && byteLen > MAX_CHAT_STORAGE_BYTES) {
-      byteLen -= ENCODER.encode(JSON.stringify(trimmed[0])).length + 1;
-      trimmed = trimmed.slice(1);
-    }
-    const serialized = JSON.stringify(trimmed);
+    const { serialized } = appendBoundedChatHistory(log, chatMessage);
     try {
       await this.ctx.storage.put("chat", serialized);
     } catch {

@@ -13,3 +13,21 @@ cpu_ms = 200
 [[routes]]
 pattern = "tiles.geolibre.app"
 custom_domain = true
+
+[[ratelimits]]
+name = "TILES_RATE_LIMITER"
+namespace_id = "54703"
+
+[ratelimits.simple]
+limit = 600
+period = 60
+
+[observability]
+enabled = true
+
+[observability.logs]
+head_sampling_rate = 1
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 0.01

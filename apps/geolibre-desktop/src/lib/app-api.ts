@@ -105,6 +105,7 @@ import {
   openLocalDataFileWithFallback,
   pickVectorFilesWithSidecars,
   readVectorFileWithSidecars,
+  saveBinaryFileWithFallback,
   saveTextFileWithFallback,
 } from "./tauri-io";
 import {
@@ -866,6 +867,35 @@ export function createAppAPI(
         });
       })().catch((error) => {
         console.error(`Could not export ${filename}.`, error);
+      });
+    },
+    saveBinaryFile: async (
+      filename: string,
+      data: Blob | Uint8Array,
+      options?: GeoLibreFileDialogOptions,
+    ) => {
+      const description = options?.description ?? "Binary file";
+      const extensions = options?.extensions ?? ["bin"];
+      const mimeType = options?.mimeType ?? "application/octet-stream";
+      const acceptMime = mimeType.split(";")[0].trim() || "application/octet-stream";
+      let defaultName = filename;
+      if (options?.promptName && browserSaveFallsBackToDownload()) {
+        const chosen = await useFileNamePrompt.getState().prompt({
+          defaultName: filename,
+        });
+        if (chosen === null) return null;
+        defaultName = ensureFileExtension(chosen, extensions);
+      }
+      return saveBinaryFileWithFallback(data, {
+        defaultName,
+        filters: [{ name: description, extensions }],
+        browserTypes: [
+          {
+            description,
+            accept: { [acceptMime]: extensions.map((ext) => `.${ext}`) },
+          },
+        ],
+        mimeType,
       });
     },
     exportGeoParquetFile: async (filename: string, data: FeatureCollection) => {

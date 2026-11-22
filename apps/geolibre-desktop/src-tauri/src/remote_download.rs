@@ -22,18 +22,18 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::Ordering,
         Arc, Mutex, OnceLock,
     },
     time::Duration,
 };
 
+use percent_encoding::percent_decode_str;
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
     redirect::Policy,
     Url,
 };
-use percent_encoding::percent_decode_str;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::Manager;
@@ -112,13 +112,11 @@ pub(crate) struct WriteFileResult {
     size: u64,
 }
 
-type CancelDownload = Box<dyn Fn() + Send + Sync>;
-
 /// In-flight downloads (for cancellation) and finished cache downloads waiting
 /// to be read, both keyed by the caller's request id.
 #[derive(Default, Clone)]
 pub(crate) struct RemoteDownloads {
-    active: Arc<Mutex<HashMap<String, CancelDownload>>>,
+    active: crate::in_flight::CancelRegistry,
     cached: Arc<Mutex<HashMap<String, PathBuf>>>,
     /// Folders the user picked for multi-file downloads, by id.
     folders: Arc<Mutex<HashMap<String, PathBuf>>>,
@@ -126,20 +124,7 @@ pub(crate) struct RemoteDownloads {
 
 impl RemoteDownloads {
     fn cancel(&self, id: &str) {
-        if let Some(cancel) = self.active.lock().unwrap().remove(id) {
-            cancel();
-        }
-    }
-}
-
-struct ActiveGuard {
-    downloads: RemoteDownloads,
-    id: String,
-}
-
-impl Drop for ActiveGuard {
-    fn drop(&mut self) {
-        self.downloads.cancel(&self.id);
+        self.active.cancel(id);
     }
 }
 
@@ -546,7 +531,7 @@ pub(crate) async fn download_remote_file(
         .map_err(|error| format!("URL validation failed: {error}"))??;
     // Reject a reused ID before the save dialog opens, and never let a new
     // cache entry orphan an earlier one's file.
-    if downloads.active.lock().unwrap().contains_key(&request_id)
+    if downloads.active.contains_key(&request_id)
         || downloads.cached.lock().unwrap().contains_key(&request_id)
     {
         return Err("Duplicate request ID.".into());
@@ -585,8 +570,7 @@ pub(crate) async fn download_remote_file(
     };
 
     let task = {
-        let mut active = downloads.active.lock().unwrap();
-        if active.contains_key(&request_id) {
+        if downloads.active.contains_key(&request_id) {
             return Err("Duplicate request ID.".into());
         }
         let task = tauri::async_runtime::spawn(transfer(
@@ -599,13 +583,18 @@ pub(crate) async fn download_remote_file(
             progress,
         ));
         let abort = task.inner().abort_handle();
-        active.insert(request_id.clone(), Box::new(move || abort.abort()));
+        if downloads
+            .active
+            .try_register(request_id.clone(), Box::new(move || abort.abort()))
+            .is_err()
+        {
+            task.abort();
+            return Err("Duplicate request ID.".into());
+        }
         task
     };
-    let _guard = ActiveGuard {
-        downloads: downloads.inner().clone(),
-        id: request_id.clone(),
-    };
+    let _guard =
+        crate::in_flight::CancelGuard::new(downloads.inner().active.clone(), request_id.clone());
     let mut cache_guard = PartFile {
         path: destination.clone(),
         done: saves_to_disk,
@@ -688,8 +677,6 @@ fn encode_reserved_filename_chars(name: &str) -> String {
     encoded
 }
 
-static WRITE_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
-
 /// A file or folder name that is safe to create inside a picked folder.
 fn checked_name(file_name: &str) -> Result<String, String> {
     let raw = file_name.rsplit(['/', '\\']).next().unwrap_or("");
@@ -764,7 +751,9 @@ fn subfolder_in(folder: &Path, name: &str) -> Result<PathBuf, String> {
     if let Err(error) = fs::create_dir(&dir) {
         let is_real_folder = dir.symlink_metadata().is_ok_and(|meta| meta.is_dir());
         if error.kind() != std::io::ErrorKind::AlreadyExists || !is_real_folder {
-            return Err(format!("Refusing to write: could not use the subfolder: {error}"));
+            return Err(format!(
+                "Refusing to write: could not use the subfolder: {error}"
+            ));
         }
     }
     Ok(dir)
@@ -799,61 +788,17 @@ fn write_file_to_folder_in_dir(
         }
     }
     let size = data.len() as u64;
-
-    let mut temp = None;
-    let mut file = None;
-
-    for _ in 0..10 {
-        let mut rand_bytes = [0u8; 8];
-        let rand_suffix = if getrandom::fill(&mut rand_bytes).is_ok() {
-            rand_bytes
-                .iter()
-                .map(|b| format!("{b:02x}"))
-                .collect::<String>()
-        } else {
-            format!(
-                "{}-{}",
-                std::process::id(),
-                WRITE_FILE_COUNTER.fetch_add(1, Ordering::Relaxed)
-            )
-        };
-        let candidate = folder.join(format!(".geolibre-write-tmp-{rand_suffix}"));
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-
-        match options.open(&candidate) {
-            Ok(f) => {
-                temp = Some(candidate);
-                file = Some(f);
-                break;
-            }
-            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(err) => return Err(format!("Could not create temporary file in folder: {err}")),
-        }
-    }
-
-    let (temp_path, mut temp_file) = match (temp, file) {
-        (Some(p), Some(f)) => (p, f),
-        _ => return Err("Could not allocate a unique temporary file in the chosen folder.".into()),
-    };
-
-    let write_result = (|| -> Result<(), std::io::Error> {
-        temp_file.write_all(data)?;
-        temp_file.sync_all()?;
-        Ok(())
-    })();
-    // Close the temporary file handle before renaming or unlinking; Windows
-    // refuses both while a write handle is still open.
-    drop(temp_file);
-
-    let finish_result = write_result.and_then(|()| fs::rename(&temp_path, &destination));
-
-    if let Err(error) = finish_result {
-        let _ = fs::remove_file(&temp_path);
-        return Err(format!("Could not write file to folder: {error}"));
-    }
+    crate::fs_util::write_file_atomic(
+        &destination,
+        data,
+        crate::fs_util::AtomicWriteOptions {
+            create_parents: false,
+            owner_only_unix: true,
+            sync: true,
+            preserve_permissions: None,
+        },
+    )
+    .map_err(|error| format!("Could not write file to folder: {error}"))?;
 
     Ok(WriteFileResult {
         path: destination.to_string_lossy().into_owned(),
@@ -882,10 +827,9 @@ fn write_file_to_folder_core(
 ) -> Result<WriteFileResult, String> {
     let folder = {
         let folders = downloads.folders.lock().unwrap();
-        folders
-            .get(folder_id)
-            .cloned()
-            .ok_or_else(|| "Unknown download folder id; call pick_download_folder first.".to_string())?
+        folders.get(folder_id).cloned().ok_or_else(|| {
+            "Unknown download folder id; call pick_download_folder first.".to_string()
+        })?
     };
     write_file_to_folder_in_dir(&folder, file_name, data)
 }
@@ -919,10 +863,9 @@ pub(crate) async fn write_file_to_folder(
     let data = body_bytes(request.body())?;
     let folder = {
         let folders = downloads.folders.lock().unwrap();
-        folders
-            .get(&folder_id)
-            .cloned()
-            .ok_or_else(|| "Unknown download folder id; call pick_download_folder first.".to_string())?
+        folders.get(&folder_id).cloned().ok_or_else(|| {
+            "Unknown download folder id; call pick_download_folder first.".to_string()
+        })?
     };
     tauri::async_runtime::spawn_blocking(move || -> Result<WriteFileResult, String> {
         checked_name(&file_name)?; // first, so a refused name leaves no empty subfolder behind
@@ -995,15 +938,24 @@ mod tests {
     #[test]
     fn decoded_header_undoes_encode_uri_component() {
         let mut headers = HeaderMap::new();
-        headers.insert("x-file-name", HeaderValue::from_static("%E6%98%A5%20map.geojson"));
-        assert_eq!(decoded_header(&headers, "x-file-name").unwrap(), "\u{6625} map.geojson");
+        headers.insert(
+            "x-file-name",
+            HeaderValue::from_static("%E6%98%A5%20map.geojson"),
+        );
+        assert_eq!(
+            decoded_header(&headers, "x-file-name").unwrap(),
+            "\u{6625} map.geojson"
+        );
         assert!(decoded_header(&headers, "x-folder-id").is_err());
     }
 
     #[test]
     fn body_bytes_takes_raw_bytes_and_the_postmessage_list() {
         use tauri::ipc::InvokeBody;
-        assert_eq!(body_bytes(&InvokeBody::Raw(vec![1, 2])).unwrap(), vec![1, 2]);
+        assert_eq!(
+            body_bytes(&InvokeBody::Raw(vec![1, 2])).unwrap(),
+            vec![1, 2]
+        );
         let list = InvokeBody::Json(serde_json::json!([1, 255]));
         assert_eq!(body_bytes(&list).unwrap(), vec![1, 255]);
         assert!(body_bytes(&InvokeBody::Json(serde_json::json!([256]))).is_err());
@@ -1249,13 +1201,9 @@ mod tests {
             .unwrap()
             .insert("folder-1".into(), dir.clone());
 
-        let res = write_file_to_folder_core(
-            "folder-1",
-            "checkpoint:12.json",
-            b"content",
-            &downloads,
-        )
-        .unwrap();
+        let res =
+            write_file_to_folder_core("folder-1", "checkpoint:12.json", b"content", &downloads)
+                .unwrap();
 
         assert_eq!(res.size, 7);
         assert!(res.path.ends_with("checkpoint%3A12.json"));
@@ -1354,8 +1302,8 @@ mod tests {
     #[test]
     fn write_file_rejects_unknown_folder() {
         let downloads = RemoteDownloads::default();
-        let err = write_file_to_folder_core("folder-missing", "a.txt", b"data", &downloads)
-            .unwrap_err();
+        let err =
+            write_file_to_folder_core("folder-missing", "a.txt", b"data", &downloads).unwrap_err();
         assert!(err.contains("Unknown download folder id"));
     }
 
@@ -1377,13 +1325,9 @@ mod tests {
             .unwrap()
             .insert("folder-1".into(), dir.clone());
 
-        let res = write_file_to_folder_core(
-            "folder-1",
-            "../../nested/escape.txt",
-            b"safe",
-            &downloads,
-        )
-        .unwrap();
+        let res =
+            write_file_to_folder_core("folder-1", "../../nested/escape.txt", b"safe", &downloads)
+                .unwrap();
 
         assert_eq!(res.path, dir.join("escape.txt").to_string_lossy());
         assert_eq!(fs::read(dir.join("escape.txt")).unwrap(), b"safe");

@@ -22,3 +22,21 @@ class_name = "CollabSession"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["CollabSession"]
+
+[[ratelimits]]
+name = "COLLAB_RATE_LIMITER"
+namespace_id = "54702"
+
+[ratelimits.simple]
+limit = 10
+period = 60
+
+[observability]
+enabled = true
+
+[observability.logs]
+head_sampling_rate = 1
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 0.01

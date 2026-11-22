@@ -7,11 +7,7 @@
 //! way a browser tab on the service's own site would. Set-Cookie headers are
 //! never handed back to JavaScript, matching a browser's HttpOnly handling.
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::time::Duration;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use reqwest::{
@@ -210,27 +206,12 @@ async fn send(request: PluginHttpRequest) -> Result<PluginHttpResponse, String> 
     read_response(response).await
 }
 
-type CancelRequest = Box<dyn Fn() + Send + Sync>;
-
 #[derive(Default, Clone)]
-pub(crate) struct PluginHttpRequests(Arc<Mutex<HashMap<String, CancelRequest>>>);
+pub(crate) struct PluginHttpRequests(crate::in_flight::CancelRegistry);
 
 impl PluginHttpRequests {
     fn cancel(&self, id: &str) {
-        if let Some(cancel) = self.0.lock().unwrap().remove(id) {
-            cancel();
-        }
-    }
-}
-
-struct RequestGuard {
-    requests: PluginHttpRequests,
-    id: String,
-}
-
-impl Drop for RequestGuard {
-    fn drop(&mut self) {
-        self.requests.cancel(&self.id);
+        self.0.cancel(id);
     }
 }
 
@@ -253,19 +234,22 @@ pub(crate) async fn plugin_http_request(
     requests: tauri::State<'_, PluginHttpRequests>,
 ) -> Result<PluginHttpResponse, String> {
     let task = {
-        let mut active = requests.0.lock().unwrap();
-        if active.contains_key(&request_id) {
+        if requests.0.contains_key(&request_id) {
             return Err("Duplicate request ID.".into());
         }
         let task = tauri::async_runtime::spawn(send(request));
         let abort = task.inner().abort_handle();
-        active.insert(request_id.clone(), Box::new(move || abort.abort()));
+        if requests
+            .0
+            .try_register(request_id.clone(), Box::new(move || abort.abort()))
+            .is_err()
+        {
+            task.abort();
+            return Err("Duplicate request ID.".into());
+        }
         task
     };
-    let _guard = RequestGuard {
-        requests: requests.inner().clone(),
-        id: request_id,
-    };
+    let _guard = crate::in_flight::CancelGuard::new(requests.inner().0.clone(), request_id);
     ready
         .send(())
         .map_err(|_| "Request caller disconnected.".to_string())?;

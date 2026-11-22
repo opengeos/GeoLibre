@@ -14,6 +14,7 @@ import type {
   MapLayerMouseEvent,
   MapMouseEvent,
 } from "maplibre-gl";
+import { downloadBlobFallback } from "../panel-dom";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { getControlMap } from "./style-map";
 import {
@@ -377,15 +378,7 @@ function downloadDemItem(item: UsgsDemItem): void {
 function exportFootprintsAsGeoJson(items: UsgsDemItem[]): void {
   const fc = footprintCollection(items);
   const blob = new Blob([JSON.stringify(fc, null, 2)], { type: "application/geo+json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "usgs-dem-footprints.geojson";
-  link.style.display = "none";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  downloadBlobFallback("usgs-dem-footprints.geojson", blob, "application/geo+json");
 }
 
 function mountPanel(container: HTMLElement): () => void {
