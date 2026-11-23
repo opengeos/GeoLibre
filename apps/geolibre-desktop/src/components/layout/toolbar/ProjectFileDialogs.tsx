@@ -10,17 +10,13 @@ import {
   Label,
 } from "@geolibre/ui";
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import type {
   RemoteSharedProjectTarget,
   ProjectFileActions,
 } from "../../../hooks/useProjectFileActions";
-import {
-  countArcgisUnloadedLayers,
-  type ArcgisProjectImportWarning,
-} from "../../../lib/arcgis-project-import";
 import {
   fetchSharedProjectVersions,
   shareHostLabel,
@@ -36,7 +32,7 @@ import {
 import { RemoteSignInDialog } from "./RemoteSignInDialog";
 import { SaveTemplateDialog } from "../SaveTemplateDialog";
 import { EmbedVectorDataDialog } from "./EmbedVectorDataDialog";
-import { ImportWarningList } from "./ImportWarningList";
+import { ArcgisImportReportDialog } from "./ArcgisImportReportDialog";
 import { QgisImportReportDialog } from "./QgisImportReportDialog";
 import { SaveLayerEditsDialog } from "./SaveLayerEditsDialog";
 
@@ -58,20 +54,6 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
   }
   const saveNameLabels = projectFiles.saveNamePrompt ?? lastSaveNamePrompt.current;
 
-  // Stable identities so the warning lists regroup only when the warnings change.
-  const describeArcgisWarning = useCallback(
-    (warning: ArcgisProjectImportWarning) => {
-      const layerType = warning.layerType || t("toolbar.item.arcgisUnknownLayerType");
-      // The importer gives every symbology warning an issue code, so the
-      // `symbology`/`symbology-partial` reason texts are only a fallback; the
-      // typed key below still needs one entry per reason.
-      return warning.symbologyIssue
-        ? t(`toolbar.item.arcgisSymbologyIssue.${warning.symbologyIssue}`, { layerType })
-        : t(`toolbar.item.arcgisImportReason.${warning.reason}`, { layerType });
-    },
-    [t],
-  );
-  const arcgisUnloadedCount = countArcgisUnloadedLayers(projectFiles.arcgisImportWarnings ?? []);
   return (
     <>
       <Dialog
@@ -220,32 +202,7 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog
-        open={projectFiles.arcgisImportWarnings !== null}
-        onOpenChange={(open: boolean) => {
-          if (!open) projectFiles.setArcgisImportWarnings(null);
-        }}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{t("toolbar.item.arcgisImportComplete")}</DialogTitle>
-            <DialogDescription>
-              {arcgisUnloadedCount > 0
-                ? t("toolbar.item.arcgisImportWarnings", { count: arcgisUnloadedCount })
-                : t("toolbar.item.arcgisImportSymbologyOnly")}
-            </DialogDescription>
-          </DialogHeader>
-          <ImportWarningList
-            warnings={projectFiles.arcgisImportWarnings ?? []}
-            describe={describeArcgisWarning}
-          />
-          <div className="flex justify-end">
-            <Button onClick={() => projectFiles.setArcgisImportWarnings(null)}>
-              {t("common.ok")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ArcgisImportReportDialog report={projectFiles.arcgisImportReport} />
       <Dialog
         open={projectFiles.actionError !== null}
         onOpenChange={(open: boolean) => {
