@@ -147,14 +147,9 @@ export class ArcgisControlHost {
         isEnabled: () => doubleClickZoomEnabled,
       },
       ...Object.fromEntries(
-        [
-          "dragRotate",
-          "scrollZoom",
-          "boxZoom",
-          "touchZoomRotate",
-          "touchPitch",
-          "keyboard",
-        ].map((name) => [name, inertHandler()]),
+        ["dragRotate", "scrollZoom", "boxZoom", "touchZoomRotate", "touchPitch", "keyboard"].map(
+          (name) => [name, inertHandler()],
+        ),
       ),
     });
     installControlLayerEvents({
