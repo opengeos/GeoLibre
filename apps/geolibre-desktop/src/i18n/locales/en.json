@@ -181,6 +181,9 @@
     "noChangelog": "Release notes are not available. See the downloads page for details.",
     "stepsTitle": "How to update",
     "download": "Download update",
+    "installSigned": "Download and install update",
+    "installingSigned": "Installing update…",
+    "installSignedError": "Could not install the signed update automatically.",
     "steps": {
       "download": "Download the installer for your platform from the downloads page.",
       "install": "Run the installer. Your local projects, settings, and API keys are kept.",

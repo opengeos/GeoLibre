@@ -150,6 +150,43 @@ interface GitHubRelease {
   html_url?: unknown;
 }
 
+export interface DesktopSignedUpdateInfo {
+  configured: boolean;
+  available: boolean;
+  currentVersion: string;
+  version: string | null;
+  notes: string | null;
+  date: string | null;
+}
+
+/**
+ * Query Tauri's signed auto-updater (`tauri-plugin-updater`) on non-Store
+ * desktop builds. Returns `null` off desktop or in Store builds.
+ */
+export async function checkDesktopSignedUpdate(): Promise<DesktopSignedUpdateInfo | null> {
+  if (IS_STORE_BUILD) return null;
+  const { isTauri } = await import("./is-tauri");
+  if (!isTauri()) return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<DesktopSignedUpdateInfo>("check_desktop_update");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Download, verify, and install an available signed desktop update, restarting
+ * the application upon completion.
+ */
+export async function installDesktopSignedUpdate(): Promise<boolean> {
+  if (IS_STORE_BUILD) return false;
+  const { isTauri } = await import("./is-tauri");
+  if (!isTauri()) return false;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<boolean>("install_desktop_update");
+}
+
 /**
  * Fetch the latest GeoLibre release from GitHub.
  *

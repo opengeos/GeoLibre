@@ -638,12 +638,32 @@ pub(crate) async fn pick_download_folder(
     Ok(Some(PickedDownloadFolder { id, path: shown }))
 }
 
-/// Mobile stand-in for [`pick_download_folder`]: the dialog plugin has no
-/// folder picker on Android or iOS.
+/// Mobile export staging folder for [`pick_download_folder`]: iOS and Android
+/// lack an arbitrary desktop folder picker, so we stage exports inside the
+/// app-private `exports` cache directory so callers can immediately hand them
+/// to the OS Share Sheet.
 #[cfg(mobile)]
 #[tauri::command]
-pub(crate) async fn pick_download_folder() -> Result<Option<PickedDownloadFolder>, String> {
-    Err("Choosing a download folder is not supported on this platform.".into())
+pub(crate) async fn pick_download_folder(
+    app: tauri::AppHandle,
+    downloads: tauri::State<'_, RemoteDownloads>,
+) -> Result<Option<PickedDownloadFolder>, String> {
+    let dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| format!("Could not resolve mobile export folder: {error}"))?
+        .join("exports");
+    fs::create_dir_all(&dir)
+        .map_err(|error| format!("Could not prepare mobile export folder: {error}"))?;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT_MOBILE_FOLDER_ID: AtomicU64 = AtomicU64::new(1);
+    let id = format!(
+        "mobile-export-{}",
+        NEXT_MOBILE_FOLDER_ID.fetch_add(1, Ordering::Relaxed)
+    );
+    let shown = dir.to_string_lossy().into_owned();
+    downloads.folders.lock().unwrap().insert(id.clone(), dir);
+    Ok(Some(PickedDownloadFolder { id, path: shown }))
 }
 
 fn encode_reserved_filename_chars(name: &str) -> String {

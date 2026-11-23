@@ -137,6 +137,7 @@ windows-sys = { version = "0.61", features = [
   "Wdk_System_Threading",
   "Win32_Foundation",
   "Win32_NetworkManagement_IpHelper",
+  "Win32_System_JobObjects",
   "Win32_System_Threading",
 ] }
 # Reading the OAuth callback scheme's registered handler (#3042). Already an
@@ -144,7 +145,9 @@ windows-sys = { version = "0.61", features = [
 windows-registry = "0.100"
 
 # OS credential store for tokens and API keys saved in Settings (issue #1667).
-# Desktop only: mobile keeps the webview's localStorage path. Pinned to 3.6.3:
+# Desktop uses macOS Keychain, Windows Credential Manager, and Linux Secret
+# Service; iOS uses Keychain via apple-native; Android uses the encrypted vault
+# backed by ring AES-256-GCM in app-private storage. Pinned to 3.6.3:
 # 4.x moved to the keyring-core store API and needs Rust 1.88. `vendored`
 # builds libdbus from source, so Linux builds need no libdbus-1-dev.
 [target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
@@ -155,3 +158,8 @@ keyring = { version = "=3.6.3", features = [
   "crypto-rust",
   "vendored",
 ] }
+# Signed desktop auto-updater for non-Store builds (compiled out when feature = "mas").
+tauri-plugin-updater = "2"
+
+[target.'cfg(target_os = "ios")'.dependencies]
+keyring = { version = "=3.6.3", features = ["apple-native"] }

@@ -90,9 +90,155 @@ pub fn reset_read_gate(label: &str) {
     with_read_gate(|gate| gate.reset(label));
 }
 
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "windows",
+    target_os = "linux"
+))]
 fn entry(account: &str) -> Result<keyring::Entry, String> {
     validate_account(account)?;
     keyring::Entry::new(SERVICE, account).map_err(|error| error.to_string())
+}
+
+/// Encrypted app-private credential vault using AES-256-GCM (`ring::aead`) for
+/// Android (where `keyring` has no native backend). Each write generates a
+/// fresh 96-bit random nonce and stores the vault atomically with owner-only
+/// permissions inside the app-private data directory.
+#[cfg(any(target_os = "android", test))]
+pub(crate) mod encrypted_vault {
+    use super::{validate_account, SERVICE};
+    use crate::fs_util::{write_file_atomic, AtomicWriteOptions};
+    use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM, NONCE_LEN};
+    use ring::rand::{SecureRandom, SystemRandom};
+    use std::collections::HashMap;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    const VAULT_MAGIC: &[u8; 4] = b"GLV1";
+    const KEY_LEN: usize = 32;
+
+    fn vault_paths(base_dir: &Path) -> (PathBuf, PathBuf) {
+        let dir = base_dir.join("secure_vault");
+        (dir.join("vault.key"), dir.join("credentials.enc"))
+    }
+
+    fn load_or_create_key(key_path: &Path) -> Result<[u8; KEY_LEN], String> {
+        if let Ok(bytes) = fs::read(key_path) {
+            if bytes.len() == KEY_LEN {
+                let mut key = [0u8; KEY_LEN];
+                key.copy_from_slice(&bytes);
+                return Ok(key);
+            }
+        }
+        let rng = SystemRandom::new();
+        let mut key = [0u8; KEY_LEN];
+        rng.fill(&mut key)
+            .map_err(|_| "Could not generate credential vault key.".to_string())?;
+        write_file_atomic(
+            key_path,
+            &key,
+            AtomicWriteOptions {
+                create_parents: true,
+                owner_only_unix: true,
+                sync: true,
+                preserve_permissions: None,
+            },
+        )
+        .map_err(|error| format!("Could not persist credential vault key: {error}"))?;
+        Ok(key)
+    }
+
+    fn read_map(base_dir: &Path) -> Result<HashMap<String, String>, String> {
+        let (key_path, vault_path) = vault_paths(base_dir);
+        let raw = match fs::read(&vault_path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(HashMap::new());
+            }
+            Err(error) => return Err(format!("Could not read encrypted vault: {error}")),
+        };
+        if raw.len() < VAULT_MAGIC.len() + NONCE_LEN || &raw[..VAULT_MAGIC.len()] != VAULT_MAGIC {
+            return Err("Encrypted credential vault header is invalid.".to_string());
+        }
+        let key_bytes = load_or_create_key(&key_path)?;
+        let unbound = UnboundKey::new(&AES_256_GCM, &key_bytes)
+            .map_err(|_| "Could not initialize credential vault cipher.".to_string())?;
+        let key = LessSafeKey::new(unbound);
+        let nonce_start = VAULT_MAGIC.len();
+        let nonce_end = nonce_start + NONCE_LEN;
+        let nonce = Nonce::try_assume_unique_for_key(&raw[nonce_start..nonce_end])
+            .map_err(|_| "Invalid credential vault nonce.".to_string())?;
+        let mut in_out = raw[nonce_end..].to_vec();
+        let plaintext = key
+            .open_in_place(nonce, Aad::from(SERVICE.as_bytes()), &mut in_out)
+            .map_err(|_| "Could not decrypt credential vault (integrity check failed).".to_string())?;
+        serde_json::from_slice(plaintext)
+            .map_err(|error| format!("Could not parse decrypted credential vault: {error}"))
+    }
+
+    fn write_map(base_dir: &Path, entries: &HashMap<String, String>) -> Result<(), String> {
+        let (key_path, vault_path) = vault_paths(base_dir);
+        let key_bytes = load_or_create_key(&key_path)?;
+        let unbound = UnboundKey::new(&AES_256_GCM, &key_bytes)
+            .map_err(|_| "Could not initialize credential vault cipher.".to_string())?;
+        let key = LessSafeKey::new(unbound);
+        let rng = SystemRandom::new();
+        let mut nonce_bytes = [0u8; NONCE_LEN];
+        rng.fill(&mut nonce_bytes)
+            .map_err(|_| "Could not generate credential vault nonce.".to_string())?;
+        let nonce = Nonce::assume_unique_for_key(nonce_bytes);
+        let mut in_out = serde_json::to_vec(entries)
+            .map_err(|error| format!("Could not serialize credential vault: {error}"))?;
+        key.seal_in_place_append_tag(nonce, Aad::from(SERVICE.as_bytes()), &mut in_out)
+            .map_err(|_| "Could not encrypt credential vault.".to_string())?;
+        let mut blob = Vec::with_capacity(VAULT_MAGIC.len() + NONCE_LEN + in_out.len());
+        blob.extend_from_slice(VAULT_MAGIC);
+        blob.extend_from_slice(&nonce_bytes);
+        blob.extend_from_slice(&in_out);
+        write_file_atomic(
+            &vault_path,
+            &blob,
+            AtomicWriteOptions {
+                create_parents: true,
+                owner_only_unix: true,
+                sync: true,
+                preserve_permissions: None,
+            },
+        )
+        .map_err(|error| format!("Could not write encrypted credential vault: {error}"))
+    }
+
+    pub(crate) fn get_many(
+        base_dir: &Path,
+        accounts: &[String],
+    ) -> Result<HashMap<String, String>, String> {
+        let map = read_map(base_dir)?;
+        let mut found = HashMap::with_capacity(accounts.len());
+        for account in accounts {
+            validate_account(account)?;
+            if let Some(secret) = map.get(account) {
+                found.insert(account.clone(), secret.clone());
+            }
+        }
+        Ok(found)
+    }
+
+    pub(crate) fn set(base_dir: &Path, account: &str, secret: &str) -> Result<(), String> {
+        validate_account(account)?;
+        let mut map = read_map(base_dir)?;
+        map.insert(account.to_string(), secret.to_string());
+        write_map(base_dir, &map)
+    }
+
+    pub(crate) fn delete(base_dir: &Path, account: &str) -> Result<(), String> {
+        validate_account(account)?;
+        let mut map = read_map(base_dir)?;
+        if map.remove(account).is_some() {
+            write_map(base_dir, &map)?;
+        }
+        Ok(())
+    }
 }
 
 fn lock() -> std::sync::MutexGuard<'static, ()> {
@@ -100,7 +246,16 @@ fn lock() -> std::sync::MutexGuard<'static, ()> {
     STORE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-fn get_many_blocking(accounts: Vec<String>) -> Result<HashMap<String, String>, String> {
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "windows",
+    target_os = "linux"
+))]
+fn get_many_blocking(
+    _app_data_dir: Option<std::path::PathBuf>,
+    accounts: Vec<String>,
+) -> Result<HashMap<String, String>, String> {
     let _guard = lock();
     let mut found = HashMap::with_capacity(accounts.len());
     for account in accounts {
@@ -115,8 +270,24 @@ fn get_many_blocking(accounts: Vec<String>) -> Result<HashMap<String, String>, S
     Ok(found)
 }
 
+#[cfg(target_os = "android")]
+fn get_many_blocking(
+    app_data_dir: Option<std::path::PathBuf>,
+    accounts: Vec<String>,
+) -> Result<HashMap<String, String>, String> {
+    let dir = app_data_dir.ok_or_else(|| "Could not resolve app data directory.".to_string())?;
+    let _guard = lock();
+    encrypted_vault::get_many(&dir, &accounts)
+}
+
 /// Reads one entry for the app's own Rust code (not the webview): the read gate
 /// guards only [`secure_store_get_many`].
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "windows",
+    target_os = "linux"
+))]
 pub(crate) fn get_blocking(account: &str) -> Result<Option<String>, String> {
     let _guard = lock();
     match entry(account)?.get_password() {
@@ -143,6 +314,12 @@ fn check_webview_account(account: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "windows",
+    target_os = "linux"
+))]
 pub(crate) fn set_blocking(account: String, secret: String) -> Result<(), String> {
     let _guard = lock();
     entry(&account)?
@@ -150,12 +327,39 @@ pub(crate) fn set_blocking(account: String, secret: String) -> Result<(), String
         .map_err(|error| error.to_string())
 }
 
+#[cfg(target_os = "android")]
+fn set_blocking_with_dir(
+    app_data_dir: Option<std::path::PathBuf>,
+    account: String,
+    secret: String,
+) -> Result<(), String> {
+    let dir = app_data_dir.ok_or_else(|| "Could not resolve app data directory.".to_string())?;
+    let _guard = lock();
+    encrypted_vault::set(&dir, &account, &secret)
+}
+
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "windows",
+    target_os = "linux"
+))]
 pub(crate) fn delete_blocking(account: String) -> Result<(), String> {
     let _guard = lock();
     match entry(&account)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(error) => Err(error.to_string()),
     }
+}
+
+#[cfg(target_os = "android")]
+fn delete_blocking_with_dir(
+    app_data_dir: Option<std::path::PathBuf>,
+    account: String,
+) -> Result<(), String> {
+    let dir = app_data_dir.ok_or_else(|| "Could not resolve app data directory.".to_string())?;
+    let _guard = lock();
+    encrypted_vault::delete(&dir, &account)
 }
 
 /// Returns the secrets for the accounts that exist; absent accounts are omitted.
@@ -165,15 +369,18 @@ pub(crate) fn delete_blocking(account: String) -> Result<(), String> {
 /// [`secure_store_seal`]; the read is used up even when it fails.
 #[tauri::command]
 pub async fn secure_store_get_many(
+    app: tauri::AppHandle,
     webview: tauri::Webview,
     accounts: Vec<String>,
 ) -> Result<HashMap<String, String>, String> {
+    use tauri::Manager;
     with_read_gate(|gate| gate.claim(webview.label()))?;
     let accounts = accounts
         .into_iter()
         .filter(|account| check_webview_account(account).is_ok())
         .collect();
-    tauri::async_runtime::spawn_blocking(move || get_many_blocking(accounts))
+    let app_data_dir = app.path().app_data_dir().ok();
+    tauri::async_runtime::spawn_blocking(move || get_many_blocking(app_data_dir, accounts))
         .await
         .map_err(|error| format!("Could not join secure storage task: {error}"))?
 }
@@ -187,8 +394,23 @@ pub fn secure_store_seal(webview: tauri::Webview) {
 }
 
 #[tauri::command]
-pub async fn secure_store_set(account: String, secret: String) -> Result<(), String> {
+pub async fn secure_store_set(
+    app: tauri::AppHandle,
+    account: String,
+    secret: String,
+) -> Result<(), String> {
+    use tauri::Manager;
     check_webview_account(&account)?;
+    let _app_data_dir = app.path().app_data_dir().ok();
+    #[cfg(target_os = "android")]
+    {
+        return tauri::async_runtime::spawn_blocking(move || {
+            set_blocking_with_dir(_app_data_dir, account, secret)
+        })
+        .await
+        .map_err(|error| format!("Could not join secure storage task: {error}"))?;
+    }
+    #[cfg(not(target_os = "android"))]
     tauri::async_runtime::spawn_blocking(move || set_blocking(account, secret))
         .await
         .map_err(|error| format!("Could not join secure storage task: {error}"))?
@@ -196,8 +418,19 @@ pub async fn secure_store_set(account: String, secret: String) -> Result<(), Str
 
 /// Deleting an account that does not exist succeeds.
 #[tauri::command]
-pub async fn secure_store_delete(account: String) -> Result<(), String> {
+pub async fn secure_store_delete(app: tauri::AppHandle, account: String) -> Result<(), String> {
+    use tauri::Manager;
     check_webview_account(&account)?;
+    let _app_data_dir = app.path().app_data_dir().ok();
+    #[cfg(target_os = "android")]
+    {
+        return tauri::async_runtime::spawn_blocking(move || {
+            delete_blocking_with_dir(_app_data_dir, account)
+        })
+        .await
+        .map_err(|error| format!("Could not join secure storage task: {error}"))?;
+    }
+    #[cfg(not(target_os = "android"))]
     tauri::async_runtime::spawn_blocking(move || delete_blocking(account))
         .await
         .map_err(|error| format!("Could not join secure storage task: {error}"))?
@@ -284,5 +517,45 @@ mod tests {
             validate_account("settings.share\nToken"),
             Err("Credential name must not contain control characters.".to_string())
         );
+    }
+
+    #[test]
+    fn encrypted_vault_round_trips_and_detects_tampering() {
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-vault-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        super::encrypted_vault::set(&dir, "settings.shareToken", "secret-123").unwrap();
+        super::encrypted_vault::set(&dir, "ai.default.KEY", "api-xyz").unwrap();
+        let found = super::encrypted_vault::get_many(
+            &dir,
+            &[
+                "settings.shareToken".to_string(),
+                "ai.default.KEY".to_string(),
+                "missing.key".to_string(),
+            ],
+        )
+        .unwrap();
+        assert_eq!(found.get("settings.shareToken").map(String::as_str), Some("secret-123"));
+        assert_eq!(found.get("ai.default.KEY").map(String::as_str), Some("api-xyz"));
+        assert!(!found.contains_key("missing.key"));
+
+        super::encrypted_vault::delete(&dir, "settings.shareToken").unwrap();
+        let after_delete =
+            super::encrypted_vault::get_many(&dir, &["settings.shareToken".to_string()]).unwrap();
+        assert!(after_delete.is_empty());
+
+        // Tampering with ciphertext must fail GCM authentication.
+        let enc_path = dir.join("secure_vault").join("credentials.enc");
+        let mut bytes = std::fs::read(&enc_path).unwrap();
+        let last = bytes.len() - 1;
+        bytes[last] ^= 0xFF;
+        std::fs::write(&enc_path, &bytes).unwrap();
+        assert!(super::encrypted_vault::get_many(&dir, &["ai.default.KEY".to_string()]).is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -41,6 +41,42 @@ struct NativeVectorOptions {
     extension: String,
     layer: Option<String>,
     override_source_crs: Option<String>,
+    bbox: Option<[f64; 4]>,
+}
+
+/// Binary IPC export format supported by [`load_native_vector_file_binary`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NativeBinaryFormat {
+    FlatGeobuf,
+    GeoJson,
+}
+
+impl NativeBinaryFormat {
+    fn parse(raw: Option<&str>) -> Result<Self, String> {
+        match raw.map(str::trim).filter(|v| !v.is_empty()) {
+            None | Some("flatgeobuf") | Some("fgb") => Ok(Self::FlatGeobuf),
+            Some("geojson") | Some("json") => Ok(Self::GeoJson),
+            Some(other) => Err(format!(
+                "Unsupported native vector binary format \"{other}\". Expected \"flatgeobuf\" or \"geojson\"."
+            )),
+        }
+    }
+}
+
+fn validate_bbox(bbox: Option<[f64; 4]>) -> Result<Option<[f64; 4]>, String> {
+    let Some([min_x, min_y, max_x, max_y]) = bbox else {
+        return Ok(None);
+    };
+    if ![min_x, min_y, max_x, max_y]
+        .iter()
+        .all(|coord| coord.is_finite())
+    {
+        return Err("Spatial bbox filter must contain finite coordinates.".to_string());
+    }
+    if min_x > max_x || min_y > max_y {
+        return Err("Spatial bbox filter must satisfy min_x <= max_x and min_y <= max_y.".to_string());
+    }
+    Ok(Some([min_x, min_y, max_x, max_y]))
 }
 
 #[derive(Debug)]
@@ -72,8 +108,10 @@ struct DescribedColumn {
 pub async fn count_native_vector_file_features(
     path: String,
     layer: Option<String>,
+    override_source_crs: Option<String>,
+    bbox: Option<[f64; 4]>,
 ) -> Result<usize, String> {
-    let options = native_options(path, layer, None)?;
+    let options = native_options_with_bbox(path, layer, override_source_crs, bbox)?;
     tauri::async_runtime::spawn_blocking(move || {
         count_native_vector_file_features_blocking(options)
     })
@@ -86,11 +124,32 @@ pub async fn load_native_vector_file(
     path: String,
     layer: Option<String>,
     override_source_crs: Option<String>,
+    bbox: Option<[f64; 4]>,
 ) -> Result<serde_json::Value, String> {
-    let options = native_options(path, layer, override_source_crs)?;
+    let options = native_options_with_bbox(path, layer, override_source_crs, bbox)?;
     tauri::async_runtime::spawn_blocking(move || load_native_vector_file_blocking(options))
         .await
         .map_err(|error| format!("Native DuckDB load task failed: {error}"))?
+}
+
+/// Stream a native DuckDB vector query directly as raw IPC bytes (FlatGeobuf
+/// or UTF-8 GeoJSON) with optional WGS84 spatial bounding-box pushdown.
+#[tauri::command]
+pub async fn load_native_vector_file_binary(
+    path: String,
+    layer: Option<String>,
+    override_source_crs: Option<String>,
+    bbox: Option<[f64; 4]>,
+    format: Option<String>,
+) -> Result<tauri::ipc::Response, String> {
+    let options = native_options_with_bbox(path, layer, override_source_crs, bbox)?;
+    let binary_format = NativeBinaryFormat::parse(format.as_deref())?;
+    let bytes = tauri::async_runtime::spawn_blocking(move || {
+        load_native_vector_file_binary_blocking(options, binary_format)
+    })
+    .await
+    .map_err(|error| format!("Native DuckDB binary load task failed: {error}"))??;
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
 fn native_options(
@@ -98,6 +157,16 @@ fn native_options(
     layer: Option<String>,
     override_source_crs: Option<String>,
 ) -> Result<NativeVectorOptions, String> {
+    native_options_with_bbox(path, layer, override_source_crs, None)
+}
+
+fn native_options_with_bbox(
+    path: String,
+    layer: Option<String>,
+    override_source_crs: Option<String>,
+    bbox: Option<[f64; 4]>,
+) -> Result<NativeVectorOptions, String> {
+    let bbox = validate_bbox(bbox)?;
     if !crate::is_allowed_local_vector_path(&path) {
         return Err(format!(
             "Refusing to read \"{path}\": not an absolute local vector file path"
@@ -143,6 +212,7 @@ fn native_options(
         path: canonical_path,
         layer: blank_to_none(layer),
         override_source_crs: blank_to_none(override_source_crs),
+        bbox,
     })
 }
 
@@ -202,57 +272,39 @@ fn has_duckdb_bracket_glob(path: &str) -> bool {
     false
 }
 
-fn count_native_vector_file_features_blocking(
-    options: NativeVectorOptions,
-) -> Result<usize, String> {
-    let conn = open_native_duckdb()?;
-    let sql = source_sql(&options);
-    let count_sql = format!(
-        "SELECT count(*) AS {} FROM ({sql}) AS data",
-        quote_identifier(FEATURE_COUNT_COLUMN)
-    );
-    conn.query_row(&count_sql, [], |row| row.get::<_, i64>(0))
-        .map(|count| count.max(0) as usize)
-        .map_err(|error| format!("Could not count vector features with native DuckDB: {error}"))
+struct PreparedVectorQuery {
+    sql: String,
+    property_columns: Vec<String>,
+    geometry_wgs84_sql: String,
+    bbox_where_clause: String,
 }
 
-fn load_native_vector_file_blocking(
-    options: NativeVectorOptions,
-) -> Result<serde_json::Value, String> {
-    let conn = open_native_duckdb()?;
-    let sql = source_sql(&options);
-    let columns = describe_source_columns(&conn, &sql)?;
-    // A GeoParquet's own `geo` block names the geometry column, which beats
-    // guessing from column names when a file carries several binary columns.
-    // The document is read once here and reused for the CRS below.
+fn prepare_vector_query(
+    conn: &Connection,
+    options: &NativeVectorOptions,
+) -> Result<PreparedVectorQuery, String> {
+    let sql = source_sql(options);
+    let columns = describe_source_columns(conn, &sql)?;
     let is_parquet = is_parquet_extension(&options.extension);
     let geo_metadata = if is_parquet {
-        read_geoparquet_metadata_json(&conn, &options.path)
+        read_geoparquet_metadata_json(conn, &options.path)
             .as_deref()
             .and_then(parse_geoparquet_metadata)
     } else {
         None
     };
     let detected = detect_geometry_column(
-        &conn,
+        conn,
         &sql,
         &columns,
         geo_metadata
             .as_ref()
             .and_then(|metadata| metadata.primary_column.as_deref()),
-        // A Parquet table of lon/lat columns with no geometry at all is a very
-        // common publishing shape; every other format either carries geometry
-        // or has its own importer.
         is_parquet,
     )?;
     let property_columns: Vec<String> = columns
         .iter()
         .filter(|column| column.name != detected.column)
-        // A *second* geometry column is not an attribute, and the DuckDB client
-        // has no reader for the spatial extension's type: selecting one fails
-        // the whole query rather than yielding a value. Drop it the way binary
-        // values are dropped in `row_to_feature`. This is the ordinary shape of
-        // a file that declares a `primary_column`, so it must load.
         .filter(|column| {
             !column
                 .column_type
@@ -263,10 +315,53 @@ fn load_native_vector_file_blocking(
         .collect();
     let source_crs = match options.override_source_crs.clone() {
         Some(crs) => Some(crs),
-        None => read_source_crs(&conn, &options, geo_metadata.as_ref(), &detected.column),
+        None => read_source_crs(conn, options, geo_metadata.as_ref(), &detected.column),
     };
-    let geometry_json_sql = geometry_geojson_sql(&geometry_expr(&detected), source_crs.as_deref());
-    let mut select_columns: Vec<String> = property_columns
+    let geom_wgs84 = geometry_wgs84_sql(&geometry_expr(&detected), source_crs.as_deref());
+    let bbox_where_clause = match options.bbox {
+        Some(bbox) => format!(" WHERE {}", bbox_filter_sql(&geom_wgs84, bbox)),
+        None => String::new(),
+    };
+    Ok(PreparedVectorQuery {
+        sql,
+        property_columns,
+        geometry_wgs84_sql: geom_wgs84,
+        bbox_where_clause,
+    })
+}
+
+fn count_native_vector_file_features_blocking(
+    options: NativeVectorOptions,
+) -> Result<usize, String> {
+    let conn = open_native_duckdb()?;
+    let count_sql = if options.bbox.is_some() {
+        let prepared = prepare_vector_query(&conn, &options)?;
+        format!(
+            "SELECT count(*) AS {} FROM ({}) AS data{}",
+            quote_identifier(FEATURE_COUNT_COLUMN),
+            prepared.sql,
+            prepared.bbox_where_clause
+        )
+    } else {
+        let sql = source_sql(&options);
+        format!(
+            "SELECT count(*) AS {} FROM ({sql}) AS data",
+            quote_identifier(FEATURE_COUNT_COLUMN)
+        )
+    };
+    conn.query_row(&count_sql, [], |row| row.get::<_, i64>(0))
+        .map(|count| count.max(0) as usize)
+        .map_err(|error| format!("Could not count vector features with native DuckDB: {error}"))
+}
+
+fn load_native_vector_file_blocking(
+    options: NativeVectorOptions,
+) -> Result<serde_json::Value, String> {
+    let conn = open_native_duckdb()?;
+    let prepared = prepare_vector_query(&conn, &options)?;
+    let geometry_json_sql = format!("ST_AsGeoJSON({})", prepared.geometry_wgs84_sql);
+    let mut select_columns: Vec<String> = prepared
+        .property_columns
         .iter()
         .map(|column| quote_identifier(column))
         .collect();
@@ -274,12 +369,17 @@ fn load_native_vector_file_blocking(
         "{geometry_json_sql} AS {}",
         quote_identifier(GEOMETRY_JSON_COLUMN)
     ));
-    let load_sql = format!("SELECT {} FROM ({sql}) AS data", select_columns.join(", "));
+    let load_sql = format!(
+        "SELECT {} FROM ({}) AS data{}",
+        select_columns.join(", "),
+        prepared.sql,
+        prepared.bbox_where_clause
+    );
 
     let mut stmt = conn
         .prepare(&load_sql)
         .map_err(|error| format!("Could not prepare native DuckDB vector query: {error}"))?;
-    let mut column_names = property_columns;
+    let mut column_names = prepared.property_columns;
     column_names.push(GEOMETRY_JSON_COLUMN.to_string());
     let mut rows = stmt
         .query([])
@@ -295,6 +395,68 @@ fn load_native_vector_file_blocking(
         "type": "FeatureCollection",
         "features": features,
     }))
+}
+
+struct TempFileGuard(std::path::PathBuf);
+
+impl Drop for TempFileGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+fn load_native_vector_file_binary_blocking(
+    options: NativeVectorOptions,
+    format: NativeBinaryFormat,
+) -> Result<Vec<u8>, String> {
+    match format {
+        NativeBinaryFormat::GeoJson => {
+            let fc = load_native_vector_file_blocking(options)?;
+            serde_json::to_vec(&fc)
+                .map_err(|error| format!("Could not serialize GeoJSON bytes: {error}"))
+        }
+        NativeBinaryFormat::FlatGeobuf => {
+            let conn = open_native_duckdb()?;
+            let prepared = prepare_vector_query(&conn, &options)?;
+            let mut select_columns: Vec<String> = prepared
+                .property_columns
+                .iter()
+                .map(|column| quote_identifier(column))
+                .collect();
+            select_columns.push(format!(
+                "{} AS {}",
+                prepared.geometry_wgs84_sql,
+                quote_identifier("geom")
+            ));
+            let select_sql = format!(
+                "SELECT {} FROM ({}) AS data{}",
+                select_columns.join(", "),
+                prepared.sql,
+                prepared.bbox_where_clause
+            );
+
+            static TEMP_COUNTER: std::sync::atomic::AtomicU64 =
+                std::sync::atomic::AtomicU64::new(1);
+            let seq = TEMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let temp_path = std::env::temp_dir().join(format!(
+                "geolibre-native-duckdb-{}-{seq}.fgb",
+                std::process::id()
+            ));
+            let _guard = TempFileGuard(temp_path.clone());
+            let temp_path_str = temp_path
+                .to_str()
+                .ok_or_else(|| "Temporary FlatGeobuf path is not valid UTF-8".to_string())?;
+            let copy_sql = format!(
+                "COPY ({select_sql}) TO {} WITH (FORMAT GDAL, DRIVER 'FlatGeobuf', SRS 'EPSG:4326')",
+                quote_sql_string(&sql_source_path(temp_path_str))
+            );
+            conn.execute_batch(&copy_sql).map_err(|error| {
+                format!("Could not export FlatGeobuf stream from native DuckDB: {error}")
+            })?;
+            std::fs::read(&temp_path)
+                .map_err(|error| format!("Could not read exported FlatGeobuf bytes: {error}"))
+        }
+    }
 }
 
 fn open_native_duckdb() -> Result<Connection, String> {
@@ -1233,15 +1395,22 @@ fn geometry_expr(detected: &DetectedGeometry) -> String {
     }
 }
 
-fn geometry_geojson_sql(geometry_expression: &str, source_crs: Option<&str>) -> String {
+fn geometry_wgs84_sql(geometry_expression: &str, source_crs: Option<&str>) -> String {
     match source_crs {
         Some(source_crs) => format!(
-            "ST_AsGeoJSON(ST_Transform({geometry_expression}, {}, {}, true))",
+            "ST_Transform({geometry_expression}, {}, {}, true)",
             quote_sql_string(source_crs),
             quote_sql_string(TARGET_CRS)
         ),
-        None => format!("ST_AsGeoJSON({geometry_expression})"),
+        None => geometry_expression.to_string(),
     }
+}
+
+fn bbox_filter_sql(geometry_wgs84_expression: &str, bbox: [f64; 4]) -> String {
+    let [min_x, min_y, max_x, max_y] = bbox;
+    format!(
+        "ST_Intersects({geometry_wgs84_expression}, ST_MakeEnvelope({min_x:?}, {min_y:?}, {max_x:?}, {max_y:?}))"
+    )
 }
 
 fn row_to_feature(row: &Row<'_>, column_names: &[String]) -> Result<serde_json::Value, String> {
@@ -1706,6 +1875,7 @@ mod tests {
             literal.to_string_lossy().into_owned(),
             None,
             None,
+            None,
         ))
         .expect_err("bracket parquet path must be rejected before read_parquet");
         assert!(direct_err.contains("glob paths are not allowed"));
@@ -1716,6 +1886,7 @@ mod tests {
             std::os::unix::fs::symlink(&literal, &link).expect("create bracket symlink");
             let link_err = tauri::async_runtime::block_on(load_native_vector_file(
                 link.to_string_lossy().into_owned(),
+                None,
                 None,
                 None,
             ))
@@ -1744,6 +1915,7 @@ mod tests {
                 .expect("create backslash symlink");
             let collection = tauri::async_runtime::block_on(load_native_vector_file(
                 backslash_link.to_string_lossy().into_owned(),
+                None,
                 None,
                 None,
             ))
@@ -2242,5 +2414,29 @@ mod tests {
         assert_eq!(query_layer(Some("parcels")).as_deref(), Some("EPSG:32618"));
         assert_eq!(query_layer(Some("local")), None);
         assert_eq!(query_layer(None).as_deref(), Some("EPSG:4326"));
+    }
+
+    #[test]
+    fn validate_bbox_and_bbox_filter_sql_guard_bounds() {
+        assert_eq!(
+            validate_bbox(Some([-10.0, 20.0, 30.0, 40.0])).unwrap(),
+            Some([-10.0, 20.0, 30.0, 40.0])
+        );
+        assert!(validate_bbox(Some([10.0, 0.0, 5.0, 1.0])).is_err());
+        assert!(validate_bbox(Some([0.0, f64::NAN, 1.0, 1.0])).is_err());
+        assert!(validate_bbox(Some([0.0, 0.0, f64::INFINITY, 1.0])).is_err());
+        assert_eq!(validate_bbox(None).unwrap(), None);
+
+        let sql = bbox_filter_sql("geom", [-122.5, 37.5, -122.0, 38.0]);
+        assert!(sql.contains("ST_Intersects(geom, ST_MakeEnvelope(-122.5, 37.5, -122.0, 38.0))"));
+        assert_eq!(
+            NativeBinaryFormat::parse(Some("flatgeobuf")).unwrap(),
+            NativeBinaryFormat::FlatGeobuf
+        );
+        assert_eq!(
+            NativeBinaryFormat::parse(Some("geojson")).unwrap(),
+            NativeBinaryFormat::GeoJson
+        );
+        assert!(NativeBinaryFormat::parse(Some("xml")).is_err());
     }
 }

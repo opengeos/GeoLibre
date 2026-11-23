@@ -14,8 +14,10 @@ import { useTranslation } from "react-i18next";
 import { openExternalLink } from "../../lib/open-external";
 import {
   APP_VERSION,
+  checkDesktopSignedUpdate,
   compareVersions,
   fetchLatestRelease,
+  installDesktopSignedUpdate,
   IS_STORE_BUILD,
   UPDATE_URL,
   UpdateCheckError,
@@ -68,6 +70,8 @@ export function AboutDialog({
   const [latestNotes, setLatestNotes] = useState<string>("");
   const [latestUrl, setLatestUrl] = useState<string>(UPDATE_URL);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [signedUpdateAvailable, setSignedUpdateAvailable] = useState(false);
+  const [installingSignedUpdate, setInstallingSignedUpdate] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const handledCheckForUpdatesRequestRef = useRef(0);
   const wasOpenRef = useRef(false);
@@ -81,6 +85,8 @@ export function AboutDialog({
     setLatestNotes("");
     setLatestUrl(UPDATE_URL);
     setUpdateError(null);
+    setSignedUpdateAvailable(false);
+    setInstallingSignedUpdate(false);
   }, []);
 
   const describeUpdateError = useCallback(
@@ -120,16 +126,34 @@ export function AboutDialog({
     setUpdateError(null);
 
     try {
-      const release = await fetchLatestRelease(controller.signal);
+      const [release, signed] = await Promise.all([
+        fetchLatestRelease(controller.signal),
+        checkDesktopSignedUpdate(),
+      ]);
+      if (controller.signal.aborted) return;
       setLatestVersion(release.version);
       setLatestNotes(release.notes);
       setLatestUrl(release.url);
+      setSignedUpdateAvailable(Boolean(signed?.configured && signed.available));
       setUpdateStatus(compareVersions(APP_VERSION, release.version) < 0 ? "available" : "current");
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
       console.error("Failed to check for updates", error);
       setUpdateStatus("error");
       setUpdateError(describeUpdateError(error));
+    }
+  };
+
+  const handleInstallSignedUpdate = async () => {
+    if (IS_STORE_BUILD || installingSignedUpdate) return;
+    setInstallingSignedUpdate(true);
+    setUpdateError(null);
+    try {
+      await installDesktopSignedUpdate();
+    } catch (error) {
+      console.error("Failed to install signed desktop update", error);
+      setUpdateError(t("updates.installSignedError"));
+      setInstallingSignedUpdate(false);
     }
   };
 
@@ -249,11 +273,32 @@ export function AboutDialog({
                         </div>
                         <UpdateInstructions />
                       </div>
+                      {signedUpdateAvailable ? (
+                        <Button
+                          className="w-full justify-between"
+                          disabled={installingSignedUpdate}
+                          onClick={() => void handleInstallSignedUpdate()}
+                          type="button"
+                          variant="default"
+                        >
+                          <span>
+                            {installingSignedUpdate
+                              ? t("updates.installingSigned")
+                              : t("updates.installSigned")}
+                          </span>
+                          <RefreshCw
+                            className={`h-3.5 w-3.5 ${installingSignedUpdate ? "animate-spin" : ""}`}
+                          />
+                        </Button>
+                      ) : null}
+                      {updateError ? (
+                        <div className="text-xs text-destructive">{updateError}</div>
+                      ) : null}
                       <Button
                         className="w-full justify-between"
                         onClick={() => void openExternalLink(latestUrl)}
                         type="button"
-                        variant="default"
+                        variant={signedUpdateAvailable ? "outline" : "default"}
                       >
                         <span>{t("updates.download")}</span>
                         <ExternalLink className="h-3.5 w-3.5" />

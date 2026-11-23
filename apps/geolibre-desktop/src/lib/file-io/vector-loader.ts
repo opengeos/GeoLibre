@@ -128,6 +128,7 @@ async function readLocalFileTextOrEmpty(path: string): Promise<string> {
 interface NativeDuckDbVectorInvokeOptions {
   layer?: string;
   overrideSourceCrs?: string;
+  bbox?: [number, number, number, number];
 }
 
 interface NativeDuckDbVectorAttempt {
@@ -136,14 +137,38 @@ interface NativeDuckDbVectorAttempt {
 }
 
 function nativeDuckDbInvokeOptions(
-  options?: DuckDbVectorLoadOptions,
+  options?: DuckDbVectorLoadOptions & { bbox?: [number, number, number, number] },
 ): NativeDuckDbVectorInvokeOptions {
   return {
     ...(options?.layer?.trim() ? { layer: options.layer.trim() } : {}),
     ...(options?.overrideSourceCrs?.trim()
       ? { overrideSourceCrs: options.overrideSourceCrs.trim() }
       : {}),
+    ...(options?.bbox ? { bbox: options.bbox } : {}),
   };
+}
+
+/**
+ * Stream a native DuckDB vector query as raw binary IPC bytes (`flatgeobuf` or
+ * UTF-8 `geojson`) with optional WGS84 spatial bounding-box pushdown.
+ */
+export async function loadNativeVectorFileBinary(
+  path: string,
+  options?: {
+    layer?: string;
+    overrideSourceCrs?: string;
+    bbox?: [number, number, number, number];
+    format?: "flatgeobuf" | "geojson";
+  },
+): Promise<ArrayBuffer> {
+  if (!isTauri()) {
+    throw new Error("Binary native DuckDB streaming requires GeoLibre Desktop.");
+  }
+  return invoke<ArrayBuffer>("load_native_vector_file_binary", {
+    path,
+    ...nativeDuckDbInvokeOptions(options),
+    ...(options?.format ? { format: options.format } : {}),
+  });
 }
 
 async function tryLoadNativeDuckDbVectorPath(

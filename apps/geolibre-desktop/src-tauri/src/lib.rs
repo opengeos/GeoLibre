@@ -2,10 +2,14 @@ mod app_error;
 mod arcgis_http;
 mod aws_credentials;
 mod aws_sts;
+mod desktop_updater;
 mod fs_util;
 mod http_client;
 mod in_flight;
+mod local_media_protocol;
 mod plugin_http;
+#[cfg(not(feature = "mas"))]
+mod process_lifetime;
 mod remote_download;
 // Earth Engine sign-in uses Google's OAuth loopback-redirect flow, which binds
 // a listener on 127.0.0.1 to accept the browser's redirect. Accepting an
@@ -94,6 +98,8 @@ mod native_duckdb {
     pub async fn count_native_vector_file_features(
         _path: String,
         _layer: Option<String>,
+        _override_source_crs: Option<String>,
+        _bbox: Option<[f64; 4]>,
     ) -> Result<usize, String> {
         Err("Native DuckDB is not enabled in this build.".to_string())
     }
@@ -103,7 +109,19 @@ mod native_duckdb {
         _path: String,
         _layer: Option<String>,
         _override_source_crs: Option<String>,
+        _bbox: Option<[f64; 4]>,
     ) -> Result<serde_json::Value, String> {
+        Err("Native DuckDB is not enabled in this build.".to_string())
+    }
+
+    #[tauri::command]
+    pub async fn load_native_vector_file_binary(
+        _path: String,
+        _layer: Option<String>,
+        _override_source_crs: Option<String>,
+        _bbox: Option<[f64; 4]>,
+        _format: Option<String>,
+    ) -> Result<tauri::ipc::Response, String> {
         Err("Native DuckDB is not enabled in this build.".to_string())
     }
 }
@@ -120,48 +138,16 @@ mod http_body;
 // the Martin tile server (GeoLibre#2091). Outbound connections only: no
 // listening socket and no spawned process, so every build target can carry it.
 mod postgis_tiles;
-// OS credential store (macOS Keychain, Windows Credential Manager, Linux Secret
-// Service) for tokens and API keys saved in Settings (issue #1667). Mobile has
-// no keyring backend, and the keyring crate silently falls back to an
-// in-memory mock store on unsupported targets, which would lose credentials
-// without an error. Those targets get a stub that fails loudly instead.
-#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+// OS credential store across all platforms: macOS/iOS Keychain, Windows
+// Credential Manager, Linux Secret Service, and encrypted AES-256-GCM vault on
+// Android (issue #1667, #3570).
 mod secure_store;
-#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-mod secure_store {
-    use std::collections::HashMap;
-
-    const UNAVAILABLE: &str = "Secure credential storage is not available on this platform.";
-
-    #[tauri::command]
-    pub async fn secure_store_get_many(
-        _accounts: Vec<String>,
-    ) -> Result<HashMap<String, String>, String> {
-        Err(UNAVAILABLE.to_string())
-    }
-
-    /// Nothing to seal: reads always fail here.
-    #[tauri::command]
-    pub fn secure_store_seal() {}
-
-    pub fn reset_read_gate(_label: &str) {}
-
-    #[tauri::command]
-    pub async fn secure_store_set(_account: String, _secret: String) -> Result<(), String> {
-        Err(UNAVAILABLE.to_string())
-    }
-
-    #[tauri::command]
-    pub async fn secure_store_delete(_account: String) -> Result<(), String> {
-        Err(UNAVAILABLE.to_string())
-    }
-}
 
 #[cfg(not(any(feature = "mas", target_os = "ios")))]
 use earth_engine_oauth::EarthEngineOAuthState;
 use earth_engine_oauth::{poll_earth_engine_oauth, start_earth_engine_oauth};
 use flate2::read::{GzDecoder, ZlibDecoder};
-use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashSet, VecDeque};
@@ -542,6 +528,32 @@ pub fn run() {
         .manage(arcgis_http::ArcGISRequests::default())
         .manage(plugin_http::PluginHttpRequests::default())
         .manage(remote_download::RemoteDownloads::default())
+        .manage(local_media_protocol::LocalMediaPools::default())
+        .register_asynchronous_uri_scheme_protocol("mbtiles", |ctx, request, responder| {
+            local_media_protocol::handle_mbtiles_protocol(
+                ctx.app_handle().clone(),
+                request,
+                responder,
+            );
+        })
+        .register_asynchronous_uri_scheme_protocol("pmtiles", |ctx, request, responder| {
+            local_media_protocol::handle_range_media_protocol(
+                ctx.app_handle().clone(),
+                request,
+                responder,
+                &[".pmtiles"],
+                "application/octet-stream",
+            );
+        })
+        .register_asynchronous_uri_scheme_protocol("local-cog", |ctx, request, responder| {
+            local_media_protocol::handle_range_media_protocol(
+                ctx.app_handle().clone(),
+                request,
+                responder,
+                &[".tif", ".tiff"],
+                "image/tiff",
+            );
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         // Runs before persisted-scope's setup hook so legacy photo grants are
@@ -571,6 +583,13 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init());
+
+    // Signed desktop auto-updater for non-Store desktop builds.
+    #[cfg(all(
+        any(target_os = "macos", target_os = "windows", target_os = "linux"),
+        not(feature = "mas")
+    ))]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
     // The Earth Engine OAuth loopback listener is compiled out of the Apple App
     // Store builds (see the module gate at the top of this file); the stub
@@ -636,6 +655,9 @@ pub fn run() {
             aws_credentials::aws_sso_login_poll,
             install_external_plugin_archive,
             native_duckdb::load_native_vector_file,
+            native_duckdb::load_native_vector_file_binary,
+            desktop_updater::check_desktop_update,
+            desktop_updater::install_desktop_update,
             load_external_plugin_bundles,
             read_external_plugin_asset,
             pick_image_paths,
@@ -3561,6 +3583,7 @@ fn start_geolibre_sidecar_blocking(
     let mut child = command
         .spawn()
         .map_err(|error| format!("Could not start GeoLibre sidecar: {error}"))?;
+    process_lifetime::assign_child_to_job(&child);
     // Drain both pipes from the moment we spawn. Reading them only after the
     // child exits (the old shape) deadlocks a cold-cache `uv sync`, whose
     // per-package output overflows the 64 KB pipe long before uvicorn can bind:
@@ -3827,6 +3850,7 @@ fn start_jupyter_server_blocking(
     let mut child = command
         .spawn()
         .map_err(|error| format!("Could not start Jupyter server: {error}"))?;
+    process_lifetime::assign_child_to_job(&child);
     let output = CapturedOutput::attach(&mut child);
 
     let base_url = jupyter_base_url();
@@ -4388,6 +4412,7 @@ fn configure_sidecar_process_impl(command: &mut Command) {
     use std::os::unix::process::CommandExt;
 
     command.process_group(0);
+    process_lifetime::configure_child_pdeathsig(command);
 }
 
 #[cfg(all(not(unix), not(feature = "mas")))]
@@ -5480,11 +5505,13 @@ fn spawn_martin_server(
     // Martin is a console program too, and it runs for as long as the PostGIS
     // connection is open.
     hide_console_window(&mut command);
+    process_lifetime::configure_child_pdeathsig(&mut command);
 
     drop(listener);
     let mut child = command
         .spawn()
         .map_err(|error| format!("Could not start Martin: {error}"))?;
+    process_lifetime::assign_child_to_job(&child);
     // Drain both pipes from the moment we spawn, and for as long as Martin
     // runs. Martin logs at least one line per auto-published table before it
     // binds its port, so a database with a few hundred tables overflows the
@@ -5559,15 +5586,28 @@ struct MbtilesMetadata {
 }
 
 #[tauri::command]
-async fn read_mbtiles_metadata(path: String) -> Result<MbtilesMetadata, String> {
-    tauri::async_runtime::spawn_blocking(move || read_mbtiles_metadata_blocking(path))
-        .await
-        .map_err(|error| format!("Could not join MBTiles metadata task: {error}"))?
+async fn read_mbtiles_metadata(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<MbtilesMetadata, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let pools = app.state::<local_media_protocol::LocalMediaPools>();
+        let pooled = pools.mbtiles.get_or_open(&path)?;
+        let connection = pooled
+            .connection
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        read_mbtiles_metadata_from_connection(&path, &connection)
+    })
+    .await
+    .map_err(|error| format!("Could not join MBTiles metadata task: {error}"))?
 }
 
-fn read_mbtiles_metadata_blocking(path: String) -> Result<MbtilesMetadata, String> {
-    let connection = open_mbtiles(&path)?;
-    let metadata = read_metadata_rows(&connection)?;
+fn read_mbtiles_metadata_from_connection(
+    path: &str,
+    connection: &Connection,
+) -> Result<MbtilesMetadata, String> {
+    let metadata = read_metadata_rows(connection)?;
     let metadata_min_zoom = metadata
         .get("minzoom")
         .and_then(|value| value.parse::<i64>().ok());
@@ -5575,11 +5615,11 @@ fn read_mbtiles_metadata_blocking(path: String) -> Result<MbtilesMetadata, Strin
         .get("maxzoom")
         .and_then(|value| value.parse::<i64>().ok());
     let (tile_min_zoom, tile_max_zoom) = read_mbtiles_zoom_range(
-        &connection,
+        connection,
         metadata_min_zoom.is_none(),
         metadata_max_zoom.is_none(),
     )?;
-    let fallback_name = Path::new(&path)
+    let fallback_name = Path::new(path)
         .file_stem()
         .and_then(|name| name.to_str())
         .unwrap_or("MBTiles Layer")
@@ -5634,49 +5674,29 @@ fn read_mbtiles_zoom_range(
     ))
 }
 
-const MAX_MBTILES_ZOOM: u32 = 30;
+pub(crate) const MAX_MBTILES_ZOOM: u32 = 30;
 const MAX_DECOMPRESSED_TILE_BYTES: u64 = 32 * 1024 * 1024;
 
 #[tauri::command]
-async fn read_mbtiles_tile(path: String, z: u32, x: u32, y: u32) -> Result<Vec<u8>, String> {
-    tauri::async_runtime::spawn_blocking(move || read_mbtiles_tile_blocking(path, z, x, y))
-        .await
-        .map_err(|error| format!("Could not join MBTiles tile task: {error}"))?
+async fn read_mbtiles_tile(
+    app: tauri::AppHandle,
+    path: String,
+    z: u32,
+    x: u32,
+    y: u32,
+) -> Result<tauri::ipc::Response, String> {
+    let bytes = tauri::async_runtime::spawn_blocking(move || {
+        let pools = app.state::<local_media_protocol::LocalMediaPools>();
+        pools.mbtiles.read_tile(&path, z, x, y)
+    })
+    .await
+    .map_err(|error| format!("Could not join MBTiles tile task: {error}"))??;
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
+#[cfg(test)]
 fn read_mbtiles_tile_blocking(path: String, z: u32, x: u32, y: u32) -> Result<Vec<u8>, String> {
-    if z > MAX_MBTILES_ZOOM {
-        return Err("Tile zoom level is too large".to_string());
-    }
-    let connection = open_mbtiles(&path)?;
-    let scheme = read_metadata_value(&connection, "scheme")?
-        .map(|value| value.to_ascii_lowercase())
-        .unwrap_or_else(|| "tms".to_string());
-    let tile_row = if scheme == "xyz" {
-        i64::from(y)
-    } else {
-        let row_count = 1_i64
-            .checked_shl(z)
-            .ok_or_else(|| "Tile zoom level is too large".to_string())?;
-        row_count - 1 - i64::from(y)
-    };
-    if tile_row < 0 {
-        return Ok(Vec::new());
-    }
-
-    let tile_data = connection
-        .query_row(
-            "SELECT tile_data FROM tiles WHERE zoom_level = ?1 AND tile_column = ?2 AND tile_row = ?3",
-            params![i64::from(z), i64::from(x), tile_row],
-            |row| row.get::<_, Vec<u8>>(0),
-        )
-        .optional()
-        .map_err(|error| format!("Could not read MBTiles tile: {error}"))?;
-
-    Ok(tile_data
-        .map(decompress_tile_data)
-        .transpose()?
-        .unwrap_or_default())
+    local_media_protocol::MbtilesConnectionPool::default().read_tile(&path, z, x, y)
 }
 
 fn open_mbtiles(path: &str) -> Result<Connection, String> {
@@ -5724,7 +5744,10 @@ fn read_metadata_rows(
     Ok(metadata)
 }
 
-fn read_metadata_value(connection: &Connection, name: &str) -> Result<Option<String>, String> {
+pub(crate) fn read_metadata_value(
+    connection: &Connection,
+    name: &str,
+) -> Result<Option<String>, String> {
     connection
         .query_row(
             "SELECT value FROM metadata WHERE lower(name) = lower(?1)",
@@ -5778,7 +5801,7 @@ fn parse_number_list(value: &str) -> Vec<f64> {
         .collect()
 }
 
-fn decompress_tile_data(data: Vec<u8>) -> Result<Vec<u8>, String> {
+pub(crate) fn decompress_tile_data(data: Vec<u8>) -> Result<Vec<u8>, String> {
     if data.starts_with(&[0x1f, 0x8b]) {
         let decoder = GzDecoder::new(data.as_slice());
         let mut decoded = Vec::new();

@@ -58,6 +58,12 @@ import {
   trackStats,
 } from "../../lib/gps-tracking";
 import { watchPosition } from "../../lib/geolocation";
+import {
+  clearGpsTrackCheckpoint,
+  loadGpsTrackCheckpoint,
+  saveGpsTrackCheckpoint,
+} from "../../lib/gps-wake-lock";
+import { useGpsBackgroundRecording } from "../../hooks/useGpsBackgroundRecording";
 import type { NmeaStreamStats } from "../../lib/nmea";
 import {
   androidBluetoothNmeaSupported,
@@ -334,7 +340,7 @@ export function GpsTrackingDialog({
   // Logged track fixes as pause/resume segments; a ref so the high-frequency
   // watch callback appends in place without re-creating itself, with
   // `fixCount` mirroring the total for renders. Always holds >= 1 segment.
-  const fixesRef = useRef<GpsTrackSegments>([[]]);
+  const fixesRef = useRef<GpsTrackSegments>(loadGpsTrackCheckpoint() ?? [[]]);
   const lastFixRef = useRef<GpsFix | null>(null);
   const recordingRef = useRef<RecordingState>("off");
   const followRef = useRef(true);
@@ -423,6 +429,7 @@ export function GpsTrackingDialog({
         const prev = segment[segment.length - 1] ?? null;
         if (shouldLogFix(prev, fix, settingsRef.current)) {
           segment.push(fix);
+          saveGpsTrackCheckpoint(fixesRef.current);
           setFixCount((n) => n + 1);
           logged = true;
         }
@@ -521,6 +528,8 @@ export function GpsTrackingDialog({
     },
     [getMap, mapControllerRef, recenterOnFix, setGpsStatus],
   );
+
+  useGpsBackgroundRecording(recording, fixesRef, setFixCount);
 
   // The first fix of every tracking session zooms in, whichever source it came
   // from; later fixes only pan.
@@ -867,6 +876,7 @@ export function GpsTrackingDialog({
 
   const clearTrack = useCallback(() => {
     fixesRef.current = [[]];
+    clearGpsTrackCheckpoint();
     setFixCount(0);
     const map = getMap();
     if (map) setSourceData(map, TRACK_SOURCE, EMPTY_FC);

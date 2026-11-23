@@ -168,7 +168,10 @@ export function registerMbtilesProtocol(): void {
       throw new Error("This MBTiles file is no longer loaded. Add it again to view its tiles.");
     }
 
-    const bytes = await invoke<number[] | Uint8Array>("read_mbtiles_tile", params);
+    const bytes = await invoke<ArrayBuffer | number[] | Uint8Array>("read_mbtiles_tile", params);
+    if (bytes instanceof ArrayBuffer) {
+      return { data: bytes };
+    }
     const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
     return {
       data: array.buffer.slice(array.byteOffset, array.byteOffset + array.byteLength),

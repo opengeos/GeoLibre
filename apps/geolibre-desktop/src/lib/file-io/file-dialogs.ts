@@ -7,6 +7,7 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readFile, readTextFile, writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { nativeFileDialogFilters, type FileDialogFilter } from "../file-dialog-filters";
+import { isMobile } from "../is-mobile";
 import { isTauri } from "../is-tauri";
 import { localFileSizeBytes } from "./local-fs";
 import { browserSafeFileName } from "./paths";
@@ -387,12 +388,64 @@ export async function pickSavePathWithFallback(
   return null;
 }
 
+export type ShareSheetOutcome = "shared" | "cancelled" | "unsupported";
+
+interface ShareNavigatorLike {
+  canShare?: (data: { files?: File[]; title?: string }) => boolean;
+  share?: (data: { files?: File[]; title?: string }) => Promise<void>;
+}
+
+/**
+ * Hand an exported file to the OS Share Sheet via the Web Share API when
+ * supported (iOS, Android, and mobile WebViews). Returns `"cancelled"` when the
+ * user dismisses the sheet so callers do not trigger a duplicate download.
+ */
+export async function shareFileWithOsSheet(
+  file: File,
+  title?: string,
+  nav: ShareNavigatorLike | null = typeof navigator !== "undefined"
+    ? (navigator as unknown as ShareNavigatorLike)
+    : null,
+): Promise<ShareSheetOutcome> {
+  if (!nav?.share || !nav?.canShare) return "unsupported";
+  const payload = { files: [file], title: title ?? file.name };
+  try {
+    if (!nav.canShare(payload)) return "unsupported";
+    await nav.share(payload);
+    return "shared";
+  } catch (error) {
+    if (isAbortError(error) || (error instanceof Error && error.name === "AbortError")) {
+      return "cancelled";
+    }
+    return "unsupported";
+  }
+}
+
 export async function saveTextFileWithFallback(
   content: string,
   options: SaveTextFileOptions,
 ): Promise<string | null> {
   if (!isTauri()) {
+    if (isMobile()) {
+      const fileName = browserSafeFileName(options.defaultName);
+      const outcome = await shareFileWithOsSheet(
+        new File([content], fileName, { type: options.mimeType }),
+        fileName,
+      );
+      if (outcome === "shared") return fileName;
+      if (outcome === "cancelled") return null;
+    }
     return saveTextFileBrowser(content, options);
+  }
+
+  if (isMobile()) {
+    const fileName = browserSafeFileName(options.defaultName);
+    const outcome = await shareFileWithOsSheet(
+      new File([content], fileName, { type: options.mimeType }),
+      fileName,
+    );
+    if (outcome === "shared") return fileName;
+    if (outcome === "cancelled") return null;
   }
 
   const path = await save({
@@ -409,7 +462,34 @@ export async function saveBinaryFileWithFallback(
   options: SaveBinaryFileOptions,
 ): Promise<string | null> {
   if (!isTauri()) {
+    if (isMobile()) {
+      const fileName = browserSafeFileName(options.defaultName);
+      const blob =
+        content instanceof Blob
+          ? content
+          : new Blob([toArrayBuffer(content)], { type: options.mimeType });
+      const outcome = await shareFileWithOsSheet(
+        new File([blob], fileName, { type: blob.type || options.mimeType }),
+        fileName,
+      );
+      if (outcome === "shared") return fileName;
+      if (outcome === "cancelled") return null;
+    }
     return saveBinaryFileBrowser(content, options);
+  }
+
+  if (isMobile()) {
+    const fileName = browserSafeFileName(options.defaultName);
+    const blob =
+      content instanceof Blob
+        ? content
+        : new Blob([toArrayBuffer(content)], { type: options.mimeType });
+    const outcome = await shareFileWithOsSheet(
+      new File([blob], fileName, { type: blob.type || options.mimeType }),
+      fileName,
+    );
+    if (outcome === "shared") return fileName;
+    if (outcome === "cancelled") return null;
   }
 
   const path = await save({
