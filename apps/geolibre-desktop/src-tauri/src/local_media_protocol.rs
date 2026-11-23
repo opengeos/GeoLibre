@@ -178,12 +178,18 @@ impl MbtilesConnectionPool {
                         .lock()
                         .unwrap_or_else(|poisoned| poisoned.into_inner());
                     Self::evict_expired(&mut guard, Instant::now(), ttl);
-                    guard.is_empty()
+                    let empty = guard.is_empty();
+                    if empty {
+                        // Clear while still holding `entries` so a concurrent insertion
+                        // either lands before this check (keeping us alive) or after
+                        // this store (spawning a replacement reaper).
+                        if let Some(running) = running_weak.upgrade() {
+                            running.store(false, Ordering::SeqCst);
+                        }
+                    }
+                    empty
                 };
                 if should_exit {
-                    if let Some(running) = running_weak.upgrade() {
-                        running.store(false, Ordering::SeqCst);
-                    }
                     break;
                 }
             });
@@ -243,6 +249,9 @@ impl MbtilesConnectionPool {
             }
         }
 
+        // Best-effort pre-open regular-file verification and identity snapshot:
+        // `rusqlite` opens by path rather than an existing file descriptor, and
+        // `canonical` is already confined to user-authorized scope.
         let (_verified_file, verified_identity) = open_verified_regular_file(canonical)?;
         let connection = Connection::open_with_flags(canonical, OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(|error| format!("Could not open MBTiles file: {error}"))?;
@@ -518,12 +527,18 @@ impl LocalFilePool {
                         .lock()
                         .unwrap_or_else(|poisoned| poisoned.into_inner());
                     Self::evict_expired(&mut guard, Instant::now(), ttl);
-                    guard.is_empty()
+                    let empty = guard.is_empty();
+                    if empty {
+                        // Clear while still holding `entries` so a concurrent insertion
+                        // either lands before this check (keeping us alive) or after
+                        // this store (spawning a replacement reaper).
+                        if let Some(running) = running_weak.upgrade() {
+                            running.store(false, Ordering::SeqCst);
+                        }
+                    }
+                    empty
                 };
                 if should_exit {
-                    if let Some(running) = running_weak.upgrade() {
-                        running.store(false, Ordering::SeqCst);
-                    }
                     break;
                 }
             });
@@ -846,10 +861,12 @@ pub(crate) fn is_bundled_app_origin(origin: &str) -> bool {
 
 /// Validate the requesting document origin from `Origin` or `Referer` headers.
 /// Returns `Ok(Some(origin))` when a validated `Origin` header should be echoed
-/// in `Access-Control-Allow-Origin`, `Ok(None)` when neither header was sent by
-/// the webview, or `Err` when a non-bundled remote origin attempted access.
+/// in `Access-Control-Allow-Origin` (including literal `"null"` when confirmed
+/// by a bundled `Referer`), `Ok(None)` when no `Origin` (or an empty `Origin`)
+/// was sent, or `Err` when a non-bundled remote origin attempted access.
 fn validated_request_origin(request: &Request<Vec<u8>>) -> Result<Option<String>, String> {
-    let mut opaque_origin = false;
+    let mut null_origin = false;
+    let mut empty_origin = false;
     if let Some(origin_val) = request
         .headers()
         .get(header::ORIGIN)
@@ -862,8 +879,10 @@ fn validated_request_origin(request: &Request<Vec<u8>>) -> Result<Option<String>
         // Custom-scheme webviews (e.g. WKWebView on macOS/iOS for `tauri://`)
         // may send `Origin: null` or an empty `Origin` header for same-app
         // fetches; fall through and require a bundled `Referer` to confirm.
-        if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("null") {
-            opaque_origin = true;
+        if trimmed.eq_ignore_ascii_case("null") {
+            null_origin = true;
+        } else if trimmed.is_empty() {
+            empty_origin = true;
         } else {
             return Err(format!(
                 "Refusing local media request from non-bundled origin \"{origin_val}\""
@@ -891,12 +910,18 @@ fn validated_request_origin(request: &Request<Vec<u8>>) -> Result<Option<String>
         });
         if let Some(origin) = referer_origin {
             if is_bundled_app_origin(&origin) {
-                return Ok(None);
+                // Under the Fetch Standard CORS check, a request carrying
+                // `Origin: null` requires `Access-Control-Allow-Origin: null`.
+                return Ok(if null_origin {
+                    Some("null".to_string())
+                } else {
+                    None
+                });
             }
         }
         return Err("Refusing local media request from non-bundled referer".to_string());
     }
-    if opaque_origin {
+    if null_origin || empty_origin {
         return Err(
             "Refusing local media request with opaque Origin and no bundled Referer".to_string(),
         );
@@ -1241,7 +1266,8 @@ mod tests {
             .unwrap();
         assert_eq!(validated_request_origin(&tauri_ref).unwrap(), None);
 
-        // `Origin: null` with a bundled Referer (custom-scheme WebView fetch) passes.
+        // `Origin: null` with a bundled Referer (custom-scheme WebView fetch)
+        // passes and echoes `"null"` for `Access-Control-Allow-Origin`.
         let null_origin_bundled_ref = Request::builder()
             .uri("local-pmtiles://localhost/file?path=%2Ftmp%2Fa.pmtiles")
             .header(header::ORIGIN, "null")
@@ -1250,6 +1276,18 @@ mod tests {
             .unwrap();
         assert_eq!(
             validated_request_origin(&null_origin_bundled_ref).unwrap(),
+            Some("null".to_string())
+        );
+
+        // Empty `Origin` with a bundled Referer passes without echoing a header.
+        let empty_origin_bundled_ref = Request::builder()
+            .uri("local-pmtiles://localhost/file?path=%2Ftmp%2Fa.pmtiles")
+            .header(header::ORIGIN, "")
+            .header(header::REFERER, "tauri://localhost/index.html")
+            .body(Vec::new())
+            .unwrap();
+        assert_eq!(
+            validated_request_origin(&empty_origin_bundled_ref).unwrap(),
             None
         );
 

@@ -24,6 +24,7 @@ pub struct DesktopUpdateCheckResult {
 
 #[cfg(all(
     any(target_os = "macos", target_os = "windows", target_os = "linux"),
+    feature = "desktop-updater",
     not(feature = "mas")
 ))]
 mod active {
@@ -161,6 +162,7 @@ pub async fn check_desktop_update(
 ) -> Result<DesktopUpdateCheckResult, String> {
     #[cfg(all(
         any(target_os = "macos", target_os = "windows", target_os = "linux"),
+        feature = "desktop-updater",
         not(feature = "mas")
     ))]
     {
@@ -168,6 +170,7 @@ pub async fn check_desktop_update(
     }
     #[cfg(not(all(
         any(target_os = "macos", target_os = "windows", target_os = "linux"),
+        feature = "desktop-updater",
         not(feature = "mas")
     )))]
     {
@@ -186,6 +189,7 @@ pub async fn check_desktop_update(
 pub async fn install_desktop_update(app: tauri::AppHandle) -> Result<bool, String> {
     #[cfg(all(
         any(target_os = "macos", target_os = "windows", target_os = "linux"),
+        feature = "desktop-updater",
         not(feature = "mas")
     ))]
     {
@@ -193,6 +197,7 @@ pub async fn install_desktop_update(app: tauri::AppHandle) -> Result<bool, Strin
     }
     #[cfg(not(all(
         any(target_os = "macos", target_os = "windows", target_os = "linux"),
+        feature = "desktop-updater",
         not(feature = "mas")
     )))]
     {

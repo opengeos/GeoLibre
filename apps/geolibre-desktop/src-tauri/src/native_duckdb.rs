@@ -490,8 +490,11 @@ fn load_native_vector_file_binary_blocking(
             conn.execute_batch(&copy_sql).map_err(|error| {
                 format!("Could not export FlatGeobuf stream from native DuckDB: {error}")
             })?;
-            std::fs::read(&temp_path)
-                .map_err(|error| format!("Could not read exported FlatGeobuf bytes: {error}"))
+            match std::fs::read(&temp_path) {
+                Ok(bytes) => Ok(bytes),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+                Err(error) => Err(format!("Could not read exported FlatGeobuf bytes: {error}")),
+            }
         }
     }
 }
@@ -2522,6 +2525,40 @@ mod tests {
         assert!(
             bytes.starts_with(b"fgb"),
             "exported payload must be FlatGeobuf"
+        );
+    }
+
+    #[test]
+    fn flatgeobuf_binary_export_handles_empty_bbox_result() {
+        if std::env::var_os("GEOLIBRE_SKIP_DUCKDB_SPATIAL_TESTS").is_some() {
+            return;
+        }
+        let conn = open_native_duckdb()
+            .expect("open native DuckDB with spatial extension (set GEOLIBRE_SKIP_DUCKDB_SPATIAL_TESTS=1 to opt out)");
+        let export_dir = create_private_export_dir().unwrap();
+        let _guard = TempDirGuard(export_dir.clone());
+        let src_path = export_dir.join("single_point.geojson");
+        std::fs::write(
+            &src_path,
+            r#"{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"sf"},"geometry":{"type":"Point","coordinates":[-122.4,37.7]}}]}"#,
+        )
+        .unwrap();
+        drop(conn);
+
+        // Bbox disjoint from the single feature produces zero rows.
+        let options = NativeVectorOptions {
+            path: src_path.to_string_lossy().into_owned(),
+            extension: "geojson".to_string(),
+            layer: None,
+            override_source_crs: None,
+            bbox: Some([10.0, 10.0, 20.0, 20.0]),
+        };
+        let bytes =
+            load_native_vector_file_binary_blocking(options, NativeBinaryFormat::FlatGeobuf)
+                .expect("FlatGeobuf export should succeed cleanly when bbox matches zero features");
+        assert!(
+            bytes.is_empty() || bytes.starts_with(b"fgb"),
+            "empty bbox export must return either empty bytes or a valid FlatGeobuf header"
         );
     }
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
 import i18next from "i18next";
 import type { GpsTrackSegments } from "../lib/gps-tracking";
 import {
+  clearGpsTrackCheckpoint,
   createGpsWakeLockController,
   createThrottledCheckpointSaver,
   type GpsWakeLockController,
@@ -18,7 +19,11 @@ export function useGpsBackgroundRecording(
   recording: "off" | "recording" | "paused",
   fixesRef: MutableRefObject<GpsTrackSegments>,
   onRestoredCount: (count: number) => void,
-): { scheduleCheckpoint: (segments: GpsTrackSegments) => void } {
+): {
+  scheduleCheckpoint: (segments: GpsTrackSegments) => void;
+  flushCheckpoint: (segments: GpsTrackSegments) => void;
+  clearCheckpoint: () => void;
+} {
   const wakeLockRef = useRef<GpsWakeLockController | null>(null);
   const saverRef = useRef<ThrottledCheckpointSaver | null>(null);
   const warnedQuotaRef = useRef(false);
@@ -77,6 +82,9 @@ export function useGpsBackgroundRecording(
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", flushNow);
       flushNow();
+      // Cancel any pending trailing timer even when the track is now empty so
+      // an earlier queued write cannot fire after unmount or discard.
+      saver.reset();
       void controller.stop();
     };
   }, [recording, fixesRef, getSaver]);
@@ -88,5 +96,17 @@ export function useGpsBackgroundRecording(
     [getSaver],
   );
 
-  return { scheduleCheckpoint };
+  const flushCheckpoint = useCallback(
+    (segments: GpsTrackSegments) => {
+      getSaver().flush(segments);
+    },
+    [getSaver],
+  );
+
+  const clearCheckpoint = useCallback(() => {
+    getSaver().reset();
+    clearGpsTrackCheckpoint();
+  }, [getSaver]);
+
+  return { scheduleCheckpoint, flushCheckpoint, clearCheckpoint };
 }

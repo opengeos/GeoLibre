@@ -587,6 +587,7 @@ pub fn run() {
     // Signed desktop auto-updater for non-Store desktop builds.
     #[cfg(all(
         any(target_os = "macos", target_os = "windows", target_os = "linux"),
+        feature = "desktop-updater",
         not(feature = "mas")
     ))]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());

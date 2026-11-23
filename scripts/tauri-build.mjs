@@ -28,10 +28,11 @@ if (mas) {
     process.exit(1);
   }
   // The `mas` cargo feature compiles out everything that downloads or spawns
-  // external code (Python sidecar, Jupyter, martin, uv bootstrap); the config
-  // overlay adds App Sandbox entitlements, the embedded provisioning profile,
-  // and drops the bundled sidecar resources.
-  buildArgs.push("--features", "mas");
+  // external code (Python sidecar, Jupyter, martin, uv bootstrap); passing
+  // `--no-default-features` also excludes the optional `desktop-updater` crate
+  // from linking at all. The config overlay adds App Sandbox entitlements, the
+  // embedded provisioning profile, and drops the bundled sidecar resources.
+  buildArgs.push("--no-default-features", "--features", "mas");
   buildArgs.push("--config", "src-tauri/tauri.mas.conf.json");
 }
 

@@ -7,8 +7,11 @@
 //!   (instead of a Tokio `spawn_blocking` worker that may retire when idle)
 //!   ensures the kernel only signals the child when the GeoLibre process exits.
 //! - Windows: assigns every spawned child to a Win32 Job Object configured with
-//!   `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` and fails startup (terminating the
-//!   child) if job assignment fails.
+//!   `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` immediately after spawn and fails
+//!   startup (terminating the child) if job assignment fails. Note that
+//!   `std::process::Command::spawn` does not expose the primary thread handle
+//!   for `CREATE_SUSPENDED` + `ResumeThread`, so a narrow window exists between
+//!   process creation and job assignment.
 
 use std::process::{Child, Command};
 

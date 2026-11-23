@@ -10,12 +10,15 @@ name = "geolibre_desktop_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [features]
-default = []
+default = ["desktop-updater"]
+desktop-updater = ["dep:tauri-plugin-updater"]
 native-duckdb = ["dep:duckdb"]
 # Mac App Store build: compiles out every command that downloads or spawns
-# external code (sidecar, Jupyter, Martin, uv, external plugin installs), which
-# the App Sandbox and App Store guideline 2.5.2 forbid. Mutually exclusive with
-# native-duckdb (see the compile_error! in src/lib.rs).
+# external code (sidecar, Jupyter, Martin, uv, external plugin installs, and the
+# signed desktop auto-updater), which the App Sandbox and App Store guidelines
+# forbid. Built with `--no-default-features --features mas` via
+# scripts/tauri-build.mjs so `tauri-plugin-updater` is not even linked. Mutually
+# exclusive with native-duckdb (see the compile_error! in src/lib.rs).
 mas = []
 
 # Optimize the release binary for size. The frontend assets dominate the binary,
@@ -158,8 +161,9 @@ keyring = { version = "=3.6.3", features = [
   "crypto-rust",
   "vendored",
 ] }
-# Signed desktop auto-updater for non-Store builds (compiled out when feature = "mas").
-tauri-plugin-updater = "2"
+# Signed desktop auto-updater for non-Store builds (excluded when built with
+# `--no-default-features --features mas`).
+tauri-plugin-updater = { version = "2", optional = true }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 keyring = { version = "=3.6.3", features = ["apple-native"] }
