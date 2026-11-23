@@ -789,9 +789,21 @@ def build_lifecycle_router() -> APIRouter:
         matched_step = verify_totp_step(mfa.secret_b32, body.code, now_ts)
         if matched_step is None:
             raise HTTPException(400, "invalid TOTP code")
-        mfa.enabled = True
-        mfa.confirmed_at = now_ts
-        mfa.last_used_totp_step = matched_step
+        updated = session.execute(
+            update(AccountMfaTotp)
+            .where(
+                AccountMfaTotp.account_id == account.id,
+                AccountMfaTotp.enabled.is_(False),
+            )
+            .values(
+                enabled=True,
+                confirmed_at=now_ts,
+                last_used_totp_step=matched_step,
+            )
+        )
+        if updated.rowcount != 1:
+            raise HTTPException(409, "TOTP MFA is already enabled")
+        session.expire(mfa, ["enabled", "confirmed_at", "last_used_totp_step"])
         record_audit_event(
             session,
             timestamp=now_ts,

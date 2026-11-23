@@ -304,7 +304,10 @@ def _write_shapefile(target: Path, geojson: dict) -> int:
 
             # Discover existing sibling components case-insensitively so datasets
             # with mixed-case stems or extensions (e.g. `foo.shp` + `Foo.DBF`) are
-            # backed up and replaced in place on case-sensitive filesystems.
+            # backed up and replaced in place on case-sensitive filesystems. First
+            # reject ambiguous families where multiple distinct `.shp` primaries
+            # share the same lowercase stem (e.g. `roads.shp` and `Roads.shp`) so
+            # we can never overwrite or delete another dataset's components.
             all_exts = {*_SHAPEFILE_SIDECARS, *_SHAPEFILE_STALE_INDEXES}
             target_stem_lower = target.stem.lower()
             existing_by_ext: dict[str, list[Path]] = {}
@@ -315,6 +318,15 @@ def _write_shapefile(target: Path, geojson: dict) -> int:
                     and child.is_file()
                 ):
                     existing_by_ext.setdefault(child.suffix.lower(), []).append(child)
+            primary_shps = existing_by_ext.get(".shp", [])
+            if len(primary_shps) > 1:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"Refusing to overwrite ambiguous shapefile '{target.name}': "
+                        "multiple case-variant .shp files share the same stem in this folder."
+                    ),
+                )
 
             use_upper = target.suffix == ".SHP"
             backups: list[tuple[Path, Path]] = []
