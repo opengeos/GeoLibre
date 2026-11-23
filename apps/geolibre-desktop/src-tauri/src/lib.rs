@@ -2589,7 +2589,7 @@ fn list_installed_plugin_archives_blocking(
 async fn uninstall_external_plugin_archive(
     app: tauri::AppHandle,
     plugin_id: String,
-) -> Result<bool, String> {
+) -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         uninstall_external_plugin_archive_blocking(&app, &plugin_id)
     })
@@ -2601,7 +2601,7 @@ async fn uninstall_external_plugin_archive(
 fn uninstall_external_plugin_archive_blocking(
     app: &tauri::AppHandle,
     plugin_id: &str,
-) -> Result<bool, String> {
+) -> Result<Vec<String>, String> {
     validate_required_manifest_string("plugin_id", plugin_id)?;
     let plugins_dir = app
         .path()
@@ -2609,31 +2609,48 @@ fn uninstall_external_plugin_archive_blocking(
         .map_err(|error| format!("Could not resolve app data directory: {error}"))?
         .join("plugins");
     if !plugins_dir.exists() {
-        return Ok(false);
+        return Ok(Vec::new());
     }
     let canonical_dir = fs::canonicalize(&plugins_dir)
         .map_err(|error| format!("Could not resolve plugins directory: {error}"))?;
 
     let mut targets: Vec<PathBuf> = Vec::new();
+    let mut seen_canonical: HashSet<PathBuf> = HashSet::new();
     let direct = plugins_dir.join(plugin_archive_file_name(plugin_id));
     if direct.is_file() {
-        targets.push(direct);
-    } else if let Ok(entries) = fs::read_dir(&plugins_dir) {
+        let label = direct.to_string_lossy().to_string();
+        if let Ok(bundle) = load_external_plugin_archive(&direct, &label) {
+            if bundle.manifest.id == plugin_id {
+                if let Ok(canonical) = fs::canonicalize(&direct) {
+                    if seen_canonical.insert(canonical) {
+                        targets.push(direct);
+                    }
+                }
+            }
+        }
+    }
+    if let Ok(entries) = fs::read_dir(&plugins_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if !path.is_file() || !is_zip_path(&path) {
                 continue;
             }
+            let Ok(canonical) = fs::canonicalize(&path) else {
+                continue;
+            };
+            if seen_canonical.contains(&canonical) {
+                continue;
+            }
             let label = path.to_string_lossy().to_string();
             if let Ok(bundle) = load_external_plugin_archive(&path, &label) {
-                if bundle.manifest.id == plugin_id {
+                if bundle.manifest.id == plugin_id && seen_canonical.insert(canonical) {
                     targets.push(path);
                 }
             }
         }
     }
 
-    let mut removed = false;
+    let mut removed_paths = Vec::new();
     for candidate in targets {
         let canonical = fs::canonicalize(&candidate)
             .map_err(|error| format!("Could not resolve installed plugin archive: {error}"))?;
@@ -2643,9 +2660,9 @@ fn uninstall_external_plugin_archive_blocking(
         }
         fs::remove_file(&canonical)
             .map_err(|error| format!("Could not remove plugin archive: {error}"))?;
-        removed = true;
+        removed_paths.push(canonical.to_string_lossy().into_owned());
     }
-    Ok(removed)
+    Ok(removed_paths)
 }
 
 /// Build a filesystem-safe `<id>.zip` name for an installed plugin archive.
@@ -3404,7 +3421,7 @@ async fn list_installed_plugin_archives(
 async fn uninstall_external_plugin_archive(
     _app: tauri::AppHandle,
     _plugin_id: String,
-) -> Result<bool, String> {
+) -> Result<Vec<String>, String> {
     Err("External plugin removal is not available in the Mac App Store build.".to_string())
 }
 

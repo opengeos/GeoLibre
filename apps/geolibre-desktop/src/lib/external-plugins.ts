@@ -823,8 +823,10 @@ export async function uninstallDesktopPluginArchive(
   app: GeoLibreAppAPI,
 ): Promise<void> {
   if (!isTauri()) return;
-  await invoke<boolean>("uninstall_external_plugin_archive", { pluginId });
-  unloadFilesystemPlugin(manager, pluginId, app);
+  const removedPaths = await invoke<string[]>("uninstall_external_plugin_archive", { pluginId });
+  if (removedPaths.length > 0) {
+    unloadFilesystemPlugin(manager, pluginId, app, removedPaths);
+  }
 }
 
 // new Date()/Date.now() are awkward to stub in tests; isolate the one timestamp
@@ -973,13 +975,30 @@ export function unloadRemovedUrlPlugins(
  * Deactivates the plugin (removing any map control) and drops its injected style.
  * Returns true when a filesystem plugin was unloaded.
  */
+function normalizePluginSourcePath(source: string): string {
+  return source.replace(/\\/g, "/").replace(/^\/\/\?\//, "");
+}
+
 export function unloadFilesystemPlugin(
   manager: PluginManager,
   pluginId: string,
   app: GeoLibreAppAPI,
+  onlyMatchingSources?: readonly string[],
 ): boolean {
   const source = externallyLoadedPluginSources.get(pluginId);
   if (source === undefined || isManagedUrlSource(source)) return false;
+  if (onlyMatchingSources) {
+    const normalizedSource = normalizePluginSourcePath(source);
+    const matches = onlyMatchingSources.some((candidate) => {
+      const normalizedCandidate = normalizePluginSourcePath(candidate);
+      return (
+        normalizedSource === normalizedCandidate ||
+        normalizedSource.endsWith(`/${normalizedCandidate}`) ||
+        normalizedCandidate.endsWith(`/${normalizedSource}`)
+      );
+    });
+    if (!matches) return false;
+  }
   manager.unregister(pluginId, app);
   removeExternalPluginStyle(pluginId);
   externallyLoadedPluginSources.delete(pluginId);

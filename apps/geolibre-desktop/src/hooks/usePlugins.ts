@@ -751,12 +751,22 @@ export async function reloadPluginArchiveFromFile(
   const wasActive = manager.isActive(pluginId);
   unloadFilesystemPlugin(manager, pluginId, app);
   const desktopSettings = useDesktopSettingsStore.getState().desktopSettings;
-  await ensureExternalPluginsLoadedWithSettings(desktopSettings, app, { force: true });
+  await ensureExternalPluginsLoadedWithSettings(desktopSettings, app, {
+    force: true,
+  });
+  const isRegistered = manager.list().some((plugin) => plugin.id === pluginId);
+  if (!isRegistered) {
+    throw new Error(`Plugin "${pluginId}" could not be reloaded from its archive.`);
+  }
   if (wasActive && !manager.isActive(pluginId)) {
     try {
-      await manager.activate(pluginId, app);
+      const activated = await manager.activate(pluginId, app);
+      if (!activated) {
+        throw new Error(`Plugin "${pluginId}" reloaded but could not be reactivated.`);
+      }
     } catch (error) {
       reportPluginError(pluginId, "activate", error);
+      throw error;
     }
   }
 }

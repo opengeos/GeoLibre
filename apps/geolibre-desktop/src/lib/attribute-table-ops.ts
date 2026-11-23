@@ -159,23 +159,39 @@ export function filterAttributeRowsByColumns(
   );
 }
 
-function setDraftCell(
+function setOwnProperty<T>(target: Record<string, T>, key: string, value: T): void {
+  Object.defineProperty(target, key, {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true,
+  });
+}
+
+function mutateDraftCell(
   drafts: AttributeDrafts,
+  copiedRows: Set<string>,
   featureId: string,
   column: string,
   nextValue: string,
   originalValue: unknown,
-): AttributeDrafts {
-  const row = { ...getDraftRow(drafts, featureId) };
-  if (nextValue === formatAttributeValue(originalValue)) {
-    delete row[column];
-  } else {
-    row[column] = nextValue;
+): void {
+  let row = getDraftRow(drafts, featureId);
+  if (!copiedRows.has(featureId)) {
+    row = { ...row };
+    copiedRows.add(featureId);
   }
-  const next: AttributeDrafts = { ...drafts };
-  if (Object.keys(row).length > 0) next[featureId] = row;
-  else delete next[featureId];
-  return next;
+  const mutableRow = row ?? {};
+  if (nextValue === formatAttributeValue(originalValue)) {
+    delete mutableRow[column];
+  } else {
+    setOwnProperty(mutableRow, column, nextValue);
+  }
+  if (Object.keys(mutableRow).length > 0) {
+    setOwnProperty(drafts, featureId, mutableRow);
+  } else if (Object.prototype.hasOwnProperty.call(drafts, featureId)) {
+    delete drafts[featureId];
+  }
 }
 
 /**
@@ -190,18 +206,21 @@ export function computeBulkFillDrafts(options: {
   currentDrafts: AttributeDrafts;
 }): { drafts: AttributeDrafts; updatedCount: number } {
   const { rows, targetRowIds, column, value, currentDrafts } = options;
-  let drafts = currentDrafts;
+  let nextDrafts: AttributeDrafts | null = null;
+  const copiedRows = new Set<string>();
   let updatedCount = 0;
   for (const row of rows) {
     if (!targetRowIds.has(row.featureId)) continue;
     const original = row.properties[column];
+    const activeDrafts = nextDrafts ?? currentDrafts;
     const currentText =
-      getDraftRow(drafts, row.featureId)?.[column] ?? formatAttributeValue(original);
+      getDraftRow(activeDrafts, row.featureId)?.[column] ?? formatAttributeValue(original);
     if (currentText === value) continue;
-    drafts = setDraftCell(drafts, row.featureId, column, value, original);
+    nextDrafts ??= { ...currentDrafts };
+    mutateDraftCell(nextDrafts, copiedRows, row.featureId, column, value, original);
     updatedCount += 1;
   }
-  return { drafts, updatedCount };
+  return { drafts: nextDrafts ?? currentDrafts, updatedCount };
 }
 
 /**
@@ -230,7 +249,8 @@ export function computeFindReplaceDrafts(options: {
   } = options;
   if (!find) return { drafts: currentDrafts, updatedCount: 0 };
 
-  let drafts = currentDrafts;
+  let nextDrafts: AttributeDrafts | null = null;
+  const copiedRows = new Set<string>();
   let updatedCount = 0;
   const escaped = find.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = wholeCell
@@ -240,8 +260,9 @@ export function computeFindReplaceDrafts(options: {
   for (const row of rows) {
     if (!targetRowIds.has(row.featureId)) continue;
     const original = row.properties[column];
+    const activeDrafts = nextDrafts ?? currentDrafts;
     const currentText =
-      getDraftRow(drafts, row.featureId)?.[column] ?? formatAttributeValue(original);
+      getDraftRow(activeDrafts, row.featureId)?.[column] ?? formatAttributeValue(original);
     if (!pattern.test(currentText)) {
       pattern.lastIndex = 0;
       continue;
@@ -249,8 +270,9 @@ export function computeFindReplaceDrafts(options: {
     pattern.lastIndex = 0;
     const nextText = currentText.replace(pattern, () => replace);
     if (nextText === currentText) continue;
-    drafts = setDraftCell(drafts, row.featureId, column, nextText, original);
+    nextDrafts ??= { ...currentDrafts };
+    mutateDraftCell(nextDrafts, copiedRows, row.featureId, column, nextText, original);
     updatedCount += 1;
   }
-  return { drafts, updatedCount };
+  return { drafts: nextDrafts ?? currentDrafts, updatedCount };
 }

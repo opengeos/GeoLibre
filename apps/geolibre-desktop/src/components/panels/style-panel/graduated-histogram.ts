@@ -35,7 +35,8 @@ export function colorForGraduatedValue(
   const numericStops = stops
     .map((stop) => ({ value: Number(stop.value), color: stop.color }))
     .filter((stop) => Number.isFinite(stop.value))
-    .sort((a, b) => a.value - b.value);
+    .sort((a, b) => a.value - b.value)
+    .filter((stop, index, sorted) => index === 0 || stop.value > sorted[index - 1].value);
   if (numericStops.length === 0) return fallbackColor;
   let chosen = numericStops[0].color;
   for (const stop of numericStops) {
@@ -79,7 +80,7 @@ export function computeGraduatedHistogram(
     const color = colorForGraduatedValue(min, stops);
     const breakPositions = stops
       .map((s) => ({ value: Number(s.value), color: s.color }))
-      .filter((s) => Number.isFinite(s.value))
+      .filter((s) => Number.isFinite(s.value) && s.value === min)
       .map((s) => ({ value: s.value, position: 0.5, color: s.color }));
     return {
       bins: [{ min, max, count: numeric.length, midpoint: min, color }],

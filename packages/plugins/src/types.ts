@@ -2130,8 +2130,9 @@ export interface GeoLibreExternalPluginManifest {
    */
   engines?: MapRendererKind[];
   /**
-   * Optional capabilities declared by the plugin (e.g. `network`, `filesystem`,
-   * `sidecar`, `mapWrite`, `ui`). Surfaced in Manage Plugins before/after install.
+   * Optional self-declared capability labels (`network`, `filesystem`,
+   * `sidecar`, `mapWrite`, `ui`). Displayed as advisory badges for installed
+   * archive plugins in Manage Plugins; not enforced at runtime.
    */
   capabilities?: GeoLibrePluginCapability[];
   /**

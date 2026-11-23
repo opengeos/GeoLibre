@@ -1,5 +1,6 @@
 import type { ProcessingModelGraph } from "@geolibre/core";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { NODE_HEIGHT, NODE_WIDTH } from "../../../lib/model-graph-edit";
 
 interface ModelBuilderMinimapProps {
@@ -35,22 +36,47 @@ export function ModelBuilderMinimap({
   viewportHeight,
   onNavigate,
 }: ModelBuilderMinimapProps) {
+  const { t } = useTranslation();
   if (graph.nodes.length === 0) return null;
   const worldW = Math.max(extentWidth, 1);
   const worldH = Math.max(extentHeight, 1);
   const scale = Math.min(MINIMAP_WIDTH / worldW, MINIMAP_HEIGHT / worldH);
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
 
-  const viewX = (scrollLeft / Math.max(zoom, 0.1)) * scale;
-  const viewY = (scrollTop / Math.max(zoom, 0.1)) * scale;
-  const viewW = Math.min(MINIMAP_WIDTH, (viewportWidth / Math.max(zoom, 0.1)) * scale);
-  const viewH = Math.min(MINIMAP_HEIGHT, (viewportHeight / Math.max(zoom, 0.1)) * scale);
+  const safeZoom = Math.max(zoom, 0.1);
+  const viewX = (scrollLeft / safeZoom) * scale;
+  const viewY = (scrollTop / safeZoom) * scale;
+  const viewW = Math.min(MINIMAP_WIDTH, (viewportWidth / safeZoom) * scale);
+  const viewH = Math.min(MINIMAP_HEIGHT, (viewportHeight / safeZoom) * scale);
 
   const handleClick = (event: ReactMouseEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const clickX = event.clientX - rect.left;
     const clickY = event.clientY - rect.top;
     onNavigate(clickX / scale, clickY / scale);
+  };
+
+  const handleKeyDown = (event: ReactKeyboardEvent<SVGSVGElement>) => {
+    const centerWorldX = (scrollLeft + viewportWidth / 2) / safeZoom;
+    const centerWorldY = (scrollTop + viewportHeight / 2) / safeZoom;
+    const stepX = Math.max(80, worldW * 0.1);
+    const stepY = Math.max(60, worldH * 0.1);
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      onNavigate(Math.max(0, centerWorldX - stepX), centerWorldY);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      onNavigate(Math.min(worldW, centerWorldX + stepX), centerWorldY);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      onNavigate(centerWorldX, Math.max(0, centerWorldY - stepY));
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      onNavigate(centerWorldX, Math.min(worldH, centerWorldY + stepY));
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      onNavigate(0, 0);
+    }
   };
 
   return (
@@ -61,10 +87,12 @@ export function ModelBuilderMinimap({
       <svg
         width={MINIMAP_WIDTH}
         height={MINIMAP_HEIGHT}
-        className="block cursor-pointer"
-        role="img"
-        aria-label="Model canvas minimap"
+        tabIndex={0}
+        className="block cursor-pointer rounded-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        role="application"
+        aria-label={t("processing.modelBuilder.minimapAriaLabel")}
         onClick={handleClick}
+        onKeyDown={handleKeyDown}
       >
         {graph.edges.map((edge) => {
           const from = nodeById.get(edge.from);

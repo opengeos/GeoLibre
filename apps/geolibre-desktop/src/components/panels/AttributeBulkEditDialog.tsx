@@ -234,11 +234,12 @@ export function ColumnFilterBar({
 }: ColumnFilterBarProps) {
   const { t } = useTranslation();
   const [selectedCol, setSelectedCol] = useState<string>(columns[0] ?? "");
+  const [editorModes, setEditorModes] = useState<Record<string, ColumnFilterMode>>({});
   const activeCol = columns.includes(selectedCol) ? selectedCol : (columns[0] ?? "");
   const current = activeCol ? filters[activeCol] : undefined;
   const defaultMode: ColumnFilterMode =
     activeCol && numericColumns.has(activeCol) ? "range" : "contains";
-  const mode: ColumnFilterMode = current?.mode ?? defaultMode;
+  const mode: ColumnFilterMode = current?.mode ?? (activeCol ? editorModes[activeCol] : undefined) ?? defaultMode;
   const activeEntries = Object.entries(filters);
 
   if (columns.length === 0) return null;
@@ -264,6 +265,7 @@ export function ColumnFilterBar({
         onChange={(e) => {
           if (!activeCol) return;
           const nextMode = e.target.value as ColumnFilterMode;
+          setEditorModes((prev) => ({ ...prev, [activeCol]: nextMode }));
           onChangeFilter(activeCol, { ...current, mode: nextMode });
         }}
       >
@@ -314,7 +316,15 @@ export function ColumnFilterBar({
               size="sm"
               variant="secondary"
               className="h-6 px-2 text-[11px]"
-              onClick={() => onChangeFilter(col, null)}
+              onClick={() => {
+                setEditorModes((prev) => {
+                  if (!(col in prev)) return prev;
+                  const next = { ...prev };
+                  delete next[col];
+                  return next;
+                });
+                onChangeFilter(col, null);
+              }}
             >
               {col} ×
             </Button>
@@ -324,7 +334,10 @@ export function ColumnFilterBar({
             size="sm"
             variant="ghost"
             className="h-6 px-2 text-[11px]"
-            onClick={onClearAll}
+            onClick={() => {
+              setEditorModes({});
+              onClearAll();
+            }}
           >
             {t("attributeTable.columnFilter.clearAll")}
           </Button>

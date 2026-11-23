@@ -386,9 +386,14 @@ export function ModelBuilderPanel({
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [canvasScroll, setCanvasScroll] = useState({ left: 0, top: 0, width: 0, height: 0 });
   const graphRef = useRef(graph);
+  const historyRef = useRef(history);
+  const dragGenerationRef = useRef(0);
   useLayoutEffect(() => {
     graphRef.current = graph;
   }, [graph]);
+  useLayoutEffect(() => {
+    historyRef.current = history;
+  }, [history]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(() => new Set());
 
@@ -399,32 +404,36 @@ export function ModelBuilderPanel({
 
   const commitGraph = useCallback(
     (updater: ProcessingModelGraph | ((current: ProcessingModelGraph) => ProcessingModelGraph)) => {
-      setGraph((current) => {
-        const next = typeof updater === "function" ? updater(current) : updater;
-        if (next === current) return current;
-        setHistory((prev) => pushModelHistory(prev, current));
-        return next;
-      });
+      const current = graphRef.current;
+      const next = typeof updater === "function" ? updater(current) : updater;
+      if (next === current) return;
+      const nextHistory = pushModelHistory(historyRef.current, current);
+      graphRef.current = next;
+      historyRef.current = nextHistory;
+      setGraph(next);
+      setHistory(nextHistory);
     },
     [],
   );
 
   const handleUndo = useCallback(() => {
-    setHistory((prev) => {
-      const result = undoModelHistory(prev, graphRef.current);
-      if (!result) return prev;
-      setGraph(result.graph);
-      return result.history;
-    });
+    const result = undoModelHistory(historyRef.current, graphRef.current);
+    if (!result) return;
+    dragGenerationRef.current += 1;
+    graphRef.current = result.graph;
+    historyRef.current = result.history;
+    setGraph(result.graph);
+    setHistory(result.history);
   }, []);
 
   const handleRedo = useCallback(() => {
-    setHistory((prev) => {
-      const result = redoModelHistory(prev, graphRef.current);
-      if (!result) return prev;
-      setGraph(result.graph);
-      return result.history;
-    });
+    const result = redoModelHistory(historyRef.current, graphRef.current);
+    if (!result) return;
+    dragGenerationRef.current += 1;
+    graphRef.current = result.graph;
+    historyRef.current = result.history;
+    setGraph(result.graph);
+    setHistory(result.history);
   }, []);
 
   const handleDuplicateSelected = useCallback(() => {
@@ -1009,12 +1018,19 @@ export function ModelBuilderPanel({
     if (!open || minimized) return;
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
+      const boundary = sectionRef.current;
       if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.tagName === "SELECT" ||
-          target.isContentEditable)
+        !boundary ||
+        !target ||
+        (!boundary.contains(target) && !boundary.contains(document.activeElement))
+      ) {
+        return;
+      }
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
       ) {
         return;
       }
@@ -1108,9 +1124,26 @@ export function ModelBuilderPanel({
     [graph, commitGraph, selectSingleNode],
   );
 
+  // Non-passive native wheel listener so Ctrl/Cmd+wheel zooms the model canvas
+  // without triggering browser page zoom.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!open || minimized || !el) return;
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        setCanvasZoom((z) => clampCanvasZoom(z + (event.deltaY < 0 ? 0.1 : -0.1)));
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [open, minimized]);
+
   // Node dragging (supports Shift/Ctrl multi-selection and group drag).
   const handleNodePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>, node: ModelGraphNode) => {
+      // Leave middle-button and Alt+left pan gestures to the canvas pan handler.
+      if (event.button !== 0 || event.altKey) return;
       if ((event.target as HTMLElement).closest("[data-port]")) return;
       event.preventDefault();
       const additive = event.shiftKey || event.ctrlKey || event.metaKey;
@@ -1140,11 +1173,20 @@ export function ModelBuilderPanel({
       const startX = event.clientX;
       const startY = event.clientY;
       const zoom = canvasZoom || 1;
+      const dragGen = dragGenerationRef.current;
       const snapshotBeforeDrag = graphRef.current;
       const origins = new Map<string, { x: number; y: number }>();
+      let minOriginX = Infinity;
+      let minOriginY = Infinity;
       for (const item of snapshotBeforeDrag.nodes) {
-        if (activeSelection.has(item.id)) origins.set(item.id, { x: item.x, y: item.y });
+        if (activeSelection.has(item.id)) {
+          origins.set(item.id, { x: item.x, y: item.y });
+          if (item.x < minOriginX) minOriginX = item.x;
+          if (item.y < minOriginY) minOriginY = item.y;
+        }
       }
+      if (!Number.isFinite(minOriginX)) minOriginX = 0;
+      if (!Number.isFinite(minOriginY)) minOriginY = 0;
       let moved = false;
       let frame = 0;
       let pendingDelta: { dx: number; dy: number } | null = null;
@@ -1152,28 +1194,31 @@ export function ModelBuilderPanel({
         frame = 0;
         const delta = pendingDelta;
         pendingDelta = null;
-        if (!delta) return;
+        if (!delta || dragGen !== dragGenerationRef.current) return;
         moved = true;
+        const clampedDx = Math.max(-minOriginX, delta.dx);
+        const clampedDy = Math.max(-minOriginY, delta.dy);
         if (origins.size === 1) {
           const origin = origins.get(node.id)!;
           setGraph((current) =>
             moveNode(current, node.id, {
-              x: Math.max(0, origin.x + delta.dx),
-              y: Math.max(0, origin.y + delta.dy),
+              x: origin.x + clampedDx,
+              y: origin.y + clampedDy,
             }),
           );
         } else {
           const positions = new Map<string, { x: number; y: number }>();
           for (const [id, origin] of origins) {
             positions.set(id, {
-              x: Math.max(0, origin.x + delta.dx),
-              y: Math.max(0, origin.y + delta.dy),
+              x: origin.x + clampedDx,
+              y: origin.y + clampedDy,
             });
           }
           setGraph((current) => moveNodes(current, positions));
         }
       };
       const handleMove = (move: PointerEvent) => {
+        if (dragGen !== dragGenerationRef.current) return;
         pendingDelta = {
           dx: (move.clientX - startX) / zoom,
           dy: (move.clientY - startY) / zoom,
@@ -1187,9 +1232,12 @@ export function ModelBuilderPanel({
         handle.removeEventListener("pointerup", handleEnd);
         handle.removeEventListener("pointercancel", handleEnd);
         if (frame) cancelAnimationFrame(frame);
+        if (dragGen !== dragGenerationRef.current) return;
         commit();
         if (moved) {
-          setHistory((prev) => pushModelHistory(prev, snapshotBeforeDrag));
+          const nextHistory = pushModelHistory(historyRef.current, snapshotBeforeDrag);
+          historyRef.current = nextHistory;
+          setHistory(nextHistory);
           if (origins.size === 1) {
             setGraph((current) => settleNode(current, node.id));
           }
@@ -2211,12 +2259,6 @@ export function ModelBuilderPanel({
                 width: el.clientWidth,
                 height: el.clientHeight,
               });
-            }}
-            onWheel={(event) => {
-              if (event.ctrlKey || event.metaKey) {
-                event.preventDefault();
-                setCanvasZoom((z) => clampCanvasZoom(z + (event.deltaY < 0 ? 0.1 : -0.1)));
-              }
             }}
             onPointerDown={(event) => {
               // Middle-button or Alt+drag pans the scrollable canvas smoothly.

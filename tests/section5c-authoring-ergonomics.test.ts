@@ -244,6 +244,25 @@ describe("PR 5c: Attribute Table multi-sort, column filters, and bulk edit", () 
     assert.equal(filled.drafts["3"]?.region, "South");
     assert.equal(filled.drafts["4"]?.region, "South");
     assert.equal(filled.drafts["1"]?.note, "gamma city");
+
+    // Prototype-named feature IDs must create own properties without mutating currentDrafts.
+    const protoRows = [
+      { featureId: "__proto__", properties: { note: "old" } },
+      { featureId: "constructor", properties: { note: "old" } },
+    ];
+    const baseDrafts = {};
+    const protoFill = computeBulkFillDrafts({
+      rows: protoRows,
+      targetRowIds: new Set(["__proto__", "constructor"]),
+      column: "note",
+      value: "updated",
+      currentDrafts: baseDrafts,
+    });
+    assert.equal(protoFill.updatedCount, 2);
+    assert.equal(Object.prototype.hasOwnProperty.call(protoFill.drafts, "__proto__"), true);
+    assert.equal(protoFill.drafts["__proto__"]?.note, "updated");
+    assert.equal(protoFill.drafts["constructor"]?.note, "updated");
+    assert.equal(Object.keys(baseDrafts).length, 0);
   });
 });
 
@@ -257,6 +276,32 @@ describe("PR 5c: Graduated Symbology inline distribution histogram", () => {
     assert.equal(colorForGraduatedValue(10, stops), "#fee5d9");
     assert.equal(colorForGraduatedValue(50, stops), "#fcae91");
     assert.equal(colorForGraduatedValue(120, stops), "#cb181d");
+    // Duplicate stop values keep the first stop's color (matching renderer semantics).
+    assert.equal(
+      colorForGraduatedValue(10, [
+        { value: 0, color: "red" },
+        { value: 10, color: "green" },
+        { value: 10, color: "blue" },
+        { value: 20, color: "yellow" },
+      ]),
+      "green",
+    );
+
+    // Constant data excludes out-of-range stops and retains stops equal to the constant value.
+    const constantHist = computeGraduatedHistogram(
+      [5, 5],
+      [
+        { value: 0, color: "red" },
+        { value: 5, color: "green" },
+        { value: 10, color: "blue" },
+      ],
+      4,
+    );
+    assert.ok(constantHist);
+    assert.deepEqual(
+      constantHist.breakPositions.map((b) => b.value),
+      [5],
+    );
 
     const hist = computeGraduatedHistogram([0, 10, 20, 55, 95, 100, null, "bad"], stops, 4);
     assert.ok(hist);

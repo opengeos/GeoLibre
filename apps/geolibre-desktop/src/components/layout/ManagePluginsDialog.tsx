@@ -992,7 +992,7 @@ function SettingsTab({
                       {plugin.archiveName}
                     </span>
                     {plugin.capabilities?.length ? (
-                      <div className="mt-1 flex flex-wrap gap-1">
+                      <div className="mt-1 flex flex-wrap gap-1" title={t("managePlugins.capabilitiesAdvisory")}>
                         {plugin.capabilities.map((cap) => (
                           <span
                             key={cap}

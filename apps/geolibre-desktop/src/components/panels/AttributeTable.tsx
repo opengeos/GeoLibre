@@ -8,6 +8,7 @@ import {
   computeFindReplaceDrafts,
   filterAttributeRowsByColumns,
   hasActiveColumnFilter,
+  matchesColumnFilter,
   sortAttributeRows,
   toggleMultiSort,
   type ColumnFilterSpec,
@@ -1115,14 +1116,24 @@ export function AttributeTable({
   useEffect(() => {
     if (attributeTableEditLayerId === null) return;
     if (layer?.id === attributeTableEditLayerId && canEnterEditMode) {
-      // Clear the search only when it hides the requested row; a filter that
-      // already shows it is the user's to keep.
+      // Clear only filters that hide the requested row; filters that already
+      // admit it are the user's to keep.
       if (
-        attributeFilter &&
         selectedFeatureId !== null &&
         !filtered.some((row) => row.featureId === selectedFeatureId)
       ) {
-        setAttributeFilter("");
+        if (attributeFilter) setAttributeFilter("");
+        const targetRow = attributeRows.find((row) => row.featureId === selectedFeatureId);
+        if (targetRow && Object.keys(columnFilters).length > 0) {
+          setColumnFilters((prev) => {
+            const next: Record<string, ColumnFilterSpec> = {};
+            for (const [col, spec] of Object.entries(prev)) {
+              const val = col === "__featureId" ? targetRow.featureId : targetRow.properties[col];
+              if (matchesColumnFilter(val, spec)) next[col] = spec;
+            }
+            return next;
+          });
+        }
       }
       // A collapsed table would enter edit mode with the row out of sight.
       setCollapsed(false);

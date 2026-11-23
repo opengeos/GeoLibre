@@ -1,5 +1,6 @@
 import type { VectorStyleStop } from "@geolibre/core";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { computeGraduatedHistogram } from "./graduated-histogram";
 
 interface GraduatedHistogramProps {
@@ -8,12 +9,15 @@ interface GraduatedHistogramProps {
   binCount?: number;
 }
 
-function formatAxisNumber(value: number): string {
+export function formatAxisNumber(value: number): string {
   if (!Number.isFinite(value)) return "";
   const abs = Math.abs(value);
+  if (abs === 0) return "0";
   if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (abs >= 10_000) return `${(value / 1_000).toFixed(1)}k`;
   if (Number.isInteger(value)) return String(value);
+  if (abs < 0.001) return value.toExponential(2);
+  if (abs < 1) return Number(value.toPrecision(3)).toString();
   return abs >= 100 ? value.toFixed(1) : value.toFixed(2);
 }
 
@@ -22,26 +26,27 @@ function formatAxisNumber(value: number): string {
  * by the active stop ramp with vertical class-break markers.
  */
 export function GraduatedHistogram({ values, stops, binCount = 20 }: GraduatedHistogramProps) {
+  const { t } = useTranslation();
   const data = useMemo(
     () => computeGraduatedHistogram(values, stops, binCount),
     [values, stops, binCount],
   );
-  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
 
   if (!data || data.maxCount === 0) return null;
 
   const width = 240;
   const height = 56;
   const barWidth = width / data.bins.length;
-  const hovered = hoveredIdx !== null ? data.bins[hoveredIdx] : null;
+  const activeBin = activeIdx !== null ? data.bins[activeIdx] : null;
 
   return (
     <div className="space-y-1 rounded-md border bg-muted/20 p-2" data-testid="graduated-histogram">
       <div className="flex items-center justify-between text-[10px] text-muted-foreground">
         <span>
-          {hovered
-            ? `${formatAxisNumber(hovered.min)} .. ${formatAxisNumber(hovered.max)} (${hovered.count})`
-            : `n = ${data.totalCount}`}
+          {activeBin
+            ? `${formatAxisNumber(activeBin.min)} .. ${formatAxisNumber(activeBin.max)} (${activeBin.count})`
+            : t("style.graduatedHistogram.sampleCount", { count: data.totalCount })}
         </span>
         <span>
           {formatAxisNumber(data.min)} .. {formatAxisNumber(data.max)}
@@ -51,14 +56,19 @@ export function GraduatedHistogram({ values, stops, binCount = 20 }: GraduatedHi
         viewBox={`0 0 ${width} ${height}`}
         className="h-14 w-full overflow-visible"
         role="img"
-        aria-label="Attribute value distribution histogram"
-        onMouseLeave={() => setHoveredIdx(null)}
+        aria-label={t("style.graduatedHistogram.ariaLabel")}
+        onMouseLeave={() => setActiveIdx(null)}
       >
         {data.bins.map((bin, idx) => {
           const barHeight =
             bin.count > 0 ? Math.max(2, (bin.count / data.maxCount) * (height - 4)) : 0;
           const x = idx * barWidth;
           const y = height - barHeight;
+          const binLabel = t("style.graduatedHistogram.binSummary", {
+            min: formatAxisNumber(bin.min),
+            max: formatAxisNumber(bin.max),
+            count: bin.count,
+          });
           return (
             <rect
               key={idx}
@@ -68,10 +78,16 @@ export function GraduatedHistogram({ values, stops, binCount = 20 }: GraduatedHi
               height={barHeight}
               rx={1}
               fill={bin.color}
-              fillOpacity={hoveredIdx === null || hoveredIdx === idx ? 0.88 : 0.45}
-              onMouseEnter={() => setHoveredIdx(idx)}
+              fillOpacity={activeIdx === null || activeIdx === idx ? 0.88 : 0.45}
+              tabIndex={bin.count > 0 ? 0 : undefined}
+              role={bin.count > 0 ? "button" : undefined}
+              aria-label={bin.count > 0 ? binLabel : undefined}
+              className="focus:outline-none focus:stroke-foreground"
+              onMouseEnter={() => setActiveIdx(idx)}
+              onFocus={() => setActiveIdx(idx)}
+              onBlur={() => setActiveIdx((prev) => (prev === idx ? null : prev))}
             >
-              <title>{`${formatAxisNumber(bin.min)} to ${formatAxisNumber(bin.max)}: ${bin.count}`}</title>
+              <title>{binLabel}</title>
             </rect>
           );
         })}

@@ -294,6 +294,7 @@
     "policyBlocklisted": "Plugin '{{pluginId}}' was blocked by the plugin registry: {{reason}}",
     "policyNotAllowed": "Plugin '{{pluginId}}' is not allowed by deployment policy.",
     "reloadArchiveAria": "Reload {{name}}",
+    "capabilitiesAdvisory": "Self-declared by the plugin; not enforced.",
     "reloadedArchive": "Reloaded plugin \"{{id}}\"."
   },
   "viewState": {
@@ -6334,6 +6335,7 @@
       "outputPlaceholder": "Output will appear here."
     },
     "modelBuilder": {
+      "minimapAriaLabel": "Model canvas minimap",
       "title": "Model builder",
       "description": "Drag tools onto the canvas and connect them into a processing model.",
       "modelName": "Model name",
@@ -9023,6 +9025,11 @@
     "noLayer": "Select a vector layer to save or apply styles."
   },
   "style": {
+    "graduatedHistogram": {
+      "ariaLabel": "Attribute value distribution histogram",
+      "sampleCount": "n = {{count}}",
+      "binSummary": "{{min}} to {{max}}: {{count}}"
+    },
     "i3sBuilding": {
       "heading": "Building",
       "overview": "Overview",
