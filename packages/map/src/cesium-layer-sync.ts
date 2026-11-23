@@ -2588,7 +2588,7 @@ export class CesiumLayerSync {
           entry.resolvedHeaders !== undefined &&
           entry.resolvedHeaders !== resolvedRequestHeaders(entry.layer),
       );
-      if (stale) this.sync(this.currentLayers);
+      if (stale) this.sync(this.lastStoreLayers);
     });
   }
 
