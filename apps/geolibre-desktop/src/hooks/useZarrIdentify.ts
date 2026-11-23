@@ -1,4 +1,4 @@
-import { isMapClickClaimed, useAppStore } from "@geolibre/core";
+import { isMapClickClaimed, isPopupClickEnabled, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import type * as maplibregl from "maplibre-gl";
 import { isNativeZarrRenderer } from "@geolibre/plugins";
@@ -49,7 +49,9 @@ export function useZarrIdentify(
       // A drawing map tool (Measure, the Geo Editor) owns the click.
       if (isMapClickClaimed()) return;
       const layer = useAppStore.getState().layers.find((item) => item.id === activeLayerId);
-      if (!layer) return;
+      // An author can turn the click popup off for a layer; honor it the way
+      // MapCanvas does for every other layer.
+      if (!layer || !isPopupClickEnabled(layer.popup)) return;
       controller?.abort();
       const current = new AbortController();
       controller = current;

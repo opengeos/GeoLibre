@@ -16,6 +16,7 @@ import {
   interpolateRampColors,
   setExternalNativePaintBridge,
   useAppStore,
+  wrapLongitude,
 } from "@geolibre/core";
 import {
   readNativeZarrDimensions,
@@ -774,18 +775,6 @@ export async function setZarrLayerSelector(
 }
 
 /**
- * Wraps a longitude into [-180, 180). A click on a repeated world copy reports
- * a longitude beyond ±180, which the store's grid does not cover.
- *
- * @param lng - The longitude.
- * @returns The wrapped longitude; an in-range value is returned unchanged.
- */
-export function wrapZarrLongitude(lng: number): number {
-  if (lng >= -180 && lng < 180) return lng;
-  return ((((lng + 180) % 360) + 360) % 360) - 180;
-}
-
-/**
  * The variable a store Zarr layer renders, e.g. `"sst"`.
  *
  * @param layerId - The layer id.
@@ -1139,7 +1128,7 @@ function registerZarrTemporalAdapter(
         ): Promise<Map<number, number | null>> => {
           const result = await queryZarrLayer(
             layerId,
-            { type: "Point", coordinates: [wrapZarrLongitude(lngLat[0]), lngLat[1]] },
+            { type: "Point", coordinates: [wrapLongitude(lngLat[0]), lngLat[1]] },
             zarrIndexSeriesSelector(axis.dimension, indices),
             { signal, includeSpatialCoordinates: false },
           );

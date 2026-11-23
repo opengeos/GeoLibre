@@ -17,8 +17,8 @@ export interface ZarrIdentifyLabels {
 }
 
 /**
- * Formats a cube value for display: six significant digits for ordinary
- * magnitudes, exponent form for very large or very small ones.
+ * Formats a cube value for display: six significant digits, in exponent form
+ * for very large or very small magnitudes.
  *
  * Six significant digits is what a float32 store actually carries, so a stored
  * `26.54` reads as `26.54` rather than its float32 expansion `26.539999`.
@@ -28,7 +28,7 @@ export interface ZarrIdentifyLabels {
  */
 export function formatZarrValue(value: number): string {
   const magnitude = Math.abs(value);
-  if (magnitude !== 0 && (magnitude >= 1e6 || magnitude < 1e-3)) return value.toExponential(3);
+  if (magnitude !== 0 && (magnitude >= 1e6 || magnitude < 1e-3)) return value.toExponential(5);
   return Number(value.toPrecision(6)).toString();
 }
 
@@ -49,11 +49,31 @@ export function zarrSliceDate(layer: GeoLibreLayer): { dimension: string; date: 
   const selector = layer.source.selector as Record<string, unknown> | undefined;
   const index = selector?.[binding.dimension];
   if (typeof index !== "number" || !Number.isFinite(axis[index])) return null;
-  const iso = new Date(axis[index]).toISOString();
+  // A finite but out-of-range coordinate makes an Invalid Date, whose
+  // toISOString() throws.
+  const date = new Date(axis[index]);
+  if (Number.isNaN(date.getTime())) return null;
+  const iso = date.toISOString();
   return {
     dimension: binding.dimension,
     date: iso.endsWith("T00:00:00.000Z") ? iso.slice(0, 10) : iso,
   };
+}
+
+/**
+ * Whether a point lies inside a layer's `[west, south, east, north]` bounds.
+ *
+ * @param bounds - The layer's bounds, as stored on its source.
+ * @param point - `[lng, lat]` in WGS84.
+ * @returns False when the bounds are missing or malformed.
+ */
+function insideBounds(bounds: unknown, point: [number, number]): boolean {
+  if (!Array.isArray(bounds) || bounds.length !== 4) return false;
+  const [west, south, east, north] = bounds as number[];
+  if (![west, south, east, north].every(Number.isFinite)) return false;
+  const [lng, lat] = point;
+  const inLng = west <= east ? lng >= west && lng <= east : lng >= west || lng <= east;
+  return inLng && lat >= south && lat <= north;
 }
 
 /**
@@ -82,8 +102,14 @@ export async function readZarrIdentifyRows(
     signal,
     includeSpatialCoordinates: false,
   });
-  const value = zarrPointValue(result as Record<string, unknown> | null, variable);
-  if (value === undefined) return null;
+  let value = zarrPointValue(result as Record<string, unknown> | null, variable);
+  // The renderer drops a fill-value sample, so a covered no-data cell (land in
+  // an ocean grid) comes back as empty as a click off the grid. Inside the
+  // layer's bounds it is no data; outside, Identify stays silent.
+  if (value === undefined) {
+    if (!result || !insideBounds(layer.source.bounds, point)) return null;
+    value = null;
+  }
   const rows: Array<[string, string]> = [
     [variable ?? layer.name, value === null ? labels.nodata : formatZarrValue(value)],
   ];
