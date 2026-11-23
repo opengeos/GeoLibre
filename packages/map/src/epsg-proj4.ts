@@ -4,7 +4,7 @@
 // The EPSG tables come from geotiff-geokeys-to-proj4; both it and proj4 are
 // loaded on first use, so a session that never needs them never pays for them.
 
-import { withDatumShift } from "@geolibre/core";
+import { normalizeProj4Definition } from "@geolibre/core";
 import type proj4Type from "proj4";
 
 /** A resolved EPSG CRS. */
@@ -48,7 +48,7 @@ export function resolveEpsgProjection(code: number): Promise<EpsgProjection | nu
       // The tables leave some datums' shifts out (the British National Grid,
       // DHDN, Amersfoort...): add them, or data lands up to a few hundred
       // metres off.
-      const definition = withDatumShift(raw.replace(/\+axis=\w+\s*/g, "").trim(), code);
+      const definition = normalizeProj4Definition(raw, code);
       // The tables also name projections proj4js does not implement
       // (EPSG:6244 is +proj=col_urban), so build a converter once here. A WMS
       // can advertise dozens of them, so this is unsupported, not a warning.

@@ -171,6 +171,7 @@ export {
 } from "./crs-proj4";
 export {
   compileRasterExpression,
+  extractReferencedRasters,
   type BandRef,
   type CompiledRasterExpression,
 } from "./raster-expr";

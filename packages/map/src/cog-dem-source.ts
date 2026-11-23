@@ -1105,10 +1105,18 @@ export async function registerCogDemSource(
         `COG terrain could not resolve ${projection} via bundled proj4 definitions.`,
       );
     }
-    const wgs84Conv = resolved.proj4(resolved.definition, "EPSG:4326");
-    const mercConv = resolved.proj4("EPSG:3857", resolved.definition);
-    toWgs84 = (coord) => wgs84Conv.forward(coord);
-    mercatorToSource = (coord) => mercConv.forward(coord);
+    try {
+      const wgs84Conv = resolved.proj4(resolved.definition, "EPSG:4326");
+      const mercConv = resolved.proj4("EPSG:3857", resolved.definition);
+      toWgs84 = (coord) => wgs84Conv.forward(coord);
+      mercatorToSource = (coord) => mercConv.forward(coord);
+    } catch {
+      closeQuietly(tiff);
+      throw new CogDemError(
+        "unsupported-projection",
+        `COG terrain could not build a coordinate transform for ${projection}.`,
+      );
+    }
   }
   ensureCogDemProtocol();
   let images: GeoTIFFImage[];

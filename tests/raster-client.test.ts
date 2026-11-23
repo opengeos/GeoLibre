@@ -617,6 +617,21 @@ describe("client-raster-inputs helper", () => {
       },
     );
     assert.deepEqual(Object.keys(decoded ?? {}), ["B"]);
+
+    // Unused secondary inputs (not referenced by the expression) must be skipped
+    // without estimating or decoding them.
+    let skippedEstimateCalls = 0;
+    const skipped = await loadClientAdditionalRasters(primary, inputs, {
+      expression: "A * 2",
+      maxBytes: 100,
+      estimateBytes: async () => {
+        skippedEstimateCalls += 1;
+        return 10_000;
+      },
+      readRaster: async () => primary,
+    });
+    assert.equal(skipped, undefined);
+    assert.equal(skippedEstimateCalls, 0);
   });
 
   it("compiles standalone raster expressions via raster-expr module", async () => {

@@ -323,12 +323,11 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     [],
   );
 
-  const clearClientSecondaryInput = useCallback((letter: string, paramId: string) => {
+  const clearClientSecondaryInput = useCallback((letter: string) => {
     secondaryPickTokensRef.current[letter] = (secondaryPickTokensRef.current[letter] ?? 0) + 1;
     clientRunIdRef.current += 1;
     setClientRunning(false);
     setClientAdditionalInputs((prev) => omitClientSecondaryInput(prev, letter));
-    setParams((prev) => ({ ...prev, [paramId]: "" }));
     setClientResult(null);
     setClientLog([]);
   }, []);
@@ -392,7 +391,6 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
             ...prev,
             [letter]: { name: picked.path, bytes: picked.data! },
           }));
-          setParam(param.id, picked.path);
         } catch (err) {
           if (
             session !== formSessionRef.current ||
@@ -644,7 +642,9 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       }
       const additionalInputs =
         tool.id === "raster-calc"
-          ? await loadClientAdditionalRasters(raster, clientAdditionalInputs)
+          ? await loadClientAdditionalRasters(raster, clientAdditionalInputs, {
+              expression: typeof params.expression === "string" ? params.expression : undefined,
+            })
           : undefined;
       if (isStale()) return;
       const { raster: result, bytes } = runRasterToolClient(
@@ -965,9 +965,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                   onChange={(value) => setParam(param.id, value)}
                   onPick={() => void pickPathParam(param)}
                   readOnly={letter !== null}
-                  onClear={
-                    letter && entry ? () => clearClientSecondaryInput(letter, param.id) : undefined
-                  }
+                  onClear={letter && entry ? () => clearClientSecondaryInput(letter) : undefined}
                 />
               );
             })}

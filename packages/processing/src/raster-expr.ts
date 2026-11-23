@@ -555,3 +555,20 @@ export function compileRasterExpression(
     evaluate: root,
   };
 }
+
+/**
+ * Extract the distinct uppercase raster variable letters (`"A"`, `"B"`, `"C"`, ...)
+ * referenced by a band-math expression without requiring decoded band arrays.
+ */
+export function extractReferencedRasters(expression: string): Set<string> {
+  const letters = new Set<string>();
+  const trimmed = expression.trim();
+  if (!trimmed) return letters;
+  for (const token of tokenize(trimmed)) {
+    if (token.kind !== "ident") continue;
+    if (Object.prototype.hasOwnProperty.call(ALLOWED_FUNCTIONS, token.value)) continue;
+    const match = BAND_REF_RE.exec(token.value);
+    if (match) letters.add(match[1]);
+  }
+  return letters;
+}

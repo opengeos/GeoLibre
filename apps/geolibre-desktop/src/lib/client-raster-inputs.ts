@@ -1,5 +1,6 @@
 import {
   estimateRasterDataBytes,
+  extractReferencedRasters,
   MAX_CLIENT_RASTER_BYTES,
   readRasterData,
   type RasterData,
@@ -48,13 +49,28 @@ export async function loadClientAdditionalRasters(
   primary: Pick<RasterData, "width" | "height" | "bands">,
   entries: Record<string, ClientRasterInputEntry>,
   deps: {
+    expression?: string;
     estimateBytes?: (bytes: ArrayBuffer) => Promise<number>;
     readRaster?: (bytes: ArrayBuffer) => Promise<RasterData>;
     maxBytes?: number;
   } = {},
 ): Promise<Record<string, RasterData> | undefined> {
-  const keys = Object.keys(entries);
-  if (keys.length === 0) return undefined;
+  let activeEntries: [string, ClientRasterInputEntry][] = Object.entries(entries);
+  if (activeEntries.length === 0) return undefined;
+
+  if (deps.expression !== undefined) {
+    let referenced: Set<string> | null = null;
+    try {
+      referenced = extractReferencedRasters(deps.expression);
+    } catch {
+      // Leave invalid-expression reporting to compileRasterExpression in rasterCalc.
+      referenced = null;
+    }
+    if (referenced) {
+      activeEntries = activeEntries.filter(([letter]) => referenced.has(letter));
+      if (activeEntries.length === 0) return undefined;
+    }
+  }
 
   const estimateBytes = deps.estimateBytes ?? estimateRasterDataBytes;
   const readRaster = deps.readRaster ?? readRasterData;
@@ -64,7 +80,7 @@ export async function loadClientAdditionalRasters(
     primary.width * primary.height * primary.bands.length * Float32Array.BYTES_PER_ELEMENT;
   const outputBytes = primary.width * primary.height * Float32Array.BYTES_PER_ELEMENT;
   let combinedBytes = primaryBytes + outputBytes;
-  for (const entry of Object.values(entries)) {
+  for (const [, entry] of activeEntries) {
     combinedBytes += await estimateBytes(entry.bytes);
     if (!Number.isFinite(combinedBytes) || combinedBytes > maxBytes) {
       throw new ClientRasterInputError("COMBINED_TOO_LARGE");
@@ -72,7 +88,7 @@ export async function loadClientAdditionalRasters(
   }
 
   const decoded: Record<string, RasterData> = {};
-  for (const [letter, entry] of Object.entries(entries)) {
+  for (const [letter, entry] of activeEntries) {
     decoded[letter] = await readRaster(entry.bytes);
   }
   return decoded;

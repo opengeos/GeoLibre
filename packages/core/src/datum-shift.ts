@@ -204,6 +204,19 @@ export function withDatumShift(
 }
 
 /**
+ * Normalize a proj4 definition for GeoLibre's east-first `[x, y]` coordinate
+ * convention by stripping any `+axis=` override and injecting missing datum
+ * shift parameters for known EPSG codes.
+ */
+export function normalizeProj4Definition(
+  raw: string,
+  epsgCode?: number | null,
+): string {
+  const cleaned = raw.replace(/\+axis=\w+\s*/g, "").trim();
+  return epsgCode != null ? withDatumShift(cleaned, epsgCode) : cleaned;
+}
+
+/**
  * Add the datum shift to a proj4 definition built from GeoTIFF geokeys, from
  * the projected or geographic CRS code, else the datum code.
  *
