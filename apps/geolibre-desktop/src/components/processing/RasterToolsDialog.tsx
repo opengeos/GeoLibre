@@ -718,7 +718,11 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       setError(message);
       setClientLog((prev) => [...prev, message]);
     } finally {
-      if (!isStale()) setClientRunning(false);
+      if (isStale()) {
+        tracker.finish("error", "Superseded by an input change.");
+      } else {
+        setClientRunning(false);
+      }
     }
   }, [tool, params, clientInput, clientAdditionalInputs, validateParams, mapControllerRef, t]);
 
