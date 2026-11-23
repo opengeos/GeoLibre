@@ -29,11 +29,18 @@ if (mas) {
   }
   // The `mas` cargo feature compiles out everything that downloads or spawns
   // external code (Python sidecar, Jupyter, martin, uv bootstrap); passing
-  // `--no-default-features` also excludes the optional `desktop-updater` crate
-  // from linking at all. The config overlay adds App Sandbox entitlements, the
-  // embedded provisioning profile, and drops the bundled sidecar resources.
-  buildArgs.push("--no-default-features", "--features", "mas");
-  buildArgs.push("--config", "src-tauri/tauri.mas.conf.json");
+  // `--no-default-features` after Tauri's `--` cargo delimiter also excludes
+  // the optional `desktop-updater` crate from linking at all. The config
+  // overlay adds App Sandbox entitlements, the embedded provisioning profile,
+  // and drops the bundled sidecar resources.
+  const delimiterIndex = buildArgs.indexOf("--");
+  const masTauriArgs = ["--features", "mas", "--config", "src-tauri/tauri.mas.conf.json"];
+  if (delimiterIndex === -1) {
+    buildArgs.push(...masTauriArgs, "--", "--no-default-features");
+  } else {
+    buildArgs.splice(delimiterIndex, 0, ...masTauriArgs);
+    buildArgs.push("--no-default-features");
+  }
 }
 
 const result = spawnSync(

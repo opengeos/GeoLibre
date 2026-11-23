@@ -5692,6 +5692,7 @@ fn read_mbtiles_tile_blocking(path: String, z: u32, x: u32, y: u32) -> Result<Ve
     local_media_protocol::MbtilesConnectionPool::default().read_tile(&path, z, x, y)
 }
 
+#[cfg(test)]
 fn open_mbtiles(path: &str) -> Result<Connection, String> {
     if !is_safe_absolute_path(path) || !path.to_ascii_lowercase().ends_with(".mbtiles") {
         return Err(format!(

@@ -28,6 +28,7 @@ export function useGpsBackgroundRecording(
   const saverRef = useRef<ThrottledCheckpointSaver | null>(null);
   const warnedQuotaRef = useRef(false);
   const restoredOnceRef = useRef(false);
+  const checkpointClearedRef = useRef(false);
 
   const getSaver = useCallback((): ThrottledCheckpointSaver => {
     if (!saverRef.current) {
@@ -64,12 +65,12 @@ export function useGpsBackgroundRecording(
       void controller.start();
     } else {
       void controller.stop();
-      if (fixesRef.current.some((seg) => seg.length > 0)) {
+      if (!checkpointClearedRef.current && fixesRef.current.some((seg) => seg.length > 0)) {
         saver.flush(fixesRef.current);
       }
     }
     const flushNow = () => {
-      if (fixesRef.current.some((seg) => seg.length > 0)) {
+      if (!checkpointClearedRef.current && fixesRef.current.some((seg) => seg.length > 0)) {
         saver.flush(fixesRef.current);
       }
     };
@@ -91,6 +92,7 @@ export function useGpsBackgroundRecording(
 
   const scheduleCheckpoint = useCallback(
     (segments: GpsTrackSegments) => {
+      checkpointClearedRef.current = false;
       getSaver().schedule(segments);
     },
     [getSaver],
@@ -98,12 +100,14 @@ export function useGpsBackgroundRecording(
 
   const flushCheckpoint = useCallback(
     (segments: GpsTrackSegments) => {
+      checkpointClearedRef.current = false;
       getSaver().flush(segments);
     },
     [getSaver],
   );
 
   const clearCheckpoint = useCallback(() => {
+    checkpointClearedRef.current = true;
     getSaver().reset();
     clearGpsTrackCheckpoint();
   }, [getSaver]);

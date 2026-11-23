@@ -959,7 +959,10 @@ export function GpsTrackingDialog({
           mimeType: format === "gpx" ? "application/gpx+xml" : "application/geo+json",
         });
         if (path) {
-          if (trackRevisionRef.current === exportRevision) {
+          // `lineSegments()` only exports segments with >= 2 points; keep the
+          // checkpoint if any singleton segment was omitted or new fixes arrived.
+          const hasUnexportedFixes = fixesRef.current.some((seg) => seg.length === 1);
+          if (trackRevisionRef.current === exportRevision && !hasUnexportedFixes) {
             clearCheckpoint();
           } else if (fixesRef.current.some((seg) => seg.length > 0)) {
             flushCheckpoint(fixesRef.current);

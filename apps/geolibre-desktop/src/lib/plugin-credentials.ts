@@ -45,6 +45,22 @@ const LEGACY_PLUGIN_CREDENTIAL_KEYS: Readonly<Record<string, string>> = {
 
 function readLegacyPluginCredentials(): Record<string, { key: string; value: string }> {
   const found: Record<string, { key: string; value: string }> = {};
+  // First collect browser/mobile-prefixed plugin credentials so mobile upgrades
+  // from localStorage to the native secure store preserve every plugin secret.
+  try {
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (!key || !key.startsWith(PLUGIN_CREDENTIAL_BROWSER_KEY_PREFIX)) continue;
+      const suffix = key.slice(PLUGIN_CREDENTIAL_BROWSER_KEY_PREFIX.length);
+      const account = `plugin.${suffix}`;
+      if (!isStorableCredentialAccount(account)) continue;
+      const value = window.localStorage.getItem(key)?.trim();
+      if (value) found[account] = { key, value };
+    }
+  } catch {
+    // Unreadable: skip browser-prefix scan.
+  }
+  // Pre-#2729 built-in plugin keys take precedence when both exist.
   for (const [account, key] of Object.entries(LEGACY_PLUGIN_CREDENTIAL_KEYS)) {
     try {
       const value = window.localStorage.getItem(key)?.trim();

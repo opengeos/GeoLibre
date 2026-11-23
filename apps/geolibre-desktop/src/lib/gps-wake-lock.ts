@@ -176,10 +176,10 @@ export interface ThrottledCheckpointSaver {
 }
 
 /**
- * Throttle GPS track checkpoint writes to avoid O(n^2) JSON serialization on
- * high-frequency fixes while still scheduling a trailing write for throttled
- * fixes (so a fix recorded right after a flush is never stranded) and allowing
- * immediate flushes on pagehide / visibilitychange / stop.
+ * Throttle GPS track checkpoint writes to bound `localStorage` serialization
+ * frequency on high-frequency fixes while still scheduling a trailing write for
+ * throttled fixes (so a fix recorded right after a flush is never stranded) and
+ * allowing immediate flushes on pagehide / visibilitychange / stop.
  */
 export function createThrottledCheckpointSaver(options?: {
   intervalMs?: number;

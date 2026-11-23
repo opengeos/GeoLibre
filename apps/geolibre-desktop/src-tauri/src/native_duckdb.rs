@@ -490,11 +490,33 @@ fn load_native_vector_file_binary_blocking(
             conn.execute_batch(&copy_sql).map_err(|error| {
                 format!("Could not export FlatGeobuf stream from native DuckDB: {error}")
             })?;
-            match std::fs::read(&temp_path) {
-                Ok(bytes) => Ok(bytes),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
-                Err(error) => Err(format!("Could not read exported FlatGeobuf bytes: {error}")),
+            let bytes = match std::fs::read(&temp_path) {
+                Ok(bytes) => bytes,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+                Err(error) => {
+                    return Err(format!("Could not read exported FlatGeobuf bytes: {error}"));
+                }
+            };
+            if bytes.is_empty() {
+                // GDAL's FlatGeobuf driver writes a 0-byte file for 0-feature exports
+                // when SPATIAL_INDEX=NO. Re-export the 0-row schema without that LCO
+                // so callers always receive a valid FlatGeobuf header with 0 features.
+                let empty_path = temp_dir.join("empty.fgb");
+                let empty_path_str = empty_path
+                    .to_str()
+                    .ok_or_else(|| "Temporary FlatGeobuf path is not valid UTF-8".to_string())?;
+                let empty_copy_sql = format!(
+                    "SET geometry_always_xy = true; COPY (SELECT * FROM ({select_sql}) AS _empty LIMIT 0) TO {} WITH (FORMAT GDAL, DRIVER 'FlatGeobuf', SRS 'EPSG:4326')",
+                    quote_sql_string(&sql_source_path(empty_path_str))
+                );
+                conn.execute_batch(&empty_copy_sql).map_err(|error| {
+                    format!("Could not export empty FlatGeobuf stream from native DuckDB: {error}")
+                })?;
+                return std::fs::read(&empty_path).map_err(|error| {
+                    format!("Could not read exported empty FlatGeobuf bytes: {error}")
+                });
             }
+            Ok(bytes)
         }
     }
 }
@@ -1446,6 +1468,11 @@ fn geometry_wgs84_sql(geometry_expression: &str, source_crs: Option<&str>) -> St
     }
 }
 
+/// Build a WGS84 bounding-box intersection filter over `geometry_wgs84_expression`.
+///
+/// Assumes `geometry_wgs84_expression` is in WGS84 (via `ST_Transform` when
+/// source CRS metadata is known, or native WGS84 coordinates for unlabeled
+/// formats such as GeoJSON).
 fn bbox_filter_sql(geometry_wgs84_expression: &str, bbox: [f64; 4]) -> String {
     let [min_x, min_y, max_x, max_y] = bbox;
     format!(
@@ -2557,8 +2584,23 @@ mod tests {
             load_native_vector_file_binary_blocking(options, NativeBinaryFormat::FlatGeobuf)
                 .expect("FlatGeobuf export should succeed cleanly when bbox matches zero features");
         assert!(
-            bytes.is_empty() || bytes.starts_with(b"fgb"),
-            "empty bbox export must return either empty bytes or a valid FlatGeobuf header"
+            bytes.starts_with(b"fgb"),
+            "empty bbox export must return a valid FlatGeobuf document"
+        );
+        let roundtrip_path = export_dir.join("empty_roundtrip.fgb");
+        std::fs::write(&roundtrip_path, &bytes).unwrap();
+        let decoded = load_native_vector_file_blocking(NativeVectorOptions {
+            path: roundtrip_path.to_string_lossy().into_owned(),
+            extension: "fgb".to_string(),
+            layer: None,
+            override_source_crs: None,
+            bbox: None,
+        })
+        .expect("exported empty FlatGeobuf must decode cleanly");
+        assert_eq!(
+            decoded["features"].as_array().map(|f| f.len()),
+            Some(0),
+            "empty bbox FlatGeobuf must contain zero features"
         );
     }
 }

@@ -212,9 +212,9 @@ pub(crate) fn spawn_managed_child(mut command: Command) -> Result<Child, String>
 
     #[cfg(target_os = "windows")]
     if let Err(error) = assign_child_to_job(&child) {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(error);
+        // Log and continue rather than killing the child so restricted Windows
+        // environments where Job Objects cannot be created/assigned still run.
+        eprintln!("[GeoLibre] Could not attach child process to Win32 Job Object: {error}");
     }
 
     Ok(child)
