@@ -2516,6 +2516,8 @@ export class CesiumLayerSync {
   private lastImageryOrder = "";
   /** Active layer list from the current/latest sync pass. */
   private currentLayers: GeoLibreLayer[] = [];
+  /** Un-materialized store layers from the latest sync pass (used for DuckDB edit refreshes). */
+  private lastStoreLayers: GeoLibreLayer[] = [];
 
   /**
    * @param readZoom Supplies the camera's MapLibre zoom for `["zoom"]` filters;
@@ -2530,6 +2532,26 @@ export class CesiumLayerSync {
 
   private unsubscribeEnvironment: (() => void) | null = null;
   private unwatchTerrain: (() => void) | null = null;
+  private unwatchDuckDB: (() => void) | null = null;
+
+  /**
+   * Re-sync materialized DuckDB query layers when attribute edits or query
+   * refreshes invalidate the DuckDB bridge cache outside the layer store.
+   */
+  private watchDuckDB(): void {
+    if (this.unwatchDuckDB || typeof window === "undefined") return;
+    const handler = (event: Event) => {
+      if (this.destroyed) return;
+      const layerId = (event as CustomEvent<{ layerId?: string }>).detail?.layerId;
+      const hasDuckDB = this.lastStoreLayers.some(
+        (layer) =>
+          layer.type === "duckdb-query" && (layerId === undefined || layer.id === layerId),
+      );
+      if (hasDuckDB) this.sync(this.lastStoreLayers);
+    };
+    window.addEventListener("geolibre:duckdb-layer-updated", handler);
+    this.unwatchDuckDB = () => window.removeEventListener("geolibre:duckdb-layer-updated", handler);
+  }
 
   /**
    * Re-ground the I3S scene layers whenever the globe's terrain provider
@@ -2638,6 +2660,7 @@ export class CesiumLayerSync {
   }
 
   sync(storeLayers: GeoLibreLayer[]): void {
+    this.lastStoreLayers = storeLayers;
     // deck.gl has no globe renderer: a Deck.gl Layer builder record is drawn
     // as the GeoJSON or CZML record it rewrites to (issue #2261), and active
     // DuckDB query layers materialize their GeoArrow rows into GeoJSON.
@@ -2648,6 +2671,7 @@ export class CesiumLayerSync {
     this.currentLayers = layers;
     this.watchEnvironment();
     this.watchTerrain();
+    this.watchDuckDB();
     for (const layer of layers) {
       if (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) {
         const d = extractTimeFilterDate(layer.timeFilter);
@@ -2791,6 +2815,8 @@ export class CesiumLayerSync {
     this.unsubscribeEnvironment = null;
     this.unwatchTerrain?.();
     this.unwatchTerrain = null;
+    this.unwatchDuckDB?.();
+    this.unwatchDuckDB = null;
     this.removeDrapeLayer();
     this.drape?.destroy();
     this.drape = undefined;

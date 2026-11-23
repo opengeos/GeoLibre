@@ -416,6 +416,9 @@ export function updateDuckDBLayerRows(
 
   const renderedLayer = duckdbRenderedLayers.get(layerId);
   if (renderedLayer) duckdbGeoJsonCache.delete(renderedLayer);
+  if (typeof window !== "undefined" && typeof CustomEvent !== "undefined") {
+    window.dispatchEvent(new CustomEvent("geolibre:duckdb-layer-updated", { detail: { layerId } }));
+  }
 
   const control = getMutableDuckDBControl();
   if (control?.layer?.id === layerId) {
@@ -937,6 +940,13 @@ function patchDuckDBRenderer(renderer: DuckDBRendererLike | null | undefined) {
         if (cached) {
           cached.results = incoming.results;
           duckdbGeoJsonCache.delete(cached);
+          if (typeof window !== "undefined" && typeof CustomEvent !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("geolibre:duckdb-layer-updated", {
+                detail: { layerId: incoming.id },
+              }),
+            );
+          }
         }
       }
       renderer.__geolibreOriginalSetData?.(getOrderedDuckDBRenderedLayers());

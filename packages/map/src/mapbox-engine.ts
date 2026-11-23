@@ -215,6 +215,7 @@ export class MapboxEngine implements MapEngine {
   private cogDemUrl: string | null = null;
   private cogDemGeneration = 0;
   private terrainSourcePending = false;
+  private terrainRestorePending = false;
   private retiredCogDems: Array<{
     registration: CogDemSourceRegistration | null;
     binding: RegisteredMapboxCogDem | null;
@@ -280,7 +281,7 @@ export class MapboxEngine implements MapEngine {
   private syncPending = false;
   private basemapPending = false;
   private flushLayers = () => {
-    if (this.terrainSourcePending) this.reconcileTerrainSource();
+    if (this.terrainSourcePending || this.terrainRestorePending) this.reconcileTerrainSource();
     if (this.syncPending) this.syncLayers(this.layers);
     if (this.basemapPending) this.applyBasemap();
   };
@@ -475,6 +476,7 @@ export class MapboxEngine implements MapEngine {
     // A fresh style dropped any previous native terrain source, so pending
     // source swaps are already superseded and retired COG DEM bindings can be released.
     this.terrainSourcePending = false;
+    this.terrainRestorePending = false;
     this.releaseRetiredCogDems();
     this.setTerrainEnabled(this.terrain);
     this.syncLayers(this.layers);
@@ -504,6 +506,7 @@ export class MapboxEngine implements MapEngine {
     if (this.ownsLayerLabels) clearLayerLabels();
     this.cogDemGeneration++;
     this.terrainSourcePending = false;
+    this.terrainRestorePending = false;
     this.releaseRetiredCogDems();
     this.cogDemTileBinding?.unregister();
     this.cogDemTileBinding = null;
@@ -2028,15 +2031,26 @@ export class MapboxEngine implements MapEngine {
   }
 
   private reconcileTerrainSource(): void {
-    if (!this.terrainSourcePending) return;
     const map = this.map;
     if (!map || !map.isStyleLoaded()) return;
-    this.terrainSourcePending = false;
-    const wasEnabled = this.terrain;
-    if (wasEnabled) map.setTerrain(null);
-    if (map.getSource("geolibre-mapbox-dem")) map.removeSource("geolibre-mapbox-dem");
-    if (wasEnabled) this.setTerrainEnabled(true);
-    this.releaseRetiredCogDems();
+    if (this.terrainSourcePending) {
+      this.terrainSourcePending = false;
+      // Always detach native terrain before removing the source, even when
+      // `this.terrain` was flipped to false while the style was still loading.
+      map.setTerrain(null);
+      if (map.getSource("geolibre-mapbox-dem")) map.removeSource("geolibre-mapbox-dem");
+      this.releaseRetiredCogDems();
+      if (this.terrain) {
+        this.terrainRestorePending = true;
+      }
+    }
+    if (this.terrainRestorePending) {
+      if (!this.terrain) {
+        this.terrainRestorePending = false;
+      } else if (this.setTerrainEnabled(true)) {
+        this.terrainRestorePending = false;
+      }
+    }
   }
 
   private releaseRetiredCogDems(): void {

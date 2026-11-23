@@ -288,8 +288,8 @@ function PaneLayerToggle({ viewId, index, renderer }: PaneLayerToggleProps) {
             const only3d = !is3d && isCesiumOnlyLayer(layer);
             // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine layer support table
             const noMapbox = renderer === "mapbox" && !isMapboxSupportedLayer(layer);
-            // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine layer support table
             const noArcgis =
+              // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine layer support table
               renderer === "arcgis" && !isArcgisSupportedLayer(layer, false, arcgisScene);
             return (
               <DropdownMenuCheckboxItem
