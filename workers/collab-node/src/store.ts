@@ -343,6 +343,10 @@ export class SessionStore {
    * @param entry - The event to record.
    */
   appendSessionLog(sessionId: string, entry: SessionLogEntry): void {
+    // Intentionally mirror the Worker's capped JSON format for small self-hosted
+    // relays. Only appends and host log requests load it; per-frame session reads
+    // stay separate. Higher-throughput relays should use per-entry rows and byte
+    // counters to avoid rewriting the log.
     const log = this.getSessionLog(sessionId);
     log.push(entry);
     // Bound by count AND serialized bytes: `join` entries carry an identity of

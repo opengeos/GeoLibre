@@ -1216,10 +1216,13 @@ def whitebox_job(job_id: str):
 
 @router.post("/jobs/{job_id}/cancel")
 def whitebox_cancel(job_id: str):
-    """Stop a pending or running Whitebox job.
+    """Request cancellation of a pending or running Whitebox job.
 
     Cancelling a job that has already finished is a no-op that returns its final
-    state, so a client racing completion never sees an error.
+    state, so a client racing completion never sees an error. Cancellation is
+    best-effort: work already completing may still report success, and completed
+    output is not rolled back. The response is the current state; clients should
+    keep polling until a terminal state.
 
     Args:
         job_id: The Whitebox job id.
