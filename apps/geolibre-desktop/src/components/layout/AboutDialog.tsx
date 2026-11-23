@@ -141,12 +141,16 @@ export function AboutDialog({
 
     if (releaseResult.status === "fulfilled") {
       const release = releaseResult.value;
-      const displayVersion =
-        hasSignedUpdate && signed?.version ? formatVersion(signed.version) : release.version;
-      const displayNotes = hasSignedUpdate && signed?.notes ? signed.notes : release.notes;
+      const useSignedMetadata = Boolean(hasSignedUpdate && signed?.version);
+      const displayVersion = useSignedMetadata ? formatVersion(signed!.version!) : release.version;
+      const versionsMatch =
+        !useSignedMetadata || compareVersions(displayVersion, release.version) === 0;
+      const displayNotes = useSignedMetadata
+        ? signed!.notes || (versionsMatch ? release.notes : "")
+        : release.notes;
       setLatestVersion(displayVersion);
       setLatestNotes(displayNotes);
-      setLatestUrl(release.url);
+      setLatestUrl(versionsMatch ? release.url : UPDATE_URL);
       setSignedUpdateAvailable(hasSignedUpdate);
       setUpdateStatus(
         compareVersions(APP_VERSION, displayVersion) < 0 || hasSignedUpdate

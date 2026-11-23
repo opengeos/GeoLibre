@@ -30,6 +30,14 @@ export function useGpsBackgroundRecording(
   const warnedQuotaRef = useRef(false);
   const restoredOnceRef = useRef(false);
   const checkpointClearedRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const getSaver = useCallback((): ThrottledCheckpointSaver => {
     if (!saverRef.current) {
@@ -115,9 +123,11 @@ export function useGpsBackgroundRecording(
 
   // `lineSegments()` only exports segments with >= 2 points; keep or flush the
   // checkpoint if any singleton segment was omitted or new fixes arrived during
-  // the async save dialog.
+  // the async save dialog. Skip once unmounted so a stale save completion can
+  // never clear or overwrite a newer dialog instance's shared checkpoint.
   const reconcileAfterExport = useCallback(
     (unchangedSinceExport: boolean) => {
+      if (!mountedRef.current) return;
       const segments = fixesRef.current;
       const hasUnexportedFixes = segments.some((seg) => seg.length === 1);
       if (unchangedSinceExport && !hasUnexportedFixes) {
