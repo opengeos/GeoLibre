@@ -29,17 +29,33 @@ export function ExportActions({
   const { t } = useTranslation();
   const { atlasProgress, atlasBusy, exporting, copied } = ui;
   const { atlasActive, atlasConfigBlocked, atlasPageCount } = atlas;
-  const { handleCopy, handleExport, handleAtlasExport, handleDialogOpenChange } = actions;
+  const {
+    handleCopy,
+    handleExport,
+    handleAtlasExport,
+    handleCancelAtlasExport,
+    handleDialogOpenChange,
+  } = actions;
   return (
     <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
-      {/* Atlas export progress, kept visible next to the buttons. */}
+      {/* Atlas export progress and cancel button, kept visible next to the export buttons. */}
       {atlasProgress && (
-        <span className="me-auto text-sm text-muted-foreground">
-          {t("printLayout.atlas.exporting", {
-            current: atlasProgress.current,
-            total: atlasProgress.total,
-          })}
-        </span>
+        <div className="me-auto flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">
+            {t("printLayout.atlas.exporting", {
+              current: atlasProgress.current,
+              total: atlasProgress.total,
+            })}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleCancelAtlasExport}
+          >
+            {t("common.cancel")}
+          </Button>
+        </div>
       )}
       <Button
         variant="ghost"

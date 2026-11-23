@@ -47,6 +47,7 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  CopyPlus,
   BookOpen,
   Download,
   GripVertical,
@@ -58,10 +59,14 @@ import {
   Loader2,
   Play,
   Plus,
+  Redo2,
   Save,
   Trash2,
+  Undo2,
   Upload,
   X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import {
   Fragment,
@@ -104,19 +109,29 @@ import {
   addOutputForPort,
   addToolNode,
   autoLayout,
+  clampCanvasZoom,
   connectNodes,
+  createModelHistory,
+  duplicateNodes,
   emptyModelGraph,
   graphsEqual,
   layoutGraph,
   moveNode,
+  moveNodes,
   parseMaxIterations,
   portFeedsOutput,
+  pushModelHistory,
+  redoModelHistory,
   removeEdge,
   removeNode,
+  removeNodes,
   setNodeField,
   setNodeParameter,
   settleNode,
+  undoModelHistory,
+  type ModelHistoryState,
 } from "../../../lib/model-graph-edit";
+import { ModelBuilderMinimap } from "./ModelBuilderMinimap";
 import { fetchLayerBytes } from "../../../lib/whitebox-layer-inputs";
 import { fieldNamesByLayer } from "../../../lib/layer-field-names";
 import { modelFieldOptions } from "../../../lib/model-field-options";
@@ -367,11 +382,78 @@ export function ModelBuilderPanel({
   /** The sample workflow being fetched, so the menu can show progress and ignore repeats. */
   const [loadingSampleId, setLoadingSampleId] = useState<string | null>(null);
   const [graph, setGraph] = useState<ProcessingModelGraph>(emptyModelGraph);
+  const [history, setHistory] = useState<ModelHistoryState>(createModelHistory);
+  const [canvasZoom, setCanvasZoom] = useState(1);
+  const [canvasScroll, setCanvasScroll] = useState({ left: 0, top: 0, width: 0, height: 0 });
   const graphRef = useRef(graph);
   useLayoutEffect(() => {
     graphRef.current = graph;
   }, [graph]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(() => new Set());
+
+  const selectSingleNode = useCallback((id: string | null) => {
+    setSelectedNodeId(id);
+    setSelectedNodeIds(id ? new Set([id]) : new Set());
+  }, []);
+
+  const commitGraph = useCallback(
+    (updater: ProcessingModelGraph | ((current: ProcessingModelGraph) => ProcessingModelGraph)) => {
+      setGraph((current) => {
+        const next = typeof updater === "function" ? updater(current) : updater;
+        if (next === current) return current;
+        setHistory((prev) => pushModelHistory(prev, current));
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleUndo = useCallback(() => {
+    setHistory((prev) => {
+      const result = undoModelHistory(prev, graphRef.current);
+      if (!result) return prev;
+      setGraph(result.graph);
+      return result.history;
+    });
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    setHistory((prev) => {
+      const result = redoModelHistory(prev, graphRef.current);
+      if (!result) return prev;
+      setGraph(result.graph);
+      return result.history;
+    });
+  }, []);
+
+  const handleDuplicateSelected = useCallback(() => {
+    const ids =
+      selectedNodeIds.size > 0
+        ? Array.from(selectedNodeIds)
+        : selectedNodeId
+          ? [selectedNodeId]
+          : [];
+    if (ids.length === 0) return;
+    const result = duplicateNodes(graphRef.current, ids, createId);
+    if (result.nodeIds.length === 0) return;
+    commitGraph(result.graph);
+    setSelectedNodeIds(new Set(result.nodeIds));
+    setSelectedNodeId(result.nodeIds[result.nodeIds.length - 1] ?? null);
+  }, [commitGraph, selectedNodeId, selectedNodeIds]);
+
+  const handleDeleteSelected = useCallback(() => {
+    const ids =
+      selectedNodeIds.size > 0
+        ? Array.from(selectedNodeIds)
+        : selectedNodeId
+          ? [selectedNodeId]
+          : [];
+    if (ids.length === 0) return;
+    commitGraph((current) => removeNodes(current, ids));
+    setArmedPort((current) => (current && ids.includes(current.nodeId) ? null : current));
+    selectSingleNode(null);
+  }, [commitGraph, selectSingleNode, selectedNodeId, selectedNodeIds]);
   const [catalog, setCatalog] = useState<ModelToolDescriptor[]>([]);
   const [catalogFailed, setCatalogFailed] = useState(false);
   const [catalogLoaded, setCatalogLoaded] = useState(false);
@@ -631,9 +713,10 @@ export function ModelBuilderPanel({
     setModelId(createId());
     setModelName("");
     setGraph(emptyModelGraph());
-    setSelectedNodeId(null);
+    setHistory(createModelHistory());
+    selectSingleNode(null);
     resetRunState();
-  }, [confirmDiscard, resetRunState]);
+  }, [confirmDiscard, resetRunState, selectSingleNode]);
 
   /** @returns False when the user declined to discard what was on the canvas. */
   const handleLoadModel = useCallback(
@@ -642,20 +725,21 @@ export function ModelBuilderPanel({
       setModelId(model.id);
       setModelName(model.name);
       setGraph(autoLayout(model.graph ?? stepsToGraph(model), layoutOptions()));
-      setSelectedNodeId(null);
+      setHistory(createModelHistory());
+      selectSingleNode(null);
       resetRunState();
       return true;
     },
-    [confirmDiscard, layoutOptions, resetRunState],
+    [confirmDiscard, layoutOptions, resetRunState, selectSingleNode],
   );
 
   /** Re-run the depth-based layout over the nodes the user has moved around. */
   const handleArrange = useCallback(() => {
-    setGraph((current) => layoutGraph(current, layoutOptions()));
+    commitGraph((current) => layoutGraph(current, layoutOptions()));
     // The layout starts at the origin, so a canvas left scrolled somewhere
     // else would open on empty space right after tidying it up.
     canvasRef.current?.scrollTo({ left: 0, top: 0 });
-  }, [layoutOptions]);
+  }, [commitGraph, layoutOptions]);
 
   // Programmatic entry points (notably the AI Assistant) save a normal project
   // model and request that it be shown. Reuse the regular load path so an
@@ -692,12 +776,15 @@ export function ModelBuilderPanel({
    * The port can still feed the next tool as well, so keeping an intermediate
    * step costs nothing downstream.
    */
-  const handleKeepResult = useCallback((nodeId: string, portId: string, name: string) => {
-    setGraph((current) => {
-      const next = addOutputForPort(current, nodeId, portId, createId, name);
-      return next ? next.graph : current;
-    });
-  }, []);
+  const handleKeepResult = useCallback(
+    (nodeId: string, portId: string, name: string) => {
+      commitGraph((current) => {
+        const next = addOutputForPort(current, nodeId, portId, createId, name);
+        return next ? next.graph : current;
+      });
+    },
+    [commitGraph],
+  );
 
   const handleSave = useCallback(() => {
     // Also write the legacy linear projection when the graph happens to be a
@@ -746,14 +833,15 @@ export function ModelBuilderPanel({
         setModelId(createId());
         setModelName(parsed.name);
         setGraph(autoLayout(graph, layoutOptions()));
-        setSelectedNodeId(null);
+        setHistory(createModelHistory());
+        selectSingleNode(null);
         resetRunState();
         appendLog(t("processing.modelBuilder.importedLog", { nodes: graph.nodes.length }));
       } catch (err) {
         appendLog(`${t("processing.modelBuilder.importFailed")}: ${(err as Error).message}`);
       }
     },
-    [appendLog, confirmDiscard, layoutOptions, resetRunState, t],
+    [appendLog, confirmDiscard, layoutOptions, resetRunState, selectSingleNode, t],
   );
 
   /**
@@ -875,7 +963,8 @@ export function ModelBuilderPanel({
         setModelId(createId());
         setModelName(parsed.name || sample.title);
         setGraph(autoLayout(graph, layoutOptions()));
-        setSelectedNodeId(null);
+        setHistory(createModelHistory());
+        selectSingleNode(null);
         resetRunState();
         canvasRef.current?.scrollTo({ left: 0, top: 0 });
         notes.forEach(appendLog);
@@ -894,21 +983,71 @@ export function ModelBuilderPanel({
       loadingSampleId,
       onAddRasterUrl,
       resetRunState,
+      selectSingleNode,
       t,
     ],
   );
 
   // --- Canvas interaction -------------------------------------------------
 
-  const canvasPoint = useCallback((clientX: number, clientY: number) => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    const scrollLeft = canvasRef.current?.scrollLeft ?? 0;
-    const scrollTop = canvasRef.current?.scrollTop ?? 0;
-    return {
-      x: clientX - (rect?.left ?? 0) + scrollLeft,
-      y: clientY - (rect?.top ?? 0) + scrollTop,
+  const canvasPoint = useCallback(
+    (clientX: number, clientY: number) => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      const scrollLeft = canvasRef.current?.scrollLeft ?? 0;
+      const scrollTop = canvasRef.current?.scrollTop ?? 0;
+      const zoom = canvasZoom || 1;
+      return {
+        x: (clientX - (rect?.left ?? 0) + scrollLeft) / zoom,
+        y: (clientY - (rect?.top ?? 0) + scrollTop) / zoom,
+      };
+    },
+    [canvasZoom],
+  );
+
+  // Sync keyboard shortcuts (Undo/Redo/Duplicate/Delete) while Model Builder is open.
+  useEffect(() => {
+    if (!open || minimized) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const mod = event.metaKey || event.ctrlKey;
+      if (mod && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) handleRedo();
+        else handleUndo();
+      } else if (mod && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        handleRedo();
+      } else if (mod && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        handleDuplicateSelected();
+      } else if (event.key === "Delete" || event.key === "Backspace") {
+        if (selectedNodeIds.size > 0 || selectedNodeId) {
+          event.preventDefault();
+          handleDeleteSelected();
+        }
+      }
     };
-  }, []);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    open,
+    minimized,
+    handleUndo,
+    handleRedo,
+    handleDuplicateSelected,
+    handleDeleteSelected,
+    selectedNodeId,
+    selectedNodeIds.size,
+  ]);
 
   const handleCanvasDrop = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
@@ -923,39 +1062,34 @@ export function ModelBuilderPanel({
         { x: Math.max(0, point.x - NODE_WIDTH / 2), y: Math.max(0, point.y - NODE_HEIGHT / 2) },
         createId,
       );
-      setGraph(next.graph);
-      setSelectedNodeId(next.nodeId);
+      commitGraph(next.graph);
+      selectSingleNode(next.nodeId);
     },
-    [descriptorByKey, graph, canvasPoint],
+    [descriptorByKey, graph, canvasPoint, commitGraph, selectSingleNode],
   );
 
   /** Drop a palette tool onto the canvas without a pointer drag. */
   const addToolAtDefault = useCallback(
     (descriptor: ModelToolDescriptor) => {
       const next = addToolNode(graph, descriptor, { x: 24 + NODE_WIDTH + 72, y: 24 }, createId);
-      setGraph(next.graph);
-      setSelectedNodeId(next.nodeId);
+      commitGraph(next.graph);
+      selectSingleNode(next.nodeId);
     },
-    [graph],
+    [graph, commitGraph, selectSingleNode],
   );
 
   const addNode = useCallback(
     (kind: "input" | "output") => {
-      // Inputs go in the first column and outputs in the second; the placement
-      // helper pushes a new card down until it has a clear footprint. Both stay
-      // near the origin so they land in view even in a narrow panel, rather
-      // than off the right edge where the user would have to scroll to find
-      // them.
       const next = addDataNode(
         graph,
         kind,
         { x: kind === "input" ? 24 : 24 + NODE_WIDTH + 72, y: 24 },
         createId,
       );
-      setGraph(next.graph);
-      setSelectedNodeId(next.nodeId);
+      commitGraph(next.graph);
+      selectSingleNode(next.nodeId);
     },
-    [graph],
+    [graph, commitGraph, selectSingleNode],
   );
 
   const addControlFlowNode = useCallback(
@@ -968,39 +1102,81 @@ export function ModelBuilderPanel({
         | "conditional-merge",
     ) => {
       const next = addControlNode(graph, kind, { x: 24 + NODE_WIDTH + 36, y: 48 }, createId);
-      setGraph(next.graph);
-      setSelectedNodeId(next.nodeId);
+      commitGraph(next.graph);
+      selectSingleNode(next.nodeId);
     },
-    [graph],
+    [graph, commitGraph, selectSingleNode],
   );
 
-  // Node dragging.
+  // Node dragging (supports Shift/Ctrl multi-selection and group drag).
   const handleNodePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>, node: ModelGraphNode) => {
       if ((event.target as HTMLElement).closest("[data-port]")) return;
       event.preventDefault();
-      setSelectedNodeId(node.id);
+      const additive = event.shiftKey || event.ctrlKey || event.metaKey;
+      let activeSelection: Set<string>;
+      if (additive) {
+        const nextSet = new Set(selectedNodeIds);
+        if (nextSet.has(node.id)) {
+          nextSet.delete(node.id);
+          setSelectedNodeIds(nextSet);
+          setSelectedNodeId(nextSet.size > 0 ? Array.from(nextSet)[nextSet.size - 1] : null);
+          return;
+        }
+        nextSet.add(node.id);
+        setSelectedNodeIds(nextSet);
+        setSelectedNodeId(node.id);
+        activeSelection = nextSet;
+      } else if (selectedNodeIds.has(node.id) && selectedNodeIds.size > 1) {
+        setSelectedNodeId(node.id);
+        activeSelection = selectedNodeIds;
+      } else {
+        selectSingleNode(node.id);
+        activeSelection = new Set([node.id]);
+      }
+
       const handle = event.currentTarget;
       handle.setPointerCapture(event.pointerId);
       const startX = event.clientX;
       const startY = event.clientY;
-      const origin = { x: node.x, y: node.y };
-      // A pointer can report several moves per frame, and each setGraph here
-      // re-runs validateModelGraph over the whole graph and repaints the edge
-      // layer. Coalescing to one commit per animation frame keeps that work at
-      // display rate no matter how fast the device samples.
+      const zoom = canvasZoom || 1;
+      const snapshotBeforeDrag = graphRef.current;
+      const origins = new Map<string, { x: number; y: number }>();
+      for (const item of snapshotBeforeDrag.nodes) {
+        if (activeSelection.has(item.id)) origins.set(item.id, { x: item.x, y: item.y });
+      }
+      let moved = false;
       let frame = 0;
-      let pending: { x: number; y: number } | null = null;
+      let pendingDelta: { dx: number; dy: number } | null = null;
       const commit = () => {
         frame = 0;
-        const next = pending;
-        pending = null;
-        if (next) setGraph((current) => moveNode(current, node.id, next));
+        const delta = pendingDelta;
+        pendingDelta = null;
+        if (!delta) return;
+        moved = true;
+        if (origins.size === 1) {
+          const origin = origins.get(node.id)!;
+          setGraph((current) =>
+            moveNode(current, node.id, {
+              x: Math.max(0, origin.x + delta.dx),
+              y: Math.max(0, origin.y + delta.dy),
+            }),
+          );
+        } else {
+          const positions = new Map<string, { x: number; y: number }>();
+          for (const [id, origin] of origins) {
+            positions.set(id, {
+              x: Math.max(0, origin.x + delta.dx),
+              y: Math.max(0, origin.y + delta.dy),
+            });
+          }
+          setGraph((current) => moveNodes(current, positions));
+        }
       };
       const handleMove = (move: PointerEvent) => {
-        pending = {
-          x: Math.max(0, origin.x + (move.clientX - startX)),
-          y: Math.max(0, origin.y + (move.clientY - startY)),
+        pendingDelta = {
+          dx: (move.clientX - startX) / zoom,
+          dy: (move.clientY - startY) / zoom,
         };
         if (!frame) frame = requestAnimationFrame(commit);
       };
@@ -1010,19 +1186,20 @@ export function ModelBuilderPanel({
         handle.removeEventListener("pointermove", handleMove);
         handle.removeEventListener("pointerup", handleEnd);
         handle.removeEventListener("pointercancel", handleEnd);
-        // Land the last sampled position before settling, or a move that was
-        // still waiting on its frame would be dropped on release.
         if (frame) cancelAnimationFrame(frame);
         commit();
-        // Settle on drop so a card never comes to rest covering another's
-        // ports, which would make those ports unclickable with no way back.
-        setGraph((current) => settleNode(current, node.id));
+        if (moved) {
+          setHistory((prev) => pushModelHistory(prev, snapshotBeforeDrag));
+          if (origins.size === 1) {
+            setGraph((current) => settleNode(current, node.id));
+          }
+        }
       };
       handle.addEventListener("pointermove", handleMove);
       handle.addEventListener("pointerup", handleEnd);
       handle.addEventListener("pointercancel", handleEnd);
     },
-    [],
+    [canvasZoom, selectSingleNode, selectedNodeIds],
   );
 
   // Port-to-port wiring.
@@ -1055,9 +1232,9 @@ export function ModelBuilderPanel({
         return;
       }
       graphRef.current = result.graph;
-      setGraph(result.graph);
+      commitGraph(result.graph);
     },
-    [appendLog, t],
+    [appendLog, commitGraph, t],
   );
 
   /**
@@ -1620,6 +1797,69 @@ export function ModelBuilderPanel({
           <Button
             size="sm"
             variant="ghost"
+            className="h-7 w-7 shrink-0 p-0"
+            onClick={handleUndo}
+            disabled={history.past.length === 0}
+            aria-label={t("processing.modelBuilder.undo")}
+            title={t("processing.modelBuilder.undo")}
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 shrink-0 p-0"
+            onClick={handleRedo}
+            disabled={history.future.length === 0}
+            aria-label={t("processing.modelBuilder.redo")}
+            title={t("processing.modelBuilder.redo")}
+          >
+            <Redo2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 shrink-0 p-0"
+            onClick={handleDuplicateSelected}
+            disabled={selectedNodeIds.size === 0 && !selectedNodeId}
+            aria-label={t("processing.modelBuilder.duplicateSelected")}
+            title={t("processing.modelBuilder.duplicateSelected")}
+          >
+            <CopyPlus className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 shrink-0 p-0"
+            onClick={() => setCanvasZoom((z) => clampCanvasZoom(z - 0.15))}
+            aria-label={t("processing.modelBuilder.zoomOut")}
+            title={t("processing.modelBuilder.zoomOut")}
+          >
+            <ZoomOut className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 shrink-0 px-1.5 text-[11px] tabular-nums"
+            onClick={() => setCanvasZoom(1)}
+            aria-label={t("processing.modelBuilder.resetZoom")}
+            title={t("processing.modelBuilder.resetZoom")}
+          >
+            {Math.round(canvasZoom * 100)}%
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 shrink-0 p-0"
+            onClick={() => setCanvasZoom((z) => clampCanvasZoom(z + 0.15))}
+            aria-label={t("processing.modelBuilder.zoomIn")}
+            title={t("processing.modelBuilder.zoomIn")}
+          >
+            <ZoomIn className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
             className="h-7 shrink-0 gap-1 px-2"
             onClick={handleArrange}
             disabled={graph.nodes.length === 0}
@@ -1963,6 +2203,42 @@ export function ModelBuilderPanel({
           <div
             ref={canvasRef}
             className="relative min-w-0 flex-1 overflow-auto bg-muted/20"
+            onScroll={(event) => {
+              const el = event.currentTarget;
+              setCanvasScroll({
+                left: el.scrollLeft,
+                top: el.scrollTop,
+                width: el.clientWidth,
+                height: el.clientHeight,
+              });
+            }}
+            onWheel={(event) => {
+              if (event.ctrlKey || event.metaKey) {
+                event.preventDefault();
+                setCanvasZoom((z) => clampCanvasZoom(z + (event.deltaY < 0 ? 0.1 : -0.1)));
+              }
+            }}
+            onPointerDown={(event) => {
+              // Middle-button or Alt+drag pans the scrollable canvas smoothly.
+              if (event.button !== 1 && !(event.button === 0 && event.altKey)) return;
+              const container = canvasRef.current;
+              if (!container) return;
+              event.preventDefault();
+              const startX = event.clientX;
+              const startY = event.clientY;
+              const startLeft = container.scrollLeft;
+              const startTop = container.scrollTop;
+              const onMove = (move: PointerEvent) => {
+                container.scrollLeft = startLeft - (move.clientX - startX);
+                container.scrollTop = startTop - (move.clientY - startY);
+              };
+              const onUp = () => {
+                window.removeEventListener("pointermove", onMove);
+                window.removeEventListener("pointerup", onUp);
+              };
+              window.addEventListener("pointermove", onMove);
+              window.addEventListener("pointerup", onUp);
+            }}
             onDragOver={(event) => {
               if (event.dataTransfer.types.includes(TOOL_DRAG_TYPE)) {
                 event.preventDefault();
@@ -1971,36 +2247,68 @@ export function ModelBuilderPanel({
             }}
             onDrop={handleCanvasDrop}
             onClick={(event) => {
-              if (event.target === event.currentTarget) setSelectedNodeId(null);
+              if (event.target === event.currentTarget) selectSingleNode(null);
             }}
           >
             <div
               className="relative"
-              style={{ width: canvasExtent.width, height: canvasExtent.height }}
+              style={{
+                width: canvasExtent.width * canvasZoom,
+                height: canvasExtent.height * canvasZoom,
+              }}
             >
-              <GraphEdges
-                graph={graph}
-                resolveDescriptor={resolveDescriptor}
-                linking={linking}
-                onRemoveEdge={(edgeId) => setGraph((current) => removeEdge(current, edgeId))}
-              />
-              {graph.nodes.map((node) => (
-                <GraphNodeCard
-                  key={node.id}
-                  node={node}
-                  descriptor={resolveDescriptor(node.provider, node.toolId)}
-                  layers={layers}
-                  selected={node.id === selectedNodeId}
-                  status={nodeStatus[node.id]}
-                  hasIssue={issuesByNode.has(node.id)}
-                  armedPortId={armedPort?.nodeId === node.id ? armedPort.portId : undefined}
-                  onSelect={setSelectedNodeId}
-                  onPointerDown={handleNodePointerDown}
-                  onPortPointerDown={handlePortPointerDown}
-                  onPortActivate={handlePortActivate}
+              <div
+                className="relative origin-top-left"
+                style={{
+                  width: canvasExtent.width,
+                  height: canvasExtent.height,
+                  transform: `scale(${canvasZoom})`,
+                }}
+              >
+                <GraphEdges
+                  graph={graph}
+                  resolveDescriptor={resolveDescriptor}
+                  linking={linking}
+                  onRemoveEdge={(edgeId) => commitGraph((current) => removeEdge(current, edgeId))}
                 />
-              ))}
+                {graph.nodes.map((node) => (
+                  <GraphNodeCard
+                    key={node.id}
+                    node={node}
+                    descriptor={resolveDescriptor(node.provider, node.toolId)}
+                    layers={layers}
+                    selected={selectedNodeIds.has(node.id) || node.id === selectedNodeId}
+                    status={nodeStatus[node.id]}
+                    hasIssue={issuesByNode.has(node.id)}
+                    armedPortId={armedPort?.nodeId === node.id ? armedPort.portId : undefined}
+                    onSelect={selectSingleNode}
+                    onPointerDown={handleNodePointerDown}
+                    onPortPointerDown={handlePortPointerDown}
+                    onPortActivate={handlePortActivate}
+                  />
+                ))}
+              </div>
             </div>
+            <ModelBuilderMinimap
+              graph={graph}
+              selectedIds={selectedNodeIds}
+              extentWidth={canvasExtent.width}
+              extentHeight={canvasExtent.height}
+              zoom={canvasZoom}
+              scrollLeft={canvasScroll.left}
+              scrollTop={canvasScroll.top}
+              viewportWidth={canvasScroll.width || canvasRef.current?.clientWidth || 0}
+              viewportHeight={canvasScroll.height || canvasRef.current?.clientHeight || 0}
+              onNavigate={(worldX, worldY) => {
+                const container = canvasRef.current;
+                if (!container) return;
+                container.scrollTo({
+                  left: Math.max(0, worldX * canvasZoom - container.clientWidth / 2),
+                  top: Math.max(0, worldY * canvasZoom - container.clientHeight / 2),
+                  behavior: "smooth",
+                });
+              }}
+            />
             {/* Centred on the visible canvas rather than the scroll extent, which
               is wider than the viewport and would push the hint out of sight. */}
             {graph.nodes.length === 0 && (
@@ -2064,23 +2372,23 @@ export function ModelBuilderPanel({
                   }
                   onFieldChange={(field, value) =>
                     selectedNode &&
-                    setGraph((current) => setNodeField(current, selectedNode.id, field, value))
+                    commitGraph((current) => setNodeField(current, selectedNode.id, field, value))
                   }
                   onParamChange={(paramId, value) =>
                     selectedNode &&
-                    setGraph((current) =>
+                    commitGraph((current) =>
                       setNodeParameter(current, selectedNode.id, paramId, value),
                     )
                   }
                   onRemove={() => {
                     if (!selectedNode) return;
-                    setGraph((current) => removeNode(current, selectedNode.id));
+                    commitGraph((current) => removeNode(current, selectedNode.id));
                     // An armed port on the node being deleted would otherwise stay
                     // armed and wire the next activation to a node that is gone.
                     setArmedPort((current) =>
                       current?.nodeId === selectedNode.id ? null : current,
                     );
-                    setSelectedNodeId(null);
+                    selectSingleNode(null);
                   }}
                 />
               </ScrollArea>

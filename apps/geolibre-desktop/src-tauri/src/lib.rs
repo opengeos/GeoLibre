@@ -450,6 +450,19 @@ struct ExternalPluginManifest {
     description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     style: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    capabilities: Option<Vec<String>>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InstalledExternalPluginArchive {
+    id: String,
+    name: String,
+    version: String,
+    archive_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    capabilities: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
@@ -635,6 +648,8 @@ pub fn run() {
             aws_credentials::aws_sso_login_start,
             aws_credentials::aws_sso_login_poll,
             install_external_plugin_archive,
+            list_installed_plugin_archives,
+            uninstall_external_plugin_archive,
             native_duckdb::load_native_vector_file,
             load_external_plugin_bundles,
             read_external_plugin_asset,
@@ -2521,6 +2536,118 @@ fn install_external_plugin_archive_blocking(
     Ok(plugin_id)
 }
 
+#[cfg(not(feature = "mas"))]
+#[tauri::command]
+async fn list_installed_plugin_archives(
+    app: tauri::AppHandle,
+) -> Result<Vec<InstalledExternalPluginArchive>, String> {
+    tauri::async_runtime::spawn_blocking(move || list_installed_plugin_archives_blocking(&app))
+        .await
+        .map_err(|error| format!("Plugin archive list task failed: {error}"))?
+}
+
+#[cfg(not(feature = "mas"))]
+fn list_installed_plugin_archives_blocking(
+    app: &tauri::AppHandle,
+) -> Result<Vec<InstalledExternalPluginArchive>, String> {
+    let plugins_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Could not resolve app data directory: {error}"))?
+        .join("plugins");
+    if !plugins_dir.exists() {
+        return Ok(Vec::new());
+    }
+    let entries = fs::read_dir(&plugins_dir)
+        .map_err(|error| format!("Could not read plugins directory: {error}"))?;
+    let mut installed = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() || !is_zip_path(&path) {
+            continue;
+        }
+        let archive_name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.to_string_lossy().to_string());
+        if let Ok(bundle) = load_external_plugin_archive(&path, &archive_name) {
+            installed.push(InstalledExternalPluginArchive {
+                id: bundle.manifest.id,
+                name: bundle.manifest.name,
+                version: bundle.manifest.version,
+                archive_name,
+                capabilities: bundle.manifest.capabilities,
+            });
+        }
+    }
+    installed.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)));
+    Ok(installed)
+}
+
+#[cfg(not(feature = "mas"))]
+#[tauri::command]
+async fn uninstall_external_plugin_archive(
+    app: tauri::AppHandle,
+    plugin_id: String,
+) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        uninstall_external_plugin_archive_blocking(&app, &plugin_id)
+    })
+    .await
+    .map_err(|error| format!("Plugin uninstall task failed: {error}"))?
+}
+
+#[cfg(not(feature = "mas"))]
+fn uninstall_external_plugin_archive_blocking(
+    app: &tauri::AppHandle,
+    plugin_id: &str,
+) -> Result<bool, String> {
+    validate_required_manifest_string("plugin_id", plugin_id)?;
+    let plugins_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Could not resolve app data directory: {error}"))?
+        .join("plugins");
+    if !plugins_dir.exists() {
+        return Ok(false);
+    }
+    let canonical_dir = fs::canonicalize(&plugins_dir)
+        .map_err(|error| format!("Could not resolve plugins directory: {error}"))?;
+
+    let mut targets: Vec<PathBuf> = Vec::new();
+    let direct = plugins_dir.join(plugin_archive_file_name(plugin_id));
+    if direct.is_file() {
+        targets.push(direct);
+    } else if let Ok(entries) = fs::read_dir(&plugins_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() || !is_zip_path(&path) {
+                continue;
+            }
+            let label = path.to_string_lossy().to_string();
+            if let Ok(bundle) = load_external_plugin_archive(&path, &label) {
+                if bundle.manifest.id == plugin_id {
+                    targets.push(path);
+                }
+            }
+        }
+    }
+
+    let mut removed = false;
+    for candidate in targets {
+        let canonical = fs::canonicalize(&candidate)
+            .map_err(|error| format!("Could not resolve installed plugin archive: {error}"))?;
+        if !canonical.starts_with(&canonical_dir) || !canonical.is_file() || !is_zip_path(&canonical)
+        {
+            return Err("Refusing to remove a file outside the plugins directory.".to_string());
+        }
+        fs::remove_file(&canonical)
+            .map_err(|error| format!("Could not remove plugin archive: {error}"))?;
+        removed = true;
+    }
+    Ok(removed)
+}
+
 /// Build a filesystem-safe `<id>.zip` name for an installed plugin archive.
 ///
 /// The manifest `id` is validated for emptiness and whitespace but not for
@@ -3021,6 +3148,18 @@ fn validate_external_plugin_manifest(manifest: &ExternalPluginManifest) -> Resul
             return Err("style must point to a .css file".to_string());
         }
     }
+    if let Some(capabilities) = manifest.capabilities.as_deref() {
+        for capability in capabilities {
+            match capability.as_str() {
+                "network" | "filesystem" | "sidecar" | "mapWrite" | "ui" => {}
+                other => {
+                    return Err(format!(
+                        "capabilities contains unsupported capability '{other}'"
+                    ));
+                }
+            }
+        }
+    }
 
     Ok(())
 }
@@ -3250,6 +3389,23 @@ async fn install_external_plugin_archive(
     _source_path: String,
 ) -> Result<String, String> {
     Err("External plugin installation is not available in the Mac App Store build.".to_string())
+}
+
+#[cfg(feature = "mas")]
+#[tauri::command]
+async fn list_installed_plugin_archives(
+    _app: tauri::AppHandle,
+) -> Result<Vec<InstalledExternalPluginArchive>, String> {
+    Ok(Vec::new())
+}
+
+#[cfg(feature = "mas")]
+#[tauri::command]
+async fn uninstall_external_plugin_archive(
+    _app: tauri::AppHandle,
+    _plugin_id: String,
+) -> Result<bool, String> {
+    Err("External plugin removal is not available in the Mac App Store build.".to_string())
 }
 
 // Succeeds with an empty scan rather than erroring, so the startup plugin load

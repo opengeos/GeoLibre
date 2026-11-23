@@ -2,6 +2,7 @@ import type {
   GeoLibreAppAPI,
   GeoLibreExternalPluginManifest,
   GeoLibrePlugin,
+  GeoLibrePluginCapability,
   PluginManager,
 } from "@geolibre/plugins";
 import { invoke } from "@tauri-apps/api/core";
@@ -674,7 +675,10 @@ export interface InstalledWebPlugin {
   name: string;
   version: string;
   archiveName: string;
+  capabilities?: GeoLibrePluginCapability[];
 }
+
+export type InstalledArchivePlugin = InstalledWebPlugin;
 
 // Synthetic source recorded in externallyLoadedPluginSources for an
 // IndexedDB-installed plugin. It is intentionally not an http(s)/tauri URL so
@@ -795,7 +799,34 @@ export async function listInstalledWebPlugins(): Promise<InstalledWebPlugin[]> {
     name: record.manifest.name,
     version: record.manifest.version,
     archiveName: record.archiveName,
+    ...(record.manifest.capabilities?.length
+      ? { capabilities: record.manifest.capabilities }
+      : {}),
   }));
+}
+
+/** List `.zip` plugins installed in the desktop app-data plugins directory. */
+export async function listInstalledDesktopPlugins(): Promise<InstalledArchivePlugin[]> {
+  if (!isTauri()) return [];
+  try {
+    return await invoke<InstalledArchivePlugin[]>("list_installed_plugin_archives");
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Uninstall a desktop `.zip` plugin: delete its archive from the app-data
+ * plugins directory, unregister it, and remove its injected stylesheet.
+ */
+export async function uninstallDesktopPluginArchive(
+  manager: PluginManager,
+  pluginId: string,
+  app: GeoLibreAppAPI,
+): Promise<void> {
+  if (!isTauri()) return;
+  await invoke<boolean>("uninstall_external_plugin_archive", { pluginId });
+  unloadFilesystemPlugin(manager, pluginId, app);
 }
 
 // new Date()/Date.now() are awkward to stub in tests; isolate the one timestamp

@@ -159,9 +159,11 @@ import { bundledPluginManifestPaths } from "virtual:bundled-plugins";
 import {
   assertBundleNotBlocklisted,
   installWebPluginArchive,
+  listInstalledDesktopPlugins,
   listInstalledWebPlugins,
   loadExternalPlugins,
   reloadExternalUrlPlugin,
+  uninstallDesktopPluginArchive,
   uninstallWebPlugin,
   unloadFilesystemPlugin,
   unloadRemovedUrlPlugins,
@@ -726,18 +728,42 @@ export async function installPluginArchiveFromFile(
   return pluginId;
 }
 
-// Uninstall a plugin that was installed from a file in the browser.
+// Uninstall a plugin that was installed from a `.zip` file (desktop or browser).
 export async function uninstallPluginArchiveFromFile(
   pluginId: string,
   mapControllerRef: RefObject<MapEngine | null>,
 ): Promise<void> {
-  await uninstallWebPlugin(manager, pluginId, createAppAPI(mapControllerRef));
+  const app = createAppAPI(mapControllerRef);
+  if (isTauriRuntime()) {
+    await uninstallDesktopPluginArchive(manager, pluginId, app);
+    return;
+  }
+  await uninstallWebPlugin(manager, pluginId, app);
 }
 
-// List plugins installed from a file (browser IndexedDB), for the Manage
-// Plugins UI. Returns an empty list on desktop and where IndexedDB is absent.
+// Hot-reload a plugin installed from a `.zip` file (desktop disk or browser IndexedDB)
+// without restarting the app, preserving its active state.
+export async function reloadPluginArchiveFromFile(
+  pluginId: string,
+  mapControllerRef: RefObject<MapEngine | null>,
+): Promise<void> {
+  const app = createAppAPI(mapControllerRef);
+  const wasActive = manager.isActive(pluginId);
+  unloadFilesystemPlugin(manager, pluginId, app);
+  const desktopSettings = useDesktopSettingsStore.getState().desktopSettings;
+  await ensureExternalPluginsLoadedWithSettings(desktopSettings, app, { force: true });
+  if (wasActive && !manager.isActive(pluginId)) {
+    try {
+      await manager.activate(pluginId, app);
+    } catch (error) {
+      reportPluginError(pluginId, "activate", error);
+    }
+  }
+}
+
+// List plugins installed from a `.zip` file (desktop app-data dir or browser IndexedDB).
 export function listPluginArchivesFromFile(): Promise<InstalledWebPlugin[]> {
-  return listInstalledWebPlugins();
+  return isTauriRuntime() ? listInstalledDesktopPlugins() : listInstalledWebPlugins();
 }
 
 export function usePluginRegistry() {

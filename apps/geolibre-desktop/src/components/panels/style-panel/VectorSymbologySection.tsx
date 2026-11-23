@@ -27,6 +27,7 @@ import {
   regeneratingClassificationScheme,
   validateExpressionJson,
 } from "./classification-helpers";
+import { GraduatedHistogram } from "./GraduatedHistogram";
 import { RuleBasedRulesEditor } from "./RuleBasedRulesEditor";
 import type { VectorRuleActions } from "./rule-tree";
 import type { ExpressionBuilderTarget } from "./StyleExpressionBuilder";
@@ -501,6 +502,12 @@ export function VectorSymbologySection({
               <Plus className="h-3.5 w-3.5" />
             </Button>
           </div>
+          {draftVectorStyleMode === "graduated" && (
+            <GraduatedHistogram
+              values={draftVectorPropertyValues}
+              stops={draftVectorStyleStops}
+            />
+          )}
           <div className="space-y-2">
             {draftVectorStyleStops.map((stop, index) => (
               <div key={index} className="grid grid-cols-[auto_1fr_2rem] items-center gap-2">

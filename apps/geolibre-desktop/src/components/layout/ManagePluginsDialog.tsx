@@ -44,6 +44,7 @@ import {
   installPluginArchive,
   installPluginArchiveFromFile,
   listPluginArchivesFromFile,
+  reloadPluginArchiveFromFile,
   subscribeToExternalPluginLoads,
   uninstallPluginArchiveFromFile,
   upgradeExternalPlugin,
@@ -148,11 +149,8 @@ export function ManagePluginsDialog({
   const [installNotice, setInstallNotice] = useState<string | null>(null);
   const [webPlugins, setWebPlugins] = useState<InstalledWebPlugin[]>([]);
 
-  // Plugins installed from a file on the web build live in IndexedDB, so the
-  // dialog tracks them separately from the registry-driven list. Desktop file
-  // installs persist on disk and are not listed here.
+  // Plugins installed from a `.zip` file (desktop app-data dir or browser IndexedDB).
   const refreshWebPlugins = useCallback(async () => {
-    if (isTauri()) return;
     try {
       setWebPlugins(await listPluginArchivesFromFile());
     } catch {
@@ -406,6 +404,7 @@ export function ManagePluginsDialog({
         setInstalling(true);
         const id = await installPluginArchive(path, mapControllerRef);
         setInstallNotice(`Installed plugin "${id}".`);
+        await refreshWebPlugins();
       } else {
         // Web: read the uploaded bytes, unpack and register client-side, and
         // persist the bundle in IndexedDB so it reloads on the next visit.
@@ -449,6 +448,24 @@ export function ManagePluginsDialog({
       }
     },
     [mapControllerRef, refreshWebPlugins],
+  );
+
+  const reloadArchivePlugin = useCallback(
+    async (id: string) => {
+      setInstallError(null);
+      setInstallNotice(null);
+      try {
+        await reloadPluginArchiveFromFile(id, mapControllerRef);
+        await refreshWebPlugins();
+        setInstallNotice(t("managePlugins.reloadedArchive", { id }));
+      } catch (error) {
+        setInstallError({
+          message: error instanceof Error ? error.message : t("managePlugins.errorUpdate"),
+          ...policyDenialForError(error),
+        });
+      }
+    },
+    [mapControllerRef, refreshWebPlugins, t],
   );
 
   const addManifestUrl = useCallback(() => {
@@ -597,6 +614,7 @@ export function ManagePluginsDialog({
                 installNotice={installNotice}
                 installedFromFile={webPlugins}
                 onInstallFromFile={() => void installFromFile()}
+                onReloadFromFile={(id) => void reloadArchivePlugin(id)}
                 onUninstallFromFile={(id) => void removeWebPlugin(id)}
                 onNewDirectoryChange={setNewDirectory}
                 onNewManifestUrlChange={(value) => {
@@ -880,6 +898,7 @@ interface SettingsTabProps {
   installNotice: string | null;
   installedFromFile: InstalledWebPlugin[];
   onInstallFromFile: () => void;
+  onReloadFromFile: (id: string) => void;
   onUninstallFromFile: (id: string) => void;
   onNewDirectoryChange: (value: string) => void;
   onNewManifestUrlChange: (value: string) => void;
@@ -902,6 +921,7 @@ function SettingsTab({
   installNotice,
   installedFromFile,
   onInstallFromFile,
+  onReloadFromFile,
   onUninstallFromFile,
   onNewDirectoryChange,
   onNewManifestUrlChange,
@@ -971,7 +991,27 @@ function SettingsTab({
                     <span className="truncate text-[11px] text-muted-foreground">
                       {plugin.archiveName}
                     </span>
+                    {plugin.capabilities?.length ? (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {plugin.capabilities.map((cap) => (
+                          <span key={cap} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                            {cap}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 shrink-0"
+                    title={t("managePlugins.reloadArchiveAria", { name: pluginDisplayName(t, plugin) })}
+                    aria-label={t("managePlugins.reloadArchiveAria", { name: pluginDisplayName(t, plugin) })}
+                    onClick={() => onReloadFromFile(plugin.id)}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </Button>
                   <Button
                     type="button"
                     size="icon"

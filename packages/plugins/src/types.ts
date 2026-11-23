@@ -2112,6 +2112,12 @@ export interface GeoLibrePlugin {
   sessionScoped?: boolean;
 }
 
+/**
+ * Optional capabilities an external plugin may declare in `plugin.json` so
+ * Manage Plugins can disclose what surfaces the plugin accesses.
+ */
+export type GeoLibrePluginCapability = "network" | "filesystem" | "sidecar" | "mapWrite" | "ui";
+
 export interface GeoLibreExternalPluginManifest {
   id: string;
   name: string;
@@ -2123,6 +2129,11 @@ export interface GeoLibreExternalPluginManifest {
    * Renderers this plugin supports. Defaults to `["maplibre"]`.
    */
   engines?: MapRendererKind[];
+  /**
+   * Optional capabilities declared by the plugin (e.g. `network`, `filesystem`,
+   * `sidecar`, `mapWrite`, `ui`). Surfaced in Manage Plugins before/after install.
+   */
+  capabilities?: GeoLibrePluginCapability[];
   /**
    * Activate the plugin on startup when no saved plugin state overrides it.
    * Honored only for bundled drop-ins (public/plugins/<id>/), which are baked

@@ -292,7 +292,9 @@
     "policySideloadDisabled": "Plugin sideloading is disabled by deployment policy.",
     "policyBlocked": "Plugin '{{pluginId}}' is blocked by deployment policy.",
     "policyBlocklisted": "Plugin '{{pluginId}}' was blocked by the plugin registry: {{reason}}",
-    "policyNotAllowed": "Plugin '{{pluginId}}' is not allowed by deployment policy."
+    "policyNotAllowed": "Plugin '{{pluginId}}' is not allowed by deployment policy.",
+    "reloadArchiveAria": "Reload {{name}}",
+    "reloadedArchive": "Reloaded plugin \"{{id}}\"."
   },
   "viewState": {
     "panelTitle": "Info"
@@ -6502,7 +6504,13 @@
         "rasterUnsupported": "Sample data \"{{name}}\" is a raster, which this build cannot add to the map.",
         "dataUnusable": "not a GeoJSON FeatureCollection",
         "dataTooLarge": "larger than {{size}} MB"
-      }
+      },
+      "undo": "Undo (Ctrl+Z)",
+      "redo": "Redo (Ctrl+Shift+Z)",
+      "duplicateSelected": "Duplicate selected nodes (Ctrl+D)",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "resetZoom": "Reset zoom to 100%"
     },
     "parameterField": {
       "selectLayer": "Select a layer…",
@@ -8937,7 +8945,39 @@
     "calcAppliedWithErrors": "Applied, but {{errors}} of {{evaluated}} feature(s) errored and were written as null.",
     "exportFailed": "Could not export the selected layer.",
     "saveTitleFormErrors": "Fix attribute form violations before saving",
-    "fieldReserved": "This field name is reserved for GeoEditor."
+    "fieldReserved": "This field name is reserved for GeoEditor.",
+    "multiSortHint": "Click to sort; Shift+click to add secondary sort",
+    "columnFilter": {
+      "toggle": "Per-column filters",
+      "column": "Filter column",
+      "mode": "Filter mode",
+      "contains": "Contains",
+      "equals": "Equals",
+      "range": "Numeric range",
+      "isNull": "Is empty",
+      "notNull": "Is not empty",
+      "valuePlaceholder": "Filter value...",
+      "min": "Min",
+      "max": "Max",
+      "clearAll": "Clear filters"
+    },
+    "bulkEdit": {
+      "title": "Find & Replace / Bulk Fill",
+      "description": "Update multiple rows in one column through the attribute edit draft queue.",
+      "findReplace": "Find & Replace",
+      "bulkFill": "Bulk Fill",
+      "column": "Column",
+      "scope": "Target rows",
+      "scopeSelected": "Selected rows ({{count}})",
+      "scopeFiltered": "Filtered rows ({{count}})",
+      "find": "Find text",
+      "replaceWith": "Replace with",
+      "matchCase": "Match case",
+      "wholeCell": "Match entire cell",
+      "fillValue": "Fill value",
+      "apply": "Apply to drafts",
+      "updatedCount": "Updated {{count}} cell(s) in drafts. Click Save to commit."
+    }
   },
   "styleManager": {
     "title": "Style manager",

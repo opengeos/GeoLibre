@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch } from "react";
+import { useCallback, useEffect, useRef, type Dispatch } from "react";
 import type { TFunction } from "i18next";
 import type { PrintLayoutConfig } from "@geolibre/core";
 import type { LayoutOptions } from "../../../lib/print-layout";
@@ -81,6 +81,13 @@ export function useExportActions({
   t,
 }: UseExportActionsArgs) {
   const setError = (error: string | null) => dispatch({ type: "setUi", patch: { error } });
+  const atlasAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => {
+      atlasAbortRef.current?.abort();
+      atlasAbortRef.current = null;
+    };
+  }, []);
 
   // Copy the composed layout to the clipboard as a PNG, so it can be pasted
   // straight into a document without saving a file first (GH #773).
@@ -155,6 +162,9 @@ export function useExportActions({
     if (!atlasActive || atlasBusy || atlasConfigBlocked) return;
     const pages = atlasPages;
     const total = pages.length;
+    const controller = new AbortController();
+    atlasAbortRef.current?.abort();
+    atlasAbortRef.current = controller;
     dispatch({ type: "setUi", patch: { exporting: true, atlasBusy: true, error: null } });
     try {
       const ctxFor = (i: number): AtlasTokenContext => ({
@@ -165,10 +175,17 @@ export function useExportActions({
       });
       const source = {
         total,
+        signal: controller.signal,
         onProgress: (current: number, totalPages: number) =>
           dispatch({ type: "setUi", patch: { atlasProgress: { current, total: totalPages } } }),
         optionsForPage: async (i: number): Promise<LayoutOptions> => {
+          if (controller.signal.aborted) {
+            throw new DOMException("Atlas export cancelled", "AbortError");
+          }
           const { cap, viewBounds, mapFit: atlasMapFit } = await captureAtlasPage(pages[i]);
+          if (controller.signal.aborted) {
+            throw new DOMException("Atlas export cancelled", "AbortError");
+          }
           // Mirror progress into the dialog preview as pages are produced.
           dispatch({ type: "atlasPageCaptured", captured: cap, index: i, bounds: viewBounds });
           const ctx = ctxFor(i);
@@ -208,19 +225,31 @@ export function useExportActions({
           layout.exportDpi,
         );
       }
-    } catch {
-      setError(
-        t("printLayout.errors.exportFailed", {
-          format: kind === "pdf" ? "PDF" : "ZIP",
-        }),
-      );
+    } catch (error) {
+      const cancelled =
+        controller.signal.aborted ||
+        (error instanceof DOMException && error.name === "AbortError");
+      if (!cancelled) {
+        setError(
+          t("printLayout.errors.exportFailed", {
+            format: kind === "pdf" ? "PDF" : "ZIP",
+          }),
+        );
+      }
     } finally {
+      if (atlasAbortRef.current === controller) {
+        atlasAbortRef.current = null;
+      }
       dispatch({
         type: "setUi",
         patch: { exporting: false, atlasBusy: false, atlasProgress: null },
       });
     }
   };
+
+  const handleCancelAtlasExport = useCallback(() => {
+    atlasAbortRef.current?.abort();
+  }, []);
 
   const handleDialogOpenChange = useCallback(
     (nextOpen: boolean) => {
@@ -230,5 +259,11 @@ export function useExportActions({
     [atlasBusy, exporting, onOpenChange],
   );
 
-  return { handleCopy, handleExport, handleAtlasExport, handleDialogOpenChange };
+  return {
+    handleCopy,
+    handleExport,
+    handleAtlasExport,
+    handleCancelAtlasExport,
+    handleDialogOpenChange,
+  };
 }

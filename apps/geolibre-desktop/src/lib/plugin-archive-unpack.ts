@@ -7,6 +7,7 @@
 import type {
   GeoLibreExternalPluginManifest,
   GeoLibrePluginAssistantInfo,
+  GeoLibrePluginCapability,
 } from "@geolibre/plugins";
 import { unzip } from "fflate";
 
@@ -69,6 +70,25 @@ export function isPluginAssistantInfo(value: unknown): value is GeoLibrePluginAs
   );
 }
 
+/** Valid capability identifiers a plugin may declare in `plugin.json`. */
+export const PLUGIN_CAPABILITIES: readonly GeoLibrePluginCapability[] = [
+  "network",
+  "filesystem",
+  "sidecar",
+  "mapWrite",
+  "ui",
+] as const;
+
+const PLUGIN_CAPABILITY_SET: ReadonlySet<string> = new Set(PLUGIN_CAPABILITIES);
+
+/** Type guard for a plugin's optional `capabilities` array. */
+export function isPluginCapabilityList(value: unknown): value is GeoLibrePluginCapability[] {
+  return (
+    Array.isArray(value) &&
+    value.every((cap) => typeof cap === "string" && PLUGIN_CAPABILITY_SET.has(cap))
+  );
+}
+
 /**
  * Type guard validating that a candidate object conforms to the GeoLibre external plugin manifest schema.
  *
@@ -89,6 +109,7 @@ export function isExternalPluginManifest(value: unknown): value is GeoLibreExter
       (typeof manifest.style === "string" && manifest.style.endsWith(".css"))) &&
     (manifest.activeByDefault === undefined || typeof manifest.activeByDefault === "boolean") &&
     (manifest.engines === undefined || isPluginEngineList(manifest.engines)) &&
+    (manifest.capabilities === undefined || isPluginCapabilityList(manifest.capabilities)) &&
     (manifest.assistant === undefined || isPluginAssistantInfo(manifest.assistant))
   );
 }
