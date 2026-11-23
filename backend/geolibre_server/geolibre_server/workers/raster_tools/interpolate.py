@@ -195,7 +195,11 @@ def main() -> None:
             nugget = max(0.0, float(coef[0]))
             sill = max(1e-12, float(coef[1]))
             sse = float((((nugget + sill * shape) - gamma) ** 2).sum())
-            if best is None or sse < best[0]:
+            # Keep the smallest range among (near-)equal fits: once every bin
+            # sits below the range (e.g. a linear model), the SSE is flat in r
+            # and floating-point noise alone would pick the winner, which the
+            # browser engine could not reproduce.
+            if best is None or sse < best[0] * (1.0 - 1e-9):
                 best = (sse, float(r), sill, nugget)
         return best[1], best[2], best[3]
 

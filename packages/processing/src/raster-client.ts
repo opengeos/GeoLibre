@@ -1,7 +1,30 @@
 import { fromArrayBuffer, writeArrayBuffer } from "geotiff";
+import type { FeatureCollection } from "geojson";
 import type { RasterToolId } from "./raster-tools";
 import { buildSpectralIndexExpression } from "./spectral-indices";
 import { compileRasterExpression } from "./raster-expr";
+import {
+  bandDifference,
+  ndviChange,
+  transitionMatrix,
+  type TransitionMatrix,
+} from "./raster-change";
+import {
+  crsTransform,
+  epsgDefinition,
+  geojsonEpsg,
+  mapGeometry,
+  rasterCrsDefinition,
+} from "./raster-geo";
+import { interpolatePoints } from "./raster-interpolate";
+import { dualPolRgb, floodMap, sarDbConvert, speckleFilter } from "./raster-sar";
+import {
+  clipRasterByMask,
+  contourRaster,
+  polygonizeRaster,
+  zonalStatistics,
+} from "./raster-vector";
+import { mosaicRasters, reprojectRaster, resampleRaster } from "./raster-warp";
 
 /**
  * In-browser raster processing engine.
@@ -53,7 +76,12 @@ export interface RasterData {
   geoKeys: Record<string, unknown>;
 }
 
-/** The raster tools that have an in-browser implementation. */
+/**
+ * The raster tools that have an in-browser implementation: every tool of the
+ * raster toolbox. The first group runs synchronously through
+ * {@link runRasterToolClient}; the rest need CRS lookups, vector inputs or a
+ * second raster and run through {@link runRasterToolClientAsync}.
+ */
 export const CLIENT_RASTER_TOOL_IDS: ReadonlySet<RasterToolId> = new Set<RasterToolId>([
   "hillshade",
   "slope",
@@ -63,6 +91,21 @@ export const CLIENT_RASTER_TOOL_IDS: ReadonlySet<RasterToolId> = new Set<RasterT
   "raster-calc",
   "spectral-index",
   "focal",
+  "reproject",
+  "resample",
+  "clip-mask",
+  "polygonize",
+  "contour",
+  "interpolate",
+  "zonal",
+  "mosaic",
+  "change-difference",
+  "ndvi-change",
+  "transition-matrix",
+  "sar-db",
+  "speckle-filter",
+  "sar-rgb",
+  "flood-map",
 ]);
 
 /** Whether a tool can run in the browser without the sidecar. */
@@ -359,7 +402,10 @@ const DEGREES_PER_ANGULAR_UNIT: Record<number, number> = {
  * Without this, slope on a 4326 DEM comes back ~111,320x too steep and
  * saturates at 90 degrees.
  */
-function gradientResolutions(input: RasterData): { resX: number; resY: number } {
+function gradientResolutions(input: RasterData): {
+  resX: number;
+  resY: number;
+} {
   const geoKeys = input.geoKeys ?? {};
   const modelType = geoKeys.GTModelTypeGeoKey as number | undefined;
   const isGeographic =
@@ -935,4 +981,243 @@ export function runRasterToolClient(
 
   messages.push(`Computed "${toolId}" in the browser.`);
   return { raster, bytes: writeRasterBands(raster), messages };
+}
+
+// --- Async dispatcher (every tool) -----------------------------------------
+
+/** Inputs for {@link runRasterToolClientAsync}. */
+export interface ClientToolInputs {
+  /** The primary raster (absent for `interpolate`, whose input is points). */
+  raster?: RasterData;
+  /**
+   * Secondary rasters keyed by parameter id (`raster_2`, `after_path`, ...),
+   * or by letter (`B`, `C`) for the raster calculator.
+   */
+  rasters?: Record<string, RasterData>;
+  /**
+   * GeoJSON inputs keyed by parameter id (`mask_path`, `zones_path`); the
+   * primary point layer of `interpolate` is keyed `input`.
+   */
+  vectors?: Record<string, unknown>;
+}
+
+/** The outcome of a client tool run: a raster or a vector layer. */
+export type ClientToolResult =
+  | {
+      kind: "raster";
+      raster: RasterData;
+      bytes: ArrayBuffer;
+      messages: string[];
+      /** The transition matrix, for `transition-matrix`. */
+      matrix?: TransitionMatrix;
+    }
+  | {
+      kind: "vector";
+      /** The GeoJSON as the sidecar writes it (source CRS, legacy `crs` member). */
+      geojson: FeatureCollection;
+      /** The same features in WGS84, ready for the map. */
+      wgs84: FeatureCollection;
+      messages: string[];
+    };
+
+/** Tools {@link runRasterToolClient} computes synchronously. */
+const SYNC_CLIENT_TOOLS = new Set([
+  "hillshade",
+  "slope",
+  "aspect",
+  "clip-extent",
+  "reclassify",
+  "raster-calc",
+  "spectral-index",
+  "focal",
+]);
+
+/** Whether a tool's primary input is a GeoJSON layer rather than a raster. */
+export function rasterToolTakesVectorInput(toolId: string): boolean {
+  return toolId === "interpolate";
+}
+
+async function toWgs84(fc: FeatureCollection, definition: string): Promise<FeatureCollection> {
+  if (definition === "EPSG:4326") return { type: "FeatureCollection", features: fc.features };
+  const fn = await crsTransform(definition, "EPSG:4326");
+  return {
+    type: "FeatureCollection",
+    features: fc.features.map((f) => ({
+      ...f,
+      geometry: f.geometry ? mapGeometry(f.geometry, fn) : f.geometry,
+    })),
+  };
+}
+
+function requireRaster(inputs: ClientToolInputs, toolId: string): RasterData {
+  if (!inputs.raster) throw new Error(`"${toolId}" needs an input raster.`);
+  return inputs.raster;
+}
+
+function requireVector(inputs: ClientToolInputs, key: string, label: string): unknown {
+  const v = inputs.vectors?.[key];
+  if (v == null) throw new Error(`Choose the ${label} GeoJSON file.`);
+  return v;
+}
+
+function requireSecondary(inputs: ClientToolInputs, key: string, label: string): RasterData {
+  const r = inputs.rasters?.[key];
+  if (!r) throw new Error(`Choose the ${label} raster.`);
+  return r;
+}
+
+/**
+ * Run any raster tool in the browser and return a raster (with encoded
+ * GeoTIFF bytes) or a vector result. Tools that need a CRS resolve it from the
+ * raster's GeoKeys; GeoJSON inputs follow the sidecar's convention (a legacy
+ * `crs` member, else WGS84).
+ */
+export async function runRasterToolClientAsync(
+  toolId: string,
+  inputs: ClientToolInputs,
+  parameters: Record<string, unknown>,
+): Promise<ClientToolResult> {
+  if (SYNC_CLIENT_TOOLS.has(toolId)) {
+    const { raster, bytes, messages } = runRasterToolClient(
+      toolId,
+      requireRaster(inputs, toolId),
+      parameters,
+      inputs.rasters,
+    );
+    return { kind: "raster", raster, bytes, messages };
+  }
+  const messages: string[] = [];
+  if (inputs.raster) {
+    messages.push(
+      `Loaded raster: ${inputs.raster.width}×${inputs.raster.height}, ${inputs.raster.bands.length} band(s).`,
+    );
+  }
+  const rasterResult = (raster: RasterData, extra: string[] = []): ClientToolResult => {
+    messages.push(...extra, `Computed "${toolId}" in the browser.`);
+    return {
+      kind: "raster",
+      raster,
+      bytes: writeRasterBands(raster),
+      messages,
+    };
+  };
+  const vectorResult = async (
+    geojson: FeatureCollection,
+    definition: string,
+    extra: string[],
+  ): Promise<ClientToolResult> => {
+    messages.push(...extra, `Computed "${toolId}" in the browser.`);
+    return {
+      kind: "vector",
+      geojson,
+      wgs84: await toWgs84(geojson, definition),
+      messages,
+    };
+  };
+  const p = parameters;
+  switch (toolId) {
+    case "reproject":
+      return rasterResult(
+        await reprojectRaster(requireRaster(inputs, toolId), {
+          dst_crs: String(p.dst_crs ?? ""),
+          resampling: (p.resampling as string) ?? "nearest",
+        }),
+        [`Reprojected to ${String(p.dst_crs)}.`],
+      );
+    case "resample":
+      return rasterResult(
+        resampleRaster(requireRaster(inputs, toolId), {
+          resolution: Number(p.resolution),
+          resampling: (p.resampling as string) ?? "bilinear",
+        }),
+      );
+    case "clip-mask": {
+      const out = await clipRasterByMask(
+        requireRaster(inputs, toolId),
+        requireVector(inputs, "mask_path", "mask"),
+        { crop: p.crop !== false, all_touched: p.all_touched === true },
+      );
+      return rasterResult(out.raster, out.messages);
+    }
+    case "mosaic": {
+      const extras = ["raster_2", "raster_3", "raster_4", "raster_5"]
+        .map((k) => inputs.rasters?.[k])
+        .filter((r): r is RasterData => r != null);
+      const out = mosaicRasters([requireRaster(inputs, toolId), ...extras], p.method);
+      return rasterResult(out.raster, [...out.messages, `Merged ${extras.length + 1} rasters.`]);
+    }
+    case "interpolate": {
+      const out = await interpolatePoints(requireVector(inputs, "input", "point"), p as never);
+      return rasterResult(out.raster, out.messages);
+    }
+    case "polygonize":
+    case "contour": {
+      const raster = requireRaster(inputs, toolId);
+      const out =
+        toolId === "polygonize"
+          ? polygonizeRaster(raster, p as never)
+          : contourRaster(raster, p as never);
+      return vectorResult(out.geojson, await rasterCrsDefinition(raster, toolId), out.messages);
+    }
+    case "zonal": {
+      const zones = requireVector(inputs, "zones_path", "zones");
+      const out = await zonalStatistics(requireRaster(inputs, toolId), zones, p as never);
+      return vectorResult(out.geojson, await epsgDefinition(geojsonEpsg(zones)), out.messages);
+    }
+    case "change-difference": {
+      const out = bandDifference(
+        requireRaster(inputs, toolId),
+        requireSecondary(inputs, "after_path", "after"),
+        p as never,
+      );
+      return rasterResult(out.raster, out.messages);
+    }
+    case "ndvi-change": {
+      const out = ndviChange(
+        requireRaster(inputs, toolId),
+        requireSecondary(inputs, "after_path", "after"),
+        p as never,
+      );
+      return rasterResult(out.raster, out.messages);
+    }
+    case "transition-matrix": {
+      const out = transitionMatrix(
+        requireRaster(inputs, toolId),
+        requireSecondary(inputs, "after_path", "after"),
+        p as never,
+      );
+      messages.push(...out.messages, `Computed "${toolId}" in the browser.`);
+      return {
+        kind: "raster",
+        raster: out.raster,
+        bytes: writeRasterBands(out.raster),
+        messages,
+        matrix: out.matrix,
+      };
+    }
+    case "sar-db":
+      return rasterResult(sarDbConvert(requireRaster(inputs, toolId), p as never));
+    case "speckle-filter": {
+      const out = speckleFilter(requireRaster(inputs, toolId), p as never);
+      return rasterResult(out.raster, out.messages);
+    }
+    case "sar-rgb": {
+      const out = dualPolRgb(
+        requireRaster(inputs, toolId),
+        inputs.rasters?.vh_path ?? null,
+        p as never,
+      );
+      return rasterResult(out.raster, out.messages);
+    }
+    case "flood-map": {
+      const out = floodMap(
+        requireRaster(inputs, toolId),
+        inputs.rasters?.pre_path ?? null,
+        p as never,
+      );
+      return rasterResult(out.raster, out.messages);
+    }
+    default:
+      throw new Error(`"${toolId}" has no client-side implementation.`);
+  }
 }

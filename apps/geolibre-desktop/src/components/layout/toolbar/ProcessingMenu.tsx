@@ -26,7 +26,12 @@ import { WHITEBOX_MENU_CATALOG } from "../../../lib/whitebox-menu-catalog";
 import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "../../../lib/global-dem";
 import { openObiaWorkbench } from "../../../lib/obia/obia-panel";
 import { CapabilityNotice, capabilityNoticeId, useCapabilityReason } from "./CapabilityNotice";
-import { VECTOR_JOIN_TOOL_COMMANDS, type ToolbarChrome } from "./constants";
+import {
+  RASTER_CHANGE_TOOLS,
+  RASTER_SAR_TOOLS,
+  VECTOR_JOIN_TOOL_COMMANDS,
+  type ToolbarChrome,
+} from "./constants";
 import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
 import { PlanetaryComputerMenuItem } from "./PlanetaryComputerMenuItem";
 import { PluginMenuContributions } from "./PluginMenuContributions";
@@ -692,6 +697,26 @@ export function ProcessingMenu({
                         >
                           {t("toolbar.rasterTool.focal")}
                         </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        {/* Browser-only tools: no sidecar gate, the submenu
+                            trigger already carries the processing gate. */}
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                          {t("toolbar.item.subGroupChangeDetection")}
+                        </DropdownMenuLabel>
+                        {RASTER_CHANGE_TOOLS.map(({ kind, titleKey }) => (
+                          <DropdownMenuItem key={kind} onSelect={() => setRasterToolOpen(kind)}>
+                            {t(titleKey)}
+                          </DropdownMenuItem>
+                        ))}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                          {t("toolbar.item.subGroupSar")}
+                        </DropdownMenuLabel>
+                        {RASTER_SAR_TOOLS.map(({ kind, titleKey }) => (
+                          <DropdownMenuItem key={kind} onSelect={() => setRasterToolOpen(kind)}>
+                            {t(titleKey)}
+                          </DropdownMenuItem>
+                        ))}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={onOpenGeoreferencer}>
                           {t("toolbar.item.georeferencing")}

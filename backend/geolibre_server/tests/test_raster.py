@@ -406,6 +406,46 @@ def test_interpolate_kriging_recovers_trend(tmp_path: Path) -> None:
 
 
 @requires_rasterio
+def test_interpolate_kriging_linear_variogram_picks_smallest_tied_range(
+    tmp_path: Path,
+) -> None:
+    """Once every bin sits below the range, a linear model's SSE is flat in the
+    range, so the fit must keep the smallest such range deterministically
+    (the browser engine reproduces this choice) instead of whichever
+    floating-point noise favours."""
+    import re
+
+    import numpy as np
+
+    src = _write_points(tmp_path / "points.geojson")
+    out = tmp_path / "kriging-linear.tif"
+    stdout = _run_script(
+        _RASTER_TOOL_SCRIPTS["interpolate"],
+        {
+            "input_path": str(src),
+            "output_path": str(out),
+            "field": "z",
+            "method": "kriging",
+            "resolution": 0.5,
+            "variogram_model": "linear",
+        },
+    )
+    match = re.search(r"Variogram \(linear\): range=([0-9.eE+-]+)", stdout)
+    assert match, stdout
+    picked = float(match.group(1))
+    # The sweep's ranges and the bin centres, as the worker computes them.
+    fc = json.loads(src.read_text())
+    pts = np.array([f["geometry"]["coordinates"] for f in fc["features"]], dtype="float64")
+    diff = pts[:, None, :] - pts[None, :, :]
+    dist = np.sqrt((diff * diff).sum(axis=2))
+    hmax = float(dist[np.triu_indices(len(pts), k=1)].max())
+    edges = np.linspace(0.0, hmax, 13)
+    top_centre = float(0.5 * (edges[-2] + edges[-1]))
+    first_flat = next(r for r in np.linspace(hmax * 0.1, hmax * 1.5, 25) if r >= top_centre)
+    assert picked <= float(f"{first_flat:.4g}") + 1e-9
+
+
+@requires_rasterio
 def test_interpolate_skips_non_numeric_values(tmp_path: Path) -> None:
     """Features whose field value is non-numeric are skipped; if too few remain
     the run fails with the minimum-count error rather than crashing."""

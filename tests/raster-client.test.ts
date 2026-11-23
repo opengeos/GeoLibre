@@ -43,8 +43,10 @@ describe("raster-client compute", () => {
   it("reports which tools have a client implementation", () => {
     assert.equal(supportsClientRaster("hillshade"), true);
     assert.equal(supportsClientRaster("focal"), true);
-    assert.equal(supportsClientRaster("polygonize"), false);
-    assert.equal(supportsClientRaster("reproject"), false);
+    assert.equal(supportsClientRaster("polygonize"), true);
+    assert.equal(supportsClientRaster("reproject"), true);
+    assert.equal(supportsClientRaster("flood-map"), true);
+    assert.equal(supportsClientRaster("not-a-tool"), false);
   });
 
   it("parses reclassify rule tables with min/max bounds", () => {
@@ -59,7 +61,10 @@ describe("raster-client compute", () => {
 
   it("reclassifies values into half-open ranges", () => {
     const raster = makeRaster([[5, 10, 15, 25]], 4, 1);
-    const out = reclassify(raster, { table: "0:10:1, 10:20:2", unmatched: "nodata" });
+    const out = reclassify(raster, {
+      table: "0:10:1, 10:20:2",
+      unmatched: "nodata",
+    });
     // 5 -> 1, 10 -> 2 (half-open [10,20)), 15 -> 2, 25 -> unmatched (nodata)
     assert.equal(out.bands[0][0], 1);
     assert.equal(out.bands[0][1], 2);
@@ -318,62 +323,101 @@ describe("raster-client compute", () => {
     // Dimension mismatch between A and B must be rejected cleanly.
     const wrongSize = makeRaster([[1, 2]], 2, 1);
     assert.throws(
-      () => rasterCalc(a, { expression: "A + B", additionalInputs: { B: wrongSize } }),
+      () =>
+        rasterCalc(a, {
+          expression: "A + B",
+          additionalInputs: { B: wrongSize },
+        }),
       /do not match/,
     );
 
     // Georeferencing mismatch (same size, different origin/resolution/registration/CRS/rotation) must be rejected.
     const shifted = { ...b, originX: b.originX + 10 };
     assert.throws(
-      () => rasterCalc(a, { expression: "A + B", additionalInputs: { B: shifted } }),
+      () =>
+        rasterCalc(a, {
+          expression: "A + B",
+          additionalInputs: { B: shifted },
+        }),
       /origin does not match/,
     );
     // Pixel-scaled origin tolerance: 25 cm pixels at 600,000 m shifted by 0.5 m (2 pixels) must reject.
     const fineA = { ...a, originX: 600_000, resX: 0.25, resY: 0.25 };
     const fineB = { ...b, originX: 600_000.5, resX: 0.25, resY: 0.25 };
     assert.throws(
-      () => rasterCalc(fineA, { expression: "A + B", additionalInputs: { B: fineB } }),
+      () =>
+        rasterCalc(fineA, {
+          expression: "A + B",
+          additionalInputs: { B: fineB },
+        }),
       /origin does not match/,
     );
     // Accumulated far-edge resolution drift across width must reject.
     const resDriftA = { ...a, resX: 0.00001, resY: 0.00001 };
     const resDriftB = { ...b, resX: 0.000015, resY: 0.00001 };
     assert.throws(
-      () => rasterCalc(resDriftA, { expression: "A + B", additionalInputs: { B: resDriftB } }),
+      () =>
+        rasterCalc(resDriftA, {
+          expression: "A + B",
+          additionalInputs: { B: resDriftB },
+        }),
       /pixel resolution does not match/,
     );
     const flipped = { ...b, flipY: true };
     assert.throws(
-      () => rasterCalc(a, { expression: "A + B", additionalInputs: { B: flipped } }),
+      () =>
+        rasterCalc(a, {
+          expression: "A + B",
+          additionalInputs: { B: flipped },
+        }),
       /axis orientation does not match/,
     );
     const rotatedB = { ...b, rotated: true };
     assert.throws(
-      () => rasterCalc(a, { expression: "A + B", additionalInputs: { B: rotatedB } }),
+      () =>
+        rasterCalc(a, {
+          expression: "A + B",
+          additionalInputs: { B: rotatedB },
+        }),
       /rotated or sheared/,
     );
     const pointRegB = { ...b, geoKeys: { GTRasterTypeGeoKey: 2 } };
     assert.throws(
-      () => rasterCalc(a, { expression: "A + B", additionalInputs: { B: pointRegB } }),
+      () =>
+        rasterCalc(a, {
+          expression: "A + B",
+          additionalInputs: { B: pointRegB },
+        }),
       /pixel registration/,
     );
     const userDefinedA = { ...a, geoKeys: { ProjectedCSTypeGeoKey: 32767 } };
     const userDefinedB = { ...b, geoKeys: { ProjectedCSTypeGeoKey: 32767 } };
     assert.throws(
       () =>
-        rasterCalc(userDefinedA, { expression: "A + B", additionalInputs: { B: userDefinedB } }),
+        rasterCalc(userDefinedA, {
+          expression: "A + B",
+          additionalInputs: { B: userDefinedB },
+        }),
       /user-defined CRS/,
     );
     const otherCrs = { ...b, geoKeys: { ProjectedCSTypeGeoKey: 32617 } };
     const aWithCrs = { ...a, geoKeys: { ProjectedCSTypeGeoKey: 3857 } };
     assert.throws(
-      () => rasterCalc(aWithCrs, { expression: "A + B", additionalInputs: { B: otherCrs } }),
+      () =>
+        rasterCalc(aWithCrs, {
+          expression: "A + B",
+          additionalInputs: { B: otherCrs },
+        }),
       /CRS .* does not match/,
     );
 
     // Duplicate normalized secondary raster keys must be rejected.
     assert.throws(
-      () => rasterCalc(a, { expression: "A + B", additionalInputs: { B: b, " b ": b } }),
+      () =>
+        rasterCalc(a, {
+          expression: "A + B",
+          additionalInputs: { B: b, " b ": b },
+        }),
       /Duplicate secondary raster key/,
     );
   });
@@ -389,7 +433,10 @@ describe("raster-client compute", () => {
       { nodata: -9999 },
     );
     const b = makeRaster([[1, -32768, 3]], 3, 1, { nodata: -32768 });
-    const out = rasterCalc(a, { expression: "A + B", additionalInputs: { B: b } });
+    const out = rasterCalc(a, {
+      expression: "A + B",
+      additionalInputs: { B: b },
+    });
     assert.equal(out.bands[0][0], 11); // A2 NoData ignored
     assert.equal(out.bands[0][1], -9999); // B's -32768 NoData propagated to A's sentinel
     assert.equal(out.bands[0][2], 33);
@@ -572,6 +619,51 @@ describe("readRasterData with a short SampleFormat tag", () => {
   });
 });
 
+describe("client-raster-inputs path parameters", () => {
+  it("classifies raster and GeoJSON path parameters for the client engine", async () => {
+    const { clientInputForParam, parseGeoJsonBytes } =
+      await import("../apps/geolibre-desktop/src/lib/client-raster-inputs");
+    const tif = [{ extensions: ["tif", "tiff"] }];
+    const geojson = [{ extensions: ["geojson", "json"] }];
+    assert.deepEqual(clientInputForParam({ id: "b_path", type: "path", fileFilters: tif }), {
+      kind: "raster",
+      key: "B",
+    });
+    assert.deepEqual(clientInputForParam({ id: "raster_2", type: "path", fileFilters: tif }), {
+      kind: "raster",
+      key: "raster_2",
+    });
+    assert.deepEqual(
+      clientInputForParam({
+        id: "mask_path",
+        type: "path",
+        fileFilters: geojson,
+      }),
+      {
+        kind: "vector",
+        key: "mask_path",
+      },
+    );
+    assert.equal(clientInputForParam({ id: "band", type: "number" }), null);
+    assert.equal(
+      clientInputForParam({
+        id: "x",
+        type: "path",
+        fileFilters: [{ extensions: ["csv"] }],
+      }),
+      null,
+    );
+
+    const enc = (s: string) => new TextEncoder().encode(s).buffer as ArrayBuffer;
+    assert.deepEqual(parseGeoJsonBytes(enc('{"type":"FeatureCollection","features":[]}')), {
+      type: "FeatureCollection",
+      features: [],
+    });
+    assert.equal(parseGeoJsonBytes(enc("not json")), null);
+    assert.equal(parseGeoJsonBytes(enc("42")), null);
+  });
+});
+
 describe("client-raster-inputs helper", () => {
   it("maps secondary parameter ids, omits cleared inputs, and enforces combined memory budget", async () => {
     const {
@@ -586,7 +678,10 @@ describe("client-raster-inputs helper", () => {
     assert.equal(secondaryRasterLetterForParam("expression"), null);
 
     const dummyBuf = new ArrayBuffer(8);
-    const inputs = { B: { name: "b.tif", bytes: dummyBuf }, C: { name: "c.tif", bytes: dummyBuf } };
+    const inputs = {
+      B: { name: "b.tif", bytes: dummyBuf },
+      C: { name: "c.tif", bytes: dummyBuf },
+    };
     const withoutB = omitClientSecondaryInput(inputs, "B");
     assert.deepEqual(Object.keys(withoutB), ["C"]);
     assert.equal(omitClientSecondaryInput(withoutB, "B"), withoutB);

@@ -251,7 +251,42 @@ export const RASTER_TOOL_COMMANDS: Array<{
   { kind: "reclassify", titleKey: "toolbar.rasterTool.reclassify" },
   { kind: "mosaic", titleKey: "toolbar.rasterTool.mosaic" },
   { kind: "focal", titleKey: "toolbar.rasterTool.focal" },
+  {
+    kind: "change-difference",
+    titleKey: "toolbar.rasterTool.changeDifference",
+  },
+  { kind: "ndvi-change", titleKey: "toolbar.rasterTool.ndviChange" },
+  {
+    kind: "transition-matrix",
+    titleKey: "toolbar.rasterTool.transitionMatrix",
+  },
+  { kind: "sar-db", titleKey: "toolbar.rasterTool.sarDb" },
+  { kind: "speckle-filter", titleKey: "toolbar.rasterTool.speckleFilter" },
+  { kind: "sar-rgb", titleKey: "toolbar.rasterTool.sarRgb" },
+  { kind: "flood-map", titleKey: "toolbar.rasterTool.floodMap" },
 ];
+
+const RASTER_CHANGE_KINDS: ReadonlySet<RasterToolKind> = new Set<RasterToolKind>([
+  "change-difference",
+  "ndvi-change",
+  "transition-matrix",
+]);
+const RASTER_SAR_KINDS: ReadonlySet<RasterToolKind> = new Set<RasterToolKind>([
+  "sar-db",
+  "speckle-filter",
+  "sar-rgb",
+  "flood-map",
+]);
+
+/** The Raster submenu's Change detection group, in command-list order. */
+export const RASTER_CHANGE_TOOLS = RASTER_TOOL_COMMANDS.filter(({ kind }) =>
+  RASTER_CHANGE_KINDS.has(kind),
+);
+
+/** The Raster submenu's SAR group, in command-list order. */
+export const RASTER_SAR_TOOLS = RASTER_TOOL_COMMANDS.filter(({ kind }) =>
+  RASTER_SAR_KINDS.has(kind),
+);
 
 // Re-exported so existing toolbar imports keep working; the shared helper
 // guards the URL scheme and logs opener failures instead of rejecting.
