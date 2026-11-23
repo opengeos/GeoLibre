@@ -760,6 +760,21 @@ describe("Node collaboration relay", () => {
     rejoin.close();
   });
 
+  it("authorizes log requests without loading the session snapshot", async (t) => {
+    const { relay, http } = await start();
+    const created = await createSession(http);
+    relay.store.saveSnapshot(created.sessionId, { data: "x".repeat(2_000_000) }, 1);
+    const fullReads = t.mock.method(relay.store, "get");
+    const logUrl = `${http}/sessions/${created.sessionId}/log`;
+    const asHost = { authorization: `Bearer ${created.hostToken}` };
+    assert.equal((await fetch(logUrl, { headers: asHost })).status, 200);
+    assert.equal((await fetch(logUrl, { method: "DELETE", headers: asHost })).status, 204);
+    const unauthorized = { authorization: "Bearer wrong-token" };
+    assert.equal((await fetch(logUrl, { headers: unauthorized })).status, 403);
+    assert.equal((await fetch(logUrl, { method: "DELETE", headers: unauthorized })).status, 403);
+    assert.equal(fullReads.mock.callCount(), 0);
+  });
+
   it("allows DELETE and the Authorization header in CORS preflight", async () => {
     const { http } = await start();
     const preflight = await fetch(`${http}/sessions/ABCDEFGH/log`, { method: "OPTIONS" });

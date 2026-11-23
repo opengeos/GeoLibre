@@ -334,6 +334,12 @@ core:
   (relay default 10,000,000; the compose file defaults it to 1,000,000) and
   `COLLAB_IDLE_TTL_MS` (default two hours) when needed.
 
+The Node relay currently stores the audit log as capped JSON and synchronously
+rewrites it on each recorded event, including snapshots. Per-frame session
+reads skip that log. This format suits smaller self-hosted deployments; measure
+event throughput before using a busy shared relay. Per-entry SQLite rows and
+byte counters are the next storage improvement for sustained high event rates.
+
 Both relay implementations accept `COLLAB_MAX_SNAPSHOT_BYTES` as a positive
 integer number of bytes. For the Cloudflare relay, set it as a Worker variable,
 for example:

@@ -904,7 +904,7 @@ export function createRelay(options: RelayOptions = {}): {
     const logMatch = url.pathname.match(/^\/sessions\/([^/]+)\/log$/);
     if (logMatch && (request.method === "GET" || request.method === "DELETE")) {
       const sessionId = logMatch[1];
-      const hostToken = store.get(sessionId)?.hostToken ?? "";
+      const hostToken = store.getHostToken(sessionId) ?? "";
       const clientToken = bearerToken(request.headers.authorization);
       if (!hostToken || !clientToken || !timingSafeEqual(hostToken, clientToken)) {
         return json(response, 403, { error: "Forbidden" });

@@ -144,6 +144,14 @@ export class SessionStore {
     return result.changes === 1;
   }
 
+  /** Read the host credential without loading or parsing the project snapshot. */
+  getHostToken(id: string): string | null {
+    const row = this.db.prepare("SELECT host_token FROM collab_sessions WHERE id = ?").get(id) as
+      | { host_token: string }
+      | undefined;
+    return row?.host_token ?? null;
+  }
+
   get(id: string): StoredSession | null {
     const row = this.db.prepare("SELECT * FROM collab_sessions WHERE id = ?").get(id) as unknown as
       | SessionRow
