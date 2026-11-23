@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
+import json
+import math
 import os
 import re
 from dataclasses import dataclass
@@ -321,3 +324,62 @@ def plan_feature_diff(
     if deletes and not caps.get("delete", True):
         raise HTTPException(status_code=403, detail="Layer capability excludes feature deletion.")
     return FeatureDiff(updates, inserts, deletes, sorted(skipped))
+
+
+def validate_bbox(bbox: Optional[list[float]]) -> Optional[tuple[float, float, float, float]]:
+    """Validate an optional WGS84 bounding box ``[min_x, min_y, max_x, max_y]``."""
+    if bbox is None:
+        return None
+    if len(bbox) != 4:
+        raise HTTPException(
+            status_code=400, detail="bbox must contain 4 numbers: [min_x, min_y, max_x, max_y]"
+        )
+    vals = [float(v) for v in bbox]
+    if any(not math.isfinite(v) for v in vals):
+        raise HTTPException(status_code=400, detail="bbox coordinates must be finite numbers")
+    min_x, min_y, max_x, max_y = vals
+    if min_x >= max_x or min_y >= max_y:
+        raise HTTPException(status_code=400, detail="bbox requires min_x < max_x and min_y < max_y")
+    return min_x, min_y, max_x, max_y
+
+
+def row_state_hash(geometry: Any, properties: dict[str, Any]) -> str:
+    """Compute a deterministic SHA-256 digest of a stored feature's geometry and attributes."""
+    canonical = json.dumps(
+        {"geometry": geometry, "properties": properties},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def check_optimistic_concurrency(
+    existing_rows: dict[Any, tuple[Any, dict[str, Any]]],
+    expected_row_hashes: Optional[dict[str, str]],
+    target_keys: Iterable[Any],
+) -> None:
+    """Raise HTTP 409 when any modified or deleted row changed concurrently since read."""
+    if not expected_row_hashes:
+        return
+    conflicts: list[str] = []
+    for key in target_keys:
+        key_str = str(key)
+        expected = expected_row_hashes.get(key_str)
+        if expected is None:
+            continue
+        current = existing_rows.get(key)
+        if current is None:
+            conflicts.append(key_str)
+            continue
+        current_geom, current_props = current
+        if row_state_hash(current_geom, current_props) != expected:
+            conflicts.append(key_str)
+    if conflicts:
+        sample = ", ".join(conflicts[:5])
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Concurrent modification detected on feature(s): {sample}. "
+                "Reload the layer and retry."
+            ),
+        )

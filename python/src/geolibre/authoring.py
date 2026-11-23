@@ -524,6 +524,53 @@ def remove_layer(project: dict[str, Any], ref: str) -> str:
     return layer_id
 
 
+def duplicate_layer(
+    project: dict[str, Any],
+    ref: str,
+    *,
+    name: str | None = None,
+    index: int | None = None,
+) -> dict[str, Any]:
+    """Duplicate an existing layer, assigning it a fresh id.
+
+    The copy is appended to the draw order (drawn on top) unless ``index`` is
+    given. Any top-level ``project["styles"][source_id]`` entry is copied under
+    the new layer id as well.
+
+    Args:
+        project: The project dict (mutated in place).
+        ref: A layer id or display name.
+        name: Display name for the copy; defaults to ``"<source name> copy"``.
+        index: Optional draw-order position; appended when omitted.
+
+    Returns:
+        A summary of the newly created layer copy.
+
+    Raises:
+        ValueError: If ``ref`` does not resolve to one layer, or ``name`` is
+            blank or reserved.
+    """
+    source = find_layer(project, ref)
+    if name is not None:
+        cleaned = str(name).strip()
+        if not cleaned:
+            raise ValueError("layer name cannot be blank")
+        target_name = cleaned
+    else:
+        target_name = f"{source.get('name', 'Layer')} copy"
+    _reject_reserved_name(target_name)
+    cloned = copy.deepcopy(source)
+    old_id = str(source.get("id", ""))
+    new_id = str(uuid.uuid4())
+    cloned["id"] = new_id
+    cloned["name"] = target_name
+    add_layer(project, cloned, index=index)
+    styles = project.get("styles")
+    if isinstance(styles, dict) and old_id in styles:
+        styles[new_id] = copy.deepcopy(styles[old_id])
+    return layer_summary(cloned)
+
+
 def _drop_layer_references(project: dict[str, Any], layer_id: str) -> None:
     """Scrub a removed layer id from bookmarks, story chapters, and split views."""
     bookmarks = project.get("bookmarks")
@@ -930,6 +977,34 @@ def classify_layer(
 
 
 _RENDERERS = frozenset({"maplibre", "cesium", "mapbox", "arcgis"})
+_PROJECTIONS = frozenset({"globe", "mercator"})
+
+
+def set_projection(project: dict[str, Any], projection: str) -> str:
+    """Set the persisted map projection (``"globe"`` or ``"mercator"``).
+
+    Args:
+        project: The project dict (mutated in place).
+        projection: ``"globe"`` or ``"mercator"``.
+
+    Returns:
+        The validated projection name.
+
+    Raises:
+        ValueError: If ``projection`` is not ``"globe"`` or ``"mercator"``.
+    """
+    if not isinstance(projection, str) or projection not in _PROJECTIONS:
+        raise ValueError(f"projection must be 'globe' or 'mercator', got {projection!r}")
+    preferences = project.get("preferences")
+    if not isinstance(preferences, dict):
+        preferences = {}
+        project["preferences"] = preferences
+    map_prefs = preferences.get("map")
+    if not isinstance(map_prefs, dict):
+        map_prefs = {}
+        preferences["map"] = map_prefs
+    map_prefs["projection"] = projection
+    return projection
 
 
 def _is_renderer(value: Any) -> bool:

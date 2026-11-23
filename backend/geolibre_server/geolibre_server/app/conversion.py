@@ -393,11 +393,20 @@ def _is_within_roots(path: Path) -> bool:
 
     Uses ``Path.is_relative_to`` so filesystem roots (``/``, a Windows drive)
     work — naive ``startswith(root + sep)`` would produce ``//`` and reject
-    valid descendants.
+    valid descendants. When a per-tenant workspace root is configured via
+    ``GEOLIBRE_TENANT_WORKSPACES_ROOT``, the path must also reside inside the
+    calling tenant's subdirectory.
     """
+    from .tenant import tenant_workspace_root
+
+    resolved = path.resolve()
+    tenant_root = tenant_workspace_root()
+    if tenant_root is not None and not (
+        resolved == tenant_root or resolved.is_relative_to(tenant_root)
+    ):
+        return False
     if not _CONVERSION_ROOTS:
         return True
-    resolved = path.resolve()
     return any(
         resolved == Path(root) or resolved.is_relative_to(root) for root in _CONVERSION_ROOTS
     )

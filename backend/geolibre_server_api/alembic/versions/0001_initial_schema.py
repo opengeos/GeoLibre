@@ -36,9 +36,23 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+_POST_BASELINE_TABLES = frozenset(
+    {
+        "account_email_verifications",
+        "account_lifecycle_tokens",
+        "account_mfa_totp",
+        "audit_log_entries",
+        "project_version_usage",
+    }
+)
+
+
 def upgrade() -> None:
     bind = op.get_bind()
-    Base.metadata.create_all(bind=bind, checkfirst=True)
+    baseline_tables = [
+        table for table in Base.metadata.sorted_tables if table.name not in _POST_BASELINE_TABLES
+    ]
+    Base.metadata.create_all(bind=bind, tables=baseline_tables, checkfirst=True)
     if context.is_offline_mode():
         # In offline --sql mode, create_all already emits table-associated indexes;
         # emitting them again creates duplicate CREATE INDEX statements.

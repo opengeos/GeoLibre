@@ -33,7 +33,10 @@ import {
   tileOptionsFromParams,
 } from "./raster-params";
 import { parameterKind } from "../whitebox-param-kind";
-import { canUseLayerForParameter, fetchLayerBytes } from "../whitebox-layer-inputs";
+import {
+  canUseLayerForParameter,
+  fetchLayerBytes,
+} from "../whitebox-layer-inputs";
 import { createAppAPI } from "../../hooks/usePlugins";
 import { buildModelToolCatalog } from "../model-tool-catalog";
 import {
@@ -55,7 +58,9 @@ import {
 // console expose identical behaviour.
 
 /** A single command handler: params object in, value (or promise) out. */
-export type ScriptingHandler = (params: Record<string, unknown>) => unknown | Promise<unknown>;
+export type ScriptingHandler = (
+  params: Record<string, unknown>
+) => unknown | Promise<unknown>;
 
 export type ScriptingHandlers = Record<string, ScriptingHandler>;
 
@@ -73,7 +78,9 @@ export interface ScriptingDeps {
  * @param getController - Lazy accessor for the live map controller.
  * @returns A ref whose `current` resolves the controller on every read.
  */
-function controllerRefFrom(getController: () => MapEngine | null): RefObject<MapEngine | null> {
+function controllerRefFrom(
+  getController: () => MapEngine | null
+): RefObject<MapEngine | null> {
   return {
     get current() {
       return getController();
@@ -99,10 +106,12 @@ function addWhiteboxRasterOutput(
   getController: () => MapEngine | null,
   bytes: Uint8Array,
   name: string,
-  fileName: string,
+  fileName: string
 ): Promise<string> {
   const file = new File([bytes as BlobPart], fileName, { type: "image/tiff" });
-  return addRasterToMap(createAppAPI(controllerRefFrom(getController)), file, { name });
+  return addRasterToMap(createAppAPI(controllerRefFrom(getController)), file, {
+    name,
+  });
 }
 
 function whiteboxToolName(tool: WhiteboxTool): string {
@@ -118,15 +127,24 @@ async function whiteboxTools(): Promise<WhiteboxTool[]> {
     listWasmToolManifests(),
   ]);
   if (catalogResult.status === "rejected") {
-    console.warn("[GeoLibre] Could not load Whitebox catalog snapshot:", catalogResult.reason);
+    console.warn(
+      "[GeoLibre] Could not load Whitebox catalog snapshot:",
+      catalogResult.reason
+    );
   }
   if (manifestResult.status === "rejected") {
-    console.warn("[GeoLibre] Could not enumerate WASM tool manifests:", manifestResult.reason);
+    console.warn(
+      "[GeoLibre] Could not enumerate WASM tool manifests:",
+      manifestResult.reason
+    );
   }
   // Hide locked ("pro"-tier) tools: they cannot run in the browser.
   const catalog =
-    catalogResult.status === "fulfilled" ? catalogResult.value.filter((tool) => !tool.locked) : [];
-  const manifests = manifestResult.status === "fulfilled" ? manifestResult.value : [];
+    catalogResult.status === "fulfilled"
+      ? catalogResult.value.filter((tool) => !tool.locked)
+      : [];
+  const manifests =
+    manifestResult.status === "fulfilled" ? manifestResult.value : [];
   return mergeWasmToolManifests(catalog, manifests);
 }
 
@@ -155,7 +173,9 @@ function requireLayerId(params: Record<string, unknown>): string {
  * @param deps - Accessors for the runtime dependencies (the map controller).
  * @returns A map of command name to handler.
  */
-export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers {
+export function createScriptingHandlers(
+  deps: ScriptingDeps
+): ScriptingHandlers {
   const { getController } = deps;
 
   const handlers: ScriptingHandlers = {
@@ -168,25 +188,34 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       return null;
     },
     fitBounds: (params) => {
-      getController()?.fitBounds(params.bounds as [number, number, number, number]);
+      getController()?.fitBounds(
+        params.bounds as [number, number, number, number]
+      );
       return null;
     },
     setView: (params) => {
       useAppStore
         .getState()
-        .setMapView(params as Parameters<ReturnType<typeof useAppStore.getState>["setMapView"]>[0]);
+        .setMapView(
+          params as Parameters<
+            ReturnType<typeof useAppStore.getState>["setMapView"]
+          >[0]
+        );
       return null;
     },
 
     // -- queries ------------------------------------------------------------
     identify: (params) => {
       const lngLat = params.lngLat as [number, number];
-      const layerId = typeof params.layerId === "string" ? params.layerId : undefined;
+      const layerId =
+        typeof params.layerId === "string" ? params.layerId : undefined;
       return getController()?.identifyFeatures(lngLat, layerId) ?? [];
     },
     getLayerFeatures: (params) => {
       const layerId = requireLayerId(params);
-      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
+      const layer = useAppStore
+        .getState()
+        .layers.find((item) => item.id === layerId);
       if (!layer) throw new Error(`No layer with id "${layerId}"`);
       return layer.geojson?.features ?? [];
     },
@@ -202,7 +231,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       // Mirror the controller's id convention (String(feature.id ?? index)) so a
       // selectedFeatureId derived from an index still resolves.
       const match = features.find(
-        (feature, index) => String(feature.id ?? index) === selectedFeatureId,
+        (feature, index) => String(feature.id ?? index) === selectedFeatureId
       );
       return match ? [match] : [];
     },
@@ -240,53 +269,74 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
     addTileLayer: (params) => {
       const url = requireHttpUrl("addTileLayer", params.url);
       const app = createAppAPI(controllerRefFrom(getController));
-      if (!app.addTileLayer) throw new Error("addTileLayer: not available in this app");
+      if (!app.addTileLayer)
+        throw new Error("addTileLayer: not available in this app");
       return app.addTileLayer(
         String(params.name ?? "Tile layer"),
         url,
-        tileOptionsFromParams(params.options),
+        tileOptionsFromParams(params.options)
       );
     },
     addCogLayer: async (params) => {
       const url = requireHttpUrl("addCogLayer", params.url);
       const app = createAppAPI(controllerRefFrom(getController));
-      if (!app.addCogLayer) throw new Error("addCogLayer: not available in this app");
+      if (!app.addCogLayer)
+        throw new Error("addCogLayer: not available in this app");
       return app.addCogLayer(
         String(params.name ?? "COG"),
         url,
-        cogOptionsFromParams(params.options),
+        cogOptionsFromParams(params.options)
       );
     },
     addRasterBytes: async (params) => {
       if (typeof params.data !== "string" || !params.data) {
-        throw new Error("addRasterBytes: data must be a base64-encoded GeoTIFF");
+        throw new Error(
+          "addRasterBytes: data must be a base64-encoded GeoTIFF"
+        );
       }
       const name = String(params.name ?? "Raster");
-      const file = new File([base64ToBytes(params.data) as BlobPart], `${name}.tif`, {
-        type: "image/tiff",
-      });
-      const { colormap, rescaleMin, rescaleMax, nodata, opacity, beforeLayerId, zoomTo } =
-        cogOptionsFromParams(params.options);
-      return addRasterToMap(createAppAPI(controllerRefFrom(getController)), file, {
-        name,
-        ...(beforeLayerId ? { beforeId: beforeLayerId } : {}),
-        ...(zoomTo !== undefined ? { zoomTo } : {}),
-        state: {
-          ...(colormap !== undefined ? { colormap } : {}),
-          ...(rescaleMin !== undefined && rescaleMax !== undefined
-            ? { rescale: [[rescaleMin, rescaleMax]] }
-            : {}),
-          ...(nodata !== undefined ? { nodata } : {}),
-          ...(opacity !== undefined ? { opacity } : {}),
-        },
-      });
+      const file = new File(
+        [base64ToBytes(params.data) as BlobPart],
+        `${name}.tif`,
+        {
+          type: "image/tiff",
+        }
+      );
+      const {
+        colormap,
+        rescaleMin,
+        rescaleMax,
+        nodata,
+        opacity,
+        beforeLayerId,
+        zoomTo,
+      } = cogOptionsFromParams(params.options);
+      return addRasterToMap(
+        createAppAPI(controllerRefFrom(getController)),
+        file,
+        {
+          name,
+          ...(beforeLayerId ? { beforeId: beforeLayerId } : {}),
+          ...(zoomTo !== undefined ? { zoomTo } : {}),
+          state: {
+            ...(colormap !== undefined ? { colormap } : {}),
+            ...(rescaleMin !== undefined && rescaleMax !== undefined
+              ? { rescale: [[rescaleMin, rescaleMax]] }
+              : {}),
+            ...(nodata !== undefined ? { nodata } : {}),
+            ...(opacity !== undefined ? { opacity } : {}),
+          },
+        }
+      );
     },
     removeLayer: (params) => {
       useAppStore.getState().removeLayer(requireLayerId(params));
       return null;
     },
     setVisibility: (params) => {
-      useAppStore.getState().setLayerVisibility(requireLayerId(params), Boolean(params.visible));
+      useAppStore
+        .getState()
+        .setLayerVisibility(requireLayerId(params), Boolean(params.visible));
       return null;
     },
     setOpacity: (params) => {
@@ -295,22 +345,108 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       if (!Number.isFinite(raw)) {
         throw new Error("setOpacity: opacity must be a finite number");
       }
-      useAppStore.getState().setLayerOpacity(layerId, Math.min(1, Math.max(0, raw)));
+      useAppStore
+        .getState()
+        .setLayerOpacity(layerId, Math.min(1, Math.max(0, raw)));
       return null;
     },
     setStyle: (params) => {
       useAppStore
         .getState()
-        .setLayerStyle(requireLayerId(params), params.style as Record<string, unknown>);
+        .setLayerStyle(
+          requireLayerId(params),
+          params.style as Record<string, unknown>
+        );
       return null;
+    },
+    setLabels: (params) => {
+      const layerId = requireLayerId(params);
+      const layer = useAppStore
+        .getState()
+        .layers.find((item) => item.id === layerId);
+      if (!layer) throw new Error(`No layer with id "${layerId}"`);
+      const patch = params.labels;
+      if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+        throw new Error("setLabels: labels must be an object");
+      }
+      const merged = {
+        ...layer.style.labels,
+        ...(patch as Partial<typeof layer.style.labels>),
+      };
+      useAppStore.getState().setLayerStyle(layerId, { labels: merged });
+      return merged;
+    },
+    setFilter: (params) => {
+      const layerId = requireLayerId(params);
+      const layer = useAppStore
+        .getState()
+        .layers.find((item) => item.id === layerId);
+      if (!layer) throw new Error(`No layer with id "${layerId}"`);
+      let expression = params.expression;
+      if (typeof expression === "string") {
+        const trimmed = expression.trim();
+        if (!trimmed) {
+          expression = null;
+        } else {
+          try {
+            expression = JSON.parse(trimmed);
+          } catch {
+            throw new Error("setFilter: expression string is not valid JSON");
+          }
+        }
+      }
+      if (expression === undefined || expression === null) {
+        useAppStore.getState().setLayerFilterExpression(layerId, null);
+        return null;
+      }
+      if (!Array.isArray(expression)) {
+        throw new Error(
+          "setFilter: expression must be a MapLibre expression array or null"
+        );
+      }
+      if (expression.length === 0) {
+        useAppStore.getState().setLayerFilterExpression(layerId, null);
+        return null;
+      }
+      if (typeof expression[0] !== "string" || !expression[0].trim()) {
+        throw new Error(
+          "setFilter: expression must start with an operator string"
+        );
+      }
+      useAppStore.getState().setLayerFilterExpression(layerId, expression);
+      return expression;
+    },
+    setRenderer: (params) => {
+      const renderer = params.renderer;
+      /* eslint-disable local/no-renderer-kind-checks -- validating the setRenderer command argument itself */
+      if (
+        renderer !== "maplibre" &&
+        renderer !== "cesium" &&
+        renderer !== "mapbox" &&
+        renderer !== "arcgis"
+      ) {
+        /* eslint-enable local/no-renderer-kind-checks */
+        throw new Error(
+          `setRenderer: renderer must be "maplibre", "cesium", "mapbox", or "arcgis", got ${JSON.stringify(
+            renderer
+          )}`
+        );
+      }
+      useAppStore.getState().setPrimaryRenderer(renderer);
+      return renderer;
     },
     setBasemap: (params) => {
       // Validate the scheme: reject undefined/non-string (would store the literal
       // "undefined") and non-http(s) schemes like javascript:/data: that would
       // be persisted into project state and snapshots.
       const url = params.url;
-      if (typeof url !== "string" || (!/^https?:\/\//i.test(url) && !url.startsWith("/"))) {
-        throw new Error("setBasemap: url must be an http(s) or root-relative URL string");
+      if (
+        typeof url !== "string" ||
+        (!/^https?:\/\//i.test(url) && !url.startsWith("/"))
+      ) {
+        throw new Error(
+          "setBasemap: url must be an http(s) or root-relative URL string"
+        );
       }
       useAppStore.getState().setBasemapStyleUrl(url);
       return null;
@@ -324,7 +460,9 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       const options = params.options;
       if (
         options !== undefined &&
-        (options === null || typeof options !== "object" || Array.isArray(options))
+        (options === null ||
+          typeof options !== "object" ||
+          Array.isArray(options))
       ) {
         throw new Error("setControlVisible: options must be an object");
       }
@@ -340,7 +478,9 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         return visible;
       }
       if (options !== undefined) {
-        throw new Error("setControlVisible: options are only supported for measure and minimap");
+        throw new Error(
+          "setControlVisible: options are only supported for measure and minimap"
+        );
       }
       if (isScriptableMapControl(control)) {
         // Record before applying. The controller is created asynchronously, so a
@@ -366,20 +506,24 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         window.dispatchEvent(
           new CustomEvent<ScriptMapControlDetail>(SCRIPT_MAP_CONTROL_EVENT, {
             detail: { control, visible },
-          }),
+          })
         );
         return visible;
       }
       throw new Error(
-        `setControlVisible: unknown control ${JSON.stringify(control)}; expected one of ${[
+        `setControlVisible: unknown control ${JSON.stringify(
+          control
+        )}; expected one of ${[
           ...SCRIPTABLE_PANELS,
           ...SCRIPTABLE_MAP_CONTROLS,
-        ].join(", ")}`,
+        ].join(", ")}`
       );
     },
     zoomToLayer: (params) => {
       const layerId = requireLayerId(params);
-      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
+      const layer = useAppStore
+        .getState()
+        .layers.find((item) => item.id === layerId);
       if (!layer) throw new Error(`No layer with id "${layerId}"`);
       getController()?.fitLayer(layer);
       return null;
@@ -438,7 +582,9 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
             const layerId = useAppStore.getState().addGeoJsonLayer(name, fc);
             tracker.addOutputLayer(name);
             resultLayerIds.push(layerId);
-            const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
+            const layer = useAppStore
+              .getState()
+              .layers.find((item) => item.id === layerId);
             if (layer) getController()?.fitLayer(layer);
           },
           duckdb: createDuckDbCapability(),
@@ -454,7 +600,10 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         // Off the main thread for the Turf vector tools (#2858).
         await runAlgorithmInBackground(algo, ctx);
       } catch (error) {
-        tracker.finish("error", error instanceof Error ? error.message : String(error));
+        tracker.finish(
+          "error",
+          error instanceof Error ? error.message : String(error)
+        );
         throw error;
       }
       if (softError) tracker.finish("error", softError);
@@ -475,7 +624,10 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       if (!tool) throw new Error(`Unknown Whitebox tool "${id}"`);
       const supplied = (params.params as Record<string, unknown>) ?? {};
       const parameters: Record<string, unknown> = { ...supplied };
-      const layerInputs: Record<string, WhiteboxLayerInput | WhiteboxLayerInput[]> = {};
+      const layerInputs: Record<
+        string,
+        WhiteboxLayerInput | WhiteboxLayerInput[]
+      > = {};
       const layers = useAppStore.getState().layers;
 
       for (const param of tool.params ?? []) {
@@ -484,11 +636,15 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         const value = supplied[param.name];
         const values = Array.isArray(value) ? value : [value];
         const resolvedLayers = values.map((item) =>
-          typeof item === "string" ? layers.find((layer) => layer.id === item) : undefined,
+          typeof item === "string"
+            ? layers.find((layer) => layer.id === item)
+            : undefined
         );
         if (resolvedLayers.every((layer) => !layer)) continue;
         if (resolvedLayers.some((layer) => !layer)) {
-          throw new Error(`Not every layer supplied for "${param.name}" could be resolved`);
+          throw new Error(
+            `Not every layer supplied for "${param.name}" could be resolved`
+          );
         }
         const resolved = resolvedLayers.filter((layer) => layer !== undefined);
         const inputs: WhiteboxLayerInput[] = [];
@@ -498,18 +654,22 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
           // a vaguer "not fetchable".
           if (!canUseLayerForParameter(layer, param)) {
             throw new Error(
-              `Layer "${layer.name}" (${layer.type}) cannot be used as ${kind} for "${param.name}"`,
+              `Layer "${layer.name}" (${layer.type}) cannot be used as ${kind} for "${param.name}"`
             );
           }
           if (kind === "vector_in") {
             if (!layer.geojson) {
-              throw new Error(`Layer "${layer.name}" has no in-memory GeoJSON for "${param.name}"`);
+              throw new Error(
+                `Layer "${layer.name}" has no in-memory GeoJSON for "${param.name}"`
+              );
             }
             inputs.push({ name: layer.name, kind, geojson: layer.geojson });
           } else {
             const bytes = await fetchLayerBytes(layer);
             if (!bytes) {
-              throw new Error(`Layer "${layer.name}" is not fetchable for "${param.name}"`);
+              throw new Error(
+                `Layer "${layer.name}" is not fetchable for "${param.name}"`
+              );
             }
             inputs.push({ name: layer.name, kind, bytes });
           }
@@ -535,7 +695,9 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
           tier: "open",
         });
         if (job.status !== "succeeded") {
-          throw new Error(job.error || job.messages.join("\n") || `Whitebox tool ${id} failed`);
+          throw new Error(
+            job.error || job.messages.join("\n") || `Whitebox tool ${id} failed`
+          );
         }
         const resultLayerIds: string[] = [];
         // Byte outputs this API cannot surface as a layer. Reported back in
@@ -543,7 +705,10 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         // data it did not receive.
         const unretrievable: string[] = [];
         for (const [outputName, value] of Object.entries(job.outputs)) {
-          const displayName = `${whiteboxToolName(tool)} ${outputName.replace(/_/g, " ")}`;
+          const displayName = `${whiteboxToolName(tool)} ${outputName.replace(
+            /_/g,
+            " "
+          )}`;
           if (
             value &&
             typeof value === "object" &&
@@ -555,7 +720,9 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
             resultLayerIds.push(layerId);
             tracker.addOutputLayer(displayName);
           } else if (value instanceof Uint8Array) {
-            const outputParam = tool.params?.find((item) => item.name === outputName);
+            const outputParam = tool.params?.find(
+              (item) => item.name === outputName
+            );
             const outKind = outputParam ? parameterKind(outputParam) : "";
             // Mirror ProcessingDialog's rule: any binary output is a raster
             // unless it is explicitly file_out/vector_out (which the dialog
@@ -563,16 +730,19 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
             // GeoLibre-authored subset extractors, whose produced COG comes back
             // under a key with no typed param at all (SUBSET_OUTPUT_TOOL_IDS in
             // wasm-client), so parameterKind falls through to "string".
-            if ((outKind === "file_out" || outKind === "vector_out") && !isTiff(value)) {
+            if (
+              (outKind === "file_out" || outKind === "vector_out") &&
+              !isTiff(value)
+            ) {
               unretrievable.push(
-                `Output "${outputName}" (${outKind}, ${value.length} bytes) is a file, not a map layer; run this tool from Processing to download it.`,
+                `Output "${outputName}" (${outKind}, ${value.length} bytes) is a file, not a map layer; run this tool from Processing to download it.`
               );
             } else {
               const layerId = await addWhiteboxRasterOutput(
                 getController,
                 value,
                 displayName,
-                `${tool.id}_${outputName}.tif`,
+                `${tool.id}_${outputName}.tif`
               );
               resultLayerIds.push(layerId);
               tracker.addOutputLayer(displayName);
@@ -590,9 +760,17 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
     runModelBuilder: async (params) => {
       const graph = normalizeModelGraph(params.graph);
       if (!graph) throw new Error("runModelBuilder: graph is invalid");
-      const catalog = buildModelToolCatalog(VECTOR_TOOLS, await whiteboxTools());
-      const byKey = new Map(catalog.map((descriptor) => [descriptor.key, descriptor]));
-      const resolve = (provider: string | undefined, toolId: string | undefined) =>
+      const catalog = buildModelToolCatalog(
+        VECTOR_TOOLS,
+        await whiteboxTools()
+      );
+      const byKey = new Map(
+        catalog.map((descriptor) => [descriptor.key, descriptor])
+      );
+      const resolve = (
+        provider: string | undefined,
+        toolId: string | undefined
+      ) =>
         provider && toolId ? byKey.get(`${provider}:${toolId}`) : undefined;
       for (const node of graph.nodes) {
         if (
@@ -601,12 +779,13 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
           node.kind === "collect-results"
         ) {
           throw new Error(
-            `runModelBuilder: Iteration nodes ("${node.kind}") are not supported via scripting API execution; run this model in Model Builder to execute iterators.`,
+            `runModelBuilder: Iteration nodes ("${node.kind}") are not supported via scripting API execution; run this model in Model Builder to execute iterators.`
           );
         }
       }
       const issues = validateModelGraph(graph, resolve);
-      if (issues.length) throw new Error(issues.map((issue) => issue.message).join("\n"));
+      if (issues.length)
+        throw new Error(issues.map((issue) => issue.message).join("\n"));
       const ordered = topologicalOrder(graph);
       if (!ordered) throw new Error("The model contains a loop.");
 
@@ -643,7 +822,10 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
           allSkipped = true;
         }
         if (allSkipped) {
-          const desc = node.kind === "tool" ? resolve(node.provider, node.toolId) : undefined;
+          const desc =
+            node.kind === "tool"
+              ? resolve(node.provider, node.toolId)
+              : undefined;
           const nodePorts = portsFor(node, desc);
           const skippedOutputs = new Map<string, string>();
           for (const outPort of nodePorts.outputs) {
@@ -655,7 +837,9 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
 
         if (node.kind === "input") {
           const layerId = node.layerId ?? "";
-          if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) {
+          if (
+            !useAppStore.getState().layers.some((layer) => layer.id === layerId)
+          ) {
             throw new Error(`No layer with id "${layerId}"`);
           }
           produced.set(node.id, new Map([["out", layerId]]));
@@ -663,17 +847,24 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         }
         if (node.kind === "output") {
           const edge = incoming.get(node.id)?.[0];
-          const layerId = edge ? produced.get(edge.from)?.get(edge.fromPort) : undefined;
+          const layerId = edge
+            ? produced.get(edge.from)?.get(edge.fromPort)
+            : undefined;
           if (layerId === SKIPPED) continue;
-          if (!layerId) throw new Error(`No result reached output "${node.name ?? node.id}"`);
-          if (node.name?.trim()) useAppStore.getState().updateLayer(layerId, { name: node.name });
+          if (!layerId)
+            throw new Error(
+              `No result reached output "${node.name ?? node.id}"`
+            );
+          if (node.name?.trim())
+            useAppStore.getState().updateLayer(layerId, { name: node.name });
           outputLayerIds.push(layerId);
           continue;
         }
 
         if (node.kind === "conditional-switch") {
           const edge =
-            incoming.get(node.id)?.find((e) => e.toPort === "input") ?? incoming.get(node.id)?.[0];
+            incoming.get(node.id)?.find((e) => e.toPort === "input") ??
+            incoming.get(node.id)?.[0];
           // Like runModelGraph: an unwired switch routes the layer it names.
           const layerId = edge
             ? produced.get(edge.from)?.get(edge.fromPort)
@@ -684,11 +875,13 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
               new Map([
                 ["true", SKIPPED],
                 ["false", SKIPPED],
-              ]),
+              ])
             );
             continue;
           }
-          const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
+          const layer = useAppStore
+            .getState()
+            .layers.find((l) => l.id === layerId);
           const isVector = layer?.type === "geojson" && layer.geojson;
           const cond = evaluateCondition({
             // A raster condition reads only the name (and metadata), so the
@@ -696,8 +889,8 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
             inputValue: isVector
               ? { kind: "vector", geojson: layer.geojson as FeatureCollection }
               : layer
-                ? { kind: "raster", bytes: new Uint8Array(), name: layer.name }
-                : undefined,
+              ? { kind: "raster", bytes: new Uint8Array(), name: layer.name }
+              : undefined,
             parameters: node.parameters,
           });
           if (cond) {
@@ -706,7 +899,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
               new Map([
                 ["true", layerId],
                 ["false", SKIPPED],
-              ]),
+              ])
             );
           } else {
             produced.set(
@@ -714,16 +907,22 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
               new Map([
                 ["true", SKIPPED],
                 ["false", layerId],
-              ]),
+              ])
             );
           }
           continue;
         }
 
         if (node.kind === "conditional-merge") {
-          const trueEdge = incoming.get(node.id)?.find((e) => e.toPort === "true");
-          const falseEdge = incoming.get(node.id)?.find((e) => e.toPort === "false");
-          const trueId = trueEdge ? produced.get(trueEdge.from)?.get(trueEdge.fromPort) : undefined;
+          const trueEdge = incoming
+            .get(node.id)
+            ?.find((e) => e.toPort === "true");
+          const falseEdge = incoming
+            .get(node.id)
+            ?.find((e) => e.toPort === "false");
+          const trueId = trueEdge
+            ? produced.get(trueEdge.from)?.get(trueEdge.fromPort)
+            : undefined;
           const falseId = falseEdge
             ? produced.get(falseEdge.from)?.get(falseEdge.fromPort)
             : undefined;
@@ -731,8 +930,8 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
             trueId && trueId !== SKIPPED
               ? trueId
               : falseId && falseId !== SKIPPED
-                ? falseId
-                : undefined;
+              ? falseId
+              : undefined;
           if (!activeId) {
             produced.set(node.id, new Map([["out", SKIPPED]]));
           } else {
@@ -745,26 +944,42 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         if (!descriptor || !node.provider || !node.toolId) {
           throw new Error(`Unknown Model Builder tool "${node.toolId ?? ""}"`);
         }
-        const toolParams: Record<string, unknown> = { ...(node.parameters ?? {}) };
+        const toolParams: Record<string, unknown> = {
+          ...(node.parameters ?? {}),
+        };
         for (const edge of incoming.get(node.id) ?? []) {
           const layerId = produced.get(edge.from)?.get(edge.fromPort);
-          if (!layerId) throw new Error(`No result reached "${descriptor.name}"`);
+          if (!layerId)
+            throw new Error(`No result reached "${descriptor.name}"`);
           toolParams[edge.toPort] = layerId;
         }
         const handler =
-          node.provider === "whitebox" ? handlers.runWhiteboxTool : handlers.runAlgorithm;
-        const result = (await handler({ id: node.toolId, params: toolParams })) as {
+          node.provider === "whitebox"
+            ? handlers.runWhiteboxTool
+            : handlers.runAlgorithm;
+        const result = (await handler({
+          id: node.toolId,
+          params: toolParams,
+        })) as {
           resultLayerIds?: unknown;
         };
         const resultLayerIds = result?.resultLayerIds;
-        if (!Array.isArray(resultLayerIds) || resultLayerIds.length < descriptor.outputs.length) {
-          throw new Error(`"${descriptor.name}" did not produce its expected map outputs.`);
+        if (
+          !Array.isArray(resultLayerIds) ||
+          resultLayerIds.length < descriptor.outputs.length
+        ) {
+          throw new Error(
+            `"${descriptor.name}" did not produce its expected map outputs.`
+          );
         }
         produced.set(
           node.id,
           new Map(
-            descriptor.outputs.map((port, index) => [port.id, String(resultLayerIds[index])]),
-          ),
+            descriptor.outputs.map((port, index) => [
+              port.id,
+              String(resultLayerIds[index]),
+            ])
+          )
         );
       }
       return { outputLayerIds };

@@ -84,8 +84,10 @@ from geolibre_server_api.proxy_identity import proxy_identity
 
 PROJECT_SCOPES = ("read:projects", "write:projects", "share:public")
 MANAGEMENT_SCOPE = "manage:sessions"
-RESERVED_SCOPES = ("admin:org",)
-KNOWN_SCOPES = (*PROJECT_SCOPES, MANAGEMENT_SCOPE)
+ADMIN_ORG_SCOPE = "admin:org"
+RESERVED_SCOPES: tuple[str, ...] = ()
+PAT_SCOPES = (*PROJECT_SCOPES, ADMIN_ORG_SCOPE)
+KNOWN_SCOPES = (*PROJECT_SCOPES, MANAGEMENT_SCOPE, ADMIN_ORG_SCOPE)
 SCOPE_ORDER = KNOWN_SCOPES
 PAT_MAX_DAYS = 365
 
@@ -798,6 +800,34 @@ def require_scope(scope: str):
     return dependency
 
 
+def require_any_scope(*scopes: str):
+    """Dependency factory accepting any of the listed scopes."""
+
+    def dependency(principal: AuthPrincipal = Depends(required_principal)) -> AuthPrincipal:
+        if not any(scope in principal.scopes for scope in scopes):
+            raise InsufficientScopeError(scopes[0])
+        return principal
+
+    return dependency
+
+
+def revoke_account_oauth_sessions(session: Session, account_id: str, now_ts: int) -> None:
+    """Revoke active OAuth sessions and consume pending authorization codes for an account."""
+    session.execute(
+        update(OAuthSession)
+        .where(OAuthSession.account_id == account_id, OAuthSession.revoked_at.is_(None))
+        .values(revoked_at=now_ts)
+    )
+    session.execute(
+        update(OAuthAuthorizationCode)
+        .where(
+            OAuthAuthorizationCode.account_id == account_id,
+            OAuthAuthorizationCode.consumed_at.is_(None),
+        )
+        .values(consumed_at=now_ts)
+    )
+
+
 # ---------------------------------------------------------------------------
 # Personal token issuance (scoped and expiring)
 # ---------------------------------------------------------------------------
@@ -816,7 +846,7 @@ def validate_pat_scopes(scopes: list[str] | None) -> str:
         if not scopes or any(not isinstance(scope, str) or not scope for scope in scopes):
             raise HTTPException(400, "invalid_scope")
         for scope in scopes:
-            if scope not in PROJECT_SCOPES:
+            if scope not in PAT_SCOPES:
                 raise HTTPException(400, "invalid_scope")
         selected = list(dict.fromkeys(scopes))
     return " ".join(selected)
@@ -901,6 +931,9 @@ def scope_description(scope: str) -> str:
         "share:public": "Make your projects publicly visible",
         MANAGEMENT_SCOPE: (
             "List and revoke every sign-in session and personal token on your account"
+        ),
+        ADMIN_ORG_SCOPE: (
+            "Manage organization security policies, identity providers, SCIM tokens, and audit logs"
         ),
     }[scope]
 
@@ -1176,6 +1209,7 @@ class TokenIssueRequest(BaseModel):
     name: str | None = Field(default=None, max_length=100)
     scopes: list[str] | None = None
     expiresInDays: int | None = None
+    totpCode: str | None = Field(default=None, max_length=32)
 
 
 class AccountCreateRequest(TokenIssueRequest):
@@ -1260,6 +1294,8 @@ def build_identity_router() -> APIRouter:
         session: Session = Depends(get_session),
     ):
         """Create an account and return its bootstrap personal API token once."""
+        if not getattr(request.app.state, "allow_self_registration", True):
+            raise HTTPException(403, "self-registration is disabled")
         _validate_pat_lifetime(body.expiresInDays)
         # Validate the token policy before creating anything. A bad scope
         # request must not reserve the username without returning a credential.
@@ -1313,14 +1349,18 @@ def build_identity_router() -> APIRouter:
         session: Session = Depends(get_session),
     ):
         """Exchange account credentials for a personal API token."""
+        from geolibre_server_api.account_lifecycle import record_audit_event, verify_account_mfa
+
         _validate_pat_lifetime(body.expiresInDays)
+        now_ts = get_clock(request)()
         try:
-            account = verify_password_login(
-                session, body.username, body.password, get_clock(request)()
-            )
+            account = verify_password_login(session, body.username, body.password, now_ts)
         except PasswordLoginError as exc:
             status, message = LOGIN_ERRORS[exc.code]
             raise HTTPException(status, message) from None
+        mfa_ok, mfa_err = verify_account_mfa(session, account.id, body.totpCode, now_ts)
+        if not mfa_ok:
+            raise HTTPException(401, mfa_err or "mfa_required")
         token, extra = issue_token(
             session,
             account,
@@ -1328,7 +1368,17 @@ def build_identity_router() -> APIRouter:
             scopes=body.scopes,
             expires_in_days=body.expiresInDays,
             clock=get_clock(request),
+            commit=False,
         )
+        record_audit_event(
+            session,
+            timestamp=now_ts,
+            actor_account_id=account.id,
+            action="auth.token.issue",
+            resource_type="token",
+            resource_id=extra.get("tokenId"),
+        )
+        session.commit()
         return {"account": account_json(account), "token": token, **extra}
 
     @router.post("/api/account/password", status_code=204)
@@ -1358,20 +1408,16 @@ def build_identity_router() -> APIRouter:
         ensure_account_security(session, account.id).password_changed_at = now_ts
         # Revoke active OAuth sessions on password change so compromised or
         # stale interactive sessions cannot survive credential rotation.
-        session.execute(
-            update(OAuthSession)
-            .where(OAuthSession.account_id == account.id, OAuthSession.revoked_at.is_(None))
-            .values(revoked_at=now_ts)
-        )
-        # Consume outstanding authorization codes approved before rotation so
-        # they cannot be exchanged for a fresh session after the password changes.
-        session.execute(
-            update(OAuthAuthorizationCode)
-            .where(
-                OAuthAuthorizationCode.account_id == account.id,
-                OAuthAuthorizationCode.consumed_at.is_(None),
-            )
-            .values(consumed_at=now_ts)
+        revoke_account_oauth_sessions(session, account.id, now_ts)
+        from geolibre_server_api.account_lifecycle import record_audit_event
+
+        record_audit_event(
+            session,
+            timestamp=now_ts,
+            actor_account_id=account.id,
+            action="account.password.change",
+            resource_type="account",
+            resource_id=account.id,
         )
         session.commit()
         return Response(status_code=204)

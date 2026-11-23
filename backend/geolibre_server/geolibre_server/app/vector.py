@@ -33,12 +33,12 @@ from .conversion import _is_within_roots
 router = APIRouter(prefix="/vector", tags=["vector"])
 logger = logging.getLogger(__name__)
 
-# Source formats whose write-back is supported today: single-file, GeoPandas
-# (OGR) writable, and whose source CRS and — for a multi-layer GeoPackage — the
-# sibling tables we can preserve on an in-place overwrite. Kept in sync with the
-# client-side gate in ``LayerPanel.tsx`` (WRITEBACK_EXTENSIONS). Shapefile,
-# FlatGeobuf and GeoParquet write-back are deliberately deferred (issue #1070).
-_WRITABLE_EXTENSIONS = {".gpkg", ".geojson", ".json"}
+# Source formats whose write-back is supported today: GeoPackage, GeoJSON,
+# Shapefile, FlatGeobuf, and GeoParquet, preserving source CRS (and sibling
+# tables for GeoPackage / sidecars for Shapefile). Kept in sync with the
+# client-side gate in ``layer-panel-utils.ts`` (WRITEBACK_EXTENSIONS).
+_WRITABLE_EXTENSIONS = {".gpkg", ".geojson", ".json", ".shp", ".fgb", ".parquet", ".geoparquet"}
+_SHAPEFILE_SIDECARS = (".shp", ".shx", ".dbf", ".prj", ".cpg")
 
 
 class VectorToolRequest(BaseModel):
@@ -204,6 +204,50 @@ def _write_geojson(target: Path, geojson: dict) -> int:
     return len(gdf)
 
 
+def _reproject_to_existing_crs(gdf: Any, target: Path, *, is_parquet: bool = False) -> Any:
+    """Reproject a WGS84 GeoDataFrame back into ``target``'s stored CRS when non-4326."""
+    gpd = vector_ops._import_geopandas()
+    head = gpd.read_parquet(str(target)) if is_parquet else gpd.read_file(str(target), rows=1)
+    if head.crs is not None and head.crs.to_epsg() != 4326:
+        return gdf.to_crs(head.crs)
+    return gdf
+
+
+def _write_flatgeobuf(target: Path, geojson: dict) -> int:
+    """Overwrite a FlatGeobuf source file atomically, preserving its source CRS."""
+    gdf = _reproject_to_existing_crs(_build_wgs84_gdf(geojson), target)
+    _atomic_write(target, lambda tmp: gdf.to_file(tmp, driver="FlatGeobuf"))
+    return len(gdf)
+
+
+def _write_geoparquet(target: Path, geojson: dict) -> int:
+    """Overwrite a GeoParquet source file atomically, preserving its source CRS."""
+    gdf = _reproject_to_existing_crs(_build_wgs84_gdf(geojson), target, is_parquet=True)
+    _atomic_write(target, lambda tmp: gdf.to_parquet(tmp))
+    return len(gdf)
+
+
+def _write_shapefile(target: Path, geojson: dict) -> int:
+    """Overwrite an ESRI Shapefile and its sidecar files, preserving its source CRS."""
+    gdf = _reproject_to_existing_crs(_build_wgs84_gdf(geojson), target)
+    tmpdir = tempfile.mkdtemp(dir=str(target.parent))
+    try:
+        tmp_shp = Path(tmpdir) / target.name
+        gdf.to_file(tmp_shp, driver="ESRI Shapefile")
+        for ext in _SHAPEFILE_SIDECARS:
+            src_sidecar = tmp_shp.with_suffix(ext)
+            dst_sidecar = target.with_suffix(ext)
+            if src_sidecar.exists():
+                if dst_sidecar.exists():
+                    shutil.copymode(dst_sidecar, src_sidecar)
+                elif target.exists():
+                    shutil.copymode(target, src_sidecar)
+                os.replace(src_sidecar, dst_sidecar)
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+    return len(gdf)
+
+
 def _write_geopackage(target: Path, geojson: dict, layer: Optional[str]) -> tuple[int, str]:
     """Overwrite one layer of a GeoPackage in place, preserving the others.
 
@@ -304,9 +348,16 @@ def vector_write(request: WriteVectorRequest):
         )
 
     layer_name: Optional[str] = None
+    ext = target.suffix.lower()
     try:
-        if target.suffix.lower() == ".gpkg":
+        if ext == ".gpkg":
             count, layer_name = _write_geopackage(target, request.geojson, request.layer)
+        elif ext == ".shp":
+            count = _write_shapefile(target, request.geojson)
+        elif ext == ".fgb":
+            count = _write_flatgeobuf(target, request.geojson)
+        elif ext in {".parquet", ".geoparquet"}:
+            count = _write_geoparquet(target, request.geojson)
         else:
             count = _write_geojson(target, request.geojson)
     except HTTPException:

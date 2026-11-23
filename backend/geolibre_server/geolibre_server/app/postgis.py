@@ -32,6 +32,7 @@ from pydantic import BaseModel
 
 from .db_common import (
     allowlist_from_env,
+    check_optimistic_concurrency,
     db_max_features,
     feature_limit_error,
     host_port_allowed,
@@ -39,7 +40,9 @@ from .db_common import (
     normalize_host,
     plan_feature_diff,
     require_features,
+    row_state_hash,
     scrub_secrets,
+    validate_bbox,
 )
 
 router = APIRouter(prefix="/postgis", tags=["postgis"])
@@ -168,6 +171,8 @@ class PostgisReadRequest(BaseModel):
     table: str
     geometry_column: Optional[str] = None
     excluded_fields: list[str] = []
+    # Optional WGS84 bounding box [min_x, min_y, max_x, max_y] for spatial filtering.
+    bbox: Optional[list[float]] = None
 
 
 class PostgisWriteRequest(BaseModel):
@@ -190,6 +195,9 @@ class PostgisWriteRequest(BaseModel):
     # caller that omits the field (or sends its own) is trusted. Anything that
     # must hold against an untrusted caller belongs in database grants.
     capabilities: Optional[dict[str, bool]] = None
+    # Optional map of stringified primary key -> SHA-256 state hash returned by
+    # /postgis/read for optimistic concurrency checks (HTTP 409 on conflict).
+    expected_row_hashes: Optional[dict[str, str]] = None
 
 
 def _connect(connection: str) -> Any:
@@ -433,6 +441,7 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
     psycopg = _import_psycopg()
     sql = psycopg.sql
     limit = db_max_features()
+    bbox = validate_bbox(request.bbox)
 
     try:
         with _connect(request.connection) as conn:
@@ -453,15 +462,33 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
             column_list = sql.SQL(", ").join(
                 [geom_expr] + [sql.Identifier(col) for col in read_columns]
             )
-            query = sql.SQL("SELECT {columns} FROM {schema}.{table} LIMIT %s").format(
+            params: list[Any] = []
+            where_clause = sql.SQL("")
+            if bbox is not None:
+                envelope = (
+                    sql.SQL("ST_Transform(ST_MakeEnvelope(%s, %s, %s, %s, 4326), {srid})").format(
+                        srid=sql.Literal(info["srid"])
+                    )
+                    if info["srid"] not in (0, 4326)
+                    else sql.SQL(
+                        "ST_SetSRID(ST_MakeEnvelope(%s, %s, %s, %s, 4326), {srid})"
+                    ).format(srid=sql.Literal(info["srid"]))
+                )
+                where_clause = sql.SQL(" WHERE ST_Intersects({geom}, {env})").format(
+                    geom=geom, env=envelope
+                )
+                params.extend(bbox)
+            query = sql.SQL("SELECT {columns} FROM {schema}.{table}{where} LIMIT %s").format(
                 columns=column_list,
                 schema=sql.Identifier(request.schema_name),
                 table=sql.Identifier(request.table),
+                where=where_clause,
             )
+            params.append(limit + 1)
             with conn.cursor() as cur:
                 # Over-fetch by one row to distinguish "exactly at the cap"
                 # from "the table is larger than the cap".
-                cur.execute(query, (limit + 1,))
+                cur.execute(query, tuple(params))
                 rows = cur.fetchall()
     except HTTPException:
         raise
@@ -482,19 +509,22 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
 
     pk = info["primary_key"]
     features = []
+    row_hashes: dict[str, str] = {}
     for row in rows:
         properties_raw = {
             column: json_safe(value) for column, value in zip(read_columns, row[1:], strict=True)
         }
+        geometry = json.loads(row[0]) if row[0] else None
         feature: dict[str, Any] = {
             "type": "Feature",
-            "geometry": json.loads(row[0]) if row[0] else None,
+            "geometry": geometry,
             "properties": {
                 k: v for k, v in properties_raw.items() if k not in request.excluded_fields
             },
         }
         if pk is not None and properties_raw.get(pk) is not None:
             feature["id"] = properties_raw[pk]
+            row_hashes[str(properties_raw[pk])] = row_state_hash(geometry, properties_raw)
         features.append(feature)
 
     return {
@@ -505,6 +535,7 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
         "srid": info["srid"],
         "primary_key": pk,
         "feature_count": len(features),
+        "row_hashes": row_hashes,
     }
 
 
@@ -628,6 +659,11 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                     baseline_keys=request.baseline_keys,
                     capabilities=request.capabilities,
                     table_label=f"{request.schema_name}.{request.table}",
+                )
+                check_optimistic_concurrency(
+                    existing_rows,
+                    request.expected_row_hashes,
+                    [change.key for change in diff.updates] + list(diff.deletes),
                 )
                 skipped = set(diff.skipped_fields)
                 inserted = len(diff.inserts)

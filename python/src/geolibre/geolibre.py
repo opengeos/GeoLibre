@@ -2109,13 +2109,15 @@ class Map(anywidget.AnyWidget):
         """
         if name is not None:
             name = self._clean_layer_name(name)
-        source = copy.deepcopy(self._resolve_layer(layer)._layer())
-        source["id"] = str(uuid.uuid4())
-        source["name"] = name if name is not None else f"{source.get('name', 'Layer')} copy"
-        # `_add_layer` appends raw; `authoring.add_layer` is the entry point that
-        # applies the reserved-name check `rename_layer` gets from `update_layer`.
-        self._update_project(lambda p: _authoring.add_layer(p, source))
-        return str(source["id"])
+        handle = self._resolve_layer(layer)
+        created_id: list[str] = []
+
+        def _dup(p: dict[str, Any]) -> None:
+            summary = _authoring.duplicate_layer(p, handle.id, name=name)
+            created_id.append(str(summary["id"]))
+
+        self._update_project(_dup)
+        return created_id[0]
 
     def show_layer(self, layer: str | Layer) -> None:
         """Show a layer."""
@@ -4354,11 +4356,7 @@ class Map(anywidget.AnyWidget):
         if projection not in _VALID_PROJECTIONS:
             raise ValueError(f"projection must be 'globe' or 'mercator', got {projection!r}")
 
-        def _apply(p: dict[str, Any]) -> None:
-            preferences = p.setdefault("preferences", {})
-            preferences.setdefault("map", {})["projection"] = projection
-
-        self._update_project(_apply)
+        self._update_project(lambda p: _authoring.set_projection(p, projection))
 
     @property
     def projection(self) -> str:
