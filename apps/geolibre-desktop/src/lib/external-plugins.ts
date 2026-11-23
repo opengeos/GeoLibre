@@ -131,7 +131,11 @@ const externallyLoadedPluginSources = new Map<string, string>();
 // version and registry hash it was asked to check.
 const inFlightUrlUpgrades = new Map<
   string,
-  { promise: Promise<GeoLibrePlugin>; expectedVersion?: string; expectedHash?: string }
+  {
+    promise: Promise<GeoLibrePlugin>;
+    expectedVersion?: string;
+    expectedHash?: string;
+  }
 >();
 
 // Manifest URLs this session has tried to load under the SHA-256 pin (bundled
@@ -224,8 +228,14 @@ export async function loadExternalPlugins(
   // Tag each bundle with its policy source at construction, where the origin is
   // unambiguous, instead of re-deriving it from the concatenation order.
   const bundles: Array<{ bundle: ExternalPluginBundle; source: PluginSource }> = [
-    ...filesystemResult.bundles.map((bundle) => ({ bundle, source: "directory" as const })),
-    ...urlBundles.map((bundle) => ({ bundle, source: urlSource(bundle.sourceUrl ?? "") })),
+    ...filesystemResult.bundles.map((bundle) => ({
+      bundle,
+      source: "directory" as const,
+    })),
+    ...urlBundles.map((bundle) => ({
+      bundle,
+      source: urlSource(bundle.sourceUrl ?? ""),
+    })),
     ...webBundles.map((bundle) => ({ bundle, source: "zip" as const })),
   ];
   for (const { bundle, source } of bundles) {
@@ -823,9 +833,19 @@ export async function uninstallDesktopPluginArchive(
   app: GeoLibreAppAPI,
 ): Promise<void> {
   if (!isTauri()) return;
-  const removedPaths = await invoke<string[]>("uninstall_external_plugin_archive", { pluginId });
-  if (removedPaths.length > 0) {
-    unloadFilesystemPlugin(manager, pluginId, app, removedPaths);
+  const result = await invoke<{
+    removedPaths: string[];
+    error?: string | null;
+  }>("uninstall_external_plugin_archive", { pluginId });
+  if (result.removedPaths.length > 0) {
+    unloadFilesystemPlugin(manager, pluginId, app, result.removedPaths);
+  } else if (!result.error) {
+    // The archive was already removed from disk; still unregister any stale
+    // filesystem-loaded instance so it does not linger in memory until restart.
+    unloadFilesystemPlugin(manager, pluginId, app);
+  }
+  if (result.error) {
+    throw new Error(result.error);
   }
 }
 
@@ -963,6 +983,15 @@ export function unloadRemovedUrlPlugins(
     removePluginBundlePin(url);
   }
   return toRemove;
+}
+
+/**
+ * Return whether `pluginId` is currently loaded from a local filesystem or
+ * installed archive source (as opposed to a managed URL or built-in plugin).
+ */
+export function isFilesystemPluginLoaded(pluginId: string): boolean {
+  const source = externallyLoadedPluginSources.get(pluginId);
+  return source !== undefined && !isManagedUrlSource(source);
 }
 
 function normalizePluginSourcePath(source: string): string {

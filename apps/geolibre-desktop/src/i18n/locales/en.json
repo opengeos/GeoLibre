@@ -297,6 +297,7 @@
     "capabilitiesAdvisory": "Self-declared by the plugin; not enforced.",
     "reloadedArchive": "Reloaded plugin \"{{id}}\".",
     "reloadNotFound": "Plugin \"{{pluginId}}\" could not be reloaded from its archive.",
+    "reloadConflict": "Plugin \"{{pluginId}}\" could not be reloaded because another source already provides that ID.",
     "reloadReactivateFailed": "Plugin \"{{pluginId}}\" reloaded but could not be reactivated."
   },
   "viewState": {
@@ -6509,9 +6510,9 @@
         "dataUnusable": "not a GeoJSON FeatureCollection",
         "dataTooLarge": "larger than {{size}} MB"
       },
-      "undo": "Undo (Ctrl+Z)",
-      "redo": "Redo (Ctrl+Shift+Z)",
-      "duplicateSelected": "Duplicate selected nodes (Ctrl+D)",
+      "undo": "Undo",
+      "redo": "Redo",
+      "duplicateSelected": "Duplicate selected nodes",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
       "resetZoom": "Reset zoom to 100%"

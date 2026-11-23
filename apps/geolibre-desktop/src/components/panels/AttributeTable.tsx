@@ -504,7 +504,10 @@ function computeFormDraftErrors(
     for (const check of contingencies?.checks(candidate, properties) ?? [])
       if (blocksArcGISEdit(check))
         for (const field of check.fields)
-          groupErrors[field] ??= { code: "constraint", message: contingencies!.message(check) };
+          groupErrors[field] ??= {
+            code: "constraint",
+            message: contingencies!.message(check),
+          };
     if (Object.keys(groupErrors).length) result[featureId] = groupErrors;
     const validation = validateAttributeFormValues(rowForm.form, candidate, {
       feature,
@@ -648,7 +651,10 @@ export function AttributeTable({
   const [sortSpecs, setSortSpecs] = useState<SortSpec[]>([
     { key: "__featureId", direction: "asc" },
   ]);
-  const sort = sortSpecs[0] ?? { key: "__featureId" as SortKey, direction: "asc" as SortDirection };
+  const sort = sortSpecs[0] ?? {
+    key: "__featureId" as SortKey,
+    direction: "asc" as SortDirection,
+  };
   const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilterSpec>>({});
   const [columnFilterBarOpen, setColumnFilterBarOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
@@ -943,10 +949,16 @@ export function AttributeTable({
   const domainNotice = serviceConstraints?.diagnostics
     .map((diagnostic) =>
       diagnostic.code === "unresolvedDomain"
-        ? t("attributeTable.serviceDomains.unresolvedDomain", { field: diagnostic.field })
+        ? t("attributeTable.serviceDomains.unresolvedDomain", {
+            field: diagnostic.field,
+          })
         : diagnostic.code === "subtypeFieldMissing"
-          ? t("attributeTable.serviceDomains.subtypeFieldMissing", { field: diagnostic.field })
-          : t("attributeTable.serviceDomains.subtypeConflict", { field: diagnostic.field }),
+          ? t("attributeTable.serviceDomains.subtypeFieldMissing", {
+              field: diagnostic.field,
+            })
+          : t("attributeTable.serviceDomains.subtypeConflict", {
+              field: diagnostic.field,
+            }),
     )
     .join(" ");
   const hasRowForms = Boolean(attributeForm?.fields.length || serviceConstraints);
@@ -1001,7 +1013,11 @@ export function AttributeTable({
               : check.status === "retired"
                 ? "contingentValues.existingRetired"
                 : "contingentValues.existing",
-            { row: featureId, fields: check.fields.join(", "), group: check.group },
+            {
+              row: featureId,
+              fields: check.fields.join(", "),
+              group: check.group,
+            },
           ),
         );
     return lines.join(" ");
@@ -1122,8 +1138,15 @@ export function AttributeTable({
         selectedFeatureId !== null &&
         !filtered.some((row) => row.featureId === selectedFeatureId)
       ) {
-        if (attributeFilter) setAttributeFilter("");
         const targetRow = attributeRows.find((row) => row.featureId === selectedFeatureId);
+        if (attributeFilter) {
+          const filterLower = attributeFilter.toLowerCase();
+          const admittedBySearch =
+            targetRow !== undefined &&
+            (targetRow.featureId.toLowerCase().includes(filterLower) ||
+              attributeValuesMatchQuery(targetRow.properties, filterLower));
+          if (!admittedBySearch) setAttributeFilter("");
+        }
         if (targetRow && Object.keys(columnFilters).length > 0) {
           setColumnFilters((prev) => {
             const next: Record<string, ColumnFilterSpec> = {};
@@ -2757,7 +2780,10 @@ export function AttributeTable({
                     direction: "asc" as SortDirection,
                   };
                   return [
-                    { ...primary, direction: primary.direction === "asc" ? "desc" : "asc" },
+                    {
+                      ...primary,
+                      direction: primary.direction === "asc" ? "desc" : "asc",
+                    },
                     ...current.slice(1),
                   ];
                 })
@@ -3051,11 +3077,19 @@ export function AttributeTable({
           data-testid="attribute-table-status"
           className="flex shrink-0 items-center gap-3 border-t bg-card px-3 py-1 text-[11px] text-muted-foreground"
         >
-          <span>{t("attributeTable.statusFeatures", { count: attributeRows.length })}</span>
+          <span>
+            {t("attributeTable.statusFeatures", {
+              count: attributeRows.length,
+            })}
+          </span>
           {filtered.length !== attributeRows.length ? (
             <span>{t("attributeTable.statusShown", { count: filtered.length })}</span>
           ) : null}
-          <span>{t("attributeTable.statusSelected", { count: selectedFeatureIds.length })}</span>
+          <span>
+            {t("attributeTable.statusSelected", {
+              count: selectedFeatureIds.length,
+            })}
+          </span>
         </div>
       ) : null}
       <Dialog

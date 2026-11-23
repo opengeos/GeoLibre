@@ -159,6 +159,7 @@ import { bundledPluginManifestPaths } from "virtual:bundled-plugins";
 import {
   assertBundleNotBlocklisted,
   installWebPluginArchive,
+  isFilesystemPluginLoaded,
   listInstalledDesktopPlugins,
   listInstalledWebPlugins,
   loadExternalPlugins,
@@ -366,7 +367,9 @@ setPointCloudPrelabelRunner(async (toolId, parameters, las) => {
   const job = await runWhiteboxToolWasm({
     tool_id: toolId,
     parameters,
-    layer_inputs: { input: { name: "input.las", kind: "lidar_in", bytes: las } },
+    layer_inputs: {
+      input: { name: "input.las", kind: "lidar_in", bytes: las },
+    },
     tool: {
       id: toolId,
       params: [
@@ -741,39 +744,60 @@ export async function uninstallPluginArchiveFromFile(
   await uninstallWebPlugin(manager, pluginId, app);
 }
 
+const archiveReloadInFlight = new Map<string, Promise<void>>();
+
 // Hot-reload a plugin installed from a `.zip` file (desktop disk or browser IndexedDB)
 // without restarting the app, preserving its active state.
-export async function reloadPluginArchiveFromFile(
+export function reloadPluginArchiveFromFile(
   pluginId: string,
   mapControllerRef: RefObject<MapEngine | null>,
 ): Promise<void> {
-  const app = createAppAPI(mapControllerRef);
-  let wasActive = manager.isActive(pluginId);
-  const desktopSettings = useDesktopSettingsStore.getState().desktopSettings;
-  // Run the unload inside the serialized scan queue so any in-flight scan
-  // settles before we drop the previous registration and re-read the archive.
-  await ensureExternalPluginsLoadedWithSettings(desktopSettings, app, {
-    force: true,
-    beforeScan: () => {
-      wasActive = manager.isActive(pluginId);
-      unloadFilesystemPlugin(manager, pluginId, app);
-    },
-  });
-  const isRegistered = manager.list().some((plugin) => plugin.id === pluginId);
-  if (!isRegistered) {
-    throw new Error(i18n.t("managePlugins.reloadNotFound", { pluginId }));
-  }
-  if (wasActive && !manager.isActive(pluginId)) {
-    try {
-      const activated = await manager.activate(pluginId, app);
-      if (!activated) {
-        throw new Error(i18n.t("managePlugins.reloadReactivateFailed", { pluginId }));
+  const previous = archiveReloadInFlight.get(pluginId) ?? Promise.resolve();
+  const run = previous
+    .catch(() => {})
+    .then(async () => {
+      const app = createAppAPI(mapControllerRef);
+      let wasActive = manager.isActive(pluginId);
+      const desktopSettings = useDesktopSettingsStore.getState().desktopSettings;
+      // Run the unload inside the serialized scan queue so any in-flight scan
+      // settles before we drop the previous registration and re-read the archive.
+      await ensureExternalPluginsLoadedWithSettings(desktopSettings, app, {
+        force: true,
+        beforeScan: () => {
+          wasActive = manager.isActive(pluginId);
+          unloadFilesystemPlugin(manager, pluginId, app);
+        },
+      });
+      if (!isFilesystemPluginLoaded(pluginId)) {
+        const shadowedByOther = manager.list().some((plugin) => plugin.id === pluginId);
+        throw new Error(
+          i18n.t(
+            shadowedByOther ? "managePlugins.reloadConflict" : "managePlugins.reloadNotFound",
+            {
+              pluginId,
+            },
+          ),
+        );
       }
-    } catch (error) {
-      reportPluginError(pluginId, "activate", error);
-      throw error;
+      if (wasActive && !manager.isActive(pluginId)) {
+        try {
+          const activated = await manager.activate(pluginId, app);
+          if (!activated) {
+            throw new Error(i18n.t("managePlugins.reloadReactivateFailed", { pluginId }));
+          }
+        } catch (error) {
+          reportPluginError(pluginId, "activate", error);
+          throw error;
+        }
+      }
+    });
+  const tracked = run.finally(() => {
+    if (archiveReloadInFlight.get(pluginId) === tracked) {
+      archiveReloadInFlight.delete(pluginId);
     }
-  }
+  });
+  archiveReloadInFlight.set(pluginId, tracked);
+  return tracked;
 }
 
 // List plugins installed from a `.zip` file (desktop app-data dir or browser IndexedDB).
@@ -1452,16 +1476,20 @@ export async function activateDeepLinkedPlugin(
 export function listAssistantActivatablePlugins(): ActivatablePlugin[] {
   const renderer = useAppStore.getState().primaryRenderer;
   const { uiProfile } = useDesktopSettingsStore.getState().desktopSettings;
-  return manager
-    .list()
-    .flatMap((plugin) =>
-      plugin.assistant &&
-      !manager.isActive(plugin.id) &&
-      isPluginEngineSupported(plugin, renderer) &&
-      isPluginVisible(uiProfile, plugin.id)
-        ? [{ id: plugin.id, name: plugin.name, description: plugin.assistant.description.trim() }]
-        : [],
-    );
+  return manager.list().flatMap((plugin) =>
+    plugin.assistant &&
+    !manager.isActive(plugin.id) &&
+    isPluginEngineSupported(plugin, renderer) &&
+    isPluginVisible(uiProfile, plugin.id)
+      ? [
+          {
+            id: plugin.id,
+            name: plugin.name,
+            description: plugin.assistant.description.trim(),
+          },
+        ]
+      : [],
+  );
 }
 
 /**

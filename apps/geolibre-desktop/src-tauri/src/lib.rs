@@ -2590,11 +2590,19 @@ fn list_installed_plugin_archives_blocking(
 }
 
 #[cfg(not(feature = "mas"))]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UninstallExternalPluginArchiveResult {
+    removed_paths: Vec<String>,
+    error: Option<String>,
+}
+
+#[cfg(not(feature = "mas"))]
 #[tauri::command]
 async fn uninstall_external_plugin_archive(
     app: tauri::AppHandle,
     plugin_id: String,
-) -> Result<Vec<String>, String> {
+) -> Result<UninstallExternalPluginArchiveResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         uninstall_external_plugin_archive_blocking(&app, &plugin_id)
     })
@@ -2606,7 +2614,7 @@ async fn uninstall_external_plugin_archive(
 fn uninstall_external_plugin_archive_blocking(
     app: &tauri::AppHandle,
     plugin_id: &str,
-) -> Result<Vec<String>, String> {
+) -> Result<UninstallExternalPluginArchiveResult, String> {
     validate_required_manifest_string("plugin_id", plugin_id)?;
     let plugins_dir = app
         .path()
@@ -2614,7 +2622,10 @@ fn uninstall_external_plugin_archive_blocking(
         .map_err(|error| format!("Could not resolve app data directory: {error}"))?
         .join("plugins");
     if !plugins_dir.exists() {
-        return Ok(Vec::new());
+        return Ok(UninstallExternalPluginArchiveResult {
+            removed_paths: Vec::new(),
+            error: None,
+        });
     }
     let canonical_dir = fs::canonicalize(&plugins_dir)
         .map_err(|error| format!("Could not resolve plugins directory: {error}"))?;
@@ -2655,7 +2666,9 @@ fn uninstall_external_plugin_archive_blocking(
         }
     }
 
-    let mut removed_paths = Vec::new();
+    // Preflight-validate every target before deleting any archive so a symlink
+    // or non-zip target cannot leave a partial deletion behind.
+    let mut validated_targets: Vec<PathBuf> = Vec::with_capacity(targets.len());
     for candidate in targets {
         let canonical = fs::canonicalize(&candidate)
             .map_err(|error| format!("Could not resolve installed plugin archive: {error}"))?;
@@ -2665,11 +2678,34 @@ fn uninstall_external_plugin_archive_blocking(
         {
             return Err("Refusing to remove a file outside the plugins directory.".to_string());
         }
-        fs::remove_file(&canonical)
-            .map_err(|error| format!("Could not remove plugin archive: {error}"))?;
-        removed_paths.push(canonical.to_string_lossy().into_owned());
+        validated_targets.push(canonical);
     }
-    Ok(removed_paths)
+
+    let mut removed_paths = Vec::new();
+    let mut removal_error: Option<String> = None;
+    for canonical in validated_targets {
+        match fs::remove_file(&canonical) {
+            Ok(()) => removed_paths.push(canonical.to_string_lossy().into_owned()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                removal_error = Some(format!("Could not remove plugin archive: {error}"));
+                break;
+            }
+        }
+    }
+    if let Some(error) = removal_error {
+        if removed_paths.is_empty() {
+            return Err(error);
+        }
+        return Ok(UninstallExternalPluginArchiveResult {
+            removed_paths,
+            error: Some(error),
+        });
+    }
+    Ok(UninstallExternalPluginArchiveResult {
+        removed_paths,
+        error: None,
+    })
 }
 
 /// Build a filesystem-safe `<id>.zip` name for an installed plugin archive.
@@ -3175,12 +3211,16 @@ fn validate_external_plugin_manifest(manifest: &ExternalPluginManifest) -> Resul
     }
     if let Some(capabilities) = manifest.capabilities.as_deref() {
         for capability in capabilities {
+            validate_required_manifest_string("capabilities", capability)?;
             match capability.as_str() {
                 "network" | "filesystem" | "sidecar" | "mapWrite" | "ui" => {}
                 other => {
-                    return Err(format!(
-                        "capabilities contains unsupported capability '{other}'"
-                    ));
+                    // Capabilities are advisory metadata; ignore unknown labels
+                    // so manifests declaring future capabilities stay loadable.
+                    eprintln!(
+                        "[GeoLibre] Ignoring unrecognized advisory plugin capability '{other}' in '{}'",
+                        manifest.id
+                    );
                 }
             }
         }

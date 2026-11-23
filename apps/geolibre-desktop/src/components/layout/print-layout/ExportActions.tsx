@@ -47,9 +47,11 @@ export function ExportActions({
               total: atlasProgress.total,
             })}
           </span>
-          <Button type="button" variant="outline" size="sm" onClick={handleCancelAtlasExport}>
-            {t("common.cancel")}
-          </Button>
+          {atlasProgress.current < atlasProgress.total && (
+            <Button type="button" variant="outline" size="sm" onClick={handleCancelAtlasExport}>
+              {t("common.cancel")}
+            </Button>
+          )}
         </div>
       )}
       <Button

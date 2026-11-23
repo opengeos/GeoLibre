@@ -288,7 +288,10 @@ function portPosition(
 ): { x: number; y: number } {
   const x = side === "in" ? node.x : node.x + NODE_WIDTH;
   if (labelled) {
-    return { x, y: node.y + band.top + PORT_ROW_HEIGHT * index + PORT_ROW_HEIGHT / 2 };
+    return {
+      x,
+      y: node.y + band.top + PORT_ROW_HEIGHT * index + PORT_ROW_HEIGHT / 2,
+    };
   }
   const spacing = band.height / (count + 1);
   return { x, y: node.y + band.top + spacing * (index + 1) };
@@ -384,7 +387,12 @@ export function ModelBuilderPanel({
   const [graph, setGraph] = useState<ProcessingModelGraph>(emptyModelGraph);
   const [history, setHistory] = useState<ModelHistoryState>(createModelHistory);
   const [canvasZoom, setCanvasZoom] = useState(1);
-  const [canvasScroll, setCanvasScroll] = useState({ left: 0, top: 0, width: 0, height: 0 });
+  const [canvasScroll, setCanvasScroll] = useState({
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 0,
+  });
   const graphRef = useRef(graph);
   const historyRef = useRef(history);
   const dragGenerationRef = useRef(0);
@@ -394,7 +402,17 @@ export function ModelBuilderPanel({
   useLayoutEffect(() => {
     historyRef.current = history;
   }, [history]);
+  const scrollRafRef = useRef<number | null>(null);
   useEffect(() => {
+    return () => {
+      if (scrollRafRef.current !== null) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+    };
+  }, []);
+  useEffect(() => {
+    if (!open || minimized) return;
     const el = canvasRef.current;
     if (!el) return;
     const syncSize = () => {
@@ -409,7 +427,7 @@ export function ModelBuilderPanel({
     const observer = new ResizeObserver(syncSize);
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [open, minimized]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(() => new Set());
 
@@ -418,7 +436,11 @@ export function ModelBuilderPanel({
     setSelectedNodeIds(id ? new Set([id]) : new Set());
   }, []);
 
-  const lastCoalesceEditRef = useRef<{ key: string; at: number } | null>(null);
+  const lastCoalesceEditRef = useRef<{
+    key: string;
+    at: number;
+    graph: ProcessingModelGraph;
+  } | null>(null);
 
   const commitGraph = useCallback(
     (
@@ -434,12 +456,13 @@ export function ModelBuilderPanel({
         Boolean(coalesceKey) &&
         lastEdit !== null &&
         lastEdit.key === coalesceKey &&
+        lastEdit.graph === current &&
         now - lastEdit.at < 800 &&
         historyRef.current.past.length > 0;
       const nextHistory = shouldCoalesce
         ? historyRef.current
         : pushModelHistory(historyRef.current, current);
-      lastCoalesceEditRef.current = coalesceKey ? { key: coalesceKey, at: now } : null;
+      lastCoalesceEditRef.current = coalesceKey ? { key: coalesceKey, at: now, graph: next } : null;
       graphRef.current = next;
       historyRef.current = nextHistory;
       setGraph(next);
@@ -515,7 +538,10 @@ export function ModelBuilderPanel({
    * to complete the connection. Null during pointer drags, which carry their
    * own in-flight state in {@link linking}.
    */
-  const [armedPort, setArmedPort] = useState<{ nodeId: string; portId: string } | null>(null);
+  const [armedPort, setArmedPort] = useState<{
+    nodeId: string;
+    portId: string;
+  } | null>(null);
   const armedPortRef = useRef(armedPort);
   useLayoutEffect(() => {
     armedPortRef.current = armedPort;
@@ -879,7 +905,11 @@ export function ModelBuilderPanel({
         setHistory(createModelHistory());
         selectSingleNode(null);
         resetRunState();
-        appendLog(t("processing.modelBuilder.importedLog", { nodes: graph.nodes.length }));
+        appendLog(
+          t("processing.modelBuilder.importedLog", {
+            nodes: graph.nodes.length,
+          }),
+        );
       } catch (err) {
         appendLog(`${t("processing.modelBuilder.importFailed")}: ${(err as Error).message}`);
       }
@@ -932,7 +962,9 @@ export function ModelBuilderPanel({
             if (data.kind === "raster") {
               if (!onAddRasterUrl) {
                 notes.push(
-                  t("processing.modelBuilder.samples.rasterUnsupported", { name: data.name }),
+                  t("processing.modelBuilder.samples.rasterUnsupported", {
+                    name: data.name,
+                  }),
                 );
                 continue;
               }
@@ -969,14 +1001,18 @@ export function ModelBuilderPanel({
             }
             if (layerId) {
               bindings.set(data.layerId, layerId);
-              notes.push(t("processing.modelBuilder.samples.dataAddedLog", { name: data.name }));
+              notes.push(
+                t("processing.modelBuilder.samples.dataAddedLog", {
+                  name: data.name,
+                }),
+              );
             }
           } catch (err) {
             // The model still loads; its input is left for the user to pick.
             notes.push(
-              `${t("processing.modelBuilder.samples.dataFailed", { name: data.name })}: ${
-                (err as Error).message
-              }`,
+              `${t("processing.modelBuilder.samples.dataFailed", {
+                name: data.name,
+              })}: ${(err as Error).message}`,
             );
           }
         }
@@ -1109,7 +1145,10 @@ export function ModelBuilderPanel({
       const next = addToolNode(
         graph,
         descriptor,
-        { x: Math.max(0, point.x - NODE_WIDTH / 2), y: Math.max(0, point.y - NODE_HEIGHT / 2) },
+        {
+          x: Math.max(0, point.x - NODE_WIDTH / 2),
+          y: Math.max(0, point.y - NODE_HEIGHT / 2),
+        },
         createId,
       );
       commitGraph(next.graph);
@@ -1438,9 +1477,9 @@ export function ModelBuilderPanel({
                   // reports success for an output that never reached the map.
                   failedOutputs.push(name);
                   appendLog(
-                    `${t("processing.modelBuilder.outputAddFailed", { name })}: ${
-                      err instanceof Error ? err.message : String(err)
-                    }`,
+                    `${t("processing.modelBuilder.outputAddFailed", {
+                      name,
+                    })}: ${err instanceof Error ? err.message : String(err)}`,
                   );
                 }),
               );
@@ -1451,7 +1490,12 @@ export function ModelBuilderPanel({
             // runModelGraph already splits a raster collection into one call
             // per raster; anything else (a count, a string) has no map form.
             failedOutputs.push(name);
-            appendLog(t("processing.modelBuilder.outputUnsupported", { name, kind: value.kind }));
+            appendLog(
+              t("processing.modelBuilder.outputUnsupported", {
+                name,
+                kind: value.kind,
+              }),
+            );
           }
         },
         log: (message) => {
@@ -2286,11 +2330,22 @@ export function ModelBuilderPanel({
             className="relative min-w-0 flex-1 overflow-auto bg-muted/20"
             onScroll={(event) => {
               const el = event.currentTarget;
-              setCanvasScroll({
-                left: el.scrollLeft,
-                top: el.scrollTop,
-                width: el.clientWidth,
-                height: el.clientHeight,
+              if (scrollRafRef.current !== null) return;
+              scrollRafRef.current = requestAnimationFrame(() => {
+                scrollRafRef.current = null;
+                setCanvasScroll((prev) =>
+                  prev.left === el.scrollLeft &&
+                  prev.top === el.scrollTop &&
+                  prev.width === el.clientWidth &&
+                  prev.height === el.clientHeight
+                    ? prev
+                    : {
+                        left: el.scrollLeft,
+                        top: el.scrollTop,
+                        width: el.clientWidth,
+                        height: el.clientHeight,
+                      },
+                );
               });
             }}
             onPointerDown={(event) => {
@@ -2591,13 +2646,19 @@ function translateIssue(t: TFunction, issue: ModelGraphIssue): string {
     case "missing-layer":
       return t("processing.modelBuilder.issueMissingLayer");
     case "unknown-tool":
-      return t("processing.modelBuilder.issueUnknownTool", { tool: issue.detail ?? "" });
+      return t("processing.modelBuilder.issueUnknownTool", {
+        tool: issue.detail ?? "",
+      });
     case "missing-input":
-      return t("processing.modelBuilder.issueMissingInput", { port: issue.detail ?? "" });
+      return t("processing.modelBuilder.issueMissingInput", {
+        port: issue.detail ?? "",
+      });
     case "unknown-port":
       return t("processing.modelBuilder.issueUnknownPort");
     case "duplicate-input":
-      return t("processing.modelBuilder.issueDuplicateInput", { port: issue.detail ?? "" });
+      return t("processing.modelBuilder.issueDuplicateInput", {
+        port: issue.detail ?? "",
+      });
     case "type-mismatch":
       return t("processing.modelBuilder.issueTypeMismatch");
     case "cycle":
@@ -2746,7 +2807,10 @@ function GraphEdges({
 function portsOf(
   node: ModelGraphNode,
   descriptor: ModelToolDescriptor | undefined,
-): { inputs: { id: string; label: string }[]; outputs: { id: string; label: string }[] } {
+): {
+  inputs: { id: string; label: string }[];
+  outputs: { id: string; label: string }[];
+} {
   return portsFor(node, descriptor);
 }
 
@@ -2826,7 +2890,12 @@ const GraphNodeCard = memo(function GraphNodeCard({
         event.preventDefault();
         onSelect(node.id);
       }}
-      style={{ left: node.x, top: node.y, width: NODE_WIDTH, height: layout.height }}
+      style={{
+        left: node.x,
+        top: node.y,
+        width: NODE_WIDTH,
+        height: layout.height,
+      }}
       className={cn(
         "absolute cursor-grab select-none border p-2 shadow-sm active:cursor-grabbing",
         // A tool is a square-cornered card (control-flow nodes too, tinted
@@ -3256,7 +3325,10 @@ function NodeInspector({
                   param,
                 )}
                 value={node.parameters?.[param.id]}
-                layerOptions={layers.map((layer) => ({ id: layer.id, name: layer.name }))}
+                layerOptions={layers.map((layer) => ({
+                  id: layer.id,
+                  name: layer.name,
+                }))}
                 fieldOptions={
                   param.type === "field"
                     ? modelFieldOptions(graph, node, descriptor, param, fieldsByLayer)
@@ -3304,8 +3376,12 @@ function NodeInspector({
                       ? t("processing.modelBuilder.resultKeptSingle")
                       : t("processing.modelBuilder.keepResultSingle")
                     : keptPorts.has(port.id)
-                      ? t("processing.modelBuilder.resultKept", { port: portLabel(t, port.label) })
-                      : t("processing.modelBuilder.keepResult", { port: portLabel(t, port.label) })}
+                      ? t("processing.modelBuilder.resultKept", {
+                          port: portLabel(t, port.label),
+                        })
+                      : t("processing.modelBuilder.keepResult", {
+                          port: portLabel(t, port.label),
+                        })}
                 </Button>
               ))}
             </div>
@@ -3423,7 +3499,11 @@ async function executeModelTool({
   if (descriptor.provider === "vector") {
     const tool = getVectorTool(descriptor.toolId);
     if (!tool)
-      throw new Error(t("processing.modelBuilder.issueUnknownTool", { tool: descriptor.toolId }));
+      throw new Error(
+        t("processing.modelBuilder.issueUnknownTool", {
+          tool: descriptor.toolId,
+        }),
+      );
     // Each wired input becomes a synthetic layer the tool resolves by id, the
     // same trick the linear runner uses to chain a step's output forward.
     const synthetic: GeoLibreLayer[] = [];
@@ -3431,7 +3511,9 @@ async function executeModelTool({
     for (const [portId, value] of Object.entries(inputs)) {
       if (value.kind !== "vector") {
         throw new Error(
-          t("processing.modelBuilder.portNeedsVector", { port: portLabel(t, portId) }),
+          t("processing.modelBuilder.portNeedsVector", {
+            port: portLabel(t, portId),
+          }),
         );
       }
       const syntheticId = `__geolibre_model_${node.id}_${portId}`;
@@ -3446,7 +3528,9 @@ async function executeModelTool({
     });
     if (!output)
       throw new Error(
-        t("processing.modelBuilder.toolNoOutput", { tool: descriptorName(t, descriptor) }),
+        t("processing.modelBuilder.toolNoOutput", {
+          tool: descriptorName(t, descriptor),
+        }),
       );
     return { out: { kind: "vector", geojson: output } };
   }
@@ -3454,9 +3538,17 @@ async function executeModelTool({
   const layerInputs: Record<string, WhiteboxLayerInput> = {};
   for (const [portId, value] of Object.entries(inputs)) {
     if (value.kind === "vector") {
-      layerInputs[portId] = { name: portId, kind: "vector_in", geojson: value.geojson };
+      layerInputs[portId] = {
+        name: portId,
+        kind: "vector_in",
+        geojson: value.geojson,
+      };
     } else if (value.kind === "raster") {
-      layerInputs[portId] = { name: portId, kind: "raster_in", bytes: value.bytes };
+      layerInputs[portId] = {
+        name: portId,
+        kind: "raster_in",
+        bytes: value.bytes,
+      };
     } else {
       // A raster collection, number or string has no Whitebox input form;
       // say so here rather than fail later as a missing input.
@@ -3494,13 +3586,20 @@ async function executeModelTool({
     ) {
       results[port.id] = {
         kind: "vector",
-        geojson: value as ModelValue extends { kind: "vector"; geojson: infer G } ? G : never,
+        geojson: value as ModelValue extends {
+          kind: "vector";
+          geojson: infer G;
+        }
+          ? G
+          : never,
       };
     }
   }
   if (Object.keys(results).length === 0) {
     throw new Error(
-      t("processing.modelBuilder.toolNoUsableOutput", { tool: descriptorName(t, descriptor) }),
+      t("processing.modelBuilder.toolNoUsableOutput", {
+        tool: descriptorName(t, descriptor),
+      }),
     );
   }
   return results;

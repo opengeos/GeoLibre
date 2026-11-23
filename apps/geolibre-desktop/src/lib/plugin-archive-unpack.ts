@@ -81,12 +81,44 @@ export const PLUGIN_CAPABILITIES: readonly GeoLibrePluginCapability[] = [
 
 const PLUGIN_CAPABILITY_SET: ReadonlySet<string> = new Set(PLUGIN_CAPABILITIES);
 
-/** Type guard for a plugin's optional `capabilities` array. */
+/**
+ * Type guard for a plugin's optional `capabilities` array.
+ *
+ * Capabilities are advisory metadata, so unknown future capability strings are
+ * accepted as valid strings rather than rejecting the manifest. Call
+ * {@link normalizePluginCapabilities} to keep only capabilities recognized by
+ * this build.
+ */
 export function isPluginCapabilityList(value: unknown): value is GeoLibrePluginCapability[] {
-  return (
-    Array.isArray(value) &&
-    value.every((cap) => typeof cap === "string" && PLUGIN_CAPABILITY_SET.has(cap))
-  );
+  return Array.isArray(value) && value.every((cap) => isRequiredManifestString(cap));
+}
+
+/**
+ * Filter a manifest's advisory `capabilities` array to the capabilities known
+ * by this build, warning once per unrecognized label.
+ */
+export function normalizePluginCapabilities(
+  capabilities: readonly string[] | undefined,
+  pluginLabel?: string,
+): GeoLibrePluginCapability[] | undefined {
+  if (!capabilities) return undefined;
+  const known: GeoLibrePluginCapability[] = [];
+  const unknown: string[] = [];
+  for (const cap of capabilities) {
+    if (PLUGIN_CAPABILITY_SET.has(cap)) {
+      known.push(cap as GeoLibrePluginCapability);
+    } else {
+      unknown.push(cap);
+    }
+  }
+  if (unknown.length > 0) {
+    console.warn(
+      `Ignoring unrecognized plugin capabilities${
+        pluginLabel ? ` in '${pluginLabel}'` : ""
+      }: ${unknown.join(", ")}`,
+    );
+  }
+  return known;
 }
 
 /**
@@ -187,15 +219,22 @@ export async function bundleFromZipBytes(
   // for a wrapped archive); entry/style resolve against it.
   const prefix = manifestPath.slice(0, manifestPath.length - "plugin.json".length);
 
-  let manifest: unknown;
+  let rawManifest: unknown;
   try {
-    manifest = JSON.parse(decodePluginText(files[manifestPath], "plugin manifest"));
+    rawManifest = JSON.parse(decodePluginText(files[manifestPath], "plugin manifest"));
   } catch {
     throw new Error("Could not parse plugin.json.");
   }
-  if (!isExternalPluginManifest(manifest)) {
+  if (!isExternalPluginManifest(rawManifest)) {
     throw new Error("Plugin manifest is invalid.");
   }
+  const manifest: GeoLibreExternalPluginManifest =
+    rawManifest.capabilities !== undefined
+      ? {
+          ...rawManifest,
+          capabilities: normalizePluginCapabilities(rawManifest.capabilities, rawManifest.id),
+        }
+      : rawManifest;
 
   assertSafeArchivePath("entry", manifest.entry);
   const entryBytes = files[prefix + manifest.entry];
