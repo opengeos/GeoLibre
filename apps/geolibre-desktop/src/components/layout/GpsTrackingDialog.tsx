@@ -527,7 +527,6 @@ export function GpsTrackingDialog({
     [getMap, mapControllerRef, recenterOnFix, scheduleCheckpoint, setGpsStatus],
   );
 
-
   // The first fix of every tracking session zooms in, whichever source it came
   // from; later fixes only pan.
   useEffect(() => {
