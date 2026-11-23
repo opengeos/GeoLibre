@@ -245,9 +245,10 @@ function formatCell(value: unknown): string {
  * the layer name, the columns from its features), so restyling a layer does
  * not rescan every layer's columns.
  */
-const selectSqlTableSources = createLayerSliceSelector((layer) =>
-  layer.geojson ? { id: layer.id, name: layer.name, geojson: layer.geojson } : null,
-);
+const selectSqlTableSources = () =>
+  createLayerSliceSelector((layer) =>
+    layer.geojson ? { id: layer.id, name: layer.name, geojson: layer.geojson } : null,
+  );
 
 /**
  * The in-app SQL Workspace: a bottom-docked, resizable panel (à la the Python
@@ -258,7 +259,7 @@ const selectSqlTableSources = createLayerSliceSelector((layer) =>
  */
 export function SqlWorkspacePanel() {
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
-  const tableSources = useLayerSlices(selectSqlTableSources);
+  const tableSources = useLayerSlices(useMemo(selectSqlTableSources, []));
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
 

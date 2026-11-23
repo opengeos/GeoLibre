@@ -338,7 +338,11 @@ def test_whitebox_cancel_endpoint_stops_a_running_job(monkeypatch, tmp_path):
         whitebox.whitebox_cancel(job.id)
         for _ in range(200):
             state = whitebox._JOB_MANAGER.get(job.id)
-            if state.status not in {"pending", "running"}:
+            if (
+                state.status not in {"pending", "running"}
+                and job.id not in whitebox._JOB_MANAGER.processes
+                and job.id not in whitebox._JOB_MANAGER.cancelled
+            ):
                 break
             time.sleep(0.05)
         assert state.status == "cancelled"

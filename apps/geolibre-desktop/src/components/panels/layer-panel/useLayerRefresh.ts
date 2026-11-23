@@ -1,5 +1,5 @@
 import { arcGISLayerHasPendingEdits } from "@geolibre/plugins";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createLayerSliceSelector, useAppStore, useLayerIds, useLayerSlices } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
@@ -49,26 +49,29 @@ interface UseLayerRefreshOptions {
 // when it needs one.
 
 /** WFS GetFeature layers, for the hydration bootstrap. */
-const selectWfsLayers = createLayerSliceSelector((layer) =>
-  layer.type === "geojson" && layer.metadata.sourceKind === "wfs-getfeature"
-    ? { id: layer.id, url: layer.source.url as unknown, hasGeojson: Boolean(layer.geojson) }
-    : null,
-);
+const selectWfsLayers = () =>
+  createLayerSliceSelector((layer) =>
+    layer.type === "geojson" && layer.metadata.sourceKind === "wfs-getfeature"
+      ? { id: layer.id, url: layer.source.url as unknown, hasGeojson: Boolean(layer.geojson) }
+      : null,
+  );
 
 /** Layers with auto-refresh on, and their cadence. */
-const selectAutoRefreshLayers = createLayerSliceSelector((layer) => {
-  const config = getLayerRefreshConfig(layer);
-  if (!config.enabled || !isRefreshableLayer(layer) || !supportsAutoRefresh(layer)) return null;
-  return { id: layer.id, intervalMs: config.intervalMs };
-});
+const selectAutoRefreshLayers = () =>
+  createLayerSliceSelector((layer) => {
+    const config = getLayerRefreshConfig(layer);
+    if (!config.enabled || !isRefreshableLayer(layer) || !supportsAutoRefresh(layer)) return null;
+    return { id: layer.id, intervalMs: config.intervalMs };
+  });
 
 /** Local-file layers with watch mode on, and the path to watch. */
-const selectWatchedLayers = createLayerSliceSelector((layer) => {
-  if (!isLocalFileLayer(layer) || !getLayerWatchConfig(layer).enabled) return null;
-  const path = layer.sourcePath;
-  if (typeof path !== "string" || !path) return null;
-  return { id: layer.id, path };
-});
+const selectWatchedLayers = () =>
+  createLayerSliceSelector((layer) => {
+    if (!isLocalFileLayer(layer) || !getLayerWatchConfig(layer).enabled) return null;
+    const path = layer.sourcePath;
+    if (typeof path !== "string" || !path) return null;
+    return { id: layer.id, path };
+  });
 
 /** Read one layer's current record from the store. */
 function currentLayer(layerId: string): GeoLibreLayer | undefined {
@@ -105,9 +108,9 @@ export function useLayerRefresh({ isCollapsed }: UseLayerRefreshOptions) {
     s.layers.some((layer) => Boolean(layer.connection?.lastSyncedAt)),
   );
   const layerIds = useLayerIds();
-  const wfsLayers = useLayerSlices(selectWfsLayers);
-  const autoRefreshLayers = useLayerSlices(selectAutoRefreshLayers);
-  const watchedLayers = useLayerSlices(selectWatchedLayers);
+  const wfsLayers = useLayerSlices(useMemo(selectWfsLayers, []));
+  const autoRefreshLayers = useLayerSlices(useMemo(selectAutoRefreshLayers, []));
+  const watchedLayers = useLayerSlices(useMemo(selectWatchedLayers, []));
   useEffect(() => {
     if (isCollapsed || !hasSyncTimestamps) return;
     const timer = window.setInterval(

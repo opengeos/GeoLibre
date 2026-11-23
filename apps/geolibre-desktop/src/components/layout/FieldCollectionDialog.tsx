@@ -8,7 +8,6 @@ import {
   editorTrackingFieldNames,
   getAttributeFormField,
   isAttributeFormFieldVisible,
-  createLayerSliceSelector,
   stampFeatureEditorTracking,
   useAppStore,
   useLayer,
@@ -60,7 +59,7 @@ import {
   getGeometryType,
   getSchema,
   type GeometryType,
-  isCollectionLayer,
+  createCollectionLayerSelector,
   isFileBackedCollectionLayer,
   MAX_PHOTO_BYTES,
   minVertices,
@@ -118,15 +117,6 @@ function formatLatLng(lng: number, lat: number): string {
 }
 
 /**
- * The collection layers, as the `{ id, name }` the target picker and the
- * session effects read, so an edit to any other layer field does not
- * re-render this always-mounted dialog.
- */
-const selectCollectionLayers = createLayerSliceSelector((layer) =>
-  isCollectionLayer(layer) ? { id: layer.id, name: layer.name } : null,
-);
-
-/**
  * Field Collection: capture point, line, or polygon observations against a
  * custom attribute form, placing geometry by GPS or by tapping the map. Captures
  * are written to a tagged `geojson` collection layer in the store, so they
@@ -144,7 +134,7 @@ export function FieldCollectionDialog({
   const updateLayer = useAppStore((s) => s.updateLayer);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
 
-  const collectionLayers = useLayerSlices(selectCollectionLayers);
+  const collectionLayers = useLayerSlices(useMemo(createCollectionLayerSelector, []));
 
   // Field Collection runs as a *session* that is deliberately separate from
   // whether the dialog is open, and from whether collection layers exist: a

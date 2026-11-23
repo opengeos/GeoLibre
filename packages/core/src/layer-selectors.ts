@@ -211,10 +211,11 @@ export function useLayersWhen(active: boolean): GeoLibreLayer[] {
  * of the picked fields. While `layers` itself is unchanged (a camera move, a
  * dialog flag) the previous array is returned as is.
  *
- * Create the selector once, at module level, and subscribe with
+ * Create the selector once per component mount with `useMemo`, and subscribe with
  * {@link useLayerSlices}. Like {@link selectLayerSummaries}, its cache is shared
  * by every subscriber of that selector and re-checked against the current
- * layers, so sharing can cause a cache miss but never a stale slice.
+ * layers, so sharing can cause a cache miss but never a stale slice. Do not
+ * retain selectors at module scope: their caches keep full layer data alive.
  *
  * @param pick - Projects one layer onto its slice, or skips it.
  * @returns A selector returning one slice per picked layer, in store order.

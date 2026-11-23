@@ -1,9 +1,9 @@
 import {
-  createLayerSliceSelector,
-  useAppStore,
-  useLayerSlices,
-  type GeoLibreLayer,
-} from "@geolibre/core";
+  fieldsOf,
+  hasPolygons,
+  selectImportVectorLayers,
+} from "../../../lib/obia/obia-import-layers";
+import { useAppStore, useLayerSlices } from "@geolibre/core";
 import {
   OBIA_SEGMENT_ID_FIELD,
   applyObjectFeatures,
@@ -22,7 +22,6 @@ import {
   parseClassSchema,
   parseFeatureTable,
   parseLevelMapping,
-  polygonsOf,
   rasterizeObjects,
   withClasses,
 } from "../../../lib/obia/obia-import";
@@ -36,34 +35,6 @@ import { useObiaSession } from "../../../lib/obia/obia-session";
 import { ObiaEcognitionImport } from "./ObiaEcognitionImport";
 import { ObiaStatus } from "./ObiaFields";
 import { labelStylePatch } from "./ObiaTrainStep";
-
-/** The fields of a vector layer the import pickers list and read. */
-type ImportVectorLayer = Pick<GeoLibreLayer, "id" | "name" | "geojson">;
-
-/**
- * Vector layers with features in memory, other than OBIA objects layers, as
- * the `{ id, name, geojson }` the pickers read, so restyling a layer does not
- * re-render the panel.
- */
-const selectImportVectorLayers = createLayerSliceSelector((layer): ImportVectorLayer | null =>
-  layer.geojson && layer.metadata.obiaRole !== "objects"
-    ? { id: layer.id, name: layer.name, geojson: layer.geojson }
-    : null,
-);
-
-/** Whether a layer has a polygon feature (stops at the first). */
-function hasPolygons(layer: ImportVectorLayer): boolean {
-  return (layer.geojson?.features ?? []).some((f) => polygonsOf(f.geometry).length > 0);
-}
-
-/** Property names of a layer's first features. */
-function fieldsOf(layer: ImportVectorLayer | undefined): string[] {
-  const names = new Set<string>();
-  for (const feature of layer?.geojson?.features.slice(0, 50) ?? []) {
-    for (const key of Object.keys(feature.properties ?? {})) names.add(key);
-  }
-  return [...names];
-}
 
 const readText = async (accept: string, extensions: string[]) => {
   const file = await openLocalDataFileWithFallback({
@@ -90,7 +61,7 @@ export function ObiaImportPanel(): ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
 
-  const vectorLayers = useLayerSlices(selectImportVectorLayers);
+  const vectorLayers = useLayerSlices(useMemo(selectImportVectorLayers, []));
   const polygonLayers = useMemo(() => vectorLayers.filter(hasPolygons), [vectorLayers]);
   const [objectsFrom, setObjectsFrom] = useState("");
   const [idField, setIdField] = useState("");

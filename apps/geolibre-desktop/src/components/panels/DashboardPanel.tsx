@@ -108,9 +108,10 @@ function widgetToSpec(widget: DashboardWidget, type: ChartType): ChartSpec {
  * Layers that expose chartable attributes, as the `{ id, name }` the widget
  * editor's layer picker lists.
  */
-const selectChartableLayers = createLayerSliceSelector((layer) =>
-  isChartableLayer(layer) ? { id: layer.id, name: layer.name } : null,
-);
+const selectChartableLayers = () =>
+  createLayerSliceSelector((layer) =>
+    isChartableLayer(layer) ? { id: layer.id, name: layer.name } : null,
+  );
 
 /**
  * The Dashboard panel: a bottom-docked, resizable strip of chart widgets, each
@@ -189,7 +190,7 @@ export function DashboardPanel() {
   }, [widgets, selections]);
 
   // Layers that expose chartable attributes, for the editor's layer picker.
-  const chartableLayers = useLayerSlices(selectChartableLayers);
+  const chartableLayers = useLayerSlices(useMemo(selectChartableLayers, []));
 
   const startResize = (event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();

@@ -633,11 +633,28 @@ def test_failed_conversion_preserves_preexisting_output(monkeypatch, tmp_path: P
 
 
 def _wait_for_conversion_job(job_id: str, *, while_status: set[str]):
+    """Wait for a terminal job and its process tracking cleanup.
+
+    Args:
+        job_id: The conversion job to observe.
+        while_status: States that indicate the job is still in flight.
+
+    Returns:
+        The finished job state.
+
+    Raises:
+        AssertionError: If the job or its cleanup exceeds the bounded wait.
+    """
     import time
 
     for _ in range(200):
         state = conversion._job_state(job_id)
-        if state is not None and state.status not in while_status:
+        if (
+            state is not None
+            and state.status not in while_status
+            and job_id not in conversion._PROCESSES
+            and job_id not in conversion._CANCELLED
+        ):
             return state
         time.sleep(0.05)
     raise AssertionError(f"job {job_id} stayed in {while_status}")
@@ -677,3 +694,51 @@ def test_conversion_cancel_route_is_registered() -> None:
 
     response = TestClient(app).post("/conversion/jobs/not-a-job/cancel")
     assert response.status_code == 404
+
+
+@pytest.mark.parametrize("outcome", ["succeeded", "failed", "cancelled"])
+def test_pmtiles_parent_cleans_scratch_after_worker_exit(monkeypatch, tmp_path, outcome):
+    """Parent cleanup removes PMTiles intermediates even after a hard kill.
+
+    Args:
+        monkeypatch: The pytest patch fixture.
+        tmp_path: An isolated temporary directory.
+        outcome: The worker's terminal state to exercise.
+    """
+    import time
+
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    script = (
+        "import json, pathlib, sys, time\n"
+        "params = json.loads(sys.argv[1])\n"
+        "scratch = pathlib.Path(params['scratch_dir'])\n"
+        "(scratch / 'intermediate.parquet').write_bytes(b'partial dataset')\n"
+        "print('ready', flush=True)\n"
+    )
+    if outcome == "cancelled":
+        script += "time.sleep(30)\n"
+    elif outcome == "failed":
+        script += "raise RuntimeError('tiling failed')\n"
+    monkeypatch.setattr(conversion, "_PMTILES_SCRIPT", script)
+    monkeypatch.setattr(conversion, "_runtime_python", lambda: sys.executable)
+    monkeypatch.setattr(conversion.tempfile, "mkdtemp", lambda **kwargs: str(scratch))
+    job = conversion._start_job("vector-to-pmtiles", script, {}, "pmtiles")
+    try:
+        if outcome == "cancelled":
+            for _ in range(200):
+                if (scratch / "intermediate.parquet").exists():
+                    break
+                time.sleep(0.05)
+            assert (scratch / "intermediate.parquet").exists()
+            conversion.conversion_cancel(job.id)
+        for _ in range(200):
+            state = conversion._job_state(job.id)
+            if state.status not in {"pending", "running"} and not scratch.exists():
+                break
+            time.sleep(0.05)
+        assert state.status == outcome
+        assert not scratch.exists()
+        assert job.id not in conversion._PROCESSES
+    finally:
+        conversion.conversion_cancel(job.id)

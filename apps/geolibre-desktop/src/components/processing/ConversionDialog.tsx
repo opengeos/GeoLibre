@@ -1,3 +1,4 @@
+import { useSidecarJobCancellation } from "../../hooks/useSidecarJobCancellation";
 import { useAppStore, type ConversionToolKind } from "@geolibre/core";
 import {
   COG_WASM_COMPRESSIONS,
@@ -593,7 +594,6 @@ export function ConversionDialog() {
   const cogAbortRef = useRef<AbortController | null>(null);
   const cogSavingRef = useRef<AbortController | null>(null);
   const [cogConverting, setCogConverting] = useState(false);
-  const [cancellingJob, setCancellingJob] = useState(false);
 
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -1542,17 +1542,14 @@ export function ConversionDialog() {
   // A sidecar job (not a browser run, which the COG abort controller handles)
   // can be stopped on the server; polling then picks up its `cancelled` state.
   const sidecarJobRunning = Boolean(running && job && job.id !== BROWSER_JOB_ID);
-  const cancelSidecarJob = async () => {
-    if (!job || !sidecarJobRunning) return;
-    setCancellingJob(true);
-    try {
-      await cancelConversionJob(job.id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("toolbar.conversion.errorCancel"));
-    } finally {
-      setCancellingJob(false);
-    }
-  };
+  const { cancellingJob, cancelSidecarJob } = useSidecarJobCancellation(
+    job,
+    sidecarJobRunning,
+    cancelConversionJob,
+    setJob,
+    setError,
+    t("toolbar.conversion.errorCancel"),
+  );
 
   return (
     <Dialog

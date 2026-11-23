@@ -1,3 +1,5 @@
+import { downloadBytes } from "../../lib/download-bytes";
+import { useSidecarJobCancellation } from "../../hooks/useSidecarJobCancellation";
 import {
   shouldZoomToNewLayers,
   useAppStore,
@@ -168,22 +170,6 @@ const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
 const PANEL_MIN_W = 560;
 const PANEL_MIN_H = 400;
 
-/** Save bytes to the user's downloads via a transient object URL. */
-function downloadBytes(bytes: Uint8Array, filename: string): void {
-  // Cast required: TS types Uint8Array as Uint8Array<ArrayBufferLike>, which is
-  // not directly assignable to BlobPart under this lib (mirrors DesktopShell).
-  const url = URL.createObjectURL(new Blob([bytes as BlobPart]));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  // Defer revoke so the browser can fetch the blob first (Firefox races and
-  // silently drops the download if the URL is revoked synchronously).
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
 export function ProcessingDialog({
   mapControllerRef,
   onAddRaster,
@@ -232,7 +218,6 @@ export function ProcessingDialog({
   // terminal job (never "pending"/"running"), so without this flag the Run
   // button would stay enabled mid-execution and allow concurrent runs.
   const [runningLocal, setRunningLocal] = useState(false);
-  const [cancellingJob, setCancellingJob] = useState(false);
   // Transient "Copied!" state for the share-link button, cleared after 2s.
   const [linkCopied, setLinkCopied] = useState(false);
   const linkCopyTimer = useRef<number | null>(null);
@@ -1732,17 +1717,14 @@ export function ProcessingDialog({
   // Cancelling kills the tool on the sidecar; polling then picks up the
   // job's `cancelled` state.
   const sidecarJobRunning = !runningLocal && Boolean(job && RUNNING_JOB_STATUSES.has(job.status));
-  const cancelSidecarJob = async () => {
-    if (!job || !sidecarJobRunning) return;
-    setCancellingJob(true);
-    try {
-      await cancelWhiteboxJob(job.id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("processing.whitebox.errorCancel"));
-    } finally {
-      setCancellingJob(false);
-    }
-  };
+  const { cancellingJob, cancelSidecarJob } = useSidecarJobCancellation(
+    job,
+    sidecarJobRunning,
+    cancelWhiteboxJob,
+    setJob,
+    setError,
+    t("processing.whitebox.errorCancel"),
+  );
   const serverBusy = loadingTools || startingServer || stoppingServer;
 
   if (!open) return null;

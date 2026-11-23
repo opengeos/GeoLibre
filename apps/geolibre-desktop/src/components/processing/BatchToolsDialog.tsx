@@ -100,11 +100,12 @@ type BatchSourceLayer = Pick<GeoLibreLayer, "id" | "name"> & {
  * input list, layer pickers and field sampling read, so restyling a layer
  * does not re-render the panel.
  */
-const selectBatchSourceLayers = createLayerSliceSelector((layer): BatchSourceLayer | null =>
-  layer.type === "geojson" && layer.geojson
-    ? { id: layer.id, name: layer.name, geojson: layer.geojson }
-    : null,
-);
+const selectBatchSourceLayers = () =>
+  createLayerSliceSelector((layer): BatchSourceLayer | null =>
+    layer.type === "geojson" && layer.geojson
+      ? { id: layer.id, name: layer.name, geojson: layer.geojson }
+      : null,
+  );
 
 /** GeoJSON layers usable as inputs, optionally filtered by geometry family. */
 function geojsonLayers(
@@ -223,7 +224,7 @@ function LogView({ log }: { log: string[] }): ReactElement {
 /** Batch mode: one tool over many input layers with shared parameters. */
 function BatchPanel({ mapControllerRef }: BatchToolsDialogProps): ReactElement {
   const { t } = useTranslation();
-  const layers = useLayerSlices(selectBatchSourceLayers);
+  const layers = useLayerSlices(useMemo(selectBatchSourceLayers, []));
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const duckdb = useMemo(() => createDuckDbCapability(), []);
 
