@@ -17,7 +17,9 @@ import {
   checkDesktopSignedUpdate,
   compareVersions,
   fetchLatestRelease,
+  formatVersion,
   installDesktopSignedUpdate,
+  isDesktopSignedUpdateInstalling,
   IS_STORE_BUILD,
   UPDATE_URL,
   UpdateCheckError,
@@ -71,7 +73,9 @@ export function AboutDialog({
   const [latestUrl, setLatestUrl] = useState<string>(UPDATE_URL);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [signedUpdateAvailable, setSignedUpdateAvailable] = useState(false);
-  const [installingSignedUpdate, setInstallingSignedUpdate] = useState(false);
+  const [installingSignedUpdate, setInstallingSignedUpdate] = useState(() =>
+    isDesktopSignedUpdateInstalling(),
+  );
   const abortRef = useRef<AbortController | null>(null);
   const handledCheckForUpdatesRequestRef = useRef(0);
   const wasOpenRef = useRef(false);
@@ -86,7 +90,7 @@ export function AboutDialog({
     setLatestUrl(UPDATE_URL);
     setUpdateError(null);
     setSignedUpdateAvailable(false);
-    setInstallingSignedUpdate(false);
+    setInstallingSignedUpdate(isDesktopSignedUpdateInstalling());
   }, []);
 
   const describeUpdateError = useCallback(
@@ -125,31 +129,57 @@ export function AboutDialog({
     setLatestUrl(UPDATE_URL);
     setUpdateError(null);
 
-    try {
-      const [release, signed] = await Promise.all([
-        fetchLatestRelease(controller.signal),
-        checkDesktopSignedUpdate(),
-      ]);
-      if (controller.signal.aborted) return;
+    const [releaseResult, signedResult] = await Promise.allSettled([
+      fetchLatestRelease(controller.signal),
+      checkDesktopSignedUpdate(),
+    ]);
+    if (controller.signal.aborted) return;
+
+    const signed = signedResult.status === "fulfilled" ? signedResult.value : null;
+    const hasSignedUpdate = Boolean(signed?.configured && signed.available);
+
+    if (releaseResult.status === "fulfilled") {
+      const release = releaseResult.value;
       setLatestVersion(release.version);
       setLatestNotes(release.notes);
       setLatestUrl(release.url);
-      setSignedUpdateAvailable(Boolean(signed?.configured && signed.available));
-      setUpdateStatus(compareVersions(APP_VERSION, release.version) < 0 ? "available" : "current");
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") return;
-      console.error("Failed to check for updates", error);
-      setUpdateStatus("error");
-      setUpdateError(describeUpdateError(error));
+      setSignedUpdateAvailable(hasSignedUpdate);
+      setUpdateStatus(
+        compareVersions(APP_VERSION, release.version) < 0 || hasSignedUpdate
+          ? "available"
+          : "current",
+      );
+      return;
     }
+
+    const error = releaseResult.reason;
+    if (error instanceof Error && error.name === "AbortError") return;
+
+    if (hasSignedUpdate && signed?.version) {
+      setLatestVersion(formatVersion(signed.version));
+      setLatestNotes(signed.notes ?? "");
+      setLatestUrl(UPDATE_URL);
+      setSignedUpdateAvailable(true);
+      setUpdateStatus("available");
+      return;
+    }
+
+    console.error("Failed to check for updates", error);
+    setUpdateStatus("error");
+    setUpdateError(describeUpdateError(error));
   };
 
   const handleInstallSignedUpdate = async () => {
-    if (IS_STORE_BUILD || installingSignedUpdate) return;
+    if (IS_STORE_BUILD || installingSignedUpdate || isDesktopSignedUpdateInstalling()) return;
     setInstallingSignedUpdate(true);
     setUpdateError(null);
     try {
-      await installDesktopSignedUpdate();
+      const installed = await installDesktopSignedUpdate();
+      if (!installed) {
+        setInstallingSignedUpdate(false);
+        setSignedUpdateAvailable(false);
+        setUpdateError(t("updates.noSignedUpdateAvailable"));
+      }
     } catch (error) {
       console.error("Failed to install signed desktop update", error);
       setUpdateError(t("updates.installSignedError"));

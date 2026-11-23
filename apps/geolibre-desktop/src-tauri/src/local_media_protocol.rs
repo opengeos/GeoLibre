@@ -1,5 +1,6 @@
 //! Pooled local tile and COG streaming over Tauri custom URI schemes
-//! (`mbtiles://`, `pmtiles://`, and `local-cog://`) with HTTP `Range` support.
+//! (`mbtiles://`, `local-pmtiles://`, and `local-cog://`) with HTTP `Range`
+//! support.
 //!
 //! Replacing per-tile SQLite open/close and JSON `Vec<u8>` IPC with bounded
 //! LRU connection/file pools and binary HTTP responses eliminates connection
@@ -12,7 +13,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 use tauri::http::{header, Request, Response, StatusCode};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_fs::FsExt;
@@ -21,10 +22,80 @@ use tauri_plugin_fs::FsExt;
 const MAX_POOLED_MBTILES: usize = 16;
 /// Maximum number of simultaneously open read-only PMTiles/COG file handles.
 const MAX_POOLED_FILES: usize = 24;
+/// Idle TTL after which cached handles are evicted so Windows files do not stay
+/// locked indefinitely after a layer is closed.
+const DEFAULT_POOL_IDLE_TTL: Duration = Duration::from_secs(60);
 /// Maximum response body size for a non-Range `200 OK` request (64 MiB).
 const MAX_UNRANGED_MEDIA_BYTES: u64 = 64 * 1024 * 1024;
 /// Maximum byte length served by a single HTTP `Range` request (32 MiB).
 const MAX_RANGE_CHUNK_BYTES: u64 = 32 * 1024 * 1024;
+
+/// Platform file identity captured from an opened file or stat call so
+/// replacing a file at the same path with identical length and mtime still
+/// invalidates cached readers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FileIdentity {
+    len: u64,
+    modified: Option<SystemTime>,
+    #[cfg(unix)]
+    dev: u64,
+    #[cfg(unix)]
+    ino: u64,
+}
+
+impl FileIdentity {
+    fn from_metadata(meta: &fs::Metadata) -> Self {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            Self {
+                len: meta.len(),
+                modified: meta.modified().ok(),
+                dev: meta.dev(),
+                ino: meta.ino(),
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            Self {
+                len: meta.len(),
+                modified: meta.modified().ok(),
+            }
+        }
+    }
+}
+
+/// Open `canonical` as a regular file and verify that the opened file descriptor
+/// still matches the canonicalized, non-symlink pathname that passed the scope
+/// check.
+fn open_verified_regular_file(canonical: &Path) -> Result<(File, FileIdentity), String> {
+    let link_meta = fs::symlink_metadata(canonical)
+        .map_err(|error| format!("Could not inspect local media file: {error}"))?;
+    if link_meta.file_type().is_symlink() || !link_meta.is_file() {
+        return Err("Local media path is not a regular file".to_string());
+    }
+    let expected = FileIdentity::from_metadata(&link_meta);
+
+    let file = File::open(canonical)
+        .map_err(|error| format!("Could not open local media file: {error}"))?;
+    let opened_meta = file
+        .metadata()
+        .map_err(|error| format!("Could not inspect opened local media handle: {error}"))?;
+    if !opened_meta.is_file() {
+        return Err("Opened local media handle is not a regular file".to_string());
+    }
+    let actual = FileIdentity::from_metadata(&opened_meta);
+    #[cfg(unix)]
+    if actual.dev != expected.dev || actual.ino != expected.ino {
+        return Err(
+            "Local media file changed on disk between authorization and open".to_string(),
+        );
+    }
+    #[cfg(not(unix))]
+    let _ = expected;
+
+    Ok((file, actual))
+}
 
 /// A pooled read-only MBTiles SQLite connection with its cached tile scheme.
 pub(crate) struct PooledMbtiles {
@@ -35,16 +106,20 @@ pub(crate) struct PooledMbtiles {
 struct MbtilesPoolEntry {
     handle: Arc<PooledMbtiles>,
     last_used: u64,
-    file_len: u64,
-    modified: Option<SystemTime>,
+    last_used_at: Instant,
+    identity: FileIdentity,
 }
 
-/// Bounded LRU pool of open read-only MBTiles SQLite connections keyed by
-/// canonical filesystem path.
+/// Bounded LRU + idle-TTL pool of open read-only MBTiles SQLite connections
+/// keyed by canonical filesystem path.
 pub(crate) struct MbtilesConnectionPool {
     capacity: usize,
+    idle_ttl: Duration,
     tick: AtomicU64,
     entries: Mutex<HashMap<PathBuf, MbtilesPoolEntry>>,
+    /// Serializes cache-miss opens so concurrent first reads of the same file
+    /// coalesce into a single SQLite connection and respect `capacity`.
+    open_lock: Mutex<()>,
 }
 
 impl Default for MbtilesConnectionPool {
@@ -55,36 +130,76 @@ impl Default for MbtilesConnectionPool {
 
 impl MbtilesConnectionPool {
     pub(crate) fn with_capacity(capacity: usize) -> Self {
+        Self::with_capacity_and_ttl(capacity, DEFAULT_POOL_IDLE_TTL)
+    }
+
+    pub(crate) fn with_capacity_and_ttl(capacity: usize, idle_ttl: Duration) -> Self {
         Self {
             capacity: capacity.max(1),
+            idle_ttl,
             tick: AtomicU64::new(1),
             entries: Mutex::new(HashMap::new()),
+            open_lock: Mutex::new(()),
         }
+    }
+
+    fn evict_expired(entries: &mut HashMap<PathBuf, MbtilesPoolEntry>, now: Instant, ttl: Duration) {
+        entries.retain(|_, entry| now.saturating_duration_since(entry.last_used_at) <= ttl);
     }
 
     pub(crate) fn get_or_open(&self, path: &str) -> Result<Arc<PooledMbtiles>, String> {
         let canonical = canonicalize_allowed_mbtiles(path)?;
-        let metadata = fs::metadata(&canonical)
-            .map_err(|error| format!("Could not inspect MBTiles file: {error}"))?;
-        let file_len = metadata.len();
-        let modified = metadata.modified().ok();
+        self.get_or_open_canonical(&canonical)
+    }
 
-        let now = self.tick.fetch_add(1, Ordering::Relaxed);
+    pub(crate) fn get_or_open_canonical(
+        &self,
+        canonical: &Path,
+    ) -> Result<Arc<PooledMbtiles>, String> {
+        let metadata = fs::metadata(canonical)
+            .map_err(|error| format!("Could not inspect MBTiles file: {error}"))?;
+        let identity = FileIdentity::from_metadata(&metadata);
+        let now_tick = self.tick.fetch_add(1, Ordering::Relaxed);
+        let now_instant = Instant::now();
+
         {
             let mut guard = self
                 .entries
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
-            if let Some(entry) = guard.get_mut(&canonical) {
-                if entry.file_len == file_len && entry.modified == modified {
-                    entry.last_used = now;
+            Self::evict_expired(&mut guard, now_instant, self.idle_ttl);
+            if let Some(entry) = guard.get_mut(canonical) {
+                if entry.identity == identity {
+                    entry.last_used = now_tick;
+                    entry.last_used_at = now_instant;
                     return Ok(Arc::clone(&entry.handle));
                 }
-                guard.remove(&canonical);
+                guard.remove(canonical);
             }
         }
 
-        let connection = Connection::open_with_flags(&canonical, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        // Coalesce concurrent cache misses for the same archive.
+        let _open_guard = self
+            .open_lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        {
+            let mut guard = self
+                .entries
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(entry) = guard.get_mut(canonical) {
+                if entry.identity == identity {
+                    entry.last_used = now_tick;
+                    entry.last_used_at = now_instant;
+                    return Ok(Arc::clone(&entry.handle));
+                }
+                guard.remove(canonical);
+            }
+        }
+
+        let (_verified_file, verified_identity) = open_verified_regular_file(canonical)?;
+        let connection = Connection::open_with_flags(canonical, OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(|error| format!("Could not open MBTiles file: {error}"))?;
         let scheme = crate::read_metadata_value(&connection, "scheme")?
             .map(|value| value.to_ascii_lowercase())
@@ -98,22 +213,25 @@ impl MbtilesConnectionPool {
             .entries
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if guard.len() >= self.capacity && !guard.contains_key(&canonical) {
+        Self::evict_expired(&mut guard, Instant::now(), self.idle_ttl);
+        while guard.len() >= self.capacity && !guard.contains_key(canonical) {
             if let Some(lru_key) = guard
                 .iter()
                 .min_by_key(|(_, entry)| entry.last_used)
                 .map(|(key, _)| key.clone())
             {
                 guard.remove(&lru_key);
+            } else {
+                break;
             }
         }
         guard.insert(
-            canonical,
+            canonical.to_path_buf(),
             MbtilesPoolEntry {
                 handle: Arc::clone(&handle),
-                last_used: now,
-                file_len,
-                modified,
+                last_used: now_tick,
+                last_used_at: Instant::now(),
+                identity: verified_identity,
             },
         );
         Ok(handle)
@@ -123,7 +241,21 @@ impl MbtilesConnectionPool {
         if z > crate::MAX_MBTILES_ZOOM {
             return Err("Tile zoom level is too large".to_string());
         }
-        let pooled = self.get_or_open(path)?;
+        let canonical = canonicalize_allowed_mbtiles(path)?;
+        self.read_tile_canonical(&canonical, z, x, y)
+    }
+
+    pub(crate) fn read_tile_canonical(
+        &self,
+        canonical: &Path,
+        z: u32,
+        x: u32,
+        y: u32,
+    ) -> Result<Vec<u8>, String> {
+        if z > crate::MAX_MBTILES_ZOOM {
+            return Err("Tile zoom level is too large".to_string());
+        }
+        let pooled = self.get_or_open_canonical(canonical)?;
         let tile_row = if pooled.scheme == "xyz" {
             i64::from(y)
         } else {
@@ -168,21 +300,23 @@ impl MbtilesConnectionPool {
 
 struct PooledFileHandle {
     file: Mutex<File>,
-    len: u64,
-    modified: Option<SystemTime>,
+    identity: FileIdentity,
 }
 
 struct FilePoolEntry {
     handle: Arc<PooledFileHandle>,
     last_used: u64,
+    last_used_at: Instant,
 }
 
-/// Bounded LRU pool of open read-only local files for byte-range streaming
-/// (`pmtiles://` and `local-cog://`).
+/// Bounded LRU + idle-TTL pool of open read-only local files for byte-range
+/// streaming (`local-pmtiles://` and `local-cog://`).
 pub(crate) struct LocalFilePool {
     capacity: usize,
+    idle_ttl: Duration,
     tick: AtomicU64,
     entries: Mutex<HashMap<PathBuf, FilePoolEntry>>,
+    open_lock: Mutex<()>,
 }
 
 impl Default for LocalFilePool {
@@ -216,16 +350,21 @@ pub(crate) enum RangeParseResult {
 
 /// Parse an RFC 9110 single byte-range header (`bytes=start-end`, `bytes=start-`,
 /// or `bytes=-suffix`) against a resource of `total_len` bytes.
+///
+/// Per RFC 9110 section 14.1.2, range unit names are case-insensitive and
+/// unknown units are ignored (treated as `RangeParseResult::None` so the server
+/// falls back to a full `200 OK` response).
 pub(crate) fn parse_http_byte_range(header_value: Option<&str>, total_len: u64) -> RangeParseResult {
     let Some(raw) = header_value.map(str::trim).filter(|value| !value.is_empty()) else {
         return RangeParseResult::None;
     };
-    let Some(spec) = raw
-        .strip_prefix("bytes=")
-        .or_else(|| raw.strip_prefix("BYTES="))
-    else {
-        return RangeParseResult::Unsatisfiable;
+    let Some((unit, spec)) = raw.split_once('=') else {
+        return RangeParseResult::None;
     };
+    if !unit.trim().eq_ignore_ascii_case("bytes") {
+        return RangeParseResult::None;
+    }
+    let spec = spec.trim();
     // Multi-range requests are not supported; reject cleanly with 416.
     if spec.contains(',') || total_len == 0 {
         return RangeParseResult::Unsatisfiable;
@@ -273,66 +412,113 @@ pub(crate) fn parse_http_byte_range(header_value: Option<&str>, total_len: u64) 
 
 impl LocalFilePool {
     pub(crate) fn with_capacity(capacity: usize) -> Self {
+        Self::with_capacity_and_ttl(capacity, DEFAULT_POOL_IDLE_TTL)
+    }
+
+    pub(crate) fn with_capacity_and_ttl(capacity: usize, idle_ttl: Duration) -> Self {
         Self {
             capacity: capacity.max(1),
+            idle_ttl,
             tick: AtomicU64::new(1),
             entries: Mutex::new(HashMap::new()),
+            open_lock: Mutex::new(()),
         }
     }
 
+    fn evict_expired(entries: &mut HashMap<PathBuf, FilePoolEntry>, now: Instant, ttl: Duration) {
+        entries.retain(|_, entry| now.saturating_duration_since(entry.last_used_at) <= ttl);
+    }
+
+    fn invalidate(&self, canonical: &Path) {
+        let mut guard = self
+            .entries
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        guard.remove(canonical);
+    }
+
     fn get_or_open(&self, canonical: &Path) -> Result<Arc<PooledFileHandle>, String> {
-        let metadata = fs::metadata(canonical)
+        let link_meta = fs::symlink_metadata(canonical)
             .map_err(|error| format!("Could not inspect local media file: {error}"))?;
-        if !metadata.is_file() {
+        if link_meta.file_type().is_symlink() || !link_meta.is_file() {
             return Err("Local media path is not a regular file".to_string());
         }
-        let len = metadata.len();
-        let modified = metadata.modified().ok();
-        let now = self.tick.fetch_add(1, Ordering::Relaxed);
+        let current_identity = FileIdentity::from_metadata(&link_meta);
+        let now_tick = self.tick.fetch_add(1, Ordering::Relaxed);
+        let now_instant = Instant::now();
 
         {
             let mut guard = self
                 .entries
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
+            Self::evict_expired(&mut guard, now_instant, self.idle_ttl);
             if let Some(entry) = guard.get_mut(canonical) {
-                if entry.handle.len == len && entry.handle.modified == modified {
-                    entry.last_used = now;
+                if entry.handle.identity == current_identity {
+                    entry.last_used = now_tick;
+                    entry.last_used_at = now_instant;
                     return Ok(Arc::clone(&entry.handle));
                 }
                 guard.remove(canonical);
             }
         }
 
-        let file = File::open(canonical)
-            .map_err(|error| format!("Could not open local media file: {error}"))?;
+        // Coalesce concurrent cache misses for the same path.
+        let _open_guard = self
+            .open_lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        {
+            let mut guard = self
+                .entries
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(entry) = guard.get_mut(canonical) {
+                if entry.handle.identity == current_identity {
+                    entry.last_used = now_tick;
+                    entry.last_used_at = now_instant;
+                    return Ok(Arc::clone(&entry.handle));
+                }
+                guard.remove(canonical);
+            }
+        }
+
+        let (file, identity) = open_verified_regular_file(canonical)?;
         let handle = Arc::new(PooledFileHandle {
             file: Mutex::new(file),
-            len,
-            modified,
+            identity,
         });
 
         let mut guard = self
             .entries
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if guard.len() >= self.capacity && !guard.contains_key(canonical) {
+        Self::evict_expired(&mut guard, Instant::now(), self.idle_ttl);
+        while guard.len() >= self.capacity && !guard.contains_key(canonical) {
             if let Some(lru_key) = guard
                 .iter()
                 .min_by_key(|(_, entry)| entry.last_used)
                 .map(|(key, _)| key.clone())
             {
                 guard.remove(&lru_key);
+            } else {
+                break;
             }
         }
         guard.insert(
             canonical.to_path_buf(),
             FilePoolEntry {
                 handle: Arc::clone(&handle),
-                last_used: now,
+                last_used: now_tick,
+                last_used_at: Instant::now(),
             },
         );
         Ok(handle)
+    }
+
+    pub(crate) fn head_len(&self, canonical: &Path) -> Result<u64, String> {
+        let handle = self.get_or_open(canonical)?;
+        Ok(handle.identity.len)
     }
 
     pub(crate) fn read_range(
@@ -340,39 +526,12 @@ impl LocalFilePool {
         canonical: &Path,
         range_header: Option<&str>,
     ) -> Result<RangeReadResponse, String> {
-        let handle = self.get_or_open(canonical)?;
-        let total_len = handle.len;
+        for attempt in 0..2 {
+            let handle = self.get_or_open(canonical)?;
+            let total_len = handle.identity.len;
 
-        match parse_http_byte_range(range_header, total_len) {
-            RangeParseResult::Unsatisfiable => Ok(RangeReadResponse {
-                status: StatusCode::RANGE_NOT_SATISFIABLE,
-                bytes: Vec::new(),
-                content_range: Some(format!("bytes */{total_len}")),
-                total_len,
-            }),
-            RangeParseResult::Satisfiable(range) => {
-                let requested_len = range.end - range.start + 1;
-                let clamped_len = requested_len.min(MAX_RANGE_CHUNK_BYTES);
-                let actual_end = range.start + clamped_len - 1;
-                let bytes = read_file_slice(&handle.file, range.start, clamped_len)?;
-                let final_end = if bytes.is_empty() {
-                    range.start
-                } else {
-                    range.start + (bytes.len() as u64) - 1
-                };
-                Ok(RangeReadResponse {
-                    status: StatusCode::PARTIAL_CONTENT,
-                    bytes,
-                    content_range: Some(format!(
-                        "bytes {}-{}/{total_len}",
-                        range.start,
-                        final_end.min(actual_end)
-                    )),
-                    total_len,
-                })
-            }
-            RangeParseResult::None => {
-                if total_len > MAX_UNRANGED_MEDIA_BYTES {
+            match parse_http_byte_range(range_header, total_len) {
+                RangeParseResult::Unsatisfiable => {
                     return Ok(RangeReadResponse {
                         status: StatusCode::RANGE_NOT_SATISFIABLE,
                         bytes: Vec::new(),
@@ -380,15 +539,58 @@ impl LocalFilePool {
                         total_len,
                     });
                 }
-                let bytes = read_file_slice(&handle.file, 0, total_len)?;
-                Ok(RangeReadResponse {
-                    status: StatusCode::OK,
-                    bytes,
-                    content_range: None,
-                    total_len,
-                })
+                RangeParseResult::Satisfiable(range) => {
+                    let requested_len = range.end - range.start + 1;
+                    let clamped_len = requested_len.min(MAX_RANGE_CHUNK_BYTES);
+                    let bytes = read_file_slice(&handle.file, range.start, clamped_len)?;
+                    if (bytes.len() as u64) < clamped_len {
+                        // File was truncated concurrently; invalidate cached handle
+                        // and retry once against the refreshed size.
+                        self.invalidate(canonical);
+                        if attempt == 0 {
+                            continue;
+                        }
+                        if bytes.is_empty() {
+                            let refreshed_len = self
+                                .get_or_open(canonical)
+                                .map(|h| h.identity.len)
+                                .unwrap_or(0);
+                            return Ok(RangeReadResponse {
+                                status: StatusCode::RANGE_NOT_SATISFIABLE,
+                                bytes: Vec::new(),
+                                content_range: Some(format!("bytes */{refreshed_len}")),
+                                total_len: refreshed_len,
+                            });
+                        }
+                    }
+                    let final_end = range.start + (bytes.len() as u64) - 1;
+                    return Ok(RangeReadResponse {
+                        status: StatusCode::PARTIAL_CONTENT,
+                        bytes,
+                        content_range: Some(format!("bytes {}-{}/{total_len}", range.start, final_end)),
+                        total_len,
+                    });
+                }
+                RangeParseResult::None => {
+                    if total_len > MAX_UNRANGED_MEDIA_BYTES {
+                        return Ok(RangeReadResponse {
+                            status: StatusCode::RANGE_NOT_SATISFIABLE,
+                            bytes: Vec::new(),
+                            content_range: Some(format!("bytes */{total_len}")),
+                            total_len,
+                        });
+                    }
+                    let bytes = read_file_slice(&handle.file, 0, total_len)?;
+                    return Ok(RangeReadResponse {
+                        status: StatusCode::OK,
+                        bytes,
+                        content_range: None,
+                        total_len,
+                    });
+                }
             }
         }
+        Err("Local media file changed concurrently while reading".to_string())
     }
 
     #[cfg(test)]
@@ -470,9 +672,10 @@ fn canonicalize_scoped_media_path(
             "Refusing to stream \"{path}\": resolves to a disallowed file"
         ));
     }
-    let in_fs_scope = app.fs_scope().is_allowed(path) || app.fs_scope().is_allowed(&canonical);
-    let in_asset_scope = app.asset_protocol_scope().is_allowed(path)
-        || app.asset_protocol_scope().is_allowed(&canonical);
+    // Check ONLY the resolved canonical path so a symlink inside an authorized
+    // directory cannot escape scope to an unauthorized target.
+    let in_fs_scope = app.fs_scope().is_allowed(&canonical);
+    let in_asset_scope = app.asset_protocol_scope().is_allowed(&canonical);
     if !in_fs_scope && !in_asset_scope {
         return Err(format!(
             "Refusing to stream \"{path}\": file has not been authorized by user selection"
@@ -481,29 +684,93 @@ fn canonicalize_scoped_media_path(
     Ok(canonical)
 }
 
+/// Check whether `origin` belongs to GeoLibre's bundled desktop/mobile webview
+/// (or local Vite dev server in debug builds). Remote documents loaded in OAuth
+/// popups or iframes are always rejected.
+pub(crate) fn is_bundled_app_origin(origin: &str) -> bool {
+    let trimmed = origin.trim().trim_end_matches('/');
+    if matches!(
+        trimmed,
+        "tauri://localhost" | "https://tauri.localhost" | "http://tauri.localhost"
+    ) {
+        return true;
+    }
+    #[cfg(debug_assertions)]
+    {
+        if let Ok(parsed) = tauri::Url::parse(trimmed) {
+            if parsed.scheme() == "http"
+                && matches!(parsed.host_str(), Some("localhost" | "127.0.0.1"))
+                && parsed.port() == Some(5173)
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Validate the requesting document origin from `Origin` or `Referer` headers.
+/// Returns `Ok(Some(origin))` when a validated `Origin` header should be echoed
+/// in `Access-Control-Allow-Origin`, `Ok(None)` when neither header was sent by
+/// the webview, or `Err` when a non-bundled remote origin attempted access.
+fn validated_request_origin(request: &Request<Vec<u8>>) -> Result<Option<String>, String> {
+    if let Some(origin_val) = request
+        .headers()
+        .get(header::ORIGIN)
+        .and_then(|v| v.to_str().ok())
+    {
+        if is_bundled_app_origin(origin_val) {
+            return Ok(Some(origin_val.trim().to_string()));
+        }
+        return Err(format!(
+            "Refusing local media request from non-bundled origin \"{origin_val}\""
+        ));
+    }
+    if let Some(referer_val) = request
+        .headers()
+        .get(header::REFERER)
+        .and_then(|v| v.to_str().ok())
+    {
+        let referer_origin = tauri::Url::parse(referer_val)
+            .ok()
+            .map(|u| u.origin().ascii_serialization());
+        if let Some(origin) = referer_origin {
+            if is_bundled_app_origin(&origin) {
+                return Ok(None);
+            }
+        }
+        return Err("Refusing local media request from non-bundled referer".to_string());
+    }
+    Ok(None)
+}
+
 fn query_param_path(url: &tauri::Url) -> Option<String> {
     url.query_pairs()
         .find(|(key, _)| key == "path")
         .map(|(_, value)| value.into_owned())
 }
 
-fn parse_mbtiles_uri(uri: &str) -> Result<(String, u32, u32, u32), String> {
+pub(crate) fn parse_mbtiles_uri(uri: &str) -> Result<(String, u32, u32, u32), String> {
     let url = tauri::Url::parse(uri).map_err(|error| format!("Invalid mbtiles URI: {error}"))?;
     let path = query_param_path(&url).ok_or_else(|| "Missing path query parameter".to_string())?;
     let segments: Vec<&str> = url
         .path_segments()
         .map(|segments| segments.filter(|s| !s.is_empty()).collect())
         .unwrap_or_default();
-    if segments.len() != 3 {
-        return Err("Expected mbtiles://tile/{z}/{x}/{y}?path=...".to_string());
-    }
-    let z = segments[0]
+    // Accept both platform-neutral `http://mbtiles.localhost/tile/{z}/{x}/{y}`
+    // / `mbtiles://localhost/tile/{z}/{x}/{y}` and legacy `mbtiles://tile/{z}/{x}/{y}`.
+    let coords: &[&str] = match segments.as_slice() {
+        ["tile", z, x, y] => &[z, x, y],
+        [z, x, y] if url.host_str() == Some("tile") => &[z, x, y],
+        _ => return Err("Expected mbtiles tile URL with /tile/{z}/{x}/{y}?path=...".to_string()),
+    };
+    let z = coords[0]
         .parse::<u32>()
         .map_err(|_| "Invalid z coordinate".to_string())?;
-    let x = segments[1]
+    let x = coords[1]
         .parse::<u32>()
         .map_err(|_| "Invalid x coordinate".to_string())?;
-    let y = segments[2]
+    let y = coords[2]
         .parse::<u32>()
         .map_err(|_| "Invalid y coordinate".to_string())?;
     Ok((path, z, x, y))
@@ -521,27 +788,47 @@ fn sniff_tile_content_type(bytes: &[u8]) -> &'static str {
     }
 }
 
-fn error_response(status: StatusCode, message: &str) -> Response<Vec<u8>> {
-    Response::builder()
-        .status(status)
-        .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
-        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-        .body(message.as_bytes().to_vec())
-        .unwrap_or_else(|_| Response::new(Vec::new()))
+fn apply_cors_headers(
+    mut builder: tauri::http::response::Builder,
+    allowed_origin: Option<&str>,
+) -> tauri::http::response::Builder {
+    if let Some(origin) = allowed_origin {
+        builder = builder
+            .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin)
+            .header(header::VARY, "Origin");
+    }
+    builder
 }
 
-fn cors_preflight_response() -> Response<Vec<u8>> {
-    Response::builder()
-        .status(StatusCode::NO_CONTENT)
-        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-        .header(header::ACCESS_CONTROL_ALLOW_METHODS, "GET, HEAD, OPTIONS")
-        .header(header::ACCESS_CONTROL_ALLOW_HEADERS, "Range, Content-Type")
-        .header(
-            header::ACCESS_CONTROL_EXPOSE_HEADERS,
-            "Accept-Ranges, Content-Range, Content-Length",
-        )
-        .body(Vec::new())
-        .unwrap_or_else(|_| Response::new(Vec::new()))
+fn error_response(
+    status: StatusCode,
+    message: &str,
+    allowed_origin: Option<&str>,
+) -> Response<Vec<u8>> {
+    apply_cors_headers(
+        Response::builder()
+            .status(status)
+            .header(header::CONTENT_TYPE, "text/plain; charset=utf-8"),
+        allowed_origin,
+    )
+    .body(message.as_bytes().to_vec())
+    .unwrap_or_else(|_| Response::new(Vec::new()))
+}
+
+fn cors_preflight_response(allowed_origin: Option<&str>) -> Response<Vec<u8>> {
+    apply_cors_headers(
+        Response::builder()
+            .status(StatusCode::NO_CONTENT)
+            .header(header::ACCESS_CONTROL_ALLOW_METHODS, "GET, HEAD, OPTIONS")
+            .header(header::ACCESS_CONTROL_ALLOW_HEADERS, "Range, Content-Type")
+            .header(
+                header::ACCESS_CONTROL_EXPOSE_HEADERS,
+                "Accept-Ranges, Content-Range, Content-Length",
+            ),
+        allowed_origin,
+    )
+    .body(Vec::new())
+    .unwrap_or_else(|_| Response::new(Vec::new()))
 }
 
 /// Handle a `mbtiles://` custom protocol request asynchronously on the blocking pool.
@@ -550,41 +837,57 @@ pub(crate) fn handle_mbtiles_protocol(
     request: Request<Vec<u8>>,
     responder: tauri::UriSchemeResponder,
 ) {
+    let allowed_origin = match validated_request_origin(&request) {
+        Ok(origin) => origin,
+        Err(error) => {
+            responder.respond(error_response(StatusCode::FORBIDDEN, &error, None));
+            return;
+        }
+    };
     if request.method() == tauri::http::Method::OPTIONS {
-        responder.respond(cors_preflight_response());
+        responder.respond(cors_preflight_response(allowed_origin.as_deref()));
         return;
     }
     let uri = request.uri().to_string();
     tauri::async_runtime::spawn_blocking(move || {
+        let origin_ref = allowed_origin.as_deref();
         let response = match parse_mbtiles_uri(&uri) {
             Ok((path, z, x, y)) => {
-                let pools = app.state::<LocalMediaPools>();
-                match pools.mbtiles.read_tile(&path, z, x, y) {
-                    Ok(bytes) if bytes.is_empty() => Response::builder()
-                        .status(StatusCode::NO_CONTENT)
-                        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-                        .body(Vec::new())
-                        .unwrap_or_else(|_| Response::new(Vec::new())),
-                    Ok(bytes) => {
-                        let content_type = sniff_tile_content_type(&bytes);
-                        Response::builder()
-                            .status(StatusCode::OK)
-                            .header(header::CONTENT_TYPE, content_type)
-                            .header(header::CACHE_CONTROL, "private, max-age=300")
-                            .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-                            .body(bytes)
-                            .unwrap_or_else(|_| Response::new(Vec::new()))
+                match canonicalize_scoped_media_path(&app, &path, &[".mbtiles"]) {
+                    Ok(canonical) => {
+                        let pools = app.state::<LocalMediaPools>();
+                        match pools.mbtiles.read_tile_canonical(&canonical, z, x, y) {
+                            Ok(bytes) if bytes.is_empty() => apply_cors_headers(
+                                Response::builder().status(StatusCode::NO_CONTENT),
+                                origin_ref,
+                            )
+                            .body(Vec::new())
+                            .unwrap_or_else(|_| Response::new(Vec::new())),
+                            Ok(bytes) => {
+                                let content_type = sniff_tile_content_type(&bytes);
+                                apply_cors_headers(
+                                    Response::builder()
+                                        .status(StatusCode::OK)
+                                        .header(header::CONTENT_TYPE, content_type)
+                                        .header(header::CACHE_CONTROL, "private, max-age=300"),
+                                    origin_ref,
+                                )
+                                .body(bytes)
+                                .unwrap_or_else(|_| Response::new(Vec::new()))
+                            }
+                            Err(error) => error_response(StatusCode::BAD_REQUEST, &error, origin_ref),
+                        }
                     }
-                    Err(error) => error_response(StatusCode::BAD_REQUEST, &error),
+                    Err(error) => error_response(StatusCode::FORBIDDEN, &error, origin_ref),
                 }
             }
-            Err(error) => error_response(StatusCode::BAD_REQUEST, &error),
+            Err(error) => error_response(StatusCode::BAD_REQUEST, &error, origin_ref),
         };
         responder.respond(response);
     });
 }
 
-/// Handle a `pmtiles://` or `local-cog://` HTTP byte-range streaming request.
+/// Handle a `local-pmtiles://` or `local-cog://` HTTP byte-range streaming request.
 pub(crate) fn handle_range_media_protocol(
     app: AppHandle,
     request: Request<Vec<u8>>,
@@ -592,8 +895,15 @@ pub(crate) fn handle_range_media_protocol(
     allowed_extensions: &'static [&'static str],
     content_type: &'static str,
 ) {
+    let allowed_origin = match validated_request_origin(&request) {
+        Ok(origin) => origin,
+        Err(error) => {
+            responder.respond(error_response(StatusCode::FORBIDDEN, &error, None));
+            return;
+        }
+    };
     if request.method() == tauri::http::Method::OPTIONS {
-        responder.respond(cors_preflight_response());
+        responder.respond(cors_preflight_response(allowed_origin.as_deref()));
         return;
     }
     let is_head = request.method() == tauri::http::Method::HEAD;
@@ -605,12 +915,14 @@ pub(crate) fn handle_range_media_protocol(
         .map(str::to_string);
 
     tauri::async_runtime::spawn_blocking(move || {
+        let origin_ref = allowed_origin.as_deref();
         let url = match tauri::Url::parse(&uri) {
             Ok(url) => url,
             Err(error) => {
                 responder.respond(error_response(
                     StatusCode::BAD_REQUEST,
                     &format!("Invalid media URI: {error}"),
+                    origin_ref,
                 ));
                 return;
             }
@@ -619,37 +931,41 @@ pub(crate) fn handle_range_media_protocol(
             responder.respond(error_response(
                 StatusCode::BAD_REQUEST,
                 "Missing path query parameter",
+                origin_ref,
             ));
             return;
         };
         let canonical = match canonicalize_scoped_media_path(&app, &path, allowed_extensions) {
             Ok(canonical) => canonical,
             Err(error) => {
-                responder.respond(error_response(StatusCode::FORBIDDEN, &error));
+                responder.respond(error_response(StatusCode::FORBIDDEN, &error, origin_ref));
                 return;
             }
         };
         let pools = app.state::<LocalMediaPools>();
         if is_head {
-            match fs::metadata(&canonical) {
-                Ok(meta) => {
-                    let resp = Response::builder()
-                        .status(StatusCode::OK)
-                        .header(header::CONTENT_TYPE, content_type)
-                        .header(header::ACCEPT_RANGES, "bytes")
-                        .header(header::CONTENT_LENGTH, meta.len().to_string())
-                        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-                        .header(
-                            header::ACCESS_CONTROL_EXPOSE_HEADERS,
-                            "Accept-Ranges, Content-Range, Content-Length",
-                        )
-                        .body(Vec::new())
-                        .unwrap_or_else(|_| Response::new(Vec::new()));
+            match pools.files.head_len(&canonical) {
+                Ok(file_len) => {
+                    let resp = apply_cors_headers(
+                        Response::builder()
+                            .status(StatusCode::OK)
+                            .header(header::CONTENT_TYPE, content_type)
+                            .header(header::ACCEPT_RANGES, "bytes")
+                            .header(header::CONTENT_LENGTH, file_len.to_string())
+                            .header(
+                                header::ACCESS_CONTROL_EXPOSE_HEADERS,
+                                "Accept-Ranges, Content-Range, Content-Length",
+                            ),
+                        origin_ref,
+                    )
+                    .body(Vec::new())
+                    .unwrap_or_else(|_| Response::new(Vec::new()));
                     responder.respond(resp);
                 }
                 Err(error) => responder.respond(error_response(
                     StatusCode::NOT_FOUND,
                     &format!("Could not inspect local media file: {error}"),
+                    origin_ref,
                 )),
             }
             return;
@@ -657,16 +973,18 @@ pub(crate) fn handle_range_media_protocol(
 
         let response = match pools.files.read_range(&canonical, range_header.as_deref()) {
             Ok(read) => {
-                let mut builder = Response::builder()
-                    .status(read.status)
-                    .header(header::CONTENT_TYPE, content_type)
-                    .header(header::ACCEPT_RANGES, "bytes")
-                    .header(header::CONTENT_LENGTH, read.bytes.len().to_string())
-                    .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-                    .header(
-                        header::ACCESS_CONTROL_EXPOSE_HEADERS,
-                        "Accept-Ranges, Content-Range, Content-Length",
-                    );
+                let mut builder = apply_cors_headers(
+                    Response::builder()
+                        .status(read.status)
+                        .header(header::CONTENT_TYPE, content_type)
+                        .header(header::ACCEPT_RANGES, "bytes")
+                        .header(header::CONTENT_LENGTH, read.bytes.len().to_string())
+                        .header(
+                            header::ACCESS_CONTROL_EXPOSE_HEADERS,
+                            "Accept-Ranges, Content-Range, Content-Length",
+                        ),
+                    origin_ref,
+                );
                 if let Some(content_range) = read.content_range {
                     builder = builder.header(header::CONTENT_RANGE, content_range);
                 }
@@ -674,7 +992,7 @@ pub(crate) fn handle_range_media_protocol(
                     .body(read.bytes)
                     .unwrap_or_else(|_| Response::new(Vec::new()))
             }
-            Err(error) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &error),
+            Err(error) => error_response(StatusCode::INTERNAL_SERVER_ERROR, &error, origin_ref),
         };
         responder.respond(response);
     });
@@ -704,6 +1022,16 @@ mod tests {
             parse_http_byte_range(Some("bytes=0-9"), 100),
             RangeParseResult::Satisfiable(ByteRange { start: 0, end: 9 })
         );
+        // RFC 9110: range units are ASCII case-insensitive.
+        assert_eq!(
+            parse_http_byte_range(Some("ByTeS=0-9"), 100),
+            RangeParseResult::Satisfiable(ByteRange { start: 0, end: 9 })
+        );
+        // RFC 9110: unknown range units are ignored and fall back to full 200 GET.
+        assert_eq!(
+            parse_http_byte_range(Some("items=0-5"), 100),
+            RangeParseResult::None
+        );
         assert_eq!(
             parse_http_byte_range(Some("bytes=90-200"), 100),
             RangeParseResult::Satisfiable(ByteRange { start: 90, end: 99 })
@@ -729,28 +1057,61 @@ mod tests {
             RangeParseResult::Unsatisfiable
         );
         assert_eq!(
-            parse_http_byte_range(Some("items=0-5"), 100),
-            RangeParseResult::Unsatisfiable
-        );
-        assert_eq!(
             parse_http_byte_range(Some("bytes=0-0"), 0),
             RangeParseResult::Unsatisfiable
         );
     }
 
     #[test]
-    fn local_file_pool_serves_byte_ranges_and_evicts_lru() {
+    fn bundled_app_origin_rejects_remote_pages_and_allows_tauri_origins() {
+        assert!(is_bundled_app_origin("tauri://localhost"));
+        assert!(is_bundled_app_origin("https://tauri.localhost"));
+        assert!(is_bundled_app_origin("http://tauri.localhost"));
+        assert!(!is_bundled_app_origin("https://accounts.google.com"));
+        assert!(!is_bundled_app_origin("https://evil.example"));
+        assert!(!is_bundled_app_origin("null"));
+    }
+
+    #[test]
+    fn parse_mbtiles_uri_accepts_windows_localhost_and_custom_scheme_forms() {
+        let (p1, z1, x1, y1) =
+            parse_mbtiles_uri("http://mbtiles.localhost/tile/2/1/3?path=%2Fdata%2Fa.mbtiles")
+                .unwrap();
+        assert_eq!((p1.as_str(), z1, x1, y1), ("/data/a.mbtiles", 2, 1, 3));
+
+        let (p2, z2, x2, y2) =
+            parse_mbtiles_uri("mbtiles://localhost/tile/4/5/6?path=%2Fdata%2Fb.mbtiles").unwrap();
+        assert_eq!((p2.as_str(), z2, x2, y2), ("/data/b.mbtiles", 4, 5, 6));
+
+        let (p3, z3, x3, y3) =
+            parse_mbtiles_uri("mbtiles://tile/7/8/9?path=%2Fdata%2Fc.mbtiles").unwrap();
+        assert_eq!((p3.as_str(), z3, x3, y3), ("/data/c.mbtiles", 7, 8, 9));
+    }
+
+    #[test]
+    fn local_file_pool_serves_byte_ranges_evicts_lru_and_handles_truncation() {
         let p1 = unique_temp_path("a.pmtiles");
         let p2 = unique_temp_path("b.pmtiles");
         fs::write(&p1, b"0123456789abcdef").unwrap();
         fs::write(&p2, b"ABCDEFGHIJKLMNOP").unwrap();
 
         let pool = LocalFilePool::with_capacity(1);
-        let partial = pool.read_range(&p1, Some("bytes=4-7")).unwrap();
+        let partial = pool.read_range(&p1, Some("ByTeS=4-7")).unwrap();
         assert_eq!(partial.status, StatusCode::PARTIAL_CONTENT);
         assert_eq!(partial.bytes, b"4567");
         assert_eq!(partial.content_range.as_deref(), Some("bytes 4-7/16"));
         assert_eq!(pool.len(), 1);
+
+        // Unknown range unit falls back to full 200 OK.
+        let unknown_unit = pool.read_range(&p1, Some("items=0-3")).unwrap();
+        assert_eq!(unknown_unit.status, StatusCode::OK);
+        assert_eq!(unknown_unit.bytes, b"0123456789abcdef");
+
+        // Truncating file invalidates stale cached length and returns 416 instead of 0-byte 206.
+        fs::write(&p1, b"01234567").unwrap();
+        let after_truncate = pool.read_range(&p1, Some("bytes=12-15")).unwrap();
+        assert_eq!(after_truncate.status, StatusCode::RANGE_NOT_SATISFIABLE);
+        assert_eq!(after_truncate.content_range.as_deref(), Some("bytes */8"));
 
         let full = pool.read_range(&p2, None).unwrap();
         assert_eq!(full.status, StatusCode::OK);
@@ -764,6 +1125,23 @@ mod tests {
 
         let _ = fs::remove_file(&p1);
         let _ = fs::remove_file(&p2);
+    }
+
+    #[test]
+    fn local_file_pool_invalidates_when_file_replaced_with_same_size() {
+        let p = unique_temp_path("replace.pmtiles");
+        let tmp = unique_temp_path("replace-new.pmtiles");
+        fs::write(&p, b"0123456789abcdef").unwrap();
+
+        let pool = LocalFilePool::with_capacity(4);
+        assert_eq!(pool.read_range(&p, Some("bytes=0-3")).unwrap().bytes, b"0123");
+
+        // Atomic rename replacement with identical length changes inode on Unix.
+        fs::write(&tmp, b"fedcba9876543210").unwrap();
+        fs::rename(&tmp, &p).unwrap();
+
+        assert_eq!(pool.read_range(&p, Some("bytes=0-3")).unwrap().bytes, b"fedc");
+        let _ = fs::remove_file(&p);
     }
 
     #[test]
@@ -804,15 +1182,5 @@ mod tests {
 
         let _ = fs::remove_file(&p1);
         let _ = fs::remove_file(&p2);
-    }
-
-    #[test]
-    fn parse_mbtiles_uri_validates_coords_and_path() {
-        let (path, z, x, y) =
-            parse_mbtiles_uri("mbtiles://tile/10/512/341?path=%2Ftmp%2Ftest.mbtiles").unwrap();
-        assert_eq!(path, "/tmp/test.mbtiles");
-        assert_eq!((z, x, y), (10, 512, 341));
-        assert!(parse_mbtiles_uri("mbtiles://tile/10/512").is_err());
-        assert!(parse_mbtiles_uri("mbtiles://tile/10/512/341").is_err());
     }
 }

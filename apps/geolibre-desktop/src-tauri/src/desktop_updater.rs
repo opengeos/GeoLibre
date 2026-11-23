@@ -28,7 +28,37 @@ pub struct DesktopUpdateCheckResult {
 ))]
 mod active {
     use super::DesktopUpdateCheckResult;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
     use tauri_plugin_updater::UpdaterExt;
+
+    /// Finite timeout for updater manifest check requests.
+    const UPDATE_CHECK_TIMEOUT: Duration = Duration::from_secs(15);
+    /// Finite timeout for downloading signed installer binaries.
+    const UPDATE_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(300);
+
+    static INSTALL_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+
+    struct InstallInFlightGuard;
+
+    impl InstallInFlightGuard {
+        fn try_acquire() -> Option<Self> {
+            if INSTALL_IN_FLIGHT
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                Some(Self)
+            } else {
+                None
+            }
+        }
+    }
+
+    impl Drop for InstallInFlightGuard {
+        fn drop(&mut self) {
+            INSTALL_IN_FLIGHT.store(false, Ordering::SeqCst);
+        }
+    }
 
     fn store_managed_build() -> bool {
         #[cfg(target_os = "windows")]
@@ -38,6 +68,12 @@ mod active {
             }
         }
         false
+    }
+
+    fn build_updater(
+        app: &tauri::AppHandle,
+    ) -> Result<tauri_plugin_updater::Updater, tauri_plugin_updater::Error> {
+        app.updater_builder().timeout(UPDATE_CHECK_TIMEOUT).build()
     }
 
     pub(super) async fn check(app: tauri::AppHandle) -> Result<DesktopUpdateCheckResult, String> {
@@ -52,7 +88,7 @@ mod active {
                 date: None,
             });
         }
-        let updater = match app.updater() {
+        let updater = match build_updater(&app) {
             Ok(updater) => updater,
             Err(_) => {
                 // Updater endpoints / minisign pubkey are omitted in dev builds.
@@ -94,16 +130,20 @@ mod active {
         if store_managed_build() {
             return Err("In-app updates are managed by the Microsoft Store.".to_string());
         }
-        let updater = app
-            .updater()
+        let _guard = InstallInFlightGuard::try_acquire()
+            .ok_or_else(|| "A signed desktop update installation is already in progress.".to_string())?;
+        let updater = build_updater(&app)
             .map_err(|_| "Signed auto-updater is not configured for this build.".to_string())?;
-        let Some(update) = updater
+        let Some(mut update) = updater
             .check()
             .await
             .map_err(|error| format!("Could not check for signed desktop updates: {error}"))?
         else {
             return Ok(false);
         };
+        // tauri-plugin-updater 2.14.x does not copy the builder timeout into
+        // the returned `Update`, so apply a finite download deadline explicitly.
+        update.timeout = Some(UPDATE_DOWNLOAD_TIMEOUT);
         update
             .download_and_install(|_chunk, _total| {}, || {})
             .await

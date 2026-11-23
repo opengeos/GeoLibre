@@ -536,7 +536,7 @@ pub fn run() {
                 responder,
             );
         })
-        .register_asynchronous_uri_scheme_protocol("pmtiles", |ctx, request, responder| {
+        .register_asynchronous_uri_scheme_protocol("local-pmtiles", |ctx, request, responder| {
             local_media_protocol::handle_range_media_protocol(
                 ctx.app_handle().clone(),
                 request,
@@ -3580,10 +3580,8 @@ fn start_geolibre_sidecar_blocking(
         .stderr(Stdio::piped());
     configure_sidecar_process(&mut command);
 
-    let mut child = command
-        .spawn()
+    let mut child = process_lifetime::spawn_managed_child(command)
         .map_err(|error| format!("Could not start GeoLibre sidecar: {error}"))?;
-    process_lifetime::assign_child_to_job(&child);
     // Drain both pipes from the moment we spawn. Reading them only after the
     // child exits (the old shape) deadlocks a cold-cache `uv sync`, whose
     // per-package output overflows the 64 KB pipe long before uvicorn can bind:
@@ -3847,10 +3845,8 @@ fn start_jupyter_server_blocking(
         .stderr(Stdio::piped());
     configure_sidecar_process(&mut command);
 
-    let mut child = command
-        .spawn()
+    let mut child = process_lifetime::spawn_managed_child(command)
         .map_err(|error| format!("Could not start Jupyter server: {error}"))?;
-    process_lifetime::assign_child_to_job(&child);
     let output = CapturedOutput::attach(&mut child);
 
     let base_url = jupyter_base_url();
@@ -4412,7 +4408,6 @@ fn configure_sidecar_process_impl(command: &mut Command) {
     use std::os::unix::process::CommandExt;
 
     command.process_group(0);
-    process_lifetime::configure_child_pdeathsig(command);
 }
 
 #[cfg(all(not(unix), not(feature = "mas")))]
@@ -5505,13 +5500,10 @@ fn spawn_martin_server(
     // Martin is a console program too, and it runs for as long as the PostGIS
     // connection is open.
     hide_console_window(&mut command);
-    process_lifetime::configure_child_pdeathsig(&mut command);
 
     drop(listener);
-    let mut child = command
-        .spawn()
+    let mut child = process_lifetime::spawn_managed_child(command)
         .map_err(|error| format!("Could not start Martin: {error}"))?;
-    process_lifetime::assign_child_to_job(&child);
     // Drain both pipes from the moment we spawn, and for as long as Martin
     // runs. Martin logs at least one line per auto-published table before it
     // binds its port, so a database with a few hundred tables overflows the

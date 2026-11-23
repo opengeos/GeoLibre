@@ -184,6 +184,7 @@
     "installSigned": "Download and install update",
     "installingSigned": "Installing update…",
     "installSignedError": "Could not install the signed update automatically.",
+    "noSignedUpdateAvailable": "No signed update is currently available.",
     "steps": {
       "download": "Download the installer for your platform from the downloads page.",
       "install": "Run the installer. Your local projects, settings, and API keys are kept.",

@@ -9,6 +9,7 @@ import { readFile, readTextFile, writeFile, writeTextFile } from "@tauri-apps/pl
 import { nativeFileDialogFilters, type FileDialogFilter } from "../file-dialog-filters";
 import { isMobile } from "../is-mobile";
 import { isTauri } from "../is-tauri";
+import { notify } from "../notify";
 import { localFileSizeBytes } from "./local-fs";
 import { browserSafeFileName } from "./paths";
 import { isAbortError, toArrayBuffer } from "./shared";
@@ -421,6 +422,17 @@ export async function shareFileWithOsSheet(
   }
 }
 
+function offerDownloadInsteadToast(fileName: string, onDownload: () => void): void {
+  notify.info(`Share sheet closed for ${fileName}.`, {
+    description: "If no share targets appeared, you can download the file directly instead.",
+    dedupeKey: `share-sheet-download-fallback:${fileName}`,
+    action: {
+      label: "Download instead",
+      onClick: onDownload,
+    },
+  });
+}
+
 export async function saveTextFileWithFallback(
   content: string,
   options: SaveTextFileOptions,
@@ -433,7 +445,12 @@ export async function saveTextFileWithFallback(
         fileName,
       );
       if (outcome === "shared") return fileName;
-      if (outcome === "cancelled") return null;
+      if (outcome === "cancelled") {
+        offerDownloadInsteadToast(fileName, () => {
+          void saveTextFileBrowser(content, options);
+        });
+        return null;
+      }
     }
     return saveTextFileBrowser(content, options);
   }
@@ -445,7 +462,12 @@ export async function saveTextFileWithFallback(
       fileName,
     );
     if (outcome === "shared") return fileName;
-    if (outcome === "cancelled") return null;
+    if (outcome === "cancelled") {
+      offerDownloadInsteadToast(fileName, () => {
+        void saveTextFileBrowser(content, options);
+      });
+      return null;
+    }
   }
 
   const path = await save({
@@ -473,7 +495,12 @@ export async function saveBinaryFileWithFallback(
         fileName,
       );
       if (outcome === "shared") return fileName;
-      if (outcome === "cancelled") return null;
+      if (outcome === "cancelled") {
+        offerDownloadInsteadToast(fileName, () => {
+          void saveBinaryFileBrowser(content, options);
+        });
+        return null;
+      }
     }
     return saveBinaryFileBrowser(content, options);
   }
@@ -489,7 +516,12 @@ export async function saveBinaryFileWithFallback(
       fileName,
     );
     if (outcome === "shared") return fileName;
-    if (outcome === "cancelled") return null;
+    if (outcome === "cancelled") {
+      offerDownloadInsteadToast(fileName, () => {
+        void saveBinaryFileBrowser(content, options);
+      });
+      return null;
+    }
   }
 
   const path = await save({

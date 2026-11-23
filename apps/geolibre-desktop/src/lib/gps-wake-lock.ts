@@ -2,33 +2,25 @@
  * Screen wake-lock management and resilient track checkpoint persistence for
  * mobile/field GPS track logging.
  *
- * When a user records a GPS track on a phone or tablet, locking the screen or
- * backgrounding the WebView can suspend location delivery or reload the page.
- * This module:
- * 1. Holds a Screen Wake Lock (`navigator.wakeLock.request("screen")`) while
- *    recording and automatically re-acquires it when returning to the
- *    foreground (`visibilitychange`).
- * 2. Checkpoints active track segments to storage so an unexpected mobile
- *    WebView reload or background eviction does not lose recorded fixes.
+ * Delegates Screen Wake Lock acquisition/re-acquire/dedupe to the shared
+ * {@link createWakeLockController} helper in `./wake-lock`, and provides
+ * throttled checkpoint persistence so an unexpected mobile WebView reload or
+ * background eviction does not lose recorded fixes without causing O(n^2)
+ * serialization on every GPS fix.
  */
 
 import type { GpsFix, GpsTrackSegments } from "./gps-tracking";
+import {
+  createWakeLockController,
+  type WakeLockNavigatorLike,
+  type WakeLockSentinelLike,
+} from "./wake-lock";
+
+export type { WakeLockNavigatorLike, WakeLockSentinelLike };
 
 export const GPS_TRACK_CHECKPOINT_KEY = "geolibre.gpsTracking.activeCheckpoint";
+export const GPS_CHECKPOINT_THROTTLE_MS = 5_000;
 const MAX_CHECKPOINT_FIXES = 25_000;
-
-export interface WakeLockSentinelLike {
-  released: boolean;
-  release(): Promise<void>;
-  addEventListener?(type: "release", listener: () => void): void;
-  removeEventListener?(type: "release", listener: () => void): void;
-}
-
-export interface WakeLockNavigatorLike {
-  wakeLock?: {
-    request(type: "screen"): Promise<WakeLockSentinelLike>;
-  };
-}
 
 export interface WakeLockDocumentLike {
   visibilityState?: string;
@@ -37,7 +29,7 @@ export interface WakeLockDocumentLike {
 }
 
 export interface GpsWakeLockController {
-  /** Begin holding the screen wake lock (idempotent). */
+  /** Begin holding the screen wake lock (idempotent, deduplicates in-flight requests). */
   start(): Promise<boolean>;
   /** Release the screen wake lock and detach visibility listeners. */
   stop(): Promise<void>;
@@ -46,76 +38,59 @@ export interface GpsWakeLockController {
 }
 
 /**
- * Create a lifecycle-safe Screen Wake Lock controller that acquires the screen
- * lock while active, re-acquires it after foreground visibility transitions,
- * and cleanly releases it on stop.
+ * Create a lifecycle-safe Screen Wake Lock controller backed by the shared
+ * {@link createWakeLockController} implementation.
  */
 export function createGpsWakeLockController(deps?: {
   nav?: WakeLockNavigatorLike | null;
   doc?: WakeLockDocumentLike | null;
 }): GpsWakeLockController {
-  const nav =
-    deps?.nav !== undefined
-      ? deps.nav
-      : typeof navigator !== "undefined"
-        ? (navigator as unknown as WakeLockNavigatorLike)
-        : null;
-  const doc =
-    deps?.doc !== undefined
-      ? deps.doc
-      : typeof document !== "undefined"
-        ? (document as unknown as WakeLockDocumentLike)
-        : null;
+  let held = false;
+  let inner: ReturnType<typeof createWakeLockController> | null = null;
 
-  let active = false;
-  let sentinel: WakeLockSentinelLike | null = null;
-  let listenerAttached = false;
-
-  const requestLock = async (): Promise<boolean> => {
-    if (!active || !nav?.wakeLock?.request) return false;
-    if (sentinel && !sentinel.released) return true;
-    try {
-      const next = await nav.wakeLock.request("screen");
-      if (!active) {
-        await next.release().catch(() => undefined);
-        return false;
-      }
-      sentinel = next;
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  const onVisibilityChange = () => {
-    if (active && doc?.visibilityState === "visible") {
-      void requestLock();
-    }
+  const ensureInner = () => {
+    if (inner) return inner;
+    const nav = deps?.nav === null ? {} : deps?.nav;
+    const doc =
+      deps?.doc === null
+        ? ({
+            visibilityState: "visible",
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+          } as unknown as Pick<
+            Document,
+            "visibilityState" | "addEventListener" | "removeEventListener"
+          >)
+        : (deps?.doc as
+            | Pick<Document, "visibilityState" | "addEventListener" | "removeEventListener">
+            | undefined);
+    inner = createWakeLockController({
+      navigator: nav,
+      document: doc,
+      onChange: (active) => {
+        held = active;
+      },
+    });
+    return inner;
   };
 
   return {
     async start(): Promise<boolean> {
-      active = true;
-      if (doc && !listenerAttached) {
-        doc.addEventListener("visibilitychange", onVisibilityChange);
-        listenerAttached = true;
-      }
-      return requestLock();
+      const ok = await ensureInner().acquire();
+      held = ok;
+      return ok;
     },
     async stop(): Promise<void> {
-      active = false;
-      if (doc && listenerAttached) {
-        doc.removeEventListener("visibilitychange", onVisibilityChange);
-        listenerAttached = false;
-      }
-      const current = sentinel;
-      sentinel = null;
-      if (current && !current.released) {
-        await current.release().catch(() => undefined);
+      const current = inner;
+      inner = null;
+      held = false;
+      if (current) {
+        await current.release();
+        current.dispose();
       }
     },
     isHeld(): boolean {
-      return Boolean(sentinel && !sentinel.released);
+      return held;
     },
   };
 }
@@ -186,6 +161,54 @@ export function saveGpsTrackCheckpoint(
   } catch {
     return false;
   }
+}
+
+export interface ThrottledCheckpointSaver {
+  /** Save at most once per `intervalMs`; returns `null` when throttled. */
+  schedule(segments: GpsTrackSegments): boolean | null;
+  /** Flush immediately regardless of throttle interval. */
+  flush(segments: GpsTrackSegments): boolean;
+  /** Reset throttle state (e.g. when clearing a track). */
+  reset(): void;
+}
+
+/**
+ * Throttle GPS track checkpoint writes to avoid O(n^2) JSON serialization on
+ * high-frequency fixes while still allowing immediate flushes on pagehide /
+ * visibilitychange / stop.
+ */
+export function createThrottledCheckpointSaver(options?: {
+  intervalMs?: number;
+  storage?: StorageLike | null;
+  now?: () => number;
+  onSaveResult?: (ok: boolean) => void;
+}): ThrottledCheckpointSaver {
+  const intervalMs = options?.intervalMs ?? GPS_CHECKPOINT_THROTTLE_MS;
+  const now = options?.now ?? Date.now;
+  let lastSavedAt = -Infinity;
+
+  const writeNow = (segments: GpsTrackSegments): boolean => {
+    const ok = saveGpsTrackCheckpoint(
+      segments,
+      options?.storage !== undefined ? options.storage : defaultStorage(),
+    );
+    lastSavedAt = now();
+    options?.onSaveResult?.(ok);
+    return ok;
+  };
+
+  return {
+    schedule(segments: GpsTrackSegments): boolean | null {
+      if (now() - lastSavedAt < intervalMs) return null;
+      return writeNow(segments);
+    },
+    flush(segments: GpsTrackSegments): boolean {
+      return writeNow(segments);
+    },
+    reset(): void {
+      lastSavedAt = -Infinity;
+    },
+  };
 }
 
 /** Restore a previously checkpointed track recording, or null if absent/invalid. */

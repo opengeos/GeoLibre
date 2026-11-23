@@ -175,16 +175,33 @@ export async function checkDesktopSignedUpdate(): Promise<DesktopSignedUpdateInf
   }
 }
 
+let pendingSignedInstall: Promise<boolean> | null = null;
+
+/** Whether a signed desktop update download/install is currently in flight. */
+export function isDesktopSignedUpdateInstalling(): boolean {
+  return pendingSignedInstall !== null;
+}
+
 /**
  * Download, verify, and install an available signed desktop update, restarting
- * the application upon completion.
+ * the application upon completion. Coalesces concurrent calls so reopening the
+ * About dialog cannot start a second parallel installation.
  */
 export async function installDesktopSignedUpdate(): Promise<boolean> {
   if (IS_STORE_BUILD) return false;
+  if (pendingSignedInstall) return pendingSignedInstall;
   const { isTauri } = await import("./is-tauri");
   if (!isTauri()) return false;
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<boolean>("install_desktop_update");
+  const run = (async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<boolean>("install_desktop_update");
+  })();
+  pendingSignedInstall = run;
+  try {
+    return await run;
+  } finally {
+    if (pendingSignedInstall === run) pendingSignedInstall = null;
+  }
 }
 
 /**

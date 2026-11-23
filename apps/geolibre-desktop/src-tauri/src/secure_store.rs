@@ -101,10 +101,16 @@ fn entry(account: &str) -> Result<keyring::Entry, String> {
     keyring::Entry::new(SERVICE, account).map_err(|error| error.to_string())
 }
 
-/// Encrypted app-private credential vault using AES-256-GCM (`ring::aead`) for
-/// Android (where `keyring` has no native backend). Each write generates a
-/// fresh 96-bit random nonce and stores the vault atomically with owner-only
-/// permissions inside the app-private data directory.
+/// Authenticated app-private credential vault using AES-256-GCM (`ring::aead`)
+/// for Android (where `keyring` has no native backend).
+///
+/// Each write generates a fresh 96-bit random nonce and stores the vault and
+/// key atomically with owner-only (`0600`) permissions inside Android's
+/// app-private data directory. Because the key file sits alongside the
+/// ciphertext inside app-private storage, AES-256-GCM provides integrity /
+/// tamper detection and avoids plaintext secrets on disk; full hardware-backed
+/// confidentiality requires Android Keystore key-wrapping and excluding
+/// `secure_vault/` from Android Auto Backup.
 #[cfg(any(target_os = "android", test))]
 pub(crate) mod encrypted_vault {
     use super::{validate_account, SERVICE};
@@ -123,30 +129,66 @@ pub(crate) mod encrypted_vault {
         (dir.join("vault.key"), dir.join("credentials.enc"))
     }
 
-    fn load_or_create_key(key_path: &Path) -> Result<[u8; KEY_LEN], String> {
-        if let Ok(bytes) = fs::read(key_path) {
-            if bytes.len() == KEY_LEN {
+    fn read_existing_key(key_path: &Path) -> Result<[u8; KEY_LEN], String> {
+        let bytes = fs::read(key_path)
+            .map_err(|error| format!("Could not read credential vault key: {error}"))?;
+        if bytes.len() != KEY_LEN {
+            return Err(format!(
+                "Credential vault key has invalid length ({} bytes, expected {KEY_LEN}).",
+                bytes.len()
+            ));
+        }
+        let mut key = [0u8; KEY_LEN];
+        key.copy_from_slice(&bytes);
+        Ok(key)
+    }
+
+    /// Load an existing vault key or create one ONLY when initializing a brand-new
+    /// vault (neither `vault.key` nor `credentials.enc` exists). Never replaces a
+    /// key after a read error or length corruption, so existing credentials are
+    /// never silently orphaned.
+    fn load_or_init_key_for_write(
+        key_path: &Path,
+        vault_path: &Path,
+    ) -> Result<[u8; KEY_LEN], String> {
+        match fs::read(key_path) {
+            Ok(bytes) => {
+                if bytes.len() != KEY_LEN {
+                    return Err(format!(
+                        "Credential vault key has invalid length ({} bytes, expected {KEY_LEN}).",
+                        bytes.len()
+                    ));
+                }
                 let mut key = [0u8; KEY_LEN];
                 key.copy_from_slice(&bytes);
-                return Ok(key);
+                Ok(key)
             }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                if vault_path.exists() {
+                    return Err(
+                        "Credential vault key is missing for an existing vault; refusing to overwrite."
+                            .to_string(),
+                    );
+                }
+                let rng = SystemRandom::new();
+                let mut key = [0u8; KEY_LEN];
+                rng.fill(&mut key)
+                    .map_err(|_| "Could not generate credential vault key.".to_string())?;
+                write_file_atomic(
+                    key_path,
+                    &key,
+                    AtomicWriteOptions {
+                        create_parents: true,
+                        owner_only_unix: true,
+                        sync: true,
+                        preserve_permissions: None,
+                    },
+                )
+                .map_err(|write_err| format!("Could not persist credential vault key: {write_err}"))?;
+                Ok(key)
+            }
+            Err(error) => Err(format!("Could not read credential vault key: {error}")),
         }
-        let rng = SystemRandom::new();
-        let mut key = [0u8; KEY_LEN];
-        rng.fill(&mut key)
-            .map_err(|_| "Could not generate credential vault key.".to_string())?;
-        write_file_atomic(
-            key_path,
-            &key,
-            AtomicWriteOptions {
-                create_parents: true,
-                owner_only_unix: true,
-                sync: true,
-                preserve_permissions: None,
-            },
-        )
-        .map_err(|error| format!("Could not persist credential vault key: {error}"))?;
-        Ok(key)
     }
 
     fn read_map(base_dir: &Path) -> Result<HashMap<String, String>, String> {
@@ -161,7 +203,7 @@ pub(crate) mod encrypted_vault {
         if raw.len() < VAULT_MAGIC.len() + NONCE_LEN || &raw[..VAULT_MAGIC.len()] != VAULT_MAGIC {
             return Err("Encrypted credential vault header is invalid.".to_string());
         }
-        let key_bytes = load_or_create_key(&key_path)?;
+        let key_bytes = read_existing_key(&key_path)?;
         let unbound = UnboundKey::new(&AES_256_GCM, &key_bytes)
             .map_err(|_| "Could not initialize credential vault cipher.".to_string())?;
         let key = LessSafeKey::new(unbound);
@@ -179,7 +221,7 @@ pub(crate) mod encrypted_vault {
 
     fn write_map(base_dir: &Path, entries: &HashMap<String, String>) -> Result<(), String> {
         let (key_path, vault_path) = vault_paths(base_dir);
-        let key_bytes = load_or_create_key(&key_path)?;
+        let key_bytes = load_or_init_key_for_write(&key_path, &vault_path)?;
         let unbound = UnboundKey::new(&AES_256_GCM, &key_bytes)
             .map_err(|_| "Could not initialize credential vault cipher.".to_string())?;
         let key = LessSafeKey::new(unbound);
@@ -547,6 +589,19 @@ mod tests {
         let after_delete =
             super::encrypted_vault::get_many(&dir, &["settings.shareToken".to_string()]).unwrap();
         assert!(after_delete.is_empty());
+
+        // Corrupting the key file must fail without overwriting the key.
+        let key_path = dir.join("secure_vault").join("vault.key");
+        let original_key = std::fs::read(&key_path).unwrap();
+        std::fs::write(&key_path, b"short").unwrap();
+        assert!(super::encrypted_vault::get_many(&dir, &["ai.default.KEY".to_string()]).is_err());
+        assert_eq!(std::fs::read(&key_path).unwrap(), b"short");
+
+        // Removing the key file when ciphertext exists must fail without creating a new key.
+        std::fs::remove_file(&key_path).unwrap();
+        assert!(super::encrypted_vault::set(&dir, "another.key", "v").is_err());
+        assert!(!key_path.exists());
+        std::fs::write(&key_path, &original_key).unwrap();
 
         // Tampering with ciphertext must fail GCM authentication.
         let enc_path = dir.join("secure_vault").join("credentials.enc");

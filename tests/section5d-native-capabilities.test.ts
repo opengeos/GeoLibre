@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   nativeLocalCogProtocolUrl,
+  nativeLocalPmtilesProtocolUrl,
   nativeMbtilesProtocolUrl,
-  nativePmtilesProtocolUrl,
+  usesLocalhostCustomSchemeOrigin,
 } from "../apps/geolibre-desktop/src/lib/local-media-url";
 import {
   clearGpsTrackCheckpoint,
   createGpsWakeLockController,
+  createThrottledCheckpointSaver,
   GPS_TRACK_CHECKPOINT_KEY,
   loadGpsTrackCheckpoint,
   saveGpsTrackCheckpoint,
@@ -19,6 +21,7 @@ import { shareFileWithOsSheet } from "../apps/geolibre-desktop/src/lib/file-io/f
 import {
   checkDesktopSignedUpdate,
   installDesktopSignedUpdate,
+  isDesktopSignedUpdateInstalling,
 } from "../apps/geolibre-desktop/src/lib/updates";
 import type { GpsFix } from "../apps/geolibre-desktop/src/lib/gps-tracking";
 
@@ -49,25 +52,42 @@ function makeFix(i: number): GpsFix {
 }
 
 describe("local-media-url custom URI scheme builders", () => {
-  it("encodes local paths for mbtiles, pmtiles, and local-cog protocols", () => {
+  it("dispatches custom scheme origins for macOS/Linux vs Windows/Android", () => {
     const path = "/data/my maps/test #1.mbtiles";
+    assert.equal(usesLocalhostCustomSchemeOrigin("windows"), true);
+    assert.equal(usesLocalhostCustomSchemeOrigin("android"), true);
+    assert.equal(usesLocalhostCustomSchemeOrigin("macos"), false);
+    assert.equal(usesLocalhostCustomSchemeOrigin("linux"), false);
+
     assert.equal(
-      nativeMbtilesProtocolUrl(path),
-      `mbtiles://tile/{z}/{x}/{y}?path=${encodeURIComponent(path)}`,
+      nativeMbtilesProtocolUrl(path, "macos"),
+      `mbtiles://localhost/tile/{z}/{x}/{y}?path=${encodeURIComponent(path)}`,
     );
     assert.equal(
-      nativePmtilesProtocolUrl("/data/basemap.pmtiles"),
-      "pmtiles://file?path=%2Fdata%2Fbasemap.pmtiles",
+      nativeMbtilesProtocolUrl(path, "windows"),
+      `http://mbtiles.localhost/tile/{z}/{x}/{y}?path=${encodeURIComponent(path)}`,
     );
     assert.equal(
-      nativeLocalCogProtocolUrl("/data/dem 3dep.tif"),
-      "local-cog://file?path=%2Fdata%2Fdem%203dep.tif",
+      nativeLocalPmtilesProtocolUrl("/data/basemap.pmtiles", "linux"),
+      "local-pmtiles://localhost/file?path=%2Fdata%2Fbasemap.pmtiles",
+    );
+    assert.equal(
+      nativeLocalPmtilesProtocolUrl("/data/basemap.pmtiles", "android"),
+      "http://local-pmtiles.localhost/file?path=%2Fdata%2Fbasemap.pmtiles",
+    );
+    assert.equal(
+      nativeLocalCogProtocolUrl("/data/dem 3dep.tif", "macos"),
+      "local-cog://localhost/file?path=%2Fdata%2Fdem%203dep.tif",
+    );
+    assert.equal(
+      nativeLocalCogProtocolUrl("/data/dem 3dep.tif", "windows"),
+      "http://local-cog.localhost/file?path=%2Fdata%2Fdem%203dep.tif",
     );
   });
 });
 
 describe("gps-wake-lock screen wake lock & track checkpoints", () => {
-  it("acquires wake lock, re-acquires on visibilitychange, and releases on stop", async () => {
+  it("acquires wake lock, deduplicates concurrent requests, re-acquires on visibilitychange, and releases on stop", async () => {
     let requestCount = 0;
     let releaseCount = 0;
     let currentSentinel: WakeLockSentinelLike | null = null;
@@ -86,6 +106,7 @@ describe("gps-wake-lock screen wake lock & track checkpoints", () => {
         async request(type: "screen"): Promise<WakeLockSentinelLike> {
           assert.equal(type, "screen");
           requestCount += 1;
+          await new Promise((resolve) => setTimeout(resolve, 5));
           const sentinel: WakeLockSentinelLike = {
             released: false,
             async release() {
@@ -102,15 +123,17 @@ describe("gps-wake-lock screen wake lock & track checkpoints", () => {
     };
 
     const controller = createGpsWakeLockController({ nav, doc });
-    assert.equal(await controller.start(), true);
+    // Two concurrent starts must share one in-flight wakeLock.request call.
+    const [ok1, ok2] = await Promise.all([controller.start(), controller.start()]);
+    assert.equal(ok1, true);
+    assert.equal(ok2, true);
     assert.equal(requestCount, 1);
     assert.equal(controller.isHeld(), true);
 
     // Simulate OS dropping the wake lock while backgrounded, then returning to foreground.
     currentSentinel!.released = true;
-    assert.equal(controller.isHeld(), false);
     for (const listener of listeners) listener();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(requestCount, 2);
     assert.equal(controller.isHeld(), true);
 
@@ -127,12 +150,25 @@ describe("gps-wake-lock screen wake lock & track checkpoints", () => {
     await controller.stop();
   });
 
-  it("saves, restores, validates, and clears GPS track checkpoints", () => {
+  it("saves, restores, throttles, validates, and clears GPS track checkpoints", () => {
     const storage = makeMemoryStorage();
     const segments = [[makeFix(0), makeFix(1)], [makeFix(2)]];
     assert.equal(saveGpsTrackCheckpoint(segments, storage), true);
     const restored = loadGpsTrackCheckpoint(storage);
     assert.deepEqual(restored, segments);
+
+    // Throttled saver avoids serializing on every fix while honoring flush().
+    let nowMs = 1_000;
+    const saver = createThrottledCheckpointSaver({
+      intervalMs: 5_000,
+      storage,
+      now: () => nowMs,
+    });
+    assert.equal(saver.schedule([[makeFix(0)]]), true);
+    nowMs = 2_000;
+    assert.equal(saver.schedule([[makeFix(0), makeFix(1)]]), null);
+    assert.equal(saver.flush([[makeFix(0), makeFix(1)]]), true);
+    assert.equal(loadGpsTrackCheckpoint(storage)?.[0]?.length, 2);
 
     // Corrupt payloads fail closed and return null.
     storage.setItem(GPS_TRACK_CHECKPOINT_KEY, "{not-valid-json");
@@ -182,6 +218,7 @@ describe("mobile OS Share Sheet export", () => {
 
 describe("signed desktop auto-updater client helpers", () => {
   it("returns null / false safely outside Tauri desktop runtime", async () => {
+    assert.equal(isDesktopSignedUpdateInstalling(), false);
     assert.equal(await checkDesktopSignedUpdate(), null);
     assert.equal(await installDesktopSignedUpdate(), false);
   });

@@ -397,12 +397,49 @@ fn load_native_vector_file_blocking(
     }))
 }
 
-struct TempFileGuard(std::path::PathBuf);
+struct TempDirGuard(std::path::PathBuf);
 
-impl Drop for TempFileGuard {
+impl Drop for TempDirGuard {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
+        let _ = std::fs::remove_dir_all(&self.0);
     }
+}
+
+/// Create a private per-export temporary directory with owner-only (`0700`)
+/// permissions on Unix and a cryptographically random suffix so other local
+/// users cannot pre-create symlinks or read exported FlatGeobuf data.
+fn create_private_export_dir() -> Result<std::path::PathBuf, String> {
+    use ring::rand::{SecureRandom, SystemRandom};
+
+    let rng = SystemRandom::new();
+    let base = std::env::temp_dir();
+    for _ in 0..8 {
+        let mut bytes = [0u8; 16];
+        rng.fill(&mut bytes)
+            .map_err(|_| "Could not generate random temporary export directory name".to_string())?;
+        let mut hex = String::with_capacity(32);
+        for b in bytes {
+            use std::fmt::Write as _;
+            let _ = write!(&mut hex, "{b:02x}");
+        }
+        let dir = base.join(format!("geolibre-native-duckdb-{hex}"));
+        let mut builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        match builder.create(&dir) {
+            Ok(()) => return Ok(dir),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(format!(
+                    "Could not create private temporary export directory: {error}"
+                ));
+            }
+        }
+    }
+    Err("Could not allocate a unique temporary export directory".to_string())
 }
 
 fn load_native_vector_file_binary_blocking(
@@ -435,19 +472,17 @@ fn load_native_vector_file_binary_blocking(
                 prepared.bbox_where_clause
             );
 
-            static TEMP_COUNTER: std::sync::atomic::AtomicU64 =
-                std::sync::atomic::AtomicU64::new(1);
-            let seq = TEMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let temp_path = std::env::temp_dir().join(format!(
-                "geolibre-native-duckdb-{}-{seq}.fgb",
-                std::process::id()
-            ));
-            let _guard = TempFileGuard(temp_path.clone());
+            let temp_dir = create_private_export_dir()?;
+            let _guard = TempDirGuard(temp_dir.clone());
+            let temp_path = temp_dir.join("export.fgb");
             let temp_path_str = temp_path
                 .to_str()
                 .ok_or_else(|| "Temporary FlatGeobuf path is not valid UTF-8".to_string())?;
+            // Disable FlatGeobuf's spatial index so features with NULL geometry
+            // export cleanly (GDAL rejects NULL geometries when SPATIAL_INDEX=YES),
+            // and opt into [lon, lat] axis order as required by DuckDB >= 2.0.
             let copy_sql = format!(
-                "COPY ({select_sql}) TO {} WITH (FORMAT GDAL, DRIVER 'FlatGeobuf', SRS 'EPSG:4326')",
+                "SET geometry_always_xy = true; COPY ({select_sql}) TO {} WITH (FORMAT GDAL, DRIVER 'FlatGeobuf', SRS 'EPSG:4326', LAYER_CREATION_OPTIONS 'SPATIAL_INDEX=NO')",
                 quote_sql_string(&sql_source_path(temp_path_str))
             );
             conn.execute_batch(&copy_sql).map_err(|error| {
@@ -2438,5 +2473,47 @@ mod tests {
             NativeBinaryFormat::GeoJson
         );
         assert!(NativeBinaryFormat::parse(Some("xml")).is_err());
+
+        let private_dir = create_private_export_dir().expect("create private export dir");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&private_dir)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o700);
+        }
+        let _ = std::fs::remove_dir_all(&private_dir);
+    }
+
+    #[test]
+    fn flatgeobuf_binary_export_preserves_null_geometries() {
+        let conn = match open_native_duckdb() {
+            Ok(conn) => conn,
+            Err(_) => return, // Skip when DuckDB spatial extension is not installed offline.
+        };
+        let export_dir = create_private_export_dir().unwrap();
+        let _guard = TempDirGuard(export_dir.clone());
+        let src_path = export_dir.join("null_geom.geojson");
+        std::fs::write(
+            &src_path,
+            r#"{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"with-geom"},"geometry":{"type":"Point","coordinates":[-122.4,37.7]}},{"type":"Feature","properties":{"name":"null-geom"},"geometry":null}]}"#,
+        )
+        .unwrap();
+        drop(conn);
+
+        let options = NativeVectorOptions {
+            path: src_path.to_string_lossy().into_owned(),
+            extension: "geojson".to_string(),
+            layer: None,
+            override_source_crs: None,
+            bbox: None,
+        };
+        let bytes =
+            load_native_vector_file_binary_blocking(options, NativeBinaryFormat::FlatGeobuf)
+                .expect("FlatGeobuf export should succeed with NULL geometry when SPATIAL_INDEX=NO");
+        assert!(bytes.starts_with(b"fgb"), "exported payload must be FlatGeobuf");
     }
 }

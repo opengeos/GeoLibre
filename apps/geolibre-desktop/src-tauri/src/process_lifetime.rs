@@ -1,47 +1,89 @@
 //! OS-enforced child process lifetimes so sidecars (FastAPI, Jupyter, Martin)
 //! are automatically reaped by the kernel if GeoLibre crashes or is killed.
 //!
-//! - Linux: sets `PR_SET_PDEATHSIG(SIGTERM)` via `CommandExt::pre_exec` and
-//!   verifies the parent PID immediately after `fork` to close the race window.
+//! - Linux: spawns children from a dedicated long-lived supervisor thread that
+//!   sets `PR_SET_PDEATHSIG(SIGTERM)` via `CommandExt::pre_exec` and verifies
+//!   the parent PID immediately after `fork`. Spawning from a permanent thread
+//!   (instead of a Tokio `spawn_blocking` worker that may retire when idle)
+//!   ensures the kernel only signals the child when the GeoLibre process exits.
 //! - Windows: assigns every spawned child to a Win32 Job Object configured with
-//!   `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`.
+//!   `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` and fails startup (terminating the
+//!   child) if job assignment fails.
 
 use std::process::{Child, Command};
 
-/// Configure `command` so the OS signals the child if this parent process dies.
 #[cfg(all(target_os = "linux", not(feature = "mas")))]
-pub(crate) fn configure_child_pdeathsig(command: &mut Command) {
+mod linux_supervisor {
     use std::os::unix::process::CommandExt;
+    use std::process::{Child, Command};
+    use std::sync::{mpsc, OnceLock};
 
-    const PR_SET_PDEATHSIG: i32 = 1;
-    const SIGTERM: i32 = 15;
-
-    unsafe extern "C" {
-        fn prctl(option: i32, arg2: usize, arg3: usize, arg4: usize, arg5: usize) -> i32;
-        fn getppid() -> i32;
-        fn getpid() -> i32;
-        fn kill(pid: i32, sig: i32) -> i32;
+    struct SpawnRequest {
+        command: Command,
+        reply: mpsc::SyncSender<std::io::Result<Child>>,
     }
 
-    let parent_pid = std::process::id() as i32;
-    // SAFETY: `pre_exec` runs between `fork` and `exec`. `prctl`, `getppid`,
-    // `getpid`, and `kill` are async-signal-safe syscalls and perform no
-    // heap allocation or Rust locking.
-    unsafe {
-        command.pre_exec(move || {
-            let _ = prctl(PR_SET_PDEATHSIG, SIGTERM as usize, 0, 0, 0);
-            // Close the race window where the parent died between fork() and
-            // prctl(): if we were already reparented, terminate ourselves now.
-            if getppid() != parent_pid {
-                let _ = kill(getpid(), SIGTERM);
-            }
-            Ok(())
-        });
+    fn supervisor_tx() -> &'static mpsc::Sender<SpawnRequest> {
+        static TX: OnceLock<mpsc::Sender<SpawnRequest>> = OnceLock::new();
+        TX.get_or_init(|| {
+            let (tx, rx) = mpsc::channel::<SpawnRequest>();
+            std::thread::Builder::new()
+                .name("geolibre-child-supervisor".to_string())
+                .spawn(move || {
+                    const PR_SET_PDEATHSIG: i32 = 1;
+                    const SIGTERM: i32 = 15;
+
+                    unsafe extern "C" {
+                        fn prctl(
+                            option: i32,
+                            arg2: usize,
+                            arg3: usize,
+                            arg4: usize,
+                            arg5: usize,
+                        ) -> i32;
+                        fn getppid() -> i32;
+                        fn getpid() -> i32;
+                        fn kill(pid: i32, sig: i32) -> i32;
+                    }
+
+                    while let Ok(mut req) = rx.recv() {
+                        let parent_pid = std::process::id() as i32;
+                        // SAFETY: `pre_exec` runs between `fork` and `exec` on this
+                        // long-lived supervisor thread. `prctl`, `getppid`, `getpid`,
+                        // and `kill` are async-signal-safe syscalls and perform no
+                        // heap allocation or Rust locking.
+                        unsafe {
+                            req.command.pre_exec(move || {
+                                let _ = prctl(PR_SET_PDEATHSIG, SIGTERM as usize, 0, 0, 0);
+                                if getppid() != parent_pid {
+                                    let _ = kill(getpid(), SIGTERM);
+                                }
+                                Ok(())
+                            });
+                        }
+                        let result = req.command.spawn();
+                        let _ = req.reply.send(result);
+                    }
+                })
+                .expect("failed to spawn geolibre child supervisor thread");
+            tx
+        })
+    }
+
+    pub(super) fn spawn(command: Command) -> Result<Child, String> {
+        let (reply_tx, reply_rx) = mpsc::sync_channel(1);
+        supervisor_tx()
+            .send(SpawnRequest {
+                command,
+                reply: reply_tx,
+            })
+            .map_err(|_| "Child supervisor thread is unavailable".to_string())?;
+        reply_rx
+            .recv()
+            .map_err(|_| "Child supervisor thread terminated unexpectedly".to_string())?
+            .map_err(|error| error.to_string())
     }
 }
-
-#[cfg(all(not(target_os = "linux"), not(feature = "mas")))]
-pub(crate) fn configure_child_pdeathsig(_command: &mut Command) {}
 
 /// Holds an OS-level process lifetime handle (a Win32 Job Object on Windows)
 /// that kills every assigned child process when closed or when this process
@@ -68,7 +110,7 @@ impl Default for ChildProcessJob {
 impl ChildProcessJob {
     pub(crate) fn new() -> Self {
         use std::mem::{size_of, zeroed};
-        use std::ptr::{null, null_mut};
+        use std::ptr::null;
         use windows_sys::Win32::Foundation::CloseHandle;
         use windows_sys::Win32::System::JobObjects::{
             CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
@@ -92,7 +134,6 @@ impl ChildProcessJob {
                 let _ = CloseHandle(handle);
                 return Self { handle: 0 };
             }
-            let _ = null_mut::<std::ffi::c_void>();
             Self {
                 handle: handle as isize,
             }
@@ -101,19 +142,27 @@ impl ChildProcessJob {
 
     /// Assign a newly spawned `child` to this Job Object so Windows reaps it
     /// automatically if the parent exits or crashes.
-    pub(crate) fn assign_child(&self, child: &Child) {
+    pub(crate) fn assign_child(&self, child: &Child) -> Result<(), String> {
         use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Foundation::GetLastError;
         use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
 
         if self.handle == 0 {
-            return;
+            return Err("Win32 Job Object handle could not be initialized".to_string());
         }
-        unsafe {
-            let _ = AssignProcessToJobObject(
+        let ok = unsafe {
+            AssignProcessToJobObject(
                 self.handle as windows_sys::Win32::Foundation::HANDLE,
                 child.as_raw_handle() as windows_sys::Win32::Foundation::HANDLE,
-            );
+            )
+        };
+        if ok == 0 {
+            let err = unsafe { GetLastError() };
+            return Err(format!(
+                "Could not assign child process to Win32 Job Object (error {err})"
+            ));
         }
+        Ok(())
     }
 }
 
@@ -131,42 +180,78 @@ impl Drop for ChildProcessJob {
     }
 }
 
-#[cfg(all(not(target_os = "windows"), not(feature = "mas")))]
-#[derive(Default)]
-pub(crate) struct ChildProcessJob;
-
-#[cfg(all(not(target_os = "windows"), not(feature = "mas")))]
-impl ChildProcessJob {
-    pub(crate) fn assign_child(&self, _child: &Child) {}
+/// Assign a spawned child process to the process-wide OS lifetime Job Object on Windows.
+#[cfg(all(target_os = "windows", not(feature = "mas")))]
+pub(crate) fn assign_child_to_job(child: &Child) -> Result<(), String> {
+    static GLOBAL_JOB: std::sync::OnceLock<ChildProcessJob> = std::sync::OnceLock::new();
+    GLOBAL_JOB
+        .get_or_init(ChildProcessJob::default)
+        .assign_child(child)
 }
 
-/// Assign a spawned child process to the process-wide OS lifetime Job Object
-/// (on Windows; no-op on Unix where `PR_SET_PDEATHSIG` enforces parent death).
+/// Spawn a managed child process with OS-enforced lifetime protection.
+///
+/// - On Linux, the spawn is dispatched through a permanent supervisor thread
+///   that configures `PR_SET_PDEATHSIG(SIGTERM)` so retiring worker threads do
+///   not prematurely kill long-running sidecar processes.
+/// - On Windows, the child is assigned to the process-wide Job Object; if
+///   assignment fails, the child is terminated and waited on before returning
+///   the error.
 #[cfg(not(feature = "mas"))]
-pub(crate) fn assign_child_to_job(child: &Child) {
-    static GLOBAL_JOB: std::sync::OnceLock<ChildProcessJob> = std::sync::OnceLock::new();
-    GLOBAL_JOB.get_or_init(ChildProcessJob::default).assign_child(child);
+pub(crate) fn spawn_managed_child(mut command: Command) -> Result<Child, String> {
+    #[cfg(target_os = "linux")]
+    let child = {
+        let _ = &mut command;
+        linux_supervisor::spawn(command)?
+    };
+    #[cfg(not(target_os = "linux"))]
+    let mut child = command.spawn().map_err(|error| error.to_string())?;
+
+    #[cfg(target_os = "windows")]
+    if let Err(error) = assign_child_to_job(&child) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(error);
+    }
+
+    Ok(child)
 }
 
 #[cfg(all(test, not(feature = "mas")))]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
-    fn configure_child_pdeathsig_and_job_assignment_succeed() {
-        let job = ChildProcessJob::default();
-        #[cfg(unix)]
-        let mut cmd = Command::new("true");
-        #[cfg(windows)]
-        let mut cmd = {
-            let mut c = Command::new("cmd");
-            c.args(["/C", "exit", "0"]);
-            c
-        };
-        configure_child_pdeathsig(&mut cmd);
-        let mut child = cmd.spawn().expect("spawn test child");
-        job.assign_child(&child);
-        let status = child.wait().expect("wait test child");
-        assert!(status.success());
+    fn managed_child_survives_exiting_caller_thread() {
+        // Spawn a sleeping child from a short-lived worker thread (simulating a
+        // Tokio `spawn_blocking` worker that retires after idle keep-alive).
+        // Because Linux delegates spawning to the permanent supervisor thread,
+        // the child must remain alive after the worker thread exits.
+        let mut child = std::thread::spawn(|| {
+            #[cfg(unix)]
+            let cmd = {
+                let mut c = Command::new("sleep");
+                c.arg("5");
+                c
+            };
+            #[cfg(windows)]
+            let cmd = {
+                let mut c = Command::new("ping");
+                c.args(["-n", "6", "127.0.0.1"]);
+                c
+            };
+            spawn_managed_child(cmd).expect("spawn managed child")
+        })
+        .join()
+        .expect("worker thread finished");
+
+        std::thread::sleep(Duration::from_millis(150));
+        assert!(
+            child.try_wait().expect("poll child").is_none(),
+            "managed child must survive after the calling worker thread exits"
+        );
+        let _ = child.kill();
+        let _ = child.wait();
     }
 }
