@@ -6,9 +6,12 @@ import {
   fetchZarrTimeAttributes,
   parseCfTimeUnits,
   pickTimeDimension,
+  pointSeriesFromQueryResult,
   readCoordinateTimeAttributes,
   resolveZarrSelectorDates,
   resolveZarrTimeAxis,
+  zarrIndexSeriesSelector,
+  zarrPointValue,
 } from "../packages/plugins/src/plugins/zarr-time-axis.ts";
 
 // A Zarr cube's time axis reaches the Time Slider as raw coordinate values, so
@@ -440,5 +443,77 @@ describe("resolveZarrSelectorDates", () => {
       axis,
     );
     assert.deepEqual(result, { selector: null, unresolved: ["band"] });
+  });
+});
+
+// The pixel time-series chart reads many slices of a cube at a click in one
+// query; these pin how the slices are requested and read back.
+describe("zarrIndexSeriesSelector", () => {
+  it("names slices by position, not by coordinate value", () => {
+    // A bare number is matched against coordinate values first (days since
+    // 1900 for OISST), so the explicit index type is what makes 0 mean slot 0.
+    assert.deepEqual(zarrIndexSeriesSelector("time", [0, 5, 9]), {
+      time: { selected: [0, 5, 9], type: "index" },
+    });
+  });
+});
+
+describe("pointSeriesFromQueryResult", () => {
+  it("reads one value per requested index from the nested result", () => {
+    const result = {
+      sst: { 0: [12.5], 5: [27.25] },
+      dimensions: ["time", "lat", "lon"],
+      coordinates: {},
+    };
+    const values = pointSeriesFromQueryResult(result, "sst", [0, 5]);
+    assert.deepEqual(
+      [...values],
+      [
+        [0, 12.5],
+        [5, 27.25],
+      ],
+    );
+  });
+
+  it("turns fill values and missing indices into null gaps", () => {
+    const result = { sst: { 0: [Number.NaN], 1: [] } };
+    const values = pointSeriesFromQueryResult(result, "sst", [0, 1, 2]);
+    assert.deepEqual(
+      [...values],
+      [
+        [0, null],
+        [1, null],
+        [2, null],
+      ],
+    );
+  });
+
+  it("keeps the first finite sample when a point yields several", () => {
+    const values = pointSeriesFromQueryResult({ sst: { 3: [Number.NaN, 8, 9] } }, "sst", [3]);
+    assert.equal(values.get(3), 8);
+  });
+
+  it("falls back to the first data key when the variable name does not match", () => {
+    const result = { dimensions: [], coordinates: {}, analysed_sst: { 2: [1.5] } };
+    assert.equal(pointSeriesFromQueryResult(result, "sst", [2]).get(2), 1.5);
+  });
+
+  it("returns all gaps when the layer was not live", () => {
+    assert.deepEqual([...pointSeriesFromQueryResult(null, "sst", [0])], [[0, null]]);
+  });
+});
+
+describe("zarrPointValue", () => {
+  it("reads the value on screen", () => {
+    assert.equal(zarrPointValue({ sst: [27.5], dimensions: [], coordinates: {} }, "sst"), 27.5);
+  });
+
+  it("reports a fill value as null, so Identify can say no data", () => {
+    assert.equal(zarrPointValue({ sst: [Number.NaN] }, "sst"), null);
+  });
+
+  it("reports a point outside the grid as undefined, so Identify stays silent", () => {
+    assert.equal(zarrPointValue({ sst: [] }, "sst"), undefined);
+    assert.equal(zarrPointValue(null, "sst"), undefined);
   });
 });

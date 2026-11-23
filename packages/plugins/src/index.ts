@@ -1500,6 +1500,7 @@ export {
   parseCfTimeUnits,
   pickTimeDimension,
   resolveZarrTimeAxis,
+  zarrPointValue,
   type CfTimeUnits,
   type ZarrTimeAttributes,
   type ZarrTimeAxis,

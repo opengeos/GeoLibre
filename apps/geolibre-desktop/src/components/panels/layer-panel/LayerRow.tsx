@@ -194,6 +194,8 @@ export function LayerRow({
       layer.type === "cog" ||
       // An ArcGIS ImageServer reports its pixel values through `/identify`.
       isArcGISImageServiceLayer(layer) ||
+      // A Zarr cube reads its value through the renderer (useZarrIdentify).
+      layer.type === "zarr" ||
       hasNativeIdentifyLayers(layer));
   const identifyActive = identifyLayerId === layer.id;
   // A gesture that takes over map clicks has to turn Identify off, or

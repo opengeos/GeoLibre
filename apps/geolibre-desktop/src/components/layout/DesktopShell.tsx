@@ -56,6 +56,7 @@ import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
 import { useGlobalRasterIdentify } from "../../hooks/useGlobalRasterIdentify";
 import { useNetcdfIdentify } from "../../hooks/useNetcdfIdentify";
+import { useZarrIdentify } from "../../hooks/useZarrIdentify";
 import { useTerrainRestore } from "../../hooks/useTerrainRestore";
 import { useScriptControlRestore } from "../../hooks/useScriptControlRestore";
 import { useProjectInteractionRestore } from "../../hooks/useProjectInteractionRestore";
@@ -375,6 +376,7 @@ export function DesktopShell({
   // COG layers (read band values on click). Inert until a COG is identified.
   useRasterIdentify();
   useNetcdfIdentify(mapControllerRef, mapReadyGeneration);
+  useZarrIdentify(mapControllerRef, mapReadyGeneration);
   useCogSpectralIdentify(mapControllerRef, mapReadyGeneration);
   // The sampled pixels (markers + profile) those two hooks record live outside
   // the project, so New/Open and removing the inspected layer clear them here.

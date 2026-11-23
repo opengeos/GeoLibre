@@ -553,3 +553,95 @@ function dateIndexOnAxis(values: readonly number[], text: string): number {
   const tolerance = step > 0 ? step : 86_400_000;
   return target >= min - tolerance && target <= max + tolerance ? best : -1;
 }
+
+/**
+ * Build the selector that reads several slices of a Zarr time axis at once.
+ *
+ * The slices are named by **position** with an explicit `type: "index"`: a bare
+ * number is first matched against the coordinate values (e.g. days since 1900)
+ * and only falls back to a position when no value matches, so an index that
+ * happens to equal a coordinate value would read the wrong slice.
+ *
+ * @param dimension - The time dimension name, e.g. `"time"`.
+ * @param indices - Positions along the axis to read.
+ * @returns A selector for `queryData`.
+ */
+export function zarrIndexSeriesSelector(
+  dimension: string,
+  indices: readonly number[],
+): Record<string, { selected: number[]; type: "index" }> {
+  return { [dimension]: { selected: [...indices], type: "index" } };
+}
+
+/**
+ * Pull one value per requested time index out of a Zarr point query.
+ *
+ * A multi-value selector nests the variable's values by the requested label
+ * (here the index): `{ sst: { 0: [12.3], 5: [NaN] } }`. A point usually yields
+ * one sample per slice; when it yields several (a point on a cell edge), the
+ * first finite one is kept. Fill values arrive as `NaN` and become null, as
+ * does any index missing from the result, so the chart shows a gap rather than
+ * a fabricated zero.
+ *
+ * @param result - The query result, or null when the layer was not live.
+ * @param variable - The queried variable; when absent or not in the result, the
+ *   first non-metadata key is used.
+ * @param indices - The indices that were requested.
+ * @returns The value per requested index.
+ */
+export function pointSeriesFromQueryResult(
+  result: Record<string, unknown> | null | undefined,
+  variable: string | undefined,
+  indices: readonly number[],
+): Map<number, number | null> {
+  const values = new Map<number, number | null>();
+  for (const index of indices) values.set(index, null);
+  if (!result) return values;
+  const key =
+    variable && variable in result
+      ? variable
+      : Object.keys(result).find((name) => name !== "dimensions" && name !== "coordinates");
+  const nested = key ? result[key] : undefined;
+  if (!nested || typeof nested !== "object") return values;
+  // A single requested index comes back flat rather than nested.
+  const lookup = (index: number): unknown =>
+    Array.isArray(nested)
+      ? indices.length === 1
+        ? nested
+        : undefined
+      : (nested as Record<string, unknown>)[String(index)];
+  for (const index of indices) {
+    const samples = lookup(index);
+    if (!Array.isArray(samples)) continue;
+    const value = samples.find((sample) => typeof sample === "number" && Number.isFinite(sample));
+    if (typeof value === "number") values.set(index, value);
+  }
+  return values;
+}
+
+/**
+ * Read the single value a Zarr point query returned for the slice on screen.
+ *
+ * Tells "outside the grid" (no samples at all) apart from "no data here" (a fill
+ * value, which the renderer reports as `NaN`), so Identify can stay silent for a
+ * click off the data and still say "no data" for a land cell of an ocean grid.
+ *
+ * @param result - The query result, or null when the layer was not live.
+ * @param variable - The queried variable; falls back to the first data key.
+ * @returns The value, null for a fill value, or undefined when the point is
+ *   outside the grid (or the layer was not live).
+ */
+export function zarrPointValue(
+  result: Record<string, unknown> | null | undefined,
+  variable: string | undefined,
+): number | null | undefined {
+  if (!result) return undefined;
+  const key =
+    variable && variable in result
+      ? variable
+      : Object.keys(result).find((name) => name !== "dimensions" && name !== "coordinates");
+  const samples = key ? result[key] : undefined;
+  if (!Array.isArray(samples) || samples.length === 0) return undefined;
+  const value = samples.find((sample) => typeof sample === "number" && Number.isFinite(sample));
+  return typeof value === "number" ? value : null;
+}

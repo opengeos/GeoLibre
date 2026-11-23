@@ -1,6 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import {
   bandOptionsFromResults,
+  isSelectorTimeBinding,
   hasTimeSliderRasterStack,
   type LabeledPixelTimeSeries,
   type PixelTimeSeriesResult,
@@ -140,9 +141,13 @@ export function PixelTimeSeriesControl({
   // component; hasTimeSliderRasterStack() (read live below) is what gates the
   // trigger on a pixel-readable stack, since the query engine only supports the
   // sources that carry real values (COG and mosaic).
+  // A data cube (Zarr) stepped through its own time dimension is not a Time
+  // Slider source and has no mirror; its selector binding is the signal instead.
   const hasTimeSliderRasterMirror = useAppStore((s) =>
     s.layers.some(
-      (layer) => layer.metadata.sourceKind === "time-slider" && layer.type === "raster",
+      (layer) =>
+        (layer.metadata.sourceKind === "time-slider" && layer.type === "raster") ||
+        isSelectorTimeBinding(layer.metadata.timeBinding),
     ),
   );
   const hasRasterStack = hasTimeSliderRasterMirror && hasTimeSliderRasterStack();
