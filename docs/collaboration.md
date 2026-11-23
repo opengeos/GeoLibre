@@ -328,7 +328,9 @@ core:
 - `workers/collab` is the Cloudflare Durable Object used by the hosted service.
 - `workers/collab-node` is the self-hostable Node/SQLite relay. It is included
   as `geolibre-collab` in the root `docker-compose.yml`; its persistent database
-  is mounted at `/data/collab.sqlite`. Configure `COLLAB_MAX_SNAPSHOT_BYTES`
+  is mounted at `/data/collab.sqlite`. It serves the same HTTP endpoints as
+  the Worker, including the host-only session log, which it keeps in SQLite
+  under the same entry-count and byte bounds. Configure `COLLAB_MAX_SNAPSHOT_BYTES`
   (relay default 10,000,000; the compose file defaults it to 1,000,000) and
   `COLLAB_IDLE_TTL_MS` (default two hours) when needed.
 

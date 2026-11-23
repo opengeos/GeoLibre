@@ -3,6 +3,8 @@ import {
   type GeoLibreLayer,
   type LayerJoin,
   useAppStore,
+  useLayerSummaries,
+  useLayersWhen,
 } from "@geolibre/core";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { AlertTriangle, Plus, Trash2 } from "lucide-react";
@@ -31,8 +33,13 @@ function newJoinId(): string {
  */
 export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
   const { t } = useTranslation();
-  const layers = useAppStore((s) => s.layers);
   const setLayerJoins = useAppStore((s) => s.setLayerJoins);
+  // The join list shows each join layer's name only; the add form needs every
+  // layer's rows and joins, so the full array is subscribed only while the
+  // form is open.
+  const layerSummaries = useLayerSummaries();
+  const [formOpen, setFormOpen] = useState(false);
+  const layers = useLayersWhen(formOpen);
 
   const joins = useMemo(() => layer.joins ?? [], [layer.joins]);
 
@@ -50,7 +57,6 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
     [layers, layer.id],
   );
 
-  const [formOpen, setFormOpen] = useState(false);
   const [draftJoinLayerId, setDraftJoinLayerId] = useState("");
   const [draftTargetField, setDraftTargetField] = useState("");
   const [draftJoinField, setDraftJoinField] = useState("");
@@ -133,7 +139,7 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
         <p className="text-xs text-muted-foreground">{t("style.joins.empty")}</p>
       )}
       {joins.map((join) => {
-        const joinLayer = layers.find((candidate) => candidate.id === join.joinLayerId);
+        const joinLayer = layerSummaries.find((candidate) => candidate.id === join.joinLayerId);
         const stats = join.stats;
         const total = stats ? stats.matchedCount + stats.unmatchedTargetCount : 0;
         return (

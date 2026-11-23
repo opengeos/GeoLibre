@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { createLayerSliceSelector, useAppStore, useLayerSlices } from "@geolibre/core";
 import { Button, Input, ScrollArea, Select, cn } from "@geolibre/ui";
 import {
   AlertCircle,
@@ -241,6 +241,15 @@ function formatCell(value: unknown): string {
 }
 
 /**
+ * The fields the table and column previews read (the table name comes from
+ * the layer name, the columns from its features), so restyling a layer does
+ * not rescan every layer's columns.
+ */
+const selectSqlTableSources = createLayerSliceSelector((layer) =>
+  layer.geojson ? { id: layer.id, name: layer.name, geojson: layer.geojson } : null,
+);
+
+/**
  * The in-app SQL Workspace: a bottom-docked, resizable panel (à la the Python
  * Console) that runs DuckDB / PostGIS / Apache Sedona SQL against loaded layers,
  * local files, and URLs. Results render beside the editor so a query gives
@@ -249,7 +258,7 @@ function formatCell(value: unknown): string {
  */
 export function SqlWorkspacePanel() {
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
-  const layers = useAppStore((s) => s.layers);
+  const tableSources = useLayerSlices(selectSqlTableSources);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
 
@@ -295,8 +304,12 @@ export function SqlWorkspacePanel() {
   // property that repeats another ignoring case (`name` next to `NAME`).
   const tableColumns = useMemo(
     () =>
-      previewLayerColumns(layers, engine === "sedona" ? "geometry" : "geom", engine === "duckdb"),
-    [layers, engine],
+      previewLayerColumns(
+        tableSources,
+        engine === "sedona" ? "geometry" : "geom",
+        engine === "duckdb",
+      ),
+    [tableSources, engine],
   );
   const tables = useMemo(() => tableColumns.map((table) => table.tableName), [tableColumns]);
   const sampleQueries =
@@ -394,6 +407,8 @@ export function SqlWorkspacePanel() {
     // rows on screen while the spinner runs.
     setResult(null);
     try {
+      // The query reads every layer as it is now, not a render-time snapshot.
+      const layers = useAppStore.getState().layers;
       const queryResult =
         engine === "postgis"
           ? await runPostgisQuery(trimmed, layers)

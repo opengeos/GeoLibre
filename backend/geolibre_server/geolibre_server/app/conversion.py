@@ -930,3 +930,26 @@ def conversion_job(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@router.post("/jobs/{job_id}/cancel")
+def conversion_cancel(job_id: str):
+    """Stop a pending or running conversion job and kill its subprocess.
+
+    Cancelling a job that has already finished is a no-op that returns its final
+    state, so a client racing completion never sees an error. The job then
+    reports ``cancelled`` and its partial output is removed.
+
+    Args:
+        job_id: The conversion job id.
+
+    Returns:
+        The job's current state.
+
+    Raises:
+        HTTPException: 404 if the job is unknown (or owned by another tenant).
+    """
+    if _JOB_MANAGER.get(job_id) is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _cancel_job(job_id)
+    return _JOB_MANAGER.get(job_id)

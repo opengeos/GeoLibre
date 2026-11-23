@@ -630,3 +630,50 @@ def test_failed_conversion_preserves_preexisting_output(monkeypatch, tmp_path: P
     finally:
         with conversion._JOBS_LOCK:
             conversion._JOBS.pop(job_id, None)
+
+
+def _wait_for_conversion_job(job_id: str, *, while_status: set[str]):
+    import time
+
+    for _ in range(200):
+        state = conversion._job_state(job_id)
+        if state is not None and state.status not in while_status:
+            return state
+        time.sleep(0.05)
+    raise AssertionError(f"job {job_id} stayed in {while_status}")
+
+
+def test_conversion_cancel_endpoint_stops_a_running_job(monkeypatch) -> None:
+    """``POST /conversion/jobs/{id}/cancel`` kills the subprocess and reports cancelled."""
+    import time
+
+    monkeypatch.setattr(conversion, "_runtime_python", lambda: sys.executable)
+    job = conversion._start_job("convert-test", "import time\ntime.sleep(30)\n", {}, "out")
+    for _ in range(100):
+        if conversion._PROCESSES.get(job.id) is not None:
+            break
+        time.sleep(0.05)
+    conversion.conversion_cancel(job.id)
+    state = _wait_for_conversion_job(job.id, while_status={"pending", "running"})
+    assert state.status == "cancelled"
+    assert state.error == "Cancelled."
+    assert job.id not in conversion._PROCESSES
+    # Cancelling a finished job is a no-op that returns its final state.
+    assert conversion.conversion_cancel(job.id).status == "cancelled"
+
+
+def test_conversion_cancel_endpoint_rejects_unknown_job() -> None:
+    """An unknown job id is a 404, like ``GET /conversion/jobs/{id}``."""
+    with pytest.raises(HTTPException) as excinfo:
+        conversion.conversion_cancel("not-a-job")
+    assert excinfo.value.status_code == 404
+
+
+def test_conversion_cancel_route_is_registered() -> None:
+    """The cancel route is reachable over HTTP on the sidecar app."""
+    from fastapi.testclient import TestClient
+
+    from geolibre_server.app.main import app
+
+    response = TestClient(app).post("/conversion/jobs/not-a-job/cancel")
+    assert response.status_code == 404

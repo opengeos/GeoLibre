@@ -7,6 +7,7 @@ import {
 import { getLayerBounds, type MapEngine } from "@geolibre/map";
 import {
   clearRemoteWhiteboxCatalogSnapshotCache,
+  cancelWhiteboxJob,
   fetchWhiteboxJob,
   fetchWhiteboxJsonOutput,
   fetchRemoteWhiteboxCatalogSnapshot,
@@ -231,6 +232,7 @@ export function ProcessingDialog({
   // terminal job (never "pending"/"running"), so without this flag the Run
   // button would stay enabled mid-execution and allow concurrent runs.
   const [runningLocal, setRunningLocal] = useState(false);
+  const [cancellingJob, setCancellingJob] = useState(false);
   // Transient "Copied!" state for the share-link button, cleared after 2s.
   const [linkCopied, setLinkCopied] = useState(false);
   const linkCopyTimer = useRef<number | null>(null);
@@ -1726,6 +1728,21 @@ export function ProcessingDialog({
   };
 
   const running = runningLocal || Boolean(job && RUNNING_JOB_STATUSES.has(job.status));
+  // Only a sidecar job can be pending or running: WASM runs arrive terminal.
+  // Cancelling kills the tool on the sidecar; polling then picks up the
+  // job's `cancelled` state.
+  const sidecarJobRunning = !runningLocal && Boolean(job && RUNNING_JOB_STATUSES.has(job.status));
+  const cancelSidecarJob = async () => {
+    if (!job || !sidecarJobRunning) return;
+    setCancellingJob(true);
+    try {
+      await cancelWhiteboxJob(job.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("processing.whitebox.errorCancel"));
+    } finally {
+      setCancellingJob(false);
+    }
+  };
   const serverBusy = loadingTools || startingServer || stoppingServer;
 
   if (!open) return null;
@@ -2071,6 +2088,16 @@ export function ProcessingDialog({
                   ? t("processing.whitebox.copyLinkCopied")
                   : t("processing.whitebox.copyLink")}
               </Button>
+              {sidecarJobRunning ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void cancelSidecarJob()}
+                  disabled={cancellingJob}
+                >
+                  {t("common.cancel")}
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 onClick={runSelectedTool}
@@ -2278,7 +2305,7 @@ function JobOutputPanel({ job }: { job: WhiteboxJob }) {
       <p className={cn("flex items-center gap-2 text-sm font-medium", jobStatusTone(job))}>
         {job.status === "succeeded" ? (
           <CheckCircle2 className="h-4 w-4" />
-        ) : job.status === "failed" ? (
+        ) : job.status === "cancelled" ? null : job.status === "failed" ? (
           <AlertCircle className="h-4 w-4" />
         ) : (
           <Loader2 className="h-4 w-4 animate-spin" />

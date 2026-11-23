@@ -4,6 +4,7 @@ import {
   MAX_VECTOR_PMTILES_ZOOM,
   PMTILES_COLORMAPS,
   PMTILES_RESAMPLING_METHODS,
+  cancelConversionJob,
   fetchConversionJob,
   fetchConversionStatus,
   runCsvToGeoParquet,
@@ -592,6 +593,7 @@ export function ConversionDialog() {
   const cogAbortRef = useRef<AbortController | null>(null);
   const cogSavingRef = useRef<AbortController | null>(null);
   const [cogConverting, setCogConverting] = useState(false);
+  const [cancellingJob, setCancellingJob] = useState(false);
 
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -1537,6 +1539,20 @@ export function ConversionDialog() {
   };
 
   const running = Boolean(job && RUNNING_JOB_STATUSES.has(job.status));
+  // A sidecar job (not a browser run, which the COG abort controller handles)
+  // can be stopped on the server; polling then picks up its `cancelled` state.
+  const sidecarJobRunning = Boolean(running && job && job.id !== BROWSER_JOB_ID);
+  const cancelSidecarJob = async () => {
+    if (!job || !sidecarJobRunning) return;
+    setCancellingJob(true);
+    try {
+      await cancelConversionJob(job.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("toolbar.conversion.errorCancel"));
+    } finally {
+      setCancellingJob(false);
+    }
+  };
 
   return (
     <Dialog
@@ -1850,6 +1866,16 @@ export function ConversionDialog() {
           <div className="flex items-center justify-end gap-2">
             {cogConverting && (
               <Button type="button" variant="outline" onClick={() => cogAbortRef.current?.abort()}>
+                {t("common.cancel")}
+              </Button>
+            )}
+            {sidecarJobRunning && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void cancelSidecarJob()}
+                disabled={cancellingJob}
+              >
                 {t("common.cancel")}
               </Button>
             )}

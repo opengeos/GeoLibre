@@ -8,11 +8,14 @@ import {
   editorTrackingFieldNames,
   getAttributeFormField,
   isAttributeFormFieldVisible,
+  createLayerSliceSelector,
   stampFeatureEditorTracking,
   useAppStore,
+  useLayer,
+  useLayerSlices,
+  useLayersWhen,
   validateAttributeFormValues,
   type AttributeFormConfig,
-  type GeoLibreLayer,
 } from "@geolibre/core";
 import {
   Button,
@@ -115,6 +118,15 @@ function formatLatLng(lng: number, lat: number): string {
 }
 
 /**
+ * The collection layers, as the `{ id, name }` the target picker and the
+ * session effects read, so an edit to any other layer field does not
+ * re-render this always-mounted dialog.
+ */
+const selectCollectionLayers = createLayerSliceSelector((layer) =>
+  isCollectionLayer(layer) ? { id: layer.id, name: layer.name } : null,
+);
+
+/**
  * Field Collection: capture point, line, or polygon observations against a
  * custom attribute form, placing geometry by GPS or by tapping the map. Captures
  * are written to a tagged `geojson` collection layer in the store, so they
@@ -128,12 +140,11 @@ export function FieldCollectionDialog({
   mapReadyGeneration,
 }: FieldCollectionDialogProps) {
   const { t } = useTranslation();
-  const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
 
-  const collectionLayers = useMemo(() => layers.filter((l) => isCollectionLayer(l)), [layers]);
+  const collectionLayers = useLayerSlices(selectCollectionLayers);
 
   // Field Collection runs as a *session* that is deliberately separate from
   // whether the dialog is open, and from whether collection layers exist: a
@@ -223,7 +234,10 @@ export function FieldCollectionDialog({
     if (!layerId) creatingRef.current = false;
   }, [layerId]);
 
-  const activeLayer = layerId ? (layers.find((l) => l.id === layerId) ?? null) : null;
+  const activeLayer = useLayer(layerId) ?? null;
+  // The related-record links read every layer's form, and show only inside the
+  // open dialog.
+  const openLayers = useLayersWhen(open);
   const schema: CollectionSchema | null = activeLayer ? getSchema(activeLayer) : null;
   const activeGeometry: GeometryType = activeLayer ? getGeometryType(activeLayer) : geometry;
   const activeGeometryRef = useRef(activeGeometry);
@@ -1085,7 +1099,7 @@ export function FieldCollectionDialog({
               value={layerId}
               onChange={(e) => handleTargetChange(e.target.value)}
             >
-              {collectionLayers.map((l: GeoLibreLayer) => (
+              {collectionLayers.map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.name}
                 </option>
@@ -1148,7 +1162,7 @@ export function FieldCollectionDialog({
               {savedParent && (activeGeometry === "none" ? !recordEdited : !pending) && (
                 <FieldCollectionRelated
                   parent={savedParent}
-                  layers={layers}
+                  layers={openLayers}
                   onAdd={(childId, prefill) => {
                     handleTargetChange(childId);
                     prefillRef.current = prefill;

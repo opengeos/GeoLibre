@@ -1,6 +1,11 @@
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import {
+  createLayerSliceSelector,
+  useAppStore,
+  useLayerSlices,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
   VECTOR_TOOLS,
@@ -85,10 +90,28 @@ function ToolOptions({ t }: { t: TFunction }): ReactElement {
   );
 }
 
+/** The fields of a GeoJSON layer the batch panel lists and samples. */
+type BatchSourceLayer = Pick<GeoLibreLayer, "id" | "name"> & {
+  geojson: NonNullable<GeoLibreLayer["geojson"]>;
+};
+
+/**
+ * GeoJSON layers with features in memory, as the `{ id, name, geojson }` the
+ * input list, layer pickers and field sampling read, so restyling a layer
+ * does not re-render the panel.
+ */
+const selectBatchSourceLayers = createLayerSliceSelector((layer): BatchSourceLayer | null =>
+  layer.type === "geojson" && layer.geojson
+    ? { id: layer.id, name: layer.name, geojson: layer.geojson }
+    : null,
+);
+
 /** GeoJSON layers usable as inputs, optionally filtered by geometry family. */
-function geojsonLayers(layers: GeoLibreLayer[], filter?: GeometryFamily[]): GeoLibreLayer[] {
+function geojsonLayers(
+  layers: readonly BatchSourceLayer[],
+  filter?: GeometryFamily[],
+): BatchSourceLayer[] {
   return layers.filter((layer) => {
-    if (layer.type !== "geojson" || !layer.geojson) return false;
     if (!filter?.length) return true;
     const profile = detectGeometryProfile(layer.geojson);
     return filter.some(
@@ -119,12 +142,14 @@ function isParamVisible(param: AlgorithmParameter, params: Record<string, unknow
 }
 
 /** Attribute field names per GeoJSON layer, sampled for schemaless data. */
-function useFieldsByLayer(layers: GeoLibreLayer[], enabled: boolean): Map<string, string[]> {
+function useFieldsByLayer(
+  layers: readonly BatchSourceLayer[],
+  enabled: boolean,
+): Map<string, string[]> {
   return useMemo(() => {
     const map = new Map<string, string[]>();
     if (!enabled) return map;
     for (const layer of layers) {
-      if (layer.type !== "geojson" || !layer.geojson) continue;
       const keys = new Set<string>();
       for (const feature of layer.geojson.features.slice(0, FIELD_SCAN_SAMPLE)) {
         for (const key of Object.keys(feature.properties ?? {})) keys.add(key);
@@ -198,7 +223,7 @@ function LogView({ log }: { log: string[] }): ReactElement {
 /** Batch mode: one tool over many input layers with shared parameters. */
 function BatchPanel({ mapControllerRef }: BatchToolsDialogProps): ReactElement {
   const { t } = useTranslation();
-  const layers = useAppStore((s) => s.layers);
+  const layers = useLayerSlices(selectBatchSourceLayers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const duckdb = useMemo(() => createDuckDbCapability(), []);
 
@@ -311,8 +336,10 @@ function BatchPanel({ mapControllerRef }: BatchToolsDialogProps): ReactElement {
     abortRef.current = controller;
     const { signal } = controller;
     setRunning(true);
+    // The run reads every layer as it is when it starts.
+    const runLayers = useAppStore.getState().layers;
     const host: RunnerHost = {
-      layers,
+      layers: runLayers,
       // A cancelled run's late log lines (an inline tool still finishing) are
       // dropped rather than mixed into the next run's log.
       log: (message) => {
@@ -325,7 +352,7 @@ function BatchPanel({ mapControllerRef }: BatchToolsDialogProps): ReactElement {
     let produced = 0;
     try {
       for (const id of selectedIds) {
-        const layer = layers.find((l) => l.id === id);
+        const layer = runLayers.find((l) => l.id === id);
         if (!layer) continue;
         appendLog(`Running "${tool.name}" on ${layer.name}...`);
         // Race the abort so a cancel settles at once even for a tool that
@@ -364,7 +391,6 @@ function BatchPanel({ mapControllerRef }: BatchToolsDialogProps): ReactElement {
     selectedIds,
     sharedParams,
     params,
-    layers,
     appendLog,
     duckdb,
     mapControllerRef,

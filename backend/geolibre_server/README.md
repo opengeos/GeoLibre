@@ -162,8 +162,7 @@ are not retained for features that are saved.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Health check |
-| GET | `/algorithms` | List algorithms |
-| POST | `/run` | Run algorithm (501 placeholder) |
+| GET | `/token-check` | Confirms the sidecar token (no-op, authenticated) |
 | GET | `/conversion/status` | Conversion runtime availability |
 | POST | `/conversion/vector-to-geoparquet` | Vector → Hilbert-sorted GeoParquet |
 | POST | `/conversion/vector-to-flatgeobuf` | Vector → Hilbert-sorted FlatGeobuf |
@@ -171,6 +170,7 @@ are not retained for features that are saved.
 | POST | `/conversion/vector-to-pmtiles` | Vector → PMTiles (freestiler) |
 | POST | `/conversion/raster-to-cog` | Raster → Cloud Optimized GeoTIFF |
 | GET | `/conversion/jobs/{id}` | Conversion job status |
+| POST | `/conversion/jobs/{id}/cancel` | Cancel a conversion job |
 | GET | `/sql/status` | Spatial SQL (SedonaDB) availability |
 | POST | `/sql/run` | Run Sedona spatial SQL over registered layers |
 | GET | `/ml/status` | Segmentation backend availability + models |

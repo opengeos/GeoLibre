@@ -1,5 +1,11 @@
 import type { DashboardWidget, IndicatorAggregation } from "@geolibre/core";
-import { MAX_DASHBOARD_COLUMNS, MIN_DASHBOARD_COLUMNS, useAppStore } from "@geolibre/core";
+import {
+  createLayerSliceSelector,
+  MAX_DASHBOARD_COLUMNS,
+  MIN_DASHBOARD_COLUMNS,
+  useAppStore,
+  useLayerSlices,
+} from "@geolibre/core";
 import { Button, Select } from "@geolibre/ui";
 import {
   ChevronLeft,
@@ -99,6 +105,14 @@ function widgetToSpec(widget: DashboardWidget, type: ChartType): ChartSpec {
 }
 
 /**
+ * Layers that expose chartable attributes, as the `{ id, name }` the widget
+ * editor's layer picker lists.
+ */
+const selectChartableLayers = createLayerSliceSelector((layer) =>
+  isChartableLayer(layer) ? { id: layer.id, name: layer.name } : null,
+);
+
+/**
  * The Dashboard panel: a bottom-docked, resizable strip of chart widgets, each
  * bound to a layer and field(s), in the spirit of CARTO Builder / Foursquare
  * Studio (issue #401). Widgets are stored in the project, so a dashboard
@@ -109,7 +123,6 @@ function widgetToSpec(widget: DashboardWidget, type: ChartType): ChartSpec {
 export function DashboardPanel() {
   const { t } = useTranslation();
   const widgets = useAppStore((s) => s.widgets);
-  const layers = useAppStore((s) => s.layers);
   const columns = useAppStore((s) => s.dashboardColumns);
   const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
   const setDashboardColumns = useAppStore((s) => s.setDashboardColumns);
@@ -176,13 +189,7 @@ export function DashboardPanel() {
   }, [widgets, selections]);
 
   // Layers that expose chartable attributes, for the editor's layer picker.
-  const chartableLayers = useMemo(
-    () =>
-      layers
-        .filter((layer) => isChartableLayer(layer))
-        .map((layer) => ({ id: layer.id, name: layer.name })),
-    [layers],
-  );
+  const chartableLayers = useLayerSlices(selectChartableLayers);
 
   const startResize = (event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
