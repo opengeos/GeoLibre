@@ -588,6 +588,22 @@ html .maplibre-gl-inspect-geometry {
   color: hsl(var(--accent-foreground));
 }
 
+/* The Zarr layer click popup (maplibre-gl-components) hardcodes #555/#333 cell
+   text and #eee row rules for a white popup. The shared popup theme above makes
+   the popup dark in dark mode, which left that text near-invisible; follow the
+   popover tokens instead so it reads in both themes. */
+html .maplibregl-popup .maplibre-gl-zarr-layer-popup-table td {
+  border-bottom-color: hsl(var(--border));
+}
+
+html .maplibregl-popup .maplibre-gl-zarr-layer-popup-table td:first-child {
+  color: hsl(var(--muted-foreground));
+}
+
+html .maplibregl-popup .maplibre-gl-zarr-layer-popup-table td:last-child {
+  color: hsl(var(--popover-foreground));
+}
+
 .maplibregl-map :is(.maplibre-gl-inspect-button, .maplibre-gl-vector-dataset-button) {
   color: hsl(var(--popover-foreground));
 }
