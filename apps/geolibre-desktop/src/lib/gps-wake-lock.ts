@@ -163,19 +163,23 @@ export function saveGpsTrackCheckpoint(
   }
 }
 
+/** Maximum age of a saved GPS checkpoint before it is treated as stale (24h). */
+export const GPS_CHECKPOINT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 export interface ThrottledCheckpointSaver {
-  /** Save at most once per `intervalMs`; returns `null` when throttled. */
+  /** Save at most once per `intervalMs`; queues a trailing write when throttled. */
   schedule(segments: GpsTrackSegments): boolean | null;
   /** Flush immediately regardless of throttle interval. */
   flush(segments: GpsTrackSegments): boolean;
-  /** Reset throttle state (e.g. when clearing a track). */
+  /** Reset throttle state and cancel any pending trailing write. */
   reset(): void;
 }
 
 /**
  * Throttle GPS track checkpoint writes to avoid O(n^2) JSON serialization on
- * high-frequency fixes while still allowing immediate flushes on pagehide /
- * visibilitychange / stop.
+ * high-frequency fixes while still scheduling a trailing write for throttled
+ * fixes (so a fix recorded right after a flush is never stranded) and allowing
+ * immediate flushes on pagehide / visibilitychange / stop.
  */
 export function createThrottledCheckpointSaver(options?: {
   intervalMs?: number;
@@ -186,8 +190,19 @@ export function createThrottledCheckpointSaver(options?: {
   const intervalMs = options?.intervalMs ?? GPS_CHECKPOINT_THROTTLE_MS;
   const now = options?.now ?? Date.now;
   let lastSavedAt = -Infinity;
+  let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingSegments: GpsTrackSegments | null = null;
+
+  const cancelPending = () => {
+    if (pendingTimer !== null) {
+      clearTimeout(pendingTimer);
+      pendingTimer = null;
+    }
+    pendingSegments = null;
+  };
 
   const writeNow = (segments: GpsTrackSegments): boolean => {
+    cancelPending();
     const ok = saveGpsTrackCheckpoint(
       segments,
       options?.storage !== undefined ? options.storage : defaultStorage(),
@@ -199,28 +214,55 @@ export function createThrottledCheckpointSaver(options?: {
 
   return {
     schedule(segments: GpsTrackSegments): boolean | null {
-      if (now() - lastSavedAt < intervalMs) return null;
+      const elapsed = now() - lastSavedAt;
+      if (elapsed < intervalMs) {
+        pendingSegments = segments;
+        if (pendingTimer === null) {
+          const delay = Math.max(0, intervalMs - elapsed);
+          pendingTimer = setTimeout(() => {
+            const latest = pendingSegments;
+            pendingTimer = null;
+            pendingSegments = null;
+            if (latest) writeNow(latest);
+          }, delay);
+        }
+        return null;
+      }
       return writeNow(segments);
     },
     flush(segments: GpsTrackSegments): boolean {
       return writeNow(segments);
     },
     reset(): void {
+      cancelPending();
       lastSavedAt = -Infinity;
     },
   };
 }
 
-/** Restore a previously checkpointed track recording, or null if absent/invalid. */
+/** Restore a previously checkpointed track recording, or null if absent/invalid/stale. */
 export function loadGpsTrackCheckpoint(
   storage: StorageLike | null = defaultStorage(),
+  now: number = Date.now(),
 ): GpsTrackSegments | null {
   if (!storage) return null;
   try {
     const raw = storage.getItem(GPS_TRACK_CHECKPOINT_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { version?: unknown; segments?: unknown };
+    const parsed = JSON.parse(raw) as {
+      version?: unknown;
+      savedAt?: unknown;
+      segments?: unknown;
+    };
     if (parsed?.version !== 1 || !Array.isArray(parsed.segments)) return null;
+    if (
+      typeof parsed.savedAt === "number" &&
+      Number.isFinite(parsed.savedAt) &&
+      now - parsed.savedAt > GPS_CHECKPOINT_MAX_AGE_MS
+    ) {
+      clearGpsTrackCheckpoint(storage);
+      return null;
+    }
     const segments: GpsTrackSegments = [];
     for (const seg of parsed.segments) {
       if (!Array.isArray(seg)) continue;

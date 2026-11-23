@@ -187,21 +187,19 @@ export function isDesktopSignedUpdateInstalling(): boolean {
  * the application upon completion. Coalesces concurrent calls so reopening the
  * About dialog cannot start a second parallel installation.
  */
-export async function installDesktopSignedUpdate(): Promise<boolean> {
-  if (IS_STORE_BUILD) return false;
+export function installDesktopSignedUpdate(): Promise<boolean> {
+  if (IS_STORE_BUILD) return Promise.resolve(false);
   if (pendingSignedInstall) return pendingSignedInstall;
-  const { isTauri } = await import("./is-tauri");
-  if (!isTauri()) return false;
   const run = (async () => {
+    const { isTauri } = await import("./is-tauri");
+    if (!isTauri()) return false;
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<boolean>("install_desktop_update");
   })();
   pendingSignedInstall = run;
-  try {
-    return await run;
-  } finally {
+  return run.finally(() => {
     if (pendingSignedInstall === run) pendingSignedInstall = null;
-  }
+  });
 }
 
 /**

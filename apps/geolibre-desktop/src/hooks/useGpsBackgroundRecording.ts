@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
+import i18next from "i18next";
 import type { GpsTrackSegments } from "../lib/gps-tracking";
 import {
   createGpsWakeLockController,
@@ -29,10 +30,9 @@ export function useGpsBackgroundRecording(
         onSaveResult: (ok) => {
           if (!ok && !warnedQuotaRef.current) {
             warnedQuotaRef.current = true;
-            notify.warning(
-              "GPS track checkpoint could not be saved to browser storage. Export your track to avoid losing fixes.",
-              { dedupeKey: "gps-checkpoint-quota" },
-            );
+            notify.warning(i18next.t("gps.checkpointQuotaWarning"), {
+              dedupeKey: "gps-checkpoint-quota",
+            });
           } else if (ok) {
             warnedQuotaRef.current = false;
           }

@@ -1,7 +1,9 @@
 /**
- * Platform-aware URL builders for Tauri's pooled custom URI scheme handlers
- * (`mbtiles`, `local-pmtiles`, and `local-cog`) that serve local tiles and HTTP
- * byte-range media directly from Rust without JSON IPC serialization overhead.
+ * Foundational platform-aware URL builders for Tauri's pooled custom URI scheme
+ * handlers (`mbtiles`, `local-pmtiles`, and `local-cog`) that serve local tiles
+ * and HTTP byte-range media directly from Rust without JSON IPC serialization
+ * overhead. These helpers expose the protocol URL contract for layer loaders
+ * adopting native protocol streaming.
  *
  * Tauri v2 serves custom URI schemes over `http://<scheme>.localhost` on
  * Windows (WebView2) and Android, and `<scheme>://localhost` on macOS, Linux,

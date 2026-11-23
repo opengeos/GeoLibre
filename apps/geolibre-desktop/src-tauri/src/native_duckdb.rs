@@ -74,7 +74,9 @@ fn validate_bbox(bbox: Option<[f64; 4]>) -> Result<Option<[f64; 4]>, String> {
         return Err("Spatial bbox filter must contain finite coordinates.".to_string());
     }
     if min_x > max_x || min_y > max_y {
-        return Err("Spatial bbox filter must satisfy min_x <= max_x and min_y <= max_y.".to_string());
+        return Err(
+            "Spatial bbox filter must satisfy min_x <= max_x and min_y <= max_y.".to_string(),
+        );
     }
     Ok(Some([min_x, min_y, max_x, max_y]))
 }
@@ -2490,10 +2492,11 @@ mod tests {
 
     #[test]
     fn flatgeobuf_binary_export_preserves_null_geometries() {
-        let conn = match open_native_duckdb() {
-            Ok(conn) => conn,
-            Err(_) => return, // Skip when DuckDB spatial extension is not installed offline.
-        };
+        if std::env::var_os("GEOLIBRE_SKIP_DUCKDB_SPATIAL_TESTS").is_some() {
+            return;
+        }
+        let conn = open_native_duckdb()
+            .expect("open native DuckDB with spatial extension (set GEOLIBRE_SKIP_DUCKDB_SPATIAL_TESTS=1 to opt out)");
         let export_dir = create_private_export_dir().unwrap();
         let _guard = TempDirGuard(export_dir.clone());
         let src_path = export_dir.join("null_geom.geojson");
@@ -2513,7 +2516,12 @@ mod tests {
         };
         let bytes =
             load_native_vector_file_binary_blocking(options, NativeBinaryFormat::FlatGeobuf)
-                .expect("FlatGeobuf export should succeed with NULL geometry when SPATIAL_INDEX=NO");
-        assert!(bytes.starts_with(b"fgb"), "exported payload must be FlatGeobuf");
+                .expect(
+                    "FlatGeobuf export should succeed with NULL geometry when SPATIAL_INDEX=NO",
+                );
+        assert!(
+            bytes.starts_with(b"fgb"),
+            "exported payload must be FlatGeobuf"
+        );
     }
 }

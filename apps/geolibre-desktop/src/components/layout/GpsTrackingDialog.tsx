@@ -950,6 +950,9 @@ export function GpsTrackingDialog({
           ],
           mimeType: format === "gpx" ? "application/gpx+xml" : "application/geo+json",
         });
+        if (path) {
+          clearGpsTrackCheckpoint();
+        }
         setNotice(path ? t("gps.trackExported") : t("gps.exportCancelled"));
       } catch (error) {
         logGpsFailure(`GPS: exporting the track as ${format} failed`, error);

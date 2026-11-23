@@ -11,6 +11,7 @@ import {
 import { CheckCircle2, ExternalLink, Info, Map, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useAppStore } from "@geolibre/core";
 import { openExternalLink } from "../../lib/open-external";
 import {
   APP_VERSION,
@@ -171,6 +172,11 @@ export function AboutDialog({
 
   const handleInstallSignedUpdate = async () => {
     if (IS_STORE_BUILD || installingSignedUpdate || isDesktopSignedUpdateInstalling()) return;
+    const isDirty = useAppStore.getState().isDirty;
+    const confirmKey = isDirty ? "updates.confirmInstallDirty" : "updates.confirmInstall";
+    if (typeof window !== "undefined" && !window.confirm(t(confirmKey))) {
+      return;
+    }
     setInstallingSignedUpdate(true);
     setUpdateError(null);
     try {

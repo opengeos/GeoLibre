@@ -39,8 +39,7 @@ pub(crate) fn validate_account(account: &str) -> Result<(), String> {
     Ok(())
 }
 
-const READS_SEALED: &str =
-    "Saved credentials can only be read once, while GeoLibre starts up.";
+const READS_SEALED: &str = "Saved credentials can only be read once, while GeoLibre starts up.";
 
 /// Which webviews have used their one credential read since their last page
 /// load, by webview label.
@@ -80,7 +79,9 @@ static READ_GATE: Mutex<Option<ReadGate>> = Mutex::new(None);
 fn with_read_gate<T>(f: impl FnOnce(&mut ReadGate) -> T) -> T {
     // A panic while holding the lock leaves the set consistent: every update
     // is a single insert or remove.
-    let mut guard = READ_GATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut guard = READ_GATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     f(guard.get_or_insert_with(ReadGate::default))
 }
 
@@ -184,7 +185,9 @@ pub(crate) mod encrypted_vault {
                         preserve_permissions: None,
                     },
                 )
-                .map_err(|write_err| format!("Could not persist credential vault key: {write_err}"))?;
+                .map_err(|write_err| {
+                    format!("Could not persist credential vault key: {write_err}")
+                })?;
                 Ok(key)
             }
             Err(error) => Err(format!("Could not read credential vault key: {error}")),
@@ -214,7 +217,9 @@ pub(crate) mod encrypted_vault {
         let mut in_out = raw[nonce_end..].to_vec();
         let plaintext = key
             .open_in_place(nonce, Aad::from(SERVICE.as_bytes()), &mut in_out)
-            .map_err(|_| "Could not decrypt credential vault (integrity check failed).".to_string())?;
+            .map_err(|_| {
+                "Could not decrypt credential vault (integrity check failed).".to_string()
+            })?;
         serde_json::from_slice(plaintext)
             .map_err(|error| format!("Could not parse decrypted credential vault: {error}"))
     }
@@ -285,7 +290,9 @@ pub(crate) mod encrypted_vault {
 
 fn lock() -> std::sync::MutexGuard<'static, ()> {
     // A panic while holding the lock leaves no partial state to protect.
-    STORE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    STORE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 #[cfg(any(
@@ -411,17 +418,22 @@ fn delete_blocking_with_dir(
 /// [`secure_store_seal`]; the read is used up even when it fails.
 #[tauri::command]
 pub async fn secure_store_get_many(
-    app: tauri::AppHandle,
+    #[allow(unused_variables)] app: tauri::AppHandle,
     webview: tauri::Webview,
     accounts: Vec<String>,
 ) -> Result<HashMap<String, String>, String> {
-    use tauri::Manager;
     with_read_gate(|gate| gate.claim(webview.label()))?;
     let accounts = accounts
         .into_iter()
         .filter(|account| check_webview_account(account).is_ok())
         .collect();
-    let app_data_dir = app.path().app_data_dir().ok();
+    #[cfg(target_os = "android")]
+    let app_data_dir = {
+        use tauri::Manager;
+        app.path().app_data_dir().ok()
+    };
+    #[cfg(not(target_os = "android"))]
+    let app_data_dir = None;
     tauri::async_runtime::spawn_blocking(move || get_many_blocking(app_data_dir, accounts))
         .await
         .map_err(|error| format!("Could not join secure storage task: {error}"))?
@@ -437,17 +449,17 @@ pub fn secure_store_seal(webview: tauri::Webview) {
 
 #[tauri::command]
 pub async fn secure_store_set(
-    app: tauri::AppHandle,
+    #[allow(unused_variables)] app: tauri::AppHandle,
     account: String,
     secret: String,
 ) -> Result<(), String> {
-    use tauri::Manager;
     check_webview_account(&account)?;
-    let _app_data_dir = app.path().app_data_dir().ok();
     #[cfg(target_os = "android")]
     {
+        use tauri::Manager;
+        let app_data_dir = app.path().app_data_dir().ok();
         return tauri::async_runtime::spawn_blocking(move || {
-            set_blocking_with_dir(_app_data_dir, account, secret)
+            set_blocking_with_dir(app_data_dir, account, secret)
         })
         .await
         .map_err(|error| format!("Could not join secure storage task: {error}"))?;
@@ -460,14 +472,17 @@ pub async fn secure_store_set(
 
 /// Deleting an account that does not exist succeeds.
 #[tauri::command]
-pub async fn secure_store_delete(app: tauri::AppHandle, account: String) -> Result<(), String> {
-    use tauri::Manager;
+pub async fn secure_store_delete(
+    #[allow(unused_variables)] app: tauri::AppHandle,
+    account: String,
+) -> Result<(), String> {
     check_webview_account(&account)?;
-    let _app_data_dir = app.path().app_data_dir().ok();
     #[cfg(target_os = "android")]
     {
+        use tauri::Manager;
+        let app_data_dir = app.path().app_data_dir().ok();
         return tauri::async_runtime::spawn_blocking(move || {
-            delete_blocking_with_dir(_app_data_dir, account)
+            delete_blocking_with_dir(app_data_dir, account)
         })
         .await
         .map_err(|error| format!("Could not join secure storage task: {error}"))?;
@@ -581,8 +596,14 @@ mod tests {
             ],
         )
         .unwrap();
-        assert_eq!(found.get("settings.shareToken").map(String::as_str), Some("secret-123"));
-        assert_eq!(found.get("ai.default.KEY").map(String::as_str), Some("api-xyz"));
+        assert_eq!(
+            found.get("settings.shareToken").map(String::as_str),
+            Some("secret-123")
+        );
+        assert_eq!(
+            found.get("ai.default.KEY").map(String::as_str),
+            Some("api-xyz")
+        );
         assert!(!found.contains_key("missing.key"));
 
         super::encrypted_vault::delete(&dir, "settings.shareToken").unwrap();

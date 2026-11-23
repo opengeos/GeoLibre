@@ -6,6 +6,7 @@
 
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readFile, readTextFile, writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import i18next from "i18next";
 import { nativeFileDialogFilters, type FileDialogFilter } from "../file-dialog-filters";
 import { isMobile } from "../is-mobile";
 import { isTauri } from "../is-tauri";
@@ -423,51 +424,47 @@ export async function shareFileWithOsSheet(
 }
 
 function offerDownloadInsteadToast(fileName: string, onDownload: () => void): void {
-  notify.info(`Share sheet closed for ${fileName}.`, {
-    description: "If no share targets appeared, you can download the file directly instead.",
+  notify.info(i18next.t("fileDialogs.shareClosed", { fileName }), {
+    description: i18next.t("fileDialogs.shareClosedDescription"),
     dedupeKey: `share-sheet-download-fallback:${fileName}`,
     action: {
-      label: "Download instead",
+      label: i18next.t("fileDialogs.downloadInstead"),
       onClick: onDownload,
     },
   });
+}
+
+async function tryMobileShareWithFallback(
+  fileName: string,
+  createFile: () => File,
+  onDownloadFallback: () => void,
+): Promise<{ handled: true; result: string | null } | { handled: false }> {
+  if (!isMobile()) return { handled: false };
+  const outcome = await shareFileWithOsSheet(createFile(), fileName);
+  if (outcome === "shared") return { handled: true, result: fileName };
+  if (outcome === "cancelled") {
+    offerDownloadInsteadToast(fileName, onDownloadFallback);
+    return { handled: true, result: null };
+  }
+  return { handled: false };
 }
 
 export async function saveTextFileWithFallback(
   content: string,
   options: SaveTextFileOptions,
 ): Promise<string | null> {
-  if (!isTauri()) {
-    if (isMobile()) {
-      const fileName = browserSafeFileName(options.defaultName);
-      const outcome = await shareFileWithOsSheet(
-        new File([content], fileName, { type: options.mimeType }),
-        fileName,
-      );
-      if (outcome === "shared") return fileName;
-      if (outcome === "cancelled") {
-        offerDownloadInsteadToast(fileName, () => {
-          void saveTextFileBrowser(content, options);
-        });
-        return null;
-      }
-    }
-    return saveTextFileBrowser(content, options);
-  }
+  const fileName = browserSafeFileName(options.defaultName);
+  const shared = await tryMobileShareWithFallback(
+    fileName,
+    () => new File([content], fileName, { type: options.mimeType }),
+    () => {
+      void saveTextFileBrowser(content, options);
+    },
+  );
+  if (shared.handled) return shared.result;
 
-  if (isMobile()) {
-    const fileName = browserSafeFileName(options.defaultName);
-    const outcome = await shareFileWithOsSheet(
-      new File([content], fileName, { type: options.mimeType }),
-      fileName,
-    );
-    if (outcome === "shared") return fileName;
-    if (outcome === "cancelled") {
-      offerDownloadInsteadToast(fileName, () => {
-        void saveTextFileBrowser(content, options);
-      });
-      return null;
-    }
+  if (!isTauri()) {
+    return saveTextFileBrowser(content, options);
   }
 
   const path = await save({
@@ -483,45 +480,24 @@ export async function saveBinaryFileWithFallback(
   content: Uint8Array | Blob,
   options: SaveBinaryFileOptions,
 ): Promise<string | null> {
-  if (!isTauri()) {
-    if (isMobile()) {
-      const fileName = browserSafeFileName(options.defaultName);
+  const fileName = browserSafeFileName(options.defaultName);
+  const shared = await tryMobileShareWithFallback(
+    fileName,
+    () => {
       const blob =
         content instanceof Blob
           ? content
           : new Blob([toArrayBuffer(content)], { type: options.mimeType });
-      const outcome = await shareFileWithOsSheet(
-        new File([blob], fileName, { type: blob.type || options.mimeType }),
-        fileName,
-      );
-      if (outcome === "shared") return fileName;
-      if (outcome === "cancelled") {
-        offerDownloadInsteadToast(fileName, () => {
-          void saveBinaryFileBrowser(content, options);
-        });
-        return null;
-      }
-    }
-    return saveBinaryFileBrowser(content, options);
-  }
+      return new File([blob], fileName, { type: blob.type || options.mimeType });
+    },
+    () => {
+      void saveBinaryFileBrowser(content, options);
+    },
+  );
+  if (shared.handled) return shared.result;
 
-  if (isMobile()) {
-    const fileName = browserSafeFileName(options.defaultName);
-    const blob =
-      content instanceof Blob
-        ? content
-        : new Blob([toArrayBuffer(content)], { type: options.mimeType });
-    const outcome = await shareFileWithOsSheet(
-      new File([blob], fileName, { type: blob.type || options.mimeType }),
-      fileName,
-    );
-    if (outcome === "shared") return fileName;
-    if (outcome === "cancelled") {
-      offerDownloadInsteadToast(fileName, () => {
-        void saveBinaryFileBrowser(content, options);
-      });
-      return null;
-    }
+  if (!isTauri()) {
+    return saveBinaryFileBrowser(content, options);
   }
 
   const path = await save({

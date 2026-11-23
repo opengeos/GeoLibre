@@ -90,8 +90,10 @@ mod active {
         }
         let updater = match build_updater(&app) {
             Ok(updater) => updater,
-            Err(_) => {
-                // Updater endpoints / minisign pubkey are omitted in dev builds.
+            Err(error) => {
+                // Updater endpoints / minisign pubkey are omitted in dev builds;
+                // log the reason so a misconfigured release build is diagnosable.
+                eprintln!("[GeoLibre] Signed desktop updater unavailable: {error}");
                 return Ok(DesktopUpdateCheckResult {
                     configured: false,
                     available: false,
@@ -130,8 +132,9 @@ mod active {
         if store_managed_build() {
             return Err("In-app updates are managed by the Microsoft Store.".to_string());
         }
-        let _guard = InstallInFlightGuard::try_acquire()
-            .ok_or_else(|| "A signed desktop update installation is already in progress.".to_string())?;
+        let _guard = InstallInFlightGuard::try_acquire().ok_or_else(|| {
+            "A signed desktop update installation is already in progress.".to_string()
+        })?;
         let updater = build_updater(&app)
             .map_err(|_| "Signed auto-updater is not configured for this build.".to_string())?;
         let Some(mut update) = updater

@@ -87,9 +87,7 @@ fn open_verified_regular_file(canonical: &Path) -> Result<(File, FileIdentity), 
     let actual = FileIdentity::from_metadata(&opened_meta);
     #[cfg(unix)]
     if actual.dev != expected.dev || actual.ino != expected.ino {
-        return Err(
-            "Local media file changed on disk between authorization and open".to_string(),
-        );
+        return Err("Local media file changed on disk between authorization and open".to_string());
     }
     #[cfg(not(unix))]
     let _ = expected;
@@ -146,7 +144,11 @@ impl MbtilesConnectionPool {
         }
     }
 
-    fn evict_expired(entries: &mut HashMap<PathBuf, MbtilesPoolEntry>, now: Instant, ttl: Duration) {
+    fn evict_expired(
+        entries: &mut HashMap<PathBuf, MbtilesPoolEntry>,
+        now: Instant,
+        ttl: Duration,
+    ) {
         entries.retain(|_, entry| now.saturating_duration_since(entry.last_used_at) <= ttl);
     }
 
@@ -158,20 +160,30 @@ impl MbtilesConnectionPool {
         {
             return;
         }
-        let entries = Arc::clone(&self.entries);
-        let running = Arc::clone(&self.reaper_running);
+        let entries_weak = Arc::downgrade(&self.entries);
+        let running_weak = Arc::downgrade(&self.reaper_running);
         let ttl = self.idle_ttl;
-        let sleep_step = ttl.min(Duration::from_secs(5)).max(Duration::from_millis(10));
+        let sleep_step = ttl
+            .min(Duration::from_secs(5))
+            .max(Duration::from_millis(10));
         let spawned = std::thread::Builder::new()
             .name("geolibre-mbtiles-reaper".to_string())
             .spawn(move || loop {
                 std::thread::sleep(sleep_step);
-                let mut guard = entries
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                Self::evict_expired(&mut guard, Instant::now(), ttl);
-                if guard.is_empty() {
-                    running.store(false, Ordering::SeqCst);
+                let should_exit = {
+                    let Some(entries) = entries_weak.upgrade() else {
+                        break;
+                    };
+                    let mut guard = entries
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    Self::evict_expired(&mut guard, Instant::now(), ttl);
+                    guard.is_empty()
+                };
+                if should_exit {
+                    if let Some(running) = running_weak.upgrade() {
+                        running.store(false, Ordering::SeqCst);
+                    }
                     break;
                 }
             });
@@ -396,8 +408,14 @@ pub(crate) enum RangeParseResult {
 /// Per RFC 9110 section 14.1.2, range unit names are case-insensitive and
 /// unknown units are ignored (treated as `RangeParseResult::None` so the server
 /// falls back to a full `200 OK` response).
-pub(crate) fn parse_http_byte_range(header_value: Option<&str>, total_len: u64) -> RangeParseResult {
-    let Some(raw) = header_value.map(str::trim).filter(|value| !value.is_empty()) else {
+pub(crate) fn parse_http_byte_range(
+    header_value: Option<&str>,
+    total_len: u64,
+) -> RangeParseResult {
+    let Some(raw) = header_value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
         return RangeParseResult::None;
     };
     let Some((unit, spec)) = raw.split_once('=') else {
@@ -407,12 +425,14 @@ pub(crate) fn parse_http_byte_range(header_value: Option<&str>, total_len: u64) 
         return RangeParseResult::None;
     }
     let spec = spec.trim();
-    // Multi-range requests are not supported; reject cleanly with 416.
-    if spec.contains(',') || total_len == 0 {
-        return RangeParseResult::Unsatisfiable;
+    // Per RFC 9110 section 14.2, unsupported multi-range or syntactically
+    // invalid Range headers are ignored (treated as an unranged request) rather
+    // than rejected with 416.
+    if spec.contains(',') {
+        return RangeParseResult::None;
     }
     let Some((start_str, end_str)) = spec.split_once('-') else {
-        return RangeParseResult::Unsatisfiable;
+        return RangeParseResult::None;
     };
     let start_str = start_str.trim();
     let end_str = end_str.trim();
@@ -420,9 +440,9 @@ pub(crate) fn parse_http_byte_range(header_value: Option<&str>, total_len: u64) 
     if start_str.is_empty() {
         // Suffix byte range: `bytes=-N` means the last N bytes.
         let Ok(suffix) = end_str.parse::<u64>() else {
-            return RangeParseResult::Unsatisfiable;
+            return RangeParseResult::None;
         };
-        if suffix == 0 {
+        if suffix == 0 || total_len == 0 {
             return RangeParseResult::Unsatisfiable;
         }
         let start = total_len.saturating_sub(suffix);
@@ -433,19 +453,19 @@ pub(crate) fn parse_http_byte_range(header_value: Option<&str>, total_len: u64) 
     }
 
     let Ok(start) = start_str.parse::<u64>() else {
-        return RangeParseResult::Unsatisfiable;
+        return RangeParseResult::None;
     };
-    if start >= total_len {
+    if total_len == 0 || start >= total_len {
         return RangeParseResult::Unsatisfiable;
     }
     let end = if end_str.is_empty() {
         total_len - 1
     } else {
         let Ok(parsed_end) = end_str.parse::<u64>() else {
-            return RangeParseResult::Unsatisfiable;
+            return RangeParseResult::None;
         };
         if parsed_end < start {
-            return RangeParseResult::Unsatisfiable;
+            return RangeParseResult::None;
         }
         parsed_end.min(total_len - 1)
     };
@@ -480,20 +500,30 @@ impl LocalFilePool {
         {
             return;
         }
-        let entries = Arc::clone(&self.entries);
-        let running = Arc::clone(&self.reaper_running);
+        let entries_weak = Arc::downgrade(&self.entries);
+        let running_weak = Arc::downgrade(&self.reaper_running);
         let ttl = self.idle_ttl;
-        let sleep_step = ttl.min(Duration::from_secs(5)).max(Duration::from_millis(10));
+        let sleep_step = ttl
+            .min(Duration::from_secs(5))
+            .max(Duration::from_millis(10));
         let spawned = std::thread::Builder::new()
             .name("geolibre-local-file-reaper".to_string())
             .spawn(move || loop {
                 std::thread::sleep(sleep_step);
-                let mut guard = entries
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                Self::evict_expired(&mut guard, Instant::now(), ttl);
-                if guard.is_empty() {
-                    running.store(false, Ordering::SeqCst);
+                let should_exit = {
+                    let Some(entries) = entries_weak.upgrade() else {
+                        break;
+                    };
+                    let mut guard = entries
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    Self::evict_expired(&mut guard, Instant::now(), ttl);
+                    guard.is_empty()
+                };
+                if should_exit {
+                    if let Some(running) = running_weak.upgrade() {
+                        running.store(false, Ordering::SeqCst);
+                    }
                     break;
                 }
             });
@@ -619,18 +649,35 @@ impl LocalFilePool {
                     let requested_len = range.end - range.start + 1;
                     let clamped_len = requested_len.min(MAX_RANGE_CHUNK_BYTES);
                     let bytes = read_file_slice(&handle.file, range.start, clamped_len)?;
-                    if (bytes.len() as u64) < clamped_len {
-                        // File was truncated concurrently; invalidate cached handle
-                        // and retry once against the refreshed size. If the retry
-                        // is also short, fail instead of returning a 206 whose
-                        // Content-Range complete-length disagrees with the file.
+                    // Re-verify the opened handle's identity (length/mtime/inode)
+                    // after reading so an in-place modification or growth cannot
+                    // emit a 206 whose Content-Range disagrees with the bytes.
+                    let post_identity_matches = {
+                        let guard = handle
+                            .file
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        guard
+                            .metadata()
+                            .ok()
+                            .map(|meta| FileIdentity::from_metadata(&meta) == handle.identity)
+                            .unwrap_or(false)
+                    };
+                    if (bytes.len() as u64) < clamped_len || !post_identity_matches {
                         self.invalidate(canonical);
                         if attempt == 0 {
                             continue;
                         }
                         if bytes.is_empty() {
                             if let Ok(refreshed) = self.get_or_open(canonical) {
-                                if range.start >= refreshed.identity.len {
+                                // Reparse the original Range header against the
+                                // refreshed file length so suffix ranges (e.g.
+                                // `bytes=-4`) are checked accurately instead of
+                                // comparing against the previous attempt's offset.
+                                if matches!(
+                                    parse_http_byte_range(range_header, refreshed.identity.len),
+                                    RangeParseResult::Unsatisfiable
+                                ) {
                                     return Ok(RangeReadResponse {
                                         status: StatusCode::RANGE_NOT_SATISFIABLE,
                                         bytes: Vec::new(),
@@ -652,16 +699,19 @@ impl LocalFilePool {
                     return Ok(RangeReadResponse {
                         status: StatusCode::PARTIAL_CONTENT,
                         bytes,
-                        content_range: Some(format!("bytes {}-{}/{total_len}", range.start, final_end)),
+                        content_range: Some(format!(
+                            "bytes {}-{}/{total_len}",
+                            range.start, final_end
+                        )),
                         total_len,
                     });
                 }
                 RangeParseResult::None => {
                     if total_len > MAX_UNRANGED_MEDIA_BYTES {
                         return Ok(RangeReadResponse {
-                            status: StatusCode::RANGE_NOT_SATISFIABLE,
+                            status: StatusCode::PAYLOAD_TOO_LARGE,
                             bytes: Vec::new(),
-                            content_range: Some(format!("bytes */{total_len}")),
+                            content_range: None,
                             total_len,
                         });
                     }
@@ -799,17 +849,26 @@ pub(crate) fn is_bundled_app_origin(origin: &str) -> bool {
 /// in `Access-Control-Allow-Origin`, `Ok(None)` when neither header was sent by
 /// the webview, or `Err` when a non-bundled remote origin attempted access.
 fn validated_request_origin(request: &Request<Vec<u8>>) -> Result<Option<String>, String> {
+    let mut opaque_origin = false;
     if let Some(origin_val) = request
         .headers()
         .get(header::ORIGIN)
         .and_then(|v| v.to_str().ok())
     {
-        if is_bundled_app_origin(origin_val) {
-            return Ok(Some(origin_val.trim().to_string()));
+        let trimmed = origin_val.trim();
+        if is_bundled_app_origin(trimmed) {
+            return Ok(Some(trimmed.to_string()));
         }
-        return Err(format!(
-            "Refusing local media request from non-bundled origin \"{origin_val}\""
-        ));
+        // Custom-scheme webviews (e.g. WKWebView on macOS/iOS for `tauri://`)
+        // may send `Origin: null` or an empty `Origin` header for same-app
+        // fetches; fall through and require a bundled `Referer` to confirm.
+        if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("null") {
+            opaque_origin = true;
+        } else {
+            return Err(format!(
+                "Refusing local media request from non-bundled origin \"{origin_val}\""
+            ));
+        }
     }
     if let Some(referer_val) = request
         .headers()
@@ -836,6 +895,11 @@ fn validated_request_origin(request: &Request<Vec<u8>>) -> Result<Option<String>
             }
         }
         return Err("Refusing local media request from non-bundled referer".to_string());
+    }
+    if opaque_origin {
+        return Err(
+            "Refusing local media request with opaque Origin and no bundled Referer".to_string(),
+        );
     }
     Ok(None)
 }
@@ -971,7 +1035,9 @@ pub(crate) fn handle_mbtiles_protocol(
                                 .body(bytes)
                                 .unwrap_or_else(|_| Response::new(Vec::new()))
                             }
-                            Err(error) => error_response(StatusCode::BAD_REQUEST, &error, origin_ref),
+                            Err(error) => {
+                                error_response(StatusCode::BAD_REQUEST, &error, origin_ref)
+                            }
                         }
                     }
                     Err(error) => error_response(StatusCode::FORBIDDEN, &error, origin_ref),
@@ -1146,11 +1212,11 @@ mod tests {
         );
         assert_eq!(
             parse_http_byte_range(Some("bytes=50-40"), 100),
-            RangeParseResult::Unsatisfiable
+            RangeParseResult::None
         );
         assert_eq!(
             parse_http_byte_range(Some("bytes=0-1, 2-3"), 100),
-            RangeParseResult::Unsatisfiable
+            RangeParseResult::None
         );
         assert_eq!(
             parse_http_byte_range(Some("bytes=0-0"), 0),
@@ -1175,9 +1241,40 @@ mod tests {
             .unwrap();
         assert_eq!(validated_request_origin(&tauri_ref).unwrap(), None);
 
+        // `Origin: null` with a bundled Referer (custom-scheme WebView fetch) passes.
+        let null_origin_bundled_ref = Request::builder()
+            .uri("local-pmtiles://localhost/file?path=%2Ftmp%2Fa.pmtiles")
+            .header(header::ORIGIN, "null")
+            .header(header::REFERER, "tauri://localhost/index.html")
+            .body(Vec::new())
+            .unwrap();
+        assert_eq!(
+            validated_request_origin(&null_origin_bundled_ref).unwrap(),
+            None
+        );
+
+        // `Origin: null` with a remote Referer or no Referer must be rejected.
+        let null_origin_remote_ref = Request::builder()
+            .uri("local-pmtiles://localhost/file?path=%2Ftmp%2Fa.pmtiles")
+            .header(header::ORIGIN, "null")
+            .header(header::REFERER, "https://evil.example/page.html")
+            .body(Vec::new())
+            .unwrap();
+        assert!(validated_request_origin(&null_origin_remote_ref).is_err());
+
+        let null_origin_no_ref = Request::builder()
+            .uri("local-pmtiles://localhost/file?path=%2Ftmp%2Fa.pmtiles")
+            .header(header::ORIGIN, "null")
+            .body(Vec::new())
+            .unwrap();
+        assert!(validated_request_origin(&null_origin_no_ref).is_err());
+
         let remote_ref = Request::builder()
             .uri("mbtiles://localhost/tile/0/0/0?path=%2Ftmp%2Fa.mbtiles")
-            .header(header::REFERER, "https://accounts.google.com/o/oauth2/v2/auth")
+            .header(
+                header::REFERER,
+                "https://accounts.google.com/o/oauth2/v2/auth",
+            )
             .body(Vec::new())
             .unwrap();
         assert!(validated_request_origin(&remote_ref).is_err());
@@ -1245,13 +1342,19 @@ mod tests {
         fs::write(&p, b"0123456789abcdef").unwrap();
 
         let pool = LocalFilePool::with_capacity(4);
-        assert_eq!(pool.read_range(&p, Some("bytes=0-3")).unwrap().bytes, b"0123");
+        assert_eq!(
+            pool.read_range(&p, Some("bytes=0-3")).unwrap().bytes,
+            b"0123"
+        );
 
         // Atomic rename replacement with identical length changes inode on Unix.
         fs::write(&tmp, b"fedcba9876543210").unwrap();
         fs::rename(&tmp, &p).unwrap();
 
-        assert_eq!(pool.read_range(&p, Some("bytes=0-3")).unwrap().bytes, b"fedc");
+        assert_eq!(
+            pool.read_range(&p, Some("bytes=0-3")).unwrap().bytes,
+            b"fedc"
+        );
         let _ = fs::remove_file(&p);
     }
 
@@ -1300,12 +1403,46 @@ mod tests {
         let p = unique_temp_path("idle-reap.pmtiles");
         fs::write(&p, b"0123456789abcdef").unwrap();
 
-        let pool = LocalFilePool::with_capacity_and_ttl(4, Duration::from_millis(30));
-        assert_eq!(pool.read_range(&p, Some("bytes=0-3")).unwrap().bytes, b"0123");
+        // Use a long enough TTL that the entry is guaranteed to remain cached
+        // immediately after the read even under heavy CI scheduling jitter,
+        // then backdate `last_used_at` past the TTL and poll with a generous
+        // deadline so the background reaper evicts it autonomously without any
+        // extra media request.
+        let pool = LocalFilePool::with_capacity_and_ttl(4, Duration::from_secs(60));
+        assert_eq!(
+            pool.read_range(&p, Some("bytes=0-3")).unwrap().bytes,
+            b"0123"
+        );
         assert_eq!(pool.len(), 1);
 
-        std::thread::sleep(Duration::from_millis(120));
-        assert_eq!(pool.len(), 0);
+        // Force expiry via deterministic timestamp adjustment on the cached
+        // entry, then let the reaper's next tick (or a short-TTL pool) evict it.
+        let short_pool = LocalFilePool::with_capacity_and_ttl(4, Duration::from_millis(200));
+        assert_eq!(
+            short_pool.read_range(&p, Some("bytes=0-3")).unwrap().bytes,
+            b"0123"
+        );
+        {
+            let mut guard = short_pool
+                .entries
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            assert_eq!(guard.len(), 1);
+            for entry in guard.values_mut() {
+                entry.last_used_at = Instant::now() - Duration::from_secs(5);
+            }
+        }
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while short_pool.len() > 0 && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(
+            short_pool.len(),
+            0,
+            "idle reaper should evict expired entry without additional requests"
+        );
+        drop(pool);
         let _ = fs::remove_file(&p);
     }
 }
