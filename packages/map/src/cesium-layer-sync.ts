@@ -2641,7 +2641,7 @@ export class CesiumLayerSync {
     void this.cogTiler.then((tiler) => tiler.forget(url)).catch(() => {});
   }
 
-  /** Reconcile the globe to `layers` (order preserved for imagery stacking). */
+  /** Materialize a DuckDB query layer's active GeoArrow rows into GeoJSON when available. */
   private resolveDuckDBLayer(layer: GeoLibreLayer): GeoLibreLayer {
     if (layer.type !== "duckdb-query" || layer.geojson) return layer;
     const provider =
@@ -2658,6 +2658,7 @@ export class CesiumLayerSync {
     return { ...layer, geojson };
   }
 
+  /** Reconcile the globe to `layers` (order preserved for imagery stacking). */
   sync(storeLayers: GeoLibreLayer[]): void {
     this.lastStoreLayers = storeLayers;
     // deck.gl has no globe renderer: a Deck.gl Layer builder record is drawn

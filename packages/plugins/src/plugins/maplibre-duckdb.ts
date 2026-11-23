@@ -352,7 +352,7 @@ export function getDuckDBLayerGeoJson(layerId: string): FeatureCollection | null
     }
   }
   const fc: FeatureCollection = { type: "FeatureCollection", features };
-  duckdbGeoJsonCache.set(renderedLayer, fc);
+  if (Object.keys(rows).length > 0) duckdbGeoJsonCache.set(renderedLayer, fc);
   return fc;
 }
 
