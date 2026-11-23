@@ -66,6 +66,14 @@ import {
   type ProcessingRunTracker,
 } from "../../lib/processing-history";
 import { createAppAPI } from "../../hooks/usePlugins";
+import {
+  ClientRasterInputError,
+  loadClientAdditionalRasters,
+  omitClientSecondaryInput,
+  secondaryRasterLetterForParam,
+  type ClientRasterInputEntry,
+} from "../../lib/client-raster-inputs";
+import { RasterParameterField } from "./RasterParameterField";
 import { canExportRasterLayer, rasterExportUrl } from "../../lib/raster-export";
 import { fetchableUrl } from "../../lib/url-utils";
 import {
@@ -155,6 +163,14 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   // Aborts an in-flight layer-bytes fetch when the dialog closes/unmounts or a
   // new pick supersedes it, so its state setters never fire on a dead component.
   const layerFetchAbortRef = useRef<AbortController | null>(null);
+  // Incremented on reset so stale async secondary file reads are ignored.
+  const formSessionRef = useRef(0);
+  // Incremented whenever inputs change or the form resets so an in-flight
+  // client run cannot write stale result/log/map output after input edits.
+  const clientRunIdRef = useRef(0);
+  // Per-letter pick sequence tokens so a superseded secondary file read cannot
+  // overwrite a newer selection or a Clear action.
+  const secondaryPickTokensRef = useRef<Record<string, number>>({});
   // History trackers per dispatched sidecar job id (#1292). Entries stay after
   // finish (finish is idempotent); the map is capped (oldest evicted) so a
   // long session cannot grow it without bound.
@@ -167,6 +183,9 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     name: string;
     bytes: ArrayBuffer;
   } | null>(null);
+  const [clientAdditionalInputs, setClientAdditionalInputs] = useState<
+    Record<string, ClientRasterInputEntry>
+  >({});
   const [clientLog, setClientLog] = useState<string[]>([]);
   const [clientRunning, setClientRunning] = useState(false);
   // True while fetching a picked layer's bytes for the client engine.
@@ -213,14 +232,19 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   // without a sidecar, otherwise sidecar.
   useEffect(() => {
     if (!open) return;
+    formSessionRef.current += 1;
+    clientRunIdRef.current += 1;
+    secondaryPickTokensRef.current = {};
     setInputPath("");
     setOutputPath("");
     setParams(toolDefaults(tool));
     setError(null);
     setJob(null);
     setClientInput(null);
+    setClientAdditionalInputs({});
     setClientLog([]);
     setClientResult(null);
+    setClientRunning(false);
     setEngine(tool.supportsClient && !desktopServer ? "client" : "sidecar");
   }, [open, tool, desktopServer]);
 
@@ -299,6 +323,15 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     [],
   );
 
+  const clearClientSecondaryInput = useCallback((letter: string) => {
+    secondaryPickTokensRef.current[letter] = (secondaryPickTokensRef.current[letter] ?? 0) + 1;
+    clientRunIdRef.current += 1;
+    setClientRunning(false);
+    setClientAdditionalInputs((prev) => omitClientSecondaryInput(prev, letter));
+    setClientResult(null);
+    setClientLog([]);
+  }, []);
+
   // Whether a parameter is shown, given another parameter's value (e.g. hide
   // the IDW power field when the kriging method is selected).
   const isParamVisible = useCallback(
@@ -331,12 +364,48 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
 
   const pickPathParam = useCallback(
     async (param: AlgorithmParameter) => {
-      const path = await pickLocalPathWithFallback({
-        filters: param.fileFilters,
-      });
+      const letter = engine === "client" ? secondaryRasterLetterForParam(param.id) : null;
+      if (letter) {
+        const session = formSessionRef.current;
+        const pickToken = (secondaryPickTokensRef.current[letter] ?? 0) + 1;
+        secondaryPickTokensRef.current[letter] = pickToken;
+        try {
+          const picked = await openLocalDataFileWithFallback({
+            filters: param.fileFilters ?? tool.inputFilters,
+            accept: ".tif,.tiff,image/tiff",
+            readBinary: true,
+          });
+          if (
+            session !== formSessionRef.current ||
+            secondaryPickTokensRef.current[letter] !== pickToken ||
+            !picked?.data
+          ) {
+            return;
+          }
+          clientRunIdRef.current += 1;
+          setClientRunning(false);
+          setError(null);
+          setClientResult(null);
+          setClientLog([]);
+          setClientAdditionalInputs((prev) => ({
+            ...prev,
+            [letter]: { name: picked.path, bytes: picked.data! },
+          }));
+        } catch (err) {
+          if (
+            session !== formSessionRef.current ||
+            secondaryPickTokensRef.current[letter] !== pickToken
+          ) {
+            return;
+          }
+          setError(err instanceof Error ? err.message : t("toolbar.rasterTool.layerLoadError"));
+        }
+        return;
+      }
+      const path = await pickLocalPathWithFallback({ filters: param.fileFilters });
       if (path) setParam(param.id, path);
     },
-    [setParam],
+    [engine, setParam, tool.inputFilters, t],
   );
 
   const startServer = useCallback(async () => {
@@ -380,6 +449,8 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       readBinary: true,
     });
     if (picked?.data) {
+      clientRunIdRef.current += 1;
+      setClientRunning(false);
       setClientInput({ name: picked.path, bytes: picked.data });
       // Drop any prior run's result/log so the Download button can't offer a
       // GeoTIFF computed from the previous input.
@@ -436,6 +507,8 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const bytes = await response.arrayBuffer();
         if (controller.signal.aborted) return;
+        clientRunIdRef.current += 1;
+        setClientRunning(false);
         setClientInput({ name: layer.name, bytes });
         setClientResult(null);
         setClientLog([]);
@@ -526,6 +599,8 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       setError(invalid);
       return;
     }
+    const runId = ++clientRunIdRef.current;
+    const isStale = () => clientRunIdRef.current !== runId;
     setClientRunning(true);
     setClientLog([t("toolbar.rasterTool.runningInBrowser", { tool: tool.name })]);
     const tracker = beginProcessingRun(
@@ -540,6 +615,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     );
     try {
       const raster = await readRasterData(clientInput.bytes);
+      if (isStale()) return;
       setClientLog((prev) => [
         ...prev,
         t("toolbar.rasterTool.loadedRaster", {
@@ -552,6 +628,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       // DEM). Yield once so React paints the "running" spinner before the main
       // thread blocks; a Web Worker would be the full fix for very large rasters.
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      if (isStale()) return;
       const pixelCount = raster.width * raster.height;
       if (pixelCount > 2_000_000) {
         setClientLog((prev) => [
@@ -561,8 +638,22 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
           }),
         ]);
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        if (isStale()) return;
       }
-      const { raster: result, bytes } = runRasterToolClient(tool.id, raster, params);
+      const additionalInputs =
+        tool.id === "raster-calc"
+          ? await loadClientAdditionalRasters(raster, clientAdditionalInputs, {
+              expression: typeof params.expression === "string" ? params.expression : undefined,
+            })
+          : undefined;
+      if (isStale()) return;
+      const { raster: result, bytes } = runRasterToolClient(
+        tool.id,
+        raster,
+        params,
+        additionalInputs,
+      );
+      if (isStale()) return;
       setClientLog((prev) => [
         ...prev,
         t("toolbar.rasterTool.computedInBrowser", { tool: tool.name }),
@@ -587,6 +678,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         // as NaN so the overviews the auto stretch reads hold no NoData blends
         // (#3255); the Download button keeps the raster's own sentinel.
         const cogBytes = await convertRasterDataToCog(result, { nanNodata: true });
+        if (isStale()) return;
         await addRasterToMap(
           app,
           // TypeScript widens wasm byte buffers to ArrayBufferLike, which is
@@ -596,9 +688,11 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
             name: outName.replace(/\.tiff?$/i, ""),
           },
         );
+        if (isStale()) return;
         setClientLog((prev) => [...prev, t("toolbar.rasterTool.addedToMap", { name: outName })]);
         tracker.addOutputLayer(outName);
       } catch (mapError) {
+        if (isStale()) return;
         const mapMessage =
           mapError instanceof Error ? mapError.message : t("toolbar.rasterTool.mapAddError");
         setError(mapMessage);
@@ -613,14 +707,24 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       }
       tracker.finish("success");
     } catch (err) {
-      const message = err instanceof Error ? err.message : t("toolbar.rasterTool.runError");
+      if (isStale()) return;
+      const message =
+        err instanceof ClientRasterInputError && err.code === "COMBINED_TOO_LARGE"
+          ? t("toolbar.rasterTool.combinedInputsTooLarge")
+          : err instanceof Error
+            ? err.message
+            : t("toolbar.rasterTool.runError");
       tracker.finish("error", message);
       setError(message);
       setClientLog((prev) => [...prev, message]);
     } finally {
-      setClientRunning(false);
+      if (isStale()) {
+        tracker.finish("error", "Superseded by an input change.");
+      } else {
+        setClientRunning(false);
+      }
     }
-  }, [tool, params, clientInput, validateParams, mapControllerRef, t]);
+  }, [tool, params, clientInput, clientAdditionalInputs, validateParams, mapControllerRef, t]);
 
   const handleRun = useCallback(
     () => (engine === "client" ? runClient() : runSidecar()),
@@ -850,15 +954,21 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
             )}
 
             {/* Operation parameters */}
-            {tool.parameters.filter(isParamVisible).map((param) => (
-              <RasterParameterField
-                key={param.id}
-                param={translateParameter(t, "raster", tool.id, param)}
-                value={params[param.id]}
-                onChange={(value) => setParam(param.id, value)}
-                onPick={() => void pickPathParam(param)}
-              />
-            ))}
+            {tool.parameters.filter(isParamVisible).map((param) => {
+              const letter = engine === "client" ? secondaryRasterLetterForParam(param.id) : null;
+              const entry = letter ? clientAdditionalInputs[letter] : undefined;
+              return (
+                <RasterParameterField
+                  key={param.id}
+                  param={translateParameter(t, "raster", tool.id, param)}
+                  value={letter ? (entry?.name ?? "") : params[param.id]}
+                  onChange={(value) => setParam(param.id, value)}
+                  onPick={() => void pickPathParam(param)}
+                  readOnly={letter !== null}
+                  onClear={letter && entry ? () => clearClientSecondaryInput(letter) : undefined}
+                />
+              );
+            })}
 
             <div>
               <Button
@@ -952,125 +1062,5 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-interface RasterParameterFieldProps {
-  param: AlgorithmParameter;
-  value: unknown;
-  onChange: (value: unknown) => void;
-  onPick: () => void;
-}
-
-function RasterParameterField({
-  param,
-  value,
-  onChange,
-  onPick,
-}: RasterParameterFieldProps): ReactElement {
-  const { t } = useTranslation();
-  const label = (
-    <Label htmlFor={param.id} className="text-xs">
-      {param.label}
-      {param.required ? <span className="text-destructive"> *</span> : null}
-    </Label>
-  );
-
-  if (param.type === "select") {
-    return (
-      <div className="flex flex-col gap-1">
-        {label}
-        <Select
-          id={param.id}
-          value={(value as string) ?? ""}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          {param.options?.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </Select>
-      </div>
-    );
-  }
-
-  if (param.type === "boolean") {
-    return (
-      <label className="flex items-center gap-2 text-sm" htmlFor={param.id}>
-        <input
-          id={param.id}
-          type="checkbox"
-          checked={Boolean(value)}
-          onChange={(e) => onChange(e.target.checked)}
-          className="h-4 w-4 rounded border-input"
-        />
-        {param.label}
-      </label>
-    );
-  }
-
-  if (param.type === "number") {
-    return (
-      <div className="flex flex-col gap-1">
-        {label}
-        <Input
-          id={param.id}
-          type="number"
-          value={value === undefined || value === null ? "" : String(value)}
-          min={param.min}
-          max={param.max}
-          step={param.step}
-          onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
-        />
-        {param.description ? (
-          <p className="text-xs text-muted-foreground">{param.description}</p>
-        ) : null}
-      </div>
-    );
-  }
-
-  if (param.type === "path") {
-    return (
-      <div className="flex flex-col gap-1">
-        {label}
-        <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
-          <Input
-            id={param.id}
-            value={(value as string) ?? ""}
-            placeholder={t("processing.filePicker.filePath")}
-            onChange={(e) => onChange(e.target.value)}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            title={t("processing.filePicker.chooseFile")}
-            onClick={onPick}
-          >
-            <FolderOpen className="h-4 w-4" />
-          </Button>
-        </div>
-        {param.description ? (
-          <p className="text-xs text-muted-foreground">{param.description}</p>
-        ) : null}
-      </div>
-    );
-  }
-
-  // string
-  return (
-    <div className="flex flex-col gap-1">
-      {label}
-      <Input
-        id={param.id}
-        type="text"
-        value={(value as string) ?? ""}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {param.description ? (
-        <p className="text-xs text-muted-foreground">{param.description}</p>
-      ) : null}
-    </div>
   );
 }

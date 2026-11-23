@@ -4138,6 +4138,7 @@
       "computedInBrowser": "Computed \"{{tool}}\" in the browser.",
       "addedToMap": "Added \"{{name}}\" to the map.",
       "largeRasterWarning": "Large raster ({{mp}} M pixels); the browser may be unresponsive while computing.",
+      "combinedInputsTooLarge": "The combined calculator inputs are too large for the in-browser engine. Use the sidecar (rasterio/GDAL) engine instead.",
       "mapAddFailed": "Map add failed (the result is still available to download): {{message}}",
       "mapAddError": "Could not add the result to the map.",
       "runError": "Could not run raster tool.",
@@ -6972,14 +6973,14 @@
         },
         "reproject": {
           "name": "Reproject",
-          "description": "Reinterpret a layer's coordinates as a source CRS and transform them to WGS84 so they display in the correct location. Requires the Sidecar or Python engine.",
+          "description": "Reinterpret a layer's coordinates as a source CRS and transform them to WGS84 so they display in the correct location.",
           "params": {
             "layer": {
               "label": "Input layer"
             },
             "source_crs": {
               "label": "Source CRS",
-              "description": "The CRS the layer's coordinates are really in (e.g. EPSG:3857). The result is transformed to WGS84 (EPSG:4326)."
+              "description": "The CRS the layer's coordinates are really in (e.g. EPSG:3857, EPSG:32617). The result is transformed to WGS84 (EPSG:4326)."
             }
           }
         },

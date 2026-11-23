@@ -57,12 +57,12 @@ describe("processing runner", () => {
   });
 
   it("returns null when a tool produces no result layer", async () => {
-    // Reproject's client run defers to the Python engine and adds nothing.
+    // An unknown CRS causes reproject to log an error and add no layer.
     const tool = getVectorTool("reproject");
     assert.ok(tool);
     const output = await runAlgorithmCapture(
       tool,
-      { layer: "pts", source_crs: "EPSG:3857" },
+      { layer: "pts", source_crs: "EPSG:999999" },
       makeHost(),
     );
     assert.equal(output, null);
@@ -116,8 +116,9 @@ describe("processing runner", () => {
 
   it("stops when an upstream step produces no output to chain", async () => {
     // select-by-value with a predicate that matches nothing yields an empty
-    // FeatureCollection (a real, non-null output), so the chain continues; but a
-    // tool that adds nothing (reproject) leaves the next step with no input.
+    // FeatureCollection (a real, non-null output), so the chain continues; a
+    // tool that errors out without producing a layer (e.g. reproject with an
+    // unknown CRS) leaves the next step with no input.
     const model = {
       id: "m3",
       name: "Stalled",
@@ -125,7 +126,7 @@ describe("processing runner", () => {
         {
           id: "s1",
           toolId: "reproject",
-          parameters: { layer: "pts", source_crs: "EPSG:3857" },
+          parameters: { layer: "pts", source_crs: "EPSG:999999" },
         },
         { id: "s2", toolId: "centroids", parameters: {} },
       ],
