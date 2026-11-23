@@ -150,6 +150,58 @@ interface GitHubRelease {
   html_url?: unknown;
 }
 
+export interface DesktopSignedUpdateInfo {
+  configured: boolean;
+  available: boolean;
+  currentVersion: string;
+  version: string | null;
+  notes: string | null;
+  date: string | null;
+}
+
+/**
+ * Query Tauri's signed auto-updater (`tauri-plugin-updater`) on non-Store
+ * desktop builds. Returns `null` off desktop or in Store builds.
+ */
+export async function checkDesktopSignedUpdate(): Promise<DesktopSignedUpdateInfo | null> {
+  if (IS_STORE_BUILD) return null;
+  const { isTauri } = await import("./is-tauri");
+  if (!isTauri()) return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<DesktopSignedUpdateInfo>("check_desktop_update");
+  } catch {
+    return null;
+  }
+}
+
+let pendingSignedInstall: Promise<boolean> | null = null;
+
+/** Whether a signed desktop update download/install is currently in flight. */
+export function isDesktopSignedUpdateInstalling(): boolean {
+  return pendingSignedInstall !== null;
+}
+
+/**
+ * Download, verify, and install an available signed desktop update, restarting
+ * the application upon completion. Coalesces concurrent calls so reopening the
+ * About dialog cannot start a second parallel installation.
+ */
+export function installDesktopSignedUpdate(): Promise<boolean> {
+  if (IS_STORE_BUILD) return Promise.resolve(false);
+  if (pendingSignedInstall) return pendingSignedInstall;
+  const run = (async () => {
+    const { isTauri } = await import("./is-tauri");
+    if (!isTauri()) return false;
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<boolean>("install_desktop_update");
+  })();
+  pendingSignedInstall = run;
+  return run.finally(() => {
+    if (pendingSignedInstall === run) pendingSignedInstall = null;
+  });
+}
+
 /**
  * Fetch the latest GeoLibre release from GitHub.
  *

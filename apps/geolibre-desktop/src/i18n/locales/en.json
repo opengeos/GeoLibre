@@ -1,4 +1,9 @@
 {
+  "fileDialogs": {
+    "shareClosed": "Share sheet closed for {{fileName}}.",
+    "shareClosedDescription": "If no share targets appeared, you can download the file directly instead.",
+    "downloadInstead": "Download instead"
+  },
   "gcsExport": {
     "title": "Harvest & Export to GCS",
     "backendUrl": "Backend URL (Cloud Run)",
@@ -181,6 +186,12 @@
     "noChangelog": "Release notes are not available. See the downloads page for details.",
     "stepsTitle": "How to update",
     "download": "Download update",
+    "installSigned": "Download and install update",
+    "installingSigned": "Installing update…",
+    "installSignedError": "Could not install the signed update automatically.",
+    "noSignedUpdateAvailable": "No signed update is currently available.",
+    "confirmInstall": "GeoLibre will download the signed update and restart automatically when finished. Continue?",
+    "confirmInstallDirty": "You have unsaved project changes that will be lost when GeoLibre restarts to install the update. Continue anyway?",
     "steps": {
       "download": "Download the installer for your platform from the downloads page.",
       "install": "Run the installer. Your local projects, settings, and API keys are kept.",
@@ -1841,6 +1852,7 @@
     "trackExported": "Track exported.",
     "exportCancelled": "Export cancelled.",
     "exportFailed": "Could not export the track. Please try again.",
+    "checkpointQuotaWarning": "GPS track checkpoint could not be saved to browser storage. Export your track to avoid losing fixes.",
     "capture": "Digitize",
     "capturePoint": "Capture point",
     "captureLayerName": "GPS points",

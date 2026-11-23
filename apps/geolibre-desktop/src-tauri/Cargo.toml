@@ -10,12 +10,15 @@ name = "geolibre_desktop_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [features]
-default = []
+default = ["desktop-updater"]
+desktop-updater = ["dep:tauri-plugin-updater"]
 native-duckdb = ["dep:duckdb"]
 # Mac App Store build: compiles out every command that downloads or spawns
-# external code (sidecar, Jupyter, Martin, uv, external plugin installs), which
-# the App Sandbox and App Store guideline 2.5.2 forbid. Mutually exclusive with
-# native-duckdb (see the compile_error! in src/lib.rs).
+# external code (sidecar, Jupyter, Martin, uv, external plugin installs, and the
+# signed desktop auto-updater), which the App Sandbox and App Store guidelines
+# forbid. Built with `--no-default-features --features mas` via
+# scripts/tauri-build.mjs so `tauri-plugin-updater` is not even linked. Mutually
+# exclusive with native-duckdb (see the compile_error! in src/lib.rs).
 mas = []
 
 # Optimize the release binary for size. The frontend assets dominate the binary,
@@ -137,6 +140,7 @@ windows-sys = { version = "0.61", features = [
   "Wdk_System_Threading",
   "Win32_Foundation",
   "Win32_NetworkManagement_IpHelper",
+  "Win32_System_JobObjects",
   "Win32_System_Threading",
 ] }
 # Reading the OAuth callback scheme's registered handler (#3042). Already an
@@ -144,7 +148,9 @@ windows-sys = { version = "0.61", features = [
 windows-registry = "0.100"
 
 # OS credential store for tokens and API keys saved in Settings (issue #1667).
-# Desktop only: mobile keeps the webview's localStorage path. Pinned to 3.6.3:
+# Desktop uses macOS Keychain, Windows Credential Manager, and Linux Secret
+# Service; iOS uses Keychain via apple-native; Android uses the encrypted vault
+# backed by ring AES-256-GCM in app-private storage. Pinned to 3.6.3:
 # 4.x moved to the keyring-core store API and needs Rust 1.88. `vendored`
 # builds libdbus from source, so Linux builds need no libdbus-1-dev.
 [target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
@@ -155,3 +161,9 @@ keyring = { version = "=3.6.3", features = [
   "crypto-rust",
   "vendored",
 ] }
+# Signed desktop auto-updater for non-Store builds (excluded when built with
+# `--no-default-features --features mas`).
+tauri-plugin-updater = { version = "2", optional = true }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+keyring = { version = "=3.6.3", features = ["apple-native"] }

@@ -6,8 +6,11 @@
 
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readFile, readTextFile, writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import i18next from "i18next";
 import { nativeFileDialogFilters, type FileDialogFilter } from "../file-dialog-filters";
+import { isMobile } from "../is-mobile";
 import { isTauri } from "../is-tauri";
+import { notify } from "../notify";
 import { localFileSizeBytes } from "./local-fs";
 import { browserSafeFileName } from "./paths";
 import { isAbortError, toArrayBuffer } from "./shared";
@@ -387,10 +390,79 @@ export async function pickSavePathWithFallback(
   return null;
 }
 
+export type ShareSheetOutcome = "shared" | "cancelled" | "unsupported";
+
+interface ShareNavigatorLike {
+  canShare?: (data: { files?: File[]; title?: string }) => boolean;
+  share?: (data: { files?: File[]; title?: string }) => Promise<void>;
+}
+
+/**
+ * Hand an exported file to the OS Share Sheet via the Web Share API when
+ * supported (iOS, Android, and mobile WebViews). Returns `"cancelled"` when the
+ * user dismisses the sheet so callers do not trigger a duplicate download.
+ */
+export async function shareFileWithOsSheet(
+  file: File,
+  title?: string,
+  nav: ShareNavigatorLike | null = typeof navigator !== "undefined"
+    ? (navigator as unknown as ShareNavigatorLike)
+    : null,
+): Promise<ShareSheetOutcome> {
+  if (!nav?.share || !nav?.canShare) return "unsupported";
+  const payload = { files: [file], title: title ?? file.name };
+  try {
+    if (!nav.canShare(payload)) return "unsupported";
+    await nav.share(payload);
+    return "shared";
+  } catch (error) {
+    if (isAbortError(error) || (error instanceof Error && error.name === "AbortError")) {
+      return "cancelled";
+    }
+    return "unsupported";
+  }
+}
+
+function offerDownloadInsteadToast(fileName: string, onDownload: () => void): void {
+  notify.info(i18next.t("fileDialogs.shareClosed", { fileName }), {
+    description: i18next.t("fileDialogs.shareClosedDescription"),
+    dedupeKey: `share-sheet-download-fallback:${fileName}`,
+    action: {
+      label: i18next.t("fileDialogs.downloadInstead"),
+      onClick: onDownload,
+    },
+  });
+}
+
+async function tryMobileShareWithFallback(
+  fileName: string,
+  createFile: () => File,
+  onDownloadFallback: () => void,
+): Promise<{ handled: true; result: string | null } | { handled: false }> {
+  if (!isMobile()) return { handled: false };
+  const outcome = await shareFileWithOsSheet(createFile(), fileName);
+  if (outcome === "shared") return { handled: true, result: fileName };
+  if (outcome === "cancelled") {
+    offerDownloadInsteadToast(fileName, onDownloadFallback);
+    return { handled: true, result: null };
+  }
+  return { handled: false };
+}
+
 export async function saveTextFileWithFallback(
   content: string,
   options: SaveTextFileOptions,
 ): Promise<string | null> {
+  const fileName = browserSafeFileName(options.defaultName);
+  const shared = await tryMobileShareWithFallback(
+    fileName,
+    () => new File([content], fileName, { type: options.mimeType }),
+    () => {
+      void saveTextFileBrowser(content, options);
+    },
+  );
+  if (shared.handled) return shared.result;
+
   if (!isTauri()) {
     return saveTextFileBrowser(content, options);
   }
@@ -408,6 +480,22 @@ export async function saveBinaryFileWithFallback(
   content: Uint8Array | Blob,
   options: SaveBinaryFileOptions,
 ): Promise<string | null> {
+  const fileName = browserSafeFileName(options.defaultName);
+  const shared = await tryMobileShareWithFallback(
+    fileName,
+    () => {
+      const blob =
+        content instanceof Blob
+          ? content
+          : new Blob([toArrayBuffer(content)], { type: options.mimeType });
+      return new File([blob], fileName, { type: blob.type || options.mimeType });
+    },
+    () => {
+      void saveBinaryFileBrowser(content, options);
+    },
+  );
+  if (shared.handled) return shared.result;
+
   if (!isTauri()) {
     return saveBinaryFileBrowser(content, options);
   }

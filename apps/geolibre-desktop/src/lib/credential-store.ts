@@ -1,8 +1,10 @@
 /**
- * Where saved credentials live (issue #1667). The desktop (Tauri) build keeps
- * them in the OS credential store through the `secure_store_*` commands in
- * `src-tauri/src/secure_store.rs`, one entry per credential. The web build, the
- * Jupyter embed and the mobile apps keep them in localStorage.
+ * Where saved credentials live (issue #1667). Packaged Tauri builds (desktop,
+ * iOS, and Android) keep them in the native credential store through the
+ * `secure_store_*` commands in `src-tauri/src/secure_store.rs` (OS Keychain /
+ * Credential Manager / Secret Service on desktop, Keychain on iOS, and the
+ * app-private AES-256-GCM vault on Android), one entry per credential. The web
+ * build and Jupyter embed keep them in localStorage.
  *
  * Failures never fall back to plaintext: they are reported through
  * {@link useCredentialStorageStatus}, which drives the shell banner and the
@@ -10,12 +12,12 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
-import { isDesktopRuntime } from "./is-mobile";
+import { isTauri } from "./is-tauri";
 
 export type CredentialStorageLocation = "keychain" | "browser";
 
 export function credentialStorageLocation(): CredentialStorageLocation {
-  return isDesktopRuntime() ? "keychain" : "browser";
+  return isTauri() ? "keychain" : "browser";
 }
 
 /** Whether this document has used or closed its one credential read. */
