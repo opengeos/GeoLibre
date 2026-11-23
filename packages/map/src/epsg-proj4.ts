@@ -15,6 +15,13 @@ export interface EpsgProjection {
   northFirst: boolean;
   /** Whether the CRS is geographic (`+proj=longlat`), in degrees. */
   geographic: boolean;
+  /**
+   * Native-unit to proj4-unit coordinate scale factors (e.g. `0.9` for grads
+   * to degrees in EPSG:4807, or `1` for degree/metre CRSes). Multiply native
+   * coordinates before passing to proj4, and divide proj4 outputs to return
+   * to native units.
+   */
+  conversionFactors: { x: number; y: number };
   /** The proj4 library, already loaded, for building converters. */
   proj4: typeof proj4Type;
 }
@@ -30,7 +37,9 @@ const cache = new Map<number, Promise<EpsgProjection | null>>();
  * @param code - The numeric EPSG code, e.g. 2180.
  * @returns The projection, or null for an unknown code.
  */
-export function resolveEpsgProjection(code: number): Promise<EpsgProjection | null> {
+export function resolveEpsgProjection(
+  code: number
+): Promise<EpsgProjection | null> {
   let projection = cache.get(code);
   if (!projection) {
     projection = (async () => {
@@ -57,10 +66,24 @@ export function resolveEpsgProjection(code: number): Promise<EpsgProjection | nu
       } catch {
         return null;
       }
+      const rawConv = resolved.conversionParameters;
+      const xFactor =
+        typeof rawConv?.x === "number" &&
+        Number.isFinite(rawConv.x) &&
+        rawConv.x !== 0
+          ? rawConv.x
+          : 1;
+      const yFactor =
+        typeof rawConv?.y === "number" &&
+        Number.isFinite(rawConv.y) &&
+        rawConv.y !== 0
+          ? rawConv.y
+          : 1;
       return {
         definition,
         northFirst: /\+axis=ne/.test(raw),
         geographic: /\+proj=longlat\b/.test(raw),
+        conversionFactors: { x: xFactor, y: yFactor },
         proj4,
       };
     })().catch((error) => {
