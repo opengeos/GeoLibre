@@ -2571,12 +2571,22 @@ fn list_installed_plugin_archives_blocking(
             .map(|name| name.to_string_lossy().to_string())
             .unwrap_or_else(|| path.to_string_lossy().to_string());
         if let Ok(bundle) = load_external_plugin_archive(&path, &archive_name) {
+            let capabilities = bundle.manifest.capabilities.map(|caps| {
+                caps.into_iter()
+                    .filter(|cap| {
+                        matches!(
+                            cap.as_str(),
+                            "network" | "filesystem" | "sidecar" | "mapWrite" | "ui"
+                        )
+                    })
+                    .collect()
+            });
             installed.push(InstalledExternalPluginArchive {
                 id: bundle.manifest.id,
                 name: bundle.manifest.name,
                 version: bundle.manifest.version,
                 archive_name,
-                capabilities: bundle.manifest.capabilities,
+                capabilities,
             });
         }
     }

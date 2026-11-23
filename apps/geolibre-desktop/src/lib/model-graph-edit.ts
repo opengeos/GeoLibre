@@ -669,8 +669,10 @@ export function removeNodes(
 ): ProcessingModelGraph {
   const toRemove = new Set(nodeIds);
   if (toRemove.size === 0) return graph;
+  const remainingNodes = graph.nodes.filter((node) => !toRemove.has(node.id));
+  if (remainingNodes.length === graph.nodes.length) return graph;
   return {
-    nodes: graph.nodes.filter((node) => !toRemove.has(node.id)),
+    nodes: remainingNodes,
     edges: graph.edges.filter((edge) => !toRemove.has(edge.from) && !toRemove.has(edge.to)),
   };
 }

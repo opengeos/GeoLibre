@@ -34,6 +34,7 @@ import {
 import {
   isExternalPluginManifest,
   isPluginCapabilityList,
+  normalizePluginCapabilities,
   PLUGIN_CAPABILITIES,
 } from "../apps/geolibre-desktop/src/lib/plugin-archive-unpack";
 
@@ -322,10 +323,16 @@ describe("PR 5c: Graduated Symbology inline distribution histogram", () => {
 });
 
 describe("PR 5c: External plugin capabilities manifest validation", () => {
-  it("accepts declared capability identifiers and rejects unknown ones", () => {
+  it("accepts advisory capability labels, rejects blank strings, and filters unknown labels on normalize", () => {
     assert.ok(PLUGIN_CAPABILITIES.includes("network"));
     assert.equal(isPluginCapabilityList(["network", "mapWrite", "ui"]), true);
-    assert.equal(isPluginCapabilityList(["network", "root-shell"]), false);
+    assert.equal(isPluginCapabilityList(["network", "future-cap"]), true);
+    assert.equal(isPluginCapabilityList(["network", ""]), false);
+    assert.equal(isPluginCapabilityList([" network "]), false);
+    assert.deepEqual(normalizePluginCapabilities(["network", "future-cap", "ui"], "demo"), [
+      "network",
+      "ui",
+    ]);
 
     assert.equal(
       isExternalPluginManifest({
@@ -343,9 +350,23 @@ describe("PR 5c: External plugin capabilities manifest validation", () => {
         name: "Demo Plugin",
         version: "1.0.0",
         entry: "index.js",
-        capabilities: ["unknown-cap"],
+        capabilities: ["future-advisory-cap"],
+      }),
+      true,
+    );
+    assert.equal(
+      isExternalPluginManifest({
+        id: "demo-plugin",
+        name: "Demo Plugin",
+        version: "1.0.0",
+        entry: "index.js",
+        capabilities: [""],
       }),
       false,
     );
+
+    // No-op removeNodes must preserve graph reference identity so undo history stays clean.
+    const empty = emptyModelGraph();
+    assert.equal(removeNodes(empty, ["nonexistent-id"]), empty);
   });
 });

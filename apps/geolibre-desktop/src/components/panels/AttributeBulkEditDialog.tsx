@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Button,
   Dialog,
@@ -55,6 +55,12 @@ export function AttributeBulkEditDialog({
   const [matchCase, setMatchCase] = useState(false);
   const [wholeCell, setWholeCell] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setScope(selectedCount > 0 ? "selected" : "filtered");
+    setStatus(null);
+  }, [open, selectedCount]);
 
   const activeColumn = editableColumns.includes(column) ? column : (editableColumns[0] ?? "");
   const effectiveScope = scope === "selected" && selectedCount === 0 ? "filtered" : scope;

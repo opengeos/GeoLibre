@@ -430,6 +430,28 @@ export function ModelBuilderPanel({
   }, [open, minimized]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(() => new Set());
+  const selectedNodeIdsRef = useRef(selectedNodeIds);
+  const canvasZoomRef = useRef(canvasZoom);
+  useLayoutEffect(() => {
+    selectedNodeIdsRef.current = selectedNodeIds;
+  }, [selectedNodeIds]);
+  useLayoutEffect(() => {
+    canvasZoomRef.current = canvasZoom;
+  }, [canvasZoom]);
+
+  const pruneSelectionToGraph = useCallback((targetGraph: ProcessingModelGraph) => {
+    const validIds = new Set(targetGraph.nodes.map((node) => node.id));
+    setSelectedNodeIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (validIds.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+    setSelectedNodeId((prev) => (prev && validIds.has(prev) ? prev : null));
+  }, []);
 
   const selectSingleNode = useCallback((id: string | null) => {
     setSelectedNodeId(id);
@@ -480,7 +502,8 @@ export function ModelBuilderPanel({
     historyRef.current = result.history;
     setGraph(result.graph);
     setHistory(result.history);
-  }, []);
+    pruneSelectionToGraph(result.graph);
+  }, [pruneSelectionToGraph]);
 
   const handleRedo = useCallback(() => {
     const result = redoModelHistory(historyRef.current, graphRef.current);
@@ -491,7 +514,8 @@ export function ModelBuilderPanel({
     historyRef.current = result.history;
     setGraph(result.graph);
     setHistory(result.history);
-  }, []);
+    pruneSelectionToGraph(result.graph);
+  }, [pruneSelectionToGraph]);
 
   const handleDuplicateSelected = useCallback(() => {
     const ids =
@@ -1220,9 +1244,10 @@ export function ModelBuilderPanel({
       if ((event.target as HTMLElement).closest("[data-port]")) return;
       event.preventDefault();
       const additive = event.shiftKey || event.ctrlKey || event.metaKey;
+      const currentSelection = selectedNodeIdsRef.current;
       let activeSelection: Set<string>;
       if (additive) {
-        const nextSet = new Set(selectedNodeIds);
+        const nextSet = new Set(currentSelection);
         if (nextSet.has(node.id)) {
           nextSet.delete(node.id);
           setSelectedNodeIds(nextSet);
@@ -1233,9 +1258,9 @@ export function ModelBuilderPanel({
         setSelectedNodeIds(nextSet);
         setSelectedNodeId(node.id);
         activeSelection = nextSet;
-      } else if (selectedNodeIds.has(node.id) && selectedNodeIds.size > 1) {
+      } else if (currentSelection.has(node.id) && currentSelection.size > 1) {
         setSelectedNodeId(node.id);
-        activeSelection = selectedNodeIds;
+        activeSelection = currentSelection;
       } else {
         selectSingleNode(node.id);
         activeSelection = new Set([node.id]);
@@ -1245,7 +1270,7 @@ export function ModelBuilderPanel({
       handle.setPointerCapture(event.pointerId);
       const startX = event.clientX;
       const startY = event.clientY;
-      const zoom = canvasZoom || 1;
+      const zoom = canvasZoomRef.current || 1;
       const dragGen = dragGenerationRef.current;
       const snapshotBeforeDrag = graphRef.current;
       const origins = new Map<string, { x: number; y: number }>();
@@ -1311,16 +1336,20 @@ export function ModelBuilderPanel({
           const nextHistory = pushModelHistory(historyRef.current, snapshotBeforeDrag);
           historyRef.current = nextHistory;
           setHistory(nextHistory);
-          if (origins.size === 1) {
-            setGraph((current) => settleNode(current, node.id));
-          }
+          setGraph((current) => {
+            let settled = current;
+            for (const movedId of origins.keys()) {
+              settled = settleNode(settled, movedId);
+            }
+            return settled;
+          });
         }
       };
       handle.addEventListener("pointermove", handleMove);
       handle.addEventListener("pointerup", handleEnd);
       handle.addEventListener("pointercancel", handleEnd);
     },
-    [canvasZoom, selectSingleNode, selectedNodeIds],
+    [selectSingleNode],
   );
 
   // Port-to-port wiring.
