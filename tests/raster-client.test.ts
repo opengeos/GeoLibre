@@ -431,6 +431,18 @@ describe("raster-client compute", () => {
     );
     // Letter-free "JSFuck"-style payloads must be blocked by the char allowlist.
     assert.throws(() => rasterCalc(raster, { expression: "[]+[]" }), /unsupported characters/);
+    // Prototype properties must be rejected as unsupported identifiers, not treated as functions.
+    assert.throws(
+      () => rasterCalc(raster, { expression: "constructor(A)" }),
+      /unsupported identifiers/,
+    );
+    assert.throws(() => rasterCalc(raster, { expression: "toString()" }), /unsupported identifiers/);
+    // where(NaN, a, b) must evaluate falsy (matching JS truthiness and &&/||/!).
+    const neg = makeRaster([[-1, 4]], 2, 1);
+    assert.deepEqual(
+      [...rasterCalc(neg, { expression: "where(sqrt(A), 1, 0)" }).bands[0]],
+      [0, 1],
+    );
   });
 
   it("allows numeric literals including leading-dot decimals and scientific notation", () => {
@@ -562,8 +574,12 @@ describe("readRasterData with a short SampleFormat tag", () => {
 
 describe("client-raster-inputs helper", () => {
   it("maps secondary parameter ids, omits cleared inputs, and enforces combined memory budget", async () => {
-    const { loadClientAdditionalRasters, omitClientSecondaryInput, secondaryRasterLetterForParam } =
-      await import("../apps/geolibre-desktop/src/lib/client-raster-inputs");
+    const {
+      ClientRasterInputError,
+      loadClientAdditionalRasters,
+      omitClientSecondaryInput,
+      secondaryRasterLetterForParam,
+    } = await import("../apps/geolibre-desktop/src/lib/client-raster-inputs");
 
     assert.equal(secondaryRasterLetterForParam("b_path"), "B");
     assert.equal(secondaryRasterLetterForParam("c_path"), "C");
@@ -587,7 +603,7 @@ describe("client-raster-inputs helper", () => {
             return primary;
           },
         }),
-      /too large for the in-browser engine/,
+      (err: unknown) => err instanceof ClientRasterInputError && err.code === "COMBINED_TOO_LARGE",
     );
     assert.equal(readCalls, 0, "must reject oversized combined inputs before decoding bytes");
 
@@ -601,5 +617,14 @@ describe("client-raster-inputs helper", () => {
       },
     );
     assert.deepEqual(Object.keys(decoded ?? {}), ["B"]);
+  });
+
+  it("compiles standalone raster expressions via raster-expr module", async () => {
+    const { compileRasterExpression } = await import("../packages/processing/src/raster-expr");
+    const compiled = compileRasterExpression("where(A, A + 1, 0)", {
+      A: [new Float32Array([2, Number.NaN])],
+    });
+    assert.equal(compiled.evaluate(0), 3);
+    assert.equal(compiled.evaluate(1), 0);
   });
 });

@@ -10,6 +10,18 @@ export interface ClientRasterInputEntry {
   bytes: ArrayBuffer;
 }
 
+export type ClientRasterInputErrorCode = "COMBINED_TOO_LARGE";
+
+export class ClientRasterInputError extends Error {
+  readonly code: ClientRasterInputErrorCode;
+
+  constructor(code: ClientRasterInputErrorCode) {
+    super(code);
+    this.name = "ClientRasterInputError";
+    this.code = code;
+  }
+}
+
 /** Map a secondary Raster Calculator parameter id (`b_path` / `c_path`) to its variable letter. */
 export function secondaryRasterLetterForParam(paramId: string): "B" | "C" | null {
   if (paramId === "b_path") return "B";
@@ -55,10 +67,7 @@ export async function loadClientAdditionalRasters(
   for (const entry of Object.values(entries)) {
     combinedBytes += await estimateBytes(entry.bytes);
     if (!Number.isFinite(combinedBytes) || combinedBytes > maxBytes) {
-      throw new Error(
-        "The combined calculator inputs are too large for the in-browser engine. " +
-          "Use the sidecar (rasterio/GDAL) engine instead.",
-      );
+      throw new ClientRasterInputError("COMBINED_TOO_LARGE");
     }
   }
 

@@ -10,8 +10,6 @@ import type proj4Type from "proj4";
 export interface ResolvedCrs {
   /** Normalized proj4 definition string (with any `+axis` stripped so coordinates are east-first). */
   definition: string;
-  /** Whether the EPSG registry defines this CRS with north-first axis order (`+axis=ne`). */
-  northFirst: boolean;
   /** The loaded proj4 instance. */
   proj4: typeof proj4Type;
 }
@@ -37,15 +35,14 @@ export function resolveCrsDefinition(crsInput: string): Promise<ResolvedCrs | nu
       const { default: proj4 } = await import("proj4");
 
       if (CRS84_RE.test(trimmed) || cacheKey === "EPSG:4326") {
-        return { definition: "EPSG:4326", northFirst: false, proj4 };
+        return { definition: "EPSG:4326", proj4 };
       }
       if (cacheKey === "EPSG:3857" || cacheKey === "EPSG:900913" || cacheKey === "EPSG:102100") {
-        return { definition: "EPSG:3857", northFirst: false, proj4 };
+        return { definition: "EPSG:3857", proj4 };
       }
 
       const epsgMatch = EPSG_RE.exec(trimmed);
       let definition: string;
-      let northFirst = false;
       if (epsgMatch) {
         const code = Number(epsgMatch[1]);
         if (!Number.isInteger(code) || code <= 0 || code >= 32767) return null;
@@ -53,10 +50,8 @@ export function resolveCrsDefinition(crsInput: string): Promise<ResolvedCrs | nu
         const resolved = toProj4({ ProjectedCSTypeGeoKey: code });
         const raw = resolved.proj4 ?? "";
         if (!raw || resolved.errors?.CRSNotSupported) return null;
-        northFirst = /\+axis=ne/.test(raw);
         definition = withDatumShift(raw.replace(/\+axis=\w+\s*/g, "").trim(), code);
       } else {
-        northFirst = /\+axis=ne/.test(trimmed);
         definition = trimmed.replace(/\+axis=\w+\s*/g, "").trim();
       }
 
@@ -65,7 +60,7 @@ export function resolveCrsDefinition(crsInput: string): Promise<ResolvedCrs | nu
       } catch {
         return null;
       }
-      return { definition, northFirst, proj4 };
+      return { definition, proj4 };
     })().catch(() => null);
     definitionCache.set(cacheKey, pending);
   }

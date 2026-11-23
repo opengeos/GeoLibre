@@ -94,7 +94,7 @@ function tokenize(expr: string): Token[] {
       const start = i;
       while (i < n && /[A-Za-z0-9$_]/.test(expr[i])) i += 1;
       const ident = expr.slice(start, i);
-      if (!ALLOWED_FUNCTIONS[ident] && !BAND_REF_RE.test(ident)) {
+      if (!Object.prototype.hasOwnProperty.call(ALLOWED_FUNCTIONS, ident) && !BAND_REF_RE.test(ident)) {
         throw new Error(
           `Expression contains unsupported identifiers ("${ident}"). Only raster bands (A, B, C, A1, B2 ...) and the math helpers ` +
             "(where, clip, log, exp, sqrt, abs, minimum, maximum, min, max, sin, cos, tan, pow, floor, ceil, round) are allowed.",
@@ -395,7 +395,7 @@ export function compileRasterExpression(
     switch (name) {
       case "where": {
         const [c, a, b] = args;
-        return (p) => (c(p) !== 0 ? a(p) : b(p));
+        return (p) => (c(p) ? a(p) : b(p));
       }
       case "clip": {
         const [v, lo, hi] = args;
@@ -474,7 +474,9 @@ export function compileRasterExpression(
     if (token.kind === "ident") {
       consume();
       const name = token.value;
-      const fnSpec = ALLOWED_FUNCTIONS[name];
+      const fnSpec = Object.prototype.hasOwnProperty.call(ALLOWED_FUNCTIONS, name)
+        ? ALLOWED_FUNCTIONS[name]
+        : undefined;
       if (fnSpec) {
         countNode();
         if (peek().kind !== "lparen") {
