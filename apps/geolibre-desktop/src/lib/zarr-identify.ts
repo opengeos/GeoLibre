@@ -1,4 +1,4 @@
-import type { GeoLibreLayer } from "@geolibre/core";
+import { wrapLongitude, type GeoLibreLayer } from "@geolibre/core";
 import {
   getTemporalLayerAdapter,
   isSelectorTimeBinding,
@@ -6,7 +6,6 @@ import {
   toEpochMsAxis,
   zarrPointValue,
 } from "@geolibre/plugins";
-import { wrapLongitude } from "./global-raster-identify";
 
 /** Localized labels for the rows {@link readZarrIdentifyRows} returns. */
 export interface ZarrIdentifyLabels {
@@ -72,8 +71,26 @@ function insideBounds(bounds: unknown, point: [number, number]): boolean {
   const [west, south, east, north] = bounds as number[];
   if (![west, south, east, north].every(Number.isFinite)) return false;
   const [lng, lat] = point;
-  const inLng = west <= east ? lng >= west && lng <= east : lng >= west || lng <= east;
-  return inLng && lat >= south && lat <= north;
+  if (lat < south || lat > north) return false;
+  // Bounds may run past ±180 (e.g. [170, -10, 190, 10]) while the point is
+  // wrapped, so test the point and its copies one world away.
+  return [lng, lng - 360, lng + 360].some((x) =>
+    west <= east ? x >= west && x <= east : x >= west || x <= east,
+  );
+}
+
+/**
+ * Whether a layer's `source.bounds` are in WGS84 degrees. They are recorded in
+ * the store's CRS, so a projected store's bounds are in metres and cannot be
+ * compared with a clicked `[lng, lat]`.
+ *
+ * @param layer - The Zarr layer.
+ * @returns True when the store declares no CRS or a geographic WGS84 one.
+ */
+function hasGeographicBounds(layer: GeoLibreLayer): boolean {
+  const crs = typeof layer.source.crs === "string" ? layer.source.crs.toUpperCase() : "";
+  if (layer.source.proj4) return false;
+  return crs === "" || crs === "EPSG:4326" || crs === "OGC:CRS84";
 }
 
 /**
@@ -107,7 +124,9 @@ export async function readZarrIdentifyRows(
   // an ocean grid) comes back as empty as a click off the grid. Inside the
   // layer's bounds it is no data; outside, Identify stays silent.
   if (value === undefined) {
-    if (!result || !insideBounds(layer.source.bounds, point)) return null;
+    if (!result || !hasGeographicBounds(layer) || !insideBounds(layer.source.bounds, point)) {
+      return null;
+    }
     value = null;
   }
   const rows: Array<[string, string]> = [

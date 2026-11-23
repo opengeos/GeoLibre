@@ -61,9 +61,14 @@ export function useZarrIdentify(
       void readZarrIdentifyRows(
         layer,
         lngLat,
-        { nodata: t("netcdfIdentify.noData"), coordinates: t("netcdfIdentify.coordinates") },
+        { nodata: t("map.identifyAll.nodata"), coordinates: t("map.identifyAll.coordinates") },
         current.signal,
       )
+        // A failed read (network, decode) says so, as Identify visible layers
+        // does, rather than looking like a click outside the grid.
+        .catch((): Array<[string, string]> | null =>
+          current.signal.aborted ? null : [[layer.name, t("map.identifyAll.pixelReadFailed")]],
+        )
         .then((rows) => {
           // A newer click (or teardown) superseded this read. A click outside the
           // grid shows nothing rather than an empty popup.
@@ -89,7 +94,7 @@ export function useZarrIdentify(
             .addTo(map);
         })
         .catch(() => {
-          // An aborted or failed read leaves the map as it was.
+          // Building the popup itself failed; leave the map as it was.
         });
     };
 

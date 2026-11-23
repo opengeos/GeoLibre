@@ -575,7 +575,7 @@ export function zarrIndexSeriesSelector(
 
 /**
  * The key a Zarr query result holds the variable's values under: the variable
- * itself when present, else the first key that is not query metadata.
+ * itself when present, else the only key that is not query metadata.
  *
  * @param result - The query result.
  * @param variable - The queried variable, when known.
@@ -586,7 +586,12 @@ function resolveZarrVariableKey(
   variable: string | undefined,
 ): string | undefined {
   if (variable && variable in result) return variable;
-  return Object.keys(result).find((name) => name !== "dimensions" && name !== "coordinates");
+  // Fall back only when the result holds exactly one data key: with several,
+  // guessing could read a value off the wrong array.
+  const keys = Object.keys(result).filter(
+    (name) => name !== "dimensions" && name !== "coordinates",
+  );
+  return keys.length === 1 ? keys[0] : undefined;
 }
 
 /**

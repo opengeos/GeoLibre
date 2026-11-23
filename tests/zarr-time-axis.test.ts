@@ -498,6 +498,11 @@ describe("pointSeriesFromQueryResult", () => {
     assert.equal(pointSeriesFromQueryResult(result, "sst", [2]).get(2), 1.5);
   });
 
+  it("does not guess between several data keys", () => {
+    const result = { depth: { 2: [5] }, analysed_sst: { 2: [1.5] } };
+    assert.equal(pointSeriesFromQueryResult(result, "sst", [2]).get(2), null);
+  });
+
   it("returns all gaps when the layer was not live", () => {
     assert.deepEqual([...pointSeriesFromQueryResult(null, "sst", [0])], [[0, null]]);
   });

@@ -200,6 +200,9 @@ export function LayerRow({
       isArcGISImageServiceLayer(layer) ||
       // A Zarr cube reads its value through the renderer (useZarrIdentify);
       // the ArcGIS and Cesium renderers draw it natively, with no query path.
+      // Its `metadata.identifiable` stays false on purpose: that flag gates the
+      // generic native-layer feature query (hasNativeIdentifyLayers), which
+      // has no features to return for a cube.
       (layer.type === "zarr" && !isNativeZarrRenderer(primaryRenderer)) ||
       hasNativeIdentifyLayers(layer));
   const identifyActive = identifyLayerId === layer.id;
