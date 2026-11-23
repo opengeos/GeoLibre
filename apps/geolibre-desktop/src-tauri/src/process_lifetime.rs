@@ -20,63 +20,66 @@ use std::process::{Child, Command};
 mod linux_supervisor {
     use std::os::unix::process::CommandExt;
     use std::process::{Child, Command};
-    use std::sync::{mpsc, OnceLock};
+    use std::sync::{mpsc, Mutex};
 
     struct SpawnRequest {
         command: Command,
         reply: mpsc::SyncSender<std::io::Result<Child>>,
     }
 
-    fn supervisor_tx() -> &'static mpsc::Sender<SpawnRequest> {
-        static TX: OnceLock<mpsc::Sender<SpawnRequest>> = OnceLock::new();
-        TX.get_or_init(|| {
-            let (tx, rx) = mpsc::channel::<SpawnRequest>();
-            std::thread::Builder::new()
-                .name("geolibre-child-supervisor".to_string())
-                .spawn(move || {
-                    const PR_SET_PDEATHSIG: i32 = 1;
-                    const SIGTERM: i32 = 15;
+    fn supervisor_tx() -> Result<mpsc::Sender<SpawnRequest>, String> {
+        static TX: Mutex<Option<mpsc::Sender<SpawnRequest>>> = Mutex::new(None);
+        let mut guard = TX.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(tx) = guard.as_ref() {
+            return Ok(tx.clone());
+        }
+        let (tx, rx) = mpsc::channel::<SpawnRequest>();
+        std::thread::Builder::new()
+            .name("geolibre-child-supervisor".to_string())
+            .spawn(move || {
+                const PR_SET_PDEATHSIG: i32 = 1;
+                const SIGTERM: i32 = 15;
 
-                    unsafe extern "C" {
-                        fn prctl(
-                            option: i32,
-                            arg2: usize,
-                            arg3: usize,
-                            arg4: usize,
-                            arg5: usize,
-                        ) -> i32;
-                        fn getppid() -> i32;
-                        fn getpid() -> i32;
-                        fn kill(pid: i32, sig: i32) -> i32;
-                    }
+                unsafe extern "C" {
+                    fn prctl(
+                        option: i32,
+                        arg2: usize,
+                        arg3: usize,
+                        arg4: usize,
+                        arg5: usize,
+                    ) -> i32;
+                    fn getppid() -> i32;
+                    fn getpid() -> i32;
+                    fn kill(pid: i32, sig: i32) -> i32;
+                }
 
-                    while let Ok(mut req) = rx.recv() {
-                        let parent_pid = std::process::id() as i32;
-                        // SAFETY: `pre_exec` runs between `fork` and `exec` on this
-                        // long-lived supervisor thread. `prctl`, `getppid`, `getpid`,
-                        // and `kill` are async-signal-safe syscalls and perform no
-                        // heap allocation or Rust locking.
-                        unsafe {
-                            req.command.pre_exec(move || {
-                                let _ = prctl(PR_SET_PDEATHSIG, SIGTERM as usize, 0, 0, 0);
-                                if getppid() != parent_pid {
-                                    let _ = kill(getpid(), SIGTERM);
-                                }
-                                Ok(())
-                            });
-                        }
-                        let result = req.command.spawn();
-                        let _ = req.reply.send(result);
+                while let Ok(mut req) = rx.recv() {
+                    let parent_pid = std::process::id() as i32;
+                    // SAFETY: `pre_exec` runs between `fork` and `exec` on this
+                    // long-lived supervisor thread. `prctl`, `getppid`, `getpid`,
+                    // and `kill` are async-signal-safe syscalls and perform no
+                    // heap allocation or Rust locking.
+                    unsafe {
+                        req.command.pre_exec(move || {
+                            let _ = prctl(PR_SET_PDEATHSIG, SIGTERM as usize, 0, 0, 0);
+                            if getppid() != parent_pid {
+                                let _ = kill(getpid(), SIGTERM);
+                            }
+                            Ok(())
+                        });
                     }
-                })
-                .expect("failed to spawn geolibre child supervisor thread");
-            tx
-        })
+                    let result = req.command.spawn();
+                    let _ = req.reply.send(result);
+                }
+            })
+            .map_err(|error| format!("Could not start child supervisor thread: {error}"))?;
+        *guard = Some(tx.clone());
+        Ok(tx)
     }
 
     pub(super) fn spawn(command: Command) -> Result<Child, String> {
         let (reply_tx, reply_rx) = mpsc::sync_channel(1);
-        supervisor_tx()
+        supervisor_tx()?
             .send(SpawnRequest {
                 command,
                 reply: reply_tx,
