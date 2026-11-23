@@ -1273,6 +1273,7 @@ test = [
     { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pip" },
     { name = "psycopg", extra = ["binary"] },
+    { name = "pyarrow" },
     { name = "pyodbc" },
     { name = "pyproj", version = "3.7.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pyproj", version = "3.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -1291,6 +1292,7 @@ test = [
 ]
 vector = [
     { name = "geopandas" },
+    { name = "pyarrow" },
     { name = "shapely" },
 ]
 whitebox = [
@@ -1317,6 +1319,7 @@ requires-dist = [
     { name = "numpy", marker = "extra == 'raster'", specifier = ">=1.24" },
     { name = "pip", marker = "extra == 'notebook'", specifier = ">=24" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgis'", specifier = ">=3.1" },
+    { name = "pyarrow", marker = "extra == 'vector'", specifier = ">=15.0" },
     { name = "pyodbc", marker = "extra == 'mssql'", specifier = ">=5.1" },
     { name = "pyproj", marker = "extra == 'mssql'", specifier = ">=3.6" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },

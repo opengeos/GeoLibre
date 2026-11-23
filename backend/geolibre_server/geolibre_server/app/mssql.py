@@ -917,9 +917,9 @@ def _bbox_envelope_wkt(
         (min_x, max_y),
         (min_x, min_y),
     ]
-    target_srid = 4326 if column_type == "geography" else srid
-    if column_type != "geography" and srid not in (0, 4326):
-        transformer = _transformer(4326, srid)
+    target_srid = srid if srid != 0 else 4326
+    if target_srid != 4326:
+        transformer = _transformer(4326, target_srid)
         with _TRANSFORM_LOCK:
             ring = [transformer.transform(x, y) for x, y in ring]
     coords = ", ".join(f"{x} {y}" for x, y in ring)
@@ -936,9 +936,9 @@ def mssql_read(request: MssqlReadRequest) -> dict[str, Any]:
             cur = conn.cursor()
             info = _table_info(cur, request.schema_name, request.table, request.geometry_column)
             pk = info["primary_key"]
-            read_columns = [
-                c for c in info["columns"] if c not in request.excluded_fields or c == pk
-            ]
+            # Always fetch all table columns so row_state_hash matches the write
+            # endpoint even when excluded_fields omits columns from the response.
+            read_columns = list(info["columns"])
             selected_columns = (
                 (", " + ", ".join(_q(c) for c in read_columns)) if read_columns else ""
             )
@@ -1037,10 +1037,11 @@ def mssql_write(request: MssqlWriteRequest) -> dict[str, Any]:
             if cur.fetchone()[0] > limit:
                 raise feature_limit_error(limit, "editable write-back")
             cols = info["columns"]
+            lock_hint = " WITH (UPDLOCK, HOLDLOCK)" if request.expected_row_hashes else ""
             query = (
                 f"SELECT {_q(pk)}, {_q(info['geometry_column'])}.STAsBinary(), "
                 f"{_q(info['geometry_column'])}.STSrid, "
-                f"{', '.join(_q(column) for column in cols)} FROM {table_sql}"
+                f"{', '.join(_q(column) for column in cols)} FROM {table_sql}{lock_hint}"
             )
             cur.execute(query)
             existing = {}
@@ -1069,10 +1070,21 @@ def mssql_write(request: MssqlWriteRequest) -> dict[str, Any]:
                     else None
                 ),
             )
+            submitted_expected_keys = []
+            if request.expected_row_hashes:
+                for feature in features:
+                    props = feature.get("properties") or {}
+                    fkey = props.get(pk)
+                    if fkey is None:
+                        fkey = feature.get("id")
+                    if fkey is not None and str(fkey) in request.expected_row_hashes:
+                        submitted_expected_keys.append(fkey)
             check_optimistic_concurrency(
                 existing,
                 request.expected_row_hashes,
-                [change.key for change in diff.updates] + list(diff.deletes),
+                [change.key for change in diff.updates]
+                + list(diff.deletes)
+                + submitted_expected_keys,
             )
             # Only updates that actually write geometry, and inserts, can store
             # coordinates under an unsafe SRID; the UPDATE below emits the

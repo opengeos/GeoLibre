@@ -178,7 +178,16 @@ class JobManager:
             store[job_id] = job
             self.job_owners[job_id] = active_tenant
             self.evict_finished_locked()
-        thread = threading.Thread(target=target, args=(job_id, *args), daemon=True)
+        from .tenant import reset_current_tenant, set_current_tenant
+
+        def _run_with_tenant() -> None:
+            token = set_current_tenant(active_tenant)
+            try:
+                target(job_id, *args)
+            finally:
+                reset_current_tenant(token)
+
+        thread = threading.Thread(target=_run_with_tenant, daemon=True)
         try:
             thread.start()
         except RuntimeError:

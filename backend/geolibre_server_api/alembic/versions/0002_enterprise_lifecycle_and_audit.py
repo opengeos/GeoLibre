@@ -1,6 +1,6 @@
 """Add enterprise account lifecycle, TOTP MFA, audit log, and storage quota tables.
 
-Revision ID: 0002_enterprise_lifecycle_and_audit
+Revision ID: 0002_enterprise_lifecycle
 Revises: 0001_initial_schema
 Create Date: 2026-11-23 00:00:00.000000
 """
@@ -12,7 +12,7 @@ from collections.abc import Sequence
 import geolibre_server_api.account_lifecycle as _lifecycle
 from alembic import op
 
-revision: str = "0002_enterprise_lifecycle_and_audit"
+revision: str = "0002_enterprise_lifecycle"
 down_revision: str | Sequence[str] | None = "0001_initial_schema"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

@@ -456,9 +456,9 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
                 else sql.SQL("ST_AsGeoJSON({geom})").format(geom=geom)
             )
             pk = info["primary_key"]
-            read_columns = [
-                col for col in info["columns"] if col not in request.excluded_fields or col == pk
-            ]
+            # Always fetch all table columns so row_state_hash matches the write
+            # endpoint even when excluded_fields omits columns from the response.
+            read_columns = list(info["columns"])
             column_list = sql.SQL(", ").join(
                 [geom_expr] + [sql.Identifier(col) for col in read_columns]
             )
@@ -628,8 +628,15 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                     if info["srid"] not in (0, 4326)
                     else sql.SQL("ST_AsGeoJSON({geom})").format(geom=geom_ident)
                 )
+                lock_clause = (
+                    sql.SQL(" ORDER BY {pk} FOR UPDATE").format(pk=sql.Identifier(pk))
+                    if request.expected_row_hashes
+                    else sql.SQL("")
+                )
                 cur.execute(
-                    sql.SQL("SELECT {pk}, {geom_expr}, {columns} FROM {schema}.{table}").format(
+                    sql.SQL(
+                        "SELECT {pk}, {geom_expr}, {columns} FROM {schema}.{table}{lock_clause}"
+                    ).format(
                         pk=sql.Identifier(pk),
                         geom_expr=geom_expr,
                         columns=sql.SQL(", ").join(
@@ -637,6 +644,7 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                         ),
                         schema=schema_ident,
                         table=table_ident,
+                        lock_clause=lock_clause,
                     )
                 )
                 existing_rows: dict[Any, tuple[Any, dict[str, Any]]] = {}
@@ -660,10 +668,21 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                     capabilities=request.capabilities,
                     table_label=f"{request.schema_name}.{request.table}",
                 )
+                submitted_expected_keys = []
+                if request.expected_row_hashes:
+                    for feature in features:
+                        props = feature.get("properties") or {}
+                        fkey = props.get(pk)
+                        if fkey is None:
+                            fkey = feature.get("id")
+                        if fkey is not None and str(fkey) in request.expected_row_hashes:
+                            submitted_expected_keys.append(fkey)
                 check_optimistic_concurrency(
                     existing_rows,
                     request.expected_row_hashes,
-                    [change.key for change in diff.updates] + list(diff.deletes),
+                    [change.key for change in diff.updates]
+                    + list(diff.deletes)
+                    + submitted_expected_keys,
                 )
                 skipped = set(diff.skipped_fields)
                 inserted = len(diff.inserts)

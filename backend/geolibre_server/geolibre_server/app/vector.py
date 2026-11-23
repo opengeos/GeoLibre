@@ -19,8 +19,14 @@ import logging
 import os
 import shutil
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any, Optional
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows
+    fcntl = None  # type: ignore[assignment]
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -227,24 +233,98 @@ def _write_geoparquet(target: Path, geojson: dict) -> int:
     return len(gdf)
 
 
+_SHAPEFILE_STALE_INDEXES = (".qix", ".sbn", ".sbx")
+_SHAPEFILE_LOCKS_GUARD = threading.Lock()
+_SHAPEFILE_PATH_LOCKS: dict[Path, threading.Lock] = {}
+
+
+def _shapefile_path_lock(target: Path) -> threading.Lock:
+    resolved = target.resolve()
+    with _SHAPEFILE_LOCKS_GUARD:
+        lock = _SHAPEFILE_PATH_LOCKS.get(resolved)
+        if lock is None:
+            lock = threading.Lock()
+            _SHAPEFILE_PATH_LOCKS[resolved] = lock
+        return lock
+
+
 def _write_shapefile(target: Path, geojson: dict) -> int:
-    """Overwrite an ESRI Shapefile and its sidecar files, preserving its source CRS."""
+    """Overwrite an ESRI Shapefile and its sidecar files with rollback and per-path locking."""
     gdf = _reproject_to_existing_crs(_build_wgs84_gdf(geojson), target)
     tmpdir = tempfile.mkdtemp(dir=str(target.parent))
+    backup_dir = tempfile.mkdtemp(dir=str(target.parent))
     try:
+        # Stage the new shapefile outside the per-target lock so unrelated writes
+        # and serialization run in parallel.
         tmp_shp = Path(tmpdir) / target.name
         gdf.to_file(tmp_shp, driver="ESRI Shapefile")
-        for ext in _SHAPEFILE_SIDECARS:
-            src_sidecar = tmp_shp.with_suffix(ext)
-            dst_sidecar = target.with_suffix(ext)
-            if src_sidecar.exists():
-                if dst_sidecar.exists():
-                    shutil.copymode(dst_sidecar, src_sidecar)
-                elif target.exists():
-                    shutil.copymode(target, src_sidecar)
-                os.replace(src_sidecar, dst_sidecar)
+
+        lock = _shapefile_path_lock(target)
+        with lock:
+            lock_file = None
+            try:
+                if fcntl is not None:
+                    lock_path = target.parent / f".{target.name}.lock"
+                    lock_file = open(lock_path, "a+b")
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            except OSError:
+                if lock_file is not None:
+                    lock_file.close()
+                    lock_file = None
+
+            backups: list[tuple[Path, Path]] = []
+            created_new: list[Path] = []
+            try:
+                # Copy existing components and spatial indexes into backup_dir
+                # before replacing any file so failures can restore the original.
+                for ext in (*_SHAPEFILE_SIDECARS, *_SHAPEFILE_STALE_INDEXES):
+                    dst = target.with_suffix(ext)
+                    if dst.exists():
+                        backup = Path(backup_dir) / dst.name
+                        shutil.copy2(dst, backup)
+                        backups.append((backup, dst))
+
+                for ext in _SHAPEFILE_SIDECARS:
+                    src_sidecar = tmp_shp.with_suffix(ext)
+                    dst_sidecar = target.with_suffix(ext)
+                    if src_sidecar.exists():
+                        existed = dst_sidecar.exists()
+                        if existed:
+                            shutil.copymode(dst_sidecar, src_sidecar)
+                        elif target.exists():
+                            shutil.copymode(target, src_sidecar)
+                        os.replace(src_sidecar, dst_sidecar)
+                        if not existed:
+                            created_new.append(dst_sidecar)
+
+                # Invalidate obsolete spatial indexes so GDAL does not read stale
+                # bounding trees against the newly written geometries.
+                for idx_ext in _SHAPEFILE_STALE_INDEXES:
+                    idx_path = target.with_suffix(idx_ext)
+                    if idx_path.exists():
+                        idx_path.unlink()
+            except BaseException:
+                for backup, dst in backups:
+                    try:
+                        os.replace(backup, dst)
+                    except OSError:
+                        pass
+                for created in created_new:
+                    try:
+                        created.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                raise
+            finally:
+                if lock_file is not None:
+                    try:
+                        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                    except OSError:
+                        pass
+                    lock_file.close()
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+        shutil.rmtree(backup_dir, ignore_errors=True)
     return len(gdf)
 
 

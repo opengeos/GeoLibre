@@ -197,6 +197,38 @@ def organization_storage_bytes(session: Session, organization_id: str) -> int:
     return int(total or 0)
 
 
+def backfill_project_version_usage(session: Session, object_storage: Any) -> int:
+    """Populate ``project_version_usage`` rows for pre-upgrade versions using object storage."""
+    from geolibre_server_api.project_models import Version
+
+    missing = session.scalars(
+        select(Version)
+        .outerjoin(
+            ProjectVersionUsage,
+            (ProjectVersionUsage.project_id == Version.project_id)
+            & (ProjectVersionUsage.number == Version.number),
+        )
+        .where(ProjectVersionUsage.project_id.is_(None))
+    ).all()
+    if not missing:
+        return 0
+    for version in missing:
+        try:
+            payload = object_storage.get(version.object_key)
+            size_bytes = len(payload) if payload is not None else 0
+        except Exception:
+            size_bytes = 0
+        session.add(
+            ProjectVersionUsage(
+                project_id=version.project_id,
+                number=version.number,
+                size_bytes=size_bytes,
+            )
+        )
+    session.commit()
+    return len(missing)
+
+
 def enforce_storage_quota(
     session: Session,
     *,
@@ -206,9 +238,17 @@ def enforce_storage_quota(
     user_quota_bytes: int | None,
     org_quota_bytes: int | None,
 ) -> None:
-    """Reject a project save with 413 when the user or org storage quota would be exceeded."""
+    """Reject a project save with 413 when the user or org storage quota would be exceeded.
+
+    Locks the owning ``Organization`` or ``Account`` row ``FOR UPDATE`` inside
+    the active transaction before reading stored usage so concurrent saves for
+    the same owner serialize cleanly under PostgreSQL ``READ COMMITTED``.
+    """
+    from geolibre_server_api.org_models import Organization
+
     if organization_id is not None:
         if org_quota_bytes is not None and org_quota_bytes > 0:
+            session.get(Organization, organization_id, with_for_update=True)
             used = organization_storage_bytes(session, organization_id)
             if used + incoming_bytes > org_quota_bytes:
                 raise HTTPException(
@@ -220,6 +260,7 @@ def enforce_storage_quota(
                 )
         return
     if user_quota_bytes is not None and user_quota_bytes > 0:
+        session.get(Account, account_id, with_for_update=True)
         used = personal_storage_bytes(session, account_id)
         if used + incoming_bytes > user_quota_bytes:
             raise HTTPException(
@@ -292,14 +333,22 @@ def verify_account_mfa(
     account_id: str,
     code: str | None,
     now_ts: int,
+    *,
+    commit: bool = False,
 ) -> tuple[bool, str | None]:
     """Check MFA for ``account_id``.
 
-    Returns ``(ok, error_code)`` where ``ok=True`` if MFA is not enabled or
-    ``code`` matched either the current TOTP window or an unused backup code
-    (consuming that backup code).
+    Locks the MFA row ``FOR UPDATE`` so concurrent logins cannot consume the
+    same single-use backup code twice. By default leaves committing the updated
+    backup-code list to the caller so token issuance / OAuth approval commits
+    atomically with backup-code consumption.
     """
-    mfa = session.get(AccountMfaTotp, account_id)
+    mfa = session.get(
+        AccountMfaTotp,
+        account_id,
+        with_for_update=True,
+        populate_existing=True,
+    )
     if mfa is None or not mfa.enabled:
         return True, None
     if not code or not code.strip():
@@ -312,7 +361,8 @@ def verify_account_mfa(
         if hmac.compare_digest(candidate_digest, stored):
             remaining = hashes[:idx] + hashes[idx + 1 :]
             mfa.backup_code_hashes_json = json.dumps(remaining)
-            session.commit()
+            if commit:
+                session.commit()
             return True, None
     return False, "invalid_mfa_code"
 
@@ -534,6 +584,9 @@ def build_lifecycle_router() -> APIRouter:
         account = session.get(Account, row.account_id)
         if account is None or is_deactivated(session, account.id):
             raise HTTPException(400, "account is unavailable")
+        current_email = (account.email or "").strip().lower()
+        if row.target_email and row.target_email.strip().lower() != current_email:
+            raise HTTPException(400, "password reset token does not match the current email")
         error = password_policy_error(body.new_password, effective_policy(session, account.id))
         if error:
             raise HTTPException(422, error)

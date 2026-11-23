@@ -1352,6 +1352,7 @@ def build_identity_router() -> APIRouter:
         from geolibre_server_api.account_lifecycle import record_audit_event, verify_account_mfa
 
         _validate_pat_lifetime(body.expiresInDays)
+        validate_pat_scopes(body.scopes)
         now_ts = get_clock(request)()
         try:
             account = verify_password_login(session, body.username, body.password, now_ts)
@@ -2013,7 +2014,7 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
             )
 
         # Credential verification: the same scrypt work and lockout/rotation
-        # policy as /api/auth/token, but no PAT is minted.
+        # policy as /api/auth/token, plus account TOTP MFA enforcement.
         try:
             account = verify_password_login(session, username, password, now_ts)
         except PasswordLoginError as exc:
@@ -2024,6 +2025,27 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
                 csrf,
                 label,
                 CONSENT_LOGIN_ERRORS[exc.code],
+                proxy_user=proxy_user,
+                reauth=form_reauth,
+                requested_max_age=form_max_age,
+            )
+        from geolibre_server_api.account_lifecycle import verify_account_mfa
+
+        totp_code = fields.get("totp_code", "").strip() or None
+        mfa_ok, mfa_err = verify_account_mfa(session, account.id, totp_code, now_ts)
+        if not mfa_ok:
+            mfa_message = (
+                "Enter your 6-digit authenticator or backup code."
+                if mfa_err == "mfa_required"
+                else "Invalid authenticator or backup code."
+            )
+            return _consent_error(
+                session,
+                interaction,
+                client,
+                csrf,
+                label,
+                mfa_message,
                 proxy_user=proxy_user,
                 reauth=form_reauth,
                 requested_max_age=form_max_age,

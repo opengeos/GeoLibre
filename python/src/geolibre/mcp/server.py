@@ -2592,7 +2592,8 @@ def build_server(workspace: Workspace) -> MCPServer:
         """Add a local GeoTIFF or remote COG raster to the open map.
 
         An ``http(s)`` URL is loaded via ``addCogLayer``; a local path confined
-        to the MCP workspace (up to 50 MB) is sent via ``addRasterBytes``.
+        to the MCP workspace (up to 5 MiB, so base64 encoding stays inside the
+        relay's 8 MiB command budget) is sent via ``addRasterBytes``.
 
         Args:
             source: Public ``http(s)`` COG URL or workspace path to a
@@ -2611,10 +2612,15 @@ def build_server(workspace: Workspace) -> MCPServer:
         local = workspace.resolve(trimmed, must_exist=True)
         if local.suffix.lower() not in (".tif", ".tiff", ".geotiff"):
             raise ValueError("Local raster must be a .tif, .tiff, or .geotiff file.")
-        max_bytes = 50 * 1024 * 1024
+        # Relay._exchange caps serialized JSON commands at 8 MiB; 5 MiB raw
+        # expands to ~6.67 MiB base64, leaving comfortable headroom.
+        max_bytes = 5 * 1024 * 1024
         size = local.stat().st_size
         if size > max_bytes:
-            raise ValueError(f"Raster file exceeds the 50 MB live upload limit ({size} bytes).")
+            raise ValueError(
+                f"Raster file exceeds the 5 MiB live upload limit ({size} bytes); "
+                "host it as a COG URL and pass the URL instead."
+            )
         encoded = base64.b64encode(local.read_bytes()).decode("ascii")
         layer_name = name or local.stem or "Raster"
         params: dict[str, Any] = {"name": layer_name, "data": encoded}
@@ -2937,10 +2943,19 @@ def build_server(workspace: Workspace) -> MCPServer:
         clash = sorted(set(extra) & ({"field", "expression", "enabled"} | set(named)))
         if clash:
             raise ValueError(f"pass {clash} as arguments, not inside options")
+        # When restyling an already-labeled layer (no field/expression supplied),
+        # seed a sentinel base so label_style validates the supplied options
+        # without requiring the caller to restate the existing field.
+        validation_base = (
+            {"field": "__existing__", "enabled": True}
+            if field is None and expression is None
+            else None
+        )
         validated = _project.label_style(
             field,
             expression=expression,
             enabled=enabled,
+            base=validation_base,
             **named,
             **extra,
         )
@@ -2963,6 +2978,9 @@ def build_server(workspace: Workspace) -> MCPServer:
             "number_decimals": "numberDecimals",
             "number_locale": "numberLocale",
             "dedupe": "dedupe",
+            "line_gap": "lineGap",
+            "line_gap_padding": "lineGapPadding",
+            "line_spacing": "lineSpacing",
             "size_expression": "sizeExpression",
             "color_expression": "colorExpression",
             "opacity_expression": "opacityExpression",

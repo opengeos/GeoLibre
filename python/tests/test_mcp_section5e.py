@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 
+import geolibre.geolibre as gmod
 from geolibre import Map, authoring
 from geolibre.mcp.workspace import Workspace
 
@@ -97,7 +98,9 @@ def test_mcp_authoring_clear_popup_set_projection_duplicate_layer_and_export_htm
     assert "dark" in html_text
 
 
-def test_map_delegates_duplicate_layer_and_set_projection():
+def test_map_delegates_duplicate_layer_and_set_projection(monkeypatch):
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    monkeypatch.setattr(gmod, "app_port", lambda: 0)
     m = Map()
     layer_id = m.add_geojson(POINT_FC, name="Cities")
     dup_id = m.duplicate_layer(layer_id, name="Cities 2")
@@ -161,7 +164,7 @@ def test_mcp_live_tools_for_raster_tiles_labels_filter_and_renderer(tmp_path, mo
     assert remote_r["layerId"] == "layer-4"
     assert calls[-1][0] == "addCogLayer"
 
-    # live_set_labels sends validated partial patch
+    # live_set_labels sends validated partial patch, including restyling without restating field
     lbl = _call(
         server,
         "live_set_labels",
@@ -169,6 +172,7 @@ def test_mcp_live_tools_for_raster_tiles_labels_filter_and_renderer(tmp_path, mo
         field="name",
         size=14,
         color="#112233",
+        options={"line_gap": True, "line_gap_padding": 3, "line_spacing": 200},
     )
     assert calls[-1][0] == "setLabels"
     assert calls[-1][1]["labels"] == {
@@ -176,8 +180,17 @@ def test_mcp_live_tools_for_raster_tiles_labels_filter_and_renderer(tmp_path, mo
         "enabled": True,
         "size": 14.0,
         "color": "#112233",
+        "lineGap": True,
+        "lineGapPadding": 3.0,
+        "lineSpacing": 200.0,
     }
     assert lbl["layerId"] == "layer-1"
+
+    # Partial restyle without field/expression succeeds and only sends updated keys
+    restyle = _call(server, "live_set_labels", layer_id="layer-1", size=18)
+    assert calls[-1][0] == "setLabels"
+    assert calls[-1][1]["labels"] == {"size": 18.0}
+    assert restyle["layerId"] == "layer-1"
 
     # live_set_filter validates and sends expression, and clears on None
     flt = _call(
