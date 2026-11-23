@@ -20,16 +20,14 @@ describe("COG DEM terrain encoding", () => {
   it("encodes metre and sub-metre elevations as Terrarium RGB", () => {
     assert.deepEqual(
       Array.from(encodeTerrariumDem([-32_768, 0, 1.5, 8_848])),
-      [0, 0, 0, 255, 128, 0, 0, 255, 128, 1, 128, 255, 162, 144, 0, 255]
+      [0, 0, 0, 255, 128, 0, 0, 255, 128, 1, 128, 255, 162, 144, 0, 255],
     );
   });
 
   it("fills nodata and non-finite cells with zero metres", () => {
     assert.deepEqual(
-      Array.from(
-        encodeTerrariumDem([-9999, Number.NaN, Number.POSITIVE_INFINITY], -9999)
-      ),
-      [128, 0, 0, 255, 128, 0, 0, 255, 128, 0, 0, 255]
+      Array.from(encodeTerrariumDem([-9999, Number.NaN, Number.POSITIVE_INFINITY], -9999)),
+      [128, 0, 0, 255, 128, 0, 0, 255, 128, 0, 0, 255],
     );
   });
 
@@ -39,23 +37,17 @@ describe("COG DEM terrain encoding", () => {
     const pixel = new Float32Array([-3.4028235e38])[0];
     const tag = normalizeNoData("-3.4028235e+38");
     assert.notEqual(pixel, tag);
-    assert.deepEqual(
-      Array.from(encodeTerrariumDem([pixel], tag)),
-      [128, 0, 0, 255]
-    );
+    assert.deepEqual(Array.from(encodeTerrariumDem([pixel], tag)), [128, 0, 0, 255]);
   });
 
   it("still treats a distinct elevation as data", () => {
-    assert.deepEqual(
-      Array.from(encodeTerrariumDem([100], -9999)),
-      [128, 100, 0, 255]
-    );
+    assert.deepEqual(Array.from(encodeTerrariumDem([100], -9999)), [128, 100, 0, 255]);
   });
 
   it("clamps elevations to the representable Terrarium range", () => {
     assert.deepEqual(
       Array.from(encodeTerrariumDem([-100_000, 100_000])),
-      [0, 0, 0, 255, 255, 255, 255, 255]
+      [0, 0, 0, 255, 255, 255, 255, 255],
     );
   });
 });
@@ -143,15 +135,9 @@ describe("terrain tile placement", () => {
   });
 
   it("reports no placement for a tile that misses the DEM", () => {
-    assert.equal(
-      demTilePlacement([2000, 2000, 3000, 3000], source, 1000, 1000),
-      null
-    );
+    assert.equal(demTilePlacement([2000, 2000, 3000, 3000], source, 1000, 1000), null);
     // Touching along an edge is not an overlap either.
-    assert.equal(
-      demTilePlacement([1000, 0, 2000, 1000], source, 1000, 1000),
-      null
-    );
+    assert.equal(demTilePlacement([1000, 0, 2000, 1000], source, 1000, 1000), null);
   });
 });
 
@@ -168,20 +154,11 @@ describe("fileDirectoryValue", () => {
       ]),
       new Map(),
       new Map(),
-      0
+      0,
     );
-    assert.equal(
-      (directory as unknown as Record<string, unknown>).GDAL_NODATA,
-      undefined
-    );
-    assert.equal(
-      isDemOverviewIfd(fileDirectoryValue(directory, "NewSubfileType")),
-      true
-    );
-    assert.equal(
-      normalizeNoData(fileDirectoryValue(directory, "GDAL_NODATA")),
-      -9999
-    );
+    assert.equal((directory as unknown as Record<string, unknown>).GDAL_NODATA, undefined);
+    assert.equal(isDemOverviewIfd(fileDirectoryValue(directory, "NewSubfileType")), true);
+    assert.equal(normalizeNoData(fileDirectoryValue(directory, "GDAL_NODATA")), -9999);
   });
 
   it("still reads a plain tag record", () => {
@@ -212,7 +189,7 @@ describe("projectionFromGeoKeys", () => {
         ProjectedCSTypeGeoKey: 32617,
         GeographicTypeGeoKey: 4326,
       }),
-      "EPSG:32617"
+      "EPSG:32617",
     );
     assert.equal(
       projectionFromGeoKeys({
@@ -220,7 +197,7 @@ describe("projectionFromGeoKeys", () => {
         ProjectedCSTypeGeoKey: 32767,
         GeographicTypeGeoKey: 4326,
       }),
-      null
+      null,
     );
     assert.equal(
       projectionFromGeoKeys({
@@ -228,21 +205,21 @@ describe("projectionFromGeoKeys", () => {
         ProjectedCSTypeGeoKey: 3857,
         GeographicTypeGeoKey: 4326,
       }),
-      "EPSG:3857"
+      "EPSG:3857",
     );
     assert.equal(
       projectionFromGeoKeys({
         GTModelTypeGeoKey: 2,
         GeographicTypeGeoKey: 4326,
       }),
-      "EPSG:4326"
+      "EPSG:4326",
     );
     assert.equal(
       projectionFromGeoKeys({
         GTModelTypeGeoKey: 2,
         GeographicTypeGeoKey: 4269,
       }),
-      "EPSG:4269"
+      "EPSG:4269",
     );
   });
 });
@@ -256,12 +233,8 @@ describe("projected COG DEM warping", () => {
     const utmToMerc = utm17n.proj4(utm17n.definition, "EPSG:3857");
 
     // A 10 km x 10 km UTM 17N DEM around Knoxville, TN (~83.9°W, 35.9°N).
-    const utmBounds: [number, number, number, number] = [
-      230_000, 3_970_000, 240_000, 3_980_000,
-    ];
-    const wgs = projectedBoundsFromTransform(utmBounds, (c) =>
-      toWgs84.forward(c)
-    );
+    const utmBounds: [number, number, number, number] = [230_000, 3_970_000, 240_000, 3_980_000];
+    const wgs = projectedBoundsFromTransform(utmBounds, (c) => toWgs84.forward(c));
     assert.ok(wgs);
     assert.ok(wgs[0] > -85 && wgs[2] < -83, `unexpected lon bounds: ${wgs}`);
     assert.ok(wgs[1] > 35 && wgs[3] < 37, `unexpected lat bounds: ${wgs}`);
@@ -283,48 +256,32 @@ describe("projected COG DEM warping", () => {
       mercCenter[0] + halfSpan,
       mercCenter[1] + halfSpan,
     ];
-    const tile = resampleProjectedTile(
-      dem,
-      width,
-      height,
-      utmBounds,
-      mercBounds,
-      (c) => mercToUtm.forward(c)
+    const tile = resampleProjectedTile(dem, width, height, utmBounds, mercBounds, (c) =>
+      mercToUtm.forward(c),
     );
     assert.equal(tile.length, 256 * 256);
     // Center pixel maps to UTM x=235,000 -> halfway across the 64-col ramp (~564 m).
     const centerElev = tile[128 * 256 + 128];
     assert.ok(
       Number.isFinite(centerElev) && Math.abs(centerElev - 564) <= 6,
-      `expected ~564 m at center, got ${centerElev}`
+      `expected ~564 m at center, got ${centerElev}`,
     );
     // East edge of the Mercator tile must be higher than west edge.
     const westElev = tile[128 * 256 + 16];
     const eastElev = tile[128 * 256 + 240];
-    assert.ok(
-      eastElev > westElev + 20,
-      `expected east (${eastElev}) > west (${westElev})`
-    );
+    assert.ok(eastElev > westElev + 20, `expected east (${eastElev}) > west (${westElev})`);
   });
 
   it("preserves south-up orientation and RasterPixelIsPoint half-pixel alignment", () => {
     // South-up 2x2 grid: row 0 is south (100 m), row 1 is north (300 m).
     const southUp = new Float32Array([100, 110, 300, 310]);
     const mercBounds: [number, number, number, number] = [0, 0, 20, 20];
-    const tile = resampleProjectedTile(
-      southUp,
-      2,
-      2,
-      mercBounds,
-      mercBounds,
-      (c) => c,
-      {
-        originX: 0,
-        originY: 0,
-        resX: 10,
-        resY: 10,
-      }
-    );
+    const tile = resampleProjectedTile(southUp, 2, 2, mercBounds, mercBounds, (c) => c, {
+      originX: 0,
+      originY: 0,
+      resX: 10,
+      resY: 10,
+    });
     // Row 0 of the Mercator tile is north (y ≈ 20) -> must sample south-up row 1 (300 m).
     assert.equal(tile[10 * 256 + 10], 300);
     // Row 245 of the Mercator tile is south (y ≈ 0) -> must sample south-up row 0 (100 m).
@@ -344,7 +301,7 @@ describe("projected COG DEM warping", () => {
         originY: 10,
         resX: 10,
         resY: -10,
-      }
+      },
     );
     // col 179 of 256 spans x ≈ 7.0 -> must pick posting 1 (20 m); col 50 spans x ≈ 2.0 -> posting 0 (10 m).
     assert.equal(ptTile[128 * 256 + 50], 10);
@@ -385,16 +342,11 @@ describe("projected COG DEM warping", () => {
       const tileX = Math.floor(((lon + 180) / 360) * n);
       const latRad = (lat * Math.PI) / 180;
       const tileY = Math.floor(
-        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) /
-          2) *
-          n
+        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n,
       );
       const rgba = await reg.renderTile(z, tileX, tileY);
       const decodeTerrarium = (idx: number) =>
-        rgba[idx * 4] * 256 +
-        rgba[idx * 4 + 1] +
-        rgba[idx * 4 + 2] / 256 -
-        32768;
+        rgba[idx * 4] * 256 + rgba[idx * 4 + 1] + rgba[idx * 4 + 2] / 256 - 32768;
 
       let insideCount = 0;
       let fallbackCount = 0;
@@ -403,13 +355,10 @@ describe("projected COG DEM warping", () => {
         if (Math.abs(elev - 42) < 0.05) fallbackCount += 1;
         else if (elev >= 199 && elev <= 600) insideCount += 1;
       }
-      assert.ok(
-        insideCount > 100,
-        `expected >100 DEM pixels inside overlap, got ${insideCount}`
-      );
+      assert.ok(insideCount > 100, `expected >100 DEM pixels inside overlap, got ${insideCount}`);
       assert.ok(
         fallbackCount > 100,
-        `expected >100 fallback pixels outside overlap, got ${fallbackCount}`
+        `expected >100 fallback pixels outside overlap, got ${fallbackCount}`,
       );
     } finally {
       reg.dispose();
@@ -432,9 +381,7 @@ describe("projected COG DEM warping", () => {
       GTModelTypeGeoKey: 1,
       GTRasterTypeGeoKey: 1,
       ProjectedCSTypeGeoKey: 32617,
-      ModelTransformation: [
-        500, 0, 0, 230_000, 0, -500, 0, 3_980_000, 0, 0, 0, 0, 0, 0, 0, 1,
-      ],
+      ModelTransformation: [500, 0, 0, 230_000, 0, -500, 0, 3_980_000, 0, 0, 0, 0, 0, 0, 0, 1],
     });
     const reg = await registerCogDemSource(new Blob([northUpMatrixBuffer]));
     try {
@@ -446,25 +393,17 @@ describe("projected COG DEM warping", () => {
       const tileX = Math.floor(((lon + 180) / 360) * n);
       const latRad = (lat * Math.PI) / 180;
       const tileY = Math.floor(
-        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) /
-          2) *
-          n
+        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n,
       );
       const rgba = await reg.renderTile(z, tileX, tileY);
       const decodeTerrarium = (idx: number) =>
-        rgba[idx * 4] * 256 +
-        rgba[idx * 4 + 1] +
-        rgba[idx * 4 + 2] / 256 -
-        32768;
+        rgba[idx * 4] * 256 + rgba[idx * 4 + 1] + rgba[idx * 4 + 2] / 256 - 32768;
       let valid = 0;
       for (let i = 0; i < 256 * 256; i += 1) {
         const elev = decodeTerrarium(i);
         if (elev >= 299 && elev <= 500) valid += 1;
       }
-      assert.ok(
-        valid > 100,
-        `expected >100 DEM pixels from ModelTransformation, got ${valid}`
-      );
+      assert.ok(valid > 100, `expected >100 DEM pixels from ModelTransformation, got ${valid}`);
     } finally {
       reg.dispose();
     }
@@ -476,13 +415,11 @@ describe("projected COG DEM warping", () => {
       GTModelTypeGeoKey: 1,
       GTRasterTypeGeoKey: 1,
       ProjectedCSTypeGeoKey: 32617,
-      ModelTransformation: [
-        500, 50, 0, 230_000, 50, -500, 0, 3_980_000, 0, 0, 0, 0, 0, 0, 0, 1,
-      ],
+      ModelTransformation: [500, 50, 0, 230_000, 50, -500, 0, 3_980_000, 0, 0, 0, 0, 0, 0, 0, 1],
     });
     await assert.rejects(
       () => registerCogDemSource(new Blob([rotatedBuffer])),
-      /without rotation or shear/
+      /without rotation or shear/,
     );
   });
 
@@ -512,11 +449,11 @@ describe("projected COG DEM warping", () => {
       // 50 grads = 45.0 deg, 52 grads = 46.8 deg
       assert.ok(
         reg.bounds[1] > 44.5 && reg.bounds[1] < 45.5,
-        `expected south bound near 45°N, got ${reg.bounds[1]}`
+        `expected south bound near 45°N, got ${reg.bounds[1]}`,
       );
       assert.ok(
         reg.bounds[3] > 46.3 && reg.bounds[3] < 47.3,
-        `expected north bound near 46.8°N, got ${reg.bounds[3]}`
+        `expected north bound near 46.8°N, got ${reg.bounds[3]}`,
       );
       // Sample a tile near the center (~3.2°E, 45.9°N) and confirm DEM pixels are read.
       const z = 8;
@@ -526,24 +463,16 @@ describe("projected COG DEM warping", () => {
       const tileX = Math.floor(((lon + 180) / 360) * n);
       const latRad = (lat * Math.PI) / 180;
       const tileY = Math.floor(
-        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) /
-          2) *
-          n
+        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n,
       );
       const rgba = await reg.renderTile(z, tileX, tileY);
       const decodeTerrarium = (idx: number) =>
-        rgba[idx * 4] * 256 +
-        rgba[idx * 4 + 1] +
-        rgba[idx * 4 + 2] / 256 -
-        32768;
+        rgba[idx * 4] * 256 + rgba[idx * 4 + 1] + rgba[idx * 4 + 2] / 256 - 32768;
       let matching = 0;
       for (let i = 0; i < 256 * 256; i += 1) {
         if (Math.abs(decodeTerrarium(i) - 250) < 0.5) matching += 1;
       }
-      assert.ok(
-        matching > 1000,
-        `expected >1000 DEM pixels near 250 m, got ${matching}`
-      );
+      assert.ok(matching > 1000, `expected >1000 DEM pixels near 250 m, got ${matching}`);
     } finally {
       reg.dispose();
     }
@@ -593,29 +522,22 @@ describe("projected COG DEM warping", () => {
       4,
       4,
       0,
-      256
+      256,
     );
-    assert.equal(
-      calls.length,
-      2,
-      `expected 2 block-aligned chunk reads, got ${calls.length}`
-    );
+    assert.equal(calls.length, 2, `expected 2 block-aligned chunk reads, got ${calls.length}`);
     for (const c of calls) {
       assert.equal(
         c.width,
         undefined,
-        "must read native resolution without geotiff horizontal resize"
+        "must read native resolution without geotiff horizontal resize",
       );
       assert.equal(
         c.height,
         undefined,
-        "must read native resolution without geotiff vertical resize"
+        "must read native resolution without geotiff vertical resize",
       );
       const [l, t, r, b] = c.window;
-      assert.ok(
-        (r - l) * (b - t) <= 256,
-        "each read must stay within native pixel budget"
-      );
+      assert.ok((r - l) * (b - t) <= 256, "each read must stay within native pixel budget");
     }
     // Cell (0, 0) centre is at native col floor(0.5/4 * 32)=4, native row floor(0.5/4 * 16)=2 -> 2004.
     assert.equal(out[0], 2004);

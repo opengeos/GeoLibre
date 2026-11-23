@@ -37,9 +37,7 @@ const cache = new Map<number, Promise<EpsgProjection | null>>();
  * @param code - The numeric EPSG code, e.g. 2180.
  * @returns The projection, or null for an unknown code.
  */
-export function resolveEpsgProjection(
-  code: number
-): Promise<EpsgProjection | null> {
+export function resolveEpsgProjection(code: number): Promise<EpsgProjection | null> {
   let projection = cache.get(code);
   if (!projection) {
     projection = (async () => {
@@ -68,15 +66,11 @@ export function resolveEpsgProjection(
       }
       const rawConv = resolved.conversionParameters;
       const xFactor =
-        typeof rawConv?.x === "number" &&
-        Number.isFinite(rawConv.x) &&
-        rawConv.x !== 0
+        typeof rawConv?.x === "number" && Number.isFinite(rawConv.x) && rawConv.x !== 0
           ? rawConv.x
           : 1;
       const yFactor =
-        typeof rawConv?.y === "number" &&
-        Number.isFinite(rawConv.y) &&
-        rawConv.y !== 0
+        typeof rawConv?.y === "number" && Number.isFinite(rawConv.y) && rawConv.y !== 0
           ? rawConv.y
           : 1;
       return {
