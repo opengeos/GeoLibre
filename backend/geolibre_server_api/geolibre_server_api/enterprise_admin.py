@@ -480,22 +480,25 @@ def build_enterprise_admin_router() -> APIRouter:
                 OrganizationIdentityProvider.organization_id == organization_id
             )
         )
-        # The foreign keys cascade federated identities and pending login states.
-        session.execute(
-            delete(OrganizationIdentityProvider).where(
-                OrganizationIdentityProvider.organization_id == organization_id
+        if existing_provider_id is not None:
+            # Filter by the captured provider ID so the deleted row always
+            # matches the audited ID; FKs cascade federated identities.
+            deleted = session.execute(
+                delete(OrganizationIdentityProvider).where(
+                    OrganizationIdentityProvider.id == existing_provider_id
+                )
             )
-        )
-        record_audit_event(
-            session,
-            timestamp=get_clock(request)(),
-            actor_account_id=principal.account.id,
-            organization_id=organization_id,
-            action="org.idp.delete",
-            resource_type="identity_provider",
-            resource_id=existing_provider_id or organization_id,
-        )
-        session.commit()
+            if deleted.rowcount:
+                record_audit_event(
+                    session,
+                    timestamp=get_clock(request)(),
+                    actor_account_id=principal.account.id,
+                    organization_id=organization_id,
+                    action="org.idp.delete",
+                    resource_type="identity_provider",
+                    resource_id=existing_provider_id,
+                )
+            session.commit()
         return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
     @router.post("/api/organizations/{organization_id}/scim-tokens", status_code=201)
