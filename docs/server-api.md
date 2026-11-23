@@ -78,6 +78,15 @@ Deployment protections remain the operator's responsibility:
   `Content-Length` before reading the body, but a chunked or HTTP/2 request
   declares no length and is parsed in full before the per-route limit applies.
   Cap request size at the proxy as well.
+- **Database pooling and schema migrations.** For PostgreSQL and other
+  non-SQLite databases, the SQLAlchemy pool defaults to `GEOLIBRE_DB_POOL_SIZE=10`,
+  `GEOLIBRE_DB_MAX_OVERFLOW=20` (up to 30 connections per worker process), and
+  `GEOLIBRE_DB_POOL_RECYCLE=1800`; tune these to stay within PostgreSQL's
+  `max_connections` across all workers. In multi-worker deployments, run
+  `alembic upgrade head` (from `/app` inside the container image or from
+  `backend/geolibre_server_api/` in a source checkout with the `migrations`
+  extra installed) before startup and set `GEOLIBRE_SKIP_DDL_CREATE_ALL=1` so
+  workers skip startup DDL.
 
 The reference implementation is a correctness baseline, not a hardened
 deployment.
@@ -1028,11 +1037,13 @@ Deleting a project also removes its pending transfers and its redirect rows.
 
 ### `GET /api/shares`
 
-Requires `read:projects`. Returns `{"shares": [<project>, ...]}`, newest-updated
-first: the projects the caller manages whose `visibility` is `public` or `unlisted`
-(organization-visible projects are not link shares). Each
-entry is a project representation plus `projectSlug`. A share's `id` is its
-project id. Expired links stay listed so they can be revoked.
+Requires `read:projects`. Accepts optional pagination query parameters
+`limit` (1 to 100, default 100) and `offset` (default 0). Returns
+`{"shares": [<project>, ...], "limit": 100, "offset": 0, "total": N}`,
+newest-created first: the projects the caller manages whose `visibility` is
+`public` or `unlisted` (organization-visible projects are not link shares).
+Each entry is a project representation plus `projectSlug`. A share's `id` is
+its project id. Expired links stay listed so they can be revoked.
 
 ### `DELETE /api/shares/{id}`
 
@@ -1149,9 +1160,11 @@ Refusals use stable phrases so clients can explain them:
 Receiving and managing:
 
 - `GET /api/transfers/incoming` lists the caller's pending offers, newest
-  first: `{"transfers": [...]}`.
-- `GET /api/transfers/outgoing` lists the pending transfers the caller started:
-  `{"transfers": [...]}`.
+  first, with optional `limit` (1 to 100, default 100) and `offset` (default 0):
+  `{"transfers": [...], "limit": 100, "offset": 0, "total": N}`.
+- `GET /api/transfers/outgoing` lists the pending transfers the caller started,
+  with optional `limit` (1 to 100, default 100) and `offset` (default 0):
+  `{"transfers": [...], "limit": 100, "offset": 0, "total": N}`.
 - `POST /api/transfers/{id}/accept` (recipient only) moves the project. Its body
   is optional: `{"slug": "..."}` overrides the destination slug, which is how a
   recipient resolves a slug conflict (`409 slug already exists for the new

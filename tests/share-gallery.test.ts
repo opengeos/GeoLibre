@@ -952,4 +952,45 @@ describe("delete protection and ownership transfers", () => {
     assert.equal(transfers[0].id, "t-1");
     assert.equal(transfers[0].slug, "");
   });
+
+  it("paginates incoming transfers across multiple pages when total exceeds page size", async () => {
+    const urls: string[] = [];
+    const fn: typeof fetch = async (input) => {
+      const url = typeof input === "string" ? input : input.toString();
+      urls.push(url);
+      if (urls.length === 1) {
+        return new Response(
+          JSON.stringify({
+            transfers: [rawTransfer({ id: "t-1" }), rawTransfer({ id: "t-2" })],
+            total: 3,
+            limit: 2,
+            offset: 0,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          transfers: [rawTransfer({ id: "t-3" })],
+          total: 3,
+          limit: 2,
+          offset: 2,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+    const transfers = await fetchIncomingTransfers({
+      token: "glb_tok",
+      baseUrl: BASE,
+      fetchImpl: fn,
+    });
+    assert.deepEqual(urls, [
+      `${BASE}/api/transfers/incoming`,
+      `${BASE}/api/transfers/incoming?limit=2&offset=2`,
+    ]);
+    assert.deepEqual(
+      transfers.map((item) => item.id),
+      ["t-1", "t-2", "t-3"],
+    );
+  });
 });
