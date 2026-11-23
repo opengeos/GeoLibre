@@ -684,7 +684,7 @@ function refresh(): void {
       error instanceof RangeError ? labels.tooManyCells(DGGAL_VIEWPORT_CELL_LIMIT) : String(error);
   }
   applyStyle();
-  (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
+  void (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
   updateSelectedSource();
   // Pan/zoom only updates the status line (and auto-resolution readout) —
   // rebuilding the whole panel would destroy open color pickers / focused inputs.
@@ -777,12 +777,12 @@ function updateSelectedSource(): void {
   const engine = activeDggrs();
   if (!engine) return;
   const source = map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
-  source?.setData({
+  void source?.setData({
     type: "FeatureCollection",
     features: selectedCell ? [dggalZoneFeature(engine, selectedCell)] : [],
   });
   const neighborsSource = map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined;
-  neighborsSource?.setData({
+  void neighborsSource?.setData({
     type: "FeatureCollection",
     features:
       settings.includeNeighbors && selectedCell
@@ -790,7 +790,7 @@ function updateSelectedSource(): void {
         : [],
   });
   const parentsSource = map?.getSource(PARENTS_SOURCE_ID) as GeoJSONSource | undefined;
-  parentsSource?.setData({
+  void parentsSource?.setData({
     type: "FeatureCollection",
     features:
       settings.includeParents && selectedCell

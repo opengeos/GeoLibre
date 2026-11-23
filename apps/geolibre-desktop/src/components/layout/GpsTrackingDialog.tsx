@@ -242,7 +242,7 @@ function setSourceData(
   data: FeatureCollection | Feature,
 ): void {
   const src = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
-  src?.setData(data);
+  void src?.setData(data);
 }
 
 function removeGpsSources(map: maplibregl.Map): void {

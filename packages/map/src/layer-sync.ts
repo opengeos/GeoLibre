@@ -471,7 +471,7 @@ function rememberGeoJsonData(map: maplibregl.Map, sourceId: string, data: GeoJSO
 
 function setGeoJsonData(source: maplibregl.GeoJSONSource, data: GeoJSON): void {
   if (geoJsonSourceData.get(source) === data) return;
-  source.setData(data);
+  void source.setData(data);
   geoJsonSourceData.set(source, data);
 }
 

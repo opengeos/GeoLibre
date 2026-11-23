@@ -1173,10 +1173,32 @@ build their metadata, or they pass on shapes that never occur.
 
 The `:coverage` test variants run the same suites and print a coverage summary;
 CI runs them so every build reports coverage. They are **gated on a floor**:
-`test:frontend:coverage` fails below 78% lines / 78% branches / 63% functions, and
-`test:backend:coverage` fails below 55% (`--cov-fail-under`). The floors sit a few
-points under the current numbers as a **ratchet** — regressions fail CI, and when
-coverage rises comfortably above a floor, raise the floor to lock in the gain.
+`test:frontend:coverage` fails below 78% lines / 78% branches / 63% functions.
+The three Python suites are gated with pytest-cov:
+
+| Suite | Command | Floor | Where the floor lives | CI |
+| --- | --- | --- | --- | --- |
+| Sidecar (`backend/geolibre_server`) | `npm run test:backend:coverage` | 76% | `--cov-fail-under` in the root `package.json` | `ci.yml` "Backend tests" (`ci:backend`) |
+| Projects and identity server (`backend/geolibre_server_api`) | `npm run test:server-api:coverage` | 87% | `--cov-fail-under` in the root `package.json` | `ci.yml` "Backend tests" (`ci:backend`) |
+| Python package (`python/`) | `npm run test:python:coverage` | 88% | `fail_under` in `python/pyproject.toml` | `publish-python.yml` "Test Python package" |
+
+The Python package's floor sits in its own `pyproject.toml` rather than in
+`package.json` because `publish-python.yml` only runs for changes under
+`python/` (and the app sources it bundles), so a floor kept in `package.json`
+could change without that workflow running.
+
+The floors sit a few points under the current numbers as a **ratchet**:
+regressions fail CI, and when coverage rises comfortably above a floor, raise
+the floor to lock in the gain. Measure in the environment CI installs (the
+backend `test` extras, or the package list in `publish-python.yml`), since a
+suite whose optional dependencies are missing skips tests and reports less.
+
+Most of the sidecar's raster, conversion, OBIA and point cloud workers run as
+subprocesses in production, where coverage cannot see them. Their tests call
+each worker's `main()` in-process instead (`_run_worker` in
+`tests/test_workers_and_job_manager.py`, and `test_raster_workers_in_process.py`
+/ `test_workers_in_process.py`), which is what lets the floor count them; test a
+new worker the same way.
 
 The frontend report only counts files a test actually imports, so a module with no
 test does not appear at all rather than as 0%. That is the part that bites:
@@ -1203,8 +1225,9 @@ exported and covered by `tests/coverage-check.test.ts` — change the retry poli
 there, not by loosening a floor. If the retry starts firing regularly, fix the
 measurement instead of widening the mitigation.
 
-The backend coverage run (and `npm run ci`, which calls the `:coverage` variants)
-needs `pytest-cov` from the backend `dev` extra. Install the **`test`** extra to
+The backend coverage runs (and `npm run ci`, which calls the `:coverage` variants)
+need `pytest-cov`, from the sidecar's `dev` extra and the identity server's
+`test` extra. Install the **`test`** extra to
 run the _full_ backend suite — without the optional engines
 (geopandas/rasterio/sedona/httpx) the vector/raster/SQL/ML tests skip themselves
 and CI is green but hollow: `pip install -e "backend/geolibre_server[test]"`.
@@ -1274,6 +1297,13 @@ loudly; pin ESLint or disable the two rules rather than reaching for
   not raise the limit.
 - **A PR fixes warnings:** lower the limit to the new total that ESLint prints,
   in the same PR, so the gain is kept.
+- **A disable directive goes stale:** ESLint reports an `eslint-disable`
+  comment that no longer suppresses anything as an **error**
+  (`reportUnusedDisableDirectives`), so the ratchet cannot be dodged by a
+  leftover directive hiding a future warning on that line. Delete it
+  (`eslint --fix` removes it, but leaves a blank line and any `--` reason that
+  wrapped onto the next line, so tidy those up). In JSX children a directive
+  has to be a `{/* eslint-disable-next-line ... */}` expression comment.
 - **A PR turns on a new rule:** the one time the limit goes up. Raise it by
   exactly the new rule's count on the code as it is, say so in the PR, and fix
   those warnings over time like the rest.

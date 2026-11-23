@@ -74,7 +74,7 @@ export function showPrintExtent(map: MapLibreMap, extent: PrintExtent): void {
   const data = extentToFeature(extent);
   const existing = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
   if (existing) {
-    existing.setData(data);
+    void existing.setData(data);
     // Re-add the layers if they were removed externally (e.g. a style mutation)
     // while the source was left in place, and make them visible again -- they
     // may have been hidden by setPrintExtentVisible during a capture.

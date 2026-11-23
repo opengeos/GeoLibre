@@ -1102,8 +1102,10 @@ function refreshGeometry(): void {
   if (!whenStyleReady(activeMap)) return;
   ensureLayers(activeMap);
   const geometry = buildGeometry(activeMap);
-  (activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(geometry.lines);
-  (activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined)?.setData(geometry.labels);
+  void (activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(geometry.lines);
+  void (activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
+    geometry.labels,
+  );
 }
 
 /**

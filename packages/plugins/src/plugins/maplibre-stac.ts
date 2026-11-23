@@ -672,7 +672,7 @@ function showDrawGeometry(map: StacMap, geometry: Geometry): void {
   };
   const source = map.getSource(DRAW_SOURCE) as GeoJSONSource | undefined;
   if (source) {
-    source.setData(data);
+    void source.setData(data);
     return;
   }
   map.addSource(DRAW_SOURCE, { type: "geojson", data });
@@ -956,7 +956,7 @@ function showSelectionHighlight(geometry: Geometry | null): void {
   };
   const source = map.getSource(SELECT_SOURCE) as GeoJSONSource | undefined;
   if (source) {
-    source.setData(data);
+    void source.setData(data);
     return;
   }
   map.addSource(SELECT_SOURCE, { type: "geojson", data });

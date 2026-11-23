@@ -52,7 +52,7 @@ export class HighlightLayer {
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (!source || !item.geometry) return;
 
-    source.setData({
+    void source.setData({
       type: "FeatureCollection",
       features: [
         {
@@ -78,7 +78,7 @@ export class HighlightLayer {
   clear(): void {
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (source) {
-      source.setData(EMPTY_FC);
+      void source.setData(EMPTY_FC);
     }
   }
 

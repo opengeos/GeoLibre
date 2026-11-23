@@ -605,7 +605,7 @@ function setFootprints(map: MapLibreMap, results: ZoneResult[]): void {
     map.on("mouseenter", FOOTPRINT_FILL_LAYER_ID, handleFootprintEnter);
     map.on("mouseleave", FOOTPRINT_FILL_LAYER_ID, handleFootprintLeave);
   }
-  (map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource).setData({
+  void (map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource).setData({
     type: "FeatureCollection",
     features,
   });
@@ -673,7 +673,7 @@ function setOutline(map: MapLibreMap, boxes: LonLatBbox[]): void {
   }
   // Field layers added since would otherwise hide the outline.
   map.moveLayer(HOVER_LINE_LAYER_ID);
-  (map.getSource(HOVER_SOURCE_ID) as GeoJSONSource).setData({
+  void (map.getSource(HOVER_SOURCE_ID) as GeoJSONSource).setData({
     type: "FeatureCollection",
     features: boxes.map((box) => polygonFeature(bboxRing(box), {})),
   });
@@ -703,7 +703,10 @@ function setDrawBox(map: MapLibreMap, bbox: LonLatBbox | null): void {
     });
   }
   const features: Feature<Polygon>[] = bbox ? [polygonFeature(bboxRing(bbox), {})] : [];
-  (map.getSource(DRAW_SOURCE_ID) as GeoJSONSource).setData({ type: "FeatureCollection", features });
+  void (map.getSource(DRAW_SOURCE_ID) as GeoJSONSource).setData({
+    type: "FeatureCollection",
+    features,
+  });
 }
 
 /** Removes the plugin-private overlays (hover outline, drawn box). */

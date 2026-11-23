@@ -401,7 +401,7 @@ function setFootprints(
   const source = map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource | undefined;
   if (!source) return;
   const features = tiles.map((tile) => tileFeature(tile, selectedIds.has(tile.id)));
-  source.setData({ type: "FeatureCollection", features });
+  void source.setData({ type: "FeatureCollection", features });
   if (features.length > 0) syncFootprintStoreLayer(app, features);
   else unregisterFootprintStoreLayer(app);
 }
@@ -453,7 +453,7 @@ function setHoveredTile(app: GeoLibreAppAPI, tile: IgnLidarHdTile | null): void 
   ensureHoverLayer(map);
   const source = map.getSource(HOVER_SOURCE_ID) as GeoJSONSource | undefined;
   if (!source) return;
-  source.setData(
+  void source.setData(
     tile ? { type: "FeatureCollection", features: [tileFeature(tile)] } : emptyCollection(),
   );
 }

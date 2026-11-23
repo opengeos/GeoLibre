@@ -642,7 +642,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     if (!map) return;
     const lineSource = map.getSource(SOURCE_LINE) as GeoJSONSource | undefined;
     const vertexSource = map.getSource(SOURCE_VERTICES) as GeoJSONSource | undefined;
-    if (lineSource) lineSource.setData(lineFeature(coords));
+    if (lineSource) void lineSource.setData(lineFeature(coords));
     if (vertexSource) {
       // Dense imported routes such as GPX tracks can contain thousands of
       // vertices. Drawing a circle at every one obscures the line itself, so a
@@ -650,7 +650,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
       // hand-drawn lines remain small enough to show every editable vertex.
       const visibleVertices =
         !this._drawing && coords.length > 50 ? [coords[0], coords[coords.length - 1]] : coords;
-      vertexSource.setData(pointCollection(visibleVertices));
+      void vertexSource.setData(pointCollection(visibleVertices));
     }
   }
 
@@ -675,7 +675,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     if (!map) return;
     const source = map.getSource(SOURCE_HOVER) as GeoJSONSource | undefined;
     if (!source) return;
-    source.setData(coord ? pointFeature(coord) : emptyFeatureCollection());
+    void source.setData(coord ? pointFeature(coord) : emptyFeatureCollection());
   }
 
   private _fitToLine(coords: LngLat[]): void {

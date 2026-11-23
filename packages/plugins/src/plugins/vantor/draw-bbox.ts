@@ -100,7 +100,7 @@ export class DrawBBox {
   clear(): void {
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (source) {
-      source.setData(EMPTY_FC);
+      void source.setData(EMPTY_FC);
     }
   }
 
@@ -108,7 +108,7 @@ export class DrawBBox {
     this.initLayers();
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (source) {
-      source.setData({
+      void source.setData({
         type: "FeatureCollection",
         features: [
           {
@@ -177,7 +177,7 @@ export class DrawBBox {
     const east = Math.max(start[0], end[0]);
     const north = Math.max(start[1], end[1]);
 
-    source.setData({
+    void source.setData({
       type: "FeatureCollection",
       features: [
         {

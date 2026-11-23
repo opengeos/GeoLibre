@@ -517,7 +517,7 @@ export function createGridPlugin<S extends GridSettingsBase, L extends GridLabel
         error instanceof RangeError ? labels.tooManyCells(config.viewportCellLimit) : String(error);
     }
     applyStyle();
-    (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
+    void (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
     updateSelectedSource();
     if (panelContainer) renderPanel(panelContainer);
   }
@@ -525,18 +525,18 @@ export function createGridPlugin<S extends GridSettingsBase, L extends GridLabel
   function updateSelectedSource(): void {
     const toFeatures = (cells: string[]): Feature<Polygon>[] =>
       cells.map((cell) => config.cellFeature(cell));
-    (map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined)?.setData({
+    void (map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined)?.setData({
       type: "FeatureCollection",
       features: selectedCell ? toFeatures([selectedCell]) : [],
     });
-    (map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined)?.setData({
+    void (map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined)?.setData({
       type: "FeatureCollection",
       features:
         settings.includeNeighbors && selectedCell
           ? toFeatures(config.neighborCells(selectedCell))
           : [],
     });
-    (map?.getSource(PARENT_SOURCE_ID) as GeoJSONSource | undefined)?.setData({
+    void (map?.getSource(PARENT_SOURCE_ID) as GeoJSONSource | undefined)?.setData({
       type: "FeatureCollection",
       features: parentEnabled() && selectedCell ? toFeatures(config.parentCells(selectedCell)) : [],
     });

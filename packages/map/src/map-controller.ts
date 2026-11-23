@@ -2472,7 +2472,7 @@ export class MapController implements MapEngine {
 
     const source = map.getSource(highlightSourceId());
     if (source) {
-      (source as maplibregl.GeoJSONSource).setData(featureCollection);
+      void (source as maplibregl.GeoJSONSource).setData(featureCollection);
     } else {
       map.addSource(highlightSourceId(), {
         type: "geojson",

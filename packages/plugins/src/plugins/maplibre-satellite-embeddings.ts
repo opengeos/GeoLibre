@@ -466,7 +466,7 @@ function setFootprints(map: MapLibreMap, rows: ResultRow[]): void {
     map.on("mouseenter", FOOTPRINT_FILL_LAYER_ID, handleFootprintEnter);
     map.on("mouseleave", FOOTPRINT_FILL_LAYER_ID, handleFootprintLeave);
   }
-  (map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource).setData({
+  void (map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource).setData({
     type: "FeatureCollection",
     features,
   });
@@ -535,7 +535,7 @@ function setOutline(map: MapLibreMap, rings: [number, number][][]): void {
   // Layers added since (an AlphaEarth COG covering the whole footprint) would
   // otherwise hide the outline, so keep it on top.
   map.moveLayer(HOVER_LINE_LAYER_ID);
-  (map.getSource(HOVER_SOURCE_ID) as GeoJSONSource).setData({
+  void (map.getSource(HOVER_SOURCE_ID) as GeoJSONSource).setData({
     type: "FeatureCollection",
     features: rings.map((ring) => polygonFeature(ring, {})),
   });
@@ -565,7 +565,10 @@ function setDrawBox(map: MapLibreMap, bbox: LonLatBbox | null): void {
     });
   }
   const features: Feature<Polygon>[] = bbox ? [polygonFeature(bboxRing(bbox), {})] : [];
-  (map.getSource(DRAW_SOURCE_ID) as GeoJSONSource).setData({ type: "FeatureCollection", features });
+  void (map.getSource(DRAW_SOURCE_ID) as GeoJSONSource).setData({
+    type: "FeatureCollection",
+    features,
+  });
 }
 
 /** Removes the plugin-private overlays (hover outline, drawn box). */
