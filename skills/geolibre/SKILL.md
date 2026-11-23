@@ -125,10 +125,12 @@ export_html(path=..., out_path="counties.html", title="Population by county")
 - **File tools and `live_*` tools are different.** `create_project` and
   `add_*_layer` write a `.geolibre.json` on disk. `live_status()`,
   `live_fly_to()`, `live_add_geojson()`, and the other `live_*` tools move the
-  map already open in GeoLibre Desktop, through the Notebook-panel relay on
-  `127.0.0.1:8766`. Call `live_status()` first. If it reports no relay, ask
-  the user to open Processing → Jupyter Notebook once. A live edit is not on
-  disk until the user saves in the app. Web and JupyterLite have no relay.
+  map already open in GeoLibre Desktop, through a loopback relay (the
+  processing sidecar's, or the Notebook panel's). Call `live_status()` first.
+  If it reports no relay, ask the user to turn on Settings → Startup →
+  "Allow AI agents to drive the map" (or open Processing → Jupyter Notebook
+  once). A live edit is not on disk until the user saves in the app. Web and
+  JupyterLite have no relay.
   Processing (`live_list_algorithms()`, `live_run_algorithm()`) runs in the
   app, so it is live-only.
 

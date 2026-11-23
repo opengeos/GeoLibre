@@ -18,6 +18,8 @@ import os
 import signal
 import threading
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,6 +41,8 @@ from .obia import router as obia_router
 from .pointcloud import router as pointcloud_router
 from .postgis import router as postgis_router
 from .raster import router as raster_router
+from .relay import RELAY_CLIENT_PATHS, remove_discovery_file, write_discovery_file
+from .relay import router as relay_router
 from .sql import router as sql_router
 from .tenant import (
     is_multi_tenant_enabled,
@@ -67,7 +71,21 @@ _SIDECAR_TOKEN_BYTES = SIDECAR_TOKEN.encode("utf-8")
 # readiness poll and the frontend before it holds a token) and CORS preflight.
 _TOKEN_EXEMPT_PATHS = frozenset({"/health"})
 
-app = FastAPI(title="GeoLibre Server", version="0.8.0")
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Advertise the Live MCP relay to local MCP clients while this process runs.
+
+    Both steps are no-ops unless the desktop shell enabled the relay.
+    """
+    write_discovery_file()
+    try:
+        yield
+    finally:
+        remove_discovery_file()
+
+
+app = FastAPI(title="GeoLibre Server", version="0.8.0", lifespan=_lifespan)
 app.add_exception_handler(MssqlWriteRolledBack, mssql_write_rolled_back_handler)
 
 
@@ -84,6 +102,9 @@ async def require_sidecar_token(request: Request, call_next):
         SIDECAR_TOKEN
         and request.method != "OPTIONS"
         and request.url.path not in _TOKEN_EXEMPT_PATHS
+        # The Live MCP relay's client endpoints check their own, narrower
+        # token (app/relay.py), so an MCP client never holds this one.
+        and request.url.path not in RELAY_CLIENT_PATHS
     ):
         provided = request.headers.get("x-geolibre-token", "")
         if not provided:
@@ -163,6 +184,7 @@ app.include_router(sql_router)
 app.include_router(pointcloud_router)
 app.include_router(ml_router)
 app.include_router(obia_router)
+app.include_router(relay_router)
 
 
 class RunRequest(BaseModel):

@@ -3812,6 +3812,10 @@ fn start_geolibre_sidecar_blocking(
         .current_dir(&project_dir)
         .env("GEOLIBRE_UV", &uv)
         .env("GEOLIBRE_SIDECAR_TOKEN", sidecar_token())
+        // Turns on the Live MCP command relay (app/relay.py) and tells it the
+        // port to advertise in its discovery file. Only the desktop sets this:
+        // a container sidecar must never relay commands between users.
+        .env("GEOLIBRE_LIVE_RELAY_PORT", SIDECAR_PORT.to_string())
         .env("GEOLIBRE_RUNTIME_DIR", &runtime_dir)
         .env(POSTGIS_HOSTS_ENV, &postgis_hosts)
         .env(MSSQL_HOSTS_ENV, &mssql_hosts)

@@ -12,11 +12,32 @@ same [project builders](python.md) the Python package uses, so a project they
 write is byte-for-byte the kind the app already loads. The optional `show_map`
 in-chat preview uses a bundled MCP App view.
 
-The `live_*` tools are the other half. They speak the desktop Notebook relay
-([Notebook panel](notebook.md)), so a command from an MCP client moves the map
-already open in GeoLibre Desktop. Open **Processing → Jupyter Notebook** once
-per app launch; the panel can be closed after that. Web and JupyterLite have
-no relay, so those tools have nothing to attach to there.
+The `live_*` tools are the other half. They speak a loopback command relay
+in GeoLibre Desktop, so a command from an MCP client moves the map already open
+there. Turn on **Settings → Startup → Allow AI agents to drive the map** and
+the app starts its processing server at launch, which hosts the relay; no
+Jupyter notebook is needed. The older path still works: opening
+**Processing → Jupyter Notebook** once per launch also provides a relay (the
+[Notebook panel](notebook.md)'s). Web, JupyterLite, and the Mac App Store
+build have no relay, so those tools have nothing to attach to there.
+
+### How the live relay is found
+
+The MCP server never takes the relay's address from the model. It looks, in
+order, for:
+
+1. `GEOLIBRE_RELAY_URL` (and `GEOLIBRE_RELAY_TOKEN`), when set;
+2. the processing sidecar's discovery file,
+   `~/.geolibre/runtime/live-relay.json` (override with
+   `GEOLIBRE_LIVE_RELAY_FILE`), which the sidecar writes with owner-only
+   permissions while it runs and deletes when it stops;
+3. the desktop Jupyter server's connection file (port 8766).
+
+The sidecar relay has its own per-launch token, separate from the sidecar's
+API token, so a Live MCP client can send map commands and nothing else. The
+relay is enabled only when the desktop app spawns the sidecar; a Docker or
+multi-tenant sidecar never serves it. Only a loopback URL is accepted and
+redirects are refused, so the token stays on the machine.
 
 ## Install
 
@@ -242,6 +263,10 @@ Give it a directory meant for maps, not your home directory.
 | `add_planetary_computer_layer` | Microsoft Planetary Computer imagery (Sentinel-2, Landsat, NAIP, DEMs) by collection id: one STAC item, or a date-range mosaic. Takes a render preset such as `ndvi`, or assets / band math with a rescale and colormap. Needs no tile URL or credentials. |
 | `add_tiles_layer` | PMTiles archives and vector tile services. |
 | `add_ogc_layer` | WMS and WMTS endpoints. |
+| `add_wfs_layer` | A WFS feature type, fetched by the app when the project opens. |
+| `add_arcgis_layer` | ArcGIS REST MapServer and ImageServer (raster tiles from the export endpoint, with sublayers or a rendering rule) and FeatureServer layers (features in view loaded on open). |
+| `add_zarr_layer` | One variable of a Zarr data cube, sliced with a dimension selector, drawn by the app's Zarr control. |
+| `add_video_layer` | A georeferenced video overlay from `https://` URLs and four corners. |
 | `add_lidar_layer` | LAS/LAZ/COPC/EPT point clouds by URL. |
 | `add_spaceborne_lidar_layer` | ICESat-2 (ATL06, ATL08) or GEDI (L2A, L2B, L4A) footprints from a local HDF5 granule (needs `geolibre[spaceborne]`). |
 | `add_3d_tiles_layer` | OGC 3D Tiles tilesets, by URL or Cesium Ion asset id, and ArcGIS I3S scene layers (`.../SceneServer/layers/<n>`). |
@@ -288,6 +313,9 @@ what `describe_project` showed it without tracking UUIDs.
 | `move_story_chapter` / `remove_story_chapter` | Reorder or drop a chapter by id, title, or index. |
 | `add_bookmark` | Add a saved view to the Bookmarks panel, optionally in a folder (a new folder name creates it) and with the layers to show when it is opened. A camera value left out comes from the project's saved view. |
 | `remove_bookmark` | Drop a bookmark by id, name, or index. |
+| `add_layer_group` / `set_layer_group` / `remove_layer_group` | Group layers into (nested) Layers panel folders whose visibility and opacity apply on top of each member's; move layers in or out; remove a group but keep its layers. |
+| `add_dashboard_widget` / `remove_dashboard_widget` / `set_dashboard_columns` | Build the Dashboard panel: histogram, scatter, bar, line, box, pie, indicator, selector, and list widgets bound to a layer, and the grid width. |
+| `set_print_layout` | Set the Print Layout composer's title, page size and orientation, map furniture, data blocks, and atlas. Only the settings given change. |
 
 The shapes match what the app reads (`parseProject` in `@geolibre/core`); a
 round-trip test loads a project these tools wrote through it and checks nothing
@@ -313,9 +341,13 @@ is dropped or rewritten.
 
 Processing is live-only. The algorithm catalog and the engines that run it
 (Turf.js, DuckDB-WASM) live in the app, so there is nothing a file tool could
-run. The relay waits about five seconds for a result: a longer run keeps going
-in the app, and the tool reports that it did not finish in time instead of its
-result layer ids, so check `live_list_layers` before running it again.
+run. Each command waits for its result for a time that fits the work: about
+five seconds for view and layer commands, 30 minutes for `live_run_algorithm`
+and `live_run_whitebox_tool`, and an hour for `live_run_model_builder`. The
+three run tools take `timeout_seconds` (0.5 seconds to 4 hours) to change that.
+A run that outlasts the wait keeps going in the app, and the tool reports that
+it did not finish in time instead of its result layer ids, so check
+`live_list_layers` before running it again.
 
 ### Export
 
@@ -355,8 +387,7 @@ will not load for anyone else, so use hosted URLs for a shareable export.
   the first request, so a crafted URL cannot reach a cloud metadata endpoint.
 - **File tools write a project. `live_*` tools move the open desktop map.**
   A live edit is in the session until you save it from the app. The relay is
-  loopback-only and refuses redirects, so the Jupyter token stays on the
-  machine. The same scripting surface backs the [Python widget](python.md)
+  loopback-only and refuses redirects, so its token stays on the machine. The same scripting surface backs the [Python widget](python.md)
   and the [embed API](user-guide/embedding.md); those remain how a host page
   or a notebook drives a map without MCP.
 

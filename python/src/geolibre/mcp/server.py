@@ -728,6 +728,170 @@ def build_server(workspace: Workspace) -> MCPServer:
         return add(path, layer, index)
 
     @tool()
+    def add_wfs_layer(
+        path: str,
+        name: str,
+        endpoint: str,
+        type_name: str,
+        version: str = "2.0.0",
+        output_format: str = "application/json",
+        srs_name: str | None = "EPSG:4326",
+        max_features: int | None = 1000,
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        """Add a WFS feature type as a vector layer.
+
+        Nothing is downloaded now: the app requests the features from the
+        service each time the project opens, so the layer stays current.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            name: The layer's display name.
+            endpoint: The WFS service endpoint.
+            type_name: The feature type, e.g. `topp:states`.
+            version: WFS protocol version, e.g. `2.0.0` or `1.1.0`.
+            output_format: Requested format; it must yield GeoJSON.
+            srs_name: Response CRS, or null to omit it.
+            max_features: Feature cap per request, or null for all.
+            index: Draw-order position; appended on top when omitted.
+
+        Returns:
+            The new layer's id and the project's updated layer count.
+        """
+        layer = _project.wfs_layer(
+            name,
+            endpoint,
+            type_name,
+            version=version,
+            output_format=output_format,
+            srs_name=srs_name,
+            max_features=max_features,
+        )
+        return add(path, layer, index)
+
+    @tool()
+    def add_arcgis_layer(
+        path: str,
+        name: str,
+        url: str,
+        service: str = "map",
+        sublayers: str | None = None,
+        rendering_rule: dict[str, Any] | str | None = None,
+        max_features: int | None = None,
+        bounds: list[float] | None = None,
+        attribution: str | None = None,
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        """Add an ArcGIS REST service layer (MapServer, ImageServer, FeatureServer).
+
+        `map` and `image` draw the service as raster tiles from its export
+        endpoint. `feature` loads the features in view from the layer's query
+        endpoint when the project opens (MapLibre renderer). Token-protected
+        services are not supported. For a VectorTileServer use
+        `add_tiles_layer` with its tile URL.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            name: The layer's display name.
+            url: `.../MapServer`, `.../ImageServer`, or a feature layer URL
+                such as `.../FeatureServer/0`.
+            service: `map`, `image`, or `feature`.
+            sublayers: MapServer sublayer ids to show, e.g. `0,2`.
+            rendering_rule: ImageServer rendering rule, e.g.
+                `{"rasterFunction": "Hillshade"}`.
+            max_features: Feature service cap on features loaded per view.
+            bounds: `[west, south, east, north]` in WGS84, so "zoom to layer"
+                can reach a service layer.
+            attribution: Attribution text (the service's copyright).
+            index: Draw-order position; appended on top when omitted.
+
+        Returns:
+            The new layer's id and the project's updated layer count.
+        """
+        layer = _project.arcgis_layer(
+            name,
+            url,
+            service=service,
+            sublayers=sublayers,
+            rendering_rule=rendering_rule,
+            max_features=max_features,
+            bounds=bounds,
+            attribution=attribution,
+        )
+        return add(path, layer, index)
+
+    @tool()
+    def add_zarr_layer(
+        path: str,
+        name: str,
+        url: str,
+        variable: str,
+        selector: dict[str, Any] | None = None,
+        clim: list[float] | None = None,
+        colormap: str | None = None,
+        bounds: list[float] | None = None,
+        crs: str | None = None,
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        """Add one variable of a Zarr data cube (climate, ocean, imagery stacks).
+
+        The app's Zarr control draws it when the project opens. Icechunk
+        repositories and local stores cannot be saved in a project.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            name: The layer's display name.
+            url: An `https://`, `s3://`, or `gs://` Zarr store URL.
+            variable: The array to draw, e.g. `tas`.
+            selector: Values for the non-spatial dimensions, e.g.
+                `{"time": 0}`.
+            clim: `[min, max]` color range.
+            colormap: Colormap name, e.g. `viridis`.
+            bounds: `[west, south, east, north]` when the store has no
+                coordinate arrays.
+            crs: The store's CRS when it is not EPSG:4326.
+            index: Draw-order position; appended on top when omitted.
+
+        Returns:
+            The new layer's id and the project's updated layer count.
+        """
+        layer = _project.zarr_layer(
+            name,
+            url,
+            variable,
+            selector=selector,
+            clim=clim,
+            colormap=colormap,
+            bounds=bounds,
+            crs=crs,
+        )
+        return add(path, layer, index)
+
+    @tool()
+    def add_video_layer(
+        path: str,
+        name: str,
+        urls: list[str],
+        coordinates: list[list[float]],
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        """Add a georeferenced video overlay.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            name: The layer's display name.
+            urls: `https://` video URLs, the first preferred and the rest
+                format fallbacks (e.g. MP4 then WebM).
+            coordinates: Four `[lng, lat]` corners: top-left, top-right,
+                bottom-right, bottom-left.
+            index: Draw-order position; appended on top when omitted.
+
+        Returns:
+            The new layer's id and the project's updated layer count.
+        """
+        return add(path, _project.video_layer(name, list(urls), coordinates), index)
+
+    @tool()
     def add_tiles_layer(
         path: str,
         name: str,
@@ -2125,6 +2289,174 @@ def build_server(workspace: Workspace) -> MCPServer:
             bookmarks = authoring.remove_bookmark(project, bookmark)
         return _summarize(file, project, bookmarks=bookmarks)
 
+    # -- layer groups, dashboards, print layout ------------------------------
+
+    @tool()
+    def add_layer_group(
+        path: str,
+        name: str,
+        layers: list[str] | None = None,
+        parent: str | None = None,
+        collapsed: bool = False,
+        visible: bool = True,
+        opacity: float = 1.0,
+    ) -> dict[str, Any]:
+        """Add a group (folder) to the Layers panel.
+
+        A group's visibility and opacity apply on top of each member's own.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            name: Group name.
+            layers: Layer ids or names to move into the group.
+            parent: A group id or name to nest this group in.
+            collapsed: Start collapsed in the panel.
+            visible: Group visibility.
+            opacity: Group opacity, 0-1.
+
+        Returns:
+            The new group, including its id and member layer ids.
+        """
+        with edit(path) as (file, project):
+            group = authoring.add_layer_group(
+                project,
+                name,
+                parent=parent,
+                layers=layers,
+                collapsed=collapsed,
+                visible=visible,
+                opacity=opacity,
+            )
+        return _summarize(file, project, layerGroup=group)
+
+    @tool()
+    def set_layer_group(path: str, layers: list[str], group: str | None = None) -> dict[str, Any]:
+        """Move layers into a Layers panel group, or out of every group.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            layers: Layer ids or names.
+            group: A group id or name; null ungroups the layers.
+
+        Returns:
+            The project's groups with their member layer ids.
+        """
+        with edit(path) as (file, project):
+            groups = authoring.set_layer_group(project, layers, group)
+        return _summarize(file, project, layerGroups=groups)
+
+    @tool()
+    def remove_layer_group(path: str, group: str) -> dict[str, Any]:
+        """Remove a Layers panel group. Its layers and subgroups are kept.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            group: The group's id or name.
+
+        Returns:
+            The remaining groups.
+        """
+        with edit(path) as (file, project):
+            groups = authoring.remove_layer_group(project, group)
+        return _summarize(file, project, layerGroups=groups)
+
+    @tool()
+    def add_dashboard_widget(
+        path: str,
+        layer: str,
+        widget_type: str,
+        title: str | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Add a chart or summary widget to the Dashboard panel.
+
+        Widgets read a vector layer's attributes and follow its selection.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            layer: The layer's id or name.
+            widget_type: `histogram`, `scatter`, `bar`, `line`, `box`, `pie`,
+                `indicator`, `selector`, or `list`.
+            title: Widget title.
+            options: Type-specific settings: `field` (histogram, box,
+                indicator, selector), `x_field`/`y_field` (scatter, line),
+                `category`/`aggregation` (`count`, `sum`, `mean`)/
+                `value_field` (bar, pie), `bins` (1-50), `color` (`#rrggbb`),
+                `indicator_aggregation` (`count`, `sum`, `mean`, `min`, `max`,
+                `median`), `prefix`, `suffix`, `multiple` (selector),
+                `list_fields`, `sort_by`, `sort_dir`, `limit` (list).
+
+        Returns:
+            The widget that was added, including its id.
+        """
+        opts = dict(options or {})
+        if title is not None:
+            opts["title"] = title
+        if "widget_id" in opts or "widgetId" in opts:
+            raise ValueError("options cannot set the widget id")
+        with edit(path) as (file, project):
+            widget = authoring.add_dashboard_widget(project, layer, widget_type, **opts)
+        return _summarize(file, project, widget=widget)
+
+    @tool()
+    def remove_dashboard_widget(path: str, widget: str | int) -> dict[str, Any]:
+        """Remove a Dashboard panel widget.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            widget: The widget's id, title, or 0-based index.
+
+        Returns:
+            The remaining dashboard.
+        """
+        with edit(path) as (file, project):
+            dashboard = authoring.remove_dashboard_widget(project, widget)
+        return _summarize(file, project, dashboard=dashboard)
+
+    @tool()
+    def set_dashboard_columns(path: str, columns: int) -> dict[str, Any]:
+        """Set how many columns the Dashboard panel lays widgets out in.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            columns: 1-6.
+
+        Returns:
+            The dashboard.
+        """
+        with edit(path) as (file, project):
+            dashboard = authoring.set_dashboard_columns(project, columns)
+        return _summarize(file, project, dashboard=dashboard)
+
+    @tool()
+    def set_print_layout(
+        path: str, settings: dict[str, Any], reset: bool = False
+    ) -> dict[str, Any]:
+        """Set the Print Layout composer's page, title, and map furniture.
+
+        Only the settings given change. Common ones: `title`, `subtitle`,
+        `paper_size` (`a4`, `a3`, `letter`, `legal`, `tabloid`, `fullhd`,
+        `hd`, `uhd4k`, `square`, `custom`), `orientation` (`portrait`,
+        `landscape`), `export_dpi` (72, 150, 300), `show_legend`,
+        `show_scale_bar`, `show_north_arrow`, `show_footer`/`footer_text`,
+        `capture_mode` (`viewport`, `extent`) with `extent_bbox`
+        `[w, s, e, n]`, `show_data_table`/`table_layer_id`,
+        `show_data_chart`/`chart_layer_id`, and `atlas_enabled`/
+        `atlas_layer_id` (layer settings take an id or name).
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            settings: Settings to change, `snake_case` or `camelCase`.
+            reset: Start from the app's defaults instead of the stored
+                settings.
+
+        Returns:
+            The stored Print Layout settings.
+        """
+        with edit(path) as (file, project):
+            layout = authoring.set_print_layout(project, reset=reset, **dict(settings))
+        return _summarize(file, project, printLayout=layout)
+
     # -- export ---------------------------------------------------------------
 
     @tool()
@@ -2273,17 +2605,17 @@ def build_server(workspace: Workspace) -> MCPServer:
         return preview_sessions.close(preview_id)
 
     # -- live desktop session -------------------------------------------------
-    # These talk to the Jupyter relay GeoLibre Desktop already runs. They do
-    # not write the project file; the user saves in the app when the session
-    # should persist.
+    # These talk to a loopback relay GeoLibre Desktop runs (the sidecar relay,
+    # or the Jupyter relay; see live.py). They do not write the project file;
+    # the user saves in the app when the session should persist.
 
     @tool()
     def live_status() -> dict[str, Any]:
         """Report whether GeoLibre Desktop is listening for live commands.
 
-        Open Processing → Jupyter Notebook once if this reports no relay. The
-        panel can be closed afterwards; the server keeps running until the app
-        quits.
+        If this reports no relay, turn on Settings → Startup → "Allow AI
+        agents to drive the map" in GeoLibre Desktop (or open Processing →
+        Jupyter Notebook once; the panel can be closed afterwards).
 
         Returns:
             ``connected``, how many windows are subscribed, and the loopback
@@ -3088,25 +3420,32 @@ def build_server(workspace: Workspace) -> MCPServer:
 
     @tool()
     def live_run_algorithm(
-        algorithm_id: str, parameters: dict[str, Any] | None = None
+        algorithm_id: str,
+        parameters: dict[str, Any] | None = None,
+        timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         """Run a processing algorithm on the map open in GeoLibre Desktop.
 
         Result layers are added to the open map, and the run is recorded in
         the app's Processing History. Layer parameters take a layer id from
-        `live_list_layers`. The relay waits about five seconds for a result:
-        a longer run keeps going in the app and reports that it did not
-        finish in time, so check `live_list_layers` before retrying.
+        `live_list_layers`. The call waits up to 30 minutes for the result by
+        default. A run that outlasts the wait keeps going in the app and the
+        tool reports that it did not finish in time, so check
+        `live_list_layers` before retrying.
 
         Args:
             algorithm_id: An id from `live_list_algorithms` (e.g. `buffer`).
             parameters: The algorithm's parameters, keyed by parameter id.
+            timeout_seconds: How long to wait for the result (0.5 s to 4 h).
+                Omit for the 30 minute default.
 
         Returns:
             The algorithm's `logs` and the `resultLayerIds` it added.
         """
         value = live.require().call(
-            "runAlgorithm", {"id": algorithm_id, "params": dict(parameters or {})}
+            "runAlgorithm",
+            {"id": algorithm_id, "params": dict(parameters or {})},
+            timeout=timeout_seconds,
         )
         if not isinstance(value, dict):
             raise ValueError(f"GeoLibre returned an unexpected run result: {value!r}")
@@ -3142,41 +3481,58 @@ def build_server(workspace: Workspace) -> MCPServer:
 
     @tool()
     def live_run_whitebox_tool(
-        tool_id: str, parameters: dict[str, Any] | None = None
+        tool_id: str,
+        parameters: dict[str, Any] | None = None,
+        timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         """Run a bundled Whitebox/WASM tool on the map open in GeoLibre Desktop.
 
         Vector and raster outputs are added to the open map automatically.
-        Input-layer parameters take a layer id from ``live_list_layers``.
+        Input-layer parameters take a layer id from ``live_list_layers``. The
+        call waits up to 30 minutes by default; a longer run keeps going in
+        the app and is reported as not finished in time.
 
         Args:
             tool_id: An id from ``live_list_whitebox_tools`` (e.g. ``"slope"``).
             parameters: The tool's parameters, keyed by parameter name.
+            timeout_seconds: How long to wait for the result (0.5 s to 4 h).
+                Omit for the 30 minute default.
 
         Returns:
             The tool's ``logs`` and the ``resultLayerIds`` it added.
         """
         value = live.require().call(
-            "runWhiteboxTool", {"id": str(tool_id), "params": dict(parameters or {})}
+            "runWhiteboxTool",
+            {"id": str(tool_id), "params": dict(parameters or {})},
+            timeout=timeout_seconds,
         )
         if not isinstance(value, dict):
             raise ValueError(f"GeoLibre returned an unexpected Whitebox run result: {value!r}")
         return value
 
     @tool()
-    def live_run_model_builder(graph: dict[str, Any]) -> dict[str, Any]:
+    def live_run_model_builder(
+        graph: dict[str, Any], timeout_seconds: float | None = None
+    ) -> dict[str, Any]:
         """Run a Model Builder graph on the map open in GeoLibre Desktop.
+
+        The call waits up to an hour by default; a longer run keeps going in
+        the app and is reported as not finished in time.
 
         Args:
             graph: A serialized GeoLibre Model Builder graph dict containing
                 ``nodes`` and ``edges``.
+            timeout_seconds: How long to wait for the result (0.5 s to 4 h).
+                Omit for the one hour default.
 
         Returns:
             A dict with ``outputLayerIds`` added to the open map.
         """
         if not isinstance(graph, dict) or not graph:
             raise ValueError("graph must be a non-empty Model Builder graph dict.")
-        value = live.require().call("runModelBuilder", {"graph": dict(graph)})
+        value = live.require().call(
+            "runModelBuilder", {"graph": dict(graph)}, timeout=timeout_seconds
+        )
         if not isinstance(value, dict):
             raise ValueError(f"GeoLibre returned an unexpected Model Builder result: {value!r}")
         return value

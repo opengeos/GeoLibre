@@ -124,6 +124,7 @@ def test_add_raster_sends_base64_and_display_options(relay, displays):
             "data": "SUkqAA==",
             "options": {"colormap": "magma", "rescaleMin": 0.0, "rescaleMax": 45.0},
         },
+        "timeoutSeconds": notebook_client._RELAY_TIMEOUT_SECONDS,
     }
 
 

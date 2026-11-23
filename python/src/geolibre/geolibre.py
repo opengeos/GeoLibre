@@ -2048,6 +2048,113 @@ class Map(anywidget.AnyWidget):
         """Remove a bookmark by id, name, or 0-based index."""
         self._update_project(lambda p: _authoring.remove_bookmark(p, bookmark))
 
+    def add_layer_group(
+        self,
+        name: str,
+        *,
+        layers: list[str | Layer] | None = None,
+        parent: str | None = None,
+        collapsed: bool = False,
+        visible: bool = True,
+        opacity: float = 1.0,
+    ) -> dict[str, Any]:
+        """Add a group (folder) to the Layers panel.
+
+        Args:
+            name: Group name.
+            layers: Layers (ids, names, or handles) to move into the group.
+            parent: A group id or name to nest this group in.
+            collapsed: Start collapsed in the panel.
+            visible: Group visibility, ANDed with each member's own.
+            opacity: Group opacity in [0, 1], multiplied into each member's.
+
+        Returns:
+            The new group, including its ``id`` and member ``layerIds``.
+        """
+        refs = [layer.id if isinstance(layer, Layer) else layer for layer in layers or []]
+        result: dict[str, Any] = {}
+        self._update_project(
+            lambda p: result.update(
+                _authoring.add_layer_group(
+                    p,
+                    name,
+                    parent=parent,
+                    layers=refs,
+                    collapsed=collapsed,
+                    visible=visible,
+                    opacity=opacity,
+                )
+            )
+        )
+        return result
+
+    def set_layer_group(self, layers: list[str | Layer], group: str | None) -> None:
+        """Move layers into a Layers panel group, or out of every group.
+
+        Args:
+            layers: Layers (ids, names, or handles) to move.
+            group: A group id or name, or None to ungroup them.
+        """
+        refs = [layer.id if isinstance(layer, Layer) else layer for layer in layers]
+        self._update_project(lambda p: _authoring.set_layer_group(p, refs, group))
+
+    def remove_layer_group(self, group: str) -> None:
+        """Remove a Layers panel group, keeping its layers and subgroups.
+
+        Args:
+            group: A group id or name.
+        """
+        self._update_project(lambda p: _authoring.remove_layer_group(p, group))
+
+    def add_dashboard_widget(
+        self, layer: str | Layer, widget_type: str, **options: Any
+    ) -> dict[str, Any]:
+        """Add a widget to the Dashboard panel.
+
+        Args:
+            layer: The layer the widget reads (id, name, or handle).
+            widget_type: ``histogram``, ``scatter``, ``bar``, ``line``, ``box``,
+                ``pie``, ``indicator``, ``selector``, or ``list``.
+            **options: Widget options, e.g. ``title``, ``field``,
+                ``category``, ``aggregation``; see
+                :func:`geolibre.project.dashboard_widget`.
+
+        Returns:
+            The widget that was added, including its ``id``.
+        """
+        ref = layer.id if isinstance(layer, Layer) else layer
+        result: dict[str, Any] = {}
+        self._update_project(
+            lambda p: result.update(_authoring.add_dashboard_widget(p, ref, widget_type, **options))
+        )
+        return result
+
+    def remove_dashboard_widget(self, widget: str | int) -> None:
+        """Remove a dashboard widget by id, title, or 0-based index."""
+        self._update_project(lambda p: _authoring.remove_dashboard_widget(p, widget))
+
+    def set_dashboard_columns(self, columns: int) -> None:
+        """Set the Dashboard panel's column count (1-6)."""
+        self._update_project(lambda p: _authoring.set_dashboard_columns(p, columns))
+
+    def set_print_layout(self, *, reset: bool = False, **settings: Any) -> dict[str, Any]:
+        """Change the project's Print Layout composer settings.
+
+        Args:
+            reset: Start from the defaults instead of the stored settings.
+            **settings: Settings in ``snake_case`` or ``camelCase``, e.g.
+                ``title="Flood extent"``, ``paper_size="a3"``,
+                ``orientation="portrait"``, ``table_layer_id="Parcels"``.
+
+        Returns:
+            The stored Print Layout settings.
+        """
+        result: dict[str, Any] = {}
+        self._update_project(
+            lambda p: result.update(_authoring.set_print_layout(p, reset=reset, **settings))
+        )
+        return result
+
     def rename_layer(self, layer: str | Layer, name: str) -> None:
         """Rename a layer addressed by id, name, or handle.
 
@@ -3413,28 +3520,117 @@ class Map(anywidget.AnyWidget):
             max_features=max_features,
         )
         fc = _project.load_featurecollection(url)
-        layer = _project.geojson_layer(name, fc, source_url=url, **style)
-        # Mirror the protocol fields the UI persists on the source so the Edit
+        # The builder writes the protocol fields the UI persists, so the Edit
         # Layer panel can pre-populate the WFS form and isWfsLayer() recognizes
         # the layer when round-tripped from a Python-produced project.
-        layer["source"].update(
-            {
-                "service": "wfs",
-                "typeName": type_name,
-                "version": version,
-                "outputFormat": output_format,
-                **({"srsName": srs_name} if srs_name else {}),
-            }
-        )
-        layer["metadata"].update(
-            {
-                "service": "wfs",
-                "sourceKind": "wfs-getfeature",
-                "typeName": type_name,
-                "featureCount": len(fc.get("features", [])),
-            }
+        layer = _project.wfs_layer(
+            name,
+            endpoint,
+            type_name,
+            version=version,
+            output_format=output_format,
+            srs_name=srs_name,
+            max_features=max_features,
+            data=fc,
+            **style,
         )
         return self._add_layer(layer)
+
+    def add_arcgis_layer(
+        self,
+        url: str,
+        name: str = "ArcGIS Layer",
+        *,
+        service: str = "map",
+        sublayers: str | list[int] | None = None,
+        rendering_rule: str | dict[str, Any] | None = None,
+        max_features: int | None = None,
+        bounds: list[float] | None = None,
+        attribution: str | None = None,
+        **style: Any,
+    ) -> str:
+        """Add an ArcGIS REST MapServer, ImageServer, or FeatureServer layer.
+
+        Map and image services draw as raster tiles from the service's export
+        endpoint. A feature layer loads the features in view from the service's
+        query endpoint when the project opens in the app.
+
+        Args:
+            url: The service URL (``.../MapServer``, ``.../ImageServer``, or a
+                layer URL such as ``.../FeatureServer/0``).
+            name: Layer display name.
+            service: ``"map"``, ``"image"``, or ``"feature"``.
+            sublayers: MapServer sublayer ids to show.
+            rendering_rule: ImageServer rendering rule (dict or JSON string).
+            max_features: Feature service cap on features loaded per view.
+            bounds: ``[west, south, east, north]`` extent for "Zoom to layer".
+            attribution: Attribution text.
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        return self._add_layer(
+            _project.arcgis_layer(
+                name,
+                url,
+                service=service,
+                sublayers=sublayers,
+                rendering_rule=rendering_rule,
+                max_features=max_features,
+                bounds=bounds,
+                attribution=attribution,
+                **style,
+            )
+        )
+
+    def add_zarr(
+        self,
+        url: str,
+        variable: str,
+        name: str | None = None,
+        *,
+        selector: dict[str, int | float | str] | None = None,
+        clim: list[float] | None = None,
+        colormap: str | None = None,
+        bounds: list[float] | None = None,
+        crs: str | None = None,
+        spatial_dimensions: dict[str, str] | None = None,
+        **style: Any,
+    ) -> str:
+        """Add a Zarr data-cube layer, drawn by the app's Zarr control.
+
+        Args:
+            url: An ``http(s)://``, ``s3://``, or ``gs://`` Zarr store URL.
+                Icechunk repositories cannot be saved in a project.
+            variable: The array to draw.
+            name: Layer display name; defaults to the variable name.
+            selector: Non-spatial dimension values to slice, e.g. ``{"time": 0}``.
+            clim: ``[min, max]`` color range.
+            colormap: Colormap name.
+            bounds: ``[west, south, east, north]`` when the store lacks coordinates.
+            crs: The store's CRS when it is not EPSG:4326.
+            spatial_dimensions: ``{"lat": ..., "lon": ...}`` dimension names.
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer. The app assigns the live layer a new id
+            when it opens the project.
+        """
+        return self._add_layer(
+            _project.zarr_layer(
+                name or variable,
+                url,
+                variable,
+                selector=selector,
+                clim=clim,
+                colormap=colormap,
+                bounds=bounds,
+                crs=crs,
+                spatial_dimensions=spatial_dimensions,
+                **style,
+            )
+        )
 
     def add_vector(
         self,

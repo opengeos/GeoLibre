@@ -69,6 +69,12 @@ class _RelayServer:
         self._httpd.server_close()
 
 
+@pytest.fixture(autouse=True)
+def _no_real_sidecar_relay(tmp_path, monkeypatch):
+    """Keep a sidecar relay running on this machine out of discovery."""
+    monkeypatch.setenv("GEOLIBRE_LIVE_RELAY_FILE", str(tmp_path / "no-sidecar-relay.json"))
+
+
 @pytest.fixture
 def relay_server():
     server = _RelayServer()
@@ -548,3 +554,104 @@ def test_live_to_image_returns_data_url_or_writes_workspace_png(
     relay_server.response = {"delivered": 1, "ok": True, "value": "data:image/jpeg;base64,AAAA"}
     with pytest.raises(ToolError, match="unexpected image data URL"):
         asyncio.run(server.call_tool("live_to_image", {}))
+
+
+def _sidecar_file(path: Path, **overrides: object) -> Path:
+    payload = {
+        "kind": "sidecar",
+        "url": "http://127.0.0.1:8765/relay",
+        "token": "relay-secret",
+        "pid": os.getpid(),
+    }
+    payload.update(overrides)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def test_discover_prefers_the_sidecar_relay(tmp_path, monkeypatch):
+    monkeypatch.delenv("GEOLIBRE_RELAY_URL", raising=False)
+    monkeypatch.setattr("geolibre.mcp.live.runtime_directories", lambda: [tmp_path])
+    _connection_file(tmp_path)
+    sidecar = _sidecar_file(tmp_path / "live-relay.json")
+    monkeypatch.setenv("GEOLIBRE_LIVE_RELAY_FILE", str(sidecar))
+    relay = discover()
+    assert relay is not None
+    assert relay.token == "relay-secret"
+    assert relay.redacted_url == "http://127.0.0.1:8765/relay"
+    assert "relay-secret" not in relay.redacted_url
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"pid": 2**22},
+        {"pid": None},
+        {"url": "http://example.com:8765/relay"},
+        {"token": ""},
+    ],
+)
+def test_discover_ignores_an_unusable_sidecar_file(tmp_path, monkeypatch, overrides):
+    monkeypatch.delenv("GEOLIBRE_RELAY_URL", raising=False)
+    monkeypatch.setattr("geolibre.mcp.live.runtime_directories", lambda: [tmp_path])
+    sidecar = _sidecar_file(tmp_path / "live-relay.json", **overrides)
+    monkeypatch.setenv("GEOLIBRE_LIVE_RELAY_FILE", str(sidecar))
+    assert discover() is None
+
+
+def test_sidecar_relay_receives_the_command(relay_server, tmp_path, monkeypatch):
+    monkeypatch.delenv("GEOLIBRE_RELAY_URL", raising=False)
+    sidecar = _sidecar_file(
+        tmp_path / "live-relay.json", url=f"http://127.0.0.1:{relay_server.port}/relay"
+    )
+    monkeypatch.setenv("GEOLIBRE_LIVE_RELAY_FILE", str(sidecar))
+    assert require().call("getView") == "layer-1"
+    assert relay_server.paths == ["/relay/command"]
+    assert relay_server.authorization == "token relay-secret"
+
+
+@pytest.mark.parametrize(
+    ("method", "expected"),
+    [
+        ("getView", 5.0),
+        ("runAlgorithm", 1800.0),
+        ("runWhiteboxTool", 1800.0),
+        ("runModelBuilder", 3600.0),
+    ],
+)
+def test_command_sends_a_per_method_timeout(relay_server, monkeypatch, method, expected):
+    monkeypatch.setenv("GEOLIBRE_RELAY_URL", f"http://127.0.0.1:{relay_server.port}")
+    require().call(method)
+    assert relay_server.body["timeoutSeconds"] == expected
+
+
+def test_command_timeout_override_is_clamped_and_validated(relay_server, monkeypatch):
+    from geolibre.mcp.live import MAX_TIMEOUT_SECONDS, command_timeout_seconds
+
+    monkeypatch.setenv("GEOLIBRE_RELAY_URL", f"http://127.0.0.1:{relay_server.port}")
+    require().call("runAlgorithm", timeout=90)
+    assert relay_server.body["timeoutSeconds"] == 90.0
+    assert command_timeout_seconds("runAlgorithm", 10**9) == MAX_TIMEOUT_SECONDS
+    for bad in (0, -1, float("inf"), True):
+        with pytest.raises(LiveError, match="positive"):
+            command_timeout_seconds("runAlgorithm", bad)
+
+
+def test_live_run_tools_forward_timeout_seconds(relay_server, monkeypatch, tmp_path):
+    import asyncio
+
+    server = _live_server(tmp_path)
+    monkeypatch.setenv("GEOLIBRE_RELAY_URL", f"http://127.0.0.1:{relay_server.port}")
+    relay_server.response = {"delivered": 1, "ok": True, "value": {"resultLayerIds": []}}
+    asyncio.run(
+        server.call_tool("live_run_algorithm", {"algorithm_id": "buffer", "timeout_seconds": 120})
+    )
+    assert relay_server.body["timeoutSeconds"] == 120.0
+    asyncio.run(server.call_tool("live_run_whitebox_tool", {"tool_id": "slope"}))
+    assert relay_server.body["timeoutSeconds"] == 1800.0
+    asyncio.run(
+        server.call_tool(
+            "live_run_model_builder",
+            {"graph": {"nodes": [], "edges": []}, "timeout_seconds": 7200},
+        )
+    )
+    assert relay_server.body["timeoutSeconds"] == 7200.0

@@ -1,19 +1,26 @@
 """Drive the map open in GeoLibre Desktop from the MCP server.
 
-Desktop starts a loopback Jupyter server when Processing → Jupyter Notebook
-is opened (fixed port 8766). That server's relay, ``POST /geolibre/relay/command``,
-is the scripting surface the notebook client already uses. These helpers speak
-that relay so an MCP client can move the open map.
+GeoLibre Desktop answers scripting commands on one of two loopback relays,
+which speak the same protocol:
+
+- the **sidecar relay** (``POST /relay/command`` on the processing sidecar,
+  port 8765). The sidecar advertises it in ``~/.geolibre/runtime/live-relay.json``
+  (see :func:`sidecar_discovery_file`) while it runs. Desktop starts the sidecar
+  at launch when Settings → Startup → "Allow AI agents to drive the map" is on,
+  or whenever a processing tool needs it.
+- the **Jupyter relay** (``POST /geolibre/relay/command`` on the JupyterLab
+  server Desktop starts from Processing → Jupyter Notebook, port 8766), found
+  through Jupyter's own connection file.
 
 The endpoint is never taken from the model. It comes from ``GEOLIBRE_RELAY_URL``
-or from Jupyter's own connection file for that desktop server, and only a
-loopback URL is accepted. Redirects are refused so the Jupyter token cannot
-be sent off the machine.
+or from one of those files, and only a loopback URL is accepted. Redirects are
+refused so the relay token cannot be sent off the machine.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import os
 import urllib.error
 import urllib.request
@@ -26,9 +33,11 @@ __all__ = [
     "DESKTOP_PORT",
     "LiveError",
     "Relay",
+    "command_timeout_seconds",
     "discover",
     "require",
     "runtime_directories",
+    "sidecar_discovery_file",
 ]
 
 #: Port ``start_jupyter_server`` binds. Anything else is some other Jupyter.
@@ -38,13 +47,42 @@ DESKTOP_PORT = 8766
 #: also has to cross the app's scripting bridge in one request.
 MAX_COMMAND_BYTES = 8 * 1024 * 1024
 
-#: Longer than the relay's own 5s result wait, so its HTTP 504 arrives as the
-#: error instead of a generic client timeout.
-COMMAND_TIMEOUT_SECONDS = 6.0
+#: How long the relay waits for the app's result when a method has no entry in
+#: :data:`METHOD_TIMEOUT_SECONDS`. View and layer-list commands answer in
+#: milliseconds.
+DEFAULT_TIMEOUT_SECONDS = 5.0
+
+#: Result waits for commands that do real work in the app. Mirrors
+#: ``METHOD_RESULT_TIMEOUT_SECONDS`` in the backend's ``relay_protocol.py``;
+#: this side sends its choice as ``timeoutSeconds`` so the two cannot disagree.
+METHOD_TIMEOUT_SECONDS: dict[str, float] = {
+    "runAlgorithm": 30 * 60.0,
+    "runWhiteboxTool": 30 * 60.0,
+    "runModelBuilder": 60 * 60.0,
+    "addRasterBytes": 120.0,
+    "addGeoJsonLayer": 60.0,
+    "getLayerFeatures": 60.0,
+    "toImage": 60.0,
+}
+
+#: Bounds a caller-supplied timeout is clamped to (the relay clamps the same way).
+MIN_TIMEOUT_SECONDS = 0.5
+MAX_TIMEOUT_SECONDS = 4 * 60 * 60.0
+
+#: Extra socket time over the relay's result wait, so the relay's precise HTTP
+#: 504 arrives as the error instead of a generic client timeout.
+SOCKET_GRACE_SECONDS = 5.0
+
+#: Kept for callers that read it: the socket timeout of a default command.
+COMMAND_TIMEOUT_SECONDS = DEFAULT_TIMEOUT_SECONDS + SOCKET_GRACE_SECONDS
+
+#: Overrides where the sidecar relay's discovery file is read from.
+SIDECAR_DISCOVERY_ENV = "GEOLIBRE_LIVE_RELAY_FILE"
 
 NOT_CONNECTED = (
-    "No GeoLibre window is listening. Open GeoLibre Desktop, then "
-    "Processing → Jupyter Notebook once (the panel can be closed afterwards), "
+    "No GeoLibre window is listening. Open GeoLibre Desktop with Settings → "
+    'Startup → "Allow AI agents to drive the map" turned on (or open '
+    "Processing → Jupyter Notebook once; the panel can be closed afterwards), "
     "and retry."
 )
 
@@ -78,7 +116,8 @@ class Relay:
     def redacted_url(self) -> str:
         """The relay URL with no token, safe to return to a model."""
         host = f"[{self.host}]" if ":" in self.host else self.host
-        return f"http://{host}:{self.port}/geolibre/relay"
+        path = urlparse(self.base_url).path or "/geolibre/relay"
+        return f"http://{host}:{self.port}{path}"
 
     def listeners(self) -> int:
         """Return how many GeoLibre windows are subscribed."""
@@ -88,15 +127,37 @@ class Relay:
             raise LiveError("GeoLibre relay returned an unexpected status.")
         return count
 
-    def call(self, method: str, params: dict[str, Any] | None = None) -> Any:
-        """Run one scripting command and return the app's result value."""
+    def call(
+        self,
+        method: str,
+        params: dict[str, Any] | None = None,
+        *,
+        timeout: float | None = None,
+    ) -> Any:
+        """Run one scripting command and return the app's result value.
+
+        Args:
+            method: The scripting method name.
+            params: The method's parameters.
+            timeout: Seconds the relay waits for the app's result. None picks
+                the per-method default (:func:`command_timeout_seconds`).
+
+        Returns:
+            The value the app returned.
+
+        Raises:
+            LiveError: When no window is listening, the relay is unreachable,
+                the command failed in the app, or it did not finish in time.
+        """
+        wait = command_timeout_seconds(method, timeout)
         body = {
             "type": "geolibre:command",
             "requestId": uuid.uuid4().hex,
             "method": method,
             "params": params or {},
+            "timeoutSeconds": wait,
         }
-        payload = self._exchange("POST", "/command", body, timeout=COMMAND_TIMEOUT_SECONDS)
+        payload = self._exchange("POST", "/command", body, timeout=wait + SOCKET_GRACE_SECONDS)
         delivered = payload.get("delivered")
         if not isinstance(delivered, int) or delivered < 1:
             raise LiveError(NOT_CONNECTED)
@@ -148,18 +209,49 @@ class Relay:
         return payload
 
 
-def discover() -> Relay | None:
-    """Find the desktop relay, or None when Desktop has not started it.
+def command_timeout_seconds(method: str, requested: float | None = None) -> float:
+    """Return how long the relay should wait for ``method``'s result.
 
-    ``GEOLIBRE_RELAY_URL`` wins when set. Otherwise Jupyter connection files
-    for port 8766 whose ``root_dir`` is the desktop notebooks directory are
-    candidates. A dead pid is skipped. Two live servers is an error: set the
-    environment variable to pick one.
+    Args:
+        method: The scripting method name.
+        requested: A caller-chosen wait in seconds, or None for the default.
+
+    Returns:
+        ``requested`` clamped to [:data:`MIN_TIMEOUT_SECONDS`,
+        :data:`MAX_TIMEOUT_SECONDS`], or the per-method default.
+
+    Raises:
+        LiveError: If ``requested`` is not a finite positive number.
+    """
+    if requested is None:
+        return METHOD_TIMEOUT_SECONDS.get(method, DEFAULT_TIMEOUT_SECONDS)
+    if (
+        isinstance(requested, bool)
+        or not isinstance(requested, (int, float))
+        or not math.isfinite(requested)
+        or requested <= 0
+    ):
+        raise LiveError("timeout_seconds must be a positive number of seconds.")
+    return float(min(max(requested, MIN_TIMEOUT_SECONDS), MAX_TIMEOUT_SECONDS))
+
+
+def discover() -> Relay | None:
+    """Find the desktop relay, or None when Desktop has not started one.
+
+    ``GEOLIBRE_RELAY_URL`` wins when set. Next is the sidecar relay's discovery
+    file (:func:`sidecar_discovery_file`) when its pid is alive. Last, Jupyter
+    connection files for port 8766 whose ``root_dir`` is the desktop notebooks
+    directory are candidates; a dead pid is skipped, and two live servers is an
+    error (set the environment variable to pick one).
     """
     explicit = os.environ.get("GEOLIBRE_RELAY_URL", "").strip()
     if explicit:
         token = os.environ.get("GEOLIBRE_RELAY_TOKEN", "").strip()
         return Relay(_with_relay_path(explicit), token)
+
+    sidecar = _relay_from_sidecar_file(sidecar_discovery_file())
+    if sidecar is not None:
+        return sidecar
 
     found: list[Relay] = []
     for directory in runtime_directories():
@@ -187,6 +279,20 @@ def require() -> Relay:
     return relay
 
 
+def sidecar_discovery_file() -> Path:
+    """Return where the desktop sidecar advertises its relay.
+
+    Returns:
+        ``GEOLIBRE_LIVE_RELAY_FILE`` when set, else
+        ``~/.geolibre/runtime/live-relay.json`` (written by the backend's
+        ``geolibre_server.app.relay``).
+    """
+    override = os.environ.get(SIDECAR_DISCOVERY_ENV, "").strip()
+    if override:
+        return Path(override)
+    return Path.home() / ".geolibre" / "runtime" / "live-relay.json"
+
+
 def runtime_directories() -> list[Path]:
     """Jupyter runtime directories, in the order a connection file is sought."""
     directories: list[Path] = []
@@ -202,6 +308,28 @@ def runtime_directories() -> list[Path]:
         ]
     )
     return directories
+
+
+def _relay_from_sidecar_file(path: Path) -> Relay | None:
+    try:
+        info = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(info, dict):
+        return None
+    url = info.get("url")
+    token = info.get("token")
+    if not isinstance(url, str) or not isinstance(token, str) or not token:
+        return None
+    if not _loopback_host(url):
+        return None
+    pid = info.get("pid")
+    if not isinstance(pid, int) or not _pid_alive(pid):
+        return None
+    try:
+        return Relay(url, token)
+    except LiveError:
+        return None
 
 
 def _relay_from_connection_file(path: Path) -> Relay | None:
@@ -279,7 +407,7 @@ def _http_error(error: urllib.error.HTTPError) -> str:
     except (OSError, UnicodeError, json.JSONDecodeError):
         payload = None
     if isinstance(payload, dict):
-        message = payload.get("message") or payload.get("reason")
+        message = payload.get("message") or payload.get("reason") or payload.get("detail")
         if isinstance(message, str):
             detail = message
     if error.code == 504:

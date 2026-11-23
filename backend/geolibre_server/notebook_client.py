@@ -89,9 +89,10 @@ _RELAY_TOKEN_ENV = "GEOLIBRE_RELAY_TOKEN"
 # notebook, and the caller only loses a fire-and-forget command.
 #
 # Read-back calls wait one second longer than this (see _request_from_relay), so
-# they stay above the relay's own RESULT_TIMEOUT_SECONDS (5.0, in
-# geolibre_server/jupyter_relay.py) and surface its precise 504 rather than
-# timing out here first. Keep the two in step if either moves.
+# they stay above the relay's result wait and surface its precise 504 rather
+# than timing out here first. They send this value as ``timeoutSeconds`` so the
+# relay's longer per-method defaults (geolibre_server/relay_protocol.py) never
+# outlast this socket.
 _RELAY_TIMEOUT_SECONDS = 5.0
 
 _NOT_CONNECTED_HINT = (
@@ -232,6 +233,11 @@ def _request_from_relay(url: str, method: str, params: dict[str, Any] | None = N
         "requestId": uuid.uuid4().hex,
         "method": method,
         "params": params or {},
+        # Pin the relay's wait to ours. The relay picks a longer per-method
+        # default for some commands (addGeoJsonLayer, for one); waiting that
+        # long there would outlast this socket and turn its precise 504 into
+        # "could not be reached", which _add_layer answers by re-sending.
+        "timeoutSeconds": _RELAY_TIMEOUT_SECONDS,
     }
     request = _relay_request(url, message)
     try:

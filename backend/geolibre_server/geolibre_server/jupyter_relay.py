@@ -16,7 +16,9 @@ being *displayed*, only on which server the kernel belongs to:
     ``{"delivered": n}`` — the number of connected app windows it reached, so the
     client can warn instead of failing silently. When the command carries a
     non-empty request id, the response also waits for and includes the app's
-    correlated ``ok``/``value`` or ``ok``/``error`` result.
+    correlated ``ok``/``value`` or ``ok``/``error`` result. The wait is per
+    method (long for processing runs, short for view commands) and a caller may
+    set its own with ``timeoutSeconds``; see ``relay_protocol``.
 ``GET {base_url}geolibre/relay/socket`` (WebSocket)
     Subscribe to commands (the app side). Every posted command is broadcast to
     all open sockets.
@@ -47,7 +49,6 @@ import os
 from asyncio import Future, wait_for
 from asyncio import TimeoutError as AsyncTimeoutError
 from typing import Any
-from urllib.parse import urlparse
 from uuid import uuid4
 
 from jupyter_server.base.handlers import APIHandler, JupyterHandler
@@ -55,10 +56,21 @@ from jupyter_server.base.websocket import WebSocketMixin
 from jupyter_server.utils import url_path_join
 from tornado import web, websocket
 
+from .relay_protocol import (
+    COMMAND_TYPE,
+    DEFAULT_RESULT_TIMEOUT_SECONDS,
+    is_allowed_origin,
+    normalize_command,
+    normalize_result,
+    result_timeout_seconds,
+)
+
 __all__ = [
+    "COMMAND_TYPE",
     "ENV_RELAY_TOKEN",
     "ENV_RELAY_URL",
     "RELAY_PATH",
+    "RESULT_TIMEOUT_SECONDS",
     "is_allowed_origin",
     "normalize_command",
     "normalize_result",
@@ -71,19 +83,6 @@ RELAY_PATH = "geolibre/relay"
 #: Environment variables kernels read to find the relay (see module docstring).
 ENV_RELAY_URL = "GEOLIBRE_RELAY_URL"
 ENV_RELAY_TOKEN = "GEOLIBRE_RELAY_TOKEN"
-
-#: Message envelope the scripting bridge speaks, shared with the postMessage
-#: transport (``useNotebookBridge``) so the app dispatches both identically.
-COMMAND_TYPE = "geolibre:command"
-
-# Origins allowed to open the relay WebSocket: the Tauri webview (tauri:// on
-# macOS/Linux, http://tauri.localhost on Windows, or https:// there if
-# useHttpsScheme is ever turned on) and any loopback dev origin. Matching is on
-# host and scheme separately, so both Windows schemes are already covered.
-# This mirrors the `frame-ancestors` list in jupyter_server_config.py — the app
-# that may embed this server is exactly the app that may drive the map.
-_ALLOWED_ORIGIN_HOSTS = frozenset({"localhost", "127.0.0.1", "tauri.localhost"})
-_ALLOWED_ORIGIN_SCHEMES = frozenset({"http", "https", "tauri"})
 
 # Open app-side sockets. Module level (not per-handler) because every handler
 # instance is created per request: the POST handler needs the list the
@@ -98,81 +97,14 @@ _pending_results: dict[str, Future[dict[str, Any]]] = {}
 # Caller request ids currently in flight, used only to reject concurrent reuse.
 _pending_request_ids: set[str] = set()
 
-#: How long a correlated POST waits for the app's result before answering 504.
-#: The kernel client's own socket timeout (``_RELAY_TIMEOUT_SECONDS + 1`` in
-#: ``notebook_client.py``) must stay longer than this, so the precise 504 message
-#: reaches the notebook instead of the client's generic "could not be reached".
-RESULT_TIMEOUT_SECONDS = 5.0
-
-
-def is_allowed_origin(origin: str | None) -> bool:
-    """Return whether ``origin`` may open the relay WebSocket.
-
-    Args:
-        origin: The request's ``Origin`` header, or None when absent (a non-browser
-            client such as a test harness, which is not subject to the same-origin
-            policy and is already token-gated).
-
-    Returns:
-        True when the origin is one of the GeoLibre app origins (Tauri webview or
-        loopback), or when no origin was sent.
-    """
-    if not origin:
-        return True
-    parsed = urlparse(origin)
-    if parsed.scheme not in _ALLOWED_ORIGIN_SCHEMES:
-        return False
-    return (parsed.hostname or "") in _ALLOWED_ORIGIN_HOSTS
-
-
-def normalize_command(payload: Any) -> dict[str, Any]:
-    """Validate a posted command and return the envelope to broadcast.
-
-    Args:
-        payload: The decoded JSON request body.
-
-    Returns:
-        A ``{"type", "requestId", "method", "params"}`` envelope.
-
-    Raises:
-        ValueError: If the payload is not a command envelope with a method name.
-    """
-    if not isinstance(payload, dict):
-        raise ValueError("Expected a JSON object.")
-    method = payload.get("method")
-    if not isinstance(method, str) or not method:
-        raise ValueError("Missing a non-empty 'method'.")
-    params = payload.get("params") or {}
-    if not isinstance(params, dict):
-        raise ValueError("'params' must be an object.")
-    request_id = payload.get("requestId")
-    return {
-        "type": COMMAND_TYPE,
-        "requestId": request_id if isinstance(request_id, str) else "",
-        "method": method,
-        "params": params,
-    }
-
-
-def normalize_result(payload: Any) -> dict[str, Any]:
-    """Validate an app-side scripting result sent over the relay socket."""
-    if not isinstance(payload, dict) or payload.get("type") != "geolibre:result":
-        raise ValueError("Expected a GeoLibre result object.")
-    request_id = payload.get("requestId")
-    if not isinstance(request_id, str) or not request_id:
-        raise ValueError("Missing a non-empty 'requestId'.")
-    ok = payload.get("ok")
-    if not isinstance(ok, bool):
-        raise ValueError("Missing boolean 'ok'.")
-    result: dict[str, Any] = {
-        "requestId": request_id,
-        "ok": ok,
-    }
-    if ok:
-        result["value"] = payload.get("value")
-    else:
-        result["error"] = str(payload.get("error") or "GeoLibre command failed.")
-    return result
+#: Default wait for a correlated POST's result, kept for callers that read it.
+#: The real wait is per method (``result_timeout_seconds``): processing commands
+#: get minutes, view commands keep this short default, and a caller may ask for
+#: its own with ``timeoutSeconds``. The kernel client's own socket timeout
+#: (``_RELAY_TIMEOUT_SECONDS + 1`` in ``notebook_client.py``) must stay longer
+#: than this, so the precise 504 message reaches the notebook instead of the
+#: client's generic "could not be reached".
+RESULT_TIMEOUT_SECONDS = DEFAULT_RESULT_TIMEOUT_SECONDS
 
 
 def relay_base_url(host: str, port: int, base_url: str) -> str:
@@ -261,9 +193,11 @@ class GeoLibreRelayCommandHandler(APIHandler):
     async def post(self) -> None:
         """Relay the posted command and report how many windows received it."""
         try:
-            message = normalize_command(json.loads(self.request.body or b"{}"))
+            payload = json.loads(self.request.body or b"{}")
+            message = normalize_command(payload)
         except (ValueError, json.JSONDecodeError) as error:
             raise web.HTTPError(400, str(error)) from error
+        timeout = result_timeout_seconds(message["method"], payload.get("timeoutSeconds"))
         request_id = message["requestId"]
         if not request_id:
             self.finish(json.dumps({"delivered": _broadcast(message)}))
@@ -282,7 +216,7 @@ class GeoLibreRelayCommandHandler(APIHandler):
                 self.finish(json.dumps({"delivered": 0}))
                 return
             try:
-                result = await wait_for(future, RESULT_TIMEOUT_SECONDS)
+                result = await wait_for(future, timeout)
             except (TimeoutError, AsyncTimeoutError) as error:
                 raise web.HTTPError(504, "GeoLibre did not return a result in time.") from error
             result["requestId"] = request_id

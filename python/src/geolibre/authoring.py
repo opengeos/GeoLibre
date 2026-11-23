@@ -572,7 +572,12 @@ def duplicate_layer(
 
 
 def _drop_layer_references(project: dict[str, Any], layer_id: str) -> None:
-    """Scrub a removed layer id from bookmarks, story chapters, and split views."""
+    """Scrub a removed layer id from every project part that references it.
+
+    Covers bookmarks, story chapters, split views, dashboard widgets, and
+    Print Layout blocks.
+    """
+    _drop_dashboard_and_print_references(project, layer_id)
     bookmarks = project.get("bookmarks")
     if isinstance(bookmarks, list):
         for bookmark in bookmarks:
@@ -2477,3 +2482,399 @@ def remove_bookmark(project: dict[str, Any], ref: str | int) -> list[dict[str, A
     bookmarks.pop(entries[index])
     _drop_empty_bookmark_lists(project)
     return bookmark_summary(project)
+
+
+# -- layer groups --------------------------------------------------------------
+
+
+def _layer_groups(project: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the project's ``layerGroups`` list, creating it when absent."""
+    groups = project.get("layerGroups")
+    if not isinstance(groups, list):
+        groups = []
+        project["layerGroups"] = groups
+    return groups
+
+
+def _drop_empty_layer_groups(project: dict[str, Any]) -> None:
+    """Remove an empty ``layerGroups`` list, as the app omits it when saving."""
+    if project.get("layerGroups") == []:
+        del project["layerGroups"]
+
+
+def layer_group_summary(project: dict[str, Any]) -> list[dict[str, Any]]:
+    """List the project's layer groups with their member layer ids.
+
+    Args:
+        project: The project dict.
+
+    Returns:
+        ``{"id", "name", "parentId", "visible", "opacity", "layerIds"}`` entries
+        in panel order.
+    """
+    members: dict[str, list[str]] = {}
+    for layer in layers_of(project):
+        if isinstance(layer, dict) and isinstance(layer.get("groupId"), str):
+            members.setdefault(layer["groupId"], []).append(str(layer.get("id")))
+    return [
+        {
+            "id": group.get("id"),
+            "name": group.get("name"),
+            "parentId": group.get("parentId"),
+            "visible": group.get("visible", True),
+            "opacity": group.get("opacity", 1),
+            "layerIds": members.get(str(group.get("id")), []),
+        }
+        for group in project.get("layerGroups") or []
+        if isinstance(group, dict)
+    ]
+
+
+def find_layer_group(project: dict[str, Any], ref: str) -> dict[str, Any]:
+    """Resolve a layer group by id or name.
+
+    Args:
+        project: The project dict.
+        ref: A group id, or a group name (exact, then case-insensitive).
+
+    Returns:
+        The matching group dict (the live object).
+
+    Raises:
+        ValueError: If nothing matches, or a name matches several groups.
+    """
+    groups = [group for group in project.get("layerGroups") or [] if isinstance(group, dict)]
+    text = str(ref)
+    for group in groups:
+        if group.get("id") == text:
+            return group
+    for matcher in (lambda name: name == text, lambda name: name.casefold() == text.casefold()):
+        matches = [group for group in groups if matcher(str(group.get("name", "")))]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise ValueError(f"several layer groups are named {text!r}; use the id")
+    raise ValueError(f"no layer group matches {text!r}")
+
+
+def _keep_group_contiguous(project: dict[str, Any], group_id: str) -> None:
+    """Move a group's member layers next to each other, at the first member.
+
+    The app does the same on load (``normalizeGroupContiguity``); doing it here
+    keeps the saved draw order the one the user will see.
+    """
+    layers = layers_of(project)
+    members = [
+        layer for layer in layers if isinstance(layer, dict) and layer.get("groupId") == group_id
+    ]
+    if len(members) < 2:
+        return
+    member_ids = {id(layer) for layer in members}
+    first = next(i for i, layer in enumerate(layers) if id(layer) in member_ids)
+    others = [layer for layer in layers if id(layer) not in member_ids]
+    # Every layer before the first member is a non-member, so the members go
+    # back in right after those.
+    layers[:] = others[:first] + members + others[first:]
+
+
+def set_layer_group(
+    project: dict[str, Any], layers: Iterable[str], group: str | None
+) -> list[dict[str, Any]]:
+    """Move layers into a group, or out of every group.
+
+    Args:
+        project: The project dict (mutated in place).
+        layers: Layer ids or names.
+        group: A group id or name, or None to ungroup the layers.
+
+    Returns:
+        The project's groups, as :func:`layer_group_summary` lists them.
+
+    Raises:
+        ValueError: If a layer or the group does not resolve.
+    """
+    targets = [find_layer(project, str(ref)) for ref in layers]
+    group_id = str(find_layer_group(project, group)["id"]) if group is not None else None
+    for layer in targets:
+        if group_id is None:
+            layer.pop("groupId", None)
+        else:
+            layer["groupId"] = group_id
+    if group_id is not None:
+        _keep_group_contiguous(project, group_id)
+    return layer_group_summary(project)
+
+
+def add_layer_group(
+    project: dict[str, Any],
+    name: str,
+    *,
+    parent: str | None = None,
+    layers: Iterable[str] | None = None,
+    collapsed: bool = False,
+    visible: bool = True,
+    opacity: float = 1.0,
+    group_id: str | None = None,
+) -> dict[str, Any]:
+    """Add a group (folder) to the Layers panel.
+
+    Args:
+        project: The project dict (mutated in place).
+        name: Group name.
+        parent: A group id or name to nest this group in.
+        layers: Layer ids or names to move into the new group.
+        collapsed: Start collapsed in the panel.
+        visible: Group visibility, ANDed with each member's own.
+        opacity: Group opacity in [0, 1], multiplied into each member's.
+        group_id: Explicit group id; a UUID by default.
+
+    Returns:
+        The new group, with its member ``layerIds``.
+
+    Raises:
+        ValueError: If a value is invalid, the id is taken, or a reference does
+            not resolve.
+    """
+    parent_id = str(find_layer_group(project, parent)["id"]) if parent is not None else None
+    group = _project.layer_group(
+        name,
+        parent_id=parent_id,
+        collapsed=collapsed,
+        visible=visible,
+        opacity=opacity,
+        group_id=group_id,
+    )
+    if any(
+        isinstance(existing, dict) and existing.get("id") == group["id"]
+        for existing in project.get("layerGroups") or []
+    ):
+        raise ValueError(f"a layer group with id {group['id']!r} already exists")
+    # Resolve the layers before adding the group so a bad reference leaves the
+    # project unchanged.
+    targets = [str(find_layer(project, str(ref))["id"]) for ref in layers or []]
+    _layer_groups(project).append(group)
+    if targets:
+        set_layer_group(project, targets, group["id"])
+    return next(entry for entry in layer_group_summary(project) if entry["id"] == group["id"])
+
+
+def remove_layer_group(project: dict[str, Any], ref: str) -> list[dict[str, Any]]:
+    """Remove a layer group, keeping its layers and subgroups.
+
+    Member layers and child groups move up to the removed group's parent (the
+    panel root when it had none), as the Layers panel's ungroup does.
+
+    Args:
+        project: The project dict (mutated in place).
+        ref: A group id or name.
+
+    Returns:
+        The remaining groups, as :func:`layer_group_summary` lists them.
+
+    Raises:
+        ValueError: If the reference does not resolve to exactly one group.
+    """
+    group = find_layer_group(project, ref)
+    group_id = str(group["id"])
+    parent_id = group.get("parentId")
+    for layer in layers_of(project):
+        if isinstance(layer, dict) and layer.get("groupId") == group_id:
+            if parent_id:
+                layer["groupId"] = parent_id
+            else:
+                layer.pop("groupId", None)
+    groups = _layer_groups(project)
+    for other in groups:
+        if isinstance(other, dict) and other.get("parentId") == group_id:
+            if parent_id:
+                other["parentId"] = parent_id
+            else:
+                other.pop("parentId", None)
+    groups[:] = [entry for entry in groups if entry is not group]
+    if parent_id:
+        _keep_group_contiguous(project, str(parent_id))
+    _drop_empty_layer_groups(project)
+    return layer_group_summary(project)
+
+
+# -- dashboards ----------------------------------------------------------------
+
+
+def dashboard_summary(project: dict[str, Any]) -> dict[str, Any]:
+    """Describe the project's Dashboard panel.
+
+    Args:
+        project: The project dict.
+
+    Returns:
+        ``{"columns", "widgets"}``, the widgets as stored.
+    """
+    columns = project.get("dashboardColumns")
+    return {
+        "columns": columns
+        if isinstance(columns, int) and not isinstance(columns, bool)
+        else _project.DEFAULT_DASHBOARD_COLUMNS,
+        "widgets": copy.deepcopy(
+            [widget for widget in project.get("widgets") or [] if isinstance(widget, dict)]
+        ),
+    }
+
+
+def add_dashboard_widget(
+    project: dict[str, Any],
+    layer: str,
+    widget_type: str,
+    *,
+    widget_id: str | None = None,
+    **options: Any,
+) -> dict[str, Any]:
+    """Add a chart, indicator, selector, or list widget to the Dashboard panel.
+
+    Args:
+        project: The project dict (mutated in place).
+        layer: Id or name of the layer the widget reads.
+        widget_type: One of :data:`geolibre.project.DASHBOARD_WIDGET_TYPES`.
+        widget_id: Explicit widget id; a UUID by default.
+        **options: Widget options; see :func:`geolibre.project.dashboard_widget`.
+
+    Returns:
+        The widget that was added.
+
+    Raises:
+        ValueError: If the layer does not resolve, an option is invalid, or the
+            id is taken.
+    """
+    layer_id = str(find_layer(project, layer)["id"])
+    widget = _project.dashboard_widget(layer_id, widget_type, widget_id=widget_id, **options)
+    widgets = project.get("widgets")
+    if not isinstance(widgets, list):
+        widgets = []
+        project["widgets"] = widgets
+    if any(isinstance(entry, dict) and entry.get("id") == widget["id"] for entry in widgets):
+        raise ValueError(f"a dashboard widget with id {widget['id']!r} already exists")
+    widgets.append(widget)
+    return copy.deepcopy(widget)
+
+
+def remove_dashboard_widget(project: dict[str, Any], ref: str | int) -> dict[str, Any]:
+    """Remove a dashboard widget by id, title, or 0-based position.
+
+    Args:
+        project: The project dict (mutated in place).
+        ref: A widget id, a widget title, or an index.
+
+    Returns:
+        The dashboard after the removal, as :func:`dashboard_summary` gives it.
+
+    Raises:
+        ValueError: If the reference does not resolve to exactly one widget.
+    """
+    widgets = [widget for widget in project.get("widgets") or [] if isinstance(widget, dict)]
+    if isinstance(ref, int) and not isinstance(ref, bool):
+        if not 0 <= ref < len(widgets):
+            raise ValueError(f"widget index {ref} is out of range")
+        target = widgets[ref]
+    else:
+        text = str(ref)
+        matches = [widget for widget in widgets if widget.get("id") == text] or [
+            widget for widget in widgets if widget.get("title") == text
+        ]
+        if not matches:
+            raise ValueError(f"no dashboard widget matches {text!r}")
+        if len(matches) > 1:
+            raise ValueError(f"several dashboard widgets are titled {text!r}; use the id")
+        target = matches[0]
+    project["widgets"] = [widget for widget in project.get("widgets") or [] if widget is not target]
+    if not project["widgets"]:
+        del project["widgets"]
+    return dashboard_summary(project)
+
+
+def set_dashboard_columns(project: dict[str, Any], columns: int) -> dict[str, Any]:
+    """Set how many columns the Dashboard panel lays its widgets out in.
+
+    Args:
+        project: The project dict (mutated in place).
+        columns: An integer from 1 to 6.
+
+    Returns:
+        The dashboard, as :func:`dashboard_summary` gives it.
+
+    Raises:
+        ValueError: If ``columns`` is out of range.
+    """
+    low, high = _project.MIN_DASHBOARD_COLUMNS, _project.MAX_DASHBOARD_COLUMNS
+    if isinstance(columns, bool) or not isinstance(columns, int) or not low <= columns <= high:
+        raise ValueError(f"columns must be an integer from {low} to {high}, got {columns!r}")
+    project["dashboardColumns"] = columns
+    return dashboard_summary(project)
+
+
+# -- print layout --------------------------------------------------------------
+
+
+def set_print_layout(
+    project: dict[str, Any], *, reset: bool = False, **settings: Any
+) -> dict[str, Any]:
+    """Change the project's Print Layout composer settings.
+
+    Only the settings passed are changed; the app fills every other one from
+    its defaults when the project opens. Layer settings (``table_layer_id``,
+    ``chart_layer_id``, ``atlas_layer_id``) take a layer id or name.
+
+    Args:
+        project: The project dict (mutated in place).
+        reset: Start from the defaults instead of the stored settings.
+        **settings: Settings in ``snake_case`` or ``camelCase``; see
+            :func:`geolibre.project.print_layout_settings`.
+
+    Returns:
+        The stored ``printLayout`` settings (only those that differ from the
+        app's defaults are listed by the app, but every stored key is kept).
+
+    Raises:
+        ValueError: If a setting is unknown, its value is invalid, or a layer
+            does not resolve.
+    """
+    validated = _project.print_layout_settings(**settings)
+    for key in _project.PRINT_LAYOUT_LAYER_FIELDS:
+        value = validated.get(key)
+        if isinstance(value, str) and value:
+            validated[key] = str(find_layer(project, value)["id"])
+    current = project.get("printLayout")
+    stored = {} if reset or not isinstance(current, dict) else current
+    stored.update(validated)
+    if stored:
+        project["printLayout"] = stored
+    else:
+        project.pop("printLayout", None)
+    return copy.deepcopy(stored)
+
+
+def _drop_dashboard_and_print_references(project: dict[str, Any], layer_id: str) -> None:
+    """Drop dashboard widgets and Print Layout blocks bound to a removed layer.
+
+    Mirrors ``applyProjectToStore`` (widgets) and
+    ``scrubPrintLayoutForRemovedLayers`` (print blocks).
+    """
+    widgets = project.get("widgets")
+    if isinstance(widgets, list):
+        kept = [
+            widget
+            for widget in widgets
+            if not (isinstance(widget, dict) and widget.get("layerId") == layer_id)
+        ]
+        if kept:
+            project["widgets"] = kept
+        else:
+            del project["widgets"]
+    layout = project.get("printLayout")
+    if isinstance(layout, dict):
+        for key, flag in (
+            ("tableLayerId", "showDataTable"),
+            ("chartLayerId", "showDataChart"),
+            ("atlasLayerId", "atlasEnabled"),
+        ):
+            if layout.get(key) == layer_id:
+                layout[key] = ""
+                layout[flag] = False
