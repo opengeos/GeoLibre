@@ -177,7 +177,15 @@ export function useExportActions({
         total,
         signal: controller.signal,
         onProgress: (current: number, totalPages: number) =>
-          dispatch({ type: "setUi", patch: { atlasProgress: { current, total: totalPages } } }),
+          dispatch({
+            type: "setUi",
+            patch: { atlasProgress: { current, total: totalPages, cancellable: true } },
+          }),
+        onBeforeSave: () =>
+          dispatch({
+            type: "setUi",
+            patch: { atlasProgress: { current: total, total, cancellable: false } },
+          }),
         optionsForPage: async (i: number): Promise<LayoutOptions> => {
           if (controller.signal.aborted) {
             throw new DOMException("Atlas export cancelled", "AbortError");

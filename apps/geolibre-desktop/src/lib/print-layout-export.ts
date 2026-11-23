@@ -605,6 +605,8 @@ export interface AtlasExportSource {
   optionsForPage: (pageIndex: number) => Promise<LayoutOptions>;
   /** Progress callback fired before each page renders (1-based `current`). */
   onProgress?: (current: number, total: number) => void;
+  /** Optional hook fired once page capture/rendering finishes and saving begins. */
+  onBeforeSave?: () => void;
   /** Optional signal to cancel a multi-page export between pages. */
   signal?: AbortSignal;
 }
@@ -626,7 +628,7 @@ export async function exportAtlasPdf(
   filename: string,
   dpi = 150,
 ): Promise<string | null> {
-  const { total, optionsForPage, onProgress, signal } = source;
+  const { total, optionsForPage, onProgress, onBeforeSave, signal } = source;
   if (total < 1) throw new Error("Atlas export needs at least one page");
   throwIfAtlasAborted(signal);
   // Load jsPDF before driving the map through every page, so a failed import
@@ -658,6 +660,7 @@ export async function exportAtlasPdf(
   writeGeoPdfViewports(pdf as jsPDF, viewports);
   const bytes = new Uint8Array((pdf as jsPDF).output("arraybuffer"));
   throwIfAtlasAborted(signal);
+  onBeforeSave?.();
   return saveBinaryFileWithFallback(bytes, {
     defaultName: filename,
     filters: [{ name: "PDF Document", extensions: ["pdf"] }],
@@ -680,7 +683,7 @@ export async function exportAtlasPngZip(
   filename: string,
   dpi = 150,
 ): Promise<string | null> {
-  const { total, optionsForPage, onProgress, signal } = source;
+  const { total, optionsForPage, onProgress, onBeforeSave, signal } = source;
   if (total < 1) throw new Error("Atlas export needs at least one page");
   throwIfAtlasAborted(signal);
   const files: Record<string, Uint8Array> = {};
@@ -713,6 +716,7 @@ export async function exportAtlasPngZip(
   // PNG payloads are already compressed; store them instead of re-deflating.
   const zipped = zipSync(files, { level: 0 });
   throwIfAtlasAborted(signal);
+  onBeforeSave?.();
   return saveBinaryFileWithFallback(zipped, {
     defaultName: filename,
     filters: [{ name: "ZIP Archive", extensions: ["zip"] }],

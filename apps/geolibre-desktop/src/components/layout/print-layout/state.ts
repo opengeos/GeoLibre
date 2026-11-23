@@ -61,7 +61,7 @@ export interface PrintLayoutUiState {
   atlasIndex: number;
   /** True while the atlas drives the live map (stepping or exporting). */
   atlasBusy: boolean;
-  atlasProgress: { current: number; total: number } | null;
+  atlasProgress: { current: number; total: number; cancellable?: boolean } | null;
   /** Out-of-range notice from the last fixed-scale atlas capture. */
   atlasScaleNotice: string | null;
   /** The map's visible bounds after the last atlas capture, keyed by page. */

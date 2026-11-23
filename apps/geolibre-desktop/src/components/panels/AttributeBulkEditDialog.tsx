@@ -16,6 +16,7 @@ import type { ColumnFilterMode, ColumnFilterSpec } from "../../lib/attribute-tab
 interface AttributeBulkEditDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  canEdit?: boolean;
   editableColumns: string[];
   selectedCount: number;
   filteredCount: number;
@@ -37,6 +38,7 @@ interface AttributeBulkEditDialogProps {
 export function AttributeBulkEditDialog({
   open,
   onOpenChange,
+  canEdit = true,
   editableColumns,
   selectedCount,
   filteredCount,
@@ -66,7 +68,7 @@ export function AttributeBulkEditDialog({
   const effectiveScope = scope === "selected" && selectedCount === 0 ? "filtered" : scope;
 
   const handleApply = () => {
-    if (!activeColumn) return;
+    if (!canEdit || !activeColumn) return;
     const count =
       mode === "fill"
         ? onBulkFill({ column: activeColumn, value: fillValue, scope: effectiveScope })
@@ -212,7 +214,7 @@ export function AttributeBulkEditDialog({
           <Button
             type="button"
             size="sm"
-            disabled={!activeColumn || (mode === "replace" && !find)}
+            disabled={!canEdit || !activeColumn || (mode === "replace" && !find)}
             onClick={handleApply}
           >
             {t("attributeTable.bulkEdit.apply")}

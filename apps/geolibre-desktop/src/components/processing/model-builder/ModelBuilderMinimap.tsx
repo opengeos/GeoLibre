@@ -1,5 +1,12 @@
 import type { ProcessingModelGraph } from "@geolibre/core";
-import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type RefObject,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { NODE_HEIGHT, NODE_WIDTH } from "../../../lib/model-graph-edit";
 
@@ -9,10 +16,7 @@ interface ModelBuilderMinimapProps {
   extentWidth: number;
   extentHeight: number;
   zoom: number;
-  scrollLeft: number;
-  scrollTop: number;
-  viewportWidth: number;
-  viewportHeight: number;
+  canvasRef: RefObject<HTMLDivElement | null>;
   onNavigate: (worldX: number, worldY: number) => void;
 }
 
@@ -22,7 +26,9 @@ const MINIMAP_HEIGHT = 96;
 /**
  * Interactive SVG minimap for the Model Builder canvas. Displays scaled node
  * rectangles, connecting edges, and the current viewport frame; clicking moves
- * the canvas scroll position to that world coordinate.
+ * the canvas scroll position to that world coordinate. Owns its own scroll and
+ * resize subscription so scrolling only re-renders the minimap, not the full
+ * ModelBuilderPanel tree.
  */
 export function ModelBuilderMinimap({
   graph,
@@ -30,14 +36,68 @@ export function ModelBuilderMinimap({
   extentWidth,
   extentHeight,
   zoom,
-  scrollLeft,
-  scrollTop,
-  viewportWidth,
-  viewportHeight,
+  canvasRef,
   onNavigate,
 }: ModelBuilderMinimapProps) {
   const { t } = useTranslation();
-  if (graph.nodes.length === 0) return null;
+  const [viewport, setViewport] = useState({ left: 0, top: 0, width: 0, height: 0 });
+  const rafRef = useRef<number | null>(null);
+  const hasNodes = graph.nodes.length > 0;
+
+  useEffect(() => {
+    if (!hasNodes) return;
+    const el = canvasRef.current;
+    if (!el) return;
+
+    const sync = () => {
+      setViewport((prev) =>
+        prev.left === el.scrollLeft &&
+        prev.top === el.scrollTop &&
+        prev.width === el.clientWidth &&
+        prev.height === el.clientHeight
+          ? prev
+          : {
+              left: el.scrollLeft,
+              top: el.scrollTop,
+              width: el.clientWidth,
+              height: el.clientHeight,
+            },
+      );
+    };
+
+    const scheduleSync = () => {
+      if (rafRef.current !== null) return;
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        sync();
+      });
+    };
+
+    sync();
+    el.addEventListener("scroll", scheduleSync, { passive: true });
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(sync);
+      observer.observe(el);
+    }
+
+    return () => {
+      el.removeEventListener("scroll", scheduleSync);
+      observer?.disconnect();
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [canvasRef, hasNodes]);
+
+  if (!hasNodes) return null;
+  const {
+    left: scrollLeft,
+    top: scrollTop,
+    width: viewportWidth,
+    height: viewportHeight,
+  } = viewport;
   const worldW = Math.max(extentWidth, 1);
   const worldH = Math.max(extentHeight, 1);
   const scale = Math.min(MINIMAP_WIDTH / worldW, MINIMAP_HEIGHT / worldH);

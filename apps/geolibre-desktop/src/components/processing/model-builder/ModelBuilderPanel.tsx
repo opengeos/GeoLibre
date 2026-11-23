@@ -387,12 +387,6 @@ export function ModelBuilderPanel({
   const [graph, setGraph] = useState<ProcessingModelGraph>(emptyModelGraph);
   const [history, setHistory] = useState<ModelHistoryState>(createModelHistory);
   const [canvasZoom, setCanvasZoom] = useState(1);
-  const [canvasScroll, setCanvasScroll] = useState({
-    left: 0,
-    top: 0,
-    width: 0,
-    height: 0,
-  });
   const graphRef = useRef(graph);
   const historyRef = useRef(history);
   const dragGenerationRef = useRef(0);
@@ -402,32 +396,6 @@ export function ModelBuilderPanel({
   useLayoutEffect(() => {
     historyRef.current = history;
   }, [history]);
-  const scrollRafRef = useRef<number | null>(null);
-  useEffect(() => {
-    return () => {
-      if (scrollRafRef.current !== null) {
-        cancelAnimationFrame(scrollRafRef.current);
-        scrollRafRef.current = null;
-      }
-    };
-  }, []);
-  useEffect(() => {
-    if (!open || minimized) return;
-    const el = canvasRef.current;
-    if (!el) return;
-    const syncSize = () => {
-      setCanvasScroll((prev) =>
-        prev.width === el.clientWidth && prev.height === el.clientHeight
-          ? prev
-          : { ...prev, width: el.clientWidth, height: el.clientHeight },
-      );
-    };
-    syncSize();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(syncSize);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [open, minimized]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(() => new Set());
   const selectedNodeIdsRef = useRef(selectedNodeIds);
@@ -1137,8 +1105,10 @@ export function ModelBuilderPanel({
         event.preventDefault();
         handleRedo();
       } else if (mod && event.key.toLowerCase() === "d") {
-        event.preventDefault();
-        handleDuplicateSelected();
+        if (selectedNodeIds.size > 0 || selectedNodeId) {
+          event.preventDefault();
+          handleDuplicateSelected();
+        }
       } else if (event.key === "Delete" || event.key === "Backspace") {
         if (selectedNodeIds.size > 0 || selectedNodeId) {
           event.preventDefault();
@@ -2357,26 +2327,6 @@ export function ModelBuilderPanel({
           <div
             ref={canvasRef}
             className="relative min-w-0 flex-1 overflow-auto bg-muted/20"
-            onScroll={(event) => {
-              const el = event.currentTarget;
-              if (scrollRafRef.current !== null) return;
-              scrollRafRef.current = requestAnimationFrame(() => {
-                scrollRafRef.current = null;
-                setCanvasScroll((prev) =>
-                  prev.left === el.scrollLeft &&
-                  prev.top === el.scrollTop &&
-                  prev.width === el.clientWidth &&
-                  prev.height === el.clientHeight
-                    ? prev
-                    : {
-                        left: el.scrollLeft,
-                        top: el.scrollTop,
-                        width: el.clientWidth,
-                        height: el.clientHeight,
-                      },
-                );
-              });
-            }}
             onPointerDown={(event) => {
               // Middle-button or Alt+drag pans the scrollable canvas smoothly.
               if (event.button !== 1 && !(event.button === 0 && event.altKey)) return;
@@ -2454,10 +2404,7 @@ export function ModelBuilderPanel({
               extentWidth={canvasExtent.width}
               extentHeight={canvasExtent.height}
               zoom={canvasZoom}
-              scrollLeft={canvasScroll.left}
-              scrollTop={canvasScroll.top}
-              viewportWidth={canvasScroll.width || canvasRef.current?.clientWidth || 0}
-              viewportHeight={canvasScroll.height || canvasRef.current?.clientHeight || 0}
+              canvasRef={canvasRef}
               onNavigate={(worldX, worldY) => {
                 const container = canvasRef.current;
                 if (!container) return;

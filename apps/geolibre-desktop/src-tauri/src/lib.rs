@@ -2566,6 +2566,9 @@ fn list_installed_plugin_archives_blocking(
         if !path.is_file() || !is_zip_path(&path) {
             continue;
         }
+        // Use the bare file name as a readable display label for the Manage Plugins UI;
+        // `scan_external_plugin_directory` separately records the canonical absolute path
+        // as the collision-free source key used for exact-match uninstall and asset reads.
         let archive_name = path
             .file_name()
             .map(|name| name.to_string_lossy().to_string())
@@ -2604,6 +2607,7 @@ fn list_installed_plugin_archives_blocking(
 #[serde(rename_all = "camelCase")]
 struct UninstallExternalPluginArchiveResult {
     removed_paths: Vec<String>,
+    plugins_dir: String,
     error: Option<String>,
 }
 
@@ -2626,19 +2630,24 @@ fn uninstall_external_plugin_archive_blocking(
     plugin_id: &str,
 ) -> Result<UninstallExternalPluginArchiveResult, String> {
     validate_required_manifest_string("plugin_id", plugin_id)?;
-    let plugins_dir = app
+    let app_data_dir = app
         .path()
         .app_data_dir()
-        .map_err(|error| format!("Could not resolve app data directory: {error}"))?
-        .join("plugins");
+        .map_err(|error| format!("Could not resolve app data directory: {error}"))?;
+    let plugins_dir = app_data_dir.join("plugins");
     if !plugins_dir.exists() {
+        let resolved_plugins_dir = fs::canonicalize(&app_data_dir)
+            .map(|canonical_app_data| canonical_app_data.join("plugins"))
+            .unwrap_or(plugins_dir);
         return Ok(UninstallExternalPluginArchiveResult {
             removed_paths: Vec::new(),
+            plugins_dir: resolved_plugins_dir.to_string_lossy().into_owned(),
             error: None,
         });
     }
     let canonical_dir = fs::canonicalize(&plugins_dir)
         .map_err(|error| format!("Could not resolve plugins directory: {error}"))?;
+    let plugins_dir_str = canonical_dir.to_string_lossy().into_owned();
 
     let mut targets: Vec<PathBuf> = Vec::new();
     let mut seen_canonical: HashSet<PathBuf> = HashSet::new();
@@ -2709,11 +2718,13 @@ fn uninstall_external_plugin_archive_blocking(
         }
         return Ok(UninstallExternalPluginArchiveResult {
             removed_paths,
+            plugins_dir: plugins_dir_str,
             error: Some(error),
         });
     }
     Ok(UninstallExternalPluginArchiveResult {
         removed_paths,
+        plugins_dir: plugins_dir_str,
         error: None,
     })
 }

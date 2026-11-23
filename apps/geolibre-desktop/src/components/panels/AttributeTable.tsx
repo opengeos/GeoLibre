@@ -3467,8 +3467,9 @@ export function AttributeTable({
         layerName={layer?.name ?? ""}
       />
       <AttributeBulkEditDialog
-        open={bulkEditOpen}
+        open={bulkEditOpen && canEnterEditMode}
         onOpenChange={setBulkEditOpen}
+        canEdit={canEnterEditMode}
         editableColumns={editableBulkColumns}
         selectedCount={selectedIdSet.size}
         filteredCount={filtered.length}

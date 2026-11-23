@@ -835,14 +835,16 @@ export async function uninstallDesktopPluginArchive(
   if (!isTauri()) return;
   const result = await invoke<{
     removedPaths: string[];
+    pluginsDir?: string | null;
     error?: string | null;
   }>("uninstall_external_plugin_archive", { pluginId });
   if (result.removedPaths.length > 0) {
     unloadFilesystemPlugin(manager, pluginId, app, result.removedPaths);
-  } else if (!result.error) {
-    // The archive was already removed from disk; still unregister any stale
-    // filesystem-loaded instance so it does not linger in memory until restart.
-    unloadFilesystemPlugin(manager, pluginId, app);
+  } else if (!result.error && result.pluginsDir) {
+    // The archive was already removed from disk; only unregister a stale
+    // instance whose recorded source lives inside the app-data plugins
+    // directory so plugins loaded from additionalPluginDirectories are untouched.
+    unloadFilesystemPlugin(manager, pluginId, app, undefined, result.pluginsDir);
   }
   if (result.error) {
     throw new Error(result.error);
@@ -998,6 +1000,13 @@ function normalizePluginSourcePath(source: string): string {
   return source.replace(/\\/g, "/").replace(/^\/\/\?\//, "");
 }
 
+function isPluginSourceWithinDirectory(source: string, directory: string): boolean {
+  const normalizedSource = normalizePluginSourcePath(source);
+  const normalizedDir = normalizePluginSourcePath(directory).replace(/\/+$/, "");
+  if (!normalizedDir) return false;
+  return normalizedSource.startsWith(`${normalizedDir}/`);
+}
+
 /**
  * Forget a plugin previously loaded from the desktop filesystem so the next scan
  * re-registers it from its (possibly updated) archive. Used when a plugin is
@@ -1013,6 +1022,7 @@ export function unloadFilesystemPlugin(
   pluginId: string,
   app: GeoLibreAppAPI,
   onlyMatchingSources?: readonly string[],
+  onlyWithinDirectory?: string,
 ): boolean {
   const source = externallyLoadedPluginSources.get(pluginId);
   if (source === undefined || isManagedUrlSource(source)) return false;
@@ -1022,6 +1032,12 @@ export function unloadFilesystemPlugin(
       (candidate) => normalizePluginSourcePath(candidate) === normalizedSource,
     );
     if (!matches) return false;
+  }
+  if (
+    onlyWithinDirectory !== undefined &&
+    !isPluginSourceWithinDirectory(source, onlyWithinDirectory)
+  ) {
+    return false;
   }
   manager.unregister(pluginId, app);
   removeExternalPluginStyle(pluginId);
