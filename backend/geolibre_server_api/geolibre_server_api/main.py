@@ -40,6 +40,12 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 from starlette.concurrency import run_in_threadpool
 
+from geolibre_server_api.account_lifecycle import (
+    ProjectVersionUsage,
+    build_lifecycle_router,
+    enforce_storage_quota,
+    record_audit_event,
+)
 from geolibre_server_api.auth import (
     AuthPrincipal,
     InsufficientScopeError,
@@ -778,6 +784,21 @@ class PathCORSMiddleware:
             await self.api(scope, receive, send)
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _env_optional_int(name: str) -> int | None:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return None
+    value = int(raw.strip())
+    return value if value > 0 else None
+
+
 def create_app(
     database_url: str | None = None,
     storage=None,
@@ -785,6 +806,10 @@ def create_app(
     clock: Callable[[], int] | None = None,
     *,
     oidc_transport: httpx.BaseTransport | None = None,
+    allow_self_registration: bool | None = None,
+    user_storage_quota_bytes: int | None = None,
+    org_storage_quota_bytes: int | None = None,
+    lifecycle_delivery: Callable[[dict], None] | None = None,
 ) -> FastAPI:
     """Build the FastAPI app, wiring the engine, sessions, storage, and routes.
 
@@ -887,10 +912,31 @@ def create_app(
             idp_transport.close()
 
     object_storage = storage or make_storage()
+    if inspect(engine).has_table("project_version_usage") and inspect(engine).has_table("versions"):
+        from geolibre_server_api.account_lifecycle import backfill_project_version_usage
+
+        with sessions() as backfill_session:
+            backfill_project_version_usage(backfill_session, object_storage)
     base_url = (public_url or os.getenv("GEOLIBRE_PUBLIC_URL", "http://localhost:8000")).rstrip("/")
     viewer_url = os.getenv("GEOLIBRE_VIEWER_URL", "https://app.geolibre.org/").rstrip("/") + "/"
     max_project_bytes = int(os.getenv("GEOLIBRE_MAX_PROJECT_BYTES", str(50 * 1024 * 1024)))
     max_thumbnail_bytes = int(os.getenv("GEOLIBRE_MAX_THUMBNAIL_BYTES", str(5 * 1024 * 1024)))
+    sso_only = _env_bool("GEOLIBRE_SSO_ONLY", False)
+    self_reg_enabled = (
+        allow_self_registration
+        if allow_self_registration is not None
+        else (False if sso_only else _env_bool("GEOLIBRE_ALLOW_SELF_REGISTRATION", True))
+    )
+    resolved_user_quota = (
+        user_storage_quota_bytes
+        if user_storage_quota_bytes is not None
+        else _env_optional_int("GEOLIBRE_USER_STORAGE_QUOTA_BYTES")
+    )
+    resolved_org_quota = (
+        org_storage_quota_bytes
+        if org_storage_quota_bytes is not None
+        else _env_optional_int("GEOLIBRE_ORG_STORAGE_QUOTA_BYTES")
+    )
 
     app = FastAPI(
         title="GeoLibre projects and identity API",
@@ -903,6 +949,8 @@ def create_app(
     app.state.clock = clock_fn
     app.state.oauth_config = oauth_config
     app.state.base_url = base_url
+    app.state.allow_self_registration = self_reg_enabled
+    app.state.lifecycle_delivery = lifecycle_delivery
     app.state.trusted_proxy = load_trusted_proxy_config()
     # Outbound identity-provider HTTP; lives for the process.
     idp_transport = oidc_transport or build_transport()
@@ -1023,6 +1071,7 @@ def create_app(
 
     # Identity routes must precede the username/slug catch-alls below.
     app.include_router(build_identity_router())
+    app.include_router(build_lifecycle_router())
     app.include_router(build_enterprise_admin_router())
     app.include_router(build_scim_router())
     if oauth_config is not None:
@@ -1814,6 +1863,7 @@ def create_app(
         group_ids = group_ids or []
         validate_access_targets(session, account, visibility, organization_id, group_ids)
         document = parse_content(content, max_project_bytes)
+        content_bytes = content.encode()
         title = title_from(document, filename)
         timestamp = now()
 
@@ -1824,8 +1874,17 @@ def create_app(
         # the same title from one account can pick the same slug and the loser
         # hits uq_project_owner_slug or uq_project_org_slug. Retry the allocation
         # instead of surfacing that as a 500, matching how version numbers are
-        # allocated below.
+        # allocated below. Quota enforcement runs inside each attempt so a
+        # rollback releasing the owner lock re-acquires it before committing.
         for _ in range(5):
+            enforce_storage_quota(
+                session,
+                account_id=account.id,
+                organization_id=organization_id,
+                incoming_bytes=len(content_bytes),
+                user_quota_bytes=resolved_user_quota,
+                org_quota_bytes=resolved_org_quota,
+            )
             project = Project(
                 id=str(uuid.uuid4()),
                 owner_id=(
@@ -1859,8 +1918,11 @@ def create_app(
         else:
             raise HTTPException(409, "could not allocate a project slug; retry")
         key = f"projects/{project.id}/versions/1.json"
-        object_storage.put(key, content.encode(), "application/json")
+        object_storage.put(key, content_bytes, "application/json")
         session.add(Version(project_id=project.id, number=1, object_key=key, created_at=timestamp))
+        session.add(
+            ProjectVersionUsage(project_id=project.id, number=1, size_bytes=len(content_bytes))
+        )
         session.add_all(
             ProjectGroup(project_id=project.id, group_id=group_id) for group_id in group_ids
         )
@@ -2985,6 +3047,15 @@ def create_app(
         project.share_expires_at = None
         project.share_password_hash = None
         project.updated_at = now()
+        record_audit_event(
+            session,
+            timestamp=clock_fn(),
+            actor_account_id=principal.account.id,
+            organization_id=project.organization_id,
+            action="share.revoke",
+            resource_type="project",
+            resource_id=project.id,
+        )
         session.commit()
 
     @app.get("/api/projects", openapi_extra=OPTIONAL_AUTH_OPENAPI)
@@ -2996,6 +3067,10 @@ def create_app(
         mine: bool = False,
         shared_with_me: bool = False,
         shared_source: Literal["organizations", "groups"] | None = None,
+        q: Annotated[str | None, Query(max_length=200)] = None,
+        visibility: Visibility | None = None,
+        owner: Annotated[str | None, Query(max_length=39)] = None,
+        sort: Literal["updated", "created", "name"] = "updated",
         principal: AuthPrincipal | None = Depends(optional_principal),
         session: Session = Depends(get_session),
     ):
@@ -3073,12 +3148,35 @@ def create_app(
                 query.where(Project.featured.is_(True)),
                 count.where(Project.featured.is_(True)),
             )
+        if visibility is not None:
+            query, count = (
+                query.where(Project.visibility == visibility),
+                count.where(Project.visibility == visibility),
+            )
+        if owner and owner.strip():
+            owner_ids = select(Account.id).where(Account.username == owner.strip().lower())
+            query, count = (
+                query.where(Project.owner_id.in_(owner_ids)),
+                count.where(Project.owner_id.in_(owner_ids)),
+            )
+        if q and q.strip():
+            escaped = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped}%"
+            search_cond = or_(
+                Project.title.ilike(pattern, escape="\\"),
+                Project.description.ilike(pattern, escape="\\"),
+                Project.slug.ilike(pattern, escape="\\"),
+            )
+            query, count = query.where(search_cond), count.where(search_cond)
+        if sort == "created":
+            order_by = (Project.created_at.desc(), Project.id.desc())
+        elif sort == "name":
+            order_by = (func.lower(Project.title).asc(), Project.id.asc())
+        else:
+            order_by = (Project.updated_at.desc(), Project.id.desc())
         projects = list(
             session.scalars(
-                query.options(*LISTING_EAGER_LOADS)
-                .order_by(Project.updated_at.desc())
-                .offset(offset)
-                .limit(limit)
+                query.options(*LISTING_EAGER_LOADS).order_by(*order_by).offset(offset).limit(limit)
             ).all()
         )
         access_cache = preload_project_access(session, account, projects)
@@ -3249,13 +3347,24 @@ def create_app(
         """Write a new version of a project the caller owns or may shared-update."""
         project = editable(session.get(Project, project_id), principal, session)
         parse_content(body.content, max_project_bytes)
+        content_bytes = body.content.encode()
         # Allocated from max(number) and committed *before* the object is
         # written. Deriving it from len(project.versions) let two concurrent
         # updates pick the same number: both wrote the same storage key, the
         # second lost the primary-key race with a 500, and the winner's content
         # had already been overwritten. Reserving the row first means a loser
         # fails before touching storage, and can retry on the next free number.
+        # Quota enforcement runs inside each attempt so a rollback releasing the
+        # owner row lock re-acquires the lock and re-checks usage on retry.
         for _ in range(5):
+            enforce_storage_quota(
+                session,
+                account_id=project.owner_id or principal.account.id,
+                organization_id=project.organization_id,
+                incoming_bytes=len(content_bytes),
+                user_quota_bytes=resolved_user_quota,
+                org_quota_bytes=resolved_org_quota,
+            )
             number = (
                 session.scalar(
                     select(func.max(Version.number)).where(Version.project_id == project.id)
@@ -3282,7 +3391,10 @@ def create_app(
             raise HTTPException(409, "could not allocate a version number; retry")
         current_number = number - 1
         conflict = body.expected_version is not None and body.expected_version != current_number
-        object_storage.put(key, body.content.encode(), "application/json")
+        object_storage.put(key, content_bytes, "application/json")
+        session.add(
+            ProjectVersionUsage(project_id=project.id, number=number, size_bytes=len(content_bytes))
+        )
         project.updated_at = now()
         log_project_activity(
             session, project.id, principal.account.id, "version_save", {"version": number}

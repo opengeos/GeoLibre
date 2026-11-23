@@ -30,7 +30,13 @@ def main() -> None:
         return "'" + str(value).replace("'", "''") + "'"
 
     con = duckdb.connect()
-    con.execute("INSTALL spatial; LOAD spatial;")
+    ext_dir = os.environ.get("DUCKDB_EXTENSION_DIRECTORY", "").strip()
+    if ext_dir:
+        con.execute(f"SET extension_directory = {quote(ext_dir)};")
+    try:
+        con.execute("LOAD spatial;")
+    except Exception:
+        con.execute("INSTALL spatial; LOAD spatial;")
 
     if input_path.lower().endswith((".parquet", ".geoparquet")):
         relation = f"read_parquet({quote(input_path)})"

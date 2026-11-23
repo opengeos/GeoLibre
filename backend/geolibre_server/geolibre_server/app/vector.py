@@ -15,12 +15,20 @@ HTTP status codes.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import shutil
 import tempfile
+import threading
+import weakref
 from pathlib import Path
 from typing import Any, Optional
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows
+    fcntl = None  # type: ignore[assignment]
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -33,12 +41,12 @@ from .conversion import _is_within_roots
 router = APIRouter(prefix="/vector", tags=["vector"])
 logger = logging.getLogger(__name__)
 
-# Source formats whose write-back is supported today: single-file, GeoPandas
-# (OGR) writable, and whose source CRS and — for a multi-layer GeoPackage — the
-# sibling tables we can preserve on an in-place overwrite. Kept in sync with the
-# client-side gate in ``LayerPanel.tsx`` (WRITEBACK_EXTENSIONS). Shapefile,
-# FlatGeobuf and GeoParquet write-back are deliberately deferred (issue #1070).
-_WRITABLE_EXTENSIONS = {".gpkg", ".geojson", ".json"}
+# Source formats whose write-back is supported today: GeoPackage, GeoJSON,
+# Shapefile, FlatGeobuf, and GeoParquet, preserving source CRS (and sibling
+# tables for GeoPackage / sidecars for Shapefile). Kept in sync with the
+# client-side gate in ``layer-panel-utils.ts`` (WRITEBACK_EXTENSIONS).
+_WRITABLE_EXTENSIONS = {".gpkg", ".geojson", ".json", ".shp", ".fgb", ".parquet", ".geoparquet"}
+_SHAPEFILE_SIDECARS = (".shp", ".shx", ".dbf", ".prj", ".cpg")
 
 
 class VectorToolRequest(BaseModel):
@@ -204,6 +212,188 @@ def _write_geojson(target: Path, geojson: dict) -> int:
     return len(gdf)
 
 
+def _reproject_to_existing_crs(gdf: Any, target: Path, *, is_parquet: bool = False) -> Any:
+    """Reproject a WGS84 GeoDataFrame back into ``target``'s stored CRS when non-4326."""
+    gpd = vector_ops._import_geopandas()
+    head = gpd.read_parquet(str(target)) if is_parquet else gpd.read_file(str(target), rows=1)
+    if head.crs is not None and head.crs.to_epsg() != 4326:
+        return gdf.to_crs(head.crs)
+    return gdf
+
+
+def _write_flatgeobuf(target: Path, geojson: dict) -> int:
+    """Overwrite a FlatGeobuf source file atomically, preserving its source CRS."""
+    gdf = _reproject_to_existing_crs(_build_wgs84_gdf(geojson), target)
+    _atomic_write(target, lambda tmp: gdf.to_file(tmp, driver="FlatGeobuf"))
+    return len(gdf)
+
+
+def _write_geoparquet(target: Path, geojson: dict) -> int:
+    """Overwrite a GeoParquet source file atomically, preserving its source CRS."""
+    gdf = _reproject_to_existing_crs(_build_wgs84_gdf(geojson), target, is_parquet=True)
+    _atomic_write(target, lambda tmp: gdf.to_parquet(tmp))
+    return len(gdf)
+
+
+_SHAPEFILE_STALE_INDEXES = (".qix", ".sbn", ".sbx")
+_SHAPEFILE_LOCKS_GUARD = threading.Lock()
+
+
+class _ShapefilePathLock:
+    """Weak-referenceable lock wrapper so idle per-path locks are reclaimed."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+
+
+_SHAPEFILE_PATH_LOCKS: weakref.WeakValueDictionary[Path, _ShapefilePathLock] = (
+    weakref.WeakValueDictionary()
+)
+
+
+def _shapefile_path_lock(target: Path) -> _ShapefilePathLock:
+    resolved = target.resolve()
+    with _SHAPEFILE_LOCKS_GUARD:
+        holder = _SHAPEFILE_PATH_LOCKS.get(resolved)
+        if holder is None:
+            holder = _ShapefilePathLock()
+            _SHAPEFILE_PATH_LOCKS[resolved] = holder
+        return holder
+
+
+def _shapefile_flock_path(resolved_target: Path) -> Path:
+    digest = hashlib.sha256(str(resolved_target).encode("utf-8")).hexdigest()[:16]
+    uid = os.getuid() if hasattr(os, "getuid") else 0
+    lock_dir = Path(tempfile.gettempdir()) / f"geolibre-shp-locks-{uid}"
+    lock_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return lock_dir / f"{digest}.lock"
+
+
+def _write_shapefile(target: Path, geojson: dict) -> int:
+    """Overwrite an ESRI Shapefile and its sidecar files with rollback and per-path locking.
+
+    Preserves existing case-insensitive component filenames (e.g. ``Foo.SHP`` /
+    ``Foo.DBF`` on case-sensitive filesystems). Note that ESRI Shapefile DBF
+    attributes are subject to the format's 10-character field-name limit and
+    column-type coercion.
+    """
+    gdf = _reproject_to_existing_crs(_build_wgs84_gdf(geojson), target)
+    tmpdir = tempfile.mkdtemp(dir=str(target.parent))
+    backup_dir = tempfile.mkdtemp(dir=str(target.parent))
+    try:
+        # Always stage with lowercase `.shp` so GDAL emits predictable lowercase
+        # component names, then map each component to the target's on-disk casing.
+        tmp_shp = Path(tmpdir) / f"{target.stem}.shp"
+        gdf.to_file(tmp_shp, driver="ESRI Shapefile")
+
+        resolved_target = target.resolve()
+        holder = _shapefile_path_lock(resolved_target)
+        with holder.lock:
+            lock_file = None
+            try:
+                if fcntl is not None:
+                    lock_path = _shapefile_flock_path(resolved_target)
+                    flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+                    fd = os.open(lock_path, flags, 0o600)
+                    lock_file = os.fdopen(fd, "a+b")
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            except OSError:
+                if lock_file is not None:
+                    lock_file.close()
+                    lock_file = None
+
+            # Discover existing sibling components case-insensitively so datasets
+            # with mixed-case stems or extensions (e.g. `foo.shp` + `Foo.DBF`) are
+            # backed up and replaced in place on case-sensitive filesystems. First
+            # reject ambiguous families where multiple distinct `.shp` primaries
+            # share the same lowercase stem (e.g. `roads.shp` and `Roads.shp`) so
+            # we can never overwrite or delete another dataset's components.
+            all_exts = {*_SHAPEFILE_SIDECARS, *_SHAPEFILE_STALE_INDEXES}
+            target_stem_lower = target.stem.lower()
+            existing_by_ext: dict[str, list[Path]] = {}
+            for child in target.parent.iterdir():
+                if (
+                    child.stem.lower() == target_stem_lower
+                    and child.suffix.lower() in all_exts
+                    and child.is_file()
+                ):
+                    existing_by_ext.setdefault(child.suffix.lower(), []).append(child)
+            primary_shps = existing_by_ext.get(".shp", [])
+            if len(primary_shps) > 1:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"Refusing to overwrite ambiguous shapefile '{target.name}': "
+                        "multiple case-variant .shp files share the same stem in this folder."
+                    ),
+                )
+
+            use_upper = target.suffix == ".SHP"
+            backups: list[tuple[Path, Path]] = []
+            created_new: list[Path] = []
+            try:
+                for paths in existing_by_ext.values():
+                    for dst in paths:
+                        backup = Path(backup_dir) / dst.name
+                        shutil.copy2(dst, backup)
+                        backups.append((backup, dst))
+
+                for ext in _SHAPEFILE_SIDECARS:
+                    src_sidecar = tmp_shp.with_suffix(ext)
+                    if not src_sidecar.exists():
+                        continue
+                    existing_matches = existing_by_ext.get(ext, [])
+                    if ext == ".shp":
+                        dst_sidecar = target
+                    elif existing_matches:
+                        dst_sidecar = existing_matches[0]
+                    else:
+                        dst_ext = ext.upper() if use_upper else ext
+                        dst_sidecar = target.with_suffix(dst_ext)
+                    existed = dst_sidecar.exists()
+                    if existed:
+                        shutil.copymode(dst_sidecar, src_sidecar)
+                    elif target.exists():
+                        shutil.copymode(target, src_sidecar)
+                    os.replace(src_sidecar, dst_sidecar)
+                    if not existed:
+                        created_new.append(dst_sidecar)
+                    # Remove any differently-cased duplicate of the same sidecar.
+                    for dup in existing_matches:
+                        if dup != dst_sidecar and dup.exists():
+                            dup.unlink()
+
+                # Invalidate obsolete spatial indexes (any casing) so GDAL does not
+                # read stale bounding trees against the newly written geometries.
+                for idx_ext in _SHAPEFILE_STALE_INDEXES:
+                    for idx_path in existing_by_ext.get(idx_ext, []):
+                        if idx_path.exists():
+                            idx_path.unlink()
+            except BaseException:
+                for backup, dst in backups:
+                    try:
+                        os.replace(backup, dst)
+                    except OSError:
+                        pass
+                for created in created_new:
+                    try:
+                        created.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                raise
+            finally:
+                if lock_file is not None:
+                    try:
+                        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                    except OSError:
+                        pass
+                    lock_file.close()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        shutil.rmtree(backup_dir, ignore_errors=True)
+    return len(gdf)
+
+
 def _write_geopackage(target: Path, geojson: dict, layer: Optional[str]) -> tuple[int, str]:
     """Overwrite one layer of a GeoPackage in place, preserving the others.
 
@@ -304,9 +494,16 @@ def vector_write(request: WriteVectorRequest):
         )
 
     layer_name: Optional[str] = None
+    ext = target.suffix.lower()
     try:
-        if target.suffix.lower() == ".gpkg":
+        if ext == ".gpkg":
             count, layer_name = _write_geopackage(target, request.geojson, request.layer)
+        elif ext == ".shp":
+            count = _write_shapefile(target, request.geojson)
+        elif ext == ".fgb":
+            count = _write_flatgeobuf(target, request.geojson)
+        elif ext in {".parquet", ".geoparquet"}:
+            count = _write_geoparquet(target, request.geojson)
         else:
             count = _write_geojson(target, request.geojson)
     except HTTPException:

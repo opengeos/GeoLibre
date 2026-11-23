@@ -393,11 +393,23 @@ def _is_within_roots(path: Path) -> bool:
 
     Uses ``Path.is_relative_to`` so filesystem roots (``/``, a Windows drive)
     work — naive ``startswith(root + sep)`` would produce ``//`` and reject
-    valid descendants.
+    valid descendants. When a per-tenant workspace root is configured via
+    ``GEOLIBRE_TENANT_WORKSPACES_ROOT``, the path must also reside inside the
+    calling tenant's subdirectory.
     """
+    from .tenant import is_tenant_workspaces_configured, tenant_workspace_root
+
+    resolved = path.resolve()
+    tenant_root = tenant_workspace_root()
+    if is_tenant_workspaces_configured():
+        # Fail closed: when per-tenant workspace confinement is configured,
+        # tenant-less requests must not fall back to shared conversion roots.
+        if tenant_root is None:
+            return False
+        if not (resolved == tenant_root or resolved.is_relative_to(tenant_root)):
+            return False
     if not _CONVERSION_ROOTS:
         return True
-    resolved = path.resolve()
     return any(
         resolved == Path(root) or resolved.is_relative_to(root) for root in _CONVERSION_ROOTS
     )
@@ -914,8 +926,7 @@ def raster_to_cog(request: RasterToCogRequest):
 @router.get("/jobs/{job_id}")
 def conversion_job(job_id: str):
     """Return state for a conversion background job."""
-    with _JOBS_LOCK:
-        job = _JOBS.get(job_id)
+    job = _JOB_MANAGER.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job

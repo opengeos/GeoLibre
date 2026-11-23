@@ -20,7 +20,7 @@ conversion = ["duckdb>=1.1.0", "rio-cogeo>=5.0.0", "freestiler>=0.1.0"]
 # Optional GeoPandas engine for the Vector processing tools. Not installed by
 # default to keep the bundled sidecar small; the desktop app falls back to the
 # client-side (Turf.js) engine when this is absent.
-vector = ["geopandas>=1.0", "shapely>=2.0"]
+vector = ["geopandas>=1.0", "shapely>=2.0", "pyarrow>=15.0"]
 # PostGIS editable layers and write-back (issue #1070 phase 2). psycopg is the
 # only requirement: geometries are read/written as GeoJSON via ST_AsGeoJSON /
 # ST_GeomFromGeoJSON, so no GeoPandas is involved on this path.

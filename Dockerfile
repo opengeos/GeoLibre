@@ -139,10 +139,14 @@ RUN apt-get update \
 
 # Install the sidecar package plus the core conversion stack. duckdb and
 # rio-cogeo (rasterio) publish linux/arm64 wheels, so Vector->GeoParquet,
-# CSV->GeoParquet and Raster->COG work on both architectures.
+# CSV->GeoParquet and Raster->COG work on both architectures. Pre-bake DuckDB's
+# spatial extension so air-gapped containers load it offline without internet access.
 COPY backend/geolibre_server /opt/geolibre_server
+ENV DUCKDB_EXTENSION_DIRECTORY=/opt/duckdb_extensions
 RUN pip install --no-cache-dir /opt/geolibre_server \
-  && pip install --no-cache-dir "duckdb>=1.1.0" "rio-cogeo>=5.0.0"
+  && pip install --no-cache-dir "duckdb>=1.1.0" "rio-cogeo>=5.0.0" \
+  && mkdir -p "$DUCKDB_EXTENSION_DIRECTORY" \
+  && python -c "import os, duckdb; conn = duckdb.connect(); conn.execute(\"SET extension_directory='\" + os.environ['DUCKDB_EXTENSION_DIRECTORY'] + \"'\"); conn.execute('INSTALL spatial'); conn.execute('LOAD spatial')"
 
 # freestiler (PMTiles) and whitebox-workflows publish no linux/arm64 wheels, so
 # they are installed on amd64 only. On arm64 those tools report unavailable

@@ -29,7 +29,13 @@ def main() -> None:
         return '"' + str(value).replace('"', '""') + '"'
 
     con = duckdb.connect()
-    con.execute("INSTALL spatial; LOAD spatial;")
+    ext_dir = os.environ.get("DUCKDB_EXTENSION_DIRECTORY", "").strip()
+    if ext_dir:
+        con.execute(f"SET extension_directory = {quote(ext_dir)};")
+    try:
+        con.execute("LOAD spatial;")
+    except Exception:
+        con.execute("INSTALL spatial; LOAD spatial;")
     # DuckDB 2.0 refuses a GDAL COPY with an SRS until the axis order is chosen
     # explicitly. GEOMETRY is always [lon, lat] here (ST_Transform uses always_xy),
     # so tell GDAL the same; older DuckDB without the setting already behaves so.

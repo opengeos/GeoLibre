@@ -40,6 +40,12 @@ from .pointcloud import router as pointcloud_router
 from .postgis import router as postgis_router
 from .raster import router as raster_router
 from .sql import router as sql_router
+from .tenant import (
+    is_multi_tenant_enabled,
+    normalize_tenant_id,
+    reset_current_tenant,
+    set_current_tenant,
+)
 from .vector import router as vector_router
 from .whitebox import router as whitebox_router
 
@@ -92,6 +98,35 @@ async def require_sidecar_token(request: Request, call_next):
                 content={"detail": "Missing or invalid sidecar token"},
             )
     return await call_next(request)
+
+
+@app.middleware("http")
+async def bind_tenant_context(request: Request, call_next):
+    """Bind optional (or required in multi-tenant mode) tenant isolation context.
+
+    Trust model: the sidecar expects an authenticated reverse proxy or gateway
+    (such as nginx with ``GEOLIBRE_TRUSTED_TENANT_HEADER``) to strip untrusted
+    client headers and inject ``X-GeoLibre-Tenant`` from a verified identity.
+    """
+    if request.method == "OPTIONS" or request.url.path in _TOKEN_EXEMPT_PATHS:
+        return await call_next(request)
+    raw_tenant = request.headers.get("x-geolibre-tenant") or request.headers.get(
+        "x-geolibre-session"
+    )
+    try:
+        tenant_id = normalize_tenant_id(raw_tenant)
+    except HTTPException as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    if is_multi_tenant_enabled() and tenant_id is None:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "Missing X-GeoLibre-Tenant header"},
+        )
+    token = set_current_tenant(tenant_id)
+    try:
+        return await call_next(request)
+    finally:
+        reset_current_tenant(token)
 
 
 # Reject requests whose Host header is not a loopback name, blocking

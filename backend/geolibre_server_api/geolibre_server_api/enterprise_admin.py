@@ -17,12 +17,13 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from geolibre_server_api.account_lifecycle import record_audit_event
 from geolibre_server_api.auth import (
     AuthPrincipal,
     get_clock,
     get_session,
     iso_ts,
-    require_scope,
+    require_any_scope,
     token_digest,
 )
 from geolibre_server_api.auth_models import Account
@@ -251,7 +252,7 @@ def build_enterprise_admin_router() -> APIRouter:
         organization_id: str,
         request: Request,
         response: Response,
-        principal: AuthPrincipal = Depends(require_scope("read:projects")),
+        principal: AuthPrincipal = Depends(require_any_scope("admin:org", "read:projects")),
         session: Session = Depends(get_session),
     ):
         require_organization_admin(session, organization_id, principal, request, mutation=False)
@@ -265,7 +266,7 @@ def build_enterprise_admin_router() -> APIRouter:
         body: SecurityPolicyBody,
         request: Request,
         response: Response,
-        principal: AuthPrincipal = Depends(require_scope("write:projects")),
+        principal: AuthPrincipal = Depends(require_any_scope("admin:org", "write:projects")),
         session: Session = Depends(get_session),
     ):
         require_organization_admin(session, organization_id, principal, request, mutation=True)
@@ -300,7 +301,17 @@ def build_enterprise_admin_router() -> APIRouter:
         row.lockout_threshold = body.lockout_threshold
         row.lockout_seconds = body.lockout_seconds
         row.admin_ip_allowlist_json = json.dumps([str(network) for network in networks])
-        row.updated_at = get_clock(request)()
+        now_ts = get_clock(request)()
+        row.updated_at = now_ts
+        record_audit_event(
+            session,
+            timestamp=now_ts,
+            actor_account_id=principal.account.id,
+            organization_id=organization_id,
+            action="org.security_policy.update",
+            resource_type="organization",
+            resource_id=organization_id,
+        )
         session.commit()
         return {"securityPolicy": security_policy_json(row)}
 
@@ -309,7 +320,7 @@ def build_enterprise_admin_router() -> APIRouter:
         organization_id: str,
         request: Request,
         response: Response,
-        principal: AuthPrincipal = Depends(require_scope("read:projects")),
+        principal: AuthPrincipal = Depends(require_any_scope("admin:org", "read:projects")),
         session: Session = Depends(get_session),
     ):
         require_organization_admin(session, organization_id, principal, request, mutation=False)
@@ -325,7 +336,7 @@ def build_enterprise_admin_router() -> APIRouter:
         body: IdentityProviderBody,
         request: Request,
         response: Response,
-        principal: AuthPrincipal = Depends(require_scope("write:projects")),
+        principal: AuthPrincipal = Depends(require_any_scope("admin:org", "write:projects")),
         session: Session = Depends(get_session),
     ):
         require_organization_admin(session, organization_id, principal, request, mutation=True)
@@ -438,6 +449,16 @@ def build_enterprise_admin_router() -> APIRouter:
         provider.enabled = body.enabled
         provider.break_glass_account_id = break_glass_id
         provider.updated_at = now_ts
+        record_audit_event(
+            session,
+            timestamp=now_ts,
+            action="org.idp.upsert",
+            actor_account_id=principal.account.id,
+            organization_id=organization_id,
+            resource_type="identity_provider",
+            resource_id=provider.id,
+            detail={"issuer": body.issuer, "enabled": body.enabled},
+        )
         try:
             session.commit()
         except IntegrityError:
@@ -450,17 +471,34 @@ def build_enterprise_admin_router() -> APIRouter:
     def delete_identity_provider(
         organization_id: str,
         request: Request,
-        principal: AuthPrincipal = Depends(require_scope("write:projects")),
+        principal: AuthPrincipal = Depends(require_any_scope("admin:org", "write:projects")),
         session: Session = Depends(get_session),
     ):
         require_organization_admin(session, organization_id, principal, request, mutation=True)
-        # The foreign keys cascade federated identities and pending login states.
-        session.execute(
-            delete(OrganizationIdentityProvider).where(
+        existing_provider_id = session.scalar(
+            select(OrganizationIdentityProvider.id).where(
                 OrganizationIdentityProvider.organization_id == organization_id
             )
         )
-        session.commit()
+        if existing_provider_id is not None:
+            # Filter by the captured provider ID so the deleted row always
+            # matches the audited ID; FKs cascade federated identities.
+            deleted = session.execute(
+                delete(OrganizationIdentityProvider).where(
+                    OrganizationIdentityProvider.id == existing_provider_id
+                )
+            )
+            if deleted.rowcount:
+                record_audit_event(
+                    session,
+                    timestamp=get_clock(request)(),
+                    actor_account_id=principal.account.id,
+                    organization_id=organization_id,
+                    action="org.idp.delete",
+                    resource_type="identity_provider",
+                    resource_id=existing_provider_id,
+                )
+            session.commit()
         return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
     @router.post("/api/organizations/{organization_id}/scim-tokens", status_code=201)
@@ -469,21 +507,32 @@ def build_enterprise_admin_router() -> APIRouter:
         body: ScimTokenBody,
         request: Request,
         response: Response,
-        principal: AuthPrincipal = Depends(require_scope("write:projects")),
+        principal: AuthPrincipal = Depends(require_any_scope("admin:org", "write:projects")),
         session: Session = Depends(get_session),
     ):
         require_organization_admin(session, organization_id, principal, request, mutation=True)
         response.headers["Cache-Control"] = "private, no-store"
         token = secrets.token_urlsafe(32)
+        now_ts = get_clock(request)()
         row = ScimToken(
             id=str(uuid.uuid4()),
             organization_id=organization_id,
             created_by_id=principal.account.id,
             digest=token_digest(token),
             label=body.label,
-            created_at=get_clock(request)(),
+            created_at=now_ts,
         )
         session.add(row)
+        record_audit_event(
+            session,
+            timestamp=now_ts,
+            actor_account_id=principal.account.id,
+            organization_id=organization_id,
+            action="org.scim_token.create",
+            resource_type="scim_token",
+            resource_id=row.id,
+            detail={"label": body.label},
+        )
         session.commit()
         return {
             "token": token,
@@ -496,7 +545,7 @@ def build_enterprise_admin_router() -> APIRouter:
         organization_id: str,
         request: Request,
         response: Response,
-        principal: AuthPrincipal = Depends(require_scope("read:projects")),
+        principal: AuthPrincipal = Depends(require_any_scope("admin:org", "read:projects")),
         session: Session = Depends(get_session),
     ):
         require_organization_admin(session, organization_id, principal, request, mutation=False)
@@ -513,18 +562,28 @@ def build_enterprise_admin_router() -> APIRouter:
         organization_id: str,
         token_id: str,
         request: Request,
-        principal: AuthPrincipal = Depends(require_scope("write:projects")),
+        principal: AuthPrincipal = Depends(require_any_scope("admin:org", "write:projects")),
         session: Session = Depends(get_session),
     ):
         require_organization_admin(session, organization_id, principal, request, mutation=True)
         row = session.get(ScimToken, token_id)
         if row is None or row.organization_id != organization_id:
             raise HTTPException(404, "SCIM token not found")
+        now_ts = get_clock(request)()
         # Revoking again keeps the first revocation time.
         session.execute(
             update(ScimToken)
             .where(ScimToken.id == token_id, ScimToken.revoked_at.is_(None))
-            .values(revoked_at=get_clock(request)())
+            .values(revoked_at=now_ts)
+        )
+        record_audit_event(
+            session,
+            timestamp=now_ts,
+            actor_account_id=principal.account.id,
+            organization_id=organization_id,
+            action="org.scim_token.revoke",
+            resource_type="scim_token",
+            resource_id=token_id,
         )
         session.commit()
         return Response(status_code=204, headers={"Cache-Control": "private, no-store"})

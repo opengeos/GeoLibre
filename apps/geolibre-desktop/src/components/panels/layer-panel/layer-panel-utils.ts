@@ -84,7 +84,7 @@ function sourceUrlsFromLayer(layer: GeoLibreLayer): string[] {
 
 // Source formats whose in-place write-back the sidecar supports today. Kept in
 // sync with the backend gate in `app/vector.py` (_WRITABLE_EXTENSIONS).
-const WRITEBACK_EXTENSIONS = ["gpkg", "geojson", "json"];
+const WRITEBACK_EXTENSIONS = ["gpkg", "geojson", "json", "shp", "fgb", "parquet", "geoparquet"];
 
 /**
  * Whether the layer is an editable SQL Server table with a usable primary key

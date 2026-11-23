@@ -575,9 +575,22 @@ if auth0_domain:
         )
     auth0_frame_src = f" https://{auth0_host}"
 
+tenant_header_value = "\"\""
+trusted_tenant_header = os.environ.get("GEOLIBRE_TRUSTED_TENANT_HEADER", "").strip()
+if trusted_tenant_header:
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,63}", trusted_tenant_header):
+        raise SystemExit(
+            "ERROR: GEOLIBRE_TRUSTED_TENANT_HEADER must be a valid HTTP header name "
+            "(for example X-Auth-Request-User)."
+        )
+    nginx_var = "$http_" + trusted_tenant_header.lower().replace("-", "_")
+    tenant_header_value = nginx_var
+
 src = open("/etc/nginx/nginx.conf.template").read()
 open("/etc/nginx/conf.d/default.conf", "w").write(
     src.replace("__GEOLIBRE_SIDECAR_TOKEN__", token).replace(
+        "__GEOLIBRE_TENANT_HEADER_VALUE__", tenant_header_value
+    ).replace(
         "__GEOLIBRE_COLLAB_CONNECT_SRC__", collab_src
     ).replace(
         "__GEOLIBRE_CLERK_SCRIPT_SRC__", clerk_src

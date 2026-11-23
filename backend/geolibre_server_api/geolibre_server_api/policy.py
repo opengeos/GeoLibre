@@ -172,14 +172,17 @@ def record_failed_login(
     session.commit()
 
 
-def record_successful_login(session: Session, account_id: str, now_ts: int) -> None:
+def record_successful_login(
+    session: Session, account_id: str, now_ts: int, *, commit: bool = True
+) -> None:
     """Reset lockout counters; start the rotation clock the first time it is seen."""
     security = ensure_account_security(session, account_id)
     security.failed_login_count = 0
     security.locked_until = None
     if security.password_changed_at is None:
         security.password_changed_at = now_ts
-    session.commit()
+    if commit:
+        session.commit()
 
 
 def credential_expired(
@@ -265,6 +268,11 @@ def is_last_active_admin(session: Session, organization_id: str, account_id: str
         organization_role(session, organization_id, account_id) == "administrator"
         and active_admin_count(session, organization_id, excluding=account_id) == 0
     )
+
+
+def revoke_account_credentials(session: Session, account_id: str, now_ts: int) -> None:
+    """Public wrapper revoking every live OAuth session and personal token of an account."""
+    _revoke_credentials(session, account_id, now_ts)
 
 
 def _revoke_credentials(session: Session, account_id: str, now_ts: int) -> None:

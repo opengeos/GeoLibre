@@ -147,11 +147,13 @@ add_cesium_kml_layer(path, name, url=None, data=None, index=None)
 ```text
 update_layer(path, layer, name=None, visible=None, opacity=None, index=None)
 remove_layer(path, layer)
+duplicate_layer(path, layer, name=None, index=None)
 style_layer(path, layer, style)
 set_layer_popup(path, layer, fields=None, click=None, title=None,
                 title_expression=None, body_expression=None,
                 show_feature_id=None, max_width=None, image_height=None,
                 tooltip=None, merge=False)
+clear_popup(path, layer)
 set_layer_metadata(path, layer, title=None, abstract=None, keywords=None,
                    license=None, attribution=None, contact=None, lineage=None,
                    temporal_start=None, temporal_end=None, links=None,
@@ -284,6 +286,7 @@ remove_bookmark(path, bookmark)
 
 ```text
 set_renderer(path, renderer, pane_id=None)
+set_projection(path, projection)
 set_map_layout(path, rows, cols, view_kinds=None, sync_view=True)
 set_view(path, center=None, zoom=None, bearing=None, pitch=None, bbox=None)
 set_basemap(path, basemap)
@@ -361,7 +364,7 @@ previews at 64; closing one frees a slot, and abandoned sessions expire.
 
 ```text
 export_html(path, out_path, title="GeoLibre Map", width="100%", height="800px",
-            app_url=None, overwrite=False)
+            app_url=None, layout=None, theme=None, overwrite=False)
 ```
 
 Writes a standalone page that embeds the hosted GeoLibre viewer and injects the
@@ -387,6 +390,9 @@ live_fit_bounds(bounds)
 live_zoom_to_layer(layer_id)
 live_set_basemap(basemap)
 live_add_geojson(data, name="GeoJSON", style=None)
+live_add_tile_layer(url, name="Tile layer", options=None)
+live_add_cog(url, name="COG", options=None)
+live_add_raster(source, name=None, options=None)
 live_add_marker(lng, lat, name="Marker", properties=None, style=None)
 live_add_markers(points, name="Markers", style=None)
 live_get_layer_features(layer_id)
@@ -399,6 +405,12 @@ live_set_control_visible(control, visible=True, options=None)
 live_set_visibility(layer_id, visible)
 live_set_opacity(layer_id, opacity)
 live_set_style(layer_id, style)
+live_set_labels(layer_id, field=None, expression=None, enabled=None,
+                placement=None, size=None, color=None, halo_color=None,
+                halo_width=None, min_zoom=None, max_zoom=None,
+                allow_overlap=None, anchor=None, options=None)
+live_set_filter(layer_id, expression=None)
+live_set_renderer(renderer)
 live_remove_layer(layer_id)
 live_list_algorithms(query=None)
 live_run_algorithm(algorithm_id, parameters=None)

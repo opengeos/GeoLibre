@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from geolibre_server.app.runtime import JobState, _utc_now
+from geolibre_server.app.tenant import get_current_tenant
 
 
 class JobManager:
@@ -34,6 +35,7 @@ class JobManager:
         get_max_in_flight: Callable[[], int] | None = None,
     ) -> None:
         self.jobs: dict[str, JobState] = {}
+        self.job_owners: dict[str, str | None] = {}
         self.lock = threading.Lock()
         self.processes: dict[str, subprocess.Popen[str]] = {}
         self.cancelled: set[str] = set()
@@ -58,9 +60,17 @@ class JobManager:
             return self._get_max_in_flight()
         return self._max_in_flight
 
-    def get(self, job_id: str) -> JobState | None:
-        """Return a job's current state, or ``None`` if unknown."""
+    def _visible_to_tenant_locked(self, job_id: str, tenant_id: str | None) -> bool:
+        if job_id not in self.job_owners:
+            return True
+        return self.job_owners[job_id] == tenant_id
+
+    def get(self, job_id: str, *, tenant_id: str | None = None) -> JobState | None:
+        """Return a job's current state, or ``None`` if unknown or owned by another tenant."""
+        active_tenant = tenant_id if tenant_id is not None else get_current_tenant()
         with self.lock:
+            if not self._visible_to_tenant_locked(job_id, active_tenant):
+                return None
             return self._store().get(job_id)
 
     def snapshot_messages(self, job_id: str) -> list[str]:
@@ -103,9 +113,12 @@ class JobManager:
             self.processes.pop(job_id, None)
             self.cancelled.discard(job_id)
 
-    def cancel(self, job_id: str) -> None:
+    def cancel(self, job_id: str, *, tenant_id: str | None = None) -> None:
         """Mark a pending or running job as cancelled and kill its subprocess."""
+        active_tenant = tenant_id if tenant_id is not None else get_current_tenant()
         with self.lock:
+            if not self._visible_to_tenant_locked(job_id, active_tenant):
+                return
             job = self._store().get(job_id)
             if job is None or job.status not in {"pending", "running"}:
                 return
@@ -137,14 +150,18 @@ class JobManager:
         )
         for _created_at, job_id in finished[:excess]:
             store.pop(job_id, None)
+            self.job_owners.pop(job_id, None)
 
     def start_thread_job(
         self,
         tool_id: str,
         target: Callable[..., Any],
         args: tuple[Any, ...] = (),
+        *,
+        tenant_id: str | None = None,
     ) -> JobState:
         """Reserve an in-flight slot, launch *target(job_id, *args)*, and return state."""
+        active_tenant = tenant_id if tenant_id is not None else get_current_tenant()
         job_id = str(uuid.uuid4())
         now = _utc_now()
         job = JobState(
@@ -159,13 +176,24 @@ class JobManager:
                 raise HTTPException(status_code=429, detail=self.busy_detail)
             store = self._store()
             store[job_id] = job
+            self.job_owners[job_id] = active_tenant
             self.evict_finished_locked()
-        thread = threading.Thread(target=target, args=(job_id, *args), daemon=True)
+        from .tenant import reset_current_tenant, set_current_tenant
+
+        def _run_with_tenant() -> None:
+            token = set_current_tenant(active_tenant)
+            try:
+                target(job_id, *args)
+            finally:
+                reset_current_tenant(token)
+
+        thread = threading.Thread(target=_run_with_tenant, daemon=True)
         try:
             thread.start()
         except RuntimeError:
             with self.lock:
                 self._store().pop(job_id, None)
+                self.job_owners.pop(job_id, None)
             raise
         # Re-read under the lock so callers observe an immediate transition to
         # running, falling back to the reserved snapshot if already evicted.
