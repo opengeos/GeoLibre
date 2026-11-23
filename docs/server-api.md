@@ -1040,7 +1040,7 @@ Deleting a project also removes its pending transfers and its redirect rows.
 Requires `read:projects`. Accepts optional pagination query parameters
 `limit` (1 to 100, default 100) and `offset` (default 0). Returns
 `{"shares": [<project>, ...], "limit": 100, "offset": 0, "total": N}`,
-newest-updated first: the projects the caller manages whose `visibility` is
+newest-created first: the projects the caller manages whose `visibility` is
 `public` or `unlisted` (organization-visible projects are not link shares).
 Each entry is a project representation plus `projectSlug`. A share's `id` is
 its project id. Expired links stay listed so they can be revoked.

@@ -697,12 +697,24 @@ def upgrade_sqlite_schema(bind) -> None:
                 "Connection with PRAGMA foreign_keys=ON; disable foreign keys "
                 "before starting the migration transaction or pass an Engine."
             )
-        # Run atomically inside the active Alembic migration transaction without
-        # opening a competing SQLite writer connection.
+        # Alembic's SQLite dialect sets transactional_ddl = False and Python's
+        # sqlite3 driver does not implicitly open a transaction for DDL, so
+        # start an explicit transaction when the DBAPI connection is idle.
         bind.execute(text("PRAGMA legacy_alter_table=ON"))
+        driver_conn = bind.connection.driver_connection
+        started_tx = False
         try:
+            if not getattr(driver_conn, "in_transaction", False):
+                bind.exec_driver_sql("BEGIN")
+                started_tx = True
             for statement in rebuild_statements:
                 bind.execute(text(statement))
+            if started_tx:
+                bind.exec_driver_sql("COMMIT")
+        except Exception:
+            if started_tx:
+                bind.exec_driver_sql("ROLLBACK")
+            raise
         finally:
             bind.execute(text("PRAGMA legacy_alter_table=OFF"))
         return
