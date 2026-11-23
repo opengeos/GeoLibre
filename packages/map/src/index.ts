@@ -8,6 +8,7 @@ export {
   ArcgisEngine,
   ARCGIS_CAPABILITIES,
   ARCGIS_DECK_CAPABILITIES,
+  arcgisSceneMode,
   type ArcgisEngineMessages,
 } from "./arcgis-engine";
 export {

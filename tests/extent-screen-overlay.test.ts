@@ -93,11 +93,8 @@ describe("flatProjection capability (#2475)", () => {
 });
 
 describe("terrainSource capability (#2475)", () => {
-  it("is false only on Mapbox, which has no raster-dem source a COG can back", () => {
-    // `MapboxEngine.setTerrainCogSource` returns false for any real source, so
-    // the Terrain settings dialog hides the whole section there rather than
-    // accepting a URL, a file or a raster layer and doing nothing at all.
-    assert.equal(MAPBOX_CAPABILITIES.terrainSource, false);
+  it("is true on all four engines now that Mapbox supports COG DEM terrain", () => {
+    assert.equal(MAPBOX_CAPABILITIES.terrainSource, true);
     assert.equal(MAPLIBRE_CAPABILITIES.terrainSource, true);
     assert.equal(CESIUM_CAPABILITIES.terrainSource, true);
     assert.equal(ARCGIS_CAPABILITIES.terrainSource, true);

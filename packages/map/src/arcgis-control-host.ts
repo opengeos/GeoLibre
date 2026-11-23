@@ -73,6 +73,7 @@ export class ArcgisControlHost {
     this.sdk = sdk;
     this.hooks = hooks;
     const images = new Set<string>();
+    let doubleClickZoomEnabled = true;
     Object.assign(facade, {
       getContainer: () => view.container,
       getCanvasContainer: () => view.container,
@@ -134,16 +135,21 @@ export class ArcgisControlHost {
       // Turning drag-pan off is what a control's box or line draw needs: the
       // drag has to reach its mouse handlers instead of moving the view.
       dragPan: blockingHandler(() => view.on("drag", (event) => event.stopPropagation())),
+      // Disabling doubleClickZoom suppresses ArcGIS's default zoom-on-double-click
+      // while still letting the `dblclick` event finish active measurement/draw tools.
+      doubleClickZoom: {
+        enable: () => {
+          doubleClickZoomEnabled = true;
+        },
+        disable: () => {
+          doubleClickZoomEnabled = false;
+        },
+        isEnabled: () => doubleClickZoomEnabled,
+      },
       ...Object.fromEntries(
-        [
-          "dragRotate",
-          "scrollZoom",
-          "boxZoom",
-          "doubleClickZoom",
-          "touchZoomRotate",
-          "touchPitch",
-          "keyboard",
-        ].map((name) => [name, inertHandler()]),
+        ["dragRotate", "scrollZoom", "boxZoom", "touchZoomRotate", "touchPitch", "keyboard"].map(
+          (name) => [name, inertHandler()],
+        ),
       ),
     });
     installControlLayerEvents({
@@ -205,9 +211,13 @@ export class ArcgisControlHost {
     );
     this.cleanup.push(() => frame.remove());
     // Pointer events carry MapLibre's `lngLat` and `point`, for click-driven
-    // controls and pointer readouts.
+    // controls (including the measurement tool) and pointer readouts.
     const pointer =
-      (type: "click" | "mousemove" | "mousedown" | "mouseup") => (event: ArcgisViewEvent) => {
+      (type: "click" | "dblclick" | "mousemove" | "mousedown" | "mouseup") =>
+      (event: ArcgisViewEvent) => {
+        if (type === "dblclick" && !doubleClickZoomEnabled) {
+          event.stopPropagation();
+        }
         const point = new Point(event.x, event.y);
         const lngLat = surface().unproject([event.x, event.y]);
         if (!lngLat) return;
@@ -217,11 +227,15 @@ export class ArcgisControlHost {
           originalEvent: event.native,
           // MapLibre's mouse events carry it, and a control that draws by
           // dragging (USGS 3DEP's box) calls it on mousedown.
-          preventDefault: () => event.native?.preventDefault(),
+          preventDefault: () => {
+            event.native?.preventDefault();
+            if (type === "dblclick") event.stopPropagation();
+          },
         });
       };
     for (const handle of [
       view.on("click", pointer("click")),
+      view.on("double-click", pointer("dblclick")),
       view.on("pointer-move", pointer("mousemove")),
       view.on("pointer-down", pointer("mousedown")),
       view.on("pointer-up", pointer("mouseup")),
