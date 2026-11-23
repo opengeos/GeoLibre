@@ -1,7 +1,15 @@
 import { generateSteps, resolveUrl, type SourceSpec } from "maplibre-gl-time-slider";
 import type { BandReading, PixelReading } from "maplibre-gl-raster";
 import type { Feature, FeatureCollection, Point } from "geojson";
+import { useAppStore } from "@geolibre/core";
 import { getActiveTimeSliderControl } from "./maplibre-time-slider";
+import {
+  getTemporalLayerAdapter,
+  isSelectorTimeBinding,
+  nearestTimeIndex,
+  type TemporalLayerAdapter,
+  toEpochMsAxis,
+} from "./temporal-layers";
 import {
   isPixelIdentifiableSourceType,
   type PixelIdentifiableSpec,
@@ -196,6 +204,68 @@ function getTimeSliderSeriesSources(): PixelSeriesSource[] {
   return sources;
 }
 
+/** A layer stepped through its own time axis that can be charted. */
+interface SelectorSeriesLayer {
+  id: string;
+  name: string;
+  url: string;
+  /** The layer's time axis in epoch milliseconds, index-aligned with the store. */
+  axis: number[];
+  valueName: string | null;
+  readPointSeries: NonNullable<TemporalLayerAdapter["readPointSeries"]>;
+}
+
+/**
+ * Layers bound to the Time Slider through their own time dimension (a Zarr
+ * cube) whose adapter can read values at a point, in Layers-panel order. These
+ * are not Time Slider sources: the slider steps them through
+ * `layer.metadata.timeBinding`, so they are found on the store instead.
+ *
+ * @returns The chartable layers, or an empty array when the dock is closed.
+ */
+function getSelectorSeriesLayers(): SelectorSeriesLayer[] {
+  if (!getActiveTimeSliderControl()) return [];
+  const layers: SelectorSeriesLayer[] = [];
+  for (const layer of useAppStore.getState().layers) {
+    if (!isSelectorTimeBinding(layer.metadata?.timeBinding)) continue;
+    const adapter = getTemporalLayerAdapter(layer.id);
+    if (!adapter?.readPointSeries) continue;
+    const axis = toEpochMsAxis(adapter.getTimeValues());
+    if (!axis) continue;
+    layers.push({
+      id: layer.id,
+      name: layer.name,
+      url: typeof layer.source.url === "string" ? layer.source.url : "",
+      axis,
+      valueName: adapter.valueName ?? null,
+      readPointSeries: adapter.readPointSeries,
+    });
+  }
+  return layers;
+}
+
+/**
+ * Maps each timeline step to the nearest slice of a layer's time axis, the same
+ * snapping the slider uses to pick the slice it displays, so a charted value is
+ * the one shown on the map at that step.
+ *
+ * @param steps - The timeline steps being charted.
+ * @param axis - The layer's time axis in epoch milliseconds.
+ * @returns The axis index per step (-1 where the axis has no usable value), and
+ *   the distinct indices to read.
+ */
+export function stepAxisIndices(
+  steps: readonly Date[],
+  axis: readonly number[],
+): { perStep: number[]; unique: number[] } {
+  const perStep = steps.map((date) => nearestTimeIndex(axis, date.getTime()));
+  const unique = [...new Set(perStep.filter((index) => index >= 0))];
+  return { perStep, unique };
+}
+
+/** Time slices per Zarr point query; batches run READ_CONCURRENCY at a time. */
+const SELECTOR_BATCH_SIZE = 8;
+
 /**
  * The pixel-readable sources currently configured on the active Time Slider, in
  * dock order.
@@ -228,12 +298,13 @@ export function getTimeSliderPixelSources(): PixelIdentifiableSpec[] {
 /**
  * Whether the Time Slider currently exposes a pixel-readable raster stack.
  *
- * @returns True when at least one COG or mosaic source is configured, or a
+ * @returns True when at least one COG or mosaic source is configured, a
  *   source another plugin registered a reader for
- *   ({@link registerPixelSeriesReader}).
+ *   ({@link registerPixelSeriesReader}), or a layer bound through its own time
+ *   dimension whose adapter can read point values (a Zarr cube).
  */
 export function hasTimeSliderRasterStack(): boolean {
-  return getTimeSliderSeriesSources().length > 0;
+  return getTimeSliderSeriesSources().length > 0 || getSelectorSeriesLayers().length > 0;
 }
 
 /**
@@ -449,8 +520,9 @@ export async function queryPixelTimeSeries(
   const { signal, onProgress, maxSteps = DEFAULT_MAX_STEPS } = options;
   const seriesSources = getTimeSliderSeriesSources();
   const sources = seriesSources.map((entry) => entry.spec);
-  if (sources.length === 0) {
-    throw new Error("The Time Slider has no COG or mosaic sources to query.");
+  const selectorLayers = getSelectorSeriesLayers();
+  if (sources.length === 0 && selectorLayers.length === 0) {
+    throw new Error("The Time Slider has no COG, mosaic or data cube layers to query.");
   }
   const { steps, truncated, total: originalStepCount } = getTimeSliderSteps(maxSteps);
   if (steps.length === 0) {
@@ -500,7 +572,17 @@ export async function queryPixelTimeSeries(
     return promise;
   };
 
-  const total = sources.length * steps.length;
+  // Each selector layer reads its distinct slices in batches; progress counts
+  // the timeline steps a batch covers so the bar advances in step units.
+  const layerPlans = selectorLayers.map((layer) => {
+    const { perStep, unique } = stepAxisIndices(steps, layer.axis);
+    const batches: number[][] = [];
+    for (let i = 0; i < unique.length; i += SELECTOR_BATCH_SIZE) {
+      batches.push(unique.slice(i, i + SELECTOR_BATCH_SIZE));
+    }
+    return { layer, perStep, batches };
+  });
+  const total = (sources.length + selectorLayers.length) * steps.length;
   let completed = 0;
 
   // Per-source result slots, pre-filled with empty points so order is preserved
@@ -576,6 +658,51 @@ export async function queryPixelTimeSeries(
       });
     });
   });
+
+  const layerPoints = layerPlans.map(({ layer, perStep }) =>
+    steps.map(
+      (date, di): PixelSeriesPoint => ({
+        date: isoDate(date),
+        timestamp: date.getTime(),
+        url: perStep[di] >= 0 ? layer.url : "",
+        bands: [],
+      }),
+    ),
+  );
+  layerPlans.forEach(({ layer, perStep, batches }, li) => {
+    // A step whose axis has no usable value is never read; count it now.
+    const unreadSteps = perStep.filter((index) => index < 0).length;
+    if (unreadSteps > 0) {
+      completed += unreadSteps;
+      onProgress?.(completed, total);
+    }
+    for (const batch of batches) {
+      tasks.push(async () => {
+        const batchSet = new Set(batch);
+        try {
+          if (signal?.aborted) throw new Error("aborted");
+          const values = await layer.readPointSeries(lngLat, batch, signal);
+          perStep.forEach((index, di) => {
+            if (!batchSet.has(index)) return;
+            const value = values.get(index) ?? null;
+            layerPoints[li][di].bands = [
+              {
+                index: 1,
+                name: layer.valueName,
+                value: value ?? Number.NaN,
+                isNodata: value === null,
+              },
+            ];
+          });
+        } catch {
+          // As with a COG step: a failed batch charts as a gap.
+        } finally {
+          completed += perStep.filter((index) => batchSet.has(index)).length;
+          onProgress?.(completed, total);
+        }
+      });
+    }
+  });
   await runWithConcurrency(tasks, READ_CONCURRENCY, signal);
 
   const series = sources.map((source, si) => ({
@@ -586,11 +713,15 @@ export async function queryPixelTimeSeries(
       source.name ?? source.id ?? `${source.type === "mosaic" ? "Mosaic" : "COG"} ${si + 1}`,
     points: points[si],
   }));
+  layerPlans.forEach(({ layer }, li) => {
+    series.push({ sourceId: layer.id, sourceName: layer.name, points: layerPoints[li] });
+  });
+  const allPoints = [...points, ...layerPoints];
 
   // Union of bands actually read, so the picker matches the data even when a
   // source's configured bidx differs from what the COG exposes.
   const bandByIndex = new Map<number, BandOption>();
-  for (const sourcePoints of points) {
+  for (const sourcePoints of allPoints) {
     for (const point of sourcePoints) {
       for (const band of point.bands) {
         const existing = bandByIndex.get(band.index);
@@ -607,8 +738,8 @@ export async function queryPixelTimeSeries(
     lngLat,
     series,
     bands,
-    // sources is non-empty (guarded above), so points[0] always exists.
-    defaultBandIndex: pickDefaultBandIndex(sources, bands, points[0]),
+    // At least one source or layer exists (guarded above), so allPoints[0] does.
+    defaultBandIndex: pickDefaultBandIndex(sources, bands, allPoints[0]),
     stepCount: steps.length,
     originalStepCount,
     truncated,

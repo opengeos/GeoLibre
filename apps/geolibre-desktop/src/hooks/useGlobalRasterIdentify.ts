@@ -14,6 +14,7 @@ import {
   rasterIdentifyProperties,
   rasterPixelIdentifyProperties,
 } from "../lib/global-raster-identify";
+import { readZarrIdentifyRows } from "../lib/zarr-identify";
 import { netcdfIdentifyRows } from "./useNetcdfIdentify";
 
 /**
@@ -23,7 +24,8 @@ import { netcdfIdentifyRows } from "./useNetcdfIdentify";
  * read their retained in-memory grids, matching the dedicated per-layer
  * inspector without adding a profile marker for a broad all-layer query.
  * Planetary Computer layers are drawn from rendered tiles, so their source
- * values are read from the Planetary Computer Data API.
+ * values are read from the Planetary Computer Data API. Zarr cubes read the
+ * slice on screen through the renderer's own point query.
  *
  * @returns Stable raster identify callback for `MapCanvas`.
  */
@@ -40,6 +42,20 @@ export function useGlobalRasterIdentify(): MapCanvasRasterIdentify {
         return {
           title: t("map.identifyAll.pixel"),
           properties: rasterIdentifyProperties(netcdfIdentifyRows(state, pixel, t)),
+        };
+      }
+
+      if (layer.type === "zarr") {
+        const rows = await readZarrIdentifyRows(
+          layer,
+          lngLat,
+          { nodata: t("map.identifyAll.nodata"), coordinates: t("map.identifyAll.coordinates") },
+          signal,
+        );
+        if (!rows || signal.aborted) return null;
+        return {
+          title: t("map.identifyAll.pixel"),
+          properties: rasterIdentifyProperties(rows),
         };
       }
 

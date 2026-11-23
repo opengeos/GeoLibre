@@ -745,6 +745,7 @@ export const MapCanvas = memo(function MapCanvas({
             isPixelIdentifyLayer(candidate) ||
             isBridgedRasterIdentifyLayer(candidate) ||
             candidate.type === "cog" ||
+            candidate.type === "zarr" ||
             candidate.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND,
         );
         if (asyncLayers.length === 0) {
@@ -794,7 +795,10 @@ export const MapCanvas = memo(function MapCanvas({
               // NetCDF dialog marks these layers `pixelIdentify` too, and that
               // branch reads through the Time Slider bridge, which knows
               // nothing about a retained NetCDF grid.
-              if (candidate.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND) {
+              if (
+                candidate.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND ||
+                candidate.type === "zarr"
+              ) {
                 const result = await identifyRasterLayerAt?.(
                   candidate,
                   [event.lngLat.lng, event.lngLat.lat],
@@ -889,6 +893,9 @@ export const MapCanvas = memo(function MapCanvas({
     // Likewise for a NetCDF grid baked to pixels: useNetcdfIdentify reads its
     // retained grid directly, and the image layer has no features to query.
     if (layer.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND) return;
+
+    // And for a Zarr cube: useZarrIdentify reads the value through the renderer.
+    if (layer.type === "zarr") return;
 
     setMapLibreIdentifyCursor(map, true);
 

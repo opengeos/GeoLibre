@@ -6,6 +6,7 @@ import {
   ordinalSteps,
   type PixelTimeSeriesResult,
   seriesToFeatureCollection,
+  stepAxisIndices,
   valueAtBand,
 } from "../packages/plugins/src/plugins/time-slider-pixel-series";
 
@@ -217,5 +218,26 @@ describe("seriesToFeatureCollection", () => {
     ]);
     assert.equal(collection.features.length, 6);
     assert.equal(collection.features[3].properties?.label, "Point 2");
+  });
+});
+
+describe("stepAxisIndices", () => {
+  // A monthly cube's axis (mid-month), stepped by a month-granularity timeline.
+  const axis = [Date.UTC(2000, 0, 16), Date.UTC(2000, 1, 15), Date.UTC(2000, 2, 16)];
+
+  it("snaps each timeline step to the nearest slice, as the slider does", () => {
+    const steps = [new Date(Date.UTC(2000, 0, 1)), new Date(Date.UTC(2000, 2, 1))];
+    assert.deepEqual(stepAxisIndices(steps, axis), { perStep: [0, 1], unique: [0, 1] });
+  });
+
+  it("reads a slice once when several steps snap to it", () => {
+    // A daily timeline over a monthly cube.
+    const steps = [1, 5, 10].map((day) => new Date(Date.UTC(2000, 0, day)));
+    assert.deepEqual(stepAxisIndices(steps, axis), { perStep: [0, 0, 0], unique: [0] });
+  });
+
+  it("marks steps unreadable when the axis has no usable value", () => {
+    const steps = [new Date(Date.UTC(2000, 0, 1))];
+    assert.deepEqual(stepAxisIndices(steps, [Number.NaN]), { perStep: [-1], unique: [] });
   });
 });

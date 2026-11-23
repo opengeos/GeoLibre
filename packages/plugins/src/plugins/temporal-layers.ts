@@ -40,6 +40,24 @@ export interface TemporalLayerAdapter {
    * daily cube can use `["day"]` to keep the track and labels at its cadence.
    */
   displayUnits?: TimeGranularity[];
+  /**
+   * Read the layer's value at a point for several slices of its time axis, so
+   * the Time Slider's pixel time-series chart can plot the layer. Optional: a
+   * layer without it is stepped by the slider but not charted.
+   *
+   * @param lngLat - The clicked location, `[lng, lat]` in WGS84.
+   * @param indices - Positions along {@link getTimeValues} to read.
+   * @param signal - Aborts the read.
+   * @returns The value per requested index; null where the point has no data
+   *   (outside the grid, a fill value, or a failed read).
+   */
+  readPointSeries?: (
+    lngLat: [number, number],
+    indices: readonly number[],
+    signal?: AbortSignal,
+  ) => Promise<Map<number, number | null>>;
+  /** Display name of the value {@link readPointSeries} returns, e.g. `"sst"`. */
+  valueName?: string;
 }
 
 /**
