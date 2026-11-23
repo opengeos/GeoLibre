@@ -2,7 +2,7 @@
 
 # Gallery
 
-105 interactive maps built from public open data, grouped by theme.
+106 interactive maps built from public open data, grouped by theme.
 Each is a single `.geolibre.json` project authored with the
 [Python package](python.md) and shared on share.geolibre.app: choropleths,
 heatmaps, clusters, great-circle flows, 3D extrusions, before-and-after swipes,
@@ -163,7 +163,7 @@ Jump to a theme: [Health](#health) · [Natural hazards](#natural-hazards) · [Cl
 
 ## Oceans and water
 
-10 projects · [Filter by the `oceans-water` tag](https://share.geolibre.app/explore?tag=oceans-water)
+11 projects · [Filter by the `oceans-water` tag](https://share.geolibre.app/explore?tag=oceans-water)
 
 <table>
   <tr>
@@ -205,6 +205,14 @@ Jump to a theme: [Health](#health) · [Natural hazards](#natural-hazards) · [Cl
   <tr>
     <td align="center"><b><a href="https://share.geolibre.app/giswqs/ocean-salinity-from-space">Ocean salinity from space</a></b><br>Oceans · Sea surface salinity measured from orbit, on the globe<br><small>Data: NASA GIBS (SMAP)</small></td>
     <td align="center"><b><a href="https://share.geolibre.app/giswqs/amazon-river-water-extent-2024">Amazon river water extent 2024</a></b><br>Rivers · 30 m surface water along the Amazon and its tributaries in 2024<br><small>Data: NASA OPERA DSWx-HLS</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/sea-surface-temperature-1981-2023"><img src="https://assets.geolibre.app/images/sea-surface-temperature-1981-2023.webp" alt="GeoLibre map: Monthly sea surface temperature, 1981–2023" loading="lazy"></a></td>
+    <td width="50%"></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/sea-surface-temperature-1981-2023">Monthly sea surface temperature, 1981–2023</a></b><br>Oceans · 494 months of global SST streamed from a cloud-native Zarr store; press Play<br><small>Data: NOAA PSL OISST V2 via Source Cooperative</small></td>
+    <td></td>
   </tr>
 </table>
 
