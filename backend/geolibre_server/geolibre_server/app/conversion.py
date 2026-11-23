@@ -7,13 +7,15 @@ import logging
 import os
 import subprocess
 import threading
-import uuid
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from geolibre_server.workers import ERROR_MARKER, RESULT_MARKER, load_worker_source
+
+from .job_manager import JobManager
 from .runtime import (
     RUNTIME_DISCOVERY_TIMEOUT_SECS,
     RUNTIME_SETUP_TIMEOUT_SECS,
@@ -23,10 +25,15 @@ from .runtime import (
     _runtime_cache_root,
     _runtime_setup_env,
     _subprocess_startup_kwargs,
-    _utc_now,
     _uv_executable,
     _venv_python,
 )
+from .runtime import (
+    _utc_now as _utc_now,
+)
+
+_ERROR_MARKER = ERROR_MARKER
+_RESULT_MARKER = RESULT_MARKER
 
 router = APIRouter(prefix="/conversion", tags=["conversion"])
 logger = logging.getLogger(__name__)
@@ -94,9 +101,6 @@ def _output_extension(path: str) -> str:
 COG_COMPRESSIONS = {"deflate", "zstd", "lzw", "webp", "jpeg", "packbits", "raw"}
 DEFAULT_COG_COMPRESSION = "deflate"
 
-_RESULT_MARKER = "__GEOLIBRE_CONVERSION_RESULT__"
-_ERROR_MARKER = "__GEOLIBRE_CONVERSION_ERROR__"
-
 # Conversion and raster scripts report input mistakes the user can act on with
 # ``raise SystemExit("...")`` — curated text such as "Expression may not use
 # Attribute ...", "Exponent may not exceed 64 ...", or "Raster B must match the
@@ -122,35 +126,6 @@ except SystemExit as exc:
     raise SystemExit(1) from None
 """.replace("{marker}", _ERROR_MARKER)
 
-# Single source of truth for the Shapefile field-warning helper. Each conversion
-# script is a self-contained subprocess source string and cannot import from the
-# module, so this definition is interpolated into both _VECTOR_SCRIPT and
-# _VECTOR_TO_VECTOR_SCRIPT via the `{shapefile_field_warnings}` token (the
-# scripts use `.replace`, not f-strings, so the literal `{}` inside are safe).
-_SHAPEFILE_FIELD_WARNINGS_FN = """
-def shapefile_field_warnings(column_names):
-    # The Shapefile format caps field names at 10 characters and silently
-    # truncates longer ones, which can also collapse distinct fields into one
-    # name. Surface both so attribute renames/merges on write are not a surprise.
-    long_names = [name for name in column_names if len(name) > 10]
-    messages = []
-    if long_names:
-        messages.append(
-            "Shapefile truncates field names to 10 characters: "
-            + ", ".join(long_names)
-        )
-    truncated = {}
-    for name in column_names:
-        truncated.setdefault(name[:10].lower(), []).append(name)
-    collisions = [group for group in truncated.values() if len(group) > 1]
-    if collisions:
-        messages.append(
-            "Truncating to 10 characters produces duplicate field names: "
-            + "; ".join(", ".join(group) for group in collisions)
-        )
-    return messages
-"""
-
 # Optional allowlist of directories that conversion inputs/outputs must live
 # under, set via GEOLIBRE_CONVERSION_ROOTS (os.pathsep-separated). Unset means
 # no restriction (the default for the desktop app, where paths are the user's
@@ -163,14 +138,27 @@ _CONVERSION_ROOTS = [
     if root.strip()
 ]
 
-_JOBS: dict[str, JobState] = {}
-_JOBS_LOCK = threading.Lock()
-_RUNTIME_SETUP_LOCK = threading.Lock()
 MAX_RETAINED_JOBS = 100
 # Concurrent pending/running conversion (and raster) jobs. Finished jobs are
 # retained up to MAX_RETAINED_JOBS; in-flight work is refused with HTTP 429 once
 # this cap is hit so a burst of /run calls cannot spawn unbounded subprocesses.
 MAX_IN_FLIGHT_JOBS = 8
+MAX_JOB_MESSAGES = 500
+
+_JOB_MANAGER = JobManager(
+    busy_detail="Too many conversion jobs in progress; try again shortly.",
+    max_retained=MAX_RETAINED_JOBS,
+    max_in_flight=MAX_IN_FLIGHT_JOBS,
+    max_messages=MAX_JOB_MESSAGES,
+    get_jobs=lambda: _JOBS,
+    get_max_retained=lambda: MAX_RETAINED_JOBS,
+    get_max_in_flight=lambda: MAX_IN_FLIGHT_JOBS,
+)
+_JOBS: dict[str, JobState] = _JOB_MANAGER.jobs
+_JOBS_LOCK = _JOB_MANAGER.lock
+_PROCESSES: dict[str, subprocess.Popen[str]] = _JOB_MANAGER.processes
+_CANCELLED: set[str] = _JOB_MANAGER.cancelled
+_RUNTIME_SETUP_LOCK = threading.Lock()
 
 
 class VectorToVectorRequest(BaseModel):
@@ -260,600 +248,13 @@ class RasterToCogRequest(BaseModel):
     compression: str = DEFAULT_COG_COMPRESSION
 
 
-# Hilbert-sorting the rows before writing produces spatially clustered output
-# (row groups for Parquet, the packed R-tree for FlatGeobuf) so range requests
-# stay local. The geometry column is rebuilt from WKB or from CSV lon/lat
-# columns when needed so ST_Hilbert and the writer both receive a GEOMETRY
-# column. `output_format` selects the Parquet or FlatGeobuf writer.
-_VECTOR_SCRIPT = """
-import glob, json, os, shutil, sys, tempfile, zipfile
-
-import duckdb
-
-params = json.loads(sys.argv[1])
-input_path = params["input_path"]
-output_path = params["output_path"]
-output_format = params.get("output_format", "parquet")
-source_kind = params.get("source_kind", "auto")
-compression = params.get("compression", "zstd")
-row_group_size = int(params.get("row_group_size", 30000))
-
-def quote(value):
-    return "'" + str(value).replace("'", "''") + "'"
-
-def quote_ident(value):
-    return '"' + str(value).replace('"', '""') + '"'
-
-con = duckdb.connect()
-con.execute("INSTALL spatial; LOAD spatial;")
-# DuckDB 2.0 refuses a GDAL COPY with an SRS until the axis order is chosen
-# explicitly. GEOMETRY is always [lon, lat] here (ST_Transform uses always_xy),
-# so tell GDAL the same; older DuckDB without the setting already behaves so.
-try:
-    con.execute("SET geometry_always_xy = true")
-except duckdb.Error:
-    pass
-
-if source_kind == "csv":
-    lon = params["lon_column"]
-    lat = params["lat_column"]
-    relation = f"read_csv_auto({quote(input_path)}, header=true)"
-    geometry_column = "geometry"
-    quoted_geometry = quote_ident(geometry_column)
-    point = (
-        f"ST_Point(CAST({quote_ident(lon)} AS DOUBLE), "
-        f"CAST({quote_ident(lat)} AS DOUBLE))"
-    )
-    source = f"SELECT *, {point} AS {quoted_geometry} FROM {relation}"
-    # CSV lon/lat are WGS84. DuckDB has no ST_SetSRID, but the GeoParquet spec
-    # treats an absent CRS as OGC:CRS84 (WGS84 lon/lat), so the Parquet output
-    # is correct. output_srs only tags the FlatGeobuf writer below.
-    output_srs = "EPSG:4326"
-else:
-    if input_path.lower().endswith((".parquet", ".geoparquet")):
-        relation = f"read_parquet({quote(input_path)})"
-    else:
-        relation = f"ST_Read({quote(input_path)})"
-
-    columns = con.execute(f"DESCRIBE SELECT * FROM {relation}").fetchall()
-    # DuckDB Spatial reports CRS-annotated geometry types such as
-    # GEOMETRY('EPSG:4326'), so match on the prefix rather than equality.
-    def is_geometry_type(column_type):
-        return str(column_type).upper().startswith("GEOMETRY")
-
-    geometry_column = None
-    geometry_is_native = True
-    for name, column_type, *_ in columns:
-        if is_geometry_type(column_type):
-            geometry_column = name
-            break
-    if geometry_column is None:
-        # Plain Parquet may carry geometry as a WKB blob; rebuild it as GEOMETRY.
-        for name, column_type, *_ in columns:
-            if name.lower() in {"geometry", "geom", "wkb_geometry"}:
-                geometry_column, geometry_is_native = name, False
-                break
-    if geometry_column is None:
-        raise SystemExit("No geometry column found in the input dataset.")
-
-    quoted_geometry = quote_ident(geometry_column)
-    if geometry_is_native:
-        source = f"SELECT * FROM {relation}"
-    else:
-        source = (
-            f"SELECT * REPLACE (ST_GeomFromWKB({quoted_geometry}) AS {quoted_geometry}) "
-            f"FROM {relation}"
-        )
-    # GeoJSON is WGS84 by spec (RFC 7946) but carries no CRS on the GEOMETRY
-    # column, so a GDAL writer would emit no .prj/SRS; tag it explicitly. Other
-    # formats keep the CRS embedded in their geometry and need no override.
-    if input_path.lower().endswith((".geojson", ".json")):
-        output_srs = "EPSG:4326"
-    else:
-        output_srs = None
-
-# GDAL-backed writers share a single COPY path; the SRS clause tags the output
-# CRS (CSV lon/lat are WGS84; other sources keep the geometry's embedded CRS).
-GDAL_DRIVERS = {
-    "flatgeobuf": "FlatGeobuf",
-    "geopackage": "GPKG",
-    "shapefile": "ESRI Shapefile",
-}
-
-{shapefile_field_warnings}
-
-if output_format in GDAL_DRIVERS:
-    srs_clause = f", SRS {quote(output_srs)}" if output_srs else ""
-    to_clause = f"(FORMAT GDAL, DRIVER '{GDAL_DRIVERS[output_format]}'{srs_clause})"
-else:
-    to_clause = (
-        f"(FORMAT PARQUET, COMPRESSION {quote(compression)}, "
-        f"ROW_GROUP_SIZE {row_group_size})"
-    )
-
-warnings = []
-tmp_dir = None
-if output_format == "shapefile":
-    # source_kind for shapefile output is always "auto", so `columns` (from the
-    # DESCRIBE above) is defined here.
-    warnings = shapefile_field_warnings(
-        [name for name, *_ in columns if name != geometry_column]
-    )
-    for message in warnings:
-        print(f"Warning: {message}")
-    # The Shapefile driver writes a .shp plus .shx/.dbf/.prj/.cpg sidecars, so
-    # write into a temp directory and zip them into the requested output path.
-    tmp_dir = tempfile.mkdtemp(prefix="geolibre-shapefile-")
-    stem = os.path.splitext(os.path.basename(output_path))[0] or "layer"
-    copy_target = os.path.join(tmp_dir, stem + ".shp")
-else:
-    copy_target = output_path
-
-print(f"Converting {input_path} -> {output_path} ({output_format})")
-
-try:
-    # COPY returns the number of rows written, so the feature count comes for
-    # free rather than costing a second full scan of the dataset.
-    copy_result = con.execute(
-        f\"\"\"
-        COPY (
-          WITH src AS ({source}),
-          b AS (SELECT ST_Extent(ST_Extent_Agg({quoted_geometry})) AS box FROM src)
-          SELECT * FROM src
-          ORDER BY ST_Hilbert({quoted_geometry}, (SELECT box FROM b))
-        ) TO {quote(copy_target)} {to_clause};
-        \"\"\"
-    ).fetchone()
-    count = copy_result[0] if copy_result else None
-    if output_format == "shapefile":
-        with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as archive:
-            for sidecar in sorted(glob.glob(os.path.join(tmp_dir, stem + ".*"))):
-                archive.write(sidecar, os.path.basename(sidecar))
-finally:
-    if tmp_dir:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-
-print(f"Wrote {count} Hilbert-sorted features to {output_path}")
-print(
-    "{marker}"
-    + json.dumps(
-        {
-            "feature_count": count,
-            "geometry_column": geometry_column,
-            "output_path": output_path,
-            "warnings": warnings,
-        }
-    )
-)
-""".replace("{shapefile_field_warnings}", _SHAPEFILE_FIELD_WARNINGS_FN).replace(
-    "{marker}", _RESULT_MARKER
-)
-
-
-# Generic vector-to-vector conversion. The input format is detected by ST_Read
-# (or read_parquet) and the output format is whatever GDAL driver the caller
-# resolved from the output extension. The driver is validated against
-# ST_Drivers() so the supported set is exactly what this DuckDB spatial build
-# can create, not a hardcoded list. Rows are Hilbert-sorted before writing for
-# spatial locality, mirroring _VECTOR_SCRIPT.
-_VECTOR_TO_VECTOR_SCRIPT = """
-import glob, json, os, re, shutil, sys, tempfile, zipfile
-
-import duckdb
-
-params = json.loads(sys.argv[1])
-input_path = params["input_path"]
-output_path = params["output_path"]
-output_kind = params["output_kind"]  # "parquet" or "gdal"
-output_driver = params.get("output_driver", "")
-zip_shapefile = bool(params.get("zip_shapefile", False))
-input_layer = params.get("input_layer") or None
-target_srs = params.get("target_srs") or None
-source_srs_override = params.get("source_srs") or None
-
-def quote(value):
-    return "'" + str(value).replace("'", "''") + "'"
-
-def quote_ident(value):
-    return '"' + str(value).replace('"', '""') + '"'
-
-{shapefile_field_warnings}
-
-con = duckdb.connect()
-con.execute("INSTALL spatial; LOAD spatial;")
-# DuckDB 2.0 refuses a GDAL COPY with an SRS until the axis order is chosen
-# explicitly. GEOMETRY is always [lon, lat] here (ST_Transform uses always_xy),
-# so tell GDAL the same; older DuckDB without the setting already behaves so.
-try:
-    con.execute("SET geometry_always_xy = true")
-except duckdb.Error:
-    pass
-
-# Confirm the requested driver can actually be created by this spatial build so
-# an unsupported format fails with a clear, listed error instead of a raw GDAL
-# message. read_parquet output skips this (it is not a GDAL driver).
-if output_kind == "gdal":
-    creatable = {
-        row[0]
-        for row in con.execute(
-            "SELECT short_name FROM ST_Drivers() WHERE can_create"
-        ).fetchall()
-    }
-    if output_driver not in creatable:
-        raise SystemExit(
-            f"DuckDB spatial cannot write the '{output_driver}' driver in this "
-            f"build. Creatable drivers: {', '.join(sorted(creatable))}"
-        )
-
-low = input_path.lower()
-layer_arg = f", layer={quote(input_layer)}" if input_layer else ""
-if low.endswith((".parquet", ".geoparquet")):
-    relation = f"read_parquet({quote(input_path)})"
-elif low.endswith(".zip"):
-    # A zipped vector dataset (a zipped Shapefile or File Geodatabase) is read
-    # through GDAL's /vsizip/ virtual filesystem; a bare path fails to open.
-    relation = f"ST_Read({quote('/vsizip/' + input_path)}{layer_arg})"
-else:
-    # A bare path covers single files and directory datasets (a .gdb folder);
-    # GDAL detects the format either way.
-    relation = f"ST_Read({quote(input_path)}{layer_arg})"
-
-columns = con.execute(f"DESCRIBE SELECT * FROM {relation}").fetchall()
-
-def is_geometry_type(column_type):
-    return str(column_type).upper().startswith("GEOMETRY")
-
-geometry_column = None
-geometry_is_native = True
-for name, column_type, *_ in columns:
-    if is_geometry_type(column_type):
-        geometry_column = name
-        break
-if geometry_column is None:
-    # Plain Parquet may carry geometry as a WKB blob; rebuild it as GEOMETRY.
-    for name, column_type, *_ in columns:
-        if name.lower() in {"geometry", "geom", "wkb_geometry"}:
-            geometry_column, geometry_is_native = name, False
-            break
-if geometry_column is None:
-    raise SystemExit("No geometry column found in the input dataset.")
-
-quoted_geometry = quote_ident(geometry_column)
-geometry_expr = quoted_geometry
-if not geometry_is_native:
-    geometry_expr = f"ST_GeomFromWKB({geometry_expr})"
-
-is_geojson_input = low.endswith(
-    (".geojson", ".json", ".geojsonl", ".geojsons", ".ndjson")
-)
-
-if target_srs:
-    # An explicit source_srs wins; otherwise DuckDB spatial annotates the
-    # geometry's CRS in its DESCRIBE type, e.g. GEOMETRY('EPSG:4326') — that
-    # is the only place the dataset's own CRS is exposed.
-    source_srs = source_srs_override
-    if source_srs is None:
-        for name, column_type, *_ in columns:
-            if name == geometry_column:
-                match = re.search(r"GEOMETRY\\('([^']+)'\\)", str(column_type))
-                if match:
-                    source_srs = match.group(1)
-                break
-    if source_srs is None and is_geojson_input:
-        # GeoJSON carries no CRS annotation but is WGS84 by spec (RFC 7946).
-        source_srs = "EPSG:4326"
-    if source_srs is None and input_layer and not low.endswith((".parquet", ".geoparquet")):
-        # Last resort: GDAL's layer metadata. The DESCRIBE annotation and
-        # st_read_meta's geometry_fields[].crs are two different surfaces, and
-        # the layer-listing endpoint resolves CRS from the latter — falling
-        # back to the same surface here keeps the two paths agreeing on
-        # whether a layer's CRS is resolvable. Only attempted for an explicit
-        # layer (exact name match); a metadata failure just leaves the clear
-        # error below.
-        if low.endswith(".zip"):
-            meta_target = "/vsizip/" + input_path
-        elif os.path.isdir(input_path):
-            # Forward-slash join (not os.path.join): GDAL/DuckDB accept "/" on
-            # every platform, while a backslash-joined glob is untested on a
-            # Windows sidecar.
-            meta_target = input_path.replace("\\\\", "/") + "/*.gdbtable"
-        else:
-            meta_target = input_path
-        try:
-            for (layer_list,) in con.execute(
-                f"SELECT layers FROM st_read_meta({quote(meta_target)})"
-            ).fetchall():
-                for meta_layer in layer_list or []:
-                    if meta_layer.get("name") != input_layer:
-                        continue
-                    fields = meta_layer.get("geometry_fields") or []
-                    crs = (fields[0].get("crs") or {}) if fields else {}
-                    auth_name = crs.get("auth_name")
-                    auth_code = crs.get("auth_code")
-                    if auth_name and auth_code:
-                        source_srs = f"{auth_name}:{auth_code}"
-                    break
-        except Exception:
-            pass
-    if source_srs is None:
-        raise SystemExit(
-            "Cannot reproject: the input dataset does not declare a CRS."
-        )
-    if source_srs != target_srs:
-        geometry_expr = (
-            f"ST_Transform({geometry_expr}, {quote(source_srs)}, "
-            f"{quote(target_srs)}, always_xy := true)"
-        )
-
-if geometry_expr == quoted_geometry:
-    source = f"SELECT * FROM {relation}"
-else:
-    source = (
-        f"SELECT * REPLACE ({geometry_expr} AS {quoted_geometry}) "
-        f"FROM {relation}"
-    )
-
-# When reprojecting, tag the output with the requested CRS. Otherwise GeoJSON /
-# GeoJSONSeq inputs are WGS84 by spec (RFC 7946) but carry no CRS on the
-# GEOMETRY column, so a GDAL writer would emit no .prj/SRS; tag them explicitly.
-# Parquet is NOT always WGS84 (GeoParquet embeds its own CRS, e.g. a projected
-# dataset), so it is left untagged like every other input and the GDAL writer
-# uses whatever CRS the geometry carries rather than a hardcoded one.
-if target_srs:
-    output_srs = target_srs
-elif is_geojson_input:
-    output_srs = "EPSG:4326"
-else:
-    output_srs = None
-
-if output_kind == "parquet":
-    to_clause = "(FORMAT PARQUET, COMPRESSION 'zstd', ROW_GROUP_SIZE 30000)"
-else:
-    srs_clause = f", SRS {quote(output_srs)}" if output_srs else ""
-    # The CSV driver drops geometry unless told how to write it; emit it as a
-    # WKT column so the conversion is lossless rather than failing with
-    # "Could not set geometry".
-    lco = (
-        ", LAYER_CREATION_OPTIONS 'GEOMETRY=AS_WKT'"
-        if output_driver == "CSV"
-        else ""
-    )
-    to_clause = f"(FORMAT GDAL, DRIVER {quote(output_driver)}{srs_clause}{lco})"
-
-# Surface Shapefile field-name truncation for any Shapefile output (bare .shp or
-# zipped .zip), where GDAL silently caps field names at 10 characters.
-warnings = []
-if output_driver == "ESRI Shapefile":
-    warnings = shapefile_field_warnings(
-        [name for name, *_ in columns if name != geometry_column]
-    )
-    for message in warnings:
-        print(f"Warning: {message}")
-
-tmp_dir = None
-is_shapefile = output_driver == "ESRI Shapefile"
-if is_shapefile:
-    # The Shapefile driver writes a .shp plus .shx/.dbf/.prj/.cpg sidecars. Write
-    # the whole set into a temp directory first so a mid-write failure leaves
-    # nothing behind in the user's directory (the outer cleanup only unlinks
-    # output_path, not the sidecars). On success the bundle is zipped into
-    # output_path (.zip) or moved next to it (.shp).
-    tmp_dir = tempfile.mkdtemp(prefix="geolibre-shapefile-")
-    stem = os.path.splitext(os.path.basename(output_path))[0] or "layer"
-    copy_target = os.path.join(tmp_dir, stem + ".shp")
-else:
-    copy_target = output_path
-
-print(f"Converting {input_path} -> {output_path} ({output_driver or 'Parquet'})")
-
-try:
-    # COPY returns the number of rows written, so the feature count comes for
-    # free rather than costing a second full scan of the dataset.
-    copy_result = con.execute(
-        f\"\"\"
-        COPY (
-          WITH src AS ({source}),
-          b AS (SELECT ST_Extent(ST_Extent_Agg({quoted_geometry})) AS box FROM src)
-          SELECT * FROM src
-          ORDER BY ST_Hilbert({quoted_geometry}, (SELECT box FROM b))
-        ) TO {quote(copy_target)} {to_clause};
-        \"\"\"
-    ).fetchone()
-    count = copy_result[0] if copy_result else None
-    if is_shapefile:
-        produced = sorted(glob.glob(os.path.join(tmp_dir, stem + ".*")))
-        if zip_shapefile:
-            with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as archive:
-                for sidecar in produced:
-                    archive.write(sidecar, os.path.basename(sidecar))
-        else:
-            # Move the .shp and every sidecar next to output_path, keeping the
-            # output's basename stem. Only happens after a successful COPY, so a
-            # failure never scatters partial sidecars in the user's directory.
-            out_dir = os.path.dirname(output_path) or "."
-            for sidecar in produced:
-                ext = os.path.splitext(sidecar)[1]
-                shutil.move(sidecar, os.path.join(out_dir, stem + ext))
-finally:
-    if tmp_dir:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-
-print(f"Wrote {count} Hilbert-sorted features to {output_path}")
-print(
-    "{marker}"
-    + json.dumps(
-        {
-            "feature_count": count,
-            "geometry_column": geometry_column,
-            "output_path": output_path,
-            "warnings": warnings,
-        }
-    )
-)
-""".replace("{shapefile_field_warnings}", _SHAPEFILE_FIELD_WARNINGS_FN).replace(
-    "{marker}", _RESULT_MARKER
-)
-
-
-# List the layers of a multi-layer vector dataset (a File Geodatabase or
-# GeoPackage) without reading any features, so the frontend can offer a layer
-# picker before converting. GDB_* system tables are FileGDB's internal catalog;
-# they are filtered out here because reading one through ST_Read crashes DuckDB
-# spatial, so they must never be offered as a choice.
-_VECTOR_LAYERS_SCRIPT = """
-import json, os, sys
-
-import duckdb
-
-params = json.loads(sys.argv[1])
-input_path = params["input_path"]
-
-def quote(value):
-    return "'" + str(value).replace("'", "''") + "'"
-
-con = duckdb.connect()
-con.execute("INSTALL spatial; LOAD spatial;")
-
-low = input_path.lower()
-if low.endswith(".zip"):
-    meta_target = "/vsizip/" + input_path
-elif os.path.isdir(input_path):
-    # st_read_meta globs for files and returns no rows for a bare directory
-    # dataset, so a .gdb folder is enumerated per .gdbtable file instead; each
-    # one reports the single layer it stores. Forward-slash join (not
-    # os.path.join): GDAL/DuckDB accept "/" on every platform, while a
-    # backslash-joined glob is untested on a Windows sidecar.
-    meta_target = input_path.replace("\\\\", "/") + "/*.gdbtable"
-else:
-    meta_target = input_path
-
-layers = []
-seen = set()
-# ORDER BY file_name: the glob's match order is not guaranteed, and without it
-# the "first" layer of a per-file-enumerated .gdb could vary run to run.
-for (layer_list,) in con.execute(
-    f"SELECT layers FROM st_read_meta({quote(meta_target)}) ORDER BY file_name"
-).fetchall():
-    for layer in layer_list or []:
-        name = layer.get("name")
-        if not name or name in seen or name.startswith("GDB_"):
-            continue
-        seen.add(name)
-        geometry_fields = layer.get("geometry_fields") or []
-        first_geometry = geometry_fields[0] if geometry_fields else {}
-        crs = first_geometry.get("crs") or {}
-        auth_name = crs.get("auth_name")
-        auth_code = crs.get("auth_code")
-        layers.append(
-            {
-                "name": name,
-                "feature_count": layer.get("feature_count"),
-                "geometry_type": first_geometry.get("type"),
-                "crs": f"{auth_name}:{auth_code}" if auth_name and auth_code else None,
-            }
-        )
-
-print(f"Found {len(layers)} layer(s)")
-print("{marker}" + json.dumps({"layers": layers}))
-""".replace("{marker}", _RESULT_MARKER)
-
-
-# Vector to PMTiles via freestiler (pip-installable Rust engine). The input is
-# first materialized to a temporary GeoParquet through DuckDB so any vector
-# format ST_Read understands is accepted, then freestiler tiles it.
-_PMTILES_SCRIPT = """
-import json, os, shutil, sys, tempfile, uuid
-
-import duckdb
-try:
-    import freestiler
-except ImportError:
-    raise SystemExit(
-        "freestiler is not installed. PMTiles tiling requires freestiler, "
-        "which has no linux/arm64 wheel; it is available on amd64."
-    )
-
-params = json.loads(sys.argv[1])
-input_path = params["input_path"]
-output_path = params["output_path"]
-layer_name = params.get("layer_name") or "data"
-min_zoom = int(params.get("min_zoom", 0))
-max_zoom = int(params.get("max_zoom", 14))
-
-def quote(value):
-    return "'" + str(value).replace("'", "''") + "'"
-
-con = duckdb.connect()
-con.execute("INSTALL spatial; LOAD spatial;")
-
-if input_path.lower().endswith((".parquet", ".geoparquet")):
-    relation = f"read_parquet({quote(input_path)})"
-else:
-    relation = f"ST_Read({quote(input_path)})"
-
-tmp_dir = tempfile.mkdtemp(prefix="geolibre-pmtiles-")
-tmp_parquet = os.path.join(tmp_dir, uuid.uuid4().hex + ".parquet")
-# try/finally so the temp dir is removed even if tiling raises or is killed.
-try:
-    print(f"Preparing {input_path} for tiling")
-    con.execute(
-        f"COPY (SELECT * FROM {relation}) TO {quote(tmp_parquet)} (FORMAT PARQUET)"
-    )
-
-    print(f"Tiling to PMTiles (z{min_zoom}-{max_zoom}) as layer {layer_name}")
-    freestiler.freestile_file(
-        tmp_parquet,
-        output_path,
-        layer_name=layer_name,
-        min_zoom=min_zoom,
-        max_zoom=max_zoom,
-        quiet=True,
-    )
-finally:
-    shutil.rmtree(tmp_dir, ignore_errors=True)
-
-print(f"Wrote PMTiles to {output_path}")
-print(
-    "{marker}"
-    + json.dumps({"output_path": output_path, "layer_name": layer_name})
-)
-""".replace("{marker}", _RESULT_MARKER)
-
-
-_RASTER_SCRIPT = """
-import json, sys
-
-from rio_cogeo.cogeo import cog_translate, cog_validate
-from rio_cogeo.profiles import cog_profiles
-
-params = json.loads(sys.argv[1])
-input_path = params["input_path"]
-output_path = params["output_path"]
-compression = params["compression"]
-
-profile = cog_profiles.get(compression)
-print(f"Converting {input_path} using the {compression} COG profile")
-cog_translate(
-    input_path,
-    output_path,
-    profile,
-    in_memory=False,
-    quiet=True,
-    use_cog_driver=False,
-)
-valid, errors, warnings = cog_validate(output_path, quiet=True)
-for message in warnings:
-    print(f"Warning: {message}")
-for message in errors:
-    print(f"Error: {message}")
-if not valid:
-    raise SystemExit("Output failed COG validation: " + "; ".join(errors))
-print(f"Wrote valid Cloud Optimized GeoTIFF to {output_path}")
-print(
-    "{marker}"
-    + json.dumps({"valid": valid, "warnings": warnings, "output_path": output_path})
-)
-""".replace("{marker}", _RESULT_MARKER)
+# Worker scripts live as real Python modules under ``geolibre_server.workers``
+# so ruff, type checks, and pytest inspect them directly.
+_VECTOR_SCRIPT = load_worker_source("conversion_vector")
+_VECTOR_TO_VECTOR_SCRIPT = load_worker_source("conversion_vector_to_vector")
+_VECTOR_LAYERS_SCRIPT = load_worker_source("conversion_vector_layers")
+_PMTILES_SCRIPT = load_worker_source("conversion_pmtiles")
+_RASTER_SCRIPT = load_worker_source("conversion_raster")
 
 
 def _managed_runtime_dir() -> Path:
@@ -1061,93 +462,37 @@ def _validate_paths(input_path: str, output_path: str) -> tuple[str, str]:
 
 def _job_update(job_id: str, **patch: Any) -> None:
     """Update an in-memory conversion job."""
-    with _JOBS_LOCK:
-        job = _JOBS[job_id]
-        # model_copy(update=...) mirrors _append_job_message and skips the full
-        # re-validation that model_dump() + JobState(**data) would incur.
-        _JOBS[job_id] = job.model_copy(update={**patch, "updated_at": _utc_now()})
-
-
-MAX_JOB_MESSAGES = 500
+    _JOB_MANAGER.update(job_id, **patch)
 
 
 def _append_job_message(job_id: str, message: str) -> None:
     """Append a progress line to a job message log."""
-    with _JOBS_LOCK:
-        job = _JOBS[job_id]
-        messages = [*job.messages, message]
-        if len(messages) > MAX_JOB_MESSAGES:
-            messages = messages[-MAX_JOB_MESSAGES:]
-        _JOBS[job_id] = job.model_copy(update={"messages": messages, "updated_at": _utc_now()})
-
-
-# Running job subprocesses, so a job can be cancelled; and jobs cancelled
-# before their subprocess started.
-_PROCESSES: dict[str, subprocess.Popen[str]] = {}
-_CANCELLED: set[str] = set()
+    _JOB_MANAGER.append_message(job_id, message)
 
 
 def _is_cancelled(job_id: str) -> bool:
     """Return True if *job_id* has been marked for cancellation."""
-    with _JOBS_LOCK:
-        return job_id in _CANCELLED
+    return _JOB_MANAGER.is_cancelled(job_id)
 
 
 def _job_state(job_id: str) -> JobState | None:
-    """Return a job's current state, or None when it is unknown.
-
-    Args:
-        job_id: The job id.
-
-    Returns:
-        The job state, or None.
-    """
-    with _JOBS_LOCK:
-        return _JOBS.get(job_id)
+    """Return a job's current state, or None when it is unknown."""
+    return _JOB_MANAGER.get(job_id)
 
 
 def _cancel_job(job_id: str) -> None:
-    """Stop a pending or running job; it then reports ``cancelled``.
-
-    Args:
-        job_id: The job id. A finished or unknown job is left as it is.
-    """
-    with _JOBS_LOCK:
-        job = _JOBS.get(job_id)
-        if job is None or job.status not in {"pending", "running"}:
-            return
-        _CANCELLED.add(job_id)
-        process = _PROCESSES.get(job_id)
-    if process is not None and process.poll() is None:
-        process.kill()
+    """Stop a pending or running job; it then reports ``cancelled``."""
+    _JOB_MANAGER.cancel(job_id)
 
 
 def _count_in_flight_jobs_locked() -> int:
     """Return how many jobs are pending or running. Caller must hold ``_JOBS_LOCK``."""
-    return sum(1 for job in _JOBS.values() if job.status in {"pending", "running"})
+    return _JOB_MANAGER.count_in_flight_locked()
 
 
 def _evict_finished_jobs_locked() -> None:
-    """Drop the oldest finished jobs once the retention cap is exceeded.
-
-    The caller must hold ``_JOBS_LOCK``. Running and pending jobs are never
-    evicted; only ``succeeded``/``failed``/``cancelled`` jobs are removed,
-    oldest first.
-    """
-    excess = len(_JOBS) - MAX_RETAINED_JOBS
-    if excess <= 0:
-        return
-    # Sort by creation time so the genuinely oldest finished jobs are evicted;
-    # dict order is UUID-keyed insertion order, not chronological.
-    finished = sorted(
-        (
-            (job.created_at, job_id)
-            for job_id, job in _JOBS.items()
-            if job.status in {"succeeded", "failed", "cancelled"}
-        ),
-    )
-    for _created_at, job_id in finished[:excess]:
-        _JOBS.pop(job_id, None)
+    """Drop the oldest finished jobs once the retention cap is exceeded."""
+    _JOB_MANAGER.evict_finished_locked()
 
 
 def _remove_partial_output(params: dict[str, Any]) -> None:
@@ -1197,9 +542,7 @@ def _run_conversion_job(
             bufsize=1,
             **_subprocess_startup_kwargs(),
         )
-        with _JOBS_LOCK:
-            _PROCESSES[job_id] = process
-            cancelled_early = job_id in _CANCELLED
+        cancelled_early = _JOB_MANAGER.register_process(job_id, process)
         if cancelled_early:
             process.kill()
         # A watchdog kills the subprocess if it exceeds the deadline. Reading
@@ -1243,8 +586,7 @@ def _run_conversion_job(
         if returncode != 0:
             if validation_error:
                 raise RuntimeError(validation_error)
-            with _JOBS_LOCK:
-                messages = list(_JOBS[job_id].messages)
+            messages = _JOB_MANAGER.snapshot_messages(job_id)
             raise RuntimeError(messages[-1] if messages else f"Conversion exited with {returncode}")
         # Metadata-only jobs (layer listing) have no output file to report.
         output_path = params.get("output_path")
@@ -1269,8 +611,7 @@ def _run_conversion_job(
         # those too would leave a user who mistyped a band-math expression or
         # picked mismatched rasters with nothing actionable and no way to read
         # the sidecar log (desktop and Docker builds both hide it).
-        with _JOBS_LOCK:
-            leaked = list(_JOBS.get(job_id).messages) if job_id in _JOBS else []
+        leaked = _JOB_MANAGER.snapshot_messages(job_id)
         logger.warning(
             "Conversion job %s failed: %s; subprocess output=%r",
             job_id,
@@ -1295,9 +636,7 @@ def _run_conversion_job(
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 pass
-        with _JOBS_LOCK:
-            _PROCESSES.pop(job_id, None)
-            _CANCELLED.discard(job_id)
+        _JOB_MANAGER.clear_process(job_id)
 
 
 def _start_job(
@@ -1307,39 +646,11 @@ def _start_job(
     output_name: str,
 ) -> JobState:
     """Register a conversion job and run it in a background thread."""
-    job_id = str(uuid.uuid4())
-    now = _utc_now()
-    with _JOBS_LOCK:
-        if _count_in_flight_jobs_locked() >= MAX_IN_FLIGHT_JOBS:
-            raise HTTPException(
-                status_code=429,
-                detail="Too many conversion jobs in progress; try again shortly.",
-            )
-        _JOBS[job_id] = JobState(
-            id=job_id,
-            status="pending",
-            tool_id=tool_id,
-            created_at=now,
-            updated_at=now,
-        )
-        _evict_finished_jobs_locked()
-    thread = threading.Thread(
-        target=_run_conversion_job,
-        args=(job_id, script, params, output_name),
-        daemon=True,
+    return _JOB_MANAGER.start_thread_job(
+        tool_id,
+        _run_conversion_job,
+        (script, params, output_name),
     )
-    try:
-        thread.start()
-    except RuntimeError:
-        # Drop the reserved pending slot so a failed Thread.start does not
-        # permanently consume an in-flight capacity slot (and force 429s).
-        with _JOBS_LOCK:
-            _JOBS.pop(job_id, None)
-        raise
-    # The worker may have already flipped the job to "running" by the time this
-    # lock is re-acquired, so callers must not assume the response is "pending".
-    with _JOBS_LOCK:
-        return _JOBS[job_id]
 
 
 @router.get("/status")

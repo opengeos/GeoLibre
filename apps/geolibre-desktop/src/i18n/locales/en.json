@@ -303,7 +303,13 @@
     "policySideloadDisabled": "Plugin sideloading is disabled by deployment policy.",
     "policyBlocked": "Plugin '{{pluginId}}' is blocked by deployment policy.",
     "policyBlocklisted": "Plugin '{{pluginId}}' was blocked by the plugin registry: {{reason}}",
-    "policyNotAllowed": "Plugin '{{pluginId}}' is not allowed by deployment policy."
+    "policyNotAllowed": "Plugin '{{pluginId}}' is not allowed by deployment policy.",
+    "reloadArchiveAria": "Reload {{name}}",
+    "capabilitiesAdvisory": "Self-declared by the plugin; not enforced.",
+    "reloadedArchive": "Reloaded plugin \"{{id}}\".",
+    "reloadNotFound": "Plugin \"{{pluginId}}\" could not be reloaded from its archive.",
+    "reloadConflict": "Plugin \"{{pluginId}}\" could not be reloaded because another source already provides that ID.",
+    "reloadReactivateFailed": "Plugin \"{{pluginId}}\" reloaded but could not be reactivated."
   },
   "viewState": {
     "panelTitle": "Info"
@@ -4150,6 +4156,7 @@
       "computedInBrowser": "Computed \"{{tool}}\" in the browser.",
       "addedToMap": "Added \"{{name}}\" to the map.",
       "largeRasterWarning": "Large raster ({{mp}} M pixels); the browser may be unresponsive while computing.",
+      "combinedInputsTooLarge": "The combined calculator inputs are too large for the in-browser engine. Use the sidecar (rasterio/GDAL) engine instead.",
       "mapAddFailed": "Map add failed (the result is still available to download): {{message}}",
       "mapAddError": "Could not add the result to the map.",
       "runError": "Could not run raster tool.",
@@ -4369,6 +4376,8 @@
       "arcgisUnnamedMap": "Map {{number}}",
       "arcgisImportReadingGdb_one": "Reading {{count}} File Geodatabase layer…",
       "arcgisImportReadingGdb_other": "Reading {{count}} File Geodatabase layers…",
+      "arcgisImportReadingFiles_one": "Reading {{count}} local data layer…",
+      "arcgisImportReadingFiles_other": "Reading {{count}} local data layers…",
       "arcgisImportWarnings_one": "The project was imported, but {{count}} layer could not be loaded.",
       "arcgisImportWarnings_other": "The project was imported, but {{count}} layers could not be loaded.",
       "arcgisUnknownLayerType": "unknown",
@@ -4390,6 +4399,17 @@
         "marker-shape": "The layer's symbology was imported, but its point markers ({{layerType}}) are drawn as circles, not in their own shape.",
         "alternate-symbols": "The layer's symbology was imported, but its alternate symbols for other map scales are not: each class draws its main symbol at every scale."
       },
+      "arcgisRepairHeading": "Locate moved data",
+      "arcgisRepairDescription": "These layers could not be loaded from the folders the project saved. Choose where each folder is now to load its layers. Only the folder you choose is read. Layers not located before you close this report are left out of the project.",
+      "arcgisRepairLocateFolder": "Locate folder…",
+      "arcgisRepairLocateFolderFor": "Locate folder {{folder}}…",
+      "arcgisRepairAllRestored": "All layers listed for repair were loaded.",
+      "arcgisRepairRestored_one": "Loaded {{count}} layer from the chosen folder.",
+      "arcgisRepairRestored_other": "Loaded {{count}} layers from the chosen folder.",
+      "arcgisRepairStillMissing_one": "{{count}} layer from this folder still could not be loaded.",
+      "arcgisRepairStillMissing_other": "{{count}} layers from this folder still could not be loaded.",
+      "arcgisRepairNoneFound": "None of the expected files could be loaded from {{folder}}. Nothing was changed.",
+      "arcgisRepairNetworkFolder": "Choose a folder on a local or mapped drive. A saved project cannot reopen layers from a network share, so nothing was changed.",
       "importWarningLayerCount_one": "{{count}} layer",
       "importWarningLayerCount_other": "{{count}} layers",
       "showLayerNames": "Show layer names",
@@ -4397,6 +4417,7 @@
       "arcgisImportReason": {
         "layer-type": "The {{layerType}} layer type is not supported.",
         "missing-source": "The layer has no readable local data source.",
+        "data-not-found": "The layer's data file was not found, or could not be read, where the project saved it.",
         "format": "The layer's data format is not supported.",
         "file-geodatabase": "File Geodatabase (.gdb) sources are not loaded from projects. In GeoLibre Desktop, add them with Add data → File geodatabase (GDB).",
         "file-geodatabase-raster": "Raster datasets stored in a File Geodatabase (.gdb) are not supported. Export the raster to GeoTIFF and add it as a raster layer.",
@@ -6344,6 +6365,7 @@
       "outputPlaceholder": "Output will appear here."
     },
     "modelBuilder": {
+      "minimapAriaLabel": "Model canvas minimap",
       "title": "Model builder",
       "description": "Drag tools onto the canvas and connect them into a processing model.",
       "modelName": "Model name",
@@ -6514,7 +6536,13 @@
         "rasterUnsupported": "Sample data \"{{name}}\" is a raster, which this build cannot add to the map.",
         "dataUnusable": "not a GeoJSON FeatureCollection",
         "dataTooLarge": "larger than {{size}} MB"
-      }
+      },
+      "undo": "Undo",
+      "redo": "Redo",
+      "duplicateSelected": "Duplicate selected nodes",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "resetZoom": "Reset zoom to 100%"
     },
     "parameterField": {
       "selectLayer": "Select a layer…",
@@ -6970,14 +6998,14 @@
         },
         "reproject": {
           "name": "Reproject",
-          "description": "Reinterpret a layer's coordinates as a source CRS and transform them to WGS84 so they display in the correct location. Requires the Sidecar or Python engine.",
+          "description": "Reinterpret a layer's coordinates as a source CRS and transform them to WGS84 so they display in the correct location.",
           "params": {
             "layer": {
               "label": "Input layer"
             },
             "source_crs": {
               "label": "Source CRS",
-              "description": "The CRS the layer's coordinates are really in (e.g. EPSG:3857). The result is transformed to WGS84 (EPSG:4326)."
+              "description": "The CRS the layer's coordinates are really in (e.g. EPSG:3857, EPSG:32617). The result is transformed to WGS84 (EPSG:4326)."
             }
           }
         },
@@ -8949,7 +8977,39 @@
     "calcAppliedWithErrors": "Applied, but {{errors}} of {{evaluated}} feature(s) errored and were written as null.",
     "exportFailed": "Could not export the selected layer.",
     "saveTitleFormErrors": "Fix attribute form violations before saving",
-    "fieldReserved": "This field name is reserved for GeoEditor."
+    "fieldReserved": "This field name is reserved for GeoEditor.",
+    "multiSortHint": "Click to sort; Shift+click to add secondary sort",
+    "columnFilter": {
+      "toggle": "Per-column filters",
+      "column": "Filter column",
+      "mode": "Filter mode",
+      "contains": "Contains",
+      "equals": "Equals",
+      "range": "Numeric range",
+      "isNull": "Is empty",
+      "notNull": "Is not empty",
+      "valuePlaceholder": "Filter value…",
+      "min": "Min",
+      "max": "Max",
+      "clearAll": "Clear filters"
+    },
+    "bulkEdit": {
+      "title": "Find & Replace / Bulk Fill",
+      "description": "Update multiple rows in one column through the attribute edit draft queue.",
+      "findReplace": "Find & Replace",
+      "bulkFill": "Bulk Fill",
+      "column": "Column",
+      "scope": "Target rows",
+      "scopeSelected": "Selected rows ({{count}})",
+      "scopeFiltered": "Filtered rows ({{count}})",
+      "find": "Find text",
+      "replaceWith": "Replace with",
+      "matchCase": "Match case",
+      "wholeCell": "Match entire cell",
+      "fillValue": "Fill value",
+      "apply": "Apply to drafts",
+      "updatedCount": "Updated {{count}} cell(s) in drafts. Click Save to commit."
+    }
   },
   "styleManager": {
     "title": "Style manager",
@@ -8995,6 +9055,11 @@
     "noLayer": "Select a vector layer to save or apply styles."
   },
   "style": {
+    "graduatedHistogram": {
+      "ariaLabel": "Attribute value distribution histogram",
+      "sampleCount": "n = {{count}}",
+      "binSummary": "{{min}} to {{max}}: {{count}}"
+    },
     "i3sBuilding": {
       "heading": "Building",
       "overview": "Overview",

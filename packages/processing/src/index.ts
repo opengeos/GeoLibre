@@ -165,10 +165,23 @@ export {
   type BuiltSpectralIndex,
 } from "./spectral-indices";
 export {
+  resolveCrsDefinition,
+  reprojectFeatureCollectionToWgs84,
+  type ResolvedCrs,
+} from "./crs-proj4";
+export {
+  compileRasterExpression,
+  extractReferencedRasters,
+  type BandRef,
+  type CompiledRasterExpression,
+} from "./raster-expr";
+export {
   CLIENT_RASTER_TOOL_IDS,
   TERRAIN_NODATA,
   supportsClientRaster,
   readRasterData,
+  estimateRasterDataBytes,
+  MAX_CLIENT_RASTER_BYTES,
   writeUint8Bands,
   writeRasterData,
   writeRasterBands,

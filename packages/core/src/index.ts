@@ -297,6 +297,7 @@ export {
   datumShiftFor,
   installCogTilerDatumShift,
   withDatumShift,
+  normalizeProj4Definition,
   withGeoKeysDatumShift,
   withWktDatumShift,
 } from "./datum-shift";

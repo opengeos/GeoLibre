@@ -343,6 +343,7 @@ describe("AttributeTable", () => {
     assert.deepEqual(menuEntries(openMoreMenu()), [
       "Add field",
       "Field calculator",
+      "Find & Replace / Bulk Fill",
       "Manage fields",
       "Column explorer",
       "Field statistics",

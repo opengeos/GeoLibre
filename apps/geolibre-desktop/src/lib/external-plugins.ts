@@ -2,6 +2,7 @@ import type {
   GeoLibreAppAPI,
   GeoLibreExternalPluginManifest,
   GeoLibrePlugin,
+  GeoLibrePluginCapability,
   PluginManager,
 } from "@geolibre/plugins";
 import { invoke } from "@tauri-apps/api/core";
@@ -130,7 +131,11 @@ const externallyLoadedPluginSources = new Map<string, string>();
 // version and registry hash it was asked to check.
 const inFlightUrlUpgrades = new Map<
   string,
-  { promise: Promise<GeoLibrePlugin>; expectedVersion?: string; expectedHash?: string }
+  {
+    promise: Promise<GeoLibrePlugin>;
+    expectedVersion?: string;
+    expectedHash?: string;
+  }
 >();
 
 // Manifest URLs this session has tried to load under the SHA-256 pin (bundled
@@ -223,8 +228,14 @@ export async function loadExternalPlugins(
   // Tag each bundle with its policy source at construction, where the origin is
   // unambiguous, instead of re-deriving it from the concatenation order.
   const bundles: Array<{ bundle: ExternalPluginBundle; source: PluginSource }> = [
-    ...filesystemResult.bundles.map((bundle) => ({ bundle, source: "directory" as const })),
-    ...urlBundles.map((bundle) => ({ bundle, source: urlSource(bundle.sourceUrl ?? "") })),
+    ...filesystemResult.bundles.map((bundle) => ({
+      bundle,
+      source: "directory" as const,
+    })),
+    ...urlBundles.map((bundle) => ({
+      bundle,
+      source: urlSource(bundle.sourceUrl ?? ""),
+    })),
     ...webBundles.map((bundle) => ({ bundle, source: "zip" as const })),
   ];
   for (const { bundle, source } of bundles) {
@@ -674,7 +685,10 @@ export interface InstalledWebPlugin {
   name: string;
   version: string;
   archiveName: string;
+  capabilities?: GeoLibrePluginCapability[];
 }
+
+export type InstalledArchivePlugin = InstalledWebPlugin;
 
 // Synthetic source recorded in externallyLoadedPluginSources for an
 // IndexedDB-installed plugin. It is intentionally not an http(s)/tauri URL so
@@ -795,7 +809,46 @@ export async function listInstalledWebPlugins(): Promise<InstalledWebPlugin[]> {
     name: record.manifest.name,
     version: record.manifest.version,
     archiveName: record.archiveName,
+    ...(record.manifest.capabilities?.length ? { capabilities: record.manifest.capabilities } : {}),
   }));
+}
+
+/** List `.zip` plugins installed in the desktop app-data plugins directory. */
+export async function listInstalledDesktopPlugins(): Promise<InstalledArchivePlugin[]> {
+  if (!isTauri()) return [];
+  try {
+    return await invoke<InstalledArchivePlugin[]>("list_installed_plugin_archives");
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Uninstall a desktop `.zip` plugin: delete its archive from the app-data
+ * plugins directory, unregister it, and remove its injected stylesheet.
+ */
+export async function uninstallDesktopPluginArchive(
+  manager: PluginManager,
+  pluginId: string,
+  app: GeoLibreAppAPI,
+): Promise<void> {
+  if (!isTauri()) return;
+  const result = await invoke<{
+    removedPaths: string[];
+    pluginsDir?: string | null;
+    error?: string | null;
+  }>("uninstall_external_plugin_archive", { pluginId });
+  if (result.removedPaths.length > 0) {
+    unloadFilesystemPlugin(manager, pluginId, app, result.removedPaths);
+  } else if (!result.error && result.pluginsDir) {
+    // The archive was already removed from disk; only unregister a stale
+    // instance whose recorded source lives inside the app-data plugins
+    // directory so plugins loaded from additionalPluginDirectories are untouched.
+    unloadFilesystemPlugin(manager, pluginId, app, undefined, result.pluginsDir);
+  }
+  if (result.error) {
+    throw new Error(result.error);
+  }
 }
 
 // new Date()/Date.now() are awkward to stub in tests; isolate the one timestamp
@@ -935,6 +988,26 @@ export function unloadRemovedUrlPlugins(
 }
 
 /**
+ * Return whether `pluginId` is currently loaded from a local filesystem or
+ * installed archive source (as opposed to a managed URL or built-in plugin).
+ */
+export function isFilesystemPluginLoaded(pluginId: string): boolean {
+  const source = externallyLoadedPluginSources.get(pluginId);
+  return source !== undefined && !isManagedUrlSource(source);
+}
+
+function normalizePluginSourcePath(source: string): string {
+  return source.replace(/\\/g, "/").replace(/^\/\/\?\//, "");
+}
+
+function isPluginSourceWithinDirectory(source: string, directory: string): boolean {
+  const normalizedSource = normalizePluginSourcePath(source);
+  const normalizedDir = normalizePluginSourcePath(directory).replace(/\/+$/, "");
+  if (!normalizedDir) return false;
+  return normalizedSource.startsWith(`${normalizedDir}/`);
+}
+
+/**
  * Forget a plugin previously loaded from the desktop filesystem so the next scan
  * re-registers it from its (possibly updated) archive. Used when a plugin is
  * reinstalled from a zip: the archive is overwritten in place under the same id,
@@ -948,9 +1021,24 @@ export function unloadFilesystemPlugin(
   manager: PluginManager,
   pluginId: string,
   app: GeoLibreAppAPI,
+  onlyMatchingSources?: readonly string[],
+  onlyWithinDirectory?: string,
 ): boolean {
   const source = externallyLoadedPluginSources.get(pluginId);
   if (source === undefined || isManagedUrlSource(source)) return false;
+  if (onlyMatchingSources) {
+    const normalizedSource = normalizePluginSourcePath(source);
+    const matches = onlyMatchingSources.some(
+      (candidate) => normalizePluginSourcePath(candidate) === normalizedSource,
+    );
+    if (!matches) return false;
+  }
+  if (
+    onlyWithinDirectory !== undefined &&
+    !isPluginSourceWithinDirectory(source, onlyWithinDirectory)
+  ) {
+    return false;
+  }
   manager.unregister(pluginId, app);
   removeExternalPluginStyle(pluginId);
   externallyLoadedPluginSources.delete(pluginId);

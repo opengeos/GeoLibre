@@ -1204,23 +1204,41 @@ describe("processing registry", () => {
     assert.ok(!allNullLogs.some((m) => m.includes("requires polygon")));
   });
 
-  it("reproject defers to the Python engine on the client", () => {
+  it("reproject runs natively on the client via proj4", async () => {
     const tool = getVectorTool("reproject");
     assert.ok(tool);
     const messages: string[] = [];
-    let produced = false;
-    tool.run({
-      layers: [layer],
-      parameters: { layer: "layer-a", source_crs: "EPSG:3857" },
+    let produced: FeatureCollection | null = null;
+    const mercLayer: GeoLibreLayer = {
+      ...layer,
+      id: "layer-merc",
+      name: "Mercator Points",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { id: 1 },
+            geometry: { type: "Point", coordinates: [-8800000, 4200000] },
+          },
+        ],
+      },
+    };
+    await tool.run({
+      layers: [mercLayer],
+      parameters: { layer: "layer-merc", source_crs: "EPSG:3857" },
       log: (m) => messages.push(m),
-      addResultLayer: () => {
-        produced = true;
+      addResultLayer: (_name, fc) => {
+        produced = fc;
       },
     });
-    // The client engine cannot reproject; it points the user at Sidecar/Pyodide
-    // and produces no layer.
-    assert.equal(produced, false);
-    assert.ok(messages.some((m) => m.includes("Python engine")));
+    assert.ok(produced, `Expected reprojected layer, logs: ${messages.join("; ")}`);
+    const pt = (produced as FeatureCollection).features[0]?.geometry;
+    assert.equal(pt?.type, "Point");
+    if (pt?.type === "Point") {
+      assert.ok(Math.abs(pt.coordinates[0] - -79.05174500251788) < 1e-6);
+      assert.ok(Math.abs(pt.coordinates[1] - 35.26535092860737) < 1e-6);
+    }
   });
 
   it("smooths polygon corners with Chaikin's algorithm", () => {

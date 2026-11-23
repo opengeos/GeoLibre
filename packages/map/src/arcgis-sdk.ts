@@ -636,12 +636,21 @@ export interface ArcgisSceneSdk {
     /** The SDK's Accessor subclassing, which is how its samples extend layers. */
     createSubclass(definition: Record<string, unknown>): ArcgisClass<ArcgisElevationLayer>;
   };
+  /** Native 3D I3S SceneServer layer (`layers/SceneLayer`). */
+  SceneLayer?: ArcgisClass<ArcgisLayer>;
+  /** Native OGC 3D Tiles layer (`layers/IntegratedMesh3DTilesLayer`). */
+  IntegratedMesh3DTilesLayer?: ArcgisClass<ArcgisLayer>;
+  /** Native 3D point-cloud SceneServer layer (`layers/PointCloudLayer`). */
+  PointCloudLayer?: ArcgisClass<ArcgisLayer>;
 }
 
 const SCENE_MODULES = {
   SceneView: "views/SceneView",
   ElevationLayer: "layers/ElevationLayer",
   BaseElevationLayer: "layers/BaseElevationLayer",
+  SceneLayer: "layers/SceneLayer",
+  IntegratedMesh3DTilesLayer: "layers/IntegratedMesh3DTilesLayer",
+  PointCloudLayer: "layers/PointCloudLayer",
 } as const;
 
 type SceneModuleKey = keyof typeof SCENE_MODULES;

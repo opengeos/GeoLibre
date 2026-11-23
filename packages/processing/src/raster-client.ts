@@ -1,6 +1,7 @@
 import { fromArrayBuffer, writeArrayBuffer } from "geotiff";
 import type { RasterToolId } from "./raster-tools";
 import { buildSpectralIndexExpression } from "./spectral-indices";
+import { compileRasterExpression } from "./raster-expr";
 
 /**
  * In-browser raster processing engine.
@@ -44,6 +45,8 @@ export interface RasterData {
    * increases with pixel row. Absent/false = normal north-up (originY is the
    * northern edge). Lets georeferencing consumers handle flipped rasters. */
   flipY?: boolean;
+  /** True when the source GeoTIFF carried non-zero ModelTransformation rotation/shear terms. */
+  rotated?: boolean;
   /** NoData value, or null when the source declares none. */
   nodata: number | null;
   /** GeoTIFF GeoKeys carried through to the output so the CRS is preserved. */
@@ -121,6 +124,22 @@ export function padShortSampleFormat(image: GeoTiffImage): void {
 }
 
 /**
+ * Inspect only the GeoTIFF header to estimate the Float32 buffer size needed
+ * to decode this raster, without allocating or reading pixel data.
+ */
+export async function estimateRasterDataBytes(
+  bytes: ArrayBuffer,
+  options: { samples?: readonly number[] } = {},
+): Promise<number> {
+  const tiff = await fromArrayBuffer(bytes);
+  const image = await tiff.getImage();
+  const width = image.getWidth();
+  const height = image.getHeight();
+  const sampleCount = options.samples?.length ?? image.getSamplesPerPixel();
+  return width * height * sampleCount * Float32Array.BYTES_PER_ELEMENT;
+}
+
+/**
  * Decode GeoTIFF bytes into a {@link RasterData}.
  *
  * @param bytes GeoTIFF bytes.
@@ -150,7 +169,24 @@ export async function readRasterData(
     );
   }
   const [originX, originY] = image.getOrigin();
-  const [resolutionX, resolutionY] = image.getResolution();
+  let [resolutionX, resolutionY] = image.getResolution();
+  let rotated = false;
+  const modelTransform = image.fileDirectory.getValue("ModelTransformation") as
+    | ArrayLike<number>
+    | undefined;
+  if (modelTransform && modelTransform.length >= 16) {
+    if (Math.abs(modelTransform[1]) > 1e-12 || Math.abs(modelTransform[4]) > 1e-12) {
+      rotated = true;
+    } else if (
+      Number.isFinite(modelTransform[0]) &&
+      Number.isFinite(modelTransform[5]) &&
+      modelTransform[0] !== 0 &&
+      modelTransform[5] !== 0
+    ) {
+      resolutionX = modelTransform[0];
+      resolutionY = modelTransform[5];
+    }
+  }
 
   const result = await image.readRasters(
     options.samples ? { samples: [...options.samples] } : undefined,
@@ -172,6 +208,7 @@ export async function readRasterData(
     // placing features at the wrong location.
     flipX: resolutionX < 0,
     flipY: resolutionY > 0,
+    ...(rotated ? { rotated: true } : {}),
     nodata: noData != null && Number.isFinite(noData) ? noData : null,
     geoKeys: (image.getGeoKeys() as Record<string, unknown>) ?? {},
   };
@@ -579,121 +616,121 @@ export function reclassify(input: RasterData, params: ReclassifyParams): RasterD
 
 export interface RasterCalcParams {
   expression: string;
+  /**
+   * Optional additional raster inputs keyed by uppercase letter (`B`, `C`, ...).
+   * Each additional raster must match the width and height of input `A`.
+   */
+  additionalInputs?: Record<string, RasterData>;
+}
+
+function gridsMatch(a: RasterData, b: RasterData): string | null {
+  if (a.rotated || b.rotated) {
+    return "uses a rotated or sheared transform that the in-browser calculator cannot combine";
+  }
+  if (a.width !== b.width || a.height !== b.height) {
+    return `dimensions (${b.width}×${b.height}) do not match raster A (${a.width}×${a.height})`;
+  }
+  if (Boolean(a.flipX) !== Boolean(b.flipX) || Boolean(a.flipY) !== Boolean(b.flipY)) {
+    return "axis orientation does not match raster A";
+  }
+  const absResX = Math.abs(a.resX);
+  const absResY = Math.abs(a.resY);
+  // Measure origin shift in pixel fractions independent of absolute CRS coordinates.
+  const originTolX = 1e-3 * (absResX > 0 ? absResX : 1);
+  const originTolY = 1e-3 * (absResY > 0 ? absResY : 1);
+  if (
+    Math.abs(a.originX - b.originX) > originTolX ||
+    Math.abs(a.originY - b.originY) > originTolY
+  ) {
+    return "origin does not match raster A";
+  }
+  // Check accumulated pixel displacement across the full raster width and height.
+  const farEdgeShiftX = Math.abs(a.resX - b.resX) * a.width;
+  const farEdgeShiftY = Math.abs(a.resY - b.resY) * a.height;
+  if (farEdgeShiftX > originTolX || farEdgeShiftY > originTolY) {
+    return "pixel resolution does not match raster A";
+  }
+  const regA = a.geoKeys?.GTRasterTypeGeoKey ?? 1;
+  const regB = b.geoKeys?.GTRasterTypeGeoKey ?? 1;
+  if (regA !== regB) {
+    return "pixel registration (PixelIsArea vs PixelIsPoint) does not match raster A";
+  }
+  for (const crsKey of ["GeographicTypeGeoKey", "ProjectedCSTypeGeoKey"]) {
+    const av = a.geoKeys?.[crsKey];
+    const bv = b.geoKeys?.[crsKey];
+    if (av === 32767 || bv === 32767) {
+      return `uses a user-defined CRS (${crsKey}=32767) that the in-browser calculator cannot verify`;
+    }
+  }
+  for (const crsKey of ["GTModelTypeGeoKey", "GeographicTypeGeoKey", "ProjectedCSTypeGeoKey"]) {
+    const av = a.geoKeys?.[crsKey];
+    const bv = b.geoKeys?.[crsKey];
+    if (av != null && bv != null && av !== bv) {
+      return `CRS (${crsKey}=${String(bv)}) does not match raster A (${crsKey}=${String(av)})`;
+    }
+  }
+  return null;
 }
 
 /**
- * Evaluate a single-input NumPy-style band-math expression. Band 1 is `A`;
- * specific bands are `A1`, `A2`, …. Multi-raster references (B, C) are not
- * supported in the browser; use the sidecar for those.
+ * Evaluate a CSP-safe band-math expression over one or more rasters.
+ * Band 1 of each input is `A`, `B`, `C`, ... and specific bands are `A1`, `A2`,
+ * `B1`, `B2`, .... Uses a recursive-descent parser with zero `eval`/`new Function`.
  */
 export function rasterCalc(input: RasterData, params: RasterCalcParams): RasterData {
   const expr = params.expression.trim();
   if (!expr) throw new Error("Enter an expression.");
-  // Allowlist the expression before handing it to `new Function` below: only
-  // band refs (A, A1, A2…), the named math helpers, and numeric/arithmetic
-  // tokens are permitted. This routes multi-raster math (B, C) to the sidecar
-  // AND prevents the evaluated expression from reaching browser globals
-  // (fetch, document, globalThis…) — important for shared Jupyter embeds.
-  const HELPERS_RE = /\b(?:where|clip|log|exp|sqrt|abs|minimum|maximum|sin|cos|tan)\b/g;
-  const withoutBands = expr.replace(HELPERS_RE, " ").replace(/\bA\d*\b/g, " ");
-  if (/\b[B-Z]\d*\b/.test(withoutBands)) {
-    throw new Error(
-      "The client raster calculator supports a single input (A, A1, A2 …). Use the sidecar engine for multi-raster math.",
-    );
-  }
-  // Strip numeric literals (including leading-dot decimals like `.5` and
-  // scientific notation) and check nothing identifier-like remains.
-  const residual = withoutBands.replace(/(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/g, " ");
-  if (/[A-Za-z$_]/.test(residual)) {
-    throw new Error(
-      "Expression contains unsupported identifiers. Only A, A1, A2 … and the math helpers " +
-        "(where, clip, log, exp, sqrt, abs, minimum, maximum, sin, cos, tan) are allowed.",
-    );
-  }
-  // After identifiers/numbers/band refs are removed, only arithmetic,
-  // comparison, and logical operators, parentheses and commas may remain. This
-  // also catches non-ASCII identifiers (e.g. Greek/CJK letters) that the ASCII
-  // check above misses, and blocks bracket/property access — so "JSFuck"-style
-  // payloads (which need `[` and `]`) can't reach `new Function`. `!` is allowed
-  // for `!=`/`!` since brackets stay blocked.
-  if (/[^\s+\-*/%(),<>=&|!]/.test(residual)) {
-    throw new Error(
-      "Expression contains unsupported characters. Only A, A1, A2 …, the math helpers, " +
-        "numbers, and arithmetic/comparison operators are allowed.",
-    );
-  }
 
-  const bandCount = input.bands.length;
-  for (const match of expr.matchAll(/\bA(\d+)\b/g)) {
-    const bandIndex = Number(match[1]);
-    if (bandIndex < 1 || bandIndex > bandCount) {
-      throw new Error(
-        `Band A${match[1]} is out of range (input raster has ${bandCount} band${bandCount === 1 ? "" : "s"}).`,
-      );
+  const rasters: Record<string, RasterData> = { A: input };
+  if (params.additionalInputs) {
+    for (const [rawKey, extra] of Object.entries(params.additionalInputs)) {
+      const key = rawKey.trim().toUpperCase();
+      if (!/^[B-Z]$/.test(key)) {
+        throw new Error(`Invalid secondary raster key "${rawKey}". Expected a single letter B–Z.`);
+      }
+      if (key in rasters) {
+        throw new Error(`Duplicate secondary raster key "${key}".`);
+      }
+      const mismatch = gridsMatch(input, extra);
+      if (mismatch) {
+        throw new Error(
+          `Raster ${key} ${mismatch}; align or reproject inputs before running the calculator.`,
+        );
+      }
+      rasters[key] = extra;
     }
   }
 
-  const argNames = ["A", ...input.bands.map((_, i) => `A${i + 1}`)];
-  const helperNames = [
-    "where",
-    "clip",
-    "log",
-    "exp",
-    "sqrt",
-    "abs",
-    "minimum",
-    "maximum",
-    "sin",
-    "cos",
-    "tan",
-  ];
-  const helpers = [
-    (c: number, a: number, b: number) => (c ? a : b),
-    (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi),
-    Math.log,
-    Math.exp,
-    Math.sqrt,
-    Math.abs,
-    Math.min,
-    Math.max,
-    Math.sin,
-    Math.cos,
-    Math.tan,
-  ];
-  let fn: (...args: number[]) => number;
-  try {
-    // Bind helpers once via a closure factory so the per-pixel loop does not
-    // spread-allocate helper arguments on every pixel.
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    const factory = new Function(
-      ...helperNames,
-      `"use strict"; return function(${argNames.join(", ")}) { return (${expr}); };`,
-    ) as (...boundHelpers: unknown[]) => (...args: number[]) => number;
-    fn = factory(...helpers);
-  } catch (error) {
-    throw new Error(`Invalid expression: ${(error as Error).message}`);
+  const bandMap: Record<string, readonly Float32Array[]> = {};
+  for (const [key, r] of Object.entries(rasters)) {
+    bandMap[key] = r.bands;
   }
+
+  const compiled = compileRasterExpression(expr, bandMap);
+  const usedSources = compiled.referencedBands.map((ref) => ({
+    band: rasters[ref.raster].bands[ref.band - 1],
+    nodata: rasters[ref.raster].nodata,
+  }));
 
   const pixels = input.width * input.height;
   const out = new Float32Array(pixels);
   const outNoData = input.nodata ?? TERRAIN_NODATA;
-  const args = new Array<number>(bandCount + 1);
+  const usedCount = usedSources.length;
+
   for (let p = 0; p < pixels; p += 1) {
     let bad = false;
-    for (let b = 0; b < bandCount; b += 1) {
-      const v = input.bands[b][p];
-      if (isNoData(v, input.nodata)) {
+    for (let u = 0; u < usedCount; u += 1) {
+      const src = usedSources[u];
+      if (isNoData(src.band[p], src.nodata)) {
         bad = true;
         break;
       }
-      args[b + 1] = v;
     }
     if (bad) {
       out[p] = outNoData;
       continue;
     }
-    args[0] = args[1]; // A === band 1
-    const value = Number(fn.apply(null, args));
+    const value = compiled.evaluate(p);
     out[p] = Number.isFinite(value) ? value : outNoData;
   }
   return singleBandResult(input, out, outNoData);
@@ -811,6 +848,7 @@ export function runRasterToolClient(
   toolId: string,
   input: RasterData,
   parameters: Record<string, unknown>,
+  additionalInputs?: Record<string, RasterData>,
 ): ClientRasterResult {
   const messages: string[] = [
     `Loaded raster: ${input.width}×${input.height}, ${input.bands.length} band(s).`,
@@ -863,7 +901,10 @@ export function runRasterToolClient(
       });
       break;
     case "raster-calc":
-      raster = rasterCalc(input, { expression: String(parameters.expression ?? "") });
+      raster = rasterCalc(input, {
+        expression: String(parameters.expression ?? ""),
+        additionalInputs,
+      });
       break;
     case "spectral-index": {
       const { expression, bands } = buildSpectralIndexExpression(parameters);

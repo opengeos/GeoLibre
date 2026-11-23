@@ -32,6 +32,7 @@ import {
 } from "./map-identify-lifecycle";
 import type { MapDiagnosticEvent } from "./map-diagnostic";
 import { MapboxEngine, redactMapboxError } from "./mapbox-engine";
+import { transformMapboxCogDemRequest } from "./mapbox-cog-terrain";
 import { loadMapboxGl } from "./mapbox-gl-loader";
 import { prepareMapboxStandard } from "./mapbox-standard-style";
 import { styleUsesUnsupportedSource } from "./gl-style-compiler";
@@ -171,6 +172,9 @@ export function MapboxCanvas({
           attributionControl: false,
           preserveDrawingBuffer: true,
           trackResize: false,
+          // mapbox-gl v3 awaits async transformRequest hooks in RequestManager.
+          transformRequest:
+            transformMapboxCogDemRequest as unknown as mapboxgl.TransformRequestFunction,
         });
         engine = new MapboxEngine(map, gl, accessToken, {
           // Split/grid panes share the primary pane's layer control; a second

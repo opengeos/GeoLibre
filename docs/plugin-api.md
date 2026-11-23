@@ -963,7 +963,7 @@ app.setLayerVisibility?.(rasterLayerId, false);
 
 ## Layer styles
 
-`importLayerStyle` applies a style written in another format to a layer, like the Layers panel's "Import style": an OGC SLD, a QGIS QML, an ArcGIS Pro layer file (`.lyrx`) or a Mapbox GL style JSON, detected from the content. The style is merged over the layer's current one, so fields it does not describe keep their values, and it is saved with the project. Like the Layers panel, it styles only GeoJSON and vector-tile layers; it accepts any such layer id, not only the plugin's own, and throws for an unknown one.
+`importLayerStyle` applies a style written in another format to a layer, like the Layers panel's "Import style": an OGC SLD, a QGIS QML, an ArcGIS Pro layer file (`.lyrx`) or a Mapbox GL style JSON, detected from the content. The style is merged over the layer's current one, so fields it does not describe keep their values, and it is saved with the project. A `.lyrx` symbol is the exception: it is a whole symbol, so it also switches off the layer's dash, blur, line decorations, fill pattern, inverted fill, icon marker, heat map or cluster renderer and proportional sizing, and resets outline transparency, widths and circle radius to GeoLibre's defaults where the file does not set them. Like the Layers panel, it styles only GeoJSON and vector-tile layers; it accepts any such layer id, not only the plugin's own, and throws for an unknown one.
 
 A plugin that adds features from a web service can dress them as the service does. A GeoServer, for example, returns a layer's SLD for WMS `GetStyles`:
 
@@ -1991,6 +1991,8 @@ such as broker references in layer source or metadata instead when recipients
 need them.
 
 Manifest paths must be relative zip paths with forward slashes, no leading slash, no backslashes, and no `..` segments. External plugins cannot set `activeByDefault` on the exported plugin object, and the manifest-level flag is honored only for bundled drop-ins (see "Bundled plugins" above); saved project state can still reactivate an external plugin by ID after the zip is loaded.
+
+The optional `capabilities` field accepts an array of self-declared capability labels (`"network"`, `"filesystem"`, `"sidecar"`, `"mapWrite"`, `"ui"`). Manage Plugins surfaces them as advisory badges on installed archive plugins; they are informational and are not enforced at runtime.
 
 The optional `style` CSS is injected globally into the host document, not scoped to the plugin. Plugin authors are responsible for scoping their selectors (for example with a plugin-specific class prefix) so broad rules do not restyle the rest of the app. Injected CSS can also issue network requests through `url()` references and `@import`, so a plugin stylesheet can load external fonts, images, or additional sheets; treat plugin CSS with the same trust expectations as plugin code.
 

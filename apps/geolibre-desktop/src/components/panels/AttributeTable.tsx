@@ -3,6 +3,18 @@ import {
   isReadOnlyAttributeLayer,
   isVectorControlAttributeSource,
 } from "../../lib/attribute-table-source";
+import {
+  computeBulkFillDrafts,
+  computeFindReplaceDrafts,
+  filterAttributeRowsByColumns,
+  hasActiveColumnFilter,
+  matchesColumnFilter,
+  sortAttributeRows,
+  toggleMultiSort,
+  type ColumnFilterSpec,
+  type SortSpec,
+} from "../../lib/attribute-table-ops";
+import { AttributeBulkEditDialog, ColumnFilterBar } from "./AttributeBulkEditDialog";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
@@ -88,6 +100,7 @@ import {
   Columns3,
   Download,
   EyeOff,
+  Filter,
   LayoutDashboard,
   LayoutList,
   MoreHorizontal,
@@ -98,6 +111,7 @@ import {
   PanelBottomClose,
   PanelBottomOpen,
   Plus,
+  Replace,
   RefreshCw,
   RotateCcw,
   Save,
@@ -222,27 +236,6 @@ const CELL_PADDING = "0.5rem";
 const DEFAULT_TABLE_HEIGHT = 240;
 const MIN_TABLE_HEIGHT = 96;
 const MAX_TABLE_HEIGHT = 520;
-
-const ATTRIBUTE_COLLATOR = new Intl.Collator(undefined, {
-  numeric: true,
-  sensitivity: "base",
-});
-
-function compareAttributeValues(a: unknown, b: unknown): number {
-  if (a == null && b == null) return 0;
-  if (a == null) return -1;
-  if (b == null) return 1;
-
-  if (typeof a === "number" && typeof b === "number") return a - b;
-
-  const aNumber = Number(a);
-  const bNumber = Number(b);
-  if (Number.isFinite(aNumber) && Number.isFinite(bNumber)) {
-    return aNumber - bNumber;
-  }
-
-  return ATTRIBUTE_COLLATOR.compare(String(a), String(b));
-}
 
 function parseAttributeDraft(draft: string, previousValue: unknown, columnType?: string): unknown {
   if (draft.trim() === "") return null;
@@ -511,7 +504,10 @@ function computeFormDraftErrors(
     for (const check of contingencies?.checks(candidate, properties) ?? [])
       if (blocksArcGISEdit(check))
         for (const field of check.fields)
-          groupErrors[field] ??= { code: "constraint", message: contingencies!.message(check) };
+          groupErrors[field] ??= {
+            code: "constraint",
+            message: contingencies!.message(check),
+          };
     if (Object.keys(groupErrors).length) result[featureId] = groupErrors;
     const validation = validateAttributeFormValues(rowForm.form, candidate, {
       feature,
@@ -652,13 +648,16 @@ export function AttributeTable({
   const updateLayer = useAppStore((s) => s.updateLayer);
   const zoomToSelectedFeature = useAppStore((s) => s.ui.zoomToSelectedFeature);
   const setZoomToSelectedFeature = useAppStore((s) => s.setZoomToSelectedFeature);
-  const [sort, setSort] = useState<{
-    key: SortKey;
-    direction: SortDirection;
-  }>({
-    key: "__featureId",
-    direction: "asc",
-  });
+  const [sortSpecs, setSortSpecs] = useState<SortSpec[]>([
+    { key: "__featureId", direction: "asc" },
+  ]);
+  const sort = sortSpecs[0] ?? {
+    key: "__featureId" as SortKey,
+    direction: "asc" as SortDirection,
+  };
+  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilterSpec>>({});
+  const [columnFilterBarOpen, setColumnFilterBarOpen] = useState(false);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>({});
   // "all" shows every feature; "selected" restricts the table to the current
   // multi-selection (the Show All / Show Selected dropdown).
@@ -950,10 +949,16 @@ export function AttributeTable({
   const domainNotice = serviceConstraints?.diagnostics
     .map((diagnostic) =>
       diagnostic.code === "unresolvedDomain"
-        ? t("attributeTable.serviceDomains.unresolvedDomain", { field: diagnostic.field })
+        ? t("attributeTable.serviceDomains.unresolvedDomain", {
+            field: diagnostic.field,
+          })
         : diagnostic.code === "subtypeFieldMissing"
-          ? t("attributeTable.serviceDomains.subtypeFieldMissing", { field: diagnostic.field })
-          : t("attributeTable.serviceDomains.subtypeConflict", { field: diagnostic.field }),
+          ? t("attributeTable.serviceDomains.subtypeFieldMissing", {
+              field: diagnostic.field,
+            })
+          : t("attributeTable.serviceDomains.subtypeConflict", {
+              field: diagnostic.field,
+            }),
     )
     .join(" ");
   const hasRowForms = Boolean(attributeForm?.fields.length || serviceConstraints);
@@ -1008,7 +1013,11 @@ export function AttributeTable({
               : check.status === "retired"
                 ? "contingentValues.existingRetired"
                 : "contingentValues.existing",
-            { row: featureId, fields: check.fields.join(", "), group: check.group },
+            {
+              row: featureId,
+              fields: check.fields.join(", "),
+              group: check.group,
+            },
           ),
         );
     return lines.join(" ");
@@ -1036,6 +1045,8 @@ export function AttributeTable({
     setCalcExpression("");
     setCalcError(null);
     setCalcSelectedOnly(false);
+    setColumnFilters({});
+    setBulkEditOpen(false);
   }, [selectedLayerId, hasLayer, isGeometryEditing]);
 
   // If the selected feature is cleared while the calculator is open, drop the
@@ -1063,14 +1074,15 @@ export function AttributeTable({
 
   const filtered = useMemo(() => {
     const filterLower = attributeFilter.toLowerCase();
-    return attributeRows.filter(({ properties, featureId }) => {
+    const base = attributeRows.filter(({ properties, featureId }) => {
       // "Show Selected Features" restricts the table to the current selection.
       if (featureView === "selected" && !selectedIdSet.has(featureId)) return false;
       if (!filterLower) return true;
       if (featureId.toLowerCase().includes(filterLower)) return true;
       return attributeValuesMatchQuery(properties, filterLower);
     });
-  }, [attributeFilter, attributeRows, featureView, selectedIdSet]);
+    return filterAttributeRowsByColumns(base, columnFilters);
+  }, [attributeFilter, attributeRows, columnFilters, featureView, selectedIdSet]);
 
   // Identify's Edit attributes action asks for edit mode on its layer (#2932).
   // Declared after the layer-change reset above so, when the request arrives
@@ -1120,14 +1132,31 @@ export function AttributeTable({
   useEffect(() => {
     if (attributeTableEditLayerId === null) return;
     if (layer?.id === attributeTableEditLayerId && canEnterEditMode) {
-      // Clear the search only when it hides the requested row; a filter that
-      // already shows it is the user's to keep.
+      // Clear only filters that hide the requested row; filters that already
+      // admit it are the user's to keep.
       if (
-        attributeFilter &&
         selectedFeatureId !== null &&
         !filtered.some((row) => row.featureId === selectedFeatureId)
       ) {
-        setAttributeFilter("");
+        const targetRow = attributeRows.find((row) => row.featureId === selectedFeatureId);
+        if (attributeFilter) {
+          const filterLower = attributeFilter.toLowerCase();
+          const admittedBySearch =
+            targetRow !== undefined &&
+            (targetRow.featureId.toLowerCase().includes(filterLower) ||
+              attributeValuesMatchQuery(targetRow.properties, filterLower));
+          if (!admittedBySearch) setAttributeFilter("");
+        }
+        if (targetRow && Object.keys(columnFilters).length > 0) {
+          setColumnFilters((prev) => {
+            const next: Record<string, ColumnFilterSpec> = {};
+            for (const [col, spec] of Object.entries(prev)) {
+              const val = col === "__featureId" ? targetRow.featureId : targetRow.properties[col];
+              if (matchesColumnFilter(val, spec)) next[col] = spec;
+            }
+            return next;
+          });
+        }
       }
       // A collapsed table would enter edit mode with the row out of sight.
       setCollapsed(false);
@@ -1156,16 +1185,7 @@ export function AttributeTable({
     if (!adaptAnalysisRows || selectedIdSet.size === 0) return [];
     return pickAnalysisRows(analysisRows, attributeRows, selectedIdSet);
   }, [adaptAnalysisRows, analysisRows, attributeRows, selectedIdSet]);
-  const sorted = useMemo(
-    () =>
-      [...filtered].sort((a, b) => {
-        const aValue = sort.key === "__featureId" ? a.featureId : a.properties[sort.key];
-        const bValue = sort.key === "__featureId" ? b.featureId : b.properties[sort.key];
-        const result = compareAttributeValues(aValue, bValue);
-        return sort.direction === "asc" ? result : -result;
-      }),
-    [filtered, sort.direction, sort.key],
-  );
+  const sorted = useMemo(() => sortAttributeRows(filtered, sortSpecs), [filtered, sortSpecs]);
 
   // Row selection with keyboard modifiers (plain / Ctrl-toggle / Shift-range /
   // Shift+Ctrl merge). The branching lives in the pure `computeRowSelection`
@@ -1251,9 +1271,10 @@ export function AttributeTable({
     selectedFeatureId,
     selectedLayerId,
     attributeTableOpen,
-    sort,
+    sortSpecs,
     sorted.length,
     attributeFilter,
+    columnFilters,
     isEditing,
     collapsed,
     isCardViewActive,
@@ -1453,20 +1474,109 @@ export function AttributeTable({
     window.addEventListener("mouseup", onMouseUp);
   };
 
-  const toggleSort = (key: SortKey) => {
-    setSort((current) => ({
-      key,
-      direction: current.key === key && current.direction === "asc" ? "desc" : "asc",
-    }));
+  const toggleSort = (key: SortKey, additive = false) => {
+    setSortSpecs((current) => toggleMultiSort(current, key, additive));
   };
 
   const renderSortIcon = (key: SortKey) => {
-    if (sort.key !== key) return null;
-    return sort.direction === "asc" ? (
-      <ArrowUp className="h-3.5 w-3.5" />
-    ) : (
-      <ArrowDown className="h-3.5 w-3.5" />
+    const idx = sortSpecs.findIndex((spec) => spec.key === key);
+    if (idx === -1) return null;
+    const spec = sortSpecs[idx];
+    return (
+      <span className="inline-flex items-center gap-0.5">
+        {spec.direction === "asc" ? (
+          <ArrowUp className="h-3.5 w-3.5" />
+        ) : (
+          <ArrowDown className="h-3.5 w-3.5" />
+        )}
+        {sortSpecs.length > 1 ? (
+          <span className="text-[10px] font-semibold tabular-nums text-primary">{idx + 1}</span>
+        ) : null}
+      </span>
     );
+  };
+
+  const handleColumnFilterChange = (column: string, spec: ColumnFilterSpec | null) => {
+    setColumnFilters((current) => {
+      const next = { ...current };
+      if (!spec || !hasActiveColumnFilter(spec)) {
+        delete next[column];
+      } else {
+        next[column] = spec;
+      }
+      return next;
+    });
+  };
+
+  const activeColumnFilterCount = Object.keys(columnFilters).length;
+  const editableBulkColumns = useMemo(
+    () => columns.filter((col) => !readOnlyColumns.has(col)),
+    [columns, readOnlyColumns],
+  );
+
+  const handleBulkFill = ({
+    column,
+    value,
+    scope,
+  }: {
+    column: string;
+    value: string;
+    scope: "selected" | "filtered";
+  }): number => {
+    if (!canEnterEditMode || readOnlyColumns.has(column)) return 0;
+    const targetRowIds =
+      scope === "selected" && selectedIdSet.size > 0
+        ? selectedIdSet
+        : new Set(filtered.map((row) => row.featureId));
+    const result = computeBulkFillDrafts({
+      rows: attributeRows,
+      targetRowIds,
+      column,
+      value,
+      currentDrafts: drafts,
+    });
+    if (result.updatedCount > 0) {
+      setIsEditing(true);
+      setDrafts(result.drafts);
+    }
+    return result.updatedCount;
+  };
+
+  const handleFindReplace = ({
+    column,
+    find,
+    replace,
+    matchCase,
+    wholeCell,
+    scope,
+  }: {
+    column: string;
+    find: string;
+    replace: string;
+    matchCase: boolean;
+    wholeCell: boolean;
+    scope: "selected" | "filtered";
+  }): number => {
+    if (!canEnterEditMode || readOnlyColumns.has(column)) return 0;
+    const targetRowIds =
+      scope === "selected" && selectedIdSet.size > 0
+        ? selectedIdSet
+        : new Set(filtered.map((row) => row.featureId));
+    const result = computeFindReplaceDrafts({
+      rows: attributeRows,
+      targetRowIds,
+      column,
+      find,
+      replace,
+      matchCase,
+      wholeCell,
+      currentDrafts: drafts,
+    });
+    if (result.updatedCount > 0) {
+      setIsEditing(true);
+      setDrafts(result.drafts);
+    }
+    return result.updatedCount;
   };
 
   // Localize an Attribute Form validation error for a cell tooltip.
@@ -1656,7 +1766,14 @@ export function AttributeTable({
         const { [oldKey]: width, ...rest } = current;
         return { ...rest, [newKey]: width };
       });
-      setSort((current) => (current.key === oldKey ? { ...current, key: newKey } : current));
+      setSortSpecs((current) =>
+        current.map((spec) => (spec.key === oldKey ? { ...spec, key: newKey } : spec)),
+      );
+      setColumnFilters((current) => {
+        if (!(oldKey in current)) return current;
+        const { [oldKey]: spec, ...rest } = current;
+        return { ...rest, [newKey]: spec };
+      });
     }
     // Always close the editor when committing, even on a no-op (empty,
     // unchanged, or a name that collides with an existing — possibly hidden —
@@ -1701,9 +1818,15 @@ export function AttributeTable({
     if (patch) updateLayer(layer.id, markAttributeEdit(layer, patch));
     // Drop a sort that pointed at the deleted column, which would otherwise
     // leave sort.key referencing an absent field (every row compares equal).
-    setSort((current) =>
-      current.key === columnPendingDelete ? { key: "__featureId", direction: "asc" } : current,
-    );
+    setSortSpecs((current) => {
+      const remaining = current.filter((spec) => spec.key !== columnPendingDelete);
+      return remaining.length > 0 ? remaining : [{ key: "__featureId", direction: "asc" }];
+    });
+    setColumnFilters((current) => {
+      if (!(columnPendingDelete in current)) return current;
+      const { [columnPendingDelete]: _removed, ...rest } = current;
+      return rest;
+    });
     // Drop the deleted column's width so columnWidths doesn't accumulate stale
     // entries across a session (mirrors the migration in commitColumnRename).
     setColumnWidths((current) => {
@@ -1961,7 +2084,8 @@ export function AttributeTable({
         className={`flex h-full min-w-0 flex-1 items-center gap-1 pe-3 font-medium ${
           numeric ? "justify-end text-end" : "text-start"
         }`}
-        onClick={() => toggleSort(key)}
+        title={t("attributeTable.multiSortHint")}
+        onClick={(event) => toggleSort(key, event.shiftKey)}
       >
         <span className="truncate">{label}</span>
         {renderSortIcon(key)}
@@ -2023,8 +2147,12 @@ export function AttributeTable({
           className={`flex h-full min-w-0 flex-1 items-center gap-1 pe-1 font-medium ${
             numeric ? "justify-end text-end" : "text-start"
           }`}
-          onClick={() => toggleSort(col)}
-          title={virtualFieldColumns.has(col) ? t("attributeTable.virtualColumnTitle") : undefined}
+          onClick={(event) => toggleSort(col, event.shiftKey)}
+          title={
+            virtualFieldColumns.has(col)
+              ? t("attributeTable.virtualColumnTitle")
+              : t("attributeTable.multiSortHint")
+          }
         >
           {/* Virtual (expression-computed) columns get a function glyph and
               italics so their read-only, derived nature is visible at a
@@ -2383,6 +2511,14 @@ export function AttributeTable({
                   <Calculator className="h-4 w-4" />
                   {t("attributeTable.fieldCalculator")}
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2"
+                  disabled={!canEnterEditMode || editableBulkColumns.length === 0}
+                  onSelect={() => setBulkEditOpen(true)}
+                >
+                  <Replace className="h-4 w-4" />
+                  {t("attributeTable.bulkEdit.title")}
+                </DropdownMenuItem>
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger title={t("attributeTable.manageFieldsTitle")}>
                     <Columns3 className="h-4 w-4" />
@@ -2540,10 +2676,37 @@ export function AttributeTable({
             </DropdownMenuCheckboxItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        {/* Fixed width, pushed to the end beside Collapse and Close. It may
-            shrink a little before the bar wraps on narrow panels. */}
+        <Button
+          variant={columnFilterBarOpen || activeColumnFilterCount > 0 ? "secondary" : "outline"}
+          size="sm"
+          className="ms-auto h-7 gap-1 px-2"
+          title={t("attributeTable.columnFilter.toggle")}
+          aria-label={t("attributeTable.columnFilter.toggle")}
+          aria-pressed={columnFilterBarOpen}
+          disabled={!hasAttributeSource || columns.length === 0}
+          onClick={() => setColumnFilterBarOpen((open) => !open)}
+        >
+          <Filter className="h-3.5 w-3.5" />
+          {activeColumnFilterCount > 0 ? (
+            <span className="text-[11px] font-semibold tabular-nums">
+              {activeColumnFilterCount}
+            </span>
+          ) : null}
+        </Button>
+        {canEnterEditMode && editableBulkColumns.length > 0 ? (
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-7 w-7"
+            title={t("attributeTable.bulkEdit.title")}
+            aria-label={t("attributeTable.bulkEdit.title")}
+            onClick={() => setBulkEditOpen(true)}
+          >
+            <Replace className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
         <Input
-          className="ms-auto h-7 w-[200px] min-w-28 shrink text-xs"
+          className="h-7 w-[180px] min-w-28 shrink text-xs"
           placeholder={t("attributeTable.searchPlaceholder")}
           aria-label={t("attributeTable.searchAria")}
           value={attributeFilter}
@@ -2579,6 +2742,15 @@ export function AttributeTable({
         header row (30px) plus 0.875rem for the
         horizontal scrollbar (h-3.5), so the two scrollbars do not overlap.
       */}
+      {!collapsed && columnFilterBarOpen && hasAttributeSource ? (
+        <ColumnFilterBar
+          columns={columns}
+          numericColumns={numericColumns}
+          filters={columnFilters}
+          onChangeFilter={handleColumnFilterChange}
+          onClearAll={() => setColumnFilters({})}
+        />
+      ) : null}
       {!collapsed ? (
         <ScrollArea
           type="always"
@@ -2600,12 +2772,21 @@ export function AttributeTable({
               scrollElementRef={scrollViewportRef}
               sortKey={sort.key}
               sortDirection={sort.direction}
-              onChangeSortKey={(key) => setSort({ key, direction: "asc" })}
+              onChangeSortKey={(key) => setSortSpecs([{ key, direction: "asc" }])}
               onToggleSortDirection={() =>
-                setSort((current) => ({
-                  ...current,
-                  direction: current.direction === "asc" ? "desc" : "asc",
-                }))
+                setSortSpecs((current) => {
+                  const primary = current[0] ?? {
+                    key: "__featureId" as SortKey,
+                    direction: "asc" as SortDirection,
+                  };
+                  return [
+                    {
+                      ...primary,
+                      direction: primary.direction === "asc" ? "desc" : "asc",
+                    },
+                    ...current.slice(1),
+                  ];
+                })
               }
               onSelectRow={handleRowClick}
               onZoomRow={(featureId) => {
@@ -2896,11 +3077,19 @@ export function AttributeTable({
           data-testid="attribute-table-status"
           className="flex shrink-0 items-center gap-3 border-t bg-card px-3 py-1 text-[11px] text-muted-foreground"
         >
-          <span>{t("attributeTable.statusFeatures", { count: attributeRows.length })}</span>
+          <span>
+            {t("attributeTable.statusFeatures", {
+              count: attributeRows.length,
+            })}
+          </span>
           {filtered.length !== attributeRows.length ? (
             <span>{t("attributeTable.statusShown", { count: filtered.length })}</span>
           ) : null}
-          <span>{t("attributeTable.statusSelected", { count: selectedFeatureIds.length })}</span>
+          <span>
+            {t("attributeTable.statusSelected", {
+              count: selectedFeatureIds.length,
+            })}
+          </span>
         </div>
       ) : null}
       <Dialog
@@ -3276,6 +3465,16 @@ export function AttributeTable({
         filteredRows={analysisFilteredRows}
         columns={discoveredColumns}
         layerName={layer?.name ?? ""}
+      />
+      <AttributeBulkEditDialog
+        open={bulkEditOpen && canEnterEditMode}
+        onOpenChange={setBulkEditOpen}
+        canEdit={canEnterEditMode}
+        editableColumns={editableBulkColumns}
+        selectedCount={selectedIdSet.size}
+        filteredCount={filtered.length}
+        onBulkFill={handleBulkFill}
+        onFindReplace={handleFindReplace}
       />
     </section>
   );

@@ -159,9 +159,12 @@ import { bundledPluginManifestPaths } from "virtual:bundled-plugins";
 import {
   assertBundleNotBlocklisted,
   installWebPluginArchive,
+  isFilesystemPluginLoaded,
+  listInstalledDesktopPlugins,
   listInstalledWebPlugins,
   loadExternalPlugins,
   reloadExternalUrlPlugin,
+  uninstallDesktopPluginArchive,
   uninstallWebPlugin,
   unloadFilesystemPlugin,
   unloadRemovedUrlPlugins,
@@ -364,7 +367,9 @@ setPointCloudPrelabelRunner(async (toolId, parameters, las) => {
   const job = await runWhiteboxToolWasm({
     tool_id: toolId,
     parameters,
-    layer_inputs: { input: { name: "input.las", kind: "lidar_in", bytes: las } },
+    layer_inputs: {
+      input: { name: "input.las", kind: "lidar_in", bytes: las },
+    },
     tool: {
       id: toolId,
       params: [
@@ -726,18 +731,78 @@ export async function installPluginArchiveFromFile(
   return pluginId;
 }
 
-// Uninstall a plugin that was installed from a file in the browser.
+// Uninstall a plugin that was installed from a `.zip` file (desktop or browser).
 export async function uninstallPluginArchiveFromFile(
   pluginId: string,
   mapControllerRef: RefObject<MapEngine | null>,
 ): Promise<void> {
-  await uninstallWebPlugin(manager, pluginId, createAppAPI(mapControllerRef));
+  const app = createAppAPI(mapControllerRef);
+  if (isTauriRuntime()) {
+    await uninstallDesktopPluginArchive(manager, pluginId, app);
+    return;
+  }
+  await uninstallWebPlugin(manager, pluginId, app);
 }
 
-// List plugins installed from a file (browser IndexedDB), for the Manage
-// Plugins UI. Returns an empty list on desktop and where IndexedDB is absent.
+const archiveReloadInFlight = new Map<string, Promise<void>>();
+
+// Hot-reload a plugin installed from a `.zip` file (desktop disk or browser IndexedDB)
+// without restarting the app, preserving its active state.
+export function reloadPluginArchiveFromFile(
+  pluginId: string,
+  mapControllerRef: RefObject<MapEngine | null>,
+): Promise<void> {
+  const previous = archiveReloadInFlight.get(pluginId) ?? Promise.resolve();
+  const run = previous
+    .catch(() => {})
+    .then(async () => {
+      const app = createAppAPI(mapControllerRef);
+      let wasActive = manager.isActive(pluginId);
+      const desktopSettings = useDesktopSettingsStore.getState().desktopSettings;
+      // Run the unload inside the serialized scan queue so any in-flight scan
+      // settles before we drop the previous registration and re-read the archive.
+      await ensureExternalPluginsLoadedWithSettings(desktopSettings, app, {
+        force: true,
+        beforeScan: () => {
+          wasActive = manager.isActive(pluginId);
+          unloadFilesystemPlugin(manager, pluginId, app);
+        },
+      });
+      if (!isFilesystemPluginLoaded(pluginId)) {
+        const shadowedByOther = manager.list().some((plugin) => plugin.id === pluginId);
+        throw new Error(
+          i18n.t(
+            shadowedByOther ? "managePlugins.reloadConflict" : "managePlugins.reloadNotFound",
+            {
+              pluginId,
+            },
+          ),
+        );
+      }
+      if (wasActive && !manager.isActive(pluginId)) {
+        try {
+          const activated = await manager.activate(pluginId, app);
+          if (!activated) {
+            throw new Error(i18n.t("managePlugins.reloadReactivateFailed", { pluginId }));
+          }
+        } catch (error) {
+          reportPluginError(pluginId, "activate", error);
+          throw error;
+        }
+      }
+    });
+  const tracked = run.finally(() => {
+    if (archiveReloadInFlight.get(pluginId) === tracked) {
+      archiveReloadInFlight.delete(pluginId);
+    }
+  });
+  archiveReloadInFlight.set(pluginId, tracked);
+  return tracked;
+}
+
+// List plugins installed from a `.zip` file (desktop app-data dir or browser IndexedDB).
 export function listPluginArchivesFromFile(): Promise<InstalledWebPlugin[]> {
-  return listInstalledWebPlugins();
+  return isTauriRuntime() ? listInstalledDesktopPlugins() : listInstalledWebPlugins();
 }
 
 export function usePluginRegistry() {
@@ -1030,7 +1095,7 @@ let externalPluginsCallQueue: Promise<void> = Promise.resolve();
 function ensureExternalPluginsLoadedWithSettings(
   desktopSettings: ReturnType<typeof useDesktopSettingsStore.getState>["desktopSettings"],
   app: ReturnType<typeof createAppAPI>,
-  options?: { force?: boolean },
+  options?: { force?: boolean; beforeScan?: () => void },
 ): Promise<void> {
   const run = externalPluginsCallQueue.then(() =>
     runEnsureExternalPluginsLoadedWithSettings(desktopSettings, app, options),
@@ -1042,8 +1107,9 @@ function ensureExternalPluginsLoadedWithSettings(
 async function runEnsureExternalPluginsLoadedWithSettings(
   desktopSettings: ReturnType<typeof useDesktopSettingsStore.getState>["desktopSettings"],
   app: ReturnType<typeof createAppAPI>,
-  options?: { force?: boolean },
+  options?: { force?: boolean; beforeScan?: () => void },
 ): Promise<void> {
+  options?.beforeScan?.();
   // Only the user's installed URLs (desktop settings) and the bundled drop-ins
   // are auto-loaded. Project-supplied URLs are deliberately excluded here so
   // opening a project never fetches or imports third-party plugin code; they
@@ -1410,16 +1476,20 @@ export async function activateDeepLinkedPlugin(
 export function listAssistantActivatablePlugins(): ActivatablePlugin[] {
   const renderer = useAppStore.getState().primaryRenderer;
   const { uiProfile } = useDesktopSettingsStore.getState().desktopSettings;
-  return manager
-    .list()
-    .flatMap((plugin) =>
-      plugin.assistant &&
-      !manager.isActive(plugin.id) &&
-      isPluginEngineSupported(plugin, renderer) &&
-      isPluginVisible(uiProfile, plugin.id)
-        ? [{ id: plugin.id, name: plugin.name, description: plugin.assistant.description.trim() }]
-        : [],
-    );
+  return manager.list().flatMap((plugin) =>
+    plugin.assistant &&
+    !manager.isActive(plugin.id) &&
+    isPluginEngineSupported(plugin, renderer) &&
+    isPluginVisible(uiProfile, plugin.id)
+      ? [
+          {
+            id: plugin.id,
+            name: plugin.name,
+            description: plugin.assistant.description.trim(),
+          },
+        ]
+      : [],
+  );
 }
 
 /**

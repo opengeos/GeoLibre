@@ -99,6 +99,8 @@ interface LayerRowProps {
   cesiumPrimary: boolean;
   mapboxPrimary: boolean;
   arcgisPrimary: boolean;
+  /** Whether the ArcGIS engine is currently running in a 3D SceneView. */
+  arcgisScene: boolean;
   /** Whether the ArcGIS engine can host deck.gl overlays. */
   deckOverlay: boolean;
   canEditLayer: (layerId: string) => boolean;
@@ -137,6 +139,7 @@ export function LayerRow({
   cesiumPrimary,
   mapboxPrimary,
   arcgisPrimary,
+  arcgisScene,
   deckOverlay,
   canEditLayer,
   onOpenMetadata,
@@ -479,7 +482,7 @@ export function LayerRow({
         )}
         {arcgisPrimary &&
           !isCesiumOnlyLayer(layer) &&
-          !isArcgisSupportedLayer(layer, deckOverlay) && (
+          !isArcgisSupportedLayer(layer, deckOverlay, arcgisScene) && (
             <span
               title={t("renderer.layerArcgisUnsupported")}
               className="shrink-0 rounded-sm bg-muted px-1 text-[10px] uppercase text-muted-foreground"
@@ -496,7 +499,7 @@ export function LayerRow({
           kinds Cesium actually draws — a kind it cannot draw (e.g.
           duckdb-query) keeps its message while the globe is primary. */}
       {(!cesiumPrimary || !isCesiumSupportedLayerType(layer)) &&
-        (!arcgisPrimary || !isArcgisSupportedLayer(layer, deckOverlay)) &&
+        (!arcgisPrimary || !isArcgisSupportedLayer(layer, deckOverlay, arcgisScene)) &&
         isPlaceholderLayer(layer) && (
           <p className="mt-1 text-[10px] text-amber-600">{placeholderMessage(layer)}</p>
         )}

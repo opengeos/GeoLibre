@@ -35,6 +35,7 @@ from sqlalchemy import (
     text,
     update,
 )
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 from starlette.concurrency import run_in_threadpool
@@ -119,6 +120,41 @@ LISTING_EAGER_LOADS = (
     selectinload(Project.versions),
     selectinload(Project.group_shares).selectinload(ProjectGroup.group),
 )
+
+# transfer_json reads project, from_account, to_account, and to_organization.
+TRANSFER_EAGER_LOADS = (
+    selectinload(ProjectTransfer.project),
+    selectinload(ProjectTransfer.from_account),
+    selectinload(ProjectTransfer.to_account),
+    selectinload(ProjectTransfer.to_organization),
+)
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        parsed = int(raw)
+        if parsed > 0:
+            return parsed
+    except ValueError:
+        pass
+    logger.warning("Ignoring invalid %s=%r; using default %d", name, raw, default)
+    return default
+
+
+def _build_engine_kwargs(database_url: str) -> dict[str, Any]:
+    """Return SQLAlchemy ``create_engine`` options tuned for SQLite vs. server DBs."""
+    is_sqlite = database_url.startswith("sqlite")
+    connect_args = {"check_same_thread": False} if is_sqlite else {}
+    engine_kwargs: dict[str, Any] = {"connect_args": connect_args}
+    if not is_sqlite:
+        engine_kwargs["pool_pre_ping"] = True
+        engine_kwargs["pool_size"] = _positive_int_env("GEOLIBRE_DB_POOL_SIZE", 10)
+        engine_kwargs["max_overflow"] = _positive_int_env("GEOLIBRE_DB_MAX_OVERFLOW", 20)
+        engine_kwargs["pool_recycle"] = _positive_int_env("GEOLIBRE_DB_POOL_RECYCLE", 1800)
+    return engine_kwargs
 
 
 class ProjectCreate(BaseModel):
@@ -475,20 +511,26 @@ def postgresql_upgrade_statements() -> list[str]:
     ]
 
 
-def upgrade_postgresql_schema(engine) -> None:
-    with engine.begin() as connection:
+def upgrade_postgresql_schema(bind) -> None:
+    if isinstance(bind, Connection):
+        for statement in postgresql_upgrade_statements():
+            bind.execute(text(statement))
+        return
+    with bind.begin() as connection:
         for statement in postgresql_upgrade_statements():
             connection.execute(text(statement))
 
 
-def upgrade_sqlite_schema(engine) -> None:
+def upgrade_sqlite_schema(bind) -> None:
     """Add nullable columns introduced after the initial SQLite release.
 
     SQLAlchemy's create_all creates new tables but deliberately does not alter
     existing ones. These additive changes keep old installations bootable; a
     fresh database still receives the complete constraints from the models.
+    Accepts either a SQLAlchemy ``Engine`` or an active ``Connection`` (for
+    Alembic migrations running inside an existing transaction).
     """
-    inspector = inspect(engine)
+    inspector = inspect(bind)
     tables = set(inspector.get_table_names())
     additions = {
         "accounts": [("email", "VARCHAR(320)")],
@@ -507,7 +549,8 @@ def upgrade_sqlite_schema(engine) -> None:
             ("share_password_hash", "VARCHAR(200)"),
         ],
     }
-    with engine.begin() as connection:
+
+    def _apply_additive(connection: Connection) -> None:
         for table_name, columns in additions.items():
             if table_name not in tables:
                 continue
@@ -568,7 +611,13 @@ def upgrade_sqlite_schema(engine) -> None:
                 )
             )
 
-    inspector = inspect(engine)
+    if isinstance(bind, Connection):
+        _apply_additive(bind)
+    else:
+        with bind.begin() as connection:
+            _apply_additive(connection)
+
+    inspector = inspect(bind)
     if "projects" not in tables:
         return
     owner_column = next(
@@ -592,14 +641,9 @@ def upgrade_sqlite_schema(engine) -> None:
     # SQLite cannot alter nullability or an FK action. Keep child tables in
     # place and rebuild only projects with legacy rename behavior enabled so
     # versions/project_groups continue to reference the new `projects` table.
-    raw = engine.raw_connection()
-    try:
-        cursor = raw.cursor()
-        cursor.execute("PRAGMA foreign_keys=OFF")
-        cursor.execute("PRAGMA legacy_alter_table=ON")
-        cursor.execute("BEGIN")
-        cursor.execute("ALTER TABLE projects RENAME TO projects_legacy")
-        cursor.execute("""
+    rebuild_statements = [
+        "ALTER TABLE projects RENAME TO projects_legacy",
+        """
             CREATE TABLE projects (
                 id VARCHAR(36) NOT NULL PRIMARY KEY,
                 owner_id VARCHAR(36) REFERENCES accounts(id) ON DELETE SET NULL,
@@ -623,8 +667,8 @@ def upgrade_sqlite_schema(engine) -> None:
                 CONSTRAINT uq_project_owner_slug UNIQUE (owner_id, slug),
                 CONSTRAINT uq_project_org_slug UNIQUE (organization_id, slug)
             )
-        """)
-        cursor.execute("""
+        """,
+        """
             INSERT INTO projects (
                 id, owner_id, created_by_id, organization_id, slug, title,
                 description, visibility, tags_json, thumbnail_type, views,
@@ -636,12 +680,53 @@ def upgrade_sqlite_schema(engine) -> None:
                 views, fork_count, featured, delete_protected, share_role, share_expires_at,
                 share_password_hash, created_at, updated_at
             FROM projects_legacy
-        """)
-        cursor.execute("DROP TABLE projects_legacy")
-        cursor.execute("CREATE INDEX ix_projects_owner_id ON projects (owner_id)")
-        cursor.execute("CREATE INDEX ix_projects_created_by_id ON projects (created_by_id)")
-        cursor.execute("CREATE INDEX ix_projects_organization_id ON projects (organization_id)")
-        cursor.execute("CREATE INDEX ix_projects_updated_at ON projects (updated_at)")
+        """,
+        "DROP TABLE projects_legacy",
+        "CREATE INDEX ix_projects_owner_id ON projects (owner_id)",
+        "CREATE INDEX ix_projects_created_by_id ON projects (created_by_id)",
+        "CREATE INDEX ix_projects_organization_id ON projects (organization_id)",
+        "CREATE INDEX ix_projects_updated_at ON projects (updated_at)",
+    ]
+    if isinstance(bind, Connection):
+        # SQLite ignores PRAGMA foreign_keys inside an active transaction, and
+        # renaming `projects` while FK enforcement is ON rewrites child FKs to
+        # `projects_legacy` so the subsequent DROP fires ON DELETE CASCADE.
+        if bind.execute(text("PRAGMA foreign_keys")).scalar():
+            raise RuntimeError(
+                "upgrade_sqlite_schema cannot rebuild legacy 'projects' on a "
+                "Connection with PRAGMA foreign_keys=ON; disable foreign keys "
+                "before starting the migration transaction or pass an Engine."
+            )
+        # Alembic's SQLite dialect sets transactional_ddl = False and Python's
+        # sqlite3 driver does not implicitly open a transaction for DDL, so
+        # start an explicit transaction when the DBAPI connection is idle.
+        bind.execute(text("PRAGMA legacy_alter_table=ON"))
+        driver_conn = bind.connection.driver_connection
+        started_tx = False
+        try:
+            if not getattr(driver_conn, "in_transaction", False):
+                bind.exec_driver_sql("BEGIN")
+                started_tx = True
+            for statement in rebuild_statements:
+                bind.execute(text(statement))
+            if started_tx:
+                bind.exec_driver_sql("COMMIT")
+        except Exception:
+            if started_tx:
+                bind.exec_driver_sql("ROLLBACK")
+            raise
+        finally:
+            bind.execute(text("PRAGMA legacy_alter_table=OFF"))
+        return
+
+    raw = bind.raw_connection()
+    try:
+        cursor = raw.cursor()
+        cursor.execute("PRAGMA foreign_keys=OFF")
+        cursor.execute("PRAGMA legacy_alter_table=ON")
+        cursor.execute("BEGIN")
+        for statement in rebuild_statements:
+            cursor.execute(statement)
         raw.commit()
         cursor.execute("PRAGMA foreign_keys=ON")
     except Exception:
@@ -713,11 +798,7 @@ def create_app(
     is_sqlite_memory = is_sqlite and (
         database_url == "sqlite:///:memory:" or ":memory:" in database_url
     )
-    connect_args = {"check_same_thread": False} if is_sqlite else {}
-    engine_kwargs: dict[str, Any] = {"connect_args": connect_args}
-    if not is_sqlite:
-        engine_kwargs["pool_pre_ping"] = True
-    engine = create_engine(database_url, **engine_kwargs)
+    engine = create_engine(database_url, **_build_engine_kwargs(database_url))
     if is_sqlite:
         # SQLite disables foreign keys per connection, which makes every
         # ondelete="CASCADE" inert. The ORM cascade covers projects and versions,
@@ -731,25 +812,46 @@ def create_app(
             if not is_sqlite_memory:
                 dbapi_connection.execute("PRAGMA journal_mode=WAL")
 
-    Base.metadata.create_all(engine)
-    if database_url.startswith("sqlite"):
-        upgrade_sqlite_schema(engine)
-    elif engine.dialect.name == "postgresql":
-        upgrade_postgresql_schema(engine)
-    legacy_project_owner_required = database_url.startswith("sqlite") and not next(
-        column["nullable"]
-        for column in inspect(engine).get_columns("projects")
-        if column["name"] == "owner_id"
+    skip_ddl = os.getenv("GEOLIBRE_SKIP_DDL_CREATE_ALL", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    if not skip_ddl:
+        Base.metadata.create_all(engine)
+        if database_url.startswith("sqlite"):
+            upgrade_sqlite_schema(engine)
+        elif engine.dialect.name == "postgresql":
+            upgrade_postgresql_schema(engine)
+        # create_all leaves pre-existing tables untouched, including their indexes.
+        # Add the OAuth indexes idempotently when upgrading a persisted database.
+        for index in OAUTH_INDEXES:
+            index.create(engine, checkfirst=True)
+        # create_all does not add an index to an already-existing transfer table.
+        PENDING_TRANSFER_INDEX.create(engine, checkfirst=True)
+        # Nor the federated identity indexes to a table from an earlier release.
+        for index in FEDERATED_IDENTITY_INDEXES:
+            index.create(engine, checkfirst=True)
+    db_inspector = inspect(engine)
+    if skip_ddl and not db_inspector.has_table("projects"):
+        engine.dispose()
+        raise RuntimeError(
+            "Database schema is not initialized (missing 'projects' table). "
+            "Run 'alembic upgrade head' before starting with GEOLIBRE_SKIP_DDL_CREATE_ALL."
+        )
+    owner_col = (
+        next(
+            (
+                column
+                for column in db_inspector.get_columns("projects")
+                if column["name"] == "owner_id"
+            ),
+            None,
+        )
+        if database_url.startswith("sqlite")
+        else None
     )
-    # create_all leaves pre-existing tables untouched, including their indexes.
-    # Add the OAuth indexes idempotently when upgrading a persisted database.
-    for index in OAUTH_INDEXES:
-        index.create(engine, checkfirst=True)
-    # create_all does not add an index to an already-existing transfer table.
-    PENDING_TRANSFER_INDEX.create(engine, checkfirst=True)
-    # Nor the federated identity indexes to a table from an earlier release.
-    for index in FEDERATED_IDENTITY_INDEXES:
-        index.create(engine, checkfirst=True)
+    legacy_project_owner_required = owner_col is not None and not owner_col["nullable"]
     sessions = sessionmaker(engine, expire_on_commit=False)
     oauth_config = make_oauth_config(public_url)
     clock_fn = clock or (lambda: int(datetime.now(UTC).timestamp()))
@@ -1290,19 +1392,79 @@ def create_app(
             ProjectGroup(project_id=project.id, group_id=group_id) for group_id in group_ids
         )
 
-    def can_edit_project(session: Session, project: Project, account: Account | None) -> bool:
+    def preload_project_access(
+        session: Session,
+        account: Account | None,
+        projects: list[Project],
+    ) -> tuple[dict[str, str], set[str]] | None:
+        """Batch-load the caller's org roles and accepted shared-update groups for a page.
+
+        Avoids 1-3 per-project queries inside ``can_edit_project`` when serializing
+        ``list_projects``, ``list_shares``, and org/group/user listings.
+        """
+        if account is None or not projects:
+            return None
+        org_ids = {
+            project.organization_id for project in projects if project.organization_id is not None
+        }
+        org_roles: dict[str, str] = {}
+        if org_ids:
+            rows = session.execute(
+                select(OrganizationMember.organization_id, OrganizationMember.role).where(
+                    OrganizationMember.account_id == account.id,
+                    OrganizationMember.organization_id.in_(org_ids),
+                )
+            ).all()
+            org_roles = {org_id: role for org_id, role in rows}
+        shared_group_ids = {
+            share.group_id
+            for project in projects
+            for share in project.group_shares
+            if share.group and share.group.shared_update
+        }
+        member_groups: set[str] = set()
+        if shared_group_ids:
+            member_groups = set(
+                session.scalars(
+                    select(GroupMember.group_id).where(
+                        GroupMember.account_id == account.id,
+                        GroupMember.status == "accepted",
+                        GroupMember.group_id.in_(shared_group_ids),
+                    )
+                ).all()
+            )
+        return org_roles, member_groups
+
+    def can_edit_project(
+        session: Session,
+        project: Project,
+        account: Account | None,
+        *,
+        access_cache: tuple[dict[str, str], set[str]] | None = None,
+    ) -> bool:
         if account is None:
             return False
         if project.organization_id is None and project.owner_id == account.id:
             return True
         if project.organization_id:
-            role = organization_role(session, project.organization_id, account.id)
+            role = (
+                access_cache[0].get(project.organization_id)
+                if access_cache is not None
+                else organization_role(session, project.organization_id, account.id)
+            )
             if role == "administrator" or (
                 project.created_by_id == account.id and role in {"publisher", "member"}
             ):
                 return True
         for share in project.group_shares:
-            if share.group.shared_update and group_membership(session, share.group_id, account.id):
+            if not share.group.shared_update:
+                continue
+            is_member = (
+                share.group_id in access_cache[1]
+                if access_cache is not None
+                else group_membership(session, share.group_id, account.id) is not None
+            )
+            if is_member:
                 return True
         return False
 
@@ -1348,6 +1510,8 @@ def create_app(
         project: Project,
         session: Session | None = None,
         account: Account | None = None,
+        *,
+        access_cache: tuple[dict[str, str], set[str]] | None = None,
     ) -> dict:
         raw, page = canonical_urls(project)
         value = {
@@ -1391,7 +1555,9 @@ def create_app(
         }
         if account is not None:
             assert session is not None
-            value["canEdit"] = can_edit_project(session, project, account)
+            value["canEdit"] = can_edit_project(
+                session, project, account, access_cache=access_cache
+            )
         return value
 
     def visible(
@@ -2112,8 +2278,14 @@ def create_app(
             .offset(offset)
             .limit(limit)
         ).all()
+        access_cache = preload_project_access(session, account, list(projects))
         response.headers["Cache-Control"] = "private, no-store"
-        return {"projects": [project_json(project, session, account) for project in projects]}
+        return {
+            "projects": [
+                project_json(project, session, account, access_cache=access_cache)
+                for project in projects
+            ]
+        }
 
     @app.post("/api/groups", status_code=201)
     def create_group(
@@ -2548,8 +2720,14 @@ def create_app(
             .limit(limit)
             .offset(offset)
         ).all()
+        access_cache = preload_project_access(session, account, list(projects))
         response.headers["Cache-Control"] = "private, no-store"
-        return {"projects": [project_json(project, session, account) for project in projects]}
+        return {
+            "projects": [
+                project_json(project, session, account, access_cache=access_cache)
+                for project in projects
+            ]
+        }
 
     @app.delete("/api/groups/{group_id}/projects/{project_id}", status_code=204)
     def moderate_group_project(
@@ -2674,9 +2852,15 @@ def create_app(
             .offset(offset)
             .limit(limit)
         ).all()
+        access_cache = preload_project_access(session, account, list(projects))
         if account is not None:
             response.headers["Cache-Control"] = "private, no-store"
-        return {"projects": [project_json(project, session, account) for project in projects]}
+        return {
+            "projects": [
+                project_json(project, session, account, access_cache=access_cache)
+                for project in projects
+            ]
+        }
 
     @app.post("/api/projects", status_code=201)
     def post_project(
@@ -2731,6 +2915,8 @@ def create_app(
 
     @app.get("/api/shares")
     def list_shares(
+        limit: Annotated[int, Query(ge=1, le=100)] = 100,
+        offset: Annotated[int, Query(ge=0)] = 0,
         principal: AuthPrincipal = Depends(require_scope("read:projects")),
         session: Session = Depends(get_session),
     ):
@@ -2740,28 +2926,43 @@ def create_app(
         see and revoke them.
         """
         account = principal.account
-        candidates = session.scalars(
-            select(Project)
-            .options(*LISTING_EAGER_LOADS)
-            .where(
-                (Project.owner_id == account.id)
-                | (Project.created_by_id == account.id)
-                | Project.organization_id.in_(
-                    select(OrganizationMember.organization_id).where(
-                        OrganizationMember.account_id == account.id,
-                        OrganizationMember.role == "administrator",
-                    )
-                ),
-                Project.visibility.in_(("public", "unlisted")),
-            )
-            .order_by(Project.updated_at.desc())
-        ).all()
+        admin_org_ids = select(OrganizationMember.organization_id).where(
+            OrganizationMember.account_id == account.id,
+            OrganizationMember.role == "administrator",
+        )
+        creator_org_ids = select(OrganizationMember.organization_id).where(
+            OrganizationMember.account_id == account.id,
+            OrganizationMember.role.in_(("publisher", "member")),
+        )
+        # Push can_manage_project into SQL so pagination and total are exact
+        # without per-row authorization queries.
+        manageable = or_(
+            Project.organization_id.is_(None) & (Project.owner_id == account.id),
+            Project.organization_id.in_(admin_org_ids),
+            (Project.created_by_id == account.id) & Project.organization_id.in_(creator_org_ids),
+        )
+        where_clauses = (manageable, Project.visibility.in_(("public", "unlisted")))
+        total = session.scalar(select(func.count()).select_from(Project).where(*where_clauses)) or 0
+        projects = list(
+            session.scalars(
+                select(Project)
+                .options(*LISTING_EAGER_LOADS)
+                .where(*where_clauses)
+                .order_by(Project.created_at.desc(), Project.id.desc())
+                .offset(offset)
+                .limit(limit)
+            ).all()
+        )
+        access_cache = preload_project_access(session, account, projects)
         return {
             "shares": [
-                project_json(project, session, account) | {"projectSlug": project.slug}
-                for project in candidates
-                if can_manage_project(session, project, account)
-            ]
+                project_json(project, session, account, access_cache=access_cache)
+                | {"projectSlug": project.slug}
+                for project in projects
+            ],
+            "limit": limit,
+            "offset": offset,
+            "total": total,
         }
 
     @app.delete("/api/shares/{share_id}", status_code=204)
@@ -2872,16 +3073,21 @@ def create_app(
                 query.where(Project.featured.is_(True)),
                 count.where(Project.featured.is_(True)),
             )
-        projects = session.scalars(
-            query.options(*LISTING_EAGER_LOADS)
-            .order_by(Project.updated_at.desc())
-            .offset(offset)
-            .limit(limit)
-        ).all()
+        projects = list(
+            session.scalars(
+                query.options(*LISTING_EAGER_LOADS)
+                .order_by(Project.updated_at.desc())
+                .offset(offset)
+                .limit(limit)
+            ).all()
+        )
+        access_cache = preload_project_access(session, account, projects)
         if account is not None:
             response.headers["Cache-Control"] = "private, no-store"
         return {
-            "projects": [project_json(p, session, account) for p in projects],
+            "projects": [
+                project_json(p, session, account, access_cache=access_cache) for p in projects
+            ],
             "limit": limit,
             "offset": offset,
             "total": session.scalar(count),
@@ -3269,38 +3475,68 @@ def create_app(
     @app.get("/api/transfers/incoming")
     def list_incoming_transfers(
         response: Response,
+        limit: Annotated[int, Query(ge=1, le=100)] = 100,
+        offset: Annotated[int, Query(ge=0)] = 0,
         principal: AuthPrincipal = Depends(require_scope("read:projects")),
         session: Session = Depends(get_session),
     ):
         """List transfers offered to the caller that are still pending."""
+        where_clauses = (
+            ProjectTransfer.to_account_id == principal.account.id,
+            ProjectTransfer.status == "pending",
+        )
+        total = (
+            session.scalar(select(func.count()).select_from(ProjectTransfer).where(*where_clauses))
+            or 0
+        )
         transfers = session.scalars(
             select(ProjectTransfer)
-            .where(
-                ProjectTransfer.to_account_id == principal.account.id,
-                ProjectTransfer.status == "pending",
-            )
-            .order_by(ProjectTransfer.created_at.desc())
+            .options(*TRANSFER_EAGER_LOADS)
+            .where(*where_clauses)
+            .order_by(ProjectTransfer.created_at.desc(), ProjectTransfer.id.desc())
+            .offset(offset)
+            .limit(limit)
         ).all()
         response.headers["Cache-Control"] = "private, no-store"
-        return {"transfers": [transfer_json(item) for item in transfers]}
+        return {
+            "transfers": [transfer_json(item) for item in transfers],
+            "limit": limit,
+            "offset": offset,
+            "total": total,
+        }
 
     @app.get("/api/transfers/outgoing")
     def list_outgoing_transfers(
         response: Response,
+        limit: Annotated[int, Query(ge=1, le=100)] = 100,
+        offset: Annotated[int, Query(ge=0)] = 0,
         principal: AuthPrincipal = Depends(require_scope("read:projects")),
         session: Session = Depends(get_session),
     ):
         """List the caller's transfers that are still pending acceptance."""
+        where_clauses = (
+            ProjectTransfer.from_account_id == principal.account.id,
+            ProjectTransfer.status == "pending",
+        )
+        total = (
+            session.scalar(select(func.count()).select_from(ProjectTransfer).where(*where_clauses))
+            or 0
+        )
         transfers = session.scalars(
             select(ProjectTransfer)
-            .where(
-                ProjectTransfer.from_account_id == principal.account.id,
-                ProjectTransfer.status == "pending",
-            )
-            .order_by(ProjectTransfer.created_at.desc())
+            .options(*TRANSFER_EAGER_LOADS)
+            .where(*where_clauses)
+            .order_by(ProjectTransfer.created_at.desc(), ProjectTransfer.id.desc())
+            .offset(offset)
+            .limit(limit)
         ).all()
         response.headers["Cache-Control"] = "private, no-store"
-        return {"transfers": [transfer_json(item) for item in transfers]}
+        return {
+            "transfers": [transfer_json(item) for item in transfers],
+            "limit": limit,
+            "offset": offset,
+            "total": total,
+        }
 
     @app.post("/api/transfers/{transfer_id}/accept")
     def accept_project_transfer(
