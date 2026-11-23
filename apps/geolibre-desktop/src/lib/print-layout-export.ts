@@ -605,6 +605,16 @@ export interface AtlasExportSource {
   optionsForPage: (pageIndex: number) => Promise<LayoutOptions>;
   /** Progress callback fired before each page renders (1-based `current`). */
   onProgress?: (current: number, total: number) => void;
+  /** Optional hook fired once page capture/rendering finishes and saving begins. */
+  onBeforeSave?: () => void;
+  /** Optional signal to cancel a multi-page export between pages. */
+  signal?: AbortSignal;
+}
+
+function throwIfAtlasAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new DOMException("Atlas export cancelled", "AbortError");
+  }
 }
 
 /**
@@ -618,16 +628,20 @@ export async function exportAtlasPdf(
   filename: string,
   dpi = 150,
 ): Promise<string | null> {
-  const { total, optionsForPage, onProgress } = source;
+  const { total, optionsForPage, onProgress, onBeforeSave, signal } = source;
   if (total < 1) throw new Error("Atlas export needs at least one page");
+  throwIfAtlasAborted(signal);
   // Load jsPDF before driving the map through every page, so a failed import
   // (e.g. offline) stops the export up front.
   const JsPdf = await loadJsPdf();
+  throwIfAtlasAborted(signal);
   let pdf: jsPDF | null = null;
   const viewports: (string | null)[] = [];
   for (let i = 0; i < total; i++) {
+    throwIfAtlasAborted(signal);
     onProgress?.(i + 1, total);
     const opts = await optionsForPage(i);
+    throwIfAtlasAborted(signal);
     const size = resolvePageSize(opts);
     const { widthMm, heightMm } = pageMm(size);
     const orientation = widthMm >= heightMm ? "landscape" : "portrait";
@@ -642,8 +656,11 @@ export async function exportAtlasPdf(
     pdf.addImage(canvas, "PNG", 0, 0, widthMm, heightMm, undefined, "FAST");
     viewports.push(geoPdfPageEntry(opts, canvas, widthMm, heightMm));
   }
+  throwIfAtlasAborted(signal);
   writeGeoPdfViewports(pdf as jsPDF, viewports);
   const bytes = new Uint8Array((pdf as jsPDF).output("arraybuffer"));
+  throwIfAtlasAborted(signal);
+  onBeforeSave?.();
   return saveBinaryFileWithFallback(bytes, {
     defaultName: filename,
     filters: [{ name: "PDF Document", extensions: ["pdf"] }],
@@ -666,8 +683,9 @@ export async function exportAtlasPngZip(
   filename: string,
   dpi = 150,
 ): Promise<string | null> {
-  const { total, optionsForPage, onProgress } = source;
+  const { total, optionsForPage, onProgress, onBeforeSave, signal } = source;
   if (total < 1) throw new Error("Atlas export needs at least one page");
+  throwIfAtlasAborted(signal);
   const files: Record<string, Uint8Array> = {};
   const used = new Set<string>();
   // Compare names the way common filesystems do on extraction (Windows/macOS
@@ -679,10 +697,13 @@ export async function exportAtlasPngZip(
       .replace(/[ .]+$/g, "")
       .toLowerCase();
   for (let i = 0; i < total; i++) {
+    throwIfAtlasAborted(signal);
     onProgress?.(i + 1, total);
     const opts = await optionsForPage(i);
+    throwIfAtlasAborted(signal);
     const canvas = renderToCanvas(opts, dpi);
     const bytes = await canvasToPngBytes(canvas);
+    throwIfAtlasAborted(signal);
     const base = entryName(i) || String(i + 1);
     let name = base;
     for (let suffix = 2; used.has(collisionKey(name)); suffix++) {
@@ -691,8 +712,11 @@ export async function exportAtlasPngZip(
     used.add(collisionKey(name));
     files[`${name}.png`] = bytes;
   }
+  throwIfAtlasAborted(signal);
   // PNG payloads are already compressed; store them instead of re-deflating.
   const zipped = zipSync(files, { level: 0 });
+  throwIfAtlasAborted(signal);
+  onBeforeSave?.();
   return saveBinaryFileWithFallback(zipped, {
     defaultName: filename,
     filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
