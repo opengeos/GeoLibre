@@ -260,6 +260,14 @@ The sidecar can also confine conversion inputs and outputs to an allowlist of di
 | **OD cost matrix** | Travel time and distance for every origin-destination pair between two point layers. |
 | **Sequential route (directions)** | Route through a set of stops in order, with turn-by-turn directions. |
 
+The same menu also routes over **your own line layer**, entirely in the browser and with no server: trails, pipes, rivers, a road extract, or any other line network. The tool builds a graph from the lines (lines that share a vertex are connected, and line ends within the snap tolerance of another line are joined to it; lines that only cross stay apart, like a bridge over a road). Each edge costs its length in metres, a cost field (the cost of traversing the whole feature, spread over it by length), or the travel time in minutes from a speed field in km/h. An optional one-way field accepts the OSM (`yes`, `-1`, `no`) and Esri (`FT`, `TF`, `B`, `N`) conventions. Points are attached at the closest spot on the nearest line, and each result records how far it was moved (`*_snap_m`).
+
+| Tool | Description |
+| --- | --- |
+| **Shortest path (local network)** | Route through stops in order (or sorted by a field) with A\* or Dijkstra. Each leg records its cost and length. |
+| **Closest facility (local network)** | For each incident, the k nearest facilities by network cost, with an optional cost limit and travel direction, drawn as ranked routes. |
+| **Service area (local network)** | The parts of the network reachable from facilities within each cost break, clipped partway along edges, as lines and optionally as polygons buffered by a trim width. Facilities can share one area per break or get their own. |
+
 ### Spatial Statistics
 
 **Processing → GeoLibre Toolbox → Spatial Statistics** runs pattern analysis on a point or polygon layer and adds the result to the map.
@@ -273,6 +281,17 @@ The sidecar can also confine conversion inputs and outputs to an allowlist of di
 | **Kernel density (heatmap)** | A continuous density surface from a point layer. |
 | **Emerging Hot Spot (space-time cube)** | Hot-spot trends over time from a space-time cube. |
 | **Composite score (suitability index)** | Normalize, weight, and combine several numeric fields into one index (0-100 by default, or 0-1), styled on the map by the score. |
+| **Ordinary least squares (OLS)** | Global linear regression of a field on comma-separated explanatory fields: coefficients with standard errors, t and p values, R², F, AIC and AICc in the log, and fitted values and (standardized) residuals on each feature. |
+| **Geographically weighted regression (GWR)** | Local regression with a bisquare or Gaussian kernel and an adaptive (nearest neighbors) or fixed (metres) bandwidth. Leave the bandwidth at 0 to choose it by AICc golden-section search. Each feature gets its local coefficients, t values, fitted value, residuals, and local R². |
+| **DBSCAN clustering** | Density clusters from a search distance in metres and a minimum point count; each feature gets a cluster id (-1 for noise) and whether it is a core, border, or noise point. |
+| **HDBSCAN clustering** | Hierarchical density clusters that adapt to varying density, with only a minimum cluster size to set; each feature gets a cluster id and a membership probability. |
+| **Kriging variogram and cross-validation** | The empirical semivariogram of a point field, a spherical, exponential, Gaussian or linear model fitted as the Interpolation (IDW / Kriging) raster tool fits it, and leave-one-out cross-validation of ordinary kriging (mean error, RMSE, RMSSE) per model, with per-point predictions and standardized errors. |
+
+Distances in these tools are great-circle metres. The OLS and GWR output
+matches GWR4 on its Georgia example data, and the clustering matches
+scikit-learn's `DBSCAN` and `HDBSCAN` (its defaults: excess-of-mass selection,
+no single root cluster). GWR handles up to 1,500 features, HDBSCAN 5,000, and
+the kriging cross-validation 1,000 distinct locations.
 
 
 The **Composite score** builder is the suitability and index workflow: pick two

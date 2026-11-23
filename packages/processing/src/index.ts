@@ -42,7 +42,25 @@ export {
   VECTOR_TOOL_WORKER_IDLE_MS,
   WORKER_VECTOR_TOOL_IDS,
 } from "./vector-tool-runner";
-export { NETWORK_TOOLS, getNetworkTool, layerToSequencedPoints } from "./network-tools";
+export {
+  NETWORK_TOOLS,
+  getNetworkTool,
+  layerToSequencedPoints,
+  localShortestPathTool,
+  localClosestFacilityTool,
+  localServiceAreaTool,
+  parseCostBreaks,
+} from "./network-tools";
+export {
+  LocalNetwork,
+  buildLocalNetwork,
+  parseDirection,
+  type LocalNetworkOptions,
+  type NetworkCostMode,
+  type NetworkDirection,
+  type NetworkEdge,
+  type NetworkPath,
+} from "./local-network";
 export {
   STATISTICS_TOOLS,
   getStatisticsTool,
@@ -54,6 +72,12 @@ export {
   emergingHotSpotTool,
   emergingPattern,
   compositeScoreTool,
+  olsRegressionTool,
+  gwrTool,
+  dbscanTool,
+  hdbscanTool,
+  krigingDiagnosticsTool,
+  parseFieldList,
   computeCompositeScores,
   normalizeFieldValues,
   numericFieldValue,

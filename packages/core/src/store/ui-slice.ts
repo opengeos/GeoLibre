@@ -65,7 +65,13 @@ export type VectorToolKind =
   | "fix-topology";
 
 /** Identifiers of the network-analysis tools (`NETWORK_TOOLS` ids). */
-export type NetworkToolKind = "isochrone" | "od-matrix" | "sequential-route";
+export type NetworkToolKind =
+  | "isochrone"
+  | "od-matrix"
+  | "sequential-route"
+  | "local-shortest-path"
+  | "local-closest-facility"
+  | "local-service-area";
 
 /** Identifiers of the spatial-statistics tools (`STATISTICS_TOOLS` ids). */
 export type StatisticsToolKind =
@@ -75,7 +81,12 @@ export type StatisticsToolKind =
   | "average-nearest-neighbor"
   | "kernel-density"
   | "emerging-hot-spot"
-  | "composite-score";
+  | "composite-score"
+  | "ols-regression"
+  | "gwr"
+  | "dbscan"
+  | "hdbscan"
+  | "kriging-diagnostics";
 
 /**
  * Identifiers of the raster processing tools. Kept in sync by hand with the

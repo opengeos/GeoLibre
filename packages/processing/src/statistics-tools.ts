@@ -21,6 +21,21 @@ import type {
   ProcessingAlgorithm,
   ProcessingContext,
 } from "./types";
+import {
+  DistanceMatrix,
+  dbscan,
+  empiricalVariogram,
+  fitVariogram,
+  gwr,
+  hdbscan,
+  krigingLeaveOneOut,
+  ols,
+  searchGwrBandwidth,
+  type GwrKernel,
+  type KrigingCrossValidation,
+  type VariogramFit,
+  type VariogramModel,
+} from "./spatial-models";
 import { parseTimestamp } from "./vector-tools";
 
 /**
@@ -1977,6 +1992,683 @@ export const compositeScoreTool: ProcessingAlgorithm = {
   },
 };
 
+// -- Spatial regression (OLS / GWR) -----------------------------------------
+
+/** OLS is O(n k²); the cap only guards against pathological layers. */
+const MAX_OLS_FEATURES = 200_000;
+/** GWR keeps an n x n distance matrix and refits n local models per bandwidth. */
+const MAX_GWR_FEATURES = 1500;
+/** HDBSCAN builds a dense O(n²) minimum spanning tree. */
+const MAX_HDBSCAN_FEATURES = 5000;
+/** DBSCAN uses a grid index, so it scales much further. */
+const MAX_DBSCAN_FEATURES = 200_000;
+/** Leave-one-out kriging inverts an (n + 1)² matrix per variogram model. */
+const MAX_KRIGING_CV_FEATURES = 1000;
+
+/** Great-circle distance in metres on the active body. */
+function greatCircleM(a: [number, number], b: [number, number]): number {
+  return haversineKm(a[0], a[1], b[0], b[1]) * 1000;
+}
+
+/** Splits "a, b;c" into trimmed, de-duplicated field names. */
+export function parseFieldList(value: unknown): string[] {
+  if (Array.isArray(value)) return [...new Set(value.map((v) => String(v).trim()).filter(Boolean))];
+  return [
+    ...new Set(
+      String(value ?? "")
+        .split(/[,;]/)
+        .map((part) => part.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+interface RegressionSample {
+  /** Indices into the layer's features. */
+  indices: number[];
+  coords: [number, number][];
+  y: number[];
+  x: number[][];
+}
+
+/** Features with a location and finite values for every model field. */
+function collectRegressionSample(
+  features: Feature[],
+  dependent: string,
+  explanatory: string[],
+): RegressionSample {
+  const coords = featureCoords(features);
+  const out: RegressionSample = { indices: [], coords: [], y: [], x: [] };
+  features.forEach((feature, index) => {
+    const position = coords[index];
+    if (!position) return;
+    const yv = numericFieldValue(feature.properties?.[dependent]);
+    if (yv === null) return;
+    const row: number[] = [];
+    for (const field of explanatory) {
+      const v = numericFieldValue(feature.properties?.[field]);
+      if (v === null) return;
+      row.push(v);
+    }
+    out.indices.push(index);
+    out.coords.push(position);
+    out.y.push(yv);
+    out.x.push(row);
+  });
+  return out;
+}
+
+/** Reads and validates the dependent / explanatory parameters. */
+function readModelFields(
+  ctx: ProcessingContext,
+): { layer: GeoLibreLayer; dependent: string; explanatory: string[] } | null {
+  const layer = getLayer(ctx);
+  if (!layer?.geojson) {
+    ctx.log("Error: layer has no GeoJSON data");
+    return null;
+  }
+  const dependent = String(ctx.parameters.dependent ?? "").trim();
+  if (!dependent) {
+    ctx.log("Error: choose the dependent variable");
+    return null;
+  }
+  const explanatory = parseFieldList(ctx.parameters.explanatory).filter((f) => f !== dependent);
+  if (!explanatory.length) {
+    ctx.log("Error: list at least one explanatory field (comma-separated)");
+    return null;
+  }
+  return { layer, dependent, explanatory };
+}
+
+/** Compact numeric formatting for log tables. */
+function fmt(value: number, digits = 6): string {
+  if (!Number.isFinite(value)) return String(value);
+  if (value !== 0 && Math.abs(value) < 1e-4) return value.toExponential(3);
+  return Number(value.toFixed(digits)).toString();
+}
+
+function pad(text: string, width: number): string {
+  return text.length >= width ? `${text} ` : text + " ".repeat(width - text.length);
+}
+
+const MODEL_FIELD_PARAMS = [
+  {
+    id: "layer",
+    label: "Layer",
+    type: "layer" as const,
+    required: true,
+    geometryFilter: ["point" as const, "polygon" as const],
+  },
+  { id: "dependent", label: "Dependent variable", type: "field" as const, required: true },
+  {
+    id: "explanatory",
+    label: "Explanatory fields",
+    type: "string" as const,
+    required: true,
+    description: "Comma-separated numeric fields, e.g. income, age, density.",
+  },
+];
+
+/** Copies of the sampled features with new properties added. */
+function withModelFields(
+  features: Feature[],
+  indices: number[],
+  fields: (row: number) => Record<string, number>,
+): Feature[] {
+  return indices.map((featureIndex, row) => ({
+    ...features[featureIndex],
+    properties: { ...(features[featureIndex].properties ?? {}), ...fields(row) },
+  }));
+}
+
+export const olsRegressionTool: ProcessingAlgorithm = {
+  id: "ols-regression",
+  name: "Ordinary least squares (OLS)",
+  description:
+    "Global linear regression of a field on one or more explanatory fields: coefficients, standard errors, t and p values, R², AICc, and per-feature fitted values and residuals.",
+  group: "Spatial Regression",
+  parameters: MODEL_FIELD_PARAMS,
+  run: (ctx) => {
+    const fields = readModelFields(ctx);
+    if (!fields) return;
+    const { layer, dependent, explanatory } = fields;
+    const features = layer.geojson?.features ?? [];
+    const sample = collectRegressionSample(features, dependent, explanatory);
+    const n = sample.y.length;
+    if (n > MAX_OLS_FEATURES) {
+      ctx.log(`Error: ${n} features exceeds the ${MAX_OLS_FEATURES}-feature limit.`);
+      return;
+    }
+    if (n <= explanatory.length + 1) {
+      ctx.log(
+        `Error: need more than ${explanatory.length + 1} features with numeric values in every model field (found ${n}).`,
+      );
+      return;
+    }
+    const fit = ols(sample.x, sample.y);
+    if (!fit) {
+      ctx.log("Error: the explanatory fields are collinear (or constant); drop one and retry.");
+      return;
+    }
+    const names = ["Intercept", ...explanatory];
+    ctx.log(`OLS: ${dependent} ~ ${explanatory.join(" + ")} (n=${n})`);
+    ctx.log(
+      `  ${pad("Variable", 18)}${pad("Coefficient", 14)}${pad("Std. error", 14)}${pad("t", 12)}p`,
+    );
+    names.forEach((name, j) => {
+      ctx.log(
+        `  ${pad(name, 18)}${pad(fmt(fit.coefficients[j]), 14)}${pad(fmt(fit.standardErrors[j]), 14)}${pad(fmt(fit.tValues[j], 4), 12)}${fmt(fit.pValues[j], 4)}`,
+      );
+    });
+    ctx.log(`  R²: ${fmt(fit.r2, 4)}   Adjusted R²: ${fmt(fit.adjR2, 4)}`);
+    ctx.log(
+      `  F(${fit.k - 1}, ${n - fit.k}): ${fmt(fit.fStatistic, 4)}   p: ${fmt(fit.fPValue, 4)}`,
+    );
+    ctx.log(
+      `  Log-likelihood: ${fmt(fit.logLikelihood, 3)}   AIC: ${fmt(fit.aic, 3)}   AICc: ${fmt(fit.aicc, 3)}   σ: ${fmt(Math.sqrt(fit.sigma2), 4)}`,
+    );
+    if (n < features.length) {
+      ctx.log(
+        `  ${features.length - n} feature(s) without numeric values in every field were left out.`,
+      );
+    }
+    const out = withModelFields(features, sample.indices, (row) => ({
+      ols_pred: fit.fitted[row],
+      ols_resid: fit.residuals[row],
+      ols_std_resid: fit.standardizedResiduals[row],
+    }));
+    ctx.addResultLayer?.(`${layer.name} (OLS residuals)`, featureCollection(out), {
+      graduatedField: "ols_std_resid",
+    });
+  },
+};
+
+export const gwrTool: ProcessingAlgorithm = {
+  id: "gwr",
+  name: "Geographically weighted regression (GWR)",
+  description:
+    "Local regression whose coefficients vary over space, with a bisquare or Gaussian kernel and a fixed (metres) or adaptive (nearest neighbors) bandwidth, chosen by AICc when left at 0. Writes local coefficients, t values, fitted values, residuals and local R² to each feature.",
+  group: "Spatial Regression",
+  parameters: [
+    ...MODEL_FIELD_PARAMS,
+    {
+      id: "kernel",
+      label: "Kernel",
+      type: "select",
+      default: "bisquare",
+      options: [
+        { value: "bisquare", label: "Bisquare" },
+        { value: "gaussian", label: "Gaussian" },
+      ],
+    },
+    {
+      id: "bandwidthType",
+      label: "Bandwidth type",
+      type: "select",
+      default: "adaptive",
+      options: [
+        { value: "adaptive", label: "Adaptive (nearest neighbors)" },
+        { value: "fixed", label: "Fixed distance (metres)" },
+      ],
+    },
+    {
+      id: "bandwidth",
+      label: "Bandwidth (0 = optimize by AICc)",
+      type: "number",
+      default: 0,
+      min: 0,
+      description:
+        "Neighbor count for an adaptive kernel (the feature itself included), or a distance in metres for a fixed one.",
+    },
+  ],
+  run: (ctx) => {
+    const fields = readModelFields(ctx);
+    if (!fields) return;
+    const { layer, dependent, explanatory } = fields;
+    const features = layer.geojson?.features ?? [];
+    const sample = collectRegressionSample(features, dependent, explanatory);
+    const n = sample.y.length;
+    const k = explanatory.length + 1;
+    if (n > MAX_GWR_FEATURES) {
+      ctx.log(`Error: ${n} features exceeds the ${MAX_GWR_FEATURES}-feature limit for GWR.`);
+      return;
+    }
+    if (n < k + 3) {
+      ctx.log(
+        `Error: need at least ${k + 3} features with numeric values in every model field (found ${n}).`,
+      );
+      return;
+    }
+    const kernel = (
+      (ctx.parameters.kernel as string) === "gaussian" ? "gaussian" : "bisquare"
+    ) as GwrKernel;
+    const adaptive = (ctx.parameters.bandwidthType as string) !== "fixed";
+    const options = { kernel, adaptive };
+    const dm = new DistanceMatrix(n, (i, j) => greatCircleM(sample.coords[i], sample.coords[j]));
+    let bandwidth = Number(ctx.parameters.bandwidth ?? 0);
+    if (!Number.isFinite(bandwidth) || bandwidth < 0) bandwidth = 0;
+    if (adaptive && bandwidth > 0) {
+      bandwidth = Math.round(bandwidth);
+      if (bandwidth < k + 1 || bandwidth > n) {
+        ctx.log(`Error: an adaptive bandwidth must be between ${k + 1} and ${n} neighbors.`);
+        return;
+      }
+    }
+    if (bandwidth === 0) {
+      const found = searchGwrBandwidth(sample.x, sample.y, dm, options);
+      if (!Number.isFinite(found.aicc)) {
+        ctx.log(
+          "Error: no bandwidth gave a solvable model; check the explanatory fields for collinearity.",
+        );
+        return;
+      }
+      bandwidth = found.bandwidth;
+      ctx.log(
+        `Bandwidth by AICc golden-section search: ${adaptive ? `${bandwidth} neighbors` : `${fmt(bandwidth, 1)} m`} (${found.evaluations} fits).`,
+      );
+    }
+    const fit = gwr(sample.x, sample.y, dm, bandwidth, options, true);
+    if (!fit) {
+      ctx.log(
+        "Error: a local regression is singular at this bandwidth (too few neighbors, or collinear fields); widen the bandwidth.",
+      );
+      return;
+    }
+    const global = ols(sample.x, sample.y);
+    const names = ["intercept", ...explanatory];
+    ctx.log(`GWR: ${dependent} ~ ${explanatory.join(" + ")} (n=${n}, ${kernel} kernel)`);
+    ctx.log(
+      `  Bandwidth: ${adaptive ? `${bandwidth} neighbors (adaptive)` : `${fmt(bandwidth, 1)} m (fixed)`}`,
+    );
+    ctx.log(
+      `  R²: ${fmt(fit.r2, 4)}   Adjusted R²: ${fmt(fit.adjR2, 4)}   AICc: ${fmt(fit.aicc, 3)}`,
+    );
+    ctx.log(
+      `  Effective parameters tr(S): ${fmt(fit.traceS, 3)}   σ: ${fmt(Math.sqrt(fit.sigma2), 4)}   RSS: ${fmt(fit.rss, 4)}`,
+    );
+    if (global) {
+      ctx.log(
+        `  Global OLS AICc: ${fmt(global.aicc, 3)} (${fit.aicc < global.aicc - 3 ? "GWR fits better" : "no clear improvement over OLS"})`,
+      );
+    }
+    ctx.log(`  ${pad("Local coefficient", 20)}${pad("Min", 12)}${pad("Median", 12)}Max`);
+    names.forEach((name, j) => {
+      const sorted = fit.coefficients.map((b) => b[j]).sort((a, b) => a - b);
+      ctx.log(
+        `  ${pad(name, 20)}${pad(fmt(sorted[0], 4), 12)}${pad(fmt(sorted[Math.floor(sorted.length / 2)], 4), 12)}${fmt(sorted[sorted.length - 1], 4)}`,
+      );
+    });
+    const out = withModelFields(features, sample.indices, (row) => {
+      const props: Record<string, number> = {};
+      names.forEach((name, j) => {
+        props[`gwr_${name}`] = fit.coefficients[row][j];
+        props[`gwr_t_${name}`] = fit.tValues[row][j];
+      });
+      props.gwr_pred = fit.fitted[row];
+      props.gwr_resid = fit.residuals[row];
+      props.gwr_std_resid = fit.standardizedResiduals[row];
+      props.gwr_local_r2 = fit.localR2[row];
+      return props;
+    });
+    ctx.addResultLayer?.(`${layer.name} (GWR)`, featureCollection(out), {
+      graduatedField: "gwr_local_r2",
+    });
+  },
+};
+
+// -- Density clustering (DBSCAN / HDBSCAN) -----------------------------------
+
+/** Unit-sphere-scaled 3D position: chord distances are monotone in arc length. */
+function toChordSpace(coord: [number, number], radius: number): number[] {
+  const lon = (coord[0] * Math.PI) / 180;
+  const lat = (coord[1] * Math.PI) / 180;
+  return [
+    radius * Math.cos(lat) * Math.cos(lon),
+    radius * Math.cos(lat) * Math.sin(lon),
+    radius * Math.sin(lat),
+  ];
+}
+
+/** Located features of a layer, with their coordinates. */
+function locatedFeatures(features: Feature[]): { indices: number[]; coords: [number, number][] } {
+  const coords = featureCoords(features);
+  const out = { indices: [] as number[], coords: [] as [number, number][] };
+  coords.forEach((c, i) => {
+    if (!c) return;
+    out.indices.push(i);
+    out.coords.push(c);
+  });
+  return out;
+}
+
+export const dbscanTool: ProcessingAlgorithm = {
+  id: "dbscan",
+  name: "DBSCAN clustering",
+  description:
+    "Density-based clusters: points with at least the minimum number of neighbors within the search distance seed clusters; isolated points are labelled noise (-1).",
+  group: "Density Clustering",
+  parameters: [
+    {
+      id: "layer",
+      label: "Layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["point", "polygon"],
+    },
+    {
+      id: "eps",
+      label: "Search distance (m)",
+      type: "number",
+      default: 500,
+      min: 0,
+    },
+    {
+      id: "minPoints",
+      label: "Minimum points",
+      type: "number",
+      default: 5,
+      min: 1,
+      step: 1,
+      description:
+        "Neighbors within the search distance (the point itself included) a core point needs.",
+    },
+  ],
+  run: (ctx) => {
+    const layer = getLayer(ctx);
+    if (!layer?.geojson) {
+      ctx.log("Error: layer has no GeoJSON data");
+      return;
+    }
+    const eps = Number(ctx.parameters.eps);
+    if (!(eps > 0)) {
+      ctx.log("Error: the search distance must be positive");
+      return;
+    }
+    const minPoints = Math.max(1, Math.round(Number(ctx.parameters.minPoints ?? 5)) || 5);
+    const features = layer.geojson.features;
+    const located = locatedFeatures(features);
+    const n = located.coords.length;
+    if (!n) {
+      ctx.log("Error: the layer has no locatable features");
+      return;
+    }
+    if (n > MAX_DBSCAN_FEATURES) {
+      ctx.log(`Error: ${n} features exceeds the ${MAX_DBSCAN_FEATURES}-feature limit.`);
+      return;
+    }
+    // Clustering in 3D chord space makes the eps test exact for great-circle
+    // distance, at any latitude and across the antimeridian.
+    const radius = getActiveMeanRadiusMeters();
+    const chordEps = 2 * radius * Math.sin(Math.min(Math.PI / 2, eps / (2 * radius)));
+    const result = dbscan(
+      located.coords.map((c) => toChordSpace(c, radius)),
+      chordEps,
+      minPoints,
+    );
+    const noise = result.labels.filter((l) => l < 0).length;
+    ctx.log(
+      `DBSCAN (search distance ${eps} m, minimum ${minPoints} points): ${result.clusterCount} cluster(s), ${noise} noise point(s) of ${n}.`,
+    );
+    const out = withModelFields(features, located.indices, (row) => ({
+      cluster: result.labels[row],
+    }));
+    out.forEach((feature, row) => {
+      feature.properties = {
+        ...feature.properties,
+        cluster_type: result.labels[row] < 0 ? "noise" : result.core[row] ? "core" : "border",
+      };
+    });
+    ctx.addResultLayer?.(`${layer.name} (DBSCAN)`, featureCollection(out), {
+      graduatedField: "cluster",
+    });
+  },
+};
+
+export const hdbscanTool: ProcessingAlgorithm = {
+  id: "hdbscan",
+  name: "HDBSCAN clustering",
+  description:
+    "Hierarchical density-based clusters that adapt to varying density, with no search distance to tune: set the smallest cluster size. Writes each feature's cluster (-1 for noise) and membership probability.",
+  group: "Density Clustering",
+  parameters: [
+    {
+      id: "layer",
+      label: "Layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["point", "polygon"],
+    },
+    {
+      id: "minClusterSize",
+      label: "Minimum cluster size",
+      type: "number",
+      default: 5,
+      min: 2,
+      step: 1,
+    },
+    {
+      id: "minSamples",
+      label: "Minimum samples (0 = cluster size)",
+      type: "number",
+      default: 0,
+      min: 0,
+      step: 1,
+      description:
+        "Higher values make the clustering more conservative, labelling more points as noise.",
+    },
+  ],
+  run: (ctx) => {
+    const layer = getLayer(ctx);
+    if (!layer?.geojson) {
+      ctx.log("Error: layer has no GeoJSON data");
+      return;
+    }
+    const minClusterSize = Math.max(2, Math.round(Number(ctx.parameters.minClusterSize ?? 5)) || 5);
+    const rawSamples = Math.round(Number(ctx.parameters.minSamples ?? 0));
+    const minSamples = rawSamples > 0 ? rawSamples : minClusterSize;
+    const features = layer.geojson.features;
+    const located = locatedFeatures(features);
+    const n = located.coords.length;
+    if (n < minClusterSize) {
+      ctx.log(`Error: need at least ${minClusterSize} locatable features (found ${n}).`);
+      return;
+    }
+    if (n > MAX_HDBSCAN_FEATURES) {
+      ctx.log(
+        `Error: ${n} features exceeds the ${MAX_HDBSCAN_FEATURES}-feature limit for HDBSCAN.`,
+      );
+      return;
+    }
+    const radius = getActiveMeanRadiusMeters();
+    const xyz = located.coords.map((c) => toChordSpace(c, radius));
+    // Arc length from the chord: cheap and exact on the sphere.
+    const dist = (i: number, j: number): number => {
+      const a = xyz[i];
+      const b = xyz[j];
+      const chord = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+      return 2 * radius * Math.asin(Math.min(1, chord / (2 * radius)));
+    };
+    const result = hdbscan(n, dist, minClusterSize, minSamples);
+    const noise = result.labels.filter((l) => l < 0).length;
+    ctx.log(
+      `HDBSCAN (minimum cluster size ${minClusterSize}, minimum samples ${minSamples}): ${result.clusterCount} cluster(s), ${noise} noise point(s) of ${n}.`,
+    );
+    const out = withModelFields(features, located.indices, (row) => ({
+      cluster: result.labels[row],
+      cluster_prob: result.probabilities[row],
+    }));
+    ctx.addResultLayer?.(`${layer.name} (HDBSCAN)`, featureCollection(out), {
+      graduatedField: "cluster",
+    });
+  },
+};
+
+// -- Kriging variogram diagnostics and cross-validation ---------------------
+
+const VARIOGRAM_MODELS: VariogramModel[] = ["spherical", "exponential", "gaussian", "linear"];
+
+export const krigingDiagnosticsTool: ProcessingAlgorithm = {
+  id: "kriging-diagnostics",
+  name: "Kriging variogram and cross-validation",
+  description:
+    "Fit a semivariogram to a point field the way the Interpolation (IDW / Kriging) raster tool does, then leave-one-out cross-validate ordinary kriging: per-point predictions, errors and standardized errors, plus RMSE and RMSSE. Compare all models to pick one.",
+  group: "Geostatistics",
+  parameters: [
+    {
+      id: "layer",
+      label: "Point layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["point"],
+    },
+    { id: "field", label: "Value field", type: "field", required: true },
+    {
+      id: "model",
+      label: "Variogram model",
+      type: "select",
+      default: "compare",
+      options: [
+        { value: "compare", label: "Compare all (keep lowest RMSE)" },
+        { value: "spherical", label: "Spherical" },
+        { value: "exponential", label: "Exponential" },
+        { value: "gaussian", label: "Gaussian" },
+        { value: "linear", label: "Linear" },
+      ],
+    },
+    {
+      id: "lags",
+      label: "Lag bins",
+      type: "number",
+      default: 12,
+      min: 3,
+      max: 50,
+      step: 1,
+    },
+    {
+      id: "maxLag",
+      label: "Maximum lag (m, 0 = full extent)",
+      type: "number",
+      default: 0,
+      min: 0,
+      description:
+        "Pairs farther apart are left out of the semivariogram. Half the extent is a common choice.",
+    },
+  ],
+  run: (ctx) => {
+    const layer = getLayer(ctx);
+    const field = String(ctx.parameters.field ?? "");
+    if (!layer?.geojson) {
+      ctx.log("Error: layer has no GeoJSON data");
+      return;
+    }
+    const sample = collectNumericSample(layer.geojson.features, field);
+    // Duplicate locations make the kriging matrix singular: average them.
+    const byLocation = new Map<
+      string,
+      { coord: [number, number]; sum: number; count: number; features: Feature[] }
+    >();
+    sample.coords.forEach((coord, i) => {
+      const key = `${coord[0]},${coord[1]}`;
+      const entry = byLocation.get(key);
+      if (entry) {
+        entry.sum += sample.values[i];
+        entry.count++;
+        entry.features.push(sample.features[i]);
+      } else {
+        byLocation.set(key, {
+          coord,
+          sum: sample.values[i],
+          count: 1,
+          features: [sample.features[i]],
+        });
+      }
+    });
+    const sites = [...byLocation.values()];
+    const n = sites.length;
+    if (n < 4) {
+      ctx.log(`Error: need at least 4 distinct locations with a numeric "${field}" (found ${n}).`);
+      return;
+    }
+    if (n > MAX_KRIGING_CV_FEATURES) {
+      ctx.log(
+        `Error: ${n} locations exceeds the ${MAX_KRIGING_CV_FEATURES}-point limit for cross-validation.`,
+      );
+      return;
+    }
+    if (n < sample.values.length) {
+      ctx.log(`Averaged ${sample.values.length - n} duplicate location(s).`);
+    }
+    const z = sites.map((s) => s.sum / s.count);
+    const dist = (i: number, j: number): number => greatCircleM(sites[i].coord, sites[j].coord);
+    const lags = Math.min(50, Math.max(3, Math.round(Number(ctx.parameters.lags ?? 12)) || 12));
+    const rawMaxLag = Number(ctx.parameters.maxLag ?? 0);
+    const empirical = empiricalVariogram(n, dist, z, lags, rawMaxLag > 0 ? rawMaxLag : undefined);
+    if (!empirical.bins.length || !(empirical.maxLag > 0)) {
+      ctx.log(
+        "Error: could not build a semivariogram (all points coincide or no pairs within the maximum lag).",
+      );
+      return;
+    }
+    ctx.log(
+      `Empirical semivariogram of "${field}" (n=${n}, ${lags} lags to ${fmt(empirical.maxLag, 1)} m):`,
+    );
+    ctx.log(`  ${pad("Lag (m)", 14)}${pad("Semivariance", 16)}Pairs`);
+    for (const bin of empirical.bins) {
+      ctx.log(`  ${pad(fmt(bin.lag, 1), 14)}${pad(fmt(bin.gamma, 4), 16)}${bin.pairs}`);
+    }
+    const choice = String(ctx.parameters.model ?? "compare");
+    const models = choice === "compare" ? VARIOGRAM_MODELS : [choice as VariogramModel];
+    let best: { fit: VariogramFit; cv: KrigingCrossValidation } | null = null;
+    ctx.log(
+      `  ${pad("Model", 13)}${pad("Nugget", 12)}${pad("Partial sill", 14)}${pad("Range (m)", 12)}${pad("ME", 11)}${pad("RMSE", 11)}RMSSE`,
+    );
+    for (const model of models) {
+      if (ctx.signal?.aborted) return;
+      const fit = fitVariogram(empirical.bins, model, empirical.maxLag);
+      if (!fit) continue;
+      const cv = krigingLeaveOneOut(n, dist, z, fit);
+      if (!cv) {
+        ctx.log(`  ${pad(model, 13)}singular kriging system; skipped`);
+        continue;
+      }
+      ctx.log(
+        `  ${pad(model, 13)}${pad(fmt(fit.nugget, 4), 12)}${pad(fmt(fit.sill, 4), 14)}${pad(fmt(fit.range, 1), 12)}${pad(fmt(cv.meanError, 4), 11)}${pad(fmt(cv.rmse, 4), 11)}${fmt(cv.rmsse, 3)}`,
+      );
+      if (!best || cv.rmse < best.cv.rmse) best = { fit, cv };
+    }
+    if (!best) {
+      ctx.log("Error: no variogram model could be cross-validated");
+      return;
+    }
+    const { fit, cv } = best;
+    ctx.log(
+      `Leave-one-out cross-validation (${fit.model}): mean error ${fmt(cv.meanError, 4)}, RMSE ${fmt(cv.rmse, 4)}, mean standardized error ${fmt(cv.meanStandardizedError, 4)}, RMSSE ${fmt(cv.rmsse, 3)}, r ${fmt(cv.correlation, 3)}.`,
+    );
+    ctx.log(
+      "  Mean error near 0 means unbiased; RMSSE near 1 means the kriging variance is realistic (above 1: underestimated, below 1: overestimated).",
+    );
+    const out: Feature[] = [];
+    sites.forEach((site, i) => {
+      for (const feature of site.features) {
+        out.push({
+          ...feature,
+          properties: {
+            ...feature.properties,
+            cv_observed: z[i],
+            cv_pred: cv.predicted[i],
+            cv_error: cv.errors[i],
+            cv_variance: cv.variances[i],
+            cv_std_error: cv.standardizedErrors[i],
+          },
+        });
+      }
+    });
+    ctx.addResultLayer?.(`${layer.name} (kriging cross-validation)`, featureCollection(out), {
+      graduatedField: "cv_std_error",
+    });
+  },
+};
+
 export const STATISTICS_TOOLS: ProcessingAlgorithm[] = [
   globalMoransITool,
   localMoransITool,
@@ -1985,6 +2677,11 @@ export const STATISTICS_TOOLS: ProcessingAlgorithm[] = [
   kernelDensityTool,
   emergingHotSpotTool,
   compositeScoreTool,
+  olsRegressionTool,
+  gwrTool,
+  dbscanTool,
+  hdbscanTool,
+  krigingDiagnosticsTool,
 ];
 
 export function getStatisticsTool(id: string): ProcessingAlgorithm | undefined {
