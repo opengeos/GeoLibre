@@ -1,5 +1,8 @@
 export {
   DEFAULT_GEO_EDITOR_SETTINGS,
+  DEFAULT_GEO_EDITOR_SNAP_TOLERANCE_PX,
+  GEO_EDITOR_SNAP_TOLERANCE_RANGE,
+  geoEditorSnapTolerancePx,
   normalizeGeoEditorSettings,
   isGeoEditorFieldName,
   type GeoEditorSettings,

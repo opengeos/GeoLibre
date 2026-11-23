@@ -641,6 +641,8 @@ export {
   getGeoEditorFeatureCount,
   hasViewImportBaseline,
   loadViewFeaturesIntoEditor,
+  addFeatureToGeoEditor,
+  applyGeomanSnapTolerance,
   buildEditorSaveCollection,
 } from "./plugins/maplibre-geo-editor";
 export {

@@ -2787,7 +2787,61 @@
     "viewshedLayerName": "Viewshed ({{radius}})",
     "viewshedToolName": "Viewshed",
     "viewshedNoResult": "No visible area could be computed here.",
-    "lineOfSightHere": "Line of sight from here"
+    "lineOfSightHere": "Line of sight from here",
+    "cogoHere": "Start a COGO traverse here"
+  },
+  "cogo": {
+    "title": "COGO and trace",
+    "close": "Close COGO and trace",
+    "tolerance": "Snapping tolerance: {{pixels}} px.",
+    "geometry": "Geometry",
+    "polygon": "Polygon",
+    "line": "Line",
+    "pickStart": "Pick start",
+    "pickPoint": "Add points",
+    "trace": "Trace",
+    "longWay": "Trace the long way round a ring",
+    "bearing": "Bearing",
+    "bearingPlaceholder": "N45°30'E or 135.5",
+    "bearingHelp": "Enter an azimuth in degrees (135.5, 135°30') or a quadrant bearing (S44°30'E). Each leg starts at the last vertex.",
+    "distance": "Distance",
+    "unit": "Distance unit",
+    "units": {
+      "meters": "m",
+      "kilometers": "km",
+      "feet": "ft",
+      "usSurveyFeet": "US survey ft",
+      "miles": "mi"
+    },
+    "addLeg": "Add leg",
+    "vertices": "Vertices",
+    "length": "Length",
+    "lastLeg": "Last leg",
+    "closing": "Closing edge",
+    "meters": "{{value}} m",
+    "addToEditor": "Add to editor",
+    "saveLayer": "Save as layer",
+    "undo": "Undo last step",
+    "clear": "Clear",
+    "layerName": "COGO feature",
+    "hint": {
+      "start": "Click the map to place the first vertex.",
+      "point": "Click the map to add vertices.",
+      "traceFrom": "Click a feature's edge where the trace starts.",
+      "traceTo": "Click the same edge where the trace ends.",
+      "idle": "Add legs by bearing and distance, add points, or trace a feature."
+    },
+    "status": {
+      "needStart": "Place a start vertex first.",
+      "badBearing": "Enter a bearing such as 135.5 or S44°30'E.",
+      "badDistance": "Enter a distance greater than zero.",
+      "nothingToTrace": "No line or polygon edge within the snapping tolerance.",
+      "sameBoundary": "Click the same feature edge the trace started on.",
+      "tooFewVertices": "Add more vertices first: a line needs 2, a polygon 3.",
+      "editorUnavailable": "The Geo editor is unavailable or busy editing a layer. Save as a layer instead.",
+      "addedToEditor": "Added to the Geo editor.",
+      "savedLayer": "Saved as a new layer."
+    }
   },
   "lineOfSight": {
     "title": "Line of sight",
@@ -3528,6 +3582,8 @@
       "title": "GeoEditor",
       "description": "Choose additional fields and customize field labels and types. Existing layer attributes are included automatically. These settings are saved with the project.",
       "showAfterDraw": "Open feature properties after drawing",
+      "snapTolerance": "Snapping tolerance (px)",
+      "snapToleranceHelp": "How close, in screen pixels, the pointer must be to a vertex or segment to snap to it. Used by the editor's drawing tools and by COGO and trace.",
       "field": "Field {{number}}",
       "name": "Property name",
       "label": "Display label",
@@ -3887,6 +3943,7 @@
       "objectDetection": "Object detection",
       "segmentEverything": "Segment everything",
       "lineOfSight": "Line of sight",
+      "cogoTrace": "COGO and trace digitizing",
       "toggleControl": "Toggle {{name}} control",
       "toggleAtmosphereEffects": "Toggle atmospheric effects",
       "toggleDirections": "Toggle directions",
@@ -4066,10 +4123,15 @@
       "detectStops": "Detect stops",
       "spaceTimeProximity": "Space-time proximity",
       "mergeLayers": "Merge layers",
+      "createRoutes": "Create routes",
+      "locateFeaturesAlongRoutes": "Locate features along routes",
+      "dynamicSegmentation": "Dynamic segmentation",
       "checkValidity": "Check validity",
       "fixGeometries": "Fix geometries",
       "checkTopologyRules": "Check topology rules",
-      "fixTopology": "Fix topology"
+      "fixTopology": "Fix topology",
+      "fixPolygonOverlaps": "Fix polygon overlaps",
+      "fillPolygonGaps": "Fill polygon gaps"
     },
     "networkTool": {
       "isochrone": "Isochrone / service area",
@@ -4270,6 +4332,7 @@
       "subGroupMovement": "Movement & time",
       "subGroupDataManagement": "Data management",
       "subGroupDataQuality": "Data quality",
+      "subGroupLinearReferencing": "Linear referencing",
       "subGroupTerrain": "Terrain",
       "subGroupReproject": "Reproject",
       "subGroupClip": "Clip",
@@ -7553,6 +7616,90 @@
             }
           }
         },
+        "create-routes": {
+          "name": "Create routes",
+          "description": "Add M (measure) values to lines, from their length or from start/end measure fields, so they can be used as routes for linear referencing",
+          "params": {
+            "layer": {
+              "label": "Line layer"
+            },
+            "routeIdField": {
+              "label": "Route ID field",
+              "description": "Copied to route_id. Leave empty to use the feature id or index."
+            },
+            "measureSource": {
+              "label": "Measures from",
+              "options": {
+                "length": "Line length",
+                "fields": "Start and end fields"
+              }
+            },
+            "unit": {
+              "label": "Measure unit",
+              "options": {
+                "meters": "Meters",
+                "kilometers": "Kilometers",
+                "feet": "Feet",
+                "miles": "Miles"
+              }
+            },
+            "fromField": {
+              "label": "Start measure field"
+            },
+            "toField": {
+              "label": "End measure field"
+            }
+          }
+        },
+        "locate-features-along-routes": {
+          "name": "Locate features along routes",
+          "description": "Find the route and measure for each point: the nearest route within a search radius, or every route within it",
+          "params": {
+            "layer": {
+              "label": "Point layer"
+            },
+            "routes": {
+              "label": "Route layer"
+            },
+            "routeIdField": {
+              "label": "Route ID field",
+              "description": "Leave empty to use the route feature id or index."
+            },
+            "radius": {
+              "label": "Search radius (m)"
+            },
+            "allRoutes": {
+              "label": "Report every route within the radius",
+              "description": "Otherwise only the nearest route is reported."
+            }
+          }
+        },
+        "dynamic-segmentation": {
+          "name": "Dynamic segmentation",
+          "description": "Turn an event table with route IDs and measures into features: line events (from and to measures) become route segments, point events (one measure) become points",
+          "params": {
+            "routes": {
+              "label": "Route layer"
+            },
+            "routeIdField": {
+              "label": "Route ID field",
+              "description": "Leave empty to use the route feature id or index."
+            },
+            "layer": {
+              "label": "Event table"
+            },
+            "eventRouteField": {
+              "label": "Event route ID field"
+            },
+            "fromField": {
+              "label": "From (or point) measure field"
+            },
+            "toField": {
+              "label": "To measure field",
+              "description": "Leave empty for point events."
+            }
+          }
+        },
         "check-validity": {
           "name": "Check validity",
           "description": "Find features with invalid geometry (GEOS rules: self-intersecting rings, holes outside shells, ...) and mark them on the map",
@@ -7625,6 +7772,48 @@
             "dryRun": {
               "label": "Preview only (dry run)",
               "description": "Report the fixes that would be applied without creating a repaired layer."
+            }
+          }
+        },
+        "fix-polygon-overlaps": {
+          "name": "Fix polygon overlaps",
+          "description": "Remove overlaps between polygons: each overlapping area is kept by one polygon (largest, smallest, first, or by attribute priority) and cut out of the others",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "rule": {
+              "label": "Overlap goes to",
+              "options": {
+                "largest": "Largest polygon",
+                "smallest": "Smallest polygon",
+                "attribute": "Attribute priority",
+                "first": "First feature in the layer"
+              }
+            },
+            "priorityField": {
+              "label": "Priority field",
+              "description": "Features with no value rank last."
+            },
+            "priorityOrder": {
+              "label": "Priority order",
+              "options": {
+                "high": "Highest value wins",
+                "low": "Lowest value wins"
+              }
+            }
+          }
+        },
+        "fill-polygon-gaps": {
+          "name": "Fill polygon gaps",
+          "description": "Fill gaps enclosed by a polygon layer: each gap up to a maximum area is merged into the neighbouring polygon that shares the longest boundary with it",
+          "params": {
+            "layer": {
+              "label": "Input layer"
+            },
+            "maxArea": {
+              "label": "Maximum gap area (m²)",
+              "description": "Gaps larger than this stay open; 0 fills every enclosed gap. Holes inside a single polygon are never filled."
             }
           }
         }
@@ -8262,6 +8451,7 @@
       "dggs": "DGGS",
       "geometry": "Geometry",
       "join": "Join",
+      "linearReferencing": "Linear referencing",
       "movementTime": "Movement & time",
       "network": "Network",
       "overlay": "Overlay",

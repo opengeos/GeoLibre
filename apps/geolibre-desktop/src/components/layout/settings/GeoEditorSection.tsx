@@ -1,5 +1,7 @@
 import {
   DEFAULT_GEO_EDITOR_SETTINGS,
+  GEO_EDITOR_SNAP_TOLERANCE_RANGE,
+  geoEditorSnapTolerancePx,
   type GeoEditorAttributeField,
   type GeoEditorSettings,
 } from "@geolibre/core";
@@ -44,6 +46,26 @@ export function GeoEditorSection() {
           onChange={(event) => update({ showAfterDraw: event.target.checked })}
         />
         {t("settings.geoEditor.showAfterDraw")}
+      </Label>
+      <Label className="grid gap-1">
+        {t("settings.geoEditor.snapTolerance")}
+        <Input
+          type="number"
+          min={GEO_EDITOR_SNAP_TOLERANCE_RANGE[0]}
+          max={GEO_EDITOR_SNAP_TOLERANCE_RANGE[1]}
+          step={1}
+          value={geoEditorSnapTolerancePx(settings)}
+          onChange={(event) => {
+            const value = Number(event.target.value);
+            if (event.target.value !== "" && Number.isFinite(value)) {
+              update({ snapTolerancePx: geoEditorSnapTolerancePx({ snapTolerancePx: value }) });
+            }
+          }}
+          className="w-28"
+        />
+        <span className="text-xs font-normal text-muted-foreground">
+          {t("settings.geoEditor.snapToleranceHelp")}
+        </span>
       </Label>
       <div className="grid gap-3">
         {settings.fields.map((field, index) => (
