@@ -338,7 +338,7 @@ export function GpsTrackingDialog({
   // `fixCount` mirroring the total for renders. Always holds >= 1 segment.
   const [initialFixes] = useState<GpsTrackSegments>(() => loadGpsTrackCheckpoint() ?? [[]]);
   const fixesRef = useRef<GpsTrackSegments>(initialFixes);
-  const { scheduleCheckpoint, flushCheckpoint, clearCheckpoint } = useGpsBackgroundRecording(
+  const { scheduleCheckpoint, clearCheckpoint, reconcileAfterExport } = useGpsBackgroundRecording(
     recording,
     fixesRef,
     setFixCount,
@@ -958,23 +958,14 @@ export function GpsTrackingDialog({
           ],
           mimeType: format === "gpx" ? "application/gpx+xml" : "application/geo+json",
         });
-        if (path) {
-          // `lineSegments()` only exports segments with >= 2 points; keep the
-          // checkpoint if any singleton segment was omitted or new fixes arrived.
-          const hasUnexportedFixes = fixesRef.current.some((seg) => seg.length === 1);
-          if (trackRevisionRef.current === exportRevision && !hasUnexportedFixes) {
-            clearCheckpoint();
-          } else if (fixesRef.current.some((seg) => seg.length > 0)) {
-            flushCheckpoint(fixesRef.current);
-          }
-        }
+        if (path) reconcileAfterExport(trackRevisionRef.current === exportRevision);
         setNotice(path ? t("gps.trackExported") : t("gps.exportCancelled"));
       } catch (error) {
         logGpsFailure(`GPS: exporting the track as ${format} failed`, error);
         setNotice(t("gps.exportFailed"));
       }
     },
-    [trackName, t, clearCheckpoint, flushCheckpoint],
+    [trackName, t, reconcileAfterExport],
   );
 
   const handleCapturePoint = useCallback(() => {

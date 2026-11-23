@@ -7,11 +7,12 @@
 //!   (instead of a Tokio `spawn_blocking` worker that may retire when idle)
 //!   ensures the kernel only signals the child when the GeoLibre process exits.
 //! - Windows: assigns every spawned child to a Win32 Job Object configured with
-//!   `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` immediately after spawn and fails
-//!   startup (terminating the child) if job assignment fails. Note that
-//!   `std::process::Command::spawn` does not expose the primary thread handle
-//!   for `CREATE_SUSPENDED` + `ResumeThread`, so a narrow window exists between
-//!   process creation and job assignment.
+//!   `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` immediately after spawn, logging a
+//!   warning and allowing startup to proceed if job creation or assignment
+//!   fails in a restricted environment. Note that `std::process::Command::spawn`
+//!   does not expose the primary thread handle for `CREATE_SUSPENDED` +
+//!   `ResumeThread`, so a narrow window exists between process creation and job
+//!   assignment.
 
 use std::process::{Child, Command};
 
@@ -198,8 +199,8 @@ pub(crate) fn assign_child_to_job(child: &Child) -> Result<(), String> {
 ///   that configures `PR_SET_PDEATHSIG(SIGTERM)` so retiring worker threads do
 ///   not prematurely kill long-running sidecar processes.
 /// - On Windows, the child is assigned to the process-wide Job Object; if
-///   assignment fails, the child is terminated and waited on before returning
-///   the error.
+///   assignment fails, a warning is logged and the child is allowed to continue
+///   so restricted environments without Job Object permissions still work.
 #[cfg(not(feature = "mas"))]
 pub(crate) fn spawn_managed_child(mut command: Command) -> Result<Child, String> {
     #[cfg(target_os = "linux")]

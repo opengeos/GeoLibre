@@ -23,6 +23,7 @@ export function useGpsBackgroundRecording(
   scheduleCheckpoint: (segments: GpsTrackSegments) => void;
   flushCheckpoint: (segments: GpsTrackSegments) => void;
   clearCheckpoint: () => void;
+  reconcileAfterExport: (unchangedSinceExport: boolean) => void;
 } {
   const wakeLockRef = useRef<GpsWakeLockController | null>(null);
   const saverRef = useRef<ThrottledCheckpointSaver | null>(null);
@@ -112,5 +113,21 @@ export function useGpsBackgroundRecording(
     clearGpsTrackCheckpoint();
   }, [getSaver]);
 
-  return { scheduleCheckpoint, flushCheckpoint, clearCheckpoint };
+  // `lineSegments()` only exports segments with >= 2 points; keep or flush the
+  // checkpoint if any singleton segment was omitted or new fixes arrived during
+  // the async save dialog.
+  const reconcileAfterExport = useCallback(
+    (unchangedSinceExport: boolean) => {
+      const segments = fixesRef.current;
+      const hasUnexportedFixes = segments.some((seg) => seg.length === 1);
+      if (unchangedSinceExport && !hasUnexportedFixes) {
+        clearCheckpoint();
+      } else if (segments.some((seg) => seg.length > 0)) {
+        flushCheckpoint(segments);
+      }
+    },
+    [fixesRef, clearCheckpoint, flushCheckpoint],
+  );
+
+  return { scheduleCheckpoint, flushCheckpoint, clearCheckpoint, reconcileAfterExport };
 }
