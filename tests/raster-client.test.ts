@@ -436,13 +436,13 @@ describe("raster-client compute", () => {
       () => rasterCalc(raster, { expression: "constructor(A)" }),
       /unsupported identifiers/,
     );
-    assert.throws(() => rasterCalc(raster, { expression: "toString()" }), /unsupported identifiers/);
+    assert.throws(
+      () => rasterCalc(raster, { expression: "toString()" }),
+      /unsupported identifiers/,
+    );
     // where(NaN, a, b) must evaluate falsy (matching JS truthiness and &&/||/!).
     const neg = makeRaster([[-1, 4]], 2, 1);
-    assert.deepEqual(
-      [...rasterCalc(neg, { expression: "where(sqrt(A), 1, 0)" }).bands[0]],
-      [0, 1],
-    );
+    assert.deepEqual([...rasterCalc(neg, { expression: "where(sqrt(A), 1, 0)" }).bands[0]], [0, 1]);
   });
 
   it("allows numeric literals including leading-dot decimals and scientific notation", () => {
