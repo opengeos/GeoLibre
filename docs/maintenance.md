@@ -378,6 +378,11 @@ black — it declines the stack.
   with lazily imported chunks), so a same-specificity override loses. Overrides
   of single-class vendor rules are prefixed with `html` to win regardless of
   order; keep that when adding new ones.
+- **The Zarr layer popup table class** (`maplibre-gl-zarr-layer-popup-table`)
+  is re-themed in `index.css`: upstream hardcodes `#555`/`#333` cell text and
+  `#eee` row rules for a white popup, which is near-invisible on the dark
+  popover. `tests/upstream-contracts.test.ts` checks the class still ships;
+  after a bump, click a Zarr layer in dark mode and confirm the popup reads.
 
 ### `maplibre-gl-basemap-control` (`packages/plugins/package.json`)
 

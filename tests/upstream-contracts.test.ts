@@ -386,6 +386,24 @@ describe("maplibre-gl-components", () => {
     }
   });
 
+  it("still renders the Zarr popup table class index.css re-themes", () => {
+    // index.css overrides the popup table's hardcoded light-theme colours; a
+    // rename would silently drop the override and bring back the dark-mode
+    // contrast bug.
+    const cls = "maplibre-gl-zarr-layer-popup-table";
+    assert.ok(hasClassToken(readRepoFile("apps/geolibre-desktop/src/index.css"), cls));
+    const text = readPublishedText("maplibre-gl-components", { workspace: "packages/plugins" });
+    assert.ok(
+      hasClassToken(text, cls),
+      contractMessage(
+        "maplibre-gl-components",
+        section,
+        `the Zarr layer popup no longer carries the class "${cls}" (index.css dark-mode override)`,
+        "packages/plugins",
+      ),
+    );
+  });
+
   it("keeps MeasureControl's private `_panel`, `_sourceId` and source setup", async () => {
     const { MeasureControl } = await import("maplibre-gl-components");
     const control = new MeasureControl({}) as unknown as Record<string, unknown>;

@@ -592,15 +592,15 @@ html .maplibre-gl-inspect-geometry {
    text and #eee row rules for a white popup. The shared popup theme above makes
    the popup dark in dark mode, which left that text near-invisible; follow the
    popover tokens instead so it reads in both themes. */
-.maplibregl-popup .maplibre-gl-zarr-layer-popup-table td {
+html .maplibregl-popup .maplibre-gl-zarr-layer-popup-table td {
   border-bottom-color: hsl(var(--border));
 }
 
-.maplibregl-popup .maplibre-gl-zarr-layer-popup-table td:first-child {
+html .maplibregl-popup .maplibre-gl-zarr-layer-popup-table td:first-child {
   color: hsl(var(--muted-foreground));
 }
 
-.maplibregl-popup .maplibre-gl-zarr-layer-popup-table td:last-child {
+html .maplibregl-popup .maplibre-gl-zarr-layer-popup-table td:last-child {
   color: hsl(var(--popover-foreground));
 }
 
