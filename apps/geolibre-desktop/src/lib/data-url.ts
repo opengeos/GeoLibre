@@ -34,6 +34,9 @@ const SERVICE_KINDS = new Set([
   "ogc-features",
   "ogc-vector-tiles",
   "arcgis",
+  // A Zarr store needs a variable and value range picked before it can draw,
+  // so a link to one opens the Add Zarr dialog on the store URL.
+  "zarr",
 ]);
 
 export interface ServiceUrlParameter {
@@ -74,6 +77,22 @@ export function serviceUrlParameter(search: string): ServiceUrlParameter | null 
     styleUrl,
   };
 }
+/** Vector formats a `?data=` link hands to the vector control by URL instead of downloading here. */
+export type RemoteVectorFormat = "geoparquet" | "flatgeobuf" | "gpx";
+
+/** The display name of each {@link RemoteVectorFormat}, for load errors. */
+export const REMOTE_VECTOR_FORMAT_LABELS: Record<RemoteVectorFormat, string> = {
+  geoparquet: "GeoParquet",
+  flatgeobuf: "FlatGeobuf",
+  gpx: "GPX",
+};
+
+/**
+ * The `dataType` hint naming a 3D Tiles tileset whose URL does not end in
+ * `tileset.json`, such as a signed or extensionless tileset endpoint.
+ */
+export const THREE_D_TILES_DATA_TYPE = "3d-tiles";
+
 export interface RemoteGeoJsonLayer {
   data: FeatureCollection;
   name: string;
@@ -82,7 +101,9 @@ export interface RemoteGeoJsonLayer {
 export type RemoteData =
   | { kind: "cog"; name: string; url: string }
   | { kind: "pmtiles"; name: string; url: string }
-  | { kind: "vector"; name: string; url: string; format: "geoparquet" }
+  | { kind: "vector"; name: string; url: string; format: RemoteVectorFormat }
+  /** A 3D Tiles tileset, drawn by the active engine's 3D Tiles layer. */
+  | { kind: "3d-tiles"; name: string; url: string }
   | { kind: "lidar"; name: string; url: string }
   /** A KML/KMZ document, handed to the host KML importer the way a drop is. */
   | { kind: "kml"; name: string; file: File }
@@ -172,7 +193,7 @@ export function remoteName(url: string): string {
     name
       .replace(/\.copc\.laz$/i, "")
       .replace(
-        /\.(?:geojson|json|tiff?|cog|zip|pmtiles|geoparquet|parquet|las|laz|kml|kmz)$/i,
+        /\.(?:geojson|json|tiff?|cog|zip|pmtiles|geoparquet|parquet|fgb|flatgeobuf|gpx|las|laz|kml|kmz)$/i,
         "",
       ) || "data"
   );
@@ -382,6 +403,26 @@ function unzipGeoJsonEntries(bytes: Uint8Array): Promise<Record<string, Uint8Arr
 }
 
 /**
+ * Whether a URL names a 3D Tiles tileset. Its entry document is conventionally
+ * `tileset.json`, which would otherwise be downloaded and refused as GeoJSON.
+ */
+export function isThreeDTilesUrl(url: string): boolean {
+  return new URL(url).pathname.toLowerCase().endsWith("/tileset.json");
+}
+
+/** A tileset's entry file is always `tileset.json`, so its folder names it. */
+function threeDTilesName(url: string): string {
+  const segments = new URL(url).pathname.split("/").filter(Boolean);
+  const folder = segments.at(-1)?.toLowerCase() === "tileset.json" ? segments.at(-2) : undefined;
+  if (!folder) return remoteName(url);
+  try {
+    return decodeURIComponent(folder);
+  } catch {
+    return folder;
+  }
+}
+
+/**
  * Whether a URL names a point cloud the LiDAR control streams itself: a LAS/LAZ
  * (including COPC) file, or an Entwine Point Tile dataset's `ept.json`.
  */
@@ -479,9 +520,15 @@ export async function fetchRemoteData(
   } = {},
 ): Promise<RemoteData> {
   const { fileHandlers } = options;
-  // A plugin's hint skips detection. `lidar` is built in and never reaches a handler.
+  // A plugin's hint skips detection. `lidar` and `3d-tiles` are built in and
+  // never reach a handler.
   let hinted: ReturnType<DataUrlFileHandlers["forDataType"]>;
-  if (fileHandlers && options.dataType && options.dataType !== "lidar") {
+  if (
+    fileHandlers &&
+    options.dataType &&
+    options.dataType !== "lidar" &&
+    options.dataType !== THREE_D_TILES_DATA_TYPE
+  ) {
     await waitForReady(fileHandlers.ready, options.signal);
     hinted = fileHandlers.forDataType(options.dataType);
   }
@@ -492,6 +539,9 @@ export async function fetchRemoteData(
     const bytes = await readCappedBytes(response, url);
     const name = remoteFileName(url, response.headers.get("content-disposition"));
     return { kind: "handled", ...(await openRemoteFileWithHandler(hinted, name, bytes)) };
+  }
+  if (options.dataType === THREE_D_TILES_DATA_TYPE || isThreeDTilesUrl(url)) {
+    return { kind: "3d-tiles", name: threeDTilesName(url), url };
   }
   if (options.dataType === "lidar" || isLidarUrl(url)) {
     if (!isStreamedLidarUrl(url)) {
@@ -505,6 +555,12 @@ export async function fetchRemoteData(
   if (ext === "parquet" || ext === "geoparquet") {
     return { kind: "vector", name: remoteName(url), url, format: "geoparquet" };
   }
+  // The vector control reads both from the URL itself through DuckDB, the same
+  // path GeoParquet takes, so neither is downloaded and parsed as GeoJSON here.
+  if (ext === "fgb" || ext === "flatgeobuf") {
+    return { kind: "vector", name: remoteName(url), url, format: "flatgeobuf" };
+  }
+  if (ext === "gpx") return { kind: "vector", name: remoteName(url), url, format: "gpx" };
   const response = await fetchOk(url, options.signal, options.fetchImpl ?? fetch);
   const bytes = await readCappedBytes(response, url);
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";

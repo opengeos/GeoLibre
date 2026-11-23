@@ -1,7 +1,7 @@
 import { loadBaseUrl } from "./base-url-settings.mjs";
 import { collectRequestedUrls, scanDocumentForDatasets } from "./scanner.mjs";
 import { collectServiceCandidates, mergeServiceCandidates } from "./service-scanner.mjs";
-import { buildGeoLibreUrl } from "./url-builder.mjs";
+import { buildGeoLibreUrls } from "./url-builder.mjs";
 
 const elements = {
   loading: document.querySelector("#loading"),
@@ -24,10 +24,20 @@ const elements = {
   vectorCount: document.querySelector("#vector-count"),
   rasterCount: document.querySelector("#raster-count"),
   lidarCount: document.querySelector("#lidar-count"),
+  otherCount: document.querySelector("#other-count"),
 };
 
 let datasets = [];
 let activeFilter = "all";
+
+// Kinds with a tab of their own; anything else (3D Tiles, STAC catalogs) is listed under Other.
+const NAMED_KINDS = new Set(["vector", "raster", "lidar"]);
+
+function matchesFilter(dataset, filter) {
+  if (filter === "all") return true;
+  if (filter === "other") return !NAMED_KINDS.has(dataset?.kind);
+  return dataset?.kind === filter;
+}
 
 function selectedDatasets() {
   const selected = new Set(
@@ -53,7 +63,7 @@ function updateSelection() {
 function updateFilter() {
   let visible = 0;
   for (const [index, option] of [...elements.list.children].entries()) {
-    const show = activeFilter === "all" || datasets[index]?.kind === activeFilter;
+    const show = matchesFilter(datasets[index], activeFilter);
     option.hidden = !show;
     if (show) visible += 1;
   }
@@ -118,6 +128,9 @@ function renderDatasets(found) {
   elements.lidarCount.textContent = String(
     datasets.filter((dataset) => dataset.kind === "lidar").length,
   );
+  elements.otherCount.textContent = String(
+    datasets.filter((dataset) => matchesFilter(dataset, "other")).length,
+  );
   updateFilter();
   updateSelection();
 }
@@ -130,7 +143,7 @@ function showError(error) {
   elements.errorMessage.textContent =
     error instanceof Error && error.message
       ? error.message
-      : "Chrome protects browser and extension pages from scanning.";
+      : "The browser protects its own pages and extension pages from scanning.";
 }
 
 async function inspectPage() {
@@ -195,8 +208,12 @@ elements.openButton.addEventListener("click", async () => {
   elements.openError.hidden = true;
   try {
     const baseUrl = await loadBaseUrl();
-    const url = buildGeoLibreUrl(selectedDatasets(), baseUrl);
-    await chrome.tabs.create({ url });
+    // Files share one launch with one service and one STAC catalog; each further
+    // service or catalog needs a dialog of its own, so it opens in its own tab.
+    const urls = buildGeoLibreUrls(selectedDatasets(), baseUrl);
+    for (const [index, url] of urls.entries()) {
+      await chrome.tabs.create({ url, active: index === 0 });
+    }
     window.close();
   } catch (error) {
     elements.openError.textContent =

@@ -1298,6 +1298,69 @@ function addThreeDTilesLayerForGlobe(
   control.collapse();
 }
 
+/**
+ * Adds a 3D Tiles `tileset.json` by URL, without the panel: the `?data=` deep
+ * link's entry point. Each renderer takes the path its own panel submit takes:
+ * the globe draws the store record natively, Mapbox and the ArcGIS view replay
+ * it through the deck.gl bridge, and MapLibre gets the control's custom layer.
+ *
+ * Google Photorealistic and I3S URLs are refused: they need an API key or a
+ * scene-layer probe that only the panel collects.
+ *
+ * @param app - The GeoLibre app API.
+ * @param url - The tileset URL.
+ * @param options - The layer name, and whether to frame the tileset once it loads.
+ * @returns The id of the store layer that was added.
+ * @throws When the URL is a Google or I3S source, or the control cannot mount.
+ */
+export async function addThreeDTilesLayerFromUrl(
+  app: GeoLibreAppAPI,
+  url: string,
+  options: { name?: string; flyTo?: boolean } = {},
+): Promise<string> {
+  if (isGooglePhotorealisticTilesetUrl(url) || isArcgisI3sSceneLayerUrl(url)) {
+    throw new Error("Open Google Photorealistic and I3S tiles from the Add 3D Tiles panel.");
+  }
+  const flyTo = options.flyTo ?? true;
+  const id = `tiles-${crypto.randomUUID()}`;
+  const tileset: ThreeDTilesItemState = {
+    id,
+    layerId: `${id}-tiles`,
+    tilesetUrl: url,
+    layerName: options.name?.trim() || layerNameFromUrl(url, "3D Tiles"),
+    altitudeOffset: 0,
+    opacity: 1,
+    visible: true,
+    status: "loading",
+  };
+  const renderer = app.getMapRenderer?.() ?? "";
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
+  if (renderer === "cesium") {
+    const layer = createThreeDTilesGlobeStoreLayer({ ...tileset, status: "loaded" });
+    useAppStore.getState().addLayer(layer);
+    if (flyTo) app.fitLayer?.(layer.id);
+    return layer.id;
+  }
+  const layer = createThreeDTilesStoreLayer(tileset);
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
+  if (renderer === "mapbox" || renderer === "arcgis") {
+    activeThreeDTilesApp = app;
+    useAppStore.getState().addLayer(layer);
+    await restoreMapboxTiles(app, flyTo ? id : undefined);
+    return id;
+  }
+  await loadThreeDTilesModule();
+  const control = runWithThreeDTilesStoreSyncSuspended(() => ensureThreeDTilesControl(app));
+  if (!control) throw new Error("The 3D Tiles control could not be added to the map.");
+  runWithThreeDTilesStoreSyncSuspended(() => {
+    showThreeDTilesControl(control);
+    control.collapse();
+    useAppStore.getState().addLayer(layer);
+    restoreThreeDTilesMapLayer(control, layer, url, flyTo);
+  });
+  return id;
+}
+
 function applyGooglePhotorealisticTilesPanelDefaults(control: ThreeDTilesControl): void {
   const panel = getThreeDTilesPanel(control);
   if (!panel) return;

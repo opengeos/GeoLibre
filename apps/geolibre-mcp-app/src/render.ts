@@ -10,17 +10,52 @@ import {
   createLayerSync,
   identifyStyleLayerIds,
   isMapboxStyleUrl,
+  registerPMTilesSource,
   resolveMapStyle,
   sourceId,
+  unregisterPMTilesArchive,
 } from "@geolibre/map/headless";
 import type { RequestTransformFunction } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
-import { previewableLayers } from "./unsupported-content";
+import { loadCogPreview } from "./cog-preview";
+import type { NetworkConsent } from "./network-consent";
+import {
+  ConsentPMTilesSource,
+  isRegisteredPMTilesRequest,
+  pmtilesArchiveKey,
+  pmtilesArchiveUrl,
+} from "./pmtiles-preview";
+import { previewRenderLayers } from "./unsupported-content";
 
 export interface PreviewRenderOptions {
   transformRequest: RequestTransformFunction;
+  /** Consent-gated range reads, for PMTiles archives and COGs. */
+  fetchRange: NetworkConsent["fetchRange"];
   onReady(): void;
   onError(source: string, message: string): void;
+  /** A note about a layer that rendered with a caveat (e.g. an unknown colormap). */
+  onNotice?(message: string): void;
+}
+
+/** Decoded COG previews served to MapLibre's image source, by request URL. */
+const COG_PROTOCOL = "geolibre-cog";
+const cogImages = new Map<string, ArrayBuffer>();
+let cogImageSequence = 0;
+
+async function encodePng(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+): Promise<ArrayBuffer> {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("The preview could not create a canvas for the COG image.");
+  context.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!blob) throw new Error("The preview could not encode the COG image.");
+  return blob.arrayBuffer();
 }
 
 type PreviewMapError = maplibregl.ErrorEvent & {
@@ -85,6 +120,34 @@ export function renderProject(
 ): maplibregl.Map {
   const useBlankStyle =
     project.basemapVisible === false || isMapboxStyleUrl(project.basemapStyleUrl);
+  const layers = applyGroupEffects(project.layers, project.layerGroups ?? []);
+  const plan = previewRenderLayers({ ...project, layers });
+  const renderable = plan.map(({ layer }) => layer);
+
+  // Each remote archive reads through consent before layer sync can open a
+  // direct FetchSource for it under the same key.
+  const pmtilesKeys = new Set<string>();
+  for (const { layer, kind } of plan) {
+    if (kind !== "pmtiles") continue;
+    const key = pmtilesArchiveKey(layer);
+    const url = pmtilesArchiveUrl(layer);
+    if (!key || !url || pmtilesKeys.has(key)) continue;
+    registerPMTilesSource(new ConsentPMTilesSource(key, url, options.fetchRange));
+    pmtilesKeys.add(key);
+  }
+  const ownCogUrls = new Set<string>();
+  const transformRequest: RequestTransformFunction = (url, resourceType) => {
+    if (isRegisteredPMTilesRequest(url, pmtilesKeys)) return { url };
+    if (ownCogUrls.has(url)) return { url };
+    return options.transformRequest(url, resourceType);
+  };
+  maplibregl.addProtocol(COG_PROTOCOL, async (request) => {
+    const data = cogImages.get(request.url);
+    if (!data) throw new Error("The COG preview image is no longer available.");
+    return { data };
+  });
+  const lifecycle = new AbortController();
+
   const map = new maplibregl.Map({
     container,
     style: useBlankStyle ? createBlankMapStyle() : resolveMapStyle(project.basemapStyleUrl),
@@ -94,17 +157,66 @@ export function renderProject(
     pitch: project.mapView.pitch,
     attributionControl: { compact: true },
     maplibreLogo: false,
-    transformRequest: options.transformRequest,
+    transformRequest,
+  });
+  map.once("remove", () => {
+    lifecycle.abort();
+    for (const key of pmtilesKeys) unregisterPMTilesArchive(key);
+    for (const url of ownCogUrls) cogImages.delete(url);
+    maplibregl.removeProtocol(COG_PROTOCOL);
   });
   map.addControl(new maplibregl.NavigationControl(), "top-right");
-  const layers = applyGroupEffects(project.layers, project.layerGroups ?? []);
-  const renderable = previewableLayers({ ...project, layers });
   let styleReady = false;
   let usedBlankFallback = useBlankStyle;
   let notifiedReady = false;
 
+  const addCogLayer = async (layer: GeoLibreLayer, anchorId: string): Promise<void> => {
+    try {
+      const image = await loadCogPreview(layer, options.fetchRange, lifecycle.signal);
+      if (image.unknownColormap) {
+        options.onNotice?.(
+          `Layer “${layer.name}”: the colormap “${image.unknownColormap}” is not available in this preview, so it is shown in grayscale.`,
+        );
+      }
+      const png = await encodePng(image.rgba, image.width, image.height);
+      if (lifecycle.signal.aborted) return;
+      const url = `${COG_PROTOCOL}://${(cogImageSequence += 1)}`;
+      cogImages.set(url, png);
+      ownCogUrls.add(url);
+      const id = `${layer.id}-cog-preview`;
+      map.addSource(id, { type: "image", url, coordinates: image.corners });
+      map.addLayer(
+        {
+          id,
+          type: "raster",
+          source: id,
+          paint: { "raster-opacity": layer.opacity, "raster-fade-duration": 0 },
+        },
+        map.getLayer(anchorId) ? anchorId : undefined,
+      );
+    } catch (error) {
+      if (lifecycle.signal.aborted) return;
+      options.onError(
+        layer.name,
+        safeErrorMessage(error instanceof Error ? error.message : String(error)),
+      );
+    }
+  };
+
   const registerLayers = (): void => {
-    for (const layer of renderable) {
+    for (const { layer, kind } of plan) {
+      if (kind === "cog") {
+        // Holds the COG's place in the stack while it decodes, so it lands
+        // under the layers above it rather than on top of everything.
+        const anchorId = `${layer.id}-cog-anchor`;
+        map.addLayer({
+          id: anchorId,
+          type: "background",
+          layout: { visibility: "none" },
+        });
+        void addCogLayer(layer, anchorId);
+        continue;
+      }
       try {
         // One sync owner per layer isolates failures while preserving the project’s
         // bottom-to-top order: each successful MapLibre layer is added above the last.

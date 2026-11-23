@@ -84,10 +84,17 @@ summary without inlined feature data. Neither preview tool writes the project.
 
 The App uses the workspace `@geolibre/core` and `@geolibre/map/headless`
 renderer, not a hosted-viewer iframe. It draws MapLibre-native layers (inline
-GeoJSON, raster/WMS/WMTS/XYZ tiles, vector tiles, and image overlays). Everything
+GeoJSON, raster/WMS/WMTS/XYZ tiles, vector tiles, and image overlays), remote
+PMTiles archives (vector or raster), and Cloud Optimized GeoTIFFs. Both archive
+types are read by HTTP byte range through the same approval gate as tiles, so
+their server must support `Range` requests. A COG is shown as one downsampled
+image (at most 1024 pixels on its longest side, read from the nearest overview)
+colored from its saved bands, rescale, and colormap; only EPSG:4326 and
+EPSG:3857 COGs are placed, and Identify does not apply to them. Everything
 else in the project is named in a status notice instead of silently missing:
-plugin-rendered layers (point clouds, 3D Tiles, COG, ArcGIS, PMTiles, DuckDB,
-deck.gl), desktop-local sources (MBTiles, `file:` paths), video overlays,
+plugin-rendered layers (point clouds, 3D Tiles, COGs in other CRSs, ArcGIS,
+DuckDB, deck.gl), desktop-local sources (MBTiles, in-memory PMTiles extracts,
+`file:` paths), video overlays,
 Z-elevated GeoJSON, active plugins, legends, map controls, additional map views,
 and a non-MapLibre primary renderer. Mapbox basemaps are blank because
 credentials are stripped. Configured popup image fields show their URL as text,

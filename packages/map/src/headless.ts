@@ -87,6 +87,7 @@ export {
 } from "./cog-dem-source";
 export {
   registerPMTilesArchive,
+  registerPMTilesSource,
   unregisterPMTilesArchive,
   ensureRemotePMTilesArchive,
 } from "./pmtiles-archive";

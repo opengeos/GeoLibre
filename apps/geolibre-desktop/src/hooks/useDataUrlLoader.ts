@@ -4,6 +4,7 @@ import {
   addLidarLayerFromUrl,
   addPMTilesLayerFromUrl,
   addRasterToMap,
+  addThreeDTilesLayerFromUrl,
   addVectorLayerFromUrl,
   findFileHandlerByDataType,
   isRecoverableNonTiledRasterError,
@@ -21,6 +22,7 @@ import {
   loadDataUrlBatch,
   mapboxStyleForDataLayer,
   parseRasterUrlStyle,
+  REMOTE_VECTOR_FORMAT_LABELS,
 } from "../lib/data-url";
 import { deepLinkCogDefaults } from "../lib/cog-render-engine";
 import { queueDataLoad } from "../lib/data-load-queue";
@@ -171,6 +173,21 @@ export async function loadDataUrl(
       throw new DOMException("The operation was aborted", "AbortError");
     }
     layerIds.push(id);
+  } else if (remote.kind === "3d-tiles") {
+    if (rawStyle !== null) {
+      throw new Error("A style cannot be applied to a 3D Tiles tileset.");
+    }
+    // The tileset's extent is only known once its root tile loads, so the
+    // layer frames itself then rather than joining the batch's fit.
+    const id = await addThreeDTilesLayerFromUrl(mapAppAPI, remote.url, {
+      name: remote.name,
+      flyTo: fit,
+    });
+    if (options.signal?.aborted) {
+      store.removeLayer(id);
+      throw new DOMException("The operation was aborted", "AbortError");
+    }
+    layerIds.push(id);
   } else if (remote.kind === "kml") {
     if (rawStyle !== null) throw new Error(i18next.t("kml.dataUrlStyleUnsupported"));
     const previousIds = new Set(store.layers.map((layer) => layer.id));
@@ -212,7 +229,7 @@ export async function loadDataUrl(
       .layers.filter((layer) => !previousIds.has(layer.id) && layerPointsAt(layer, remote.url));
     if (!addedLayers.length) {
       throw new Error(
-        `The ${remote.kind === "pmtiles" ? "PMTiles" : "GeoParquet"} loader did not create a layer for ${remote.url}.`,
+        `The ${remote.kind === "pmtiles" ? "PMTiles" : REMOTE_VECTOR_FORMAT_LABELS[remote.format]} loader did not create a layer for ${remote.url}.`,
       );
     }
     if (options.signal?.aborted) {

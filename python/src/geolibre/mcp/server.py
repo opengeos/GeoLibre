@@ -2261,9 +2261,19 @@ def build_server(workspace: Workspace) -> MCPServer:
         return preview_sessions.approve(preview_id, origin)
 
     @tool(meta={"ui": {"visibility": ["app"]}})
-    async def fetch_map_resource(preview_id: str, grant: str, url: str) -> CallToolResult:
-        """Internal: fetch bounded binary resource bytes through an approved grant."""
-        result = await fetch_resource(preview_sessions, preview_id, grant, url)
+    async def fetch_map_resource(
+        preview_id: str,
+        grant: str,
+        url: str,
+        offset: int | None = None,
+        length: int | None = None,
+    ) -> CallToolResult:
+        """Internal: fetch bounded binary resource bytes through an approved grant.
+
+        ``offset`` and ``length`` request one byte range (at most 4 MiB), which
+        is how the preview reads PMTiles archives and Cloud Optimized GeoTIFFs.
+        """
+        result = await fetch_resource(preview_sessions, preview_id, grant, url, offset, length)
         # Avoid emitting a second, plain-text JSON copy of a potentially 4 MiB body.
         return CallToolResult(content=[], structured_content=result)
 

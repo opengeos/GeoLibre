@@ -158,6 +158,7 @@ export {
   ARCGIS_LAYER_TYPES,
   ARCGIS_MAP_SERVICE_SOURCE_KIND,
   ARCGIS_MAP_SERVICE_URL_ERROR,
+  arcgisLayerTypeFromUrl,
   parseArcGISLayerType,
   refreshArcGISFeatureLayer,
   reloadArcGISViewportLayer,
@@ -419,6 +420,7 @@ export {
   isEarthEngineAvailable,
 } from "./plugins/earth-engine-auth";
 export {
+  addThreeDTilesLayerFromUrl,
   closeThreeDTilesLayerPanel,
   openThreeDTilesLayerPanel,
   restoreThreeDTilesLayers,
