@@ -912,7 +912,7 @@ def create_app(
             idp_transport.close()
 
     object_storage = storage or make_storage()
-    if not _env_bool("GEOLIBRE_SKIP_DDL_CREATE_ALL", False):
+    if inspect(engine).has_table("project_version_usage") and inspect(engine).has_table("versions"):
         from geolibre_server_api.account_lifecycle import backfill_project_version_usage
 
         with sessions() as backfill_session:
@@ -1864,14 +1864,6 @@ def create_app(
         validate_access_targets(session, account, visibility, organization_id, group_ids)
         document = parse_content(content, max_project_bytes)
         content_bytes = content.encode()
-        enforce_storage_quota(
-            session,
-            account_id=account.id,
-            organization_id=organization_id,
-            incoming_bytes=len(content_bytes),
-            user_quota_bytes=resolved_user_quota,
-            org_quota_bytes=resolved_org_quota,
-        )
         title = title_from(document, filename)
         timestamp = now()
 
@@ -1882,8 +1874,17 @@ def create_app(
         # the same title from one account can pick the same slug and the loser
         # hits uq_project_owner_slug or uq_project_org_slug. Retry the allocation
         # instead of surfacing that as a 500, matching how version numbers are
-        # allocated below.
+        # allocated below. Quota enforcement runs inside each attempt so a
+        # rollback releasing the owner lock re-acquires it before committing.
         for _ in range(5):
+            enforce_storage_quota(
+                session,
+                account_id=account.id,
+                organization_id=organization_id,
+                incoming_bytes=len(content_bytes),
+                user_quota_bytes=resolved_user_quota,
+                org_quota_bytes=resolved_org_quota,
+            )
             project = Project(
                 id=str(uuid.uuid4()),
                 owner_id=(

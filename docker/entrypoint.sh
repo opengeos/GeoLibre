@@ -575,7 +575,7 @@ if auth0_domain:
         )
     auth0_frame_src = f" https://{auth0_host}"
 
-tenant_header_value = '""'
+tenant_header_value = "\"\""
 trusted_tenant_header = os.environ.get("GEOLIBRE_TRUSTED_TENANT_HEADER", "").strip()
 if trusted_tenant_header:
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,63}", trusted_tenant_header):

@@ -339,7 +339,7 @@ def verify_totp_step(
 ) -> int | None:
     """Verify a 6-digit TOTP code within ``+-window`` steps and return the matched counter."""
     cleaned = code.strip().replace(" ", "")
-    if len(cleaned) != TOTP_DIGITS or not cleaned.isdigit():
+    if len(cleaned) != TOTP_DIGITS or not (cleaned.isascii() and cleaned.isdigit()):
         return None
     base_counter = int(timestamp) // step
     for delta in range(-window, window + 1):
