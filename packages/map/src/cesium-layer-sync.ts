@@ -2544,8 +2544,7 @@ export class CesiumLayerSync {
       if (this.destroyed) return;
       const layerId = (event as CustomEvent<{ layerId?: string }>).detail?.layerId;
       const hasDuckDB = this.lastStoreLayers.some(
-        (layer) =>
-          layer.type === "duckdb-query" && (layerId === undefined || layer.id === layerId),
+        (layer) => layer.type === "duckdb-query" && (layerId === undefined || layer.id === layerId),
       );
       if (hasDuckDB) this.sync(this.lastStoreLayers);
     };
