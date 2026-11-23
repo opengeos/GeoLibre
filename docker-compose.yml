@@ -56,9 +56,11 @@ services:
       GEOLIBRE_PROXY_EMAIL_HEADER: "${GEOLIBRE_PROXY_EMAIL_HEADER:-Remote-Email}"
       GEOLIBRE_OIDC_CA_BUNDLE: "${GEOLIBRE_OIDC_CA_BUNDLE:-}"
       GEOLIBRE_OIDC_ALLOWED_NETWORKS: "${GEOLIBRE_OIDC_ALLOWED_NETWORKS:-}"
-      # Required before configuring organization SSO on a public URL; see
+      # Required before configuring organization SSO, including localhost; see
       # backend/geolibre_server_api/README.md.
       GEOLIBRE_SECRET_KEYS: "${GEOLIBRE_SECRET_KEYS:-}"
+      # Explicit development opt-out, honored only for a loopback public URL.
+      GEOLIBRE_ALLOW_PLAINTEXT_SECRETS: "${GEOLIBRE_ALLOW_PLAINTEXT_SECRETS:-0}"
       GEOLIBRE_RATE_LIMIT_AUTH: "${GEOLIBRE_RATE_LIMIT_AUTH:-30/60}"
       GEOLIBRE_RATE_LIMIT_API: "${GEOLIBRE_RATE_LIMIT_API:-600/60}"
     volumes:

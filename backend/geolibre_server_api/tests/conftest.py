@@ -56,6 +56,7 @@ def _server_security_env(monkeypatch):
     the limiter is switched off here; ``test_limits.py`` turns it back on.
     """
     monkeypatch.setenv("GEOLIBRE_SECRET_KEYS", TEST_SECRET_KEY)
+    monkeypatch.delenv("GEOLIBRE_ALLOW_PLAINTEXT_SECRETS", raising=False)
     monkeypatch.setenv("GEOLIBRE_RATE_LIMIT_AUTH", "off")
     monkeypatch.setenv("GEOLIBRE_RATE_LIMIT_API", "off")
 

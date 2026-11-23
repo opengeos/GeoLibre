@@ -345,6 +345,10 @@ COLLAB_MAX_SNAPSHOT_BYTES = "10000000"
 The configured value must remain below the deployment platform's WebSocket
 message-size limit.
 
+**Upgrade note:** the Compose default increases from 1,000,000 to 10,000,000
+bytes (1 MB to 10 MB, a tenfold increase) to match both relay implementations.
+Set `COLLAB_MAX_SNAPSHOT_BYTES=1000000` to retain the earlier, lower limit.
+
 The hosted relay deploys to Cloudflare Workers the same way as `workers/viewer`:
 
 - **CI:** `.github/workflows/deploy-collab.yml` deploys on any push to `main`

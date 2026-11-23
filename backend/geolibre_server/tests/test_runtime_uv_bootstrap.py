@@ -197,3 +197,71 @@ def test_removed_installer_mirror_setting_warns(monkeypatch, caplog):
     assert "GEOLIBRE_UV_INSTALL_BASE_URL is no longer used" in caplog.text
     assert "GEOLIBRE_UV_DOWNLOAD_BASE_URL" in caplog.text
     assert "<base>/<version>/<archive>" in caplog.text
+
+
+def test_concurrent_extractors_have_distinct_staging_files(tmp_path, monkeypatch):
+    """Independent installers can replace the same binaries without sharing staging.
+
+    Args:
+        tmp_path: An isolated temporary directory.
+        monkeypatch: The pytest patch fixture.
+    """
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    archive_name, payload = _archive_for_platform()
+    archive = tmp_path / archive_name
+    archive.write_bytes(payload)
+    install_dir = tmp_path / "uv-bin"
+    install_dir.mkdir()
+    barrier = threading.Barrier(2)
+    paths = []
+    replace = runtime.os.replace
+
+    def replace_together(source, destination):
+        """Overlap independent installs immediately before atomic replacement.
+
+        Args:
+            source: The installer's staging file.
+            destination: The shared installed executable.
+        """
+        paths.append(source)
+        barrier.wait(timeout=10)
+        replace(source, destination)
+
+    monkeypatch.setattr(runtime.os, "replace", replace_together)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(lambda _: runtime._extract_uv_binaries(archive, install_dir), range(2)))
+    uv, uvx = _binary_names()
+    assert (install_dir / uv).read_bytes() == b"uv-binary"
+    assert (install_dir / uvx).read_bytes() == b"uvx-binary"
+    assert len(paths) == len(set(paths)) == 4
+    assert not list(install_dir.glob(".*.tmp"))
+
+
+def test_uv_replace_errors_are_wrapped_and_staging_is_cleaned(tmp_path, monkeypatch):
+    """A busy Windows executable produces an actionable bootstrap error.
+
+    Args:
+        tmp_path: An isolated temporary directory.
+        monkeypatch: The pytest patch fixture.
+    """
+    archive_name, payload = _archive_for_platform()
+    archive = tmp_path / archive_name
+    archive.write_bytes(payload)
+    install_dir = tmp_path / "uv-bin"
+    install_dir.mkdir()
+
+    def busy_executable(source, destination):
+        """Simulate replacement being refused while an executable is running.
+
+        Args:
+            source: The installer's staging file.
+            destination: The installed executable.
+        """
+        raise PermissionError("executable is in use")
+
+    monkeypatch.setattr(runtime.os, "replace", busy_executable)
+    with pytest.raises(RuntimeBootstrapError, match="Could not install.*executable is in use"):
+        runtime._extract_uv_binaries(archive, install_dir)
+    assert not list(install_dir.iterdir())

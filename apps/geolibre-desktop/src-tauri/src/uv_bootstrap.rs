@@ -11,7 +11,7 @@
 //! release's official `<archive>.sha256` assets.
 
 use std::fs;
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -176,8 +176,29 @@ pub fn extract_uv_binaries(
         return Err(format!("The uv archive does not contain {primary}"));
     }
     for (name, data) in found {
-        let staging = install_dir.join(format!(".{name}.tmp"));
-        fs::write(&staging, &data).map_err(|error| format!("Could not write {name}: {error}"))?;
+        install_binary(install_dir, name, &data)?;
+    }
+    Ok(())
+}
+
+/// Stage a complete executable at a unique path before atomically installing it.
+fn install_binary(install_dir: &Path, name: &str, data: &[u8]) -> Result<(), String> {
+    let mut random = [0u8; 16];
+    getrandom::fill(&mut random)
+        .map_err(|error| format!("Could not create uv staging name: {error}"))?;
+    let nonce: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+    let staging = install_dir.join(format!(".{name}.{nonce}.tmp"));
+    // create_new prevents overwriting another installer's staging file even
+    // in the unlikely event of a random-name collision.
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&staging)
+        .map_err(|error| format!("Could not stage {name}: {error}"))?;
+    let written = file.write_all(data);
+    drop(file);
+    let result = (|| {
+        written.map_err(|error| format!("Could not write {name}: {error}"))?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -185,9 +206,10 @@ pub fn extract_uv_binaries(
                 .map_err(|error| format!("Could not mark {name} executable: {error}"))?;
         }
         fs::rename(&staging, install_dir.join(name))
-            .map_err(|error| format!("Could not install {name}: {error}"))?;
-    }
-    Ok(())
+            .map_err(|error| format!("Could not install {name}: {error}"))
+    })();
+    let _ = fs::remove_file(staging);
+    result
 }
 
 /// Verify a downloaded archive against its pin, then extract it.
@@ -253,9 +275,11 @@ fn ensure_pinned_uv_with(
     install_dir: &Path,
     install: impl FnOnce(&Path) -> Result<PathBuf, String>,
 ) -> Result<PathBuf, String> {
+    // The guard protects filesystem operations rather than mutable in-memory
+    // state. After an unwind, rechecking the installed binary is safe.
     let _guard = UV_INSTALL_LOCK
         .lock()
-        .map_err(|error| format!("Could not lock managed uv installation: {error}"))?;
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     // Check only after acquiring the lock so a waiting startup reuses the
     // completed installation instead of staging the same executable again.
     let uv = install_dir.join(uv_binary_names(cfg!(target_os = "windows"))[0]);
@@ -273,6 +297,55 @@ mod tests {
     use std::io::Write;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Barrier};
+
+    #[test]
+    fn startup_recovers_after_an_installer_panics() {
+        let dir = temp_dir("poison");
+        let panicked = std::panic::catch_unwind(|| {
+            ensure_pinned_uv_with(&dir, |_| panic!("simulated installer panic"))
+        });
+        assert!(panicked.is_err());
+        let uv = ensure_pinned_uv_with(&dir, |path| {
+            let uv = path.join(uv_binary_names(cfg!(target_os = "windows"))[0]);
+            fs::write(&uv, b"recovered-uv").map_err(|error| error.to_string())?;
+            Ok(uv)
+        })
+        .unwrap();
+        assert_eq!(fs::read(uv).unwrap(), b"recovered-uv");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn independent_extractors_do_not_share_staging_files() {
+        let dir = temp_dir("staging");
+        let archive = Arc::new(tar_gz(&[
+            ("release/uv", b"verified-uv"),
+            ("release/uvx", b"verified-uvx"),
+        ]));
+        let barrier = Arc::new(Barrier::new(8));
+        let threads: Vec<_> = (0..8)
+            .map(|_| {
+                let dir = dir.clone();
+                let archive = archive.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    for _ in 0..20 {
+                        extract_uv_binaries(&archive, "uv-x86_64-unknown-linux-musl.tar.gz", &dir)
+                            .unwrap();
+                    }
+                })
+            })
+            .collect();
+        for thread in threads {
+            thread.join().unwrap();
+        }
+        assert_eq!(fs::read(dir.join("uv")).unwrap(), b"verified-uv");
+        assert_eq!(fs::read(dir.join("uvx")).unwrap(), b"verified-uvx");
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 2);
+        let _ = fs::remove_dir_all(dir);
+    }
 
     #[test]
     fn concurrent_startups_install_once_and_reuse_the_binary() {

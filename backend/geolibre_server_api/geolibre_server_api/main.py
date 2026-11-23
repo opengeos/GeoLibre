@@ -109,6 +109,7 @@ from geolibre_server_api.secret_crypto import (
     SECRET_KEYS_ENV,
     SecretKeyError,
     is_production_url,
+    plaintext_secrets_enabled,
     reencrypt_stored_secrets,
     secret_ciphers,
 )
@@ -821,45 +822,55 @@ def _prepare_stored_secrets(engine, base_url: str) -> bool:
 
     Encrypts legacy plaintext identity-provider secrets and re-keys secrets
     written under an older key, so a database upgraded without Alembic is
-    protected too. Concurrent workers may both rewrite a row; every write is a
-    valid ciphertext, so the race is harmless.
+    protected too. Row locks serialize rotation with provider updates.
 
     Args:
         engine: The SQLAlchemy engine.
-        base_url: The public API URL, used to tell production from development.
+        base_url: The public API URL, used to restrict the development opt-out.
 
     Returns:
-        True when no key is configured in development, so secrets stay plaintext.
+        True when secret writes must be refused until a key is configured.
 
     Raises:
         RuntimeError: If the key is malformed, cannot decrypt a stored secret,
-            or is missing in production while identity-provider secrets exist.
+            or is required while identity-provider secrets exist.
     """
     production = is_production_url(base_url)
+    plaintext_allowed = not production and plaintext_secrets_enabled()
     try:
         ciphers = secret_ciphers()
         table = OrganizationIdentityProvider.__table__
         if inspect(engine).has_table(table.name):
             with engine.begin() as connection:
-                if ciphers is None and production:
-                    stored = connection.scalar(select(func.count()).select_from(table))
+                if ciphers is None and not plaintext_allowed:
+                    stored = connection.scalar(
+                        select(func.count())
+                        .select_from(table)
+                        .where(table.c.client_secret.is_not(None))
+                    )
                     if stored:
                         raise SecretKeyError(
                             f"{SECRET_KEYS_ENV} is required: {stored} organization identity "
-                            "provider secret(s) are stored and GEOLIBRE_PUBLIC_URL is not a "
-                            "loopback development URL"
+                            "provider secret(s) are stored. Only loopback development may "
+                            "opt out with GEOLIBRE_ALLOW_PLAINTEXT_SECRETS=1"
                         )
                 reencrypt_stored_secrets(connection, table, table.c.client_secret)
     except SecretKeyError as exc:
         engine.dispose()
         raise RuntimeError(str(exc)) from exc
     if ciphers is None:
-        logger.warning(
-            "%s is not set; identity-provider client secrets are stored unencrypted "
-            "(allowed only for a loopback GEOLIBRE_PUBLIC_URL)",
-            SECRET_KEYS_ENV,
-        )
-    return ciphers is None and production
+        if plaintext_allowed:
+            logger.warning(
+                "%s is not set; GEOLIBRE_ALLOW_PLAINTEXT_SECRETS explicitly enables "
+                "unencrypted identity-provider secrets for loopback development",
+                SECRET_KEYS_ENV,
+            )
+        else:
+            logger.warning(
+                "%s is not set; storing identity-provider client secrets is disabled",
+                SECRET_KEYS_ENV,
+            )
+    return ciphers is None and not plaintext_allowed
 
 
 def create_app(

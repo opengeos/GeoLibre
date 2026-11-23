@@ -45,6 +45,11 @@ Deployment protections remain the operator's responsibility:
   `GEOLIBRE_RATE_LIMIT_API`, default 600 per 60 seconds elsewhere; over budget
   answers `429` with `Retry-After`), but its counters live in each worker
   process, so they multiply with workers and replicas and reset on restart.
+  Configure `GEOLIBRE_TRUSTED_PROXIES` with the actual reverse proxy's source
+  IP or network. Without it, proxied users all share the proxy's IP and one
+  deployment-wide budget: by default 30 credential requests and 600 other
+  requests per minute. The proxy must replace incoming forwarding headers;
+  trusting arbitrary client-supplied `X-Forwarded-For` would bypass the limits.
   Before enabling OAuth publicly, also enforce per-client-IP limits at the
   ingress on **GET and POST** `/oauth/authorize`,
   `GET /oauth/sso/callback`, `POST /oauth/token`, `POST /api/auth/token`,
@@ -69,6 +74,7 @@ Deployment protections remain the operator's responsibility:
       access_log off;
       proxy_pass http://127.0.0.1:8000;
       proxy_set_header Host $http_host;
+      proxy_set_header X-Forwarded-For $remote_addr;
   }
   ```
 
@@ -87,9 +93,11 @@ Deployment protections remain the operator's responsibility:
   application workers entirely.
 - **The secret encryption key.** Set `GEOLIBRE_SECRET_KEYS` (comma-separated
   Fernet keys; see `backend/geolibre_server_api/README.md`) before configuring
-  organization single sign-on on a non-loopback `GEOLIBRE_PUBLIC_URL`. Store it
-  apart from the database and its backups; losing it means re-entering every
-  identity provider's client secret.
+  organization single sign-on, including with the default localhost public URL.
+  Store it apart from the database and its backups; losing it means re-entering every
+  identity provider's client secret. An explicit
+  `GEOLIBRE_ALLOW_PLAINTEXT_SECRETS=1` opt-out is available only for loopback
+  development servers that are not publicly reachable.
 - **Database pooling and schema migrations.** For PostgreSQL and other
   non-SQLite databases, the SQLAlchemy pool defaults to `GEOLIBRE_DB_POOL_SIZE=10`,
   `GEOLIBRE_DB_MAX_OVERFLOW=20` (up to 30 connections per worker process), and
@@ -670,10 +678,13 @@ and `identity provider discovery failed`. Out-of-range values are a generic
   ones.
 - **Secret storage:** `clientSecret` is encrypted at rest with Fernet under the
   first key in `GEOLIBRE_SECRET_KEYS` and decrypted only when calling the
-  provider's token endpoint. A production server (non-loopback
-  `GEOLIBRE_PUBLIC_URL`) without the key refuses to store a secret (`503`) and
+  provider's token endpoint. By default a server without the key refuses to
+  store a secret (`503`), even with the default localhost public URL, and
   fails startup while secrets are stored; startup and `alembic upgrade head`
-  encrypt secrets left in plaintext by earlier releases.
+  encrypt secrets left in plaintext by earlier releases. Development servers
+  with a loopback public URL can explicitly opt out using
+  `GEOLIBRE_ALLOW_PLAINTEXT_SECRETS=1`. In that mode, plaintext secrets beginning
+  with `enc:v1:` are rejected (`422`) to keep stored values unambiguous.
 
 ### Single sign-on on the consent page
 

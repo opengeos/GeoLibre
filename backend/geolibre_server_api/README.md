@@ -52,8 +52,8 @@ Configuration:
   the management grant always expires within 300 seconds and never refreshes.
 - `GEOLIBRE_TRUSTED_PROXIES`: comma-separated IPs or CIDR networks of reverse
   proxies whose `X-Forwarded-For` header is trusted when resolving the client
-  address for organization admin IP allowlists (default empty: the direct peer
-  is the client). An invalid entry fails startup.
+  address for rate limits and organization admin IP allowlists (default empty:
+  the direct peer is the client). An invalid entry fails startup.
 - `GEOLIBRE_PROXY_AUTH`: `true` (or `1`/`yes`) lets those trusted proxies sign
   users in on the OAuth consent page through their identity headers (default
   empty: identity headers are ignored, even from a trusted proxy).
@@ -74,11 +74,16 @@ Configuration:
   encrypts; every listed key decrypts, so rotate by prepending a new key and
   restarting (startup re-encrypts every secret under the new key), then drop
   the old one. Startup also encrypts secrets stored in plaintext by earlier
-  builds, as does `alembic upgrade head`. When `GEOLIBRE_PUBLIC_URL` is not a
-  loopback URL the key is required: startup fails if identity-provider secrets
-  are stored without it, and saving a provider secret answers `503`. A
+  builds, as does `alembic upgrade head`. The key is required by default,
+  including with the default localhost public URL: startup fails if
+  identity-provider secrets are stored without it, and saving a provider
+  secret answers `503`. A
   malformed key, or one that cannot decrypt a stored secret, fails startup.
-  Without a key on a loopback development URL, secrets stay in plaintext.
+- `GEOLIBRE_ALLOW_PLAINTEXT_SECRETS` (default `0`): an explicit development-only
+  opt-out from secret encryption. It is honored only with a loopback
+  `GEOLIBRE_PUBLIC_URL`. Use it only for development servers that are not
+  publicly reachable. Without a key, secrets beginning with `enc:v1:` are
+  rejected with `422` because they would be confused with ciphertext.
 - `GEOLIBRE_OIDC_ALLOWED_NETWORKS`: comma-separated IPs or CIDR networks that
   organization identity providers may be reached on even though they are not
   public, such as an on-premises IdP on `10.20.0.0/16` (default empty: calls
@@ -133,3 +138,10 @@ deployment should still rate-limit **GET and POST** `/oauth/authorize`,
 proxy; the Compose API port binds to loopback so that proxy cannot be bypassed
 from outside the host. See "What the reference server leaves to the operator"
 in `docs/server-api.md` before public exposure.
+
+Behind a reverse proxy, set `GEOLIBRE_TRUSTED_PROXIES` to the proxy's actual
+source IP or network and configure it to replace incoming forwarding headers.
+If that setting is empty, every proxied user shares the proxy's address and
+therefore one budget: by default, 30 credential requests and 600 other requests
+per minute for the entire deployment. Do not trust arbitrary client-supplied
+`X-Forwarded-For` headers to separate these budgets.

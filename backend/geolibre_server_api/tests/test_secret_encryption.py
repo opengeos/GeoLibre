@@ -20,7 +20,7 @@ from geolibre_server_api.secret_crypto import (
     decrypt_secret,
     encrypt_secret,
 )
-from helpers import admin_token, configure_idp, create_org
+from helpers import account, admin_token, configure_idp, create_org
 from sqlalchemy import create_engine, text
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
@@ -167,6 +167,7 @@ def test_development_without_key_keeps_plaintext(tmp_path, fake_idp, monkeypatch
     _store_provider(db_url, tmp_path, fake_idp, monkeypatch)
     _insert_plaintext_secret(db_url, "dev-plain")
     monkeypatch.delenv("GEOLIBRE_SECRET_KEYS")
+    monkeypatch.setenv("GEOLIBRE_ALLOW_PLAINTEXT_SECRETS", "1")
     monkeypatch.delenv("GEOLIBRE_OAUTH_CLIENTS")
     app = _app(db_url, tmp_path, public_url="http://localhost:8000")
     assert app.state.secrets_unprotected is False
@@ -247,3 +248,112 @@ def test_plaintext_with_ciphertext_prefix_is_encrypted(tmp_path, fake_idp, monke
     restarted = _app(db_url, tmp_path)
     restarted.state.engine.dispose()
     assert decrypt_secret(_raw_secrets(db_url)[0]) == secret
+
+
+@pytest.mark.parametrize("public_url", [PUBLIC_URL, "http://localhost:8000"])
+def test_missing_key_refuses_legacy_secrets_even_with_default_public_url(
+    tmp_path, fake_idp, monkeypatch, public_url
+):
+    """The default loopback public URL must not silently allow plaintext storage.
+
+    Args:
+        tmp_path: An isolated temporary directory.
+        fake_idp: The test identity provider.
+        monkeypatch: The pytest patch fixture.
+        public_url: The configured external API URL.
+    """
+    db_url = f"sqlite:///{tmp_path / 'missing-key.db'}"
+    _store_provider(db_url, tmp_path, fake_idp, monkeypatch)
+    _insert_plaintext_secret(db_url, "legacy-plain")
+    monkeypatch.delenv("GEOLIBRE_SECRET_KEYS")
+    with pytest.raises(RuntimeError, match="GEOLIBRE_SECRET_KEYS is required"):
+        _app(db_url, tmp_path, public_url=public_url)
+
+
+@pytest.mark.parametrize("public_url", [PUBLIC_URL, "http://localhost:8000"])
+def test_secret_writes_require_key_even_with_default_public_url(
+    tmp_path, fake_idp, monkeypatch, public_url
+):
+    """New providers require encryption unless development explicitly opts out.
+
+    Args:
+        tmp_path: An isolated temporary directory.
+        fake_idp: The test identity provider.
+        monkeypatch: The pytest patch fixture.
+        public_url: The configured external API URL.
+    """
+    monkeypatch.delenv("GEOLIBRE_SECRET_KEYS")
+    monkeypatch.setenv("GEOLIBRE_OAUTH_CLIENTS", json.dumps(OAUTH_CLIENTS))
+    db_url = f"sqlite:///{tmp_path / 'write-key.db'}"
+    app = _app(db_url, tmp_path, public_url=public_url, transport=fake_idp.transport)
+    try:
+        with TestClient(app, base_url=public_url) as client:
+            token = account(client)
+            org_id = create_org(client, token)
+            response = configure_idp(client, token, org_id)
+            assert response.status_code == 503, response.text
+        assert _raw_secrets(db_url) == []
+    finally:
+        app.state.engine.dispose()
+
+
+@pytest.mark.parametrize("secret", ["enc:v1:not-a-token", "enc:v1:"])
+def test_development_rejects_reserved_prefix_without_key(tmp_path, fake_idp, monkeypatch, secret):
+    """Ambiguous plaintext is rejected before it can poison a development database.
+
+    Args:
+        tmp_path: An isolated temporary directory.
+        fake_idp: The test identity provider.
+        monkeypatch: The pytest patch fixture.
+        secret: A plaintext credential using the ciphertext prefix.
+    """
+    monkeypatch.delenv("GEOLIBRE_SECRET_KEYS")
+    monkeypatch.setenv("GEOLIBRE_OAUTH_CLIENTS", json.dumps(OAUTH_CLIENTS))
+    monkeypatch.setenv("GEOLIBRE_ALLOW_PLAINTEXT_SECRETS", "1")
+    url = "http://localhost:8000"
+    db_url = f"sqlite:///{tmp_path / 'dev-reserved.db'}"
+    app = _app(db_url, tmp_path, public_url=url, transport=fake_idp.transport)
+    try:
+        with TestClient(app, base_url=url) as client:
+            token = account(client)
+            org_id = create_org(client, token)
+            response = configure_idp(client, token, org_id, clientSecret=secret)
+            assert response.status_code == 422, response.text
+            assert "GEOLIBRE_SECRET_KEYS" in response.json()["error"]
+        assert _raw_secrets(db_url) == []
+    finally:
+        app.state.engine.dispose()
+    _app(db_url, tmp_path, public_url=url).state.engine.dispose()
+
+
+def test_public_url_cannot_opt_out_of_secret_encryption(tmp_path, fake_idp, monkeypatch):
+    """A public deployment ignores the development-only opt-out.
+
+    Args:
+        tmp_path: An isolated temporary directory.
+        fake_idp: The test identity provider.
+        monkeypatch: The pytest patch fixture.
+    """
+    monkeypatch.delenv("GEOLIBRE_SECRET_KEYS")
+    monkeypatch.setenv("GEOLIBRE_ALLOW_PLAINTEXT_SECRETS", "1")
+    response = _store_provider(
+        f"sqlite:///{tmp_path / 'public.db'}", tmp_path, fake_idp, monkeypatch
+    )
+    assert response.status_code == 503
+
+
+def test_encryption_helper_requires_explicit_opt_out(monkeypatch):
+    """Direct storage callers also fail closed when a key is missing.
+
+    Args:
+        monkeypatch: The pytest patch fixture.
+    """
+    monkeypatch.delenv("GEOLIBRE_SECRET_KEYS")
+    for setting in ("", "0", "typo"):
+        monkeypatch.setenv("GEOLIBRE_ALLOW_PLAINTEXT_SECRETS", setting)
+        with pytest.raises(SecretKeyError, match="required before storing"):
+            encrypt_secret("plain")
+    monkeypatch.setenv("GEOLIBRE_ALLOW_PLAINTEXT_SECRETS", "1")
+    assert encrypt_secret("plain") == "plain"
+    with pytest.raises(SecretKeyError, match="needs GEOLIBRE_SECRET_KEYS"):
+        encrypt_secret("enc:v1:not-a-token")

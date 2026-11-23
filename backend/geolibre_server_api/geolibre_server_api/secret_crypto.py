@@ -24,6 +24,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.types import TypeDecorator
 
 SECRET_KEYS_ENV = "GEOLIBRE_SECRET_KEYS"
+PLAINTEXT_SECRETS_ENV = "GEOLIBRE_ALLOW_PLAINTEXT_SECRETS"
 CIPHERTEXT_PREFIX = "enc:v1:"
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
@@ -77,22 +78,53 @@ def is_encrypted(value: str | None) -> bool:
     return value is not None and value.startswith(CIPHERTEXT_PREFIX)
 
 
+def plaintext_secrets_enabled() -> bool:
+    """Return whether the operator explicitly opted out of secret encryption.
+
+    Returns:
+        True for an explicit development opt-out. The app additionally requires
+        a loopback public URL before honoring this setting.
+    """
+    return os.getenv(PLAINTEXT_SECRETS_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def encrypt_secret(plaintext: str) -> str:
-    """Encrypt a secret for storage, or pass it through when no key is set.
+    """Encrypt a secret for storage, requiring an explicit plaintext opt-out.
 
     Args:
         plaintext: The secret to store.
 
     Returns:
         ``enc:v1:<fernet token>``, or ``plaintext`` unchanged when
-        ``GEOLIBRE_SECRET_KEYS`` is unset (development only; production
-        startup and the admin API refuse to run that way).
+        ``GEOLIBRE_SECRET_KEYS`` is unset and the operator explicitly enabled
+        ``GEOLIBRE_ALLOW_PLAINTEXT_SECRETS`` for development.
+
+    Raises:
+        SecretKeyError: If encryption is required or plaintext is ambiguous.
     """
     ciphers = secret_ciphers()
     if ciphers is None:
+        validate_plaintext_secret(plaintext)
+        if not plaintext_secrets_enabled():
+            raise SecretKeyError(f"{SECRET_KEYS_ENV} is required before storing secrets")
         return plaintext
     token = ciphers[0].encrypt(plaintext.encode("utf-8")).decode("ascii")
     return CIPHERTEXT_PREFIX + token
+
+
+def validate_plaintext_secret(plaintext: str) -> None:
+    """Reject credentials that cannot be stored unambiguously without a key.
+
+    Args:
+        plaintext: The credential supplied by an administrator.
+
+    Raises:
+        SecretKeyError: If unencrypted text would resemble stored ciphertext.
+    """
+    if plaintext.startswith(CIPHERTEXT_PREFIX) and secret_ciphers() is None:
+        raise SecretKeyError(
+            f"a secret starting with {CIPHERTEXT_PREFIX!r} needs {SECRET_KEYS_ENV} set"
+        )
 
 
 def decrypt_secret(stored: str) -> str:

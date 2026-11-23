@@ -296,10 +296,23 @@ def _extract_uv_binaries(archive: Path, install_dir: Path) -> None:
     if primary not in found:
         raise RuntimeBootstrapError(f"The uv archive does not contain {primary}")
     for name, data in found.items():
-        staging = install_dir / f".{name}.tmp"
-        staging.write_bytes(data)
-        staging.chmod(0o755)
-        os.replace(staging, install_dir / name)
+        staging: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                prefix=f".{name}.", suffix=".tmp", dir=install_dir, delete=False
+            ) as output:
+                staging = Path(output.name)
+                output.write(data)
+            staging.chmod(0o755)
+            os.replace(staging, install_dir / name)
+        except OSError as exc:
+            raise RuntimeBootstrapError(f"Could not install {name}: {exc}") from exc
+        finally:
+            if staging is not None:
+                try:
+                    staging.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
 
 def _is_valid_managed_uv(path: Path) -> bool:
