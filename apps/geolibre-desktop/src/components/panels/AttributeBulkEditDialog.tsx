@@ -239,7 +239,8 @@ export function ColumnFilterBar({
   const current = activeCol ? filters[activeCol] : undefined;
   const defaultMode: ColumnFilterMode =
     activeCol && numericColumns.has(activeCol) ? "range" : "contains";
-  const mode: ColumnFilterMode = current?.mode ?? (activeCol ? editorModes[activeCol] : undefined) ?? defaultMode;
+  const mode: ColumnFilterMode =
+    current?.mode ?? (activeCol ? editorModes[activeCol] : undefined) ?? defaultMode;
   const activeEntries = Object.entries(filters);
 
   if (columns.length === 0) return null;
