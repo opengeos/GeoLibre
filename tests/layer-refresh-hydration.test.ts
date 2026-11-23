@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import { createElement } from "react";
 import { act, render, screen, useAppStore, waitFor } from "./helpers/dom";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 import type { FeatureCollection } from "geojson";
+
+const originalFetch = globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
 
 const { useLayerRefresh } =
   await import("../apps/geolibre-desktop/src/components/panels/layer-panel/useLayerRefresh");

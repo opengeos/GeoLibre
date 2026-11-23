@@ -2083,7 +2083,8 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
       : undefined;
 
   // Batches are runtime caches. A hydrated batch cannot be verified against
-  // the saved GeoJSON, so always discard it to avoid rendering stale data.
+  // the saved GeoJSON, so the `geoarrow` batch split off above is always
+  // discarded to avoid rendering stale data.
   return {
     ...rest,
     style: {
