@@ -1151,10 +1151,7 @@ export function AttributeTable({
     if (!adaptAnalysisRows || selectedIdSet.size === 0) return [];
     return pickAnalysisRows(analysisRows, attributeRows, selectedIdSet);
   }, [adaptAnalysisRows, analysisRows, attributeRows, selectedIdSet]);
-  const sorted = useMemo(
-    () => sortAttributeRows(filtered, sortSpecs),
-    [filtered, sortSpecs],
-  );
+  const sorted = useMemo(() => sortAttributeRows(filtered, sortSpecs), [filtered, sortSpecs]);
 
   // Row selection with keyboard modifiers (plain / Ctrl-toggle / Shift-range /
   // Shift+Ctrl merge). The branching lives in the pure `computeRowSelection`
@@ -2657,7 +2654,9 @@ export function AttributeTable({
         >
           <Filter className="h-3.5 w-3.5" />
           {activeColumnFilterCount > 0 ? (
-            <span className="text-[11px] font-semibold tabular-nums">{activeColumnFilterCount}</span>
+            <span className="text-[11px] font-semibold tabular-nums">
+              {activeColumnFilterCount}
+            </span>
           ) : null}
         </Button>
         {canEnterEditMode && editableBulkColumns.length > 0 ? (
@@ -2742,7 +2741,10 @@ export function AttributeTable({
               onChangeSortKey={(key) => setSortSpecs([{ key, direction: "asc" }])}
               onToggleSortDirection={() =>
                 setSortSpecs((current) => {
-                  const primary = current[0] ?? { key: "__featureId" as SortKey, direction: "asc" as SortDirection };
+                  const primary = current[0] ?? {
+                    key: "__featureId" as SortKey,
+                    direction: "asc" as SortDirection,
+                  };
                   return [
                     { ...primary, direction: primary.direction === "asc" ? "desc" : "asc" },
                     ...current.slice(1),

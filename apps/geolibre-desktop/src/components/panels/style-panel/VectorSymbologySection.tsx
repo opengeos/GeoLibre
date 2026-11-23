@@ -503,10 +503,7 @@ export function VectorSymbologySection({
             </Button>
           </div>
           {draftVectorStyleMode === "graduated" && (
-            <GraduatedHistogram
-              values={draftVectorPropertyValues}
-              stops={draftVectorStyleStops}
-            />
+            <GraduatedHistogram values={draftVectorPropertyValues} stops={draftVectorStyleStops} />
           )}
           <div className="space-y-2">
             {draftVectorStyleStops.map((stop, index) => (

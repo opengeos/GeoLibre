@@ -122,7 +122,12 @@ export function matchesColumnFilter(value: unknown, spec: ColumnFilterSpec): boo
     const minStr = spec.min?.trim() ?? "";
     const maxStr = spec.max?.trim() ?? "";
     if (!minStr && !maxStr) return true;
-    const num = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+    const num =
+      typeof value === "number"
+        ? value
+        : typeof value === "string" && value.trim() !== ""
+          ? Number(value)
+          : NaN;
     if (!Number.isFinite(num)) return false;
     if (minStr) {
       const min = Number(minStr);
@@ -190,7 +195,8 @@ export function computeBulkFillDrafts(options: {
   for (const row of rows) {
     if (!targetRowIds.has(row.featureId)) continue;
     const original = row.properties[column];
-    const currentText = getDraftRow(drafts, row.featureId)?.[column] ?? formatAttributeValue(original);
+    const currentText =
+      getDraftRow(drafts, row.featureId)?.[column] ?? formatAttributeValue(original);
     if (currentText === value) continue;
     drafts = setDraftCell(drafts, row.featureId, column, value, original);
     updatedCount += 1;

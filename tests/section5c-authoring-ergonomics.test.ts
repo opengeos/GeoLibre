@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { exportAtlasPdf, exportAtlasPngZip } from "../apps/geolibre-desktop/src/lib/print-layout-export";
+import {
+  exportAtlasPdf,
+  exportAtlasPngZip,
+} from "../apps/geolibre-desktop/src/lib/print-layout-export";
 import {
   MAX_MODEL_HISTORY,
   addDataNode,

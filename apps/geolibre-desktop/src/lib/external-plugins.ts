@@ -799,9 +799,7 @@ export async function listInstalledWebPlugins(): Promise<InstalledWebPlugin[]> {
     name: record.manifest.name,
     version: record.manifest.version,
     archiveName: record.archiveName,
-    ...(record.manifest.capabilities?.length
-      ? { capabilities: record.manifest.capabilities }
-      : {}),
+    ...(record.manifest.capabilities?.length ? { capabilities: record.manifest.capabilities } : {}),
   }));
 }
 

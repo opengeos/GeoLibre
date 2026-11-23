@@ -19,7 +19,11 @@ interface AttributeBulkEditDialogProps {
   editableColumns: string[];
   selectedCount: number;
   filteredCount: number;
-  onBulkFill: (options: { column: string; value: string; scope: "selected" | "filtered" }) => number;
+  onBulkFill: (options: {
+    column: string;
+    value: string;
+    scope: "selected" | "filtered";
+  }) => number;
   onFindReplace: (options: {
     column: string;
     find: string;
@@ -274,9 +278,7 @@ export function ColumnFilterBar({
           className="h-7 w-40 text-xs"
           placeholder={t("attributeTable.columnFilter.valuePlaceholder")}
           value={current?.text ?? ""}
-          onChange={(e) =>
-            activeCol && onChangeFilter(activeCol, { mode, text: e.target.value })
-          }
+          onChange={(e) => activeCol && onChangeFilter(activeCol, { mode, text: e.target.value })}
         />
       ) : mode === "range" ? (
         <div className="flex items-center gap-1">
@@ -317,7 +319,13 @@ export function ColumnFilterBar({
               {col} ×
             </Button>
           ))}
-          <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={onClearAll}>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-[11px]"
+            onClick={onClearAll}
+          >
             {t("attributeTable.columnFilter.clearAll")}
           </Button>
         </div>

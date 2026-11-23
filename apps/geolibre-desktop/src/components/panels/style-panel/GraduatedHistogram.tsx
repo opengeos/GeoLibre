@@ -55,7 +55,8 @@ export function GraduatedHistogram({ values, stops, binCount = 20 }: GraduatedHi
         onMouseLeave={() => setHoveredIdx(null)}
       >
         {data.bins.map((bin, idx) => {
-          const barHeight = bin.count > 0 ? Math.max(2, (bin.count / data.maxCount) * (height - 4)) : 0;
+          const barHeight =
+            bin.count > 0 ? Math.max(2, (bin.count / data.maxCount) * (height - 4)) : 0;
           const x = idx * barWidth;
           const y = height - barHeight;
           return (

@@ -994,7 +994,10 @@ function SettingsTab({
                     {plugin.capabilities?.length ? (
                       <div className="mt-1 flex flex-wrap gap-1">
                         {plugin.capabilities.map((cap) => (
-                          <span key={cap} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                          <span
+                            key={cap}
+                            className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                          >
                             {cap}
                           </span>
                         ))}
@@ -1006,8 +1009,12 @@ function SettingsTab({
                     size="icon"
                     variant="ghost"
                     className="h-8 w-8 shrink-0"
-                    title={t("managePlugins.reloadArchiveAria", { name: pluginDisplayName(t, plugin) })}
-                    aria-label={t("managePlugins.reloadArchiveAria", { name: pluginDisplayName(t, plugin) })}
+                    title={t("managePlugins.reloadArchiveAria", {
+                      name: pluginDisplayName(t, plugin),
+                    })}
+                    aria-label={t("managePlugins.reloadArchiveAria", {
+                      name: pluginDisplayName(t, plugin),
+                    })}
                     onClick={() => onReloadFromFile(plugin.id)}
                   >
                     <RefreshCw className="h-3.5 w-3.5" />

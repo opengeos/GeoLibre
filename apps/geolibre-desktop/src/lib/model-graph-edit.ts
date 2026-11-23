@@ -716,7 +716,12 @@ export function duplicateNodes(
       y: Math.max(0, node.y + offset.y),
       ...(node.parameters ? { parameters: structuredClone(node.parameters) } : {}),
       ...(node.kind === "output" && node.name?.trim()
-        ? { name: uniqueOutputName({ ...graph, nodes: [...graph.nodes, ...clonedNodes] }, node.name.trim()) }
+        ? {
+            name: uniqueOutputName(
+              { ...graph, nodes: [...graph.nodes, ...clonedNodes] },
+              node.name.trim(),
+            ),
+          }
         : {}),
     });
   }

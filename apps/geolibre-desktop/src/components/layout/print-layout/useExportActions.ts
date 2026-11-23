@@ -227,8 +227,7 @@ export function useExportActions({
       }
     } catch (error) {
       const cancelled =
-        controller.signal.aborted ||
-        (error instanceof DOMException && error.name === "AbortError");
+        controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError");
       if (!cancelled) {
         setError(
           t("printLayout.errors.exportFailed", {
