@@ -1,9 +1,6 @@
 import { isArcGISWritableLayer } from "@geolibre/plugins";
 import type { ParseKeys, TFunction } from "i18next";
-import {
-  NETCDF_IMAGE_SOURCE_KIND,
-  redactConfigurationCredentials,
-} from "@geolibre/core";
+import { NETCDF_IMAGE_SOURCE_KIND, redactConfigurationCredentials } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { MIN_REFRESH_INTERVAL_MS } from "../../../lib/layer-refresh";
 import { rasterExportUrl } from "../../../lib/raster-export";
@@ -11,10 +8,7 @@ import type { RasterInfo } from "../../../lib/raster-info";
 import { IS_MAS_BUILD } from "../../../lib/build-flags";
 import { isTauri } from "../../../lib/is-tauri";
 import { getNetcdfLayerState } from "../../../lib/netcdf-image-symbology";
-import {
-  DATA_SOURCE_CATALOG,
-  type DataSourceCatalogEntry,
-} from "../../../lib/ui-profile";
+import { DATA_SOURCE_CATALOG, type DataSourceCatalogEntry } from "../../../lib/ui-profile";
 import type { AddDataKind } from "../../layout/add-data/types";
 import { KIND_I18N_KEY } from "../../layout/add-data/constants";
 
@@ -49,7 +43,7 @@ export const ADD_DATA_DIALOG_SOURCES = DATA_SOURCE_CATALOG.filter(
     entry.id in KIND_I18N_KEY ||
     entry.id === "pmtiles" ||
     entry.id === "raster" ||
-    entry.id === "zarr"
+    entry.id === "zarr",
 );
 
 export type LayerRefreshStatus = {
@@ -84,22 +78,13 @@ function sourceUrlsFromLayer(layer: GeoLibreLayer): string[] {
     return [];
   }
   return layer.source.urls.filter(
-    (value): value is string =>
-      typeof value === "string" && value.trim().length > 0
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
   );
 }
 
 // Source formats whose in-place write-back the sidecar supports today. Kept in
 // sync with the backend gate in `app/vector.py` (_WRITABLE_EXTENSIONS).
-const WRITEBACK_EXTENSIONS = [
-  "gpkg",
-  "geojson",
-  "json",
-  "shp",
-  "fgb",
-  "parquet",
-  "geoparquet",
-];
+const WRITEBACK_EXTENSIONS = ["gpkg", "geojson", "json", "shp", "fgb", "parquet", "geoparquet"];
 
 /**
  * Whether the layer is an editable SQL Server table with a usable primary key
@@ -148,8 +133,7 @@ export function canWriteEditsToSource(layer: GeoLibreLayer): boolean {
   // export-only there, as on the web build.
   if (IS_MAS_BUILD) return false;
   if (isPostgisEditableLayer(layer) || isMssqlEditableLayer(layer)) return true;
-  const path =
-    typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
+  const path = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
   if (!path) return false;
   const ext = path.split(".").pop()?.toLowerCase();
   return ext ? WRITEBACK_EXTENSIONS.includes(ext) : false;
@@ -192,7 +176,7 @@ export function rasterInfoUrl(layer: GeoLibreLayer): string | null {
  */
 export function layerMetadataPayload(
   layer: GeoLibreLayer,
-  rasterInfo?: RasterInfo | null
+  rasterInfo?: RasterInfo | null,
 ): Record<string, unknown> {
   // The dialog offers Copy, so the payload is what a user pastes into an email
   // or a report: scrub credentials the way a saved project does (#2855). Each
@@ -226,14 +210,10 @@ export function layerMetadataPayload(
  * @param metadata - The layer's metadata.
  * @returns A redacted copy.
  */
-function redactLayerMetadata(
-  metadata: Record<string, unknown>
-): Record<string, unknown> {
+function redactLayerMetadata(metadata: Record<string, unknown>): Record<string, unknown> {
   const { type, ...rest } = metadata ?? {};
   return {
-    ...(type !== undefined
-      ? { type: redactConfigurationCredentials(type) }
-      : {}),
+    ...(type !== undefined ? { type: redactConfigurationCredentials(type) } : {}),
     ...redactConfigurationCredentials(rest),
   };
 }
@@ -282,9 +262,7 @@ const SOURCE_SUMMARY_OMITTED_KEYS = new Set(["kerchunkRefs"]);
  * @param layer - The layer whose source to summarize.
  * @returns The source fields, or null for a layer type without a service source.
  */
-function layerSourceSummary(
-  layer: GeoLibreLayer
-): Record<string, unknown> | null {
+function layerSourceSummary(layer: GeoLibreLayer): Record<string, unknown> | null {
   if (!SOURCE_SUMMARY_LAYER_TYPES.has(layer.type)) return null;
   const summary: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(layer.source ?? {})) {
@@ -309,9 +287,7 @@ function layerSourceSummary(
  * @returns The option value to select.
  */
 export function refreshIntervalOptionValue(intervalMs: number): string {
-  if (
-    REFRESH_INTERVAL_OPTIONS.some((option) => option.intervalMs === intervalMs)
-  ) {
+  if (REFRESH_INTERVAL_OPTIONS.some((option) => option.intervalMs === intervalMs)) {
     return String(intervalMs);
   }
   return CUSTOM_REFRESH_INTERVAL_VALUE;
@@ -348,13 +324,10 @@ export function parseCustomRefreshIntervalMs(value: string): number | null {
  * @returns The localized relative time, or `iso` when it cannot be parsed.
  */
 export function relativeSyncTime(iso: string, locale: string): string {
-  const elapsedSeconds = Math.round(
-    (new Date(iso).getTime() - Date.now()) / 1000
-  );
+  const elapsedSeconds = Math.round((new Date(iso).getTime() - Date.now()) / 1000);
   if (!Number.isFinite(elapsedSeconds)) return iso;
   const formatter = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
-  if (Math.abs(elapsedSeconds) < 60)
-    return formatter.format(elapsedSeconds, "second");
+  if (Math.abs(elapsedSeconds) < 60) return formatter.format(elapsedSeconds, "second");
   const minutes = Math.round(elapsedSeconds / 60);
   if (Math.abs(minutes) < 60) return formatter.format(minutes, "minute");
   const hours = Math.round(minutes / 60);
@@ -385,10 +358,7 @@ export function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
     return getNetcdfLayerState(layer.id) !== null;
   }
 
-  return (
-    Array.isArray(layer.metadata.nativeLayerIds) &&
-    layer.metadata.nativeLayerIds.length > 0
-  );
+  return Array.isArray(layer.metadata.nativeLayerIds) && layer.metadata.nativeLayerIds.length > 0;
 }
 
 /**
