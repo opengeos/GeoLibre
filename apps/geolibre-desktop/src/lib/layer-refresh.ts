@@ -1,5 +1,5 @@
 import type { FeatureCollection } from "geojson";
-import { parseS3Url, resolveReadableUrl, type GeoLibreLayer } from "@geolibre/core";
+import type { GeoLibreLayer } from "@geolibre/core";
 import { parseGeoRssLayer } from "./georss";
 import { looksLikeGmlFeatureCollection } from "./gml";
 import { parseGmlWithReprojection } from "./gml-projection";
@@ -218,7 +218,7 @@ export async function fetchGeoJsonFeatureCollection(
     : AbortSignal.timeout(FETCH_TIMEOUT_MS);
   let response: FetchedText;
   try {
-    response = await fetchText(await resolveReadableUrl(url, signal), options, signal);
+    response = await fetchText(url, options, signal);
   } catch (error) {
     if (error instanceof DOMException && error.name === "TimeoutError") {
       throw new Error("The request timed out.");
@@ -834,35 +834,6 @@ function appendQuery(endpoint: string, params: Array<[string, string]>): string 
   return `${endpoint}${separator}${query}`;
 }
 
-/** Check nested collections before downstream renderers traverse their members. */
-function isGeoJsonGeometry(value: unknown): boolean {
-  if (!value || typeof value !== "object" || !("type" in value)) return false;
-  if (value.type === "GeometryCollection") {
-    return (
-      "geometries" in value &&
-      Array.isArray(value.geometries) &&
-      value.geometries.every(isGeoJsonGeometry)
-    );
-  }
-  return (
-    ["Point", "MultiPoint", "LineString", "MultiLineString", "Polygon", "MultiPolygon"].includes(
-      String(value.type),
-    ) &&
-    "coordinates" in value &&
-    Array.isArray(value.coordinates)
-  );
-}
-
-function isGeoJsonFeature(value: unknown): boolean {
-  return Boolean(
-    value &&
-    typeof value === "object" &&
-    "type" in value &&
-    value.type === "Feature" &&
-    (!("geometry" in value) || value.geometry === null || isGeoJsonGeometry(value.geometry)),
-  );
-}
-
 function parseGeoJsonFeatureCollection(value: unknown): FeatureCollection {
   if (
     !value ||
@@ -870,39 +841,19 @@ function parseGeoJsonFeatureCollection(value: unknown): FeatureCollection {
     !("type" in value) ||
     value.type !== "FeatureCollection" ||
     !("features" in value) ||
-    !Array.isArray(value.features) ||
-    !value.features.every(isGeoJsonFeature)
+    !Array.isArray(value.features)
   ) {
     throw new Error("The response is not a GeoJSON FeatureCollection.");
   }
 
-  return {
-    ...value,
-    features: value.features.map((feature) =>
-      "geometry" in feature ? feature : { ...feature, geometry: null },
-    ),
-  } as FeatureCollection;
-}
-
-function layerUrl(layer: GeoLibreLayer): string {
-  const sourcePath = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
-  const sourceUrl = typeof layer.source.url === "string" ? layer.source.url.trim() : "";
-  return sourceUrl || sourcePath;
+  return value as FeatureCollection;
 }
 
 function layerHttpUrl(layer: GeoLibreLayer): string | null {
-  const url = layerUrl(layer);
+  const sourcePath = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
+  const sourceUrl = typeof layer.source.url === "string" ? layer.source.url.trim() : "";
+  const url = sourceUrl || sourcePath;
   return isHttpUrl(url) ? url : null;
-}
-
-/**
- * The layer's HTTP(S) URL, or its `gs://`/`s3://`/`s3a://` URL. Only the
- * GeoJSON refresh path resolves cloud schemes; the vector-control, OGC, and
- * ArcGIS paths stay HTTP-only.
- */
-function layerGeoJsonSourceUrl(layer: GeoLibreLayer): string | null {
-  const url = layerUrl(layer);
-  return isHttpUrl(url) || /^(?:gs|s3|s3a):\/\//i.test(url) ? url : null;
 }
 
 /**
@@ -915,7 +866,7 @@ function layerGeoJsonSourceUrl(layer: GeoLibreLayer): string | null {
 export function refreshSourceUrl(layer: GeoLibreLayer): string | null {
   if (layer.type !== "geojson") return null;
 
-  const url = layerGeoJsonSourceUrl(layer);
+  const url = layerHttpUrl(layer);
   if (!url) return null;
 
   if (isWfsLayer(layer)) return url;
@@ -1045,56 +996,4 @@ function isHttpUrl(value: string): boolean {
   } catch {
     return false;
   }
-}
-
-/**
- * Whether a URL is plain HTTP(S) to a public host, so a layer can hydrate it
- * automatically. Rejects loopback, unspecified, RFC 1918 private, link-local,
- * CGNAT, IPv6 ULA/link-local, IPv4-mapped and IPv4-compatible IPv6, 192.0.0.0/24, 198.18.0.0/15,
- * 240.0.0.0/4, 6to4, and NAT64 literal hosts, plus *.localhost, *.internal,
- * and *.local names. Other special-purpose ranges are not checked.
- */
-export function isPublicHttpUrl(url: string): boolean {
-  try {
-    const u = new URL(url);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-    const host = u.hostname.toLowerCase().replace(/\.$/, "");
-    // Loopback / unspecified (IPv4 0.0.0.0/8 and 127.0.0.0/8, IPv6 [::] and [::1], *.localhost)
-    if (host === "localhost" || host.endsWith(".localhost")) return false;
-    // Internal-only names: *.internal (e.g. metadata.google.internal) and mDNS *.local
-    if (/(^|\.)(internal|local)$/.test(host)) return false;
-    if (/^0\./.test(host) || host === "[::]" || host === "[::1]") return false;
-    if (/^127\./.test(host)) return false;
-    // CGNAT 100.64.0.0/10
-    if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host)) return false;
-    // Private ranges (RFC1918 + link-local)
-    if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) return false;
-    // IPv6 link-local (fe80::/10) and ULA (fc00::/7)
-    if (
-      /^\[?fe[89ab][0-9a-f]:/.test(host) ||
-      /^\[?fc[0-9a-f]{2}:/.test(host) ||
-      /^\[?fd[0-9a-f]{2}:/.test(host)
-    )
-      return false;
-    // IPv4-mapped IPv6, and IPv4-compatible IPv6 (::/96, e.g. [::127.0.0.1] -> [::7f00:1])
-    if (/^\[?::ffff:/i.test(host)) return false;
-    if (/^\[::[0-9a-f]{1,4}(:[0-9a-f]{1,4})?\]$/.test(host)) return false;
-    // 6to4 (2002::/16) and NAT64 (64:ff9b::/96) can embed private IPv4 addresses
-    if (/^\[(2002|64:ff9b):/.test(host)) return false;
-    // IETF protocol assignments, benchmarking, and reserved (240.0.0.0/4)
-    if (/^192\.0\.0\./.test(host)) return false;
-    if (/^198\.(1[89])\./.test(host)) return false;
-    if (/^(24\d|25[0-5])\./.test(host)) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Whether a URL layer can hydrate automatically without an explicit refresh interval. */
-export function canBootstrapLayer(layer: GeoLibreLayer): boolean {
-  const url = refreshSourceUrl(layer);
-  if (!url) return false;
-  if (layer.metadata.sourceKind === "wfs-getfeature") return true;
-  return !parseS3Url(url) && (/^gs:\/\//i.test(url) || isPublicHttpUrl(url));
 }

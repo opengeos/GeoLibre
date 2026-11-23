@@ -11,7 +11,6 @@
  * plain object URL); the signed one is minted again on every load, so a saved
  * project never carries a signature or a session token.
  */
-import { gcsUriToHttps } from "./gcs";
 
 /** A bucket and object key, with the endpoint the URL named, if any. */
 export interface S3ObjectLocation {
@@ -477,8 +476,6 @@ export function unsignedSourceUrl(url: string | undefined): string | undefined {
  * @throws When the bucket is covered but its credentials cannot be resolved.
  */
 export async function resolveReadableUrl(url: string, signal?: AbortSignal): Promise<string> {
-  const gcsUrl = gcsUriToHttps(url);
-  if (gcsUrl !== url) return gcsUrl;
   const location = parseS3Url(url);
   if (!location) return url;
   if (activeSigner?.covers(location.bucket)) {

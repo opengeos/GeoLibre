@@ -246,36 +246,3 @@ describe("explainS3ReadError", () => {
     assert.equal(await explainS3ReadError("https://example.com/a.tif", offSite), offSite);
   });
 });
-
-describe("GCS readable URLs", () => {
-  it("normalizes the scheme and preserves signed queries and fragments", async () => {
-    assert.equal(
-      await resolveReadableUrl(" GS://bucket/data.geojson?token=abc#part "),
-      "https://storage.googleapis.com/bucket/data.geojson?token=abc#part",
-    );
-  });
-  it("rejects literal and encoded dot path segments", async () => {
-    for (const key of ["a/../b", "./b", "a/%2e%2e/b", "a/.%2E/b"]) {
-      await assert.rejects(resolveReadableUrl(`gs://bucket/${key}`), /segment/);
-    }
-  });
-});
-
-it("encodes literal GCS path backslashes without altering query or fragment", async () => {
-  const result = await resolveReadableUrl("gs://bucket/a\\b.geojson?token=a\\b#part");
-  assert.equal(result, "https://storage.googleapis.com/bucket/a%5Cb.geojson?token=a\\b#part");
-  assert.equal(new URL(result).pathname, "/bucket/a%5Cb.geojson");
-});
-
-it("rejects empty GCS buckets and preserves encoded key delimiters", async () => {
-  for (const url of ["gs:///key", "gs://", "gs://?token=x"]) {
-    await assert.rejects(resolveReadableUrl(url), /bucket name/);
-  }
-  for (const url of ["gs://Bad Bucket/x", "gs://a@b/x", "gs://ab/x", "gs://-bucket/x"]) {
-    await assert.rejects(resolveReadableUrl(url), /valid bucket name/);
-  }
-  assert.equal(
-    await resolveReadableUrl("gs://bucket/data%231%3F.json?generation=2#part"),
-    "https://storage.googleapis.com/bucket/data%231%3F.json?generation=2#part",
-  );
-});

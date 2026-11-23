@@ -21,7 +21,11 @@ import {
 import { planetaryBasemapLabel, planetaryBasemapSectionKey } from "../../lib/planetary-sections";
 import { buildRemotePmtilesBasemap, isPmtilesStyleUrl } from "../../lib/pmtiles-basemap-url";
 import { clearProjectSnapshots } from "../../lib/project-history-store";
-import { withStartupLayers } from "../../lib/startup-layers";
+import {
+  fetchStartupLayerData,
+  startupLayerIds,
+  withStartupLayers,
+} from "../../lib/startup-layers";
 import { CollapsibleSection } from "../CollapsibleSection";
 import { RegionalBasemapSection } from "../panels/RegionalBasemapSection";
 import { StarterProjectsSection } from "./StarterProjectsSection";
@@ -263,6 +267,8 @@ export function NewProjectDialog({
     // plugin-painted layers replayed) for them too.
     const seeded = withStartupLayers(createEmptyProject(name, options));
     newProject({ name, ...options, layers: seeded.layers, layerGroups: seeded.layerGroups });
+    const seededIds = startupLayerIds(seeded);
+    if (seededIds.size > 0) void fetchStartupLayerData(seededIds);
     void clearProjectSnapshots().catch((error) =>
       console.error("Could not clear project history for the new project.", error),
     );

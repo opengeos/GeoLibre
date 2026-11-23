@@ -1,17 +1,15 @@
 import { arcGISLayerHasPendingEdits } from "@geolibre/plugins";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useAppStore, withoutHistory } from "@geolibre/core";
+import { useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { reloadVectorControlLayer, replayVectorControlLayerById } from "@geolibre/plugins";
 import {
-  canBootstrapLayer,
   getLayerRefreshConfig,
   getRefreshFailureLayerPatch,
   isRefreshableLayer,
   isVectorControlRefreshLayer,
   refreshGeoJsonLayer,
-  refreshSourceUrl,
   setLayerConnectionResult,
   setLayerRefreshConfig,
   supportsAutoRefresh,
@@ -81,8 +79,8 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
     return () => window.clearInterval(timer);
   }, [isCollapsed, hasSyncTimestamps]);
   const refreshingLayerIdsRef = useRef(new Set<string>());
-  const observedSourceUrlsRef = useRef(new Map<string, unknown>());
-  const observedSourceGenerationRef = useRef(projectGeneration);
+  const observedWfsSourceUrlsRef = useRef(new Map<string, unknown>());
+  const observedWfsGenerationRef = useRef(projectGeneration);
   const refreshTimersRef = useRef(new Map<string, LayerRefreshTimer>());
   const refreshStatusTimersRef = useRef(new Map<string, number>());
   // Active filesystem watchers for "watch local file" layers, keyed by layer id.
@@ -119,18 +117,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
   );
 
   const handleRefreshLayer = useCallback(
-    async (layer: GeoLibreLayer, automatic = false, outsideHistory = false) => {
-      // Initial hydration and the fetch that follows a URL change are not edits
-      // of their own: recording them would add an undo step, and on undo/redo
-      // would clear the redo stack.
-      const applyLayerUpdate: typeof updateLayer = (id, patch) => {
-        if (!outsideHistory) return updateLayer(id, patch);
-        const wasDirty = useAppStore.getState().isDirty;
-        withoutHistory(() => {
-          updateLayer(id, patch);
-          if (!wasDirty) useAppStore.setState({ isDirty: false });
-        });
-      };
+    async (layer: GeoLibreLayer, automatic = false) => {
       const requestGeneration = projectGeneration;
       const requestSourceUrl = layer.source.url;
       const mssqlRecoveryRefresh = layer.mssqlWritebackPending === true;
@@ -141,8 +128,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
         if (
           !current ||
           current.source.url !== requestSourceUrl ||
-          current.sourcePath !== layer.sourcePath ||
-          (!layer.geojson && current.geojson !== layer.geojson)
+          current.sourcePath !== layer.sourcePath
         ) {
           return undefined;
         }
@@ -193,7 +179,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
           );
           const latest = getCurrentRequestLayer();
           if (!latest) return;
-          applyLayerUpdate(layer.id, {
+          updateLayer(layer.id, {
             geojson: refreshed.geojson,
             mssqlWritebackPending: undefined,
             ...setLayerConnectionResult(latest, {
@@ -229,7 +215,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
           const latest = getCurrentRequestLayer();
           if (!latest) return;
 
-          applyLayerUpdate(layer.id, {
+          updateLayer(layer.id, {
             geojson,
             ...setLayerConnectionResult(latest, {
               syncedAt: new Date().toISOString(),
@@ -261,7 +247,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
           const latest = getCurrentRequestLayer();
           if (!latest) return;
 
-          applyLayerUpdate(layer.id, {
+          updateLayer(layer.id, {
             geojson,
             ...setLayerConnectionResult(latest, {
               syncedAt: new Date().toISOString(),
@@ -299,7 +285,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
           const latest = getCurrentRequestLayer();
           if (!latest) return;
 
-          applyLayerUpdate(layer.id, {
+          updateLayer(layer.id, {
             geojson,
             ...setLayerConnectionResult(latest, {
               syncedAt: new Date().toISOString(),
@@ -358,7 +344,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
           // the toast below.
           const featureCount = typeof info.featureCount === "number" ? info.featureCount : null;
           if (latest) {
-            applyLayerUpdate(
+            updateLayer(
               layer.id,
               setLayerConnectionResult(latest, {
                 syncedAt: new Date().toISOString(),
@@ -389,7 +375,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
         const latest = getCurrentRequestLayer();
         if (!latest) return;
 
-        applyLayerUpdate(layer.id, {
+        updateLayer(layer.id, {
           geojson,
           ...setLayerConnectionResult(latest, {
             syncedAt: new Date().toISOString(),
@@ -423,7 +409,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
             : error instanceof Error
               ? error.message
               : t("layers.refreshError");
-        applyLayerUpdate(
+        updateLayer(
           layer.id,
           getRefreshFailureLayerPatch(
             latest,
@@ -455,9 +441,9 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
   }, [handleRefreshLayer]);
 
   useEffect(() => {
-    if (observedSourceGenerationRef.current !== projectGeneration) {
-      observedSourceGenerationRef.current = projectGeneration;
-      observedSourceUrlsRef.current.clear();
+    if (observedWfsGenerationRef.current !== projectGeneration) {
+      observedWfsGenerationRef.current = projectGeneration;
+      observedWfsSourceUrlsRef.current.clear();
       for (const timer of refreshStatusTimersRef.current.values()) {
         window.clearTimeout(timer);
       }
@@ -471,41 +457,31 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
       }
     }
     const currentIds = new Set(layers.map((layer) => layer.id));
-    for (const id of observedSourceUrlsRef.current.keys()) {
-      if (!currentIds.has(id)) observedSourceUrlsRef.current.delete(id);
+    for (const id of observedWfsSourceUrlsRef.current.keys()) {
+      if (!currentIds.has(id)) observedWfsSourceUrlsRef.current.delete(id);
     }
     for (const layer of layers) {
-      const sourceUrl = refreshSourceUrl(layer);
-      if (!sourceUrl) {
-        observedSourceUrlsRef.current.delete(layer.id);
+      if (layer.type !== "geojson" || layer.metadata.sourceKind !== "wfs-getfeature") {
+        observedWfsSourceUrlsRef.current.delete(layer.id);
         continue;
       }
-      const alreadyObserved = observedSourceUrlsRef.current.has(layer.id);
-      const sameUrl = alreadyObserved && observedSourceUrlsRef.current.get(layer.id) === sourceUrl;
-      const isWfs = layer.metadata.sourceKind === "wfs-getfeature";
-
-      // Hydrated non-WFS layers: record the observed URL on first sight so a
-      // later URL change is detected, but do not auto-fetch on project open
-      // (security: only public http(s) sources are bootstrapped automatically).
-      // A later URL change (including one applied by undo/redo) refreshes the
-      // features outside undo history, so the URL edit stays the only step.
-      if (layer.geojson && !isWfs) {
-        if (!alreadyObserved) observedSourceUrlsRef.current.set(layer.id, sourceUrl);
-        if (!alreadyObserved || sameUrl) continue;
+      const alreadyObserved = observedWfsSourceUrlsRef.current.has(layer.id);
+      if (alreadyObserved && observedWfsSourceUrlsRef.current.get(layer.id) === layer.source.url) {
+        continue;
       }
-
-      if (sameUrl) continue;
-      observedSourceUrlsRef.current.set(layer.id, sourceUrl);
-
-      // Bootstrap public HTTP/GCS sources without initiating signed S3 reads.
-      // Configured refresh timers remain opt-in. WFS retains its existing
-      // auto-load behaviour on localhost/LAN hosts.
-      if (!canBootstrapLayer(layer)) continue;
-
-      // A hydrated layer present at first observation needs no bootstrap.
+      observedWfsSourceUrlsRef.current.set(layer.id, layer.source.url);
+      // A hydrated layer present at first observation needs no bootstrap. Once
+      // observed, a changed URL must refresh even if old features are still set.
       if (layer.geojson && !alreadyObserved) continue;
-
-      void handleRefreshLayerRef.current(layer, false, true);
+      if (typeof layer.source.url !== "string") continue;
+      let requestUrl: URL;
+      try {
+        requestUrl = new URL(layer.source.url);
+      } catch {
+        continue;
+      }
+      if (requestUrl.protocol !== "http:" && requestUrl.protocol !== "https:") continue;
+      void handleRefreshLayerRef.current(layer);
     }
   }, [layers, projectGeneration]);
 
