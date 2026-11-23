@@ -912,10 +912,11 @@ def create_app(
             idp_transport.close()
 
     object_storage = storage or make_storage()
-    from geolibre_server_api.account_lifecycle import backfill_project_version_usage
+    if not _env_bool("GEOLIBRE_SKIP_DDL_CREATE_ALL", False):
+        from geolibre_server_api.account_lifecycle import backfill_project_version_usage
 
-    with sessions() as backfill_session:
-        backfill_project_version_usage(backfill_session, object_storage)
+        with sessions() as backfill_session:
+            backfill_project_version_usage(backfill_session, object_storage)
     base_url = (public_url or os.getenv("GEOLIBRE_PUBLIC_URL", "http://localhost:8000")).rstrip("/")
     viewer_url = os.getenv("GEOLIBRE_VIEWER_URL", "https://app.geolibre.org/").rstrip("/") + "/"
     max_project_bytes = int(os.getenv("GEOLIBRE_MAX_PROJECT_BYTES", str(50 * 1024 * 1024)))

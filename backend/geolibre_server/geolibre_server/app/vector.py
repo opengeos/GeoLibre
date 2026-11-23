@@ -263,7 +263,10 @@ def _shapefile_path_lock(target: Path) -> _ShapefilePathLock:
 
 def _shapefile_flock_path(resolved_target: Path) -> Path:
     digest = hashlib.sha256(str(resolved_target).encode("utf-8")).hexdigest()[:16]
-    return Path(tempfile.gettempdir()) / f"geolibre-shp-{digest}.lock"
+    uid = os.getuid() if hasattr(os, "getuid") else 0
+    lock_dir = Path(tempfile.gettempdir()) / f"geolibre-shp-locks-{uid}"
+    lock_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return lock_dir / f"{digest}.lock"
 
 
 def _write_shapefile(target: Path, geojson: dict) -> int:
@@ -290,20 +293,24 @@ def _write_shapefile(target: Path, geojson: dict) -> int:
             try:
                 if fcntl is not None:
                     lock_path = _shapefile_flock_path(resolved_target)
-                    lock_file = open(lock_path, "a+b")
+                    flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+                    fd = os.open(lock_path, flags, 0o600)
+                    lock_file = os.fdopen(fd, "a+b")
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
             except OSError:
                 if lock_file is not None:
                     lock_file.close()
                     lock_file = None
 
-            # Discover existing sibling components case-insensitively so uppercase
-            # datasets like `Foo.SHP` / `Foo.DBF` are replaced in place on Linux.
+            # Discover existing sibling components case-insensitively so datasets
+            # with mixed-case stems or extensions (e.g. `foo.shp` + `Foo.DBF`) are
+            # backed up and replaced in place on case-sensitive filesystems.
             all_exts = {*_SHAPEFILE_SIDECARS, *_SHAPEFILE_STALE_INDEXES}
+            target_stem_lower = target.stem.lower()
             existing_by_ext: dict[str, list[Path]] = {}
             for child in target.parent.iterdir():
                 if (
-                    child.stem == target.stem
+                    child.stem.lower() == target_stem_lower
                     and child.suffix.lower() in all_exts
                     and child.is_file()
                 ):

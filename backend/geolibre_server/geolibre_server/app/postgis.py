@@ -650,6 +650,7 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                             base_select
                             + sql.SQL(" ORDER BY {pk} FOR UPDATE").format(pk=sql.Identifier(pk))
                         )
+                        selected_rows = cur.fetchall()
                         cur.execute("RELEASE SAVEPOINT geolibre_occ_lock")
                     except Exception as lock_exc:
                         if (
@@ -659,12 +660,14 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                             cur.execute("ROLLBACK TO SAVEPOINT geolibre_occ_lock")
                             cur.execute("RELEASE SAVEPOINT geolibre_occ_lock")
                             cur.execute(base_select)
+                            selected_rows = cur.fetchall()
                         else:
                             raise
                 else:
                     cur.execute(base_select)
+                    selected_rows = cur.fetchall()
                 existing_rows: dict[Any, tuple[Any, dict[str, Any]]] = {}
-                for row in cur.fetchall():
+                for row in selected_rows:
                     existing_rows[json_safe(row[0])] = (
                         json.loads(row[1]) if row[1] else None,
                         {

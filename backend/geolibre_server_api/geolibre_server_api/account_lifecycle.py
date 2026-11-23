@@ -26,7 +26,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import ForeignKey, Integer, String, Text, func, select, update
+from sqlalchemy import ForeignKey, Integer, String, Text, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
@@ -39,6 +39,7 @@ from geolibre_server_api.auth import (
     password_matches,
     require_any_scope,
     required_principal,
+    revoke_account_oauth_sessions,
     token_digest,
 )
 from geolibre_server_api.auth_models import Account, Base
@@ -378,12 +379,7 @@ def _hash_backup_code(code: str) -> str:
 
 
 def _matches_backup_code(code: str, stored: str) -> bool:
-    normalized = _normalize_backup_code(code)
-    if stored.startswith("scrypt$"):
-        return password_matches(normalized, stored)
-    # Backwards-compatible fallback for any legacy unsalted SHA-256 hashes.
-    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-    return hmac.compare_digest(digest, stored)
+    return password_matches(_normalize_backup_code(code), stored)
 
 
 def verify_account_mfa(
@@ -396,10 +392,11 @@ def verify_account_mfa(
 ) -> tuple[bool, str | None]:
     """Check MFA for ``account_id``.
 
-    Locks the MFA row ``FOR UPDATE`` so concurrent logins cannot consume the
-    same single-use backup code twice or replay a TOTP time step (RFC 6238
-    section 5.2). By default leaves committing the updated state to the caller
-    so token issuance / OAuth approval commits atomically.
+    Uses both ``FOR UPDATE`` row locking and atomic conditional ``UPDATE``s so
+    concurrent logins cannot consume the same single-use backup code twice or
+    replay a TOTP time step (RFC 6238 section 5.2) on either PostgreSQL or
+    SQLite. By default leaves committing to the caller so token issuance / OAuth
+    approval commits atomically.
     """
     mfa = session.get(
         AccountMfaTotp,
@@ -415,15 +412,41 @@ def verify_account_mfa(
     if matched_step is not None:
         if mfa.last_used_totp_step is not None and matched_step <= mfa.last_used_totp_step:
             return False, "invalid_mfa_code"
-        mfa.last_used_totp_step = matched_step
+        updated = session.execute(
+            update(AccountMfaTotp)
+            .where(
+                AccountMfaTotp.account_id == account_id,
+                AccountMfaTotp.enabled.is_(True),
+                or_(
+                    AccountMfaTotp.last_used_totp_step.is_(None),
+                    AccountMfaTotp.last_used_totp_step < matched_step,
+                ),
+            )
+            .values(last_used_totp_step=matched_step)
+        )
+        if updated.rowcount != 1:
+            return False, "invalid_mfa_code"
+        session.expire(mfa, ["last_used_totp_step"])
         if commit:
             session.commit()
         return True, None
-    hashes: list[str] = json.loads(mfa.backup_code_hashes_json or "[]")
+    raw_hashes_json = mfa.backup_code_hashes_json or "[]"
+    hashes: list[str] = json.loads(raw_hashes_json)
     for idx, stored in enumerate(hashes):
         if _matches_backup_code(code, stored):
             remaining = hashes[:idx] + hashes[idx + 1 :]
-            mfa.backup_code_hashes_json = json.dumps(remaining)
+            updated = session.execute(
+                update(AccountMfaTotp)
+                .where(
+                    AccountMfaTotp.account_id == account_id,
+                    AccountMfaTotp.enabled.is_(True),
+                    AccountMfaTotp.backup_code_hashes_json == raw_hashes_json,
+                )
+                .values(backup_code_hashes_json=json.dumps(remaining))
+            )
+            if updated.rowcount != 1:
+                return False, "invalid_mfa_code"
+            session.expire(mfa, ["backup_code_hashes_json"])
             if commit:
                 session.commit()
             return True, None
@@ -666,6 +689,7 @@ def build_lifecycle_router() -> APIRouter:
         sec.password_changed_at = now_ts
         sec.failed_login_count = 0
         sec.locked_until = None
+        revoke_account_oauth_sessions(session, account.id, now_ts)
         revoke_account_credentials(session, account.id, now_ts)
         record_audit_event(
             session,
@@ -759,6 +783,8 @@ def build_lifecycle_router() -> APIRouter:
         mfa = session.get(AccountMfaTotp, account.id)
         if mfa is None:
             raise HTTPException(404, "no pending TOTP enrollment")
+        if mfa.enabled:
+            raise HTTPException(409, "TOTP MFA is already enabled")
         now_ts = get_clock(request)()
         matched_step = verify_totp_step(mfa.secret_b32, body.code, now_ts)
         if matched_step is None:
