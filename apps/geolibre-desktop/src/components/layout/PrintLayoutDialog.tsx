@@ -33,6 +33,7 @@ import {
 import { useScaleControl } from "./print-layout/useScaleControl";
 import { useExtentDrawing } from "./print-layout/useExtentDrawing";
 import { usePreviewCanvas } from "./print-layout/usePreviewCanvas";
+import { useInsetMap } from "./print-layout/useInsetMap";
 import { useExportActions } from "./print-layout/useExportActions";
 import { TitleEditor } from "./print-layout/TitleEditor";
 import { PageEditor } from "./print-layout/PageEditor";
@@ -49,6 +50,8 @@ import { FooterEditor } from "./print-layout/FooterEditor";
 import { PageBorderEditor } from "./print-layout/PageBorderEditor";
 import { InfoBlockEditor } from "./print-layout/InfoBlockEditor";
 import { LegendEditor } from "./print-layout/LegendEditor";
+import { InsetMapEditor } from "./print-layout/InsetMapEditor";
+import { MapGridEditor } from "./print-layout/MapGridEditor";
 import { PreviewPane } from "./print-layout/PreviewPane";
 import { ExportActions } from "./print-layout/ExportActions";
 
@@ -145,7 +148,11 @@ export function PrintLayoutDialog({
     setPrintLayout(layout);
   }, [layout, setPrintLayout]);
 
-  const { options, isMmPage, currentRatio } = useLayoutOptions({
+  const {
+    options: baseOptions,
+    isMmPage,
+    currentRatio,
+  } = useLayoutOptions({
     layout,
     projectName,
     scaleUnit,
@@ -156,6 +163,14 @@ export function PrintLayoutDialog({
     mapFit,
     t,
   });
+
+  // The overview / inset map renders on its own hidden map, so it joins the
+  // page options once it is ready (GH #3530).
+  const inset = useInsetMap(open, layout, baseOptions, captured);
+  const options = useMemo<LayoutOptions>(
+    () => (inset ? { ...baseOptions, inset } : baseOptions),
+    [baseOptions, inset],
+  );
 
   // ---- Atlas (map series) derivations (GH #1291) ----
   const atlas = useAtlasSeries({
@@ -252,7 +267,7 @@ export function PrintLayoutDialog({
     drawAbortRef: capture.drawAbortRef,
     dispatch,
   });
-  const { previewRef, previewBoxRef } = usePreviewCanvas(open, displayOptions);
+  const { previewRef, previewBoxRef, arrangeFrame } = usePreviewCanvas(open, displayOptions);
   const actions = useExportActions({
     layout,
     projectName,
@@ -390,6 +405,12 @@ export function PrintLayoutDialog({
             {layout.showDataChart && (
               <DataChartEditor {...editorProps} atlasLayers={atlas.atlasLayers} blocks={blocks} />
             )}
+            {layout.showInset && (
+              <InsetMapEditor {...editorProps} georeferenced={Boolean(captured?.georef)} />
+            )}
+            {layout.showGrid && (
+              <MapGridEditor {...editorProps} georeferenced={Boolean(captured?.georef)} />
+            )}
             {layout.showFooter && <FooterEditor {...editorProps} />}
             {layout.showPageBorder && <PageBorderEditor {...editorProps} />}
             {layout.showInfoBlock && <InfoBlockEditor {...editorProps} />}
@@ -442,6 +463,10 @@ export function PrintLayoutDialog({
               else recapture();
             }}
             onGoToAtlasPage={goToAtlasPage}
+            arranging={state.arranging}
+            arrangeFrame={arrangeFrame}
+            layout={layout}
+            dispatch={dispatch}
           />
         </div>
 

@@ -456,3 +456,27 @@ describe("printLayoutReducer: element toggles", () => {
     assert.ok(printLayoutConfigsEqual(toggled.layout, createDefaultPrintLayout()));
   });
 });
+
+describe("printLayoutReducer: free-form arrangement (GH #3530)", () => {
+  it("resets every placed frame and moved element in one step", () => {
+    const state = stateWith({
+      mapFrameBox: { x: 0.1, y: 0.1, w: 0.5, h: 0.5 },
+      insetBox: { x: 0.7, y: 0.7, w: 0.2, h: 0.2 },
+      elementOffsets: { legend: { dx: 0.1, dy: 0, scale: 1.5 } },
+    });
+    const next = printLayoutReducer(state, { type: "resetArrangement" });
+    assert.equal(next.layout.mapFrameBox, null);
+    assert.equal(next.layout.insetBox, null);
+    assert.deepEqual(next.layout.elementOffsets, {});
+    assert.ok(printLayoutConfigsEqual(next.layout, createDefaultPrintLayout()));
+  });
+
+  it("is a no-op on an automatic layout", () => {
+    const state = stateWith();
+    assert.equal(printLayoutReducer(state, { type: "resetArrangement" }), state);
+  });
+
+  it("starts with the arrange handles hidden", () => {
+    assert.equal(stateWith().arranging, false);
+  });
+});

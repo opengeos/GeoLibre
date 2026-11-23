@@ -17,7 +17,22 @@ import {
   type MarkerShape,
 } from "@geolibre/core";
 import { prefersLightForeground } from "./theme-schemes";
-import type { CaptureGeoref, MapImagePlacement } from "./geopdf";
+import { georefLngLat, type CaptureGeoref, type MapImagePlacement } from "./geopdf";
+import {
+  clampElementScale,
+  computeMapGrid,
+  defaultInsetRect,
+  frameBoxToRect,
+  mercatorViewPx,
+  offsetBox,
+  pointsToPagePx,
+  type ElementOffset,
+  type FrameBox,
+  type MapGridType,
+  type MercatorView,
+  type Point,
+  type Rect,
+} from "./print-layout-cartography";
 
 export type PaperSizeId =
   | "a4"
@@ -546,6 +561,62 @@ export interface LayoutOptions {
    * absent exports a plain PDF.
    */
   mapGeoref?: CaptureGeoref | null;
+  /**
+   * Where the main map frame sits on the page, as page fractions; absent or
+   * null keeps the automatic body rectangle (GH #3530).
+   */
+  mapFrameBox?: FrameBox | null;
+  /**
+   * Per-element displacement of the furniture from its automatic position;
+   * an element without an entry is laid out automatically (GH #3530).
+   */
+  elementOffsets?: Partial<Record<LayoutMovableElement, ElementOffset>>;
+  /** An overview / inset locator map frame (GH #3530); null hides it. */
+  inset?: InsetMapOptions | null;
+  /** A coordinate grid around the main map frame (GH #3530); null hides it. */
+  grid?: MapGridOptions | null;
+}
+
+/** Furniture the user can drag and resize on the layout canvas. */
+export type LayoutMovableElement = "title" | "legend" | "scaleBar" | "northArrow" | "footer";
+
+/** Every element the layout reports a box for (furniture plus frames). */
+export type LayoutElementId = LayoutMovableElement | "map" | "inset";
+
+/** Where one element was drawn, reported back for the arrange overlay. */
+export interface LayoutElementBox {
+  /** The element's box on the page, after any offset, in page pixels. */
+  box: Rect;
+  /** Furniture only: the box at its automatic position, before the offset. */
+  natural?: Rect;
+  /** Furniture only: the point an offset scales the element about. */
+  anchor?: Point;
+}
+
+/** The boxes {@link drawLayoutContext} drew, keyed by element. */
+export type LayoutElementBoxes = Partial<Record<LayoutElementId, LayoutElementBox>>;
+
+/** The overview / inset map: a second map frame showing the main extent. */
+export interface InsetMapOptions {
+  /** Page box as fractions; null puts it in the main frame's lower-left corner. */
+  box: FrameBox | null;
+  /** The rendered inset, or null while it renders (a placeholder is drawn). */
+  image: CanvasImageSource | null;
+  /** The Web Mercator view {@link image} shows, in CSS pixels. */
+  view: MercatorView | null;
+  /** Colour of the main extent rectangle. */
+  extentColor: string;
+}
+
+/** The map-frame coordinate grid. */
+export interface MapGridOptions {
+  type: MapGridType;
+  /** Degrees (Lat/Lon) or metres (UTM, MGRS); 0 picks one. */
+  interval: number;
+  /** Label size in points. */
+  fontSizePt: number;
+  /** Draw full grid lines across the map, not only border ticks. */
+  lines: boolean;
 }
 
 const PAGE_BACKGROUND = "#ffffff";
@@ -667,15 +738,72 @@ function computeBodyRect(opts: LayoutOptions, W: number, H: number): BodyRect {
     bodyBottom = H - margin - footSize * 1.8;
   }
 
+  // A coordinate grid labels the outside of the frame: keep a band for its
+  // ticks and labels so they clear the title, the footer and the page edge.
+  let side = margin;
+  if (opts.grid) {
+    const band = gridLabelFontPx(opts, W, unit) * GRID_BAND_EM;
+    bodyTop += band;
+    bodyBottom -= band;
+    side += band;
+  }
+
   bodyTop = Math.min(bodyTop, bodyBottom - unit * 10);
+  if (opts.mapFrameBox) {
+    // A placed frame replaces the automatic body (GH #3530); everything keyed
+    // off the body (scale, georeference, the atlas aspect) follows it.
+    const r = frameBoxToRect(opts.mapFrameBox, W, H);
+    return {
+      unit,
+      margin,
+      bodyX: r.x,
+      bodyY: r.y,
+      bodyW: Math.max(1, r.w),
+      bodyH: Math.max(1, r.h),
+    };
+  }
   return {
     unit,
     margin,
-    bodyX: margin,
+    bodyX: side,
     bodyY: bodyTop,
-    bodyW: W - margin * 2,
+    bodyW: Math.max(unit * 10, W - side * 2),
     bodyH: Math.max(unit * 10, bodyBottom - bodyTop),
   };
+}
+
+/** Width of the grid's label band outside the frame, in label font sizes:
+ * tick (0.6) + gap (0.25) + label (about 1.1). */
+const GRID_BAND_EM = 2;
+
+/** The grid label size in page pixels for a page drawn `W` pixels wide. */
+function gridLabelFontPx(opts: LayoutOptions, W: number, unit: number): number {
+  if (!opts.grid) return 0;
+  return Math.max(
+    unit * 0.6,
+    pointsToPagePx(opts.grid.fontSizePt, W, pageMm(resolvePageSize(opts)).widthMm),
+  );
+}
+
+/**
+ * Where the inset map frame lands on a page drawn at `W` x `H`: its placed box,
+ * or the automatic lower-left corner of the main frame.
+ *
+ * @param opts - Layout content and options.
+ * @param box - The inset's stored page box, or null for the automatic one.
+ * @param W - Page width in pixels.
+ * @param H - Page height in pixels.
+ * @returns The inset rectangle in page pixels.
+ */
+export function insetRectFor(
+  opts: LayoutOptions,
+  box: FrameBox | null,
+  W: number,
+  H: number,
+): Rect {
+  if (box) return frameBoxToRect(box, W, H);
+  const { unit, bodyX, bodyY, bodyW, bodyH } = computeBodyRect(opts, W, H);
+  return defaultInsetRect({ x: bodyX, y: bodyY, w: bodyW, h: bodyH }, unit);
 }
 
 /**
@@ -860,20 +988,25 @@ export function scaleZoomTarget(
  *   size in pixels.
  * @param opts - Layout content and options.
  */
-export function drawLayout(canvas: HTMLCanvasElement, opts: LayoutOptions): void {
+export function drawLayout(canvas: HTMLCanvasElement, opts: LayoutOptions): LayoutElementBoxes {
   const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  if (!ctx) return {};
 
-  drawLayoutContext(ctx, canvas.width, canvas.height, opts);
+  return drawLayoutContext(ctx, canvas.width, canvas.height, opts);
 }
 
-/** Shared drawing commands for the canvas preview and the SVG export. */
+/**
+ * Shared drawing commands for the canvas preview and the SVG export.
+ *
+ * @returns Where each element was drawn, in page pixels, for the arrange
+ *   overlay's hit boxes.
+ */
 export function drawLayoutContext(
   ctx: CanvasRenderingContext2D,
   W: number,
   H: number,
   opts: LayoutOptions,
-): void {
+): LayoutElementBoxes {
   // Scale furniture relative to the page's shorter side so output looks the
   // same at any resolution / paper size. The body rectangle and unit come from
   // the shared geometry helper so the on-screen scale matches the export.
@@ -903,69 +1036,119 @@ export function drawLayoutContext(
   ctx.fillStyle = pageBackground;
   ctx.fillRect(0, 0, W, H);
 
+  const boxes: LayoutElementBoxes = {};
+  // Draw one piece of furniture under its stored offset (GH #3530): scaled
+  // about `anchor`, then moved. `draw` gets whether the element still sits in
+  // its automatic place (so it should keep its usual clip to the map body; a
+  // moved element may sit anywhere on the page) and returns its natural box.
+  const placed = (
+    id: LayoutMovableElement,
+    anchor: Point,
+    draw: (automatic: boolean) => Rect | null,
+  ): void => {
+    const offset = opts.elementOffsets?.[id];
+    ctx.save();
+    if (offset) {
+      const s = clampElementScale(offset.scale);
+      ctx.translate(anchor.x + offset.dx * W, anchor.y + offset.dy * H);
+      ctx.scale(s, s);
+      ctx.translate(-anchor.x, -anchor.y);
+    }
+    const natural = draw(!offset);
+    ctx.restore();
+    if (natural) boxes[id] = { box: offsetBox(natural, anchor, offset, W, H), natural, anchor };
+  };
+  const clipToBody = () => {
+    ctx.beginPath();
+    ctx.rect(bodyX, bodyY, bodyW, bodyH);
+    ctx.clip();
+  };
+
   // X anchor + canvas textAlign for the chosen title alignment.
   const titleX = titleAlign === "left" ? margin : titleAlign === "right" ? W - margin : W / 2;
+  // The box of a text block drawn at `titleX` with the current alignment.
+  const alignedBox = (anchorX: number, width: number, top: number, bottom: number): Rect => ({
+    x:
+      titleAlign === "left"
+        ? anchorX
+        : titleAlign === "right"
+          ? anchorX - width
+          : anchorX - width / 2,
+    y: top,
+    w: width,
+    h: bottom - top,
+  });
 
   // --- Title block (outside the map) -------------------------------------
   if (hasTitleBlock && !titleInside) {
-    const titleSize = unit * 4.5;
-    const subtitleSize = unit * 2.4;
-    let y = margin + titleSize;
-    if (hasTitleText) {
-      ctx.fillStyle = pageInk;
-      ctx.font = `600 ${titleSize}px system-ui, -apple-system, sans-serif`;
-      ctx.textAlign = titleAlign;
-      ctx.textBaseline = "alphabetic";
-      ctx.fillText(opts.title.trim(), titleX, y, W - margin * 2);
-    }
-    if (hasSubtitleText) {
-      y += subtitleSize * 1.4;
-      ctx.fillStyle = pageMuted;
-      ctx.font = `400 ${subtitleSize}px system-ui, -apple-system, sans-serif`;
-      ctx.textAlign = titleAlign;
-      ctx.fillText(opts.subtitle.trim(), titleX, y, W - margin * 2);
-    }
+    placed("title", { x: titleX, y: margin }, () => {
+      const titleSize = unit * 4.5;
+      const subtitleSize = unit * 2.4;
+      const maxWidth = W - margin * 2;
+      let y = margin + titleSize;
+      let width = 0;
+      if (hasTitleText) {
+        ctx.fillStyle = pageInk;
+        ctx.font = `600 ${titleSize}px system-ui, -apple-system, sans-serif`;
+        ctx.textAlign = titleAlign;
+        ctx.textBaseline = "alphabetic";
+        ctx.fillText(opts.title.trim(), titleX, y, maxWidth);
+        width = Math.max(width, Math.min(maxWidth, ctx.measureText(opts.title.trim()).width));
+      }
+      if (hasSubtitleText) {
+        y += subtitleSize * 1.4;
+        ctx.fillStyle = pageMuted;
+        ctx.font = `400 ${subtitleSize}px system-ui, -apple-system, sans-serif`;
+        ctx.textAlign = titleAlign;
+        ctx.fillText(opts.subtitle.trim(), titleX, y, maxWidth);
+        width = Math.max(width, Math.min(maxWidth, ctx.measureText(opts.subtitle.trim()).width));
+      }
+      return alignedBox(titleX, width, margin, y + unit * 0.8);
+    });
   }
 
   // --- Footer row --------------------------------------------------------
-  if (hasFooterRow) {
-    const footSize = unit * 2.2;
-    const baselineY = H - margin - footSize * 0.6;
-    ctx.fillStyle = pageMuted;
-    ctx.font = `400 ${footSize}px system-ui, -apple-system, sans-serif`;
-    ctx.textBaseline = "middle";
-    // The attribution and the date keep at most a third of the printable width
-    // each, so a long one cannot visually bleed into the centred footer text.
-    const slotMax = (W - margin * 2) / 3;
-    if (attributionText) {
-      ctx.textAlign = "left";
-      ctx.fillText(attributionText, margin, baselineY, slotMax);
-    }
-    if (dateText) {
-      ctx.textAlign = "right";
-      ctx.fillText(dateText, W - margin, baselineY, slotMax);
-    }
-    if (footerText) {
-      // The centred text gets the room the side texts actually leave, not a
-      // fixed third, so it is not squeezed when the date or attribution is off.
-      const sideWidth = (text: string | false) =>
-        text ? Math.min(ctx.measureText(text).width, slotMax) : 0;
-      const side = Math.max(sideWidth(attributionText), sideWidth(dateText));
-      const gap = side > 0 ? unit * 2 : 0;
-      const footerMax = Math.max(0, W - margin * 2 - (side + gap) * 2);
-      // Still too long: shrink the font (down to 3/4) before the canvas
-      // compresses the glyphs to fit the width.
-      const natural = ctx.measureText(footerText).width;
-      ctx.save();
-      if (natural > footerMax && natural > 0) {
-        const size = Math.max(footSize * FOOTER_MIN_FONT_RATIO, (footSize * footerMax) / natural);
-        ctx.font = `400 ${size}px system-ui, -apple-system, sans-serif`;
+  const footSize = unit * 2.2;
+  const footerBaselineY = H - margin - footSize * 0.6;
+  if (hasFooterRow)
+    placed("footer", { x: margin, y: footerBaselineY }, () => {
+      const baselineY = footerBaselineY;
+      ctx.fillStyle = pageMuted;
+      ctx.font = `400 ${footSize}px system-ui, -apple-system, sans-serif`;
+      ctx.textBaseline = "middle";
+      // The attribution and the date keep at most a third of the printable width
+      // each, so a long one cannot visually bleed into the centred footer text.
+      const slotMax = (W - margin * 2) / 3;
+      if (attributionText) {
+        ctx.textAlign = "left";
+        ctx.fillText(attributionText, margin, baselineY, slotMax);
       }
-      ctx.textAlign = "center";
-      ctx.fillText(footerText, W / 2, baselineY, footerMax);
-      ctx.restore();
-    }
-  }
+      if (dateText) {
+        ctx.textAlign = "right";
+        ctx.fillText(dateText, W - margin, baselineY, slotMax);
+      }
+      if (footerText) {
+        // The centred text gets the room the side texts actually leave, not a
+        // fixed third, so it is not squeezed when the date or attribution is off.
+        const sideWidth = (text: string | false) =>
+          text ? Math.min(ctx.measureText(text).width, slotMax) : 0;
+        const side = Math.max(sideWidth(attributionText), sideWidth(dateText));
+        const gap = side > 0 ? unit * 2 : 0;
+        const footerMax = Math.max(0, W - margin * 2 - (side + gap) * 2);
+        // Still too long: shrink the font (down to 3/4) before the canvas
+        // compresses the glyphs to fit the width.
+        const natural = ctx.measureText(footerText).width;
+        ctx.save();
+        if (natural > footerMax && natural > 0) {
+          const size = Math.max(footSize * FOOTER_MIN_FONT_RATIO, (footSize * footerMax) / natural);
+          ctx.font = `400 ${size}px system-ui, -apple-system, sans-serif`;
+        }
+        ctx.textAlign = "center";
+        ctx.fillText(footerText, W / 2, baselineY, footerMax);
+        ctx.restore();
+      }
+      return { x: margin, y: baselineY - footSize * 0.8, w: W - margin * 2, h: footSize * 1.6 };
+    });
 
   // --- Map body ----------------------------------------------------------
   // The body rectangle is computed by computeBodyRect (which already clamps the
@@ -1015,64 +1198,68 @@ export function drawLayoutContext(
     ctx.lineWidth = mapBorderWidth;
     ctx.strokeRect(bodyX, bodyY, bodyW, bodyH);
   }
+  boxes.map = { box: { x: bodyX, y: bodyY, w: bodyW, h: bodyH } };
+
+  // --- Coordinate grid (border ticks + labels, GH #3530) -----------------
+  if (opts.grid) {
+    drawMapGrid(ctx, opts, opts.grid, W, H, unit, pageInk);
+  }
 
   // --- Title block (inside the map) --------------------------------------
   // Overlaid at the top of the map body with a translucent backing for legibility.
-  if (hasTitleBlock && titleInside) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(bodyX, bodyY, bodyW, bodyH);
-    ctx.clip();
-    const titleSize = unit * 4;
-    const subtitleSize = unit * 2.2;
-    const padY = unit * 2;
-    // Seed the baseline at the first line that is actually drawn: when the title
-    // is hidden, the subtitle takes the top slot rather than being pushed a full
-    // title-height down (which dropped it below the backing rect). GH #526.
-    let y = bodyY + padY + (hasTitleText ? titleSize : subtitleSize);
-    const insetX = unit * 2;
-    const tx =
-      titleAlign === "left"
-        ? bodyX + insetX
-        : titleAlign === "right"
-          ? bodyX + bodyW - insetX
-          : bodyX + bodyW / 2;
-    const blockH =
-      padY * 2 +
-      (hasTitleText ? titleSize : 0) +
-      (hasSubtitleText ? (hasTitleText ? subtitleSize * 1.6 : subtitleSize * 1.2) : 0);
-    // Keep the translucent backing clear of the map frame so it does not wash
-    // out the dark border line at the top/left/right edges (GH #748). strokeRect
-    // centres the stroke on the body edge, so only its inner half (lineWidth/2)
-    // intrudes into the body; inset the fill by exactly that so it starts at the
-    // frame's inner edge with no gap and no overlap.
-    const frameInset = mapBorderWidth / 2;
-    ctx.fillStyle = colors.surface(0.7);
-    ctx.fillRect(
-      bodyX + frameInset,
-      bodyY + frameInset,
-      bodyW - frameInset * 2,
-      // Top shifted down by frameInset; shrink the height to keep the bottom
-      // edge at bodyY + blockH (which sits inside the body, off any frame line).
-      blockH - frameInset,
-    );
-    if (hasTitleText) {
-      ctx.fillStyle = colors.ink;
-      ctx.font = `600 ${titleSize}px system-ui, -apple-system, sans-serif`;
-      ctx.textAlign = titleAlign;
-      ctx.textBaseline = "alphabetic";
-      ctx.fillText(opts.title.trim(), tx, y, bodyW - insetX * 2);
-    }
-    if (hasSubtitleText) {
-      // Only advance past the title line when one was drawn.
-      if (hasTitleText) y += subtitleSize * 1.4;
-      ctx.fillStyle = colors.muted;
-      ctx.font = `400 ${subtitleSize}px system-ui, -apple-system, sans-serif`;
-      ctx.textAlign = titleAlign;
-      ctx.fillText(opts.subtitle.trim(), tx, y, bodyW - insetX * 2);
-    }
-    ctx.restore();
-  }
+  if (hasTitleBlock && titleInside)
+    placed("title", { x: bodyX, y: bodyY }, (automatic) => {
+      if (automatic) clipToBody();
+      const titleSize = unit * 4;
+      const subtitleSize = unit * 2.2;
+      const padY = unit * 2;
+      // Seed the baseline at the first line that is actually drawn: when the title
+      // is hidden, the subtitle takes the top slot rather than being pushed a full
+      // title-height down (which dropped it below the backing rect). GH #526.
+      let y = bodyY + padY + (hasTitleText ? titleSize : subtitleSize);
+      const insetX = unit * 2;
+      const tx =
+        titleAlign === "left"
+          ? bodyX + insetX
+          : titleAlign === "right"
+            ? bodyX + bodyW - insetX
+            : bodyX + bodyW / 2;
+      const blockH =
+        padY * 2 +
+        (hasTitleText ? titleSize : 0) +
+        (hasSubtitleText ? (hasTitleText ? subtitleSize * 1.6 : subtitleSize * 1.2) : 0);
+      // Keep the translucent backing clear of the map frame so it does not wash
+      // out the dark border line at the top/left/right edges (GH #748). strokeRect
+      // centres the stroke on the body edge, so only its inner half (lineWidth/2)
+      // intrudes into the body; inset the fill by exactly that so it starts at the
+      // frame's inner edge with no gap and no overlap.
+      const frameInset = mapBorderWidth / 2;
+      ctx.fillStyle = colors.surface(0.7);
+      ctx.fillRect(
+        bodyX + frameInset,
+        bodyY + frameInset,
+        bodyW - frameInset * 2,
+        // Top shifted down by frameInset; shrink the height to keep the bottom
+        // edge at bodyY + blockH (which sits inside the body, off any frame line).
+        blockH - frameInset,
+      );
+      if (hasTitleText) {
+        ctx.fillStyle = colors.ink;
+        ctx.font = `600 ${titleSize}px system-ui, -apple-system, sans-serif`;
+        ctx.textAlign = titleAlign;
+        ctx.textBaseline = "alphabetic";
+        ctx.fillText(opts.title.trim(), tx, y, bodyW - insetX * 2);
+      }
+      if (hasSubtitleText) {
+        // Only advance past the title line when one was drawn.
+        if (hasTitleText) y += subtitleSize * 1.4;
+        ctx.fillStyle = colors.muted;
+        ctx.font = `400 ${subtitleSize}px system-ui, -apple-system, sans-serif`;
+        ctx.textAlign = titleAlign;
+        ctx.fillText(opts.subtitle.trim(), tx, y, bodyW - insetX * 2);
+      }
+      return { x: bodyX, y: bodyY, w: bodyW, h: blockH };
+    });
 
   const inset = unit * 2;
   // Metres per pixel in the *output* image after cover scaling.
@@ -1107,48 +1294,49 @@ export function drawLayoutContext(
   const navAnchorX = navOnLeft ? bodyX + inset + bodyW * 0.28 : bodyX + bodyW - inset;
 
   // --- Scale bar + north arrow ------------------------------------------
+  // The grouped north arrow stacks on the scale bar's automatic position, so
+  // moving the bar alone leaves the arrow where it was.
   let scaleTopY = bodyY + bodyH - inset;
   if (hasScale) {
-    scaleTopY = drawScaleBar(
-      ctx,
-      colors,
-      navAnchorX,
-      bodyY + bodyH - inset,
-      bodyW * 0.28,
-      outputMpp,
-      unit,
-      scaleRatio,
-      opts.scaleUnit ?? "metric",
-    );
+    const scaleAnchor = { x: navAnchorX, y: bodyY + bodyH - inset };
+    placed("scaleBar", scaleAnchor, () => {
+      const box = drawScaleBar(
+        ctx,
+        colors,
+        scaleAnchor.x,
+        scaleAnchor.y,
+        bodyW * 0.28,
+        outputMpp,
+        unit,
+        scaleRatio,
+        opts.scaleUnit ?? "metric",
+      );
+      scaleTopY = box.y;
+      return box;
+    });
   }
   if (opts.showNorthArrow) {
     const arrowRadius = unit * 2.6;
     const discRadius = arrowRadius * 1.5;
-    if (groupNav) {
-      // Stack the north arrow directly above the scale bar (the "navigation duo").
-      drawNorthArrow(
-        ctx,
-        colors,
-        navAnchorX - discRadius,
-        scaleTopY - unit * 1.4 - discRadius,
-        arrowRadius,
-        opts.bearingDeg,
-        unit,
-      );
-    } else {
-      // Isolated fallback: top-right corner inside the map.
-      const topExtent = arrowRadius + unit * 2.4;
-      const arrowMargin = unit * 3;
-      drawNorthArrow(
-        ctx,
-        colors,
-        bodyX + bodyW - arrowMargin - discRadius,
-        bodyY + arrowMargin + topExtent,
-        arrowRadius,
-        opts.bearingDeg,
-        unit,
-      );
-    }
+    // Grouped: stack directly above the scale bar (the "navigation duo").
+    // Otherwise the isolated fallback: top-right corner inside the map.
+    const arrowMargin = unit * 3;
+    const center = groupNav
+      ? { x: navAnchorX - discRadius, y: scaleTopY - unit * 1.4 - discRadius }
+      : {
+          x: bodyX + bodyW - arrowMargin - discRadius,
+          y: bodyY + arrowMargin + arrowRadius + unit * 2.4,
+        };
+    placed("northArrow", center, () => {
+      drawNorthArrow(ctx, colors, center.x, center.y, arrowRadius, opts.bearingDeg, unit);
+      const top = center.y - arrowRadius - unit * 2.6;
+      return {
+        x: center.x - discRadius,
+        y: Math.min(top, center.y - discRadius),
+        w: discRadius * 2,
+        h: center.y + discRadius - Math.min(top, center.y - discRadius),
+      };
+    });
   }
 
   // --- Legend (top-left inside the map) ---------------------------------
@@ -1156,22 +1344,25 @@ export function drawLayoutContext(
   // footer or off the page.
   let legendHeight = 0;
   if (opts.showLegend && opts.legend.length > 0) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(bodyX, bodyY, bodyW, bodyH);
-    ctx.clip();
-    legendHeight = drawLegend(ctx, colors, bodyX + inset, bodyY + inset, opts.legend, unit, {
-      title: opts.legendTitle,
-      groupByLayer: opts.legendGroupByLayer,
-      markerIcons: opts.markerIcons,
-      // Legend sizes are stored in MapLibre CSS pixels. The capture is in
-      // device pixels and is then fitted into the page body, so apply both
-      // transforms to make the legend symbols match their map counterparts.
-      mapSymbolScale: Math.max(0, (opts.mapPixelRatio ?? 1) * coverScale),
-      maxHeight: bodyH - inset * 2,
-      formatNote: opts.legendFormatNote,
+    const legendAnchor = { x: bodyX + inset, y: bodyY + inset };
+    const legendMoved = Boolean(opts.elementOffsets?.legend);
+    placed("legend", legendAnchor, (automatic) => {
+      if (automatic) clipToBody();
+      const size = drawLegend(ctx, colors, legendAnchor.x, legendAnchor.y, opts.legend, unit, {
+        title: opts.legendTitle,
+        groupByLayer: opts.legendGroupByLayer,
+        markerIcons: opts.markerIcons,
+        // Legend sizes are stored in MapLibre CSS pixels. The capture is in
+        // device pixels and is then fitted into the page body, so apply both
+        // transforms to make the legend symbols match their map counterparts.
+        mapSymbolScale: Math.max(0, (opts.mapPixelRatio ?? 1) * coverScale),
+        maxHeight: bodyH - inset * 2,
+        formatNote: opts.legendFormatNote,
+      });
+      // A moved legend leaves the top-left corner free for stacked panels.
+      if (!legendMoved) legendHeight = size.h;
+      return size.h > 0 ? { x: legendAnchor.x, y: legendAnchor.y, w: size.w, h: size.h } : null;
     });
-    ctx.restore();
   }
 
   // --- Corner panels (colorbar, custom legend, table, chart) ------------
@@ -1273,6 +1464,13 @@ export function drawLayoutContext(
     );
   }
 
+  // --- Overview / inset map (GH #3530) -----------------------------------
+  if (opts.inset) {
+    const rect = insetRectFor(opts, opts.inset.box, W, H);
+    drawInsetMap(ctx, opts, opts.inset, rect, W, H, unit, mapBorderWidth);
+    boxes.inset = { box: rect };
+  }
+
   // --- Page border -------------------------------------------------------
   if (opts.showPageBorder) {
     const widthScale = Math.max(1, Math.min(10, opts.pageBorderWidth ?? 2));
@@ -1283,6 +1481,240 @@ export function drawLayoutContext(
   }
 
   ctx.restore();
+  return boxes;
+}
+
+/**
+ * Page pixel to longitude/latitude through the captured map's georeference,
+ * for a page drawn at `W` x `H`; null when the capture has no georeference.
+ */
+function pageGeoref(
+  opts: LayoutOptions,
+  W: number,
+  H: number,
+): { frame: Rect; toLngLat: (x: number, y: number) => [number, number] | null } | null {
+  const georef = opts.mapGeoref;
+  if (!georef) return null;
+  const placement = mapImagePlacement(opts, W, H);
+  if (!placement || !(placement.scale > 0)) return null;
+  return {
+    frame: placement.clip,
+    toLngLat: (x, y) => {
+      try {
+        const ll = georefLngLat(
+          georef,
+          (x - placement.dx) / placement.scale,
+          (y - placement.dy) / placement.scale,
+        );
+        return Number.isFinite(ll[0]) && Number.isFinite(ll[1]) && Math.abs(ll[1]) <= 90
+          ? ll
+          : null;
+      } catch {
+        return null;
+      }
+    },
+  };
+}
+
+/**
+ * Draw the coordinate grid around the main map frame: optional grid lines
+ * clipped to the map, outward border ticks, and labels outside the frame
+ * (left and right labels read bottom to top). Labels that would overlap a
+ * neighbour on the same edge are skipped. Needs a georeferenced capture; a
+ * globe or pitched view has none, so nothing is drawn.
+ */
+function drawMapGrid(
+  ctx: CanvasRenderingContext2D,
+  opts: LayoutOptions,
+  grid: MapGridOptions,
+  W: number,
+  H: number,
+  unit: number,
+  ink: string,
+): void {
+  const geo = pageGeoref(opts, W, H);
+  if (!geo) return;
+  const result = computeMapGrid({
+    frame: geo.frame,
+    pageToLngLat: geo.toLngLat,
+    type: grid.type,
+    interval: grid.interval,
+  });
+  if (!result) return;
+  const { frame } = geo;
+  const fontPx = gridLabelFontPx({ ...opts, grid }, W, unit);
+  const tick = fontPx * 0.6;
+  const gap = fontPx * 0.25;
+  ctx.save();
+
+  if (grid.lines && result.lines.length > 0) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(frame.x, frame.y, frame.w, frame.h);
+    ctx.clip();
+    ctx.strokeStyle = ink;
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = Math.max(1, unit * 0.08);
+    ctx.beginPath();
+    for (const line of result.lines) {
+      ctx.moveTo(line.x1, line.y1);
+      ctx.lineTo(line.x2, line.y2);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.strokeStyle = ink;
+  ctx.fillStyle = ink;
+  ctx.lineWidth = Math.max(1, unit * 0.12);
+  ctx.font = `400 ${fontPx}px system-ui, -apple-system, sans-serif`;
+  // Occupied label spans per edge, measured along the edge.
+  const used: Record<string, [number, number][]> = { top: [], bottom: [], left: [], right: [] };
+  const free = (edge: string, from: number, to: number) =>
+    used[edge].every(([a, b]) => to + gap < a || from - gap > b);
+
+  // The projected grid's zone goes below the frame's right end first, so the
+  // tick labels make room for it rather than the other way round.
+  if (result.zoneLabel) {
+    ctx.font = `600 ${fontPx}px system-ui, -apple-system, sans-serif`;
+    const width = ctx.measureText(result.zoneLabel).width;
+    const x = frame.x + frame.w;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "top";
+    ctx.fillText(result.zoneLabel, x, frame.y + frame.h + tick + gap);
+    ctx.font = `400 ${fontPx}px system-ui, -apple-system, sans-serif`;
+    used.bottom.push([x - width, x]);
+  }
+
+  ctx.beginPath();
+  for (const t of result.ticks) {
+    const [ox, oy] =
+      t.edge === "top"
+        ? [0, -1]
+        : t.edge === "bottom"
+          ? [0, 1]
+          : t.edge === "left"
+            ? [-1, 0]
+            : [1, 0];
+    ctx.moveTo(t.x, t.y);
+    ctx.lineTo(t.x + ox * tick, t.y + oy * tick);
+  }
+  ctx.stroke();
+
+  for (const t of result.ticks) {
+    const width = ctx.measureText(t.label).width;
+    const horizontal = t.edge === "top" || t.edge === "bottom";
+    const along = horizontal ? t.x : t.y;
+    if (!free(t.edge, along - width / 2, along + width / 2)) continue;
+    used[t.edge].push([along - width / 2, along + width / 2]);
+    ctx.save();
+    ctx.textAlign = "center";
+    if (t.edge === "top") {
+      ctx.textBaseline = "bottom";
+      ctx.fillText(t.label, t.x, t.y - tick - gap);
+    } else if (t.edge === "bottom") {
+      ctx.textBaseline = "top";
+      ctx.fillText(t.label, t.x, t.y + tick + gap);
+    } else {
+      ctx.translate(t.x + (t.edge === "left" ? -tick - gap : tick + gap), t.y);
+      ctx.rotate(-Math.PI / 2);
+      ctx.textBaseline = t.edge === "left" ? "bottom" : "top";
+      ctx.fillText(t.label, 0, 0);
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+/**
+ * Draw the overview / inset map into `rect`: the rendered inset (cover
+ * fitted), the main frame's footprint as an outlined rectangle (a marker when
+ * it is too small to read as one), and a frame border.
+ */
+function drawInsetMap(
+  ctx: CanvasRenderingContext2D,
+  opts: LayoutOptions,
+  inset: InsetMapOptions,
+  rect: Rect,
+  W: number,
+  H: number,
+  unit: number,
+  borderWidth: number,
+): void {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(rect.x, rect.y, rect.w, rect.h);
+  ctx.clip();
+  ctx.fillStyle = opts.mapBackground ?? "#e5e7eb";
+  ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+  const view = inset.view;
+  if (view && view.width > 0 && view.height > 0) {
+    const scale = coverScaleFor(rect.w, rect.h, view.width, view.height);
+    const ox = rect.x + (rect.w - view.width * scale) / 2;
+    const oy = rect.y + (rect.h - view.height * scale) / 2;
+    if (inset.image) {
+      try {
+        ctx.drawImage(inset.image, ox, oy, view.width * scale, view.height * scale);
+      } catch {
+        // A tainted inset leaves the placeholder; the footprint still draws.
+      }
+    }
+    const geo = pageGeoref(opts, W, H);
+    if (geo) {
+      // Densify each side of the main frame so a rotated or non-Mercator main
+      // map still traces its true footprint.
+      const { frame } = geo;
+      const corners: Point[] = [
+        { x: frame.x, y: frame.y },
+        { x: frame.x + frame.w, y: frame.y },
+        { x: frame.x + frame.w, y: frame.y + frame.h },
+        { x: frame.x, y: frame.y + frame.h },
+      ];
+      const ring: Point[] = [];
+      const steps = 12;
+      for (let i = 0; i < 4; i++) {
+        const a = corners[i];
+        const b = corners[(i + 1) % 4];
+        for (let k = 0; k < steps; k++) {
+          const ll = geo.toLngLat(a.x + ((b.x - a.x) * k) / steps, a.y + ((b.y - a.y) * k) / steps);
+          if (!ll) continue;
+          const p = mercatorViewPx(view, ll[0], ll[1]);
+          ring.push({ x: ox + p.x * scale, y: oy + p.y * scale });
+        }
+      }
+      if (ring.length >= 3) {
+        const xs = ring.map((p) => p.x);
+        const ys = ring.map((p) => p.y);
+        const spanPx = Math.max(
+          Math.max(...xs) - Math.min(...xs),
+          Math.max(...ys) - Math.min(...ys),
+        );
+        ctx.strokeStyle = inset.extentColor;
+        ctx.fillStyle = inset.extentColor;
+        ctx.lineWidth = Math.max(1.5, unit * 0.3);
+        if (spanPx < unit * 1.2) {
+          // Too small to read as a box: mark the spot instead.
+          const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+          const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, unit * 0.8, 0, Math.PI * 2);
+          ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ring.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+          ctx.closePath();
+          ctx.globalAlpha = 0.15;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.stroke();
+        }
+      }
+    }
+  }
+  ctx.restore();
+  ctx.strokeStyle = opts.mapBorderColor ?? BORDER;
+  ctx.lineWidth = Math.max(1, borderWidth || unit * 0.2);
+  ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
 }
 
 /** Draw a north-pointing arrow rotated to account for map bearing. */
@@ -1368,8 +1800,8 @@ function formatSpanLabel(span: number, label: string): string {
  * positive value, a representative-fraction label (e.g. "1:25,000") is drawn
  * above the distance label.
  *
- * @returns The top Y of the scale bar's backing box, so a caller can stack the
- *   north arrow directly above it without overlapping.
+ * @returns The scale bar's backing box; its top lets a caller stack the north
+ *   arrow directly above it without overlapping.
  */
 function drawScaleBar(
   ctx: CanvasRenderingContext2D,
@@ -1381,7 +1813,7 @@ function drawScaleBar(
   unit: number,
   scaleRatio = 0,
   scaleUnit: MapScaleUnit = "metric",
-): number {
+): Rect {
   const maxMeters = maxWidthPx * metersPerPixel;
   // Round to a nice number in the target unit (feet, miles, km, ...) so the bar
   // lands on a readable value in that system, then convert back to metres for
@@ -1432,7 +1864,12 @@ function drawScaleBar(
   ctx.textBaseline = "bottom";
   ctx.fillText(formatSpanLabel(rounded, label), rightX, y0 - unit * 0.5);
   ctx.restore();
-  return backingTop;
+  return {
+    x: x0 - unit * 0.8,
+    y: backingTop,
+    w: barWidth + unit * 1.6,
+    h: bottomY - backingTop + unit * 0.8,
+  };
 }
 
 /** Format a representative fraction as "1:N" with thousands separators. */
@@ -2288,7 +2725,7 @@ function drawLegendMarker(
 /**
  * Draw a legend box anchored at its top-left corner.
  *
- * @returns The drawn box's height, so corner panels can stack below it.
+ * @returns The drawn box's size, so corner panels can stack below it.
  */
 function drawLegend(
   ctx: CanvasRenderingContext2D,
@@ -2307,7 +2744,7 @@ function drawLegend(
     maxHeight?: number;
     formatNote?: (count: number) => string;
   },
-): number {
+): { w: number; h: number } {
   const pad = unit * 1.4;
   const titleSize = unit * 2;
   const labelSize = unit * 1.7;
@@ -2450,7 +2887,7 @@ function drawLegend(
       // with the page — proportional rows included, thanks to swatchCap — so
       // drawLayout's own maxHeight always clears at least one row plus the
       // note whatever the paper size. Safe to return early — ctx.save() is below.
-      if (fitRows === 0) return 0;
+      if (fitRows === 0) return { w: 0, h: 0 };
       if (fitRows < rows.length) {
         // A layer heading only means something with class rows under it, so a
         // cut that lands right after one drops it too rather than printing a
@@ -2561,7 +2998,7 @@ function drawLegend(
     ctx.fillText(note, x + pad, cy);
   }
   ctx.restore();
-  return boxH;
+  return { w: boxW, h: boxH };
 }
 
 function roundRect(

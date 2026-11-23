@@ -329,3 +329,71 @@ describe("scrubPrintLayoutForRemovedLayers", () => {
     assert.equal(scrubPrintLayoutForRemovedLayers(config, []), config);
   });
 });
+
+describe("cartographic extras (GH #3530)", () => {
+  it("opens a layout saved before them in the automatic arrangement", () => {
+    const config = normalizePrintLayoutConfig({ title: "Old", paperSize: "a3" });
+    assert.ok(config);
+    assert.equal(config.mapFrameBox, null);
+    assert.equal(config.insetBox, null);
+    assert.deepEqual(config.elementOffsets, {});
+    assert.equal(config.showInset, false);
+    assert.equal(config.showGrid, false);
+    assert.equal(config.gridType, "dms");
+    assert.equal(config.gridInterval, 0);
+  });
+
+  it("round-trips the inset, grid and arrangement", () => {
+    const saved = withOverrides({
+      showInset: true,
+      insetBasemap: "osm",
+      insetZoomOffset: -6,
+      insetExtentColor: "#2563eb",
+      insetBox: { x: 0.05, y: 0.6, w: 0.25, h: 0.3 },
+      showGrid: true,
+      gridType: "mgrs",
+      gridInterval: 5000,
+      gridFontSize: 9,
+      gridLines: true,
+      mapFrameBox: { x: 0.1, y: 0.15, w: 0.8, h: 0.7 },
+      elementOffsets: {
+        legend: { dx: 0.02, dy: -0.01, scale: 1.25 },
+        northArrow: { dx: -0.1, dy: 0.05, scale: 0.5 },
+      },
+    });
+    assert.deepEqual(normalizePrintLayoutConfig(JSON.parse(JSON.stringify(saved))), saved);
+  });
+
+  it("drops or clamps malformed boxes and offsets from a hand-edited file", () => {
+    const config = normalizePrintLayoutConfig({
+      insetBasemap: "satellite",
+      insetZoomOffset: 3,
+      gridType: "geohash",
+      insetBox: { x: 0.9, y: -1, w: 0.5, h: 0.5 },
+      mapFrameBox: { x: 0, y: 0, w: "wide", h: 1 },
+      elementOffsets: {
+        legend: { dx: 5, dy: 0, scale: 100 },
+        title: { dx: 0, dy: 0 },
+        compass: { dx: 0, dy: 0, scale: 1 },
+      },
+    });
+    assert.ok(config);
+    assert.equal(config.insetBasemap, "positron");
+    assert.equal(config.insetZoomOffset, 0);
+    assert.equal(config.gridType, "dms");
+    assert.deepEqual(config.insetBox, { x: 0.5, y: 0, w: 0.5, h: 0.5 });
+    assert.equal(config.mapFrameBox, null);
+    assert.deepEqual(config.elementOffsets, { legend: { dx: 1, dy: 0, scale: 4 } });
+  });
+
+  it("compares offsets by value regardless of key order", () => {
+    const a = withOverrides({
+      elementOffsets: { legend: { dx: 0.1, dy: 0, scale: 1 }, title: { dx: 0, dy: 0.1, scale: 1 } },
+    });
+    const b = withOverrides({
+      elementOffsets: { title: { scale: 1, dy: 0.1, dx: 0 }, legend: { dx: 0.1, dy: 0, scale: 1 } },
+    });
+    assert.equal(printLayoutConfigsEqual(a, b), true);
+    assert.equal(isDefaultPrintLayout(a), false);
+  });
+});

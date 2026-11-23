@@ -2298,7 +2298,9 @@
       "colorbar": "Colorbar",
       "customLegend": "Custom legend",
       "dataTable": "Attribute table",
-      "dataChart": "Chart"
+      "dataChart": "Chart",
+      "inset": "Overview map (inset)",
+      "grid": "Coordinate grid"
     },
     "dataBlocks": {
       "layer": "Layer",
@@ -2475,6 +2477,52 @@
       "exporting": "Exporting page {{current}} of {{total}}…",
       "tokensHint": "Tokens {atlas.name}, {atlas.pagenumber}, {atlas.total}, and {atlas.attr:FIELD} are replaced per page in the title, subtitle, footer, and page file name.",
       "alongLineHint": "Pages follow each line in order; km_start, km_end, segment, and segments are available as {atlas.attr:FIELD} tokens."
+    },
+    "inset": {
+      "heading": "Overview map",
+      "basemap": "Basemap",
+      "basemapOption": {
+        "positron": "Positron",
+        "liberty": "Liberty",
+        "bright": "Bright",
+        "dark": "Dark",
+        "fiord": "Fiord",
+        "osm": "OpenStreetMap"
+      },
+      "zoomOffset": "Zoom out (levels)",
+      "extentColor": "Extent color",
+      "needsGeoref": "The extent rectangle needs a flat 2D capture; it is not drawn for a globe or tilted view."
+    },
+    "grid": {
+      "heading": "Coordinate grid",
+      "type": "Coordinates",
+      "typeOption": {
+        "dms": "Latitude/longitude (DMS)",
+        "decimal": "Latitude/longitude (decimal)",
+        "utm": "UTM",
+        "mgrs": "MGRS"
+      },
+      "intervalDegrees": "Interval (degrees, 0 = auto)",
+      "intervalMeters": "Interval (meters, 0 = auto)",
+      "fontSize": "Label size (pt)",
+      "lines": "Draw grid lines across the map",
+      "needsGeoref": "The grid needs a flat 2D capture; it is not drawn for a globe or tilted view."
+    },
+    "arrange": {
+      "toggle": "Arrange",
+      "done": "Done",
+      "reset": "Reset layout",
+      "hint": "Drag an element to move it; drag its corner handle to resize. Arrow keys nudge the focused element.",
+      "resizeHandle": "Resize {{name}}",
+      "element": {
+        "map": "Map frame",
+        "inset": "Overview map",
+        "title": "Title",
+        "legend": "Legend",
+        "scaleBar": "Scale bar",
+        "northArrow": "North arrow",
+        "footer": "Footer"
+      }
     }
   },
   "kml": {
