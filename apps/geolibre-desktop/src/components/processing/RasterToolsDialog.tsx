@@ -316,6 +316,8 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   const clearClientSecondaryInput = useCallback((letter: string, paramId: string) => {
     setClientAdditionalInputs((prev) => omitClientSecondaryInput(prev, letter));
     setParams((prev) => ({ ...prev, [paramId]: "" }));
+    setClientResult(null);
+    setClientLog([]);
   }, []);
 
   // Whether a parameter is shown, given another parameter's value (e.g. hide
@@ -361,6 +363,8 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
           });
           if (session !== formSessionRef.current || !picked?.data) return;
           setError(null);
+          setClientResult(null);
+          setClientLog([]);
           setClientAdditionalInputs((prev) => ({
             ...prev,
             [letter]: { name: picked.path, bytes: picked.data! },
