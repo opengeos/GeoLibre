@@ -39,9 +39,14 @@ Deployment protections remain the operator's responsibility:
   1–365 day lifetime where bounded credentials are needed, and revoke or rotate
   delete-only and legacy tokens operationally.
 - **Rate limiting.** The OAuth consent flow caps pending interactions per
-  browser binding, but a fresh cookie bypasses that cap; the reference server
-  has no general request limiter. Before enabling OAuth publicly, enforce
-  per-client-IP limits at the ingress on **GET and POST** `/oauth/authorize`,
+  browser binding, but a fresh cookie bypasses that cap. The reference server
+  has a built-in per-client-IP limiter (`GEOLIBRE_RATE_LIMIT_AUTH`, default
+  30 requests per 60 seconds on the credential routes below, and
+  `GEOLIBRE_RATE_LIMIT_API`, default 600 per 60 seconds elsewhere; over budget
+  answers `429` with `Retry-After`), but its counters live in each worker
+  process, so they multiply with workers and replicas and reset on restart.
+  Before enabling OAuth publicly, also enforce per-client-IP limits at the
+  ingress on **GET and POST** `/oauth/authorize`,
   `GET /oauth/sso/callback`, `POST /oauth/token`, `POST /api/auth/token`,
   `POST /api/accounts`, and `POST /api/account/password`. The last four POSTs
   include password or token operations; consent login and the PAT/account
@@ -74,10 +79,17 @@ Deployment protections remain the operator's responsibility:
   Suppress authorization request query strings, callback `Location` headers,
   and callback request query strings at the web ingress in proxy, WAF, and
   load-balancer logs.
-- **A request-size limit.** The server rejects an oversized *declared*
-  `Content-Length` before reading the body, but a chunked or HTTP/2 request
-  declares no length and is parsed in full before the per-route limit applies.
-  Cap request size at the proxy as well.
+- **A request-size limit.** The server rejects a body over
+  `GEOLIBRE_MAX_REQUEST_BYTES` (default six times the project limit plus
+  1 KiB): an oversized declared `Content-Length` before reading the body, and a
+  chunked or HTTP/2 body as soon as the streamed bytes cross the ceiling.
+  Capping request size at the proxy as well keeps oversized uploads off the
+  application workers entirely.
+- **The secret encryption key.** Set `GEOLIBRE_SECRET_KEYS` (comma-separated
+  Fernet keys; see `backend/geolibre_server_api/README.md`) before configuring
+  organization single sign-on on a non-loopback `GEOLIBRE_PUBLIC_URL`. Store it
+  apart from the database and its backups; losing it means re-entering every
+  identity provider's client secret.
 - **Database pooling and schema migrations.** For PostgreSQL and other
   non-SQLite databases, the SQLAlchemy pool defaults to `GEOLIBRE_DB_POOL_SIZE=10`,
   `GEOLIBRE_DB_MAX_OVERFLOW=20` (up to 30 connections per worker process), and
@@ -656,8 +668,12 @@ and `identity provider discovery failed`. Out-of-range values are a generic
   single sign-on have no way to sign in. A provider configured later links
   subjects afresh, so their next sign-in creates new accounts; remove the old
   ones.
-- **Secret storage:** `clientSecret` is stored unencrypted in the database, at
-  the same trust level as the rest of its contents.
+- **Secret storage:** `clientSecret` is encrypted at rest with Fernet under the
+  first key in `GEOLIBRE_SECRET_KEYS` and decrypted only when calling the
+  provider's token endpoint. A production server (non-loopback
+  `GEOLIBRE_PUBLIC_URL`) without the key refuses to store a secret (`503`) and
+  fails startup while secrets are stored; startup and `alembic upgrade head`
+  encrypt secrets left in plaintext by earlier releases.
 
 ### Single sign-on on the consent page
 

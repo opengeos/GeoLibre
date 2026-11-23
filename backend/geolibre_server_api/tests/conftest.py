@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from cryptography.fernet import Fernet
 from fake_idp import FakeIdp
 from fastapi.testclient import TestClient
 from geolibre_server_api.main import FileStorage, create_app
@@ -40,6 +41,23 @@ class TestClock:
 
     def advance(self, seconds: int) -> None:
         self.now_ts += seconds
+
+
+# One key for the whole session so every app the suite builds stores identity
+# provider secrets encrypted, as production does.
+TEST_SECRET_KEY = Fernet.generate_key().decode()
+
+
+@pytest.fixture(autouse=True)
+def _server_security_env(monkeypatch):
+    """Encrypt stored secrets and disable the built-in rate limiter.
+
+    The suite drives hundreds of credential requests from one test client, so
+    the limiter is switched off here; ``test_limits.py`` turns it back on.
+    """
+    monkeypatch.setenv("GEOLIBRE_SECRET_KEYS", TEST_SECRET_KEY)
+    monkeypatch.setenv("GEOLIBRE_RATE_LIMIT_AUTH", "off")
+    monkeypatch.setenv("GEOLIBRE_RATE_LIMIT_API", "off")
 
 
 @pytest.fixture

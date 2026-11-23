@@ -11,6 +11,8 @@ mod plugin_http;
 #[cfg(not(feature = "mas"))]
 mod process_lifetime;
 mod remote_download;
+#[cfg(not(feature = "mas"))]
+mod uv_bootstrap;
 // Earth Engine sign-in uses Google's OAuth loopback-redirect flow, which binds
 // a listener on 127.0.0.1 to accept the browser's redirect. Accepting an
 // inbound connection requires the `com.apple.security.network.server`
@@ -329,8 +331,6 @@ const JUPYTER_PORT: u16 = 8766;
 // first-run `uv sync` of JupyterLab on a cold cache.
 #[cfg(not(feature = "mas"))]
 const JUPYTER_HEALTH_ATTEMPTS: usize = 240;
-#[cfg(not(feature = "mas"))]
-const UV_INSTALL_BASE_URL: &str = "https://astral.sh/uv";
 const REMOTE_TILE_TIMEOUT_SECS: u64 = 8;
 const MAX_HTTP_REDIRECTS: usize = 10;
 const REMOTE_TILE_CONNECT_TIMEOUT_SECS: u64 = 4;
@@ -5407,82 +5407,9 @@ fn install_managed_uv(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 
     fs::create_dir_all(&uv_dir)
         .map_err(|error| format!("Could not create uv cache directory: {error}"))?;
-    let script = download_uv_installer(app)?;
-    let mut command = if cfg!(target_os = "windows") {
-        let mut command = Command::new("powershell");
-        command
-            .arg("-NoProfile")
-            .arg("-ExecutionPolicy")
-            .arg("Bypass")
-            .arg("-File")
-            .arg(&script);
-        command
-    } else {
-        let mut command = Command::new("sh");
-        command.arg(&script);
-        command
-    };
-    // First run only, but it is the one that would flash a PowerShell window
-    // across the user's desktop while uv installs.
-    hide_console_window(&mut command);
-    let output = command
-        .env("UV_UNMANAGED_INSTALL", &uv_dir)
-        .output()
-        .map_err(|error| format!("Could not run uv installer: {error}"))?;
-    let _ = fs::remove_file(script);
-    if !output.status.success() {
-        let detail = String::from_utf8_lossy(if output.stderr.is_empty() {
-            &output.stdout
-        } else {
-            &output.stderr
-        });
-        return Err(format!("uv installer failed: {detail}"));
-    }
-    if !uv.exists() {
-        return Err(format!("uv installer did not create {}", uv.display()));
-    }
-    Ok(uv)
-}
-
-#[cfg(not(feature = "mas"))]
-fn download_uv_installer(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let url = if cfg!(target_os = "windows") {
-        format!("{UV_INSTALL_BASE_URL}/install.ps1")
-    } else {
-        format!("{UV_INSTALL_BASE_URL}/install.sh")
-    };
-    let response = reqwest::blocking::Client::builder()
-        .user_agent("GeoLibre Desktop")
-        .build()
-        .map_err(|error| format!("Could not create HTTP client: {error}"))?
-        .get(url)
-        .send()
-        .map_err(|error| format!("Could not download uv installer: {error}"))?;
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!("uv installer download failed with status {status}"));
-    }
-    let extension = if cfg!(target_os = "windows") {
-        "ps1"
-    } else {
-        "sh"
-    };
-    let installer_dir = app
-        .path()
-        .app_cache_dir()
-        .map_err(|error| format!("Could not resolve app cache directory: {error}"))?
-        .join("installers");
-    fs::create_dir_all(&installer_dir)
-        .map_err(|error| format!("Could not create installer cache directory: {error}"))?;
-    let script = installer_dir.join(format!("uv-install.{extension}"));
-    fs::write(
-        &script,
-        response
-            .bytes()
-            .map_err(|error| format!("Could not read uv installer: {error}"))?,
-    )
-    .map_err(|error| format!("Could not write uv installer: {error}"))?;
-    Ok(script)
+    // A pinned release archive, SHA-256 verified before extraction; no remote
+    // install script is ever run. See uv_bootstrap.rs.
+    uv_bootstrap::install_pinned_uv(&uv_dir)
 }
 
 #[cfg(not(feature = "mas"))]

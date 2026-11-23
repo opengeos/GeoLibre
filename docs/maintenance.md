@@ -1082,6 +1082,19 @@ run `python -m pytest backend/geolibre_server_api/tests/test_egress.py`
 (`test_identity_provider_client_refuses_loopback` makes a real connection
 through the transport).
 
+### Managed `uv` pin (sidecar runtimes and desktop sidecar bootstrap)
+
+When uv is neither configured (`GEOLIBRE_UV`) nor on `PATH`, both the sidecar
+(`backend/geolibre_server/geolibre_server/app/runtime.py`) and the desktop app
+(`apps/geolibre-desktop/src-tauri/src/uv_bootstrap.rs`) download a pinned uv
+release archive and verify its SHA-256 before extracting it. `UV_VERSION` and
+`UV_RELEASE_SHA256` in `runtime.py` are the source of truth; the Rust constants
+mirror them and `backend/geolibre_server/tests/test_runtime_uv_bootstrap.py`
+fails when they differ. To bump uv, take each digest from the release's official
+`<archive>.sha256` asset
+(`https://github.com/astral-sh/uv/releases/download/<version>/<archive>.sha256`),
+never from a local download, and update both files in the same PR.
+
 ## Shared dependency ranges
 
 `apps/geolibre-desktop` and `packages/plugins` declare many of the same

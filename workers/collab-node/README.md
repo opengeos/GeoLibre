@@ -15,7 +15,8 @@ Configuration:
 - `HOST` — listen address (default `0.0.0.0`)
 - `COLLAB_DB_PATH` — SQLite file (default `./data/collab.sqlite`)
 - `COLLAB_MAX_SNAPSHOT_BYTES` — maximum UTF-8 snapshot frame size (default
-  `1000000`, matching the hosted Worker)
+  `10000000`, `MAX_SNAPSHOT_BYTES` from `@geolibre/collab-core`, matching the
+  hosted Worker and the root `docker-compose.yml`)
 - `COLLAB_IDLE_TTL_MS` — time after the last participant disconnects before the
   session and its persisted data are deleted (default two hours)
 

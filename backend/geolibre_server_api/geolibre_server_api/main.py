@@ -65,7 +65,17 @@ from geolibre_server_api.auth import (
 )
 from geolibre_server_api.auth_models import OAUTH_INDEXES, Account, Base
 from geolibre_server_api.enterprise_admin import build_enterprise_admin_router
-from geolibre_server_api.enterprise_models import FEDERATED_IDENTITY_INDEXES
+from geolibre_server_api.enterprise_models import (
+    FEDERATED_IDENTITY_INDEXES,
+    OrganizationIdentityProvider,
+)
+from geolibre_server_api.limits import (
+    DEFAULT_API_RATE,
+    DEFAULT_AUTH_RATE,
+    BodySizeLimitMiddleware,
+    RateLimitMiddleware,
+    parse_rate,
+)
 from geolibre_server_api.oidc import build_http_client, build_transport
 from geolibre_server_api.org_models import (
     Group,
@@ -95,6 +105,13 @@ from geolibre_server_api.project_models import (
 from geolibre_server_api.projects import demote_disallowed_public_projects, log_project_activity
 from geolibre_server_api.proxy_identity import client_ip, load_trusted_proxy_config
 from geolibre_server_api.scim import SCIM_MEDIA_TYPE, ScimError, build_scim_router
+from geolibre_server_api.secret_crypto import (
+    SECRET_KEYS_ENV,
+    SecretKeyError,
+    is_production_url,
+    reencrypt_stored_secrets,
+    secret_ciphers,
+)
 
 Visibility = Literal["public", "unlisted", "private", "organization"]
 PublicSharingPolicy = Literal["yes", "publishers", "no"]
@@ -799,6 +816,52 @@ def _env_optional_int(name: str) -> int | None:
     return value if value > 0 else None
 
 
+def _prepare_stored_secrets(engine, base_url: str) -> bool:
+    """Validate the secret key configuration and encrypt stored secrets.
+
+    Encrypts legacy plaintext identity-provider secrets and re-keys secrets
+    written under an older key, so a database upgraded without Alembic is
+    protected too. Concurrent workers may both rewrite a row; every write is a
+    valid ciphertext, so the race is harmless.
+
+    Args:
+        engine: The SQLAlchemy engine.
+        base_url: The public API URL, used to tell production from development.
+
+    Returns:
+        True when no key is configured in development, so secrets stay plaintext.
+
+    Raises:
+        RuntimeError: If the key is malformed, cannot decrypt a stored secret,
+            or is missing in production while identity-provider secrets exist.
+    """
+    production = is_production_url(base_url)
+    try:
+        ciphers = secret_ciphers()
+        table = OrganizationIdentityProvider.__table__
+        if inspect(engine).has_table(table.name):
+            with engine.begin() as connection:
+                if ciphers is None and production:
+                    stored = connection.scalar(select(func.count()).select_from(table))
+                    if stored:
+                        raise SecretKeyError(
+                            f"{SECRET_KEYS_ENV} is required: {stored} organization identity "
+                            "provider secret(s) are stored and GEOLIBRE_PUBLIC_URL is not a "
+                            "loopback development URL"
+                        )
+                reencrypt_stored_secrets(connection, table, table.c.client_secret)
+    except SecretKeyError as exc:
+        engine.dispose()
+        raise RuntimeError(str(exc)) from exc
+    if ciphers is None:
+        logger.warning(
+            "%s is not set; identity-provider client secrets are stored unencrypted "
+            "(allowed only for a loopback GEOLIBRE_PUBLIC_URL)",
+            SECRET_KEYS_ENV,
+        )
+    return ciphers is None and production
+
+
 def create_app(
     database_url: str | None = None,
     storage=None,
@@ -918,6 +981,7 @@ def create_app(
         with sessions() as backfill_session:
             backfill_project_version_usage(backfill_session, object_storage)
     base_url = (public_url or os.getenv("GEOLIBRE_PUBLIC_URL", "http://localhost:8000")).rstrip("/")
+    secrets_unprotected = _prepare_stored_secrets(engine, base_url)
     viewer_url = os.getenv("GEOLIBRE_VIEWER_URL", "https://app.geolibre.org/").rstrip("/") + "/"
     max_project_bytes = int(os.getenv("GEOLIBRE_MAX_PROJECT_BYTES", str(50 * 1024 * 1024)))
     max_thumbnail_bytes = int(os.getenv("GEOLIBRE_MAX_THUMBNAIL_BYTES", str(5 * 1024 * 1024)))
@@ -952,6 +1016,9 @@ def create_app(
     app.state.allow_self_registration = self_reg_enabled
     app.state.lifecycle_delivery = lifecycle_delivery
     app.state.trusted_proxy = load_trusted_proxy_config()
+    # True only in production without GEOLIBRE_SECRET_KEYS: the admin API then
+    # refuses to store a new identity-provider secret.
+    app.state.secrets_unprotected = secrets_unprotected
     # Outbound identity-provider HTTP; lives for the process.
     idp_transport = oidc_transport or build_transport()
     app.state.oidc_http = build_http_client(idp_transport)
@@ -966,18 +1033,20 @@ def create_app(
     # a legitimate document at max_project_bytes can be six times that on the
     # wire. A tighter bound would 413 valid uploads.
     body_ceiling = max(max_project_bytes * 6, max_thumbnail_bytes) + 1024
-
-    # Known limit: this reads the declared length only, so a chunked or HTTP/2
-    # request without Content-Length skips it and is still parsed in full. The
-    # per-route checks bound what gets *stored* either way; closing the parsing
-    # cost for those requests needs a streaming body reader, which is why the
-    # deployment notes put a request-size limit at the proxy.
-    @app.middleware("http")
-    async def limit_body(request: Request, call_next):
-        declared = request.headers.get("content-length")
-        if declared and declared.isdigit() and int(declared) > body_ceiling:
-            return JSONResponse({"error": "request body too large"}, status_code=413)
-        return await call_next(request)
+    # GEOLIBRE_MAX_REQUEST_BYTES overrides the derived ceiling. A body without
+    # Content-Length (chunked, HTTP/2) is counted as it streams and refused once
+    # it crosses the ceiling, so no request is buffered past it.
+    app.add_middleware(
+        BodySizeLimitMiddleware,
+        max_bytes=_positive_int_env("GEOLIBRE_MAX_REQUEST_BYTES", body_ceiling),
+    )
+    # Added after the body limit so it wraps it: a throttled client is refused
+    # before any body is read.
+    app.add_middleware(
+        RateLimitMiddleware,
+        auth_rate=parse_rate("GEOLIBRE_RATE_LIMIT_AUTH", DEFAULT_AUTH_RATE),
+        api_rate=parse_rate("GEOLIBRE_RATE_LIMIT_API", DEFAULT_API_RATE),
+    )
 
     origins = [x.strip() for x in os.getenv("GEOLIBRE_CORS_ORIGINS", "*").split(",") if x.strip()]
     # CORSMiddleware treats a "*" anywhere in the list as allow-all, so a value
@@ -1003,7 +1072,7 @@ def create_app(
             ):
                 oauth_origins.add(origin)
     # Registered last so it is the outermost layer: Starlette wraps in reverse
-    # order of registration, and with limit_body outermost its 413 returned
+    # order of registration, and with the body limit outermost its 413 returned
     # without CORS headers, leaving a browser unable to read the documented
     # error body.
     if oauth_config is not None:

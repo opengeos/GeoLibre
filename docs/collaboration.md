@@ -329,8 +329,9 @@ core:
 - `workers/collab-node` is the self-hostable Node/SQLite relay. It is included
   as `geolibre-collab` in the root `docker-compose.yml`; its persistent database
   is mounted at `/data/collab.sqlite`. Configure `COLLAB_MAX_SNAPSHOT_BYTES`
-  (relay default 10,000,000; the compose file defaults it to 1,000,000) and
-  `COLLAB_IDLE_TTL_MS` (default two hours) when needed.
+  (default 10,000,000 bytes everywhere: both relays and the compose file share
+  `MAX_SNAPSHOT_BYTES` from `@geolibre/collab-core`) and `COLLAB_IDLE_TTL_MS`
+  (default two hours) when needed.
 
 Both relay implementations accept `COLLAB_MAX_SNAPSHOT_BYTES` as a positive
 integer number of bytes. For the Cloudflare relay, set it as a Worker variable,
@@ -370,8 +371,8 @@ environment. Until that env var is set, the feature stays dark.
 - **Payload size**: layers can embed `FeatureCollection`s. `projectFromStore`
   already strips redundant `geojson` for URL-backed layers, but a large
   in-memory/local-file layer can exceed the snapshot cap
-  (`COLLAB_MAX_SNAPSHOT_BYTES`: 10 MB by default for the relay, 1 MB in the
-  Docker Compose setup) and is rejected with
+  (`COLLAB_MAX_SNAPSHOT_BYTES`: 10 MB by default for the hosted relay, the
+  Node relay, and the Docker Compose setup) and is rejected with
   `error: too-large` (share via URL instead). v2: diff / chunked layer sync.
 - **Undo**: a remote apply clears local undo (see above).
 - v2 directions: per-action mutation or CRDT transport, coalesced remote-apply

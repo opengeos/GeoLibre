@@ -65,8 +65,20 @@ Configuration:
 - `GEOLIBRE_OIDC_CA_BUNDLE`: PEM file of CA certificates trusted for calls to
   organization identity providers in addition to the public CAs bundled with
   `certifi`, for providers behind a private CA (default empty: the public CAs
-  only). An unreadable file fails startup. Each provider's OIDC
-  `client_secret` is stored unencrypted in the database.
+  only). An unreadable file fails startup.
+- `GEOLIBRE_SECRET_KEYS`: comma-separated Fernet keys that encrypt each
+  organization identity provider's OIDC `client_secret` at rest. Generate one
+  with
+  `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+  and keep it out of the database backups it protects. The first key
+  encrypts; every listed key decrypts, so rotate by prepending a new key and
+  restarting (startup re-encrypts every secret under the new key), then drop
+  the old one. Startup also encrypts secrets stored in plaintext by earlier
+  builds, as does `alembic upgrade head`. When `GEOLIBRE_PUBLIC_URL` is not a
+  loopback URL the key is required: startup fails if identity-provider secrets
+  are stored without it, and saving a provider secret answers `503`. A
+  malformed key, or one that cannot decrypt a stored secret, fails startup.
+  Without a key on a loopback development URL, secrets stay in plaintext.
 - `GEOLIBRE_OIDC_ALLOWED_NETWORKS`: comma-separated IPs or CIDR networks that
   organization identity providers may be reached on even though they are not
   public, such as an on-premises IdP on `10.20.0.0/16` (default empty: calls
@@ -74,6 +86,21 @@ Configuration:
   are refused, because any user who creates an organization chooses its
   provider URLs). An invalid entry fails startup.
 - `GEOLIBRE_MAX_PROJECT_BYTES`, `GEOLIBRE_MAX_THUMBNAIL_BYTES`: upload limits.
+- `GEOLIBRE_MAX_REQUEST_BYTES`: ceiling on any request body (default: six
+  times `GEOLIBRE_MAX_PROJECT_BYTES` plus 1 KiB, the worst-case JSON encoding
+  of a full project). A declared `Content-Length` above it is refused before
+  the body is read; a chunked or HTTP/2 body is counted as it streams and cut
+  off with `413` once it crosses the ceiling.
+- `GEOLIBRE_RATE_LIMIT_AUTH` (default `30/60`) and `GEOLIBRE_RATE_LIMIT_API`
+  (default `600/60`): per-client-IP budgets as `<requests>/<seconds>`, or
+  `off`. The first covers the credential routes (`/oauth/authorize`,
+  `/oauth/token`, `/oauth/sso/callback`, `/api/auth/token`, `/api/accounts`,
+  `/api/account/password`); the second covers every other route except
+  `/health` and CORS preflights. Over budget answers `429` with
+  `Retry-After`. The client is the `X-Forwarded-For` address only behind a
+  `GEOLIBRE_TRUSTED_PROXIES` peer. Counters live in each worker process, so
+  several workers or replicas multiply the effective budget. A malformed value
+  fails startup.
 - `GEOLIBRE_HOST`, `GEOLIBRE_PORT`: bind address and port for the
   `geolibre-server-api` entry point, default `0.0.0.0` and `8000`. Bind to
   `127.0.0.1` when a reverse proxy fronts the service.
@@ -98,10 +125,11 @@ docker run --rm -v geolibre_geolibre-projects:/data/objects busybox \
 
 ## Hardening
 
-The OAuth consent flow caps pending interactions, but general rate limiting and
-a complete request-size limit are not implemented here. Keep the API behind a
-rate-limiting proxy for **GET and POST** `/oauth/authorize`, `POST /oauth/token`,
-`POST /api/auth/token`, and `POST /api/accounts`; the Compose API port binds to
-loopback so that proxy cannot be bypassed from outside the host. See "What the
-reference server leaves to the operator" in `docs/server-api.md` before public
-exposure.
+The API enforces a request-body ceiling and per-process, per-client-IP rate
+limits (see `GEOLIBRE_MAX_REQUEST_BYTES` and `GEOLIBRE_RATE_LIMIT_*` above).
+Those counters are not shared between workers or replicas, so a public
+deployment should still rate-limit **GET and POST** `/oauth/authorize`,
+`POST /oauth/token`, `POST /api/auth/token`, and `POST /api/accounts` at its
+proxy; the Compose API port binds to loopback so that proxy cannot be bypassed
+from outside the host. See "What the reference server leaves to the operator"
+in `docs/server-api.md` before public exposure.

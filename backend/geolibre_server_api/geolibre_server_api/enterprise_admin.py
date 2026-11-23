@@ -366,6 +366,14 @@ def build_enterprise_admin_router() -> APIRouter:
             raise HTTPException(422, "scopes must include openid and use simple scope tokens")
         if provider is None and body.client_secret is None:
             raise HTTPException(422, "clientSecret is required")
+        if body.client_secret is not None and getattr(
+            request.app.state, "secrets_unprotected", False
+        ):
+            raise HTTPException(
+                503,
+                "GEOLIBRE_SECRET_KEYS must be configured before storing an identity provider "
+                "client secret",
+            )
         group_ids = {mapping.group_id for mapping in body.group_mappings}
         if group_ids:
             found = set(
