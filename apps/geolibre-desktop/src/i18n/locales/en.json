@@ -295,7 +295,9 @@
     "policyNotAllowed": "Plugin '{{pluginId}}' is not allowed by deployment policy.",
     "reloadArchiveAria": "Reload {{name}}",
     "capabilitiesAdvisory": "Self-declared by the plugin; not enforced.",
-    "reloadedArchive": "Reloaded plugin \"{{id}}\"."
+    "reloadedArchive": "Reloaded plugin \"{{id}}\".",
+    "reloadNotFound": "Plugin \"{{pluginId}}\" could not be reloaded from its archive.",
+    "reloadReactivateFailed": "Plugin \"{{pluginId}}\" reloaded but could not be reactivated."
   },
   "viewState": {
     "panelTitle": "Info"

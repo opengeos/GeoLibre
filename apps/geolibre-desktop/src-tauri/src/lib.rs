@@ -2580,7 +2580,12 @@ fn list_installed_plugin_archives_blocking(
             });
         }
     }
-    installed.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)));
+    installed.sort_by(|a, b| {
+        a.name
+            .to_lowercase()
+            .cmp(&b.name.to_lowercase())
+            .then(a.id.cmp(&b.id))
+    });
     Ok(installed)
 }
 
@@ -2654,7 +2659,9 @@ fn uninstall_external_plugin_archive_blocking(
     for candidate in targets {
         let canonical = fs::canonicalize(&candidate)
             .map_err(|error| format!("Could not resolve installed plugin archive: {error}"))?;
-        if !canonical.starts_with(&canonical_dir) || !canonical.is_file() || !is_zip_path(&canonical)
+        if !canonical.starts_with(&canonical_dir)
+            || !canonical.is_file()
+            || !is_zip_path(&canonical)
         {
             return Err("Refusing to remove a file outside the plugins directory.".to_string());
         }

@@ -418,16 +418,32 @@ export function ModelBuilderPanel({
     setSelectedNodeIds(id ? new Set([id]) : new Set());
   }, []);
 
+  const lastCoalesceEditRef = useRef<{ key: string; at: number } | null>(null);
+
   const commitGraph = useCallback(
-    (updater: ProcessingModelGraph | ((current: ProcessingModelGraph) => ProcessingModelGraph)) => {
+    (
+      updater: ProcessingModelGraph | ((current: ProcessingModelGraph) => ProcessingModelGraph),
+      coalesceKey?: string,
+    ) => {
       const current = graphRef.current;
       const next = typeof updater === "function" ? updater(current) : updater;
       if (next === current) return;
-      const nextHistory = pushModelHistory(historyRef.current, current);
+      const now = Date.now();
+      const lastEdit = lastCoalesceEditRef.current;
+      const shouldCoalesce =
+        Boolean(coalesceKey) &&
+        lastEdit !== null &&
+        lastEdit.key === coalesceKey &&
+        now - lastEdit.at < 800 &&
+        historyRef.current.past.length > 0;
+      const nextHistory = shouldCoalesce
+        ? historyRef.current
+        : pushModelHistory(historyRef.current, current);
+      lastCoalesceEditRef.current = coalesceKey ? { key: coalesceKey, at: now } : null;
       graphRef.current = next;
       historyRef.current = nextHistory;
       setGraph(next);
-      setHistory(nextHistory);
+      if (!shouldCoalesce) setHistory(nextHistory);
     },
     [],
   );
@@ -435,6 +451,7 @@ export function ModelBuilderPanel({
   const handleUndo = useCallback(() => {
     const result = undoModelHistory(historyRef.current, graphRef.current);
     if (!result) return;
+    lastCoalesceEditRef.current = null;
     dragGenerationRef.current += 1;
     graphRef.current = result.graph;
     historyRef.current = result.history;
@@ -445,6 +462,7 @@ export function ModelBuilderPanel({
   const handleRedo = useCallback(() => {
     const result = redoModelHistory(historyRef.current, graphRef.current);
     if (!result) return;
+    lastCoalesceEditRef.current = null;
     dragGenerationRef.current += 1;
     graphRef.current = result.graph;
     historyRef.current = result.history;
@@ -1295,7 +1313,6 @@ export function ModelBuilderPanel({
         );
         return;
       }
-      graphRef.current = result.graph;
       commitGraph(result.graph);
     },
     [appendLog, commitGraph, t],
@@ -2430,12 +2447,16 @@ export function ModelBuilderPanel({
                   }
                   onFieldChange={(field, value) =>
                     selectedNode &&
-                    commitGraph((current) => setNodeField(current, selectedNode.id, field, value))
+                    commitGraph(
+                      (current) => setNodeField(current, selectedNode.id, field, value),
+                      `field:${selectedNode.id}:${field}`,
+                    )
                   }
                   onParamChange={(paramId, value) =>
                     selectedNode &&
-                    commitGraph((current) =>
-                      setNodeParameter(current, selectedNode.id, paramId, value),
+                    commitGraph(
+                      (current) => setNodeParameter(current, selectedNode.id, paramId, value),
+                      `param:${selectedNode.id}:${paramId}`,
                     )
                   }
                   onRemove={() => {

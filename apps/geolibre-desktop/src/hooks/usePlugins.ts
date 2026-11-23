@@ -761,13 +761,13 @@ export async function reloadPluginArchiveFromFile(
   });
   const isRegistered = manager.list().some((plugin) => plugin.id === pluginId);
   if (!isRegistered) {
-    throw new Error(`Plugin "${pluginId}" could not be reloaded from its archive.`);
+    throw new Error(i18n.t("managePlugins.reloadNotFound", { pluginId }));
   }
   if (wasActive && !manager.isActive(pluginId)) {
     try {
       const activated = await manager.activate(pluginId, app);
       if (!activated) {
-        throw new Error(`Plugin "${pluginId}" reloaded but could not be reactivated.`);
+        throw new Error(i18n.t("managePlugins.reloadReactivateFailed", { pluginId }));
       }
     } catch (error) {
       reportPluginError(pluginId, "activate", error);

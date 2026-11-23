@@ -965,6 +965,10 @@ export function unloadRemovedUrlPlugins(
   return toRemove;
 }
 
+function normalizePluginSourcePath(source: string): string {
+  return source.replace(/\\/g, "/").replace(/^\/\/\?\//, "");
+}
+
 /**
  * Forget a plugin previously loaded from the desktop filesystem so the next scan
  * re-registers it from its (possibly updated) archive. Used when a plugin is
@@ -975,10 +979,6 @@ export function unloadRemovedUrlPlugins(
  * Deactivates the plugin (removing any map control) and drops its injected style.
  * Returns true when a filesystem plugin was unloaded.
  */
-function normalizePluginSourcePath(source: string): string {
-  return source.replace(/\\/g, "/").replace(/^\/\/\?\//, "");
-}
-
 export function unloadFilesystemPlugin(
   manager: PluginManager,
   pluginId: string,
