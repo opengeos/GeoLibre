@@ -475,6 +475,11 @@ def build_enterprise_admin_router() -> APIRouter:
         session: Session = Depends(get_session),
     ):
         require_organization_admin(session, organization_id, principal, request, mutation=True)
+        existing_provider_id = session.scalar(
+            select(OrganizationIdentityProvider.id).where(
+                OrganizationIdentityProvider.organization_id == organization_id
+            )
+        )
         # The foreign keys cascade federated identities and pending login states.
         session.execute(
             delete(OrganizationIdentityProvider).where(
@@ -488,7 +493,7 @@ def build_enterprise_admin_router() -> APIRouter:
             organization_id=organization_id,
             action="org.idp.delete",
             resource_type="identity_provider",
-            resource_id=organization_id,
+            resource_id=existing_provider_id or organization_id,
         )
         session.commit()
         return Response(status_code=204, headers={"Cache-Control": "private, no-store"})

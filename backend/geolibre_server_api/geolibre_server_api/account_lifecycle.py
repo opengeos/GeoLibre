@@ -32,6 +32,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from geolibre_server_api.auth import (
     AuthPrincipal,
+    _mfa_lockout_policy,
     get_clock,
     get_session,
     iso_ts,
@@ -48,6 +49,7 @@ from geolibre_server_api.policy import (
     ensure_account_security,
     is_deactivated,
     password_policy_error,
+    record_failed_login,
     require_organization_admin,
     revoke_account_credentials,
 )
@@ -786,14 +788,22 @@ def build_lifecycle_router() -> APIRouter:
         if mfa.enabled:
             raise HTTPException(409, "TOTP MFA is already enabled")
         now_ts = get_clock(request)()
-        matched_step = verify_totp_step(mfa.secret_b32, body.code, now_ts)
+        sec = ensure_account_security(session, account.id)
+        if sec.locked_until is not None and sec.locked_until > now_ts:
+            raise HTTPException(429, "account is temporarily locked due to failed attempts")
+        pending_secret = mfa.secret_b32
+        matched_step = verify_totp_step(pending_secret, body.code, now_ts)
         if matched_step is None:
+            record_failed_login(
+                session, account.id, now_ts, _mfa_lockout_policy(session, account.id)
+            )
             raise HTTPException(400, "invalid TOTP code")
         updated = session.execute(
             update(AccountMfaTotp)
             .where(
                 AccountMfaTotp.account_id == account.id,
                 AccountMfaTotp.enabled.is_(False),
+                AccountMfaTotp.secret_b32 == pending_secret,
             )
             .values(
                 enabled=True,
@@ -802,7 +812,11 @@ def build_lifecycle_router() -> APIRouter:
             )
         )
         if updated.rowcount != 1:
-            raise HTTPException(409, "TOTP MFA is already enabled")
+            raise HTTPException(
+                409,
+                "TOTP enrollment changed or is already enabled; "
+                "restart confirmation with the current enrollment",
+            )
         session.expire(mfa, ["enabled", "confirmed_at", "last_used_totp_step"])
         record_audit_event(
             session,
@@ -827,8 +841,15 @@ def build_lifecycle_router() -> APIRouter:
         if mfa is None or not mfa.enabled:
             raise HTTPException(404, "TOTP MFA is not enabled")
         now_ts = get_clock(request)()
+        sec = ensure_account_security(session, account.id)
+        if sec.locked_until is not None and sec.locked_until > now_ts:
+            raise HTTPException(429, "account is temporarily locked due to failed attempts")
         ok, err = verify_account_mfa(session, account.id, body.code, now_ts)
         if not ok:
+            if err == "invalid_mfa_code":
+                record_failed_login(
+                    session, account.id, now_ts, _mfa_lockout_policy(session, account.id)
+                )
             raise HTTPException(400, err or "invalid MFA code")
         session.delete(mfa)
         record_audit_event(
