@@ -1095,6 +1095,10 @@ fails when they differ. To bump uv, take each digest from the release's official
 (`https://github.com/astral-sh/uv/releases/download/<version>/<archive>.sha256`),
 never from a local download, and update both files in the same PR.
 
+For a sidecar archive mirror, set `GEOLIBRE_UV_DOWNLOAD_BASE_URL` with the layout
+`<base>/<version>/<archive>`. The former `GEOLIBRE_UV_INSTALL_BASE_URL` setting
+is ignored with a warning because remote installer scripts are no longer used.
+
 ## Shared dependency ranges
 
 `apps/geolibre-desktop` and `packages/plugins` declare many of the same

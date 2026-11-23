@@ -182,3 +182,18 @@ def test_desktop_rust_pins_match_python_pins():
     assert version.group(1) == runtime.UV_VERSION
     pins = dict(re.findall(r'\(\s*"(uv-[^"]+)",\s*"([0-9a-f]{64})",?\s*\)', source))
     assert pins == runtime.UV_RELEASE_SHA256
+
+
+def test_removed_installer_mirror_setting_warns(monkeypatch, caplog):
+    """The removed installer mirror setting produces actionable migration guidance.
+
+    Args:
+        monkeypatch: The pytest patch fixture.
+        caplog: Captured log records.
+    """
+    monkeypatch.setenv("GEOLIBRE_UV_INSTALL_BASE_URL", "https://old.example")
+    monkeypatch.setenv("GEOLIBRE_UV_DOWNLOAD_BASE_URL", "https://archives.example/")
+    assert runtime._uv_download_base_url() == "https://archives.example"
+    assert "GEOLIBRE_UV_INSTALL_BASE_URL is no longer used" in caplog.text
+    assert "GEOLIBRE_UV_DOWNLOAD_BASE_URL" in caplog.text
+    assert "<base>/<version>/<archive>" in caplog.text

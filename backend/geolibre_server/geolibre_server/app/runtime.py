@@ -8,6 +8,7 @@ neither router has to import private symbols from the other.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import platform
 import shutil
@@ -54,12 +55,29 @@ UV_RELEASE_SHA256 = {
         "edd61f7f5728a56cc62455386661860bdfc7bab65872f39b0c25bdcc1d8e1beb"
     ),
 }
+
+
 # A mirror of the GitHub release layout (``<base>/<version>/<archive>``) may be
 # configured; the pinned digests still decide what is installed.
-UV_DOWNLOAD_BASE_URL = os.environ.get(
-    "GEOLIBRE_UV_DOWNLOAD_BASE_URL",
-    "https://github.com/astral-sh/uv/releases/download",
-).rstrip("/")
+def _uv_download_base_url() -> str:
+    """Read the archive mirror setting and flag the removed installer setting.
+
+    Returns:
+        The release-archive base URL, without a trailing slash.
+    """
+    if os.environ.get("GEOLIBRE_UV_INSTALL_BASE_URL"):
+        logging.getLogger(__name__).warning(
+            "GEOLIBRE_UV_INSTALL_BASE_URL is no longer used. Set "
+            "GEOLIBRE_UV_DOWNLOAD_BASE_URL to a mirror with the release-archive "
+            "layout <base>/<version>/<archive>; no install script is executed."
+        )
+    return os.environ.get(
+        "GEOLIBRE_UV_DOWNLOAD_BASE_URL",
+        "https://github.com/astral-sh/uv/releases/download",
+    ).rstrip("/")
+
+
+UV_DOWNLOAD_BASE_URL = _uv_download_base_url()
 UV_MAX_ARCHIVE_BYTES = 256 * 1024 * 1024
 
 # The Whitebox and conversion routers each guard their own runtime setup with

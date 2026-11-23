@@ -140,7 +140,7 @@ class EncryptedText(TypeDecorator):
         Returns:
             The value to store.
         """
-        if value is None or is_encrypted(value):
+        if value is None:
             return value
         return encrypt_secret(value)
 
@@ -197,7 +197,7 @@ def reencrypt_stored_secrets(connection: Connection, table, column) -> int:
     ciphers = secret_ciphers()
     # type_coerce to plain Text skips EncryptedText's result processing.
     rows = connection.execute(
-        select(table.c.id, type_coerce(column, Text)).where(column.is_not(None))
+        select(table.c.id, type_coerce(column, Text)).where(column.is_not(None)).with_for_update()
     ).all()
     if not rows:
         return 0

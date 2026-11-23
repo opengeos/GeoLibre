@@ -212,3 +212,38 @@ def test_alembic_migration_refuses_production_without_key(
     monkeypatch.setenv("GEOLIBRE_PUBLIC_URL", PUBLIC_URL)
     with pytest.raises(SecretKeyError, match="before upgrading"):
         command.upgrade(cfg, "head")
+
+
+@pytest.mark.parametrize("secret", ["enc:v1:not-a-token", "enc:v1:"])
+def test_plaintext_with_ciphertext_prefix_is_encrypted(tmp_path, fake_idp, monkeypatch, secret):
+    """A ciphertext-looking plaintext secret survives ORM reads and restarts.
+
+    Args:
+        tmp_path: An isolated temporary directory.
+        fake_idp: The test identity provider.
+        monkeypatch: The pytest patch fixture.
+        secret: A plaintext credential using the storage prefix.
+    """
+    from geolibre_server_api.enterprise_models import OrganizationIdentityProvider
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+
+    monkeypatch.setenv("GEOLIBRE_OAUTH_CLIENTS", json.dumps(OAUTH_CLIENTS))
+    db_url = f"sqlite:///{tmp_path / 'prefixed-secret.db'}"
+    app = _app(db_url, tmp_path, transport=fake_idp.transport)
+    try:
+        with TestClient(app, base_url=PUBLIC_URL) as client:
+            token = admin_token(client)
+            org_id = create_org(client, token)
+            response = configure_idp(client, token, org_id, clientSecret=secret)
+            assert response.status_code == 200, response.text
+        (raw,) = _raw_secrets(db_url)
+        assert raw != secret
+        assert decrypt_secret(raw) == secret
+        with Session(app.state.engine) as session:
+            assert session.scalar(select(OrganizationIdentityProvider.client_secret)) == secret
+    finally:
+        app.state.engine.dispose()
+    restarted = _app(db_url, tmp_path)
+    restarted.state.engine.dispose()
+    assert decrypt_secret(_raw_secrets(db_url)[0]) == secret

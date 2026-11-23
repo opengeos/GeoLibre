@@ -5400,16 +5400,9 @@ fn ensure_managed_uv(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 #[cfg(not(feature = "mas"))]
 fn install_managed_uv(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let uv_dir = app_runtime_dir(app)?.join("uv-bin");
-    let uv = uv_dir.join(uv_executable_name());
-    if uv.exists() {
-        return Ok(uv);
-    }
-
-    fs::create_dir_all(&uv_dir)
-        .map_err(|error| format!("Could not create uv cache directory: {error}"))?;
     // A pinned release archive, SHA-256 verified before extraction; no remote
-    // install script is ever run. See uv_bootstrap.rs.
-    uv_bootstrap::install_pinned_uv(&uv_dir)
+    // install script is ever run. The shared lock covers sidecar and Jupyter.
+    uv_bootstrap::ensure_pinned_uv(&uv_dir)
 }
 
 #[cfg(not(feature = "mas"))]

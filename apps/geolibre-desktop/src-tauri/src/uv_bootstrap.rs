@@ -13,6 +13,7 @@
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use flate2::read::GzDecoder;
 use sha2::{Digest, Sha256};
@@ -48,6 +49,8 @@ pub const UV_RELEASE_SHA256: &[(&str, &str)] = &[
 
 const UV_DOWNLOAD_BASE_URL: &str = "https://github.com/astral-sh/uv/releases/download";
 const UV_MAX_ARCHIVE_BYTES: u64 = 256 * 1024 * 1024;
+// Sidecar and Jupyter have separate startup locks but share this installation.
+static UV_INSTALL_LOCK: Mutex<()> = Mutex::new(());
 
 /// The uv release archive for an `std::env::consts` OS/arch pair.
 pub fn uv_release_archive(os: &str, arch: &str) -> Result<&'static str, String> {
@@ -241,10 +244,81 @@ pub fn install_pinned_uv(install_dir: &Path) -> Result<PathBuf, String> {
     Ok(uv)
 }
 
+/// Reuse or install the managed uv under one lock shared by all startup paths.
+pub fn ensure_pinned_uv(install_dir: &Path) -> Result<PathBuf, String> {
+    ensure_pinned_uv_with(install_dir, install_pinned_uv)
+}
+
+fn ensure_pinned_uv_with(
+    install_dir: &Path,
+    install: impl FnOnce(&Path) -> Result<PathBuf, String>,
+) -> Result<PathBuf, String> {
+    let _guard = UV_INSTALL_LOCK
+        .lock()
+        .map_err(|error| format!("Could not lock managed uv installation: {error}"))?;
+    // Check only after acquiring the lock so a waiting startup reuses the
+    // completed installation instead of staging the same executable again.
+    let uv = install_dir.join(uv_binary_names(cfg!(target_os = "windows"))[0]);
+    if uv.is_file() {
+        return Ok(uv);
+    }
+    fs::create_dir_all(install_dir)
+        .map_err(|error| format!("Could not create uv cache directory: {error}"))?;
+    install(install_dir)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Write;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Barrier};
+
+    #[test]
+    fn concurrent_startups_install_once_and_reuse_the_binary() {
+        let dir = temp_dir("concurrent");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let barrier = Arc::new(Barrier::new(8));
+        let threads: Vec<_> = (0..8)
+            .map(|_| {
+                let dir = dir.clone();
+                let calls = calls.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    ensure_pinned_uv_with(&dir, |path| {
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        // Keep the installation in flight while the other
+                        // startup paths reach the shared lock.
+                        std::thread::sleep(std::time::Duration::from_millis(20));
+                        let uv = path.join(uv_binary_names(cfg!(target_os = "windows"))[0]);
+                        fs::write(&uv, b"installed-uv").map_err(|error| error.to_string())?;
+                        Ok(uv)
+                    })
+                    .unwrap()
+                })
+            })
+            .collect();
+        for thread in threads {
+            assert_eq!(fs::read(thread.join().unwrap()).unwrap(), b"installed-uv");
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn failed_install_can_be_retried() {
+        let dir = temp_dir("retry");
+        assert!(ensure_pinned_uv_with(&dir, |_| Err("download failed".into())).is_err());
+        let uv = ensure_pinned_uv_with(&dir, |path| {
+            let uv = path.join(uv_binary_names(cfg!(target_os = "windows"))[0]);
+            fs::write(&uv, b"retried-uv").map_err(|error| error.to_string())?;
+            Ok(uv)
+        })
+        .unwrap();
+        assert_eq!(fs::read(uv).unwrap(), b"retried-uv");
+        let _ = fs::remove_dir_all(dir);
+    }
 
     fn tar_gz(members: &[(&str, &[u8])]) -> Vec<u8> {
         let mut builder = tar::Builder::new(flate2::write::GzEncoder::new(

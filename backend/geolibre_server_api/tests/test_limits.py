@@ -126,3 +126,48 @@ def test_declared_length_over_configured_ceiling_is_refused(tmp_path, monkeypatc
             content=b"{}",
         )
         assert ok.status_code == 422
+
+
+def test_eviction_keeps_each_buckets_own_expiry():
+    """Short API windows must not reset a still-active authentication budget."""
+    now = [0.0]
+    limiter = FixedWindowLimiter(clock=lambda: now[0], max_keys=3)
+    api_rate, auth_rate = Rate(1, 1), Rate(1, 60)
+    for client in ("a", "b"):
+        assert limiter.hit(("api", client), api_rate) is None
+    now[0] = 1.0
+    assert limiter.hit(("auth", "login"), auth_rate) is None
+    now[0] = 2.0
+    assert limiter.hit(("api", "c"), api_rate) is None
+    assert limiter.hit(("auth", "login"), auth_rate) == pytest.approx(59)
+    now[0] = 61.0
+    assert limiter.hit(("auth", "login"), auth_rate) is None
+
+
+def test_high_client_churn_amortizes_counter_cleanup(monkeypatch):
+    """Many new clients share each cleanup pass instead of scanning on every hit.
+
+    Args:
+        monkeypatch: The pytest patch fixture.
+    """
+    limiter = FixedWindowLimiter(clock=lambda: 0.0, max_keys=100)
+    rate = Rate(1, 60)
+    for index in range(100):
+        limiter.hit(("api", str(index)), rate)
+    cleanups = []
+    evict = limiter._evict
+
+    def count_cleanup(*args):
+        """Record one cleanup pass.
+
+        Args:
+            *args: Arguments passed to the limiter's cleanup method.
+        """
+        cleanups.append(True)
+        return evict(*args)
+
+    monkeypatch.setattr(limiter, "_evict", count_cleanup)
+    for index in range(100, 120):
+        assert limiter.hit(("api", str(index)), rate) is None
+        assert len(limiter._windows) <= 100
+    assert len(cleanups) <= 2

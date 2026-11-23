@@ -15,6 +15,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from itertools import islice
 
 from fastapi import HTTPException
 from starlette.requests import Request
@@ -139,6 +140,7 @@ class FixedWindowLimiter:
 
     Memory is bounded: once ``max_keys`` clients are tracked, expired windows
     are dropped, and if that is not enough the oldest windows go first.
+    Eviction frees at least a tenth of capacity to amortize cleanup under churn.
     """
 
     def __init__(
@@ -164,24 +166,33 @@ class FixedWindowLimiter:
         """
         now = self._clock()
         with self._lock:
-            start, count = self._windows.get(key, (now, 0))
-            if now - start >= rate.window:
-                start, count = now, 0
+            expiry, count = self._windows.get(key, (now + rate.window, 0))
+            if now >= expiry:
+                expiry, count = now + rate.window, 0
+                # Reinserting keeps dictionary order aligned with window starts.
+                self._windows.pop(key, None)
             if count >= rate.limit:
-                return max(0.0, start + rate.window - now)
+                return max(0.0, expiry - now)
             if key not in self._windows and len(self._windows) >= self._max_keys:
-                self._evict(now, rate.window)
-            self._windows[key] = (start, count + 1)
+                self._evict(now)
+            self._windows[key] = (expiry, count + 1)
             return None
 
-    def _evict(self, now: float, window: int) -> None:
-        expired = [k for k, (start, _count) in self._windows.items() if now - start >= window]
+    def _evict(self, now: float) -> None:
+        """Free a batch of slots using each window's own expiry.
+
+        Args:
+            now: The current monotonic time. The caller must hold the lock.
+        """
+        expired = [k for k, (expiry, _count) in self._windows.items() if now >= expiry]
         for k in expired:
             del self._windows[k]
-        overflow = len(self._windows) - self._max_keys + 1
+        target = self._max_keys - max(1, self._max_keys // 10)
+        overflow = len(self._windows) - target
         if overflow > 0:
-            oldest = sorted(self._windows.items(), key=lambda item: item[1][0])[:overflow]
-            for k, _value in oldest:
+            # Insertion order already identifies the oldest windows, so no
+            # O(n log n) sort is needed while holding the request-path lock.
+            for k in list(islice(self._windows, overflow)):
                 del self._windows[k]
 
 
