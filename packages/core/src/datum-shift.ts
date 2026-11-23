@@ -208,10 +208,7 @@ export function withDatumShift(
  * convention by stripping any `+axis=` override and injecting missing datum
  * shift parameters for known EPSG codes.
  */
-export function normalizeProj4Definition(
-  raw: string,
-  epsgCode?: number | null,
-): string {
+export function normalizeProj4Definition(raw: string, epsgCode?: number | null): string {
   const cleaned = raw.replace(/\+axis=\w+\s*/g, "").trim();
   return epsgCode != null ? withDatumShift(cleaned, epsgCode) : cleaned;
 }
