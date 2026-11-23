@@ -147,7 +147,9 @@ mod secure_store;
 use earth_engine_oauth::EarthEngineOAuthState;
 use earth_engine_oauth::{poll_earth_engine_oauth, start_earth_engine_oauth};
 use flate2::read::{GzDecoder, ZlibDecoder};
-use rusqlite::{Connection, OpenFlags, OptionalExtension};
+#[cfg(test)]
+use rusqlite::OpenFlags;
+use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashSet, VecDeque};
