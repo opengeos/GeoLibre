@@ -28,6 +28,11 @@ function Harness({ cancel }: { cancel: (id: string) => Promise<Job> }) {
       "Cancel",
     ),
     createElement("button", { onClick: () => setJob({ id: "two", status: "running" }) }, "New job"),
+    createElement(
+      "button",
+      { onClick: () => setJob({ id: "one", status: "cancelled" }) },
+      "Poll finished",
+    ),
   );
 }
 
@@ -69,4 +74,23 @@ it("surfaces cancellation failures and allows another attempt", async () => {
   await waitFor(() => assert.equal(screen.getByTestId("error").textContent, "Sidecar unavailable"));
   assert.equal(screen.getByTestId("job").textContent, "one:running");
   assert.equal(screen.getByRole("button", { name: "Cancel" }).hasAttribute("disabled"), false);
+});
+
+it("keeps a terminal state when a delayed cancellation response still reports running", async () => {
+  let finish!: (job: Job) => void;
+  render(
+    createElement(Harness, {
+      cancel: () =>
+        new Promise<Job>((resolve) => {
+          finish = resolve;
+        }),
+    }),
+  );
+  fireEvent.click(screen.getByText("Cancel"));
+  fireEvent.click(screen.getByText("Poll finished"));
+  assert.equal(screen.getByTestId("job").textContent, "one:cancelled");
+  await act(async () => {
+    finish({ id: "one", status: "running" });
+  });
+  assert.equal(screen.getByTestId("job").textContent, "one:cancelled");
 });
