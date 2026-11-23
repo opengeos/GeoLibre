@@ -102,7 +102,7 @@ def _redact_url(value: str) -> str:
             if pair
             and _normalize_credential_name(name := unquote_plus(pair.split("=", 1)[0]).lower())
             not in _CREDENTIAL_URL_PARAMS
-            and not name.startswith(("x-amz-", "x-goog-"))
+            and not name.startswith("x-amz-")
         )
 
     before_hash, separator, fragment = value.partition("#")

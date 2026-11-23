@@ -118,23 +118,6 @@ describe("diagnostics network info capture", () => {
     }
   });
 
-  it("redacts signed GCS parameters from URLs and embedded error text", () => {
-    const url =
-      "https://storage.googleapis.com/bucket/data.json?X-Goog-Credential=GCS_ACCOUNT&X-Goog-Signature=GCS_SIGNATURE&safe=visible";
-    appendDiagnostic({
-      category: "network",
-      level: "error",
-      url,
-      message: `GET ${url}`,
-      detail: `Failed (${url})`,
-    });
-    const [record] = getDiagnosticsSnapshot().records;
-    const serialized = JSON.stringify(record);
-    assert.doesNotMatch(serialized, /GCS_ACCOUNT|GCS_SIGNATURE/);
-    assert.match(serialized, /REDACTED/);
-    assert.ok(record.url?.includes("safe=visible"));
-  });
-
   it("removes OAuth secrets from callback URLs and embedded diagnostic text", () => {
     appendDiagnostic({
       category: "runtime",

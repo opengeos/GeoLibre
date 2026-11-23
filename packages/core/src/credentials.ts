@@ -194,9 +194,7 @@ function isCredentialParam(name: string): boolean {
   }
   const lowered = decoded.toLowerCase();
   return (
-    URL_CREDENTIAL_PARAMS.has(normalizeCredentialName(lowered)) ||
-    lowered.startsWith("x-amz-") ||
-    lowered.startsWith("x-goog-")
+    URL_CREDENTIAL_PARAMS.has(normalizeCredentialName(lowered)) || lowered.startsWith("x-amz-")
   );
 }
 

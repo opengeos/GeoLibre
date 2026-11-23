@@ -1,4 +1,3 @@
-import { gcsUriToHttps } from "./gcs";
 import { normalizeGeoEditorSettings } from "./geo-editor-settings";
 import { normalizeArcgisWkid } from "./arcgis-projection";
 import { normalizeMapCrs } from "./map-crs";
@@ -2074,20 +2073,6 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
     validateMapExpression(JSON.stringify(rawFilterExpression), { expectedType: "boolean" }).ok
       ? rawFilterExpression
       : undefined;
-  // Convert Google Cloud Storage URLs (gs://) in layer sources to their
-  // public HTTPS equivalents so layers hosted on GCS can be loaded.
-  const source = rest.source && typeof rest.source === "object" ? { ...rest.source } : rest.source;
-  if (source && typeof source === "object") {
-    const url = source.url;
-    if (typeof url === "string") {
-      try {
-        source.url = gcsUriToHttps(url);
-      } catch {
-        // Keep the original URL so the refresh pipeline can report its error.
-      }
-    }
-  }
-
   const rawStyle: Partial<LayerStyle> =
     layer.style && typeof layer.style === "object" && !Array.isArray(layer.style)
       ? layer.style
@@ -2097,9 +2082,10 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
       ? rawStyle.labels
       : undefined;
 
+  // Batches are runtime caches. A hydrated batch cannot be verified against
+  // the saved GeoJSON, so always discard it to avoid rendering stale data.
   return {
     ...rest,
-    source: source ?? {},
     style: {
       ...DEFAULT_LAYER_STYLE,
       ...rawStyle,
@@ -2108,6 +2094,7 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
     visible: layer.visible ?? true,
     opacity: clampOpacity(layer.opacity, 1),
     metadata: layer.metadata ?? {},
+    source: layer.source ?? {},
     ...(capabilities ? { capabilities } : {}),
     ...(filterExpression ? { filterExpression } : {}),
     ...(descriptiveMetadata ? { descriptiveMetadata } : {}),

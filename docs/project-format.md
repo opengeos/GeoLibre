@@ -430,34 +430,6 @@ contradicting the layer's own configuration, but the sidecar has no independent
 record of a table's capabilities and cannot tell one caller from another. Use
 database grants for restrictions that must hold against an untrusted client.
 
-A GeoJSON layer with `source.url` and no inline `geojson` loads a remote
-FeatureCollection through the app's layer refresh pipeline. Public `gs://` URLs
-are converted to Google Cloud Storage HTTPS URLs; private S3 URLs use the configured connection.
-The server must allow browser requests through CORS. Loaded data becomes the
-layer's inline snapshot and is included on save unless sharing capabilities
-exclude it. Failed initial requests display an error and can be retried with
-the layer's Refresh action. Responses for removed layers or replaced sources
-are ignored. A malformed GCS URL leaves the project loadable and reports an
-error when its layer loads.
-
-Opening a project automatically requests public HTTP(S) and GCS layer URLs.
-Non-WFS localhost, LAN, and S3 sources require manual refresh unless an
-auto-refresh interval is configured. WFS retains automatic loading on localhost
-and LAN hosts. The host check reads only the URL as written: it does not resolve
-DNS names (a public name can point at a private address) and redirects are
-followed, so a public URL can still lead the request to a local or LAN host.
-Only open projects whose data sources you trust.
-Remote responses must contain a FeatureCollection of Features whose geometries
-have a known GeoJSON type and array coordinates, including nested
-GeometryCollections; individual positions are not validated. Missing feature geometry is normalized
-to `null` for compatibility with servers that omit it; other malformed features
-reject the entire response and display a layer error instead of partial data.
-GCS URLs use URL syntax: encode literal `?` and `#` in object names
-as `%3F` and `%23`; unescaped characters begin the query and fragment. Queries
-and fragments supplied by the user are preserved in saved projects, including
-credential-bearing parameters stored in plaintext. Remove credential-bearing
-parameters or apply credential redaction before distributing a saved project.
-
 For WFS GetFeature and GeoJSON URL layers, `metadata.refresh` can persist an
 optional auto-refresh interval. `intervalMs` can be any positive interval in
 milliseconds:
@@ -871,46 +843,3 @@ parameters in URLs while preserving non-secret broker references. External
 plugin settings are arbitrary, so they are omitted from egress snapshots by
 default. Recipients retain the plugin manifest and activation metadata, but
 must configure their own settings.
-
-## Harvest dialog and automatic GeoJSON hydration
-
-The toolbar opens the GCS harvest dialog (`GcsExportDialog`) through Add Data >
-Cloud formats. It uses a user-configured harvester backend. Opening a project may issue GET
-requests to GeoJSON layer URLs that have no inline data.
-
-Auto-bootstrap rules (see `useLayerRefresh`):
-
-- WFS layers (`sourceKind === "wfs-getfeature"`) auto-load on any host, including
-  localhost and LAN, preserving prior behaviour.
-- Non-WFS layers auto-load only from public `http(s)` hosts and `gs://` URIs
-  (`gs://` resolves to public HTTPS). Private/localhost hosts and S3 sources
-  (including S3 HTTPS URLs) are skipped during bootstrap and require manual
-  refresh or a configured auto-refresh interval.
-- `s3://` and `s3a://` sources may be signed on the automatic refresh path
-  (timer/catch-up) via `resolveReadableUrl`, since they are user-configured
-  buckets. Merely opening a URL-only S3 layer without that configuration does
-  not sign a read. Saved projects may contain plaintext credential-bearing URLs;
-  apply credential redaction before sharing them.
-- `gs://` sources are auto-fetched (not manual-only).
-
-These rules also apply to layers added by the user's Startup setting. Unlike
-the earlier startup loader, private-host and S3 startup layers now need manual
-refresh or a configured refresh interval. WFS keeps its existing exception.
-The public-host check rejects known private, loopback, link-local, unspecified,
-and shared-address literals, but does not resolve DNS. Internal DNS names and
-public names resolving to private addresses can still be requested. This
-heuristic is not a complete network isolation boundary; open only trusted
-projects and data sources.
-
-Export Layers reports inline GeoJSON layers that cannot bootstrap automatically
-as skipped, including S3 and private-host non-WFS layers. It does not strip their
-features to write a reference that would reload empty. Editing an observed public URL
-on an already hydrated GeoJSON layer fetches its replacement data automatically.
-That replacement fetch runs outside undo history, so the URL edit remains the
-only undo step. Initial hydration is also outside undo history.
-Local saves, autosave snapshots, and undo history may retain signed URLs until
-they are redacted for sharing or export.
-
-The dialog defaults to dry-run + skip-Wherobots; both are togglable. Closing the
-dialog stops local polling only -- the backend harvest job keeps running, and the
-last execution ID stays visible.

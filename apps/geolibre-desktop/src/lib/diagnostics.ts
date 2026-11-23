@@ -291,12 +291,8 @@ function redactUrl(raw: string): string {
     const url = new URL(raw);
     for (const param of [...url.searchParams.keys()]) {
       const lowered = param.toLowerCase();
-      // Signed S3 and GCS URLs carry credentials and signatures here.
-      if (
-        Object.hasOwn(REDACTED_URL_PARAMS, lowered) ||
-        lowered.startsWith("x-amz-") ||
-        lowered.startsWith("x-goog-")
-      ) {
+      // SigV4 presigned S3 URLs carry the session token and signature here.
+      if (Object.hasOwn(REDACTED_URL_PARAMS, lowered) || lowered.startsWith("x-amz-")) {
         url.searchParams.set(param, "[REDACTED]");
       }
     }

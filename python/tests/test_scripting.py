@@ -707,31 +707,6 @@ def test_redact_credentials_keeps_header_values_that_only_reference_a_variable()
     assert safe["layers"][0]["source"] == {"requestHeaders": {"Authorization": "Bearer ${T}"}}
 
 
-@pytest.mark.parametrize(
-    "parameter", ["X-Goog-Signature", "X-Goog-Credential", "x-goog-date", "X%2DGoog%2DExpires"]
-)
-def test_python_redaction_removes_gcs_signing_parameters(parameter: str) -> None:
-    """Remove Google signing parameters from exported layer URLs.
-
-    Args:
-        parameter: The signed URL parameter spelling to redact.
-    """
-    original = {
-        "layers": [
-            {
-                "source": {
-                    "url": f"https://storage.googleapis.com/bucket/data.json?foo=1&{parameter}=query-secret#view=x&{parameter}=fragment-secret"
-                }
-            }
-        ]
-    }
-    safe = redact_credentials(original)
-    assert safe["layers"][0]["source"]["url"] == (
-        "https://storage.googleapis.com/bucket/data.json?foo=1#view=x"
-    )
-    assert "query-secret" in original["layers"][0]["source"]["url"]
-
-
 def test_python_redaction_sweeps_layer_connection():
     """`connection.lastError` is free-form error text and must be swept too."""
     safe = redact_credentials(
