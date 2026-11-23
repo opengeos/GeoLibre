@@ -394,6 +394,22 @@ export function ModelBuilderPanel({
   useLayoutEffect(() => {
     historyRef.current = history;
   }, [history]);
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const syncSize = () => {
+      setCanvasScroll((prev) =>
+        prev.width === el.clientWidth && prev.height === el.clientHeight
+          ? prev
+          : { ...prev, width: el.clientWidth, height: el.clientHeight },
+      );
+    };
+    syncSize();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(syncSize);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(() => new Set());
 

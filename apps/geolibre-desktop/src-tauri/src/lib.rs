@@ -2959,8 +2959,9 @@ fn scan_external_plugin_directory(
         };
 
         if metadata.is_file() && is_zip_path(&path) {
-            let bundle_name = path.to_string_lossy().to_string();
-            match load_external_plugin_archive(&path, &bundle_name) {
+            let canonical = fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+            let bundle_name = canonical.to_string_lossy().to_string();
+            match load_external_plugin_archive(&canonical, &bundle_name) {
                 Ok(bundle) => bundles.push(bundle),
                 Err(message) => errors.push(ExternalPluginBundleError {
                     archive_name: bundle_name,

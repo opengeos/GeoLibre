@@ -236,10 +236,17 @@ export function ColumnFilterBar({
   const [selectedCol, setSelectedCol] = useState<string>(columns[0] ?? "");
   const [editorModes, setEditorModes] = useState<Record<string, ColumnFilterMode>>({});
   const activeCol = columns.includes(selectedCol) ? selectedCol : (columns[0] ?? "");
-  const current = activeCol ? filters[activeCol] : undefined;
+  const current =
+    activeCol && Object.prototype.hasOwnProperty.call(filters, activeCol)
+      ? filters[activeCol]
+      : undefined;
   const defaultMode: ColumnFilterMode =
     activeCol && numericColumns.has(activeCol) ? "range" : "contains";
-  const mode: ColumnFilterMode = current?.mode ?? (activeCol ? editorModes[activeCol] : undefined) ?? defaultMode;
+  const savedMode =
+    activeCol && Object.prototype.hasOwnProperty.call(editorModes, activeCol)
+      ? editorModes[activeCol]
+      : undefined;
+  const mode: ColumnFilterMode = current?.mode ?? savedMode ?? defaultMode;
   const activeEntries = Object.entries(filters);
 
   if (columns.length === 0) return null;

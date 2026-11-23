@@ -989,14 +989,9 @@ export function unloadFilesystemPlugin(
   if (source === undefined || isManagedUrlSource(source)) return false;
   if (onlyMatchingSources) {
     const normalizedSource = normalizePluginSourcePath(source);
-    const matches = onlyMatchingSources.some((candidate) => {
-      const normalizedCandidate = normalizePluginSourcePath(candidate);
-      return (
-        normalizedSource === normalizedCandidate ||
-        normalizedSource.endsWith(`/${normalizedCandidate}`) ||
-        normalizedCandidate.endsWith(`/${normalizedSource}`)
-      );
-    });
+    const matches = onlyMatchingSources.some(
+      (candidate) => normalizePluginSourcePath(candidate) === normalizedSource,
+    );
     if (!matches) return false;
   }
   manager.unregister(pluginId, app);

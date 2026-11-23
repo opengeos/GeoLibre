@@ -748,11 +748,16 @@ export async function reloadPluginArchiveFromFile(
   mapControllerRef: RefObject<MapEngine | null>,
 ): Promise<void> {
   const app = createAppAPI(mapControllerRef);
-  const wasActive = manager.isActive(pluginId);
-  unloadFilesystemPlugin(manager, pluginId, app);
+  let wasActive = manager.isActive(pluginId);
   const desktopSettings = useDesktopSettingsStore.getState().desktopSettings;
+  // Run the unload inside the serialized scan queue so any in-flight scan
+  // settles before we drop the previous registration and re-read the archive.
   await ensureExternalPluginsLoadedWithSettings(desktopSettings, app, {
     force: true,
+    beforeScan: () => {
+      wasActive = manager.isActive(pluginId);
+      unloadFilesystemPlugin(manager, pluginId, app);
+    },
   });
   const isRegistered = manager.list().some((plugin) => plugin.id === pluginId);
   if (!isRegistered) {
@@ -1066,7 +1071,7 @@ let externalPluginsCallQueue: Promise<void> = Promise.resolve();
 function ensureExternalPluginsLoadedWithSettings(
   desktopSettings: ReturnType<typeof useDesktopSettingsStore.getState>["desktopSettings"],
   app: ReturnType<typeof createAppAPI>,
-  options?: { force?: boolean },
+  options?: { force?: boolean; beforeScan?: () => void },
 ): Promise<void> {
   const run = externalPluginsCallQueue.then(() =>
     runEnsureExternalPluginsLoadedWithSettings(desktopSettings, app, options),
@@ -1078,8 +1083,9 @@ function ensureExternalPluginsLoadedWithSettings(
 async function runEnsureExternalPluginsLoadedWithSettings(
   desktopSettings: ReturnType<typeof useDesktopSettingsStore.getState>["desktopSettings"],
   app: ReturnType<typeof createAppAPI>,
-  options?: { force?: boolean },
+  options?: { force?: boolean; beforeScan?: () => void },
 ): Promise<void> {
+  options?.beforeScan?.();
   // Only the user's installed URLs (desktop settings) and the bundled drop-ins
   // are auto-loaded. Project-supplied URLs are deliberately excluded here so
   // opening a project never fetches or imports third-party plugin code; they
