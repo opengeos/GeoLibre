@@ -1,6 +1,7 @@
 import { isMapClickClaimed, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import type * as maplibregl from "maplibre-gl";
+import { isNativeZarrRenderer } from "@geolibre/plugins";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { createEnginePopup, engineStyleMap } from "../lib/engine-style-map";
@@ -28,6 +29,8 @@ export function useZarrIdentify(
   const activeLayerId = useAppStore((s) => {
     if (!s.identifyLayerId) return null;
     const layer = s.layers.find((item) => item.id === s.identifyLayerId);
+    // The ArcGIS and Cesium renderers draw Zarr natively, with no query path.
+    if (isNativeZarrRenderer(s.primaryRenderer)) return null;
     return layer?.type === "zarr" ? layer.id : null;
   });
 

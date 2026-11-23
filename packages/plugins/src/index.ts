@@ -288,6 +288,7 @@ export {
   addZarrRasterLayer,
   restoreArcgisZarrLayers,
   restoreZarrLayers,
+  isNativeZarrRenderer,
   queryZarrLayer,
   setZarrLayerSelector,
   setZarrLocalStoreProvider,

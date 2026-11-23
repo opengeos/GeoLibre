@@ -6,6 +6,7 @@ import {
   toEpochMsAxis,
   zarrPointValue,
 } from "@geolibre/plugins";
+import { wrapLongitude } from "./global-raster-identify";
 
 /** Localized labels for the rows {@link readZarrIdentifyRows} returns. */
 export interface ZarrIdentifyLabels {
@@ -74,7 +75,10 @@ export async function readZarrIdentifyRows(
   signal?: AbortSignal,
 ): Promise<Array<[string, string]> | null> {
   const variable = typeof layer.source.variable === "string" ? layer.source.variable : undefined;
-  const result = await queryZarrLayer(layer.id, { type: "Point", coordinates: lngLat }, undefined, {
+  // A click on a repeated world copy reports a longitude beyond ±180, which the
+  // store's grid does not cover.
+  const point: [number, number] = [wrapLongitude(lngLat[0]), lngLat[1]];
+  const result = await queryZarrLayer(layer.id, { type: "Point", coordinates: point }, undefined, {
     signal,
     includeSpatialCoordinates: false,
   });
@@ -85,6 +89,6 @@ export async function readZarrIdentifyRows(
   ];
   const slice = zarrSliceDate(layer);
   if (slice) rows.push([slice.dimension, slice.date]);
-  rows.push([labels.coordinates, `${lngLat[0].toFixed(4)}, ${lngLat[1].toFixed(4)}`]);
+  rows.push([labels.coordinates, `${point[0].toFixed(4)}, ${point[1].toFixed(4)}`]);
   return rows;
 }

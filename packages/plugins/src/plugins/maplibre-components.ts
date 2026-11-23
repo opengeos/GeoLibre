@@ -191,6 +191,7 @@ export {
   addZarrRasterLayer,
   type CloudNetcdfLayerOptions,
   openZarrLayerPanel,
+  isNativeZarrRenderer,
   queryZarrLayer,
   restoreArcgisZarrLayers,
   restoreZarrLayers,

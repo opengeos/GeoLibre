@@ -774,6 +774,18 @@ export async function setZarrLayerSelector(
 }
 
 /**
+ * Wraps a longitude into [-180, 180). A click on a repeated world copy reports
+ * a longitude beyond ±180, which the store's grid does not cover.
+ *
+ * @param lng - The longitude.
+ * @returns The wrapped longitude; an in-range value is returned unchanged.
+ */
+export function wrapZarrLongitude(lng: number): number {
+  if (lng >= -180 && lng < 180) return lng;
+  return ((((lng + 180) % 360) + 360) % 360) - 180;
+}
+
+/**
  * The variable a store Zarr layer renders, e.g. `"sst"`.
  *
  * @param layerId - The layer id.
@@ -1115,19 +1127,28 @@ function registerZarrTemporalAdapter(
       valueName: zarrLayerVariable(layerId),
       // Lets the Time Slider's pixel time-series chart plot this cube: one query
       // reads every requested slice at the click, without moving the map off
-      // the slice on screen.
-      readPointSeries: async (lngLat, indices, signal) => {
-        const result = await queryZarrLayer(
-          layerId,
-          { type: "Point", coordinates: lngLat },
-          zarrIndexSeriesSelector(axis.dimension, indices),
-          { signal, includeSpatialCoordinates: false },
-        );
-        return pointSeriesFromQueryResult(
-          result as Record<string, unknown> | null,
-          zarrLayerVariable(layerId),
-          indices,
-        );
+      // the slice on screen. A getter, read when the chart looks for layers:
+      // on a native renderer (ArcGIS, Cesium) the layer is not in zarrControl,
+      // so queryZarrLayer has nothing to ask and the chart is not offered.
+      get readPointSeries() {
+        if (isNativeZarrRenderer(useAppStore.getState().primaryRenderer)) return undefined;
+        return async (
+          lngLat: [number, number],
+          indices: readonly number[],
+          signal?: AbortSignal,
+        ): Promise<Map<number, number | null>> => {
+          const result = await queryZarrLayer(
+            layerId,
+            { type: "Point", coordinates: [wrapZarrLongitude(lngLat[0]), lngLat[1]] },
+            zarrIndexSeriesSelector(axis.dimension, indices),
+            { signal, includeSpatialCoordinates: false },
+          );
+          return pointSeriesFromQueryResult(
+            result as Record<string, unknown> | null,
+            zarrLayerVariable(layerId),
+            indices,
+          );
+        };
       },
     });
     if (isNativeZarrRenderer(useAppStore.getState().primaryRenderer)) {

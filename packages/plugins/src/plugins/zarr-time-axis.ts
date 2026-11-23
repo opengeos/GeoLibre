@@ -574,6 +574,22 @@ export function zarrIndexSeriesSelector(
 }
 
 /**
+ * The key a Zarr query result holds the variable's values under: the variable
+ * itself when present, else the first key that is not query metadata.
+ *
+ * @param result - The query result.
+ * @param variable - The queried variable, when known.
+ * @returns The key, or undefined when the result holds no data key.
+ */
+function resolveZarrVariableKey(
+  result: Record<string, unknown>,
+  variable: string | undefined,
+): string | undefined {
+  if (variable && variable in result) return variable;
+  return Object.keys(result).find((name) => name !== "dimensions" && name !== "coordinates");
+}
+
+/**
  * Pull one value per requested time index out of a Zarr point query.
  *
  * A multi-value selector nests the variable's values by the requested label
@@ -597,10 +613,7 @@ export function pointSeriesFromQueryResult(
   const values = new Map<number, number | null>();
   for (const index of indices) values.set(index, null);
   if (!result) return values;
-  const key =
-    variable && variable in result
-      ? variable
-      : Object.keys(result).find((name) => name !== "dimensions" && name !== "coordinates");
+  const key = resolveZarrVariableKey(result, variable);
   const nested = key ? result[key] : undefined;
   if (!nested || typeof nested !== "object") return values;
   // A single requested index comes back flat rather than nested.
@@ -636,10 +649,7 @@ export function zarrPointValue(
   variable: string | undefined,
 ): number | null | undefined {
   if (!result) return undefined;
-  const key =
-    variable && variable in result
-      ? variable
-      : Object.keys(result).find((name) => name !== "dimensions" && name !== "coordinates");
+  const key = resolveZarrVariableKey(result, variable);
   const samples = key ? result[key] : undefined;
   if (!Array.isArray(samples) || samples.length === 0) return undefined;
   const value = samples.find((sample) => typeof sample === "number" && Number.isFinite(sample));

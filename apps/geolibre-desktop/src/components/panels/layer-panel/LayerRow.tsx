@@ -27,7 +27,11 @@ import {
   isPlaceholderLayer,
   placeholderMessage,
 } from "@geolibre/map";
-import { arcGISLayerHasPendingEdits, isArcGISWritableLayer } from "@geolibre/plugins";
+import {
+  arcGISLayerHasPendingEdits,
+  isArcGISWritableLayer,
+  isNativeZarrRenderer,
+} from "@geolibre/plugins";
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@geolibre/ui";
 import {
   ChevronDown,
@@ -194,8 +198,9 @@ export function LayerRow({
       layer.type === "cog" ||
       // An ArcGIS ImageServer reports its pixel values through `/identify`.
       isArcGISImageServiceLayer(layer) ||
-      // A Zarr cube reads its value through the renderer (useZarrIdentify).
-      layer.type === "zarr" ||
+      // A Zarr cube reads its value through the renderer (useZarrIdentify);
+      // the ArcGIS and Cesium renderers draw it natively, with no query path.
+      (layer.type === "zarr" && !isNativeZarrRenderer(primaryRenderer)) ||
       hasNativeIdentifyLayers(layer));
   const identifyActive = identifyLayerId === layer.id;
   // A gesture that takes over map clicks has to turn Identify off, or
