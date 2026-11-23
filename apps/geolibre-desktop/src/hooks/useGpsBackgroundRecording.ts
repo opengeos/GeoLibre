@@ -76,6 +76,7 @@ export function useGpsBackgroundRecording(
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", flushNow);
+      flushNow();
       void controller.stop();
     };
   }, [recording, fixesRef, getSaver]);

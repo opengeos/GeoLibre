@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 use tauri::http::{header, Request, Response, StatusCode};
@@ -97,9 +97,8 @@ fn open_verified_regular_file(canonical: &Path) -> Result<(File, FileIdentity), 
     Ok((file, actual))
 }
 
-/// A pooled read-only MBTiles SQLite connection with its cached tile scheme.
+/// A pooled read-only MBTiles SQLite connection.
 pub(crate) struct PooledMbtiles {
-    pub(crate) scheme: String,
     pub(crate) connection: Mutex<Connection>,
 }
 
@@ -111,12 +110,15 @@ struct MbtilesPoolEntry {
 }
 
 /// Bounded LRU + idle-TTL pool of open read-only MBTiles SQLite connections
-/// keyed by canonical filesystem path.
+/// keyed by canonical filesystem path. A lightweight on-demand reaper thread
+/// releases idle connections after `idle_ttl` even when no further requests
+/// arrive, so Windows file handles do not stay locked after a layer closes.
 pub(crate) struct MbtilesConnectionPool {
     capacity: usize,
     idle_ttl: Duration,
     tick: AtomicU64,
-    entries: Mutex<HashMap<PathBuf, MbtilesPoolEntry>>,
+    entries: Arc<Mutex<HashMap<PathBuf, MbtilesPoolEntry>>>,
+    reaper_running: Arc<AtomicBool>,
     /// Serializes cache-miss opens so concurrent first reads of the same file
     /// coalesce into a single SQLite connection and respect `capacity`.
     open_lock: Mutex<()>,
@@ -138,13 +140,44 @@ impl MbtilesConnectionPool {
             capacity: capacity.max(1),
             idle_ttl,
             tick: AtomicU64::new(1),
-            entries: Mutex::new(HashMap::new()),
+            entries: Arc::new(Mutex::new(HashMap::new())),
+            reaper_running: Arc::new(AtomicBool::new(false)),
             open_lock: Mutex::new(()),
         }
     }
 
     fn evict_expired(entries: &mut HashMap<PathBuf, MbtilesPoolEntry>, now: Instant, ttl: Duration) {
         entries.retain(|_, entry| now.saturating_duration_since(entry.last_used_at) <= ttl);
+    }
+
+    fn ensure_reaper_running(&self) {
+        if self
+            .reaper_running
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return;
+        }
+        let entries = Arc::clone(&self.entries);
+        let running = Arc::clone(&self.reaper_running);
+        let ttl = self.idle_ttl;
+        let sleep_step = ttl.min(Duration::from_secs(5)).max(Duration::from_millis(10));
+        let spawned = std::thread::Builder::new()
+            .name("geolibre-mbtiles-reaper".to_string())
+            .spawn(move || loop {
+                std::thread::sleep(sleep_step);
+                let mut guard = entries
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                Self::evict_expired(&mut guard, Instant::now(), ttl);
+                if guard.is_empty() {
+                    running.store(false, Ordering::SeqCst);
+                    break;
+                }
+            });
+        if spawned.is_err() {
+            self.reaper_running.store(false, Ordering::SeqCst);
+        }
     }
 
     pub(crate) fn get_or_open(&self, path: &str) -> Result<Arc<PooledMbtiles>, String> {
@@ -201,39 +234,38 @@ impl MbtilesConnectionPool {
         let (_verified_file, verified_identity) = open_verified_regular_file(canonical)?;
         let connection = Connection::open_with_flags(canonical, OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(|error| format!("Could not open MBTiles file: {error}"))?;
-        let scheme = crate::read_metadata_value(&connection, "scheme")?
-            .map(|value| value.to_ascii_lowercase())
-            .unwrap_or_else(|| "tms".to_string());
         let handle = Arc::new(PooledMbtiles {
-            scheme,
             connection: Mutex::new(connection),
         });
 
-        let mut guard = self
-            .entries
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        Self::evict_expired(&mut guard, Instant::now(), self.idle_ttl);
-        while guard.len() >= self.capacity && !guard.contains_key(canonical) {
-            if let Some(lru_key) = guard
-                .iter()
-                .min_by_key(|(_, entry)| entry.last_used)
-                .map(|(key, _)| key.clone())
-            {
-                guard.remove(&lru_key);
-            } else {
-                break;
+        {
+            let mut guard = self
+                .entries
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            Self::evict_expired(&mut guard, Instant::now(), self.idle_ttl);
+            while guard.len() >= self.capacity && !guard.contains_key(canonical) {
+                if let Some(lru_key) = guard
+                    .iter()
+                    .min_by_key(|(_, entry)| entry.last_used)
+                    .map(|(key, _)| key.clone())
+                {
+                    guard.remove(&lru_key);
+                } else {
+                    break;
+                }
             }
+            guard.insert(
+                canonical.to_path_buf(),
+                MbtilesPoolEntry {
+                    handle: Arc::clone(&handle),
+                    last_used: now_tick,
+                    last_used_at: Instant::now(),
+                    identity: verified_identity,
+                },
+            );
         }
-        guard.insert(
-            canonical.to_path_buf(),
-            MbtilesPoolEntry {
-                handle: Arc::clone(&handle),
-                last_used: now_tick,
-                last_used_at: Instant::now(),
-                identity: verified_identity,
-            },
-        );
+        self.ensure_reaper_running();
         Ok(handle)
     }
 
@@ -256,31 +288,40 @@ impl MbtilesConnectionPool {
             return Err("Tile zoom level is too large".to_string());
         }
         let pooled = self.get_or_open_canonical(canonical)?;
-        let tile_row = if pooled.scheme == "xyz" {
-            i64::from(y)
-        } else {
-            let row_count = 1_i64
-                .checked_shl(z)
-                .ok_or_else(|| "Tile zoom level is too large".to_string())?;
-            row_count - 1 - i64::from(y)
-        };
-        if tile_row < 0 {
-            return Ok(Vec::new());
-        }
 
+        // Read both the `scheme` metadata and the tile row inside a single
+        // SQLite read transaction so WAL updates that flip TMS/XYZ are always
+        // observed atomically with the tiles table.
         let tile_data = {
-            let connection = pooled
+            let mut connection = pooled
                 .connection
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
-            connection
-                .query_row(
+            let tx = connection
+                .transaction()
+                .map_err(|error| format!("Could not start MBTiles read transaction: {error}"))?;
+            let scheme = crate::read_metadata_value(&tx, "scheme")?
+                .map(|value| value.to_ascii_lowercase())
+                .unwrap_or_else(|| "tms".to_string());
+            let tile_row = if scheme == "xyz" {
+                i64::from(y)
+            } else {
+                let row_count = 1_i64
+                    .checked_shl(z)
+                    .ok_or_else(|| "Tile zoom level is too large".to_string())?;
+                row_count - 1 - i64::from(y)
+            };
+            if tile_row < 0 {
+                None
+            } else {
+                tx.query_row(
                     "SELECT tile_data FROM tiles WHERE zoom_level = ?1 AND tile_column = ?2 AND tile_row = ?3",
                     params![i64::from(z), i64::from(x), tile_row],
                     |row| row.get::<_, Vec<u8>>(0),
                 )
                 .optional()
                 .map_err(|error| format!("Could not read MBTiles tile: {error}"))?
+            }
         };
 
         Ok(tile_data
@@ -315,7 +356,8 @@ pub(crate) struct LocalFilePool {
     capacity: usize,
     idle_ttl: Duration,
     tick: AtomicU64,
-    entries: Mutex<HashMap<PathBuf, FilePoolEntry>>,
+    entries: Arc<Mutex<HashMap<PathBuf, FilePoolEntry>>>,
+    reaper_running: Arc<AtomicBool>,
     open_lock: Mutex<()>,
 }
 
@@ -420,13 +462,44 @@ impl LocalFilePool {
             capacity: capacity.max(1),
             idle_ttl,
             tick: AtomicU64::new(1),
-            entries: Mutex::new(HashMap::new()),
+            entries: Arc::new(Mutex::new(HashMap::new())),
+            reaper_running: Arc::new(AtomicBool::new(false)),
             open_lock: Mutex::new(()),
         }
     }
 
     fn evict_expired(entries: &mut HashMap<PathBuf, FilePoolEntry>, now: Instant, ttl: Duration) {
         entries.retain(|_, entry| now.saturating_duration_since(entry.last_used_at) <= ttl);
+    }
+
+    fn ensure_reaper_running(&self) {
+        if self
+            .reaper_running
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return;
+        }
+        let entries = Arc::clone(&self.entries);
+        let running = Arc::clone(&self.reaper_running);
+        let ttl = self.idle_ttl;
+        let sleep_step = ttl.min(Duration::from_secs(5)).max(Duration::from_millis(10));
+        let spawned = std::thread::Builder::new()
+            .name("geolibre-local-file-reaper".to_string())
+            .spawn(move || loop {
+                std::thread::sleep(sleep_step);
+                let mut guard = entries
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                Self::evict_expired(&mut guard, Instant::now(), ttl);
+                if guard.is_empty() {
+                    running.store(false, Ordering::SeqCst);
+                    break;
+                }
+            });
+        if spawned.is_err() {
+            self.reaper_running.store(false, Ordering::SeqCst);
+        }
     }
 
     fn invalidate(&self, canonical: &Path) {
@@ -489,30 +562,33 @@ impl LocalFilePool {
             identity,
         });
 
-        let mut guard = self
-            .entries
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        Self::evict_expired(&mut guard, Instant::now(), self.idle_ttl);
-        while guard.len() >= self.capacity && !guard.contains_key(canonical) {
-            if let Some(lru_key) = guard
-                .iter()
-                .min_by_key(|(_, entry)| entry.last_used)
-                .map(|(key, _)| key.clone())
-            {
-                guard.remove(&lru_key);
-            } else {
-                break;
+        {
+            let mut guard = self
+                .entries
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            Self::evict_expired(&mut guard, Instant::now(), self.idle_ttl);
+            while guard.len() >= self.capacity && !guard.contains_key(canonical) {
+                if let Some(lru_key) = guard
+                    .iter()
+                    .min_by_key(|(_, entry)| entry.last_used)
+                    .map(|(key, _)| key.clone())
+                {
+                    guard.remove(&lru_key);
+                } else {
+                    break;
+                }
             }
+            guard.insert(
+                canonical.to_path_buf(),
+                FilePoolEntry {
+                    handle: Arc::clone(&handle),
+                    last_used: now_tick,
+                    last_used_at: Instant::now(),
+                },
+            );
         }
-        guard.insert(
-            canonical.to_path_buf(),
-            FilePoolEntry {
-                handle: Arc::clone(&handle),
-                last_used: now_tick,
-                last_used_at: Instant::now(),
-            },
-        );
+        self.ensure_reaper_running();
         Ok(handle)
     }
 
@@ -545,23 +621,32 @@ impl LocalFilePool {
                     let bytes = read_file_slice(&handle.file, range.start, clamped_len)?;
                     if (bytes.len() as u64) < clamped_len {
                         // File was truncated concurrently; invalidate cached handle
-                        // and retry once against the refreshed size.
+                        // and retry once against the refreshed size. If the retry
+                        // is also short, fail instead of returning a 206 whose
+                        // Content-Range complete-length disagrees with the file.
                         self.invalidate(canonical);
                         if attempt == 0 {
                             continue;
                         }
                         if bytes.is_empty() {
-                            let refreshed_len = self
-                                .get_or_open(canonical)
-                                .map(|h| h.identity.len)
-                                .unwrap_or(0);
-                            return Ok(RangeReadResponse {
-                                status: StatusCode::RANGE_NOT_SATISFIABLE,
-                                bytes: Vec::new(),
-                                content_range: Some(format!("bytes */{refreshed_len}")),
-                                total_len: refreshed_len,
-                            });
+                            if let Ok(refreshed) = self.get_or_open(canonical) {
+                                if range.start >= refreshed.identity.len {
+                                    return Ok(RangeReadResponse {
+                                        status: StatusCode::RANGE_NOT_SATISFIABLE,
+                                        bytes: Vec::new(),
+                                        content_range: Some(format!(
+                                            "bytes */{}",
+                                            refreshed.identity.len
+                                        )),
+                                        total_len: refreshed.identity.len,
+                                    });
+                                }
+                            }
                         }
+                        return Err(
+                            "Local media file changed concurrently during byte-range read"
+                                .to_string(),
+                        );
                     }
                     let final_end = range.start + (bytes.len() as u64) - 1;
                     return Ok(RangeReadResponse {
@@ -731,9 +816,20 @@ fn validated_request_origin(request: &Request<Vec<u8>>) -> Result<Option<String>
         .get(header::REFERER)
         .and_then(|v| v.to_str().ok())
     {
-        let referer_origin = tauri::Url::parse(referer_val)
-            .ok()
-            .map(|u| u.origin().ascii_serialization());
+        let referer_origin = tauri::Url::parse(referer_val).ok().and_then(|u| {
+            let serialized = u.origin().ascii_serialization();
+            if serialized != "null" {
+                return Some(serialized);
+            }
+            // Custom schemes such as `tauri://localhost/index.html` have an
+            // opaque WHATWG origin ("null"); derive `scheme://host[:port]` so
+            // bundled webview requests without an `Origin` header still pass.
+            let host = u.host_str()?;
+            match u.port() {
+                Some(port) => Some(format!("{}://{host}:{port}", u.scheme())),
+                None => Some(format!("{}://{host}", u.scheme())),
+            }
+        });
         if let Some(origin) = referer_origin {
             if is_bundled_app_origin(&origin) {
                 return Ok(None);
@@ -1070,6 +1166,21 @@ mod tests {
         assert!(!is_bundled_app_origin("https://accounts.google.com"));
         assert!(!is_bundled_app_origin("https://evil.example"));
         assert!(!is_bundled_app_origin("null"));
+
+        // Custom-scheme Referer (opaque WHATWG origin) without Origin must still pass.
+        let tauri_ref = Request::builder()
+            .uri("mbtiles://localhost/tile/0/0/0?path=%2Ftmp%2Fa.mbtiles")
+            .header(header::REFERER, "tauri://localhost/index.html")
+            .body(Vec::new())
+            .unwrap();
+        assert_eq!(validated_request_origin(&tauri_ref).unwrap(), None);
+
+        let remote_ref = Request::builder()
+            .uri("mbtiles://localhost/tile/0/0/0?path=%2Ftmp%2Fa.mbtiles")
+            .header(header::REFERER, "https://accounts.google.com/o/oauth2/v2/auth")
+            .body(Vec::new())
+            .unwrap();
+        assert!(validated_request_origin(&remote_ref).is_err());
     }
 
     #[test]
@@ -1182,5 +1293,19 @@ mod tests {
 
         let _ = fs::remove_file(&p1);
         let _ = fs::remove_file(&p2);
+    }
+
+    #[test]
+    fn idle_reaper_evicts_unused_pool_entries_without_extra_requests() {
+        let p = unique_temp_path("idle-reap.pmtiles");
+        fs::write(&p, b"0123456789abcdef").unwrap();
+
+        let pool = LocalFilePool::with_capacity_and_ttl(4, Duration::from_millis(30));
+        assert_eq!(pool.read_range(&p, Some("bytes=0-3")).unwrap().bytes, b"0123");
+        assert_eq!(pool.len(), 1);
+
+        std::thread::sleep(Duration::from_millis(120));
+        assert_eq!(pool.len(), 0);
+        let _ = fs::remove_file(&p);
     }
 }
