@@ -628,25 +628,41 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                     if info["srid"] not in (0, 4326)
                     else sql.SQL("ST_AsGeoJSON({geom})").format(geom=geom_ident)
                 )
-                lock_clause = (
-                    sql.SQL(" ORDER BY {pk} FOR UPDATE").format(pk=sql.Identifier(pk))
-                    if request.expected_row_hashes
-                    else sql.SQL("")
+                base_select = sql.SQL(
+                    "SELECT {pk}, {geom_expr}, {columns} FROM {schema}.{table}"
+                ).format(
+                    pk=sql.Identifier(pk),
+                    geom_expr=geom_expr,
+                    columns=sql.SQL(", ").join(
+                        sql.Identifier(column) for column in info["columns"]
+                    ),
+                    schema=schema_ident,
+                    table=table_ident,
                 )
-                cur.execute(
-                    sql.SQL(
-                        "SELECT {pk}, {geom_expr}, {columns} FROM {schema}.{table}{lock_clause}"
-                    ).format(
-                        pk=sql.Identifier(pk),
-                        geom_expr=geom_expr,
-                        columns=sql.SQL(", ").join(
-                            sql.Identifier(column) for column in info["columns"]
-                        ),
-                        schema=schema_ident,
-                        table=table_ident,
-                        lock_clause=lock_clause,
-                    )
-                )
+                if request.expected_row_hashes:
+                    # Lock candidate rows when the DB role holds UPDATE privilege
+                    # (serializing concurrent optimistic-concurrency saves); fall
+                    # back cleanly via a savepoint for delete-only roles whose
+                    # PostgreSQL grants do not permit SELECT ... FOR UPDATE.
+                    cur.execute("SAVEPOINT geolibre_occ_lock")
+                    try:
+                        cur.execute(
+                            base_select
+                            + sql.SQL(" ORDER BY {pk} FOR UPDATE").format(pk=sql.Identifier(pk))
+                        )
+                        cur.execute("RELEASE SAVEPOINT geolibre_occ_lock")
+                    except Exception as lock_exc:
+                        if (
+                            getattr(lock_exc, "sqlstate", None) == "42501"
+                            or getattr(lock_exc, "pgcode", None) == "42501"
+                        ):
+                            cur.execute("ROLLBACK TO SAVEPOINT geolibre_occ_lock")
+                            cur.execute("RELEASE SAVEPOINT geolibre_occ_lock")
+                            cur.execute(base_select)
+                        else:
+                            raise
+                else:
+                    cur.execute(base_select)
                 existing_rows: dict[Any, tuple[Any, dict[str, Any]]] = {}
                 for row in cur.fetchall():
                     existing_rows[json_safe(row[0])] = (
@@ -668,21 +684,25 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                     capabilities=request.capabilities,
                     table_label=f"{request.schema_name}.{request.table}",
                 )
-                submitted_expected_keys = []
+                submitted_missing_expected_keys = []
                 if request.expected_row_hashes:
                     for feature in features:
                         props = feature.get("properties") or {}
                         fkey = props.get(pk)
                         if fkey is None:
                             fkey = feature.get("id")
-                        if fkey is not None and str(fkey) in request.expected_row_hashes:
-                            submitted_expected_keys.append(fkey)
+                        if (
+                            fkey is not None
+                            and fkey not in existing_rows
+                            and str(fkey) in request.expected_row_hashes
+                        ):
+                            submitted_missing_expected_keys.append(fkey)
                 check_optimistic_concurrency(
                     existing_rows,
                     request.expected_row_hashes,
                     [change.key for change in diff.updates]
                     + list(diff.deletes)
-                    + submitted_expected_keys,
+                    + submitted_missing_expected_keys,
                 )
                 skipped = set(diff.skipped_fields)
                 inserted = len(diff.inserts)

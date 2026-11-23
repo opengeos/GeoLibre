@@ -24,9 +24,10 @@ import uuid
 from typing import Annotated, Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import ForeignKey, Integer, String, Text, func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from geolibre_server_api.auth import (
@@ -35,9 +36,9 @@ from geolibre_server_api.auth import (
     get_session,
     iso_ts,
     password_hash,
+    password_matches,
     require_any_scope,
     required_principal,
-    revoke_account_oauth_sessions,
     token_digest,
 )
 from geolibre_server_api.auth_models import Account, Base
@@ -47,6 +48,7 @@ from geolibre_server_api.policy import (
     is_deactivated,
     password_policy_error,
     require_organization_admin,
+    revoke_account_credentials,
 )
 from geolibre_server_api.project_models import Project
 
@@ -106,6 +108,7 @@ class AccountMfaTotp(Base):
     backup_code_hashes_json: Mapped[str] = mapped_column(Text, default="[]")
     created_at: Mapped[int] = mapped_column(Integer)
     confirmed_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_used_totp_step: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class AuditLogEntry(Base):
@@ -198,7 +201,13 @@ def organization_storage_bytes(session: Session, organization_id: str) -> int:
 
 
 def backfill_project_version_usage(session: Session, object_storage: Any) -> int:
-    """Populate ``project_version_usage`` rows for pre-upgrade versions using object storage."""
+    """Populate ``project_version_usage`` rows for pre-upgrade versions using object storage.
+
+    Skips versions whose object size cannot be read (so transient storage errors
+    never record a permanent zero and are retried on the next startup) and wraps
+    each insert in a savepoint so concurrent instance startups cannot fail on a
+    duplicate primary key.
+    """
     from geolibre_server_api.project_models import Version
 
     missing = session.scalars(
@@ -212,21 +221,44 @@ def backfill_project_version_usage(session: Session, object_storage: Any) -> int
     ).all()
     if not missing:
         return 0
+    inserted = 0
+    size_fn = getattr(object_storage, "size", None)
     for version in missing:
         try:
-            payload = object_storage.get(version.object_key)
-            size_bytes = len(payload) if payload is not None else 0
+            if callable(size_fn):
+                measured = size_fn(version.object_key)
+                if measured is None:
+                    continue
+                size_bytes = int(measured)
+            else:
+                payload = object_storage.get(version.object_key)
+                if payload is None:
+                    continue
+                size_bytes = len(payload)
         except Exception:
-            size_bytes = 0
-        session.add(
-            ProjectVersionUsage(
-                project_id=version.project_id,
-                number=version.number,
-                size_bytes=size_bytes,
+            logger.warning(
+                "Skipping storage usage backfill for %s v%s due to storage read error",
+                version.project_id,
+                version.number,
+                exc_info=True,
             )
-        )
+            continue
+        try:
+            with session.begin_nested():
+                session.add(
+                    ProjectVersionUsage(
+                        project_id=version.project_id,
+                        number=version.number,
+                        size_bytes=size_bytes,
+                    )
+                )
+                session.flush()
+            inserted += 1
+        except IntegrityError:
+            # Another instance backfilled this version concurrently.
+            continue
     session.commit()
-    return len(missing)
+    return inserted
 
 
 def enforce_storage_quota(
@@ -296,6 +328,29 @@ def totp_code(secret_b32: str, timestamp: int, step: int = TOTP_STEP_SECONDS) ->
     return f"{code_int % (10**TOTP_DIGITS):0{TOTP_DIGITS}d}"
 
 
+def verify_totp_step(
+    secret_b32: str,
+    code: str,
+    timestamp: int,
+    *,
+    window: int = 1,
+    step: int = TOTP_STEP_SECONDS,
+) -> int | None:
+    """Verify a 6-digit TOTP code within ``+-window`` steps and return the matched counter."""
+    cleaned = code.strip().replace(" ", "")
+    if len(cleaned) != TOTP_DIGITS or not cleaned.isdigit():
+        return None
+    base_counter = int(timestamp) // step
+    for delta in range(-window, window + 1):
+        counter = base_counter + delta
+        if counter < 0:
+            continue
+        candidate = totp_code(secret_b32, counter * step, step=step)
+        if hmac.compare_digest(cleaned, candidate):
+            return counter
+    return None
+
+
 def verify_totp_code(
     secret_b32: str,
     code: str,
@@ -305,19 +360,12 @@ def verify_totp_code(
     step: int = TOTP_STEP_SECONDS,
 ) -> bool:
     """Verify a 6-digit TOTP code within ``+-window`` time steps in constant time."""
-    cleaned = code.strip().replace(" ", "")
-    if len(cleaned) != TOTP_DIGITS or not cleaned.isdigit():
-        return False
-    for delta in range(-window, window + 1):
-        candidate = totp_code(secret_b32, timestamp + delta * step, step=step)
-        if hmac.compare_digest(cleaned, candidate):
-            return True
-    return False
+    return verify_totp_step(secret_b32, code, timestamp, window=window, step=step) is not None
 
 
 def generate_backup_codes(count: int = BACKUP_CODE_COUNT) -> list[str]:
-    """Generate human-readable single-use MFA backup codes."""
-    return [f"{secrets.token_hex(2)}-{secrets.token_hex(2)}".upper() for _ in range(count)]
+    """Generate 80-bit human-readable single-use MFA backup codes."""
+    return ["-".join(secrets.token_hex(2) for _ in range(5)).upper() for _ in range(count)]
 
 
 def _normalize_backup_code(code: str) -> str:
@@ -325,7 +373,17 @@ def _normalize_backup_code(code: str) -> str:
 
 
 def _hash_backup_code(code: str) -> str:
-    return hashlib.sha256(_normalize_backup_code(code).encode("utf-8")).hexdigest()
+    """Hash a backup code with a per-code random salt using scrypt."""
+    return password_hash(_normalize_backup_code(code))
+
+
+def _matches_backup_code(code: str, stored: str) -> bool:
+    normalized = _normalize_backup_code(code)
+    if stored.startswith("scrypt$"):
+        return password_matches(normalized, stored)
+    # Backwards-compatible fallback for any legacy unsalted SHA-256 hashes.
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    return hmac.compare_digest(digest, stored)
 
 
 def verify_account_mfa(
@@ -339,9 +397,9 @@ def verify_account_mfa(
     """Check MFA for ``account_id``.
 
     Locks the MFA row ``FOR UPDATE`` so concurrent logins cannot consume the
-    same single-use backup code twice. By default leaves committing the updated
-    backup-code list to the caller so token issuance / OAuth approval commits
-    atomically with backup-code consumption.
+    same single-use backup code twice or replay a TOTP time step (RFC 6238
+    section 5.2). By default leaves committing the updated state to the caller
+    so token issuance / OAuth approval commits atomically.
     """
     mfa = session.get(
         AccountMfaTotp,
@@ -353,12 +411,17 @@ def verify_account_mfa(
         return True, None
     if not code or not code.strip():
         return False, "mfa_required"
-    if verify_totp_code(mfa.secret_b32, code, now_ts):
+    matched_step = verify_totp_step(mfa.secret_b32, code, now_ts)
+    if matched_step is not None:
+        if mfa.last_used_totp_step is not None and matched_step <= mfa.last_used_totp_step:
+            return False, "invalid_mfa_code"
+        mfa.last_used_totp_step = matched_step
+        if commit:
+            session.commit()
         return True, None
-    candidate_digest = _hash_backup_code(code)
     hashes: list[str] = json.loads(mfa.backup_code_hashes_json or "[]")
     for idx, stored in enumerate(hashes):
-        if hmac.compare_digest(candidate_digest, stored):
+        if _matches_backup_code(code, stored):
             remaining = hashes[:idx] + hashes[idx + 1 :]
             mfa.backup_code_hashes_json = json.dumps(remaining)
             if commit:
@@ -603,7 +666,7 @@ def build_lifecycle_router() -> APIRouter:
         sec.password_changed_at = now_ts
         sec.failed_login_count = 0
         sec.locked_until = None
-        revoke_account_oauth_sessions(session, account.id, now_ts)
+        revoke_account_credentials(session, account.id, now_ts)
         record_audit_event(
             session,
             timestamp=now_ts,
@@ -632,6 +695,7 @@ def build_lifecycle_router() -> APIRouter:
     @router.post("/api/account/mfa/totp/enroll", status_code=201)
     def enroll_mfa_totp(
         request: Request,
+        response: Response,
         principal: AuthPrincipal = Depends(required_principal),
         session: Session = Depends(get_session),
     ):
@@ -652,6 +716,7 @@ def build_lifecycle_router() -> APIRouter:
                     backup_code_hashes_json=hashes_json,
                     created_at=now_ts,
                     confirmed_at=None,
+                    last_used_totp_step=None,
                 )
             )
         else:
@@ -660,6 +725,7 @@ def build_lifecycle_router() -> APIRouter:
             existing.backup_code_hashes_json = hashes_json
             existing.created_at = now_ts
             existing.confirmed_at = None
+            existing.last_used_totp_step = None
         record_audit_event(
             session,
             timestamp=now_ts,
@@ -674,6 +740,8 @@ def build_lifecycle_router() -> APIRouter:
             f"otpauth://totp/GeoLibre:{label}?secret={secret_b32}&issuer=GeoLibre"
             f"&digits={TOTP_DIGITS}&period={TOTP_STEP_SECONDS}"
         )
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["Pragma"] = "no-cache"
         return {
             "secret": secret_b32,
             "otpauthUri": otpauth_uri,
@@ -692,10 +760,12 @@ def build_lifecycle_router() -> APIRouter:
         if mfa is None:
             raise HTTPException(404, "no pending TOTP enrollment")
         now_ts = get_clock(request)()
-        if not verify_totp_code(mfa.secret_b32, body.code, now_ts):
+        matched_step = verify_totp_step(mfa.secret_b32, body.code, now_ts)
+        if matched_step is None:
             raise HTTPException(400, "invalid TOTP code")
         mfa.enabled = True
         mfa.confirmed_at = now_ts
+        mfa.last_used_totp_step = matched_step
         record_audit_event(
             session,
             timestamp=now_ts,

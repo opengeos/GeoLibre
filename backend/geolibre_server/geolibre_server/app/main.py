@@ -102,7 +102,12 @@ async def require_sidecar_token(request: Request, call_next):
 
 @app.middleware("http")
 async def bind_tenant_context(request: Request, call_next):
-    """Bind optional (or required in multi-tenant mode) tenant isolation context."""
+    """Bind optional (or required in multi-tenant mode) tenant isolation context.
+
+    Trust model: the sidecar expects an authenticated reverse proxy or gateway
+    (such as nginx with ``GEOLIBRE_TRUSTED_TENANT_HEADER``) to strip untrusted
+    client headers and inject ``X-GeoLibre-Tenant`` from a verified identity.
+    """
     if request.method == "OPTIONS" or request.url.path in _TOKEN_EXEMPT_PATHS:
         return await call_next(request)
     raw_tenant = request.headers.get("x-geolibre-tenant") or request.headers.get(

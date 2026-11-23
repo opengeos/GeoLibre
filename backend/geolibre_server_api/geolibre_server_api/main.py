@@ -3346,21 +3346,23 @@ def create_app(
         project = editable(session.get(Project, project_id), principal, session)
         parse_content(body.content, max_project_bytes)
         content_bytes = body.content.encode()
-        enforce_storage_quota(
-            session,
-            account_id=project.owner_id or principal.account.id,
-            organization_id=project.organization_id,
-            incoming_bytes=len(content_bytes),
-            user_quota_bytes=resolved_user_quota,
-            org_quota_bytes=resolved_org_quota,
-        )
         # Allocated from max(number) and committed *before* the object is
         # written. Deriving it from len(project.versions) let two concurrent
         # updates pick the same number: both wrote the same storage key, the
         # second lost the primary-key race with a 500, and the winner's content
         # had already been overwritten. Reserving the row first means a loser
         # fails before touching storage, and can retry on the next free number.
+        # Quota enforcement runs inside each attempt so a rollback releasing the
+        # owner row lock re-acquires the lock and re-checks usage on retry.
         for _ in range(5):
+            enforce_storage_quota(
+                session,
+                account_id=project.owner_id or principal.account.id,
+                organization_id=project.organization_id,
+                incoming_bytes=len(content_bytes),
+                user_quota_bytes=resolved_user_quota,
+                org_quota_bytes=resolved_org_quota,
+            )
             number = (
                 session.scalar(
                     select(func.max(Version.number)).where(Version.project_id == project.id)

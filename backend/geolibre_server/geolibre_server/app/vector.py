@@ -15,11 +15,13 @@ HTTP status codes.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import shutil
 import tempfile
 import threading
+import weakref
 from pathlib import Path
 from typing import Any, Optional
 
@@ -235,36 +237,59 @@ def _write_geoparquet(target: Path, geojson: dict) -> int:
 
 _SHAPEFILE_STALE_INDEXES = (".qix", ".sbn", ".sbx")
 _SHAPEFILE_LOCKS_GUARD = threading.Lock()
-_SHAPEFILE_PATH_LOCKS: dict[Path, threading.Lock] = {}
 
 
-def _shapefile_path_lock(target: Path) -> threading.Lock:
+class _ShapefilePathLock:
+    """Weak-referenceable lock wrapper so idle per-path locks are reclaimed."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+
+
+_SHAPEFILE_PATH_LOCKS: weakref.WeakValueDictionary[Path, _ShapefilePathLock] = (
+    weakref.WeakValueDictionary()
+)
+
+
+def _shapefile_path_lock(target: Path) -> _ShapefilePathLock:
     resolved = target.resolve()
     with _SHAPEFILE_LOCKS_GUARD:
-        lock = _SHAPEFILE_PATH_LOCKS.get(resolved)
-        if lock is None:
-            lock = threading.Lock()
-            _SHAPEFILE_PATH_LOCKS[resolved] = lock
-        return lock
+        holder = _SHAPEFILE_PATH_LOCKS.get(resolved)
+        if holder is None:
+            holder = _ShapefilePathLock()
+            _SHAPEFILE_PATH_LOCKS[resolved] = holder
+        return holder
+
+
+def _shapefile_flock_path(resolved_target: Path) -> Path:
+    digest = hashlib.sha256(str(resolved_target).encode("utf-8")).hexdigest()[:16]
+    return Path(tempfile.gettempdir()) / f"geolibre-shp-{digest}.lock"
 
 
 def _write_shapefile(target: Path, geojson: dict) -> int:
-    """Overwrite an ESRI Shapefile and its sidecar files with rollback and per-path locking."""
+    """Overwrite an ESRI Shapefile and its sidecar files with rollback and per-path locking.
+
+    Preserves existing case-insensitive component filenames (e.g. ``Foo.SHP`` /
+    ``Foo.DBF`` on case-sensitive filesystems). Note that ESRI Shapefile DBF
+    attributes are subject to the format's 10-character field-name limit and
+    column-type coercion.
+    """
     gdf = _reproject_to_existing_crs(_build_wgs84_gdf(geojson), target)
     tmpdir = tempfile.mkdtemp(dir=str(target.parent))
     backup_dir = tempfile.mkdtemp(dir=str(target.parent))
     try:
-        # Stage the new shapefile outside the per-target lock so unrelated writes
-        # and serialization run in parallel.
-        tmp_shp = Path(tmpdir) / target.name
+        # Always stage with lowercase `.shp` so GDAL emits predictable lowercase
+        # component names, then map each component to the target's on-disk casing.
+        tmp_shp = Path(tmpdir) / f"{target.stem}.shp"
         gdf.to_file(tmp_shp, driver="ESRI Shapefile")
 
-        lock = _shapefile_path_lock(target)
-        with lock:
+        resolved_target = target.resolve()
+        holder = _shapefile_path_lock(resolved_target)
+        with holder.lock:
             lock_file = None
             try:
                 if fcntl is not None:
-                    lock_path = target.parent / f".{target.name}.lock"
+                    lock_path = _shapefile_flock_path(resolved_target)
                     lock_file = open(lock_path, "a+b")
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
             except OSError:
@@ -272,37 +297,59 @@ def _write_shapefile(target: Path, geojson: dict) -> int:
                     lock_file.close()
                     lock_file = None
 
+            # Discover existing sibling components case-insensitively so uppercase
+            # datasets like `Foo.SHP` / `Foo.DBF` are replaced in place on Linux.
+            all_exts = {*_SHAPEFILE_SIDECARS, *_SHAPEFILE_STALE_INDEXES}
+            existing_by_ext: dict[str, list[Path]] = {}
+            for child in target.parent.iterdir():
+                if (
+                    child.stem == target.stem
+                    and child.suffix.lower() in all_exts
+                    and child.is_file()
+                ):
+                    existing_by_ext.setdefault(child.suffix.lower(), []).append(child)
+
+            use_upper = target.suffix == ".SHP"
             backups: list[tuple[Path, Path]] = []
             created_new: list[Path] = []
             try:
-                # Copy existing components and spatial indexes into backup_dir
-                # before replacing any file so failures can restore the original.
-                for ext in (*_SHAPEFILE_SIDECARS, *_SHAPEFILE_STALE_INDEXES):
-                    dst = target.with_suffix(ext)
-                    if dst.exists():
+                for paths in existing_by_ext.values():
+                    for dst in paths:
                         backup = Path(backup_dir) / dst.name
                         shutil.copy2(dst, backup)
                         backups.append((backup, dst))
 
                 for ext in _SHAPEFILE_SIDECARS:
                     src_sidecar = tmp_shp.with_suffix(ext)
-                    dst_sidecar = target.with_suffix(ext)
-                    if src_sidecar.exists():
-                        existed = dst_sidecar.exists()
-                        if existed:
-                            shutil.copymode(dst_sidecar, src_sidecar)
-                        elif target.exists():
-                            shutil.copymode(target, src_sidecar)
-                        os.replace(src_sidecar, dst_sidecar)
-                        if not existed:
-                            created_new.append(dst_sidecar)
+                    if not src_sidecar.exists():
+                        continue
+                    existing_matches = existing_by_ext.get(ext, [])
+                    if ext == ".shp":
+                        dst_sidecar = target
+                    elif existing_matches:
+                        dst_sidecar = existing_matches[0]
+                    else:
+                        dst_ext = ext.upper() if use_upper else ext
+                        dst_sidecar = target.with_suffix(dst_ext)
+                    existed = dst_sidecar.exists()
+                    if existed:
+                        shutil.copymode(dst_sidecar, src_sidecar)
+                    elif target.exists():
+                        shutil.copymode(target, src_sidecar)
+                    os.replace(src_sidecar, dst_sidecar)
+                    if not existed:
+                        created_new.append(dst_sidecar)
+                    # Remove any differently-cased duplicate of the same sidecar.
+                    for dup in existing_matches:
+                        if dup != dst_sidecar and dup.exists():
+                            dup.unlink()
 
-                # Invalidate obsolete spatial indexes so GDAL does not read stale
-                # bounding trees against the newly written geometries.
+                # Invalidate obsolete spatial indexes (any casing) so GDAL does not
+                # read stale bounding trees against the newly written geometries.
                 for idx_ext in _SHAPEFILE_STALE_INDEXES:
-                    idx_path = target.with_suffix(idx_ext)
-                    if idx_path.exists():
-                        idx_path.unlink()
+                    for idx_path in existing_by_ext.get(idx_ext, []):
+                        if idx_path.exists():
+                            idx_path.unlink()
             except BaseException:
                 for backup, dst in backups:
                     try:

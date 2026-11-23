@@ -139,10 +139,12 @@ def test_totp_mfa_enrollment_login_enforcement_and_backup_codes(tmp_path):
 
     enroll = client.post("/api/account/mfa/totp/enroll", headers=headers)
     assert enroll.status_code == 201
+    assert "no-store" in enroll.headers.get("cache-control", "")
     secret = enroll.json()["secret"]
     backup_codes = enroll.json()["backupCodes"]
     assert enroll.json()["otpauthUri"].startswith("otpauth://totp/GeoLibre:admin1?")
     assert len(backup_codes) == 8
+    assert len(backup_codes[0].replace("-", "")) == 20
 
     # Invalid code rejected during confirm.
     assert (
@@ -174,9 +176,18 @@ def test_totp_mfa_enrollment_login_enforcement_and_backup_codes(tmp_path):
     assert wrong.status_code == 401
     assert wrong.json()["error"] == "invalid_mfa_code"
 
-    with_totp = client.post(
+    # Replaying the already-used enrollment confirmation TOTP step is rejected (RFC 6238 §5.2).
+    replayed = client.post(
         "/api/auth/token",
         json={"username": "admin1", "password": "correct horse", "totpCode": valid_code},
+    )
+    assert replayed.status_code == 401
+
+    clock.ts += 30
+    next_code = totp_code(secret, clock.ts)
+    with_totp = client.post(
+        "/api/auth/token",
+        json={"username": "admin1", "password": "correct horse", "totpCode": next_code},
     )
     assert with_totp.status_code == 200
 
@@ -193,7 +204,8 @@ def test_totp_mfa_enrollment_login_enforcement_and_backup_codes(tmp_path):
     )
     assert reuse_backup.status_code == 401
 
-    # Disable MFA with a valid code; password login succeeds without totpCode afterwards.
+    # Disable MFA with a fresh TOTP code; password login succeeds without totpCode afterwards.
+    clock.ts += 30
     disable = client.request(
         "DELETE",
         "/api/account/mfa/totp",

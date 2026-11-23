@@ -62,6 +62,11 @@ def reset_current_tenant(token: Token[str | None]) -> None:
     _CURRENT_TENANT.reset(token)
 
 
+def is_tenant_workspaces_configured() -> bool:
+    """Return True when per-tenant workspace confinement is configured."""
+    return bool(os.environ.get("GEOLIBRE_TENANT_WORKSPACES_ROOT", "").strip())
+
+
 def tenant_workspace_root(tenant_id: str | None = None) -> Path | None:
     """Return the confined workspace directory for the active tenant, if configured."""
     root = os.environ.get("GEOLIBRE_TENANT_WORKSPACES_ROOT", "").strip()

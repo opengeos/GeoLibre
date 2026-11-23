@@ -85,7 +85,9 @@ from geolibre_server_api.proxy_identity import proxy_identity
 PROJECT_SCOPES = ("read:projects", "write:projects", "share:public")
 MANAGEMENT_SCOPE = "manage:sessions"
 ADMIN_ORG_SCOPE = "admin:org"
-RESERVED_SCOPES: tuple[str, ...] = ()
+# Keep admin:org reserved out of interactive OAuth scopes; it is granted only
+# through explicit personal access tokens (PAT_SCOPES).
+RESERVED_SCOPES: tuple[str, ...] = (ADMIN_ORG_SCOPE,)
 PAT_SCOPES = (*PROJECT_SCOPES, ADMIN_ORG_SCOPE)
 KNOWN_SCOPES = (*PROJECT_SCOPES, MANAGEMENT_SCOPE, ADMIN_ORG_SCOPE)
 SCOPE_ORDER = KNOWN_SCOPES
@@ -537,6 +539,7 @@ def verify_password_login(
     now_ts: int,
     *,
     allow_expired: bool = False,
+    record_success: bool = True,
 ) -> Account:
     """Verify built-in credentials under the account's effective security policy."""
     normalized = username.strip().lower()
@@ -572,8 +575,19 @@ def verify_password_login(
         and not allow_expired
     ):
         raise PasswordLoginError("expired")
-    record_successful_login(session, account.id, now_ts)
+    if record_success:
+        record_successful_login(session, account.id, now_ts)
     return account
+
+
+def _mfa_lockout_policy(session: Session, account_id: str):
+    """Return an effective lockout policy for MFA failures (defaulting to 5 attempts / 5 min)."""
+    from dataclasses import replace
+
+    policy = effective_policy(session, account_id)
+    if policy.lockout_threshold:
+        return policy
+    return replace(policy, lockout_threshold=5, lockout_seconds=300)
 
 
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -1039,6 +1053,8 @@ def render_consent_form(
             "autocomplete='username' required></label>"
             "<label>Password <input type='password' name='password' "
             "autocomplete='current-password' required></label>"
+            "<label>Authenticator or backup code (if MFA enabled) "
+            "<input type='text' name='totp_code' autocomplete='one-time-code'></label>"
         )
         allow_text = "Sign in and allow"
     reauth_inputs = ""
@@ -1355,13 +1371,20 @@ def build_identity_router() -> APIRouter:
         validate_pat_scopes(body.scopes)
         now_ts = get_clock(request)()
         try:
-            account = verify_password_login(session, body.username, body.password, now_ts)
+            account = verify_password_login(
+                session, body.username, body.password, now_ts, record_success=False
+            )
         except PasswordLoginError as exc:
             status, message = LOGIN_ERRORS[exc.code]
             raise HTTPException(status, message) from None
         mfa_ok, mfa_err = verify_account_mfa(session, account.id, body.totpCode, now_ts)
         if not mfa_ok:
+            if mfa_err == "invalid_mfa_code":
+                record_failed_login(
+                    session, account.id, now_ts, _mfa_lockout_policy(session, account.id)
+                )
             raise HTTPException(401, mfa_err or "mfa_required")
+        record_successful_login(session, account.id, now_ts, commit=False)
         token, extra = issue_token(
             session,
             account,
@@ -2016,7 +2039,9 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
         # Credential verification: the same scrypt work and lockout/rotation
         # policy as /api/auth/token, plus account TOTP MFA enforcement.
         try:
-            account = verify_password_login(session, username, password, now_ts)
+            account = verify_password_login(
+                session, username, password, now_ts, record_success=False
+            )
         except PasswordLoginError as exc:
             return _consent_error(
                 session,
@@ -2034,6 +2059,10 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
         totp_code = fields.get("totp_code", "").strip() or None
         mfa_ok, mfa_err = verify_account_mfa(session, account.id, totp_code, now_ts)
         if not mfa_ok:
+            if mfa_err == "invalid_mfa_code":
+                record_failed_login(
+                    session, account.id, now_ts, _mfa_lockout_policy(session, account.id)
+                )
             mfa_message = (
                 "Enter your 6-digit authenticator or backup code."
                 if mfa_err == "mfa_required"
@@ -2050,6 +2079,7 @@ def build_oauth_router(config: OAuthConfig) -> APIRouter:
                 reauth=form_reauth,
                 requested_max_age=form_max_age,
             )
+        record_successful_login(session, account.id, now_ts, commit=False)
         return _approve_interaction(
             session, interaction, account.id, label, now_ts, authenticated_at=now_ts
         )

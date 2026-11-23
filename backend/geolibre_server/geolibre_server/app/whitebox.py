@@ -1140,8 +1140,7 @@ def whitebox_run(request: WhiteboxRunRequest):
 @router.get("/jobs/{job_id}")
 def whitebox_job(job_id: str):
     """Return state for a Whitebox background job."""
-    with _JOBS_LOCK:
-        job = _JOBS.get(job_id)
+    job = _JOB_MANAGER.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job

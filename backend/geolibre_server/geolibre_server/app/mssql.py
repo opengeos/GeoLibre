@@ -917,8 +917,8 @@ def _bbox_envelope_wkt(
         (min_x, max_y),
         (min_x, min_y),
     ]
-    target_srid = srid if srid != 0 else 4326
-    if target_srid != 4326:
+    target_srid = srid
+    if target_srid not in (0, 4326):
         transformer = _transformer(4326, target_srid)
         with _TRANSFORM_LOCK:
             ring = [transformer.transform(x, y) for x, y in ring]
@@ -1070,21 +1070,25 @@ def mssql_write(request: MssqlWriteRequest) -> dict[str, Any]:
                     else None
                 ),
             )
-            submitted_expected_keys = []
+            submitted_missing_expected_keys = []
             if request.expected_row_hashes:
                 for feature in features:
                     props = feature.get("properties") or {}
                     fkey = props.get(pk)
                     if fkey is None:
                         fkey = feature.get("id")
-                    if fkey is not None and str(fkey) in request.expected_row_hashes:
-                        submitted_expected_keys.append(fkey)
+                    if (
+                        fkey is not None
+                        and fkey not in existing
+                        and str(fkey) in request.expected_row_hashes
+                    ):
+                        submitted_missing_expected_keys.append(fkey)
             check_optimistic_concurrency(
                 existing,
                 request.expected_row_hashes,
                 [change.key for change in diff.updates]
                 + list(diff.deletes)
-                + submitted_expected_keys,
+                + submitted_missing_expected_keys,
             )
             # Only updates that actually write geometry, and inserts, can store
             # coordinates under an unsafe SRID; the UPDATE below emits the

@@ -318,6 +318,15 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         ...layer.style.labels,
         ...(patch as Partial<typeof layer.style.labels>),
       };
+      if (
+        typeof merged.minZoom === "number" &&
+        typeof merged.maxZoom === "number" &&
+        merged.minZoom > merged.maxZoom
+      ) {
+        throw new Error(
+          `setLabels: merged minZoom (${merged.minZoom}) must be <= maxZoom (${merged.maxZoom})`,
+        );
+      }
       useAppStore.getState().setLayerStyle(layerId, { labels: merged });
       return merged;
     },
