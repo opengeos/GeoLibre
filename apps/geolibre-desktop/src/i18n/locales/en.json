@@ -8956,7 +8956,7 @@
       "range": "Numeric range",
       "isNull": "Is empty",
       "notNull": "Is not empty",
-      "valuePlaceholder": "Filter value...",
+      "valuePlaceholder": "Filter value…",
       "min": "Min",
       "max": "Max",
       "clearAll": "Clear filters"
