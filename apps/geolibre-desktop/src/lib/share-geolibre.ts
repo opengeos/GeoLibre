@@ -491,8 +491,10 @@ export async function fetchProjectShares(options: FetchSharesOptions): Promise<A
   const fetchImpl = options.fetchImpl ?? getShareFetch();
   const MAX_SHARE_PAGES = 100;
   const rawShares: unknown[] = [];
+  const seenIds = new Set<string>();
   let offset = 0;
   let limit = 100;
+  let completed = false;
 
   for (let page = 0; page < MAX_SHARE_PAGES; page += 1) {
     const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
@@ -533,15 +535,24 @@ export async function fetchProjectShares(options: FetchSharesOptions): Promise<A
       limit?: unknown;
     };
     const pageShares = Array.isArray(payload.shares) ? payload.shares : [];
-    rawShares.push(...pageShares);
+    for (const raw of pageShares) {
+      const id = String(((raw ?? {}) as Record<string, unknown>).id || "");
+      if (id && seenIds.has(id)) continue;
+      if (id) seenIds.add(id);
+      rawShares.push(raw);
+    }
     const total = typeof payload.total === "number" ? payload.total : null;
     if (typeof payload.limit === "number" && payload.limit > 0) {
       limit = payload.limit;
     }
     offset += pageShares.length;
     if (total === null || pageShares.length === 0 || offset >= total) {
+      completed = true;
       break;
     }
+  }
+  if (!completed) {
+    throw new Error("Too many shares to fetch; pagination limit reached.");
   }
 
   return rawShares

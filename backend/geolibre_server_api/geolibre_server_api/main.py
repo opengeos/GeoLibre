@@ -2936,7 +2936,7 @@ def create_app(
                 select(Project)
                 .options(*LISTING_EAGER_LOADS)
                 .where(*where_clauses)
-                .order_by(Project.updated_at.desc(), Project.id.desc())
+                .order_by(Project.created_at.desc(), Project.id.desc())
                 .offset(offset)
                 .limit(limit)
             ).all()

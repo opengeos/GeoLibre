@@ -430,7 +430,9 @@ def test_raster_workers_in_process_analysis_and_geometry(
 
 
 def test_worker_modules_match_canonical_markers() -> None:
-    """Every extracted worker script that emits a marker must match RESULT_MARKER / ERROR_MARKER."""
+    """Every marker literal emitted by extracted workers must match canonical markers."""
+    import re
+
     import geolibre_server.workers as workers_pkg
     from geolibre_server.workers import ERROR_MARKER, RESULT_MARKER
 
@@ -438,12 +440,18 @@ def test_worker_modules_match_canonical_markers() -> None:
     worker_files = [p for p in sorted(workers_root.rglob("*.py")) if p.name != "__init__.py"]
     assert len(worker_files) >= 15
 
+    marker_re = re.compile(r"""["'](__GEOLIBRE_[A-Z0-9_]+__:?[^"']*)["']""")
     matched_any_result = False
     for path in worker_files:
         text = path.read_text(encoding="utf-8")
-        if "__GEOLIBRE_CONVERSION_RESULT__" in text:
-            assert RESULT_MARKER in text, f"{path} drifted from RESULT_MARKER"
-            matched_any_result = True
-        if "__GEOLIBRE_CONVERSION_ERROR__" in text:
-            assert ERROR_MARKER in text, f"{path} drifted from ERROR_MARKER"
+        for candidate in marker_re.findall(text):
+            if "ERROR" in candidate:
+                assert candidate == ERROR_MARKER, (
+                    f"{path} emitted marker {candidate!r} != {ERROR_MARKER!r}"
+                )
+            elif "RESULT" in candidate:
+                assert candidate == RESULT_MARKER, (
+                    f"{path} emitted marker {candidate!r} != {RESULT_MARKER!r}"
+                )
+                matched_any_result = True
     assert matched_any_result
