@@ -1081,6 +1081,7 @@ export function ModelBuilderPanel({
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const boundary = sectionRef.current;
+      if (event.defaultPrevented) return;
       if (
         !boundary ||
         !target ||
@@ -1110,7 +1111,8 @@ export function ModelBuilderPanel({
           handleDuplicateSelected();
         }
       } else if (event.key === "Delete" || event.key === "Backspace") {
-        if (selectedNodeIds.size > 0 || selectedNodeId) {
+        const inCanvas = canvasRef.current?.contains(target) || target === boundary;
+        if (inCanvas && (selectedNodeIds.size > 0 || selectedNodeId)) {
           event.preventDefault();
           handleDeleteSelected();
         }

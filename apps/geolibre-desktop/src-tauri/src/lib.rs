@@ -2602,7 +2602,6 @@ fn list_installed_plugin_archives_blocking(
     Ok(installed)
 }
 
-#[cfg(not(feature = "mas"))]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct UninstallExternalPluginArchiveResult {
@@ -3490,7 +3489,7 @@ async fn list_installed_plugin_archives(
 async fn uninstall_external_plugin_archive(
     _app: tauri::AppHandle,
     _plugin_id: String,
-) -> Result<Vec<String>, String> {
+) -> Result<UninstallExternalPluginArchiveResult, String> {
     Err("External plugin removal is not available in the Mac App Store build.".to_string())
 }
 
