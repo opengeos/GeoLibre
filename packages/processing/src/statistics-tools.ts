@@ -2123,10 +2123,27 @@ function withModelFields(
   indices: number[],
   fields: (row: number) => Record<string, number>,
 ): Feature[] {
-  return indices.map((featureIndex, row) => ({
-    ...features[featureIndex],
-    properties: { ...(features[featureIndex].properties ?? {}), ...fields(row) },
-  }));
+  if (!indices.length) return [];
+  const generated = Object.keys(fields(0));
+  const sourceNames = new Set<string>();
+  for (const index of indices)
+    for (const name of Object.keys(features[index].properties ?? {})) sourceNames.add(name);
+  const reserved = new Set([...sourceNames, ...generated]);
+  const aliases = new Map<string, string>();
+  for (const name of generated) {
+    if (!sourceNames.has(name)) continue;
+    let alias = name + "_source";
+    for (let suffix = 2; reserved.has(alias); suffix++) alias = name + "_source_" + suffix;
+    reserved.add(alias);
+    aliases.set(name, alias);
+  }
+  return indices.map((featureIndex, row) => {
+    const feature = features[featureIndex];
+    const preserved: Record<string, unknown> = { ...feature.properties };
+    for (const [name, alias] of aliases)
+      if (Object.hasOwn(preserved, name)) preserved[alias] = preserved[name];
+    return { ...feature, properties: { ...preserved, ...fields(row) } };
+  });
 }
 
 export const olsRegressionTool: ProcessingAlgorithm = {
@@ -2699,22 +2716,23 @@ export const krigingDiagnosticsTool: ProcessingAlgorithm = {
     ctx.log(
       "  Mean error near 0 means unbiased; RMSSE near 1 means the kriging variance is realistic (above 1: underestimated, below 1: overestimated).",
     );
-    const out: Feature[] = [];
-    sites.forEach((site, i) => {
-      for (const feature of site.features) {
-        out.push({
-          ...feature,
-          properties: {
-            ...feature.properties,
-            cv_observed: z[i],
-            cv_pred: cv.predicted[i],
-            cv_error: cv.errors[i],
-            cv_variance: cv.variances[i],
-            cv_std_error: cv.standardizedErrors[i],
-          },
-        });
-      }
-    });
+    const rows = sites.flatMap((site, index) =>
+      site.features.map((feature) => ({ feature, index })),
+    );
+    const out = withModelFields(
+      rows.map((row) => row.feature),
+      rows.map((_, i) => i),
+      (row) => {
+        const i = rows[row].index;
+        return {
+          cv_observed: z[i],
+          cv_pred: cv.predicted[i],
+          cv_error: cv.errors[i],
+          cv_variance: cv.variances[i],
+          cv_std_error: cv.standardizedErrors[i],
+        };
+      },
+    );
     ctx.addResultLayer?.(`${layer.name} (kriging cross-validation)`, featureCollection(out), {
       graduatedField: "cv_std_error",
     });

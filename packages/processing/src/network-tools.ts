@@ -590,6 +590,12 @@ export const localShortestPathTool: ProcessingAlgorithm = {
     const { net, unit } = built;
     const astar = (ctx.parameters.algorithm as string) !== "dijkstra";
     const placed = placePoints(net, stops);
+    if ((placed.length - 1) * net.nodeCount > 50_000_000) {
+      ctx.log(
+        "Error: routing selection is too large; reduce stops or use a smaller network extract",
+      );
+      return;
+    }
     const features: Feature[] = [];
     let totalCost = 0;
     let totalLength = 0;
@@ -707,6 +713,12 @@ export const localClosestFacilityTool: ProcessingAlgorithm = {
     const fromFacility = (ctx.parameters.travelDirection as string) === "from";
     const placedFacilities = placePoints(net, facilities);
     const placedIncidents = placePoints(net, incidents);
+    if (placedIncidents.length * net.nodeCount > 50_000_000) {
+      ctx.log(
+        "Error: closest-facility selection is too large; reduce incidents or use a smaller network extract",
+      );
+      return;
+    }
     const facilitiesAt = new Map<number, PlacedPoint[]>();
     for (const facility of placedFacilities) {
       const list = facilitiesAt.get(facility.node) ?? [];

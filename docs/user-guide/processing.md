@@ -260,6 +260,10 @@ The sidecar can also confine conversion inputs and outputs to an allowlist of di
 | **OD cost matrix** | Travel time and distance for every origin-destination pair between two point layers. |
 | **Sequential route (directions)** | Route through a set of stops in order, with turn-by-turn directions. |
 
+Local multi-stop and closest-facility runs are limited to 50 million node-search
+entries, counted after snapping. This bounds repeated graph-state allocations;
+use fewer stops/incidents or a smaller network extract for larger selections.
+
 The same menu also routes over **your own line layer**, entirely in the browser and with no server: trails, pipes, rivers, a road extract, or any other line network. The tool builds a graph from the lines (lines that share a vertex are connected, and line ends within the snap tolerance of another line are joined to it; lines that only cross stay apart, like a bridge over a road). Each edge costs its length in metres, a cost field (the cost of traversing the whole feature, spread over it by length), or the travel time in minutes from a speed field in km/h. An optional one-way field accepts the OSM (`yes`, `-1`, `no`) and Esri (`FT`, `TF`, `B`, `N`) conventions. Points are attached at the closest spot on the nearest line, and each result records how far it was moved (`*_snap_m`).
 
 | Tool | Description |
@@ -287,11 +291,17 @@ The same menu also routes over **your own line layer**, entirely in the browser 
 | **HDBSCAN clustering** | Hierarchical density clusters that adapt to varying density, with only a minimum cluster size to set; each feature gets a cluster id and a membership probability. |
 | **Kriging variogram and cross-validation** | The empirical semivariogram of a point field, a spherical, exponential, Gaussian or linear model fitted as the Interpolation (IDW / Kriging) raster tool fits it, and leave-one-out cross-validation of ordinary kriging (mean error, RMSE, RMSSE) per model, with per-point predictions and standardized errors. |
 
+Generated model fields keep their documented names. If one matches a source
+attribute, the original value is preserved under a unique `_source` suffix.
+
 Distances in these tools are great-circle metres. The OLS and GWR output
 matches GWR4 on its Georgia example data, and the clustering matches
 scikit-learn's `DBSCAN` and `HDBSCAN` (its defaults: excess-of-mass selection,
 no single root cluster). GWR handles up to 1,500 features, HDBSCAN 5,000, and
-the kriging cross-validation 1,000 distinct locations.
+the kriging cross-validation 1,000 distinct locations. DBSCAN accepts at most
+200,000 features and stops after 20 million candidate comparisons across its
+core-point and expansion passes. Dense data can reach this work limit below the
+feature cap; reduce the search radius or process a smaller area.
 
 
 The **Composite score** builder is the suitability and index workflow: pick two

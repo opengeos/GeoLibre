@@ -845,7 +845,17 @@ export function buildLocalNetwork(
       degree.set(a, (degree.get(a) ?? 0) + 1);
       degree.set(b, (degree.get(b) ?? 0) + 1);
     }
-    const segIndex = new GridIndex(Math.max(toleranceDeg * 4, 1e-7), minLon, minLat);
+    let totalSpan = 0;
+    for (const seg of segments) {
+      const a = uf.find(seg.a),
+        b = uf.find(seg.b);
+      totalSpan += Math.max(
+        Math.abs(longitudeDelta(rawLon[a], rawLon[b])),
+        Math.abs(rawLat[a] - rawLat[b]),
+      );
+    }
+    const meanSpan = segments.length ? totalSpan / segments.length : 0;
+    const segIndex = new GridIndex(Math.max(toleranceDeg * 4, meanSpan * 2, 1e-7), minLon, minLat);
     segments.forEach((seg, id) => {
       const ax = rawLon[uf.find(seg.a)];
       const ay = rawLat[uf.find(seg.a)];

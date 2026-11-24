@@ -708,3 +708,27 @@ it("keeps kriging predictions invariant under variogram rescaling", () => {
   base.predicted.forEach((value, i) => close(tiny.predicted[i], value, 1e-10));
   base.variances.forEach((value, i) => close(tiny.variances[i] / 1e-14, value, 1e-10));
 });
+
+it("preserves source attributes when regression output names collide", async () => {
+  const layer = pointLayer(
+    Array.from({ length: 5 }, (_, i) => [
+      i,
+      0,
+      {
+        x: i,
+        " value ": i * 2 + (i % 2) * 0.1,
+        ols_pred: "original",
+        ols_pred_source: "existing alias",
+      },
+    ]),
+  );
+  const result = await runTool(olsRegressionTool, layer, {
+    dependent: " value ",
+    explanatory: "x",
+  });
+  assert.equal(result.results.length, 1, result.messages.join("\n"));
+  const props = result.results[0].geojson.features[0].properties!;
+  assert.equal(props.ols_pred_source_2, "original");
+  assert.equal(props.ols_pred_source, "existing alias");
+  assert.equal(typeof props.ols_pred, "number");
+});

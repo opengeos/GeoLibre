@@ -2,6 +2,7 @@ import { shouldZoomToNewLayers, useAppStore, useLayersWhen } from "@geolibre/cor
 import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
   STATISTICS_TOOLS,
+  canRunVectorToolOnWorker,
   getStatisticsTool,
   runAlgorithmInBackground,
   type AlgorithmParameter,
@@ -446,7 +447,7 @@ export function StatisticsToolsDialog({
                 )}
                 {t("statistics.run")}
               </Button>
-              {running && (
+              {running && canRunVectorToolOnWorker(tool) && (
                 <Button variant="outline" onClick={() => abortRef.current?.abort()}>
                   {t("common.cancel")}
                 </Button>

@@ -698,3 +698,18 @@ it("lets cancellation run between shortest-path legs", async () => {
   await pending;
   assert.equal(outputs, 0);
 });
+
+it("bounds repeated search allocations on a large graph", async () => {
+  const net = layer("net", [line(Array.from({ length: 120001 }, (_, i) => [i, 0]))]);
+  const stops = layer(
+    "stops",
+    Array.from({ length: 450 }, (_, i) => point(i, 0)),
+  );
+  const result = await run(localShortestPathTool, [net, stops], {
+    network: "net",
+    stops: "stops",
+    snapTolerance: 0,
+  });
+  assert.equal(result.results.length, 0);
+  assert.match(result.messages.join("\n"), /routing selection is too large/);
+});
