@@ -1,5 +1,13 @@
 import { addProtocol, config } from "maplibre-gl";
-import { FileSource, PMTiles, Protocol, type Source } from "pmtiles";
+import {
+  FileSource,
+  PMTiles,
+  Protocol,
+  SharedPromiseCache,
+  type Cache,
+  type DecompressFunc,
+  type Source,
+} from "pmtiles";
 import { PMTILES_PROTOCOL, remotePMTilesArchive } from "./pmtiles-layer";
 
 // The process-wide `pmtiles://` archive registry.
@@ -76,15 +84,24 @@ export function registerPMTilesArchive(key: string, bytes: Uint8Array): string {
  * archive, by {@link unregisterPMTilesArchive}.
  *
  * @param source The byte source; `getKey()` is the archive URL, with or without `pmtiles://`.
+ * @param options Optional payload decoder and cache (the cache owns directory decompression).
  * @returns The `pmtiles://<key>` URL MapLibre requests tiles under.
  */
-export function registerPMTilesSource(source: Source): string {
+export function registerPMTilesSource(
+  source: Source,
+  options: { decompress?: DecompressFunc; cache?: Cache } = {},
+): string {
   const protocol = getSharedPMTilesProtocol();
   if (!isMapLibreProtocolRegistered()) {
     addProtocol(PMTILES_PROTOCOL, protocol.tile);
   }
   const name = stripPMTilesProtocol(source.getKey());
-  protocol.tiles.set(name, new PMTiles(source));
+  const cache =
+    options.cache ??
+    (options.decompress
+      ? new SharedPromiseCache(undefined, undefined, options.decompress)
+      : undefined);
+  protocol.tiles.set(name, new PMTiles(source, cache, options.decompress));
   getRegisteredPMTilesArchiveKeys().add(name);
   return `${PMTILES_PROTOCOL}://${name}`;
 }
@@ -108,6 +125,12 @@ export function unregisterPMTilesArchive(key: string): boolean {
  * a caller decide between reusing it and reloading its bytes from disk. */
 export function hasPMTilesArchive(key: string): boolean {
   return getRegisteredPMTilesArchiveKeys().has(stripPMTilesProtocol(key));
+}
+
+/** Look up a caller-registered archive without creating a remote FetchSource. */
+export function getRegisteredPMTilesArchive(key: string): PMTiles | undefined {
+  if (!hasPMTilesArchive(key)) return undefined;
+  return getSharedPMTilesProtocol().tiles.get(stripPMTilesProtocol(key));
 }
 
 /**

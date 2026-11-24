@@ -6,7 +6,6 @@
   },
   "mcpPreview": {
     "content": {
-      "pmtilesMissingMetadata": "no usable source-layer metadata, so this preview cannot draw it",
       "pmtilesUnreadable": "not an archive layer this preview can read",
       "layer": "Layer “{{name}}” ({{kind}}): {{reason}}.",
       "cogPreview": "Layer “{{name}}” ({{kind}}): shown as a downsampled preview image; Identify is not available for it."
@@ -21,6 +20,19 @@
       "overviewTooLarge": "The COG has no overview small enough to preview; add overviews or open it in GeoLibre.",
       "noMatchingMask": "The COG has no matching transparency mask for this preview level.",
       "maskTooLarge": "The COG transparency mask is too large to decode in this preview; add mask overviews or open it in GeoLibre."
+    },
+    "pmtiles": {
+      "unsupportedTiles": "This PMTiles tile format is not supported by the preview.",
+      "metadataTooLarge": "The PMTiles metadata is too large for this preview; open the project in GeoLibre.",
+      "missingLayers": "The PMTiles archive does not declare vector source-layer names; provide them in the project or open it in GeoLibre.",
+      "tooManyLayers": "The PMTiles archive declares too many source layers for this preview; open it in GeoLibre.",
+      "invalidLayer": "The PMTiles archive declares an invalid source-layer name.",
+      "conflictingLayers": "The PMTiles source-layer names conflict in this preview; open it in GeoLibre.",
+      "blockTooLarge": "A PMTiles data block is too large for this preview; open the project in GeoLibre.",
+      "invalidDirectory": "The PMTiles archive has an invalid directory.",
+      "directoryTooLarge": "A PMTiles directory is too large for this preview; open the project in GeoLibre.",
+      "unsupportedCompression": "This PMTiles compression is not supported by the preview.",
+      "archiveUnavailable": "The consent-backed PMTiles archive is no longer available."
     },
     "render": {
       "canvasFailed": "The preview could not create a canvas for the COG image.",

@@ -141,7 +141,7 @@ describe("MCP preview PMTiles and COG classification", () => {
     assert.ok(ids.has("saved-control-line"));
   });
 
-  it("reports vector archives missing source-layer metadata while accepting rasters", () => {
+  it("plans URL-only vector discovery and includes its consent origin", () => {
     const empty = pmtilesLayer("empty", "https://example.com/a.pmtiles");
     empty.source.sourceLayers = [];
     empty.metadata.sourceLayers = [];
@@ -151,9 +151,10 @@ describe("MCP preview PMTiles and COG classification", () => {
     const saved = project([empty, raster]);
     assert.deepEqual(
       previewRenderLayers(saved).map(({ layer: item }) => item.id),
-      ["raster"],
+      ["empty", "raster"],
     );
-    assert.ok(unsupportedContent(saved).some((notice) => notice.includes("“empty”")));
+    assert.ok(previewOrigins(saved).includes("https://example.com"));
+    assert.ok(!unsupportedContent(saved).some((notice) => notice.includes("“empty”")));
   });
   it("draws remote archives and COGs in project order and asks consent for their origins", () => {
     const saved = project([

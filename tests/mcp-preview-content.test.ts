@@ -33,14 +33,15 @@ function project(layers: GeoLibreLayer[]) {
 }
 
 describe("MCP preview omitted content", () => {
-  it("explains missing source-layer metadata for a reachable vector PMTiles archive", () => {
+  it("keeps URL-only remote PMTiles available for consent-backed discovery", () => {
     const saved = project([
       layer("pmtiles", {
         source: { type: "vector", url: "pmtiles://https://tiles.example.com/data.pmtiles" },
         metadata: { sourceKind: "pmtiles-url", externalNativeLayer: true },
       }),
     ]);
-    assert.match(unsupportedContent(saved).join("\n"), /no usable source-layer metadata/);
+    assert.deepEqual(unsupportedContent(saved), []);
+    assert.ok(previewOrigins(saved).includes("https://tiles.example.com"));
   });
   it("keeps WMS sources while rejecting plugin archives, video, and desktop sources", () => {
     const saved = project([
