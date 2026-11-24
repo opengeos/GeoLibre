@@ -143,6 +143,10 @@ the other elements scale in proportion. A focused handle also moves with the
 arrow keys (`Shift` for bigger steps, `Alt` to resize). **Reset layout** puts
 everything back in its automatic place, and **Done** hides the handles.
 
+Automatic placement does not avoid every furniture collision. If an info block
+moves navigation to the left, or a tall legend overlaps the overview map, use
+**Arrange** to move the overview or the navigation elements clear of each other.
+
 Positions are stored as fractions of the page, so the arrangement lands in the
 same place at every export resolution and is saved with the project. Moving
 the map frame changes its shape on the page, and the scale, the atlas fit and

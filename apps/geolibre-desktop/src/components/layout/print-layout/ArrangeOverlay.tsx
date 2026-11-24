@@ -119,6 +119,7 @@ export function ArrangeOverlay({ frame, layout, dispatch }: ArrangeOverlayProps)
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
+    e.currentTarget.closest<HTMLElement>("[data-element]")?.focus({ preventScroll: true });
     e.currentTarget.setPointerCapture(e.pointerId);
     gestureRef.current = { id, mode, x: e.clientX, y: e.clientY, entry, layout };
   };
