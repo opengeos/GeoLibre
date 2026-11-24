@@ -81,7 +81,7 @@
     "happy-dom": "^21.0.4",
     "linkedom": "^0.18.15",
     "tsx": "^4.23.15",
-    "typescript-eslint": "^8.72.2"
+    "typescript-eslint": "^8.73.0"
   },
   "overrides": {
     "@deck.gl/geo-layers": {
