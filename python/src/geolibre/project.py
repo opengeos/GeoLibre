@@ -3845,6 +3845,7 @@ _LABEL_OPTIONS: dict[str, tuple[str, str]] = {
     "line_gap": ("lineGap", "bool"),
     "line_gap_padding": ("lineGapPadding", "non_negative"),
     "line_spacing": ("lineSpacing", "positive"),
+    "one_per_polygon": ("onePerPolygon", "bool"),
     "size": ("size", "positive"),
     "color": ("color", "color"),
     "halo_color": ("haloColor", "color"),
@@ -3954,8 +3955,9 @@ def label_style(
         **options: Any of :data:`LABEL_OPTION_NAMES` -- ``placement``
             (``"point"``/``"line"``), ``line_gap`` (cut the line under a
             line-placed label, contour style), ``line_gap_padding``,
-            ``line_spacing``, ``size``, ``color``, ``halo_color``,
-            ``halo_width``, ``min_zoom``, ``max_zoom``, ``allow_overlap``,
+            ``line_spacing``, ``one_per_polygon`` (label each polygon once,
+            inside its largest part; on by default), ``size``, ``color``,
+            ``halo_color``, ``halo_width``, ``min_zoom``, ``max_zoom``, ``allow_overlap``,
             ``anchor``, ``offset_x``, ``offset_y``, ``rotation``, ``max_width``,
             ``transform``, ``number_format``, ``number_decimals``,
             ``number_locale``, ``dedupe``, and the data-defined

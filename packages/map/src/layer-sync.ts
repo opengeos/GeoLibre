@@ -44,7 +44,7 @@ import {
   hasZoomDependentClusterFilter,
   resolveVectorRenderMode,
 } from "./cluster-input";
-import type { GeoJSON } from "geojson";
+import type { FeatureCollection, GeoJSON } from "geojson";
 import type * as maplibregl from "maplibre-gl";
 import type { DataDrivenPropertyValueSpecification, PropertyValueSpecification } from "maplibre-gl";
 import { ensurePMTilesProtocol, unregisterPMTilesArchive } from "./pmtiles-archive";
@@ -123,6 +123,7 @@ import {
   getLineGapLabels,
   type LineGapLabelResult,
 } from "./line-gap-labels";
+import { POLYGON_LABEL_AREA_PROPERTY, polygonLabelPoints } from "./polygon-label-points";
 
 // Existing importers (MapController, tests) read it from here.
 export { hasZoomDependentClusterFilter };
@@ -2749,6 +2750,27 @@ function dedupedAttributeLabels(
 }
 
 /**
+ * The one-label-per-polygon points for a point-placed label on a layer with
+ * polygons, or null when MapLibre's own placement applies: the option is off,
+ * the labels follow lines, or the features are not inline GeoJSON (a
+ * GeoArrow-only layer has no feature collection to derive points from).
+ * Filters need no gating here (unlike dedup) because each point keeps its
+ * feature's properties, so the label layer's filter still evaluates on it.
+ */
+function onePerPolygonLabelPoints(
+  ctx: VectorRenderContext,
+  labels: LabelStyle,
+): FeatureCollection | null {
+  const { layer, profile } = ctx;
+  return labels.onePerPolygon !== false &&
+    labels.placement === "point" &&
+    profile.hasPolygon &&
+    layer.geojson
+    ? polygonLabelPoints(layer.geojson)
+    : null;
+}
+
+/**
  * The label layer's `text-field`: the aggregated label on the dedup source,
  * else the parsed label expression, else the field. An empty string means
  * there is nothing to label.
@@ -2999,30 +3021,35 @@ function ensureAttributeLabelLayer(
     layer.style,
   );
   const dedupSourceId = labelSourceId(layer.id);
-  // The aggregated label features live in their own GeoJSON source so the
-  // symbol layer can read one-per-point labels without altering the data the
-  // other render layers draw.
-  if (dedupedLabelFc) {
+  // One label point per polygon feature (GH discussion #3554). Unlike the
+  // dedup source, these points keep every feature's id and properties, so the
+  // layer filters and data-defined overrides below still apply to them.
+  const polygonLabelFc = dedupedLabelFc ? null : onePerPolygonLabelPoints(ctx, labels);
+  // The aggregated (or one-per-polygon) label features live in their own
+  // GeoJSON source so the symbol layer can read them without altering the
+  // data the other render layers draw.
+  const ownLabelFc = dedupedLabelFc ?? polygonLabelFc;
+  if (ownLabelFc) {
     if (map.getSource(dedupSourceId)) {
-      setGeoJsonData(map.getSource(dedupSourceId) as maplibregl.GeoJSONSource, dedupedLabelFc);
+      setGeoJsonData(map.getSource(dedupSourceId) as maplibregl.GeoJSONSource, ownLabelFc);
     } else {
       map.addSource(dedupSourceId, {
         type: "geojson",
-        data: dedupedLabelFc,
+        data: ownLabelFc,
       });
-      rememberGeoJsonData(map, dedupSourceId, dedupedLabelFc);
+      rememberGeoJsonData(map, dedupSourceId, ownLabelFc);
     }
   }
   // A layer's source is immutable, so when the label source switches between
-  // the shared source and the dedup source the layer must be recreated.
-  const targetSource = dedupedLabelFc ? dedupSourceId : src;
+  // the shared source and the label source the layer must be recreated.
+  const targetSource = ownLabelFc ? dedupSourceId : src;
   const existingLabel = map.getLayer(labelLayerId(layer.id)) as { source?: string } | undefined;
   if (existingLabel && existingLabel.source !== targetSource) {
     removeIfExists(map, labelLayerId(layer.id));
   }
   const { labelBaseFilter, sizeOverride, colorOverride, opacityOverride, priorityOverride } =
     attributeLabelOverrides(labels, dedupedLabelFc);
-  const sourceRef = dedupedLabelFc ? { source: dedupSourceId } : sourceSpec;
+  const sourceRef = ownLabelFc ? { source: dedupSourceId } : sourceSpec;
   ensureLayer(
     map,
     labelLayerId(layer.id),
@@ -3055,9 +3082,15 @@ function ensureAttributeLabelLayer(
         "text-max-width": Math.max(1, labels.maxWidth),
         "text-transform": labels.transform,
         // Lower sort keys place first, so they win when space is tight.
+        // Without an explicit priority, one-per-polygon labels place the
+        // largest polygons first, so a country is not crowded out by its
+        // smaller neighbours now that it has a single label candidate.
         // `null` resets a previously applied priority (stripped on first
         // add by ensureLayer).
-        "symbol-sort-key": priorityOverride as unknown as PropertyValueSpecification<number>,
+        "symbol-sort-key": (priorityOverride ??
+          (polygonLabelFc
+            ? ["-", ["coalesce", ["get", POLYGON_LABEL_AREA_PROPERTY], 0]]
+            : null)) as unknown as PropertyValueSpecification<number>,
         visibility,
       },
       paint: {
@@ -3072,9 +3105,9 @@ function ensureAttributeLabelLayer(
     },
     beforeId,
   );
-  // Drop the dedup source once the label layer no longer references it (it is
+  // Drop the label source once the label layer no longer references it (it is
   // recreated on the shared source above before this runs).
-  if (!dedupedLabelFc) {
+  if (!ownLabelFc) {
     removeSourceIfExists(map, dedupSourceId);
   }
 }

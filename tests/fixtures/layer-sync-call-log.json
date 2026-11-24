@@ -745,6 +745,59 @@
         ["getLayer", "layer-poly-cluster"],
         ["getLayer", "layer-poly-cluster-count"],
         ["getLayer", "layer-poly-text"],
+        ["getSource", "source-poly-label"],
+        [
+          "addSource",
+          "source-poly-label",
+          {
+            "type": "geojson",
+            "data": {
+              "type": "FeatureCollection",
+              "features": [
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "name": "A",
+                    "kind": "a",
+                    "pop": 10,
+                    "__geolibre_label_area": 1.0000507734366348
+                  },
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [0.5, 0.5000190396762169]
+                  }
+                },
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "name": "B",
+                    "kind": "b",
+                    "pop": 20,
+                    "__geolibre_label_area": 1.0000507734366348
+                  },
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [2.5, 0.5000190396762169]
+                  }
+                },
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "name": "C",
+                    "kind": "a",
+                    "pop": 30,
+                    "__geolibre_label_area": 1.0000507734366348
+                  },
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [4.5, 0.5000190396762169]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        ["getSource", "source-poly-label"],
         ["getLayer", "layer-poly-label"],
         ["getStyle"],
         ["once", "style.load", "[function]"],
@@ -755,7 +808,7 @@
           {
             "id": "layer-poly-label",
             "type": "symbol",
-            "source": "source-poly",
+            "source": "source-poly-label",
             "minzoom": 0,
             "maxzoom": 24,
             "filter": [
@@ -778,6 +831,7 @@
               "text-rotate": 0,
               "text-max-width": 10,
               "text-transform": "none",
+              "symbol-sort-key": ["-", ["coalesce", ["get", "__geolibre_label_area"], 0]],
               "visibility": "visible"
             },
             "paint": {
@@ -789,7 +843,6 @@
           },
           "anchor-layer"
         ],
-        ["getSource", "source-poly-label"],
         ["getLayer", "layer-poly-generator-fill"],
         ["getLayer", "layer-poly-generator-line"],
         ["getLayer", "layer-poly-generator-circle"],
@@ -920,6 +973,56 @@
         ["getLayer", "layer-poly-cluster"],
         ["getLayer", "layer-poly-cluster-count"],
         ["getLayer", "layer-poly-text"],
+        ["getSource", "source-poly-label"],
+        ["getSource", "source-poly-label"],
+        [
+          "source.setData",
+          "source-poly-label",
+          {
+            "type": "FeatureCollection",
+            "features": [
+              {
+                "type": "Feature",
+                "properties": {
+                  "name": "A",
+                  "kind": "a",
+                  "pop": 10,
+                  "__geolibre_label_area": 1.0000507734366348
+                },
+                "geometry": {
+                  "type": "Point",
+                  "coordinates": [0.5, 0.5000190396762169]
+                }
+              },
+              {
+                "type": "Feature",
+                "properties": {
+                  "name": "B",
+                  "kind": "b",
+                  "pop": 20,
+                  "__geolibre_label_area": 1.0000507734366348
+                },
+                "geometry": {
+                  "type": "Point",
+                  "coordinates": [2.5, 0.5000190396762169]
+                }
+              },
+              {
+                "type": "Feature",
+                "properties": {
+                  "name": "C",
+                  "kind": "a",
+                  "pop": 30,
+                  "__geolibre_label_area": 1.0000507734366348
+                },
+                "geometry": {
+                  "type": "Point",
+                  "coordinates": [4.5, 0.5000190396762169]
+                }
+              }
+            ]
+          }
+        ],
         ["getLayer", "layer-poly-label"],
         ["getLayer", "layer-poly-label"],
         ["getPaintProperty", "layer-poly-label", "text-color"],
@@ -939,14 +1042,12 @@
         ["getLayoutProperty", "layer-poly-label", "text-max-width"],
         ["getLayoutProperty", "layer-poly-label", "text-transform"],
         ["getLayoutProperty", "layer-poly-label", "symbol-sort-key"],
-        ["setLayoutProperty", "layer-poly-label", "symbol-sort-key", null],
         ["getLayoutProperty", "layer-poly-label", "visibility"],
         ["getFilter", "layer-poly-label"],
         ["getLayer", "layer-poly-label"],
         ["getLayer", "layer-poly-label"],
         ["getLayer", "anchor-layer"],
         ["moveLayer", "layer-poly-label", "anchor-layer"],
-        ["getSource", "source-poly-label"],
         ["getLayer", "layer-poly-generator-fill"],
         ["getLayer", "layer-poly-generator-line"],
         ["getLayer", "layer-poly-generator-circle"],
@@ -1079,38 +1180,51 @@
         ["getLayer", "layer-poly-text"],
         ["getLayer", "layer-poly-label"],
         ["getLayer", "layer-poly-label"],
-        ["getPaintProperty", "layer-poly-label", "text-color"],
-        ["getPaintProperty", "layer-poly-label", "text-halo-color"],
-        ["getPaintProperty", "layer-poly-label", "text-halo-width"],
-        ["getPaintProperty", "layer-poly-label", "text-opacity"],
-        ["getLayoutProperty", "layer-poly-label", "text-field"],
-        [
-          "setLayoutProperty",
-          "layer-poly-label",
-          "text-field",
-          ["to-string", ["coalesce", ["get", "name"], ""]]
-        ],
-        ["getLayoutProperty", "layer-poly-label", "text-font"],
-        ["getLayoutProperty", "layer-poly-label", "text-size"],
-        ["getLayoutProperty", "layer-poly-label", "symbol-placement"],
-        ["setLayoutProperty", "layer-poly-label", "symbol-placement", "line"],
-        ["getLayoutProperty", "layer-poly-label", "symbol-spacing"],
-        ["setLayoutProperty", "layer-poly-label", "symbol-spacing", 250],
-        ["getLayoutProperty", "layer-poly-label", "text-allow-overlap"],
-        ["getLayoutProperty", "layer-poly-label", "text-ignore-placement"],
-        ["getLayoutProperty", "layer-poly-label", "text-anchor"],
-        ["getLayoutProperty", "layer-poly-label", "text-offset"],
-        ["getLayoutProperty", "layer-poly-label", "text-rotate"],
-        ["getLayoutProperty", "layer-poly-label", "text-max-width"],
-        ["getLayoutProperty", "layer-poly-label", "text-transform"],
-        ["getLayoutProperty", "layer-poly-label", "symbol-sort-key"],
-        ["getLayoutProperty", "layer-poly-label", "visibility"],
-        ["getFilter", "layer-poly-label"],
-        ["getLayer", "layer-poly-label"],
+        ["removeLayer", "layer-poly-label"],
         ["getLayer", "layer-poly-label"],
         ["getLayer", "anchor-layer"],
-        ["moveLayer", "layer-poly-label", "anchor-layer"],
+        [
+          "addLayer",
+          {
+            "id": "layer-poly-label",
+            "type": "symbol",
+            "source": "source-poly",
+            "minzoom": 0,
+            "maxzoom": 24,
+            "filter": [
+              "!",
+              [
+                "any",
+                ["==", ["get", "__gm_shape"], "text_marker"],
+                ["==", ["get", "shape"], "text_marker"]
+              ]
+            ],
+            "layout": {
+              "text-field": ["to-string", ["coalesce", ["get", "name"], ""]],
+              "text-font": ["Noto Sans Regular"],
+              "text-size": 13,
+              "symbol-placement": "line",
+              "symbol-spacing": 250,
+              "text-allow-overlap": false,
+              "text-ignore-placement": false,
+              "text-anchor": "center",
+              "text-offset": [0, 0],
+              "text-rotate": 0,
+              "text-max-width": 10,
+              "text-transform": "none",
+              "visibility": "visible"
+            },
+            "paint": {
+              "text-color": "#111827",
+              "text-halo-color": "#ffffff",
+              "text-halo-width": 1.5,
+              "text-opacity": 0.8
+            }
+          },
+          "anchor-layer"
+        ],
         ["getSource", "source-poly-label"],
+        ["removeSource", "source-poly-label"],
         ["getLayer", "layer-poly-generator-fill"],
         ["getLayer", "layer-poly-generator-line"],
         ["getLayer", "layer-poly-generator-circle"],
@@ -1374,6 +1488,59 @@
         ["getLayer", "layer-poly-cluster"],
         ["getLayer", "layer-poly-cluster-count"],
         ["getLayer", "layer-poly-text"],
+        ["getSource", "source-poly-label"],
+        [
+          "addSource",
+          "source-poly-label",
+          {
+            "type": "geojson",
+            "data": {
+              "type": "FeatureCollection",
+              "features": [
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "name": "A",
+                    "kind": "a",
+                    "pop": 10,
+                    "__geolibre_label_area": 1.0000507734366348
+                  },
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [0.5, 0.5000190396762169]
+                  }
+                },
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "name": "B",
+                    "kind": "b",
+                    "pop": 20,
+                    "__geolibre_label_area": 1.0000507734366348
+                  },
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [2.5, 0.5000190396762169]
+                  }
+                },
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "name": "C",
+                    "kind": "a",
+                    "pop": 30,
+                    "__geolibre_label_area": 1.0000507734366348
+                  },
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [4.5, 0.5000190396762169]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        ["getSource", "source-poly-label"],
         ["getLayer", "layer-poly-label"],
         ["getLayer", "layer-poly-label"],
         ["getLayer", "anchor-layer"],
@@ -1382,7 +1549,7 @@
           {
             "id": "layer-poly-label",
             "type": "symbol",
-            "source": "source-poly",
+            "source": "source-poly-label",
             "minzoom": 0,
             "maxzoom": 24,
             "filter": [
@@ -1405,6 +1572,7 @@
               "text-rotate": 0,
               "text-max-width": 10,
               "text-transform": "none",
+              "symbol-sort-key": ["-", ["coalesce", ["get", "__geolibre_label_area"], 0]],
               "visibility": "visible"
             },
             "paint": {
@@ -1416,7 +1584,6 @@
           },
           "anchor-layer"
         ],
-        ["getSource", "source-poly-label"],
         ["getLayer", "layer-poly-generator-fill"],
         ["getLayer", "layer-poly-generator-line"],
         ["getLayer", "layer-poly-generator-circle"],
@@ -1547,6 +1714,56 @@
         ["getLayer", "layer-poly-cluster"],
         ["getLayer", "layer-poly-cluster-count"],
         ["getLayer", "layer-poly-text"],
+        ["getSource", "source-poly-label"],
+        ["getSource", "source-poly-label"],
+        [
+          "source.setData",
+          "source-poly-label",
+          {
+            "type": "FeatureCollection",
+            "features": [
+              {
+                "type": "Feature",
+                "properties": {
+                  "name": "A",
+                  "kind": "a",
+                  "pop": 10,
+                  "__geolibre_label_area": 1.0000507734366348
+                },
+                "geometry": {
+                  "type": "Point",
+                  "coordinates": [0.5, 0.5000190396762169]
+                }
+              },
+              {
+                "type": "Feature",
+                "properties": {
+                  "name": "B",
+                  "kind": "b",
+                  "pop": 20,
+                  "__geolibre_label_area": 1.0000507734366348
+                },
+                "geometry": {
+                  "type": "Point",
+                  "coordinates": [2.5, 0.5000190396762169]
+                }
+              },
+              {
+                "type": "Feature",
+                "properties": {
+                  "name": "C",
+                  "kind": "a",
+                  "pop": 30,
+                  "__geolibre_label_area": 1.0000507734366348
+                },
+                "geometry": {
+                  "type": "Point",
+                  "coordinates": [4.5, 0.5000190396762169]
+                }
+              }
+            ]
+          }
+        ],
         ["getLayer", "layer-poly-label"],
         ["getLayer", "layer-poly-label"],
         ["getPaintProperty", "layer-poly-label", "text-color"],
@@ -1589,7 +1806,6 @@
         ["getLayer", "layer-poly-label"],
         ["getLayer", "anchor-layer"],
         ["moveLayer", "layer-poly-label", "anchor-layer"],
-        ["getSource", "source-poly-label"],
         ["getLayer", "layer-poly-generator-fill"],
         ["getLayer", "layer-poly-generator-line"],
         ["getLayer", "layer-poly-generator-circle"],
@@ -1792,6 +2008,7 @@
         ["getLayer", "layer-poly-label"],
         ["removeLayer", "layer-poly-label"],
         ["getSource", "source-poly-label"],
+        ["removeSource", "source-poly-label"],
         ["getLayer", "layer-poly-generator-fill"],
         ["getLayer", "layer-poly-generator-line"],
         ["getLayer", "layer-poly-generator-circle"],
@@ -6507,6 +6724,124 @@
         ["getLayer", "anchor-layer"],
         ["moveLayer", "layer-mix-circle", "anchor-layer"],
         ["getLayer", "layer-mix-text"],
+        ["getSource", "source-mix-label"],
+        [
+          "addSource",
+          "source-mix-label",
+          {
+            "type": "geojson",
+            "data": {
+              "type": "FeatureCollection",
+              "features": [
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "name": "A",
+                    "kind": "a",
+                    "pop": 10,
+                    "__geolibre_label_area": 1.0000507734366348
+                  },
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [0.5, 0.5000190396762169]
+                  }
+                },
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "name": "B",
+                    "kind": "b",
+                    "pop": 20,
+                    "__geolibre_label_area": 1.0000507734366348
+                  },
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [2.5, 0.5000190396762169]
+                  }
+                },
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "name": "C",
+                    "kind": "a",
+                    "pop": 30,
+                    "__geolibre_label_area": 1.0000507734366348
+                  },
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [4.5, 0.5000190396762169]
+                  }
+                },
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "name": "L1",
+                    "speed": 30
+                  },
+                  "geometry": {
+                    "type": "LineString",
+                    "coordinates": [
+                      [0, 0],
+                      [1, 1],
+                      [2, 0]
+                    ]
+                  }
+                },
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "name": "L2",
+                    "speed": 60
+                  },
+                  "geometry": {
+                    "type": "LineString",
+                    "coordinates": [
+                      [0, 2],
+                      [2, 2]
+                    ]
+                  }
+                },
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "name": "P1",
+                    "kind": "a",
+                    "pop": 1
+                  },
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [0, 0]
+                  }
+                },
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "name": "P1",
+                    "kind": "b",
+                    "pop": 2
+                  },
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [0, 0]
+                  }
+                },
+                {
+                  "type": "Feature",
+                  "properties": {
+                    "name": "P2",
+                    "kind": "a",
+                    "pop": 3
+                  },
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [1, 1]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        ["getSource", "source-mix-label"],
         ["getLayer", "layer-mix-label"],
         ["getStyle"],
         ["once", "style.load", "[function]"],
@@ -6517,7 +6852,7 @@
           {
             "id": "layer-mix-label",
             "type": "symbol",
-            "source": "source-mix",
+            "source": "source-mix-label",
             "minzoom": 0,
             "maxzoom": 24,
             "filter": [
@@ -6540,6 +6875,7 @@
               "text-rotate": 0,
               "text-max-width": 10,
               "text-transform": "none",
+              "symbol-sort-key": ["-", ["coalesce", ["get", "__geolibre_label_area"], 0]],
               "visibility": "visible"
             },
             "paint": {
@@ -6551,7 +6887,6 @@
           },
           "anchor-layer"
         ],
-        ["getSource", "source-mix-label"],
         ["getLayer", "layer-mix-generator-fill"],
         ["getLayer", "layer-mix-generator-line"],
         ["getLayer", "layer-mix-generator-circle"],
@@ -6780,6 +7115,7 @@
         ["getLayer", "layer-mix-label"],
         ["removeLayer", "layer-mix-label"],
         ["getSource", "source-mix-label"],
+        ["removeSource", "source-mix-label"],
         ["getLayer", "layer-mix-generator-fill"],
         ["getLayer", "layer-mix-generator-line"],
         ["getLayer", "layer-mix-generator-circle"],

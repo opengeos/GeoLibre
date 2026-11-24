@@ -3327,6 +3327,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             "line_gap": "lineGap",
             "line_gap_padding": "lineGapPadding",
             "line_spacing": "lineSpacing",
+            "one_per_polygon": "onePerPolygon",
             "size_expression": "sizeExpression",
             "color_expression": "colorExpression",
             "opacity_expression": "opacityExpression",

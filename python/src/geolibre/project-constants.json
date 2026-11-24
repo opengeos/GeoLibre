@@ -24,6 +24,7 @@
       "lineGap": false,
       "lineGapPadding": 3,
       "lineSpacing": 250,
+      "onePerPolygon": true,
       "size": 13,
       "color": "#111827",
       "haloColor": "#ffffff",

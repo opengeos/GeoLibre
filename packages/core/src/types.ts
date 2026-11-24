@@ -308,6 +308,13 @@ export interface LabelStyle {
    * `symbol-spacing` for line placement).
    */
   lineSpacing: number;
+  /**
+   * With `"point"` placement, label each polygon feature once, inside its
+   * largest part (as QGIS does), instead of once per part and again in every
+   * map tile the polygon spans. Applies to layers drawn from inline GeoJSON in
+   * the MapLibre view. Turning it off restores MapLibre's own placement.
+   */
+  onePerPolygon: boolean;
   /** Label text size in pixels. */
   size: number;
   /** CSS color string for the label text. */
