@@ -133,7 +133,7 @@ so and skips the relay; the table notes those cases.
 | Object detection, Segment Everything | Model weights from `raw.githubusercontent.com` and `huggingface.co`; ONNX Runtime from `cdn.jsdelivr.net`. | All | Direct |
 | 3D Tiles | Draco and KTX2 decoders from `unpkg.com` | All | Direct |
 | Story map HTML export | The exported page loads MapLibre from `unpkg.com` and fonts from `demotiles.maplibre.org`. | All | Direct (from the exported page) |
-| Python sidecar and Notebook panel | First use downloads `uv` from `astral.sh` (unless `uv` is installed), a Python build through `uv` (from GitHub), and packages from PyPI (`pypi.org`, `files.pythonhosted.org`). Applies to the sidecar itself and to the Whitebox, conversion, point cloud, and OBIA runtimes. | Desktop (and a self-run sidecar) | Direct, from the native process |
+| Python sidecar and Notebook panel | First use downloads `uv` (unless `uv` is installed): the desktop app (to start the sidecar) and the sidecar's managed runtimes download a pinned uv release archive from `github.com` (the sidecar honors `GEOLIBRE_UV_DOWNLOAD_BASE_URL` for a mirror) and verify its SHA-256 before extracting it. `uv` then downloads a Python build (from GitHub) and packages from PyPI (`pypi.org`, `files.pythonhosted.org`). Applies to the sidecar itself and to the Whitebox, conversion, point cloud, and OBIA runtimes. | Desktop (and a self-run sidecar) | Direct, from the native process |
 | Project sharing, Gallery, Collaboration | See [GeoLibre-operated hosts](#geolibre-operated-hosts). | All | Direct to the GeoLibre host |
 
 ## Opt-in: built-in plugins

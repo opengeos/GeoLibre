@@ -5,6 +5,7 @@ description = "Reference GeoLibre projects and identity API"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "cryptography>=42",
   "fastapi>=0.115",
   "httpx>=0.27",
   "joserfc>=1.0",
