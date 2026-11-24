@@ -207,3 +207,35 @@ it("reports a failed stop without claiming the running sidecar stopped", async (
     useDesktopSettingsStore.setState({ desktopSettings: originalSettings });
   }
 });
+
+it("does not publish a start result while a requested stop is still pending", async () => {
+  const info = { baseUrl: "http://127.0.0.1:8765", port: 8765, token: "stopping" };
+  let finishStart!: (value: typeof info) => void;
+  let finishStop!: () => void;
+  const startResult = new Promise<typeof info>((resolve) => {
+    finishStart = resolve;
+  });
+  const stopped = new Promise<void>((resolve) => {
+    finishStop = resolve;
+  });
+  globals.window = {
+    __TAURI_INTERNALS__: {
+      invoke: (command: string) => (command === "start_geolibre_sidecar" ? startResult : stopped),
+    },
+  };
+  const states: unknown[] = [];
+  const unsubscribe = subscribeSidecarRelay((state) => states.push(state));
+  try {
+    const starting = startGeoLibreSidecar();
+    const stopping = stopGeoLibreSidecar();
+    finishStart(info);
+    await starting;
+    assert.equal(states.at(-1), null);
+    finishStop();
+    await stopping;
+    assert.equal(states.at(-1), null);
+  } finally {
+    finishStop();
+    unsubscribe();
+  }
+});

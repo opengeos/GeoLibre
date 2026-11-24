@@ -224,10 +224,12 @@ async def set_relay_access(request: Request) -> dict[str, bool]:
         raise HTTPException(status_code=400, detail="Expected an enabled boolean")
     global _access_allowed, _access_generation
     async with _hub.access_lock:
+        previous = _access_allowed
         _access_allowed = payload["enabled"]
         if _access_allowed:
             published = await run_in_threadpool(write_discovery_file)
             if published is None:
+                _access_allowed = previous
                 raise HTTPException(
                     status_code=503,
                     detail=(
@@ -241,10 +243,16 @@ async def set_relay_access(request: Request) -> dict[str, bool]:
             for future in _hub.pending.values():
                 if not future.done():
                     future.set_result({"ok": False, "error": "Live MCP access was disabled."})
-            for socket in list(_hub.listeners):
+            sockets = list(_hub.listeners)
+            for socket in sockets:
                 _hub.drop(socket)
-                with contextlib.suppress(Exception):
-                    await asyncio.wait_for(socket.close(code=1008), SEND_TIMEOUT_SECONDS)
+            await asyncio.gather(
+                *(
+                    asyncio.wait_for(socket.close(code=1008), SEND_TIMEOUT_SECONDS)
+                    for socket in sockets
+                ),
+                return_exceptions=True,
+            )
         return {"enabled": _access_allowed}
 
 
@@ -523,7 +531,8 @@ async def relay_status(request: Request) -> dict[str, int]:
 
 def _configured_port() -> int | None:
     raw = os.environ.get(PORT_ENV, "").strip()
-    if not raw.isdigit():
+    try:
+        port = int(raw)
+    except ValueError:
         return None
-    port = int(raw)
     return port if 0 < port < 65536 else None

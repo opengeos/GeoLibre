@@ -32,19 +32,68 @@ def test_malformed_origin_is_rejected(origin):
     assert not relay_protocol.is_allowed_origin(origin)
 
 
-def test_access_reports_failed_discovery_and_can_retry(client, monkeypatch):
+@pytest.mark.parametrize("previous", [False, True])
+def test_access_reports_failed_discovery_and_can_retry(client, monkeypatch, previous):
     """Surface publication failure to the desktop's retry path.
 
     Args:
         client: The shared-loop relay HTTP client.
         monkeypatch: The pytest patch fixture.
+        previous: The access state before attempting publication.
     """
     write = relay.write_discovery_file
+    monkeypatch.setattr(relay, "_access_allowed", previous)
     monkeypatch.setattr(relay, "write_discovery_file", lambda: None)
     headers = {"X-GeoLibre-Token": SIDECAR_TOKEN}
     assert client.post("/relay/access", json={"enabled": True}, headers=headers).status_code == 503
+    assert relay.relay_enabled() is previous
     monkeypatch.setattr(relay, "write_discovery_file", write)
     assert client.post("/relay/access", json={"enabled": True}, headers=headers).status_code == 200
+
+
+@pytest.mark.parametrize("port", ["²", "invalid", "-1", "65536", "9" * 5000])
+def test_invalid_port_configuration_fails_closed(monkeypatch, port):
+    """Reject malformed port configuration without raising on relay requests.
+
+    Args:
+        monkeypatch: The pytest patch fixture.
+        port: Invalid port text, including nondecimal digit-like characters.
+    """
+    monkeypatch.setenv(relay.PORT_ENV, port)
+    assert relay._configured_port() is None
+
+
+def test_revocation_closes_all_peers_concurrently(client, monkeypatch):
+    """Let every close handshake start before awaiting any peer's completion.
+
+    Args:
+        client: The shared-loop relay HTTP client.
+        monkeypatch: The pytest patch fixture.
+    """
+    barrier = asyncio.Event()
+    started, completed = [], []
+
+    async def close(*, code):
+        """Wait until all peers have entered their close handshake.
+
+        Args:
+            code: The WebSocket close status.
+        """
+        assert code == 1008
+        started.append(code)
+        if len(started) == 3:
+            barrier.set()
+        await barrier.wait()
+        completed.append(code)
+
+    monkeypatch.setattr(relay, "SEND_TIMEOUT_SECONDS", 0.2)
+    relay._hub.listeners.extend(SimpleNamespace(label=i, close=close) for i in range(3))
+    result = client.post(
+        "/relay/access", json={"enabled": False}, headers={"X-GeoLibre-Token": SIDECAR_TOKEN}
+    )
+    assert result.status_code == 200
+    assert len(completed) == 3
+    assert not relay._hub.listeners
 
 
 @pytest.mark.parametrize("reenabled", [False, True])

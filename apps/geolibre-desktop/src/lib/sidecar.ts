@@ -119,8 +119,8 @@ export async function stopGeoLibreSidecar(): Promise<void> {
   // started); a silent no-op keeps callers' cleanup paths from throwing.
   if (IS_MAS_BUILD) return;
   assertSidecarAllowed();
-  await invoke("stop_geolibre_sidecar");
   stopGeneration += 1;
+  await invoke("stop_geolibre_sidecar");
   setSidecarAuthToken(null);
   relayAccess.setServer(null);
 }
