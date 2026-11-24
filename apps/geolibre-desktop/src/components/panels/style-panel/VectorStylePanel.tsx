@@ -35,6 +35,7 @@ import {
   hasExternalDeckLayer,
   hasExternalNativeLayers,
   isControlPaintedVectorLayer,
+  isDecoratablePMTilesLayer,
   type GeometryFlags,
 } from "./layer-capabilities";
 import { ProportionalSizeSection } from "./ProportionalSizeSection";
@@ -189,13 +190,16 @@ export function VectorStylePanel({
     !!layer.geojson &&
     !hasExternalDeckLayer(layer) &&
     !hasExternalNativeLayers(layer);
+  // Vector PMTiles archives get the same decorations from their own sync path
+  // (syncPMTilesLineDecorations in @geolibre/map).
   const showLineDecorationControls =
     hasVectorPaintControls &&
     !extrusionEnabled &&
-    layer.type === "geojson" &&
-    !!layer.geojson &&
-    !hasExternalDeckLayer(layer) &&
-    !hasExternalNativeLayers(layer) &&
+    ((layer.type === "geojson" &&
+      !!layer.geojson &&
+      !hasExternalDeckLayer(layer) &&
+      !hasExternalNativeLayers(layer)) ||
+      isDecoratablePMTilesLayer(layer)) &&
     (geometryFlags.hasLine || geometryFlags.hasPolygon);
   const showGeneratorControls =
     hasVectorPaintControls && !extrusionEnabled && supportsDerivedGeometry;

@@ -153,6 +153,7 @@ export {
   addPMTilesLayerFromUrl,
   createPMTilesLayerAddHandler,
   createPMTilesLayerRemoveHandler,
+  guardPMTilesSourceRemoval,
   openPMTilesLayerPanel,
   pmtilesArchivesFullyRemoved,
   pmtilesLayerIdsToRemove,

@@ -262,6 +262,7 @@ function createPMTilesControl(
   const control = new PMTilesLayerControlClass(PMTILES_OPTIONS);
   // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   if (app.getMapRenderer?.() === "mapbox") adaptMapboxPMTilesControl(control, app);
+  guardPMTilesSourceRemoval(control, app);
   const removeHandler = createPMTilesLayerRemoveHandler();
   const onRemove = control.onRemove.bind(control);
   control.onRemove = () => {
@@ -296,6 +297,64 @@ function createPMTilesControl(
     }
   });
   return control;
+}
+
+/** The slice of a MapLibre or Mapbox map {@link dropGeoLibreLayersOnSources} touches. */
+interface CompanionLayerMap {
+  getLayersOrder?: () => string[];
+  getLayer: (id: string) => { source?: unknown; metadata?: unknown } | undefined | null;
+  removeLayer: (id: string) => unknown;
+}
+
+/**
+ * Remove the GeoLibre-owned companion layers (`metadata["geolibre:internal"]`)
+ * that read any of `sourceIds`, such as the line-decoration arrows layer sync
+ * draws over an archive. MapLibre refuses to remove a source while a style
+ * layer still reads it (it reports an error and keeps the source), so these
+ * must go before the control drops the archive's source.
+ *
+ * @internal Exported only so the guard can be unit-tested.
+ * @param map - The map the archive is drawn on.
+ * @param sourceIds - The archive source ids about to be removed.
+ */
+export function dropGeoLibreLayersOnSources(
+  map: CompanionLayerMap,
+  sourceIds: ReadonlySet<string>,
+): void {
+  if (sourceIds.size === 0) return;
+  for (const id of map.getLayersOrder?.() ?? []) {
+    const layer = map.getLayer(id);
+    if (!layer || typeof layer.source !== "string" || !sourceIds.has(layer.source)) continue;
+    const metadata = layer.metadata as Record<string, unknown> | undefined;
+    if (metadata?.["geolibre:internal"] === true) map.removeLayer(id);
+  }
+}
+
+/**
+ * Every way the control drops an archive (its public `removeLayer`, the
+ * panel's remove button, and `onRemove`) runs through its private
+ * `_removeLayer(id?)`, which removes the archive's source by id right after its
+ * own style layers. Wrap it on this instance so GeoLibre's companion layers on
+ * that source are removed first. `tests/pmtiles-control-contract.test.ts`
+ * drives the real control and fails if the method is renamed or stops
+ * removing the source.
+ *
+ * @internal Exported only so the guard can be tested against the real control.
+ * @param control - The PMTiles control instance to guard.
+ * @param app - The app API, read for the live map at removal time.
+ */
+export function guardPMTilesSourceRemoval(control: PMTilesLayerControl, app: GeoLibreAppAPI): void {
+  const target = control as unknown as { _removeLayer?: (id?: string) => void };
+  const original = target._removeLayer;
+  if (typeof original !== "function") return;
+  target._removeLayer = (id?: string) => {
+    const map = (app.getMap?.() ?? app.getMapboxMap?.()) as CompanionLayerMap | null | undefined;
+    if (map) {
+      const ids = id ? [id] : control.getState().layers.map((layer) => layer.id);
+      dropGeoLibreLayersOnSources(map, new Set(ids));
+    }
+    original.call(control, id);
+  };
 }
 
 /** @internal Exported only so the control's teardown can be unit-tested. */

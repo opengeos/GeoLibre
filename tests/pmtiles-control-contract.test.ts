@@ -17,6 +17,7 @@ import {
   createPMTilesLayerAddHandler,
   __resetPMTilesControlForTests,
   addPMTilesLayerFromUrl,
+  guardPMTilesSourceRemoval,
 } from "../packages/plugins/src/plugins/maplibre-components";
 
 /**
@@ -335,5 +336,92 @@ describe("adding an archive by URL while the panel holds a stale tick", () => {
       globals.requestAnimationFrame = restore.requestAnimationFrame;
       __resetPMTilesControlForTests();
     }
+  });
+});
+
+/**
+ * A map that keeps its layers and sources and, like MapLibre, refuses to remove a source while a
+ * style layer still reads it (MapLibre reports an error event and keeps the source; it does not
+ * throw, so the control's try/catch cannot notice).
+ */
+function statefulMap(document: Document) {
+  const layers = new Map<string, { id: string; source?: string; metadata?: unknown }>();
+  const sources = new Set<string>();
+  const refused: string[] = [];
+  const map = new Proxy(
+    {
+      addSource: (id: string) => sources.add(id),
+      getSource: (id: string) => (sources.has(id) ? {} : undefined),
+      removeSource: (id: string) => {
+        if ([...layers.values()].some((layer) => layer.source === id)) refused.push(id);
+        else sources.delete(id);
+      },
+      addLayer: (layer: { id: string; source?: string }) => layers.set(layer.id, layer),
+      getLayer: (id: string) => layers.get(id),
+      removeLayer: (id: string) => layers.delete(id),
+      getLayersOrder: () => [...layers.keys()],
+      getCanvasContainer: () => document.createElement("div"),
+    } as Record<string, unknown>,
+    { get: (target, key) => target[key as string] ?? (() => undefined) },
+  );
+  return { map, layers, sources, refused };
+}
+
+/**
+ * GeoLibre draws line decorations (flow arrows) as its own symbol layer on the archive's source.
+ * The control drops that source in its private `_removeLayer`, which every removal path runs
+ * through, so the guard wraps it; a rename leaves the guard wrapping nothing and the archive's
+ * source stranded on the map.
+ */
+describe("removing an archive GeoLibre has decorated", () => {
+  async function decoratedArchive(guarded: boolean) {
+    const { document, window } = parseHTML("<!doctype html><html><body></body></html>");
+    const globals = globalThis as Record<string, unknown>;
+    const restore = { document: globals.document, window: globals.window, fetch: globals.fetch };
+    globals.document = document;
+    globals.window = Object.assign(window, { maplibregl: { addProtocol: () => {} } });
+    globals.fetch = serve(vectorArchive(["streams"]));
+    try {
+      const control = new PMTilesLayerControl({}) as unknown as {
+        onAdd: (map: unknown) => unknown;
+        addLayer: (url: string) => Promise<void>;
+        removeLayer: (id: string) => void;
+        getState: () => { layers: { id: string }[]; error: string | null };
+      };
+      const fake = statefulMap(document as unknown as Document);
+      control.onAdd(fake.map);
+      if (guarded) {
+        guardPMTilesSourceRemoval(control as never, { getMap: () => fake.map } as never);
+      }
+      await control.addLayer("https://example.test/flow.pmtiles");
+      assert.equal(control.getState().error, null, "the control loaded the archive");
+      const archiveId = control.getState().layers[0]!.id;
+      assert.ok(fake.sources.has(archiveId), "the control added the archive's source by its id");
+      fake.layers.set("layer-x-line-decoration-streams", {
+        id: "layer-x-line-decoration-streams",
+        source: archiveId,
+        metadata: { "geolibre:internal": true },
+      });
+      control.removeLayer(archiveId);
+      return { ...fake, archiveId };
+    } finally {
+      globals.document = restore.document;
+      globals.window = restore.window;
+      globals.fetch = restore.fetch;
+    }
+  }
+
+  it("strands the source without the guard, which is why it exists", async () => {
+    const { sources, refused, archiveId } = await decoratedArchive(false);
+    assert.deepEqual(refused, [archiveId]);
+    assert.ok(sources.has(archiveId));
+  });
+
+  it("drops GeoLibre's decoration first, so the control removes its source", async () => {
+    const { layers, sources, refused, archiveId } = await decoratedArchive(true);
+    assert.deepEqual(refused, []);
+    assert.ok(!sources.has(archiveId), "the archive's source is gone");
+    assert.ok(!layers.has("layer-x-line-decoration-streams"));
+    assert.equal(layers.size, 0, "and so is everything the control drew");
   });
 });

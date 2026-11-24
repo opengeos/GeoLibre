@@ -54,6 +54,20 @@ export function pmtilesControlLayerId(sourceId: string, sourceLayer: string, kin
 }
 
 /**
+ * The GeoLibre-owned symbol layer that repeats the line-decoration icon (flow
+ * arrows and the like) along one source layer of a PMTiles archive. Keyed on
+ * the store layer id, not the archive's source id, so two store layers split
+ * from one archive never share a decoration layer.
+ *
+ * @param layerId - The store layer id.
+ * @param sourceLayer - The archive source layer the decorations follow.
+ * @returns The decoration style layer id.
+ */
+export function pmtilesLineDecorationLayerId(layerId: string, sourceLayer: string): string {
+  return `layer-${layerId}-line-decoration-${encodeVectorTileLayerPart(sourceLayer)}`;
+}
+
+/**
  * The MapLibre layer ids `syncLayers` creates for a `pmtiles` store layer, in
  * the exact naming scheme `ensurePMTilesExternalLayer` uses. A layer built
  * outside the PMTiles control (e.g. the offline basemap extract dialog) must
