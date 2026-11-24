@@ -341,6 +341,14 @@ black — it declines the stack.
   not a throw), so without the wrap the decoration strands the source and logs a
   Diagnostics error. If the method is renamed the guard wraps nothing;
   `tests/pmtiles-control-contract.test.ts` drives the real control and fails.
+  The guard removes those layers from the map directly, not through
+  store-driven sync, because the control drops the source before sync runs
+  (synchronously from the store subscription, or with no store write at all
+  from the panel's remove button). The same file also asserts that the
+  unguarded control strands the source: if an upstream bump makes that case
+  fail (the control drops its source safely on its own), the guard is no
+  longer needed, so delete it and that test rather than inverting the
+  assertion.
 
 - **The AddVectorControl's layer id rule** (`upstreamUrlLayerId` /
   `flatGeobufLayerName`, `packages/plugins/src/plugins/components/flatgeobuf.ts`)

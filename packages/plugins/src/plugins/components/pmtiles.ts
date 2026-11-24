@@ -350,7 +350,11 @@ function styleLayerIds(map: CompanionLayerMap): string[] {
  * panel's remove button, and `onRemove`) runs through its private
  * `_removeLayer(id?)`, which removes the archive's source by id right after its
  * own style layers. Wrap it on this instance so GeoLibre's companion layers on
- * that source are removed first. `tests/pmtiles-control-contract.test.ts`
+ * that source are removed first. This mutates the map directly rather than
+ * through store-driven sync on purpose: the store subscription above calls
+ * `removeLayer` synchronously on the same store write that removes the layer,
+ * and the panel's remove button needs no store write at all, so sync has not
+ * run (or will not run) before the source goes. `tests/pmtiles-control-contract.test.ts`
  * drives the real control and fails if the method is renamed or stops
  * removing the source.
  *
