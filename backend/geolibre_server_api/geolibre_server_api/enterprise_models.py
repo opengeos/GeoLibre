@@ -9,6 +9,7 @@ from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, Unique
 from sqlalchemy.orm import Mapped, mapped_column
 
 from geolibre_server_api.auth_models import Base
+from geolibre_server_api.secret_crypto import EncryptedText
 
 
 class AccountSecurity(Base):
@@ -61,8 +62,9 @@ class OrganizationIdentityProvider(Base):
     protocol: Mapped[str] = mapped_column(String(8), default="oidc")
     issuer: Mapped[str] = mapped_column(String(512))
     client_id: Mapped[str] = mapped_column(String(255))
-    # Stored unencrypted, at the same trust level as the rest of the database.
-    client_secret: Mapped[str] = mapped_column(Text)
+    # Encrypted at rest under GEOLIBRE_SECRET_KEYS (see secret_crypto); the
+    # attribute holds the plaintext.
+    client_secret: Mapped[str] = mapped_column(EncryptedText)
     authorization_endpoint: Mapped[str] = mapped_column(Text)
     token_endpoint: Mapped[str] = mapped_column(Text)
     jwks_uri: Mapped[str] = mapped_column(Text)

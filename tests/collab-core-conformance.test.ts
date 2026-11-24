@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   authorizeHostAction,
@@ -192,5 +193,20 @@ describe("collaboration relay conformance", () => {
       lat: 42,
     });
     assert.equal(sanitizeCursor({ lng: Number.NaN, lat: 42 }), null);
+  });
+});
+
+describe("COLLAB_MAX_SNAPSHOT_BYTES default", () => {
+  it("matches MAX_SNAPSHOT_BYTES in docker-compose.yml and the collab-node README", () => {
+    const compose = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
+    const composeDefault = compose.match(/\$\{COLLAB_MAX_SNAPSHOT_BYTES:-(\d+)\}/);
+    assert.ok(composeDefault, "docker-compose.yml sets COLLAB_MAX_SNAPSHOT_BYTES");
+    assert.equal(Number(composeDefault[1]), MAX_SNAPSHOT_BYTES);
+
+    const readme = readFileSync(
+      new URL("../workers/collab-node/README.md", import.meta.url),
+      "utf8",
+    );
+    assert.match(readme, new RegExp(`\\(default\\s+\`${MAX_SNAPSHOT_BYTES}\``));
   });
 });
