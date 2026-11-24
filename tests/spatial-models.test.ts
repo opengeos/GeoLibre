@@ -755,3 +755,32 @@ it("preserves DBSCAN source cluster_type attributes", async () => {
   assert.equal(output.results[0].geojson.features[0].properties?.cluster_type_source, "source");
   assert.equal(output.results[0].geojson.features[0].properties?.cluster_type, "core");
 });
+
+it("reports features excluded from GWR and kriging samples", async () => {
+  const gwrLayer = structuredClone(georgiaLayer);
+  gwrLayer.geojson!.features.push({
+    type: "Feature",
+    properties: { PctBach: "missing" },
+    geometry: { type: "Point", coordinates: [0, 0] },
+  });
+  const local = await runTool(gwrTool, gwrLayer, {
+    dependent: "PctBach",
+    explanatory: "PctRural, PctPov, PctBlack",
+    kernel: "gaussian",
+    bandwidthType: "adaptive",
+    bandwidth: 100,
+  });
+  assert.equal(local.results.length, 1, local.messages.join("\n"));
+  assert.match(local.messages.join("\n"), /Skipped 1 feature/);
+  const points = pointLayer(
+    Array.from({ length: 12 }, (_, i) => [i % 4, Math.floor(i / 4), { z: i + Math.sin(i) }]),
+  );
+  points.geojson!.features.push({
+    type: "Feature",
+    properties: { z: "missing" },
+    geometry: { type: "Point", coordinates: [0, 0] },
+  });
+  const diagnostic = await runTool(krigingDiagnosticsTool, points, { field: "z", model: "linear" });
+  assert.equal(diagnostic.results.length, 1, diagnostic.messages.join("\n"));
+  assert.match(diagnostic.messages.join("\n"), /Skipped 1 feature/);
+});

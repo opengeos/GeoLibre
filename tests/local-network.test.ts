@@ -818,3 +818,30 @@ it("keeps dateline service-area lines and polygons continuous", async () => {
     for (const feature of result.geojson.features)
       if (feature.geometry && "coordinates" in feature.geometry) walk(feature.geometry.coordinates);
 });
+
+it("records coincident stops and facilities as zero-cost points", async () => {
+  const roads = layer("roads", [
+    line([
+      [0, 0],
+      [100, 0],
+    ]),
+  ]);
+  const stops = layer("stops", [point(0, 0), point(0, 0)]);
+  const route = await run(localShortestPathTool, [roads, stops], {
+    network: "roads",
+    stops: "stops",
+  });
+  const leg = route.results[0].geojson.features[0];
+  assert.equal(leg.geometry?.type, "Point");
+  assert.equal(leg.properties?.cost, 0);
+  const facilities = layer("facilities", [point(0, 0)]);
+  const incidents = layer("incidents", [point(0, 0)]);
+  const closest = await run(localClosestFacilityTool, [roads, facilities, incidents], {
+    network: "roads",
+    facilities: "facilities",
+    incidents: "incidents",
+  });
+  const match = closest.results[0].geojson.features[0];
+  assert.equal(match.geometry?.type, "Point");
+  assert.equal(match.properties?.cost, 0);
+});

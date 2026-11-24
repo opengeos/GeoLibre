@@ -1,5 +1,5 @@
 import type { Feature, LineString, MultiLineString, Position } from "geojson";
-import { getActiveMeanRadiusMeters } from "@geolibre/core";
+import { getActiveMeanRadiusMeters } from "@geolibre/core/worker-safe";
 
 /**
  * Client-side network graph over a user line layer: the engine behind the

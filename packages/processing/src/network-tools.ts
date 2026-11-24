@@ -563,6 +563,15 @@ function placePoints(net: LocalNetwork, points: RoutingPoint[]): PlacedPoint[] {
 }
 
 function lineFeature(coordinates: Position[], properties: Record<string, unknown>): Feature {
+  if (
+    coordinates.length === 1 ||
+    coordinates.every((point) => point[0] === coordinates[0][0] && point[1] === coordinates[0][1])
+  )
+    return {
+      type: "Feature",
+      properties,
+      geometry: { type: "Point", coordinates: coordinates[0] },
+    };
   const source = coordinates.length >= 2 ? coordinates : [coordinates[0], coordinates[0]];
   const pieces = splitNetworkLine(source);
   return {

@@ -260,6 +260,9 @@ The sidecar can also confine conversion inputs and outputs to an allowlist of di
 | **OD cost matrix** | Travel time and distance for every origin-destination pair between two point layers. |
 | **Sequential route (directions)** | Route through a set of stops in order, with turn-by-turn directions. |
 
+Coincident stops or incident/facility matches are recorded as point features
+with zero cost, preserving the match without a degenerate route line.
+
 Local graph construction runs on the main thread and accepts at most 250,000
 vertices. Point placement has a 50-million edge/point comparison budget, including
 far or antimeridian selections that use a full edge scan. Searches yield between

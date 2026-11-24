@@ -2253,6 +2253,10 @@ export const gwrTool: ProcessingAlgorithm = {
     const features = layer.geojson?.features ?? [];
     const sample = collectRegressionSample(features, dependent, explanatory);
     const n = sample.y.length;
+    if (n < features.length)
+      ctx.log(
+        `Skipped ${features.length - n} feature(s) without a location or numeric values in every model field.`,
+      );
     const k = explanatory.length + 1;
     if (n > MAX_GWR_FEATURES) {
       ctx.log(`Error: ${n} features exceeds the ${MAX_GWR_FEATURES}-feature limit for GWR.`);
@@ -2613,6 +2617,9 @@ export const krigingDiagnosticsTool: ProcessingAlgorithm = {
       ),
       field,
     );
+    const skipped = layer.geojson.features.length - sample.features.length;
+    if (skipped)
+      ctx.log(`Skipped ${skipped} feature(s) without a location or numeric "${field}" value.`);
     // Duplicate locations make the kriging matrix singular: average them.
     const byLocation = new Map<
       string,
