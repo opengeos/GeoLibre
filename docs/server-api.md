@@ -45,6 +45,8 @@ Deployment protections remain the operator's responsibility:
   `GEOLIBRE_RATE_LIMIT_API`, default 600 per 60 seconds elsewhere; over budget
   answers `429` with `Retry-After`), but its counters live in each worker
   process, so they multiply with workers and replicas and reset on restart.
+  IPv6 clients in the same /64 share a budget, so rotating host addresses
+  within that subnet does not reset the limit. IPv4 budgets remain per address.
   Configure `GEOLIBRE_TRUSTED_PROXIES` with the actual reverse proxy's source
   IP or network. Without it, proxied users all share the proxy's IP and one
   deployment-wide budget: by default 30 credential requests and 600 other
@@ -685,6 +687,47 @@ and `identity provider discovery failed`. Out-of-range values are a generic
   with a loopback public URL can explicitly opt out using
   `GEOLIBRE_ALLOW_PLAINTEXT_SECRETS=1`. In that mode, plaintext secrets beginning
   with `enc:v1:` are rejected (`422`) to keep stored values unambiguous.
+
+### Recovering an ambiguous legacy secret
+
+An older build could save plaintext beginning with `enc:v1:`, the prefix now
+reserved for encrypted values. This is indistinguishable from damaged
+ciphertext. Startup and migration refuse to guess and identify the affected
+identity-provider row in the error, without logging its secret. For actual
+ciphertext, restore the key used to write it. For a confirmed legacy plaintext
+credential, re-enter its known value encrypted under the configured key.
+Back up the database first. Run this in the installed server API environment,
+with `GEOLIBRE_DATABASE_URL` and `GEOLIBRE_SECRET_KEYS` configured and
+`GEOLIBRE_REPAIR_PROVIDER_ID` set to the row id reported by the error:
+
+```python
+import getpass
+import os
+
+from sqlalchemy import create_engine, text
+from geolibre_server_api.secret_crypto import encrypt_secret, secret_ciphers
+
+if secret_ciphers() is None:
+    raise RuntimeError("Configure GEOLIBRE_SECRET_KEYS before repairing the secret")
+engine = create_engine(os.environ["GEOLIBRE_DATABASE_URL"])
+with engine.begin() as connection:
+    result = connection.execute(
+        text("UPDATE organization_identity_providers SET client_secret=:secret WHERE id=:id"),
+        {
+            "id": os.environ["GEOLIBRE_REPAIR_PROVIDER_ID"],
+            "secret": encrypt_secret(getpass.getpass("Identity provider client secret: ")),
+        },
+    )
+    if result.rowcount != 1:
+        raise RuntimeError("Expected exactly one identity provider row; transaction rolled back")
+engine.dispose()
+```
+
+Retry the migration or startup afterward. Repair only the secret column;
+deleting and recreating the provider would also remove its linked identities.
+Alembic reads `GEOLIBRE_PUBLIC_URL` to restrict the development opt-out. Set it
+to the actual deployment URL even when your application passes `public_url`
+directly to `create_app`.
 
 ### Single sign-on on the consent page
 

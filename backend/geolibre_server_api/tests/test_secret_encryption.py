@@ -101,6 +101,19 @@ def test_round_trip_and_wrong_key(monkeypatch):
         decrypt_secret(stored)
 
 
+def test_crypto_rejects_public_plaintext_opt_out(monkeypatch):
+    """Protect direct crypto callers when the configured deployment is public.
+
+    Args:
+        monkeypatch: The pytest patch fixture.
+    """
+    monkeypatch.delenv("GEOLIBRE_SECRET_KEYS")
+    monkeypatch.setenv("GEOLIBRE_ALLOW_PLAINTEXT_SECRETS", "1")
+    monkeypatch.setenv("GEOLIBRE_PUBLIC_URL", PUBLIC_URL)
+    with pytest.raises(SecretKeyError, match="loopback"):
+        encrypt_secret("must-not-be-written-in-plaintext")
+
+
 def test_secret_is_stored_encrypted_and_used_decrypted(tmp_path, fake_idp, monkeypatch):
     db_url = f"sqlite:///{tmp_path / 'enc.db'}"
     response = _store_provider(db_url, tmp_path, fake_idp, monkeypatch)
@@ -197,9 +210,21 @@ def test_alembic_migration_encrypts_existing_rows(
     assert _raw_secrets(db_url) == ["pre-migration"]
 
 
-def test_alembic_migration_refuses_production_without_key(
-    tmp_path, fake_idp, monkeypatch, keep_loggers_enabled
+@pytest.mark.parametrize("public_url", [PUBLIC_URL, "http://localhost:8000"])
+@pytest.mark.parametrize("opt_out", [False, True])
+def test_alembic_migration_matches_startup_key_policy(
+    tmp_path, fake_idp, monkeypatch, keep_loggers_enabled, public_url, opt_out
 ):
+    """Require a key except for an explicit loopback development opt-out.
+
+    Args:
+        tmp_path: Isolated database directory.
+        fake_idp: The test identity provider.
+        monkeypatch: The pytest patch fixture.
+        keep_loggers_enabled: Restore logging after Alembic configuration.
+        public_url: The deployment URL supplied to migration and startup.
+        opt_out: Whether development plaintext storage was explicitly enabled.
+    """
     db_url = f"sqlite:///{tmp_path / 'migrate-nokey.db'}"
     monkeypatch.setenv("GEOLIBRE_DATABASE_URL", db_url)
     cfg = Config(str(ALEMBIC_INI))
@@ -210,9 +235,60 @@ def test_alembic_migration_refuses_production_without_key(
     _insert_plaintext_secret(db_url, "pre-migration")
 
     monkeypatch.delenv("GEOLIBRE_SECRET_KEYS")
-    monkeypatch.setenv("GEOLIBRE_PUBLIC_URL", PUBLIC_URL)
-    with pytest.raises(SecretKeyError, match="before upgrading"):
+    monkeypatch.setenv("GEOLIBRE_PUBLIC_URL", public_url)
+    monkeypatch.setenv("GEOLIBRE_ALLOW_PLAINTEXT_SECRETS", "1" if opt_out else "0")
+    if opt_out and public_url.startswith("http://localhost"):
         command.upgrade(cfg, "head")
+        app = _app(db_url, tmp_path, public_url=public_url)
+        app.state.engine.dispose()
+        assert _raw_secrets(db_url) == ["pre-migration"]
+    else:
+        with pytest.raises(SecretKeyError, match="before upgrading"):
+            command.upgrade(cfg, "head")
+        assert _raw_secrets(db_url) == ["pre-migration"]
+
+
+@pytest.mark.parametrize("secret", ["enc:v1:", "enc:v1:legacy-plaintext", "enc:v1:雪"])
+def test_ambiguous_legacy_secrets_report_the_row_and_support_repair(
+    tmp_path, fake_idp, monkeypatch, keep_loggers_enabled, secret
+):
+    """Identify ambiguous legacy rows without treating corrupted ciphertext as plaintext.
+
+    Args:
+        tmp_path: Isolated database directory.
+        fake_idp: The test identity provider.
+        monkeypatch: The pytest patch fixture.
+        keep_loggers_enabled: Restore logging after Alembic configuration.
+        secret: A legacy plaintext value using the reserved ciphertext prefix.
+    """
+    db_url = f"sqlite:///{tmp_path / 'ambiguous.db'}"
+    monkeypatch.setenv("GEOLIBRE_DATABASE_URL", db_url)
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    command.upgrade(cfg, "0002_enterprise_lifecycle")
+    monkeypatch.setenv("GEOLIBRE_SKIP_DDL_CREATE_ALL", "1")
+    _store_provider(db_url, tmp_path, fake_idp, monkeypatch)
+    _insert_plaintext_secret(db_url, secret)
+    engine = create_engine(db_url)
+    with engine.connect() as connection:
+        row_id = connection.scalar(text("SELECT id FROM organization_identity_providers"))
+    engine.dispose()
+    for operation, error_type in (
+        (lambda: _app(db_url, tmp_path), RuntimeError),
+        (lambda: command.upgrade(cfg, "head"), SecretKeyError),
+    ):
+        with pytest.raises(error_type) as error:
+            operation()
+        message = str(error.value)
+        assert row_id in message
+        assert "re-enter" in message
+        assert secret not in message
+    # Repair only the secret column, retaining the provider and its identities.
+    _insert_plaintext_secret(db_url, encrypt_secret(secret))
+    command.upgrade(cfg, "head")
+    app = _app(db_url, tmp_path)
+    app.state.engine.dispose()
+    assert decrypt_secret(_raw_secrets(db_url)[0]) == secret
 
 
 @pytest.mark.parametrize("secret", ["enc:v1:not-a-token", "enc:v1:"])

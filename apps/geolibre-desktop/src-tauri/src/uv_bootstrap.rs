@@ -227,6 +227,8 @@ pub fn install_from_archive(
 fn download_archive(url: &str) -> Result<Vec<u8>, String> {
     let response = reqwest::blocking::Client::builder()
         .user_agent("GeoLibre Desktop uv-bootstrap")
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(600))
         .build()
         .map_err(|error| format!("Could not create HTTP client: {error}"))?
         .get(url)

@@ -79,11 +79,16 @@ Configuration:
   identity-provider secrets are stored without it, and saving a provider
   secret answers `503`. A
   malformed key, or one that cannot decrypt a stored secret, fails startup.
+  Migrations use the same key requirement and development opt-out as startup.
+  Set `GEOLIBRE_PUBLIC_URL` to the deployment URL when running Alembic,
+  including when an application supplies its URL directly to `create_app`.
 - `GEOLIBRE_ALLOW_PLAINTEXT_SECRETS` (default `0`): an explicit development-only
   opt-out from secret encryption. It is honored only with a loopback
   `GEOLIBRE_PUBLIC_URL`. Use it only for development servers that are not
   publicly reachable. Without a key, secrets beginning with `enc:v1:` are
   rejected with `422` because they would be confused with ciphertext.
+  For credentials saved by an older build that already used this prefix, see
+  [recovering an ambiguous legacy secret](../../docs/server-api.md#recovering-an-ambiguous-legacy-secret).
 - `GEOLIBRE_OIDC_ALLOWED_NETWORKS`: comma-separated IPs or CIDR networks that
   organization identity providers may be reached on even though they are not
   public, such as an on-premises IdP on `10.20.0.0/16` (default empty: calls
@@ -97,13 +102,14 @@ Configuration:
   the body is read; a chunked or HTTP/2 body is counted as it streams and cut
   off with `413` once it crosses the ceiling.
 - `GEOLIBRE_RATE_LIMIT_AUTH` (default `30/60`) and `GEOLIBRE_RATE_LIMIT_API`
-  (default `600/60`): per-client-IP budgets as `<requests>/<seconds>`, or
+  (default `600/60`): client budgets as `<requests>/<seconds>`, or
   `off`. The first covers the credential routes (`/oauth/authorize`,
   `/oauth/token`, `/oauth/sso/callback`, `/api/auth/token`, `/api/accounts`,
   `/api/account/password`); the second covers every other route except
   `/health` and CORS preflights. Over budget answers `429` with
   `Retry-After`. The client is the `X-Forwarded-For` address only behind a
-  `GEOLIBRE_TRUSTED_PROXIES` peer. Counters live in each worker process, so
+  `GEOLIBRE_TRUSTED_PROXIES` peer. IPv4 clients are counted per address;
+  IPv6 clients share a budget within each /64 subnet. Counters live in each worker process, so
   several workers or replicas multiply the effective budget. A malformed value
   fails startup.
 - `GEOLIBRE_HOST`, `GEOLIBRE_PORT`: bind address and port for the

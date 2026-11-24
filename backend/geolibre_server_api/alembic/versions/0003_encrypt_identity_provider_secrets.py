@@ -3,8 +3,8 @@
 Rewrites every plaintext ``organization_identity_providers.client_secret`` as a
 Fernet ciphertext under the first key in ``GEOLIBRE_SECRET_KEYS`` (and re-keys
 values written under an older key). Without a key the upgrade refuses to run
-against stored secrets when ``GEOLIBRE_PUBLIC_URL`` names a production
-(non-loopback) host, and leaves development rows in plaintext otherwise.
+against stored secrets unless ``GEOLIBRE_ALLOW_PLAINTEXT_SECRETS`` explicitly
+opts out and ``GEOLIBRE_PUBLIC_URL`` names a loopback development host.
 
 The column type is unchanged (TEXT), so the downgrade decrypts back to
 plaintext with the same key.
@@ -28,6 +28,7 @@ from geolibre_server_api.secret_crypto import (
     decrypt_secret,
     is_encrypted,
     is_production_url,
+    plaintext_secrets_enabled,
     reencrypt_stored_secrets,
     secret_ciphers,
 )
@@ -59,12 +60,18 @@ def upgrade() -> None:
     if not _has_table(bind):
         return
     if secret_ciphers() is None:
-        stored = bind.scalar(sa.select(sa.func.count()).select_from(_providers))
+        stored = bind.scalar(
+            sa.select(sa.func.count())
+            .select_from(_providers)
+            .where(_providers.c.client_secret.is_not(None))
+        )
         public_url = os.getenv("GEOLIBRE_PUBLIC_URL", "http://localhost:8000")
-        if stored and is_production_url(public_url):
+        plaintext_allowed = not is_production_url(public_url) and plaintext_secrets_enabled()
+        if stored and not plaintext_allowed:
             raise SecretKeyError(
                 f"set {SECRET_KEYS_ENV} before upgrading: {stored} identity provider "
-                "secret(s) would stay unencrypted"
+                "secret(s) would stay unencrypted. Only loopback development may "
+                "opt out with GEOLIBRE_ALLOW_PLAINTEXT_SECRETS=1"
             )
         if stored:
             logger.warning(

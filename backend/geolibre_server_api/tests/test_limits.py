@@ -91,6 +91,28 @@ def test_untrusted_peer_cannot_spoof_forwarded_for(tmp_path, monkeypatch):
         assert (first.status_code, second.status_code) == (200, 429)
 
 
+@pytest.mark.parametrize("bucket,path", [("API", "/api/projects"), ("AUTH", "/api/auth/token")])
+def test_ipv6_rotating_addresses_share_a_subnet_budget(tmp_path, monkeypatch, bucket, path):
+    """Addresses within one IPv6 /64 share limits while other networks remain independent.
+
+    Args:
+        tmp_path: Isolated database directory.
+        monkeypatch: The pytest patch fixture.
+        bucket: The rate-limit configuration bucket.
+        path: A request path classified into that bucket.
+    """
+    monkeypatch.setenv(f"GEOLIBRE_RATE_LIMIT_{bucket}", "1/60")
+    monkeypatch.setenv("GEOLIBRE_TRUSTED_PROXIES", "10.0.0.1")
+    with _client(tmp_path, peer="10.0.0.1") as client:
+        responses = [
+            client.get(path, headers={"x-forwarded-for": address}).status_code
+            for address in ("2001:db8:1::1", "2001:db8:1::ffff", "2001:db8:2::1")
+        ]
+        assert responses[0] != 429
+        assert responses[1] == 429
+        assert responses[2] != 429
+
+
 def test_streamed_body_without_length_is_cut_off(tmp_path, monkeypatch):
     monkeypatch.setenv("GEOLIBRE_MAX_REQUEST_BYTES", "4096")
     with _client(tmp_path) as client:

@@ -8,6 +8,7 @@ N times the configured rate.
 
 from __future__ import annotations
 
+import ipaddress
 import math
 import os
 import re
@@ -201,7 +202,8 @@ class RateLimitMiddleware:
 
     The client is the direct peer, or the ``X-Forwarded-For`` address when the
     peer is in ``GEOLIBRE_TRUSTED_PROXIES``. CORS preflights and ``/health``
-    are never counted.
+    are never counted. IPv6 addresses in one /64 share a budget, preventing
+    clients from resetting their budget by rotating host addresses.
     """
 
     def __init__(
@@ -232,6 +234,8 @@ class RateLimitMiddleware:
             await self.app(scope, receive, send)
             return
         address = client_ip(Request(scope))
+        if isinstance(address, ipaddress.IPv6Address):
+            address = ipaddress.IPv6Network((address, 64), strict=False)
         retry_after = self.limiter.hit((bucket, str(address or "unknown")), rate)
         if retry_after is None:
             await self.app(scope, receive, send)

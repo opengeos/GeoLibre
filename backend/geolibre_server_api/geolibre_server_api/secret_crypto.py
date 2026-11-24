@@ -8,7 +8,9 @@ and restarting (startup re-encrypts rows still under an older key).
 
 Ciphertext is stored with the ``enc:v1:`` prefix. A value without the prefix is
 a legacy plaintext row from before encryption existed: it reads back unchanged
-and startup (or ``alembic upgrade head``) encrypts it in place.
+and startup (or ``alembic upgrade head``) encrypts it in place. A legacy
+plaintext credential that already used this prefix is ambiguous and needs
+operator repair; a value marked as ciphertext is never silently treated as plaintext.
 """
 
 from __future__ import annotations
@@ -105,8 +107,13 @@ def encrypt_secret(plaintext: str) -> str:
     ciphers = secret_ciphers()
     if ciphers is None:
         validate_plaintext_secret(plaintext)
-        if not plaintext_secrets_enabled():
-            raise SecretKeyError(f"{SECRET_KEYS_ENV} is required before storing secrets")
+        if not plaintext_secrets_enabled() or is_production_url(
+            os.getenv("GEOLIBRE_PUBLIC_URL", "http://localhost:8000")
+        ):
+            raise SecretKeyError(
+                f"{SECRET_KEYS_ENV} is required before storing secrets; only loopback "
+                "development may explicitly opt out"
+            )
         return plaintext
     token = ciphers[0].encrypt(plaintext.encode("utf-8")).decode("ascii")
     return CIPHERTEXT_PREFIX + token
@@ -149,7 +156,7 @@ def decrypt_secret(stored: str) -> str:
         )
     try:
         return ciphers[1].decrypt(stored[len(CIPHERTEXT_PREFIX) :].encode("ascii")).decode("utf-8")
-    except InvalidToken as exc:
+    except (InvalidToken, UnicodeError) as exc:
         raise SecretKeyError(
             f"a stored secret cannot be decrypted with any key in {SECRET_KEYS_ENV}; "
             "keep older keys in the list until every secret is re-encrypted"
@@ -244,17 +251,21 @@ def reencrypt_stored_secrets(connection: Connection, table, column) -> int:
     rewritten = 0
     for row_id, value in rows:
         if is_encrypted(value):
-            token = value[len(CIPHERTEXT_PREFIX) :].encode("ascii")
             try:
-                primary.decrypt(token)
-                continue
-            except InvalidToken:
-                pass
-            try:
+                token = value[len(CIPHERTEXT_PREFIX) :].encode("ascii")
+                try:
+                    primary.decrypt(token)
+                    continue
+                except InvalidToken:
+                    pass
                 plaintext = every.decrypt(token)
-            except InvalidToken as exc:
+            except (InvalidToken, UnicodeError) as exc:
                 raise SecretKeyError(
-                    f"a stored secret cannot be decrypted with any key in {SECRET_KEYS_ENV}"
+                    f"a stored secret cannot be decrypted with any key in {SECRET_KEYS_ENV} "
+                    f"for {table.name} row {row_id!r}. Restore the original key for "
+                    "ciphertext. If this is a legacy plaintext credential using the "
+                    "reserved prefix, re-enter the credential encrypted under the "
+                    "configured key before retrying; see the server API recovery guide."
                 ) from exc
         else:
             plaintext = value.encode("utf-8")
