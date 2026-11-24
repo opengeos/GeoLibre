@@ -13,7 +13,7 @@
     },
     "cog": {
       "byteRangesOnly": "The COG preview only reads byte ranges.",
-      "byteBudget": "The COG preview stopped after reading {{limit}} MiB; open the project in GeoLibre to view it.",
+      "byteBudget": "The COG preview stopped after requesting {{limit}} MiB; open the project in GeoLibre to view it.",
       "noPublicUrl": "The COG layer has no public URL.",
       "affineUnsupported": "This preview cannot place a rotated, skewed, or flipped COG; open it in GeoLibre.",
       "noCrs": "The COG declares no coordinate reference system, so the preview cannot place it.",

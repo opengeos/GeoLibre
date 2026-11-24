@@ -516,7 +516,7 @@ describe("MCP preview COG loading", () => {
         undefined,
         16,
       ),
-      /stopped after reading/,
+      /stopped after requesting/,
     );
   });
 });
