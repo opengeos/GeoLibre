@@ -101,6 +101,7 @@
     "maplibre-gl-usgs-lidar": "^0.11.5",
     "maplibre-gl-vector": "^0.11.2",
     "maplibre-tilepackage-protocol": "^1.2.2",
+    "mgrs": "^2.2.0",
     "openai": "^7.57.0",
     "pdfjs-dist": "^6.5.438",
     "proj4": "^2.23.0",

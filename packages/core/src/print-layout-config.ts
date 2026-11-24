@@ -36,6 +36,52 @@ export interface PrintLayoutLegendEntry {
   color: string;
 }
 
+/** A furniture element the user can drag and resize on the layout canvas. */
+export type PrintLayoutMovableElement = "title" | "legend" | "scaleBar" | "northArrow" | "footer";
+
+/** Every {@link PrintLayoutMovableElement}, for validation. */
+export const PRINT_LAYOUT_MOVABLE_ELEMENTS: readonly PrintLayoutMovableElement[] = [
+  "title",
+  "legend",
+  "scaleBar",
+  "northArrow",
+  "footer",
+];
+
+/**
+ * How far a furniture element was moved from its automatic position: `dx` /
+ * `dy` as fractions of the page width / height, and a uniform `scale` about
+ * the element's anchor. Resolution independent, so the preview and every
+ * export DPI agree.
+ */
+export interface PrintLayoutElementOffset {
+  dx: number;
+  dy: number;
+  scale: number;
+}
+
+/** A map frame placed on the page: position and size as page fractions. */
+export interface PrintLayoutFrameBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** How the map-frame coordinate grid labels its ticks. */
+export type PrintLayoutGridType = "dms" | "decimal" | "utm" | "mgrs";
+
+/** Basemaps the overview / inset map can draw. */
+export const PRINT_LAYOUT_INSET_BASEMAPS = [
+  "positron",
+  "liberty",
+  "bright",
+  "dark",
+  "fiord",
+  "osm",
+] as const;
+export type PrintLayoutInsetBasemap = (typeof PRINT_LAYOUT_INSET_BASEMAPS)[number];
+
 export interface PrintLayoutConfig {
   // Title block
   title: string;
@@ -139,6 +185,32 @@ export interface PrintLayoutConfig {
   projectNumber: string;
   crs: string;
   revision: string;
+
+  // Overview / inset locator map
+  showInset: boolean;
+  insetBasemap: PrintLayoutInsetBasemap;
+  /** Zoom levels the inset sits out from the main frame's fitted zoom (<= 0). */
+  insetZoomOffset: number;
+  /** Colour of the main frame's extent rectangle drawn on the inset. */
+  insetExtentColor: string;
+  /** Where the inset sits on the page; null keeps its automatic corner. */
+  insetBox: PrintLayoutFrameBox | null;
+
+  // Map-frame coordinate grid
+  showGrid: boolean;
+  gridType: PrintLayoutGridType;
+  /** Degrees (Lat/Lon) or metres (UTM, MGRS); 0 picks an interval automatically. */
+  gridInterval: number;
+  /** Label size in typographic points. */
+  gridFontSize: number;
+  /** Draw grid lines across the map, not only border ticks. */
+  gridLines: boolean;
+
+  // Free-form positioning
+  /** The main map frame's page box; null keeps the automatic layout. */
+  mapFrameBox: PrintLayoutFrameBox | null;
+  /** Per-element displacement from the automatic layout; absent = automatic. */
+  elementOffsets: Partial<Record<PrintLayoutMovableElement, PrintLayoutElementOffset>>;
 
   // What the page captures
   captureMode: "viewport" | "extent";
@@ -253,6 +325,21 @@ export const DEFAULT_PRINT_LAYOUT: PrintLayoutConfig = {
   crs: "",
   revision: "",
 
+  showInset: false,
+  insetBasemap: "positron",
+  insetZoomOffset: -4,
+  insetExtentColor: "#dc2626",
+  insetBox: null,
+
+  showGrid: false,
+  gridType: "dms",
+  gridInterval: 0,
+  gridFontSize: 7,
+  gridLines: false,
+
+  mapFrameBox: null,
+  elementOffsets: {},
+
   captureMode: "viewport",
   extentBbox: null,
 
@@ -277,6 +364,7 @@ export function createDefaultPrintLayout(): PrintLayoutConfig {
     ...DEFAULT_PRINT_LAYOUT,
     tableColumns: [],
     customLegendEntries: DEFAULT_PRINT_LAYOUT.customLegendEntries.map((entry) => ({ ...entry })),
+    elementOffsets: {},
   };
 }
 
@@ -374,6 +462,43 @@ function extent(value: unknown): [number, number, number, number] | null {
   return [west, south, east, north];
 }
 
+/** A page-fraction frame box kept on the page, or null for anything else. */
+function frameBox(value: unknown): PrintLayoutFrameBox | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const parts = [raw.x, raw.y, raw.w, raw.h];
+  if (!parts.every((n) => typeof n === "number" && Number.isFinite(n))) return null;
+  const [x, y, w, h] = parts as number[];
+  if (w < 0.01 || h < 0.01) return null;
+  const cw = Math.min(1, w);
+  const ch = Math.min(1, h);
+  return {
+    x: Math.min(1 - cw, Math.max(0, x)),
+    y: Math.min(1 - ch, Math.max(0, y)),
+    w: cw,
+    h: ch,
+  };
+}
+
+/** Valid element offsets only; unknown elements and malformed entries drop. */
+function elementOffsets(value: unknown): PrintLayoutConfig["elementOffsets"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: PrintLayoutConfig["elementOffsets"] = {};
+  for (const id of PRINT_LAYOUT_MOVABLE_ELEMENTS) {
+    const entry = (value as Record<string, unknown>)[id];
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const { dx, dy, scale } = entry as Record<string, unknown>;
+    if (![dx, dy, scale].every((n) => typeof n === "number" && Number.isFinite(n))) continue;
+    out[id] = {
+      // An element can be dragged partly off the page but not lost entirely.
+      dx: Math.min(1, Math.max(-1, dx as number)),
+      dy: Math.min(1, Math.max(-1, dy as number)),
+      scale: Math.min(4, Math.max(0.25, scale as number)),
+    };
+  }
+  return out;
+}
+
 /**
  * Coerce an untrusted (possibly hand-edited, possibly partial) `printLayout`
  * into a complete {@link PrintLayoutConfig}, filling every missing or
@@ -387,6 +512,7 @@ export function normalizePrintLayoutConfig(value: unknown): PrintLayoutConfig | 
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const raw = value as Record<string, unknown>;
   const d = DEFAULT_PRINT_LAYOUT;
+  const gridInterval = num(raw.gridInterval, d.gridInterval, 0, 10_000_000);
   return {
     title: str(raw.title, d.title),
     subtitle: str(raw.subtitle, d.subtitle),
@@ -480,6 +606,27 @@ export function normalizePrintLayoutConfig(value: unknown): PrintLayoutConfig | 
     crs: str(raw.crs, d.crs),
     revision: str(raw.revision, d.revision),
 
+    showInset: bool(raw.showInset, d.showInset),
+    insetBasemap: oneOf(raw.insetBasemap, PRINT_LAYOUT_INSET_BASEMAPS, d.insetBasemap),
+    insetZoomOffset: num(raw.insetZoomOffset, d.insetZoomOffset, -12, 0),
+    insetExtentColor: hexColor(raw.insetExtentColor, d.insetExtentColor).replace(
+      /^#([a-f\d])([a-f\d])([a-f\d])$/i,
+      "#$1$1$2$2$3$3",
+    ),
+    insetBox: frameBox(raw.insetBox),
+
+    showGrid: bool(raw.showGrid, d.showGrid),
+    gridType: oneOf(raw.gridType, ["dms", "decimal", "utm", "mgrs"] as const, d.gridType),
+    gridInterval:
+      raw.gridType === "mgrs" && gridInterval > 0
+        ? Math.ceil(gridInterval / 1000) * 1000
+        : gridInterval,
+    gridFontSize: num(raw.gridFontSize, d.gridFontSize, 3, 36),
+    gridLines: bool(raw.gridLines, d.gridLines),
+
+    mapFrameBox: frameBox(raw.mapFrameBox),
+    elementOffsets: elementOffsets(raw.elementOffsets),
+
     captureMode: oneOf(raw.captureMode, ["viewport", "extent"] as const, d.captureMode),
     extentBbox: extent(raw.extentBbox),
 
@@ -517,13 +664,27 @@ export function printLayoutConfigsEqual(a: PrintLayoutConfig, b: PrintLayoutConf
   for (const key of Object.keys(DEFAULT_PRINT_LAYOUT) as (keyof PrintLayoutConfig)[]) {
     const left = a[key];
     const right = b[key];
-    if (Array.isArray(left) || Array.isArray(right)) {
-      if (JSON.stringify(left) !== JSON.stringify(right)) return false;
+    if (
+      (left !== null && typeof left === "object") ||
+      (right !== null && typeof right === "object")
+    ) {
+      if (stableJson(left) !== stableJson(right)) return false;
     } else if (left !== right) {
       return false;
     }
   }
   return true;
+}
+
+/** JSON with object keys sorted, so key order never reads as a change. */
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(
+          Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)),
+        )
+      : v,
+  );
 }
 
 /**

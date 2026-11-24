@@ -2325,7 +2325,9 @@
       "colorbar": "Colorbar",
       "customLegend": "Custom legend",
       "dataTable": "Attribute table",
-      "dataChart": "Chart"
+      "dataChart": "Chart",
+      "inset": "Overview map (inset)",
+      "grid": "Coordinate grid"
     },
     "dataBlocks": {
       "layer": "Layer",
@@ -2502,6 +2504,59 @@
       "exporting": "Exporting page {{current}} of {{total}}…",
       "tokensHint": "Tokens {atlas.name}, {atlas.pagenumber}, {atlas.total}, and {atlas.attr:FIELD} are replaced per page in the title, subtitle, footer, and page file name.",
       "alongLineHint": "Pages follow each line in order; km_start, km_end, segment, and segments are available as {atlas.attr:FIELD} tokens."
+    },
+    "inset": {
+      "heading": "Overview map",
+      "basemap": "Basemap",
+      "basemapOption": {
+        "positron": "Positron",
+        "liberty": "Liberty",
+        "bright": "Bright",
+        "dark": "Dark",
+        "fiord": "Fiord",
+        "osm": "OpenStreetMap"
+      },
+      "zoomOffset": "Zoom out (levels)",
+      "extentColor": "Extent color",
+      "needsGeoref": "The overview map needs a flat 2D capture. Recapture in 2D or turn off the overview map to export.",
+      "loading": "Loading overview map…",
+      "failed": "The overview map could not load. Check your connection and retry.",
+      "retry": "Retry overview map",
+      "waitForMap": "Wait for the overview map to load, or turn it off before exporting."
+    },
+    "grid": {
+      "heading": "Coordinate grid",
+      "type": "Coordinates",
+      "typeOption": {
+        "dms": "Latitude/longitude (DMS)",
+        "decimal": "Latitude/longitude (decimal)",
+        "utm": "UTM",
+        "mgrs": "MGRS"
+      },
+      "intervalDegrees": "Interval (degrees, 0 = auto)",
+      "intervalMeters": "Interval (meters, 0 = auto)",
+      "mgrsSingleSquare": "MGRS grid requires one 100 km square.",
+      "mgrsPrecision": "MGRS labels use kilometer precision. Positive fixed intervals round up to whole kilometers.",
+      "denseInterval": "The requested interval is too small for this grid. Using an interval of {{interval}}.",
+      "fontSize": "Label size (pt)",
+      "lines": "Draw grid lines across the map",
+      "needsGeoref": "The grid needs a flat 2D capture; it is not drawn for a globe or tilted view."
+    },
+    "arrange": {
+      "toggle": "Arrange",
+      "done": "Done",
+      "reset": "Reset layout",
+      "hint": "Drag an element to move it; drag its corner handle to resize. Arrow keys nudge the focused element; hold Alt with an arrow key to resize it.",
+      "resizeHandle": "Resize {{name}}",
+      "element": {
+        "map": "Map frame",
+        "inset": "Overview map",
+        "title": "Title",
+        "legend": "Legend",
+        "scaleBar": "Scale bar",
+        "northArrow": "North arrow",
+        "footer": "Footer"
+      }
     }
   },
   "kml": {

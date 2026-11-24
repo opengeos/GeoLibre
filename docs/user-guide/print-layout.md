@@ -80,12 +80,77 @@ Tick the elements to place on the page under **Map elements**:
 | **Custom legend** | Hand-made legend entries. See [Custom legend](#custom-legend). |
 | **Attribute table** | A table of a layer's records. See [Data blocks](#data-blocks). |
 | **Chart** | A bar, pie, or line chart. See [Data blocks](#data-blocks). |
+| **Overview map (inset)** | A second map frame locating the main map. See [Overview map](#overview-map). |
+| **Coordinate grid** | Ticks and labels around the map frame. See [Coordinate grid](#coordinate-grid). |
 
-Blocks snap to the page corners through their **Position** setting; there is no
-free placement by dragging. The composer has no free text boxes, image or logo
-elements, inset maps, or layout grid. A coordinate grid on the map itself
-(**Controls → Gridlines**) is captured with the map, and the map is fitted so
-its edge labels are not cropped.
+Colorbar, custom legend and data blocks snap to the page corners through their
+**Position** setting. The title, legend, scale bar, north arrow, footer, the map
+frame and the overview map can also be placed by hand: see
+[Arranging elements](#arranging-elements). The composer has no free text boxes
+or image and logo elements. The gridlines plugin (**Controls → Gridlines**) is a
+separate, on-map grid: it is captured with the map, and the map is fitted so its
+edge labels are not cropped.
+
+### Overview map
+
+**Overview map (inset)** adds a small locator map, by default in the lower-left
+corner of the main frame. It has its own **Basemap** (Positron, Liberty, Bright,
+Dark, Fiord or OpenStreetMap) and a **Zoom out (levels)** setting: how many zoom
+levels it sits out from the main map, so the main map's extent reads as a
+rectangle in its surroundings. **Extent color** sets that rectangle's color.
+When the main extent is too small to read as a box at the inset's zoom, a ring
+marks the spot instead.
+
+The overview map renders on its own hidden map, so it never moves your map or
+changes its basemap. The extent rectangle is drawn from the captured map's
+georeference, so the overview needs a flat 2D view (rotated is fine). A globe or
+tilted capture cannot render the overview. Recapture in 2D or turn the overview
+off before exporting. Export waits until the matching overview basemap has
+loaded; a failed load shows a retry button.
+
+### Coordinate grid
+
+**Coordinate grid** draws ticks and labels around the outside of the map frame:
+
+- **Coordinates**: **Latitude/longitude (DMS)** (`45°30′N`),
+  **Latitude/longitude (decimal)** (`45.5°N`), **UTM** (`345000mE`, with the
+  zone, such as `33N`, below the frame), or **MGRS** (two-digit kilometre
+  values inside the 100 km square, with the grid zone and square, such as
+  `33U VP`, below the frame). UTM and MGRS use the zone of the frame's centre.
+- **Interval**: degrees for latitude/longitude, meters for UTM and MGRS. `0`
+  picks a readable interval for the map's extent. Positive MGRS intervals round
+  up to whole kilometers, matching the labels' precision.
+- **Label size (pt)**: the label size in points on the printed page.
+- **Draw grid lines across the map**: adds lines across the map as well as the
+  border ticks.
+
+Left and right labels read bottom to top, and a label that would overlap its
+neighbour is skipped. The grid is drawn from the captured map's georeference,
+so like the overview rectangle it needs a 2D, untilted view. It is drawn by the
+layout itself, so it is as sharp in PNG, PDF and SVG exports as in the preview.
+MGRS is limited to one 100 km square; a frame crossing square boundaries shows
+a notice instead of an ambiguous grid. The automatic frame reserves a label
+band. When a frame placed by hand leaves too little outside space, ticks and
+labels move inside that edge.
+
+### Arranging elements
+
+Click **Arrange** above the preview to show a dashed handle around every
+movable element: the map frame, the overview map, the title, the legend, the
+scale bar, the north arrow and the footer. Drag an element to move it, or drag
+its corner handle to resize it. The map frame and overview map resize freely;
+the other elements scale in proportion. A focused handle also moves with the
+arrow keys (`Shift` for bigger steps, `Alt` to resize). **Reset layout** puts
+everything back in its automatic place, and **Done** hides the handles.
+
+Automatic placement does not avoid every furniture collision. If an info block
+moves navigation to the left, or a tall legend overlaps the overview map, use
+**Arrange** to move the overview or the navigation elements clear of each other.
+
+Positions are stored as fractions of the page, so the arrangement lands in the
+same place at every export resolution and is saved with the project. Moving
+the map frame changes its shape on the page, and the scale, the atlas fit and
+the GeoPDF georeference follow it.
 
 ### Legend editor
 

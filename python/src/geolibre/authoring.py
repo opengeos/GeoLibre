@@ -2825,7 +2825,10 @@ def set_print_layout(
     """Change the project's Print Layout composer settings.
 
     Only the settings passed are changed; the app fills every other one from
-    its defaults when the project opens. Layer settings (``table_layer_id``,
+    its defaults when the project opens. ``element_offsets`` merges by element
+    name; each supplied element replaces that element's offset record. Use
+    ``reset=True`` to discard all previously stored settings.
+    Layer settings (``table_layer_id``,
     ``chart_layer_id``, ``atlas_layer_id``) take a layer id or name.
 
     Args:
@@ -2849,7 +2852,21 @@ def set_print_layout(
             validated[key] = str(find_layer(project, value)["id"])
     current = project.get("printLayout")
     stored = {} if reset or not isinstance(current, dict) else current
+    if "elementOffsets" in validated and not reset:
+        offsets = stored.get("elementOffsets")
+        validated["elementOffsets"] = {
+            **(offsets if isinstance(offsets, dict) else {}),
+            **validated["elementOffsets"],
+        }
     stored.update(validated)
+    interval = stored.get("gridInterval", 0)
+    if (
+        stored.get("gridType") == "mgrs"
+        and not isinstance(interval, bool)
+        and isinstance(interval, (int, float))
+        and 0 < interval <= 10000000
+    ):
+        stored["gridInterval"] = math.ceil(interval / 1000) * 1000
     if stored:
         project["printLayout"] = stored
     else:
