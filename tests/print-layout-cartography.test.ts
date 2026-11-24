@@ -12,6 +12,8 @@ import {
   formatMgrsDigits,
   formatUtm,
   insetViewForBounds,
+  insetRenderSize,
+  insetFootprint,
   mercatorViewPx,
   mgrsSquareLabel,
   movedOffset,
@@ -29,6 +31,8 @@ import {
   type LayoutOptions,
 } from "../apps/geolibre-desktop/src/lib/print-layout";
 import type { CaptureGeoref } from "../apps/geolibre-desktop/src/lib/geopdf";
+import type { CapturedMap } from "../apps/geolibre-desktop/src/lib/print-layout-export";
+import { capturedBounds } from "../apps/geolibre-desktop/src/components/layout/print-layout/useInsetMap";
 
 const close = (actual: number, expected: number, tol: number, msg?: string) =>
   assert.ok(Math.abs(actual - expected) <= tol, msg ?? `${actual} != ${expected} (±${tol})`);
@@ -202,9 +206,46 @@ describe("computeMapGrid", () => {
     const top = grid.ticks.filter((tk) => tk.edge === "top");
     assert.ok(top.length >= 5, `expected several easting ticks, got ${top.length}`);
     assert.ok(top.every((tk) => tk.value % 10_000 === 0 && tk.label.endsWith("mE")));
-    const mgrs = computeMapGrid({ frame, pageToLngLat: small, type: "mgrs", interval: 10_000 });
+    const mgrs = computeMapGrid({
+      frame,
+      pageToLngLat: (x, y) => [
+        14.8 + ((x - frame.x) / frame.w) * 0.1,
+        48.2 - ((y - frame.y) / frame.h) * 0.05,
+      ],
+      type: "mgrs",
+      interval: 1000,
+    });
     assert.match(mgrs?.zoneLabel ?? "", /^33U [A-Z]{2}$/);
     assert.ok(mgrs?.ticks.every((tk) => /^\d\d$/.test(tk.label)));
+  });
+
+  it("finds both axes when a quarter-turn puts longitude on the side edges", () => {
+    const grid = computeMapGrid({
+      frame,
+      type: "decimal",
+      interval: 5,
+      pageToLngLat: (x, y) => [
+        5 + ((y - frame.y) / frame.h) * 20,
+        50 - ((x - frame.x) / frame.w) * 10,
+      ],
+    });
+    assert.ok(grid);
+    assert.equal(grid.lines.length, 8);
+    assert.ok(grid.ticks.some((tick) => tick.edge === "top" && tick.axis === 1));
+    assert.ok(grid.ticks.some((tick) => tick.edge === "left" && tick.axis === 0));
+  });
+
+  it("bounds the work for tiny fixed intervals", () => {
+    const grid = computeMapGrid({ frame, pageToLngLat, type: "decimal", interval: 1e-12 });
+    assert.ok(grid && grid.interval >= 0.1);
+    assert.ok(grid.ticks.length < 2000);
+    assert.ok(findEdgeTicks((t) => t * 80, 1e-12).length <= 4096);
+  });
+
+  it("reports multi-square MGRS frames instead of printing one misleading square id", () => {
+    const grid = computeMapGrid({ frame, pageToLngLat, type: "mgrs", interval: 1000 });
+    assert.equal(grid?.warning, "mgrs-multiple-squares");
+    assert.deepEqual(grid?.ticks, []);
   });
 
   it("returns null when the frame centre is off the map", () => {
@@ -216,6 +257,32 @@ describe("computeMapGrid", () => {
 });
 
 describe("inset view", () => {
+  it("bounds extremely narrow and wide renders while keeping both sides positive", () => {
+    assert.deepEqual(insetRenderSize(0.01 / 0.8), { width: 6, height: 480 });
+    assert.deepEqual(insetRenderSize(80), { width: 480, height: 6 });
+    assert.deepEqual(insetRenderSize(4 / 3), { width: 480, height: 360 });
+    const tiny = insetRenderSize(1e-9);
+    assert.equal(tiny.width, 1);
+    assert.equal(tiny.height, 480);
+  });
+  it("draws one world boundary without an interior dateline seam", () => {
+    const view = insetViewForBounds([-180, -50, 180, 50], 480, 360, 0);
+    const ring = insetFootprint(view, [
+      [-180, 50],
+      [-90, 50],
+      [0, 50],
+      [90, 50],
+      [180, 50],
+      [180, -50],
+      [90, -50],
+      [0, -50],
+      [-90, -50],
+      [-180, -50],
+    ]);
+    assert.equal(ring.length, 4);
+    assert.equal(new Set(ring.map((point) => point.x)).size, 2);
+    assert.equal(new Set(ring.map((point) => point.y)).size, 2);
+  });
   it("centres on the extent and zooms out by the offset", () => {
     const bounds: [number, number, number, number] = [-1, -1, 1, 1];
     const fitted = insetViewForBounds(bounds, 400, 400, 0);
@@ -244,6 +311,19 @@ describe("inset view", () => {
 });
 
 describe("element offsets", () => {
+  it("keeps moved and resized offsets within the persisted range", () => {
+    assert.deepEqual(movedOffset(undefined, -1200, 1200, 1000, 700), { dx: -1, dy: 1, scale: 1 });
+    const resized = resizedOffset(
+      { x: 500, y: 500, w: 100, h: 100 },
+      { x: 0, y: 0 },
+      { dx: -0.9, dy: -0.9, scale: 1 },
+      1000,
+      1000,
+      1000,
+      700,
+    );
+    assert.ok(Math.abs(resized.dx) <= 1 && Math.abs(resized.dy) <= 1);
+  });
   const natural = { x: 100, y: 50, w: 200, h: 100 };
   const anchor = { x: 100, y: 50 };
   const W = 1000;
@@ -320,6 +400,13 @@ describe("frame boxes", () => {
     close(r.w, 200, 1e-9);
     close(r.h, 150, 1e-9);
   });
+
+  it("keeps the automatic inset inside a tiny frame at the page edge", () => {
+    const body = { x: 950, y: 100, w: 50, h: 500 };
+    const inset = defaultInsetRect(body, 10);
+    assert.ok(inset.x >= body.x && inset.x + inset.w <= body.x + body.w);
+    assert.ok(inset.y >= body.y && inset.y + inset.h <= body.y + body.h);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -331,16 +418,26 @@ function recordingCanvas(width = 1000, height = 700) {
   const fills: { text: string; x: number; y: number }[] = [];
   const images: { x: number; y: number; w: number; h: number }[] = [];
   const transforms: string[] = [];
+  const paint: string[] = [];
   const state: Record<string, unknown> = { textAlign: "start", textBaseline: "alphabetic" };
   const ctx = new Proxy(state, {
     get(target, prop) {
       if (prop === "measureText") return (text: string) => ({ width: text.length * 5 });
+      if (prop === "arcTo")
+        return (_x: number, _y: number, _x2: number, _y2: number, radius: number) => {
+          assert.ok(radius >= 0, "Canvas rejects a negative arc radius");
+        };
       if (prop === "fillText") {
-        return (text: string, x: number, y: number) => fills.push({ text, x, y });
+        return (text: string, x: number, y: number) => {
+          paint.push(`text:${text}`);
+          fills.push({ text, x, y });
+        };
       }
       if (prop === "drawImage") {
-        return (_img: unknown, x: number, y: number, w: number, h: number) =>
+        return (_img: unknown, x: number, y: number, w: number, h: number) => {
+          paint.push("image");
           images.push({ x, y, w, h });
+        };
       }
       if (prop === "translate" || prop === "scale" || prop === "rotate") {
         return (...args: number[]) => transforms.push(`${String(prop)}(${args.join(",")})`);
@@ -354,7 +451,7 @@ function recordingCanvas(width = 1000, height = 700) {
     },
   });
   const canvas = { width, height, getContext: () => ctx } as unknown as HTMLCanvasElement;
-  return { canvas, fills, images, transforms };
+  return { canvas, fills, images, transforms, paint };
 }
 
 /** An equirectangular georeference: 1000 x 500 image over 10W..10E, 50N..40N. */
@@ -394,7 +491,124 @@ function options(overrides: Partial<LayoutOptions> = {}): LayoutOptions {
   };
 }
 
+describe("captured inset bounds", () => {
+  const capture = (west: number, span: number): CapturedMap => ({
+    image: {} as HTMLCanvasElement,
+    width: 1000,
+    height: 500,
+    metersPerPixel: 100,
+    pixelRatio: 1,
+    bearingDeg: 0,
+    georef: {
+      transform: [west, span / 1000, 0, 50, 0, -0.02],
+      projection: {
+        ...GEOREF.projection,
+        inverse: (x, y) => [wrapLongitude(x), y],
+      },
+    },
+  });
+  it("preserves broad and full-world captures without collapsing them to the dateline", () => {
+    const broad = capturedBounds(capture(-170, 340));
+    const world = capturedBounds(capture(-180, 360));
+    assert.ok(broad && Math.abs(broad[2] - broad[0] - 340) < 1e-7);
+    assert.deepEqual(world, [-180, 40, 180, 50]);
+  });
+  it("keeps a narrow dateline crossing narrow", () => {
+    assert.deepEqual(capturedBounds(capture(170, 20)), [170, 40, 190, 50]);
+  });
+  it("fits the visible cover crop rather than the whole capture", () => {
+    const cropped = capturedBounds(
+      capture(-10, 20),
+      options({
+        mapFrameBox: { x: 0, y: 0, w: 0.25, h: 1 },
+      }),
+    );
+    assert.ok(cropped && cropped[2] - cropped[0] < 5);
+    assert.equal(cropped[1], 40);
+    assert.equal(cropped[3], 50);
+  });
+});
+
 describe("drawLayout with the cartographic extras", () => {
+  it("paints both map frames before title and footer furniture", () => {
+    const { canvas, paint } = recordingCanvas();
+    drawLayout(
+      canvas,
+      options({
+        inset: {
+          box: null,
+          image: {} as CanvasImageSource,
+          view: { center: [0, 0], zoom: 2, width: 480, height: 360 },
+          extentColor: "#ff0000",
+        },
+      }),
+    );
+    const lastFrame = paint.lastIndexOf("image");
+    assert.ok(paint.indexOf("text:Map") > lastFrame);
+    assert.ok(paint.indexOf("text:Footer") > lastFrame);
+  });
+  it("changes a resized scale bar's distance while a move preserves it", () => {
+    const render = (scale: number, dx: number) => {
+      const { canvas, fills } = recordingCanvas();
+      drawLayout(canvas, options({ elementOffsets: { scaleBar: { dx, dy: 0, scale } } }));
+      return fills.find((item) => /^\d+(?:\.\d+)? (?:km|m)$/.test(item.text))?.text;
+    };
+    const original = render(1, 0);
+    assert.ok(original);
+    assert.equal(render(1, 0.1), original);
+    assert.notEqual(render(2, 0), original);
+    const plain = drawLayout(recordingCanvas().canvas, options());
+    const doubled = drawLayout(
+      recordingCanvas().canvas,
+      options({ elementOffsets: { scaleBar: { dx: 0, dy: 0, scale: 2 } } }),
+    );
+    close(doubled.scaleBar!.box.w, plain.scaleBar!.box.w * 2, 1e-9);
+  });
+  it("keeps full-page grid labels inside the page", () => {
+    const { canvas, fills, transforms } = recordingCanvas();
+    drawLayout(
+      canvas,
+      options({
+        mapFrameBox: { x: 0, y: 0, w: 1, h: 1 },
+        showTitle: false,
+        showFooter: false,
+        grid: { type: "decimal", interval: 5, fontSizePt: 7, lines: true },
+      }),
+    );
+    const labels = fills.filter((item) => item.text.includes("°"));
+    assert.ok(labels.length);
+    assert.ok(labels.every((item) => item.y >= 0 && item.y <= 700));
+    assert.ok(!transforms.some((item) => /^translate\(-\d/.test(item)), transforms.join(" | "));
+  });
+  it("skips a table when a narrow map frame has no positive content width", () => {
+    const { canvas, fills } = recordingCanvas();
+    assert.doesNotThrow(() =>
+      drawLayout(
+        canvas,
+        options({
+          mapFrameBox: { x: 0, y: 0, w: 0.01, h: 1 },
+          dataTable: { columns: ["name"], rows: [["parcel"]], position: "bottom-left" },
+        }),
+      ),
+    );
+    assert.ok(!fills.some((item) => item.text === "parcel"));
+  });
+  it("composes the inset's basemap attribution into the output", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      options({
+        inset: {
+          box: null,
+          image: {} as CanvasImageSource,
+          view: { center: [0, 0], zoom: 2, width: 480, height: 360 },
+          extentColor: "#ff0000",
+          attribution: "© OpenStreetMap contributors",
+        },
+      }),
+    );
+    assert.ok(fills.some((item) => item.text === "© OpenStreetMap contributors"));
+  });
   it("reports a box for every drawn element, unchanged by default", () => {
     const { canvas } = recordingCanvas();
     const boxes = drawLayout(canvas, options());

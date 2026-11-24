@@ -11,6 +11,16 @@ import {
   type PrintLayoutConfig,
 } from "../packages/core/src/print-layout-config";
 
+it("normalizes fixed MGRS intervals to the supported kilometre precision", () => {
+  assert.equal(
+    normalizePrintLayoutConfig({ gridType: "mgrs", gridInterval: 500 })?.gridInterval,
+    1000,
+  );
+  assert.equal(normalizePrintLayoutConfig({ gridType: "mgrs", gridInterval: 0 })?.gridInterval, 0);
+  assert.equal(normalizePrintLayoutConfig({ gridInterval: Infinity })?.gridInterval, 0);
+  assert.equal(normalizePrintLayoutConfig({ gridInterval: -1 })?.gridInterval, 0);
+});
+
 // The Print Layout composer's settings describe the project's map document, so
 // they round-trip through `.geolibre.json`. Before GeoLibre discussion #1992
 // they lived only in the dialog's component state: reopening a project lost the

@@ -168,13 +168,10 @@ export function ArrangeOverlay({ frame, layout, dispatch }: ArrangeOverlayProps)
           >
             <span
               role="presentation"
-              aria-label={t("printLayout.arrange.resizeHandle", { name })}
+              title={t("printLayout.arrange.resizeHandle", { name })}
               className="absolute h-3 w-3 cursor-nwse-resize rounded-sm border border-background bg-primary"
               style={{ right: -6, bottom: -6 }}
               onPointerDown={(e) => begin(e, id, entry, "resize")}
-              onPointerMove={move}
-              onPointerUp={end}
-              onPointerCancel={end}
             />
           </div>
         );

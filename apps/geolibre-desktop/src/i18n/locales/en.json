@@ -2504,6 +2504,9 @@
       },
       "intervalDegrees": "Interval (degrees, 0 = auto)",
       "intervalMeters": "Interval (meters, 0 = auto)",
+      "mgrsSingleSquare": "MGRS grid requires one 100 km square.",
+      "mgrsPrecision": "MGRS labels use kilometer precision. Smaller fixed intervals round up to 1 km.",
+      "denseInterval": "This grid is too dense. Using an interval of {{interval}}.",
       "fontSize": "Label size (pt)",
       "lines": "Draw grid lines across the map",
       "needsGeoref": "The grid needs a flat 2D capture; it is not drawn for a globe or tilted view."

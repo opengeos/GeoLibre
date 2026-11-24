@@ -512,6 +512,7 @@ export function normalizePrintLayoutConfig(value: unknown): PrintLayoutConfig | 
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const raw = value as Record<string, unknown>;
   const d = DEFAULT_PRINT_LAYOUT;
+  const gridInterval = num(raw.gridInterval, d.gridInterval, 0, 10_000_000);
   return {
     title: str(raw.title, d.title),
     subtitle: str(raw.subtitle, d.subtitle),
@@ -613,7 +614,8 @@ export function normalizePrintLayoutConfig(value: unknown): PrintLayoutConfig | 
 
     showGrid: bool(raw.showGrid, d.showGrid),
     gridType: oneOf(raw.gridType, ["dms", "decimal", "utm", "mgrs"] as const, d.gridType),
-    gridInterval: num(raw.gridInterval, d.gridInterval, 0, 10_000_000),
+    gridInterval:
+      raw.gridType === "mgrs" && gridInterval > 0 ? Math.max(1000, gridInterval) : gridInterval,
     gridFontSize: num(raw.gridFontSize, d.gridFontSize, 3, 36),
     gridLines: bool(raw.gridLines, d.gridLines),
 

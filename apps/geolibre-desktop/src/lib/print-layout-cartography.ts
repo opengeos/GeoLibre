@@ -49,6 +49,7 @@ export type FrameEdge = "top" | "bottom" | "left" | "right";
 /** Where one grid line meets the frame border. */
 export interface GridTick {
   edge: FrameEdge;
+  axis: 0 | 1;
   /** Page-pixel position on the frame border. */
   x: number;
   y: number;
@@ -76,6 +77,7 @@ export interface MapGrid {
    * projected grid is drawn in; null for a Lat/Lon grid.
    */
   zoneLabel: string | null;
+  warning?: "mgrs-multiple-squares";
 }
 
 /** Degree intervals a DMS grid snaps to: whole seconds, minutes and degrees. */
@@ -158,10 +160,15 @@ export function findEdgeTicks(
       // Closed [lo, hi]: a multiple landing exactly on a shared sample is found
       // by both segments and merged below. `+ 0` turns -0 into 0.
       const eps = 1e-9 * interval;
-      for (let k = Math.ceil((lo - eps) / interval); k * interval <= hi + eps; k++) {
+      const first = Math.ceil((lo - eps) / interval);
+      const last = Math.floor((hi + eps) / interval);
+      if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last) || last - first > 4096)
+        return [];
+      for (let k = first; k <= last; k++) {
         const value = k * interval + 0;
         const f = Math.min(1, Math.max(0, (value - prev.v) / (v - prev.v)));
         out.push({ t: prev.t + f * (t - prev.t), value });
+        if (out.length >= 4096) return out;
       }
     }
     prev = { t, v };
@@ -332,9 +339,8 @@ export interface MapGridInput {
 /**
  * Compute the border ticks, labels and grid lines for a map frame.
  *
- * Top and bottom edges carry the x coordinate (longitude, or easting); left
- * and right carry the y coordinate (latitude, or northing). A projected grid is
- * drawn in the UTM zone of the frame centre.
+ * Both coordinates are sampled on all four edges so rotated frames retain
+ * their crossings. A projected grid uses the frame centre's UTM zone.
  *
  * @param input - The frame, its georeference and the grid settings.
  * @returns The grid, or null when the frame centre has no coordinate.
@@ -359,7 +365,7 @@ export function computeMapGrid(input: MapGridInput): MapGrid | null {
     }
   };
 
-  const edges: { edge: FrameEdge; from: Point; to: Point; axis: 0 | 1 }[] = [
+  const frameEdges: { edge: FrameEdge; from: Point; to: Point; axis: 0 | 1 }[] = [
     {
       edge: "top",
       from: { x: frame.x, y: frame.y },
@@ -385,6 +391,10 @@ export function computeMapGrid(input: MapGridInput): MapGrid | null {
       axis: 1,
     },
   ];
+  const edges = frameEdges.flatMap((edge) => [
+    { ...edge, axis: 0 as const },
+    { ...edge, axis: 1 as const },
+  ]);
   const along = (e: (typeof edges)[number], t: number): Point => ({
     x: e.from.x + (e.to.x - e.from.x) * t,
     y: e.from.y + (e.to.y - e.from.y) * t,
@@ -395,24 +405,50 @@ export function computeMapGrid(input: MapGridInput): MapGrid | null {
     return c ? c[e.axis] : null;
   };
 
-  let interval = input.interval;
-  if (!(interval > 0) || !Number.isFinite(interval)) {
-    // Span of each axis along the edges that carry it; the shorter one sets a
-    // single interval for both, so the grid cells stay square-ish.
-    const spanOf = (e: (typeof edges)[number]) => {
-      const f = valueAlong(e);
-      const a = f(0);
-      let b = f(1);
-      if (a === null || b === null) return Infinity;
-      if (!projected && e.axis === 0 && b < a) b += 360;
-      return Math.abs(b - a);
-    };
-    const span = Math.min(
-      Math.min(spanOf(edges[0]), spanOf(edges[1])),
-      Math.min(spanOf(edges[2]), spanOf(edges[3])),
-    );
-    if (!Number.isFinite(span) || span <= 0) return null;
-    interval = autoGridInterval(span, type);
+  const spanOf = (edge: (typeof edges)[number]) => {
+    const at = valueAlong(edge);
+    let previous: number | null = null;
+    let low = Infinity,
+      high = -Infinity;
+    for (let i = 0; i <= samples; i++) {
+      let value = at(i / samples);
+      if (value === null || !Number.isFinite(value)) continue;
+      if (!projected && edge.axis === 0 && previous !== null) {
+        value += 360 * Math.round((previous - value) / 360);
+      }
+      low = Math.min(low, value);
+      high = Math.max(high, value);
+      previous = value;
+    }
+    return Math.max(0, high - low);
+  };
+  const spans = [0, 1].map((axis) => Math.max(...edges.filter((e) => e.axis === axis).map(spanOf)));
+  const span = Math.min(...spans.filter((value) => value > 0));
+  const largestSpan = Math.max(...spans);
+  if (!(span > 0) || !Number.isFinite(span)) return null;
+  let interval =
+    input.interval > 0 && Number.isFinite(input.interval)
+      ? input.interval
+      : autoGridInterval(span, type);
+  interval = Math.max(interval, largestSpan / 200, type === "mgrs" ? 1000 : 0);
+
+  if (type === "mgrs") {
+    const square = mgrsSquareLabel(center[0], center[1]);
+    for (const edge of frameEdges) {
+      for (let i = 0; i <= samples; i++) {
+        const p = along(edge, i / samples);
+        const ll = pageToLngLat(p.x, p.y);
+        if (!ll || !square || mgrsSquareLabel(ll[0], ll[1]) !== square) {
+          return {
+            ticks: [],
+            lines: [],
+            interval,
+            zoneLabel: null,
+            warning: "mgrs-multiple-squares",
+          };
+        }
+      }
+    }
   }
 
   const label = (value: number, axis: 0 | 1): string => {
@@ -434,28 +470,38 @@ export function computeMapGrid(input: MapGridInput): MapGrid | null {
     const periodic = !projected && e.axis === 0;
     for (const { t, value } of findEdgeTicks(valueAlong(e), interval, periodic, samples)) {
       const p = along(e, t);
-      ticks.push({ edge: e.edge, x: p.x, y: p.y, value, label: label(value, e.axis) });
+      ticks.push({
+        edge: e.edge,
+        axis: e.axis,
+        x: p.x,
+        y: p.y,
+        value,
+        label: label(value, e.axis),
+      });
     }
   }
 
-  // Join ticks of the same value on opposite edges. Exact for a north-up
-  // Lat/Lon grid on Web Mercator; a projected grid's lines are slightly curved
-  // there, which a straight chord approximates well within one frame.
+  // Join equal-coordinate crossings even when rotation puts them on adjacent
+  // edges. Projected lines are approximated by straight chords inside the frame.
   const lines: GridLine[] = [];
-  const key = (v: number) => (projected ? Math.round(v) : Math.round(wrapLongitude(v) * 3.6e6));
-  const join = (a: FrameEdge, b: FrameEdge, isLon: boolean) => {
-    const others = ticks.filter((tk) => tk.edge === b);
-    for (const tk of ticks.filter((tk) => tk.edge === a)) {
-      const match = others.find((o) =>
-        isLon
-          ? key(o.value) === key(tk.value)
-          : Math.abs(o.value - tk.value) < 1e-9 * interval + 1e-9,
-      );
-      if (match) lines.push({ x1: tk.x, y1: tk.y, x2: match.x, y2: match.y });
+  const crossings = new Map<string, GridTick[]>();
+  for (const tick of ticks) {
+    const value = !projected && tick.axis === 0 ? wrapLongitude(tick.value) : tick.value;
+    const key = `${tick.axis}:${Math.round((value / interval) * 1e7)}`;
+    const group = crossings.get(key) ?? [];
+    if (!group.some((p) => Math.hypot(p.x - tick.x, p.y - tick.y) < 1e-6)) group.push(tick);
+    crossings.set(key, group);
+  }
+  for (const group of crossings.values()) {
+    const dx = Math.max(...group.map((p) => p.x)) - Math.min(...group.map((p) => p.x));
+    const dy = Math.max(...group.map((p) => p.y)) - Math.min(...group.map((p) => p.y));
+    group.sort((a, b) => (dx > dy ? a.x - b.x || a.y - b.y : a.y - b.y || a.x - b.x));
+    for (let i = 1; i < group.length; i += 2) {
+      const a = group[i - 1],
+        b = group[i];
+      lines.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y });
     }
-  };
-  join("top", "bottom", !projected);
-  join("left", "right", false);
+  }
 
   let zoneLabel: string | null = null;
   if (zone) {
@@ -497,6 +543,17 @@ export interface MercatorView {
   height: number;
 }
 
+/** Keep both dimensions positive while bounding a very narrow or wide inset. */
+export function insetRenderSize(
+  aspect: number,
+  maxDimension = 480,
+): { width: number; height: number } {
+  const value = aspect > 0 && Number.isFinite(aspect) ? aspect : 4 / 3;
+  return value >= 1
+    ? { width: maxDimension, height: Math.max(1, Math.round(maxDimension / value)) }
+    : { width: Math.max(1, Math.round(maxDimension * value)), height: maxDimension };
+}
+
 function mercatorX(lng: number, zoom: number): number {
   return ((lng + 180) / 360) * TILE_SIZE * 2 ** zoom;
 }
@@ -517,15 +574,42 @@ function mercatorY(lat: number, zoom: number): number {
  * @param lat - Latitude in degrees.
  * @returns The pixel position.
  */
-export function mercatorViewPx(view: MercatorView, lng: number, lat: number): Point {
+export function mercatorViewPx(view: MercatorView, lng: number, lat: number, wrap = true): Point {
   let dLng = lng - view.center[0];
   // Take the short way round so a frame across the antimeridian stays whole.
-  while (dLng > 180) dLng -= 360;
-  while (dLng < -180) dLng += 360;
+  while (wrap && dLng > 180) dLng -= 360;
+  while (wrap && dLng < -180) dLng += 360;
   const cx = mercatorX(view.center[0], view.zoom);
   const x = mercatorX(view.center[0] + dLng, view.zoom) - cx + view.width / 2;
   const y = mercatorY(lat, view.zoom) - mercatorY(view.center[1], view.zoom) + view.height / 2;
   return { x, y };
+}
+
+/** Project an ordered, densified boundary without folding it at the dateline. */
+export function insetFootprint(view: MercatorView, boundary: readonly [number, number][]): Point[] {
+  const unwrapped: [number, number][] = [];
+  for (const [lng, lat] of boundary) {
+    const previous = unwrapped.at(-1)?.[0];
+    unwrapped.push([
+      previous === undefined ? lng : lng + 360 * Math.round((previous - lng) / 360),
+      lat,
+    ]);
+  }
+  if (!unwrapped.length) return [];
+  const west = Math.min(...unwrapped.map((point) => point[0]));
+  const east = Math.max(...unwrapped.map((point) => point[0]));
+  if (east - west >= 360 - 1e-7) {
+    const north = Math.max(...unwrapped.map((point) => point[1]));
+    const south = Math.min(...unwrapped.map((point) => point[1]));
+    return [
+      [view.center[0] - 180, north],
+      [view.center[0] + 180, north],
+      [view.center[0] + 180, south],
+      [view.center[0] - 180, south],
+    ].map(([lng, lat]) => mercatorViewPx(view, lng, lat, false));
+  }
+  const shift = 360 * Math.round((view.center[0] - (west + east) / 2) / 360);
+  return unwrapped.map(([lng, lat]) => mercatorViewPx(view, lng + shift, lat, false));
 }
 
 /**
@@ -648,8 +732,8 @@ export function movedOffset(
 ): ElementOffset {
   const base = offset ?? { dx: 0, dy: 0, scale: 1 };
   return {
-    dx: base.dx + deltaX / W,
-    dy: base.dy + deltaY / H,
+    dx: Math.max(-1, Math.min(1, base.dx + deltaX / W)),
+    dy: Math.max(-1, Math.min(1, base.dy + deltaY / H)),
     scale: clampElementScale(base.scale),
   };
 }
@@ -685,8 +769,8 @@ export function resizedOffset(
   // horizontal drag on a wide element still resizes it.
   const s = clampElementScale(Math.abs(sx - current) >= Math.abs(sy - current) ? sx : sy);
   return {
-    dx: (start.x - anchor.x - (natural.x - anchor.x) * s) / W,
-    dy: (start.y - anchor.y - (natural.y - anchor.y) * s) / H,
+    dx: Math.max(-1, Math.min(1, (start.x - anchor.x - (natural.x - anchor.x) * s) / W)),
+    dy: Math.max(-1, Math.min(1, (start.y - anchor.y - (natural.y - anchor.y) * s) / H)),
     scale: s,
   };
 }
@@ -763,8 +847,8 @@ export function adjustFrameBox(
  * @returns The inset rectangle in page pixels.
  */
 export function defaultInsetRect(body: Rect, unit: number): Rect {
-  const w = Math.max(unit * 10, body.w * 0.25);
-  const h = Math.min(body.h * 0.4, w * 0.75);
-  const pad = unit * 2;
+  const pad = Math.min(unit * 2, body.w * 0.1, body.h * 0.1);
+  const w = Math.min(body.w - 2 * pad, Math.max(unit * 10, body.w * 0.25));
+  const h = Math.min(body.h - 2 * pad, body.h * 0.4, w * 0.75);
   return { x: body.x + pad, y: body.y + body.h - pad - h, w, h };
 }

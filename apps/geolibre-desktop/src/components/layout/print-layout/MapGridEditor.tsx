@@ -9,10 +9,16 @@ const GRID_TYPES: readonly PrintLayoutGridType[] = ["dms", "decimal", "utm", "mg
 interface MapGridEditorProps extends LayoutEditorProps {
   /** Whether the capture is georeferenced, so the grid can be drawn. */
   georeferenced: boolean;
+  effectiveInterval?: number;
 }
 
 /** The map-frame coordinate grid: type, interval, label size, lines (GH #3530). */
-export function MapGridEditor({ layout, dispatch, georeferenced }: MapGridEditorProps) {
+export function MapGridEditor({
+  layout,
+  dispatch,
+  georeferenced,
+  effectiveInterval,
+}: MapGridEditorProps) {
   const { t } = useTranslation();
   const projected = layout.gridType === "utm" || layout.gridType === "mgrs";
   return (
@@ -32,7 +38,15 @@ export function MapGridEditor({ layout, dispatch, georeferenced }: MapGridEditor
             // 1 metre.
             dispatch({
               type: "setLayout",
-              patch: wasProjected === isProjected ? { gridType } : { gridType, gridInterval: 0 },
+              patch: {
+                gridType,
+                gridInterval:
+                  wasProjected !== isProjected
+                    ? 0
+                    : gridType === "mgrs" && layout.gridInterval > 0
+                      ? Math.max(1000, layout.gridInterval)
+                      : layout.gridInterval,
+              },
             });
           }}
         >
@@ -56,13 +70,29 @@ export function MapGridEditor({ layout, dispatch, georeferenced }: MapGridEditor
             min={0}
             step={projected ? 1000 : 0.25}
             value={layout.gridInterval}
-            onChange={(e) =>
+            onChange={(e) => {
+              const value = Math.max(0, Number(e.target.value) || 0);
               dispatch({
                 type: "setLayout",
-                patch: { gridInterval: Math.max(0, Number(e.target.value) || 0) },
-              })
-            }
+                patch: {
+                  gridInterval:
+                    layout.gridType === "mgrs" && value > 0 ? Math.max(1000, value) : value,
+                },
+              });
+            }}
           />
+          {layout.gridType === "mgrs" && (
+            <p className="text-xs text-muted-foreground">{t("printLayout.grid.mgrsPrecision")}</p>
+          )}
+          {layout.gridInterval > 0 &&
+            effectiveInterval !== undefined &&
+            effectiveInterval > layout.gridInterval * (1 + 1e-9) && (
+              <p className="text-xs text-muted-foreground">
+                {t("printLayout.grid.denseInterval", {
+                  interval: Number(effectiveInterval.toPrecision(4)),
+                })}
+              </p>
+            )}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="layout-grid-font">{t("printLayout.grid.fontSize")}</Label>

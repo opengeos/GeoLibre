@@ -13,8 +13,8 @@ import { Map as MapLibreMap, type StyleSpecification } from "maplibre-gl";
 import { OPENFREEMAP_BASEMAPS, type PrintLayoutInsetBasemap } from "@geolibre/core";
 import type { MercatorView } from "./print-layout-cartography";
 
-/** CSS width the inset renders at; its height follows the frame's aspect. */
-export const INSET_RENDER_WIDTH = 480;
+/** Maximum CSS side of the inset; its other side follows the frame's aspect. */
+export const INSET_RENDER_MAX_DIMENSION = 480;
 /** Device pixels per CSS pixel of the rendered inset, for print sharpness. */
 const INSET_PIXEL_RATIO = 2;
 /** Give up waiting for tiles after this long and keep whatever has drawn. */

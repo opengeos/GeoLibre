@@ -189,7 +189,13 @@ export function useLayoutOptions({
       mapFrameBox,
       elementOffsets,
       grid: showGrid
-        ? { type: gridType, interval: gridInterval, fontSizePt: gridFontSize, lines: gridLines }
+        ? {
+            type: gridType,
+            interval: gridInterval,
+            fontSizePt: gridFontSize,
+            lines: gridLines,
+            unavailableText: t("printLayout.grid.mgrsSingleSquare"),
+          }
         : null,
     }),
     [

@@ -10,7 +10,8 @@ import {
   DialogTitle,
   Separator,
 } from "@geolibre/ui";
-import type { LayoutOptions } from "../../lib/print-layout";
+import { layoutMapGrid, resolvePageSize, type LayoutOptions } from "../../lib/print-layout";
+import { canGeoreferencePrint } from "../../lib/print-layout-export";
 import { substituteAtlasTokens } from "../../lib/print-atlas";
 import { useMapCapabilities } from "../../hooks/useMapCapabilities";
 import {
@@ -167,6 +168,11 @@ export function PrintLayoutDialog({
   // The overview / inset map renders on its own hidden map, so it joins the
   // page options once it is ready (GH #3530).
   const inset = useInsetMap(open, layout, baseOptions, captured);
+  const effectiveGridInterval = useMemo(() => {
+    if (!baseOptions.grid || !(baseOptions.grid.interval > 0)) return undefined;
+    const page = resolvePageSize(baseOptions);
+    return layoutMapGrid(baseOptions, page.width, page.height)?.interval;
+  }, [baseOptions]);
   const options = useMemo<LayoutOptions>(
     () => (inset ? { ...baseOptions, inset } : baseOptions),
     [baseOptions, inset],
@@ -410,7 +416,11 @@ export function PrintLayoutDialog({
               <InsetMapEditor {...editorProps} georeferenced={Boolean(captured?.georef)} />
             )}
             {layout.showGrid && (
-              <MapGridEditor {...editorProps} georeferenced={Boolean(captured?.georef)} />
+              <MapGridEditor
+                {...editorProps}
+                georeferenced={Boolean(captured?.georef)}
+                effectiveInterval={effectiveGridInterval}
+              />
             )}
             {layout.showFooter && <FooterEditor {...editorProps} />}
             {layout.showPageBorder && <PageBorderEditor {...editorProps} />}
@@ -474,7 +484,7 @@ export function PrintLayoutDialog({
         <ExportActions
           ui={state}
           hasCapture={Boolean(captured)}
-          georeferenced={Boolean(captured?.georef)}
+          georeferenced={canGeoreferencePrint(options)}
           atlasEnabled={atlasEnabled}
           atlas={atlas}
           actions={actions}
