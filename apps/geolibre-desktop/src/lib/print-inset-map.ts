@@ -87,6 +87,9 @@ export async function renderInsetMap(
       canvasContextAttributes: { preserveDrawingBuffer: true },
     });
     const live = map;
+    // Override a remote style's projection before the first settled frame:
+    // the inset camera and footprint use flat Web Mercator coordinates.
+    live.once("style.load", () => live.setProjection({ type: "mercator" }));
     await new Promise<void>((resolve, reject) => {
       let hasTile = false;
       const loaded = (event: import("maplibre-gl").MapSourceDataEvent) => {
