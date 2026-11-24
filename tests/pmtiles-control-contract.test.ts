@@ -392,10 +392,9 @@ describe("removing an archive GeoLibre has decorated", () => {
         getState: () => { layers: { id: string }[]; error: string | null };
       };
       const fake = statefulMap(document as unknown as Document, { mapbox });
+      // Guarded before it is added, as the plugin does, so the guard captures this map.
+      if (guarded) guardPMTilesSourceRemoval(control as never);
       control.onAdd(fake.map);
-      if (guarded) {
-        guardPMTilesSourceRemoval(control as never, { getMap: () => fake.map } as never);
-      }
       await control.addLayer("https://example.test/flow.pmtiles");
       assert.equal(control.getState().error, null, "the control loaded the archive");
       const archiveId = control.getState().layers[0]!.id;

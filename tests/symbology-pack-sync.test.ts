@@ -309,14 +309,16 @@ describe("PMTiles line decoration sync", () => {
     const notFromControl = pmtilesLayer({}, { metadata: { ...pmtilesLayer().metadata } });
     delete notFromControl.metadata.externalNativeLayer;
     // The panel hides the section for extruded layers on its own, so the shared predicate is
-    // compared against a flat render of each layer.
-    for (const layer of [pmtilesLayer(), raster, notFromControl, lineLayer()]) {
+    // compared against a flat render of each PMTiles layer. (GeoJSON layers have their own gate.)
+    for (const layer of [pmtilesLayer(), raster, notFromControl]) {
       const { map, layers } = makeMap();
       syncLayer(map as never, {
         ...layer,
         style: { ...layer.style, lineDecoration: "arrow", extrusionEnabled: false },
       });
-      const drawn = [...layers.keys()].some((id) => id.startsWith("layer-flow-line-decoration"));
+      const drawn = [...layers.keys()].some((id) =>
+        id.startsWith(`layer-${layer.id}-line-decoration`),
+      );
       const offered = pmtilesLayerDrawsLineDecorations(layer);
       assert.equal(offered, drawn, `panel and sync disagree for ${layer.name}`);
     }

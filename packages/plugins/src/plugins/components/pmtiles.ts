@@ -262,7 +262,7 @@ function createPMTilesControl(
   const control = new PMTilesLayerControlClass(PMTILES_OPTIONS);
   // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   if (app.getMapRenderer?.() === "mapbox") adaptMapboxPMTilesControl(control, app);
-  guardPMTilesSourceRemoval(control, app);
+  guardPMTilesSourceRemoval(control);
   const removeHandler = createPMTilesLayerRemoveHandler();
   const onRemove = control.onRemove.bind(control);
   control.onRemove = () => {
@@ -354,19 +354,30 @@ function styleLayerIds(map: CompanionLayerMap): string[] {
  * drives the real control and fails if the method is renamed or stops
  * removing the source.
  *
+ * The map is the one handed to the control's `onAdd`, captured there, so the guard always works on
+ * the map the source lives on even after a renderer switch has given the app a different one.
+ * Call it before the control is added.
+ *
  * @internal Exported only so the guard can be tested against the real control.
  * @param control - The PMTiles control instance to guard.
- * @param app - The app API, read for the live map at removal time.
  */
-export function guardPMTilesSourceRemoval(control: PMTilesLayerControl, app: GeoLibreAppAPI): void {
-  const target = control as unknown as { _removeLayer?: (id?: string) => void };
+export function guardPMTilesSourceRemoval(control: PMTilesLayerControl): void {
+  const target = control as unknown as {
+    _removeLayer?: (id?: string) => void;
+    onAdd: (map: unknown) => HTMLElement;
+  };
   const original = target._removeLayer;
   if (typeof original !== "function") return;
+  let attached: CompanionLayerMap | null = null;
+  const onAdd = target.onAdd.bind(control);
+  target.onAdd = (map: unknown) => {
+    attached = map as CompanionLayerMap;
+    return onAdd(map);
+  };
   target._removeLayer = (id?: string) => {
-    const map = (app.getMap?.() ?? app.getMapboxMap?.()) as CompanionLayerMap | null | undefined;
-    if (map) {
+    if (attached) {
       const ids = id ? [id] : control.getState().layers.map((layer) => layer.id);
-      dropGeoLibreLayersOnSources(map, new Set(ids));
+      dropGeoLibreLayersOnSources(attached, new Set(ids));
     }
     original.call(control, id);
   };
