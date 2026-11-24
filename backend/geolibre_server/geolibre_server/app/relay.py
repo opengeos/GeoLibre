@@ -118,6 +118,10 @@ class _Hub:
             try:
                 await asyncio.wait_for(socket.send_text(encoded), SEND_TIMEOUT_SECONDS)
             except (Exception, asyncio.CancelledError):
+                # Cancellation can interrupt an ASGI frame write after bytes
+                # were accepted. Deliberately close that uncertain connection
+                # and let the app reconnect instead of reusing a partial write.
+                # Peers whose sends already completed remain subscribed.
                 self.drop(socket)
                 # Trigger the desktop's onclose/reconnect path. Close attempts
                 # run concurrently and cannot extend cleanup indefinitely.

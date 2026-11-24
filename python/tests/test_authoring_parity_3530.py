@@ -262,6 +262,10 @@ def test_arcgis_feature_layer_is_viewport_loaded():
         ({"service": "map", "rendering_rule": "{}"}, "rendering_rule"),
         ({"service": "map", "max_features": 10}, "max_features"),
         ({"service": "map", "sublayers": "zero"}, "sublayers"),
+        *[
+            ({"service": "map", "sublayers": values}, "sublayers")
+            for values in ([1.9], [1.0], [True], ["1"], [-1], [float("nan")])
+        ],
         ({"service": "image", "rendering_rule": "not json"}, "JSON"),
     ],
 )

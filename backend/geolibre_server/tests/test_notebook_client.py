@@ -124,7 +124,7 @@ def test_add_raster_sends_base64_and_display_options(relay, displays):
             "data": "SUkqAA==",
             "options": {"colormap": "magma", "rescaleMin": 0.0, "rescaleMax": 45.0},
         },
-        "timeoutSeconds": notebook_client._RELAY_TIMEOUT_SECONDS,
+        "timeoutSeconds": 120.0,
     }
 
 
@@ -356,6 +356,8 @@ def test_add_geojson_does_not_resend_after_a_result_timeout(relay, displays):
 
     assert layer_id is None
     assert displays == []
+    assert len(relay.calls) == 1
+    assert json.loads(relay.calls[0].data)["timeoutSeconds"] == 60.0
     # The warning must blame the caller's line, not notebook_client's internals,
     # so it points at the user's cell and repeats per cell.
     assert caught[0].filename == __file__
@@ -446,3 +448,54 @@ def test_read_back_reports_an_unreachable_relay_as_such(relay):
 
     with pytest.raises(RuntimeError, match="could not be reached"):
         notebook_client.HostMap().list_layers()
+
+
+def test_notebook_budgets_match_relay():
+    """Standalone kernels and both relay hosts use the same command budgets."""
+    from geolibre_server import relay_protocol
+
+    assert (
+        notebook_client._METHOD_RESULT_TIMEOUT_SECONDS
+        == relay_protocol.METHOD_RESULT_TIMEOUT_SECONDS
+    )
+    assert notebook_client._RELAY_TIMEOUT_SECONDS == relay_protocol.DEFAULT_RESULT_TIMEOUT_SECONDS
+
+
+@pytest.mark.parametrize(
+    "method",
+    [
+        "listLayers",
+        "getLayerFeatures",
+        "toImage",
+        "addGeoJsonLayer",
+        "addRasterBytes",
+        "runAlgorithm",
+        "runModelBuilder",
+    ],
+)
+def test_correlated_request_socket_outlasts_result_budget(monkeypatch, method):
+    """Long-running commands receive their full budget before the socket expires.
+
+    Args:
+        monkeypatch: The pytest patch fixture.
+        method: A read-back or long-running scripting command.
+    """
+    waits = []
+
+    def respond(request, timeout):
+        """Record the command budget and simulate a successful response.
+
+        Args:
+            request: The outgoing relay request.
+            timeout: The socket deadline in seconds.
+
+        Returns:
+            A valid relay response carrying the command result.
+        """
+        waits.append((json.loads(request.data)["timeoutSeconds"], timeout))
+        return FakeResponse(b'{"delivered":1,"ok":true,"value":"result"}')
+
+    monkeypatch.setattr(notebook_client.urllib.request, "urlopen", respond)
+    assert notebook_client._request_from_relay("http://127.0.0.1/relay", method) == "result"
+    expected = notebook_client._METHOD_RESULT_TIMEOUT_SECONDS.get(method, 5.0)
+    assert waits == [(expected, expected + 1)]

@@ -671,6 +671,14 @@ It builds projects through the same builders this package uses, so anything it
 writes opens in the widget (and in the desktop and web apps) unchanged. See
 [MCP server](mcp.md) for the tool list and client configuration.
 
+The built-in Notebook panel's kernel client uses the same method budgets as Live MCP:
+60 seconds for GeoJSON layer additions, feature reads, and image exports;
+120 seconds for raster-byte additions; 30 minutes for algorithms and Whitebox
+tools; and one hour for model graphs. Other requests keep the five-second
+default. The kernel socket waits one second longer than the command budget so
+the relay can report a result timeout. An accepted layer addition that times
+out is not sent again; use `list_layers()` to find the layer when it completes.
+
 ## Building from source
 
 The package lives in [`python/`](https://github.com/opengeos/GeoLibre/tree/main/python).

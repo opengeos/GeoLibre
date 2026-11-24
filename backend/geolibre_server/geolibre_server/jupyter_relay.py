@@ -101,7 +101,7 @@ _pending_request_ids: set[str] = set()
 #: The real wait is per method (``result_timeout_seconds``): processing commands
 #: get minutes, view commands keep this short default, and a caller may ask for
 #: its own with ``timeoutSeconds``. The kernel client's own socket timeout
-#: (``_RELAY_TIMEOUT_SECONDS + 1`` in ``notebook_client.py``) must stay longer
+#: (``wait_seconds + 1`` in ``notebook_client.py``) must stay longer
 #: than this, so the precise 504 message reaches the notebook instead of the
 #: client's generic "could not be reached".
 RESULT_TIMEOUT_SECONDS = DEFAULT_RESULT_TIMEOUT_SECONDS

@@ -4603,7 +4603,12 @@ def arcgis_layer(
 
     if sublayers is not None:
         if isinstance(sublayers, (list, tuple)):
-            sublayer_text = ",".join(str(int(value)) for value in sublayers)
+            if any(
+                not isinstance(value, int) or isinstance(value, bool) or value < 0
+                for value in sublayers
+            ):
+                raise ValueError("sublayers must contain nonnegative integer layer ids")
+            sublayer_text = ",".join(str(value) for value in sublayers)
         else:
             sublayer_text = str(sublayers).strip()
         if not re.fullmatch(r"\d+(,\d+)*", sublayer_text):

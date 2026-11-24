@@ -85,15 +85,22 @@ __all__ = [
 _RELAY_URL_ENV = "GEOLIBRE_RELAY_URL"
 _RELAY_TOKEN_ENV = "GEOLIBRE_RELAY_TOKEN"
 
-# Loopback round-trip to the local app. Short: a hung relay must not stall a
-# notebook, and the caller only loses a fire-and-forget command.
-#
-# Read-back calls wait one second longer than this (see _request_from_relay), so
-# they stay above the relay's result wait and surface its precise 504 rather
-# than timing out here first. They send this value as ``timeoutSeconds`` so the
-# relay's longer per-method defaults (geolibre_server/relay_protocol.py) never
-# outlast this socket.
+# Cheap fire-and-forget POSTs retain a short transport deadline. Correlated
+# requests use the same per-method budgets as the relay, with one extra second
+# for its precise 504 response to arrive before the kernel socket expires.
 _RELAY_TIMEOUT_SECONDS = 5.0
+# This client is also copied as a standalone geolibre module into kernels and
+# JupyterLite, where the sidecar package is unavailable. A drift test keeps
+# this dependency-free map aligned with geolibre_server.relay_protocol.
+_METHOD_RESULT_TIMEOUT_SECONDS: dict[str, float] = {
+    "runAlgorithm": 30 * 60.0,
+    "runWhiteboxTool": 30 * 60.0,
+    "runModelBuilder": 60 * 60.0,
+    "addRasterBytes": 120.0,
+    "addGeoJsonLayer": 60.0,
+    "getLayerFeatures": 60.0,
+    "toImage": 60.0,
+}
 
 _NOT_CONNECTED_HINT = (
     "The command was not delivered to a GeoLibre map. Open GeoLibre Desktop and "
@@ -227,22 +234,28 @@ def _relay_request(url: str, message: dict[str, Any]) -> urllib.request.Request:
 
 
 def _request_from_relay(url: str, method: str, params: dict[str, Any] | None = None) -> Any:
-    """Run one scripting command and return its correlated result."""
+    """Run one scripting command with the relay's method-specific result budget.
+
+    Args:
+        url: The local relay endpoint.
+        method: The scripting command name.
+        params: The command parameters, or None.
+
+    Returns:
+        The correlated command's result value.
+    """
+    wait_seconds = _METHOD_RESULT_TIMEOUT_SECONDS.get(method, _RELAY_TIMEOUT_SECONDS)
     message = {
         "type": "geolibre:command",
         "requestId": uuid.uuid4().hex,
         "method": method,
         "params": params or {},
-        # Pin the relay's wait to ours. The relay picks a longer per-method
-        # default for some commands (addGeoJsonLayer, for one); waiting that
-        # long there would outlast this socket and turn its precise 504 into
-        # "could not be reached", which _add_layer answers by re-sending.
-        "timeoutSeconds": _RELAY_TIMEOUT_SECONDS,
+        "timeoutSeconds": wait_seconds,
     }
     request = _relay_request(url, message)
     try:
         with urllib.request.urlopen(  # noqa: S310 - see above
-            request, timeout=_RELAY_TIMEOUT_SECONDS + 1
+            request, timeout=wait_seconds + 1
         ) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
@@ -251,7 +264,7 @@ def _request_from_relay(url: str, method: str, params: dict[str, Any] | None = N
         # (400 malformed, 409 duplicate id) are bugs and stay loud.
         if error.code == 504:
             raise GeoLibreTimeoutError(
-                f"GeoLibre did not return a result within {_RELAY_TIMEOUT_SECONDS:.0f}s. "
+                f"GeoLibre did not return a result within {wait_seconds:.0f}s. "
                 "The command is still running in the app."
             ) from error
         raise RuntimeError(f"GeoLibre read-back failed: {_relay_failure_reason(error)}") from error
