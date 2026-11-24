@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "node:test";
 import {
   interpolatePoints,
+  polygonizeRaster,
   transitionMatrix,
   zonalStatistics,
   type RasterData,
@@ -115,4 +116,19 @@ it("rejects transition codes that Float32 cannot represent exactly", () => {
   assert.throws(() => transitionMatrix(large, large, {}), /Float32 integer range/);
   const supported = raster([1677], 1, 1);
   assert.equal(transitionMatrix(supported, supported, {}).raster.bands[0][0], 16771677);
+});
+
+it("bounds polygonization before allocating noisy boundary objects", () => {
+  const noisy = raster(
+    Array.from({ length: 300 * 300 }, (_, i) => ((i % 300) + Math.floor(i / 300)) % 2),
+    300,
+    300,
+  );
+  assert.throws(() => polygonizeRaster(noisy, {}), /boundary-edge budget/);
+  const uniform = raster(new Array(1000 * 1000).fill(1), 1000, 1000);
+  assert.equal(polygonizeRaster(uniform, {}).geojson.features.length, 1);
+  assert.throws(
+    () => polygonizeRaster({ ...uniform, width: 8_000_001, height: 1 }, {}),
+    /limited to 8 million pixels/,
+  );
 });

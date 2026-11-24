@@ -485,6 +485,10 @@ export function polygonizeRaster(
   input: RasterData,
   params: PolygonizeParams,
 ): { geojson: FeatureCollection; messages: string[] } {
+  if (input.width * input.height > 8_000_000)
+    throw new RangeError(
+      "Browser polygonization is limited to 8 million pixels. Crop the raster or use the sidecar (rasterio/GDAL) engine.",
+    );
   const raster = toNorthUp(input);
   const bandIndex = Math.trunc(Number(params.band ?? 1));
   const band = raster.bands[bandIndex - 1];
@@ -525,6 +529,25 @@ export function polygonizeRaster(
   const label = new Int32Array(W * H).fill(-1);
   for (let i = 0; i < W * H; i += 1) if (parent[i] !== -1) label[i] = find(i);
 
+  const labelAt = (r: number, c: number) =>
+    r < 0 || c < 0 || r >= H || c >= W ? -1 : label[r * W + c];
+  // Count before allocating per-region arrays, edges, or GeoJSON rings.
+  let boundaryEdges = 0;
+  for (let r = 0; r < H; r++) {
+    for (let c = 0; c < W; c++) {
+      const lab = label[r * W + c];
+      if (lab === -1) continue;
+      if (labelAt(r - 1, c) !== lab) boundaryEdges++;
+      if (labelAt(r + 1, c) !== lab) boundaryEdges++;
+      if (labelAt(r, c - 1) !== lab) boundaryEdges++;
+      if (labelAt(r, c + 1) !== lab) boundaryEdges++;
+      if (boundaryEdges > 250_000)
+        throw new RangeError(
+          "Browser polygonization exceeds the 250,000 boundary-edge budget. Crop or simplify the classified raster, or use the sidecar (rasterio/GDAL) engine.",
+        );
+    }
+  }
+
   // Directed boundary edges per region, region on the left in pixel space
   // (x right, y down). Vertex id = row * (W + 1) + col.
   const V = W + 1;
@@ -534,8 +557,6 @@ export function polygonizeRaster(
     if (!list) edges.set(lab, (list = []));
     list.push({ from, to });
   };
-  const labelAt = (r: number, c: number) =>
-    r < 0 || c < 0 || r >= H || c >= W ? -1 : label[r * W + c];
   for (let r = 0; r < H; r += 1) {
     for (let c = 0; c < W; c += 1) {
       const lab = label[r * W + c];
