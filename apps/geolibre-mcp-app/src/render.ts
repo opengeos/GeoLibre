@@ -11,6 +11,7 @@ import {
   identifyStyleLayerIds,
   isMapboxStyleUrl,
   registerPMTilesSource,
+  getRegisteredPMTilesArchive,
   resolveMapStyle,
   sourceId,
   styleLayerZoomRange,
@@ -18,10 +19,15 @@ import {
 } from "@geolibre/map/headless";
 import type { RequestTransformFunction } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
+import { SharedPromiseCache } from "pmtiles";
 import { loadCogPreview } from "./cog-preview";
 import type { NetworkConsent } from "./network-consent";
 import {
   ConsentPMTilesSource,
+  decompressPreviewPMTiles,
+  decompressPreviewPMTilesDirectory,
+  discoverPreviewPMTilesLayer,
+  needsPMTilesDiscovery,
   isRegisteredPMTilesRequest,
   pmtilesArchiveKey,
   pmtilesArchiveUrl,
@@ -128,6 +134,8 @@ export function renderProject(
   const layers = applyGroupEffects(project.layers, project.layerGroups ?? []);
   const plan = previewRenderLayers({ ...project, layers });
   const renderable = plan.map(({ layer }) => layer);
+  const lifecycle = new AbortController();
+  const discoveredLayers = new Map<string, GeoLibreLayer>();
 
   // Each remote archive reads through consent before layer sync can open a
   // direct FetchSource for it under the same key.
@@ -137,7 +145,16 @@ export function renderProject(
     const key = pmtilesArchiveKey(layer);
     const url = pmtilesArchiveUrl(layer);
     if (!key || !url || pmtilesKeys.has(key)) continue;
-    registerPMTilesSource(new ConsentPMTilesSource(key, url, options.fetchRange));
+    registerPMTilesSource(
+      new ConsentPMTilesSource(key, url, options.fetchRange, lifecycle.signal),
+      {
+        decompress: (buffer, compression) =>
+          decompressPreviewPMTiles(buffer, compression, lifecycle.signal),
+        cache: new SharedPromiseCache(16, undefined, (buffer, compression) =>
+          decompressPreviewPMTilesDirectory(buffer, compression, lifecycle.signal),
+        ),
+      },
+    );
     pmtilesKeys.add(key);
   }
   const ownCogUrls = new Set<string>();
@@ -151,7 +168,6 @@ export function renderProject(
     if (!data) throw new Error(t("imageUnavailable"));
     return { data };
   });
-  const lifecycle = new AbortController();
 
   const map = new maplibregl.Map({
     container,
@@ -209,6 +225,33 @@ export function renderProject(
     }
   };
 
+  const addDiscoveredPMTilesLayer = async (
+    layer: GeoLibreLayer,
+    anchorId: string,
+  ): Promise<void> => {
+    try {
+      lifecycle.signal.throwIfAborted();
+      const key = pmtilesArchiveKey(layer);
+      const archive = key ? getRegisteredPMTilesArchive(key) : undefined;
+      if (!archive) throw new Error(previewI18n.t("mcpPreview.pmtiles.archiveUnavailable"));
+      const resolved = await discoverPreviewPMTilesLayer(layer, archive, lifecycle.signal);
+      lifecycle.signal.throwIfAborted();
+      createLayerSync(map).sync([resolved]);
+      // Metadata may arrive after layers above this one. Keep its generated
+      // fill/line/circle layers immediately below its reserved position.
+      for (const id of previewPMTilesStyleLayerIds(resolved)) {
+        if (map.getLayer(id) && map.getLayer(anchorId)) map.moveLayer(id, anchorId);
+      }
+      discoveredLayers.set(layer.id, resolved);
+    } catch (error) {
+      if (lifecycle.signal.aborted) return;
+      options.onError(
+        layer.name,
+        safeErrorMessage(error instanceof Error ? error.message : String(error)),
+      );
+    }
+  };
+
   const registerLayers = (): void => {
     for (const { layer, kind } of plan) {
       try {
@@ -222,6 +265,12 @@ export function renderProject(
             layout: { visibility: "none" },
           });
           void addCogLayer(layer, anchorId);
+          continue;
+        }
+        if (kind === "pmtiles" && needsPMTilesDiscovery(layer)) {
+          const anchorId = `${layer.id}-pmtiles-anchor`;
+          map.addLayer({ id: anchorId, type: "background", layout: { visibility: "none" } });
+          void addDiscoveredPMTilesLayer(layer, anchorId);
           continue;
         }
         // One sync owner per layer isolates failures while preserving the project’s
@@ -257,7 +306,7 @@ export function renderProject(
   const popup = new maplibregl.Popup({ closeButton: true, maxWidth: "340px" });
   map.on("click", (event) => {
     for (let index = layers.length - 1; index >= 0; index -= 1) {
-      const layer = layers[index];
+      const layer = discoveredLayers.get(layers[index].id) ?? layers[index];
       if (!layer.visible || !isPopupClickEnabled(layer.popup)) continue;
       const ids = [
         ...new Set([...identifyStyleLayerIds(layer), ...previewPMTilesStyleLayerIds(layer)]),

@@ -115,7 +115,17 @@ renderer, not a hosted-viewer iframe. It draws MapLibre-native layers (inline
 GeoJSON, raster/WMS/WMTS/XYZ tiles, vector tiles, and image overlays), remote
 PMTiles archives (vector or raster), and Cloud Optimized GeoTIFFs. Both archive
 types are read by HTTP byte range through the same approval gate as tiles, so
-their server must support `Range` requests. A COG is shown as one downsampled
+their server must support `Range` requests. Vector PMTiles layers without saved
+source-layer names discover them from the archive after approval. Discovery
+preserves the project and its layer order, and Identify uses the discovered
+layers. The preview accepts at most 1 MiB of compressed discovery metadata,
+128 source layers with names up to 256 characters, and 16 MiB per fetched or
+decoded block. Directories are limited to 65,536 entries and 16 cached blocks
+per archive. Gzip decoding requires the browser DecompressionStream API;
+unsupported formats, missing metadata, conflicting names, and exceeded limits
+are reported explicitly. Closing or replacing the preview cancels its reads.
+
+A COG is shown as one downsampled
 image (at most 1024 pixels on its longest side, read from the nearest overview)
 colored from its saved bands, rescale, and colormap; only EPSG:4326 and
 EPSG:3857 COGs are placed, and Identify does not apply to them. Everything
