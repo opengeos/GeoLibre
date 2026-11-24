@@ -286,7 +286,9 @@ ephemeral and never written to a project file.
 > and look-alike domains are rejected; the shared `opengeos.org` GitHub Pages
 > preview origin is deliberately not trusted) as browser-origin filtering
 > and defense-in-depth (not authentication or a general server-side access gate)
-> and enforces a per-IP `checkRateLimit` (10 requests / 60 s). `Access-Control-Allow-Origin: *` is
+> and enforces a per-IP creation limit (10 requests / 60 s), using the
+> required `COLLAB_RATE_LIMITER` binding on the Worker and `checkRateLimit`
+> on the Node relay. `Access-Control-Allow-Origin: *` is
 > still sent on responses so non-browser clients (e.g. Tauri) are not blocked by
 > CORS; non-browser clients may omit these headers and remain supported, unless a
 > verifiable credential requirement is added. Configure `ALLOWED_ORIGINS`
@@ -328,7 +330,11 @@ core:
 - `workers/collab` is the Cloudflare Durable Object used by the hosted service.
   New session creation requires the `COLLAB_RATE_LIMITER` binding configured
   in `workers/collab/wrangler.toml`. A missing or failed binding returns `503`;
-  there is no isolate-local fallback that can reset the budget. Health checks
+  there is no isolate-local fallback that can reset the budget. A platform
+  limiter outage therefore pauses new session creation until it recovers.
+  Structured warnings distinguish `binding_missing` from `binding_error`;
+  raw exception messages are omitted to avoid logging credentials or keys.
+  Health checks
   and existing session routes remain available. The [Cloudflare Rate Limiting
   API](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
   applies approximate limits per Cloudflare location, rather than a strict
