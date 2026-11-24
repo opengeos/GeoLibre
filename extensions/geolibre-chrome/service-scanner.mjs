@@ -61,7 +61,7 @@ const WCS_OPERATION_PARAMS = new Set([
 
 /**
  * The URL without its fragment, and without its query unless `keepQuery`: a
- * signed file URL needs its token, a catalog document does not take one.
+ * signed file or catalog URL needs its query parameters preserved.
  */
 function withoutQuery(url, keepQuery = false) {
   const plain = new URL(url.href);
@@ -93,7 +93,6 @@ function zarrStoreUrl(url) {
   if (root === undefined) return null;
   const store = new URL(url.href);
   store.pathname = root || "/";
-  store.search = "";
   store.hash = "";
   return store.href;
 }
@@ -264,7 +263,7 @@ export function classifyServiceRequest(rawUrl) {
   const stacApi = stacApiUrl(url);
   if (stacApi) return candidate(url, "STAC", "catalog", "STAC catalog", stacApi);
   if (/\/(?:catalog|collection)\.json$/i.test(path)) {
-    return candidate(url, "STAC", "catalog", "STAC catalog", withoutQuery(url));
+    return candidate(url, "STAC", "catalog", "STAC catalog", withoutQuery(url, true));
   }
 
   // A data file fetched by the page's own map library (OpenLayers reads KML and

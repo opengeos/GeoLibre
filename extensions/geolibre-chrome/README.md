@@ -30,7 +30,7 @@ hand. The extension has no background script, so there is no service worker
 versus event page difference to bridge, and Firefox implements the `chrome.*`
 namespace, `scripting.executeScript` and `activeTab` that the popup uses.
 
-1. From the repository root, run `npm run build:firefox-extension`.
+1. From the repository root, run `npm ci`, then `npm run build:firefox-extension`.
 2. Open `about:debugging#/runtime/this-firefox`.
 3. Choose **Load Temporary Add-on…** and pick
    `dist/geolibre-firefox/manifest.json`.

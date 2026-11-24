@@ -480,7 +480,7 @@ function clampLayerZoom(value: number, fallback: number): number {
   return Math.min(MAX_LAYER_ZOOM, Math.max(MIN_LAYER_ZOOM, value));
 }
 
-function styleLayerZoomRange(style: LayerStyle): {
+export function styleLayerZoomRange(style: LayerStyle): {
   maxzoom: number;
   minzoom: number;
 } {

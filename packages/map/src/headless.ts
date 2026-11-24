@@ -174,6 +174,7 @@ export {
 } from "./feature-selection";
 export { isPlaceholderLayer, placeholderMessage } from "./placeholders";
 export { identifyStyleLayerIds } from "./identify-layer-ids";
+export { styleLayerZoomRange } from "./layer-sync";
 export { createIdentifyPopupElement, type IdentifyPopupOptions } from "./feature-popup";
 export { createBlankMapStyle, resolveMapStyle } from "./basemap-style";
 export { classifyLayer, layerKindSupport } from "./layer-kind";

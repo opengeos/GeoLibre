@@ -67,21 +67,20 @@ export function scanDocumentForDatasets() {
     if (!store) return null;
     const canonical = new URL(url.href);
     canonical.pathname = store[1];
-    canonical.search = "";
     canonical.hash = "";
     return canonical;
   };
 
   const canonicalUrl = (url) => {
-    const zarr = zarrStoreUrl(url);
-    if (zarr) return zarr;
-    if (huggingFaceHost(url)) return huggingFaceFileUrl(url) ?? url;
-    if (url.hostname !== "source.coop") return url;
-    const parts = url.pathname.split("/").filter(Boolean);
-    if (parts.length < 3) return url;
-    const canonical = new URL(url.href);
-    canonical.hostname = "data.source.coop";
-    return canonical;
+    let canonical = huggingFaceHost(url) ? (huggingFaceFileUrl(url) ?? url) : url;
+    if (
+      canonical.hostname === "source.coop" &&
+      canonical.pathname.split("/").filter(Boolean).length >= 3
+    ) {
+      canonical = new URL(canonical.href);
+      canonical.hostname = "data.source.coop";
+    }
+    return zarrStoreUrl(canonical) ?? canonical;
   };
 
   const canonicalHttpUrl = (raw) => {
@@ -131,7 +130,7 @@ export function scanDocumentForDatasets() {
     if (/\.pmtiles$/.test(path) || says(/pmtiles/)) {
       return { format: "PMTiles", kind: "vector", confidence: 3 };
     }
-    if (/\.(?:fgb|flatgeobuf)$/.test(path) || says(/flatgeobuf/)) {
+    if (/\.(?:fgb|flatgeobuf)$/.test(path)) {
       return { format: "FlatGeobuf", kind: "vector", confidence: 3 };
     }
     if (/\.gpx$/.test(path)) return { format: "GPX", kind: "vector", confidence: 3 };

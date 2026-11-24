@@ -37,6 +37,7 @@ const runtimeFiles = [
   "scanner.mjs",
   "service-scanner.mjs",
   "url-builder.mjs",
+  "tab-launcher.mjs",
   "icons/geolibre-16.png",
   "icons/geolibre-32.png",
   "icons/geolibre-48.png",

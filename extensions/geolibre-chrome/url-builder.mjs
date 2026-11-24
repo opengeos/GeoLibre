@@ -82,29 +82,10 @@ function appendData(target, datasets) {
 }
 
 /**
- * Build the single GeoLibre link for a selection that fits in one: any number
- * of files, or exactly one service or STAC catalog on its own.
+ * Compatibility helper returning the first launch from a selection.
  */
 export function buildGeoLibreUrl(datasets, baseUrl = GEOLIBRE_WEB_URL) {
-  if (!Array.isArray(datasets) || datasets.length === 0) {
-    throw new Error("Select at least one dataset.");
-  }
-  const target = baseTarget(baseUrl);
-  const services = datasets.filter(isServiceEntry);
-  const catalogs = datasets.filter(isStacEntry);
-  if (services.length + catalogs.length) {
-    if (services.length + catalogs.length > 1) throw new Error("Open one map service at a time.");
-    // Nothing stops a selection holding a service and a file at once, and the
-    // two open through different GeoLibre entry points.
-    if (datasets.length !== 1) {
-      throw new Error("A map service cannot be opened together with other data.");
-    }
-    if (catalogs.length) target.searchParams.set("stac", httpUrl(catalogs[0].url, "STAC").href);
-    else appendService(target, services[0]);
-    return target.href;
-  }
-  appendData(target, datasets);
-  return target.href;
+  return buildGeoLibreUrls(datasets, baseUrl)[0];
 }
 
 /**

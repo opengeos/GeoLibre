@@ -23,9 +23,10 @@ export const EXTENSION_TARGETS = ["chrome", "firefox"];
  * `storage.sync` and AMO, and a declaration that nothing is collected, while
  * the Chrome-only `minimum_chrome_version` key would only draw a warning.
  *
- * @param {object} manifest The Chrome manifest (`manifest.json`).
+ * @template {object} T
+ * @param {T} manifest The Chrome manifest (`manifest.json`).
  * @param {"chrome" | "firefox"} target The browser to build for.
- * @returns {object} A new manifest object for that browser.
+ * @returns {T & {browser_specific_settings?: {gecko: {id: string, strict_min_version: string, data_collection_permissions: {required: string[]}}}}} A new manifest retaining the source fields.
  */
 export function manifestForTarget(manifest, target) {
   if (!EXTENSION_TARGETS.includes(target)) {

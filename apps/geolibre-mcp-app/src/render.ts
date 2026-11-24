@@ -13,6 +13,7 @@ import {
   registerPMTilesSource,
   resolveMapStyle,
   sourceId,
+  styleLayerZoomRange,
   unregisterPMTilesArchive,
 } from "@geolibre/map/headless";
 import type { RequestTransformFunction } from "maplibre-gl";
@@ -24,6 +25,7 @@ import {
   isRegisteredPMTilesRequest,
   pmtilesArchiveKey,
   pmtilesArchiveUrl,
+  previewPMTilesStyleLayerIds,
 } from "./pmtiles-preview";
 import { previewRenderLayers } from "./unsupported-content";
 
@@ -190,6 +192,7 @@ export function renderProject(
           id,
           type: "raster",
           source: id,
+          ...styleLayerZoomRange(layer.style),
           paint: { "raster-opacity": layer.opacity, "raster-fade-duration": 0 },
         },
         map.getLayer(anchorId) ? anchorId : undefined,
@@ -256,7 +259,9 @@ export function renderProject(
     for (let index = layers.length - 1; index >= 0; index -= 1) {
       const layer = layers[index];
       if (!layer.visible || !isPopupClickEnabled(layer.popup)) continue;
-      const ids = identifyStyleLayerIds(layer).filter((id) => map.getLayer(id));
+      const ids = [
+        ...new Set([...identifyStyleLayerIds(layer), ...previewPMTilesStyleLayerIds(layer)]),
+      ].filter((id) => map.getLayer(id));
       if (ids.length === 0) continue;
       const [feature] = map.queryRenderedFeatures(event.point, { layers: ids });
       if (!feature) continue;

@@ -1,6 +1,7 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { RangeResponse, Source } from "pmtiles";
 import type { NetworkConsent } from "./network-consent";
+import { pmtilesNativeLayerIds } from "@geolibre/map/pmtiles-layer";
 
 const PMTILES_PREFIX = "pmtiles://";
 
@@ -46,8 +47,29 @@ export function isPreviewPMTilesLayer(layer: GeoLibreLayer): boolean {
     layer.type === "pmtiles" &&
     layer.metadata?.sourceKind === "pmtiles-url" &&
     layer.metadata?.externalNativeLayer === true &&
-    pmtilesArchiveUrl(layer) !== null
+    pmtilesArchiveUrl(layer) !== null &&
+    (layer.metadata.tileType === "raster" ||
+      layer.source.type === "raster" ||
+      previewPMTilesStyleLayerIds(layer).length > 0)
   );
+}
+
+/** Style IDs created by layer sync, including Python archives with placeholder saved IDs. */
+export function previewPMTilesStyleLayerIds(layer: GeoLibreLayer): string[] {
+  if (layer.type !== "pmtiles") return [];
+  const sourceId =
+    typeof layer.metadata.sourceId === "string"
+      ? layer.metadata.sourceId
+      : typeof layer.source.sourceId === "string"
+        ? layer.source.sourceId
+        : layer.id;
+  const raw = layer.source.sourceLayers ?? layer.metadata.sourceLayers;
+  const names = Array.isArray(raw)
+    ? raw.filter((s): s is string => typeof s === "string" && s.length > 0)
+    : [];
+  const kind =
+    layer.metadata.tileType === "raster" || layer.source.type === "raster" ? "raster" : "vector";
+  return pmtilesNativeLayerIds(sourceId, kind, names);
 }
 
 /**

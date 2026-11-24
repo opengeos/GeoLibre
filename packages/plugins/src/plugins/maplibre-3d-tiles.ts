@@ -1318,8 +1318,14 @@ export async function addThreeDTilesLayerFromUrl(
   url: string,
   options: { name?: string; flyTo?: boolean } = {},
 ): Promise<string> {
+  const translate = createPluginTranslator(app, "3d-tiles");
   if (isGooglePhotorealisticTilesetUrl(url) || isArcgisI3sSceneLayerUrl(url)) {
-    throw new Error("Open Google Photorealistic and I3S tiles from the Add 3D Tiles panel.");
+    throw new Error(
+      translate(
+        "usePanel",
+        "Open Google Photorealistic and I3S tiles from the Add 3D Tiles panel.",
+      ),
+    );
   }
   const flyTo = options.flyTo ?? true;
   const id = `tiles-${crypto.randomUUID()}`;
@@ -1346,12 +1352,20 @@ export async function addThreeDTilesLayerFromUrl(
   if (renderer === "mapbox" || renderer === "arcgis") {
     activeThreeDTilesApp = app;
     useAppStore.getState().addLayer(layer);
-    await restoreMapboxTiles(app, flyTo ? id : undefined);
+    try {
+      await restoreMapboxTiles(app, flyTo ? id : undefined);
+    } catch (error) {
+      useAppStore.getState().removeLayer(layer.id);
+      throw error;
+    }
     return id;
   }
   await loadThreeDTilesModule();
   const control = runWithThreeDTilesStoreSyncSuspended(() => ensureThreeDTilesControl(app));
-  if (!control) throw new Error("The 3D Tiles control could not be added to the map.");
+  if (!control)
+    throw new Error(
+      translate("controlUnavailable", "The 3D Tiles control could not be added to the map."),
+    );
   runWithThreeDTilesStoreSyncSuspended(() => {
     showThreeDTilesControl(control);
     control.collapse();

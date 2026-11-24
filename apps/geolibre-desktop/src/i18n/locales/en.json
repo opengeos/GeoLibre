@@ -2484,6 +2484,7 @@
     "dataUrlNoImporter": "Could not add {{name}} to the map: no KML importer is available."
   },
   "map": {
+    "dataUrl3dTilesStyleUnsupported": "A style cannot be applied to a 3D Tiles tileset.",
     "boundsRestricted": "Bounds locked",
     "boundsRestrictedTooltip": "Map bounds are restricted. You can change this in Settings.",
     "identifyAll": {
@@ -10780,6 +10781,8 @@
       "showing": "Showing {{shown}} of {{total}} items."
     },
     "3d-tiles": {
+      "usePanel": "Open Google Photorealistic and I3S tiles from the Add 3D Tiles panel.",
+      "controlUnavailable": "The 3D Tiles control could not be added to the map.",
       "arcgisSourceUnsupported": "Use a 3D Tiles tileset.json URL in this ArcGIS view. Google Photorealistic and I3S tiles require another renderer.",
       "globeGoogleKeyRequired": "Google Photorealistic 3D Tiles need a Google Maps API key in Settings to load on the globe.",
       "headersHint": "One per line as Name: Value. Use ${NAME} to insert an environment variable from Settings → Environment; the value is not saved with the layer.",

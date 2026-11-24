@@ -31,7 +31,7 @@ A manually installed copy does not update itself. To update it, download and ext
 
 ### Firefox
 
-The same extension runs in Firefox 140 or later. Until it is listed on addons.mozilla.org, build it from a source checkout with `npm run build:firefox-extension`, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and pick `dist/geolibre-firefox/manifest.json`. A temporary add-on is removed when Firefox restarts. See the [extension README](https://github.com/opengeos/GeoLibre/tree/main/extensions/geolibre-chrome#firefox) for details.
+The same extension runs in Firefox 140 or later. Until it is listed on addons.mozilla.org, build it from a source checkout: run `npm ci`, then `npm run build:firefox-extension`. Open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and pick `dist/geolibre-firefox/manifest.json`. A temporary add-on is removed when Firefox restarts. See the [extension README](https://github.com/opengeos/GeoLibre/tree/main/extensions/geolibre-chrome#firefox) for details.
 
 ## Open datasets from a webpage
 

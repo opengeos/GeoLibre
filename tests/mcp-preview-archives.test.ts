@@ -24,6 +24,7 @@ import {
   isRegisteredPMTilesRequest,
   pmtilesArchiveKey,
   pmtilesArchiveUrl,
+  previewPMTilesStyleLayerIds,
 } from "../apps/geolibre-mcp-app/src/pmtiles-preview";
 import {
   previewOrigins,
@@ -31,6 +32,7 @@ import {
   unsupportedContent,
 } from "../apps/geolibre-mcp-app/src/unsupported-content";
 import "./helpers/dom";
+import { styleLayerZoomRange, identifyStyleLayerIds } from "@geolibre/map/headless";
 
 function layer(type: GeoLibreLayer["type"], extra: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
   return {
@@ -107,6 +109,33 @@ function project(layers: GeoLibreLayer[]) {
 }
 
 describe("MCP preview PMTiles and COG classification", () => {
+  it("includes realized vector IDs for Identify while retaining saved control IDs", () => {
+    const archive = pmtilesLayer("roads", "https://example.com/a.pmtiles");
+    archive.metadata.nativeLayerIds = ["roads", "saved-control-line"];
+    const ids = new Set([
+      ...identifyStyleLayerIds(archive),
+      ...previewPMTilesStyleLayerIds(archive),
+    ]);
+    assert.ok(ids.has("roads-roads-fill"));
+    assert.ok(ids.has("roads-roads-line"));
+    assert.ok(ids.has("roads-roads-circle"));
+    assert.ok(ids.has("saved-control-line"));
+  });
+
+  it("reports vector archives missing source-layer metadata while accepting rasters", () => {
+    const empty = pmtilesLayer("empty", "https://example.com/a.pmtiles");
+    empty.source.sourceLayers = [];
+    empty.metadata.sourceLayers = [];
+    const raster = pmtilesLayer("raster", "https://example.com/b.pmtiles");
+    raster.source = { ...raster.source, type: "raster", sourceLayers: [] };
+    raster.metadata = { ...raster.metadata, tileType: "raster", sourceLayers: [] };
+    const saved = project([empty, raster]);
+    assert.deepEqual(
+      previewRenderLayers(saved).map(({ layer: item }) => item.id),
+      ["raster"],
+    );
+    assert.ok(unsupportedContent(saved).some((notice) => notice.includes("“empty”")));
+  });
   it("draws remote archives and COGs in project order and asks consent for their origins", () => {
     const saved = project([
       cogLayer("dem", "https://cogs.example.com/dem.tif"),
@@ -192,11 +221,22 @@ describe("MCP preview PMTiles and COG classification", () => {
 });
 
 describe("MCP preview COG rendering helpers", () => {
+  it("uses the native renderer's normalized saved zoom limits", () => {
+    assert.deepEqual(styleLayerZoomRange({ ...DEFAULT_LAYER_STYLE, minZoom: 10, maxZoom: 12 }), {
+      minzoom: 10,
+      maxzoom: 12,
+    });
+    assert.deepEqual(styleLayerZoomRange({ ...DEFAULT_LAYER_STYLE, minZoom: 12, maxZoom: 10 }), {
+      minzoom: 10,
+      maxzoom: 12,
+    });
+  });
   it("recognizes the CRSs the preview can place", () => {
     assert.equal(cogEpsg({ GeographicTypeGeoKey: 4326 }), 4326);
     assert.equal(cogEpsg({ ProjectedCSTypeGeoKey: 900913 }), 3857);
     assert.equal(cogEpsg({ ProjectedCSTypeGeoKey: 32633, GeographicTypeGeoKey: 4326 }), 32633);
     assert.equal(cogEpsg({ ProjectedCSTypeGeoKey: 32767 }), null);
+    assert.equal(cogEpsg({ ProjectedCSTypeGeoKey: 32767, GeographicTypeGeoKey: 4326 }), null);
     assert.equal(cogEpsg(null), null);
   });
 
@@ -210,6 +250,14 @@ describe("MCP preview COG rendering helpers", () => {
     ];
     assert.equal(pickPreviewImage(sizes, 1024), 3);
     assert.equal(pickPreviewImage([{ width: 300, height: 200 }], 1024), 0);
+    assert.equal(
+      pickPreviewImage([
+        { width: 8192, height: 8192 },
+        { width: 512, height: 512 },
+      ]),
+      1,
+    );
+    assert.equal(pickPreviewImage([{ width: 8192, height: 8192 }]), -1);
     assert.deepEqual(previewSize(2048, 1024, 1024), {
       width: 1024,
       height: 512,
@@ -274,6 +322,29 @@ describe("MCP preview COG rendering helpers", () => {
 });
 
 describe("MCP preview COG loading", () => {
+  it("unpremultiplies associated-alpha TIFF colors before applying transparency", async () => {
+    const buffer = writeArrayBuffer([64, 0, 0, 128, 128, 0, 0, 255], {
+      width: 2,
+      height: 1,
+      SamplesPerPixel: 4,
+      BitsPerSample: [8, 8, 8, 8],
+      PhotometricInterpretation: 2,
+      ExtraSamples: [1],
+      ModelPixelScale: [1, 1, 0],
+      ModelTiepoint: [0, 0, 0, 10, 50, 0],
+      GTModelTypeGeoKey: 2,
+      GeographicTypeGeoKey: 4326,
+    } as never);
+    const image = await loadCogPreview(
+      cogLayer("alpha", "https://cogs.example.com/alpha.tif", {
+        mode: "rgb",
+        bands: [1, 2, 3],
+        rescale: [[0, 255]],
+      }),
+      rangeReader(buffer).fetchRange,
+    );
+    assert.deepEqual([...image.rgba], [128, 0, 0, 128, 128, 0, 0, 255]);
+  });
   function tinyGeoTiff(epsg: number): ArrayBuffer {
     const values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
     const metadata: Record<string, unknown> = {
@@ -324,6 +395,27 @@ describe("MCP preview COG loading", () => {
     // Bottom-right pixel (value 11) is white and opaque.
     assert.deepEqual([...image.rgba.slice(-4)], [255, 255, 255, 255]);
     assert.equal(image.unknownColormap, null);
+  });
+
+  it("preserves transparent and partially transparent declared alpha samples", async () => {
+    const buffer = writeArrayBuffer([50, 60, 70, 0, 100, 110, 120, 128], {
+      width: 2,
+      height: 1,
+      SamplesPerPixel: 4,
+      BitsPerSample: [8, 8, 8, 8],
+      PhotometricInterpretation: 2,
+      ExtraSamples: [2],
+      ModelPixelScale: [1, 1, 0],
+      ModelTiepoint: [0, 0, 0, 10, 50, 0],
+      GTModelTypeGeoKey: 2,
+      GeographicTypeGeoKey: 4326,
+    } as never);
+    const { fetchRange } = rangeReader(buffer);
+    const image = await loadCogPreview(
+      cogLayer("alpha", "https://cogs.example.com/alpha.tif"),
+      fetchRange,
+    );
+    assert.deepEqual([image.rgba[3], image.rgba[7]], [0, 128]);
   });
 
   it("refuses CRSs it cannot place and reads past the byte budget", async () => {

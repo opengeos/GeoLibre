@@ -175,7 +175,7 @@ export async function loadDataUrl(
     layerIds.push(id);
   } else if (remote.kind === "3d-tiles") {
     if (rawStyle !== null) {
-      throw new Error("A style cannot be applied to a 3D Tiles tileset.");
+      throw new Error(i18next.t("map.dataUrl3dTilesStyleUnsupported"));
     }
     // The tileset's extent is only known once its root tile loads, so the
     // layer frames itself then rather than joining the batch's fit.

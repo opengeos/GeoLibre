@@ -66,6 +66,7 @@ export function isPreviewCogLayer(layer: GeoLibreLayer): boolean {
  */
 export function cogEpsg(geoKeys: Record<string, unknown> | null | undefined): number | null {
   const projected = geoKeys?.ProjectedCSTypeGeoKey;
+  if (projected === 32767) return null;
   if (typeof projected === "number" && projected !== 32767) {
     return [3857, 900913, 3785, 102100, 102113].includes(projected) ? 3857 : projected;
   }
@@ -89,10 +90,12 @@ export function pickPreviewImage(
   target = PREVIEW_COG_MAX_DIMENSION,
 ): number {
   let best = -1;
-  let largest = 0;
+  let largest = -1;
   sizes.forEach((size, index) => {
+    if (size.width * size.height > PREVIEW_COG_MAX_READ_PIXELS) return;
     const side = Math.max(size.width, size.height);
-    if (side > Math.max(sizes[largest].width, sizes[largest].height)) largest = index;
+    if (largest < 0 || side > Math.max(sizes[largest].width, sizes[largest].height))
+      largest = index;
     if (side >= target && (best < 0 || side < Math.max(sizes[best].width, sizes[best].height))) {
       best = index;
     }
@@ -588,7 +591,7 @@ async function decodeCogPreview(
         })),
       )
     ];
-  if (level.getWidth() * level.getHeight() > PREVIEW_COG_MAX_READ_PIXELS) {
+  if (!level) {
     throw new Error(
       "The COG has no overview small enough to preview; add overviews or open it in GeoLibre.",
     );
@@ -596,6 +599,10 @@ async function decodeCogPreview(
   const style = cogPreviewStyle(layer.metadata?.rasterState, primary.getSamplesPerPixel());
   const size = previewSize(level.getWidth(), level.getHeight());
   const samples = [...new Set(style.bands)].map((band) => band - 1);
+  const extras = level.getFileDirectory().getValue("ExtraSamples") ?? [];
+  const alphaExtra = Array.from(extras).findIndex((value) => value === 1 || value === 2);
+  const alphaIndex = alphaExtra < 0 ? -1 : level.getSamplesPerPixel() - extras.length + alphaExtra;
+  if (alphaIndex >= 0 && !samples.includes(alphaIndex)) samples.push(alphaIndex);
   const rasters = (await level.readRasters({
     samples,
     width: size.width,
@@ -604,7 +611,30 @@ async function decodeCogPreview(
     interleave: false,
     signal,
   })) as unknown as ArrayLike<number>[];
-  const bands = style.bands.map((band) => rasters[samples.indexOf(band - 1)]);
+  let bands = style.bands.map((band) => rasters[samples.indexOf(band - 1)]);
+  const alpha = alphaIndex >= 0 ? rasters[samples.indexOf(alphaIndex)] : null;
+  const alphaMax =
+    alphaIndex >= 0 && level.getSampleFormat(alphaIndex) === 3
+      ? 1
+      : 2 ** (alphaIndex >= 0 ? level.getBitsPerSample(alphaIndex) : 8) - 1;
+  const alphaFraction = (index: number) => {
+    const value = alpha ? alpha[index] / alphaMax : 1;
+    return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+  };
+  if (alpha) {
+    // Transparent borders must not affect the color stretch. Associated-alpha
+    // TIFFs store premultiplied samples; undo that before coloring them.
+    bands = bands.map((band) =>
+      Float64Array.from({ length: size.width * size.height }, (_v, index) => {
+        const fraction = alphaFraction(index);
+        return fraction === 0
+          ? NaN
+          : extras[alphaExtra] === 1
+            ? band[index] / fraction
+            : band[index];
+      }),
+    );
+  }
   const nodataValue = primary.getGDALNoData();
   const { rgba, unknownColormap } = colorizeBands(
     bands,
@@ -612,6 +642,10 @@ async function decodeCogPreview(
     style,
     typeof nodataValue === "number" && Number.isFinite(nodataValue) ? nodataValue : null,
   );
+  if (alpha)
+    for (let index = 0; index < size.width * size.height; index += 1) {
+      rgba[index * 4 + 3] = Math.round(rgba[index * 4 + 3] * alphaFraction(index));
+    }
   const bbox = primary.getBoundingBox();
   return {
     rgba:

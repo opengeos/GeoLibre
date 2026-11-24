@@ -8,6 +8,7 @@ import {
   collectServiceCandidates,
 } from "../extensions/geolibre-chrome/service-scanner.mjs";
 import { buildGeoLibreUrl, buildGeoLibreUrls } from "../extensions/geolibre-chrome/url-builder.mjs";
+import { openGeoLibreTabs } from "../extensions/geolibre-chrome/tab-launcher.mjs";
 import { FIREFOX_ADDON_ID, manifestForTarget } from "../scripts/extension-manifest.mjs";
 import {
   dataUrlParameters,
@@ -34,7 +35,44 @@ function formatsOf(found: Array<{ url: string; format: string }>) {
   return Object.fromEntries(found.map((entry) => [entry.url, entry.format]));
 }
 
+it("creates all tabs before activating the first, which can close the popup", async () => {
+  const calls: string[] = [];
+  let closed = false;
+  let id = 0;
+  await openGeoLibreTabs(["first", "second", "third"], {
+    create: async ({ url, active }: { url: string; active: boolean }) => {
+      assert.equal(closed, false);
+      assert.equal(active, false);
+      calls.push(url);
+      return { id: ++id };
+    },
+    update: async (tabId: number, { active }: { active: boolean }) => {
+      assert.deepEqual(calls, ["first", "second", "third"]);
+      assert.equal(tabId, 1);
+      assert.equal(active, true);
+      closed = true;
+    },
+  });
+  assert.equal(closed, true);
+});
+
 describe("GeoLibre extension: file formats in page links", () => {
+  it("preserves signed Zarr URLs after host and store-root normalization", () => {
+    const found = scan(`
+      <a href="https://source.coop/account/product/a.zarr/.zmetadata?sig=keep">Cube</a>
+      <a href="https://huggingface.co/datasets/org/repo/blob/main/a.zarr/zarr.json?sig=keep">Cube</a>
+      <a href="https://data.example.com/a.zarr/0.0?sig=keep">Cube</a>
+      <a href="https://data.example.com/download/42">FlatGeobuf</a>
+    `);
+    assert.deepEqual(
+      found.map((entry) => entry.url).sort(),
+      [
+        "https://data.example.com/a.zarr?sig=keep",
+        "https://data.source.coop/account/product/a.zarr?sig=keep",
+        "https://huggingface.co/datasets/org/repo/resolve/main/a.zarr?sig=keep",
+      ].sort(),
+    );
+  });
   it("finds FlatGeobuf, GPX, KML/KMZ, Zarr, 3D Tiles and STAC links", () => {
     const found = scan(`
       <a href="parcels.fgb">Parcels</a>
@@ -73,6 +111,16 @@ describe("GeoLibre extension: file formats in page links", () => {
 });
 
 describe("GeoLibre extension: service requests", () => {
+  it("preserves signed catalog and Zarr request URLs", () => {
+    assert.equal(
+      classifyServiceRequest("https://data.example.com/a.zarr/.zmetadata?sig=keep")?.url,
+      "https://data.example.com/a.zarr?sig=keep",
+    );
+    assert.equal(
+      classifyServiceRequest("https://data.example.com/catalog.json?sig=keep#item")?.url,
+      "https://data.example.com/catalog.json?sig=keep",
+    );
+  });
   it("recognizes a WCS request and drops its coverage operation parameters", () => {
     const found = classifyServiceRequest(
       "https://maps.example.com/ows?map=dem&SERVICE=WCS&REQUEST=GetCoverage&COVERAGEID=elevation&SUBSET=Lat(1,2)",

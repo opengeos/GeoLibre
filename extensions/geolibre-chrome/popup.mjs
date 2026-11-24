@@ -2,6 +2,7 @@ import { loadBaseUrl } from "./base-url-settings.mjs";
 import { collectRequestedUrls, scanDocumentForDatasets } from "./scanner.mjs";
 import { collectServiceCandidates, mergeServiceCandidates } from "./service-scanner.mjs";
 import { buildGeoLibreUrls } from "./url-builder.mjs";
+import { openGeoLibreTabs } from "./tab-launcher.mjs";
 
 const elements = {
   loading: document.querySelector("#loading"),
@@ -211,9 +212,7 @@ elements.openButton.addEventListener("click", async () => {
     // Files share one launch with one service and one STAC catalog; each further
     // service or catalog needs a dialog of its own, so it opens in its own tab.
     const urls = buildGeoLibreUrls(selectedDatasets(), baseUrl);
-    for (const [index, url] of urls.entries()) {
-      await chrome.tabs.create({ url, active: index === 0 });
-    }
+    await openGeoLibreTabs(urls, chrome.tabs);
     window.close();
   } catch (error) {
     elements.openError.textContent =
