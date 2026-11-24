@@ -20,6 +20,8 @@ const MAX_IDW_POINTS = 200_000;
 const MAX_CELLS_IDW = 6_000_000;
 const MAX_CELLS_KRIGE = 1_000_000;
 const MAX_KRIGE_POINTS = 1500;
+/** Bound synchronous distance evaluation and dense-solve work together. */
+const MAX_INTERPOLATION_WORK = 200_000_000;
 
 export type VariogramModel = "spherical" | "exponential" | "gaussian" | "linear";
 
@@ -171,7 +173,8 @@ export async function interpolatePoints(
   if (!field) throw new Error("Value field is required");
   const method = String(params.method ?? "idw").toLowerCase();
   const resolution = Number(params.resolution ?? 0) || 0;
-  if (resolution <= 0) throw new Error("Output pixel size (resolution) must be > 0");
+  if (!Number.isFinite(resolution) || resolution <= 0)
+    throw new Error("Output pixel size (resolution) must be finite and > 0");
   const power = params.power == null ? 2 : Number(params.power);
   if (method === "idw" && !(power > 0)) throw new Error("IDW power must be > 0");
   const model = String(params.variogram_model ?? "spherical").toLowerCase();
@@ -203,8 +206,14 @@ export async function interpolatePoints(
       skipped += 1;
       continue;
     }
-    px.push(Number(coords[0]));
-    py.push(Number(coords[1]));
+    const x = Number(coords[0]),
+      y = Number(coords[1]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      skipped += 1;
+      continue;
+    }
+    px.push(x);
+    py.push(y);
     pz.push(z);
   }
   if (pz.length < 3) {
@@ -226,10 +235,16 @@ export async function interpolatePoints(
   const geographic =
     definition === "EPSG:4326" || /\+proj=(?:longlat|latlong|lonlat|latlon)\b/.test(definition);
 
-  const minx = Math.min(...px);
-  let maxx = Math.max(...px);
-  const miny = Math.min(...py);
-  let maxy = Math.max(...py);
+  let minx = Infinity,
+    maxx = -Infinity,
+    miny = Infinity,
+    maxy = -Infinity;
+  for (let i = 0; i < px.length; i++) {
+    minx = Math.min(minx, px[i]);
+    maxx = Math.max(maxx, px[i]);
+    miny = Math.min(miny, py[i]);
+    maxy = Math.max(maxy, py[i]);
+  }
   // A degenerate extent (all points share an x or y) still needs a 1-cell span.
   if (maxx <= minx) maxx = minx + resolution;
   if (maxy <= miny) maxy = miny + resolution;
@@ -246,6 +261,15 @@ export async function interpolatePoints(
   const gy = Float64Array.from({ length: height }, (_, j) => maxy - (j + 0.5) * resolution);
 
   const n = pz.length;
+  if (method === "kriging" && n > MAX_KRIGE_POINTS)
+    throw new Error(
+      `Ordinary kriging is capped at ${MAX_KRIGE_POINTS} points (got ${n}). Use IDW for larger point sets.`,
+    );
+  const work = method === "kriging" ? n ** 3 + cells * n : 2 * cells * n;
+  if (!Number.isFinite(work) || work > MAX_INTERPOLATION_WORK)
+    throw new Error(
+      "Interpolation exceeds the in-browser work budget. Thin the points, increase the pixel size, or use the sidecar for large kriging requests.",
+    );
   const out = new Float32Array(cells);
   if (method === "idw") {
     const half = power / 2;
@@ -283,11 +307,6 @@ export async function interpolatePoints(
       }
     }
   } else if (method === "kriging") {
-    if (n > MAX_KRIGE_POINTS) {
-      throw new Error(
-        `Ordinary kriging is capped at ${MAX_KRIGE_POINTS} points (got ${n}). Use IDW for larger point sets.`,
-      );
-    }
     const dist = new Float64Array(n * n);
     const h: number[] = [];
     const gamma: number[] = [];
@@ -301,7 +320,8 @@ export async function interpolatePoints(
         }
       }
     }
-    const hmax = Math.max(...h);
+    let hmax = 0;
+    for (const distance of h) hmax = Math.max(hmax, distance);
     if (!(hmax > 0)) throw new Error("All points are coincident; cannot krige.");
     const nbins = 12;
     const edges = linspace(0, hmax, nbins + 1);

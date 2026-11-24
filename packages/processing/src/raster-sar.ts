@@ -411,8 +411,9 @@ export function floodMap(
     counts[cls] += 1;
     out[i] = cls;
   }
-  const valid_ = counts[0] + counts[1] + counts[2];
-  const pct = (k: number) => (valid_ ? ((100 * counts[k]) / valid_).toFixed(2) : "0.00");
+  const validPixelCount = counts[0] + counts[1] + counts[2];
+  const pct = (k: number) =>
+    validPixelCount ? ((100 * counts[k]) / validPixelCount).toFixed(2) : "0.00";
   const messages = preBand
     ? [
         `Water threshold ${threshold} dB, change >= ${changeDb} dB.`,

@@ -232,8 +232,12 @@ function rasterizeGeometries(
   geometries: Geometry[],
   win: Window,
   allTouched: boolean,
+  reusable?: Uint8Array,
 ): Uint8Array {
-  const mask = new Uint8Array(raster.width * raster.height);
+  const mask = reusable ?? new Uint8Array(raster.width * raster.height);
+  if (reusable)
+    for (let row = win.row0; row < win.row1; row++)
+      mask.fill(0, row * raster.width + win.col0, row * raster.width + win.col1);
   for (const geometry of geometries) {
     const { polygons, points } = splitGeometry(geometry);
     for (const polygon of polygons) {
@@ -371,6 +375,7 @@ export async function zonalStatistics(
   const zoneEpsg = geojsonEpsg(zonesGeojson);
   const geometries = await geometriesInRasterCrs(raster, features, zoneEpsg, "zonal statistics");
   let withData = 0;
+  let reusableMask: Uint8Array | undefined;
   const out: Feature[] = features.map((feature, idx) => {
     const props: Record<string, unknown> = { ...(feature?.properties ?? {}) };
     const geometry = geometries[idx];
@@ -384,7 +389,8 @@ export async function zonalStatistics(
       }
       const win = geometryWindow(raster, [geometry]);
       if (win) {
-        const mask = rasterizeGeometries(raster, [geometry], win, false);
+        const mask = rasterizeGeometries(raster, [geometry], win, false, reusableMask);
+        reusableMask = mask;
         for (let r = win.row0; r < win.row1; r += 1) {
           for (let c = win.col0; c < win.col1; c += 1) {
             const i = r * raster.width + c;
@@ -841,9 +847,4 @@ function traceLevel(
     lines.push(walk(segments[s][0], s).map((key2) => crossing.get(key2)!));
   }
   return lines;
-}
-
-/** Polygon/MultiPolygon type guard used by callers that only accept areas. */
-export function isAreaGeometry(g: Geometry | null): g is Polygon | MultiPolygon {
-  return g?.type === "Polygon" || g?.type === "MultiPolygon";
 }

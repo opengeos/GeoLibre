@@ -74,15 +74,6 @@ export function rasterEpsg(raster: Pick<RasterData, "geoKeys">): number | null {
   return null;
 }
 
-/** Whether the raster's GeoKeys describe a geographic (lon/lat) CRS. */
-export function rasterIsGeographic(raster: Pick<RasterData, "geoKeys">): boolean {
-  const keys = raster.geoKeys ?? {};
-  const modelType = keys.GTModelTypeGeoKey as number | undefined;
-  if (modelType === 2) return true;
-  if (modelType === 1) return false;
-  return keys.ProjectedCSTypeGeoKey == null && keys.GeographicTypeGeoKey != null;
-}
-
 /**
  * Resolve the proj4 definition of a raster's CRS from its GeoKeys (with the
  * datum shift GeoLibre adds where the EPSG tables leave it out), or throw a

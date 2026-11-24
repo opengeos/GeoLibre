@@ -1087,6 +1087,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                   onChange={(value) => setParam(param.id, value)}
                   onPick={() => void pickPathParam(param)}
                   readOnly={clientParam !== null}
+                  inputKind={clientParam?.kind}
                   onClear={
                     clientParam && entry
                       ? () => clearClientSecondaryInput(clientParam.kind, clientParam.key)

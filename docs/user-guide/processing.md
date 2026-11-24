@@ -177,6 +177,13 @@ See the [Vector Analysis tutorial](../tutorials/vector-analysis.md).
 
 Every raster tool also offers a **Client (browser)** engine that computes on the loaded raster with no sidecar at all, so the whole toolbox works on the web build and on mobile. The engine picker in the dialog shows which engines a tool accepts, and the line beneath it says what the selected one will do. The browser engine follows the sidecar's algorithms (GDAL's warp kernels and output grid for Reproject and Resample, GDAL's rasterization rules for Clip by mask layer and Zonal statistics, ContourPy's marching squares for Contour, the same IDW and kriging pipeline for Interpolation), and a parity test replays sidecar outputs against it. A few inputs stay sidecar-only, and the browser engine says so when it meets them: a Reproject target that is not an EPSG code, Mosaic inputs on different pixel grids, zonal statistics over line zones, and a kriging system that is singular (for example, duplicate sample locations). The Change detection and SAR tools run in the browser only.
 
+Browser interpolation also enforces a 200-million-operation work estimate,
+including point/grid comparisons and the kriging dense solve. This can limit a
+request below the separate point or cell caps. Thin the points, use a coarser
+pixel size, or select the sidecar for larger kriging jobs. Transition-matrix
+outputs require codes within the exact Float32 integer range (up to 16,777,216);
+reclassify larger labels to smaller non-negative integers first.
+
 **Terrain**
 
 | Tool | Description |

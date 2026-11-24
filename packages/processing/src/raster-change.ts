@@ -275,6 +275,10 @@ export function transitionMatrix(
   const index = new Map(classes.map((c, i) => [c, i]));
   const maxClass = classes[classes.length - 1];
   const multiplier = 10 ** Math.max(1, Math.ceil(Math.log10(maxClass + 1)));
+  if (!Number.isSafeInteger(multiplier) || maxClass * multiplier + maxClass > 16_777_216)
+    throw new Error(
+      "Transition codes exceed the exact Float32 integer range. Reclassify to smaller non-negative integers first.",
+    );
   const counts = classes.map(() => classes.map(() => 0));
   const out = new Float32Array(a.length);
   let total = 0;
