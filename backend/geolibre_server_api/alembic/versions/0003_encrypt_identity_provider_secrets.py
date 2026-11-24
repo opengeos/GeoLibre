@@ -54,8 +54,10 @@ def _has_table(bind) -> bool:
 def upgrade() -> None:
     """Encrypt stored identity provider client secrets in place."""
     if context.is_offline_mode():
-        # Encryption needs the key and the row values; emit no SQL for them.
-        return
+        raise SecretKeyError(
+            "identity-provider secret encryption requires an online migration; "
+            "SQL generation cannot read and encrypt the stored values"
+        )
     bind = op.get_bind()
     if not _has_table(bind):
         return
@@ -85,7 +87,10 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Decrypt stored identity provider client secrets back to plaintext."""
     if context.is_offline_mode():
-        return
+        raise SecretKeyError(
+            "identity-provider secret decryption requires an online migration; "
+            "SQL generation cannot read and decrypt the stored values"
+        )
     bind = op.get_bind()
     if not _has_table(bind):
         return

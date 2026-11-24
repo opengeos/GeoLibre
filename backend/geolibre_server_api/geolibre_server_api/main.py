@@ -112,6 +112,7 @@ from geolibre_server_api.secret_crypto import (
     plaintext_secrets_enabled,
     reencrypt_stored_secrets,
     secret_ciphers,
+    secret_storage_policy,
 )
 
 Visibility = Literal["public", "unlisted", "private", "organization"]
@@ -873,6 +874,31 @@ def _prepare_stored_secrets(engine, base_url: str) -> bool:
     return ciphers is None and not plaintext_allowed
 
 
+class SecretStoragePolicyMiddleware:
+    """Apply the app's storage URL without wrapping streamed receive errors."""
+
+    def __init__(self, app, public_url: str) -> None:
+        """Retain the application and its effective public URL.
+
+        Args:
+            app: The downstream ASGI application.
+            public_url: The URL selected by the application factory.
+        """
+        self.app = app
+        self.public_url = public_url
+
+    async def __call__(self, scope, receive, send) -> None:
+        """Scope route handlers and their worker threads to this app's policy.
+
+        Args:
+            scope: The ASGI connection scope.
+            receive: The incoming ASGI message callback.
+            send: The outgoing ASGI message callback.
+        """
+        with secret_storage_policy(self.public_url):
+            await self.app(scope, receive, send)
+
+
 def create_app(
     database_url: str | None = None,
     storage=None,
@@ -992,7 +1018,8 @@ def create_app(
         with sessions() as backfill_session:
             backfill_project_version_usage(backfill_session, object_storage)
     base_url = (public_url or os.getenv("GEOLIBRE_PUBLIC_URL", "http://localhost:8000")).rstrip("/")
-    secrets_unprotected = _prepare_stored_secrets(engine, base_url)
+    with secret_storage_policy(base_url):
+        secrets_unprotected = _prepare_stored_secrets(engine, base_url)
     viewer_url = os.getenv("GEOLIBRE_VIEWER_URL", "https://app.geolibre.org/").rstrip("/") + "/"
     max_project_bytes = int(os.getenv("GEOLIBRE_MAX_PROJECT_BYTES", str(50 * 1024 * 1024)))
     max_thumbnail_bytes = int(os.getenv("GEOLIBRE_MAX_THUMBNAIL_BYTES", str(5 * 1024 * 1024)))
@@ -1027,7 +1054,10 @@ def create_app(
     app.state.allow_self_registration = self_reg_enabled
     app.state.lifecycle_delivery = lifecycle_delivery
     app.state.trusted_proxy = load_trusted_proxy_config()
-    # True only in production without GEOLIBRE_SECRET_KEYS: the admin API then
+
+    app.add_middleware(SecretStoragePolicyMiddleware, public_url=base_url)
+
+    # True when a key is required but missing: the admin API then
     # refuses to store a new identity-provider secret.
     app.state.secrets_unprotected = secrets_unprotected
     # Outbound identity-provider HTTP; lives for the process.
@@ -1053,11 +1083,19 @@ def create_app(
     )
     # Added after the body limit so it wraps it: a throttled client is refused
     # before any body is read.
-    app.add_middleware(
-        RateLimitMiddleware,
-        auth_rate=parse_rate("GEOLIBRE_RATE_LIMIT_AUTH", DEFAULT_AUTH_RATE),
-        api_rate=parse_rate("GEOLIBRE_RATE_LIMIT_API", DEFAULT_API_RATE),
-    )
+    auth_rate = parse_rate("GEOLIBRE_RATE_LIMIT_AUTH", DEFAULT_AUTH_RATE)
+    api_rate = parse_rate("GEOLIBRE_RATE_LIMIT_API", DEFAULT_API_RATE)
+    if (
+        is_production_url(base_url)
+        and not app.state.trusted_proxy.networks
+        and (auth_rate or api_rate)
+    ):
+        logger.warning(
+            "Client rate limiting uses direct peer addresses. If this API is behind a "
+            "reverse proxy, configure GEOLIBRE_TRUSTED_PROXIES to avoid sharing "
+            "one rate budget across its users."
+        )
+    app.add_middleware(RateLimitMiddleware, auth_rate=auth_rate, api_rate=api_rate)
 
     origins = [x.strip() for x in os.getenv("GEOLIBRE_CORS_ORIGINS", "*").split(",") if x.strip()]
     # CORSMiddleware treats a "*" anywhere in the list as allow-all, so a value

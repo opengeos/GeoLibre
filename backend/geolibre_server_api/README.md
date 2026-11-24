@@ -79,12 +79,15 @@ Configuration:
   identity-provider secrets are stored without it, and saving a provider
   secret answers `503`. A
   malformed key, or one that cannot decrypt a stored secret, fails startup.
-  Migrations use the same key requirement and development opt-out as startup.
+  Online migrations use the same key requirement and development opt-out as startup.
+  This secret-data migration refuses offline `--sql` generation for upgrades
+  and downgrades because it must read and transform each stored value.
   Set `GEOLIBRE_PUBLIC_URL` to the deployment URL when running Alembic,
   including when an application supplies its URL directly to `create_app`.
 - `GEOLIBRE_ALLOW_PLAINTEXT_SECRETS` (default `0`): an explicit development-only
   opt-out from secret encryption. It is honored only with a loopback
-  `GEOLIBRE_PUBLIC_URL`. Use it only for development servers that are not
+  application public URL (the explicit `create_app(public_url=...)` value
+  overrides `GEOLIBRE_PUBLIC_URL`). Use it only for development servers that are not
   publicly reachable. Without a key, secrets beginning with `enc:v1:` are
   rejected with `422` because they would be confused with ciphertext.
   For credentials saved by an older build that already used this prefix, see

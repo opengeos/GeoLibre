@@ -433,3 +433,55 @@ def test_encryption_helper_requires_explicit_opt_out(monkeypatch):
     assert encrypt_secret("plain") == "plain"
     with pytest.raises(SecretKeyError, match="needs GEOLIBRE_SECRET_KEYS"):
         encrypt_secret("enc:v1:not-a-token")
+
+
+def test_explicit_loopback_url_overrides_public_environment(tmp_path, fake_idp, monkeypatch):
+    """A loopback app uses its own policy for storage despite an inherited public URL.
+
+    Args:
+        tmp_path: An isolated database directory.
+        fake_idp: The test identity provider.
+        monkeypatch: The pytest environment patch fixture.
+    """
+    monkeypatch.delenv("GEOLIBRE_SECRET_KEYS")
+    monkeypatch.setenv("GEOLIBRE_ALLOW_PLAINTEXT_SECRETS", "1")
+    monkeypatch.setenv("GEOLIBRE_PUBLIC_URL", PUBLIC_URL)
+    monkeypatch.setenv("GEOLIBRE_OAUTH_CLIENTS", json.dumps(OAUTH_CLIENTS))
+    db_url = f"sqlite:///{tmp_path / 'explicit-loopback.db'}"
+    app = _app(db_url, tmp_path, public_url="http://localhost:8000", transport=fake_idp.transport)
+    try:
+        with TestClient(app, base_url="http://localhost:8000") as client:
+            token = account(client)
+            org_id = create_org(client, token)
+            response = configure_idp(client, token, org_id, clientSecret="local-secret")
+            assert response.status_code == 200, response.text
+        assert _raw_secrets(db_url) == ["local-secret"]
+        # Request-scoped development policy does not leak to direct callers.
+        with pytest.raises(SecretKeyError, match="required before storing"):
+            encrypt_secret("outside-request")
+    finally:
+        app.state.engine.dispose()
+
+
+@pytest.mark.parametrize("with_key", [False, True])
+@pytest.mark.parametrize("direction", ["upgrade", "downgrade"])
+def test_secret_migration_requires_online_values(tmp_path, monkeypatch, with_key, direction):
+    """Offline SQL cannot silently skip encryption or decryption of existing data.
+
+    Args:
+        tmp_path: An isolated database directory.
+        monkeypatch: The pytest environment patch fixture.
+        with_key: Whether a valid encryption key is configured.
+        direction: The requested migration direction.
+    """
+    import io
+
+    if not with_key:
+        monkeypatch.delenv("GEOLIBRE_SECRET_KEYS")
+    cfg = Config(str(ALEMBIC_INI), output_buffer=io.StringIO())
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{tmp_path / 'offline.db'}")
+    with pytest.raises(SecretKeyError, match="requires an online migration"):
+        if direction == "upgrade":
+            command.upgrade(cfg, "0002_enterprise_lifecycle:head", sql=True)
+        else:
+            command.downgrade(cfg, "head:0002_enterprise_lifecycle", sql=True)

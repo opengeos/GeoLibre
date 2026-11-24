@@ -20,6 +20,7 @@ import urllib.request
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 from pydantic import BaseModel
@@ -228,10 +229,17 @@ def _download_verified(url: str, expected_sha256: str, target: Path) -> None:
     )
     digest = hashlib.sha256()
     size = 0
+    deadline = monotonic() + RUNTIME_SETUP_TIMEOUT_SECS
     try:
         with urllib.request.urlopen(request, timeout=60) as response, target.open("wb") as out:
             while True:
-                chunk = response.read(1024 * 1024)
+                if monotonic() >= deadline:
+                    raise RuntimeBootstrapError("uv download exceeded the runtime setup deadline")
+                # read1 returns after one network read, so a drip-fed response
+                # cannot keep one large buffered read inside the socket timeout.
+                chunk = response.read1(1024 * 1024)
+                if monotonic() >= deadline:
+                    raise RuntimeBootstrapError("uv download exceeded the runtime setup deadline")
                 if not chunk:
                     break
                 size += len(chunk)

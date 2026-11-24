@@ -18,6 +18,9 @@ from __future__ import annotations
 import functools
 import logging
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from urllib.parse import urlparse
 
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
@@ -31,6 +34,24 @@ CIPHERTEXT_PREFIX = "enc:v1:"
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 logger = logging.getLogger(__name__)
+_storage_public_url: ContextVar[str | None] = ContextVar("secret_storage_public_url", default=None)
+
+
+@contextmanager
+def secret_storage_policy(public_url: str) -> Iterator[None]:
+    """Scope storage checks to the effective URL of the application.
+
+    Args:
+        public_url: The URL selected by the application factory.
+
+    Yields:
+        Control with that application's plaintext storage policy active.
+    """
+    token = _storage_public_url.set(public_url)
+    try:
+        yield
+    finally:
+        _storage_public_url.reset(token)
 
 
 class SecretKeyError(RuntimeError):
@@ -108,7 +129,7 @@ def encrypt_secret(plaintext: str) -> str:
     if ciphers is None:
         validate_plaintext_secret(plaintext)
         if not plaintext_secrets_enabled() or is_production_url(
-            os.getenv("GEOLIBRE_PUBLIC_URL", "http://localhost:8000")
+            _storage_public_url.get() or os.getenv("GEOLIBRE_PUBLIC_URL", "http://localhost:8000")
         ):
             raise SecretKeyError(
                 f"{SECRET_KEYS_ENV} is required before storing secrets; only loopback "

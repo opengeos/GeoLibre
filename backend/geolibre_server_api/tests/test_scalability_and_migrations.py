@@ -226,14 +226,16 @@ def test_alembic_upgrade_head_builds_full_schema(tmp_path: Path, monkeypatch) ->
     finally:
         engine.dispose()
 
-    # Offline SQL generation must not emit duplicate CREATE INDEX statements.
+    # Schema-only offline SQL must not emit duplicate CREATE INDEX statements.
+    # The following secret-data migration needs live rows and refuses offline
+    # execution; test_secret_encryption exercises that explicit failure.
     import io
     import re
     from contextlib import redirect_stdout
 
     buf = io.StringIO()
     with redirect_stdout(buf):
-        command.upgrade(cfg, "head", sql=True)
+        command.upgrade(cfg, "0002_enterprise_lifecycle", sql=True)
     sql_out = buf.getvalue()
     created_indexes = re.findall(r"CREATE\s+(?:UNIQUE\s+)?INDEX\s+(\S+)", sql_out, flags=re.I)
     assert len(created_indexes) == len(set(created_indexes)), (

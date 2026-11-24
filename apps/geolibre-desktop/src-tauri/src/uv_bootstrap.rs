@@ -50,6 +50,9 @@ pub const UV_RELEASE_SHA256: &[(&str, &str)] = &[
 const UV_DOWNLOAD_BASE_URL: &str = "https://github.com/astral-sh/uv/releases/download";
 const UV_MAX_ARCHIVE_BYTES: u64 = 256 * 1024 * 1024;
 // Sidecar and Jupyter have separate startup locks but share this installation.
+// The one-time first install holds this lock through the bounded download so
+// concurrent startup paths reuse one verified archive rather than downloading
+// and staging duplicate copies. Later calls only recheck the installed binary.
 static UV_INSTALL_LOCK: Mutex<()> = Mutex::new(());
 
 /// The uv release archive for an `std::env::consts` OS/arch pair.

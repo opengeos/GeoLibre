@@ -265,3 +265,41 @@ def test_uv_replace_errors_are_wrapped_and_staging_is_cleaned(tmp_path, monkeypa
     with pytest.raises(RuntimeBootstrapError, match="Could not install.*executable is in use"):
         runtime._extract_uv_binaries(archive, install_dir)
     assert not list(install_dir.iterdir())
+
+
+def test_drip_fed_download_observes_overall_deadline(monkeypatch, tmp_path):
+    """Continued small reads cannot hold runtime installation indefinitely.
+
+    Args:
+        monkeypatch: The pytest patch fixture.
+        tmp_path: An isolated download directory.
+    """
+    now = [0.0]
+
+    class DripResponse(_FakeResponse):
+        """A response whose individual read remains below the socket timeout."""
+
+        def read1(self, size=-1):
+            """Advance fake elapsed time while supplying one byte.
+
+            Args:
+                size: The requested maximum bytes, intentionally ignored.
+
+            Returns:
+                One byte before the end of the simulated stream.
+            """
+            now[0] += 20
+            return super().read1(1)
+
+    monkeypatch.setattr(runtime, "monotonic", lambda: now[0])
+    monkeypatch.setattr(runtime, "RUNTIME_SETUP_TIMEOUT_SECS", 30)
+    monkeypatch.setattr(
+        runtime.urllib.request, "urlopen", lambda *args, **kwargs: DripResponse(b"abc")
+    )
+    with pytest.raises(RuntimeBootstrapError, match="setup deadline"):
+        runtime._download_verified(
+            "https://example.invalid/archive",
+            hashlib.sha256(b"abc").hexdigest(),
+            tmp_path / "archive",
+        )
+    assert now[0] == 40

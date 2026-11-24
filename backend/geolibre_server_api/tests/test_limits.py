@@ -193,3 +193,74 @@ def test_high_client_churn_amortizes_counter_cleanup(monkeypatch):
         assert limiter.hit(("api", str(index)), rate) is None
         assert len(limiter._windows) <= 100
     assert len(cleanups) <= 2
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/auth/password-reset/request",
+        "/api/auth/password-reset/confirm",
+        "/api/auth/verify-email/request",
+        "/api/auth/verify-email/confirm",
+        "/api/account/mfa/totp",
+        "/api/account/mfa/totp/enroll",
+        "/api/account/mfa/totp/confirm",
+    ],
+)
+def test_account_lifecycle_uses_credential_budget(tmp_path, monkeypatch, path):
+    """Account recovery, mail and MFA use the stricter credential limit.
+
+    Args:
+        tmp_path: An isolated database directory.
+        monkeypatch: The pytest environment patch fixture.
+        path: A credential or email operation.
+    """
+    monkeypatch.setenv("GEOLIBRE_RATE_LIMIT_AUTH", "1/60")
+    with _client(tmp_path) as client:
+        assert client.post(path, json={}).status_code != 429
+        assert client.post(path, json={}).status_code == 429
+        assert client.get("/api/projects").status_code == 200
+
+
+@pytest.mark.parametrize("trusted_proxy", ["", "198.51.100.7"])
+def test_public_rate_limit_warns_without_trusted_proxy(
+    tmp_path, monkeypatch, caplog, trusted_proxy
+):
+    """An enabled public limiter explains how proxy deployments preserve identity.
+
+    Args:
+        tmp_path: An isolated database directory.
+        monkeypatch: The pytest environment patch fixture.
+        caplog: Captured application logs.
+        trusted_proxy: The configured trusted peer, or an empty configuration.
+    """
+    monkeypatch.setenv("GEOLIBRE_RATE_LIMIT_AUTH", "1/60")
+    monkeypatch.setenv("GEOLIBRE_TRUSTED_PROXIES", trusted_proxy)
+    with _client(tmp_path):
+        assert ("configure GEOLIBRE_TRUSTED_PROXIES" in caplog.text) == (not trusted_proxy)
+
+
+def test_unknown_peer_retains_limit_and_warns_once(tmp_path, monkeypatch, caplog):
+    """Missing transport identity cannot disable limits or trust spoofed headers.
+
+    Args:
+        tmp_path: An isolated database directory.
+        monkeypatch: The pytest environment patch fixture.
+        caplog: Captured application logs.
+    """
+    monkeypatch.setenv("GEOLIBRE_RATE_LIMIT_API", "1/60")
+    app = create_app(
+        f"sqlite:///{tmp_path / 'unknown.db'}",
+        public_url=PUBLIC_URL,
+        storage=FileStorage(str(tmp_path / "objects")),
+    )
+    with TestClient(app, client=None) as client:
+        assert (
+            client.get("/api/projects", headers={"x-forwarded-for": "203.0.113.1"}).status_code
+            == 200
+        )
+        assert (
+            client.get("/api/projects", headers={"x-forwarded-for": "203.0.113.2"}).status_code
+            == 429
+        )
+    assert sum("no client address" in record.message for record in caplog.records) == 1

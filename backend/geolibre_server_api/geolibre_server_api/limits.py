@@ -9,6 +9,7 @@ N times the configured rate.
 from __future__ import annotations
 
 import ipaddress
+import logging
 import math
 import os
 import re
@@ -24,14 +25,15 @@ from starlette.responses import JSONResponse
 
 from geolibre_server_api.proxy_identity import client_ip
 
-# Routes that run scrypt, mint or refresh tokens, or call an identity provider:
+# Routes that run credential operations, send mail, or call an identity provider:
 # the same set docs/server-api.md tells operators to rate-limit at the ingress.
 AUTH_PATH_RE = re.compile(
-    r"^/(oauth/(authorize|token|sso/callback)|api/(auth/token|accounts|account/password))$"
+    r"^/(oauth/(authorize|token|sso/callback)|api/(auth/(token|password-reset/(request|confirm)|verify-email/(request|confirm))|accounts|account/(password|mfa/totp(/(enroll|confirm))?)))$"
 )
 DEFAULT_AUTH_RATE = "30/60"
 DEFAULT_API_RATE = "600/60"
 MAX_TRACKED_CLIENTS = 100_000
+logger = logging.getLogger(__name__)
 
 
 class RequestBodyTooLarge(HTTPException):
@@ -191,8 +193,9 @@ class FixedWindowLimiter:
         target = self._max_keys - max(1, self._max_keys // 10)
         overflow = len(self._windows) - target
         if overflow > 0:
-            # Insertion order already identifies the oldest windows, so no
-            # O(n log n) sort is needed while holding the request-path lock.
+            # All expired windows were removed above using their own expiry.
+            # Shed the earliest-started remaining windows regardless of their
+            # configured duration, without sorting on the request-path lock.
             for k in list(islice(self._windows, overflow)):
                 del self._windows[k]
 
@@ -217,6 +220,7 @@ class RateLimitMiddleware:
         self.auth_rate = auth_rate
         self.api_rate = api_rate
         self.limiter = limiter or FixedWindowLimiter()
+        self._warned_missing_client = False
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http" or scope.get("method") == "OPTIONS":
@@ -234,6 +238,12 @@ class RateLimitMiddleware:
             await self.app(scope, receive, send)
             return
         address = client_ip(Request(scope))
+        if address is None and not self._warned_missing_client:
+            self._warned_missing_client = True
+            logger.warning(
+                "Rate limiting has no client address; requests share the unknown-client "
+                "budget. Configure the ASGI server to supply the original peer address."
+            )
         if isinstance(address, ipaddress.IPv6Address):
             address = ipaddress.IPv6Network((address, 64), strict=False)
         retry_after = self.limiter.hit((bucket, str(address or "unknown")), rate)

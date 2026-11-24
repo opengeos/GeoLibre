@@ -50,12 +50,19 @@ Deployment protections remain the operator's responsibility:
   Configure `GEOLIBRE_TRUSTED_PROXIES` with the actual reverse proxy's source
   IP or network. Without it, proxied users all share the proxy's IP and one
   deployment-wide budget: by default 30 credential requests and 600 other
-  requests per minute. The proxy must replace incoming forwarding headers;
+  requests per minute. Public deployments log a startup reminder when rate
+  limiting is enabled without trusted proxies. Requests whose ASGI scope has
+  no peer address share an unknown-client budget and log one configuration
+  warning; the ASGI server must supply the original peer address for per-client
+  limits. Forwarding headers are ignored without a trusted peer. The proxy must replace incoming forwarding headers;
   trusting arbitrary client-supplied `X-Forwarded-For` would bypass the limits.
   Before enabling OAuth publicly, also enforce per-client-IP limits at the
   ingress on **GET and POST** `/oauth/authorize`,
   `GET /oauth/sso/callback`, `POST /oauth/token`, `POST /api/auth/token`,
-  `POST /api/accounts`, and `POST /api/account/password`. The last four POSTs
+  `POST /api/accounts`, `POST /api/account/password`,
+  `POST /api/auth/password-reset/request`, `POST /api/auth/password-reset/confirm`,
+  `POST /api/auth/verify-email/request`, `POST /api/auth/verify-email/confirm`,
+  and `/api/account/mfa/totp` (including its `/enroll` and `/confirm` paths). These
   include password or token operations; consent login and the PAT/account
   routes run scrypt, and the single sign-on callback calls the organization's
   identity provider. Add per-username limits where the
@@ -69,7 +76,7 @@ Deployment protections remain the operator's responsibility:
   limit_req_zone $binary_remote_addr zone=geolibre_auth:10m rate=12r/m;
 
   # TLS issuer server context; proxy other API routes separately.
-  location ~ ^/(oauth/(authorize|token|sso/callback)|api/(auth/token|accounts|account/password))$ {
+  location ~ ^/(oauth/(authorize|token|sso/callback)|api/(auth/(token|password-reset/(request|confirm)|verify-email/(request|confirm))|accounts|account/(password|mfa/totp(/(enroll|confirm))?)))$ {
       limit_req zone=geolibre_auth burst=6 nodelay;
       limit_req_status 429;
       client_max_body_size 16k;
