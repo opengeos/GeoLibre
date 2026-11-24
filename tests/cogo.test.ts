@@ -97,6 +97,30 @@ describe("COGO traverse", () => {
     assert.deepEqual(polygon.coordinates[0], [...pts, [0, 0]]);
     assert.equal(constructedFeature([[0, 0]], "line"), null);
     assert.equal(constructedFeature(pts.slice(0, 2), "polygon"), null);
+    assert.equal(
+      constructedFeature(
+        [
+          [0, 0],
+          [1, 0],
+          [0, 0],
+        ],
+        "polygon",
+      ),
+      null,
+    );
+    assert.equal(
+      constructedFeature(
+        [
+          [0, 0],
+          [1, 0],
+          [0, 0],
+          [1, 0],
+        ],
+        "polygon",
+      ),
+      null,
+    );
+    assert.deepEqual(constructedFeature([...pts, pts[0]], "polygon")?.geometry, polygon);
   });
 });
 

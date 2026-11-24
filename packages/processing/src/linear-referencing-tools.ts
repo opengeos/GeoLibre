@@ -282,7 +282,12 @@ export function pointAtMeasure(route: Geometry | null, measure: number): Positio
       const t = mb === ma ? 0 : (measure - ma) / (mb - ma);
       const za = a[2] ?? 0;
       const zb = b[2] ?? 0;
-      return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), za + t * (zb - za), measure];
+      return [
+        a[0] + t * (((b[0] - a[0] + 540) % 360) - 180),
+        a[1] + t * (b[1] - a[1]),
+        za + t * (zb - za),
+        measure,
+      ];
     }
   }
   return null;
@@ -471,10 +476,7 @@ function collectRoutes(
   if (fallback)
     log(`${fallback} route(s) have incomplete M values and were measured by length in metres`);
   const repeated = [...routes.values()].filter((parts) => parts.length > 1).length;
-  if (repeated)
-    log(
-      `${repeated} route ID(s) occur on multiple features; event measures use the first feature whose measure range covers the event`,
-    );
+  if (repeated) log(`${repeated} route ID(s) occur on multiple features`);
   return routes;
 }
 
@@ -546,8 +548,9 @@ export const locateFeaturesAlongRoutesTool: ProcessingAlgorithm = {
         unmatched += 1;
         continue;
       }
-      const hits: { route: string; location: RouteLocation; position: Position }[] = [];
+      let matched = false;
       for (const position of positions) {
+        const hits: { route: string; location: RouteLocation; position: Position }[] = [];
         for (const route of routes) {
           const pad = radius / ((EARTH_RADIUS_M * Math.PI) / 180);
           const [west, south, east, north] = route.bounds;
@@ -562,24 +565,22 @@ export const locateFeaturesAlongRoutesTool: ProcessingAlgorithm = {
           if (location && location.distance <= radius)
             hits.push({ route: route.id, location, position });
         }
+        hits.sort((a, b) => a.location.distance - b.location.distance);
+        for (const hit of allRoutes ? hits : hits.slice(0, 1)) {
+          matched = true;
+          features.push({
+            type: "Feature",
+            properties: {
+              ...(feature.properties ?? {}),
+              route_id: hit.route,
+              measure: hit.location.measure,
+              distance_m: hit.location.distance,
+            },
+            geometry: { type: "Point", coordinates: hit.position },
+          });
+        }
       }
-      if (hits.length === 0) {
-        unmatched += 1;
-        continue;
-      }
-      hits.sort((a, b) => a.location.distance - b.location.distance);
-      for (const hit of allRoutes ? hits : hits.slice(0, 1)) {
-        features.push({
-          type: "Feature",
-          properties: {
-            ...(feature.properties ?? {}),
-            route_id: hit.route,
-            measure: hit.location.measure,
-            distance_m: hit.location.distance,
-          },
-          geometry: { type: "Point", coordinates: hit.position },
-        });
-      }
+      if (!matched) unmatched += 1;
     }
     if (unmatched) ctx.log(`${unmatched} feature(s) had no route within ${radius} m`);
     if (features.length === 0) {

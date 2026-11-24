@@ -362,22 +362,24 @@ it("locates each MultiPoint hit with its matching point geometry", async () => {
       },
     },
   ]);
-  const result = await run(locateFeaturesAlongRoutesTool.run, [routes, points], {
-    layer: "points",
-    routes: "routes",
-    routeIdField: "route_id",
-    allRoutes: true,
-    radius: 1,
-  });
-  assert.equal(result.results[0].features.length, 2);
-  assert.deepEqual(
-    result.results[0].features.map((feature) => feature.geometry),
-    [
-      { type: "Point", coordinates: [0.5, 0] },
-      { type: "Point", coordinates: [2, 0] },
-    ],
-  );
-  assert.match(result.logs.join("\n"), /incomplete M values/);
+  for (const allRoutes of [false, true]) {
+    const result = await run(locateFeaturesAlongRoutesTool.run, [routes, points], {
+      layer: "points",
+      routes: "routes",
+      routeIdField: "route_id",
+      allRoutes,
+      radius: 1,
+    });
+    assert.equal(result.results[0].features.length, 2);
+    assert.deepEqual(
+      result.results[0].features.map((feature) => feature.geometry),
+      [
+        { type: "Point", coordinates: [0.5, 0] },
+        { type: "Point", coordinates: [2, 0] },
+      ],
+    );
+    assert.match(result.logs.join("\n"), /incomplete M values/);
+  }
 });
 
 it("places zero-length line events as points and warns about repeated route IDs", async () => {
@@ -433,4 +435,34 @@ it("locates nearby routes across the antimeridian and reports missing IDs", asyn
   assert.equal(result.results[0].features.length, 1);
   assert.ok(Number(result.results[0].features[0].properties?.distance_m) < 250);
   assert.match(result.logs.join("\n"), /empty route ID/);
+});
+
+it("places point events on a wrapped route at the antimeridian", async () => {
+  const geometry: LineString = {
+    type: "LineString",
+    coordinates: [
+      [179, 0, 0, 0],
+      [-179, 0, 0, 100],
+    ],
+  };
+  assert.deepEqual(pointAtMeasure(geometry, 50), [180, 0, 0, 50]);
+  const routes = layerOf("routes", [{ type: "Feature", properties: { id: "A" }, geometry }]);
+  const events = layerOf("events", [
+    {
+      type: "Feature",
+      properties: { id: "A", m: 50 },
+      geometry: { type: "Point", coordinates: [0, 0] },
+    },
+  ]);
+  const result = await run(dynamicSegmentationTool.run, [routes, events], {
+    layer: "events",
+    routes: "routes",
+    routeIdField: "id",
+    eventRouteField: "id",
+    fromField: "m",
+  });
+  assert.deepEqual(result.results[0].features[0].geometry, {
+    type: "Point",
+    coordinates: [180, 0, 0, 50],
+  });
 });

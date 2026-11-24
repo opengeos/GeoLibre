@@ -995,6 +995,27 @@ export function fillPolygonGaps(fc: FeatureCollection, maxArea: number): FillGap
         }
         const box = geometryBBox(gap);
         const neighbours = polygons.filter((p) => bboxesIntersect(p.box, box));
+        // An overlapping neighbour may share an existing hole edge. Preserve
+        // that hole whenever one original polygon bounds the entire shell.
+        const shell = gap.coordinates[0];
+        const enclosedByOne = neighbours.some((neighbour) => {
+          const vertices = polygonVertices(neighbour.feature.geometry);
+          for (let i = 0; i + 1 < shell.length; i++) {
+            const pieces = splitSegmentAt(shell[i], shell[i + 1], vertices);
+            for (let j = 0; j + 1 < pieces.length; j++) {
+              const a = pieces[j];
+              const b = pieces[j + 1];
+              const midpoint: Position = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+              if (distanceToBoundary(midpoint, neighbour.feature.geometry) > SHARED_EDGE_TOLERANCE)
+                return false;
+            }
+          }
+          return true;
+        });
+        if (enclosedByOne) {
+          skippedHoles++;
+          continue;
+        }
         // Each gap edge is a piece of exactly one polygon's boundary: credit its
         // length to the polygon whose boundary its midpoint lies on.
         // The union merges collinear edges, so first split each gap edge at

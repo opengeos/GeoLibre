@@ -255,6 +255,11 @@ describe("fillPolygonGaps", () => {
     const result = fillPolygonGaps(fcOf(donut), 0);
     assert.equal(result.filled, 0);
     assert.equal(result.skippedHoles, 1);
+    const overlap = rect(1, 0, 2, 1, { name: "overlap" });
+    const withOverlap = fillPolygonGaps(fcOf(donut, overlap), 0);
+    assert.equal(withOverlap.filled, 0);
+    assert.equal(withOverlap.skippedHoles, 1);
+    assert.deepEqual(byName(withOverlap.collection, "donut")?.geometry, donut.geometry);
   });
 });
 

@@ -21,6 +21,11 @@ it("constructs a line from a typed traverse and saves it as a layer", () => {
     fireEvent.change(screen.getByLabelText(i18n.t("cogo.bearing")), { target: { value: "90" } });
     fireEvent.change(screen.getByLabelText(i18n.t("cogo.distance")), { target: { value: "100" } });
     fireEvent.click(screen.getByRole("button", { name: i18n.t("cogo.addLeg") }));
+    assert.equal(
+      (screen.getByRole("button", { name: i18n.t("cogo.pickStart") }) as HTMLButtonElement)
+        .disabled,
+      true,
+    );
     fireEvent.click(screen.getByRole("button", { name: i18n.t("cogo.saveLayer") }));
     const layer = useAppStore
       .getState()

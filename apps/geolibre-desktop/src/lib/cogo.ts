@@ -420,8 +420,11 @@ export function constructedFeature(
     if (unique.length < 2) return null;
     return { type: "Feature", properties, geometry: { type: "LineString", coordinates: unique } };
   }
-  const ring = isClosedPath(unique) ? unique.slice(0, -1) : unique;
-  if (ring.length < 3) return null;
+  const first = unique[0];
+  const last = unique.at(-1);
+  const ring =
+    first && last && first[0] === last[0] && first[1] === last[1] ? unique.slice(0, -1) : unique;
+  if (new Set(ring.map((point) => `${point[0]},${point[1]}`)).size < 3) return null;
   return {
     type: "Feature",
     properties,

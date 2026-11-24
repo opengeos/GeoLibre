@@ -507,6 +507,7 @@ function CogoTraceTool({
             size="sm"
             variant={mode === "start" ? "default" : "outline"}
             aria-pressed={mode === "start"}
+            disabled={vertices.length > 0}
             onClick={() => toggleMode("start")}
           >
             <Crosshair className="me-1 h-3.5 w-3.5" />
