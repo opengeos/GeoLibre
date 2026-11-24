@@ -1,8 +1,11 @@
+import { isProcessingParameterVisible } from "../../lib/processing-parameter-visibility";
 import { shouldZoomToNewLayers, useAppStore, useLayersWhen } from "@geolibre/core";
 import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
   STATISTICS_TOOLS,
+  canRunVectorToolOnWorker,
   getStatisticsTool,
+  runAlgorithmInBackground,
   type AlgorithmParameter,
   type FieldWeight,
   type GeometryFamily,
@@ -106,6 +109,11 @@ export function StatisticsToolsDialog({
   const [params, setParams] = useState<Record<string, unknown>>({});
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(() => {
+    if (!open) abortRef.current?.abort();
+  }, [open]);
   const [autoRunPending, setAutoRunPending] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
   const runTrackerRef = useRef<ProcessingRunTracker | null>(null);
@@ -275,16 +283,9 @@ export function StatisticsToolsDialog({
   );
 
   const isParamVisible = useCallback(
-    (param: AlgorithmParameter): boolean => {
-      const vw = param.visibleWhen;
-      if (!vw) return true;
-      const current = params[vw.param] as string | undefined;
-      if ("in" in vw) return current != null && vw.in.includes(current);
-      return current == null || !vw.notIn.includes(current);
-    },
+    (param: AlgorithmParameter) => isProcessingParameterVisible(param, params),
     [params],
   );
-
   // All required parameters; used for the asterisk legend condition.
   const requiredParams = useMemo(() => tool.parameters.filter((param) => param.required), [tool]);
   // Visible required params that are still unset — disables the Run button.
@@ -315,28 +316,40 @@ export function StatisticsToolsDialog({
       parameters: params,
     });
     runTrackerRef.current = tracker;
+    const controller = new AbortController();
+    abortRef.current = controller;
     setRunning(true);
     try {
       const ctx: ProcessingContext = {
         layers,
         parameters: params,
+        signal: controller.signal,
         log: appendLog,
         fitBounds: (bounds) => mapControllerRef.current?.fitBounds(bounds),
-        addResultLayer,
+        addResultLayer: (...args) => {
+          controller.signal.throwIfAborted();
+          addResultLayer(...args);
+        },
         viewportBounds: () => mapControllerRef.current?.getViewBounds() ?? null,
       };
-      await tool.run(ctx);
+      await runAlgorithmInBackground(tool, ctx);
+      controller.signal.throwIfAborted();
       // A logged "Error: ..." line marks a soft failure (the client tools
       // bail out without throwing); don't record those as successes.
       if (softErrorRef.current) tracker.finish("error", softErrorRef.current);
       else tracker.finish("success");
     } catch (error) {
+      if (controller.signal.aborted) {
+        tracker.finish("error", t("statistics.cancelled"));
+        return;
+      }
       appendLog(`Error: ${(error as Error).message}`);
       tracker.finish("error", (error as Error).message);
     } finally {
+      if (abortRef.current === controller) abortRef.current = null;
       setRunning(false);
     }
-  }, [tool, params, layers, appendLog, addResultLayer, mapControllerRef, isParamVisible]);
+  }, [tool, params, layers, appendLog, addResultLayer, mapControllerRef, isParamVisible, t]);
 
   // Auto-run for a History "Re-run": kick off handleRun on the render after the
   // pre-fill effect committed the recorded parameters. The ref always points at
@@ -375,6 +388,7 @@ export function StatisticsToolsDialog({
                 <button
                   key={entry.id}
                   type="button"
+                  disabled={running}
                   onClick={() => setSelectedId(entry.id)}
                   className={cn(
                     "w-full rounded-md px-2 py-1.5 text-start text-sm transition-colors hover:bg-accent",
@@ -428,6 +442,11 @@ export function StatisticsToolsDialog({
                 )}
                 {t("statistics.run")}
               </Button>
+              {running && canRunVectorToolOnWorker(tool) && (
+                <Button variant="outline" onClick={() => abortRef.current?.abort()}>
+                  {t("common.cancel")}
+                </Button>
+              )}
             </div>
 
             <ScrollArea className="h-32 rounded-md border bg-muted/30 p-2 font-mono text-xs">

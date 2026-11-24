@@ -110,8 +110,10 @@ export function useConsentGatedActions({
   // Network analysis tools send the coordinates of the input points to a public
   // Valhalla routing server, so they show the same one-time consent notice as
   // Directions before opening, gated on every activation path (each menu item).
+  // The local-network tools route in the browser and send nothing, so they
+  // open directly; the dialog re-checks consent before a server tool runs.
   const openNetworkTool = (kind: NetworkToolKind) => {
-    if (hasRoutingConsent()) {
+    if (kind.startsWith("local-") || hasRoutingConsent()) {
       setNetworkToolOpen(kind);
       return;
     }

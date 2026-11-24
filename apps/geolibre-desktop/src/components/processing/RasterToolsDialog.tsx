@@ -1,3 +1,4 @@
+import { isProcessingParameterVisible } from "../../lib/processing-parameter-visibility";
 import { useAppCapability, useAppStore, useLayersWhen } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
@@ -276,8 +277,14 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     setClientLog([]);
     setClientResult(null);
     setClientRunning(false);
-    setEngine(tool.supportsClient && (tool.clientOnly || !sidecarAllowed) ? "client" : "sidecar");
-  }, [open, tool, sidecarAllowed]);
+    setEngine(tool.supportsClient && (tool.clientOnly || sidecarRestriction(desktopServer)) ? "client" : "sidecar");
+  }, [open, tool, desktopServer]);
+
+  // Permission changes block new runs without discarding an already dispatched
+  // job, its polling state, or the user's form inputs.
+  useEffect(() => {
+    if (!sidecarAllowed && !job && tool.supportsClient) setEngine("client");
+  }, [sidecarAllowed, job, tool]);
 
   // Pre-fill from a pending History re-run once the requested tool is selected.
   // Declared after the reset effect above so the recorded parameters win over
@@ -368,20 +375,9 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   // Whether a parameter is shown, given another parameter's value (e.g. hide
   // the IDW power field when the kriging method is selected).
   const isParamVisible = useCallback(
-    (param: AlgorithmParameter): boolean => {
-      const vw = param.visibleWhen;
-      if (!vw) return true;
-      // Fall back to the controlling param's declared default, so dependent
-      // fields resolve correctly on the first render — before the effect that
-      // seeds `params` from toolDefaults has run (avoids a one-frame flicker).
-      const controller = tool.parameters.find((p) => p.id === vw.param);
-      const current = (params[vw.param] ?? controller?.default) as string | undefined;
-      if ("in" in vw) return current != null && vw.in.includes(current);
-      return current == null || !vw.notIn.includes(current);
-    },
+    (param: AlgorithmParameter) => isProcessingParameterVisible(param, params, tool.parameters),
     [params, tool],
   );
-
   const pickInput = useCallback(async () => {
     const path = await pickLocalPathWithFallback({
       filters: tool.inputFilters,
