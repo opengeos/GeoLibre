@@ -3812,6 +3812,10 @@ fn start_geolibre_sidecar_blocking(
         .current_dir(&project_dir)
         .env("GEOLIBRE_UV", &uv)
         .env("GEOLIBRE_SIDECAR_TOKEN", sidecar_token())
+        // Makes the Live MCP relay available on this desktop port. Access is
+        // disabled until the authenticated /relay/access request applies the
+        // user's setting, including when processing starts the sidecar first.
+        .env("GEOLIBRE_LIVE_RELAY_PORT", SIDECAR_PORT.to_string())
         .env("GEOLIBRE_RUNTIME_DIR", &runtime_dir)
         .env(POSTGIS_HOSTS_ENV, &postgis_hosts)
         .env(MSSQL_HOSTS_ENV, &mssql_hosts)

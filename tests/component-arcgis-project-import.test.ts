@@ -336,8 +336,13 @@ function desktopImport(
       }
     },
   };
-  mockFetch(async (input) => {
+  mockFetch(async (input, init) => {
     const url = String(input);
+    if (url.endsWith("/relay/access")) {
+      assert.deepEqual(JSON.parse(String(init?.body)), { enabled: false });
+      assert.equal(new Headers(init?.headers).get("X-GeoLibre-Token"), "t");
+      return Response.json({ enabled: false });
+    }
     requests.push(url.replace(/^.*\/conversion\//, ""));
     if (listingNeverFinishes && (url.endsWith("/vector-layers") || url.endsWith("/jobs/list"))) {
       return Response.json({ id: "list", status: "running" });

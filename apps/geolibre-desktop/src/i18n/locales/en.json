@@ -3163,6 +3163,8 @@
       "globeByDefaultHint": "Used for the untitled workspace when no startup project or project link is provided.",
       "openS3Browser": "Open the S3 browser at startup",
       "openS3BrowserHint": "Show the S3 browser panel each time GeoLibre starts. It stays open when you open a project.",
+      "allowLiveMcp": "Allow AI agents to drive the map",
+      "allowLiveMcpHint": "Start the local processing server at launch so the GeoLibre MCP server's live tools can control this map. No Jupyter notebook is needed. Only programs on this computer that can read your user folder can connect.",
       "defaultView": "Default map view",
       "defaultViewHint": "Set the center and zoom for the untitled workspace.",
       "longitude": "Center longitude",
@@ -10451,6 +10453,8 @@
     "emptyNetworkError": "No network error diagnostics captured."
   },
   "notifications": {
+    "liveMcpEnableRetry": "Live MCP access could not be enabled. Retrying automatically; processing remains available.",
+    "liveMcpDisableRetry": "Live MCP server access has not been revoked yet. This window is disconnected and GeoLibre is retrying; processing remains available.",
     "regionLabel": "Notifications",
     "dismiss": "Dismiss notification",
     "reportIssue": "Report issue",
