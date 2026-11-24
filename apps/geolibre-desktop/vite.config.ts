@@ -1512,8 +1512,8 @@ function pwaPlugin(): Plugin[] {
           // engine. Caching them here is what lets the browser SQL (PostGIS),
           // Sedona SQL, and Python features work OFFLINE after their first online
           // use — closing the gap noted at the top of this file. jsDelivr sends
-          // permissive CORS headers, so these come back as normal (non-opaque)
-          // 200s and can be revalidated/evicted like any cache entry. When
+          // permissive CORS headers; the fetch policy below requires readable
+          // 200 responses even for classic-worker requests. When
           // GEOLIBRE_PGLITE_CDN=0 / GEOLIBRE_CEREUS_CDN=0, those engines are
           // bundled under /assets/ instead and this rule simply never matches them
           // (Pyodide is always CDN-loaded regardless).
@@ -1536,7 +1536,29 @@ function pwaPlugin(): Plugin[] {
           options: {
             cacheName: "geolibre-cdn-engines",
             expiration: { maxEntries: 400, maxAgeSeconds: 60 * 60 * 24 * 30 },
-            cacheableResponse: { statuses: [0, 200] },
+            // Classic-worker importScripts defaults to no-cors, while the console's
+            // dynamic import requires CORS. Fetch a readable response for both.
+            fetchOptions: { mode: "cors", credentials: "omit" },
+            cacheableResponse: { statuses: [200] },
+            plugins: [
+              {
+                // Older service workers stored opaque status-0 responses. Ignore
+                // those hits so affected profiles recover on their next request,
+                // retaining readable entries for offline use (issue #3607).
+                cachedResponseWillBeUsed: async ({
+                  cachedResponse,
+                }: {
+                  cachedResponse?: Response;
+                }) => (cachedResponse?.status === 200 ? cachedResponse : undefined),
+                // A legacy opaque entry is still usable by a classic worker
+                // offline. Never return it to a CORS/module request.
+                handlerDidError: async ({ request }: { request: Request }) => {
+                  if (request.mode !== "no-cors") return undefined;
+                  const cached = await (await caches.open("geolibre-cdn-engines")).match(request);
+                  return cached?.type === "opaque" ? cached : undefined;
+                },
+              },
+            ],
           },
         },
         {
