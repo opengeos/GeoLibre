@@ -17,6 +17,14 @@ it("normalizes fixed MGRS intervals to the supported kilometre precision", () =>
     1000,
   );
   assert.equal(normalizePrintLayoutConfig({ gridType: "mgrs", gridInterval: 0 })?.gridInterval, 0);
+  assert.equal(
+    normalizePrintLayoutConfig({ gridType: "mgrs", gridInterval: 1500 })?.gridInterval,
+    2000,
+  );
+  assert.equal(
+    normalizePrintLayoutConfig({ gridType: "mgrs", gridInterval: 2000 })?.gridInterval,
+    2000,
+  );
   assert.equal(normalizePrintLayoutConfig({ gridInterval: Infinity })?.gridInterval, 0);
   assert.equal(normalizePrintLayoutConfig({ gridInterval: -1 })?.gridInterval, 0);
 });

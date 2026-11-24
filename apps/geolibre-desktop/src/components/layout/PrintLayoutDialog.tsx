@@ -9,9 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
   Separator,
-  Button,
 } from "@geolibre/ui";
-import { layoutMapGrid, resolvePageSize, type LayoutOptions } from "../../lib/print-layout";
+import type { LayoutOptions } from "../../lib/print-layout";
 import { canGeoreferencePrint } from "../../lib/print-layout-export";
 import { substituteAtlasTokens } from "../../lib/print-atlas";
 import { useMapCapabilities } from "../../hooks/useMapCapabilities";
@@ -170,11 +169,6 @@ export function PrintLayoutDialog({
   // page options once it is ready (GH #3530).
   const insetState = useInsetMap(open, layout, baseOptions, captured);
   const { inset } = insetState;
-  const effectiveGridInterval = useMemo(() => {
-    if (!baseOptions.grid || !(baseOptions.grid.interval > 0)) return undefined;
-    const page = resolvePageSize(baseOptions);
-    return layoutMapGrid(baseOptions, page.width, page.height)?.interval;
-  }, [baseOptions]);
   const options = useMemo<LayoutOptions>(
     () => (inset ? { ...baseOptions, inset } : baseOptions),
     [baseOptions, inset],
@@ -416,30 +410,13 @@ export function PrintLayoutDialog({
               <DataChartEditor {...editorProps} atlasLayers={atlas.atlasLayers} blocks={blocks} />
             )}
             {layout.showInset && (
-              <>
-                <InsetMapEditor {...editorProps} georeferenced={Boolean(captured?.georef)} />
-                {insetState.loading && (
-                  <p role="status" className="text-xs text-muted-foreground">
-                    {t("printLayout.inset.loading")}
-                  </p>
-                )}
-                {insetState.failed && (
-                  <div role="alert" className="space-y-2 text-xs">
-                    <p>{t("printLayout.inset.failed")}</p>
-                    <Button size="sm" variant="outline" onClick={insetState.retry}>
-                      {t("printLayout.inset.retry")}
-                    </Button>
-                  </div>
-                )}
-              </>
-            )}
-            {layout.showGrid && (
-              <MapGridEditor
+              <InsetMapEditor
                 {...editorProps}
                 georeferenced={Boolean(captured?.georef)}
-                effectiveInterval={effectiveGridInterval}
+                status={insetState}
               />
             )}
+            {layout.showGrid && <MapGridEditor {...editorProps} options={baseOptions} />}
             {layout.showFooter && <FooterEditor {...editorProps} />}
             {layout.showPageBorder && <PageBorderEditor {...editorProps} />}
             {layout.showInfoBlock && <InfoBlockEditor {...editorProps} />}

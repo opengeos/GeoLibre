@@ -1,15 +1,16 @@
 import { useTranslation } from "react-i18next";
-import { Input, Label, Select } from "@geolibre/ui";
+import { Button, Input, Label, Select } from "@geolibre/ui";
 import { PRINT_LAYOUT_INSET_BASEMAPS, type PrintLayoutInsetBasemap } from "@geolibre/core";
 import type { LayoutEditorProps } from "./state";
 
 interface InsetMapEditorProps extends LayoutEditorProps {
   /** Whether the capture is georeferenced, so the extent box can be drawn. */
   georeferenced: boolean;
+  status: { loading: boolean; failed: boolean; retry: () => void };
 }
 
 /** The overview / inset locator map's basemap, zoom and extent colour (GH #3530). */
-export function InsetMapEditor({ layout, dispatch, georeferenced }: InsetMapEditorProps) {
+export function InsetMapEditor({ layout, dispatch, georeferenced, status }: InsetMapEditorProps) {
   const { t } = useTranslation();
   return (
     <div className="space-y-3">
@@ -70,6 +71,19 @@ export function InsetMapEditor({ layout, dispatch, georeferenced }: InsetMapEdit
       </div>
       {!georeferenced && (
         <p className="text-xs text-muted-foreground">{t("printLayout.inset.needsGeoref")}</p>
+      )}
+      {status.loading && (
+        <p role="status" className="text-xs text-muted-foreground">
+          {t("printLayout.inset.loading")}
+        </p>
+      )}
+      {status.failed && (
+        <div role="alert" className="space-y-2 text-xs">
+          <p>{t("printLayout.inset.failed")}</p>
+          <Button size="sm" variant="outline" onClick={status.retry}>
+            {t("printLayout.inset.retry")}
+          </Button>
+        </div>
       )}
     </div>
   );

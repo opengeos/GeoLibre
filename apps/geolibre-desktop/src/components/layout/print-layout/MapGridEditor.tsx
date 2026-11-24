@@ -1,26 +1,26 @@
 import { useTranslation } from "react-i18next";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Input, Label, Select } from "@geolibre/ui";
 import type { PrintLayoutGridType } from "@geolibre/core";
 import { ToggleField } from "./ToggleField";
 import type { LayoutEditorProps } from "./state";
+import { layoutMapGrid, resolvePageSize, type LayoutOptions } from "../../../lib/print-layout";
 
 const GRID_TYPES: readonly PrintLayoutGridType[] = ["dms", "decimal", "utm", "mgrs"];
 
 interface MapGridEditorProps extends LayoutEditorProps {
-  /** Whether the capture is georeferenced, so the grid can be drawn. */
-  georeferenced: boolean;
-  effectiveInterval?: number;
+  options: LayoutOptions;
 }
 
 /** The map-frame coordinate grid: type, interval, label size, lines (GH #3530). */
-export function MapGridEditor({
-  layout,
-  dispatch,
-  georeferenced,
-  effectiveInterval,
-}: MapGridEditorProps) {
+export function MapGridEditor({ layout, dispatch, options }: MapGridEditorProps) {
   const { t } = useTranslation();
+  const georeferenced = Boolean(options.mapGeoref);
+  const effectiveInterval = useMemo(() => {
+    if (!options.grid || !(options.grid.interval > 0)) return undefined;
+    const page = resolvePageSize(options);
+    return layoutMapGrid(options, page.width, page.height)?.interval;
+  }, [options]);
   const projected = layout.gridType === "utm" || layout.gridType === "mgrs";
   const [intervalDraft, setIntervalDraft] = useState(String(layout.gridInterval));
   const [fontDraft, setFontDraft] = useState(String(layout.gridFontSize));
@@ -32,7 +32,8 @@ export function MapGridEditor({
   const commitInterval = () => {
     const parsed = Number(intervalDraft);
     const value = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
-    const interval = layout.gridType === "mgrs" && value > 0 ? Math.max(1000, value) : value;
+    const interval =
+      layout.gridType === "mgrs" && value > 0 ? Math.ceil(value / 1000) * 1000 : value;
     setIntervalDraft(String(interval));
     dispatch({ type: "setLayout", patch: { gridInterval: interval } });
   };
@@ -64,7 +65,7 @@ export function MapGridEditor({
                   wasProjected !== isProjected
                     ? 0
                     : gridType === "mgrs" && layout.gridInterval > 0
-                      ? Math.max(1000, layout.gridInterval)
+                      ? Math.ceil(layout.gridInterval / 1000) * 1000
                       : layout.gridInterval,
               },
             });

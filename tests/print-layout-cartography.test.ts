@@ -241,10 +241,12 @@ describe("computeMapGrid", () => {
         48.2 - ((y - frame.y) / frame.h) * 0.05,
       ],
       type: "mgrs",
-      interval: 1000,
+      interval: 1500,
     });
     assert.match(mgrs?.zoneLabel ?? "", /^33U [A-Z]{2}$/);
     assert.ok(mgrs && mgrs.ticks.length > 0);
+    assert.equal(mgrs.interval, 2000);
+    assert.ok(mgrs.ticks.every((tick) => tick.value % 2000 === 0));
     assert.ok(mgrs?.ticks.every((tk) => /^\d\d$/.test(tk.label)));
   });
 

@@ -124,14 +124,20 @@ export function useInsetMap(
   }, []);
 
   useEffect(() => {
-    if (!open || !showInset || !view || !requestKey || rendered?.key === requestKey) return;
+    if (!open || !showInset || !requestKey || rendered?.key === requestKey) return;
+    // Snapshot the serialized camera: unrelated editor changes may recreate
+    // view objects but must not abort an identical request already in flight.
+    const [basemap, camera] = JSON.parse(requestKey) as [
+      PrintLayoutConfig["insetBasemap"],
+      MercatorView,
+    ];
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setFailedKey(null);
-      renderInsetMap(insetBasemap, view, controller.signal)
+      renderInsetMap(basemap, camera, controller.signal)
         .then((image) => {
           if (!controller.signal.aborted)
-            setRendered({ image, view, basemap: insetBasemap, key: requestKey });
+            setRendered({ image, view: camera, basemap, key: requestKey });
         })
         .catch(() => {
           // A failed replacement keeps its placeholder; a cached image is
@@ -143,7 +149,7 @@ export function useInsetMap(
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [open, showInset, view, insetBasemap, requestKey, rendered?.key, attempt]);
+  }, [open, showInset, requestKey, rendered?.key, attempt]);
 
   const inset = useMemo<InsetMapOptions | null>(() => {
     if (!showInset) return null;

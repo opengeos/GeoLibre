@@ -5309,5 +5309,5 @@ def print_layout_settings(**settings: Any) -> dict[str, Any]:
                 raise ValueError(f"{raw_key} must be #rgb or #rrggbb")
         result[key] = value
     if result.get("gridType") == "mgrs" and result.get("gridInterval", 0) > 0:
-        result["gridInterval"] = max(1000, result["gridInterval"])
+        result["gridInterval"] = math.ceil(result["gridInterval"] / 1000) * 1000
     return result

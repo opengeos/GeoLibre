@@ -553,6 +553,10 @@ def test_mgrs_spacing_normalizes_when_settings_are_merged():
     authoring.set_print_layout(project, grid_interval=500)
     assert authoring.set_print_layout(project, grid_type="mgrs")["gridInterval"] == 1000
     assert authoring.set_print_layout(project, grid_interval=10)["gridInterval"] == 1000
+    assert authoring.set_print_layout(project, grid_interval=1500)["gridInterval"] == 2000
+    assert (
+        _project.print_layout_settings(grid_type="mgrs", grid_interval=1500)["gridInterval"] == 2000
+    )
 
 
 @pytest.mark.parametrize(

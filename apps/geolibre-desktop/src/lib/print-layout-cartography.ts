@@ -442,6 +442,7 @@ export function computeMapGrid(input: MapGridInput): MapGrid | null {
   const precisionFloor =
     type === "mgrs" ? 1000 : type === "utm" ? 1 : type === "dms" ? 1 / 3600 : 1e-6;
   interval = Math.max(interval, largestSpan / 200, precisionFloor);
+  if (type === "mgrs") interval = Math.ceil(interval / 1000) * 1000;
 
   if (type === "mgrs") {
     const square = mgrsSquareLabel(center[0], center[1]);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type Dispatch } from "react";
+import { useEffect, useLayoutEffect, useRef, type Dispatch } from "react";
 import { useTranslation } from "react-i18next";
 import type { PrintLayoutConfig } from "@geolibre/core";
 import type {
@@ -72,11 +72,12 @@ export function ArrangeOverlay({ frame, layout, dispatch }: ArrangeOverlayProps)
     [],
   );
   const { boxes, pageW, pageH, cssW, cssH } = frame;
-  if (!(pageW > 0 && pageH > 0 && cssW > 0 && cssH > 0)) return null;
+  const valid = pageW > 0 && pageH > 0 && cssW > 0 && cssH > 0;
   const toCss = cssW / pageW;
 
   /** Apply a drag of (`dxCss`, `dyCss`) CSS pixels to `gesture`'s start state. */
   const apply = (gesture: Gesture, dxCss: number, dyCss: number) => {
+    if (!valid) return;
     const { id, mode, entry, layout: start } = gesture;
     if (id === "map" || id === "inset") {
       const field = id === "map" ? "mapFrameBox" : "insetBox";
@@ -98,7 +99,10 @@ export function ArrangeOverlay({ frame, layout, dispatch }: ArrangeOverlayProps)
       patch: { elementOffsets: { ...start.elementOffsets, [id as LayoutMovableElement]: next } },
     });
   };
-  applyRef.current = apply;
+  useLayoutEffect(() => {
+    applyRef.current = apply;
+  });
+  if (!valid) return null;
   const flush = () => {
     rafRef.current = null;
     const pending = pendingRef.current;

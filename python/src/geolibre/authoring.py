@@ -2855,9 +2855,9 @@ def set_print_layout(
         stored.get("gridType") == "mgrs"
         and not isinstance(interval, bool)
         and isinstance(interval, (int, float))
-        and 0 < interval < 1000
+        and 0 < interval <= 10000000
     ):
-        stored["gridInterval"] = 1000
+        stored["gridInterval"] = math.ceil(interval / 1000) * 1000
     if stored:
         project["printLayout"] = stored
     else:

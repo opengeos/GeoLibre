@@ -118,7 +118,8 @@ loaded; a failed load shows a retry button.
   values inside the 100 km square, with the grid zone and square, such as
   `33U VP`, below the frame). UTM and MGRS use the zone of the frame's centre.
 - **Interval**: degrees for latitude/longitude, meters for UTM and MGRS. `0`
-  picks a readable interval for the map's extent.
+  picks a readable interval for the map's extent. Positive MGRS intervals round
+  up to whole kilometers, matching the labels' precision.
 - **Label size (pt)**: the label size in points on the printed page.
 - **Draw grid lines across the map**: adds lines across the map as well as the
   border ticks.
@@ -127,9 +128,10 @@ Left and right labels read bottom to top, and a label that would overlap its
 neighbour is skipped. The grid is drawn from the captured map's georeference,
 so like the overview rectangle it needs a 2D, untilted view. It is drawn by the
 layout itself, so it is as sharp in PNG, PDF and SVG exports as in the preview.
-The automatic map frame leaves a band around itself for the labels; a frame you
-place by hand (see [Arranging elements](#arranging-elements)) needs room left
-around it.
+MGRS is limited to one 100 km square; a frame crossing square boundaries shows
+a notice instead of an ambiguous grid. The automatic frame reserves a label
+band. When a frame placed by hand leaves too little outside space, ticks and
+labels move inside that edge.
 
 ### Arranging elements
 

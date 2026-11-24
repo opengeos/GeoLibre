@@ -615,7 +615,9 @@ export function normalizePrintLayoutConfig(value: unknown): PrintLayoutConfig | 
     showGrid: bool(raw.showGrid, d.showGrid),
     gridType: oneOf(raw.gridType, ["dms", "decimal", "utm", "mgrs"] as const, d.gridType),
     gridInterval:
-      raw.gridType === "mgrs" && gridInterval > 0 ? Math.max(1000, gridInterval) : gridInterval,
+      raw.gridType === "mgrs" && gridInterval > 0
+        ? Math.ceil(gridInterval / 1000) * 1000
+        : gridInterval,
     gridFontSize: num(raw.gridFontSize, d.gridFontSize, 3, 36),
     gridLines: bool(raw.gridLines, d.gridLines),
 
