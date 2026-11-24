@@ -54,10 +54,13 @@ jobs:
       # `pointcloud` extra) and tests/test_spaceborne_lidar.py without h5py
       # (the `spaceborne` extra).
       - name: Install test dependencies
-        run: python -m pip install anywidget traitlets pytest "mcp>=2.0" "httpcore[asyncio]>=1.0.9,<2" "dash>=2.16" "laspy[lazrs]>=2.5" numpy "whitebox-workflows>=2.0.2" "h5py>=3.8"
+        run: python -m pip install anywidget traitlets pytest pytest-cov "mcp>=2.0" "httpcore[asyncio]>=1.0.9,<2" "dash>=2.16" "laspy[lazrs]>=2.5" numpy "whitebox-workflows>=2.0.2" "h5py>=3.8"
 
-      - name: Run tests
-        run: python -m pytest python/tests
+      # Gated on a coverage floor like the backend suites; the floor is
+      # `fail_under` in python/pyproject.toml (see "Coverage floors" in
+      # docs/maintenance.md). Same command as `npm run test:python:coverage`.
+      - name: Run tests with coverage floor
+        run: python -m pytest python/tests --cov=geolibre --cov-config=python/pyproject.toml --cov-report=term-missing
         env:
           PYTHONPATH: python/src
 

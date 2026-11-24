@@ -32,6 +32,7 @@ export function BoundsRestrictionIndicator() {
 
   return (
     <div
+      // eslint-disable-next-line local/no-physical-tailwind -- anchored to the map, whose controls sit at physical corners in every locale.
       className="pointer-events-auto absolute bottom-12 left-2 z-10 flex items-center gap-1 rounded-md border map-glass px-2 py-1 text-xs font-medium text-foreground shadow-sm"
       role="status"
       title={tooltip}

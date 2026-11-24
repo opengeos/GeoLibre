@@ -170,6 +170,7 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
         onChange={(value) => setSecondaryMapLabel(viewId, value)}
         ariaLabel={t("mapGrid.labelLabel", { number: index + 2 })}
       />
+      {/* eslint-disable-next-line local/no-physical-tailwind -- anchored to the map, whose controls sit at physical corners in every locale. */}
       <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5">
         {/* Every renderer draws the shared layers, so the per-pane
             layer-visibility toggle applies to each of them. */}

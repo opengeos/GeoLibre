@@ -494,6 +494,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
               aria-label={t("storymap.resizeDialog")}
               title={t("storymap.resizeDialog")}
               onPointerDown={startDialogResize}
+              // eslint-disable-next-line local/no-physical-tailwind -- the resize grip's drag math and cursor are physical (bottom-right).
               className="absolute bottom-0 right-0 z-10 hidden h-5 w-5 cursor-nwse-resize touch-none select-none text-muted-foreground hover:text-foreground md:block"
             >
               <svg viewBox="0 0 16 16" className="h-full w-full" aria-hidden="true">

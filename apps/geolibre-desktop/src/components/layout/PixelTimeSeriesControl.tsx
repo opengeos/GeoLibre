@@ -729,6 +729,7 @@ export function PixelTimeSeriesControl({
               Mouse/touch-only, so it is presentational — there is no keyboard
               resize to expose to assistive tech. */}
           <div
+            // eslint-disable-next-line local/no-physical-tailwind -- the resize grip's drag math and cursor are physical (bottom-right).
             className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none"
             onPointerDown={handleResizeStart}
             role="presentation"

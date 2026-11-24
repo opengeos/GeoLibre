@@ -180,7 +180,7 @@ export function useSqlCompletion({
       id={listboxId}
       role="listbox"
       aria-label={label}
-      className="absolute bottom-full left-3 z-30 mb-1 max-h-48 w-72 overflow-auto rounded-md border bg-popover py-1 text-popover-foreground shadow-md"
+      className="absolute bottom-full start-3 z-30 mb-1 max-h-48 w-72 overflow-auto rounded-md border bg-popover py-1 text-popover-foreground shadow-md"
     >
       {completion.candidates.map((candidate, i) => (
         // A div, not a button: role="option" overrides the native button role,

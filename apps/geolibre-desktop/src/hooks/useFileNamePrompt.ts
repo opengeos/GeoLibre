@@ -114,7 +114,6 @@ export async function promptDownloadNameIfNeeded(
     // Replace characters illegal in common filesystems (path separators and the
     // C0 control range plus DEL, incl. the null byte) so a pasted name cannot
     // smuggle in a path or control character.
-    // eslint-disable-next-line no-control-regex
     .replace(/[/\\:*?"<>|\x00-\x1f\x7f]/g, "_");
   return ensureFileExtension(sanitized, extensions);
 }

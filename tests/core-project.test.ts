@@ -1109,7 +1109,6 @@ describe("project serialization", () => {
 
   it("writes a sparse array's holes as null, matching JSON.stringify", () => {
     const project = createEmptyProject("Sparse");
-    // eslint-disable-next-line no-sparse-arrays
     project.metadata = { gappy: [1, , 2] };
     const text = serializeProject(project);
     assert.equal(text, JSON.stringify(project, null, 2));
@@ -1129,11 +1128,8 @@ describe("project serialization", () => {
   it("unwraps boxed primitives the way JSON.stringify does", () => {
     const project = createEmptyProject("Boxed");
     project.metadata = {
-      // eslint-disable-next-line no-new-wrappers
       count: new Number(7),
-      // eslint-disable-next-line no-new-wrappers
       label: new String("x"),
-      // eslint-disable-next-line no-new-wrappers
       flag: new Boolean(true),
     };
     const text = serializeProject(project);

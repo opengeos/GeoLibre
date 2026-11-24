@@ -837,7 +837,6 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
       }
       const map = deps.getMapController()?.getMap();
       if (!map) throw new Error("The map is not ready yet.");
-      // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
       const run = new Function("map", "maplibregl", input.code) as (
         map: unknown,
         maplibregl: unknown,
