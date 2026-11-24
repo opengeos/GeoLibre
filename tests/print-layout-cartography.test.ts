@@ -32,7 +32,7 @@ import {
 } from "../apps/geolibre-desktop/src/lib/print-layout";
 import type { CaptureGeoref } from "../apps/geolibre-desktop/src/lib/geopdf";
 import type { CapturedMap } from "../apps/geolibre-desktop/src/lib/print-layout-export";
-import { capturedBounds } from "../apps/geolibre-desktop/src/components/layout/print-layout/useInsetMap";
+import { capturedBounds } from "../apps/geolibre-desktop/src/lib/print-capture-bounds";
 
 const close = (actual: number, expected: number, tol: number, msg?: string) =>
   assert.ok(Math.abs(actual - expected) <= tol, msg ?? `${actual} != ${expected} (±${tol})`);
@@ -705,6 +705,12 @@ describe("drawLayout with the cartographic extras", () => {
     const labels = fills.map((f) => f.text);
     assert.ok(labels.includes("0°"), `labels: ${labels.join(" | ")}`);
     assert.ok(labels.includes("45°N"));
+  });
+
+  it("reserves no grid margin without a georeference", () => {
+    const plain = options({ mapGeoref: null });
+    const grid = { type: "dms" as const, interval: 5, fontSizePt: 7, lines: true };
+    assert.equal(mapBodyAspectRatio({ ...plain, grid }), mapBodyAspectRatio(plain));
   });
 
   it("draws no grid without a georeference (globe or tilted capture)", () => {

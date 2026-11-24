@@ -745,7 +745,7 @@ function computeBodyRect(opts: LayoutOptions, W: number, H: number): BodyRect {
   // A coordinate grid labels the outside of the frame: keep a band for its
   // ticks and labels so they clear the title, the footer and the page edge.
   let side = margin;
-  if (opts.grid) {
+  if (opts.grid && opts.mapGeoref) {
     const band = gridLabelFontPx(opts, W, unit) * GRID_BAND_EM;
     bodyTop += band;
     bodyBottom -= band;

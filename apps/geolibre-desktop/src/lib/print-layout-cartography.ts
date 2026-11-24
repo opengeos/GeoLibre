@@ -13,7 +13,7 @@
  */
 
 import * as mgrsModule from "mgrs";
-import proj4 from "proj4";
+import proj4, { type Converter } from "proj4";
 
 // mgrs 2.x publishes an ESM `module` build with named exports only, and a UMD
 // `main` whose named exports Node cannot detect. Bundlers take the first, the
@@ -301,6 +301,8 @@ export function utmZoneFor(lng: number, lat: number): UtmZone {
   return { zone: Math.min(60, Math.max(1, zone)), south: lat < 0 };
 }
 
+const utmConverters = new Map<string, Converter>();
+
 /**
  * A WGS 84 longitude/latitude to UTM easting/northing converter for one zone.
  *
@@ -310,8 +312,13 @@ export function utmZoneFor(lng: number, lat: number): UtmZone {
  */
 export function utmProjector(zone: UtmZone): (lng: number, lat: number) => [number, number] {
   const def = `+proj=utm +zone=${zone.zone}${zone.south ? " +south" : ""} +datum=WGS84 +units=m +no_defs`;
-  const converter = proj4("EPSG:4326", def);
-  return (lng, lat) => converter.forward([lng, lat]) as [number, number];
+  let converter = utmConverters.get(def);
+  if (!converter) {
+    converter = proj4("EPSG:4326", def);
+    utmConverters.set(def, converter);
+  }
+  const active = converter;
+  return (lng, lat) => active.forward([lng, lat]) as [number, number];
 }
 
 /**
