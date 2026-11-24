@@ -12,8 +12,8 @@ Endpoints, all under ``/relay``:
 ``GET /relay/socket`` (WebSocket)
     The app side. Subscribes to every posted command and sends back
     ``geolibre:result`` frames. Authenticated with the per-launch sidecar token
-    in the ``token`` query parameter (a WebSocket handshake cannot carry a
-    header from the webview), and restricted to the app's origins.
+    in ``Sec-WebSocket-Protocol`` (outside access-logged URL paths), and
+    restricted to the app's origins.
 ``POST /relay/command``
     The client side. Posts one command and, when it carries a ``requestId``,
     waits for the correlated result. The wait is per method and a caller may set
@@ -44,6 +44,7 @@ import secrets
 import tempfile
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -92,9 +93,18 @@ class _Hub:
         self.pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
         self.pending_request_ids: set[str] = set()
 
-    async def broadcast(self, message: dict[str, Any]) -> int:
-        """Send ``message`` to every app socket and count the ones it reached."""
+    async def broadcast(self, message: dict[str, Any], delivered: list[int] | None = None) -> int:
+        """Send concurrently, recording deliveries before the slowest peer finishes.
+
+        Args:
+            message: The command to broadcast.
+            delivered: Optional one-item counter shared with the result waiter.
+
+        Returns:
+            The number of windows reached.
+        """
         encoded = json.dumps(message)
+        delivered = delivered if delivered is not None else [0]
 
         async def send(socket: WebSocket) -> int:
             """Deliver to one window within the socket send budget.
@@ -107,9 +117,14 @@ class _Hub:
             """
             try:
                 await asyncio.wait_for(socket.send_text(encoded), SEND_TIMEOUT_SECONDS)
-            except Exception:  # noqa: BLE001 - a dead peer must not fail the request
+            except (Exception, asyncio.CancelledError):
                 self.drop(socket)
+                # Trigger the desktop's onclose/reconnect path. Close attempts
+                # run concurrently and cannot extend cleanup indefinitely.
+                with contextlib.suppress(Exception, asyncio.CancelledError):
+                    await asyncio.wait_for(socket.close(code=1013), 0.1)
                 return 0
+            delivered[0] += 1
             return 1
 
         return sum(await asyncio.gather(*(send(socket) for socket in list(self.listeners))))
@@ -293,13 +308,23 @@ async def relay_socket(websocket: WebSocket) -> None:
     if not relay_enabled() or not is_allowed_origin(websocket.headers.get("origin")):
         await websocket.close(code=1008)
         return
-    provided = websocket.query_params.get("token", "")
-    if not SIDECAR_TOKEN or not hmac.compare_digest(
-        provided.encode("utf-8"), SIDECAR_TOKEN.encode("utf-8")
+    protocols = websocket.scope.get("subprotocols", [])
+    provided = next(
+        (
+            unquote(value[len("geolibre-token.") :])
+            for value in protocols
+            if value.startswith("geolibre-token.")
+        ),
+        "",
+    )
+    if (
+        "geolibre-relay" not in protocols
+        or not SIDECAR_TOKEN
+        or not hmac.compare_digest(provided.encode("utf-8"), SIDECAR_TOKEN.encode("utf-8"))
     ):
         await websocket.close(code=1008)
         return
-    await websocket.accept()
+    await websocket.accept(subprotocol="geolibre-relay")
     _hub.listeners.append(websocket)
     try:
         await websocket.send_text(json.dumps({"type": "geolibre:relay-ready"}))
@@ -332,22 +357,43 @@ async def relay_command(request: Request) -> dict[str, Any]:
     future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
     _hub.pending_request_ids.add(request_id)
     _hub.pending[dispatch_id] = future
+
+    async def wait_for_response() -> tuple[int, dict[str, Any] | None]:
+        """Wait for delivery or the first app result without serializing them.
+
+        Returns:
+            The delivery count and result, or no result when no window was reached.
+        """
+        delivered = [0]
+        broadcast = asyncio.create_task(_hub.broadcast(message, delivered))
+        try:
+            await asyncio.wait({future, broadcast}, return_when=asyncio.FIRST_COMPLETED)
+            if future.done():
+                return max(1, delivered[0]), future.result()
+            reached = broadcast.result()
+            if reached == 0:
+                return 0, None
+            return reached, await future
+        finally:
+            broadcast.cancel()
+            await asyncio.gather(broadcast, return_exceptions=True)
+
     try:
         try:
-            async with asyncio.timeout(timeout):
-                delivered = await _hub.broadcast(message)
-                if delivered == 0:
-                    return {"delivered": 0}
-                result = await future
+            delivered, result = await asyncio.wait_for(wait_for_response(), timeout)
         except asyncio.TimeoutError as error:
             raise HTTPException(
                 status_code=504, detail="GeoLibre did not return a result in time."
             ) from error
+        if result is None:
+            return {"delivered": delivered}
         result["requestId"] = request_id
         return {"delivered": delivered, **result}
     finally:
         _hub.pending.pop(dispatch_id, None)
         _hub.pending_request_ids.discard(request_id)
+        if not future.done():
+            future.cancel()
 
 
 @router.get("/status")

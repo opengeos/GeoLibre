@@ -125,6 +125,20 @@ def _redact_url(value: str) -> str:
     )
 
 
+def _assert_no_url_userinfo(url: str) -> None:
+    """Reject embedded username/password URLs without echoing their credentials.
+
+    Args:
+        url: A source URL to persist in a layer.
+
+    Raises:
+        ValueError: If the URL embeds credentials unsupported by browser fetch.
+    """
+    parsed = urlsplit(url)
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("URL must not carry username/password credentials")
+
+
 def _redact_config(value: Any, depth: int = 0) -> Any:
     """Return project configuration with credential-named fields removed."""
     if depth >= _MAX_REDACT_DEPTH:
@@ -3110,7 +3124,7 @@ def video_layer(
     Raises:
         ValueError: If ``urls`` is empty, any URL is not ``https://`` (the
             browser's ``media-src`` CSP blocks ``http://``), or ``coordinates``
-            is not four ``[lng, lat]`` pairs.
+            is not four ``[lng, lat]`` pairs. Embedded URL credentials are refused.
     """
     if not urls:
         raise ValueError("video_layer requires at least one non-empty URL")
@@ -3120,6 +3134,8 @@ def video_layer(
     if invalid:
         raise ValueError(f"video_layer: every URL must be a non-empty string; got {invalid!r}")
     clean_urls = list(urls)
+    for url in clean_urls:
+        _assert_no_url_userinfo(url)
     if any(not u.lower().startswith("https://") for u in clean_urls):
         raise ValueError("Video URLs must start with https:// (the browser CSP blocks http://)")
     if len(coordinates) != 4 or any(len(corner) != 2 for corner in coordinates):
@@ -4407,12 +4423,14 @@ def wfs_layer(
         A layer dict for the project's ``layers`` array.
 
     Raises:
-        ValueError: If ``endpoint`` or ``type_name`` is blank.
+        ValueError: If ``endpoint`` or ``type_name`` is blank, or the endpoint
+            embeds username/password credentials.
     """
     if not isinstance(endpoint, str) or not endpoint.strip():
         raise ValueError("wfs_layer: endpoint must be a non-empty URL")
     if not isinstance(type_name, str) or not type_name.strip():
         raise ValueError("wfs_layer: type_name must be a non-empty string")
+    _assert_no_url_userinfo(endpoint.strip())
     url = wfs_getfeature_url(
         endpoint.strip(),
         type_name.strip(),
@@ -4538,16 +4556,14 @@ def arcgis_layer(
 
     Raises:
         ValueError: If ``service`` is unknown, ``url`` is not an http(s) URL,
-            carries a ``token``, or an option does not apply to ``service``.
+            carries credentials or a ``token``, or an option does not apply to ``service``.
     """
     if service not in ARCGIS_SERVICES:
         raise ValueError(f"service must be one of {sorted(ARCGIS_SERVICES)}, got {service!r}")
     if not isinstance(url, str) or not url.strip().lower().startswith(("https://", "http://")):
         raise ValueError(f"url must be an http(s) ArcGIS REST service URL, got {url!r}")
     service_url = url.strip().split("?", 1)[0].split("#", 1)[0].rstrip("/")
-    parsed_url = urlsplit(service_url)
-    if parsed_url.username is not None or parsed_url.password is not None:
-        raise ValueError("url must not carry credentials: they would be saved into the project")
+    _assert_no_url_userinfo(service_url)
     if "token=" in url.lower():
         raise ValueError("url must not carry a token: it would be saved into the project")
     layer_type, source_kind = ARCGIS_SERVICES[service]
@@ -4681,7 +4697,7 @@ def zarr_layer(
 
     Raises:
         ValueError: If ``url`` or ``variable`` is blank, the URL is an Icechunk
-            or local store, or an option is malformed.
+            or local store, embeds credentials, or an option is malformed.
     """
     if not isinstance(url, str) or not url.strip():
         raise ValueError("zarr_layer: url must be a non-empty string")
@@ -4693,6 +4709,7 @@ def zarr_layer(
         )
     if not re.match(r"^(https?|s3|gs)://", store_url, re.IGNORECASE):
         raise ValueError(f"zarr_layer: url must be http(s)://, s3://, or gs://, got {url!r}")
+    _assert_no_url_userinfo(store_url)
     if not isinstance(variable, str) or not variable.strip():
         raise ValueError("zarr_layer: variable must be a non-empty string")
     if selector is not None and (

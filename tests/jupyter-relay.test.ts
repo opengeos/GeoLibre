@@ -9,6 +9,7 @@ import {
   relaySocketUrl,
   runRelayCommand,
   sidecarRelaySocketUrl,
+  sidecarRelaySocketProtocols,
 } from "../apps/geolibre-desktop/src/lib/jupyter-relay";
 import type { ScriptingHandlers } from "../apps/geolibre-desktop/src/lib/scripting/scriptingApi";
 
@@ -19,11 +20,15 @@ import type { ScriptingHandlers } from "../apps/geolibre-desktop/src/lib/scripti
 const SERVER = { url: "http://127.0.0.1:8766", port: 8766, token: "s3cret" };
 
 describe("sidecarRelaySocketUrl", () => {
-  it("points at the sidecar relay socket with the sidecar token", () => {
+  it("keeps the sidecar token outside the access-logged URL", () => {
     assert.equal(
       sidecarRelaySocketUrl({ baseUrl: "http://127.0.0.1:8765/", token: "t k" }),
-      "ws://127.0.0.1:8765/relay/socket?token=t+k",
+      "ws://127.0.0.1:8765/relay/socket",
     );
+    assert.deepEqual(sidecarRelaySocketProtocols({ baseUrl: SERVER.url, token: "t k" }), [
+      "geolibre-relay",
+      "geolibre-token.t%20k",
+    ]);
   });
 
   it("omits an empty token", () => {

@@ -56,8 +56,12 @@ export interface SidecarRelayTarget {
 export function sidecarRelaySocketUrl(info: SidecarRelayTarget): string {
   const url = new URL(`${info.baseUrl.replace(/\/+$/, "")}/relay/socket`);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  if (info.token) url.searchParams.set("token", info.token);
   return url.toString();
+}
+
+/** Send sidecar authentication in the handshake, outside logged URL paths. */
+export function sidecarRelaySocketProtocols(info: SidecarRelayTarget): string[] {
+  return ["geolibre-relay", `geolibre-token.${encodeURIComponent(info.token)}`];
 }
 
 /**

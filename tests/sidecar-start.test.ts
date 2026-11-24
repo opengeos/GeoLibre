@@ -6,6 +6,7 @@ import {
   StaleSidecarError,
   stopGeoLibreSidecar,
   subscribeSidecarServer,
+  subscribeSidecarRelay,
   updateLiveMcpAccess,
 } from "../apps/geolibre-desktop/src/lib/sidecar";
 import { useDesktopSettingsStore } from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
@@ -84,11 +85,29 @@ it("does not republish a start response delivered after stop completes", async (
   }
 });
 
+it("keeps processing startup successful when relay access synchronization fails", async () => {
+  const originalFetch = globalThis.fetch;
+  const info = { baseUrl: "http://127.0.0.1:8765", port: 8765, token: "processing" };
+  globals.window = { __TAURI_INTERNALS__: { invoke: async () => info } };
+  globalThis.fetch = async () => {
+    throw new Error("relay unavailable");
+  };
+  try {
+    assert.deepEqual(await startGeoLibreSidecar(), info);
+    await updateLiveMcpAccess();
+  } finally {
+    await stopGeoLibreSidecar();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 it("applies opt-in and revocation to a running sidecar without stopping it", async () => {
   const originalFetch = globalThis.fetch;
   const originalSettings = useDesktopSettingsStore.getState().desktopSettings;
   const commands: string[] = [];
   const requests: { enabled: boolean }[] = [];
+  const relayStates: unknown[] = [];
+  const unsubscribe = subscribeSidecarRelay((info) => relayStates.push(info));
   globals.window = {
     __TAURI_INTERNALS__: {
       invoke: async (command: string) => {
@@ -115,13 +134,45 @@ it("applies opt-in and revocation to a running sidecar without stopping it", asy
     await startGeoLibreSidecar();
     setAllowed(true);
     await updateLiveMcpAccess();
+    assert.ok(relayStates.at(-1));
     setAllowed(false);
-    await updateLiveMcpAccess();
+    const revocation = updateLiveMcpAccess();
+    assert.equal(relayStates.at(-1), null);
+    await revocation;
     assert.deepEqual(requests, [{ enabled: false }, { enabled: true }, { enabled: false }]);
     assert.deepEqual(commands, ["start_geolibre_sidecar"]);
   } finally {
     await stopGeoLibreSidecar();
     globalThis.fetch = originalFetch;
     useDesktopSettingsStore.setState({ desktopSettings: originalSettings });
+    unsubscribe();
+  }
+});
+
+it("reports a failed stop without claiming the running sidecar stopped", async () => {
+  const originalFetch = globalThis.fetch;
+  const info = { baseUrl: "http://127.0.0.1:8765", port: 8765, token: "still-running" };
+  let failStop = true;
+  globals.window = {
+    __TAURI_INTERNALS__: {
+      invoke: async (command: string) => {
+        if (command === "stop_geolibre_sidecar" && failStop) throw new Error("stop failed");
+        return info;
+      },
+    },
+  };
+  globalThis.fetch = async () => Response.json({ enabled: false });
+  const seen: unknown[] = [];
+  const unsubscribe = subscribeSidecarServer((state) => seen.push(state));
+  try {
+    await startGeoLibreSidecar();
+    await updateLiveMcpAccess();
+    await assert.rejects(stopGeoLibreSidecar(), /stop failed/);
+    assert.equal(seen.at(-1), info);
+  } finally {
+    failStop = false;
+    await stopGeoLibreSidecar();
+    unsubscribe();
+    globalThis.fetch = originalFetch;
   }
 });

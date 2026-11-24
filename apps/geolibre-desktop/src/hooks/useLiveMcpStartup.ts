@@ -10,8 +10,9 @@ import { useDesktopSettingsStore } from "./useDesktopSettings";
  * Jupyter Notebook panel. useJupyterRelay connects to the relay as soon as the
  * sidecar is running.
  *
- * Runs at launch and again when the setting is turned on. Turning it off does
- * disables relay access without stopping processing jobs. Inert on web and in
+ * Runs at launch and again when the setting changes. Turning it off disables
+ * relay access without stopping processing jobs. Failed access updates retry
+ * and display a persistent notice until synchronization succeeds. Inert on web and in
  * the Mac App Store build, where the sidecar cannot run.
  */
 export function useLiveMcpStartup(): void {

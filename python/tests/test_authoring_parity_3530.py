@@ -50,6 +50,55 @@ def test_arcgis_rejects_embedded_credentials(service):
         )
 
 
+@pytest.mark.parametrize("kind", ["wfs", "zarr", "video"])
+def test_other_authoring_builders_reject_url_userinfo(kind):
+    """Reject embedded credentials that browser fetch cannot consume.
+
+    Args:
+        kind: The layer builder being checked.
+    """
+    url = "https://private-user:private-password@example.com/data"
+    with pytest.raises(ValueError, match="credentials") as error:
+        if kind == "wfs":
+            _project.wfs_layer("WFS", url, "cities")
+        elif kind == "zarr":
+            _project.zarr_layer("Cube", url, "tas")
+        else:
+            _project.video_layer("Video", [url], [[0, 1], [1, 1], [1, 0], [0, 0]])
+    assert "private-password" not in str(error.value)
+
+
+def test_signed_sources_are_preserved_privately_and_redacted_when_sharing(tmp_path, monkeypatch):
+    """Keep authenticated sources usable while Map saves redact by default.
+
+    Args:
+        tmp_path: The output directory.
+        monkeypatch: The pytest patch fixture.
+    """
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    monkeypatch.setattr(gmod, "app_port", lambda: 0)
+    token = "private-query-credential"
+    project = _project.build_empty_project("Private sources")
+    for layer in (
+        _project.wfs_layer("WFS", f"https://example.com/wfs?token={token}", "cities"),
+        _project.zarr_layer("Cube", f"https://example.com/a.zarr?token={token}", "tas"),
+        _project.video_layer(
+            "Video", [f"https://example.com/a.mp4?token={token}"], [[0, 1], [1, 1], [1, 0], [0, 0]]
+        ),
+    ):
+        authoring.add_layer(project, layer)
+    private = tmp_path / "private.geolibre.json"
+    authoring.save_project(private, project)
+    assert token in private.read_text()
+    m = Map()
+    m.load_project(project)
+    public = tmp_path / "public.geolibre.json"
+    m.save_project(str(public))
+    assert token not in public.read_text()
+    assert token not in json.dumps(m.to_project())
+    assert token in json.dumps(m.to_project(keep_credentials=True))
+
+
 @pytest.mark.parametrize("rule", ["[]", '"Hillshade"', "null", "42"])
 def test_arcgis_rendering_rule_requires_an_object(rule):
     """Reject valid JSON that cannot describe an ArcGIS rendering rule."""

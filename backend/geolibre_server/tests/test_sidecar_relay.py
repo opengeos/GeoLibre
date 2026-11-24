@@ -7,6 +7,7 @@ import json
 import os
 import stat
 import threading
+from types import SimpleNamespace
 
 import pytest
 from starlette.testclient import TestClient
@@ -73,7 +74,9 @@ def test_processing_start_requires_explicit_relay_opt_in(client, monkeypatch):
         "enabled": True
     }
     assert relay.discovery_file().exists()
-    with client.websocket_connect(f"/relay/socket?token={SIDECAR_TOKEN}") as socket:
+    with client.websocket_connect(
+        "/relay/socket", subprotocols=["geolibre-relay", f"geolibre-token.{SIDECAR_TOKEN}"]
+    ) as socket:
         socket.receive_text()
         assert (
             client.post("/relay/access", json={"enabled": False}, headers=headers).status_code
@@ -109,12 +112,15 @@ def test_socket_requires_the_sidecar_token_and_an_app_origin(client):
             socket.receive_text()
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect(
-            f"/relay/socket?token={SIDECAR_TOKEN}",
+            "/relay/socket",
+            subprotocols=["geolibre-relay", f"geolibre-token.{SIDECAR_TOKEN}"],
             headers={"Origin": "https://evil.example"},
         ) as socket:
             socket.receive_text()
     with client.websocket_connect(
-        f"/relay/socket?token={SIDECAR_TOKEN}", headers={"Origin": "tauri://localhost"}
+        "/relay/socket",
+        subprotocols=["geolibre-relay", f"geolibre-token.{SIDECAR_TOKEN}"],
+        headers={"Origin": "tauri://localhost"},
     ) as socket:
         assert json.loads(socket.receive_text()) == {"type": "geolibre:relay-ready"}
         status = client.get("/relay/status", headers=_client_headers()).json()
@@ -134,8 +140,30 @@ def _post_in_thread(client: TestClient, body: dict) -> tuple[threading.Thread, d
     return thread, outcome
 
 
+def test_deadline_works_without_asyncio_timeout(client, monkeypatch):
+    """Handle correlated requests without the Python 3.11 timeout API.
+
+    Args:
+        client: The shared-loop HTTP client.
+        monkeypatch: The pytest patch fixture.
+    """
+    monkeypatch.setattr(
+        relay,
+        "asyncio",
+        SimpleNamespace(**{key: value for key, value in vars(asyncio).items() if key != "timeout"}),
+    )
+    response = client.post(
+        "/relay/command",
+        headers=_client_headers(),
+        json={"method": "getView", "requestId": "compatibility"},
+    )
+    assert response.json() == {"delivered": 0}
+
+
 def test_correlated_command_round_trips_through_the_app_socket(client):
-    with client.websocket_connect(f"/relay/socket?token={SIDECAR_TOKEN}") as socket:
+    with client.websocket_connect(
+        "/relay/socket", subprotocols=["geolibre-relay", f"geolibre-token.{SIDECAR_TOKEN}"]
+    ) as socket:
         socket.receive_text()  # ready greeting
         thread, outcome = _post_in_thread(
             client,
@@ -168,8 +196,70 @@ def test_correlated_command_round_trips_through_the_app_socket(client):
     }
 
 
+def test_fast_window_result_survives_a_stalled_peer_and_short_deadline(client):
+    """Consume an immediate result before another peer exhausts the deadline.
+
+    Args:
+        client: The shared-loop HTTP client.
+    """
+
+    class StalledSocket:
+        """A blocked app window that records the relay closing it."""
+
+        closed = False
+
+        async def send_text(self, _encoded):
+            """Simulate backpressure.
+
+            Args:
+                _encoded: The command payload.
+            """
+            await asyncio.Event().wait()
+
+        async def close(self, code):
+            """Record a server close, allowing the app to reconnect.
+
+            Args:
+                code: The WebSocket close code.
+            """
+            self.closed = True
+
+    stalled = StalledSocket()
+    with client.websocket_connect(
+        "/relay/socket", subprotocols=["geolibre-relay", f"geolibre-token.{SIDECAR_TOKEN}"]
+    ) as socket:
+        socket.receive_text()
+        relay._hub.listeners.insert(0, stalled)
+        thread, outcome = _post_in_thread(
+            client,
+            {
+                "requestId": "short",
+                "method": "getView",
+                "timeoutSeconds": 0.5,
+            },
+        )
+        command = json.loads(socket.receive_text())
+        socket.send_text(
+            json.dumps(
+                {
+                    "type": "geolibre:result",
+                    "requestId": command["requestId"],
+                    "ok": True,
+                    "value": "ready",
+                }
+            )
+        )
+        thread.join(2)
+        assert outcome["status"] == 200
+        assert outcome["body"]["value"] == "ready"
+        assert stalled.closed
+        assert stalled not in relay._hub.listeners
+
+
 def test_a_caller_timeout_answers_504(client):
-    with client.websocket_connect(f"/relay/socket?token={SIDECAR_TOKEN}") as socket:
+    with client.websocket_connect(
+        "/relay/socket", subprotocols=["geolibre-relay", f"geolibre-token.{SIDECAR_TOKEN}"]
+    ) as socket:
         socket.receive_text()
         thread, outcome = _post_in_thread(
             client,
@@ -187,7 +277,9 @@ def test_fire_and_forget_and_no_listener(client):
         headers=_client_headers(),
     )
     assert response.json() == {"delivered": 0}
-    with client.websocket_connect(f"/relay/socket?token={SIDECAR_TOKEN}") as socket:
+    with client.websocket_connect(
+        "/relay/socket", subprotocols=["geolibre-relay", f"geolibre-token.{SIDECAR_TOKEN}"]
+    ) as socket:
         socket.receive_text()
         response = client.post(
             "/relay/command", json={"method": "flyTo"}, headers=_client_headers()

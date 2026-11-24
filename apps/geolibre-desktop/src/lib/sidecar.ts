@@ -4,6 +4,8 @@ import { setSidecarAuthToken, setSidecarRelayAccess } from "@geolibre/processing
 import { IS_MAS_BUILD } from "./build-flags";
 import { isTauri } from "./tauri-io";
 import { useDesktopSettingsStore } from "../hooks/useDesktopSettings";
+import { createLiveMcpAccessController } from "./live-mcp-access";
+import { dismissNotification, notify } from "./notify";
 
 export interface SidecarServerInfo {
   baseUrl: string;
@@ -46,7 +48,7 @@ export async function startGeoLibreSidecar(): Promise<SidecarServerInfo> {
   if (generation === stopGeneration) {
     setSidecarAuthToken(info.token);
     setLiveSidecar(info);
-    await updateLiveMcpAccess();
+    void updateLiveMcpAccess();
   }
   return info;
 }
@@ -55,19 +57,36 @@ export async function startGeoLibreSidecar(): Promise<SidecarServerInfo> {
 // relay in useJupyterRelay) connect whenever any feature has started it.
 let liveSidecar: SidecarServerInfo | null = null;
 let stopGeneration = 0;
-let accessUpdate: Promise<void> = Promise.resolve();
+const relayAccess = createLiveMcpAccessController({
+  getEnabled: () => useDesktopSettingsStore.getState().desktopSettings.startup.allowLiveMcp,
+  send: (info, enabled) => setSidecarRelayAccess(info.baseUrl, enabled),
+});
+let accessNotice: string | null = null;
+relayAccess.subscribe((state) => {
+  if (!state.error && accessNotice) {
+    dismissNotification(accessNotice);
+    accessNotice = null;
+  }
+  if (state.error && !accessNotice) {
+    accessNotice = notify.warning(
+      i18next.t(
+        state.enabled ? "notifications.liveMcpEnableRetry" : "notifications.liveMcpDisableRetry",
+      ),
+      { durationMs: null, pinned: true, dedupeKey: "live-mcp-access" },
+    );
+  }
+});
 
 /** Apply the current Live MCP preference without stopping processing jobs. */
 export function updateLiveMcpAccess(): Promise<void> {
-  accessUpdate = accessUpdate
-    .catch(() => {})
-    .then(async () => {
-      const info = liveSidecar;
-      if (!info) return;
-      const enabled = useDesktopSettingsStore.getState().desktopSettings.startup.allowLiveMcp;
-      await setSidecarRelayAccess(info.baseUrl, enabled);
-    });
-  return accessUpdate;
+  return relayAccess.sync();
+}
+
+/** Subscribe only while relay access has been confirmed for the current sidecar. */
+export function subscribeSidecarRelay(
+  listener: (info: SidecarServerInfo | null) => void,
+): () => void {
+  return relayAccess.subscribe((state) => listener(state.ready));
 }
 const sidecarListeners = new Set<(info: SidecarServerInfo | null) => void>();
 
@@ -81,6 +100,7 @@ function setLiveSidecar(info: SidecarServerInfo | null): void {
   // server back; only a real change should reconnect the relay socket.
   if (sameSidecar(liveSidecar, info)) return;
   liveSidecar = info;
+  relayAccess.setServer(info);
   for (const listener of sidecarListeners) listener(info);
 }
 

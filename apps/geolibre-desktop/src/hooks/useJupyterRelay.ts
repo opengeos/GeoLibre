@@ -10,9 +10,10 @@ import {
   relaySocketUrl,
   runRelayCommand,
   sidecarRelaySocketUrl,
+  sidecarRelaySocketProtocols,
 } from "../lib/jupyter-relay";
 import { type ScriptingHandlers, createScriptingHandlers } from "../lib/scripting/scriptingApi";
-import { subscribeSidecarServer } from "../lib/sidecar";
+import { subscribeSidecarRelay } from "../lib/sidecar";
 
 // The app side of the desktop map-command relays. This is the SIBLING of
 // useNotebookBridge: that one receives commands over postMessage from the
@@ -49,6 +50,7 @@ function connectRelay<T>(
   socketUrl: (info: T) => string,
   handlers: ScriptingHandlers,
   label: string,
+  protocols?: (info: T) => string[],
 ): () => void {
   let socket: WebSocket | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -98,7 +100,7 @@ function connectRelay<T>(
       if (generation !== mine) return;
       let next: WebSocket;
       try {
-        next = new WebSocket(socketUrl(info));
+        next = new WebSocket(socketUrl(info), protocols?.(info));
       } catch (error) {
         console.warn(`${label}: could not open the command socket`, error);
         return;
@@ -153,10 +155,11 @@ export function useJupyterRelay(mapControllerRef: RefObject<MapEngine | null>): 
       "Jupyter relay",
     );
     const stopSidecar = connectRelay(
-      subscribeSidecarServer,
+      subscribeSidecarRelay,
       sidecarRelaySocketUrl,
       handlers,
       "Sidecar relay",
+      sidecarRelaySocketProtocols,
     );
     return () => {
       stopJupyter();

@@ -377,6 +377,14 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 Style keyword arguments (for example `fillColor`, `strokeColor`, `strokeWidth`,
 `circleRadius`) map to the GeoLibre [layer style fields](project-format.md).
 
+WFS, Zarr, video, and ArcGIS builders reject URLs containing embedded
+usernames or passwords, which browser fetch cannot use. Signed query URLs for
+WFS, Zarr, and video remain supported in trusted local projects. `Map.save_project`
+and `Map.to_project` redact credentials by default; `keep_credentials=True`
+preserves them for private use. Low-level `authoring.save_project` and MCP file
+edits preserve the existing project's contents, so use a redacted Map export
+when sharing a project.
+
 ### Marker symbology
 
 `add_marker` and `add_markers` take the common point-symbology settings as named

@@ -10395,6 +10395,8 @@
     "emptyNetworkError": "No network error diagnostics captured."
   },
   "notifications": {
+    "liveMcpEnableRetry": "Live MCP access could not be enabled. Retrying automatically; processing remains available.",
+    "liveMcpDisableRetry": "Live MCP server access has not been revoked yet. This window is disconnected and GeoLibre is retrying; processing remains available.",
     "regionLabel": "Notifications",
     "dismiss": "Dismiss notification",
     "reportIssue": "Report issue",
