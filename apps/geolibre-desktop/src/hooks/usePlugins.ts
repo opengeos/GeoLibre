@@ -1,4 +1,5 @@
-import { BUILT_IN_PLUGINS, configureBuiltInPluginModule } from "@geolibre/plugins/builtin-plugins";
+import { BUILT_IN_PLUGINS } from "@geolibre/plugins/builtin-plugins";
+import { configureHostPluginModule as configureBuiltInPluginModule } from "../lib/configure-plugin-module";
 import { setOverpassEndpoint } from "@geolibre/plugins/osm-downloader-api";
 import { useAppStore } from "@geolibre/core";
 import { buildProjectEgressSnapshot } from "../lib/build-project-snapshot";

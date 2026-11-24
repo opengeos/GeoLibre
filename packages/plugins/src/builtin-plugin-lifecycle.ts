@@ -54,6 +54,7 @@ export function createLazyPlugin(registration: LazyPluginRegistration, context: 
   const queueRestore = (app: GeoLibreAppAPI): void => {
     const ticket = ++restoreTicket;
     const generation = context.restoreGeneration();
+    const activation = activationGeneration;
     const renderer = app.getMapRenderer?.() ?? "maplibre";
     lastRestoreGeneration = generation;
     // An untouched/reset plugin needs no implementation until it is used.
@@ -64,6 +65,7 @@ export function createLazyPlugin(registration: LazyPluginRegistration, context: 
           !context.isRegistered() ||
           ticket !== restoreTicket ||
           generation !== context.restoreGeneration() ||
+          activation !== activationGeneration ||
           renderer !== (app.getMapRenderer?.() ?? "maplibre")
         )
           return;
@@ -80,6 +82,7 @@ export function createLazyPlugin(registration: LazyPluginRegistration, context: 
           context.isRegistered() &&
           ticket === restoreTicket &&
           generation === context.restoreGeneration() &&
+          activation === activationGeneration &&
           renderer === (app.getMapRenderer?.() ?? "maplibre")
         )
           context.reportError(error);
@@ -166,7 +169,9 @@ export function createLazyPlugin(registration: LazyPluginRegistration, context: 
       if (implementation) {
         if (!implementation.setMapControlPosition)
           throw new Error(`Plugin '${metadata.id}' cannot restore its control position.`);
-        return implementation.setMapControlPosition(app, target);
+        const updated = implementation.setMapControlPosition(app, target);
+        if (updated !== false) position = undefined;
+        return updated;
       }
       position = target;
       return true;

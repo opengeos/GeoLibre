@@ -108,6 +108,60 @@ function harness() {
 }
 
 describe("lazy plugin lifecycle", () => {
+  it("applies queued saved controls with the activation scope instead of consuming them with an obsolete restore scope", async () => {
+    const test = harness();
+    const manager = new PluginManager();
+    let saved: unknown;
+    let mounts = 0;
+    const widget = { onAdd: () => ({}) as HTMLElement, onRemove: () => {} };
+    const scopedApp = {
+      getMapRenderer: () => "maplibre",
+      addMapControl: () => {
+        mounts++;
+        return true;
+      },
+    } as unknown as GeoLibreAppAPI;
+    const implementation: GeoLibrePlugin = {
+      ...test.implementation,
+      getProjectState: () => saved,
+      applyProjectState: (scope, value) => {
+        if (scope.addMapControl(widget, "top-right") === false) return false;
+        saved = value;
+        return true;
+      },
+    };
+    manager.registerLazy(test.registration);
+    manager.restoreProjectState(
+      {
+        manifestUrls: [],
+        activePluginIds: ["lazy"],
+        mapControlPositions: {},
+        settings: { lazy: { images: ["saved-image"] } },
+      },
+      scopedApp,
+    );
+    test.pending.resolve(implementation);
+    assert.equal(await manager.pendingActivation("lazy"), true);
+    assert.equal(mounts, 1);
+    assert.deepEqual(manager.getProjectState().settings.lazy, { images: ["saved-image"] });
+  });
+
+  it("replaces a queued position only after an already-loaded provider accepts the newer position", async () => {
+    const test = harness();
+    test.adapter.plugin.setMapControlPosition?.(app, "bottom-left");
+    test.setLoaded(test.implementation);
+    const update = test.implementation.setMapControlPosition;
+    test.implementation.setMapControlPosition = () => false;
+    assert.equal(test.adapter.plugin.setMapControlPosition?.(app, "top-left"), false);
+    assert.equal(test.adapter.plugin.getMapControlPosition?.(), "bottom-left");
+    test.implementation.setMapControlPosition = update;
+    test.adapter.plugin.setMapControlPosition?.(app, "top-left");
+    assert.equal(test.adapter.plugin.getMapControlPosition?.(), "top-left");
+    test.pending.resolve(test.implementation);
+    await test.adapter.plugin.activate(app);
+    assert.equal(test.implementation.getMapControlPosition?.(), "top-left");
+  });
+
   it("retains live settings and teardown after a later configuration failure evicts the module", async () => {
     const test = harness();
     let imports = 0;

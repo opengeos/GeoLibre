@@ -342,6 +342,8 @@ const pendingDeactivations: Partial<Record<BuiltInPluginId, (state: unknown) => 
     omitDefaultState(stopPendingPanel(state), DEFAULT_ROUTE_ANIMATION_SETTINGS),
   "geolibre-flight-simulator": (state) =>
     omitDefaultState(closePendingPanel(state), DEFAULT_FLIGHT_SIMULATOR_SETTINGS),
+  // The native Components teardown removes every widget and clears its saved
+  // state, including images. Match it even while the implementation is pending.
   "maplibre-gl-components": () => undefined,
 };
 

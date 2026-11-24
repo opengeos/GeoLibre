@@ -42,6 +42,9 @@ export function createBuiltInPluginModules<
     loadModule: load,
     peekModule: <Key extends Id>(id: Key): Module<Key> | undefined =>
       loaded.get(id) as Module<Key> | undefined,
+    // A failed initializer remains required until its host replaces it: never
+    // expose a partially configured module. Live errors propagate so hosts
+    // can report programmer errors; UI effects must catch them at the boundary.
     configure: <Key extends Id>(
       id: Key,
       initializers: Record<string, (module: Module<Key>) => void>,

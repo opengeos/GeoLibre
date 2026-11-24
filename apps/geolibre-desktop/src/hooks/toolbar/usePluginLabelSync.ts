@@ -1,4 +1,4 @@
-import { configureBuiltInPluginModule } from "@geolibre/plugins/builtin-plugins";
+import { configureHostPluginModule as configureBuiltInPluginModule } from "../../lib/configure-plugin-module";
 import { setPlanetaryComputerLabels } from "@geolibre/plugins/planetary-computer-labels";
 import { type ArcGisHubLabels } from "@geolibre/plugins";
 import { useEffect } from "react";

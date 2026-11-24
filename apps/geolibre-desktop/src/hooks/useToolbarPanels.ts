@@ -199,7 +199,7 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
       visible: searchPlacesVisible,
       toggle: () =>
         runPanelAction("maplibre-gl-components", (preparedApp) => {
-          if (searchPlacesVisible) {
+          if (isSearchPlacesPanelVisible()) {
             closeSearchPlacesPanel();
             return;
           }
@@ -210,7 +210,7 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
       visible: spinGlobeVisible,
       toggle: () =>
         runPanelAction("maplibre-gl-components", (preparedApp) => {
-          if (spinGlobeVisible) {
+          if (isSpinGlobePanelVisible()) {
             closeSpinGlobePanel(preparedApp);
             return;
           }
@@ -221,7 +221,7 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
       visible: sunVisible,
       toggle: () =>
         runPanelAction("geolibre-sun", (preparedApp) => {
-          if (sunVisible) {
+          if (isSunPanelVisible()) {
             closeSunPanel(preparedApp);
             return;
           }
@@ -232,7 +232,7 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
       visible: routeAnimationVisible,
       toggle: () =>
         runPanelAction("geolibre-route-animation", (preparedApp) => {
-          if (routeAnimationVisible) {
+          if (isRouteAnimationPanelVisible()) {
             closeRouteAnimationPanel(preparedApp);
             return;
           }
@@ -243,7 +243,7 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
       visible: flightSimulatorVisible,
       toggle: () =>
         runPanelAction("geolibre-flight-simulator", (preparedApp) => {
-          if (flightSimulatorVisible) {
+          if (isFlightSimulatorPanelVisible()) {
             closeFlightSimulatorPanel(preparedApp);
             return;
           }
@@ -254,7 +254,7 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
       visible: printVisible,
       toggle: () =>
         runPanelAction("maplibre-gl-components", (preparedApp) => {
-          if (printVisible) {
+          if (isPrintPanelVisible()) {
             closePrintPanel();
             return;
           }
@@ -265,7 +265,7 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
       visible: colorbarVisible,
       toggle: () =>
         runPanelAction("maplibre-gl-components", (preparedApp) => {
-          if (colorbarVisible) {
+          if (isColorbarPanelVisible()) {
             closeColorbarPanel(preparedApp);
             return;
           }
@@ -280,7 +280,7 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
       visible: htmlVisible,
       toggle: () =>
         runPanelAction("maplibre-gl-components", (preparedApp) => {
-          if (htmlVisible) {
+          if (isHtmlPanelVisible()) {
             closeHtmlPanel(preparedApp);
             return;
           }
@@ -301,7 +301,7 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
       visible: measureVisible,
       toggle: () =>
         runPanelAction("maplibre-gl-components", (preparedApp) => {
-          if (measureVisible) {
+          if (isMeasurePanelVisible()) {
             closeMeasurePanel(preparedApp);
             return;
           }
@@ -312,7 +312,7 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
       visible: bookmarkVisible,
       toggle: () =>
         runPanelAction("maplibre-gl-components", (preparedApp) => {
-          if (bookmarkVisible) {
+          if (isBookmarkPanelVisible()) {
             closeBookmarkPanel(preparedApp);
             return;
           }
@@ -323,7 +323,7 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
       visible: minimapVisible,
       toggle: () =>
         runPanelAction("maplibre-gl-components", (preparedApp) => {
-          if (minimapVisible) {
+          if (isMinimapPanelVisible()) {
             closeMinimapPanel(preparedApp);
             return;
           }
@@ -334,7 +334,7 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
       visible: viewStateVisible,
       toggle: () =>
         runPanelAction("maplibre-gl-components", (preparedApp) => {
-          if (viewStateVisible) {
+          if (isViewStatePanelVisible()) {
             closeViewStatePanel(preparedApp);
             return;
           }

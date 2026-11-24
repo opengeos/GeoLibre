@@ -552,15 +552,20 @@ Built-in plugins ship with GeoLibre itself. Most plugins do **not** need to be
 built in — see [External plugins](#external-plugins) to ship one without forking
 GeoLibre. To add one to this repository:
 
-1. Create a plugin file in `packages/plugins/src/plugins/`.
+1. Add its metadata to `packages/plugins/src/builtin-plugin-metadata.ts` with
+   an id, name, version, menu category, supported engines, and declared hooks.
+   Include a default control position if the plugin exposes position hooks.
+   This catalog is available before implementations are loaded.
+
+2. Create a plugin file in `packages/plugins/src/plugins/`. Reuse the catalog
+   metadata so the implementation and lazy registration share one definition.
 
    ```typescript
    import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+   import { builtInPluginProperties } from "../builtin-plugin-metadata";
 
    export const myPlugin: GeoLibrePlugin = {
-     id: "my-plugin",
-     name: "My Plugin",
-     version: "0.1.0",
+     ...builtInPluginProperties("my-plugin"),
      activate: (app: GeoLibreAppAPI) => {
        app.setBasemap("https://example.com/style.json");
      },
@@ -576,26 +581,24 @@ GeoLibre. To add one to this repository:
    keeping what they last selected. Plugins that add controls, listeners, or
    layers must undo them in `deactivate()`.
 
-2. Export it from `packages/plugins/src/index.ts`.
+3. Export it from `packages/plugins/src/index.ts` for SDK consumers.
 
    ```typescript
    export { myPlugin } from "./plugins/my-plugin";
    ```
 
-3. Register it in `apps/geolibre-desktop/src/hooks/usePlugins.ts` by adding it
-   to the `BUILT_IN_PLUGINS` array, which is passed to `manager.registerAll`.
+4. Add a dynamic import to the module registry in
+   `packages/plugins/src/builtin-plugins.ts`, following its existing entries.
+   Add the plugin's export to both the load and peek selector tables. Plugins
+   exported from the same implementation file share one module loader.
+   `BUILT_IN_PLUGINS` derives registration descriptors from the catalog;
+   `usePlugins.ts` registers them through `manager.registerLazy`.
 
-   ```typescript
-   import { myPlugin } from "@geolibre/plugins";
-
-   const BUILT_IN_PLUGINS: GeoLibrePlugin[] = [
-     maplibreLayerControlPlugin,
-     maplibreGeoEditorPlugin,
-     // ...
-     myPlugin,
-   ];
-   manager.registerAll(BUILT_IN_PLUGINS);
-   ```
+5. Run `npm run plugins:docs` and the built-in contract tests. The contract
+   suite imports each implementation and checks its metadata, actual hooks,
+   and initial control position against the catalog. Host helpers that need
+   runtime state prepare the plugin through `manager.runPluginHelper` before
+   creating controls. Use specific package entrypoints for host imports.
 
 For a MapLibre control plugin, add the package dependency, then call
 `app.addMapControl(control, "top-left")` in `activate()` and
