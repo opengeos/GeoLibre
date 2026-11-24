@@ -182,12 +182,9 @@ export function VectorStylePanel({
     hasVectorPaintControls && !extrusionEnabled && !controlPainted && geometryFlags.hasPolygon;
   const showMarkerControls =
     hasVectorPaintControls && supportsPointRenderer && pointRenderer === "single";
-  // The symbology-pack renders (inverted mask, line decorations, geometry
-  // generator) are drawn by the core GeoJSON render path
-  // (applyVectorDataRenderLayers), so they don't apply to vector tiles,
-  // external deck layers, or control-painted (external native) layers — hide
-  // the controls there rather than offer a silent no-op. The one exception is
-  // line decorations on vector PMTiles, which their own sync path draws.
+  // Inverted masks and geometry generators use the core GeoJSON render path
+  // (applyVectorDataRenderLayers). Their controls require store-owned GeoJSON.
+  // Line decorations additionally support vector PMTiles on style-spec engines.
   const supportsDerivedGeometry =
     layer.type === "geojson" &&
     !!layer.geojson &&

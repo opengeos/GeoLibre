@@ -447,6 +447,7 @@ describe("removing an archive GeoLibre has decorated", () => {
     const control = {
       onAdd: () => ({}),
       getState: () => ({ layers: [{ id: "owned" }] }),
+      onRemove() {},
       _removeLayer: (_id?: string) => {
         calls++;
       },
@@ -466,6 +467,7 @@ describe("removing an archive GeoLibre has decorated", () => {
     const control = {
       onAdd: () => ({}),
       getState: () => ({ layers: [] }),
+      onRemove() {},
       _removeLayer: (_id?: string) => {
         throw failure;
       },
@@ -475,6 +477,28 @@ describe("removing an archive GeoLibre has decorated", () => {
       () => control._removeLayer("owned"),
       (error) => error === failure,
     );
+  });
+
+  it("releases the captured map after the control finishes removal", () => {
+    let mapReads = 0;
+    const control = {
+      onAdd: (_map: unknown) => ({}),
+      onRemove() {},
+      getState: () => ({ layers: [{ id: "owned" }] }),
+      _removeLayer: (_id?: string) => {},
+    };
+    guardPMTilesSourceRemoval(control as never);
+    control.onAdd({
+      getLayersOrder: () => {
+        mapReads++;
+        return [];
+      },
+    });
+    control._removeLayer("owned");
+    assert.equal(mapReads, 1);
+    control.onRemove();
+    control._removeLayer("owned");
+    assert.equal(mapReads, 1, "a removed control must not retain access to its former map");
   });
 
   it("strands the source without the guard, which is why it exists", async () => {
