@@ -719,31 +719,31 @@ export function ProcessingMenu({
                           {t("toolbar.rasterTool.focal")}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        {/* Browser-only tools: no sidecar gate, the submenu
-                            trigger already carries the processing gate. */}
-                        <DropdownMenuLabel className="text-xs text-muted-foreground">
-                          {t("toolbar.item.subGroupChangeDetection")}
-                        </DropdownMenuLabel>
-                        {RASTER_CHANGE_TOOLS.map(({ kind, titleKey }) => (
-                          <DropdownMenuItem key={kind} onSelect={() => setRasterToolOpen(kind)}>
-                            {t(titleKey)}
-                          </DropdownMenuItem>
-                        ))}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuLabel className="text-xs text-muted-foreground">
-                          {t("toolbar.item.subGroupSar")}
-                        </DropdownMenuLabel>
-                        {RASTER_SAR_TOOLS.map(({ kind, titleKey }) => (
-                          <DropdownMenuItem key={kind} onSelect={() => setRasterToolOpen(kind)}>
-                            {t(titleKey)}
-                          </DropdownMenuItem>
-                        ))}
-                        <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={onOpenGeoreferencer}>
                           {t("toolbar.item.georeferencing")}
                         </DropdownMenuItem>
                       </>
                     )}
+                    <DropdownMenuSeparator />
+                    {/* Browser-only tools: no sidecar gate, the submenu
+                            trigger already carries the processing gate. */}
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupChangeDetection")}
+                    </DropdownMenuLabel>
+                    {RASTER_CHANGE_TOOLS.map(({ kind, titleKey }) => (
+                      <DropdownMenuItem key={kind} onSelect={() => setRasterToolOpen(kind)}>
+                        {t(titleKey)}
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupSar")}
+                    </DropdownMenuLabel>
+                    {RASTER_SAR_TOOLS.map(({ kind, titleKey }) => (
+                      <DropdownMenuItem key={kind} onSelect={() => setRasterToolOpen(kind)}>
+                        {t(titleKey)}
+                      </DropdownMenuItem>
+                    ))}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
               )}

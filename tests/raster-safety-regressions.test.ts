@@ -13,9 +13,90 @@ import {
   writeRasterData,
   zonalStatistics,
   SAR_NODATA,
+  runRasterToolClientAsync,
+  speckleFilter,
   type RasterData,
 } from "@geolibre/processing";
 import { rasterEpsg } from "../packages/processing/src/raster-geo";
+
+it("keeps unreferenced vectors downloadable and exports custom projected vectors as WGS84", async () => {
+  const input = raster([1, 1, 1, 1], 2, 2);
+  const unreferenced = await runRasterToolClientAsync(
+    "polygonize",
+    { raster: { ...input, geoKeys: {} } },
+    {},
+  );
+  assert.equal(unreferenced.kind, "vector");
+  if (unreferenced.kind !== "vector") return;
+  assert.equal(unreferenced.wgs84, null);
+  assert.ok("crs" in unreferenced.geojson);
+  assert.equal(unreferenced.geojson.crs, null);
+  const projected = await runRasterToolClientAsync(
+    "polygonize",
+    {
+      raster: {
+        ...input,
+        originX: 500000,
+        originY: 4100000,
+        resX: 10,
+        resY: 10,
+        geoKeys: {
+          GTModelTypeGeoKey: 1,
+          ProjectedCSTypeGeoKey: 32767,
+          GeographicTypeGeoKey: 4326,
+          ProjCoordTransGeoKey: 1,
+          ProjNatOriginLatGeoKey: 0,
+          ProjNatOriginLongGeoKey: -81,
+          ProjScaleAtNatOriginGeoKey: 0.9996,
+          ProjFalseEastingGeoKey: 500000,
+          ProjFalseNorthingGeoKey: 0,
+          ProjLinearUnitsGeoKey: 9001,
+        },
+      },
+    },
+    {},
+  );
+  assert.equal(projected.kind, "vector");
+  if (projected.kind !== "vector") return;
+  assert.ok(projected.wgs84);
+  assert.deepEqual(projected.geojson, projected.wgs84);
+  const geometry = projected.geojson.features[0].geometry;
+  assert.equal(geometry?.type, "Polygon");
+  if (geometry?.type === "Polygon") {
+    assert.ok(Math.abs(geometry.coordinates[0][0][0] + 81) < 0.01);
+    assert.ok(geometry.coordinates[0][0][1] > 36 && geometry.coordinates[0][0][1] < 38);
+  }
+});
+
+it("includes point cells on integer pixel edges", async () => {
+  const input = raster([1, 2, 3, 4], 2, 2);
+  const clipped = await clipRasterByMask(
+    input,
+    {
+      type: "MultiPoint",
+      coordinates: [
+        [0, 2],
+        [1, 1],
+      ],
+    },
+    { crop: true },
+  );
+  assert.equal(clipped.raster.width, 2);
+  assert.equal(clipped.raster.height, 2);
+  assert.equal(clipped.raster.bands[0][0], 1);
+  assert.equal(clipped.raster.bands[0][3], 4);
+});
+
+it("rejects multiband speckle work before orienting or allocating bands", () => {
+  const input = {
+    ...raster([1]),
+    width: 1000,
+    height: 1000,
+    flipY: true,
+    bands: Array.from({ length: 100 }, () => new Float32Array(0)),
+  };
+  assert.throws(() => speckleFilter(input, { method: "refined-lee" }), /limit|large|budget/i);
+});
 
 /** A small north-up raster with a declared geographic CRS. */
 function raster(values: number[], width = values.length, height = 1): RasterData {

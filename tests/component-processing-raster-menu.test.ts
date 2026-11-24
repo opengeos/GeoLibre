@@ -64,5 +64,23 @@ describe("Processing menu browser raster entries", () => {
       );
       assert.equal(useAppStore.getState().ui.rasterToolOpen, id);
     });
+    it(`opens ${id} on Android`, async () => {
+      const descriptor = Object.getOwnPropertyDescriptor(navigator, "userAgent");
+      Object.defineProperty(navigator, "userAgent", {
+        configurable: true,
+        value: "Mozilla/5.0 Android",
+      });
+      try {
+        renderMenu();
+        const menu = await openGroup("Raster");
+        fireEvent.click(
+          await within(menu).findByRole("menuitem", { name: i18n.t(`toolbar.rasterTool.${key}`) }),
+        );
+        assert.equal(useAppStore.getState().ui.rasterToolOpen, id);
+      } finally {
+        if (descriptor) Object.defineProperty(navigator, "userAgent", descriptor);
+        else Reflect.deleteProperty(navigator, "userAgent");
+      }
+    });
   }
 });

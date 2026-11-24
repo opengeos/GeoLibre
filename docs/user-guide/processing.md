@@ -206,16 +206,29 @@ Warp and mosaic output buffers have a 256 MiB allocation budget that includes
 all bands (and mosaic validity flags). Contouring accepts at most 8 million
 pixels, 10,000 levels, 50 million level/pixel visits, and 250,000 output segments.
 Increase the interval or crop the raster when these limits are reached.
+Warp, polygonization, and contour computation currently run synchronously in
+the browser. Large jobs can pause the interface until computation returns;
+use a smaller input or the sidecar engine for these jobs. Worker execution
+and interruption within the compute loops remain follow-up work.
 
 Browser polygonization accepts at most 8 million pixels and 250,000 directed
 boundary edges. Noisy classified rasters can reach the edge budget well below
 the pixel limit. Crop or simplify them, or select the sidecar.
 
-In deployments with restricted capabilities, classic raster commands retain
-the existing `processing:run` and `processing:sidecar` requirements. This keeps
-the operator's command allowlist consistent across engine choices. Browser-only
-SAR and change commands require `processing:run`. Mobile menu availability also
-depends on the screen layout.
+Speckle filtering counts every input band against its work and scratch-memory
+budgets before copying the raster. The shared input preflight also reserves
+all output bands, including the three channels of SAR RGB.
+
+Polygon and contour downloads from a custom projected CRS are transformed to
+WGS84. An image without a CRS can produce an unreferenced vector download with
+an explicit null CRS; it is not added to the geographic map.
+
+In deployments with restricted capabilities, classic raster command entry
+points retain their existing `processing:run` and `processing:sidecar`
+requirements. The dialog checks current permissions before probing, starting,
+or running the sidecar, including after switching tools. Browser execution
+requires `processing:run`. Browser-only SAR and change groups are available
+on mobile; the sidecar engine requires the desktop app and its permission.
 
 **Terrain**
 

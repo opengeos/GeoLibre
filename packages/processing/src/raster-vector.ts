@@ -125,6 +125,18 @@ function geometryWindow(raster: RasterData, geometries: Geometry[]): Window | nu
   let col1 = -Infinity;
   let row1 = -Infinity;
   for (const g of geometries) {
+    // A point on an integer pixel edge still burns the cell selected by
+    // floor(). Include those cells even when the point's extent is zero.
+    for (const point of splitGeometry(g).points) {
+      const [x, y] = toPixel(raster, point);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      const col = Math.floor(x);
+      const row = Math.floor(y);
+      col0 = Math.min(col0, col);
+      row0 = Math.min(row0, row);
+      col1 = Math.max(col1, col + 1);
+      row1 = Math.max(row1, row + 1);
+    }
     const b = geometryBounds(g);
     if (!b) continue;
     const colOff = (b[0] - raster.originX) / raster.resX;

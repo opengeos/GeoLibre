@@ -107,7 +107,6 @@ export function speckleFilter(
   input: RasterData,
   params: SpeckleParams,
 ): { raster: RasterData; messages: string[] } {
-  const raster = toNorthUp(input);
   const method = String(params.method ?? "refined-lee");
   if (method !== "lee" && method !== "refined-lee") {
     throw new Error(`Unknown speckle filter: ${method}`);
@@ -118,12 +117,20 @@ export function speckleFilter(
   let size = Math.max(3, Math.min(15, Math.round(Number(params.size ?? 7))));
   if (size % 2 === 0) size += 1;
   const db = params.units === "db";
-  const { width, height } = raster;
-  if (width * height * (method === "lee" ? size * size : 49 * 2) > 600_000_000) {
+  const { width, height } = input;
+  const pixels = width * height;
+  const samples = pixels * input.bands.length;
+  // Include every band and the Float64 filter scratch space before orientation
+  // can copy the input. Leave room for the Float32 result and encoding buffers.
+  if (
+    samples * (method === "lee" ? size * size : 49 * 2) > 600_000_000 ||
+    samples * 16 + pixels * (method === "lee" ? 17 : 25) > 256 * 1024 * 1024
+  ) {
     throw new Error(
       "This raster is too large to speckle-filter in the browser; clip it to the area of interest first.",
     );
   }
+  const raster = toNorthUp(input);
   const bands = raster.bands.map((src) => {
     const n = src.length;
     const lin = new Float64Array(n);
@@ -220,33 +227,40 @@ function refinedLeeFilter(
     const cc = Math.min(width - 1, Math.max(0, c));
     return mean3[rr * width + cc];
   };
+  const s = new Float64Array(9);
+  const gradients = new Float64Array(4);
+  const pairs: [number, number, string, string][] = [
+    [3, 5, "left", "right"],
+    [1, 7, "top", "bottom"],
+    [0, 8, "topLeft", "bottomRight"],
+    [2, 6, "topRight", "bottomLeft"],
+  ];
   for (let r = 0; r < height; r += 1) {
     for (let c = 0; c < width; c += 1) {
       const i = r * width + c;
       if (!ok[i]) continue;
       // Sub-window means s[k], k = row-major over offsets (-2, 0, 2).
-      const s: number[] = [];
-      for (const dr of [-2, 0, 2]) for (const dc of [-2, 0, 2]) s.push(sub(r + dr, c + dc));
+      let k = 0;
+      for (let dr = -2; dr <= 2; dr += 2)
+        for (let dc = -2; dc <= 2; dc += 2) s[k++] = sub(r + dr, c + dc);
       const centre = s[4];
       // Lee's (1981) edge masks on the 3x3 grid of sub-window means, each with
       // the two sub-windows that stand for its sides. Orthogonal edges come
       // first so they win ties.
-      const pairs: [number, number, string, string, number][] = [
-        [3, 5, "left", "right", s[0] + s[3] + s[6] - (s[2] + s[5] + s[8])],
-        [1, 7, "top", "bottom", s[0] + s[1] + s[2] - (s[6] + s[7] + s[8])],
-        [0, 8, "topLeft", "bottomRight", s[0] + s[1] + s[3] - (s[5] + s[7] + s[8])],
-        [2, 6, "topRight", "bottomLeft", s[1] + s[2] + s[5] - (s[3] + s[6] + s[7])],
-      ];
+      gradients[0] = s[0] + s[3] + s[6] - (s[2] + s[5] + s[8]);
+      gradients[1] = s[0] + s[1] + s[2] - (s[6] + s[7] + s[8]);
+      gradients[2] = s[0] + s[1] + s[3] - (s[5] + s[7] + s[8]);
+      gradients[3] = s[1] + s[2] + s[5] - (s[3] + s[6] + s[7]);
       let best = -1;
       let bestGrad = -Infinity;
-      pairs.forEach(([, , , , diff], k) => {
-        const g = Math.abs(diff);
+      for (let k = 0; k < gradients.length; k += 1) {
+        const g = Math.abs(gradients[k]);
         if (Number.isFinite(g) && g > bestGrad) {
           bestGrad = g;
           best = k;
         }
-      });
-      let window = (_r: number, _c: number) => true;
+      }
+      let window: (r: number, c: number) => boolean = all;
       if (best >= 0) {
         const [p, q, sideP, sideQ] = pairs[best];
         // Keep the half on the side whose sub-window mean is closer to the centre.

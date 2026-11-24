@@ -4269,6 +4269,9 @@
       "engine": "Engine",
       "engineClient": "Client (browser)",
       "engineSidecar": "Sidecar (rasterio/GDAL)",
+      "processingRestricted": "Raster processing is unavailable under the current application permissions.",
+      "sidecarRestricted": "Sidecar execution is unavailable under the current application permissions. Choose the browser engine.",
+      "clientMemoryLimit": "The decoded inputs and output exceed the browser memory limit. Crop or downsample the rasters before running this tool.",
       "clientHint": "Computes in your browser and adds the result to the map. For large rasters or geographic-CRS terrain, prefer the sidecar.",
       "switchToClientHint": "Or switch the engine to Client to run this tool in your browser.",
       "chooseGeoTiff": "Choose a GeoTIFF",
@@ -8697,7 +8700,7 @@
             },
             "vh_band": {
               "label": "VH band",
-              "description": "Band of the VH raster, or of the input when no VH raster is chosen."
+              "description": "Leave blank for band 1 of a separate VH raster, or band 2 of the stacked input. Enter a band number to override."
             },
             "vv_min": {
               "label": "VV min (dB)"

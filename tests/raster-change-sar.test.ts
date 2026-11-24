@@ -11,6 +11,7 @@ import {
   ndviChange,
   parseEpsgCode,
   polygonizeRaster,
+  RASTER_TOOLS,
   readRasterData,
   reprojectRaster,
   runRasterToolClientAsync,
@@ -256,6 +257,17 @@ describe("SAR utilities", () => {
     const { raster } = dualPolRgb(vv, vh, { units: "db" });
     assert.equal(raster.bands[1][0], 1 + Math.round((10 / 25) * 254));
     assert.throws(() => dualPolRgb(vv, vh, { units: "db", vv_min: 0, vv_max: -5 }), /max > min/);
+    const defaults = Object.fromEntries(
+      RASTER_TOOLS.find((tool) => tool.id === "sar-rgb")!
+        .parameters.filter((parameter) => parameter.default !== undefined)
+        .map((parameter) => [parameter.id, parameter.default]),
+    );
+    assert.equal(defaults.vh_band, undefined);
+    assert.equal(
+      dualPolRgb(vv, vh, { ...defaults, units: "db" }).raster.bands[1][0],
+      raster.bands[1][0],
+    );
+    assert.throws(() => dualPolRgb(vv, vh, { vh_band: 2 }), /band/i);
   });
 
   it("maps water with a single-date threshold", () => {
@@ -374,6 +386,7 @@ describe("runRasterToolClientAsync", () => {
       type: "name",
       properties: { name: "urn:ogc:def:crs:EPSG::32617" },
     });
+    assert.ok(result.wgs84);
     const [lon, lat] = (result.wgs84.features[0].geometry as Polygon).coordinates[0][0];
     assert.ok(lon > -81.1 && lon < -80.9, `lon ${lon}`);
     assert.ok(lat > 37 && lat < 37.1, `lat ${lat}`);

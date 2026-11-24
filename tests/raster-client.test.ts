@@ -665,6 +665,40 @@ describe("client-raster-inputs path parameters", () => {
 });
 
 describe("client-raster-inputs helper", () => {
+  it("reserves all RGB and preserved output bands even without secondary files", async () => {
+    const { loadClientAdditionalRasters, clientRasterOutputBands } =
+      await import("../apps/geolibre-desktop/src/lib/client-raster-inputs");
+    const primary = { width: 4096, height: 8192, bands: [new Float32Array(0)] };
+    let reads = 0;
+    const deps = {
+      outputBands: 3,
+      estimateBytes: async () => 4096 * 8192 * 4,
+      readRaster: async () => {
+        reads += 1;
+        return makeRaster([[1]], 1, 1);
+      },
+    };
+    await assert.rejects(
+      loadClientAdditionalRasters(
+        primary,
+        { vh_path: { name: "vh.tif", bytes: new ArrayBuffer(0) } },
+        deps,
+      ),
+      /COMBINED_TOO_LARGE/,
+    );
+    await assert.rejects(
+      loadClientAdditionalRasters(
+        { ...primary, bands: [...primary.bands, ...primary.bands] },
+        {},
+        deps,
+      ),
+      /COMBINED_TOO_LARGE/,
+    );
+    assert.equal(reads, 0);
+    assert.equal(clientRasterOutputBands("sar-rgb", 2), 3);
+    assert.equal(clientRasterOutputBands("speckle-filter", 4), 4);
+    assert.equal(clientRasterOutputBands("raster-calc", 4), 1);
+  });
   it("maps secondary parameter ids, omits cleared inputs, and enforces combined memory budget", async () => {
     const {
       ClientRasterInputError,

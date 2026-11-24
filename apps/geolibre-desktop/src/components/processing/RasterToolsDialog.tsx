@@ -1,4 +1,4 @@
-import { useAppStore, useLayersWhen } from "@geolibre/core";
+import { useAppCapability, useAppStore, useLayersWhen } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { addRasterToMap } from "@geolibre/plugins";
@@ -61,6 +61,7 @@ import {
   saveBinaryFileWithFallback,
 } from "../../lib/tauri-io";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
+import { isDesktopRuntime } from "../../lib/is-mobile";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
 import {
   beginProcessingRun,
@@ -71,6 +72,7 @@ import { createAppAPI } from "../../hooks/usePlugins";
 import {
   ClientRasterInputError,
   clientInputForParam,
+  clientRasterOutputBands,
   parseGeoJsonBytes,
   loadClientAdditionalRasters,
   omitClientSecondaryInput,
@@ -133,6 +135,22 @@ interface RasterToolsDialogProps {
   mapControllerRef: RefObject<MapEngine | null>;
 }
 
+/** Read current privileges at execution time, including stale UI handlers. */
+function sidecarRestriction(
+  platformAvailable: boolean,
+):
+  | "toolbar.rasterTool.processingRestricted"
+  | "toolbar.rasterTool.sidecarRestricted"
+  | "toolbar.rasterTool.needsDesktopSidecar"
+  | "masBuild.unavailable"
+  | null {
+  const privileges = useAppStore.getState().capabilities.privileges;
+  if (!privileges.includes("processing:run")) return "toolbar.rasterTool.processingRestricted";
+  if (!platformAvailable)
+    return IS_MAS_BUILD ? "masBuild.unavailable" : "toolbar.rasterTool.needsDesktopSidecar";
+  return privileges.includes("processing:sidecar") ? null : "toolbar.rasterTool.sidecarRestricted";
+}
+
 export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps): ReactElement {
   const { t } = useTranslation();
   const openTool = useAppStore((s) => s.ui.rasterToolOpen);
@@ -148,7 +166,10 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   // Whether this build can run the sidecar engine: desktop, except the Mac App
   // Store build, whose App Sandbox forbids the sidecar process. The client
   // (in-browser) engine keeps working either way.
-  const desktopServer = desktop && !IS_MAS_BUILD;
+  const desktopServer = isDesktopRuntime() && !IS_MAS_BUILD;
+  const processingCap = useAppCapability("processing:run");
+  const sidecarCap = useAppCapability("processing:sidecar");
+  const sidecarAllowed = desktopServer && processingCap.granted && sidecarCap.granted;
   const [selectedId, setSelectedId] = useState<string>(openTool ?? RASTER_TOOLS[0].id);
   const [inputPath, setInputPath] = useState("");
   const [outputPath, setOutputPath] = useState("");
@@ -181,7 +202,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
 
   // Client-engine state. The browser fallback reads a GeoTIFF into memory,
   // computes a new raster, adds it to the map, and offers a download.
-  const [engine, setEngine] = useState<RasterEngine>(desktopServer ? "sidecar" : "client");
+  const [engine, setEngine] = useState<RasterEngine>(sidecarAllowed ? "sidecar" : "client");
   const [clientInput, setClientInput] = useState<{
     name: string;
     bytes: ArrayBuffer;
@@ -214,14 +235,13 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   }, [openTool]);
 
   const checkRuntime = useCallback(async () => {
-    if (!desktopServer) {
+    const restriction = sidecarRestriction(desktopServer);
+    if (restriction) {
       // Raster tools' sidecar engine cannot run in a pure web build (no real
       // file paths) or in the Mac App Store build (no sidecar process); only
       // the client engine works there.
       setRuntimeAvailable(false);
-      setRuntimeMessage(
-        IS_MAS_BUILD ? t("masBuild.unavailable") : t("toolbar.rasterTool.needsDesktopSidecar"),
-      );
+      setRuntimeMessage(t(restriction));
       return;
     }
     setRuntimeAvailable(null);
@@ -234,7 +254,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       setRuntimeAvailable(false);
       setRuntimeMessage(err instanceof Error ? err.message : t("toolbar.rasterTool.errorConnect"));
     }
-  }, [desktopServer, t]);
+  }, [desktopServer, processingCap.granted, sidecarCap.granted, t]);
 
   // Reset per-tool state whenever the dialog opens or the selected tool changes.
   // Also reset the engine here (not only on tool change) so reopening the dialog
@@ -256,8 +276,8 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     setClientLog([]);
     setClientResult(null);
     setClientRunning(false);
-    setEngine(tool.supportsClient && (tool.clientOnly || !desktopServer) ? "client" : "sidecar");
-  }, [open, tool, desktopServer]);
+    setEngine(tool.supportsClient && (tool.clientOnly || !sidecarAllowed) ? "client" : "sidecar");
+  }, [open, tool, sidecarAllowed]);
 
   // Pre-fill from a pending History re-run once the requested tool is selected.
   // Declared after the reset effect above so the recorded parameters win over
@@ -432,6 +452,11 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   );
 
   const startServer = useCallback(async () => {
+    const restriction = sidecarRestriction(desktopServer);
+    if (restriction) {
+      setError(t(restriction));
+      return;
+    }
     setStartingServer(true);
     setError(null);
     try {
@@ -442,7 +467,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     } finally {
       setStartingServer(false);
     }
-  }, [checkRuntime]);
+  }, [checkRuntime, desktopServer, t]);
 
   // Validate required operation parameters. A hidden parameter (e.g. an IDW
   // knob while kriging is selected) is skipped. Returns an error string or null.
@@ -563,6 +588,11 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
 
   const runSidecar = useCallback(async () => {
     setError(null);
+    const restriction = sidecarRestriction(desktopServer);
+    if (restriction) {
+      setError(t(restriction));
+      return;
+    }
     if (!inputPath.trim()) {
       setError("Choose an input file.");
       return;
@@ -621,10 +651,14 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       tracker.finish("error", message);
       setError(message);
     }
-  }, [tool, inputPath, outputPath, params, validateParams, t]);
+  }, [tool, inputPath, outputPath, params, validateParams, desktopServer, t]);
 
   const runClient = useCallback(async () => {
     setError(null);
+    if (!useAppStore.getState().capabilities.privileges.includes("processing:run")) {
+      setError(t("toolbar.rasterTool.processingRestricted"));
+      return;
+    }
     setClientResult(null);
     if (!clientInput) {
       setError(
@@ -703,6 +737,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       // images), memory-checked together with the primary before decoding.
       const additionalInputs = raster
         ? await loadClientAdditionalRasters(raster, clientAdditionalInputs, {
+            outputBands: clientRasterOutputBands(tool.id, raster.bands.length),
             expression:
               tool.id === "raster-calc" && typeof params.expression === "string"
                 ? params.expression
@@ -733,9 +768,11 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
           bytes: new TextEncoder().encode(text).buffer as ArrayBuffer,
           kind: "vector",
         });
-        addGeoJsonLayer(outName.replace(/\.(geo)?json$/i, ""), run.wgs84);
-        setClientLog((prev) => [...prev, t("toolbar.rasterTool.addedToMap", { name: outName })]);
-        tracker.addOutputLayer(outName);
+        if (run.wgs84) {
+          addGeoJsonLayer(outName.replace(/\.(geo)?json$/i, ""), run.wgs84);
+          setClientLog((prev) => [...prev, t("toolbar.rasterTool.addedToMap", { name: outName })]);
+          tracker.addOutputLayer(outName);
+        }
         tracker.finish("success");
         return;
       }
@@ -795,7 +832,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       if (isStale()) return;
       const message =
         err instanceof ClientRasterInputError && err.code === "COMBINED_TOO_LARGE"
-          ? t("toolbar.rasterTool.combinedInputsTooLarge")
+          ? t("toolbar.rasterTool.clientMemoryLimit")
           : err instanceof Error
             ? err.message
             : t("toolbar.rasterTool.runError");
@@ -918,12 +955,17 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                 <Label className="flex items-center gap-1.5 text-xs">
                   <Server className="h-3.5 w-3.5" /> {t("toolbar.rasterTool.engine")}
                 </Label>
-                <Select value={engine} onChange={(e) => setEngine(e.target.value as RasterEngine)}>
+                <Select
+                  value={engine}
+                  onChange={(e) =>
+                    setEngine(e.target.value === "sidecar" && sidecarAllowed ? "sidecar" : "client")
+                  }
+                >
                   <option value="client">{t("toolbar.rasterTool.engineClient")}</option>
                   {/* The Mac App Store build has no sidecar at all, so the
                       option is dropped rather than shown disabled. */}
                   {!IS_MAS_BUILD && (
-                    <option value="sidecar" disabled={!desktop}>
+                    <option value="sidecar" disabled={!sidecarAllowed}>
                       {t("toolbar.rasterTool.engineSidecar")}
                     </option>
                   )}
@@ -942,7 +984,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                   {runtimeMessage}
                 </p>
-                {desktopServer && (
+                {sidecarAllowed && (
                   <Button
                     type="button"
                     variant="outline"
@@ -1102,6 +1144,8 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                 onClick={() => void handleRun()}
                 disabled={
                   running ||
+                  !processingCap.granted ||
+                  (engine === "sidecar" && !sidecarAllowed) ||
                   (engine === "sidecar" && runtimeAvailable !== true) ||
                   (engine === "client" && !clientInput)
                 }

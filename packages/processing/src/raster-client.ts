@@ -15,6 +15,7 @@ import {
   geojsonEpsg,
   mapGeometry,
   rasterCrsDefinition,
+  rasterEpsg,
 } from "./raster-geo";
 import { interpolatePoints } from "./raster-interpolate";
 import { dualPolRgb, floodMap, sarDbConvert, speckleFilter } from "./raster-sar";
@@ -1016,8 +1017,8 @@ export type ClientToolResult =
       kind: "vector";
       /** The GeoJSON as the sidecar writes it (source CRS, legacy `crs` member). */
       geojson: FeatureCollection;
-      /** The same features in WGS84, ready for the map. */
-      wgs84: FeatureCollection;
+      /** The same features in WGS84, or null for an unreferenced download. */
+      wgs84: FeatureCollection | null;
       messages: string[];
     };
 
@@ -1104,14 +1105,26 @@ export async function runRasterToolClientAsync(
   };
   const vectorResult = async (
     geojson: FeatureCollection,
-    definition: string,
+    definition: string | null,
     extra: string[],
+    exportWgs84 = false,
   ): Promise<ClientToolResult> => {
     messages.push(...extra, `Computed "${toolId}" in the browser.`);
+    const wgs84 = definition ? await toWgs84(geojson, definition) : null;
+    const download =
+      exportWgs84 && wgs84 ? wgs84 : definition ? geojson : { ...geojson, crs: null };
+    if (!definition)
+      messages.push(
+        "The raster has no CRS. The vector download retains unreferenced coordinates and is not added to the map.",
+      );
+    else if (exportWgs84)
+      messages.push(
+        "The source uses a custom CRS. The vector download is transformed to WGS84 (EPSG:4326).",
+      );
     return {
       kind: "vector",
-      geojson,
-      wgs84: await toWgs84(geojson, definition),
+      geojson: download,
+      wgs84,
       messages,
     };
   };
@@ -1154,11 +1167,21 @@ export async function runRasterToolClientAsync(
     case "polygonize":
     case "contour": {
       const raster = requireRaster(inputs, toolId);
+      // Resolve a declared CRS before computing; unknown image coordinates
+      // remain useful for download but must not be placed on a geographic map.
+      const definition = Object.keys(raster.geoKeys ?? {}).length
+        ? await rasterCrsDefinition(raster, toolId)
+        : null;
       const out =
         toolId === "polygonize"
           ? polygonizeRaster(raster, p as never)
           : contourRaster(raster, p as never);
-      return vectorResult(out.geojson, await rasterCrsDefinition(raster, toolId), out.messages);
+      return vectorResult(
+        out.geojson,
+        definition,
+        out.messages,
+        definition !== null && rasterEpsg(raster) === null,
+      );
     }
     case "zonal": {
       const zones = requireVector(inputs, "zones_path", "zones");

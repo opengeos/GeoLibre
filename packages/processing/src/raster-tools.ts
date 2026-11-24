@@ -1058,11 +1058,11 @@ export const dualPolRgbTool: RasterTool = {
       id: "vh_band",
       label: "VH band",
       type: "number",
-      default: 2,
       min: 1,
       max: 99,
       step: 1,
-      description: "Band of the VH raster, or of the input when no VH raster is chosen.",
+      description:
+        "Leave blank for band 1 of a separate VH raster, or band 2 of the stacked input. Enter a band number to override.",
     },
     {
       id: "vv_min",

@@ -7,6 +7,38 @@ const { RasterToolsDialog } =
   await import("../apps/geolibre-desktop/src/components/processing/RasterToolsDialog");
 
 describe("Raster tools browser inputs", () => {
+  it("keeps sidecar execution disabled when switching from SAR to a classic tool without permission", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+    useAppStore.getState().revokeAppPrivilege("processing:sidecar");
+    try {
+      useAppStore.getState().setRasterToolOpen("sar-db");
+      render(createElement(RasterToolsDialog, { mapControllerRef: { current: null } }));
+      fireEvent.click(
+        await screen.findByRole("button", { name: i18n.t("toolbar.rasterTool.reproject") }),
+      );
+      const option = await screen.findByRole("option", {
+        name: i18n.t("toolbar.rasterTool.engineSidecar"),
+      });
+      assert.equal((option as HTMLOptionElement).disabled, true);
+      await waitFor(() =>
+        assert.equal(
+          (
+            screen.getByRole("option", {
+              name: i18n.t("toolbar.rasterTool.engineClient"),
+            }) as HTMLOptionElement
+          ).selected,
+          true,
+        ),
+      );
+      assert.equal(
+        screen.queryByRole("button", { name: i18n.t("toolbar.rasterTool.startServer") }),
+        null,
+      );
+    } finally {
+      Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+      useAppStore.getState().resetAppCapabilities();
+    }
+  });
   it("asks for GeoJSON zones alongside a GeoTIFF raster", async () => {
     useAppStore.getState().setRasterToolOpen("zonal");
     render(createElement(RasterToolsDialog, { mapControllerRef: { current: null } }));
