@@ -80,7 +80,8 @@ import { AndroidBluetoothControls, nmeaErrorText } from "./GpsBluetoothReceiverC
 import { NtripControls, useNtripCorrections } from "./GpsNtripControls";
 import { createGpsOverlay, type GpsOverlay } from "../../lib/gps-overlay";
 import { engineMarkerMap } from "../../lib/engine-style-map";
-import { createAnnotationMarker, type AnnotationMarker } from "@geolibre/plugins";
+import { createAnnotationMarker } from "@geolibre/plugins/annotation-marker";
+import { type AnnotationMarker } from "@geolibre/plugins";
 import { appendDiagnostic, formatUnknown, type DiagnosticLevel } from "../../lib/diagnostics";
 
 /**

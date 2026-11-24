@@ -1,3 +1,4 @@
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
   DEFAULT_TILES_BASE_URL,
@@ -349,15 +350,14 @@ function releaseControl(): void {
 }
 
 export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
-  id: "maplibre-gl-overture-maps",
-  name: "Overture Maps",
-  version: "0.2.0",
+  ...builtInPluginProperties("maplibre-gl-overture-maps"),
+
   // The control only touches the Style Spec surface both 2D engines share
   // (sources, layers, paint, `queryRenderedFeatures`, click and style events);
   // its two MapLibre-specific pieces, the `pmtiles://` protocol and the
   // inspection popup class, are swapped through options on a Mapbox host (see
   // `engineOvertureOptions`).
-  engines: ["maplibre", "mapbox"],
+
   activate: (app: GeoLibreAppAPI) => {
     if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     // A Mapbox host without the mapbox-gl namespace cannot build the control.

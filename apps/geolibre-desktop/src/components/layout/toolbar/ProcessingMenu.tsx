@@ -1,5 +1,5 @@
 import { type NetworkToolKind, useAppCapability, useAppStore } from "@geolibre/core";
-import { isEarthEngineAvailable } from "@geolibre/plugins";
+import { isEarthEngineAvailable } from "@geolibre/plugins/earth-engine-auth";
 import {
   Button,
   DropdownMenu,

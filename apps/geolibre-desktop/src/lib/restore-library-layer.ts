@@ -20,18 +20,21 @@ import {
 } from "@geolibre/core";
 import {
   ADOPTED_VECTOR_SOURCE_KIND,
-  LIDAR_SOURCE_KIND,
-  PLANETARY_COMPUTER_SOURCE_KIND,
-  RASTER_SOURCE_KIND,
-  restoreLidarLayers,
-  restorePlanetaryComputerLayers,
-  restoreRasterLayers,
-  restoreThreeDTilesLayers,
-  restoreVectorLayers,
-  THREE_D_TILES_SOURCE_KIND,
   VECTOR_SOURCE_KIND,
-  type GeoLibreAppAPI,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/vector-layer-sync";
+import { LIDAR_SOURCE_KIND, restoreLidarLayers } from "@geolibre/plugins/maplibre-components";
+import {
+  PLANETARY_COMPUTER_SOURCE_KIND,
+  restorePlanetaryComputerLayers,
+} from "@geolibre/plugins/maplibre-planetary-computer";
+import { RASTER_SOURCE_KIND } from "@geolibre/plugins/raster-symbology-texture";
+import { restoreRasterLayers } from "@geolibre/plugins/maplibre-raster";
+import {
+  restoreThreeDTilesLayers,
+  THREE_D_TILES_SOURCE_KIND,
+} from "@geolibre/plugins/maplibre-3d-tiles";
+import { restoreVectorLayers } from "@geolibre/plugins/maplibre-vector";
+import { type GeoLibreAppAPI } from "@geolibre/plugins";
 import { notify } from "./notify";
 
 /**

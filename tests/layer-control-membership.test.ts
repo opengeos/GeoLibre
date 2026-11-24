@@ -8,6 +8,7 @@ import {
   type LayerControlHostAdapter,
 } from "../packages/map/src/layer-control-host";
 import { geojsonLayer } from "./helpers/layer-fixtures";
+import { MapController } from "../packages/map/src/map-controller";
 
 it("lists all 85 project layers before any native style layer is mounted", () => {
   const layers = Array.from({ length: 85 }, (_, index) =>
@@ -96,6 +97,13 @@ it("mounts one row per project layer, mapped or not, top-most first", () => {
     const host = new LayerControlHost(adapter);
     assert.equal(host.add("top-right"), true);
     assert.ok(mounted);
+    const originalControl = mounted;
+    // The engine mounts this control before lazy default-plugin activation.
+    // Enabling it again must report success without creating a second control.
+    const controller = new MapController();
+    Object.assign(controller, { map, layerControlHost: host });
+    assert.equal(controller.setBuiltInControlVisible("layer-control", true), true);
+    assert.equal(mounted, originalControl);
     const rows = Array.from(container.querySelectorAll(".layer-control-item"))
       .map((item) => item.getAttribute("data-layer-id"))
       .filter((id) => id !== "Background");

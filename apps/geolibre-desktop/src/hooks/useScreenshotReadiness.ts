@@ -1,11 +1,9 @@
 import { useEffect, type RefObject } from "react";
 import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import {
-  getRasterLoadState,
-  getSharedDeckLoadState,
-  getSwipeRasterLoadState,
-} from "@geolibre/plugins";
+import { getRasterLoadState } from "@geolibre/plugins/maplibre-raster";
+import { getSharedDeckLoadState } from "@geolibre/plugins/shared-deck-overlay";
+import { getSwipeRasterLoadState } from "@geolibre/plugins/maplibre-swipe";
 import { inspectScreenshotLayers, screenshotReadinessEnabled } from "../lib/screenshot-readiness";
 
 /** Opt-in DOM contract for browser automation; adds no pixels to the screenshot. */

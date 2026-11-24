@@ -7,7 +7,7 @@
  */
 
 import type { GeoLibreLayer } from "@geolibre/core";
-import { isUnsavableLocalRaster } from "@geolibre/plugins";
+import { isUnsavableLocalRaster } from "@geolibre/plugins/raster-layer-sync";
 import i18next from "i18next";
 import { notify } from "./notify";
 import { isTauri } from "./is-tauri";

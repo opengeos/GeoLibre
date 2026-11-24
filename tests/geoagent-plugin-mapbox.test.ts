@@ -1,14 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { builtInPluginMetadata } from "../packages/plugins/src/builtin-plugin-metadata";
 import { geoAgentMapEngine } from "../packages/plugins/src/plugins/geoagent-map-engine";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 
 // The plugin's entry module pulls the Earth Engine browser client in at import
-// time, so its declaration is read off the source (as the Mapbox web-service
-// suite already does for this plugin) while the engine resolver — which has no
-// such dependency and lives in its own module for exactly this reason — is
-// imported and exercised directly.
+// time, so its capabilities come from the pure catalog. The engine resolver
+// has no such dependency and is imported and exercised directly.
 const SOURCE = readFileSync(
   new URL("../packages/plugins/src/plugins/maplibre-geoagent.ts", import.meta.url),
   "utf8",
@@ -16,7 +15,7 @@ const SOURCE = readFileSync(
 
 describe("maplibreGeoAgentPlugin", () => {
   it("declares both 2D engines", () => {
-    assert.match(SOURCE, /engines:\s*\["maplibre",\s*"mapbox"\]/);
+    assert.deepEqual(builtInPluginMetadata("maplibre-gl-geoagent").engines, ["maplibre", "mapbox"]);
   });
 
   it("hands the control the engine, so its tools follow the host", () => {

@@ -12,19 +12,23 @@ import {
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
   addArcGISRelatedRecord,
-  arcGISRelatedAttachmentSupport,
   arcGISRelatedEditSupport,
-  arcGISContingencyChecks,
-  arcGISContingentChoices,
   arcGISRelatedFields,
-  blocksArcGISEdit,
   arcGISRelatedNewRecordDefaults,
   arcGISRelatedParentKey,
   deleteArcGISRelatedRecord,
   fetchArcGISRelatedTableInfo,
-  LocalizedError,
   queryArcGISRelatedRecords,
   updateArcGISRelatedRecord,
+} from "@geolibre/plugins/arcgis-related-records";
+import { arcGISRelatedAttachmentSupport } from "@geolibre/plugins/arcgis-attachments";
+import {
+  arcGISContingencyChecks,
+  arcGISContingentChoices,
+  blocksArcGISEdit,
+} from "@geolibre/plugins/arcgis-contingent-values";
+import { LocalizedError } from "@geolibre/plugins/runtime";
+import {
   type ArcGISContingencyCheck,
   type ArcGISRelatedField,
   type ArcGISRelatedRecord,

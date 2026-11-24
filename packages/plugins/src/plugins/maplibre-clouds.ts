@@ -1,3 +1,6 @@
+import { CLOUDS_PLUGIN_ID } from "../plugin-ids";
+export { CLOUDS_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { createWeatherLayer, type WeatherAnimationState, type WeatherFrame } from "./weather-layer";
 
@@ -10,8 +13,6 @@ import { createWeatherLayer, type WeatherAnimationState, type WeatherFrame } fro
  * store-layer + time-scrub engine in {@link createWeatherLayer}. VIIRS is a
  * once-daily mosaic, so scrubbing plays cloud evolution day by day.
  */
-
-export const CLOUDS_PLUGIN_ID = "maplibre-gl-clouds";
 
 /** Marks the store layer as the one this plugin owns (for adopt-on-restore). */
 const CLOUDS_LAYER_FLAG = "cloudsLayer";
@@ -108,14 +109,13 @@ export function subscribeClouds(listener: () => void): () => void {
 }
 
 export const maplibreCloudsPlugin: GeoLibrePlugin = {
-  id: CLOUDS_PLUGIN_ID,
-  name: "Clouds",
-  version: "0.3.0",
+  ...builtInPluginProperties("maplibre-gl-clouds"),
+
   // The overlay is a store tile layer (`addTileLayer`), which every renderer
   // draws; the 2D style map is only used for an instant frame swap and tile
   // error watching, and the controller does without it on the globe and on
   // ArcGIS.
-  engines: ["maplibre", "cesium", "mapbox", "arcgis"],
+
   activate: (app: GeoLibreAppAPI) => controller.activate(app),
   deactivate: () => controller.deactivate(),
 };

@@ -1,12 +1,14 @@
 import { shouldZoomToNewLayers } from "@geolibre/core";
+import { createDeckVizStoreLayer } from "@geolibre/plugins/deckgl-viz/store-layer";
 import {
-  createDeckVizStoreLayer,
   DECK_VIZ_CATEGORY_LABELS,
   DEFAULT_DECK_VIZ_SCENEGRAPH,
   DEFAULT_DECK_VIZ_STYLE,
-  ensureMercatorProjection,
   getDeckVizLayerDef,
   listDeckVizLayerDefs,
+} from "@geolibre/plugins/deckgl-viz/registry";
+import { ensureMercatorProjection } from "@geolibre/plugins/map-projection-utils";
+import {
   type DeckVizCategory,
   type DeckVizFieldMapping,
   type DeckVizScenegraphConfig,

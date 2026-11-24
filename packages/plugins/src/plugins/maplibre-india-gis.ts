@@ -1,3 +1,6 @@
+import { INDIA_GIS_PLUGIN_ID } from "../plugin-ids";
+export { INDIA_GIS_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-metadata";
 import type { GeoLibrePlugin } from "../types";
 import {
   createArcGisHubPlugin,
@@ -5,8 +8,6 @@ import {
   type ArcGisHubLabels,
 } from "./maplibre-arcgis-hub";
 import { INDIA_GIS_CATALOGS } from "./india-gis-catalogs";
-
-export const INDIA_GIS_PLUGIN_ID = "geolibre-india-gis";
 
 export const DEFAULT_INDIA_GIS_LABELS: ArcGisHubLabels = {
   ...DEFAULT_ARCGIS_HUB_LABELS,
@@ -22,7 +23,7 @@ export const DEFAULT_INDIA_GIS_LABELS: ArcGisHubLabels = {
 
 const indiaGis = createArcGisHubPlugin({
   id: INDIA_GIS_PLUGIN_ID,
-  name: "India GIS",
+  name: builtInPluginMetadata("geolibre-india-gis").name,
   defaultLabels: DEFAULT_INDIA_GIS_LABELS,
   catalogSets: INDIA_GIS_CATALOGS,
   defaultCatalogSetId: "national",
@@ -33,7 +34,10 @@ const indiaGis = createArcGisHubPlugin({
   filenameFallback: "india-gis-data",
 });
 
-export const maplibreIndiaGisPlugin: GeoLibrePlugin = indiaGis.plugin;
+export const maplibreIndiaGisPlugin: GeoLibrePlugin = defineBuiltInPlugin(
+  "geolibre-india-gis",
+  indiaGis.plugin,
+);
 export const setIndiaGisLabels = indiaGis.setLabels;
 
 export default maplibreIndiaGisPlugin;

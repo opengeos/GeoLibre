@@ -1,17 +1,14 @@
 import { interpolateColors, parseHexColor, type GeoLibreLayer } from "@geolibre/core";
-import {
-  colormapColors,
-  composeColormappedImage,
-  warmColormapColors,
-  type LocalNetcdfImage,
-} from "@geolibre/plugins";
+import { colormapColors, warmColormapColors } from "@geolibre/plugins/colormap-colors";
+import { composeColormappedImage } from "@geolibre/plugins/local-netcdf";
+import { type LocalNetcdfImage } from "@geolibre/plugins";
 import type { NetcdfImageSource } from "./netcdf-layer-registry";
 
 export { NETCDF_IMAGE_SOURCE_KIND } from "@geolibre/core";
 // Re-exported so callers reach one module for everything about these layers.
-export { gridPixelAt, gridValueAt, type GridPixel } from "@geolibre/plugins";
+export { gridPixelAt, gridValueAt, type GridPixel } from "@geolibre/plugins/local-netcdf";
 // The retained grids live in their own module, which stays clear of the plugin
-// barrel this one needs for the colormapper; re-exported here so a caller that
+// colormapper this one needs; re-exported here so a caller that
 // wants both still reaches for one import.
 export {
   getNetcdfImageSource,

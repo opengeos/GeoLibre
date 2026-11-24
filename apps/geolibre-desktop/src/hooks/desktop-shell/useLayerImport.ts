@@ -6,12 +6,10 @@ import {
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { getLayerBounds } from "@geolibre/map";
-import {
-  addRasterToMap,
-  isRecoverableNonTiledRasterError,
-  setKmlFileImportHandler,
-  TIME_SLIDER_PLUGIN_ID,
-} from "@geolibre/plugins";
+import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
+import { isRecoverableNonTiledRasterError } from "@geolibre/plugins/non-tiled-raster-error";
+import { setKmlFileImportHandler } from "@geolibre/plugins/maplibre-vector";
+import { TIME_SLIDER_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import type { TFunction } from "i18next";
 import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect } from "react";
 import type { GeotaggedPhotoResult } from "../../lib/geotagged-photos";

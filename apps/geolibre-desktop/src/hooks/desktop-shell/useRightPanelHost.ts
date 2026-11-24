@@ -1,4 +1,4 @@
-import { getRightPanel } from "@geolibre/plugins";
+import { getRightPanel } from "@geolibre/plugins/runtime";
 import { notifyPanelRenderFailed } from "../../lib/panel-render-failure";
 import { useEffect, useState } from "react";
 import {

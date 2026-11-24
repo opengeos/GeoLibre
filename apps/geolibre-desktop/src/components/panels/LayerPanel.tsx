@@ -25,11 +25,11 @@ import {
   layerPanelGroupHeaders,
 } from "@geolibre/core";
 import type { EllipsoidId, GeoLibreLayer, LayerGroup } from "@geolibre/core";
+import { BASEMAP_CONTROL_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import {
-  BASEMAP_CONTROL_PLUGIN_ID,
   getTemporalLayersVersion,
   subscribeTemporalLayers,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/temporal-layers";
 import { arcgisSceneMode, rendererCapabilities, type MapEngine } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { useSideSheet } from "../../hooks/useSideSheet";

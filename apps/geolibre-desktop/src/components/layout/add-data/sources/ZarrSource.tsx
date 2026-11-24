@@ -1,6 +1,6 @@
 import { Input, Label, Select } from "@geolibre/ui";
 import { useAppStore, VECTOR_COLOR_RAMPS } from "@geolibre/core";
-import { addZarrRasterLayer } from "@geolibre/plugins";
+import { addZarrRasterLayer } from "@geolibre/plugins/maplibre-components";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../../../hooks/usePlugins";

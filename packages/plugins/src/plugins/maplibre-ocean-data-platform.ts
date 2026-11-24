@@ -1,3 +1,6 @@
+import { OCEAN_DATA_PLATFORM_PLUGIN_ID } from "../plugin-ids";
+export { OCEAN_DATA_PLATFORM_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { Feature, FeatureCollection } from "geojson";
 import { createLayerId } from "../layer-ids";
@@ -24,7 +27,6 @@ import {
 import { getControlMap } from "./style-map";
 import { createPluginTranslator } from "../plugin-i18n";
 
-export const OCEAN_DATA_PLATFORM_PLUGIN_ID = "geolibre-ocean-data-platform";
 const PANEL_ID = OCEAN_DATA_PLATFORM_PLUGIN_ID;
 
 /** `metadata.sourceKind` of the vector tile layers this plugin adds. */
@@ -827,12 +829,11 @@ function mountPanel(container: HTMLElement): void {
  * file through OGC API Features.
  */
 export const maplibreOceanDataPlatformPlugin: GeoLibrePlugin = {
-  id: OCEAN_DATA_PLATFORM_PLUGIN_ID,
-  name: "Ocean Data Platform",
-  version: "0.1.0",
+  ...builtInPluginProperties("geolibre-ocean-data-platform"),
+
   // Everything it adds is a vector-tiles or GeoJSON store layer, which every
   // engine hosts (the globe drapes vector tiles).
-  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
+
   activate: (app) => {
     appRef = app;
     unregisterPanel =

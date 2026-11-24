@@ -1,3 +1,6 @@
+import { IGN_LIDAR_HD_PLUGIN_ID } from "../plugin-ids";
+export { IGN_LIDAR_HD_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { Feature, FeatureCollection } from "geojson";
@@ -17,7 +20,6 @@ import {
 import { getControlMap } from "./style-map";
 import { createPluginTranslator } from "../plugin-i18n";
 
-export const IGN_LIDAR_HD_PLUGIN_ID = "geolibre-ign-lidar-hd";
 const PANEL_ID = IGN_LIDAR_HD_PLUGIN_ID;
 
 // A plugin-owned native layer (not app.addGeoJsonLayer) so map clicks can be
@@ -874,12 +876,11 @@ function mountPanel(container: HTMLElement, app: GeoLibreAppAPI): void {
 /** Search the IGN WFS for LiDAR HD tile coverage, add tiles to
  * the map as point clouds, or download their COPC LAZ files directly from IGN. */
 export const maplibreIgnLidarHdPlugin: GeoLibrePlugin = {
-  id: IGN_LIDAR_HD_PLUGIN_ID,
-  name: "IGN LiDAR HD",
-  version: "0.1.0",
+  ...builtInPluginProperties("geolibre-ign-lidar-hd"),
+
   // Tiles are `lidar-url` store layers, which ArcGIS draws through its deck
   // overlay; the footprints go through the host's control map there.
-  engines: ["maplibre", "mapbox", "cesium", "arcgis"],
+
   activate: (app) => {
     unregisterPanel =
       app.registerRightPanel?.({

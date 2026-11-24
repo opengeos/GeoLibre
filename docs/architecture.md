@@ -33,6 +33,30 @@ flowchart LR
 | `@geolibre/collab-core` | Transport-neutral collaboration relay core (wire protocol, permissions, payload validators) shared by the `workers/collab` and `workers/collab-node` relays |
 | `geolibre-desktop`     | Shell layout, Tauri I/O, composition                                                           |
 
+## Plugin host boundaries
+
+`@geolibre/plugins/builtin-plugin-metadata` supplies built-in names, versions,
+capabilities, menu groups, and lifecycle flags without evaluating implementations.
+Stable plugin IDs live in `plugin-ids.ts`. Implementations use the same metadata
+through `builtInPluginProperties` or `defineBuiltInPlugin`.
+
+`@geolibre/plugins/builtin-plugins` owns the dynamic imports and shared module
+cache. Configure translated labels and host I/O with separate named channels via
+`configureBuiltInPluginModule`; updating a label channel preserves file savers and
+other setup on the same module. Failed imports or setup can be retried.
+`@geolibre/plugins/runtime` exposes registries and plugin contracts. App imports
+use that entry point or a specific helper entry point; the root SDK barrel
+retains its existing exports for consumers.
+
+`PluginManager.registerLazy` registers metadata immediately. Its adapter retains
+pending project settings and control positions for synchronous snapshots until
+the implementation can apply them. Restore generations and registration identity
+reject stale completions. Host panel actions use `runPluginHelper` to prepare
+saved settings and receive an app scope owned by the current project before
+calling implementation helpers. The import guard in
+`tests/builtin-plugin-loader.test.ts` checks that registries, metadata, and label
+hooks remain importable without implementations.
+
 ## State flow
 
 1. User adds data through the Add Data menu, the Tauri dialog, browser file picker, drag and drop, or a built-in plugin control.

@@ -1,4 +1,4 @@
-import { isTrustedPortalServiceUrl } from "@geolibre/plugins";
+import { isTrustedPortalServiceUrl } from "@geolibre/plugins/arcgis-portal-api";
 import { ARCGIS_ONLINE_PORTAL } from "./arcgis-oauth";
 
 /**

@@ -1,3 +1,6 @@
+import { SENTINEL2_EXPLORER_PLUGIN_ID } from "../plugin-ids";
+export { SENTINEL2_EXPLORER_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { useAppStore } from "@geolibre/core";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap, MapLayerMouseEvent } from "maplibre-gl";
@@ -44,7 +47,6 @@ import { getRasterLoadState } from "./maplibre-raster";
 import { getSharedDeckLoadState } from "./shared-deck-overlay";
 import { getStyleMap } from "./style-map";
 
-export const SENTINEL2_EXPLORER_PLUGIN_ID = "geolibre-sentinel2-explorer";
 const PANEL_ID = SENTINEL2_EXPLORER_PLUGIN_ID;
 
 // The MGRS choropleth, the hovered/selected tile outline, and the hovered
@@ -1725,12 +1727,11 @@ function mountPanel(container: HTMLElement): void {
  * the map from its Cloud-Optimized GeoTIFF.
  */
 export const maplibreSentinel2ExplorerPlugin: GeoLibrePlugin = {
-  id: SENTINEL2_EXPLORER_PLUGIN_ID,
-  name: "Sentinel-2 Explorer",
-  version: "0.1.0",
+  ...builtInPluginProperties("geolibre-sentinel2-explorer"),
+
   // The grid and outlines are Style Spec sources and layers, so both 2D
   // engines host them; scenes are COG store layers.
-  engines: ["maplibre", "mapbox"],
+
   activate: (app) => {
     appRef = app;
     registerSentinel2CompositeProtocol();

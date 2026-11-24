@@ -1,5 +1,5 @@
 import { type NetworkToolKind, useAppStore } from "@geolibre/core";
-import { DIRECTIONS_PLUGIN_ID, REVERSE_GEOCODE_PLUGIN_ID } from "@geolibre/plugins";
+import { DIRECTIONS_PLUGIN_ID, REVERSE_GEOCODE_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import { useState } from "react";
 import {
   hasReverseGeocodeConsent,

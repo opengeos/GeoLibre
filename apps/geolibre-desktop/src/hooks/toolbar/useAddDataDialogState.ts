@@ -7,7 +7,7 @@ import {
   type OpenAddDataPostgres,
   type OpenAddDataMssql,
 } from "../../components/layout/add-data/open-add-data";
-import { registerFileHandler } from "@geolibre/plugins";
+import { registerFileHandler } from "@geolibre/plugins/runtime";
 import { serviceUrlParameter, type ServiceUrlParameter } from "../../lib/data-url";
 import { GEOPDF_FILE_HANDLER } from "../../lib/geopdf/file-handler";
 import { masHidesDataSource } from "../../lib/mas-build";

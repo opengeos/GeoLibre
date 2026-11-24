@@ -1,3 +1,6 @@
+import { US_LOCAL_GIS_PLUGIN_ID } from "../plugin-ids";
+export { US_LOCAL_GIS_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-metadata";
 import type { GeoLibrePlugin } from "../types";
 import { ARCGIS_HUB_SEARCH_TYPES } from "./arcgis-hub-api";
 import {
@@ -6,8 +9,6 @@ import {
   type ArcGisHubLabels,
 } from "./maplibre-arcgis-hub";
 import { US_LOCAL_GIS_CATALOGS } from "./us-local-gis-catalogs";
-
-export const US_LOCAL_GIS_PLUGIN_ID = "geolibre-us-local-gis";
 
 // City and county portals publish orthoimagery and basemaps as map and image
 // services, which add as raster layers.
@@ -27,7 +28,7 @@ export const DEFAULT_US_LOCAL_GIS_LABELS: ArcGisHubLabels = {
 
 const usLocalGis = createArcGisHubPlugin({
   id: US_LOCAL_GIS_PLUGIN_ID,
-  name: "US Local GIS",
+  name: builtInPluginMetadata("geolibre-us-local-gis").name,
   defaultLabels: DEFAULT_US_LOCAL_GIS_LABELS,
   types: US_LOCAL_GIS_TYPES,
   catalogSets: US_LOCAL_GIS_CATALOGS,
@@ -38,7 +39,10 @@ const usLocalGis = createArcGisHubPlugin({
   filenameFallback: "local-gis-data",
 });
 
-export const maplibreUsLocalGisPlugin: GeoLibrePlugin = usLocalGis.plugin;
+export const maplibreUsLocalGisPlugin: GeoLibrePlugin = defineBuiltInPlugin(
+  "geolibre-us-local-gis",
+  usLocalGis.plugin,
+);
 export const setUsLocalGisLabels = usLocalGis.setLabels;
 
 export default maplibreUsLocalGisPlugin;

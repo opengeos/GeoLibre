@@ -12,7 +12,8 @@ import {
   type LabelStyle,
 } from "@geolibre/core";
 import { Button } from "@geolibre/ui";
-import { SKETCHES_SOURCE_KIND, TIME_SLIDER_SOURCE_KIND } from "@geolibre/plugins";
+import { SKETCHES_SOURCE_KIND } from "@geolibre/plugins/maplibre-geo-editor";
+import { TIME_SLIDER_SOURCE_KIND } from "@geolibre/plugins/maplibre-time-slider";
 import {
   arcgisRasterEffect,
   arcgisUnsupportedStyleSettings,

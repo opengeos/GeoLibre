@@ -41,23 +41,29 @@ import {
 } from "@geolibre/core";
 import {
   SKETCHES_SOURCE_KIND,
-  stripEditorProperties,
-  isInternalEditorProperty,
-  arcGISAttachmentObjectId,
-  arcGISAttachmentSupport,
-  arcGISAttributeConstraints,
-  blocksArcGISEdit,
-  type ArcGISContingencyCheck,
-  arcGISLayerHasPendingEdits,
-  arcGISRelatedParentObjectId,
-  arcGISRelationships,
-  getDuckDBLayerRows,
-  getVectorLayerGeoJSON,
   getGeometryEditTargetLayerId,
   subscribeGeometryEdit,
-  updateDuckDBLayerRows,
-  type DuckDBAttributeRow,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/maplibre-geo-editor";
+import {
+  stripEditorProperties,
+  isInternalEditorProperty,
+} from "@geolibre/plugins/geo-editor-view-import";
+import {
+  arcGISAttachmentObjectId,
+  arcGISAttachmentSupport,
+} from "@geolibre/plugins/arcgis-attachments";
+import {
+  arcGISAttributeConstraints,
+  arcGISLayerHasPendingEdits,
+} from "@geolibre/plugins/arcgis-layer";
+import { blocksArcGISEdit } from "@geolibre/plugins/arcgis-contingent-values";
+import { type ArcGISContingencyCheck, type DuckDBAttributeRow } from "@geolibre/plugins";
+import {
+  arcGISRelatedParentObjectId,
+  arcGISRelationships,
+} from "@geolibre/plugins/arcgis-related-records";
+import { getDuckDBLayerRows, updateDuckDBLayerRows } from "@geolibre/plugins/maplibre-duckdb";
+import { getVectorLayerGeoJSON } from "@geolibre/plugins/maplibre-vector";
 import type { MapEngine } from "@geolibre/map";
 import type { GeoJSONSource } from "maplibre-gl";
 import {

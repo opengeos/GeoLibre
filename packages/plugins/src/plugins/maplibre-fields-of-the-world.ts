@@ -1,3 +1,6 @@
+import { FIELDS_OF_THE_WORLD_PLUGIN_ID } from "../plugin-ids";
+export { FIELDS_OF_THE_WORLD_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { createPMTilesStoreLayer } from "@geolibre/map/pmtiles-layer";
@@ -42,7 +45,6 @@ import { type LonLatBbox, bboxRing, polygonFeature } from "./satellite-embedding
 import { getControlMap } from "./style-map";
 import { createPluginTranslator } from "../plugin-i18n";
 
-export const FIELDS_OF_THE_WORLD_PLUGIN_ID = "geolibre-fields-of-the-world";
 const PANEL_ID = FIELDS_OF_THE_WORLD_PLUGIN_ID;
 
 /** Most fields added to the map as one GeoJSON layer. */
@@ -1523,13 +1525,12 @@ function clearOverlays(app: GeoLibreAppAPI): void {
  * overlap it.
  */
 export const maplibreFieldsOfTheWorldPlugin: GeoLibrePlugin = {
-  id: FIELDS_OF_THE_WORLD_PLUGIN_ID,
-  name: "Fields of the World",
-  version: "0.2.0",
+  ...builtInPluginProperties("geolibre-fields-of-the-world"),
+
   // The field layers are PMTiles and GeoJSON store layers and the footprints
   // are Style Spec sources and layers, so both 2D engines host them, and the
   // host's control map draws them on ArcGIS.
-  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
+
   activate: (app) => {
     appRef = app;
     unregisterPanel =

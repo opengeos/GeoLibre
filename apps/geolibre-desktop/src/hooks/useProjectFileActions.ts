@@ -16,15 +16,13 @@ import {
   type GeoLibreLayer,
   type GeoLibreProject,
 } from "@geolibre/core";
-import {
-  addArcGISLayer,
-  addRasterToMap,
-  fetchPortalUser,
-  getGeometryEditTargetLayerId,
-  isRecoverableNonTiledRasterError,
-  materializeEmbeddableVectorLayers,
-  type ArcGISLayerOptions,
-} from "@geolibre/plugins";
+import { addArcGISLayer } from "@geolibre/plugins/arcgis-layer";
+import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
+import { fetchPortalUser } from "@geolibre/plugins/arcgis-portal-api";
+import { getGeometryEditTargetLayerId } from "@geolibre/plugins/maplibre-geo-editor";
+import { isRecoverableNonTiledRasterError } from "@geolibre/plugins/non-tiled-raster-error";
+import { materializeEmbeddableVectorLayers } from "@geolibre/plugins/maplibre-vector";
+import { type ArcGISLayerOptions } from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
 import { type FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { confirmDiscardAttributeDrafts } from "../lib/attribute-draft-guard";

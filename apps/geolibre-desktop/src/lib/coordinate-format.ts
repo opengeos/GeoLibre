@@ -22,7 +22,11 @@
 // Imported from the plugin's own subpath rather than the package barrel: the
 // barrel pulls in every plugin (Earth Engine among them), which a small
 // formatter has no business loading.
-import { formatEasting, formatNorthing, lngLatToUtm } from "@geolibre/plugins/maplibre-graticule";
+import {
+  formatEasting,
+  formatNorthing,
+  lngLatToUtm,
+} from "@geolibre/plugins/graticule-coordinates";
 import { lngLatToMgrs, mgrsToUsng } from "@geolibre/plugins/mgrs-reference";
 import { decimalToDdmAxis, decimalToDmsAxis } from "./dms";
 import { resolveEpsgProjection } from "@geolibre/map/epsg-proj4";

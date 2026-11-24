@@ -7,7 +7,8 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
-import { canEditLayerGeometry, isArcGISWritableLayer } from "@geolibre/plugins";
+import { canEditLayerGeometry } from "@geolibre/plugins/maplibre-geo-editor";
+import { isArcGISWritableLayer } from "@geolibre/plugins/arcgis-layer";
 import {
   ArrowDown,
   ArrowUp,

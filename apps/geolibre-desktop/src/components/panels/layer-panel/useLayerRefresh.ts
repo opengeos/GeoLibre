@@ -1,9 +1,12 @@
-import { arcGISLayerHasPendingEdits } from "@geolibre/plugins";
+import { arcGISLayerHasPendingEdits } from "@geolibre/plugins/arcgis-layer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createLayerSliceSelector, useAppStore, useLayerIds, useLayerSlices } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
-import { reloadVectorControlLayer, replayVectorControlLayerById } from "@geolibre/plugins";
+import {
+  reloadVectorControlLayer,
+  replayVectorControlLayerById,
+} from "@geolibre/plugins/maplibre-vector";
 import {
   getLayerRefreshConfig,
   getRefreshFailureLayerPatch,

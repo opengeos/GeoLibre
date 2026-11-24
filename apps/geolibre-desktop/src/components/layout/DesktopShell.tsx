@@ -3,13 +3,12 @@ import { useAppStore } from "@geolibre/core";
 import type { MapDiagnosticEvent, MapEngine } from "@geolibre/map";
 import { MapCanvas, rendererCapabilities } from "@geolibre/map";
 import { useTranslation } from "react-i18next";
+import { addRasterToMap, openRasterLayerPanel } from "@geolibre/plugins/maplibre-raster";
 import {
-  addRasterToMap,
   getGeometryEditTargetLayerId,
-  openRasterLayerPanel,
-  openRightPanel,
   subscribeGeometryEdit,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/maplibre-geo-editor";
+import { openRightPanel } from "@geolibre/plugins/runtime";
 import {
   Suspense,
   useCallback,

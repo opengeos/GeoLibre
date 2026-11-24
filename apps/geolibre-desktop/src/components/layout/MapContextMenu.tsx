@@ -1,6 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import { rendererCapabilities, type MapEngine } from "@geolibre/map";
-import { isGeoEditorUsingRightClick } from "@geolibre/plugins";
+import { isGeoEditorUsingRightClick } from "@geolibre/plugins/maplibre-geo-editor";
 import {
   DropdownMenu,
   DropdownMenuContent,

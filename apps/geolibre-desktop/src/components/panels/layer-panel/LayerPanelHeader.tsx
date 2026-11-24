@@ -2,7 +2,7 @@ import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { IDENTIFY_ALL_LAYERS_ID, PLANET_SWITCHER_OPTIONS, useAppStore } from "@geolibre/core";
 import type { EllipsoidId } from "@geolibre/core";
-import { BASEMAP_CONTROL_PLUGIN_ID, GEO_EDITOR_PLUGIN_ID } from "@geolibre/plugins";
+import { BASEMAP_CONTROL_PLUGIN_ID, GEO_EDITOR_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import type { MapEngine } from "@geolibre/map";
 import {
   Button,

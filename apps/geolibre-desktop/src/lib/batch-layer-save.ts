@@ -17,7 +17,7 @@ import {
   arcGISLayerHasPendingEdits,
   isArcGISWritableLayer,
   saveArcGISLayerEdits,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/arcgis-layer";
 import {
   fetchMssqlStatus,
   PostgisWriteRejectedError,

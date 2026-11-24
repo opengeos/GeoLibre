@@ -8,7 +8,10 @@
  */
 
 import { useAppCapability, useAppStore, useLayersWhen } from "@geolibre/core";
-import { getGeometryEditTargetLayerId, subscribeGeometryEdit } from "@geolibre/plugins";
+import {
+  getGeometryEditTargetLayerId,
+  subscribeGeometryEdit,
+} from "@geolibre/plugins/maplibre-geo-editor";
 import {
   Button,
   Dialog,

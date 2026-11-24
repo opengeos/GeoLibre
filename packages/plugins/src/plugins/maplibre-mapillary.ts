@@ -1,3 +1,6 @@
+import { MAPILLARY_PLUGIN_ID } from "../plugin-ids";
+export { MAPILLARY_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type {
   GeoJSONSource,
@@ -18,7 +21,6 @@ import { getStyleMap } from "./style-map";
 type MapillaryViewer = import("mapillary-js").Viewer;
 type MapillaryImage = import("mapillary-js").Image;
 
-export const MAPILLARY_PLUGIN_ID = "maplibre-gl-mapillary";
 const PANEL_ID = "geolibre-mapillary-viewer";
 
 const SOURCE_ID = "geolibre-mapillary-coverage";
@@ -774,12 +776,11 @@ const floatingPanelRegistration: GeoLibreFloatingPanelRegistration = {
 // ---------------------------------------------------------------------------
 
 export const maplibreMapillaryPlugin: GeoLibrePlugin = {
-  id: MAPILLARY_PLUGIN_ID,
-  name: "Mapillary",
-  version: "0.1.0",
+  ...builtInPluginProperties("maplibre-gl-mapillary"),
+
   // Coverage is a vector-tile source with style layers and the viewer is a
   // floating panel: nothing MapLibre-specific.
-  engines: ["maplibre", "mapbox"],
+
   activate: (app: GeoLibreAppAPI) => {
     const activeMap = getStyleMap(app);
     if (!activeMap) return false;

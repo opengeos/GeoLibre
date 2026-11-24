@@ -1,9 +1,7 @@
 import {
   COMPONENTS_PLUGIN_ID,
   DECK_VIZ_PLUGIN_ID,
-  DGGS_PLUGIN_IDS,
   DIRECTIONS_PLUGIN_ID,
-  type GeoLibreMapControlPosition,
   GRATICULE_PLUGIN_ID,
   LAYER_CONTROL_PLUGIN_ID,
   CLOUDS_PLUGIN_ID,
@@ -12,11 +10,10 @@ import {
   EFFECTS_PLUGIN_ID,
   ROUTE_ANIMATION_PLUGIN_ID,
   SUN_PLUGIN_ID,
-  WEB_SERVICE_PLUGIN_IDS,
-  type GeoLibreToolbarMenu,
-  isPluginEngineSupported,
-  resolveToolbarLabel,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/plugin-ids";
+import { DGGS_PLUGIN_IDS, WEB_SERVICE_PLUGIN_IDS } from "@geolibre/plugins/builtin-plugin-metadata";
+import { type GeoLibreMapControlPosition, type GeoLibreToolbarMenu } from "@geolibre/plugins";
+import { isPluginEngineSupported, resolveToolbarLabel } from "@geolibre/plugins/runtime";
 import { useAppStore } from "@geolibre/core";
 import {
   Button,

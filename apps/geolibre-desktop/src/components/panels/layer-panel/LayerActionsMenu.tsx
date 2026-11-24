@@ -19,16 +19,13 @@ import type {
   GeoLibreLayer,
   LayerGroup,
 } from "@geolibre/core";
-import {
-  canEditLayerGeometry,
-  getLayerTimeBinding,
-  getTemporalLayerAdapter,
-  isArcGISWritableLayer,
-  isEmbeddableLocalVectorLayer,
-  isTileVectorLayer,
-  RASTER_SOURCE_KIND,
-  SKETCHES_SOURCE_KIND,
-} from "@geolibre/plugins";
+import { canEditLayerGeometry, SKETCHES_SOURCE_KIND } from "@geolibre/plugins/maplibre-geo-editor";
+import { getLayerTimeBinding } from "@geolibre/plugins/maplibre-time-slider";
+import { getTemporalLayerAdapter } from "@geolibre/plugins/temporal-layers";
+import { isArcGISWritableLayer } from "@geolibre/plugins/arcgis-layer";
+import { isEmbeddableLocalVectorLayer } from "@geolibre/plugins/vector-layer-sync";
+import { isTileVectorLayer } from "@geolibre/plugins/time-slider-tile-sample";
+import { RASTER_SOURCE_KIND } from "@geolibre/plugins/raster-symbology-texture";
 import { startFeatureSelection, type MapEngine } from "@geolibre/map";
 import {
   DropdownMenuCheckboxItem,

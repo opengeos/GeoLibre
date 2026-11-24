@@ -8,12 +8,8 @@ import {
   ROUTE_FOLLOW_ZOOM_MAX,
   ROUTE_FOLLOW_ZOOM_MIN,
   ROUTE_MARKER_STYLES,
-  LocalizedError,
   RouteVideoUnsupportedError,
-  type RouteMarkerStyle,
   closeRouteAnimationPanel,
-  flattenToLine,
-  flattenToRoute,
   getRouteAnimationDurationSeconds,
   getRouteAnimationSnapshot,
   isRouteAnimationPanelVisible,
@@ -28,7 +24,10 @@ import {
   subscribeRouteAnimationPanel,
   toggleRouteAnimationPlaying,
   videoExtensionForMime,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/maplibre-route-animation";
+import { LocalizedError } from "@geolibre/plugins/runtime";
+import { type RouteMarkerStyle } from "@geolibre/plugins";
+import { flattenToLine, flattenToRoute } from "@geolibre/plugins/route-animation-geometry";
 import { Button, Select, Slider } from "@geolibre/ui";
 import {
   ChevronDown,

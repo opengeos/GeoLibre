@@ -1,4 +1,4 @@
-import { isArcGISWritableLayer } from "@geolibre/plugins";
+import { isArcGISWritableLayer } from "@geolibre/plugins/arcgis-layer";
 import type { ParseKeys, TFunction } from "i18next";
 import { NETCDF_IMAGE_SOURCE_KIND, redactConfigurationCredentials } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";

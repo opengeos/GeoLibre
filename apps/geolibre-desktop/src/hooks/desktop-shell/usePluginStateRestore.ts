@@ -1,32 +1,33 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { setExternalDeckLayerOrderHandler } from "@geolibre/map";
+import { applyRasterLayerOrder, restoreRasterLayers } from "@geolibre/plugins/maplibre-raster";
 import {
-  applyRasterLayerOrder,
   applyStacSearchLayerOrder,
+  restoreArcgisZarrLayers,
+  restoreZarrLayers,
+  restoreLidarLayers,
+  restoreSplattingLayers,
+} from "@geolibre/plugins/maplibre-components";
+import {
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
-  reattachFlightSimulator,
-  reattachGodsEyeView,
-  reattachRouteAnimation,
-  reattachSun,
-  restoreArcGISViewportLayers,
-  restoreArcgisZarrLayers,
-  restoreZarrLayers,
-  restoreDeckViz,
-  restoreDirections,
-  restoreEffects,
-  restoreLidarLayers,
-  restorePlanetaryComputerLayers,
-  restoreRasterLayers,
-  restoreReverseGeocode,
-  restoreSplattingLayers,
-  probeArcgisI3sLayers,
-  restoreThreeDTilesLayers,
-  restoreVectorLayers,
   REVERSE_GEOCODE_PLUGIN_ID,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/plugin-ids";
+import { reattachFlightSimulator } from "@geolibre/plugins/flight-simulator";
+import { reattachGodsEyeView } from "@geolibre/plugins/gods-eye-view";
+import { reattachRouteAnimation } from "@geolibre/plugins/maplibre-route-animation";
+import { reattachSun } from "@geolibre/plugins/maplibre-sun";
+import { restoreArcGISViewportLayers } from "@geolibre/plugins/arcgis-layer";
+import { restoreDeckViz } from "@geolibre/plugins/deckgl-viz/overlay";
+import { restoreDirections } from "@geolibre/plugins/maplibre-directions";
+import { restoreEffects } from "@geolibre/plugins/maplibre-effects";
+import { restorePlanetaryComputerLayers } from "@geolibre/plugins/maplibre-planetary-computer";
+import { restoreReverseGeocode } from "@geolibre/plugins/maplibre-reverse-geocode";
+import { probeArcgisI3sLayers } from "@geolibre/plugins/arcgis-i3s-tiles";
+import { restoreThreeDTilesLayers } from "@geolibre/plugins/maplibre-3d-tiles";
+import { restoreVectorLayers } from "@geolibre/plugins/maplibre-vector";
 import i18next from "i18next";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { notify } from "../../lib/notify";

@@ -27,11 +27,8 @@ import {
   isPlaceholderLayer,
   placeholderMessage,
 } from "@geolibre/map";
-import {
-  arcGISLayerHasPendingEdits,
-  isArcGISWritableLayer,
-  isNativeZarrRenderer,
-} from "@geolibre/plugins";
+import { arcGISLayerHasPendingEdits, isArcGISWritableLayer } from "@geolibre/plugins/arcgis-layer";
+import { isNativeZarrRenderer } from "@geolibre/plugins/maplibre-components";
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@geolibre/ui";
 import {
   ChevronDown,

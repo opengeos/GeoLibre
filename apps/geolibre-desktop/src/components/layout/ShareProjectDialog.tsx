@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import { isEmbeddableLocalVectorLayer } from "@geolibre/plugins";
+import { isEmbeddableLocalVectorLayer } from "@geolibre/plugins/vector-layer-sync";
 import {
   Button,
   Dialog,

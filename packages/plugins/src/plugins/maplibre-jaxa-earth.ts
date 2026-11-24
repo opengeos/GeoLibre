@@ -1,3 +1,6 @@
+import { JAXA_EARTH_PLUGIN_ID } from "../plugin-ids";
+export { JAXA_EARTH_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { useAppStore } from "@geolibre/core";
 import type { RasterTileSource } from "maplibre-gl";
 import { createPluginTranslator } from "../plugin-i18n";
@@ -26,7 +29,6 @@ import {
 } from "./jaxa-earth-api";
 import { getStyleMap } from "./style-map";
 
-export const JAXA_EARTH_PLUGIN_ID = "geolibre-jaxa-earth";
 const PANEL_ID = JAXA_EARTH_PLUGIN_ID;
 
 /** Layer metadata keys recording what a JAXA Earth layer draws. */
@@ -1005,14 +1007,13 @@ function mountPanel(container: HTMLElement): void {
  * drawn in the browser by JAXA's JavaScript API.
  */
 export const maplibreJaxaEarthPlugin: GeoLibrePlugin = {
-  id: JAXA_EARTH_PLUGIN_ID,
-  name: "JAXA Earth",
-  version: "0.1.0",
+  ...builtInPluginProperties("geolibre-jaxa-earth"),
+
   // Layers are XYZ templates of the `jaxa-earth://` MapLibre protocol, which
   // the globe reads through the shared protocol registry. mapbox-gl has no
   // protocol registry. ArcGIS reads protocol tiles too but has not been checked
   // with JAXA layers yet, so it is left out until it is.
-  engines: ["maplibre", "cesium"],
+
   activate: (app) => {
     appRef = app;
     unregisterPanel =

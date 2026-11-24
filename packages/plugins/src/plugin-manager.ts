@@ -1,4 +1,5 @@
 import { isPluginEngineSupported } from "./types";
+import { createLazyPlugin, type LazyPluginRegistration } from "./builtin-plugin-lifecycle";
 import {
   getAssistantToolOwnerScope,
   unregisterAssistantToolsByOwner,
@@ -154,8 +155,55 @@ export class PluginManager {
   private activationResults = new Map<string, Promise<boolean>>();
   private activating = new Set<string>();
   private version = 0;
+  private lazyPlugins = new Map<string, ReturnType<typeof createLazyPlugin>>();
 
   register(plugin: GeoLibrePlugin): void {
+    this.lazyPlugins.delete(plugin.id);
+    this.registerPlugin(plugin);
+  }
+
+  /** Register metadata now and defer implementation loading until it is needed. */
+  registerLazy(registration: LazyPluginRegistration): void {
+    const id = registration.metadata.id;
+    if (this.plugins.has(id)) throw new Error(`Plugin '${id}' is already registered.`);
+    const controller: ReturnType<typeof createLazyPlugin> = createLazyPlugin(registration, {
+      restoreGeneration: () => this.restorePass,
+      isRegistered: () => this.plugins.get(id) === controller.plugin,
+      changed: () => this.notify(),
+      reportError: (error) => console.warn(`[GeoLibre] Could not restore plugin '${id}'.`, error),
+    });
+    this.lazyPlugins.set(id, controller);
+    this.registerPlugin(controller.plugin, true);
+  }
+
+  /** Prepare saved settings before a host invokes a module's data/UI helper. */
+  async preparePlugin(id: string, app: GeoLibreAppAPI): Promise<GeoLibrePlugin | undefined> {
+    const plugin = this.plugins.get(id);
+    if (!plugin || !this.supportsEngine(id, app)) return undefined;
+    const controller = this.lazyPlugins.get(id);
+    return controller
+      ? controller.prepare(this.scopeAppToPlugin(app, id, {}, this.restorePass))
+      : plugin;
+  }
+
+  /** Run a host helper against prepared state and the current project scope. */
+  async runPluginHelper<Result>(
+    id: string,
+    app: GeoLibreAppAPI,
+    action: (implementation: GeoLibrePlugin, app: GeoLibreAppAPI) => Result,
+  ): Promise<Result | undefined> {
+    const registered = this.plugins.get(id);
+    const restorePass = this.restorePass;
+    const implementation = await this.preparePlugin(id, app);
+    if (!implementation) return;
+    if (registered !== this.plugins.get(id) || restorePass !== this.restorePass)
+      throw new Error(`Plugin '${id}' helper was superseded.`);
+    const result = action(implementation, this.scopeAppToPlugin(app, id, {}, restorePass));
+    this.notify();
+    return result;
+  }
+
+  private registerPlugin(plugin: GeoLibrePlugin, deferDefaultActivation = false): void {
     const previous = this.plugins.get(plugin.id);
     if (previous && previous !== plugin) {
       // Evict the plugin's dedup entries from every retained context so a
@@ -200,7 +248,7 @@ export class PluginManager {
     // layer control is added by MapController.init regardless of plugin state).
     if (plugin.activeByDefault) {
       this.defaultActive.add(plugin.id);
-      this.active.add(plugin.id);
+      if (!deferDefaultActivation) this.active.add(plugin.id);
     } else {
       this.defaultActive.delete(plugin.id);
     }
@@ -246,6 +294,7 @@ export class PluginManager {
     releaseOwnedRegistrations(id);
     this.clearUrlParameters(id, app);
     this.plugins.delete(id);
+    this.lazyPlugins.delete(id);
     this.deferredActive.delete(id);
     this.defaultActive.delete(id);
     this.defaultMapControlPositions.delete(id);
@@ -666,15 +715,21 @@ export class PluginManager {
   ): void {
     const restorePass = ++this.restorePass;
     const renderer = app.getMapRenderer?.() ?? "maplibre";
+    const pendingSessions = new Set<string>();
     // A new map took down every live control with the old one, so reactivate
     // from scratch. A swap and back (MapLibre to Mapbox to MapLibre) before
     // the middle map restored lands on the same renderer kind, so the kind
     // alone cannot tell; the caller says when the map itself was replaced.
     if (this.renderer !== null && (renderer !== this.renderer || options.mapReplaced)) {
       for (const id of Array.from(this.active)) {
+        const restartPendingSession =
+          Boolean(this.plugins.get(id)?.sessionScoped) &&
+          this.activationResults.has(id) &&
+          this.supportsEngine(id, app);
+        if (restartPendingSession) pendingSessions.add(id);
         // A session-scoped plugin owns no map controls, so the new map does
         // not need it rebuilt (and the saved project would not bring it back).
-        if (!this.keepsSessionActivation(id, app)) {
+        if (restartPendingSession || !this.keepsSessionActivation(id, app)) {
           try {
             this.deactivate(id, app);
           } catch (error) {
@@ -689,7 +744,10 @@ export class PluginManager {
     this.renderer = renderer;
     this.deferredState = state;
     this.deferredActive.clear();
-    const requestedActive = state?.activePluginIds ?? Array.from(this.defaultActive);
+    const requestedActive = [
+      ...(state?.activePluginIds ?? Array.from(this.defaultActive)),
+      ...pendingSessions,
+    ];
     const targetActive = new Set<string>();
     const exclusiveTargets = new Map<string, string>();
     for (const id of requestedActive) {
@@ -808,6 +866,9 @@ export class PluginManager {
           console.warn(`[GeoLibre] Plugin '${id}' threw while restoring project state.`, error);
         }
       }
+      // A newer project can retain this plugin's preferences without supplying
+      // new settings. Retarget only after resets/current settings have won.
+      this.lazyPlugins.get(id)?.retargetRestore(scopedApp);
     }
 
     for (const id of targetActive) {

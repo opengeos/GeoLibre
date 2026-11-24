@@ -1,3 +1,8 @@
+import { NATURAL_EARTH_PLUGIN_ID } from "../plugin-ids";
+export { NATURAL_EARTH_PLUGIN_ID } from "../plugin-ids";
+import { SOURCE_COOP_PLUGIN_ID } from "../plugin-ids";
+export { SOURCE_COOP_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-metadata";
 /**
  * Source Cooperative browser (Plugins > Web Services).
  *
@@ -56,8 +61,6 @@ import {
   type SourceCoopObject,
   type SourceCoopProduct,
 } from "./source-coop-api";
-
-export const SOURCE_COOP_PLUGIN_ID = "maplibre-gl-source-coop";
 
 /** User-facing strings. The host pushes translations in via {@link setSourceCoopLabels}. */
 export interface SourceCoopLabels {
@@ -1160,12 +1163,13 @@ function createSourceCoopPlugin(config: SourceCoopPluginConfig): GeoLibrePlugin 
   };
 }
 
-export const maplibreSourceCoopPlugin: GeoLibrePlugin = createSourceCoopPlugin({
-  id: SOURCE_COOP_PLUGIN_ID,
-  name: "Source Cooperative",
-});
-
-export const NATURAL_EARTH_PLUGIN_ID = "maplibre-gl-natural-earth";
+export const maplibreSourceCoopPlugin: GeoLibrePlugin = defineBuiltInPlugin(
+  "maplibre-gl-source-coop",
+  createSourceCoopPlugin({
+    id: SOURCE_COOP_PLUGIN_ID,
+    name: builtInPluginMetadata("maplibre-gl-source-coop").name,
+  }),
+);
 
 /**
  * Natural Earth (https://source.coop/opengeos/natural-earth): the public-domain
@@ -1173,14 +1177,17 @@ export const NATURAL_EARTH_PLUGIN_ID = "maplibre-gl-natural-earth";
  * shapefiles. It is the Source Cooperative browser pinned to one product, so
  * the layer list comes from the live bucket listing and needs no catalog here.
  */
-export const maplibreNaturalEarthPlugin: GeoLibrePlugin = createSourceCoopPlugin({
-  id: NATURAL_EARTH_PLUGIN_ID,
-  name: "Natural Earth",
-  pinnedProduct: {
-    accountId: "opengeos",
-    productId: "natural-earth",
-    title: "Natural Earth",
-  },
-});
+export const maplibreNaturalEarthPlugin: GeoLibrePlugin = defineBuiltInPlugin(
+  "maplibre-gl-natural-earth",
+  createSourceCoopPlugin({
+    id: NATURAL_EARTH_PLUGIN_ID,
+    name: builtInPluginMetadata("maplibre-gl-natural-earth").name,
+    pinnedProduct: {
+      accountId: "opengeos",
+      productId: "natural-earth",
+      title: "Natural Earth",
+    },
+  }),
+);
 
 export default maplibreSourceCoopPlugin;

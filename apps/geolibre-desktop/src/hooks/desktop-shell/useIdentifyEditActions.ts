@@ -3,9 +3,9 @@ import type { MapCanvasIdentifyEditActions } from "@geolibre/map";
 import {
   canEditLayerGeometry,
   getGeometryEditTargetLayerId,
-  isPluginEngineSupported,
   maplibreGeoEditorPlugin,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/maplibre-geo-editor";
+import { isPluginEngineSupported } from "@geolibre/plugins/runtime";
 import { useMemo } from "react";
 import { identifyEditActionsForLayout } from "../../lib/identify-edit-actions-layout";
 import {

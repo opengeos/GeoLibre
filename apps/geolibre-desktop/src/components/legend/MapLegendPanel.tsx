@@ -20,7 +20,7 @@ import {
   useLayersWhen,
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { colormapColors, warmColormapColors } from "@geolibre/plugins";
+import { colormapColors, warmColormapColors } from "@geolibre/plugins/colormap-colors";
 import { cn, Select } from "@geolibre/ui";
 import {
   ArrowDown,

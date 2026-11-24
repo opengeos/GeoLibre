@@ -6,12 +6,13 @@ import {
   buildTimeBindingFromRecords,
   detectTimePropertiesFromRecords,
   formatTimeExtentInput,
-  isTileVectorLayer,
   parseTimeValue,
+} from "@geolibre/plugins/time-slider-binding";
+import {
+  isTileVectorLayer,
   sampleTileFeatureRecords,
-  type TimePropertyCandidate,
-  type TimePropertyRecord,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/time-slider-tile-sample";
+import { type TimePropertyCandidate, type TimePropertyRecord } from "@geolibre/plugins";
 import type { MapEngine } from "@geolibre/map";
 import { activateTimeSliderForBinding } from "../../../hooks/usePlugins";
 import { resolveLayerGeojson } from "../../../lib/vector-export";

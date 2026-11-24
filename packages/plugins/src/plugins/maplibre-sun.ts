@@ -1,3 +1,8 @@
+import { SUN_PLUGIN_ID } from "../plugin-ids";
+export { SUN_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
+import { DEFAULT_SUN_SETTINGS } from "../builtin-plugin-defaults";
+export { DEFAULT_SUN_SETTINGS } from "../builtin-plugin-defaults";
 import type { CesiumSceneHandle } from "@geolibre/map";
 import type { CanvasSource, LightSpecification, Map as MapLibreMap } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
@@ -26,8 +31,6 @@ import { getStyleMap } from "./style-map";
  * day-side atmosphere, and the lighting of 3D Tiles all come from Cesium's
  * ephemeris rather than a painted mask. See {@link CesiumSunEngine}.
  */
-
-export const SUN_PLUGIN_ID = "geolibre-sun";
 
 const NIGHT_SOURCE_ID = "geolibre-sun-night-source";
 const NIGHT_LAYER_ID = "geolibre-sun-night-layer";
@@ -75,20 +78,6 @@ export const SUN_SPEED_MIN = 5;
 export const SUN_SPEED_MAX = 480;
 export const SUN_SHADE_MIN = 0;
 export const SUN_SHADE_MAX = 0.85;
-
-/**
- * Default clock is midday UTC on an arbitrary fixed date rather than "now": the
- * plugin is pure and must not read the wall clock at module load, and a stable
- * default keeps project files deterministic. The panel offers a "Now" button to
- * jump to the current time on demand.
- */
-export const DEFAULT_SUN_SETTINGS: SunSettings = {
-  dateMs: Date.UTC(2024, 5, 21, 12, 0, 0), // June solstice, noon UTC
-  playing: false,
-  speed: 60,
-  loop: true,
-  shadeOpacity: 0.55,
-};
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
@@ -807,11 +796,8 @@ export function reattachSun(app: GeoLibreAppAPI): void {
 }
 
 export const maplibreSunPlugin: GeoLibrePlugin = {
-  id: SUN_PLUGIN_ID,
-  name: "Sun Simulation",
-  version: "1.1.0",
-  activeByDefault: false,
-  engines: ["maplibre", "cesium", "mapbox"],
+  ...builtInPluginProperties("geolibre-sun"),
+
   activate: (app: GeoLibreAppAPI) => openSunPanel(app),
   deactivate: (app: GeoLibreAppAPI) => closeSunPanel(app),
   // Persist the panel-open flag plus settings so a saved project reopens with

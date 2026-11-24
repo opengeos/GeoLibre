@@ -1,6 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { closeFloatingPanel, collapseRightPanel, openRasterLayerPanel } from "@geolibre/plugins";
+import { closeFloatingPanel, collapseRightPanel } from "@geolibre/plugins/runtime";
+import { openRasterLayerPanel } from "@geolibre/plugins/maplibre-raster";
 import { BottomSheet } from "@geolibre/ui";
 import {
   type ComponentProps,

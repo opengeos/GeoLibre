@@ -1,3 +1,7 @@
+import { COMPONENTS_PLUGIN_ID } from "../plugin-ids";
+export { COMPONENTS_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
+export { setTerrainMeasureBodyNames, setTerrainMeasureLabels } from "./terrain-measure";
 // The Components plugin (the maplibre-gl-components ControlGrid) and the public
 // surface of its standalone sub-controls.
 //
@@ -313,12 +317,10 @@ const mountComponentsControl = (app: GeoLibreAppAPI): boolean => {
 };
 
 /** Stable id of the Components plugin. */
-export const COMPONENTS_PLUGIN_ID = "maplibre-gl-components";
 
 export const maplibreComponentsPlugin: GeoLibrePlugin = {
-  id: COMPONENTS_PLUGIN_ID,
-  name: "Components",
-  version: "0.18.2",
+  ...builtInPluginProperties("maplibre-gl-components"),
+
   activate: (app: GeoLibreAppAPI) => {
     pluginActive = true;
     if (componentsControl) return mountComponentsControl(app);

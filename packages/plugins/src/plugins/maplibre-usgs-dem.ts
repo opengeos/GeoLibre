@@ -1,3 +1,6 @@
+import { USGS_DEM_PLUGIN_ID } from "../plugin-ids";
+export { USGS_DEM_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 /**
  * USGS 3DEP Elevation / DEM Explorer plugin (Plugins > Web Services > USGS 3DEP).
  *
@@ -30,7 +33,6 @@ import {
   type UsgsDemSearchResult,
 } from "./usgs-dem-api";
 
-export const USGS_DEM_PLUGIN_ID = "maplibre-gl-usgs-dem";
 const PANEL_ID = USGS_DEM_PLUGIN_ID;
 const ATTRIBUTION =
   '<a href="https://www.usgs.gov/3dep" target="_blank" rel="noopener">USGS 3DEP Elevation</a>';
@@ -1010,14 +1012,12 @@ function onMapMouseLeave(e: MapLayerMouseEvent): void {
  * GeoLibre USGS 3DEP DEM Plugin definition.
  */
 export const maplibreUsgsDemPlugin: GeoLibrePlugin = {
-  id: USGS_DEM_PLUGIN_ID,
-  name: "USGS 3DEP",
-  version: "1.0.0",
+  ...builtInPluginProperties("maplibre-gl-usgs-dem"),
+
   // The footprints, selection outline and drawn box are GeoJSON Style Spec
   // layers, and a loaded DEM is a store COG layer, so every engine hosts it:
   // the 2D engines draw the overlays directly, and the ArcGIS and Cesium
   // control maps record them for the engine to draw.
-  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
 
   activate(app: GeoLibreAppAPI) {
     appRef = app;

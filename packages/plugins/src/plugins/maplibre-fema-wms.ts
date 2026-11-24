@@ -1,3 +1,4 @@
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import {
   buildGetMapTileUrl,
   FemaWmsControl,
@@ -114,15 +115,14 @@ const femaWmsAdapter: WebServiceAdapter<FemaWmsControl> = {
 const femaWmsStoreSync = createWebServiceStoreSync(femaWmsAdapter);
 
 export const maplibreFemaWmsPlugin: GeoLibrePlugin = {
-  id: "maplibre-gl-fema-wms",
-  name: "FEMA NFHL",
-  version: "0.1.2",
+  ...builtInPluginProperties("maplibre-gl-fema-wms"),
+
   // Docks its panel and adds raster tile layers through the Style Spec API
   // both 2D engines share; the engine adopts the layers under the control's
   // own native ids on Mapbox as MapLibre's layer-sync does. On ArcGIS and the
   // Cesium globe the control's style is only recorded and the engine draws
   // the mirrored store layers from their tile URLs.
-  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
+
   activate: (app: GeoLibreAppAPI) => {
     if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     if (!femaWmsControl) {

@@ -6,10 +6,10 @@ import {
   EFFECTS_PLUGIN_ID,
   GRATICULE_PLUGIN_ID,
   LAYER_CONTROL_PLUGIN_ID,
-  openPlanetaryComputerPanel,
   PRECIPITATION_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/plugin-ids";
+import { openPlanetaryComputerPanel } from "@geolibre/plugins/maplibre-planetary-computer";
 import { Button, cn } from "@geolibre/ui";
 import { Map, Moon, Sun } from "lucide-react";
 import { useMemo, useState } from "react";

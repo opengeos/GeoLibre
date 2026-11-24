@@ -12,6 +12,8 @@ import {
   downloadArcGISAttachment,
   listArcGISAttachments,
   updateArcGISAttachment,
+} from "@geolibre/plugins/arcgis-attachments";
+import {
   type ArcGISAttachmentInfo,
   type ArcGISAttachmentSource,
   type ArcGISAttachmentSupport,

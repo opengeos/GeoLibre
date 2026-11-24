@@ -1,3 +1,4 @@
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
   DEFAULT_LAYER_ID,
@@ -34,14 +35,13 @@ let stateChangeHandler: EsriWaybackControlEventHandler | null = null;
 let unregisterPanel: (() => void) | null = null;
 
 export const maplibreEsriWaybackPlugin: GeoLibrePlugin = {
-  id: "maplibre-gl-esri-wayback",
-  name: "Historical Imagery",
-  version: "0.2.0",
+  ...builtInPluginProperties("maplibre-gl-esri-wayback"),
+
   // The upstream control adds raster sources/layers through the shared Style
   // Spec API; the engine adopts them under their native ids on Mapbox. On
   // ArcGIS and the Cesium globe the control's style is only recorded and the
   // engine draws the store records, whose `url` is a tile template.
-  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
+
   activate: (app: GeoLibreAppAPI) => {
     if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     unregisterPanel = app.registerRightPanel({

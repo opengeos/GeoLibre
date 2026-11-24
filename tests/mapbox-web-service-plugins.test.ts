@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { parseHTML } from "linkedom";
 import { useAppStore } from "@geolibre/core";
+import { builtInPluginMetadata } from "../packages/plugins/src/builtin-plugin-metadata";
 import type {
   GeoLibreAppAPI,
   GeoLibreFloatingPanelRegistration,
@@ -387,12 +387,8 @@ describe("Web Services and service browsers on the Mapbox renderer", () => {
     // Its four engine-specific tools (the marker, both projection tools, and
     // the script runner) take the engine from `mapEngine`. The module pulls the
     // Earth Engine client in at import time, which needs a browser window, so
-    // its declaration is read off the source rather than imported.
-    const geoagent = readFileSync(
-      new URL("../packages/plugins/src/plugins/maplibre-geoagent.ts", import.meta.url),
-      "utf8",
-    );
-    assert.match(geoagent, /engines:\s*\["maplibre",\s*"mapbox"\]/);
+    // read its capabilities from the implementation-free catalog.
+    assert.deepEqual(builtInPluginMetadata("maplibre-gl-geoagent").engines, ["maplibre", "mapbox"]);
   });
 
   it("resolves the shared map to the Mapbox map when MapLibre is absent", () => {

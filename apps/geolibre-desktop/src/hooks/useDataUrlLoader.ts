@@ -3,14 +3,12 @@ import { applyMapboxStyleImport, parseMapboxStyle } from "@geolibre/map";
 import {
   addLidarLayerFromUrl,
   addPMTilesLayerFromUrl,
-  addRasterToMap,
-  addThreeDTilesLayerFromUrl,
-  addVectorLayerFromUrl,
-  findFileHandlerByDataType,
-  isRecoverableNonTiledRasterError,
-  listFileHandlers,
-  routeKmlFileSelection,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/maplibre-components";
+import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
+import { addThreeDTilesLayerFromUrl } from "@geolibre/plugins/maplibre-3d-tiles";
+import { addVectorLayerFromUrl, routeKmlFileSelection } from "@geolibre/plugins/maplibre-vector";
+import { findFileHandlerByDataType, listFileHandlers } from "@geolibre/plugins/runtime";
+import { isRecoverableNonTiledRasterError } from "@geolibre/plugins/non-tiled-raster-error";
 import i18next from "i18next";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {

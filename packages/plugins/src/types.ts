@@ -2161,7 +2161,7 @@ export interface GeoLibreExternalPluginManifest {
  * Defaults to `["maplibre"]` when `engines` is omitted or empty.
  */
 export function isPluginEngineSupported(
-  plugin: Pick<GeoLibrePlugin, "engines"> | null | undefined,
+  plugin: { readonly engines?: readonly MapRendererKind[] } | null | undefined,
   engine: MapRendererKind,
 ): boolean {
   const supported: readonly MapRendererKind[] =

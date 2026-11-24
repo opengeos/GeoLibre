@@ -1,3 +1,6 @@
+import { ARCGIS_PORTAL_PLUGIN_ID } from "../plugin-ids";
+export { ARCGIS_PORTAL_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 // ArcGIS Portal: browse a signed-in user's ArcGIS Online organization or
 // ArcGIS Enterprise portal (my content, favorites, groups, the organization,
 // or the whole portal) and add its items to the map. Sign-in itself belongs to
@@ -27,7 +30,6 @@ import {
   type ArcGisPortalView,
 } from "./arcgis-portal-api";
 
-export const ARCGIS_PORTAL_PLUGIN_ID = "geolibre-arcgis-portal";
 const PAGE_SIZE = 20;
 
 /** A signed-in portal: its normalized base URL and the user. */
@@ -591,10 +593,8 @@ function rebuildPanel(): void {
 }
 
 export const maplibreArcGisPortalPlugin: GeoLibrePlugin = {
-  id: ARCGIS_PORTAL_PLUGIN_ID,
-  name: "ArcGIS Portal",
-  version: "0.1.0",
-  engines: ["maplibre", "cesium", "mapbox", "arcgis"],
+  ...builtInPluginProperties("geolibre-arcgis-portal"),
+
   activate: (app) => {
     appRef = app;
     unregisterPanel =

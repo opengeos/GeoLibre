@@ -1,8 +1,11 @@
+import { CKAN_PLUGIN_ID } from "../plugin-ids";
+export { CKAN_PLUGIN_ID } from "../plugin-ids";
+import { SOCRATA_PLUGIN_ID } from "../plugin-ids";
+export { SOCRATA_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-metadata";
 import type { FeatureCollection } from "geojson";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
-export const SOCRATA_PLUGIN_ID = "maplibre-gl-socrata";
-export const CKAN_PLUGIN_ID = "maplibre-gl-ckan";
 const FETCH_TIMEOUT_MS = 30_000;
 // Downloads pull whole datasets (a Socrata `.geojson?$limit=50000`, or an
 // arbitrary CKAN resource), so they get a much longer ceiling than a search —
@@ -380,16 +383,22 @@ function createCatalogPlugin(options: {
   };
 }
 
-export const maplibreSocrataPlugin = createCatalogPlugin({
-  id: SOCRATA_PLUGIN_ID,
-  name: "Socrata",
-  hint: () => labels.socrataHint,
-  search: searchSocrata,
-});
+export const maplibreSocrataPlugin = defineBuiltInPlugin(
+  "maplibre-gl-socrata",
+  createCatalogPlugin({
+    id: SOCRATA_PLUGIN_ID,
+    name: builtInPluginMetadata("maplibre-gl-socrata").name,
+    hint: () => labels.socrataHint,
+    search: searchSocrata,
+  }),
+);
 
-export const maplibreCkanPlugin = createCatalogPlugin({
-  id: CKAN_PLUGIN_ID,
-  name: "CKAN",
-  hint: () => labels.ckanHint,
-  search: searchCkan,
-});
+export const maplibreCkanPlugin = defineBuiltInPlugin(
+  "maplibre-gl-ckan",
+  createCatalogPlugin({
+    id: CKAN_PLUGIN_ID,
+    name: builtInPluginMetadata("maplibre-gl-ckan").name,
+    hint: () => labels.ckanHint,
+    search: searchCkan,
+  }),
+);

@@ -2,10 +2,10 @@ import { wrapLongitude, type GeoLibreLayer } from "@geolibre/core";
 import {
   getTemporalLayerAdapter,
   isSelectorTimeBinding,
-  queryZarrLayer,
   toEpochMsAxis,
-  zarrPointValue,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/temporal-layers";
+import { queryZarrLayer } from "@geolibre/plugins/maplibre-components";
+import { zarrPointValue } from "@geolibre/plugins/zarr-time-axis";
 
 /** Localized labels for the rows {@link readZarrIdentifyRows} returns. */
 export interface ZarrIdentifyLabels {

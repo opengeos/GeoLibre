@@ -2,9 +2,11 @@ import {
   addArcGISLayer,
   fetchArcGISImageServiceRasterFunctions,
   fetchArcGISMapServiceSublayers,
-  type ArcGISImageServiceRasterFunction,
   arcgisLayerTypeFromUrl,
   parseArcGISLayerType,
+} from "@geolibre/plugins/arcgis-layer";
+import {
+  type ArcGISImageServiceRasterFunction,
   type ArcGISLayerType,
   type ArcGISMapServiceSublayer,
   type ArcGISSourceType,

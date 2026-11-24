@@ -2,7 +2,7 @@ import { isProcessingParameterVisible } from "../../lib/processing-parameter-vis
 import { useAppCapability, useAppStore, useLayersWhen } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { addRasterToMap } from "@geolibre/plugins";
+import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
 import {
   RASTER_TOOLS,
   getRasterTool,

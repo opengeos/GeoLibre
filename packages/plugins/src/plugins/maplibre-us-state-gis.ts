@@ -1,3 +1,6 @@
+import { US_STATE_GIS_PLUGIN_ID } from "../plugin-ids";
+export { US_STATE_GIS_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-metadata";
 import type { GeoLibrePlugin } from "../types";
 import { ARCGIS_HUB_SEARCH_TYPES } from "./arcgis-hub-api";
 import {
@@ -6,8 +9,6 @@ import {
   type ArcGisHubLabels,
 } from "./maplibre-arcgis-hub";
 import { US_STATE_GIS_CATALOGS } from "./us-state-gis-catalogs";
-
-export const US_STATE_GIS_PLUGIN_ID = "geolibre-us-state-gis";
 
 // State portals publish statewide imagery and basemaps as map and image
 // services, which add as raster layers.
@@ -27,7 +28,7 @@ export const DEFAULT_US_STATE_GIS_LABELS: ArcGisHubLabels = {
 
 const usStateGis = createArcGisHubPlugin({
   id: US_STATE_GIS_PLUGIN_ID,
-  name: "US State GIS",
+  name: builtInPluginMetadata("geolibre-us-state-gis").name,
   defaultLabels: DEFAULT_US_STATE_GIS_LABELS,
   types: US_STATE_GIS_TYPES,
   catalogSets: US_STATE_GIS_CATALOGS,
@@ -38,7 +39,10 @@ const usStateGis = createArcGisHubPlugin({
   filenameFallback: "state-gis-data",
 });
 
-export const maplibreUsStateGisPlugin: GeoLibrePlugin = usStateGis.plugin;
+export const maplibreUsStateGisPlugin: GeoLibrePlugin = defineBuiltInPlugin(
+  "geolibre-us-state-gis",
+  usStateGis.plugin,
+);
 export const setUsStateGisLabels = usStateGis.setLabels;
 
 export default maplibreUsStateGisPlugin;

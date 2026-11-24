@@ -1,6 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { gridPixelAt, type LocalNetcdfGrid, type LocalNetcdfWindow } from "@geolibre/plugins";
+import { gridPixelAt } from "@geolibre/plugins/local-netcdf";
+import { type LocalNetcdfGrid, type LocalNetcdfWindow } from "@geolibre/plugins";
 import { Button, ColorRampSelect, Label, Select } from "@geolibre/ui";
 import { Boxes, GripVertical, Settings2, X } from "lucide-react";
 import {
