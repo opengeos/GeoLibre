@@ -2127,6 +2127,10 @@ class Map(anywidget.AnyWidget):
         Returns:
             The widget that was added, including its ``id``.
         """
+        if "widget_id" in options or "widgetId" in options:
+            raise ValueError("options cannot set the widget id")
+        if {"project", "layer", "layer_id", "widget_type"} & options.keys():
+            raise ValueError("options cannot override project, layer, layer_id, or widget_type")
         ref = self._resolve_layer(layer).id if isinstance(layer, Layer) else layer
         result: dict[str, Any] = {}
         self._update_project(
@@ -2154,6 +2158,8 @@ class Map(anywidget.AnyWidget):
         Returns:
             The stored Print Layout settings.
         """
+        if "project" in settings:
+            raise ValueError("settings cannot override project or reset")
         result: dict[str, Any] = {}
         self._update_project(
             lambda p: result.update(_authoring.set_print_layout(p, reset=reset, **settings))

@@ -271,6 +271,65 @@ def _post_in_thread(client: TestClient, body: dict) -> tuple[threading.Thread, d
     return thread, outcome
 
 
+def test_binary_socket_frames_close_cleanly(client):
+    """Reject binary app frames without a KeyError traceback.
+
+    Args:
+        client: The shared-loop relay client.
+    """
+    with client.websocket_connect(
+        "/relay/socket", subprotocols=["geolibre-relay", f"geolibre-token.{SIDECAR_TOKEN}"]
+    ) as socket:
+        socket.receive_text()
+        socket.send_bytes(b"not a text command result")
+        with pytest.raises(WebSocketDisconnect) as error:
+            socket.receive_text()
+        assert error.value.code == 1003
+    assert client.get("/relay/status", headers=_client_headers()).json() == {"listeners": 0}
+
+
+def test_discovery_lock_wait_does_not_block_http_requests(client, monkeypatch):
+    """Keep the event loop available while publication waits on file I/O.
+
+    Args:
+        client: The shared-loop relay client.
+        monkeypatch: The pytest patch fixture.
+    """
+    started, release, finished = threading.Event(), threading.Event(), threading.Event()
+    write = relay.write_discovery_file
+    outcome = {}
+
+    def blocked_write():
+        """Pause the publisher until the concurrent health request returns.
+
+        Returns:
+            The path published by the original helper.
+        """
+        started.set()
+        release.wait(timeout=5)
+        finished.set()
+        return write()
+
+    def enable_access():
+        """Apply access from a concurrent HTTP client thread."""
+        outcome["response"] = client.post(
+            "/relay/access", json={"enabled": True}, headers={"X-GeoLibre-Token": SIDECAR_TOKEN}
+        )
+
+    monkeypatch.setattr(relay, "write_discovery_file", blocked_write)
+    thread = threading.Thread(target=enable_access)
+    thread.start()
+    try:
+        assert started.wait(timeout=2)
+        assert client.get("/relay/status", headers=_client_headers()).status_code == 200
+        assert not finished.is_set()
+    finally:
+        release.set()
+        thread.join(timeout=10)
+    assert not thread.is_alive()
+    assert outcome["response"].status_code == 200
+
+
 def test_deadline_works_without_asyncio_timeout(client, monkeypatch):
     """Handle correlated requests without the Python 3.11 timeout API.
 

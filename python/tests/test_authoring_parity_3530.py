@@ -285,6 +285,36 @@ def test_google_storage_zarr_uses_a_restorable_https_endpoint():
     assert layer["source"]["url"] == "https://storage.googleapis.com/public-bucket/a.zarr?token=abc"
 
 
+def test_zarr_rejects_mapping_color_ranges_with_a_validation_error():
+    """Reject a sized mapping without leaking an indexing KeyError."""
+    with pytest.raises(ValueError, match="clim must be"):
+        _project.zarr_layer("Cube", "https://example.com/a.zarr", "tas", clim={"min": 0, "max": 1})
+
+
+@pytest.mark.parametrize("key", ["project", "layer_id", "widget_id", "widgetId"])
+def test_python_dashboard_rejects_reserved_options(key, monkeypatch):
+    """Match the MCP guard before modifying the project.
+
+    Args:
+        key: A reserved authoring option.
+        monkeypatch: The pytest patch fixture.
+    """
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    with pytest.raises(ValueError, match="options cannot"):
+        Map().add_dashboard_widget("missing", "indicator", **{key: "reserved"})
+
+
+def test_python_print_layout_rejects_a_project_override(monkeypatch):
+    """Return an actionable error instead of duplicate Python arguments.
+
+    Args:
+        monkeypatch: The pytest patch fixture.
+    """
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    with pytest.raises(ValueError, match="settings cannot override"):
+        Map().set_print_layout(project={})
+
+
 def test_zarr_layer_matches_the_restorable_record():
     layer = _project.zarr_layer(
         "Air temperature",

@@ -4739,7 +4739,7 @@ def zarr_layer(
     if clim is not None:
         try:
             clim = [float(clim[0]), float(clim[1])] if len(clim) == 2 else None
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, LookupError):
             clim = None
         if clim is None or not all(math.isfinite(value) for value in clim) or clim[0] >= clim[1]:
             raise ValueError("zarr_layer: clim must be [min, max] with min < max")

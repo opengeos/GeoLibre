@@ -50,6 +50,7 @@ from urllib.parse import unquote
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
+from starlette.concurrency import run_in_threadpool
 
 from ..relay_protocol import (
     is_allowed_origin,
@@ -100,6 +101,7 @@ class _Hub:
         self.pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
         self.pending_request_ids: set[str] = set()
         self.recipients: dict[str, set[WebSocket]] = {}
+        self.access_lock = asyncio.Lock()
 
     async def broadcast(self, message: dict[str, Any], delivered: list[int] | None = None) -> int:
         """Send concurrently, recording deliveries before the slowest peer finishes.
@@ -134,7 +136,7 @@ class _Hub:
             """
             try:
                 await asyncio.wait_for(socket.send_text(encoded), send_timeout)
-            except (Exception, asyncio.CancelledError):
+            except (Exception, asyncio.CancelledError) as error:
                 # Cancellation can interrupt an ASGI frame write after bytes
                 # were accepted. Deliberately close that uncertain connection
                 # and let the app reconnect instead of reusing a partial write.
@@ -144,6 +146,8 @@ class _Hub:
                 # run concurrently and cannot extend cleanup indefinitely.
                 with contextlib.suppress(Exception, asyncio.CancelledError):
                     await asyncio.wait_for(socket.close(code=1013), 0.1)
+                if isinstance(error, asyncio.CancelledError):
+                    raise
                 return 0
             delivered[0] += 1
             return 1
@@ -218,20 +222,21 @@ async def set_relay_access(request: Request) -> dict[str, bool]:
     if not isinstance(payload, dict) or not isinstance(payload.get("enabled"), bool):
         raise HTTPException(status_code=400, detail="Expected an enabled boolean")
     global _access_allowed, _access_generation
-    _access_allowed = payload["enabled"]
-    if _access_allowed:
-        write_discovery_file()
-    else:
-        _access_generation += 1
-        remove_discovery_file()
-        for future in _hub.pending.values():
-            if not future.done():
-                future.set_result({"ok": False, "error": "Live MCP access was disabled."})
-        for socket in list(_hub.listeners):
-            _hub.drop(socket)
-            with contextlib.suppress(Exception):
-                await asyncio.wait_for(socket.close(code=1008), SEND_TIMEOUT_SECONDS)
-    return {"enabled": _access_allowed}
+    async with _hub.access_lock:
+        _access_allowed = payload["enabled"]
+        if _access_allowed:
+            await run_in_threadpool(write_discovery_file)
+        else:
+            _access_generation += 1
+            await run_in_threadpool(remove_discovery_file)
+            for future in _hub.pending.values():
+                if not future.done():
+                    future.set_result({"ok": False, "error": "Live MCP access was disabled."})
+            for socket in list(_hub.listeners):
+                _hub.drop(socket)
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(socket.close(code=1008), SEND_TIMEOUT_SECONDS)
+        return {"enabled": _access_allowed}
 
 
 def relay_token() -> str:
@@ -264,7 +269,7 @@ def _discovery_lock(target: Path) -> Iterator[None]:
         While this process holds the adjacent lock file. The lock file remains
         in place so all processes continue locking the same inode.
     """
-    target.parent.mkdir(parents=True, exist_ok=True)
+    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     descriptor = os.open(str(target) + ".lock", os.O_CREAT | os.O_RDWR, 0o600)
     with os.fdopen(descriptor, "r+b") as handle:
         if os.name == "nt":
@@ -411,7 +416,14 @@ async def relay_socket(websocket: WebSocket) -> None:
     try:
         await websocket.send_text(json.dumps({"type": "geolibre:relay-ready"}))
         while True:
-            _hub.resolve(await websocket.receive_text())
+            message = await websocket.receive()
+            if message["type"] == "websocket.disconnect":
+                break
+            if isinstance(message.get("text"), str):
+                _hub.resolve(message["text"])
+            elif message.get("bytes") is not None:
+                await websocket.close(code=1003)
+                break
     except WebSocketDisconnect:
         pass
     finally:
