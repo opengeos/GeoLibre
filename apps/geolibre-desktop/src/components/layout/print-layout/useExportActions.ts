@@ -41,6 +41,7 @@ export function sanitizeFilename(name: string): string {
 }
 
 interface UseExportActionsArgs {
+  insetReady: boolean;
   layout: PrintLayoutConfig;
   projectName: string | null | undefined;
   captured: CapturedMap | null;
@@ -65,6 +66,7 @@ interface UseExportActionsArgs {
  * @returns The action handlers.
  */
 export function useExportActions({
+  insetReady,
   layout,
   projectName,
   captured,
@@ -81,6 +83,13 @@ export function useExportActions({
   t,
 }: UseExportActionsArgs) {
   const setError = (error: string | null) => dispatch({ type: "setUi", patch: { error } });
+  const requireInset = () => {
+    if (insetReady) return true;
+    setError(
+      t(captured?.georef ? "printLayout.inset.waitForMap" : "printLayout.inset.needsGeoref"),
+    );
+    return false;
+  };
   const atlasAbortRef = useRef<AbortController | null>(null);
   useEffect(() => {
     return () => {
@@ -92,6 +101,7 @@ export function useExportActions({
   // Copy the composed layout to the clipboard as a PNG, so it can be pasted
   // straight into a document without saving a file first (GH #773).
   const handleCopy = async () => {
+    if (!requireInset()) return;
     if (!captured) {
       setError(t("printLayout.errors.captureFirst"));
       return;
@@ -115,6 +125,7 @@ export function useExportActions({
   };
 
   const handleExport = async (kind: "png" | "pdf" | "svg") => {
+    if (!requireInset()) return;
     if (!captured) {
       setError(t("printLayout.errors.captureFirst"));
       return;
@@ -142,6 +153,7 @@ export function useExportActions({
   // option templates are frozen at click time so edits made while the loop
   // runs cannot produce a mixed document.
   const handleAtlasExport = async (kind: "pdf" | "zip") => {
+    if (!requireInset()) return;
     const { atlasActive, atlasConfigBlocked, atlasPages } = atlas;
     const {
       buildBlocksFromRows,

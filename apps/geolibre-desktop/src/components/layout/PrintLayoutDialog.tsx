@@ -11,6 +11,7 @@ import {
   Separator,
 } from "@geolibre/ui";
 import type { LayoutOptions } from "../../lib/print-layout";
+import { canGeoreferencePrint } from "../../lib/print-layout-export";
 import { substituteAtlasTokens } from "../../lib/print-atlas";
 import { useMapCapabilities } from "../../hooks/useMapCapabilities";
 import {
@@ -33,6 +34,7 @@ import {
 import { useScaleControl } from "./print-layout/useScaleControl";
 import { useExtentDrawing } from "./print-layout/useExtentDrawing";
 import { usePreviewCanvas } from "./print-layout/usePreviewCanvas";
+import { useInsetMap } from "./print-layout/useInsetMap";
 import { useExportActions } from "./print-layout/useExportActions";
 import { TitleEditor } from "./print-layout/TitleEditor";
 import { PageEditor } from "./print-layout/PageEditor";
@@ -49,6 +51,8 @@ import { FooterEditor } from "./print-layout/FooterEditor";
 import { PageBorderEditor } from "./print-layout/PageBorderEditor";
 import { InfoBlockEditor } from "./print-layout/InfoBlockEditor";
 import { LegendEditor } from "./print-layout/LegendEditor";
+import { InsetMapEditor } from "./print-layout/InsetMapEditor";
+import { MapGridEditor } from "./print-layout/MapGridEditor";
 import { PreviewPane } from "./print-layout/PreviewPane";
 import { ExportActions } from "./print-layout/ExportActions";
 
@@ -145,7 +149,11 @@ export function PrintLayoutDialog({
     setPrintLayout(layout);
   }, [layout, setPrintLayout]);
 
-  const { options, isMmPage, currentRatio } = useLayoutOptions({
+  const {
+    options: baseOptions,
+    isMmPage,
+    currentRatio,
+  } = useLayoutOptions({
     layout,
     projectName,
     scaleUnit,
@@ -182,18 +190,29 @@ export function PrintLayoutDialog({
   // Options with this page's atlas tokens resolved, fed to the preview, the
   // clipboard copy, and the single-page exports; the inputs keep the raw
   // template so the tokens stay editable.
-  const displayOptions = useMemo<LayoutOptions>(() => {
-    const withBlocks = { ...options, ...displayDataBlocks };
+  const resolvedOptions = useMemo<LayoutOptions>(() => {
+    const withBlocks = { ...baseOptions, ...displayDataBlocks };
     return atlasTokenCtx
       ? {
           ...withBlocks,
-          title: substituteAtlasTokens(options.title, atlasTokenCtx),
-          subtitle: substituteAtlasTokens(options.subtitle, atlasTokenCtx),
-          footerText: substituteAtlasTokens(options.footerText, atlasTokenCtx),
+          title: substituteAtlasTokens(baseOptions.title, atlasTokenCtx),
+          subtitle: substituteAtlasTokens(baseOptions.subtitle, atlasTokenCtx),
+          footerText: substituteAtlasTokens(baseOptions.footerText, atlasTokenCtx),
         }
       : withBlocks;
-  }, [options, displayDataBlocks, atlasTokenCtx]);
+  }, [baseOptions, displayDataBlocks, atlasTokenCtx]);
+  const insetState = useInsetMap(open, layout, resolvedOptions, captured);
+  const { inset } = insetState;
+  const displayOptions = useMemo<LayoutOptions>(
+    () => (inset ? { ...resolvedOptions, inset } : resolvedOptions),
+    [resolvedOptions, inset],
+  );
+  const options = useMemo<LayoutOptions>(
+    () => (inset ? { ...baseOptions, inset } : baseOptions),
+    [baseOptions, inset],
+  );
 
+  const canGeoPdf = useMemo(() => canGeoreferencePrint(options), [options]);
   const { captureAtlasPage, goToAtlasPage, goToAtlasPageRef } = useAtlasCapture({
     mapControllerRef,
     layout,
@@ -252,8 +271,9 @@ export function PrintLayoutDialog({
     drawAbortRef: capture.drawAbortRef,
     dispatch,
   });
-  const { previewRef, previewBoxRef } = usePreviewCanvas(open, displayOptions);
+  const { previewRef, previewBoxRef, arrangeFrame } = usePreviewCanvas(open, displayOptions);
   const actions = useExportActions({
+    insetReady: insetState.ready,
     layout,
     projectName,
     captured,
@@ -391,6 +411,14 @@ export function PrintLayoutDialog({
             {layout.showDataChart && (
               <DataChartEditor {...editorProps} atlasLayers={atlas.atlasLayers} blocks={blocks} />
             )}
+            {layout.showInset && (
+              <InsetMapEditor
+                {...editorProps}
+                georeferenced={Boolean(captured?.georef)}
+                status={insetState}
+              />
+            )}
+            {layout.showGrid && <MapGridEditor {...editorProps} options={baseOptions} />}
             {layout.showFooter && <FooterEditor {...editorProps} />}
             {layout.showPageBorder && <PageBorderEditor {...editorProps} />}
             {layout.showInfoBlock && <InfoBlockEditor {...editorProps} />}
@@ -443,13 +471,19 @@ export function PrintLayoutDialog({
               else recapture();
             }}
             onGoToAtlasPage={goToAtlasPage}
+            arranging={state.arranging}
+            arrangeFrame={arrangeFrame}
+            layout={layout}
+            dispatch={dispatch}
           />
         </div>
 
         <ExportActions
+          insetReady={insetState.ready}
+          insetNeedsGeoref={insetState.unavailable}
           ui={state}
           hasCapture={Boolean(captured)}
-          georeferenced={Boolean(captured?.georef)}
+          georeferenced={canGeoPdf}
           atlasEnabled={atlasEnabled}
           atlas={atlas}
           actions={actions}

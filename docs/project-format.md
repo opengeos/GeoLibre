@@ -171,6 +171,31 @@ carries no `printLayout` key.
   whose layer is missing from the project opens cleared rather than blank.
 - Atlas: `atlasEnabled` plus the coverage layer, extent mode, sorting, filter
   and filename pattern for the map series.
+- Overview map: `showInset`, `insetBasemap` (`positron`, `liberty`, `bright`,
+  `dark`, `fiord` or `osm`), `insetZoomOffset` (zoom levels out from the main
+  frame's extent, `-12` to `0`), `insetExtentColor`, and `insetBox` (see
+  below; `null` keeps the automatic lower-left corner).
+- Coordinate grid: `showGrid`, `gridType` (`dms`, `decimal`, `utm` or `mgrs`),
+  `gridInterval` (degrees, or meters for UTM/MGRS; `0` is automatic),
+  `gridFontSize` (points) and `gridLines`.
+- Arrangement: `mapFrameBox` and `insetBox` place the map frames as
+  `{ "x", "y", "w", "h" }` fractions of the page width and height;
+  `elementOffsets` moves the `title`, `legend`, `scaleBar`, `northArrow` and
+  `footer` from their automatic positions as `{ "dx", "dy", "scale" }` (page
+  fractions plus a uniform scale). A missing or `null` value keeps the
+  automatic layout, so a project saved before these fields opens unchanged.
+
+```json
+{
+  "showGrid": true,
+  "gridType": "utm",
+  "gridInterval": 0,
+  "showInset": true,
+  "insetBox": { "x": 0.72, "y": 0.62, "w": 0.22, "h": 0.25 },
+  "mapFrameBox": { "x": 0.05, "y": 0.12, "w": 0.9, "h": 0.8 },
+  "elementOffsets": { "legend": { "dx": 0.02, "dy": 0.04, "scale": 1.2 } }
+}
+```
 
 Unknown or malformed values fall back to the default for that field, so a
 hand-edited file never leaves the composer in an unusable state. Per-session

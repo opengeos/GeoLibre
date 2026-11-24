@@ -363,6 +363,8 @@ export function captureMapImage(
           }
         },
         projection,
+        1,
+        { allowUnwrappedLongitude: true },
       )
     : null;
 
@@ -538,7 +540,7 @@ const MM_TO_PT = 72 / 25.4;
  */
 function geoPdfPageEntry(
   opts: LayoutOptions,
-  canvas: HTMLCanvasElement,
+  canvas: Pick<HTMLCanvasElement, "width" | "height">,
   widthMm: number,
   heightMm: number,
 ): string | null {
@@ -559,6 +561,15 @@ function geoPdfPageEntry(
   } catch {
     return null;
   }
+}
+
+/** Whether the visible print viewport can carry a valid GeoPDF georeference. */
+export function canGeoreferencePrint(opts: LayoutOptions): boolean {
+  const size = resolvePageSize(opts);
+  const { widthMm, heightMm } = pageMm(size);
+  return (
+    geoPdfPageEntry(opts, { width: size.width, height: size.height }, widthMm, heightMm) !== null
+  );
 }
 
 /**
