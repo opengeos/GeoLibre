@@ -280,7 +280,10 @@ vertices. Endpoint-to-node and endpoint-to-segment snapping share a 50-million
 budget for index visits and candidate checks. Reduce the snap tolerance or
 extract a smaller network if it is exceeded. Point placement also caps index
 storage, cell visits, overflow candidates, and fallback scans at 50 million
-visits per run. It has a separate 50-million edge/point comparison budget,
+visits per run. Seam-adjacent queries and networks wider than 180 degrees
+currently use a full edge scan for correct wrapped placement, so they can reach
+this work limit with fewer points. Use a smaller local extract for those runs.
+It has a separate 50-million edge/point comparison budget,
 including far or antimeridian selections that use a full edge scan. Searches yield between
 legs or incidents; graph construction itself is synchronous.
 
@@ -319,7 +322,7 @@ The same menu also routes over **your own line layer**, entirely in the browser 
 | **Ordinary least squares (OLS)** | Global linear regression of a field on comma-separated explanatory fields: coefficients with standard errors, t and p values, R², F, AIC and AICc in the log, and fitted values and (standardized) residuals on each feature. |
 | **Geographically weighted regression (GWR)** | Local regression with a bisquare or Gaussian kernel and an adaptive (nearest neighbors) or fixed (metres) bandwidth. Leave the bandwidth at 0 to choose it by AICc golden-section search. Each feature gets its local coefficients, t values, fitted value, residuals, and local R². |
 | **DBSCAN clustering** | Density clusters from a search distance in metres and a minimum point count; each feature gets a cluster id (-1 for noise) and whether it is a core, border, or noise point. |
-| **HDBSCAN clustering** | Hierarchical density clusters that adapt to varying density, with only a minimum cluster size to set; each feature gets a cluster id and a membership probability. |
+| **HDBSCAN clustering** | Hierarchical density clusters that adapt to varying density. Set the minimum cluster size and optionally minimum samples (defaults to the cluster size); each feature gets a cluster id and a membership probability. |
 | **Kriging variogram and cross-validation** | The empirical semivariogram of a point field, a spherical, exponential, Gaussian or linear model fitted as the Interpolation (IDW / Kriging) raster tool fits it, and leave-one-out cross-validation of ordinary kriging (mean error, RMSE, RMSSE) per model, with per-point predictions and standardized errors. |
 
 Generated model fields keep their documented names. If one matches a source

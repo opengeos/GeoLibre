@@ -18,6 +18,38 @@ import {
 } from "../packages/processing/src/local-network";
 
 describe("network review regressions", () => {
+  it("keeps nearest-edge placement correct on a wide Pacific network", () => {
+    const net = buildLocalNetwork(
+      [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [179, 0],
+              [179.5, 0],
+            ],
+          },
+        },
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [-179.5, 0],
+              [-179, 0],
+            ],
+          },
+        },
+      ],
+      { snapToleranceM: 0 },
+    );
+    assert.equal(net.nearestEdge(-179.4, 0.001)?.edge, 1);
+    assert.equal(net.nearestEdge(179.4, 0.001)?.edge, 0);
+    assert.equal(net.nearestEdge(-179.9, 0.001)?.edge, 1);
+  });
   it("uses the bounded edge scan for an unindexable distant coordinate", () => {
     const net = buildLocalNetwork(
       [
