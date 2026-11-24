@@ -1,0 +1,231 @@
+import assert from "node:assert/strict";
+import { it } from "node:test";
+import {
+  bandDifference,
+  clipRasterByMask,
+  contourRaster,
+  interpolatePoints,
+  mosaicRasters,
+  readRasterData,
+  reprojectRaster,
+  resampleRaster,
+  sarDbConvert,
+  writeRasterData,
+  zonalStatistics,
+  SAR_NODATA,
+  type RasterData,
+} from "@geolibre/processing";
+import { rasterEpsg } from "../packages/processing/src/raster-geo";
+
+/** A small north-up raster with a declared geographic CRS. */
+function raster(values: number[], width = values.length, height = 1): RasterData {
+  return {
+    width,
+    height,
+    originX: 0,
+    originY: 2,
+    resX: 1,
+    resY: 1,
+    bands: [Float32Array.from(values)],
+    nodata: null,
+    geoKeys: { GTModelTypeGeoKey: 2, GeographicTypeGeoKey: 4326 },
+  };
+}
+
+it("encodes a valid -9999 change separately from a missing pixel", async () => {
+  const before = { ...raster([10000, -123]), nodata: -123 };
+  const output = bandDifference(before, raster([1, 4]), {}).raster;
+  const decoded = await readRasterData(writeRasterData(output));
+  assert.equal(decoded.bands[0][0], -9999);
+  assert.ok(Number.isNaN(decoded.bands[0][1]));
+  assert.ok(Number.isNaN(decoded.nodata));
+});
+
+it("preserves undeclared -9999 samples through clipping, resampling, and mosaics", async () => {
+  const input = raster([-9999, 5]);
+  const clipped = await clipRasterByMask(
+    input,
+    { type: "Point", coordinates: [0.5, 1.5] },
+    { crop: false },
+  );
+  assert.equal(clipped.raster.bands[0][0], -9999);
+  assert.ok(Number.isNaN(clipped.raster.bands[0][1]));
+  const resampled = resampleRaster(input, { resolution: 1, resampling: "nearest" });
+  assert.equal(resampled.bands[0][0], -9999);
+  assert.ok(Number.isNaN(resampled.nodata));
+  const merged = mosaicRasters(
+    [
+      { ...raster([1]), nodata: -9999 },
+      { ...raster([-9999]), originX: 1 },
+    ],
+    "first",
+  ).raster;
+  assert.deepEqual([...merged.bands[0]], [1, -9999]);
+  assert.ok(Number.isNaN(merged.nodata));
+});
+
+it("rejects paired projected rasters with different CRSs", () => {
+  const a = { ...raster([1]), geoKeys: { GTModelTypeGeoKey: 1, ProjectedCSTypeGeoKey: 3857 } };
+  const b = { ...a, geoKeys: { GTModelTypeGeoKey: 1, ProjectedCSTypeGeoKey: 32617 } };
+  assert.throws(() => bandDifference(a, b, {}), /CRS/);
+  assert.equal(
+    bandDifference(a, { ...a, geoKeys: { ...a.geoKeys, GTRasterTypeGeoKey: 1 } }, {}).raster
+      .bands[0][0],
+    0,
+  );
+});
+
+it("does not confuse a projected CRS with its base geographic EPSG code", async () => {
+  const custom = {
+    ...raster([1]),
+    geoKeys: { GTModelTypeGeoKey: 1, ProjectedCSTypeGeoKey: 32767, GeographicTypeGeoKey: 4326 },
+  };
+  assert.equal(rasterEpsg(custom), null);
+  await assert.rejects(
+    reprojectRaster(custom, { dst_crs: "EPSG:4326" }),
+    /CRS|sidecar|projection/i,
+  );
+});
+
+it("masks Float32 overflow in continuous change and dB conversion", () => {
+  const changed = bandDifference(raster([-3e38]), raster([3e38]), {}).raster;
+  assert.ok(Number.isNaN(changed.bands[0][0]));
+  const converted = sarDbConvert(raster([400, 20]), { direction: "to-linear", quantity: "power" });
+  assert.equal(converted.bands[0][0], SAR_NODATA);
+  assert.ok(Math.abs(converted.bands[0][1] - 100) < 1e-5);
+});
+
+it("rejects malformed geometries and unsupported line masks", async () => {
+  const input = raster([1, 2, 3, 4], 2, 2);
+  await assert.rejects(
+    zonalStatistics(
+      input,
+      {
+        type: "FeatureCollection",
+        features: [
+          { type: "Feature", properties: {}, geometry: { type: "Polygonn", coordinates: [] } },
+        ],
+      },
+      {},
+    ),
+    /malformed GeoJSON/,
+  );
+  await assert.rejects(
+    clipRasterByMask(
+      input,
+      {
+        type: "LineString",
+        coordinates: [
+          [0, 0],
+          [2, 2],
+        ],
+      },
+      {},
+    ),
+    /line geometries/,
+  );
+  const empty = await zonalStatistics(
+    input,
+    { type: "Feature", properties: {}, geometry: null },
+    {},
+  );
+  assert.equal(empty.geojson.features[0].geometry, null);
+  assert.equal(empty.geojson.features[0].properties?.count, 0);
+});
+
+it("bounds contour levels and retains sub-micro-unit elevations", () => {
+  assert.throws(() => contourRaster(raster([0, 1, 0, 1], 2, 2), { interval: 1e-9 }), /work budget/);
+  const output = contourRaster(raster([0, 4e-7, 0, 4e-7], 2, 2), { interval: 1e-7 });
+  const levels = new Set(output.geojson.features.map((feature) => feature.properties?.elev));
+  assert.ok(levels.has(1e-7));
+  assert.ok(levels.has(2e-7));
+  assert.ok(levels.has(3e-7));
+  const noisy = raster(
+    Array.from({ length: 500 * 500 }, (_, i) => ((i % 500) + Math.floor(i / 500)) % 2),
+    500,
+    500,
+  );
+  assert.throws(() => contourRaster(noisy, { interval: 1 }), /segment budget/);
+});
+
+it("bounds total warp and mosaic allocations and verifies mosaic CRS and resolution", () => {
+  const input = { ...raster(new Array(1_000_000).fill(1), 1000, 1000), resX: 8, resY: 8 };
+  input.bands = new Array(12).fill(input.bands[0]);
+  assert.throws(() => resampleRaster(input, { resolution: 1 }), /too large/);
+  assert.throws(
+    () =>
+      mosaicRasters([raster([1]), { ...raster([2]), originX: 40000, originY: -40000 }], "first"),
+    /allocation budget/,
+  );
+  assert.throws(
+    () =>
+      mosaicRasters(
+        [
+          { ...raster([1]), geoKeys: { GTModelTypeGeoKey: 1 } },
+          { ...raster([2]), geoKeys: {} },
+        ],
+        "first",
+      ),
+    /known EPSG/,
+  );
+  assert.throws(
+    () =>
+      mosaicRasters(
+        [{ ...raster(new Array(1_000_001).fill(1)) }, { ...raster([2]), resX: 2 }],
+        "first",
+      ),
+    /equal pixel size/,
+  );
+  const small = raster([1, 2, 3, 4], 2, 2);
+  small.bands = new Array(12).fill(small.bands[0]);
+  assert.equal(resampleRaster(small, { resolution: 1 }).bands.length, 12);
+});
+
+it("keeps degenerate interpolation axes at one cell and normalizes small kriging systems", async () => {
+  const points = {
+    type: "FeatureCollection",
+    features: [0, 1, 2].map((y) => ({
+      type: "Feature",
+      properties: { z: 7 },
+      geometry: { type: "Point", coordinates: [500000, y] },
+    })),
+    crs: { type: "name", properties: { name: "EPSG:32617" } },
+  };
+  for (const method of ["idw", "kriging"]) {
+    const output = await interpolatePoints(points, {
+      method,
+      field: "z",
+      resolution: 0.2,
+      variogram_model: "linear",
+    });
+    assert.equal(output.raster.width, 1);
+    for (const value of output.raster.bands[0]) assert.ok(Math.abs(value - 7) < 1e-5);
+  }
+  for (const feature of points.features) feature.properties.z = 1e39;
+  const overflow = await interpolatePoints(points, { method: "idw", field: "z", resolution: 1 });
+  assert.ok([...overflow.raster.bands[0]].every(Number.isNaN));
+  points.features[1].geometry.coordinates = [...points.features[0].geometry.coordinates];
+  await assert.rejects(
+    interpolatePoints(points, { method: "kriging", field: "z", resolution: 1 }),
+    /singular/,
+  );
+});
+
+it("keeps the earliest exact linear variogram fit when residuals are near zero", async () => {
+  const q = (-46 + Math.sqrt(2668)) / 6;
+  const points = {
+    type: "FeatureCollection",
+    features: [0, 1, q].map((z, x) => ({
+      type: "Feature",
+      properties: { z },
+      geometry: { type: "Point", coordinates: [x, 0] },
+    })),
+  };
+  const result = await interpolatePoints(points, {
+    method: "kriging",
+    field: "z",
+    resolution: 0.5,
+    variogram_model: "linear",
+  });
+  assert.match(result.messages.join("\n"), /range=1\.95,/);
+});

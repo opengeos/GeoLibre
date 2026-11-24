@@ -252,7 +252,7 @@ export async function readRasterData(
     flipX: resolutionX < 0,
     flipY: resolutionY > 0,
     ...(rotated ? { rotated: true } : {}),
-    nodata: noData != null && Number.isFinite(noData) ? noData : null,
+    nodata: noData ?? null,
     geoKeys: (image.getGeoKeys() as Record<string, unknown>) ?? {},
   };
 }
@@ -313,7 +313,8 @@ function writeInterleaved<T extends Float32Array | Uint8Array>(
     ModelPixelScale: [raster.resX, raster.resY, 0],
     ModelTiepoint: [0, 0, 0, raster.originX, raster.originY, 0],
   };
-  if (raster.nodata != null) metadata.GDAL_NODATA = String(raster.nodata);
+  if (raster.nodata != null)
+    metadata.GDAL_NODATA = Number.isNaN(raster.nodata) ? "nan" : String(raster.nodata);
   for (const key of PRESERVED_GEO_KEYS) {
     const value = raster.geoKeys[key];
     if (value != null) metadata[key] = value;

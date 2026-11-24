@@ -29,7 +29,7 @@ import {
 export type WarpResampling = "nearest" | "bilinear" | "cubic";
 
 /** NoData written where the source does not declare one (matches the terrain tools). */
-const DEFAULT_NODATA = -9999;
+const DEFAULT_NODATA = Number.NaN;
 
 /** GDAL's approximate transformer error threshold (rasterio's `tolerance`). */
 const APPROX_ERROR = 0.125;
@@ -312,7 +312,10 @@ function approxInternal(
 /** Resample every band of `plan.src` onto `plan.dst`. */
 function warp(plan: WarpPlan): { bands: Float32Array[]; nodata: number } {
   const { src, dst, method, rowTransform, exactTransform } = plan;
-  if (dst.width * dst.height > MAX_WARP_PIXELS) {
+  if (
+    dst.width * dst.height > MAX_WARP_PIXELS ||
+    dst.width * dst.height * src.bands.length * 4 > 256 * 1024 * 1024
+  ) {
     throw new Error(
       `The ${dst.width}x${dst.height} output is too large for the in-browser engine. Use the sidecar (rasterio/GDAL) engine instead.`,
     );
@@ -323,7 +326,7 @@ function warp(plan: WarpPlan): { bands: Float32Array[]; nodata: number } {
   const H = src.height;
   const srcNodata = src.nodata;
   const masked = srcNodata != null;
-  const outNodata = srcNodata ?? DEFAULT_NODATA;
+  const outNodata = DEFAULT_NODATA;
   const radius0 = FILTER_RADIUS[method];
   const xRadius = scaleX < 1 ? Math.ceil(radius0 / scaleX) : radius0;
   const yRadius = scaleY < 1 ? Math.ceil(radius0 / scaleY) : radius0;
@@ -487,7 +490,7 @@ function warp(plan: WarpPlan): { bands: Float32Array[]; nodata: number } {
         else if (use4)
           value = method === "bilinear" ? bilinear4(band, px, py) : cubic4(band, px, py);
         else value = general(band, px, py);
-        if (value == null || !Number.isFinite(value)) continue;
+        if (value == null || !Number.isFinite(Math.fround(value))) continue;
         bands[b][di] = value;
       }
     }
@@ -731,8 +734,10 @@ export function mosaicRasters(
   const rasters = inputs.map(toNorthUp);
   const first = rasters[0];
   const firstEpsg = rasterEpsg(first);
-  if (!Object.keys(first.geoKeys ?? {}).length) {
-    throw new Error("First raster has no CRS; mosaic requires georeferenced inputs.");
+  if (firstEpsg === null) {
+    throw new Error(
+      "Mosaic requires a known EPSG CRS for every input; resolve or reproject custom/unknown CRSs with the sidecar first.",
+    );
   }
   for (const r of rasters.slice(1)) {
     if (rasterEpsg(r) !== firstEpsg) {
@@ -743,13 +748,11 @@ export function mosaicRasters(
         `All rasters must have the same band count; one has ${r.bands.length} but the first has ${first.bands.length}.`,
       );
     }
-    const tolX = 1e-6 * first.resX * Math.max(first.width, r.width);
-    const tolY = 1e-6 * first.resY * Math.max(first.height, r.height);
     const offX = (r.originX - first.originX) / first.resX;
     const offY = (first.originY - r.originY) / first.resY;
     if (
-      Math.abs(r.resX - first.resX) > tolX / Math.max(1, r.width) ||
-      Math.abs(r.resY - first.resY) > tolY / Math.max(1, r.height) ||
+      Math.abs(r.resX - first.resX) > 1e-6 * Math.abs(first.resX) ||
+      Math.abs(r.resY - first.resY) > 1e-6 * Math.abs(first.resY) ||
       Math.abs(offX - Math.round(offX)) > 1e-3 ||
       Math.abs(offY - Math.round(offY)) > 1e-3
     ) {
@@ -760,9 +763,9 @@ export function mosaicRasters(
   }
   const messages: string[] = [];
   for (const r of rasters.slice(1)) {
-    if (r.nodata !== first.nodata) {
+    if (r.nodata !== first.nodata && !(Number.isNaN(r.nodata) && Number.isNaN(first.nodata))) {
       messages.push(
-        `Warning: inputs have different nodata values (${first.nodata} vs ${r.nodata}); output nodata will be ${first.nodata}.`,
+        `Warning: inputs have different nodata values (${first.nodata} vs ${r.nodata}); output nodata is NaN.`,
       );
     }
   }
@@ -773,7 +776,16 @@ export function mosaicRasters(
   const minY = Math.min(...rasters.map((r) => r.originY - r.height * r.resY));
   const width = Math.max(1, Math.ceil((maxX - minX) / resX - 1e-9));
   const height = Math.max(1, Math.ceil((maxY - minY) / resY - 1e-9));
-  const outNodata = first.nodata ?? DEFAULT_NODATA;
+  const pixels = width * height;
+  if (
+    !Number.isSafeInteger(pixels) ||
+    pixels > MAX_WARP_PIXELS ||
+    pixels * first.bands.length * 5 > 256 * 1024 * 1024
+  )
+    throw new RangeError(
+      "The mosaic union exceeds the browser allocation budget. Crop the extent or use the sidecar (rasterio/GDAL) engine.",
+    );
+  const outNodata = DEFAULT_NODATA;
   const bands = first.bands.map(() => new Float32Array(width * height).fill(outNodata));
   // Per-band "already written" flags: rasterio decides per band value whether
   // the destination still holds NoData.

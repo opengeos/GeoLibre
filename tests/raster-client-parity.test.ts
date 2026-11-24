@@ -12,6 +12,7 @@ import {
   resampleRaster,
   type RasterData,
 } from "@geolibre/processing";
+import { rasterEpsg } from "../packages/processing/src/raster-geo";
 import type { Feature, FeatureCollection, LineString, Polygon, Position } from "geojson";
 
 /**
@@ -89,6 +90,7 @@ function assertRasterMatches(
 ): void {
   assert.equal(actual.width, expected.width, `${label}: width`);
   assert.equal(actual.height, expected.height, `${label}: height`);
+  assert.equal(rasterEpsg(actual), expected.epsg, `${label}: CRS`);
   assert.ok(close(actual.originX, expected.originX, 1e-9), `${label}: originX`);
   assert.ok(close(actual.originY, expected.originY, 1e-9), `${label}: originY`);
   assert.ok(close(actual.resX, expected.resX, 1e-9), `${label}: resX`);
@@ -192,8 +194,8 @@ describe("raster client parity with the rasterio sidecar", () => {
         fc.features
           .map((f) => {
             const poly = f.geometry as Polygon;
-            const rings = poly.coordinates.map((r) => ringKey(r)).sort();
-            return `${f.properties!.value}|${rings.join("/")}`;
+            const [outer, ...holes] = poly.coordinates.map((r) => ringKey(r));
+            return `${f.properties!.value}|${outer}/${holes.sort().join("/")}`;
           })
           .sort();
       assert.deepEqual(canon(geojson), canon(expected));
@@ -221,16 +223,14 @@ describe("raster client parity with the rasterio sidecar", () => {
           return {
             level: f.properties!.elev as number,
             closed,
-            pts: [...(closed ? pts.slice(0, -1) : pts)].sort((p, q) => p[0] - q[0] || p[1] - q[1]),
+            pts: closed ? pts.slice(0, -1) : pts,
           };
         });
       const same = (x: ReturnType<typeof lines>[number], y: ReturnType<typeof lines>[number]) =>
         x.level === y.level &&
         x.closed === y.closed &&
         x.pts.length === y.pts.length &&
-        x.pts.every(
-          (p, i) => Math.abs(p[0] - y.pts[i][0]) < 1e-3 && Math.abs(p[1] - y.pts[i][1]) < 1e-3,
-        );
+        samePath(x.pts, y.pts, x.closed);
       const actual = lines(geojson);
       const want = lines(expected);
       assert.equal(actual.length, want.length, "line count");
@@ -256,7 +256,7 @@ function shoelace(ring: Position[]): number {
   return total / 2;
 }
 
-/** A ring's vertex set without collinear points, independent of start and direction. */
+/** A ring sequence without collinear points, independent of cyclic start and direction. */
 function ringKey(ring: Position[]): string {
   const pts = ring.slice(0, -1);
   const n = pts.length;
@@ -268,8 +268,32 @@ function ringKey(ring: Position[]): string {
       (prev[1] === cur[1] && cur[1] === next[1])
     );
   });
-  return kept
-    .map((p) => `${p[0]},${p[1]}`)
-    .sort()
-    .join(";");
+  const tokens = kept.map((p) => `${p[0]},${p[1]}`);
+  return (
+    [tokens, [...tokens].reverse()]
+      .flatMap((sequence) =>
+        sequence.map((_, start) =>
+          [...sequence.slice(start), ...sequence.slice(0, start)].join(";"),
+        ),
+      )
+      .sort()[0] ?? ""
+  );
+}
+
+/** Compare contour edges in order, allowing reversal and cyclic starts for rings. */
+function samePath(a: Position[], b: Position[], closed: boolean): boolean {
+  if (a.length !== b.length) return false;
+  const n = a.length;
+  for (const direction of [1, -1]) {
+    const starts = closed ? Array.from({ length: n }, (_, i) => i) : [direction === 1 ? 0 : n - 1];
+    for (const start of starts)
+      if (
+        a.every((point, i) => {
+          const other = b[(start + direction * i + n) % n];
+          return Math.abs(point[0] - other[0]) < 1e-3 && Math.abs(point[1] - other[1]) < 1e-3;
+        })
+      )
+        return true;
+  }
+  return false;
 }

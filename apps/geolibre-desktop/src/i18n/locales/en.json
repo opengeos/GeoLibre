@@ -8631,7 +8631,7 @@
         },
         "sar-db": {
           "name": "Linear / dB conversion",
-          "description": "Convert SAR backscatter between linear units and decibels (10 log10 for power, 20 log10 for amplitude). Values at or below zero have no dB value and become NoData.",
+          "description": "Convert SAR backscatter between linear units and decibels (10 log10 for power, 20 log10 for amplitude). When converting linear units to dB, values at or below zero have no dB value and become NoData.",
           "params": {
             "direction": {
               "label": "Direction",
@@ -8725,7 +8725,7 @@
           "params": {
             "pre_path": {
               "label": "Pre-event raster (optional)",
-              "description": "A pre-flood image on the same grid. Output: 0 dry, 1 permanent water, 2 new flooding. Without it: 0 not water, 1 water."
+              "description": "A pre-flood image on the same grid. Output: 0 neither permanent water nor new flooding, 1 permanent water, 2 new flooding. Without it: 0 not water, 1 water."
             },
             "units": {
               "label": "Input units",

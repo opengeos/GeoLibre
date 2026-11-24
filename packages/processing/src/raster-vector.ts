@@ -36,7 +36,7 @@ import {
  */
 
 /** NoData written where the source declares none. */
-const DEFAULT_NODATA = -9999;
+const DEFAULT_NODATA = Number.NaN;
 
 type Ring = Position[];
 
@@ -306,6 +306,10 @@ export async function clipRasterByMask(
   const geometries = (
     await geometriesInRasterCrs(raster, features, geojsonEpsg(maskGeojson), "clip-by-mask")
   ).filter((g): g is Geometry => g != null);
+  if (geometries.some((geometry) => splitGeometry(geometry).lines))
+    throw new Error(
+      "Browser clip-by-mask does not support line geometries. Use polygon/point masks or the sidecar (rasterio/GDAL) engine.",
+    );
   const messages: string[] = [];
   const window = geometryWindow(raster, geometries);
   if (!window && crop) throw new Error("Input shapes do not overlap raster.");
@@ -663,12 +667,17 @@ export function contourLevels(
   zmax: number,
   interval: number,
   base: number,
+  gridCells = 1,
 ): number[] {
   const start = base + Math.ceil((zmin - base) / interval) * interval;
   const n = Math.floor((zmax - start) / interval + 1e-9) + 1;
+  if (!Number.isFinite(n) || n > 10_000 || n * gridCells > 50_000_000)
+    throw new RangeError(
+      "Contour levels exceed the browser work budget. Increase the interval or use the sidecar (rasterio/GDAL) engine.",
+    );
   const levels: number[] = [];
   for (let i = 0; i < Math.max(0, n); i += 1) {
-    levels.push(Number((start + i * interval).toFixed(6)));
+    levels.push(start + i * interval);
   }
   return levels;
 }
@@ -682,12 +691,17 @@ export function contourRaster(
   input: RasterData,
   params: ContourParams,
 ): { geojson: FeatureCollection; messages: string[] } {
+  if (input.width * input.height > 8_000_000)
+    throw new RangeError(
+      "Browser contour input exceeds 8 million pixels. Crop it or use the sidecar engine.",
+    );
   const raster = toNorthUp(input);
   const bandIndex = Math.trunc(Number(params.band ?? 1));
   const band = raster.bands[bandIndex - 1];
   if (!band) throw new Error(`Band ${bandIndex} out of range.`);
   const interval = Number(params.interval);
-  if (!(interval > 0)) throw new Error("Contour interval must be > 0");
+  if (!(interval > 0) || !Number.isFinite(interval))
+    throw new Error("Contour interval must be finite and > 0");
   const base = Number(params.base ?? 0) || 0;
   const attribute = String(params.attribute ?? "elev");
   const { width: nx, height: ny, nodata } = raster;
@@ -705,7 +719,7 @@ export function contourRaster(
     }
   }
   if (!Number.isFinite(zmin)) throw new Error("Raster band has no valid data to contour");
-  const levels = contourLevels(zmin, zmax, interval, base);
+  const levels = contourLevels(zmin, zmax, interval, base, nx * ny);
   if (!levels.length) {
     throw new Error(
       `No contour levels fall within the data range [${zmin}, ${zmax}] for interval=${interval} and base=${base}.`,
@@ -717,8 +731,9 @@ export function contourRaster(
   ];
 
   const features: Feature<LineString>[] = [];
+  const budget = { segments: 0 };
   for (const level of levels) {
-    for (const line of traceLevel(z, ok, nx, ny, level)) {
+    for (const line of traceLevel(z, ok, nx, ny, level, budget)) {
       if (line.length < 2) continue;
       features.push({
         type: "Feature",
@@ -751,6 +766,7 @@ function traceLevel(
   nx: number,
   ny: number,
   level: number,
+  budget: { segments: number },
 ): Position[][] {
   // A crossing is identified by its grid edge (ordered point pair) so segments
   // from neighbouring cells join; diagonal edges (corner triangles) are unique.
@@ -769,6 +785,10 @@ function traceLevel(
     return [ax * frac + bx * (1 - frac), ay * frac + by * (1 - frac)];
   };
   const addSegment = (e1: [number, number], e2: [number, number]) => {
+    if (++budget.segments > 250_000)
+      throw new RangeError(
+        "Contour output exceeds the browser segment budget. Increase the interval, crop the raster, or use the sidecar engine.",
+      );
     const k1 = key(e1[0], e1[1]);
     const k2 = key(e2[0], e2[1]);
     if (!crossing.has(k1)) crossing.set(k1, point(e1[0], e1[1]));

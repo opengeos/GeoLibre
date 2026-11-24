@@ -15,7 +15,7 @@ import { epsgDefinition, geoKeysForEpsg, geojsonEpsg } from "./raster-geo";
  * rejected with a pointer to the sidecar.
  */
 
-const NODATA = -9999;
+const NODATA = Number.NaN;
 const MAX_IDW_POINTS = 200_000;
 const MAX_CELLS_IDW = 6_000_000;
 const MAX_CELLS_KRIGE = 1_000_000;
@@ -246,10 +246,11 @@ export async function interpolatePoints(
     maxy = Math.max(maxy, py[i]);
   }
   // A degenerate extent (all points share an x or y) still needs a 1-cell span.
-  if (maxx <= minx) maxx = minx + resolution;
-  if (maxy <= miny) maxy = miny + resolution;
-  const width = Math.max(1, Math.ceil((maxx - minx) / resolution));
-  const height = Math.max(1, Math.ceil((maxy - miny) / resolution));
+  const zeroX = maxx <= minx;
+  const zeroY = maxy <= miny;
+  if (zeroY) maxy = miny + resolution;
+  const width = zeroX ? 1 : Math.max(1, Math.ceil((maxx - minx) / resolution));
+  const height = zeroY ? 1 : Math.max(1, Math.ceil((maxy - miny) / resolution));
   const cells = width * height;
   const cap = method === "kriging" ? MAX_CELLS_KRIGE : MAX_CELLS_IDW;
   if (cells > cap) {
@@ -257,8 +258,6 @@ export async function interpolatePoints(
       `Output grid is ${width}x${height} = ${cells} cells, above the ${cap} limit for ${method}. Increase the pixel size.`,
     );
   }
-  const gx = Float64Array.from({ length: width }, (_, i) => minx + (i + 0.5) * resolution);
-  const gy = Float64Array.from({ length: height }, (_, j) => maxy - (j + 0.5) * resolution);
 
   const n = pz.length;
   if (method === "kriging" && n > MAX_KRIGE_POINTS)
@@ -270,6 +269,8 @@ export async function interpolatePoints(
     throw new Error(
       "Interpolation exceeds the in-browser work budget. Thin the points, increase the pixel size, or use the sidecar for large kriging requests.",
     );
+  const gx = Float64Array.from({ length: width }, (_, i) => minx + (i + 0.5) * resolution);
+  const gy = Float64Array.from({ length: height }, (_, j) => maxy - (j + 0.5) * resolution);
   const out = new Float32Array(cells);
   if (method === "idw") {
     const half = power / 2;
@@ -303,38 +304,34 @@ export async function interpolatePoints(
           }
           value = wsum > 0 ? acc / wsum : Number.NaN;
         }
-        out[j * width + i] = Number.isFinite(value) ? value : NODATA;
+        out[j * width + i] = Number.isFinite(Math.fround(value)) ? value : NODATA;
       }
     }
   } else if (method === "kriging") {
     const dist = new Float64Array(n * n);
-    const h: number[] = [];
-    const gamma: number[] = [];
+    let hmax = 0;
     for (let a = 0; a < n; a += 1) {
       for (let b = 0; b < n; b += 1) {
         const d = Math.sqrt((px[a] - px[b]) ** 2 + (py[a] - py[b]) ** 2);
         dist[a * n + b] = d;
-        if (b > a) {
-          h.push(d);
-          gamma.push(0.5 * (pz[a] - pz[b]) ** 2);
-        }
+        if (b > a) hmax = Math.max(hmax, d);
       }
     }
-    let hmax = 0;
-    for (const distance of h) hmax = Math.max(hmax, distance);
     if (!(hmax > 0)) throw new Error("All points are coincident; cannot krige.");
     const nbins = 12;
     const edges = linspace(0, hmax, nbins + 1);
     const centers = edges.slice(0, -1).map((e, k) => 0.5 * (e + edges[k + 1]));
     const sums = new Float64Array(nbins);
     const counts = new Float64Array(nbins);
-    for (let k = 0; k < h.length; k += 1) {
-      // np.digitize (right=False) - 1, clipped to [0, nbins - 1].
-      let idx = 0;
-      while (idx < edges.length && edges[idx] <= h[k]) idx += 1;
-      const bin = Math.min(nbins - 1, Math.max(0, idx - 1));
-      sums[bin] += gamma[k];
-      counts[bin] += 1;
+    for (let a = 0; a < n; a++) {
+      for (let b = a + 1; b < n; b++) {
+        const h = dist[a * n + b];
+        let idx = 0;
+        while (idx < edges.length && edges[idx] <= h) idx++;
+        const bin = Math.min(nbins - 1, Math.max(0, idx - 1));
+        sums[bin] += 0.5 * (pz[a] - pz[b]) ** 2;
+        counts[bin]++;
+      }
     }
     const binH: number[] = [];
     const binG: number[] = [];
@@ -352,6 +349,7 @@ export async function interpolatePoints(
       sill: number;
       nugget: number;
     } | null = null;
+    const sseFloor = 64 * Number.EPSILON * binG.reduce((sum, value) => sum + value * value, 0);
     for (const r of linspace(hmax * 0.1, hmax * 1.5, 25)) {
       const shape = binH.map((hh) => variogramShape(hh / r, model));
       const [c0, c1] = lstsq2(shape, binG);
@@ -361,14 +359,16 @@ export async function interpolatePoints(
       for (let k = 0; k < shape.length; k += 1) sse += (nugget + sill * shape[k] - binG[k]) ** 2;
       // Smallest range among (near-)equal fits, as the sidecar does: past the
       // largest bin the SSE is flat in r and only rounding noise differs.
-      if (!best || sse < best.sse * (1 - 1e-9)) best = { sse, range: r, sill, nugget };
+      if (!best || best.sse - sse > Math.max(best.sse * 1e-9, sseFloor))
+        best = { sse, range: r, sill, nugget };
     }
     const { range, sill, nugget } = best!;
     messages.push(
       `Variogram (${model}): range=${g4(range)}, sill=${g4(sill)}, nugget=${g4(nugget)}`,
     );
+    const semivarianceScale = Math.max(sill, nugget);
     const gammaModel = (hh: number) =>
-      hh <= 0 ? 0 : nugget + sill * variogramShape(hh / range, model);
+      hh <= 0 ? 0 : (nugget + sill * variogramShape(hh / range, model)) / semivarianceScale;
     const m = n + 1;
     const big = new Float64Array(m * m).fill(1);
     for (let a = 0; a < n; a += 1) {
@@ -389,7 +389,7 @@ export async function interpolatePoints(
         for (let k = 0; k < n; k += 1) {
           value += dual[k] * gammaModel(Math.sqrt((gx[i] - px[k]) ** 2 + (gy[j] - py[k]) ** 2));
         }
-        out[j * width + i] = Number.isFinite(value) ? value : NODATA;
+        out[j * width + i] = Number.isFinite(Math.fround(value)) ? value : NODATA;
       }
     }
   } else {

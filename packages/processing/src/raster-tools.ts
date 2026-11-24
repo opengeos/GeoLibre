@@ -942,7 +942,7 @@ export const sarDbTool: RasterTool = {
   id: "sar-db",
   name: "Linear / dB conversion",
   description:
-    "Convert SAR backscatter between linear units and decibels (10 log10 for power, 20 log10 for amplitude). Values at or below zero have no dB value and become NoData.",
+    "Convert SAR backscatter between linear units and decibels (10 log10 for power, 20 log10 for amplitude). When converting linear units to dB, values at or below zero have no dB value and become NoData.",
   group: "SAR",
   outputKind: "raster",
   defaultOutputName: "backscatter-db.tif",
@@ -1123,7 +1123,7 @@ export const floodMapTool: RasterTool = {
       type: "path",
       fileFilters: GEOTIFF_INPUT,
       description:
-        "A pre-flood image on the same grid. Output: 0 dry, 1 permanent water, 2 new flooding. Without it: 0 not water, 1 water.",
+        "A pre-flood image on the same grid. Output: 0 neither permanent water nor new flooding, 1 permanent water, 2 new flooding. Without it: 0 not water, 1 water.",
     },
     SAR_UNITS_PARAM,
     {

@@ -148,8 +148,6 @@ def read_output(path: Path) -> dict:
         bands = []
         for b in range(src.count):
             valid = masks[b] > 0
-            if src.nodata is not None:
-                valid &= ~np.isclose(arr[b], src.nodata)
             band = [None if not ok else float(v) for v, ok in zip(arr[b].ravel(), valid.ravel())]
             bands.append(band)
         return {

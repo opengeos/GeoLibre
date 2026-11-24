@@ -37,7 +37,7 @@ export function sarDbConvert(input: RasterData, params: DbConvertParams): Raster
       }
       // Zero/negative backscatter has no dB value (log of <= 0).
       const r = toDb ? (v > 0 ? factor * Math.log10(v) : Number.NaN) : 10 ** (v / factor);
-      out[i] = Number.isFinite(r) ? r : SAR_NODATA;
+      out[i] = Number.isFinite(Math.fround(r)) ? r : SAR_NODATA;
     }
     return out;
   });
@@ -419,7 +419,7 @@ export function floodMap(
         `Water threshold ${threshold} dB, change >= ${changeDb} dB.`,
         `New flooding: ${counts[2]} px (${pct(2)}%), permanent water: ${
           counts[1]
-        } px (${pct(1)}%), dry: ${counts[0]} px.`,
+        } px (${pct(1)}%), other: ${counts[0]} px (neither permanent water nor new flooding).`,
       ]
     : [
         `Water threshold ${threshold} dB.`,

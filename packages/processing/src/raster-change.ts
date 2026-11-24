@@ -1,5 +1,5 @@
 import type { RasterData } from "./raster-client";
-import { toNorthUp } from "./raster-geo";
+import { rasterEpsg, toNorthUp } from "./raster-geo";
 import { SENSOR_IDS, SENSOR_PRESETS } from "./spectral-indices";
 
 /**
@@ -10,7 +10,7 @@ import { SENSOR_IDS, SENSOR_PRESETS } from "./spectral-indices";
  */
 
 /** NoData written by the change tools. */
-export const CHANGE_NODATA = -9999;
+export const CHANGE_NODATA = Number.NaN;
 
 function valid(v: number, nodata: number | null): boolean {
   return Number.isFinite(v) && (nodata == null || v !== nodata);
@@ -21,6 +21,10 @@ function valid(v: number, nodata: number | null): boolean {
  * of a pixel), which pixel-wise comparison needs.
  */
 export function assertSameGrid(a: RasterData, b: RasterData, what: string): void {
+  const crsA = rasterEpsg(a);
+  const crsB = rasterEpsg(b);
+  if (crsA !== crsB || (crsA === null && JSON.stringify(a.geoKeys) !== JSON.stringify(b.geoKeys)))
+    throw new Error(`The ${what} raster has a different or unverified CRS; reproject it first.`);
   if (a.width !== b.width || a.height !== b.height) {
     throw new Error(
       `The ${what} raster is ${b.width}x${b.height} but the first is ${a.width}x${a.height}; resample or clip them onto the same grid first.`,
@@ -111,7 +115,7 @@ export function bandDifference(
       else same += 1;
       out[i] = cls;
     } else {
-      out[i] = v;
+      out[i] = Number.isFinite(Math.fround(v)) ? v : CHANGE_NODATA;
     }
   }
   const messages = [`Change metric: ${mode} (after vs before, band ${bandNo}).`];
@@ -201,7 +205,7 @@ export function ndviChange(
       else stable += 1;
       out[i] = cls;
     } else {
-      out[i] = d;
+      out[i] = Number.isFinite(Math.fround(d)) ? d : CHANGE_NODATA;
     }
   }
   const messages = [`NDVI bands: red ${red}, NIR ${nir}.`];

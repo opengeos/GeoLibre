@@ -220,9 +220,14 @@ describe("SAR utilities", () => {
   });
 
   it("speckle-filters dB input in linear space and returns dB", () => {
-    const db = makeRaster([Array(9).fill(-10)], 3, 3);
+    const db = makeRaster([[-5, -10, -15, -20, -6, -12, -18, -9, -16]], 3, 3);
     const out = speckleFilter(db, { method: "lee", size: 3, units: "db" }).raster.bands[0];
-    for (const v of out) assert.ok(Math.abs(v - -10) < 1e-5);
+    const linear = sarDbConvert(db, { direction: "to-linear" });
+    const expected = sarDbConvert(
+      speckleFilter(linear, { method: "lee", size: 3, units: "linear" }).raster,
+      { direction: "to-db" },
+    ).bands[0];
+    for (let i = 0; i < out.length; i++) assert.ok(Math.abs(out[i] - expected[i]) < 1e-5);
   });
 
   it("builds a dual-pol RGB from VV/VH bands with dB stretches", () => {

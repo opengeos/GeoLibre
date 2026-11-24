@@ -417,7 +417,25 @@ def test_interpolate_kriging_linear_variogram_picks_smallest_tied_range(
 
     import numpy as np
 
-    src = _write_points(tmp_path / "points.geojson")
+    # These two empirical bins fit a line through zero exactly. Their
+    # centre ratio is 23/13, so solve 2*q**2 / (1 + (q-1)**2) = 23/13.
+    q = (-46 + np.sqrt(2668)) / 6
+    src = tmp_path / "points.geojson"
+    src.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "properties": {"z": value},
+                        "geometry": {"type": "Point", "coordinates": [x, 0]},
+                    }
+                    for x, value in enumerate([0.0, 1.0, q])
+                ],
+            }
+        )
+    )
     out = tmp_path / "kriging-linear.tif"
     stdout = _run_script(
         _RASTER_TOOL_SCRIPTS["interpolate"],
@@ -442,7 +460,85 @@ def test_interpolate_kriging_linear_variogram_picks_smallest_tied_range(
     edges = np.linspace(0.0, hmax, 13)
     top_centre = float(0.5 * (edges[-2] + edges[-1]))
     first_flat = next(r for r in np.linspace(hmax * 0.1, hmax * 1.5, 25) if r >= top_centre)
-    assert picked <= float(f"{first_flat:.4g}") + 1e-9
+    assert picked == float(f"{first_flat:.4g}") == 1.95
+
+
+@requires_rasterio
+@pytest.mark.parametrize("method", ["idw", "kriging"])
+def test_interpolate_zero_span_uses_one_column(tmp_path: Path, method: str) -> None:
+    """Keep a zero-span axis at one pixel despite projected-coordinate rounding.
+
+    Args:
+        tmp_path: Isolated input and output directory.
+        method: Interpolation method under test.
+    """
+    import rasterio
+
+    src = tmp_path / "points.geojson"
+    src.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "crs": {"type": "name", "properties": {"name": "EPSG:32617"}},
+                "features": [
+                    {
+                        "type": "Feature",
+                        "properties": {"z": 7},
+                        "geometry": {"type": "Point", "coordinates": [500000, 4100000 + y]},
+                    }
+                    for y in range(3)
+                ],
+            }
+        )
+    )
+    out = tmp_path / "one-column.tif"
+    _run_script(
+        _RASTER_TOOL_SCRIPTS["interpolate"],
+        {
+            "input_path": str(src),
+            "output_path": str(out),
+            "field": "z",
+            "method": method,
+            "resolution": 0.2,
+            "variogram_model": "linear",
+        },
+    )
+    with rasterio.open(out) as image:
+        assert image.shape == (10, 1)
+        assert abs(float(image.read(1).mean()) - 7) < 1e-5
+
+
+@requires_rasterio
+def test_parity_fixture_preserves_valid_values_near_nodata(tmp_path: Path) -> None:
+    """Use raster masks to retain valid stored values near a finite sentinel.
+
+    Args:
+        tmp_path: Isolated fixture raster directory.
+    """
+    import runpy
+
+    import numpy as np
+    import rasterio
+    from rasterio.transform import from_origin
+
+    src = tmp_path / "near-nodata.tif"
+    values = np.array([[-9999.05, -9999]], dtype="float32")
+    with rasterio.open(
+        src,
+        "w",
+        driver="GTiff",
+        width=2,
+        height=1,
+        count=1,
+        dtype="float32",
+        nodata=-9999,
+        crs="EPSG:4326",
+        transform=from_origin(0, 1, 1, 1),
+    ) as image:
+        image.write(values, 1)
+    generator = Path(__file__).resolve().parents[3] / "scripts/gen-raster-parity-fixtures.py"
+    record = runpy.run_path(str(generator))["read_output"](src)
+    assert record["bands"] == [[float(values[0, 0]), None]]
 
 
 @requires_rasterio

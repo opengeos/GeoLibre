@@ -196,6 +196,17 @@ pixel size, or select the sidecar for larger kriging jobs. Transition-matrix
 outputs require codes within the exact Float32 integer range (up to 16,777,216);
 reclassify larger labels to smaller non-negative integers first.
 
+Floating browser change, interpolation, warp, and mosaic outputs use NaN for
+NoData, preserving valid finite values such as `-9999`. Clip by mask also uses
+NaN when the source has no declared NoData. Browser masks support polygon and
+point geometries; use the sidecar for line masks or line zones. Mosaic requires
+matching known EPSG codes and aligned pixel sizes.
+
+Warp and mosaic output buffers have a 256 MiB allocation budget that includes
+all bands (and mosaic validity flags). Contouring accepts at most 8 million
+pixels, 10,000 levels, 50 million level/pixel visits, and 250,000 output segments.
+Increase the interval or crop the raster when these limits are reached.
+
 Browser polygonization accepts at most 8 million pixels and 250,000 directed
 boundary edges. Noisy classified rasters can reach the edge budget well below
 the pixel limit. Crop or simplify them, or select the sidecar.

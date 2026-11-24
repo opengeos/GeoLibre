@@ -67,7 +67,14 @@ export function toNorthUp(raster: RasterData): RasterData {
 /** The EPSG code a raster's GeoKeys name, or null for a user-defined/absent CRS. */
 export function rasterEpsg(raster: Pick<RasterData, "geoKeys">): number | null {
   const keys = raster.geoKeys ?? {};
-  for (const key of ["ProjectedCSTypeGeoKey", "GeographicTypeGeoKey"]) {
+  const model = Number(keys.GTModelTypeGeoKey);
+  const candidates =
+    model === 1 || (model !== 2 && keys.ProjectedCSTypeGeoKey != null)
+      ? ["ProjectedCSTypeGeoKey"]
+      : model === 3
+        ? []
+        : ["GeographicTypeGeoKey"];
+  for (const key of candidates) {
     const code = Number(keys[key]);
     if (Number.isInteger(code) && code > 0 && code !== 32767) return code;
   }
@@ -92,7 +99,10 @@ export async function rasterCrsDefinition(raster: RasterData, toolName: string):
   }
   const { toProj4 } = await import("geotiff-geokeys-to-proj4");
   const resolved = toProj4(keys as never);
-  if (!resolved.proj4 || resolved.errors?.CRSNotSupported) {
+  const projected =
+    Number(keys.GTModelTypeGeoKey) === 1 ||
+    (Number(keys.GTModelTypeGeoKey) !== 2 && keys.ProjectedCSTypeGeoKey != null);
+  if (!resolved.proj4 || resolved.errors?.CRSNotSupported || (projected && resolved.isGCS)) {
     throw new Error(
       `The raster's CRS could not be resolved in the browser; ${toolName} needs the sidecar (rasterio/GDAL) engine for it.`,
     );
@@ -176,11 +186,61 @@ export function geojsonFeatures(geojson: unknown): FeatureCollection["features"]
     geometry?: unknown;
   } | null;
   if (!obj || typeof obj !== "object") throw new Error("The vector input is not valid GeoJSON.");
+  let features: FeatureCollection["features"];
   if (obj.type === "FeatureCollection") {
-    return (Array.isArray(obj.features) ? obj.features : []) as FeatureCollection["features"];
+    if (!Array.isArray(obj.features)) throw new Error("GeoJSON features must be an array.");
+    features = obj.features as FeatureCollection["features"];
+  } else if (obj.type === "Feature") features = [obj as FeatureCollection["features"][number]];
+  else features = [{ type: "Feature", properties: {}, geometry: obj as unknown as Geometry }];
+  for (const feature of features) {
+    if (
+      !feature ||
+      feature.type !== "Feature" ||
+      (feature.geometry !== null && !validGeometryStructure(feature.geometry))
+    )
+      throw new Error("The vector input contains a malformed GeoJSON geometry.");
   }
-  if (obj.type === "Feature") return [obj as FeatureCollection["features"][number]];
-  return [{ type: "Feature", properties: {}, geometry: obj as unknown as Geometry }];
+  return features;
+}
+
+/** Check external geometry types and coordinate nesting before analysis. */
+function validGeometryStructure(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const geometry = value as { type?: unknown; coordinates?: unknown; geometries?: unknown };
+  const position = (point: unknown): boolean =>
+    Array.isArray(point) &&
+    point.length >= 2 &&
+    point.every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate));
+  const line = (points: unknown): boolean =>
+    Array.isArray(points) && (points.length === 0 || points.length >= 2) && points.every(position);
+  const ring = (points: unknown): boolean =>
+    Array.isArray(points) &&
+    points.length >= 4 &&
+    points.every(position) &&
+    points[0][0] === points.at(-1)[0] &&
+    points[0][1] === points.at(-1)[1];
+  const polygon = (rings: unknown): boolean => Array.isArray(rings) && rings.every(ring);
+  const coordinates = geometry.coordinates;
+  switch (geometry.type) {
+    case "Point":
+      return position(coordinates);
+    case "MultiPoint":
+      return Array.isArray(coordinates) && coordinates.every(position);
+    case "LineString":
+      return line(coordinates);
+    case "MultiLineString":
+      return Array.isArray(coordinates) && coordinates.every(line);
+    case "Polygon":
+      return polygon(coordinates);
+    case "MultiPolygon":
+      return Array.isArray(coordinates) && coordinates.every(polygon);
+    case "GeometryCollection":
+      return (
+        Array.isArray(geometry.geometries) && geometry.geometries.every(validGeometryStructure)
+      );
+    default:
+      return false;
+  }
 }
 
 /** Map every position of a geometry through `fn` (Z/M values are dropped). */
