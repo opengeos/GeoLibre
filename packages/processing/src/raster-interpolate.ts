@@ -208,7 +208,12 @@ export async function interpolatePoints(
     }
     const x = Number(coords[0]),
       y = Number(coords[1]);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    if (
+      typeof coords[0] !== "number" ||
+      typeof coords[1] !== "number" ||
+      !Number.isFinite(x) ||
+      !Number.isFinite(y)
+    ) {
       skipped += 1;
       continue;
     }

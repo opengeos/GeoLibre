@@ -81,6 +81,23 @@ function toRaster(name: string): RasterData {
 const close = (a: number, b: number, tol: number) =>
   Math.abs(a - b) <= tol * Math.max(1, Math.abs(b));
 
+/** Compare geometry nesting exactly and positions within fixture rounding precision. */
+function assertGeometryMatches(actual: unknown, expected: unknown): void {
+  if (typeof expected === "number") {
+    assert.equal(typeof actual, "number");
+    assert.ok(close(actual as number, expected, 1e-9));
+  } else if (Array.isArray(expected)) {
+    assert.ok(Array.isArray(actual));
+    assert.equal(actual.length, expected.length);
+    expected.forEach((value, index) => assertGeometryMatches(actual[index], value));
+  } else if (expected && typeof expected === "object") {
+    assert.ok(actual && typeof actual === "object");
+    assert.deepEqual(Object.keys(actual).sort(), Object.keys(expected).sort());
+    for (const [key, value] of Object.entries(expected))
+      assertGeometryMatches((actual as Record<string, unknown>)[key], value);
+  } else assert.equal(actual, expected);
+}
+
 /** Compare a client raster to a sidecar output record. */
 function assertRasterMatches(
   actual: RasterData,
@@ -95,6 +112,9 @@ function assertRasterMatches(
   assert.ok(close(actual.originY, expected.originY, 1e-9), `${label}: originY`);
   assert.ok(close(actual.resX, expected.resX, 1e-9), `${label}: resX`);
   assert.ok(close(actual.resY, expected.resY, 1e-9), `${label}: resY`);
+  assert.equal(actual.bands.length, expected.bands.length, `${label}: band count`);
+  for (const band of actual.bands)
+    assert.equal(band.length, actual.width * actual.height, `${label}: sample count`);
   expected.bands.forEach((band, b) => {
     const got = actual.bands[b];
     for (let i = 0; i < band.length; i += 1) {
@@ -173,6 +193,7 @@ describe("raster client parity with the rasterio sidecar", () => {
       assert.deepEqual((geojson as { crs?: unknown }).crs, (expected as { crs?: unknown }).crs);
       assert.equal(geojson.features.length, expected.features.length);
       geojson.features.forEach((f, i) => {
+        assertGeometryMatches(f.geometry, expected.features[i].geometry);
         const want = expected.features[i].properties!;
         const got = f.properties!;
         assert.deepEqual(Object.keys(got).sort(), Object.keys(want).sort(), `zone ${i} keys`);
@@ -258,6 +279,8 @@ function shoelace(ring: Position[]): number {
 
 /** A ring sequence without collinear points, independent of cyclic start and direction. */
 function ringKey(ring: Position[]): string {
+  assert.ok(ring.length >= 4, "polygon ring has at least four positions");
+  assert.deepEqual(ring[0], ring.at(-1), "polygon ring is closed");
   const pts = ring.slice(0, -1);
   const n = pts.length;
   const kept = pts.filter((cur, i) => {

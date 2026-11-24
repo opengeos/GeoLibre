@@ -509,11 +509,14 @@ def test_interpolate_zero_span_uses_one_column(tmp_path: Path, method: str) -> N
 
 
 @requires_rasterio
-def test_parity_fixture_preserves_valid_values_near_nodata(tmp_path: Path) -> None:
+def test_parity_fixture_preserves_valid_values_near_nodata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Use raster masks to retain valid stored values near a finite sentinel.
 
     Args:
         tmp_path: Isolated fixture raster directory.
+        monkeypatch: Simulate the optional projection dependency being absent.
     """
     import runpy
 
@@ -537,6 +540,7 @@ def test_parity_fixture_preserves_valid_values_near_nodata(tmp_path: Path) -> No
     ) as image:
         image.write(values, 1)
     generator = Path(__file__).resolve().parents[3] / "scripts/gen-raster-parity-fixtures.py"
+    monkeypatch.setitem(sys.modules, "pyproj", None)
     record = runpy.run_path(str(generator))["read_output"](src)
     assert record["bands"] == [[float(values[0, 0]), None]]
 

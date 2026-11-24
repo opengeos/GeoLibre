@@ -134,20 +134,29 @@ export async function epsgDefinition(code: number): Promise<string> {
 }
 
 /**
- * The EPSG code a GeoJSON object's legacy `crs` member names (its trailing
- * digits, the way the sidecar workers parse it), else 4326.
+ * Resolve standard legacy EPSG/CRS84 names; default to WGS84 only when absent.
  */
 export function geojsonEpsg(geojson: unknown): number {
   const member = (geojson as { crs?: { properties?: { name?: unknown } } } | null)?.crs;
+  if (member == null) return 4326;
   const name = String(member?.properties?.name ?? "");
-  const digits = /(\d+)$/.exec(name);
+  const digits =
+    /^(?:EPSG:|urn:ogc:def:crs:EPSG:(?:[^:]*):|https?:\/\/www\.opengis\.net\/def\/crs\/EPSG\/[^/]*\/)(\d+)$/i.exec(
+      name,
+    );
+  if (
+    /^(?:urn:ogc:def:crs:OGC:(?:[^:]*):|OGC:|https?:\/\/www\.opengis\.net\/def\/crs\/OGC\/[^/]*\/)?CRS84$/i.test(
+      name,
+    )
+  )
+    return 4326;
   if (digits) {
     const code = Number(digits[1]);
-    // OGC's CRS84 is WGS84 lon/lat; "84" is not an EPSG code.
-    if (/CRS84$/i.test(name)) return 4326;
     if (Number.isInteger(code) && code > 0) return code;
   }
-  return 4326;
+  throw new Error(
+    "The declared GeoJSON CRS is unsupported in the browser; use an EPSG CRS or the sidecar engine.",
+  );
 }
 
 /** The legacy GeoJSON `crs` member for an EPSG code (none for 4326). */

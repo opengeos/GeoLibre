@@ -202,8 +202,8 @@ NaN when the source has no declared NoData. Browser masks support polygon and
 point geometries; use the sidecar for line masks or line zones. Mosaic requires
 matching known EPSG codes and aligned pixel sizes.
 
-Warp and mosaic output buffers have a 256 MiB allocation budget that includes
-all bands (and mosaic validity flags). Contouring accepts at most 8 million
+Warp and mosaic buffers have a 256 MiB allocation budget that includes
+all bands, warp scanline scratch, and mosaic validity flags. Contouring accepts at most 8 million
 pixels, 10,000 levels, 50 million level/pixel visits, and 250,000 output segments.
 Increase the interval or crop the raster when these limits are reached.
 Warp, polygonization, and contour computation currently run synchronously in
@@ -222,6 +222,9 @@ all output bands, including the three channels of SAR RGB.
 Polygon and contour downloads from a custom projected CRS are transformed to
 WGS84. An image without a CRS can produce an unreferenced vector download with
 an explicit null CRS; it is not added to the geographic map.
+Explicit unsupported GeoJSON CRS declarations are rejected with sidecar guidance.
+PixelIsPoint input tie points are normalized to pixel corners internally and
+restored on export, preserving sample centers through reprojection.
 
 In deployments with restricted capabilities, classic raster command entry
 points retain their existing `processing:run` and `processing:sidecar`

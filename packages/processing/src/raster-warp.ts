@@ -314,7 +314,7 @@ function warp(plan: WarpPlan): { bands: Float32Array[]; nodata: number } {
   const { src, dst, method, rowTransform, exactTransform } = plan;
   if (
     dst.width * dst.height > MAX_WARP_PIXELS ||
-    dst.width * dst.height * src.bands.length * 4 > 256 * 1024 * 1024
+    dst.width * dst.height * src.bands.length * 4 + dst.width * 32 + 64 > 256 * 1024 * 1024
   ) {
     throw new Error(
       `The ${dst.width}x${dst.height} output is too large for the in-browser engine. Use the sidecar (rasterio/GDAL) engine instead.`,
@@ -336,9 +336,8 @@ function warp(plan: WarpPlan): { bands: Float32Array[]; nodata: number } {
 
   const bands = src.bands.map(() => new Float32Array(dst.width * dst.height).fill(outNodata));
   const valid = (band: Float32Array, i: number): boolean => {
-    if (!masked) return true;
     const v = band[i];
-    return Number.isFinite(v) && v !== srcNodata;
+    return Number.isFinite(v) && (!masked || v !== srcNodata);
   };
 
   const xs = new Float64Array(dst.width);
@@ -365,6 +364,7 @@ function warp(plan: WarpPlan): { bands: Float32Array[]; nodata: number } {
     let acc = 0;
     let div = 0;
     const take = (c: number, r: number, w: number) => {
+      if (w === 0) return;
       if (c < 0 || c >= W || r < 0 || r >= H) return;
       const i = r * W + c;
       if (!valid(band, i)) return;
@@ -770,12 +770,16 @@ export function mosaicRasters(
     }
   }
   const { resX, resY } = first;
-  const minX = Math.min(...rasters.map((r) => r.originX));
-  const maxY = Math.max(...rasters.map((r) => r.originY));
-  const maxX = Math.max(...rasters.map((r) => r.originX + r.width * r.resX));
-  const minY = Math.min(...rasters.map((r) => r.originY - r.height * r.resY));
-  const width = Math.max(1, Math.ceil((maxX - minX) / resX - 1e-9));
-  const height = Math.max(1, Math.ceil((maxY - minY) / resY - 1e-9));
+  const offsets = rasters.map((r) => ({
+    col: Math.round((r.originX - first.originX) / resX),
+    row: Math.round((first.originY - r.originY) / resY),
+  }));
+  const minCol = Math.min(...offsets.map((offset) => offset.col));
+  const minRow = Math.min(...offsets.map((offset) => offset.row));
+  const minX = first.originX + minCol * resX;
+  const maxY = first.originY - minRow * resY;
+  const width = Math.max(...rasters.map((r, i) => offsets[i].col + r.width)) - minCol;
+  const height = Math.max(...rasters.map((r, i) => offsets[i].row + r.height)) - minRow;
   const pixels = width * height;
   if (
     !Number.isSafeInteger(pixels) ||
@@ -790,9 +794,9 @@ export function mosaicRasters(
   // Per-band "already written" flags: rasterio decides per band value whether
   // the destination still holds NoData.
   const filled = first.bands.map(() => new Uint8Array(width * height));
-  for (const r of rasters) {
-    const colOff = Math.round((r.originX - minX) / resX);
-    const rowOff = Math.round((maxY - r.originY) / resY);
+  for (const [index, r] of rasters.entries()) {
+    const colOff = offsets[index].col - minCol;
+    const rowOff = offsets[index].row - minRow;
     for (let row = 0; row < r.height; row += 1) {
       const dr = row + rowOff;
       if (dr < 0 || dr >= height) continue;

@@ -18,6 +18,123 @@ import {
   type RasterData,
 } from "@geolibre/processing";
 import { rasterEpsg } from "../packages/processing/src/raster-geo";
+import { geojsonEpsg } from "../packages/processing/src/raster-geo";
+import { writeArrayBuffer } from "geotiff";
+
+it("rejects explicit unsupported zone CRSs and malformed interpolation positions", async () => {
+  assert.equal(geojsonEpsg({}), 4326);
+  assert.equal(
+    geojsonEpsg({ crs: { properties: { name: "urn:ogc:def:crs:OGC:1.3:CRS84" } } }),
+    4326,
+  );
+  assert.throws(
+    () =>
+      geojsonEpsg({
+        crs: { properties: { name: "+proj=utm +zone=17 +datum=WGS84 +units=m +no_defs" } },
+      }),
+    /sidecar/,
+  );
+  await assert.rejects(
+    interpolatePoints(
+      {
+        type: "FeatureCollection",
+        features: [
+          [0, 0],
+          [1, 1],
+          [null, 0],
+        ].map((coordinates) => ({
+          type: "Feature",
+          properties: { z: 1 },
+          geometry: { type: "Point", coordinates },
+        })),
+      },
+      { field: "z", resolution: 1 },
+    ),
+    /at least 3/,
+  );
+});
+
+it("decodes decimal Float32 NoData exactly and retains nearby valid samples", async () => {
+  const bytes = writeArrayBuffer(Float32Array.of(-9999.1, -9999.05), {
+    width: 2,
+    height: 1,
+    GDAL_NODATA: "-9999.1",
+    ModelPixelScale: [1, 1, 0],
+    ModelTiepoint: [0, 0, 0, 0, 1, 0],
+    GeographicTypeGeoKey: 4326,
+    GTModelTypeGeoKey: 2,
+  });
+  const decoded = await readRasterData(bytes);
+  assert.equal(decoded.nodata, Math.fround(-9999.1));
+  assert.equal(decoded.bands[0][0], decoded.nodata);
+  assert.notEqual(decoded.bands[0][1], decoded.nodata);
+  const output = await zonalStatistics(
+    decoded,
+    {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [0, 0],
+                [2, 0],
+                [2, 1],
+                [0, 1],
+                [0, 0],
+              ],
+            ],
+          },
+        },
+      ],
+    },
+    {},
+  );
+  assert.equal(output.geojson.features[0].properties?.count, 1);
+});
+
+it("preserves PixelIsPoint centers through encoding and a same-CRS warp", async () => {
+  const bytes = writeArrayBuffer(Float32Array.of(1, 2, 3, 4), {
+    width: 2,
+    height: 2,
+    ModelPixelScale: [1, 1, 0],
+    ModelTiepoint: [0, 0, 0, 10, 20, 0],
+    GeographicTypeGeoKey: 4326,
+    GTModelTypeGeoKey: 2,
+    GTRasterTypeGeoKey: 2,
+  });
+  const decoded = await readRasterData(bytes);
+  assert.equal(decoded.originX, 9.5);
+  assert.equal(decoded.originY, 20.5);
+  const roundtrip = await readRasterData(writeRasterData(decoded));
+  assert.equal(roundtrip.originX, decoded.originX);
+  assert.equal(roundtrip.originY, decoded.originY);
+  const warped = await reprojectRaster(decoded, { dst_crs: "EPSG:4326", resampling: "nearest" });
+  assert.equal(warped.originX + warped.resX / 2, 10);
+  assert.equal(warped.originY - warped.resY / 2, 20);
+});
+
+it("budgets long warp rows, skips zero-weight NaN taps, and snaps mosaic extents", () => {
+  assert.throws(
+    () =>
+      resampleRaster({ ...raster([]), width: 16_000_000, height: 1, resX: 4 }, { resolution: 1 }),
+    /too large/,
+  );
+  const sampled = resampleRaster(raster([1, NaN, 3, 4], 2, 2), {
+    resolution: 1,
+    resampling: "bilinear",
+  });
+  assert.equal(sampled.bands[0][0], 1);
+  const merged = mosaicRasters(
+    [raster([1]), { ...raster([2]), originX: 1 + 1 / 2048 }],
+    "first",
+  ).raster;
+  assert.equal(merged.width, 2);
+  assert.deepEqual([...merged.bands[0]], [1, 2]);
+});
 
 it("keeps unreferenced vectors downloadable and exports custom projected vectors as WGS84", async () => {
   const input = raster([1, 1, 1, 1], 2, 2);
@@ -280,7 +397,26 @@ it("keeps degenerate interpolation axes at one cell and normalizes small kriging
       variogram_model: "linear",
     });
     assert.equal(output.raster.width, 1);
+    assert.equal(output.raster.height, 10);
+    assert.equal(output.raster.bands[0].length, 10);
     for (const value of output.raster.bands[0]) assert.ok(Math.abs(value - 7) < 1e-5);
+    const horizontal = {
+      ...points,
+      features: points.features.map((feature) => ({
+        ...feature,
+        geometry: { ...feature.geometry, coordinates: [...feature.geometry.coordinates].reverse() },
+      })),
+    };
+    const horizontalOutput = await interpolatePoints(horizontal, {
+      method,
+      field: "z",
+      resolution: 0.2,
+      variogram_model: "linear",
+    });
+    assert.equal(horizontalOutput.raster.width, 10);
+    assert.equal(horizontalOutput.raster.height, 1);
+    assert.equal(horizontalOutput.raster.bands[0].length, 10);
+    for (const value of horizontalOutput.raster.bands[0]) assert.ok(Math.abs(value - 7) < 1e-5);
   }
   for (const feature of points.features) feature.properties.z = 1e39;
   const overflow = await interpolatePoints(points, { method: "idw", field: "z", resolution: 1 });

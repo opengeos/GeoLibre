@@ -7,8 +7,9 @@ replays the same inputs through the client engine and asserts the results
 match, so a drift between the browser fallback and the rasterio path fails CI
 without needing Python there.
 
-Usage (needs rasterio, contourpy and pyproj, i.e. the backend ``raster`` extra):
+Usage (needs the backend ``raster`` extra plus pyproj):
 
+    pip install -e 'backend/geolibre_server[raster]' pyproj
     python scripts/gen-raster-parity-fixtures.py
 """
 
@@ -25,7 +26,6 @@ from pathlib import Path
 
 import numpy as np
 import rasterio
-from pyproj import Transformer
 from rasterio.transform import from_origin
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -182,6 +182,8 @@ def compact(value):
 
 def main() -> None:
     """Generate every parity case and write the fixture file."""
+    from pyproj import Transformer
+
     tmp = Path(tempfile.mkdtemp())
     cases: list[dict] = []
 

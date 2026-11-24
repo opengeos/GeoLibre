@@ -212,7 +212,7 @@ export async function readRasterData(
       "This raster is too large for the in-browser engine. Use the sidecar (rasterio/GDAL) engine instead.",
     );
   }
-  const [originX, originY] = image.getOrigin();
+  let [originX, originY] = image.getOrigin();
   let [resolutionX, resolutionY] = image.getResolution();
   let rotated = false;
   const modelTransform = image.fileDirectory.getValue("ModelTransformation") as
@@ -236,9 +236,25 @@ export async function readRasterData(
     options.samples ? { samples: [...options.samples] } : undefined,
   );
   const rawBands = (Array.isArray(result) ? result : [result]) as ArrayLike<number>[];
-  const bands = rawBands.map((band) => Float32Array.from(band));
-
   const noData = image.getGDALNoData();
+  const outputNoData =
+    noData == null
+      ? null
+      : rawBands.some((band) => band instanceof Float64Array)
+        ? Number.NaN
+        : Math.fround(noData);
+  const bands = rawBands.map((band) => {
+    const sourceNoData =
+      band instanceof Float32Array && noData != null ? Math.fround(noData) : noData;
+    return Float32Array.from(band, (value) =>
+      sourceNoData != null && value === sourceNoData ? outputNoData! : value,
+    );
+  });
+  const geoKeys = (image.getGeoKeys() as Record<string, unknown>) ?? {};
+  if (Number(geoKeys.GTRasterTypeGeoKey) === 2) {
+    originX -= resolutionX / 2;
+    originY -= resolutionY / 2;
+  }
   return {
     bands,
     width,
@@ -253,8 +269,8 @@ export async function readRasterData(
     flipX: resolutionX < 0,
     flipY: resolutionY > 0,
     ...(rotated ? { rotated: true } : {}),
-    nodata: noData ?? null,
-    geoKeys: (image.getGeoKeys() as Record<string, unknown>) ?? {},
+    nodata: outputNoData,
+    geoKeys,
   };
 }
 
@@ -312,7 +328,14 @@ function writeInterleaved<T extends Float32Array | Uint8Array>(
     width: raster.width,
     height: raster.height,
     ModelPixelScale: [raster.resX, raster.resY, 0],
-    ModelTiepoint: [0, 0, 0, raster.originX, raster.originY, 0],
+    ModelTiepoint: [
+      0,
+      0,
+      0,
+      raster.originX + (Number(raster.geoKeys.GTRasterTypeGeoKey) === 2 ? raster.resX / 2 : 0),
+      raster.originY - (Number(raster.geoKeys.GTRasterTypeGeoKey) === 2 ? raster.resY / 2 : 0),
+      0,
+    ],
   };
   if (raster.nodata != null)
     metadata.GDAL_NODATA = Number.isNaN(raster.nodata) ? "nan" : String(raster.nodata);
