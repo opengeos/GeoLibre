@@ -230,24 +230,24 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
     }
     DocumentCopyBatch(File(activity.filesDir, "picked-documents")).use { batch ->
       val documents = JSArray()
-      val paths = uris.map { uri ->
+      for (uri in uris) {
         val name = activity.contentResolver.query(
           uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null
         )?.use { cursor ->
           if (cursor.moveToFirst()) cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
           else null
         } ?: throw IOException("The document provider did not supply a file name")
-        val copied = batch.copy(name) {
+        val copied = batch.copy(name, uri.toString()) {
           activity.contentResolver.openInputStream(uri)
             ?: throw IOException("Could not open the selected document")
         }
-        documents.put(JSObject().put("name", name).put("sourceUri", uri.toString())
+        documents.put(JSObject().put("name", copied.file.name).put("sourceName", name)
+          .put("sourceUri", uri.toString())
           .put("bytes", copied.bytes).put("sha256", copied.sha256))
-        copied.file.absolutePath
       }
-      batch.commit(JSObject().put("version", 1).put("importedAt", System.currentTimeMillis())
+      val paths = batch.commit(JSObject().put("version", 1).put("importedAt", System.currentTimeMillis())
         .put("documents", documents).toString())
-      callResult.put("files", JSArray.from(paths.toTypedArray()))
+      callResult.put("files", JSArray.from(paths.map { it.absolutePath }.toTypedArray()))
     }
     return callResult
   }

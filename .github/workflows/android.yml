@@ -180,6 +180,10 @@ jobs:
         env:
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
 
+      - name: Test native document imports
+        working-directory: apps/geolibre-desktop/src-tauri/gen/android
+        run: ./gradlew :tauri-plugin-dialog:testDebugUnitTest --tests app.tauri.dialog.DocumentCopyBatchTest
+
       - name: Verify built APK package id
         # Second assertion, on the shipped bytes rather than the build script.
         # `aapt2 dump packagename` reads the merged manifest, so this also

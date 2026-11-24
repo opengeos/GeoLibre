@@ -34,8 +34,11 @@ to the local paths used by GeoLibre's readers:
 - Explicit `fileAccessMode: "copy"` data picks on Android stream the selected
   documents into `files/picked-documents/<selection>/data/`, using the provider's
   display names rather than interpreting opaque document IDs as filenames.
-  `DocumentCopyBatch.kt` keeps a selection's companions together, rejects unsafe
-  or duplicate names, and removes the entire selection when copying fails.
+  `DocumentCopyBatch.kt` keeps a selection's companions together, replaces path
+  separators and control characters in provider labels with underscores, rejects
+  empty/dot/oversized names and collisions after sanitization, and removes the
+  entire selection when copying fails. The manifest keeps both the actual local
+  filename and the original provider label.
   Copying runs off the UI thread with a bounded buffer. A sibling `source.json`
   retains each original URI, filename, byte count and SHA-256 fingerprint.
   The app can therefore reopen the local data offline while retaining its source
@@ -43,6 +46,19 @@ to the local paths used by GeoLibre's readers:
   Explicit copies use the document picker even for images, retaining persistable
   grants where the provider allows them. Project picks do not request this mode
   and retain their existing URI behavior.
+- An identical selection from the same provider URIs reuses its existing folder.
+  Selection order does not matter. Matching uses the names and source identities
+  plus SHA-256 fingerprints; existing files are rehashed before reuse so local
+  edits are never overwritten or mistaken for the original document. Distinct
+  provider documents retain separate copies even when their bytes match. A
+  process-wide commit lock prevents concurrent picks from publishing duplicates.
+  Temporary duplicates are removed before paths are returned.
+- Published copies are durable project data, not an evictable cache. Removing a
+  layer or closing a project does not delete them, because another saved project
+  can reference the same path. Modified copies and new source versions therefore
+  remain separate. They currently live until the app's stored data is removed;
+  reference-aware storage management belongs to the offline catalog work in
+  #3530. Failed and uncommitted selections are removed immediately.
 - Explicit data-copy failures use a result-bearing mobile bridge rather than
   the upstream callback-only picker API, which collapses errors into a cancelled
   selection. Cancellation still returns no selection; provider and storage
