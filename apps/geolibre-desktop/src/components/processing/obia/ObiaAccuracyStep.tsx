@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { useLayer } from "@geolibre/core";
 import { accuracyReportCsv, assessAccuracy, collectSamples } from "@geolibre/processing";
 import { Button } from "@geolibre/ui";
 import { Download, Info } from "lucide-react";
@@ -27,7 +27,6 @@ const formatKappa = (value: number, language: string) =>
 export function ObiaAccuracyStep(): ReactElement | null {
   const { t, i18n } = useTranslation();
   const language = i18n.language;
-  const layers = useAppStore((s) => s.layers);
   const segmentation = useObiaSession((s) => s.segmentation);
   const features = useObiaSession((s) => s.features);
   const classes = useObiaSession((s) => s.classes);
@@ -35,7 +34,7 @@ export function ObiaAccuracyStep(): ReactElement | null {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
-  const objects = layers.find((layer) => layer.id === segmentation?.objectsLayerId)?.geojson;
+  const objects = useLayer(segmentation?.objectsLayerId)?.geojson;
   const report = useMemo(() => {
     if (!objects || !classification) return null;
     const areas = new Map<number, number>();

@@ -1,4 +1,4 @@
-import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import { useAppStore, useLayer, type GeoLibreLayer } from "@geolibre/core";
 import {
   OBIA_CLASS_FIELD,
   collectSamples,
@@ -53,7 +53,6 @@ export function labelStylePatch(layer: GeoLibreLayer, classes: readonly ObiaClas
  */
 export function ObiaTrainStep(): ReactElement | null {
   const { t } = useTranslation();
-  const layers = useAppStore((s) => s.layers);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectedFeatureIds = useAppStore((s) => s.selectedFeatureIds);
@@ -68,7 +67,7 @@ export function ObiaTrainStep(): ReactElement | null {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const objectsLayer = layers.find((layer) => layer.id === segmentation?.objectsLayerId) ?? null;
+  const objectsLayer = useLayer(segmentation?.objectsLayerId) ?? null;
   const objects = objectsLayer?.geojson ?? null;
   const samples = useMemo(() => (objects ? collectSamples(objects) : []), [objects]);
 

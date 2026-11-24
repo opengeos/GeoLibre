@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { createPMTilesStoreLayer } from "@geolibre/map/pmtiles-layer";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
@@ -605,7 +606,7 @@ function setFootprints(map: MapLibreMap, results: ZoneResult[]): void {
     map.on("mouseenter", FOOTPRINT_FILL_LAYER_ID, handleFootprintEnter);
     map.on("mouseleave", FOOTPRINT_FILL_LAYER_ID, handleFootprintLeave);
   }
-  (map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource).setData({
+  updateGeoJsonSourceData(map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource, {
     type: "FeatureCollection",
     features,
   });
@@ -673,7 +674,7 @@ function setOutline(map: MapLibreMap, boxes: LonLatBbox[]): void {
   }
   // Field layers added since would otherwise hide the outline.
   map.moveLayer(HOVER_LINE_LAYER_ID);
-  (map.getSource(HOVER_SOURCE_ID) as GeoJSONSource).setData({
+  updateGeoJsonSourceData(map.getSource(HOVER_SOURCE_ID) as GeoJSONSource, {
     type: "FeatureCollection",
     features: boxes.map((box) => polygonFeature(bboxRing(box), {})),
   });
@@ -703,7 +704,10 @@ function setDrawBox(map: MapLibreMap, bbox: LonLatBbox | null): void {
     });
   }
   const features: Feature<Polygon>[] = bbox ? [polygonFeature(bboxRing(bbox), {})] : [];
-  (map.getSource(DRAW_SOURCE_ID) as GeoJSONSource).setData({ type: "FeatureCollection", features });
+  updateGeoJsonSourceData(map.getSource(DRAW_SOURCE_ID) as GeoJSONSource, {
+    type: "FeatureCollection",
+    features,
+  });
 }
 
 /** Removes the plugin-private overlays (hover outline, drawn box). */

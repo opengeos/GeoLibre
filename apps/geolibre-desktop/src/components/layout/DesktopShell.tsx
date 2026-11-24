@@ -99,6 +99,7 @@ import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
 import { useCommandBridge } from "../../hooks/useCommandBridge";
 import { useEmbedApi } from "../../hooks/useEmbedApi";
 import { useJupyterRelay } from "../../hooks/useJupyterRelay";
+import { useLiveMcpStartup } from "../../hooks/useLiveMcpStartup";
 import {
   appendDiagnostic,
   observeNetworkResponses,
@@ -265,7 +266,7 @@ export function DesktopShell({
   // the Raster Subset panel and opened from the Add Data menu in the toolbar.
   const [basemapExtractOpen, setBasemapExtractOpen] = useState(false);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
-  const layers = useAppStore((s) => s.layers);
+  const layerCount = useAppStore((s) => s.layers.length);
   // Register the Browser as a movable/dockable right panel; its body is portaled
   // into a dedicated content host (below) that the dock slots adopt.
   useRegisterBrowserPanel();
@@ -292,7 +293,6 @@ export function DesktopShell({
   const replaceStylePanelId = useReplaceStylePanelId();
   const replaceLayersPanelId = useReplaceLayersPanelId();
   const layerRefresh = useLayerRefresh({
-    layers,
     isCollapsed:
       layoutOptions.panelsHidden ||
       layoutOptions.viewer ||
@@ -368,10 +368,13 @@ export function DesktopShell({
   // (fly to a record, highlight it, open a tool; selection/view/tool events back
   // out). Off unless the deployment configured GEOLIBRE_EMBED_ORIGINS.
   useEmbedApi(mapControllerRef, mapAppAPI, mapReadyGeneration);
-  // Same scripting surface, reached over the desktop Jupyter server's relay, so
-  // a kernel driven from an EXTERNAL client (VS Code's Jupyter extension) can
-  // control the map too. Inert until that server is running.
+  // Same scripting surface, reached over the desktop Jupyter server's relay and
+  // the sidecar's Live MCP relay, so a kernel driven from an EXTERNAL client
+  // (VS Code's Jupyter extension) or an MCP client can control the map too.
+  // Inert until one of those servers is running.
   useJupyterRelay(mapControllerRef);
+  // Starts the sidecar at launch when the user allowed Live MCP in Settings.
+  useLiveMcpStartup();
   // Routes the Layers-panel Identify action to the raster pixel inspector for
   // COG layers (read band values on click). Inert until a COG is identified.
   useRasterIdentify();
@@ -1214,7 +1217,7 @@ export function DesktopShell({
         <MobileBottomNav
           activeTab={mobile.activeMobileTab}
           onSelectTab={mobile.handleSelectMobileTab}
-          layerCount={layers.length}
+          layerCount={layerCount}
           showLayers={layoutOptions.layerPanelVisible}
           showStyle={layoutOptions.stylePanelVisible}
           showAdd={layoutOptions.toolbarVisible && mobileCanAddData}

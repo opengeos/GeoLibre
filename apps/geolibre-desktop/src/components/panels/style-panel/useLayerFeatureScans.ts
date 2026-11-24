@@ -56,7 +56,6 @@ export function useLayerFeatureScans(layer: GeoLibreLayer | undefined) {
   // interactions this memo exists to survive. The fields below are the only
   // ones the call actually reads, and each keeps its identity across an
   // unrelated patch.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const styleSuggestions = useMemo(() => {
     if (!layer || !isInitialLayerStyle(layer.style, layer.geojson)) return [];
     return buildStyleSuggestions(layer, getAttributePropertyNames(layer), {
@@ -108,8 +107,8 @@ export function useLayerFeatureScans(layer: GeoLibreLayer | undefined) {
         diagramData,
       ),
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- layer.style is
-    // intentionally represented by the specific diagram fields below.
+    // layer.style is intentionally represented by the specific diagram fields
+    // below.
   }, [
     diagramGeojson,
     diagramStyleType,

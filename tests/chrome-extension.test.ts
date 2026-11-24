@@ -447,16 +447,17 @@ describe("GeoLibre Chrome extension URL builder", () => {
     assert.throws(() => buildGeoLibreUrl([{ url: "file:///tmp/roads.geojson" }]), /HTTP or HTTPS/);
   });
 
-  it("tells a mixed selection apart from two services", () => {
+  it("keeps the single-link compatibility helper on the multiple-launch path", () => {
     const service = { url: "https://maps.example.com/wms", format: "WMS" };
-    assert.throws(
-      () => buildGeoLibreUrl([service, { url: "https://maps.example.com/wfs", format: "WFS" }]),
-      /one map service at a time/,
+    const twoServices = new URL(
+      buildGeoLibreUrl([service, { url: "https://maps.example.com/wfs", format: "WFS" }]),
     );
-    assert.throws(
-      () => buildGeoLibreUrl([service, { url: "https://data.example.com/roads.geojson" }]),
-      /cannot be opened together with other data/,
+    assert.equal(twoServices.searchParams.get("serviceUrl"), service.url);
+    const mixed = new URL(
+      buildGeoLibreUrl([service, { url: "https://data.example.com/roads.geojson" }]),
     );
+    assert.equal(mixed.searchParams.get("serviceUrl"), service.url);
+    assert.equal(mixed.searchParams.get("data"), "https://data.example.com/roads.geojson");
   });
 
   it("routes detected services to the matching prefilled Add Data dialog", () => {

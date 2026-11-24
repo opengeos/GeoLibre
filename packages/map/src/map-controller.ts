@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "./geojson-source-data";
 import { showGlSearchResult } from "./gl-search-result";
 import { resolveMapPixelRatio, watchMapPixelRatio } from "./mobile-pixel-ratio";
 import {
@@ -2472,7 +2473,7 @@ export class MapController implements MapEngine {
 
     const source = map.getSource(highlightSourceId());
     if (source) {
-      (source as maplibregl.GeoJSONSource).setData(featureCollection);
+      updateGeoJsonSourceData(source as maplibregl.GeoJSONSource, featureCollection);
     } else {
       map.addSource(highlightSourceId(), {
         type: "geojson",

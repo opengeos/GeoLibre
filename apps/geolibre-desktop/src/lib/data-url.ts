@@ -2,6 +2,9 @@ import { type GeoLibreLayer, unionLonLatExtents } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import { AsyncUnzipInflate, strFromU8, Unzip, UnzipPassThrough, type UnzipFile } from "fflate";
 import { isFileHandlerDataType } from "@geolibre/plugins/file-handler-registry";
+import i18next from "i18next";
+import { parseGpxLayer } from "./gpx";
+import { proxyFeedRequestUrl } from "./feed-request";
 import { kmlFileNameFromUrl, kmlImportFile } from "./kml-import-file";
 import {
   type DataUrlFileHandlers,
@@ -34,6 +37,9 @@ const SERVICE_KINDS = new Set([
   "ogc-features",
   "ogc-vector-tiles",
   "arcgis",
+  // A Zarr store needs a variable and value range picked before it can draw,
+  // so a link to one opens the Add Zarr dialog on the store URL.
+  "zarr",
 ]);
 
 export interface ServiceUrlParameter {
@@ -74,6 +80,21 @@ export function serviceUrlParameter(search: string): ServiceUrlParameter | null 
     styleUrl,
   };
 }
+/** Vector formats a `?data=` link hands to the vector control by URL instead of downloading here. */
+export type RemoteVectorFormat = "geoparquet" | "flatgeobuf";
+
+/** The display name of each {@link RemoteVectorFormat}, for load errors. */
+export const REMOTE_VECTOR_FORMAT_LABELS: Record<RemoteVectorFormat, string> = {
+  geoparquet: "GeoParquet",
+  flatgeobuf: "FlatGeobuf",
+};
+
+/**
+ * The `dataType` hint naming a 3D Tiles tileset whose URL does not end in
+ * `tileset.json`, such as a signed or extensionless tileset endpoint.
+ */
+export const THREE_D_TILES_DATA_TYPE = "3d-tiles";
+
 export interface RemoteGeoJsonLayer {
   data: FeatureCollection;
   name: string;
@@ -82,7 +103,9 @@ export interface RemoteGeoJsonLayer {
 export type RemoteData =
   | { kind: "cog"; name: string; url: string }
   | { kind: "pmtiles"; name: string; url: string }
-  | { kind: "vector"; name: string; url: string; format: "geoparquet" }
+  | { kind: "vector"; name: string; url: string; format: RemoteVectorFormat }
+  /** A 3D Tiles tileset, drawn by the active engine's 3D Tiles layer. */
+  | { kind: "3d-tiles"; name: string; url: string }
   | { kind: "lidar"; name: string; url: string }
   /** A KML/KMZ document, handed to the host KML importer the way a drop is. */
   | { kind: "kml"; name: string; file: File }
@@ -172,7 +195,7 @@ export function remoteName(url: string): string {
     name
       .replace(/\.copc\.laz$/i, "")
       .replace(
-        /\.(?:geojson|json|tiff?|cog|zip|pmtiles|geoparquet|parquet|las|laz|kml|kmz)$/i,
+        /\.(?:geojson|json|tiff?|cog|zip|pmtiles|geoparquet|parquet|fgb|flatgeobuf|gpx|las|laz|kml|kmz)$/i,
         "",
       ) || "data"
   );
@@ -203,7 +226,6 @@ export function remoteFileName(url: string, disposition: string | null): string 
     name = name
       .split(/[\\/]/)
       .at(-1)!
-      // eslint-disable-next-line no-control-regex
       .replace(/[\u0000-\u001f\u007f]/g, "")
       .trim()
       .slice(-255);
@@ -382,6 +404,26 @@ function unzipGeoJsonEntries(bytes: Uint8Array): Promise<Record<string, Uint8Arr
 }
 
 /**
+ * Whether a URL names a 3D Tiles tileset. Its entry document is conventionally
+ * `tileset.json`, which would otherwise be downloaded and refused as GeoJSON.
+ */
+export function isThreeDTilesUrl(url: string): boolean {
+  return new URL(url).pathname.toLowerCase().endsWith("/tileset.json");
+}
+
+/** A tileset's entry file is always `tileset.json`, so its folder names it. */
+function threeDTilesName(url: string): string {
+  const segments = new URL(url).pathname.split("/").filter(Boolean);
+  const folder = segments.at(-1)?.toLowerCase() === "tileset.json" ? segments.at(-2) : undefined;
+  if (!folder) return remoteName(url);
+  try {
+    return decodeURIComponent(folder);
+  } catch {
+    return folder;
+  }
+}
+
+/**
  * Whether a URL names a point cloud the LiDAR control streams itself: a LAS/LAZ
  * (including COPC) file, or an Entwine Point Tile dataset's `ept.json`.
  */
@@ -479,9 +521,15 @@ export async function fetchRemoteData(
   } = {},
 ): Promise<RemoteData> {
   const { fileHandlers } = options;
-  // A plugin's hint skips detection. `lidar` is built in and never reaches a handler.
+  // A plugin's hint skips detection. `lidar` and `3d-tiles` are built in and
+  // never reach a handler.
   let hinted: ReturnType<DataUrlFileHandlers["forDataType"]>;
-  if (fileHandlers && options.dataType && options.dataType !== "lidar") {
+  if (
+    fileHandlers &&
+    options.dataType &&
+    options.dataType !== "lidar" &&
+    options.dataType !== THREE_D_TILES_DATA_TYPE
+  ) {
     await waitForReady(fileHandlers.ready, options.signal);
     hinted = fileHandlers.forDataType(options.dataType);
   }
@@ -492,6 +540,9 @@ export async function fetchRemoteData(
     const bytes = await readCappedBytes(response, url);
     const name = remoteFileName(url, response.headers.get("content-disposition"));
     return { kind: "handled", ...(await openRemoteFileWithHandler(hinted, name, bytes)) };
+  }
+  if (options.dataType === THREE_D_TILES_DATA_TYPE || isThreeDTilesUrl(url)) {
+    return { kind: "3d-tiles", name: threeDTilesName(url), url };
   }
   if (options.dataType === "lidar" || isLidarUrl(url)) {
     if (!isStreamedLidarUrl(url)) {
@@ -504,6 +555,42 @@ export async function fetchRemoteData(
   if (ext === "pmtiles") return { kind: "pmtiles", name: remoteName(url), url };
   if (ext === "parquet" || ext === "geoparquet") {
     return { kind: "vector", name: remoteName(url), url, format: "geoparquet" };
+  }
+  // FlatGeobuf uses the vector control, like GeoParquet.
+  if (ext === "fgb" || ext === "flatgeobuf") {
+    return { kind: "vector", name: remoteName(url), url, format: "flatgeobuf" };
+  }
+  if (ext === "gpx") {
+    const response = await fetchOk(
+      proxyFeedRequestUrl(url),
+      options.signal,
+      options.fetchImpl ?? fetch,
+    );
+    const bytes = await readCappedBytes(response, url);
+    options.signal?.throwIfAborted();
+    const parsed = parseGpxLayer(strFromU8(bytes));
+    const groups = [
+      { data: parsed.waypoints, key: "waypoints", fallback: "Waypoints" },
+      { data: parsed.tracks, key: "tracks", fallback: "Tracks" },
+      { data: parsed.routes, key: "routes", fallback: "Routes" },
+    ];
+    const layers = groups
+      .filter((group) => group.data.features.length > 0)
+      .map((group) => ({
+        data: group.data,
+        sourcePath: url,
+        name:
+          remoteName(url) +
+          " " +
+          i18next.t("addData.gpx." + group.key, { defaultValue: group.fallback }),
+      }));
+    if (!layers.length)
+      throw new Error(
+        i18next.t("addData.gpx.errorNotFound", {
+          defaultValue: "The selected GPX layer types were not found.",
+        }),
+      );
+    return { kind: "geojson", layers };
   }
   const response = await fetchOk(url, options.signal, options.fetchImpl ?? fetch);
   const bytes = await readCappedBytes(response, url);

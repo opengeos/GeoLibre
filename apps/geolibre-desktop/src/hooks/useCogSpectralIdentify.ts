@@ -112,6 +112,5 @@ export function useCogSpectralIdentify(
     return engine.onMapClick(handleClick);
     // mapReadyGeneration re-runs this once the map exists, matching the other
     // identify hooks — the ref is empty on the first render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapControllerRef, mapReadyGeneration, activeCogId, cogUrl, cogName, t]);
 }

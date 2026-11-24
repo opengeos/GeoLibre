@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type { Feature, FeatureCollection, LineString, Point } from "geojson";
 import type {
   ExpressionSpecification,
@@ -1102,8 +1103,14 @@ function refreshGeometry(): void {
   if (!whenStyleReady(activeMap)) return;
   ensureLayers(activeMap);
   const geometry = buildGeometry(activeMap);
-  (activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(geometry.lines);
-  (activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined)?.setData(geometry.labels);
+  updateGeoJsonSourceData(
+    activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined,
+    geometry.lines,
+  );
+  updateGeoJsonSourceData(
+    activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined,
+    geometry.labels,
+  );
 }
 
 /**
@@ -1138,10 +1145,12 @@ function redrawWhenStyleSwaps(activeMap: MapLibreMap): void {
       if (activeMap.getLayer(LINE_LAYER_ID) && activeMap.getLayer(LABEL_LAYER_ID)) return;
       ensureLayers(activeMap);
       const geometry = buildGeometry(activeMap);
-      void (activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
+      updateGeoJsonSourceData(
+        activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined,
         geometry.lines,
       );
-      void (activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
+      updateGeoJsonSourceData(
+        activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined,
         geometry.labels,
       );
       applyStyleProps(activeMap);

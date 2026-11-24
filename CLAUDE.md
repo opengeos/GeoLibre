@@ -26,7 +26,7 @@ npm run tauri:build    # desktop installers → apps/geolibre-desktop/src-tauri/
 npm run typecheck      # alias for the full build (tsc -b && vite build) — writes to dist/, not a pure type-check
 npm run ci             # full local gate: lint + ci:frontend + typecheck:tests + ci:backend + check:rust
 npm run ci:frontend    # build + frontend + worker tests (CI runs the halves as parallel jobs)
-npm run ci:backend     # backend + docker/tests (needs Python and the npm CLI, no npm install)
+npm run ci:backend     # sidecar + identity server (coverage-gated) + docker/tests (needs Python and the npm CLI, no npm install)
 ```
 
 Tests:
@@ -37,6 +37,8 @@ npm run test:frontend:coverage                     # same, plus a coverage summa
 node --import tsx --test tests/<name>.test.ts      # a single frontend test file
 npm run test:backend                               # pytest backend/geolibre_server/tests
 npm run test:backend:coverage                      # same, plus pytest-cov (gated on a floor)
+npm run test:server-api:coverage                   # backend/geolibre_server_api suite, gated on a floor
+npm run test:python:coverage                       # python/ package suite, gated on a floor
 python -m pytest backend/geolibre_server/tests/test_x.py::test_y   # a single backend test
 npm run test:worker                                # typecheck workers/viewer
 npm run test:e2e                                   # Playwright smoke tests (e2e/) against the built web app

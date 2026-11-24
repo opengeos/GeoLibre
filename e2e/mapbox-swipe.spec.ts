@@ -497,6 +497,11 @@ test("keeps one comparison pane across basemap changes", async ({ page }, info) 
     await expect(page.locator(".swipe-comparison-map")).toHaveCount(1);
     await expect(page.locator(".swipe-clip-container")).toHaveCount(1);
     await expect(page.locator(".swipe-slider")).toHaveCount(1);
+    // The leak itself (#2430): every orphaned pane held a live mapbox-gl map,
+    // that is a WebGL context nothing released. Only the main map and the one
+    // comparison map may exist after the change.
+    await expect(page.locator(".mapboxgl-map")).toHaveCount(2);
+    await expect(page.locator("canvas.mapboxgl-canvas")).toHaveCount(2);
     // The throw left the control unmounted, so its (hidden) button went
     // missing too.
     await expect(page.locator(".swipe-control")).toHaveCount(1);

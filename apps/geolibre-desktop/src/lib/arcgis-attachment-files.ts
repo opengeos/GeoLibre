@@ -40,7 +40,6 @@ export function isPreviewableAttachment(contentType: string): boolean {
 export function attachmentSaveName(name: string, fallback = "attachment"): string {
   const leaf = name.split(/[\\/]/).pop() ?? "";
   const cleaned = leaf
-    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f<>:"|?*]/g, "_")
     .replace(/^[\s.]+|[\s.]+$/g, "")
     .slice(0, 200);

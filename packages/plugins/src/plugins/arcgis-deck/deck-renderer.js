@@ -1,7 +1,6 @@
 // deck.gl
 // SPDX-License-Identifier: MIT
 // Copyright (c) vis.gl contributors
-/* eslint-disable no-invalid-this */
 import { initializeResources, render, finalizeResources } from "./commons.js";
 import { MapView } from "@deck.gl/core";
 // Web Mercator scale at zoom 0 for 256 px tiles; deck.gl uses 512 px tiles,
@@ -83,7 +82,6 @@ export default function createDeckRenderer(DeckProps, RenderNode) {
         this.deck = new DeckProps(props);
       }
       let isInitializing = false;
-      // eslint-disable-next-line @typescript-eslint/no-this-alias
       const self = this;
       const DeckRenderNode = RenderNode.createSubclass({
         consumes: { required: ["composite-color"] },
@@ -91,7 +89,6 @@ export default function createDeckRenderer(DeckProps, RenderNode) {
         initialize() {},
         render(inputs) {
           // biome-ignore lint/complexity/noThisInStatic: RenderNode render is an instance method
-          // eslint-disable-next-line @typescript-eslint/no-this-alias, consistent-this
           const renderNode = this;
           const passthrough = inputs.find((i) => i.name === "composite-color");
           if (!self.resources && !isInitializing) {
@@ -118,7 +115,6 @@ export default function createDeckRenderer(DeckProps, RenderNode) {
                 })
                 .catch((err) => {
                   isInitializing = false;
-                  // eslint-disable-next-line no-console
                   console.error("DeckRenderer: failed to initialize resources", err);
                 });
             }
@@ -188,7 +184,6 @@ export default function createDeckRenderer(DeckProps, RenderNode) {
               });
             }
           } catch (e) {
-            // eslint-disable-next-line no-console
             console.error("DeckRenderer: render error", e);
           }
           return output;
@@ -196,7 +191,6 @@ export default function createDeckRenderer(DeckProps, RenderNode) {
       });
       this.renderNode = new DeckRenderNode({ view: this.view });
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     async setup(_context) {}
     dispose() {
       this.cancelInitialization?.();

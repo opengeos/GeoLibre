@@ -284,7 +284,8 @@ export function SegmentEverythingPanel({
       className={
         pos
           ? "pointer-events-auto absolute z-20 flex max-h-[calc(100%-2rem)] w-[min(22rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
-          : "pointer-events-auto absolute right-3 top-16 z-20 flex max-h-[calc(100%-6rem)] w-[min(22rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+          : // eslint-disable-next-line local/no-physical-tailwind -- default spot of a draggable panel whose drag handler writes physical left/top.
+            "pointer-events-auto absolute right-3 top-16 z-20 flex max-h-[calc(100%-6rem)] w-[min(22rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
       }
       style={pos ? { left: pos.x, top: pos.y } : undefined}
       role="region"

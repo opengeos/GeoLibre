@@ -46,6 +46,23 @@ import {
   type TourKeyframe,
   TourRecordingUnsupportedError,
 } from "../../lib/tour-recorder";
+import {
+  clampDragPosition,
+  clampOr as clamp,
+  computePanelResize,
+  createKeyframeId as createId,
+  DEFAULT_TOUR_CONFIG_NAME,
+  DEFAULT_TOUR_VIDEO_NAME as DEFAULT_FILE_NAME,
+  moveKeyframe,
+  newKeyframe,
+  type PanelRect,
+  resizeKeyDelta,
+  type ResizeCorner,
+  roundCameraView,
+  secondsToMs,
+  tourConfigFileName,
+  tourVideoFileName,
+} from "../../lib/record-tour-model";
 
 interface RecordTourDialogProps {
   open: boolean;
@@ -57,42 +74,11 @@ interface RecordTourDialogProps {
 // step (name + Save) rather than an automatic download the moment recording ends.
 type Status = "idle" | "recording" | "ready" | "saving";
 
-const DEFAULT_FILE_NAME = "map-tour";
-// Default leaf name for the saved tour *configuration* (the editable JSON),
-// distinct from the recorded video's name so the two exports are easy to tell
-// apart in a downloads folder.
-const DEFAULT_CONFIG_FILE_NAME = "map-tour-setup";
-
-// Smallest the panel may be resized to, so its controls never clip away.
-const MIN_PANEL_WIDTH = 320;
-const MIN_PANEL_HEIGHT = 280;
-// Pixels each arrow-key press grows or shrinks the panel when a resize handle is
-// focused (keyboard equivalent of dragging a corner).
-const RESIZE_KEY_STEP = 16;
-
 const MIN_PATH_KEYFRAMES = 2;
 const MAX_PATH_KEYFRAMES = 100;
 const DEFAULT_PATH_KEYFRAMES = 12;
 const DEFAULT_PATH_ZOOM = 15;
 const DEFAULT_PATH_PITCH = 60;
-
-function createId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `keyframe-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-}
-
-/** Round a camera number for compact display in the keyframe list. */
-function round(value: number, digits: number): number {
-  return Number(value.toFixed(digits));
-}
-
-/** Clamp a number into a range, returning the fallback when not finite. */
-function clamp(value: number, min: number, max: number, fallback: number): number {
-  if (!Number.isFinite(value)) return fallback;
-  return Math.min(max, Math.max(min, value));
-}
 
 // Codec support is a static browser capability, so probe it once at module load
 // rather than re-running the MediaRecorder.isTypeSupported() checks per render.
@@ -163,7 +149,7 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
   // `pos.x` too); the bottom-right handle keeps the left edge fixed.
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const resizeRef = useRef<{
-    corner: "sw" | "se";
+    corner: ResizeCorner;
     startX: number;
     startY: number;
     startWidth: number;
@@ -226,13 +212,11 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
     const width = panelRef.current?.offsetWidth ?? 0;
     const height = panelRef.current?.offsetHeight ?? 0;
     // Keep the panel within the viewport so it can't be dragged off-screen.
-    const x = Math.max(
-      0,
-      Math.min(event.clientX - dragOffset.current.x, window.innerWidth - width),
-    );
-    const y = Math.max(
-      0,
-      Math.min(event.clientY - dragOffset.current.y, window.innerHeight - height),
+    const { x, y } = clampDragPosition(
+      { x: event.clientX, y: event.clientY },
+      dragOffset.current,
+      { width, height },
+      { width: window.innerWidth, height: window.innerHeight },
     );
     setPos({ x, y });
   };
@@ -244,39 +228,18 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
 
-  // Apply a resize relative to a base rect, clamped to the viewport and the
-  // minimum size, and commit it to pos/size. `dx`/`dy` are how far the dragged
-  // edge moves: the bottom edge always moves by `dy`; for the "se" corner the
-  // right edge moves by `dx` (left edge fixed), and for "sw" the left edge moves
-  // by `dx` while the right edge stays put. Shared by pointer drag and keyboard.
-  const applyResize = (
-    corner: "sw" | "se",
-    base: { width: number; height: number; left: number; top: number },
-    dx: number,
-    dy: number,
-  ) => {
-    // Height grows downward from a fixed top for both corners.
-    const maxHeight = window.innerHeight - base.top;
-    const height = Math.max(MIN_PANEL_HEIGHT, Math.min(base.height + dy, maxHeight));
-    if (corner === "se") {
-      // Left edge fixed; the right edge follows, capped at the viewport edge.
-      const maxWidth = window.innerWidth - base.left;
-      const width = Math.max(MIN_PANEL_WIDTH, Math.min(base.width + dx, maxWidth));
-      setPos({ x: base.left, y: base.top });
-      setSize({ width, height });
-    } else {
-      // Right edge fixed; the left edge follows. The width is capped at the
-      // panel's right-edge x-coordinate (left + width) rather than the window
-      // width, since that is what keeps the left edge from crossing x = 0 when
-      // we set `pos.x = right - width`.
-      const maxWidthBeforeEdge = base.left + base.width;
-      const width = Math.max(MIN_PANEL_WIDTH, Math.min(base.width + dx, maxWidthBeforeEdge));
-      setPos({ x: maxWidthBeforeEdge - width, y: base.top });
-      setSize({ width, height });
-    }
+  // Apply a resize (see computePanelResize) and commit it to pos/size. Shared by
+  // pointer drag and keyboard.
+  const applyResize = (corner: ResizeCorner, base: PanelRect, dx: number, dy: number) => {
+    const next = computePanelResize(corner, base, dx, dy, {
+      width: window.innerWidth,
+      height: window.innerHeight,
+    });
+    setPos(next.pos);
+    setSize(next.size);
   };
 
-  const onResizeStart = (corner: "sw" | "se") => (event: React.PointerEvent) => {
+  const onResizeStart = (corner: ResizeCorner) => (event: React.PointerEvent) => {
     // Don't let the press also start a drag or bubble to the map underneath.
     event.preventDefault();
     event.stopPropagation();
@@ -322,66 +285,31 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
   // Keyboard equivalent of dragging a corner: arrow keys nudge the panel size by
   // a fixed step so the resize feature is operable without a pointer. Left/Right
   // grow the side the handle is on; Up/Down adjust the bottom edge.
-  const onResizeKey = (corner: "sw" | "se") => (event: React.KeyboardEvent) => {
-    let dx = 0;
-    let dy = 0;
-    switch (event.key) {
-      case "ArrowDown":
-        dy = RESIZE_KEY_STEP;
-        break;
-      case "ArrowUp":
-        dy = -RESIZE_KEY_STEP;
-        break;
-      case "ArrowLeft":
-        // For the left handle, pressing Left extends the panel leftward.
-        dx = corner === "sw" ? RESIZE_KEY_STEP : -RESIZE_KEY_STEP;
-        break;
-      case "ArrowRight":
-        dx = corner === "sw" ? -RESIZE_KEY_STEP : RESIZE_KEY_STEP;
-        break;
-      default:
-        return;
-    }
+  const onResizeKey = (corner: ResizeCorner) => (event: React.KeyboardEvent) => {
+    const delta = resizeKeyDelta(corner, event.key);
+    if (!delta) return;
     event.preventDefault();
     const rect = panelRef.current?.getBoundingClientRect();
     if (!rect) return;
     applyResize(
       corner,
       { width: rect.width, height: rect.height, left: rect.left, top: rect.top },
-      dx,
-      dy,
+      delta.dx,
+      delta.dy,
     );
   };
 
   /** Read the live map camera, rounded for compact display. */
   const captureView = () => {
     const view = mapControllerRef.current?.readView();
-    if (!view) return null;
-    return {
-      center: [round(view.center[0], 6), round(view.center[1], 6)] as [number, number],
-      zoom: round(view.zoom, 3),
-      pitch: round(view.pitch, 1),
-      bearing: round(view.bearing, 1),
-    };
+    return view ? roundCameraView(view) : null;
   };
 
   const addCurrentView = () => {
     const view = captureView();
     if (!view) return;
     clearResultMessages();
-    setKeyframes((current) => [
-      ...current,
-      {
-        id: createId(),
-        ...view,
-        holdMs: DEFAULT_HOLD_SECONDS * 1000,
-        // A new keyframe lands as the last stop, so its own transition is unused
-        // (and greyed out) for now. Seeding it with the default means that once
-        // another keyframe is added below it, the field activates already filled
-        // with the preset transition rather than an empty box.
-        transitionMs: DEFAULT_SEGMENT_SECONDS * 1000,
-      },
-    ]);
+    setKeyframes((current) => [...current, newKeyframe(view, createId())]);
   };
 
   // Overwrite an existing keyframe's camera with the live map view, so a single
@@ -403,16 +331,11 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
   };
 
   const move = (index: number, delta: number) => {
-    const target = index + delta;
     // Guard the no-op (already at an end) so an inert reorder click can't clear
     // the banner; the buttons are disabled there anyway, this is belt-and-braces.
-    if (target < 0 || target >= keyframes.length) return;
+    if (!moveKeyframe(keyframes, index, delta)) return;
     clearResultMessages();
-    setKeyframes((current) => {
-      const next = [...current];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
+    setKeyframes((current) => moveKeyframe(current, index, delta) ?? current);
   };
 
   const generateFromPath = () => {
@@ -439,7 +362,7 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
   };
 
   const setHoldSeconds = (id: string, seconds: number) => {
-    const holdMs = Math.round(seconds * 1000);
+    const holdMs = secondsToMs(seconds);
     // Clear the banner only on a real change, so merely focusing and blurring a
     // duration field (which re-commits the same value) doesn't wipe it.
     const current = keyframes.find((kf) => kf.id === id);
@@ -448,7 +371,7 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
   };
 
   const setTransitionSeconds = (id: string, seconds: number) => {
-    const transitionMs = Math.round(seconds * 1000);
+    const transitionMs = secondsToMs(seconds);
     const current = keyframes.find((kf) => kf.id === id);
     if (current && current.transitionMs !== transitionMs) clearResultMessages();
     setKeyframes((prev) => prev.map((kf) => (kf.id === id ? { ...kf, transitionMs } : kf)));
@@ -530,12 +453,11 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
     setSavedName(null);
     setSaveCancelled(false);
     try {
-      const base = fileName.trim().replace(/\.webm$/i, "") || DEFAULT_FILE_NAME;
       const fileType = t("recordTour.videoFileType");
       // Pass the Blob straight through; the helper only materializes bytes on
       // the Tauri write path, so a cancel-and-retry never re-copies the video.
       const name = await saveBinaryFileWithFallback(pendingBlob, {
-        defaultName: `${base}.webm`,
+        defaultName: tourVideoFileName(fileName),
         filters: [{ name: fileType, extensions: ["webm"] }],
         browserTypes: [{ description: fileType, accept: { "video/webm": [".webm"] } }],
         mimeType: "video/webm",
@@ -583,28 +505,15 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
       // save dialog. Browsers without the File System Access picker (Firefox,
       // Safari) would otherwise download under the fixed default name, so prompt
       // for a name first — the fix for the "always map-tour-setup.json" report.
-      let defaultName = `${DEFAULT_CONFIG_FILE_NAME}.json`;
+      let defaultName = `${DEFAULT_TOUR_CONFIG_NAME}.json`;
       if (browserSaveFallsBackToDownload()) {
         const chosen = await useFileNamePrompt.getState().prompt({
-          defaultName: DEFAULT_CONFIG_FILE_NAME,
+          defaultName: DEFAULT_TOUR_CONFIG_NAME,
         });
         // Cancelling the name prompt aborts the save entirely.
         if (chosen === null) return;
-        // Normalize before re-appending ".json": trim, replace characters that
-        // are illegal in common filesystems (path separators, null byte, etc.)
-        // so a pasted name can't smuggle in a path, then drop trailing dots so
-        // "tour.json." doesn't keep its ".json", strip the extension, and clean
-        // up any remaining trailing dots. This avoids a doubled "tour.json.json"
-        // for inputs like "tour.json " or "tour.json.".
-        const base = chosen
-          .trim()
-          // eslint-disable-next-line no-control-regex
-          .replace(/[/\\:*?"<>|\x00]/g, "_")
-          .replace(/\.+$/, "")
-          .replace(/\.json$/i, "")
-          .replace(/\.+$/, "")
-          .trim();
-        defaultName = `${base || DEFAULT_CONFIG_FILE_NAME}.json`;
+        // Normalize to a safe name (see tourConfigFileName) before saving.
+        defaultName = tourConfigFileName(chosen);
       }
       const name = await saveTextFileWithFallback(content, {
         defaultName,
@@ -676,6 +585,7 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
       }}
       className={cn(
         "fixed z-40 flex flex-col rounded-lg border bg-card text-card-foreground shadow-xl",
+        // eslint-disable-next-line local/no-physical-tailwind -- default spot of a draggable panel whose drag handler writes physical left/top.
         pos ? "" : "left-4 top-16",
         // Default width / height cap only until the panel is explicitly resized,
         // after which the inline pixel size takes over.
@@ -1016,6 +926,7 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
         onPointerUp={onResizeEnd}
         onPointerCancel={onResizeEnd}
         onKeyDown={onResizeKey("sw")}
+        // eslint-disable-next-line local/no-physical-tailwind -- the resize grips' drag math and cursors are physical corners.
         className="absolute bottom-0 left-0 h-4 w-4 cursor-sw-resize touch-none rounded-bl-lg border-b-2 border-l-2 border-transparent hover:border-muted-foreground/50 focus-visible:border-ring focus-visible:outline-none"
       />
       <button
@@ -1026,6 +937,7 @@ export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: Recor
         onPointerUp={onResizeEnd}
         onPointerCancel={onResizeEnd}
         onKeyDown={onResizeKey("se")}
+        // eslint-disable-next-line local/no-physical-tailwind -- the resize grips' drag math and cursors are physical corners.
         className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none rounded-br-lg border-b-2 border-r-2 border-transparent hover:border-muted-foreground/50 focus-visible:border-ring focus-visible:outline-none"
       />
     </div>
