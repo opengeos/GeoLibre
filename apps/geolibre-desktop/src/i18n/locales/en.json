@@ -2519,7 +2519,7 @@
       "toggle": "Arrange",
       "done": "Done",
       "reset": "Reset layout",
-      "hint": "Drag an element to move it; drag its corner handle to resize. Arrow keys nudge the focused element.",
+      "hint": "Drag an element to move it; drag its corner handle to resize. Arrow keys nudge the focused element; hold Alt with an arrow key to resize it.",
       "resizeHandle": "Resize {{name}}",
       "element": {
         "map": "Map frame",

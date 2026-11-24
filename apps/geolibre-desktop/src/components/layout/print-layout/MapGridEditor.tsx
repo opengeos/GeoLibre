@@ -38,7 +38,8 @@ export function MapGridEditor({ layout, dispatch, options }: MapGridEditorProps)
     dispatch({ type: "setLayout", patch: { gridInterval: interval } });
   };
   const commitFont = () => {
-    const value = Math.max(3, Math.min(36, Number(fontDraft) || 7));
+    const parsed = fontDraft.trim() ? Number(fontDraft) : NaN;
+    const value = Math.max(3, Math.min(36, Number.isFinite(parsed) ? parsed : 7));
     setFontDraft(String(value));
     dispatch({ type: "setLayout", patch: { gridFontSize: value } });
   };
