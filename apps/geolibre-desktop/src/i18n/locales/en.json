@@ -3,7 +3,7 @@
     "dataImportError": "Could not import the selected files.",
     "importedDataCopies_one": "Imported {{count}} file into GeoLibre.",
     "importedDataCopies_other": "Imported {{count}} files into GeoLibre.",
-    "importedDataCopiesDescription": "Edits are saved to the imported copies. Export a file to update the original document.",
+    "importedDataCopiesDescription": "These are local copies. Export edited data to update the original document.",
     "shareClosed": "Share sheet closed for {{fileName}}.",
     "shareClosedDescription": "If no share targets appeared, you can download the file directly instead.",
     "downloadInstead": "Download instead"

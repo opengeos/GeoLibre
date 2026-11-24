@@ -305,8 +305,16 @@ review, so gate them on mobile the way the sidecar tools already are via
 - Data-file pickers import Android documents into durable app storage, retaining
   filenames and keeping files selected together in one folder for companion
   reads. A manifest records the source URI, byte count, and SHA-256 checksum.
-  Edits update the imported copy; export a file to update the original document.
+  GeoJSON edits can be saved to the imported copy. Formats that need the desktop
+  writer, including GeoPackage, are export-only on mobile. Export edited data to
+  update the original document.
   Project-file pickers retain their existing scoped-document behavior.
+- Source-document permissions are retained for future synchronization and share
+  Android's finite persisted-permission quota with project documents. After
+  enough distinct picks, the app can release an older project's permission;
+  reopening then uses the stored-project fallback with its stale-copy warning
+  when that fallback is available. Imported data copies remain readable without
+  the original provider permission.
 - Keep the locked Wry dependency at 0.57.1 or later. Earlier versions apply
   nonzero byte-range offsets twice on Android, breaking local raster reads even
   when their headers load. See [upstream Wry fix #1865](https://github.com/tauri-apps/wry/pull/1865).

@@ -45,6 +45,7 @@ import { embedEditedGeometry, hasEditedGeometry } from "./edited-geometry-save";
 import { isGeojsonSourcePath, joinLocalPath } from "./file-io/paths";
 import { collectGeojsonLayersForExport, type CollectGeojsonExportDeps } from "./geojson-zip-export";
 import { isTauri } from "./is-tauri";
+import { isDesktopRuntime } from "./is-mobile";
 import { localFileSourceLayer } from "./local-file-source";
 import { MssqlReconnectRequiredError, withMssqlSession } from "./mssql-sessions";
 import {
@@ -397,6 +398,9 @@ export async function writeLayerEditsToSource(
   const requestProjectGeneration = readProjectGeneration();
   const currentBeforeCommit = readLatestLayer(clickedLayer.id);
   if (!currentBeforeCommit) {
+    return { status: "error", message: t("layers.saveEditsError"), silent: true };
+  }
+  if (isTauri() && !isDesktopRuntime() && !canWriteEditsToSource(currentBeforeCommit)) {
     return { status: "error", message: t("layers.saveEditsError"), silent: true };
   }
   if (

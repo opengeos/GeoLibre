@@ -6,6 +6,8 @@ import type { FeatureCollection } from "geojson";
 import type { TFunction } from "i18next";
 
 const { PostgisWriteRejectedError } = await import("@geolibre/processing");
+const { canWriteEditsToSource } =
+  await import("../apps/geolibre-desktop/src/components/panels/layer-panel/layer-panel-utils");
 const {
   applyExternalCopyReferences,
   canCollaboratorEditLayer,
@@ -54,6 +56,62 @@ function makeLayer(
     ...overrides,
   } as GeoLibreLayer;
 }
+
+it("keeps mobile GeoJSON copy saves available without offering sidecar-backed sources", async () => {
+  const originalTauri = Object.getOwnPropertyDescriptor(window, "__TAURI_INTERNALS__");
+  const originalUa = Object.getOwnPropertyDescriptor(navigator, "userAgent");
+  Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+  Object.defineProperty(navigator, "userAgent", { configurable: true, value: "Android" });
+  try {
+    const root = "/data/user/0/org.geolibre.app/files/picked-documents/selection/data";
+    const geojson = makeLayer("mobile-json", "Cities", { sourcePath: `${root}/cities.geojson` });
+    const gpkg = makeLayer("mobile-gpkg", "Regions", { sourcePath: `${root}/regions.gpkg` });
+    for (const extension of ["gpkg", "shp", "fgb", "parquet", "geoparquet"]) {
+      assert.equal(
+        canWriteEditsToSource(
+          makeLayer(extension, extension, {
+            sourcePath: `${root}/data.${extension}`,
+          }),
+        ),
+        false,
+      );
+    }
+    useAppStore.setState({ layers: [geojson, gpkg] });
+    assert.deepEqual(
+      listWritableLayerCandidates([geojson, gpkg]).map((c) => c.layer.id),
+      [geojson.id],
+    );
+    let commits = 0;
+    let writes = 0;
+    const deps = {
+      commitDrafts: () => {
+        commits++;
+        return "none" as const;
+      },
+      resolveGeojson: async () => sampleFeatureCollection,
+      writeLocalGeojson: async () => {
+        writes++;
+      },
+      startSidecar: async () => {
+        throw new Error("Mobile cannot start a Python sidecar");
+      },
+      writeVectorSource: async () => {
+        throw new Error("Mobile cannot use the sidecar writer");
+      },
+    };
+    const refused = await writeLayerEditsToSource(gpkg, { map: undefined, t, deps });
+    assert.equal(refused.status, "error");
+    assert.equal(commits, 0, "unsupported saves must not commit pending drafts");
+    const saved = await writeLayerEditsToSource(geojson, { map: undefined, t, deps });
+    assert.equal(saved.status, "success");
+    assert.equal(writes, 1);
+  } finally {
+    if (originalTauri) Object.defineProperty(window, "__TAURI_INTERNALS__", originalTauri);
+    else Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    if (originalUa) Object.defineProperty(navigator, "userAgent", originalUa);
+    else Reflect.deleteProperty(navigator, "userAgent");
+  }
+});
 
 describe("writable layer classification and listing", () => {
   it("classifies local GeoJSON, GeoPackage, PostGIS, and SQL Server sources", () => {
