@@ -4222,7 +4222,10 @@
     "networkTool": {
       "isochrone": "Isochrone / service area",
       "odMatrix": "OD cost matrix",
-      "sequentialRoute": "Sequential route (directions)"
+      "sequentialRoute": "Sequential route (directions)",
+      "localShortestPath": "Shortest path (local network)",
+      "localClosestFacility": "Closest facility (local network)",
+      "localServiceArea": "Service area (local network)"
     },
     "statisticsTool": {
       "globalMoransI": "Global Moran's I",
@@ -4231,7 +4234,12 @@
       "averageNearestNeighbor": "Average nearest neighbor",
       "kernelDensity": "Kernel density (heatmap)",
       "emergingHotSpot": "Emerging Hot Spot (space-time cube)",
-      "compositeScore": "Composite score (suitability index)"
+      "compositeScore": "Composite score (suitability index)",
+      "olsRegression": "Ordinary least squares (OLS)",
+      "gwr": "Geographically weighted regression (GWR)",
+      "dbscan": "DBSCAN clustering",
+      "hdbscan": "HDBSCAN clustering",
+      "krigingDiagnostics": "Kriging variogram and cross-validation"
     },
     "rasterTool": {
       "downloadGlobalDem": "Download Global DEM",
@@ -6402,13 +6410,17 @@
   },
   "network": {
     "title": "Network analysis",
-    "description": "Isochrones, service areas, and origin–destination cost matrices from your point layers.",
+    "description": "Isochrones, service areas, origin–destination cost matrices, and routing over your own line layers.",
     "heading": "Network",
     "run": "Run",
     "outputPlaceholder": "Output will appear here.",
-    "endpointNotice": "Point coordinates are sent to the routing server ({{endpoint}}). The default is a shared public Valhalla server (FOSSGIS), which is rate-limited. For heavy use, enter your own server's URL in the \"Routing server (Valhalla)\" field above."
+    "endpointNotice": "Point coordinates are sent to the routing server ({{endpoint}}). The default is a shared public Valhalla server (FOSSGIS), which is rate-limited. For heavy use, enter your own server's URL in the \"Routing server (Valhalla)\" field above.",
+    "localNotice": "This tool runs in your browser over the selected line layer. Nothing is sent to a routing server.",
+    "consentRequired": "This tool sends point coordinates to a routing server. Open it from the Processing menu to review and accept the routing notice first.",
+    "styleFailed": "Could not style \"{{name}}\": {{reason}}"
   },
   "statistics": {
+    "cancelled": "Cancelled",
     "title": "Spatial statistics",
     "description": "Spatial autocorrelation, hotspot analysis, and density measures. Every tool runs client-side on your GeoJSON layers.",
     "heading": "Spatial statistics",
@@ -7984,6 +7996,151 @@
               "label": "Routing server (Valhalla)"
             }
           }
+        },
+        "local-shortest-path": {
+          "name": "Shortest path (local network)",
+          "description": "Route through stops in order over your own line layer (roads, trails, pipes), with no routing server. Edges cost their length, a cost field, or travel time from a speed field, and one-way lines are respected.",
+          "params": {
+            "network": {
+              "label": "Network lines"
+            },
+            "costMode": {
+              "label": "Edge cost",
+              "options": {
+                "length": "Length (metres)",
+                "field": "Cost field (total per feature)",
+                "speed": "Speed field (km/h, cost in minutes)"
+              }
+            },
+            "costField": {
+              "label": "Cost or speed field",
+              "description": "For a cost field, the cost of traversing the whole feature (spread over it by length). For a speed field, km/h. Features with a missing or invalid value are left out of the network."
+            },
+            "directionField": {
+              "label": "One-way field (optional)",
+              "description": "yes, true, 1 or FT: travel only in the digitized direction. -1, reverse or TF: only against it. N or closed: no travel. Anything else: both ways."
+            },
+            "snapTolerance": {
+              "label": "Snap tolerance (m)",
+              "description": "Line ends closer than this to another line are joined to it. Lines that share a vertex are always connected; lines that only cross are not."
+            },
+            "stops": {
+              "label": "Stops"
+            },
+            "order_field": {
+              "label": "Order by field (optional)",
+              "description": "Visit stops sorted by this field (numbers or timestamps). Leave empty to use the layer's feature order."
+            },
+            "algorithm": {
+              "label": "Search algorithm",
+              "options": {
+                "astar": "A* (haversine heuristic)",
+                "dijkstra": "Dijkstra"
+              }
+            }
+          }
+        },
+        "local-closest-facility": {
+          "name": "Closest facility (local network)",
+          "description": "For each incident, find the nearest facilities by network cost over your own line layer and draw the routes to them.",
+          "params": {
+            "network": {
+              "label": "Network lines"
+            },
+            "costMode": {
+              "label": "Edge cost",
+              "options": {
+                "length": "Length (metres)",
+                "field": "Cost field (total per feature)",
+                "speed": "Speed field (km/h, cost in minutes)"
+              }
+            },
+            "costField": {
+              "label": "Cost or speed field",
+              "description": "For a cost field, the cost of traversing the whole feature (spread over it by length). For a speed field, km/h. Features with a missing or invalid value are left out of the network."
+            },
+            "directionField": {
+              "label": "One-way field (optional)",
+              "description": "yes, true, 1 or FT: travel only in the digitized direction. -1, reverse or TF: only against it. N or closed: no travel. Anything else: both ways."
+            },
+            "snapTolerance": {
+              "label": "Snap tolerance (m)",
+              "description": "Line ends closer than this to another line are joined to it. Lines that share a vertex are always connected; lines that only cross are not."
+            },
+            "incidents": {
+              "label": "Incidents"
+            },
+            "facilities": {
+              "label": "Facilities"
+            },
+            "count": {
+              "label": "Facilities to find per incident"
+            },
+            "maxCost": {
+              "label": "Maximum cost (0 = no limit)"
+            },
+            "travelDirection": {
+              "label": "Travel direction",
+              "options": {
+                "to": "Incident to facility",
+                "from": "Facility to incident"
+              }
+            }
+          }
+        },
+        "local-service-area": {
+          "name": "Service area (local network)",
+          "description": "Parts of your own line network reachable from facilities within cost breaks, as lines and (optionally) buffered polygons.",
+          "params": {
+            "network": {
+              "label": "Network lines"
+            },
+            "costMode": {
+              "label": "Edge cost",
+              "options": {
+                "length": "Length (metres)",
+                "field": "Cost field (total per feature)",
+                "speed": "Speed field (km/h, cost in minutes)"
+              }
+            },
+            "costField": {
+              "label": "Cost or speed field",
+              "description": "For a cost field, the cost of traversing the whole feature (spread over it by length). For a speed field, km/h. Features with a missing or invalid value are left out of the network."
+            },
+            "directionField": {
+              "label": "One-way field (optional)",
+              "description": "yes, true, 1 or FT: travel only in the digitized direction. -1, reverse or TF: only against it. N or closed: no travel. Anything else: both ways."
+            },
+            "snapTolerance": {
+              "label": "Snap tolerance (m)",
+              "description": "Line ends closer than this to another line are joined to it. Lines that share a vertex are always connected; lines that only cross are not."
+            },
+            "facilities": {
+              "label": "Facilities"
+            },
+            "breaks": {
+              "label": "Cost breaks",
+              "description": "Comma-separated costs in the edge cost unit (metres, field units, or minutes)."
+            },
+            "overlap": {
+              "label": "Overlapping areas",
+              "options": {
+                "merge": "Merge (one area per break)",
+                "separate": "Separate area per facility"
+              }
+            },
+            "travelDirection": {
+              "label": "Travel direction",
+              "options": {
+                "from": "Away from facility",
+                "to": "Toward facility"
+              }
+            },
+            "polygonWidth": {
+              "label": "Polygon trim width (m, 0 = lines only)",
+              "description": "Also output polygons by buffering the reachable lines by this distance."
+            }
+          }
         }
       },
       "statistics": {
@@ -8183,6 +8340,117 @@
             "keepComponents": {
               "label": "Keep normalized components",
               "description": "Write each field's normalized value as its own column, so the score can be audited instead of taken on trust."
+            }
+          }
+        },
+        "ols-regression": {
+          "name": "Ordinary least squares (OLS)",
+          "description": "Global linear regression of a field on one or more explanatory fields: coefficients, standard errors, t and p values, R², AICc, and per-feature fitted values and residuals.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "dependent": {
+              "label": "Dependent variable"
+            },
+            "explanatory": {
+              "label": "Explanatory fields",
+              "description": "Comma-separated numeric fields, e.g. income, age, density."
+            }
+          }
+        },
+        "gwr": {
+          "name": "Geographically weighted regression (GWR)",
+          "description": "Local regression whose coefficients vary over space, with a bisquare or Gaussian kernel and a fixed (metres) or adaptive (nearest neighbors) bandwidth, chosen by AICc when left at 0. Writes local coefficients, t values, fitted values, residuals and local R² to each feature.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "dependent": {
+              "label": "Dependent variable"
+            },
+            "explanatory": {
+              "label": "Explanatory fields",
+              "description": "Comma-separated numeric fields, e.g. income, age, density."
+            },
+            "kernel": {
+              "label": "Kernel",
+              "options": {
+                "bisquare": "Bisquare",
+                "gaussian": "Gaussian"
+              }
+            },
+            "bandwidthType": {
+              "label": "Bandwidth type",
+              "options": {
+                "adaptive": "Adaptive (nearest neighbors)",
+                "fixed": "Fixed distance (metres)"
+              }
+            },
+            "bandwidth": {
+              "label": "Bandwidth (0 = optimize by AICc)",
+              "description": "Neighbor count for an adaptive kernel (the feature itself included), or a distance in metres for a fixed one."
+            }
+          }
+        },
+        "dbscan": {
+          "name": "DBSCAN clustering",
+          "description": "Density-based clusters: points with at least the minimum number of neighbors within the search distance seed clusters; isolated points are labelled noise (-1).",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "eps": {
+              "label": "Search distance (m)"
+            },
+            "minPoints": {
+              "label": "Minimum points",
+              "description": "Neighbors within the search distance (the point itself included) a core point needs."
+            }
+          }
+        },
+        "hdbscan": {
+          "name": "HDBSCAN clustering",
+          "description": "Hierarchical density-based clusters that adapt to varying density, with no search distance to tune: set the smallest cluster size. Writes each feature's cluster (-1 for noise) and membership probability.",
+          "params": {
+            "layer": {
+              "label": "Layer"
+            },
+            "minClusterSize": {
+              "label": "Minimum cluster size"
+            },
+            "minSamples": {
+              "label": "Minimum samples (0 = cluster size)",
+              "description": "Higher values make the clustering more conservative, labelling more points as noise."
+            }
+          }
+        },
+        "kriging-diagnostics": {
+          "name": "Kriging variogram and cross-validation",
+          "description": "Fit a semivariogram to a point field the way the Interpolation (IDW / Kriging) raster tool does, then leave-one-out cross-validate ordinary kriging: per-point predictions, errors and standardized errors, plus RMSE and RMSSE. Compare all models to pick one.",
+          "params": {
+            "layer": {
+              "label": "Point layer"
+            },
+            "field": {
+              "label": "Value field"
+            },
+            "model": {
+              "label": "Variogram model",
+              "options": {
+                "compare": "Compare all (keep lowest RMSE)",
+                "spherical": "Spherical",
+                "exponential": "Exponential",
+                "gaussian": "Gaussian",
+                "linear": "Linear"
+              }
+            },
+            "lags": {
+              "label": "Lag bins"
+            },
+            "maxLag": {
+              "label": "Maximum lag (m, 0 = full extent)",
+              "description": "Pairs farther apart are left out of the semivariogram. Half the extent is a common choice."
             }
           }
         }
@@ -8536,16 +8804,20 @@
       "clip": "Clip",
       "dataManagement": "Data management",
       "dataQuality": "Data quality",
+      "densityClustering": "Density Clustering",
       "dggs": "DGGS",
       "geometry": "Geometry",
+      "geostatistics": "Geostatistics",
       "join": "Join",
       "linearReferencing": "Linear referencing",
+      "localNetwork": "Local network",
       "movementTime": "Movement & time",
       "network": "Network",
       "overlay": "Overlay",
       "rasterToVector": "Raster to Vector",
       "reproject": "Reproject",
       "select": "Select",
+      "spatialRegression": "Spatial Regression",
       "spatialStatistics": "Spatial Statistics",
       "terrain": "Terrain",
       "vectorToRaster": "Vector to Raster"

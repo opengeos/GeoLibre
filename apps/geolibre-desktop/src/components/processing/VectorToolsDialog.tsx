@@ -1,3 +1,4 @@
+import { isProcessingParameterVisible } from "../../lib/processing-parameter-visibility";
 import { shouldZoomToNewLayers, useAppStore, useLayersWhen } from "@geolibre/core";
 import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
@@ -291,16 +292,9 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
   // Whether a parameter should be shown, given another parameter's value
   // (e.g. hide the Value field for is-empty/is-not-empty operators).
   const isParamVisible = useCallback(
-    (param: AlgorithmParameter): boolean => {
-      const vw = param.visibleWhen;
-      if (!vw) return true;
-      const current = params[vw.param] as string | undefined;
-      if ("in" in vw) return current != null && vw.in.includes(current);
-      return current == null || !vw.notIn.includes(current);
-    },
+    (param: AlgorithmParameter) => isProcessingParameterVisible(param, params),
     [params],
   );
-
   const addResultLayer = useCallback(
     (name: string, fc: FeatureCollection) => {
       if (!fc.features.length) {

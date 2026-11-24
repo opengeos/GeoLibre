@@ -1,3 +1,4 @@
+import { isProcessingParameterVisible } from "../../lib/processing-parameter-visibility";
 import { useAppStore, useLayersWhen } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
@@ -335,20 +336,9 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   // Whether a parameter is shown, given another parameter's value (e.g. hide
   // the IDW power field when the kriging method is selected).
   const isParamVisible = useCallback(
-    (param: AlgorithmParameter): boolean => {
-      const vw = param.visibleWhen;
-      if (!vw) return true;
-      // Fall back to the controlling param's declared default, so dependent
-      // fields resolve correctly on the first render — before the effect that
-      // seeds `params` from toolDefaults has run (avoids a one-frame flicker).
-      const controller = tool.parameters.find((p) => p.id === vw.param);
-      const current = (params[vw.param] ?? controller?.default) as string | undefined;
-      if ("in" in vw) return current != null && vw.in.includes(current);
-      return current == null || !vw.notIn.includes(current);
-    },
+    (param: AlgorithmParameter) => isProcessingParameterVisible(param, params, tool.parameters),
     [params, tool],
   );
-
   const pickInput = useCallback(async () => {
     const path = await pickLocalPathWithFallback({ filters: tool.inputFilters });
     if (path) setInputPath(path);

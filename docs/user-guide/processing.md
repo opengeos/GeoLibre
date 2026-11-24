@@ -272,6 +272,40 @@ The sidecar can also confine conversion inputs and outputs to an allowlist of di
 | **OD cost matrix** | Travel time and distance for every origin-destination pair between two point layers. |
 | **Sequential route (directions)** | Route through a set of stops in order, with turn-by-turn directions. |
 
+Coincident stops or incident/facility matches are recorded as point features
+with zero cost, preserving the match without a degenerate route line.
+
+Local graph construction runs on the main thread and accepts at most 250,000
+vertices. Endpoint-to-node and endpoint-to-segment snapping share a 50-million
+budget for index visits and candidate checks. Reduce the snap tolerance or
+extract a smaller network if it is exceeded. Point placement also caps index
+storage, cell visits, overflow candidates, and fallback scans at 50 million
+visits per run. Seam-adjacent queries and networks wider than 180 degrees
+currently use a full edge scan for correct wrapped placement, so they can reach
+this work limit with fewer points. Use a smaller local extract for those runs.
+It has a separate 50-million edge/point comparison budget,
+including far or antimeridian selections that use a full edge scan. Searches yield between
+legs or incidents; graph construction itself is synchronous.
+
+Service-area polygon buffering accepts at most 1,000 reachable line pieces per
+area and 5,000 per run. An excessive selection returns an error; rerun with
+polygons disabled for line-only output. Input points farther than 1 km or ten
+times the endpoint snap tolerance (whichever is larger) produce a warning;
+snap-distance attributes remain in the
+result.
+
+Local multi-stop and closest-facility runs are limited to 50 million node-search
+entries, counted after snapping. This bounds repeated graph-state allocations;
+use fewer stops/incidents or a smaller network extract for larger selections.
+
+The same menu also routes over **your own line layer**, entirely in the browser and with no server: trails, pipes, rivers, a road extract, or any other line network. The tool builds a graph from the lines (lines that share a vertex are connected, and line ends within the snap tolerance of another line are joined to it; lines that only cross stay apart, like a bridge over a road). Each edge costs its length in metres, a cost field (the cost of traversing the whole feature, spread over it by length), or the travel time in minutes from a speed field in km/h. An optional one-way field accepts the OSM (`yes`, `-1`, `no`) and Esri (`FT`, `TF`, `B`, `N`) conventions. Points are attached at the closest spot on the nearest line, and each result records how far it was moved (`*_snap_m`).
+
+| Tool | Description |
+| --- | --- |
+| **Shortest path (local network)** | Route through stops in order (or sorted by a field) with A\* or Dijkstra. Each leg records its cost and length. |
+| **Closest facility (local network)** | For each incident, the k nearest facilities by network cost, with an optional cost limit and travel direction, drawn as ranked routes. |
+| **Service area (local network)** | The parts of the network reachable from facilities within each cost break, clipped partway along edges, as lines and optionally as polygons buffered by a trim width. Facilities can share one area per break or get their own. |
+
 ### Spatial Statistics
 
 **Processing → GeoLibre Toolbox → Spatial Statistics** runs pattern analysis on a point or polygon layer and adds the result to the map.
@@ -285,6 +319,25 @@ The sidecar can also confine conversion inputs and outputs to an allowlist of di
 | **Kernel density (heatmap)** | A continuous density surface from a point layer. |
 | **Emerging Hot Spot (space-time cube)** | Hot-spot trends over time from a space-time cube. |
 | **Composite score (suitability index)** | Normalize, weight, and combine several numeric fields into one index (0-100 by default, or 0-1), styled on the map by the score. |
+| **Ordinary least squares (OLS)** | Global linear regression of a field on comma-separated explanatory fields: coefficients with standard errors, t and p values, R², F, AIC and AICc in the log, and fitted values and (standardized) residuals on each feature. |
+| **Geographically weighted regression (GWR)** | Local regression with a bisquare or Gaussian kernel and an adaptive (nearest neighbors) or fixed (metres) bandwidth. Leave the bandwidth at 0 to choose it by AICc golden-section search. Each feature gets its local coefficients, t values, fitted value, residuals, and local R². |
+| **DBSCAN clustering** | Density clusters from a search distance in metres and a minimum point count; each feature gets a cluster id (-1 for noise) and whether it is a core, border, or noise point. |
+| **HDBSCAN clustering** | Hierarchical density clusters that adapt to varying density. Set the minimum cluster size and optionally minimum samples (defaults to the cluster size); each feature gets a cluster id and a membership probability. |
+| **Kriging variogram and cross-validation** | The empirical semivariogram of a point field, a spherical, exponential, Gaussian or linear model fitted as the Interpolation (IDW / Kriging) raster tool fits it, and leave-one-out cross-validation of ordinary kriging (mean error, RMSE, RMSSE) per model, with per-point predictions and standardized errors. |
+
+Generated model fields keep their documented names. If one matches a source
+attribute, the original value is preserved under a unique `_source` suffix.
+
+Distances in these tools are great-circle metres. The OLS and GWR output
+matches GWR4 on its Georgia example data, and the clustering matches
+scikit-learn's `DBSCAN` and `HDBSCAN` (its defaults: excess-of-mass selection,
+no single root cluster). GWR handles up to 1,500 features, HDBSCAN 5,000, and
+the kriging cross-validation 300 distinct locations. Dense kriging inversion
+scales cubically with the number of samples; reduce the sample size for faster
+runs. Cancel terminates the processing worker without waiting for a model fit. DBSCAN accepts at most
+200,000 features and stops after 20 million candidate comparisons across its
+core-point and expansion passes. Dense data can reach this work limit below the
+feature cap; reduce the search radius or process a smaller area.
 
 
 The **Composite score** builder is the suitability and index workflow: pick two

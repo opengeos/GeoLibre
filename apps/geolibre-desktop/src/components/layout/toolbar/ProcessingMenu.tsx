@@ -515,6 +515,16 @@ export function ProcessingMenu({
                     <DropdownMenuItem onSelect={() => onOpenNetworkTool("sequential-route")}>
                       {t("toolbar.networkTool.sequentialRoute")}
                     </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => onOpenNetworkTool("local-shortest-path")}>
+                      {t("toolbar.networkTool.localShortestPath")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onOpenNetworkTool("local-closest-facility")}>
+                      {t("toolbar.networkTool.localClosestFacility")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onOpenNetworkTool("local-service-area")}>
+                      {t("toolbar.networkTool.localServiceArea")}
+                    </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
               )}
@@ -544,6 +554,22 @@ export function ProcessingMenu({
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setStatisticsToolOpen("composite-score")}>
                       {t("toolbar.statisticsTool.compositeScore")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("ols-regression")}>
+                      {t("toolbar.statisticsTool.olsRegression")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("gwr")}>
+                      {t("toolbar.statisticsTool.gwr")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("dbscan")}>
+                      {t("toolbar.statisticsTool.dbscan")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("hdbscan")}>
+                      {t("toolbar.statisticsTool.hdbscan")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("kriging-diagnostics")}>
+                      {t("toolbar.statisticsTool.krigingDiagnostics")}
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
