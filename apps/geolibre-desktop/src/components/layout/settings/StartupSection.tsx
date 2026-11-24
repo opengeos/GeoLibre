@@ -4,6 +4,7 @@ import { Crosshair, FolderOpen } from "lucide-react";
 import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { StartupSettings } from "../../../hooks/useDesktopSettings";
+import { IS_MAS_BUILD } from "../../../lib/build-flags";
 import { isTauri } from "../../../lib/is-tauri";
 import { pickLayerStylesFile } from "../../../lib/layer-style-files";
 import { pickLayersFile } from "../../../lib/startup-layers";
@@ -198,6 +199,23 @@ export function StartupSection({ mapControllerRef }: StartupSectionProps) {
           </span>
         </span>
       </label>
+      {/* The sidecar cannot run in the Mac App Store sandbox or on the web. */}
+      {isTauri() && !IS_MAS_BUILD && (
+        <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
+          <input
+            className="mt-0.5 h-4 w-4"
+            type="checkbox"
+            checked={draftDesktopSettings.startup.allowLiveMcp}
+            onChange={(event) => updateDraftStartupSettings({ allowLiveMcp: event.target.checked })}
+          />
+          <span className="space-y-1">
+            <span className="block">{t("settings.startup.allowLiveMcp")}</span>
+            <span className="block text-xs text-muted-foreground">
+              {t("settings.startup.allowLiveMcpHint")}
+            </span>
+          </span>
+        </label>
+      )}
       <div className="space-y-3 rounded-md border p-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">

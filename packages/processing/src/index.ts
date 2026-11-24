@@ -232,6 +232,7 @@ export {
   LOCAL_SIDECAR_URL,
   checkSidecarHealth,
   setSidecarAuthToken,
+  setSidecarRelayAccess,
   setSidecarFetch,
   clearRemoteWhiteboxCatalogSnapshotCache,
   cancelConversionJob,
