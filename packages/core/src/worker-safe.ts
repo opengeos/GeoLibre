@@ -13,6 +13,7 @@ export {
   earthLengthToBody,
   getActiveBodyRadiusRatio,
   getActiveEllipsoid,
+  getActiveMeanRadiusMeters,
   setActiveEllipsoidId,
 } from "./ellipsoids";
 export { decodePolyline, decodePolylineDetailed, encodePolyline } from "./polyline";

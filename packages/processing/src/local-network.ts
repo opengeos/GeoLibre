@@ -82,6 +82,11 @@ export interface SearchResult {
 }
 
 const DEG = Math.PI / 180;
+/** Signed shortest longitude offset, including the dateline seam. */
+function longitudeDelta(from: number, to: number): number {
+  if (Math.abs(to - from) <= 180) return to - from;
+  return ((((to - from + 180) % 360) + 360) % 360) - 180;
+}
 /** Metres per degree of latitude on the active body. */
 function metersPerDegree(): number {
   return getActiveMeanRadiusMeters() * DEG;
@@ -208,9 +213,9 @@ function projectOnSegment(
   by: number,
 ): { t: number; distDeg: number } {
   const k = Math.cos(py * DEG);
-  const ux = (bx - ax) * k;
+  const ux = longitudeDelta(ax, bx) * k;
   const uy = by - ay;
-  const wx = (px - ax) * k;
+  const wx = longitudeDelta(ax, px) * k;
   const wy = py - ay;
   const len2 = ux * ux + uy * uy;
   let t = len2 > 0 ? (wx * ux + wy * uy) / len2 : 0;
@@ -222,22 +227,28 @@ function projectOnSegment(
 
 /** A uniform lon/lat grid bucketing ids by the cells their bbox covers. */
 class GridIndex {
-  private cells = new Map<number, number[]>();
+  private cells = new Map<string, number[]>();
+  private boxes = new Map<number, [number, number, number, number]>();
+  private overflow = new Set<number>();
   constructor(
     readonly cell: number,
     readonly originX: number,
     readonly originY: number,
   ) {}
-  private key(ix: number, iy: number): number {
-    // Cantor-free packing; grids here stay far below 2^20 cells per axis.
-    return (ix + 1_048_576) * 2_097_152 + (iy + 1_048_576);
+  private key(ix: number, iy: number): string {
+    return `${ix},${iy}`;
   }
   cellOf(x: number, y: number): [number, number] {
     return [Math.floor((x - this.originX) / this.cell), Math.floor((y - this.originY) / this.cell)];
   }
   insert(id: number, minX: number, minY: number, maxX: number, maxY: number): void {
+    this.boxes.set(id, [minX, minY, maxX, maxY]);
     const [x0, y0] = this.cellOf(minX, minY);
     const [x1, y1] = this.cellOf(maxX, maxY);
+    if (![x0, y0, x1, y1].every(Number.isSafeInteger) || (x1 - x0 + 1) * (y1 - y0 + 1) > 256) {
+      this.overflow.add(id);
+      return;
+    }
     for (let ix = x0; ix <= x1; ix++) {
       for (let iy = y0; iy <= y1; iy++) {
         const key = this.key(ix, iy);
@@ -251,6 +262,13 @@ class GridIndex {
   query(minX: number, minY: number, maxX: number, maxY: number, out: number[]): void {
     const [x0, y0] = this.cellOf(minX, minY);
     const [x1, y1] = this.cellOf(maxX, maxY);
+    const scan =
+      ![x0, y0, x1, y1].every(Number.isSafeInteger) || (x1 - x0 + 1) * (y1 - y0 + 1) > 4096;
+    for (const id of scan ? this.boxes.keys() : this.overflow) {
+      const box = this.boxes.get(id)!;
+      if (box[0] <= maxX && box[2] >= minX && box[1] <= maxY && box[3] >= minY) out.push(id);
+    }
+    if (scan) return;
     for (let ix = x0; ix <= x1; ix++) {
       for (let iy = y0; iy <= y1; iy++) {
         const bucket = this.cells.get(this.key(ix, iy));
@@ -260,6 +278,7 @@ class GridIndex {
   }
   /** Ids in the ring of cells at Chebyshev distance `r` around (cx, cy). */
   ring(cx: number, cy: number, r: number, out: number[]): void {
+    for (const id of this.overflow) out.push(id);
     for (let ix = cx - r; ix <= cx + r; ix++) {
       for (let iy = cy - r; iy <= cy + r; iy++) {
         if (r > 0 && Math.abs(ix - cx) !== r && Math.abs(iy - cy) !== r) continue;
@@ -268,6 +287,20 @@ class GridIndex {
       }
     }
   }
+}
+
+/** Query both longitude representations when a snap window crosses the seam. */
+function queryWrapped(
+  index: GridIndex,
+  x: number,
+  y: number,
+  padX: number,
+  padY: number,
+  out: number[],
+): void {
+  index.query(x - padX, y - padY, x + padX, y + padY, out);
+  if (x - padX < -180) index.query(x - padX + 360, y - padY, 180, y + padY, out);
+  if (x + padX > 180) index.query(-180, y - padY, x + padX - 360, y + padY, out);
 }
 
 /** Result counters from {@link buildLocalNetwork}, for the tool log. */
@@ -321,15 +354,25 @@ export class LocalNetwork {
     this.edges.push(edge);
     this.adj[edge.a].push(id);
     this.adj[edge.b].push(id);
-    if (edge.length > 0) {
+    this.updateHeuristic(edge);
+    this.index?.insert(id, ...this.edgeBox(id));
+    return id;
+  }
+
+  private updateHeuristic(edge: NetworkEdge): void {
+    const direct = haversineMeters(
+      this.lon[edge.a],
+      this.lat[edge.a],
+      this.lon[edge.b],
+      this.lat[edge.b],
+    );
+    if (direct > 0) {
       for (const cost of [edge.costAB, edge.costBA]) {
         if (Number.isFinite(cost)) {
-          this.minCostPerMeter = Math.min(this.minCostPerMeter, cost / edge.length);
+          this.minCostPerMeter = Math.min(this.minCostPerMeter, cost / direct);
         }
       }
     }
-    this.index?.insert(id, ...this.edgeBox(id));
-    return id;
   }
 
   private edgeBox(id: number): [number, number, number, number] {
@@ -344,6 +387,8 @@ export class LocalNetwork {
 
   /** @internal Builds the edge spatial index once the edges are in. */
   buildIndex(): void {
+    this.minCostPerMeter = Infinity;
+    for (const edge of this.edges) this.updateHeuristic(edge);
     const { minX, minY, maxX, maxY } = this.extent;
     let total = 0;
     for (const edge of this.edges) {
@@ -387,7 +432,7 @@ export class LocalNetwork {
     let best: { edge: number; t: number; distDeg: number } | null = null;
     const seen = new Set<number>();
     const candidates: number[] = [];
-    for (let r = 0; r <= maxRing; r++) {
+    for (let r = 0; r <= Math.min(maxRing, 32); r++) {
       if (best && best.distDeg < (r - 1) * cellReach) break;
       candidates.length = 0;
       index.ring(cx, cy, r, candidates);
@@ -400,9 +445,19 @@ export class LocalNetwork {
           best = { edge: id, t: hit.t, distDeg: hit.distDeg };
       }
     }
+    // Bound empty-ring work. Distant points and seam-adjacent queries use
+    // one edge scan instead of walking arbitrarily many empty cells.
+    if (!best || best.distDeg >= 30 * cellReach || Math.abs(lon) > 170 || maxX - minX > 180) {
+      for (let id = 0; id < this.edges.length; id++) {
+        const { a, b } = this.edges[id];
+        const hit = projectOnSegment(lon, lat, this.lon[a], this.lat[a], this.lon[b], this.lat[b]);
+        if (!best || hit.distDeg < best.distDeg)
+          best = { edge: id, t: hit.t, distDeg: hit.distDeg };
+      }
+    }
     if (!best) return null;
     const { a, b } = this.edges[best.edge];
-    const px = this.lon[a] + best.t * (this.lon[b] - this.lon[a]);
+    const px = this.lon[a] + best.t * longitudeDelta(this.lon[a], this.lon[b]);
     const py = this.lat[a] + best.t * (this.lat[b] - this.lat[a]);
     return { edge: best.edge, t: best.t, distance: haversineMeters(lon, lat, px, py) };
   }
@@ -413,7 +468,10 @@ export class LocalNetwork {
    */
   splitEdge(id: number, t: number): number {
     const edge = this.edges[id];
-    const lon = this.lon[edge.a] + t * (this.lon[edge.b] - this.lon[edge.a]);
+    const lon = longitudeDelta(
+      0,
+      this.lon[edge.a] + t * longitudeDelta(this.lon[edge.a], this.lon[edge.b]),
+    );
     const lat = this.lat[edge.a] + t * (this.lat[edge.b] - this.lat[edge.a]);
     return this.splitEdgeAt(id, t, this.addNode(lon, lat));
   }
@@ -437,6 +495,7 @@ export class LocalNetwork {
     edge.costAB *= t;
     edge.costBA *= t;
     edge.length *= t;
+    this.updateHeuristic(edge);
     this.adj[node].push(id);
     this.addEdge(tail);
     return node;
@@ -586,11 +645,11 @@ export class LocalNetwork {
   reachableSegments(result: SearchResult, maxCost: number, reverse = false): Position[][] {
     const pieces: Position[][] = [];
     const lerp = (edge: NetworkEdge, t: number): Position => [
-      this.lon[edge.a] + t * (this.lon[edge.b] - this.lon[edge.a]),
+      longitudeDelta(0, this.lon[edge.a] + t * longitudeDelta(this.lon[edge.a], this.lon[edge.b])),
       this.lat[edge.a] + t * (this.lat[edge.b] - this.lat[edge.a]),
     ];
     const reach = (start: number, cost: number): number => {
-      if (!(start < maxCost) && !(start === 0 && maxCost === 0)) return 0;
+      if (!Number.isFinite(start) || start > maxCost) return 0;
       if (!Number.isFinite(cost)) return 0;
       if (cost <= 0) return 1;
       return Math.min(1, (maxCost - start) / cost);
@@ -631,9 +690,10 @@ function lineParts(feature: Feature): Position[][] {
         : [];
   const parts: Position[][] = [];
   for (const line of raw) {
+    if (!Array.isArray(line)) continue;
     const clean: Position[] = [];
     for (const pos of line) {
-      if (!Number.isFinite(pos[0]) || !Number.isFinite(pos[1])) continue;
+      if (!Array.isArray(pos) || !Number.isFinite(pos[0]) || !Number.isFinite(pos[1])) continue;
       const last = clean[clean.length - 1];
       if (last && last[0] === pos[0] && last[1] === pos[1]) continue;
       clean.push(pos);
@@ -746,7 +806,9 @@ export function buildLocalNetwork(
 
   if (toleranceDeg > 0 && rawLon.length) {
     // Node-to-node: snap each endpoint onto the nearest other vertex in range.
-    const nodeIndex = new GridIndex(toleranceDeg, Math.min(...rawLon), Math.min(...rawLat));
+    const minLon = rawLon.reduce((min, value) => Math.min(min, value), Infinity);
+    const minLat = rawLat.reduce((min, value) => Math.min(min, value), Infinity);
+    const nodeIndex = new GridIndex(toleranceDeg, minLon, minLat);
     for (let id = 0; id < rawLon.length; id++) {
       nodeIndex.insert(id, rawLon[id], rawLat[id], rawLon[id], rawLat[id]);
     }
@@ -756,7 +818,7 @@ export function buildLocalNetwork(
       const x = rawLon[node];
       const y = rawLat[node];
       const padX = toleranceDeg / Math.max(Math.cos(y * DEG), 1e-6);
-      nodeIndex.query(x - padX, y - toleranceDeg, x + padX, y + toleranceDeg, near);
+      queryWrapped(nodeIndex, x, y, padX, toleranceDeg, near);
       let best = -1;
       let bestD = Infinity;
       for (const other of near) {
@@ -783,17 +845,20 @@ export function buildLocalNetwork(
       degree.set(a, (degree.get(a) ?? 0) + 1);
       degree.set(b, (degree.get(b) ?? 0) + 1);
     }
-    const segIndex = new GridIndex(
-      Math.max(toleranceDeg * 4, 1e-7),
-      Math.min(...rawLon),
-      Math.min(...rawLat),
-    );
+    const segIndex = new GridIndex(Math.max(toleranceDeg * 4, 1e-7), minLon, minLat);
     segments.forEach((seg, id) => {
-      const ax = rawLon[seg.a];
-      const ay = rawLat[seg.a];
-      const bx = rawLon[seg.b];
-      const by = rawLat[seg.b];
-      segIndex.insert(id, Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by));
+      const ax = rawLon[uf.find(seg.a)];
+      const ay = rawLat[uf.find(seg.a)];
+      const bx = rawLon[uf.find(seg.b)];
+      const by = rawLat[uf.find(seg.b)];
+      const seam = Math.abs(bx - ax) > 180;
+      segIndex.insert(
+        id,
+        seam ? -180 : Math.min(ax, bx),
+        Math.min(ay, by),
+        seam ? 180 : Math.max(ax, bx),
+        Math.max(ay, by),
+      );
     });
     const candidates: number[] = [];
     const handled = new Set<number>();
@@ -805,7 +870,7 @@ export function buildLocalNetwork(
       const y = rawLat[root];
       candidates.length = 0;
       const padX = toleranceDeg / Math.max(Math.cos(y * DEG), 1e-6);
-      segIndex.query(x - padX, y - toleranceDeg, x + padX, y + toleranceDeg, candidates);
+      queryWrapped(segIndex, x, y, padX, toleranceDeg, candidates);
       let best: { seg: number; t: number; d: number } | null = null;
       for (const segId of new Set(candidates)) {
         const seg = segments[segId];
@@ -814,7 +879,7 @@ export function buildLocalNetwork(
         if (sa === root || sb === root) continue;
         const hit = projectOnSegment(x, y, rawLon[sa], rawLat[sa], rawLon[sb], rawLat[sb]);
         if (hit.t <= 0 || hit.t >= 1) continue;
-        const px = rawLon[sa] + hit.t * (rawLon[sb] - rawLon[sa]);
+        const px = rawLon[sa] + hit.t * longitudeDelta(rawLon[sa], rawLon[sb]);
         const py = rawLat[sa] + hit.t * (rawLat[sb] - rawLat[sa]);
         const d = haversineMeters(x, y, px, py);
         if (d <= tolerance && (!best || d < best.d)) best = { seg: segId, t: hit.t, d };
@@ -861,6 +926,20 @@ export function buildLocalNetwork(
     chain.push(nodeFor(seg.b));
     for (let i = 1; i < chain.length; i++) pushEdge(chain[i - 1], chain[i], seg);
   });
+  if (costMode === "field") {
+    // Topology can move endpoints. Preserve each declared feature total
+    // across its surviving pieces after all snapping and splits are final.
+    const lengths = new Map<number, number>();
+    for (const edge of net.edges)
+      lengths.set(edge.feature, (lengths.get(edge.feature) ?? 0) + edge.length);
+    for (const edge of net.edges) {
+      const total = numeric(features[edge.feature].properties?.[options.costField ?? ""]);
+      const length = lengths.get(edge.feature)!;
+      const cost = total !== null && length > 0 ? (total * edge.length) / length : 0;
+      if (Number.isFinite(edge.costAB)) edge.costAB = cost;
+      if (Number.isFinite(edge.costBA)) edge.costBA = cost;
+    }
+  }
   net.stats = stats;
   net.buildIndex();
   return net;

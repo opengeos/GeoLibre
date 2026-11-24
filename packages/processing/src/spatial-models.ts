@@ -132,6 +132,7 @@ export function studentTTwoSidedP(t: number, df: number): number {
 
 /** Upper-tail p-value of the F distribution with (d1, d2) degrees of freedom. */
 export function fUpperP(f: number, d1: number, d2: number): number {
+  if (Number.isNaN(f)) return NaN;
   if (!(f > 0)) return 1;
   if (!Number.isFinite(f)) return 0;
   return regularizedBeta(d2 / (d2 + d1 * f), d2 / 2, d1 / 2);
@@ -176,11 +177,46 @@ export interface OlsResult {
  * @returns The fit, or null when X'X is singular (collinear variables) or
  *   there are too few observations.
  */
+function regressionBasis(x: number[][]) {
+  const p = x[0]?.length ?? 0;
+  const means = Array.from({ length: p }, (_, j) =>
+    x.reduce((sum, row) => sum + row[j] / x.length, 0),
+  );
+  const scales = means.map((mean, j) =>
+    Math.max(
+      1e-300,
+      x.reduce((max, row) => Math.max(max, Math.abs(row[j] - mean)), 0),
+    ),
+  );
+  const transform = Array.from({ length: p + 1 }, () => new Array<number>(p + 1).fill(0));
+  transform[0][0] = 1;
+  for (let j = 0; j < p; j++) {
+    transform[0][j + 1] = -means[j] / scales[j];
+    transform[j + 1][j + 1] = 1 / scales[j];
+  }
+  return {
+    rows: x.map((row) => [1, ...row.map((v, j) => (v - means[j]) / scales[j])]),
+    coefficients: (beta: number[]) =>
+      transform.map((row) => row.reduce((sum, value, j) => sum + value * beta[j], 0)),
+    covariance: (cov: number[][]) =>
+      transform.map((left) =>
+        transform.map((right) =>
+          left.reduce(
+            (sum, a, i) => sum + a * right.reduce((inner, b, j) => inner + b * cov[i][j], 0),
+            0,
+          ),
+        ),
+      ),
+  };
+}
+
+/** Fit OLS in a centered, scaled basis and return estimates in original units. */
 export function ols(x: number[][], y: number[]): OlsResult | null {
   const n = y.length;
   const k = (x[0]?.length ?? 0) + 1;
   if (n <= k) return null;
-  const rows = x.map((row) => [1, ...row]);
+  const basis = regressionBasis(x);
+  const rows = basis.rows;
   const xtx = Array.from({ length: k }, () => new Array<number>(k).fill(0));
   const xty = new Array<number>(k).fill(0);
   for (let i = 0; i < n; i++) {
@@ -201,15 +237,19 @@ export function ols(x: number[][], y: number[]): OlsResult | null {
   const tss = y.reduce((s, v) => s + (v - mean) ** 2, 0);
   const df = n - k;
   const sigma2 = rss / df;
-  const standardErrors = inv.map((row, j) => Math.sqrt(row[j] * sigma2));
-  const tValues = beta.map((b, j) => b / standardErrors[j]);
+  const coefficients = basis.coefficients(beta);
+  const standardErrors = basis
+    .covariance(inv)
+    .map((row, j) => Math.sqrt(Math.max(0, row[j]) * sigma2));
+  const tValues = coefficients.map((b, j) => b / standardErrors[j]);
   const r2 = tss > 0 ? 1 - rss / tss : NaN;
-  const fStatistic = k > 1 && rss > 0 ? (tss - rss) / (k - 1) / sigma2 : NaN;
+  const fStatistic =
+    k > 1 ? (rss > 0 ? (tss - rss) / (k - 1) / sigma2 : tss > 0 ? Infinity : NaN) : NaN;
   const logLikelihood = (-n / 2) * (Math.log(2 * Math.PI) + Math.log(rss / n) + 1);
   return {
     n,
     k,
-    coefficients: beta,
+    coefficients,
     standardErrors,
     tValues,
     pValues: tValues.map((t) => studentTTwoSidedP(t, df)),
@@ -363,7 +403,8 @@ export function gwr(
 ): GwrResult | null {
   const n = y.length;
   const k = (x[0]?.length ?? 0) + 1;
-  const rows = x.map((row) => [1, ...row]);
+  const basis = regressionBasis(x);
+  const rows = basis.rows;
   const w = new Float64Array(n);
   const coefficients: number[][] = [];
   const covariances: number[][][] = [];
@@ -396,7 +437,7 @@ export function gwr(
     const inv = invertMatrix(xtwx);
     if (!inv) return null;
     const beta = inv.map((row) => row.reduce((s, v, j) => s + v * xtwy[j], 0));
-    coefficients.push(beta);
+    coefficients.push(basis.coefficients(beta));
     const xi = rows[i];
     fitted[i] = xi.reduce((s, v, j) => s + v * beta[j], 0);
     // S_ii = x_i (X'WX)^-1 x_i' w_ii.
@@ -412,7 +453,7 @@ export function gwr(
       const cov = tmp.map((row) =>
         inv[0].map((_, c) => row.reduce((s, v, j) => s + v * inv[j][c], 0)),
       );
-      covariances.push(cov);
+      covariances.push(basis.covariance(cov));
       traceSS += xi.reduce((s, v, a) => s + v * cov[a].reduce((t, u, b) => t + u * xi[b], 0), 0);
     }
   }
@@ -519,6 +560,9 @@ export function searchGwrBandwidth(
     return value;
   };
   const ratio = 0.38197;
+  // Keep endpoints eligible even when both interior fits are singular.
+  score(a);
+  score(c);
   const span0 = c - a;
   let b = a + ratio * (c - a);
   let d = c - ratio * (c - a);
@@ -528,6 +572,7 @@ export function searchGwrBandwidth(
       d = Math.round(d);
       if (c - a <= 4) break;
     } else if (c - a <= span0 * 1e-6) break;
+    if (!Number.isFinite(score(b)) && !Number.isFinite(score(d))) break;
     if (score(b) <= score(d)) {
       c = d;
       d = b;
@@ -556,6 +601,12 @@ export function searchGwrBandwidth(
         bestScore = s;
         best = bw;
       }
+    }
+  }
+  for (const [bw, value] of cache) {
+    if (value < bestScore) {
+      best = bw;
+      bestScore = value;
     }
   }
   return { bandwidth: best, aicc: bestScore, evaluations: cache.size };
@@ -606,13 +657,22 @@ export function dbscan(points: number[][], eps: number, minPoints: number): Dbsc
   };
   build([]);
   const eps2 = eps * eps;
+  let pairWork = 0;
   const neighbors = (i: number): number[] => {
     const p = points[i];
     const out: number[] = [];
+    const seen = new Set<string>();
     for (const offset of offsets) {
-      const bucket = cells.get(cellKey(p, offset));
+      const key = cellKey(p, offset);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const bucket = cells.get(key);
       if (!bucket) continue;
       for (const j of bucket) {
+        if (++pairWork > 20_000_000)
+          throw new Error(
+            "DBSCAN neighborhood work is too dense; reduce the search distance or input selection.",
+          );
         let d2 = 0;
         for (let a = 0; a < dim; a++) d2 += (p[a] - points[j][a]) ** 2;
         if (d2 <= eps2) out.push(j);
@@ -620,11 +680,9 @@ export function dbscan(points: number[][], eps: number, minPoints: number): Dbsc
     }
     return out;
   };
-  const hood: number[][] = [];
   const core: boolean[] = [];
   for (let i = 0; i < n; i++) {
-    hood.push(neighbors(i));
-    core.push(hood[i].length >= minPoints);
+    core.push(neighbors(i).length >= minPoints);
   }
   const labels = new Array<number>(n).fill(-1);
   let cluster = 0;
@@ -635,7 +693,7 @@ export function dbscan(points: number[][], eps: number, minPoints: number): Dbsc
     while (stack.length) {
       const p = stack.pop() as number;
       if (!core[p]) continue;
-      for (const q of hood[p]) {
+      for (const q of neighbors(p)) {
         if (labels[q] === -1) {
           labels[q] = cluster;
           stack.push(q);
@@ -690,7 +748,7 @@ export function hdbscan(
   const rank = Math.min(n, Math.max(1, minSamples)) - 1;
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) row[j] = i === j ? 0 : dist(i, j);
-    core[i] = row.slice().sort()[rank];
+    core[i] = row.sort()[rank];
   }
   // Prim's MST over mutual-reachability distances.
   const inTree = new Uint8Array(n);
@@ -821,8 +879,9 @@ export function hdbscan(
   }
   for (let i = 0; i < cParent.length; i++) {
     const p = cParent[i] - n;
-    const lambda = Number.isFinite(cLambda[i]) ? cLambda[i] : 0;
-    stability[p] += (lambda - birth[p]) * cSize[i];
+    const lambda = cLambda[i];
+    const persistence = lambda === birth[p] ? 0 : lambda - birth[p];
+    stability[p] += persistence * cSize[i];
   }
   const childClusters: number[][] = Array.from({ length: clusterCount }, () => []);
   for (let i = 0; i < cParent.length; i++) {

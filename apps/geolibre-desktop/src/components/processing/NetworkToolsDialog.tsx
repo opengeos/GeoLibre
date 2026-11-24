@@ -189,7 +189,14 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       // Service areas ask for a graduated renderer on their cost break, so the
       // nested areas read apart instead of as one flat color.
-      if (layer && options?.graduatedField) {
+      const distinctBreaks = options?.graduatedField
+        ? new Set(
+            fc.features
+              .map((feature) => feature.properties?.[options.graduatedField!])
+              .filter((value) => typeof value === "number" && Number.isFinite(value)),
+          )
+        : null;
+      if (layer && options?.graduatedField && distinctBreaks && distinctBreaks.size > 1) {
         try {
           setLayerStyle(
             layerId,

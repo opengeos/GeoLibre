@@ -9,9 +9,11 @@
  * reverse-geocode consent gates.
  */
 export const ROUTING_CONSENT_KEY = "geolibre:network-routing-valhalla-notice";
+let sessionAcknowledged = false;
 
 /** Whether the user has acknowledged the network-routing privacy notice. */
 export function hasRoutingConsent(): boolean {
+  if (sessionAcknowledged) return true;
   try {
     return localStorage.getItem(ROUTING_CONSENT_KEY) === "1";
   } catch {
@@ -23,9 +25,10 @@ export function hasRoutingConsent(): boolean {
 
 /** Record that the user acknowledged the network-routing privacy notice. */
 export function recordRoutingConsent(): void {
+  sessionAcknowledged = true;
   try {
     localStorage.setItem(ROUTING_CONSENT_KEY, "1");
   } catch {
-    // Ignore: the notice will simply show again next time.
+    // The acknowledgment lasts for this page session if storage is unavailable.
   }
 }

@@ -3,6 +3,7 @@ import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
   STATISTICS_TOOLS,
   getStatisticsTool,
+  runAlgorithmInBackground,
   type AlgorithmParameter,
   type FieldWeight,
   type GeometryFamily,
@@ -106,6 +107,11 @@ export function StatisticsToolsDialog({
   const [params, setParams] = useState<Record<string, unknown>>({});
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(() => {
+    if (!open) abortRef.current?.abort();
+  }, [open]);
   const [autoRunPending, setAutoRunPending] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
   const runTrackerRef = useRef<ProcessingRunTracker | null>(null);
@@ -315,25 +321,30 @@ export function StatisticsToolsDialog({
       parameters: params,
     });
     runTrackerRef.current = tracker;
+    const controller = new AbortController();
+    abortRef.current = controller;
     setRunning(true);
     try {
       const ctx: ProcessingContext = {
         layers,
         parameters: params,
+        signal: controller.signal,
         log: appendLog,
         fitBounds: (bounds) => mapControllerRef.current?.fitBounds(bounds),
         addResultLayer,
         viewportBounds: () => mapControllerRef.current?.getViewBounds() ?? null,
       };
-      await tool.run(ctx);
+      await runAlgorithmInBackground(tool, ctx);
       // A logged "Error: ..." line marks a soft failure (the client tools
       // bail out without throwing); don't record those as successes.
       if (softErrorRef.current) tracker.finish("error", softErrorRef.current);
       else tracker.finish("success");
     } catch (error) {
+      if (controller.signal.aborted) return;
       appendLog(`Error: ${(error as Error).message}`);
       tracker.finish("error", (error as Error).message);
     } finally {
+      if (abortRef.current === controller) abortRef.current = null;
       setRunning(false);
     }
   }, [tool, params, layers, appendLog, addResultLayer, mapControllerRef, isParamVisible]);
@@ -428,6 +439,11 @@ export function StatisticsToolsDialog({
                 )}
                 {t("statistics.run")}
               </Button>
+              {running && (
+                <Button variant="outline" onClick={() => abortRef.current?.abort()}>
+                  {t("common.cancel")}
+                </Button>
+              )}
             </div>
 
             <ScrollArea className="h-32 rounded-md border bg-muted/30 p-2 font-mono text-xs">

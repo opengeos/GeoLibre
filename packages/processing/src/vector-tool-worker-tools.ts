@@ -6,6 +6,13 @@
 // full registry lists.
 import type { ProcessingAlgorithm } from "./types";
 import {
+  olsRegressionTool,
+  gwrTool,
+  dbscanTool,
+  hdbscanTool,
+  krigingDiagnosticsTool,
+} from "./statistics-tools";
+import {
   aggregateTool,
   attributeJoinTool,
   boundingBoxTool,
@@ -50,6 +57,11 @@ import {
  */
 export const WORKER_VECTOR_TOOLS: ReadonlyMap<string, ProcessingAlgorithm> = new Map(
   [
+    olsRegressionTool,
+    gwrTool,
+    dbscanTool,
+    hdbscanTool,
+    krigingDiagnosticsTool,
     bufferTool,
     centroidsTool,
     convexHullTool,

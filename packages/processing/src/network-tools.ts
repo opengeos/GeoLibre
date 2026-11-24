@@ -693,6 +693,12 @@ export const localClosestFacilityTool: ProcessingAlgorithm = {
     if (!built) return;
     const { net, unit } = built;
     const count = Math.max(1, Math.floor(Number(ctx.parameters.count ?? 1)) || 1);
+    if (!Number.isFinite(count) || incidents.length * Math.min(count, facilities.length) > 10_000) {
+      ctx.log(
+        "Error: at most 10,000 closest-facility routes are supported per run; reduce count or the incident selection",
+      );
+      return;
+    }
     const rawMax = Number(ctx.parameters.maxCost ?? 0);
     const maxCost = Number.isFinite(rawMax) && rawMax > 0 ? rawMax : Infinity;
     const fromFacility = (ctx.parameters.travelDirection as string) === "from";
@@ -813,7 +819,7 @@ export const localServiceAreaTool: ProcessingAlgorithm = {
       description: "Also output polygons by buffering the reachable lines by this distance.",
     },
   ],
-  run: (ctx) => {
+  run: async (ctx) => {
     const facilities = layerToRoutingPoints(getLayer(ctx, "facilities"));
     if (!facilities.length) {
       ctx.log("Error: the facility layer has no point features");
@@ -838,6 +844,13 @@ export const localServiceAreaTool: ProcessingAlgorithm = {
     const separate = (ctx.parameters.overlap as string) === "separate";
     const toward = (ctx.parameters.travelDirection as string) === "to";
     const width = Math.max(0, Number(ctx.parameters.polygonWidth ?? 0) || 0);
+    const passes = (separate ? facilities.length : 1) * breaks.length;
+    if (passes * net.edges.length > 5_000_000 || (width > 0 && passes > 100)) {
+      ctx.log(
+        "Error: service area selection is too large; reduce facilities or breaks, merge areas, or disable polygons",
+      );
+      return;
+    }
     const placed = placePoints(net, facilities);
     const groups: { id: string | number | null; nodes: number[] }[] = separate
       ? placed.map((facility) => ({ id: facility.id, nodes: [facility.node] }))
@@ -850,6 +863,8 @@ export const localServiceAreaTool: ProcessingAlgorithm = {
       const result = net.search(group.nodes, { maxCost: maxBreak, reverse: toward });
       // Largest break first, so smaller areas draw on top in the result layer.
       for (const brk of [...breaks].reverse()) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        if (ctx.signal?.aborted) return;
         const pieces = net.reachableSegments(result, brk, toward);
         if (!pieces.length) continue;
         const properties: Record<string, unknown> = { break: brk };

@@ -11,6 +11,180 @@ import {
   parseDirection,
 } from "@geolibre/processing";
 import type { Feature, FeatureCollection, LineString, MultiLineString, Position } from "geojson";
+import { LocalNetwork, haversineMeters } from "../packages/processing/src/local-network";
+
+describe("network review regressions", () => {
+  it("remembers explicit routing consent when browser storage is unavailable", async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get() {
+        throw new Error("storage blocked");
+      },
+    });
+    try {
+      const { hasRoutingConsent, recordRoutingConsent } =
+        await import("../apps/geolibre-desktop/src/lib/routing-consent");
+      assert.equal(hasRoutingConsent(), false);
+      recordRoutingConsent();
+      assert.equal(hasRoutingConsent(), true);
+    } finally {
+      if (descriptor) Object.defineProperty(globalThis, "localStorage", descriptor);
+      else Reflect.deleteProperty(globalThis, "localStorage");
+    }
+  });
+
+  it("skips malformed positions while retaining a valid line", () => {
+    const feature = line([
+      [0, 0],
+      [50, 0],
+      [100, 0],
+    ]);
+    if (feature.geometry?.type !== "LineString") throw new Error("fixture must be a line");
+    Reflect.set(feature.geometry.coordinates, 1, null);
+    assert.equal(buildLocalNetwork([feature]).edges.length, 1);
+  });
+  it("bounds index storage for a long diagonal and accepts a distant stop", () => {
+    const net = buildLocalNetwork(
+      [
+        line([
+          [0, 0],
+          [20_000, 20_000],
+        ]),
+      ],
+      { snapToleranceM: 1 },
+    );
+    const hit = net.nearestEdge(deg(120_000), deg(120_000));
+    assert.ok(hit && hit.t === 1);
+  });
+
+  it("builds more vertices than a JavaScript argument list can hold", () => {
+    const coordinates = Array.from({ length: 150_000 }, (_, i) => [i * 0.000001, 0]);
+    const net = buildLocalNetwork(
+      [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates } }],
+      { snapToleranceM: 1 },
+    );
+    assert.equal(net.edges.length, 149_999);
+  });
+
+  it("projects a stop across the antimeridian to the nearest endpoint", () => {
+    const net = buildLocalNetwork([
+      {
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [179.99, 0],
+            [179.999, 0],
+          ],
+        },
+      },
+    ]);
+    assert.equal(net.nearestEdge(-179.999, 0)?.t, 1);
+  });
+
+  it("snaps endpoints and dangling junctions across the longitude seam", () => {
+    const feature = (coordinates: Position[]): Feature => ({
+      type: "Feature",
+      properties: {},
+      geometry: { type: "LineString", coordinates },
+    });
+    const endpoints = buildLocalNetwork(
+      [
+        feature([
+          [179, 0],
+          [179.9999, 0],
+        ]),
+        feature([
+          [-179.9999, 0],
+          [-179, 0],
+        ]),
+      ],
+      { snapToleranceM: 30 },
+    );
+    assert.equal(endpoints.nodeCount, 3);
+    const junction = buildLocalNetwork(
+      [
+        feature([
+          [179, 0],
+          [-179, 0],
+        ]),
+        feature([
+          [179.5, 0.000005],
+          [179.5, 0.1],
+        ]),
+      ],
+      { snapToleranceM: 1 },
+    );
+    assert.equal(junction.stats.splitSegments, 1);
+    assert.equal(junction.edges.length, 3);
+  });
+
+  it("preserves declared feature cost when snapping extends the geometry", () => {
+    const net = buildLocalNetwork(
+      [
+        line(
+          [
+            [0, 0],
+            [100, 0],
+          ],
+          { cost: 10 },
+        ),
+        line(
+          [
+            [100.8, 0],
+            [200, 0],
+          ],
+          { cost: 20 },
+        ),
+      ],
+      { costMode: "field", costField: "cost", snapToleranceM: 1 },
+    );
+    assert.ok(
+      Math.abs(
+        net.edges.filter((e) => e.feature === 0).reduce((sum, e) => sum + e.costAB, 0) - 10,
+      ) < 1e-10,
+    );
+  });
+
+  it("keeps the A star lower bound valid after a high-latitude split", () => {
+    const net = new LocalNetwork();
+    const a = net.addNode(0, 60),
+      b = net.addNode(120, 60),
+      source = net.addNode(60, 61);
+    const radius = getActiveMeanRadiusMeters();
+    const add = (from: number, to: number, cost: number) =>
+      net.addEdge({
+        a: from,
+        b: to,
+        costAB: cost,
+        costBA: cost,
+        length: haversineMeters(net.lon[from], net.lat[from], net.lon[to], net.lat[to]),
+        feature: 0,
+      });
+    const edge = add(a, b, haversineMeters(0, 60, 120, 60));
+    add(source, a, radius);
+    add(source, b, 0.54 * radius);
+    net.buildIndex();
+    const target = net.splitEdge(edge, 0.25);
+    const astar = net.shortestPath(source, target),
+      dijkstra = net.shortestPath(source, target, false);
+    assert.ok(astar && dijkstra);
+    assert.ok(Math.abs(astar.cost - dijkstra.cost) < 1e-7);
+  });
+
+  it("includes zero-cost edges reached exactly at the service break", () => {
+    const net = new LocalNetwork();
+    const a = net.addNode(0, 0),
+      b = net.addNode(0.001, 0),
+      c = net.addNode(0.002, 0);
+    net.addEdge({ a, b, costAB: 5, costBA: 5, length: 100, feature: 0 });
+    net.addEdge({ a: b, b: c, costAB: 0, costBA: 0, length: 100, feature: 1 });
+    const pieces = net.reachableSegments(net.search([a]), 5);
+    assert.equal(pieces.length, 2);
+  });
+});
 
 /** Degrees of latitude (or longitude at the equator) spanning `m` metres. */
 function deg(m: number): number {

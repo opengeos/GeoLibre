@@ -45,6 +45,78 @@ const gDist = new DistanceMatrix(georgia.rows.length, (i, j) =>
   Math.hypot(georgia.rows[i][0] - georgia.rows[j][0], georgia.rows[i][1] - georgia.rows[j][1]),
 );
 
+describe("statistical review regressions", () => {
+  it("fits full-rank predictors independently of their offset and units", () => {
+    const x = Array.from({ length: 8 }, (_, i) => [1_000_000 + i]);
+    const y = x.map((_, i) => 3 + 2 * i + (i % 2) * 0.1);
+    const original = ols(x, y),
+      centered = ols(
+        x.map((row) => [row[0] - 1_000_000]),
+        y,
+      );
+    assert.ok(original && centered);
+    close(original.coefficients[1], centered.coefficients[1], 1e-10);
+    original.fitted.forEach((value, i) => close(value, centered.fitted[i], 1e-9));
+    const dm = new DistanceMatrix(8, (i, j) => Math.abs(i - j));
+    const local = gwr(x, y, dm, 8, { kernel: "gaussian", adaptive: true });
+    const shifted = gwr(
+      x.map((row) => [row[0] - 1_000_000]),
+      y,
+      dm,
+      8,
+      { kernel: "gaussian", adaptive: true },
+    );
+    assert.ok(local && shifted);
+    local.fitted.forEach((value, i) => close(value, shifted.fitted[i], 1e-9));
+  });
+
+  it("keeps undefined F probabilities unavailable and perfect-fit evidence finite", () => {
+    assert.ok(Number.isNaN(fUpperP(NaN, 1, 3)));
+    const fit = ols([[-1], [0], [1]], [-1, 0, 1]);
+    assert.ok(fit);
+    assert.equal(fit.fStatistic, Infinity);
+    assert.equal(fit.fPValue, 0);
+  });
+
+  it("keeps the widest valid GWR bandwidth when interior fits are singular", () => {
+    const sites = Array.from({ length: 100 }, (_, i) => (i < 85 ? 0 : i < 99 ? 1 : 10));
+    const x = sites.map((site) => [site === 1 ? 1 : 0]);
+    const dm = new DistanceMatrix(100, (i, j) => Math.abs(sites[i] - sites[j]));
+    const result = searchGwrBandwidth(
+      x,
+      sites.map((site, i) => site + (i % 7)),
+      dm,
+      { kernel: "bisquare", adaptive: true },
+    );
+    assert.ok(Number.isFinite(result.aicc));
+    assert.equal(result.bandwidth, 100);
+  });
+
+  it("does not count the same DBSCAN bucket repeatedly at tiny resolutions", () => {
+    assert.deepEqual(dbscan([[6_371_000, 0, 0]], 1e-10, 3).labels, [-1]);
+  });
+
+  it("rejects excessive dense pair work without retaining all neighborhoods", () => {
+    assert.throws(
+      () =>
+        dbscan(
+          Array.from({ length: 5000 }, () => [0, 0]),
+          1,
+          2,
+        ),
+      /too dense/,
+    );
+  });
+
+  it("keeps three stable coincident HDBSCAN pairs separate", () => {
+    const locations = [0, 0, 1, 1, 10, 10];
+    const result = hdbscan(6, (i, j) => Math.abs(locations[i] - locations[j]), 2, 2);
+    assert.equal(new Set(result.labels).size, 3);
+    assert.equal(result.probabilities.length, 6);
+    assert.ok(result.probabilities.every(Number.isFinite));
+  });
+});
+
 const clusters = JSON.parse(
   readFileSync(new URL("./fixtures/density-clusters.json", import.meta.url), "utf8"),
 ) as {
@@ -277,6 +349,7 @@ describe("hdbscan", () => {
   it("matches scikit-learn labels and probabilities (min_cluster_size=8)", () => {
     const result = hdbscan(pts.length, dist, 8);
     assert.deepEqual(result.labels, clusters.hdbscan);
+    assert.equal(result.probabilities.length, pts.length);
     result.probabilities.forEach((p, i) =>
       close(p, clusters.hdbscanProbabilities[i], 1e-8, `p${i}`),
     );
@@ -285,6 +358,7 @@ describe("hdbscan", () => {
   it("matches scikit-learn with min_samples below min_cluster_size", () => {
     const result = hdbscan(pts.length, dist, 15, 5);
     assert.deepEqual(result.labels, clusters.hdbscan15x5);
+    assert.equal(result.probabilities.length, pts.length);
     result.probabilities.forEach((p, i) =>
       close(p, clusters.hdbscan15x5Probabilities[i], 1e-8, `p${i}`),
     );
@@ -422,6 +496,76 @@ const georgiaLayer = pointLayer(
 );
 
 describe("regression and clustering tools", () => {
+  it("keeps complete OLS attribute rows without geometry", async () => {
+    const layer = pointLayer(
+      Array.from({ length: 5 }, (_, i) => [i, 0, { x: i, y: 2 * i + (i % 2) * 0.1 }]),
+    );
+    Reflect.set(layer.geojson!.features[0], "geometry", null);
+    const result = await runTool(olsRegressionTool, layer, { dependent: "y", explanatory: "x" });
+    assert.equal(result.results[0].geojson.features.length, 5);
+    assert.equal(result.results[0].geojson.features[0].geometry, null);
+  });
+
+  it("keeps GWR coefficient columns distinct from diagnostics and t statistics", async () => {
+    const layer = structuredClone(georgiaLayer);
+    for (const feature of layer.geojson!.features) {
+      feature.properties = {
+        ...feature.properties,
+        pred: feature.properties?.PctRural,
+        t_pred: feature.properties?.PctPov,
+      };
+    }
+    const result = await runTool(gwrTool, layer, {
+      dependent: "PctBach",
+      explanatory: "pred,t_pred",
+      bandwidth: 100,
+      kernel: "gaussian",
+      adaptive: true,
+    });
+    assert.ok(result.results.length);
+    const props = result.results[0].geojson.features[0].properties!;
+    for (const key of ["gwr_pred", "gwr_pred_2", "gwr_t_pred", "gwr_t_pred_2", "gwr_t_t_pred"])
+      assert.ok(Number.isFinite(props[key]), key);
+  });
+
+  it("rejects a missing kriging observation instead of treating it as zero", async () => {
+    const layer = pointLayer([
+      [0, 0, { z: 4 }],
+      [1, 0, { z: 7 }],
+      [2, 0, { z: 9 }],
+      [3, 0, { z: null }],
+    ]);
+    const result = await runTool(krigingDiagnosticsTool, layer, { field: "z" });
+    assert.equal(result.results.length, 0);
+    assert.match(result.messages.join("\n"), /found 3/);
+  });
+
+  it("groups equivalent antimeridian sites for leave-one-site-out validation", async () => {
+    const layer = pointLayer([
+      [180, 0, { z: 4 }],
+      [-180, 0, { z: 7 }],
+      [170, 0, { z: 9 }],
+      [160, 0, { z: 12 }],
+      [150, 0, { z: 3 }],
+    ]);
+    const result = await runTool(krigingDiagnosticsTool, layer, { field: "z" });
+    assert.match(result.messages.join("\n"), /Averaged 1 duplicate/);
+  });
+
+  it("rejects unknown variogram models and oversized minimum samples", async () => {
+    const layer = pointLayer([
+      [0, 0, { z: 4 }],
+      [1, 0, { z: 7 }],
+      [2, 0, { z: 9 }],
+      [3, 0, { z: 3 }],
+    ]);
+    const kriging = await runTool(krigingDiagnosticsTool, layer, { field: "z", model: "sphericl" });
+    assert.equal(kriging.results.length, 0);
+    assert.match(kriging.messages.join("\n"), /supported variogram/);
+    const clustering = await runTool(hdbscanTool, layer, { minClusterSize: 2, minSamples: 5 });
+    assert.equal(clustering.results.length, 0);
+    assert.match(clustering.messages.join("\n"), /minimum samples/);
+  });
   it("OLS writes residual fields and logs the GWR4 coefficients", async () => {
     const { messages, results } = await runTool(olsRegressionTool, georgiaLayer, {
       dependent: "PctBach",

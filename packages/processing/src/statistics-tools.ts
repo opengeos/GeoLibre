@@ -7,13 +7,15 @@ import {
   centralAngle,
   geodesicDistance,
   geodesicRadiusBounds,
-  getActiveEllipsoid,
-  getActiveMeanRadiusMeters,
-  horizontalBbox,
   isLonLat,
   latLonBoxArea,
   withinGeodesicDistance,
-} from "@geolibre/core";
+} from "@geolibre/core/geodesic";
+import {
+  getActiveEllipsoid,
+  getActiveMeanRadiusMeters,
+  horizontalBbox,
+} from "@geolibre/core/worker-safe";
 import type {
   FieldDirection,
   FieldNormalization,
@@ -2036,12 +2038,13 @@ function collectRegressionSample(
   features: Feature[],
   dependent: string,
   explanatory: string[],
+  requireLocation = true,
 ): RegressionSample {
   const coords = featureCoords(features);
   const out: RegressionSample = { indices: [], coords: [], y: [], x: [] };
   features.forEach((feature, index) => {
     const position = coords[index];
-    if (!position) return;
+    if (!position && requireLocation) return;
     const yv = numericFieldValue(feature.properties?.[dependent]);
     if (yv === null) return;
     const row: number[] = [];
@@ -2051,7 +2054,7 @@ function collectRegressionSample(
       row.push(v);
     }
     out.indices.push(index);
-    out.coords.push(position);
+    if (position) out.coords.push(position);
     out.y.push(yv);
     out.x.push(row);
   });
@@ -2133,7 +2136,7 @@ export const olsRegressionTool: ProcessingAlgorithm = {
     if (!fields) return;
     const { layer, dependent, explanatory } = fields;
     const features = layer.geojson?.features ?? [];
-    const sample = collectRegressionSample(features, dependent, explanatory);
+    const sample = collectRegressionSample(features, dependent, explanatory, false);
     const n = sample.y.length;
     if (n > MAX_OLS_FEATURES) {
       ctx.log(`Error: ${n} features exceeds the ${MAX_OLS_FEATURES}-feature limit.`);
@@ -2298,11 +2301,23 @@ export const gwrTool: ProcessingAlgorithm = {
         `  ${pad(name, 20)}${pad(fmt(sorted[0], 4), 12)}${pad(fmt(sorted[Math.floor(sorted.length / 2)], 4), 12)}${fmt(sorted[sorted.length - 1], 4)}`,
       );
     });
+    const usedNames = new Set(["gwr_pred", "gwr_resid", "gwr_std_resid", "gwr_local_r2"]);
+    const uniqueName = (base: string): string => {
+      let name = base,
+        suffix = 2;
+      while (usedNames.has(name)) name = `${base}_${suffix++}`;
+      usedNames.add(name);
+      return name;
+    };
+    const outputNames = names.map((name) => ({
+      coefficient: uniqueName(`gwr_${name}`),
+      t: uniqueName(`gwr_t_${name}`),
+    }));
     const out = withModelFields(features, sample.indices, (row) => {
       const props: Record<string, number> = {};
-      names.forEach((name, j) => {
-        props[`gwr_${name}`] = fit.coefficients[row][j];
-        props[`gwr_t_${name}`] = fit.tValues[row][j];
+      outputNames.forEach(({ coefficient, t }, j) => {
+        props[coefficient] = fit.coefficients[row][j];
+        props[t] = fit.tValues[row][j];
       });
       props.gwr_pred = fit.fitted[row];
       props.gwr_resid = fit.residuals[row];
@@ -2469,6 +2484,10 @@ export const hdbscanTool: ProcessingAlgorithm = {
     const features = layer.geojson.features;
     const located = locatedFeatures(features);
     const n = located.coords.length;
+    if (minSamples > n) {
+      ctx.log(`Error: minimum samples must not exceed the ${n} locatable features.`);
+      return;
+    }
     if (n < minClusterSize) {
       ctx.log(`Error: need at least ${minClusterSize} locatable features (found ${n}).`);
       return;
@@ -2561,14 +2580,20 @@ export const krigingDiagnosticsTool: ProcessingAlgorithm = {
       ctx.log("Error: layer has no GeoJSON data");
       return;
     }
-    const sample = collectNumericSample(layer.geojson.features, field);
+    const sample = collectNumericSample(
+      layer.geojson.features.filter(
+        (feature) => numericFieldValue(feature.properties?.[field]) !== null,
+      ),
+      field,
+    );
     // Duplicate locations make the kriging matrix singular: average them.
     const byLocation = new Map<
       string,
       { coord: [number, number]; sum: number; count: number; features: Feature[] }
     >();
     sample.coords.forEach((coord, i) => {
-      const key = `${coord[0]},${coord[1]}`;
+      const longitude = coord[0] === 180 ? -180 : coord[0];
+      const key = `${longitude},${coord[1]}`;
       const entry = byLocation.get(key);
       if (entry) {
         entry.sum += sample.values[i];
@@ -2617,6 +2642,10 @@ export const krigingDiagnosticsTool: ProcessingAlgorithm = {
       ctx.log(`  ${pad(fmt(bin.lag, 1), 14)}${pad(fmt(bin.gamma, 4), 16)}${bin.pairs}`);
     }
     const choice = String(ctx.parameters.model ?? "compare");
+    if (choice !== "compare" && !VARIOGRAM_MODELS.includes(choice as VariogramModel)) {
+      ctx.log("Error: choose a supported variogram model or compare.");
+      return;
+    }
     const models = choice === "compare" ? VARIOGRAM_MODELS : [choice as VariogramModel];
     let best: { fit: VariogramFit; cv: KrigingCrossValidation } | null = null;
     ctx.log(
@@ -2629,6 +2658,14 @@ export const krigingDiagnosticsTool: ProcessingAlgorithm = {
       const cv = krigingLeaveOneOut(n, dist, z, fit);
       if (!cv) {
         ctx.log(`  ${pad(model, 13)}singular kriging system; skipped`);
+        continue;
+      }
+      if (!cv.variances.every((value) => Number.isFinite(value) && value > 0)) {
+        ctx.log(`  ${pad(model, 13)}invalid prediction variances; skipped`);
+        continue;
+      }
+      if (!Number.isFinite(cv.rmse) || !cv.predicted.every(Number.isFinite)) {
+        ctx.log(`  ${pad(model, 13)}nonfinite predictions; skipped`);
         continue;
       }
       ctx.log(
