@@ -17,6 +17,7 @@ import {
   createPMTilesLayerAddHandler,
   __resetPMTilesControlForTests,
   addPMTilesLayerFromUrl,
+  guardPMTilesSourceRemoval,
 } from "../packages/plugins/src/plugins/maplibre-components";
 
 /**
@@ -335,5 +336,189 @@ describe("adding an archive by URL while the panel holds a stale tick", () => {
       globals.requestAnimationFrame = restore.requestAnimationFrame;
       __resetPMTilesControlForTests();
     }
+  });
+});
+
+/**
+ * A map that keeps its layers and sources and, like MapLibre, refuses to remove a source while a
+ * style layer still reads it (MapLibre reports an error event and keeps the source; it does not
+ * throw, so the control's try/catch cannot notice).
+ */
+function statefulMap(document: Document, { mapbox = false } = {}) {
+  const layers = new Map<string, { id: string; source?: string; metadata?: unknown }>();
+  const sources = new Set<string>();
+  const refused: string[] = [];
+  const map = new Proxy(
+    {
+      addSource: (id: string) => sources.add(id),
+      getSource: (id: string) => (sources.has(id) ? {} : undefined),
+      removeSource: (id: string) => {
+        if ([...layers.values()].some((layer) => layer.source === id)) refused.push(id);
+        else sources.delete(id);
+      },
+      addLayer: (layer: { id: string; source?: string }) => layers.set(layer.id, layer),
+      getLayer: (id: string) => layers.get(id),
+      removeLayer: (id: string) => layers.delete(id),
+      // mapbox-gl has no getLayersOrder; its style's layer list is the only way to walk them.
+      ...(mapbox
+        ? { getLayersOrder: undefined, getStyle: () => ({ layers: [...layers.values()] }) }
+        : { getLayersOrder: () => [...layers.keys()] }),
+      getCanvasContainer: () => document.createElement("div"),
+    } as Record<string, unknown>,
+    {
+      // Keep explicitly absent Mapbox methods absent; remaining control probes are no-ops.
+      get: (target, key) => (key in target ? target[key as string] : () => undefined),
+    },
+  );
+  return { map, layers, sources, refused };
+}
+
+/**
+ * GeoLibre draws line decorations (flow arrows) as its own symbol layer on the archive's source.
+ * The control drops that source in its private `_removeLayer`, which every removal path runs
+ * through, so the guard wraps it; a rename leaves the guard wrapping nothing and the archive's
+ * source stranded on the map.
+ */
+describe("removing an archive GeoLibre has decorated", () => {
+  async function decoratedArchive(guarded: boolean, mapbox = false) {
+    const { document, window } = parseHTML("<!doctype html><html><body></body></html>");
+    const globals = globalThis as Record<string, unknown>;
+    const restore = { document: globals.document, window: globals.window, fetch: globals.fetch };
+    globals.document = document;
+    globals.window = Object.assign(window, { maplibregl: { addProtocol: () => {} } });
+    globals.fetch = serve(vectorArchive(["streams"]));
+    try {
+      const control = new PMTilesLayerControl({}) as unknown as {
+        onAdd: (map: unknown) => unknown;
+        addLayer: (url: string) => Promise<void>;
+        removeLayer: (id: string) => void;
+        getState: () => { layers: { id: string }[]; error: string | null };
+      };
+      const fake = statefulMap(document as unknown as Document, { mapbox });
+      // Guarded before it is added, as the plugin does, so the guard captures this map.
+      if (guarded) guardPMTilesSourceRemoval(control as never);
+      control.onAdd(fake.map);
+      await control.addLayer("https://example.test/flow.pmtiles");
+      assert.equal(control.getState().error, null, "the control loaded the archive");
+      const archiveId = control.getState().layers[0]!.id;
+      assert.ok(fake.sources.has(archiveId), "the control added the archive's source by its id");
+      fake.layers.set("layer-x-line-decoration-streams", {
+        id: "layer-x-line-decoration-streams",
+        source: archiveId,
+        metadata: { "geolibre:internal": true },
+      });
+      control.removeLayer(archiveId);
+      return { ...fake, archiveId };
+    } finally {
+      globals.document = restore.document;
+      globals.window = restore.window;
+      globals.fetch = restore.fetch;
+    }
+  }
+
+  it("ignores an unknown archive id without touching another source's companions", () => {
+    const { document, window } = parseHTML("<!doctype html><html><body></body></html>");
+    const globals = globalThis as Record<string, unknown>;
+    const previous = { document: globals.document, window: globals.window };
+    globals.document = document;
+    globals.window = Object.assign(window, { maplibregl: { addProtocol: () => {} } });
+    try {
+      const control = new PMTilesLayerControl({});
+      const fake = statefulMap(document as unknown as Document);
+      guardPMTilesSourceRemoval(control);
+      control.onAdd(fake.map as never);
+      fake.sources.add("unrelated-source");
+      fake.layers.set("unrelated-companion", {
+        id: "unrelated-companion",
+        source: "unrelated-source",
+        metadata: { "geolibre:internal": true },
+      });
+      control.removeLayer("unrelated-source");
+      assert.ok(fake.layers.has("unrelated-companion"));
+      assert.ok(fake.sources.has("unrelated-source"));
+    } finally {
+      globals.document = previous.document;
+      globals.window = previous.window;
+    }
+  });
+
+  it("always calls archive teardown when a disposed map rejects companion cleanup", () => {
+    let calls = 0;
+    const control = {
+      onAdd: () => ({}),
+      getState: () => ({ layers: [{ id: "owned" }] }),
+      onRemove() {},
+      _removeLayer: (_id?: string) => {
+        calls++;
+      },
+    };
+    guardPMTilesSourceRemoval(control as never);
+    (control.onAdd as (map: unknown) => unknown)({
+      getLayersOrder: () => {
+        throw new Error("map disposed");
+      },
+    });
+    assert.doesNotThrow(() => control._removeLayer("owned"));
+    assert.equal(calls, 1);
+  });
+
+  it("preserves the original archive-removal error", () => {
+    const failure = new Error("native removal failed");
+    const control = {
+      onAdd: () => ({}),
+      getState: () => ({ layers: [] }),
+      onRemove() {},
+      _removeLayer: (_id?: string) => {
+        throw failure;
+      },
+    };
+    guardPMTilesSourceRemoval(control as never);
+    assert.throws(
+      () => control._removeLayer("owned"),
+      (error) => error === failure,
+    );
+  });
+
+  it("releases the captured map after the control finishes removal", () => {
+    let mapReads = 0;
+    const control = {
+      onAdd: (_map: unknown) => ({}),
+      onRemove() {},
+      getState: () => ({ layers: [{ id: "owned" }] }),
+      _removeLayer: (_id?: string) => {},
+    };
+    guardPMTilesSourceRemoval(control as never);
+    control.onAdd({
+      getLayersOrder: () => {
+        mapReads++;
+        return [];
+      },
+    });
+    control._removeLayer("owned");
+    assert.equal(mapReads, 1);
+    control.onRemove();
+    control._removeLayer("owned");
+    assert.equal(mapReads, 1, "a removed control must not retain access to its former map");
+  });
+
+  it("strands the source without the guard, which is why it exists", async () => {
+    const { sources, refused, archiveId } = await decoratedArchive(false);
+    assert.deepEqual(refused, [archiveId]);
+    assert.ok(sources.has(archiveId));
+  });
+
+  it("drops GeoLibre's decoration first, so the control removes its source", async () => {
+    const { layers, sources, refused, archiveId } = await decoratedArchive(true);
+    assert.deepEqual(refused, []);
+    assert.ok(!sources.has(archiveId), "the archive's source is gone");
+    assert.ok(!layers.has("layer-x-line-decoration-streams"));
+    assert.equal(layers.size, 0, "and so is everything the control drew");
+  });
+
+  it("does the same on a Mapbox map, which has no getLayersOrder", async () => {
+    const { layers, sources, refused, archiveId } = await decoratedArchive(true, true);
+    assert.deepEqual(refused, []);
+    assert.ok(!sources.has(archiveId));
+    assert.equal(layers.size, 0);
   });
 });
