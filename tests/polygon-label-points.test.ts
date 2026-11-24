@@ -73,6 +73,50 @@ describe("polygonLabelPoint", () => {
     assert.ok(!insidePolygon(point, hole), `${point} should not be in the hole`);
   });
 
+  it("finds the interior of a U thinner than the search precision", () => {
+    const u: Position[] = [
+      [0, 0],
+      [100, 0],
+      [100, 1],
+      [99.9999, 1],
+      [99.9999, 0.0001],
+      [0.0001, 0.0001],
+      [0.0001, 1],
+      [0, 1],
+      [0, 0],
+    ];
+    const point = polygonLabelPoint({ type: "Polygon", coordinates: [u] })!;
+    assert.ok(insidePolygon(point, u), `${point} should be inside the thin U`);
+  });
+
+  it("stays fast on a long flat sliver", () => {
+    const start = Date.now();
+    const point = polygonLabelPoint({
+      type: "Polygon",
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 0.0000001],
+          [0, 0.0000001],
+          [0, 0],
+        ],
+      ],
+    });
+    assert.ok(point);
+    assert.ok(Date.now() - start < 1000, "the starting grid is bounded");
+  });
+
+  it("returns null for a zero-area polygon", () => {
+    const flat: Position[] = [
+      [0, 0],
+      [1, 1],
+      [2, 2],
+      [0, 0],
+    ];
+    assert.equal(polygonLabelPoint({ type: "Polygon", coordinates: [flat] }), null);
+  });
+
   it("returns null for non-polygons and degenerate rings", () => {
     assert.equal(polygonLabelPoint({ type: "Point", coordinates: [0, 0] }), null);
     assert.equal(polygonLabelPoint(null), null);
@@ -251,6 +295,20 @@ describe("one label per polygon (layer sync)", () => {
 
     syncLayer(map as never, polygonLayer({ priorityExpression: '["get", "pop"]' }));
     assert.deepEqual(label().layout["symbol-sort-key"], ["get", "pop"]);
+  });
+
+  it("keeps MapLibre placement when a filter tests the geometry type", () => {
+    // The derived label feature is a Point, so a Polygon-only filter would hide it.
+    const { map, layers, sources } = makeMap();
+    const layer = polygonLayer({});
+    layer.filterExpression = ["==", ["geometry-type"], "Polygon"];
+    syncLayer(map as never, layer);
+    assert.equal((layers.get(LABEL_ID) as { source: string }).source, "source-lyr");
+    assert.ok(!sources.has(LABEL_SOURCE_ID));
+
+    const { map: map2, layers: layers2 } = makeMap();
+    syncLayer(map2 as never, polygonLayer({ visibilityExpression: '["==", "$type", "Polygon"]' }));
+    assert.equal((layers2.get(LABEL_ID) as { source: string }).source, "source-lyr");
   });
 
   it("keeps a time filter on the label layer instead of skipping the option", () => {

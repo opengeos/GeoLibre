@@ -2754,20 +2754,43 @@ function dedupedAttributeLabels(
  * polygons, or null when MapLibre's own placement applies: the option is off,
  * the labels follow lines, or the features are not inline GeoJSON (a
  * GeoArrow-only layer has no feature collection to derive points from).
- * Filters need no gating here (unlike dedup) because each point keeps its
- * feature's properties, so the label layer's filter still evaluates on it.
+ * Attribute filters need no gating here (unlike dedup) because each point
+ * keeps its feature's properties, so the label layer's filter still evaluates
+ * on it. A filter or label expression that tests the geometry type does need
+ * it: the derived feature is a Point, so `["geometry-type"]` would no longer
+ * match "Polygon" and the label would vanish. Those keep MapLibre's placement.
  */
 function onePerPolygonLabelPoints(
   ctx: VectorRenderContext,
   labels: LabelStyle,
 ): FeatureCollection | null {
   const { layer, profile } = ctx;
-  return labels.onePerPolygon !== false &&
-    labels.placement === "point" &&
-    profile.hasPolygon &&
-    layer.geojson
-    ? polygonLabelPoints(layer.geojson)
-    : null;
+  if (
+    labels.onePerPolygon === false ||
+    labels.placement !== "point" ||
+    !profile.hasPolygon ||
+    !layer.geojson
+  ) {
+    return null;
+  }
+  return testsGeometryType(layer, labels) ? null : polygonLabelPoints(layer.geojson);
+}
+
+/**
+ * Whether the label layer's filter or any label expression reads the feature's
+ * geometry type (`["geometry-type"]`, or the legacy `"$type"` filter key).
+ */
+function testsGeometryType(layer: GeoLibreLayer, labels: LabelStyle): boolean {
+  const sources = [
+    JSON.stringify(withFeatureFilters(layer, ["all"] as unknown as maplibregl.FilterSpecification)),
+    labels.expression,
+    labels.sizeExpression,
+    labels.colorExpression,
+    labels.opacityExpression,
+    labels.visibilityExpression,
+    labels.priorityExpression,
+  ];
+  return sources.some((text) => /"(?:geometry-type|\$type)"/.test(text || ""));
 }
 
 /**

@@ -117,6 +117,42 @@ function ringCentroidCell(rings: Ring[]): Cell {
 }
 
 /**
+ * A point inside the polygon on the horizontal line `y`: the middle of the
+ * widest stretch of that line lying inside (JTS's InteriorPoint idea). The
+ * line is nudged off any vertex so crossings are counted cleanly.
+ *
+ * @param rings - The polygon's rings, outer ring first.
+ * @param y - The scanline, usually the middle of the bounding box.
+ * @returns An interior point, or null when the line misses the polygon.
+ */
+function scanlineInteriorPoint(rings: Ring[], y: number): [number, number] | null {
+  for (const ring of rings) {
+    for (const [, vy] of ring) {
+      if (vy === y) y += 1e-9 * Math.max(1, Math.abs(y));
+    }
+  }
+  const crossings: number[] = [];
+  for (const ring of rings) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [ax, ay] = ring[i];
+      const [bx, by] = ring[j];
+      if (ay > y !== by > y) crossings.push(ax + ((y - ay) * (bx - ax)) / (by - ay));
+    }
+  }
+  crossings.sort((a, b) => a - b);
+  let best: [number, number] | null = null;
+  let widest = 0;
+  for (let i = 0; i + 1 < crossings.length; i += 2) {
+    const span = crossings[i + 1] - crossings[i];
+    if (span > widest) {
+      widest = span;
+      best = [(crossings[i] + crossings[i + 1]) / 2, y];
+    }
+  }
+  return best;
+}
+
+/**
  * The pole of inaccessibility of one polygon: Mapbox's polylabel algorithm
  * (grid of cells refined best-first until no cell can beat the best point by
  * more than `precision`).
@@ -139,18 +175,30 @@ export function poleOfInaccessibility(rings: Ring[]): [number, number] {
   const height = maxY - minY;
   const size = Math.min(width, height);
   if (!Number.isFinite(size) || size === 0) return [minX, minY];
-  // A label is a few pixels across, so a thousandth of the shape's extent is
-  // more than precise enough and keeps huge outlines (10m countries) cheap.
-  const precision = Math.max(width, height) / 1000;
+  // The search only needs to put the label comfortably inside, so half a
+  // percent of the shape's extent is plenty and keeps huge outlines (10m
+  // countries) cheap.
+  const precision = Math.max(width, height) / 200;
 
   const queue: Cell[] = [];
-  const h = size / 2;
-  for (let x = minX; x < maxX; x += size) {
-    for (let y = minY; y < maxY; y += size) queue.push(cell(x + h, y + h, h, rings));
+  // Cap the starting grid at 64 cells across, so a long flat sliver cannot
+  // allocate millions of cells; best-first refinement converges either way.
+  const cellSize = Math.max(size, Math.max(width, height) / 64);
+  const h = cellSize / 2;
+  for (let x = minX; x < maxX; x += cellSize) {
+    for (let y = minY; y < maxY; y += cellSize) queue.push(cell(x + h, y + h, h, rings));
   }
   let best = ringCentroidCell(rings);
   const bboxCenter = cell(minX + width / 2, minY + height / 2, 0, rings);
   if (bboxCenter.d > best.d) best = bboxCenter;
+  // A shape thinner than `precision` (a narrow U, a long sliver) can leave
+  // both guesses outside and stop the search there, so also seed it with a
+  // point known to be inside.
+  const scan = scanlineInteriorPoint(rings, minY + height / 2);
+  if (scan) {
+    const scanCell = cell(scan[0], scan[1], 0, rings);
+    if (scanCell.d > best.d) best = scanCell;
+  }
 
   // A simple best-first search: a sorted array is plenty for the few hundred
   // cells a label-precision search visits.
@@ -217,6 +265,9 @@ function polygonLabelAnchor(
   let largestArea = -Infinity;
   for (const polygon of polygons) {
     if (!polygon[0] || polygon[0].length < 3) continue;
+    // A zero-area (collinear) part is degenerate: MapLibre draws nothing
+    // there. Tested before projecting, which would bend a straight line.
+    if (polygonArea([polygon[0] as Ring]) === 0) continue;
     const rings = polygon.filter((ring) => ring.length >= 3).map((ring) => ring.map(toMercator));
     const area = polygonArea(rings);
     if (area > largestArea) {

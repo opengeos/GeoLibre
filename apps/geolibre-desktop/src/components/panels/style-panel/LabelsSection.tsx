@@ -176,7 +176,7 @@ export function LabelsSection({
               <option value="line">{t("style.labels.placementLine")}</option>
             </Select>
           </div>
-          {labels.placement === "point" && !controlPainted && hasPolygons ? (
+          {labels.placement === "point" && !controlPainted && hasPolygons && layer.geojson ? (
             <div className="space-y-2">
               <label
                 htmlFor="labelOnePerPolygon"
