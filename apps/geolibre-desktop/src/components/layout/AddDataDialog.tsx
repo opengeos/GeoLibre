@@ -146,7 +146,7 @@ function renderSource(
     case "raster":
       return <RasterSource />;
     case "zarr":
-      return <ZarrSource />;
+      return <ZarrSource initialUrl={initialUrl} />;
     case "pmtiles":
       return <PmtilesSource initialUrl={initialUrl} />;
     case "mbtiles":

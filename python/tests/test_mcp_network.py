@@ -35,13 +35,28 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     delay = 0.0
     send_length = True
 
+    honor_range = False
+    range_shift = 0
+    seen_ranges: list[str | None] = []
+
     def do_GET(self):
         if self.path == "/slow":
             time.sleep(self.delay)
         payload = self.payload
         if self.path == "/json":
             payload = json.dumps({"type": "FeatureCollection", "features": []}).encode()
-        self.send_response(self.status)
+        requested = self.headers.get("Range")
+        self.seen_ranges.append(requested)
+        if self.honor_range and requested:
+            start, end = (int(part) for part in requested.removeprefix("bytes=").split("-"))
+            start += self.range_shift
+            end = min(end + self.range_shift, len(payload) - 1)
+            whole = len(payload)
+            payload = payload[start : end + 1]
+            self.send_response(206)
+            self.send_header("Content-Range", f"bytes {start}-{end}/{whole}")
+        else:
+            self.send_response(self.status)
         self.send_header(
             "Content-Type", self.response_headers.get("Content-Type", "application/octet-stream")
         )
@@ -62,7 +77,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
 @contextmanager
 def resource_server(
-    *, payload=b"ok", status=200, headers=None, delay=0.0, send_length=True, ssl_context=None
+    *,
+    payload=b"ok",
+    status=200,
+    headers=None,
+    delay=0.0,
+    send_length=True,
+    ssl_context=None,
+    honor_range=False,
+    range_shift=0,
+    seen_ranges=None,
 ):
     handler = type(
         "PreviewTestHandler",
@@ -73,6 +97,9 @@ def resource_server(
             "response_headers": headers or {},
             "delay": delay,
             "send_length": send_length,
+            "honor_range": honor_range,
+            "range_shift": range_shift,
+            "seen_ranges": seen_ranges if seen_ranges is not None else [],
         },
     )
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -251,6 +278,118 @@ def test_fetches_real_binary_and_json_responses(monkeypatch):
             "features": [],
         }
         assert len(calls) == 2
+
+
+def test_byte_range_requests_return_the_requested_slice(monkeypatch):
+    payload = bytes(range(256)) * 64
+    seen = []
+    with resource_server(payload=payload, honor_range=True, seen_ranges=seen) as port:
+        patch_public_dns(monkeypatch, port)
+        sessions, preview, grant = authorized_session()
+        result = asyncio.run(
+            network.fetch_resource(
+                sessions, preview, grant, "http://tiles.example.test/a.pmtiles", 100, 50
+            )
+        )
+    assert base64.b64decode(result["data"]) == payload[100:150]
+    assert result["rangeStart"] == 100
+    assert result["totalSize"] == len(payload)
+    assert seen == ["bytes=100-149"]
+
+
+def test_range_ignored_by_a_server_is_sliced_from_a_small_full_response(monkeypatch):
+    payload = b"0123456789"
+    with resource_server(payload=payload) as port:
+        patch_public_dns(monkeypatch, port)
+        sessions, preview, grant = authorized_session()
+        result = asyncio.run(
+            network.fetch_resource(
+                sessions, preview, grant, "http://tiles.example.test/c.tif", 2, 3
+            )
+        )
+    assert base64.b64decode(result["data"]) == b"234"
+    assert result["totalSize"] == len(payload)
+
+
+@pytest.mark.parametrize(
+    "content_range,offset,valid",
+    [
+        ("bytes */100000", 100000, True),
+        ("bytes */100000", 99999, False),
+        ("invalid", 100000, False),
+    ],
+)
+def test_validated_unsatisfied_range_reports_eof(monkeypatch, content_range, offset, valid):
+    """Accept only a validated end-of-file response for an exhausted byte range.
+
+    Args:
+        monkeypatch: The pytest patch fixture.
+        content_range: The server's unsatisfied-range header.
+        offset: The requested byte offset.
+        valid: Whether the response proves EOF.
+    """
+    with resource_server(status=416, headers={"Content-Range": content_range}) as port:
+        patch_public_dns(monkeypatch, port)
+        sessions, preview, grant = authorized_session()
+        if valid:
+            result = asyncio.run(
+                network.fetch_resource(
+                    sessions, preview, grant, "http://tiles.example.test/c.tif", offset, 100
+                )
+            )
+            assert result["data"] == ""
+            assert result["totalSize"] == 100000
+            assert result["rangeStart"] == offset
+        else:
+            with pytest.raises(network.PreviewNetworkError, match="416"):
+                asyncio.run(
+                    network.fetch_resource(
+                        sessions, preview, grant, "http://tiles.example.test/c.tif", offset, 100
+                    )
+                )
+
+
+def test_range_ignored_by_a_server_for_a_large_file_is_actionable(monkeypatch):
+    with resource_server(
+        payload=b"", headers={"Content-Length": str(network.MAX_RESPONSE_BYTES + 1)}
+    ) as port:
+        patch_public_dns(monkeypatch, port)
+        sessions, preview, grant = authorized_session()
+        with pytest.raises(network.PreviewNetworkError, match="byte-range"):
+            asyncio.run(
+                network.fetch_resource(
+                    sessions, preview, grant, "http://tiles.example.test/big.tif", 0, 16
+                )
+            )
+
+
+def test_mismatched_content_range_is_rejected(monkeypatch):
+    with resource_server(payload=b"x" * 64, honor_range=True, range_shift=1) as port:
+        patch_public_dns(monkeypatch, port)
+        sessions, preview, grant = authorized_session()
+        with pytest.raises(network.PreviewNetworkError, match="different byte range"):
+            asyncio.run(
+                network.fetch_resource(
+                    sessions, preview, grant, "http://tiles.example.test/a.pmtiles", 0, 8
+                )
+            )
+
+
+@pytest.mark.parametrize(
+    ("offset", "length"),
+    [(0, None), (None, 4), (-1, 4), (0, 0), (0, network.MAX_RESPONSE_BYTES + 1), (True, 4)],
+)
+def test_invalid_byte_ranges_fail_before_dns(monkeypatch, offset, length):
+    monkeypatch.setattr(
+        network.socket, "getaddrinfo", lambda *a, **k: pytest.fail("DNS must not run")
+    )
+    sessions, preview, grant = authorized_session()
+    with pytest.raises(network.PreviewNetworkError):
+        asyncio.run(
+            network.fetch_resource(
+                sessions, preview, grant, "http://tiles.example.test/a.pmtiles", offset, length
+            )
+        )
 
 
 def test_missing_grant_fails_before_dns(monkeypatch):
@@ -598,8 +737,22 @@ def test_app_tool_route_returns_actual_resource_bytes(monkeypatch, tmp_path):
                 },
             )
         )
+        ranged = asyncio.run(
+            server.call_tool(
+                "fetch_map_resource",
+                {
+                    "preview_id": preview["previewId"],
+                    "grant": grant,
+                    "url": "http://tiles.example.test/tile",
+                    "offset": 1,
+                    "length": 6,
+                },
+            )
+        ).structured_content
+        assert base64.b64decode(ranged["data"]) == payload[1:7]
+        assert ranged["rangeStart"] == 1
         assert response.content == []
         assert response.structured_content["mimeType"] == "image/png"
         assert base64.b64decode(response.structured_content["data"]) == payload
-        assert calls == ["tiles.example.test"]
+        assert calls == ["tiles.example.test", "tiles.example.test"]
         asyncio.run(server.call_tool("close_map_preview", {"preview_id": preview["previewId"]}))

@@ -42,6 +42,101 @@ const WFS_OPERATION_PARAMS = new Set([
   "typenames",
 ]);
 
+// A WCS request names its coverage and subset alongside the operation; the
+// WCS form asks for the endpoint and lists the coverages itself.
+const WCS_OPERATION_PARAMS = new Set([
+  "coverage",
+  "coverageid",
+  "identifier",
+  "identifiers",
+  "subset",
+  "scalefactor",
+  "scalesize",
+  "resx",
+  "resy",
+  "interpolation",
+  "rangesubset",
+  "mediatype",
+]);
+
+/**
+ * The URL without its fragment, and without its query unless `keepQuery`: a
+ * signed file or catalog URL needs its query parameters preserved.
+ */
+function withoutQuery(url, keepQuery = false) {
+  const plain = new URL(url.href);
+  if (!keepQuery) plain.search = "";
+  plain.hash = "";
+  return plain.href;
+}
+
+/** A display name for a file request: its last path segment. */
+function fileName(url, fallback) {
+  const last = url.pathname.split("/").filter(Boolean).pop();
+  if (!last) return fallback;
+  try {
+    return decodeURIComponent(last);
+  } catch {
+    return last;
+  }
+}
+
+/**
+ * The root of the Zarr store a request reads from. A viewer fetches the
+ * store's consolidated metadata, its v3 `zarr.json` or array metadata, and
+ * then chunk keys, all below one root, which is what GeoLibre opens.
+ */
+function zarrStoreUrl(url) {
+  const root =
+    url.pathname.match(/^(.*?\.zarr)(?:\/.*)?$/i)?.[1] ??
+    url.pathname.match(/^(.*?)\/(?:\.zmetadata|\.zgroup|\.zattrs|zarr\.json)$/i)?.[1];
+  if (root === undefined) return null;
+  const store = new URL(url.href);
+  store.pathname = root || "/";
+  store.hash = "";
+  return store.href;
+}
+
+/**
+ * The STAC API root, or the API collection, a request was made against. Only
+ * an API whose host or path names it STAC qualifies, so an ordinary OGC API
+ * Features server keeps its own form.
+ */
+function stacApiUrl(url) {
+  const segments = url.pathname.split("/");
+  const inPath = segments.findIndex((segment) => segment.toLowerCase() === "stac");
+  const inHost = /(?:^|\.)stac[.-]|(?:^|\.)stac$/i.test(url.hostname);
+  if (inPath < 0 && !inHost) return null;
+  const rest = url.pathname.match(
+    /^(.*?)\/(?:search|conformance|queryables|collections(?:\/([^/]+)(?:\/(?:items|queryables)(?:\/[^/]*)?)?)?)\/?$/i,
+  );
+  if (!rest) return null;
+  // On a path-named API the root sits at or below the `stac` segment; a
+  // `search` in some unrelated route above it is not this API's.
+  if (inPath >= 0 && rest[1].split("/").length - 1 < inPath) return null;
+  const api = new URL(
+    serviceEndpoint(
+      url,
+      new Set([
+        "collections",
+        "datetime",
+        "filter",
+        "filter-lang",
+        "ids",
+        "intersects",
+        "limit",
+        "next",
+        "page",
+        "query",
+        "sortby",
+        "fields",
+      ]),
+    ),
+  );
+  api.pathname = rest[2] ? `${rest[1]}/collections/${rest[2]}` : rest[1] || "/";
+  return api.href;
+}
+
 function serviceEndpoint(url, extraParams) {
   const endpoint = new URL(url.href);
   endpoint.hash = "";
@@ -145,7 +240,92 @@ export function classifyServiceRequest(rawUrl) {
     );
   }
 
+  if (
+    service === "wcs" &&
+    /^(?:getcapabilities|describecoverage|getcoverage)$/.test(request ?? "")
+  ) {
+    return candidate(
+      url,
+      "WCS",
+      "raster",
+      "WCS service",
+      serviceEndpoint(url, WCS_OPERATION_PARAMS),
+      requestedLayer(url, "coverageid", "coverage", "identifier"),
+    );
+  }
+
   const path = url.pathname;
+  // Ahead of the generic tile rule: a cached MapServer tile is addressed
+  // `tile/{z}/{y}/{x}`, row before column, so reading it as an XYZ template
+  // would swap the axes. GeoLibre's ArcGIS form takes the service root and
+  // reads the tiling scheme (or renders dynamically) from it instead. A
+  // VectorTileServer is left to the style rule below, which opens it ready to
+  // draw through the vector tile form.
+  const arcgisService = path.match(/^(.*\/(MapServer|ImageServer))(?:\/.*)?$/i);
+  if (arcgisService) {
+    const label = arcgisService[2].toLowerCase() === "mapserver" ? "Map" : "Image";
+    const endpoint = new URL(
+      serviceEndpoint(
+        url,
+        new Set([
+          "f",
+          "bboxsr",
+          "imagesr",
+          "size",
+          "dpi",
+          "layers",
+          "layerdefs",
+          "time",
+          "mosaicrule",
+          "renderingrule",
+          "pixeltype",
+          "nodata",
+          "nodatainterpretation",
+          "compressionquality",
+          "bandids",
+          "interpolation",
+          "dynamiclayers",
+          "mapscale",
+          "rotation",
+          "datumtransformations",
+        ]),
+      ),
+    );
+    endpoint.pathname = arcgisService[1];
+    return candidate(
+      url,
+      `ArcGIS ${label} Service`,
+      "raster",
+      `ArcGIS ${label.toLowerCase()} service`,
+      endpoint.href,
+    );
+  }
+
+  // A STAC API is an OGC API Features server underneath, so its item requests
+  // would otherwise be offered as plain features. The STAC browser lists the
+  // collection's items and their assets, which the features form cannot. Only
+  // an API that names itself STAC in its host or path is recognized: nothing
+  // else in a URL tells the two apart.
+  const stacApi = stacApiUrl(url);
+  if (stacApi) return candidate(url, "STAC", "catalog", "STAC catalog", stacApi);
+  if (/\/(?:catalog|collection)\.json$/i.test(path)) {
+    return candidate(url, "STAC", "catalog", "STAC catalog", withoutQuery(url, true));
+  }
+
+  // A data file fetched by the page's own map library (OpenLayers reads KML and
+  // GPX this way, and flatgeobuf streams by range request) is a dataset rather
+  // than a service, and opens through the same `?data=` link as a page link.
+  const zarrStore = zarrStoreUrl(url);
+  if (zarrStore) return candidate(url, "Zarr", "raster", "Zarr store", zarrStore);
+  if (/\/tileset\.json$/i.test(path)) {
+    return candidate(url, "3D Tiles", "3d", "3D Tiles tileset", withoutQuery(url, true));
+  }
+  const file = path.match(/\.(fgb|flatgeobuf|gpx|kml|kmz)$/i)?.[1].toLowerCase();
+  if (file) {
+    const format = { fgb: "FlatGeobuf", flatgeobuf: "FlatGeobuf", gpx: "GPX" }[file] ?? "KML";
+    return candidate(url, format, "vector", fileName(url, format), withoutQuery(url, true));
+  }
+
   const arcgis = path.match(/^(.*\/(?:FeatureServer))(?:\/(\d+))?(?:\/query)?\/?$/i);
   if (arcgis) {
     // Keep the layer index the request named. Handed a bare `…/FeatureServer`,

@@ -15,6 +15,7 @@ import {
   deferThreeDTilesRestoreUntilMapIdle,
   restoreThreeDTilesLayers,
   threeDTilesSampleLayerName,
+  addThreeDTilesLayerFromUrl,
 } from "../packages/plugins/src/plugins/maplibre-3d-tiles";
 
 // Shared 3D-Tiles header resolution: Google Photorealistic tiles keep their
@@ -22,6 +23,40 @@ import {
 // the MapLibre and Cesium render paths must resolve it the same way.
 
 const GOOGLE = "https://tile.googleapis.com/v1/3dtiles/root.json";
+
+it("rolls back only the newly added tileset when the deck module fails to load", async () => {
+  const previous = useAppStore.getState().layers;
+  const existing = {
+    id: "existing",
+    name: "Existing",
+    type: "3d-tiles" as const,
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    source: { url: "https://example.com/existing.json" },
+    metadata: { sourceKind: "3d-tiles-url" },
+  };
+  useAppStore.setState({ layers: [existing] });
+  const app = {
+    getMapRenderer: () => "mapbox",
+    getMapboxMap: () => ({}),
+    getDeckGL: async () => {
+      throw new Error("deck module load failed");
+    },
+  } as unknown as GeoLibreAppAPI;
+  try {
+    await assert.rejects(
+      addThreeDTilesLayerFromUrl(app, "https://example.com/new/tileset.json"),
+      /deck module load failed/,
+    );
+    assert.deepEqual(
+      useAppStore.getState().layers.map((layer) => layer.id),
+      ["existing"],
+    );
+  } finally {
+    useAppStore.setState({ layers: previous });
+  }
+});
 
 describe("threeDTilesSampleLayerName", () => {
   const GOOGLE_LABEL = "Google Photorealistic 3D Tiles";

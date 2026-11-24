@@ -25,7 +25,6 @@ import {
   DELIMITED_TEXT_DELIMITERS,
   EOX_S2CLOUDLESS_ATTRIBUTION,
   GEBCO_ATTRIBUTION,
-  GPX_PROXY_PATH,
   WFS_PROXY_PATH,
   WMS_PROXY_PATH,
 } from "./constants";
@@ -362,15 +361,7 @@ function isViteDevServer(): boolean {
   );
 }
 
-/**
- * Routes a feed request through the dev-server CORS proxy when running under
- * Vite (so a `fetch()` for a remote GPX/GeoRSS file is not blocked by the
- * feed host's missing CORS headers). In production builds the URL is returned
- * unchanged. The proxy is generic; the `GPX_PROXY_PATH` name is historical.
- */
-export function proxyFeedRequestUrl(url: string): string {
-  return isViteDevServer() ? `${GPX_PROXY_PATH}?url=${encodeURIComponent(url)}` : url;
-}
+export { proxyFeedRequestUrl } from "../../../lib/feed-request";
 
 /**
  * Fetches an OGC service capabilities document as text, working around the
