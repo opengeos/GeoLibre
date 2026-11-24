@@ -1,12 +1,19 @@
 // Run the semantic rule in a separate process so ESLint need not retain every
 // workspace's TypeScript program. ESLint still owns syntax and custom rules.
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const OXLINT = path.join(ROOT, "node_modules/oxlint/bin/oxlint");
+
+/** Stale typed suppressions are fatal independently of the warning budget. */
+function isErrorDiagnostic(item) {
+  return (
+    item.severity === "error" || /^Unused (?:oxlint|eslint)-disable directive\b/.test(item.message)
+  );
+}
 
 /** Leave ESLint's own directives to ESLint; keep every Oxlint diagnostic. */
 export function typedDiagnostics(diagnostics, readSource = readFileSync) {
@@ -53,27 +60,36 @@ export function runTypedLint({ cwd = ROOT, maxWarnings = 35 } = {}) {
     ],
     { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   );
-  if (result.error || result.status !== 0)
-    throw new Error(
-      result.error?.message || result.stderr || result.stdout || `Oxlint exited ${result.status}`,
-    );
-  const report = JSON.parse(result.stdout);
+  if (result.error) throw result.error;
+  if (result.signal) throw new Error(`Oxlint terminated by ${result.signal}`);
+  let report;
+  try {
+    report = JSON.parse(result.stdout);
+  } catch {
+    throw new Error(result.stderr || result.stdout || `Oxlint exited ${result.status}`);
+  }
   if (!Array.isArray(report.diagnostics)) throw new Error("Oxlint did not return diagnostics");
   const diagnostics = typedDiagnostics(
     report.diagnostics.map((item) => ({ ...item, filename: path.resolve(cwd, item.filename) })),
   );
   // A stale typed suppression is always an error, even when warnings remain
   // below the budget. Other unused directives are checked by ESLint itself.
-  const errors = diagnostics.filter(
-    (item) =>
-      item.severity === "error" ||
-      /^Unused (?:oxlint|eslint)-disable directive\b/.test(item.message),
-  ).length;
+  const errors = diagnostics.filter(isErrorDiagnostic).length;
   const warnings = diagnostics.length - errors;
-  return { diagnostics, errors, warnings, ok: errors === 0 && warnings <= maxWarnings };
+  return {
+    diagnostics,
+    errors,
+    warnings,
+    exitStatus: result.status,
+    ok: result.status === 0 && errors === 0 && warnings <= maxWarnings,
+  };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] &&
+  existsSync(process.argv[1]) &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+) {
   try {
     const args = process.argv.slice(2);
     if (args.length !== 2 || args[0] !== "--max-warnings" || !/^\d+$/.test(args[1]))
@@ -82,10 +98,13 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const report = runTypedLint({ maxWarnings: limit });
     for (const item of report.diagnostics) {
       const span = item.labels?.[0]?.span;
+      const severity = isErrorDiagnostic(item) ? "error" : item.severity;
       console.log(
-        `${path.relative(ROOT, item.filename)}:${span?.line ?? 0}:${span?.column ?? 0} ${item.severity}: ${item.message} ${item.code ?? ""}`,
+        `${path.relative(ROOT, item.filename)}:${span?.line ?? 0}:${span?.column ?? 0} ${severity}: ${item.message} ${item.code ?? ""}`,
       );
     }
+    if (report.exitStatus !== 0 && report.errors === 0)
+      console.error(`Oxlint exited with status ${report.exitStatus}.`);
     console.log(
       `Typed lint: ${report.errors} errors, ${report.warnings} warnings (limit ${limit}).`,
     );

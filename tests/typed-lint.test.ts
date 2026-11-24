@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ESLint } from "eslint";
+import { spawnSync } from "node:child_process";
 import { runTypedLint, typedDiagnostics, typedSourceRoots } from "../scripts/lint-typed.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -16,7 +17,7 @@ for (const directory of ["packages", "workers", "apps/geolibre-desktop/src-tauri
 symlinkSync(path.join(root, "node_modules"), path.join(fixture, "node_modules"), "junction");
 copyFileSync(path.join(root, ".oxlintrc.json"), path.join(fixture, ".oxlintrc.json"));
 writeFileSync(
-  path.join(fixture, "tsconfig.json"),
+  path.join(fixture, "apps/geolibre-desktop/tsconfig.json"),
   JSON.stringify({
     compilerOptions: {
       target: "ES2022",
@@ -25,7 +26,7 @@ writeFileSync(
       strict: true,
       noEmit: true,
     },
-    include: ["apps/geolibre-desktop/src/*.ts"],
+    include: ["src/*.ts"],
   }),
 );
 writeFileSync(
@@ -40,6 +41,18 @@ writeFileSync(
 after(() => rmSync(fixture, { recursive: true, force: true }));
 
 describe("typed lint production gate", () => {
+  it("runs the CLI through a symlinked checkout", () => {
+    const linked = path.join(fixture, "linked-checkout");
+    symlinkSync(root, linked, "junction");
+    const result = spawnSync(
+      process.execPath,
+      [path.join(linked, "scripts/lint-typed.mjs"), "--invalid"],
+      { encoding: "utf8" },
+    );
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Usage:/);
+  });
+
   it("checks cross-file promise types, scope, and each accepted handler", () => {
     writeFileSync(
       path.join(source, "sample.ts"),
@@ -140,8 +153,32 @@ void run();
   });
 
   it("fails closed on an invalid compiler configuration", () => {
-    writeFileSync(path.join(source, "tsconfig.json"), '{"extends":"./missing.json"}');
-    assert.throws(() => runTypedLint({ cwd: fixture }), /Invalid tsconfig|Cannot read file/);
+    const config = path.join(source, "tsconfig.json");
+    writeFileSync(config, '{"extends":"./missing.json"}');
+    try {
+      const report = runTypedLint({ cwd: fixture });
+      assert.equal(report.ok, false);
+      assert.notEqual(report.exitStatus, 0);
+      assert.ok(report.errors > 0);
+      assert.ok(
+        report.diagnostics.some(
+          (item: { code?: string }) => item.code === "typescript(tsconfig-error)",
+        ),
+      );
+      mkdirSync(path.join(fixture, "scripts"), { recursive: true });
+      const cli = path.join(fixture, "scripts/lint-typed.mjs");
+      copyFileSync(path.join(root, "scripts/lint-typed.mjs"), cli);
+      const result = spawnSync(process.execPath, [cli, "--max-warnings", "100"], {
+        cwd: fixture,
+        encoding: "utf8",
+      });
+      assert.equal(result.status, 1);
+      assert.match(result.stdout, /error: Invalid tsconfig/);
+      assert.match(result.stdout, /Typed lint: [1-9]\d* errors/);
+      assert.equal(result.stdout.trimStart().startsWith("{"), false);
+    } finally {
+      rmSync(config);
+    }
   });
 
   it("does not discard unrelated errors or unreadable diagnostics", () => {
