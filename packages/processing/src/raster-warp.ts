@@ -374,7 +374,7 @@ function warp(plan: WarpPlan): { bands: Float32Array[]; nodata: number } {
       div += w;
       acc += band[i] * w;
     }
-    if (div < 0.00001) return masked ? null : 0;
+    if (div < 0.00001) return null;
     return div === 1 ? acc : acc / div;
   };
 

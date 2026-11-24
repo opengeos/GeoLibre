@@ -96,6 +96,25 @@ it("decodes decimal Float32 NoData exactly and retains nearby valid samples", as
   assert.equal(output.geojson.features[0].properties?.count, 1);
 });
 
+it("keeps integer missing samples separate when Float32 values collide", async () => {
+  for (const sentinel of [16777216, 16777217]) {
+    const bytes = writeArrayBuffer(Uint32Array.of(16777216, 16777217), {
+      width: 2,
+      height: 1,
+      GDAL_NODATA: String(sentinel),
+      ModelPixelScale: [1, 1, 0],
+      ModelTiepoint: [0, 0, 0, 0, 1, 0],
+      GeographicTypeGeoKey: 4326,
+      GTModelTypeGeoKey: 2,
+    });
+    const decoded = await readRasterData(bytes);
+    assert.ok(Number.isNaN(decoded.nodata));
+    const missing = sentinel - 16777216;
+    assert.ok(Number.isNaN(decoded.bands[0][missing]));
+    assert.equal(decoded.bands[0][1 - missing], 16777216);
+  }
+});
+
 it("preserves PixelIsPoint centers through encoding and a same-CRS warp", async () => {
   const bytes = writeArrayBuffer(Float32Array.of(1, 2, 3, 4), {
     width: 2,
@@ -128,6 +147,11 @@ it("budgets long warp rows, skips zero-weight NaN taps, and snaps mosaic extents
     resampling: "bilinear",
   });
   assert.equal(sampled.bands[0][0], 1);
+  const empty = resampleRaster(raster([NaN, NaN, NaN, NaN], 2, 2), {
+    resolution: 1,
+    resampling: "bilinear",
+  });
+  assert.ok([...empty.bands[0]].every(Number.isNaN));
   const merged = mosaicRasters(
     [raster([1]), { ...raster([2]), originX: 1 + 1 / 2048 }],
     "first",

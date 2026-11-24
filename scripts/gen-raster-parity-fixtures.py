@@ -180,11 +180,14 @@ def compact(value):
     return value
 
 
-def main() -> None:
-    """Generate every parity case and write the fixture file."""
+def generate_fixtures(tmp: Path) -> None:
+    """Generate every parity case in a managed scratch directory.
+
+    Args:
+        tmp: Existing temporary directory for input and output rasters.
+    """
     from pyproj import Transformer
 
-    tmp = Path(tempfile.mkdtemp())
     cases: list[dict] = []
 
     # --- Inputs -------------------------------------------------------------
@@ -581,6 +584,12 @@ def main() -> None:
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(fixture, separators=(",", ":")) + "\n")
     print(f"Wrote {len(cases)} parity cases -> {OUT.relative_to(ROOT)}")
+
+
+def main() -> None:
+    """Generate fixtures and remove scratch rasters when finished."""
+    with tempfile.TemporaryDirectory(prefix="geolibre-raster-parity-") as scratch:
+        generate_fixtures(Path(scratch))
 
 
 if __name__ == "__main__":

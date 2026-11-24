@@ -237,10 +237,12 @@ export async function readRasterData(
   );
   const rawBands = (Array.isArray(result) ? result : [result]) as ArrayLike<number>[];
   const noData = image.getGDALNoData();
+  // Preserve masks before integer/Float64 values can collide when rounded to
+  // Float32. Float32 sources already have a distinguishable stored sentinel.
   const outputNoData =
     noData == null
       ? null
-      : rawBands.some((band) => band instanceof Float64Array)
+      : rawBands.some((band) => !(band instanceof Float32Array))
         ? Number.NaN
         : Math.fround(noData);
   const bands = rawBands.map((band) => {
