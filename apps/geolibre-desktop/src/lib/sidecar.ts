@@ -1,8 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import i18next from "i18next";
-import { setSidecarAuthToken } from "@geolibre/processing";
+import { setSidecarAuthToken, setSidecarRelayAccess } from "@geolibre/processing";
 import { IS_MAS_BUILD } from "./build-flags";
 import { isTauri } from "./tauri-io";
+import { useDesktopSettingsStore } from "../hooks/useDesktopSettings";
 
 export interface SidecarServerInfo {
   baseUrl: string;
@@ -26,6 +27,7 @@ const STALE_SIDECAR_MARKER = "does not accept this session's token";
 
 export async function startGeoLibreSidecar(): Promise<SidecarServerInfo> {
   assertSidecarAllowed();
+  const generation = stopGeneration;
   let info: SidecarServerInfo;
   try {
     info = await invoke<SidecarServerInfo>("start_geolibre_sidecar");
@@ -41,14 +43,32 @@ export async function startGeoLibreSidecar(): Promise<SidecarServerInfo> {
   }
   // Hand the per-launch token to the sidecar client so all subsequent requests
   // (which resolve the base URL themselves) are authenticated.
-  setSidecarAuthToken(info.token);
-  setLiveSidecar(info);
+  if (generation === stopGeneration) {
+    setSidecarAuthToken(info.token);
+    setLiveSidecar(info);
+    await updateLiveMcpAccess();
+  }
   return info;
 }
 
 // The running sidecar, published so app-level consumers (the Live MCP command
 // relay in useJupyterRelay) connect whenever any feature has started it.
 let liveSidecar: SidecarServerInfo | null = null;
+let stopGeneration = 0;
+let accessUpdate: Promise<void> = Promise.resolve();
+
+/** Apply the current Live MCP preference without stopping processing jobs. */
+export function updateLiveMcpAccess(): Promise<void> {
+  accessUpdate = accessUpdate
+    .catch(() => {})
+    .then(async () => {
+      const info = liveSidecar;
+      if (!info) return;
+      const enabled = useDesktopSettingsStore.getState().desktopSettings.startup.allowLiveMcp;
+      await setSidecarRelayAccess(info.baseUrl, enabled);
+    });
+  return accessUpdate;
+}
 const sidecarListeners = new Set<(info: SidecarServerInfo | null) => void>();
 
 function sameSidecar(a: SidecarServerInfo | null, b: SidecarServerInfo | null): boolean {
@@ -97,6 +117,7 @@ export async function stopGeoLibreSidecar(): Promise<void> {
   if (IS_MAS_BUILD) return;
   assertSidecarAllowed();
   await invoke("stop_geolibre_sidecar");
+  stopGeneration += 1;
   setSidecarAuthToken(null);
   setLiveSidecar(null);
 }

@@ -27,8 +27,9 @@ readable only by the current user (:func:`discovery_file`). A Live MCP client
 therefore gets the right to send map commands and nothing else the sidecar
 serves.
 
-The relay is off unless ``GEOLIBRE_LIVE_RELAY_PORT`` is set (the desktop shell
-sets it when it spawns the sidecar) and multi-tenant mode is off: a shared
+The relay is off until the desktop applies an explicit opt-in through the
+sidecar-authenticated ``POST /relay/access`` endpoint. It also requires
+``GEOLIBRE_LIVE_RELAY_PORT`` (set by the desktop shell) and multi-tenant mode off: a shared
 server must never broadcast one user's commands to another user's window.
 """
 
@@ -40,6 +41,7 @@ import hmac
 import json
 import os
 import secrets
+import tempfile
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -76,6 +78,8 @@ DISCOVERY_FILE_ENV = "GEOLIBRE_LIVE_RELAY_FILE"
 RELAY_CLIENT_PATHS = frozenset({"/relay/command", "/relay/status"})
 
 _RELAY_TOKEN = secrets.token_urlsafe(32)
+SEND_TIMEOUT_SECONDS = 1.0
+_access_allowed = False
 
 router = APIRouter(prefix="/relay", tags=["relay"])
 
@@ -91,15 +95,24 @@ class _Hub:
     async def broadcast(self, message: dict[str, Any]) -> int:
         """Send ``message`` to every app socket and count the ones it reached."""
         encoded = json.dumps(message)
-        delivered = 0
-        for socket in list(self.listeners):
+
+        async def send(socket: WebSocket) -> int:
+            """Deliver to one window within the socket send budget.
+
+            Args:
+                socket: The subscribed app window.
+
+            Returns:
+                One on delivery, or zero after dropping a stalled or dead peer.
+            """
             try:
-                await socket.send_text(encoded)
+                await asyncio.wait_for(socket.send_text(encoded), SEND_TIMEOUT_SECONDS)
             except Exception:  # noqa: BLE001 - a dead peer must not fail the request
                 self.drop(socket)
-                continue
-            delivered += 1
-        return delivered
+                return 0
+            return 1
+
+        return sum(await asyncio.gather(*(send(socket) for socket in list(self.listeners))))
 
     def drop(self, socket: WebSocket) -> None:
         """Unregister a socket, tolerating one that is already gone."""
@@ -124,10 +137,52 @@ def relay_enabled() -> bool:
     """Return whether this sidecar serves the Live MCP relay.
 
     Returns:
-        True when ``GEOLIBRE_LIVE_RELAY_PORT`` names a port and multi-tenant mode
-        is off.
+        True after explicit desktop opt-in when ``GEOLIBRE_LIVE_RELAY_PORT``
+        names a port and multi-tenant mode is off.
     """
-    return _configured_port() is not None and not is_multi_tenant_enabled()
+    return _access_allowed and _configured_port() is not None and not is_multi_tenant_enabled()
+
+
+@router.post("/access")
+async def set_relay_access(request: Request) -> dict[str, bool]:
+    """Apply the desktop's explicit Live MCP access preference.
+
+    Args:
+        request: Sidecar-authenticated request containing an enabled boolean.
+
+    Returns:
+        Whether access is now enabled.
+
+    Raises:
+        HTTPException: On missing credentials, invalid input, or a shared server.
+    """
+    from .main import SIDECAR_TOKEN
+
+    provided = request.headers.get("x-geolibre-token", "")
+    if not SIDECAR_TOKEN or not hmac.compare_digest(provided.encode(), SIDECAR_TOKEN.encode()):
+        raise HTTPException(status_code=401, detail="Missing or invalid sidecar token")
+    if _configured_port() is None or is_multi_tenant_enabled():
+        raise HTTPException(status_code=404, detail="Live relay is not available")
+    try:
+        payload = await request.json()
+    except (ValueError, UnicodeError) as error:
+        raise HTTPException(status_code=400, detail="Expected an enabled boolean") from error
+    if not isinstance(payload, dict) or not isinstance(payload.get("enabled"), bool):
+        raise HTTPException(status_code=400, detail="Expected an enabled boolean")
+    global _access_allowed
+    _access_allowed = payload["enabled"]
+    if _access_allowed:
+        write_discovery_file()
+    else:
+        remove_discovery_file()
+        for future in _hub.pending.values():
+            if not future.done():
+                future.set_result({"ok": False, "error": "Live MCP access was disabled."})
+        for socket in list(_hub.listeners):
+            _hub.drop(socket)
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(socket.close(code=1008), SEND_TIMEOUT_SECONDS)
+    return {"enabled": _access_allowed}
 
 
 def relay_token() -> str:
@@ -169,18 +224,23 @@ def write_discovery_file() -> Path | None:
         "token": _RELAY_TOKEN,
         "pid": os.getpid(),
     }
-    temporary = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+    temporary: Path | None = None
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
-        with contextlib.suppress(OSError):
-            os.chmod(target.parent, 0o700)
-        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
             json.dump(payload, handle)
         os.replace(temporary, target)
     except OSError:
-        with contextlib.suppress(OSError):
-            temporary.unlink()
+        if temporary is not None:
+            with contextlib.suppress(OSError):
+                temporary.unlink()
         return None
     return target
 
@@ -234,7 +294,7 @@ async def relay_socket(websocket: WebSocket) -> None:
         await websocket.close(code=1008)
         return
     provided = websocket.query_params.get("token", "")
-    if SIDECAR_TOKEN and not hmac.compare_digest(
+    if not SIDECAR_TOKEN or not hmac.compare_digest(
         provided.encode("utf-8"), SIDECAR_TOKEN.encode("utf-8")
     ):
         await websocket.close(code=1008)
@@ -273,11 +333,12 @@ async def relay_command(request: Request) -> dict[str, Any]:
     _hub.pending_request_ids.add(request_id)
     _hub.pending[dispatch_id] = future
     try:
-        delivered = await _hub.broadcast(message)
-        if delivered == 0:
-            return {"delivered": 0}
         try:
-            result = await asyncio.wait_for(future, timeout)
+            async with asyncio.timeout(timeout):
+                delivered = await _hub.broadcast(message)
+                if delivered == 0:
+                    return {"delivered": 0}
+                result = await future
         except asyncio.TimeoutError as error:
             raise HTTPException(
                 status_code=504, detail="GeoLibre did not return a result in time."

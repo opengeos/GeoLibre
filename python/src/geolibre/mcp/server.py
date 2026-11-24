@@ -2394,6 +2394,8 @@ def build_server(workspace: Workspace) -> MCPServer:
             opts["title"] = title
         if "widget_id" in opts or "widgetId" in opts:
             raise ValueError("options cannot set the widget id")
+        if {"project", "layer", "widget_type"} & opts.keys():
+            raise ValueError("options cannot override project, layer, or widget_type")
         with edit(path) as (file, project):
             widget = authoring.add_dashboard_widget(project, layer, widget_type, **opts)
         return _summarize(file, project, widget=widget)
@@ -2453,6 +2455,8 @@ def build_server(workspace: Workspace) -> MCPServer:
         Returns:
             The stored Print Layout settings.
         """
+        if {"project", "reset"} & settings.keys():
+            raise ValueError("settings cannot override project or reset")
         with edit(path) as (file, project):
             layout = authoring.set_print_layout(project, reset=reset, **dict(settings))
         return _summarize(file, project, printLayout=layout)

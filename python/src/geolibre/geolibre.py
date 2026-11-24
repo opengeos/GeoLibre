@@ -2071,7 +2071,10 @@ class Map(anywidget.AnyWidget):
         Returns:
             The new group, including its ``id`` and member ``layerIds``.
         """
-        refs = [layer.id if isinstance(layer, Layer) else layer for layer in layers or []]
+        refs = [
+            self._resolve_layer(layer).id if isinstance(layer, Layer) else layer
+            for layer in layers or []
+        ]
         result: dict[str, Any] = {}
         self._update_project(
             lambda p: result.update(
@@ -2095,7 +2098,9 @@ class Map(anywidget.AnyWidget):
             layers: Layers (ids, names, or handles) to move.
             group: A group id or name, or None to ungroup them.
         """
-        refs = [layer.id if isinstance(layer, Layer) else layer for layer in layers]
+        refs = [
+            self._resolve_layer(layer).id if isinstance(layer, Layer) else layer for layer in layers
+        ]
         self._update_project(lambda p: _authoring.set_layer_group(p, refs, group))
 
     def remove_layer_group(self, group: str) -> None:
@@ -2122,7 +2127,7 @@ class Map(anywidget.AnyWidget):
         Returns:
             The widget that was added, including its ``id``.
         """
-        ref = layer.id if isinstance(layer, Layer) else layer
+        ref = self._resolve_layer(layer).id if isinstance(layer, Layer) else layer
         result: dict[str, Any] = {}
         self._update_project(
             lambda p: result.update(_authoring.add_dashboard_widget(p, ref, widget_type, **options))
@@ -3511,15 +3516,6 @@ class Map(anywidget.AnyWidget):
         Returns:
             The id of the added layer.
         """
-        url = _project.wfs_getfeature_url(
-            endpoint,
-            type_name,
-            version=version,
-            output_format=output_format,
-            srs_name=srs_name,
-            max_features=max_features,
-        )
-        fc = _project.load_featurecollection(url)
         # The builder writes the protocol fields the UI persists, so the Edit
         # Layer panel can pre-populate the WFS form and isWfsLayer() recognizes
         # the layer when round-tripped from a Python-produced project.
@@ -3531,9 +3527,10 @@ class Map(anywidget.AnyWidget):
             output_format=output_format,
             srs_name=srs_name,
             max_features=max_features,
-            data=fc,
             **style,
         )
+        layer["geojson"] = _project.load_featurecollection(layer["sourcePath"])
+        layer["metadata"]["featureCount"] = len(layer["geojson"]["features"])
         return self._add_layer(layer)
 
     def add_arcgis_layer(

@@ -321,14 +321,14 @@ def _relay_from_sidecar_file(path: Path) -> Relay | None:
     token = info.get("token")
     if not isinstance(url, str) or not isinstance(token, str) or not token:
         return None
-    if not _loopback_host(url):
-        return None
     pid = info.get("pid")
     if not isinstance(pid, int) or not _pid_alive(pid):
         return None
     try:
+        if not _loopback_host(url):
+            return None
         return Relay(url, token)
-    except LiveError:
+    except (LiveError, ValueError):
         return None
 
 

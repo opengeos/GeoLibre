@@ -35,8 +35,11 @@ order, for:
 
 The sidecar relay has its own per-launch token, separate from the sidecar's
 API token, so a Live MCP client can send map commands and nothing else. The
-relay is enabled only when the desktop app spawns the sidecar; a Docker or
-multi-tenant sidecar never serves it. Only a loopback URL is accepted and
+relay requires the desktop's explicit **Allow AI agents to drive the map**
+opt-in. Starting the sidecar for processing leaves relay access disabled.
+Turning the setting off removes discovery and disconnects relay clients
+without stopping processing jobs. A Docker or multi-tenant sidecar never
+serves it. Only a loopback URL is accepted and
 redirects are refused, so the token stays on the machine.
 
 ## Install

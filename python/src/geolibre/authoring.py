@@ -2600,8 +2600,14 @@ def set_layer_group(
             layer.pop("groupId", None)
         else:
             layer["groupId"] = group_id
-    if group_id is not None:
-        _keep_group_contiguous(project, group_id)
+    # Normalize all groups in first-member order, as the app does on load.
+    group_ids = dict.fromkeys(
+        layer["groupId"]
+        for layer in layers_of(project)
+        if isinstance(layer, dict) and layer.get("groupId")
+    )
+    for affected_group in group_ids:
+        _keep_group_contiguous(project, affected_group)
     return layer_group_summary(project)
 
 

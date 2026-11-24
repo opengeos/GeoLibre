@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import stat
@@ -25,6 +26,7 @@ def enabled(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "SIDECAR_TOKEN", SIDECAR_TOKEN)
     monkeypatch.setattr(main, "_SIDECAR_TOKEN_BYTES", SIDECAR_TOKEN.encode())
     monkeypatch.setattr(relay, "_hub", relay._Hub())
+    monkeypatch.setattr(relay, "_access_allowed", True)
     return tmp_path
 
 
@@ -53,6 +55,34 @@ def test_relay_is_disabled_without_the_port_env(monkeypatch):
 def test_relay_is_disabled_in_multi_tenant_mode(enabled, monkeypatch):
     monkeypatch.setattr(relay, "is_multi_tenant_enabled", lambda: True)
     assert relay.relay_enabled() is False
+
+
+def test_processing_start_requires_explicit_relay_opt_in(client, monkeypatch):
+    """Only the sidecar-authenticated desktop can enable or revoke access."""
+    monkeypatch.setattr(relay, "_access_allowed", False)
+    relay.remove_discovery_file()
+    assert relay.write_discovery_file() is None
+    assert client.get("/relay/status", headers=_client_headers()).status_code == 404
+    assert (
+        client.post("/relay/access", json={"enabled": True}, headers=_client_headers()).status_code
+        == 401
+    )
+    headers = {"X-GeoLibre-Token": SIDECAR_TOKEN}
+    assert client.post("/relay/access", json={"enabled": "yes"}, headers=headers).status_code == 400
+    assert client.post("/relay/access", json={"enabled": True}, headers=headers).json() == {
+        "enabled": True
+    }
+    assert relay.discovery_file().exists()
+    with client.websocket_connect(f"/relay/socket?token={SIDECAR_TOKEN}") as socket:
+        socket.receive_text()
+        assert (
+            client.post("/relay/access", json={"enabled": False}, headers=headers).status_code
+            == 200
+        )
+        with pytest.raises(WebSocketDisconnect):
+            socket.receive_text()
+    assert not relay.discovery_file().exists()
+    assert client.get("/relay/status", headers=_client_headers()).status_code == 404
 
 
 def test_client_endpoints_take_the_relay_token_not_the_sidecar_token(client):
@@ -200,6 +230,78 @@ def test_lifespan_writes_and_removes_the_discovery_file(enabled):
     with TestClient(main.app):
         assert path.exists()
     assert not path.exists()
+
+
+def test_socket_fails_closed_without_a_configured_token(client, monkeypatch):
+    """Reject app subscriptions when the sidecar credential is missing."""
+    monkeypatch.setattr(main, "SIDECAR_TOKEN", "")
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/relay/socket") as socket:
+            socket.receive_text()
+
+
+def test_discovery_preserves_parent_permissions_and_ignores_staging_symlink(enabled):
+    """Keep an existing override directory and unrelated files intact."""
+    target = relay.discovery_file()
+    target.parent.mkdir(mode=0o755)
+    original_mode = stat.S_IMODE(target.parent.stat().st_mode)
+    victim = enabled / "untouched.txt"
+    victim.write_text("keep")
+    predictable = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+    predictable.symlink_to(victim)
+    assert relay.write_discovery_file() == target
+    assert victim.read_text() == "keep"
+    assert stat.S_IMODE(target.parent.stat().st_mode) == original_mode
+
+
+def test_broadcast_drops_stalled_peers_without_blocking_healthy_windows(monkeypatch):
+    """Bound concurrent sends while preserving a healthy window's response."""
+    monkeypatch.setattr(relay, "SEND_TIMEOUT_SECONDS", 0.02)
+
+    async def exercise():
+        """Exercise a stalled first peer and a responding second peer."""
+        hub = relay._Hub()
+        response = asyncio.get_running_loop().create_future()
+        hub.pending["request"] = response
+
+        class Socket:
+            """Minimal app socket with optional simulated backpressure."""
+
+            def __init__(self, stalled):
+                """Store whether writes should remain blocked.
+
+                Args:
+                    stalled: Whether the socket blocks every write.
+                """
+                self.stalled = stalled
+
+            async def send_text(self, encoded):
+                """Resolve the command or simulate a stalled write.
+
+                Args:
+                    encoded: The serialized command.
+                """
+                if self.stalled:
+                    await asyncio.Event().wait()
+                else:
+                    hub.resolve(
+                        json.dumps(
+                            {
+                                "type": "geolibre:result",
+                                "requestId": "request",
+                                "ok": True,
+                                "value": "ready",
+                            }
+                        )
+                    )
+
+        stalled, healthy = Socket(True), Socket(False)
+        hub.listeners.extend([stalled, healthy])
+        assert await asyncio.wait_for(hub.broadcast({"method": "getView"}), 0.2) == 1
+        assert response.result()["value"] == "ready"
+        assert hub.listeners == [healthy]
+
+    asyncio.run(exercise())
 
 
 @pytest.mark.parametrize(

@@ -41,6 +41,96 @@ def _layer_names(project: dict[str, Any]) -> list[str]:
     return [layer["name"] for layer in project["layers"]]
 
 
+@pytest.mark.parametrize("service", ["map", "image", "feature"])
+def test_arcgis_rejects_embedded_credentials(service):
+    """Prevent service credentials from being persisted into projects."""
+    with pytest.raises(ValueError, match="credentials"):
+        _project.arcgis_layer(
+            "Private", "https://user:secret@example.com/MapServer", service=service
+        )
+
+
+@pytest.mark.parametrize("rule", ["[]", '"Hillshade"', "null", "42"])
+def test_arcgis_rendering_rule_requires_an_object(rule):
+    """Reject valid JSON that cannot describe an ArcGIS rendering rule."""
+    with pytest.raises(ValueError, match="object"):
+        _project.arcgis_layer(
+            "Image", "https://example.com/ImageServer", service="image", rendering_rule=rule
+        )
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_zarr_selector_rejects_nonfinite_values(value):
+    """Keep Zarr selectors valid in strict JSON exports."""
+    with pytest.raises(ValueError, match="selector"):
+        _project.zarr_layer("Cube", "https://example.com/a.zarr", "tas", selector={"time": value})
+
+
+def test_zarr_accepts_explicit_fill_opacity():
+    """Allow caller style overrides of the default cube opacity."""
+    layer = _project.zarr_layer("Cube", "https://example.com/a.zarr", "tas", fillOpacity=0.4)
+    assert layer["style"]["fillOpacity"] == 0.4
+
+
+@pytest.mark.parametrize(
+    "widget_type,option", [("bar", "aggregation"), ("indicator", "indicatorAggregation")]
+)
+@pytest.mark.parametrize("value", [[], {}])
+def test_widget_aggregation_rejects_unhashable_values(widget_type, option, value):
+    """Return a validation error for malformed aggregation options."""
+    with pytest.raises(ValueError, match="aggregation"):
+        _project.dashboard_widget("layer", widget_type, **{option: value})
+
+
+def test_print_layout_reserves_explicit_ids_and_copies_columns():
+    """Generate unique legend ids and own mutable table-column settings."""
+    columns = ["name"]
+    layout = _project.print_layout_settings(
+        custom_legend_entries=[{"label": "Generated"}, {"id": "cl-1", "label": "Explicit"}],
+        table_columns=columns,
+    )
+    assert [entry["id"] for entry in layout["customLegendEntries"]] == ["cl-2", "cl-1"]
+    columns.append("pop")
+    assert layout["tableColumns"] == ["name"]
+    with pytest.raises(ValueError, match="unique"):
+        _project.print_layout_settings(custom_legend_entries=[{"id": "same"}, {"id": "same"}])
+
+
+@pytest.mark.parametrize("destination", [None, "Other"])
+def test_moving_middle_member_normalizes_its_previous_group(destination):
+    """Keep the former group contiguous after a member moves or is ungrouped."""
+    project = _project_with("A", "B", "C", "D")
+    authoring.add_layer_group(project, "First", layers=["A", "B", "C"])
+    authoring.add_layer_group(project, "Other", layers=["D"])
+    authoring.set_layer_group(project, ["B"], destination)
+    assert _layer_names(project) == ["A", "C", "B", "D"]
+
+
+@pytest.mark.parametrize("operation", ["add", "move", "widget"])
+@pytest.mark.parametrize("stale", [False, True])
+def test_map_authoring_validates_layer_handles(monkeypatch, operation, stale):
+    """Reject foreign and removed handles before mutating any project."""
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    monkeypatch.setattr(gmod, "app_port", lambda: 0)
+    owner = Map()
+    layer_id = owner.add_geojson(POINT_FC, name="Cities")
+    handle = owner.get_layer(layer_id)
+    target = owner if stale else Map()
+    if not stale:
+        target.load_project(owner.project)
+    if stale:
+        owner.remove_layer(handle)
+    before = target.to_project()
+    with pytest.raises(ValueError):
+        if operation == "add":
+            target.add_layer_group("Invalid", layers=[handle])
+        elif operation == "move":
+            target.set_layer_group([handle], None)
+        else:
+            target.add_dashboard_widget(handle, "histogram", field="pop")
+    assert target.to_project() == before
+
+
 # -- builders -------------------------------------------------------------------
 
 
@@ -343,9 +433,9 @@ def test_map_methods_write_the_same_project_parts(monkeypatch):
     monkeypatch.setattr(gmod, "app_port", lambda: 0)
     m = Map()
     a = m.add_geojson(POINT_FC, name="Cities")
-    group = m.add_layer_group("Group", layers=[a])
+    group = m.add_layer_group("Group", layers=[m.get_layer(a)])
     assert group["layerIds"] == [a]
-    widget = m.add_dashboard_widget(a, "histogram", field="pop")
+    widget = m.add_dashboard_widget(m.get_layer(a), "histogram", field="pop")
     m.set_dashboard_columns(4)
     m.set_print_layout(title="Map")
     arc = m.add_arcgis_layer(
@@ -361,6 +451,22 @@ def test_map_methods_write_the_same_project_parts(monkeypatch):
     assert {layer["id"]: layer["type"] for layer in project["layers"]}[zarr] == "zarr"
     m.remove_layer_group("Group")
     assert "layerGroups" not in m.project
+
+
+def test_map_wfs_fetches_the_normalized_persisted_url(monkeypatch):
+    """Use exactly the same GetFeature request for fetching and future refresh."""
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    monkeypatch.setattr(gmod, "app_port", lambda: 0)
+    fetched = []
+    monkeypatch.setattr(
+        _project, "load_featurecollection", lambda url: fetched.append(url) or POINT_FC
+    )
+    m = Map()
+    layer_id = m.add_wfs(" https://example.com/wfs ", " topp:states ")
+    layer = next(layer for layer in m.project["layers"] if layer["id"] == layer_id)
+    assert fetched == [layer["sourcePath"]]
+    assert "typeNames=topp%3Astates" in fetched[0]
+    assert layer["metadata"]["featureCount"] == 1
 
 
 # -- MCP tools --------------------------------------------------------------------
@@ -380,6 +486,36 @@ def _call(server: Any, tool_name: str, **kwargs: Any) -> Any:
     if hasattr(result, "structured_content") and result.structured_content is not None:
         return result.structured_content
     return json.loads(result.content[0].text)
+
+
+@pytest.mark.parametrize("key", ["project", "reset"])
+def test_print_layout_tool_rejects_reserved_settings(server, tmp_path, key):
+    """Return an actionable validation error before opening the project file."""
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    with pytest.raises(ToolError, match="settings cannot override"):
+        _call(
+            server,
+            "set_print_layout",
+            path=str(tmp_path / "missing.geolibre.json"),
+            settings={key: True},
+        )
+
+
+@pytest.mark.parametrize("key", ["project", "layer", "widget_type"])
+def test_dashboard_tool_rejects_reserved_options(server, tmp_path, key):
+    """Reject keyword collisions instead of exposing a Python argument error."""
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    with pytest.raises(ToolError, match="options cannot override"):
+        _call(
+            server,
+            "add_dashboard_widget",
+            path=str(tmp_path / "missing.geolibre.json"),
+            layer="Cities",
+            widget_type="indicator",
+            options={key: "reserved"},
+        )
 
 
 def test_mcp_tools_cover_the_parity_surface(server, tmp_path):

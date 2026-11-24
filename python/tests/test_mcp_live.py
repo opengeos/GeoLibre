@@ -7,6 +7,7 @@ without the SDK, matching ``test_mcp_server.py``.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import threading
@@ -16,6 +17,25 @@ from pathlib import Path
 import pytest
 
 from geolibre.mcp.live import DESKTOP_PORT, LiveError, discover, require
+
+
+def test_timeout_policy_matches_the_backend_protocol():
+    """Catch drift between independently installed relay and client packages."""
+    from geolibre.mcp import live
+
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "backend/geolibre_server/geolibre_server/relay_protocol.py"
+    )
+    if not path.exists():
+        pytest.skip("monorepo sources not available")
+    spec = importlib.util.spec_from_file_location("relay_timeout_policy", path)
+    protocol = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(protocol)
+    assert live.METHOD_TIMEOUT_SECONDS == protocol.METHOD_RESULT_TIMEOUT_SECONDS
+    assert live.DEFAULT_TIMEOUT_SECONDS == protocol.DEFAULT_RESULT_TIMEOUT_SECONDS
+    assert live.MIN_TIMEOUT_SECONDS == protocol.MIN_RESULT_TIMEOUT_SECONDS
+    assert live.MAX_TIMEOUT_SECONDS == protocol.MAX_RESULT_TIMEOUT_SECONDS
 
 
 class _RelayServer:
@@ -587,6 +607,8 @@ def test_discover_prefers_the_sidecar_relay(tmp_path, monkeypatch):
         {"pid": 2**22},
         {"pid": None},
         {"url": "http://example.com:8765/relay"},
+        {"url": "http://127.0.0.1:invalid/relay"},
+        {"url": "http://[broken/relay"},
         {"token": ""},
     ],
 )
@@ -596,6 +618,16 @@ def test_discover_ignores_an_unusable_sidecar_file(tmp_path, monkeypatch, overri
     sidecar = _sidecar_file(tmp_path / "live-relay.json", **overrides)
     monkeypatch.setenv("GEOLIBRE_LIVE_RELAY_FILE", str(sidecar))
     assert discover() is None
+
+
+def test_malformed_sidecar_url_falls_back_to_jupyter(tmp_path, monkeypatch):
+    """Keep a corrupt discovery file from masking a valid notebook relay."""
+    monkeypatch.delenv("GEOLIBRE_RELAY_URL", raising=False)
+    monkeypatch.setattr("geolibre.mcp.live.runtime_directories", lambda: [tmp_path])
+    _connection_file(tmp_path)
+    sidecar = _sidecar_file(tmp_path / "live-relay.json", url="http://127.0.0.1:no/relay")
+    monkeypatch.setenv("GEOLIBRE_LIVE_RELAY_FILE", str(sidecar))
+    assert discover().token == "secret"
 
 
 def test_sidecar_relay_receives_the_command(relay_server, tmp_path, monkeypatch):

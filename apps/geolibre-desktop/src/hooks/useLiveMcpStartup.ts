@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { IS_MAS_BUILD } from "../lib/build-flags";
 import { isTauri } from "../lib/is-tauri";
-import { startGeoLibreSidecar } from "../lib/sidecar";
+import { startGeoLibreSidecar, updateLiveMcpAccess } from "../lib/sidecar";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 
 /**
@@ -11,7 +11,7 @@ import { useDesktopSettingsStore } from "./useDesktopSettings";
  * sidecar is running.
  *
  * Runs at launch and again when the setting is turned on. Turning it off does
- * not stop a running sidecar: other tools may be using it. Inert on web and in
+ * disables relay access without stopping processing jobs. Inert on web and in
  * the Mac App Store build, where the sidecar cannot run.
  */
 export function useLiveMcpStartup(): void {
@@ -19,8 +19,9 @@ export function useLiveMcpStartup(): void {
     (state) => state.desktopSettings.startup.allowLiveMcp,
   );
   useEffect(() => {
-    if (!allowLiveMcp || IS_MAS_BUILD || !isTauri()) return;
-    startGeoLibreSidecar().catch((error: unknown) => {
+    if (IS_MAS_BUILD || !isTauri()) return;
+    const update = allowLiveMcp ? startGeoLibreSidecar() : updateLiveMcpAccess();
+    update.catch((error: unknown) => {
       // Best effort: Live MCP reports "not connected" and every processing
       // tool still starts (and explains) the sidecar on demand.
       console.warn("Live MCP: could not start the processing sidecar", error);

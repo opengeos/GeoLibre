@@ -4545,6 +4545,9 @@ def arcgis_layer(
     if not isinstance(url, str) or not url.strip().lower().startswith(("https://", "http://")):
         raise ValueError(f"url must be an http(s) ArcGIS REST service URL, got {url!r}")
     service_url = url.strip().split("?", 1)[0].split("#", 1)[0].rstrip("/")
+    parsed_url = urlsplit(service_url)
+    if parsed_url.username is not None or parsed_url.password is not None:
+        raise ValueError("url must not carry credentials: they would be saved into the project")
     if "token=" in url.lower():
         raise ValueError("url must not carry a token: it would be saved into the project")
     layer_type, source_kind = ARCGIS_SERVICES[service]
@@ -4599,9 +4602,11 @@ def arcgis_layer(
             else str(rendering_rule).strip()
         )
         try:
-            json.loads(rule_text)
+            parsed_rule = json.loads(rule_text)
         except json.JSONDecodeError as exc:
             raise ValueError(f"rendering_rule must be JSON, got {rendering_rule!r}") from exc
+        if not isinstance(parsed_rule, dict):
+            raise ValueError("rendering_rule must be a JSON object")
     image = service == "image"
     layer = _layer_base(name, "raster", **style)
     raster_source: dict[str, Any] = {
@@ -4693,7 +4698,9 @@ def zarr_layer(
     if selector is not None and (
         not isinstance(selector, dict)
         or not all(
-            isinstance(key, str) and isinstance(value, (int, float, str))
+            isinstance(key, str)
+            and isinstance(value, (int, float, str))
+            and (not isinstance(value, float) or math.isfinite(value))
             for key, value in selector.items()
         )
     ):
@@ -4712,7 +4719,8 @@ def zarr_layer(
     ):
         raise ValueError('zarr_layer: spatial_dimensions takes "lat" and/or "lon" names')
     resolved_bounds = _resolve_bounds(bounds)
-    layer = _layer_base(name, "zarr", fillOpacity=1, **style)
+    style.setdefault("fillOpacity", 1)
+    layer = _layer_base(name, "zarr", **style)
     source: dict[str, Any] = {
         "type": "raster",
         "url": store_url,
@@ -4929,13 +4937,17 @@ def dashboard_widget(
                 raise ValueError(f"{raw_key!r} must be an integer from 1 to {high}")
             widget[key] = value
         elif key == "aggregation":
-            if value not in _WIDGET_AGGREGATIONS or (widget_type == "pie" and value == "mean"):
+            if (
+                not isinstance(value, str)
+                or value not in _WIDGET_AGGREGATIONS
+                or (widget_type == "pie" and value == "mean")
+            ):
                 raise ValueError(
                     f"aggregation must be count, sum, or mean (no mean for pie), got {value!r}"
                 )
             widget[key] = value
         elif key == "indicatorAggregation":
-            if value not in _INDICATOR_AGGREGATIONS:
+            if not isinstance(value, str) or value not in _INDICATOR_AGGREGATIONS:
                 raise ValueError(
                     f"indicator_aggregation must be one of {sorted(_INDICATOR_AGGREGATIONS)}"
                 )
@@ -5143,17 +5155,31 @@ def print_layout_settings(**settings: Any) -> dict[str, Any]:
                 for entry in value
             ):
                 raise ValueError("custom_legend_entries must be a list of {label, color} dicts")
-            value = [
-                {
-                    "id": str(entry.get("id") or f"cl-{index + 1}"),
-                    "label": entry.get("label", ""),
-                    "color": entry.get("color", "#2563eb"),
-                }
-                for index, entry in enumerate(value)
-            ]
+            reserved = [str(entry["id"]) for entry in value if entry.get("id")]
+            if len(reserved) != len(set(reserved)):
+                raise ValueError("custom_legend_entries must have unique ids")
+            used = set(reserved)
+            normalized = []
+            for index, entry in enumerate(value):
+                entry_id = str(entry.get("id") or "")
+                if not entry_id:
+                    suffix = index + 1
+                    while f"cl-{suffix}" in used:
+                        suffix += 1
+                    entry_id = f"cl-{suffix}"
+                    used.add(entry_id)
+                normalized.append(
+                    {
+                        "id": entry_id,
+                        "label": entry.get("label", ""),
+                        "color": entry.get("color", "#2563eb"),
+                    }
+                )
+            value = normalized
         elif key == "tableColumns":
             if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
                 raise ValueError("table_columns must be a list of field names")
+            value = list(value)
         elif isinstance(default, bool):
             if not isinstance(value, bool):
                 raise ValueError(f"{raw_key} must be true or false")
