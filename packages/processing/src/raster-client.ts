@@ -242,15 +242,22 @@ export async function readRasterData(
   const outputNoData =
     noData == null
       ? null
-      : rawBands.some((band) => !(band instanceof Float32Array))
+      : rawBands.some(
+            (band) =>
+              band instanceof Float64Array ||
+              (!(band instanceof Float32Array) && Math.abs(noData) >= 2 ** 24),
+          )
         ? Number.NaN
         : Math.fround(noData);
   const bands = rawBands.map((band) => {
-    const sourceNoData =
-      band instanceof Float32Array && noData != null ? Math.fround(noData) : noData;
-    return Float32Array.from(band, (value) =>
-      sourceNoData != null && value === sourceNoData ? outputNoData! : value,
-    );
+    if (
+      noData == null ||
+      band instanceof Float32Array ||
+      outputNoData === noData ||
+      Number.isNaN(noData)
+    )
+      return Float32Array.from(band);
+    return Float32Array.from(band, (value) => (value === noData ? outputNoData! : value));
   });
   const geoKeys = (image.getGeoKeys() as Record<string, unknown>) ?? {};
   if (Number(geoKeys.GTRasterTypeGeoKey) === 2) {

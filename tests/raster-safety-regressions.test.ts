@@ -115,6 +115,23 @@ it("keeps integer missing samples separate when Float32 values collide", async (
   }
 });
 
+it("preserves exact small-integer class sentinels", async () => {
+  for (const values of [Uint8Array.of(0, 1), Uint16Array.of(0, 1), Uint32Array.of(0, 1)]) {
+    const bytes = writeArrayBuffer(values, {
+      width: 2,
+      height: 1,
+      GDAL_NODATA: "0",
+      BitsPerSample: [values.BYTES_PER_ELEMENT * 8],
+      SampleFormat: [1],
+      ModelPixelScale: [1, 1, 0],
+      ModelTiepoint: [0, 0, 0, 0, 1, 0],
+    });
+    const decoded = await readRasterData(bytes);
+    assert.equal(decoded.nodata, 0);
+    assert.deepEqual([...decoded.bands[0]], [0, 1]);
+  }
+});
+
 it("preserves PixelIsPoint centers through encoding and a same-CRS warp", async () => {
   const bytes = writeArrayBuffer(Float32Array.of(1, 2, 3, 4), {
     width: 2,
