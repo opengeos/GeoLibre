@@ -365,6 +365,7 @@ function CogoTraceTool({
           features: [feature],
         });
         setSteps([]);
+        setTraceStart(null);
         setMode("start");
         setStatus({ key: "savedLayer", kind: "info" });
         return;
@@ -384,6 +385,7 @@ function CogoTraceTool({
         }
         if (draftRevision.current === submittedRevision) {
           setSteps([]);
+          setTraceStart(null);
           setMode("start");
           setStatus({ key: "addedToEditor", kind: "info" });
         }

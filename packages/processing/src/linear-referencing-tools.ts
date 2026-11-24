@@ -212,6 +212,15 @@ export function sliceRouteByMeasure(
 ): LineString | MultiLineString | null {
   const parts = measuredParts(route);
   if (!parts) return null;
+  return sliceMeasuredParts(parts, fromMeasure, toMeasure);
+}
+
+/** Slice already validated route parts without revalidating each event. */
+function sliceMeasuredParts(
+  parts: Position[][],
+  fromMeasure: number,
+  toMeasure: number,
+): LineString | MultiLineString | null {
   const lo = Math.min(fromMeasure, toMeasure);
   const hi = Math.max(fromMeasure, toMeasure);
   const out: Position[][] = [];
@@ -272,6 +281,11 @@ export function sliceRouteByMeasure(
 export function pointAtMeasure(route: Geometry | null, measure: number): Position | null {
   const parts = measuredParts(route);
   if (!parts) return null;
+  return pointInMeasuredParts(parts, measure);
+}
+
+/** Locate a point event in route parts validated when the route was indexed. */
+function pointInMeasuredParts(parts: Position[][], measure: number): Position | null {
   for (const part of parts) {
     for (let i = 0; i + 1 < part.length; i++) {
       const a = part[i];
@@ -662,9 +676,9 @@ export const dynamicSegmentationTool: ProcessingAlgorithm = {
       let geometry: Geometry | null = null;
       for (const route of candidates) {
         if (toField && to !== from) {
-          geometry = sliceRouteByMeasure(route.geometry, from, to!);
+          geometry = sliceMeasuredParts(route.parts, from, to!);
         } else {
-          const point = pointAtMeasure(route.geometry, from);
+          const point = pointInMeasuredParts(route.parts, from);
           geometry = point ? { type: "Point", coordinates: point } : null;
         }
         if (geometry) break;
