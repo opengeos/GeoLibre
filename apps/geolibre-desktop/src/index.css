@@ -4365,6 +4365,43 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   border-left-color: hsl(var(--popover));
 }
 
+/* maplibre-gl-components' PMTiles "Enable feature picking" popup hardcodes a
+   light table (#fff rows, #f0f0f0 header, #333 text), so in dark mode it sat as
+   a white block inside the themed popup frame. Re-key it onto the app theme
+   tokens so it follows the in-app light/dark toggle. The html prefix
+   outranks the upstream single-class rules regardless of stylesheet order,
+   matching the Zarr popup overrides. */
+html .maplibregl-popup .maplibre-gl-pmtiles-popup {
+  color: hsl(var(--popover-foreground));
+}
+
+html .maplibregl-popup .maplibre-gl-pmtiles-popup-header {
+  background: hsl(var(--muted));
+  border-bottom-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+  /* Keep the title clear of the close button pinned in the corner. */
+  padding-inline-end: 28px;
+}
+
+html .maplibregl-popup .maplibre-gl-pmtiles-popup-table,
+html .maplibregl-popup .maplibre-gl-pmtiles-popup-table tr {
+  background: transparent;
+}
+
+html .maplibregl-popup .maplibre-gl-pmtiles-popup-key {
+  border-bottom-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+html .maplibregl-popup .maplibre-gl-pmtiles-popup-value {
+  border-bottom-color: hsl(var(--border));
+  color: hsl(var(--popover-foreground) / 0.85);
+}
+
+html .maplibregl-popup .maplibre-gl-pmtiles-popup-empty {
+  color: hsl(var(--muted-foreground));
+}
+
 /* Map-control-backed Web Services live in GeoLibre's dockable panel host. The
    upstream packages position and size their panels as map overlays, so reset
    that overlay geometry and let the host own the available width and height. */
