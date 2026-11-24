@@ -350,6 +350,8 @@ def remove_discovery_file() -> None:
     """
     target = discovery_file()
     try:
+        if not target.exists():
+            return
         with _discovery_lock(target):
             info = json.loads(target.read_text(encoding="utf-8"))
             if isinstance(info, dict) and info.get("pid") == os.getpid():
@@ -469,6 +471,9 @@ async def relay_command(request: Request) -> dict[str, Any]:
                 return 0, None
             return reached, await future
         finally:
+            # A first result completes this request's best-effort delivery.
+            # Do not delay it behind another window or detach request-owned
+            # writes; cancelling a partial frame deliberately reconnects its peer.
             broadcast.cancel()
             await asyncio.gather(broadcast, return_exceptions=True)
 

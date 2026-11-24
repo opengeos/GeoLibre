@@ -507,6 +507,18 @@ def test_discovery_file_from_another_process_is_left_alone(enabled):
     assert path.exists()
 
 
+def test_discovery_cleanup_does_not_create_unused_runtime_files(enabled):
+    """Leave an unused runtime directory absent during ordinary shutdown.
+
+    Args:
+        enabled: An isolated discovery path whose parent does not yet exist.
+    """
+    parent = relay.discovery_file().parent
+    assert not parent.exists()
+    relay.remove_discovery_file()
+    assert not parent.exists()
+
+
 def test_lifespan_writes_and_removes_the_discovery_file(enabled):
     path = relay.discovery_file()
     with TestClient(main.app):
