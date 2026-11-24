@@ -344,3 +344,64 @@ describe("linear referencing tools", () => {
     assert.equal(first.properties?.route_id, "0");
   });
 });
+
+it("locates each MultiPoint hit with its matching point geometry", async () => {
+  const routes = layerOf("routes", [
+    { type: "Feature", properties: { route_id: "A" }, geometry: EQUATOR_LINE },
+  ]);
+  const points = layerOf("points", [
+    {
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "MultiPoint",
+        coordinates: [
+          [0.5, 0],
+          [2, 0],
+        ],
+      },
+    },
+  ]);
+  const result = await run(locateFeaturesAlongRoutesTool.run, [routes, points], {
+    layer: "points",
+    routes: "routes",
+    routeIdField: "route_id",
+    allRoutes: true,
+    radius: 1,
+  });
+  assert.equal(result.results[0].features.length, 2);
+  assert.deepEqual(
+    result.results[0].features.map((feature) => feature.geometry),
+    [
+      { type: "Point", coordinates: [0.5, 0] },
+      { type: "Point", coordinates: [2, 0] },
+    ],
+  );
+  assert.match(result.logs.join("\n"), /incomplete M values/);
+});
+
+it("places zero-length line events as points and warns about repeated route IDs", async () => {
+  const geometry = measureLine(EQUATOR_LINE)!;
+  const routes = layerOf(
+    "routes",
+    [0, 1].map(() => ({ type: "Feature", properties: { route_id: "A" }, geometry })),
+  );
+  const events = layerOf("events", [
+    {
+      type: "Feature",
+      properties: { road: "A", from: 100, to: 100 },
+      geometry: { type: "Point", coordinates: [0, 0] },
+    },
+  ]);
+  const result = await run(dynamicSegmentationTool.run, [routes, events], {
+    layer: "events",
+    routes: "routes",
+    routeIdField: "route_id",
+    eventRouteField: "road",
+    fromField: "from",
+    toField: "to",
+  });
+  assert.equal(result.results[0].features[0].geometry?.type, "Point");
+  assert.match(result.logs.join("\n"), /multiple features/);
+  assert.ok(!result.logs.some((message) => message.includes("outside their route")));
+});

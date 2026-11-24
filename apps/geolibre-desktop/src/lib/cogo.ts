@@ -32,6 +32,7 @@ export type CogoDistanceUnit = keyof typeof COGO_DISTANCE_UNITS;
  * @returns Decimal degrees, or null when the text is not an angle.
  */
 export function parseAngle(text: string): number | null {
+  if (/^[+-]/.test(text.trim())) return null;
   const parts = text
     .trim()
     .split(/[^0-9.]+/)

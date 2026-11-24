@@ -6,6 +6,7 @@ import {
   type GeoEditorSettings,
 } from "@geolibre/core";
 import { Button, Input, Label, Select } from "@geolibre/ui";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsDraft } from "./SettingsDraftContext";
 
@@ -14,6 +15,9 @@ export function GeoEditorSection() {
   const { t } = useTranslation();
   const { draftPreferences, setDraftPreferences } = useSettingsDraft();
   const settings = draftPreferences.map.geoEditor ?? DEFAULT_GEO_EDITOR_SETTINGS;
+  const tolerance = geoEditorSnapTolerancePx(settings);
+  const [snapText, setSnapText] = useState(String(tolerance));
+  useEffect(() => setSnapText(String(tolerance)), [tolerance]);
   const update = (
     patch:
       | Partial<GeoEditorSettings>
@@ -54,12 +58,18 @@ export function GeoEditorSection() {
           min={GEO_EDITOR_SNAP_TOLERANCE_RANGE[0]}
           max={GEO_EDITOR_SNAP_TOLERANCE_RANGE[1]}
           step={1}
-          value={geoEditorSnapTolerancePx(settings)}
-          onChange={(event) => {
-            const value = Number(event.target.value);
-            if (event.target.value !== "" && Number.isFinite(value)) {
-              update({ snapTolerancePx: geoEditorSnapTolerancePx({ snapTolerancePx: value }) });
-            }
+          value={snapText}
+          onChange={(event) => setSnapText(event.target.value)}
+          onBlur={() => {
+            const value = snapText.trim() ? Number(snapText) : NaN;
+            const normalized = Number.isFinite(value)
+              ? geoEditorSnapTolerancePx({ snapTolerancePx: value })
+              : tolerance;
+            update({ snapTolerancePx: normalized });
+            setSnapText(String(normalized));
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
           }}
           className="w-28"
         />

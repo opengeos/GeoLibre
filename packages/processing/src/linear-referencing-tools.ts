@@ -19,7 +19,6 @@ import type {
   Geometry,
   LineString,
   MultiLineString,
-  Point,
   Position,
 } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
@@ -160,7 +159,11 @@ export interface RouteLocation {
  * @returns The closest location, or null when the route has no segments.
  */
 export function locatePointOnRoute(route: Geometry | null, point: Position): RouteLocation | null {
-  const parts = measuredParts(route);
+  return locatePointInParts(measuredParts(route), point);
+}
+
+/** Locate a position without rescanning or remeasuring a cached route. */
+function locatePointInParts(parts: Position[][] | null, point: Position): RouteLocation | null {
   if (!parts) return null;
   const kx = Math.cos((point[1] * Math.PI) / 180);
   let best: RouteLocation | null = null;
@@ -423,21 +426,44 @@ export const createRoutesTool: ProcessingAlgorithm = {
 interface IndexedRoute {
   id: string;
   geometry: Geometry;
+  parts: Position[][];
+  bounds: [number, number, number, number];
 }
 
 function collectRoutes(
   fc: FeatureCollection,
   routeIdField: string | undefined,
+  log: (message: string) => void,
 ): Map<string, IndexedRoute[]> {
   const routes = new Map<string, IndexedRoute[]>();
+  let fallback = 0;
   fc.features.forEach((feature, index) => {
     if (!lineParts(feature.geometry)) return;
     const id = routeIdOf(feature, routeIdField, index);
     if (!id) return;
+    const source = lineParts(feature.geometry);
+    const parts = measuredParts(feature.geometry);
+    if (!source || !parts) return;
+    if (source.some((part) => part.some((point) => getMeasure(point) === undefined))) fallback++;
+    const bounds: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const part of parts)
+      for (const point of part) {
+        bounds[0] = Math.min(bounds[0], point[0]);
+        bounds[1] = Math.min(bounds[1], point[1]);
+        bounds[2] = Math.max(bounds[2], point[0]);
+        bounds[3] = Math.max(bounds[3], point[1]);
+      }
     const list = routes.get(id) ?? [];
-    list.push({ id, geometry: feature.geometry! });
+    list.push({ id, geometry: { type: "MultiLineString", coordinates: parts }, parts, bounds });
     routes.set(id, list);
   });
+  if (fallback)
+    log(`${fallback} route(s) have incomplete M values and were measured by length in metres`);
+  const repeated = [...routes.values()].filter((parts) => parts.length > 1).length;
+  if (repeated)
+    log(
+      `${repeated} route ID(s) occur on multiple features; event measures use the first matching feature`,
+    );
   return routes;
 }
 
@@ -495,7 +521,7 @@ export const locateFeaturesAlongRoutesTool: ProcessingAlgorithm = {
     const routeIdField = (ctx.parameters.routeIdField as string | undefined) || undefined;
     const radius = Math.max(0, Number(ctx.parameters.radius ?? 50) || 0);
     const allRoutes = Boolean(ctx.parameters.allRoutes);
-    const routes = [...collectRoutes(routesLayer.geojson, routeIdField).values()].flat();
+    const routes = [...collectRoutes(routesLayer.geojson, routeIdField, ctx.log).values()].flat();
     const features: Feature[] = [];
     let unmatched = 0;
     for (const feature of points.features) {
@@ -509,11 +535,19 @@ export const locateFeaturesAlongRoutesTool: ProcessingAlgorithm = {
         unmatched += 1;
         continue;
       }
-      const hits: { route: string; location: RouteLocation }[] = [];
+      const hits: { route: string; location: RouteLocation; position: Position }[] = [];
       for (const position of positions) {
         for (const route of routes) {
-          const location = locatePointOnRoute(route.geometry, position);
-          if (location && location.distance <= radius) hits.push({ route: route.id, location });
+          const pad = radius / ((EARTH_RADIUS_M * Math.PI) / 180);
+          const [west, south, east, north] = route.bounds;
+          if (position[1] < south - pad || position[1] > north + pad) continue;
+          const lat = Math.max(Math.abs(position[1]), Math.abs(south), Math.abs(north));
+          const padX = pad / Math.max(1e-6, Math.cos((Math.min(90, lat) * Math.PI) / 180));
+          if (east - west < 180 && (position[0] < west - padX || position[0] > east + padX))
+            continue;
+          const location = locatePointInParts(route.parts, position);
+          if (location && location.distance <= radius)
+            hits.push({ route: route.id, location, position });
         }
       }
       if (hits.length === 0) {
@@ -530,7 +564,7 @@ export const locateFeaturesAlongRoutesTool: ProcessingAlgorithm = {
             measure: hit.location.measure,
             distance_m: hit.location.distance,
           },
-          geometry: feature.geometry as Point,
+          geometry: { type: "Point", coordinates: hit.position },
         });
       }
     }
@@ -590,7 +624,7 @@ export const dynamicSegmentationTool: ProcessingAlgorithm = {
       return;
     }
     const routeIdField = (ctx.parameters.routeIdField as string | undefined) || undefined;
-    const routes = collectRoutes(routesLayer.geojson, routeIdField);
+    const routes = collectRoutes(routesLayer.geojson, routeIdField, ctx.log);
     const features: Feature[] = [];
     let noRoute = 0;
     let offRoute = 0;
@@ -613,7 +647,7 @@ export const dynamicSegmentationTool: ProcessingAlgorithm = {
       }
       let geometry: Geometry | null = null;
       for (const route of candidates) {
-        if (toField) {
+        if (toField && to !== from) {
           geometry = sliceRouteByMeasure(route.geometry, from, to!);
         } else {
           const point = pointAtMeasure(route.geometry, from);

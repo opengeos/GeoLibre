@@ -738,7 +738,10 @@ function isMissingValue(value: unknown): boolean {
 function compareValues(a: unknown, b: unknown): number {
   const aNum = typeof a === "number" ? a : Number(a);
   const bNum = typeof b === "number" ? b : Number(b);
-  if (Number.isFinite(aNum) && Number.isFinite(bNum)) return aNum - bNum;
+  const aIsNum = Number.isFinite(aNum),
+    bIsNum = Number.isFinite(bNum);
+  if (aIsNum && bIsNum) return aNum - bNum;
+  if (aIsNum !== bIsNum) return aIsNum ? -1 : 1;
   return String(a).localeCompare(String(b));
 }
 
@@ -957,56 +960,72 @@ export function fillPolygonGaps(fc: FeatureCollection, maxArea: number): FillGap
   let skippedHoles = 0;
   for (const rings of parts) {
     for (const hole of rings.slice(1)) {
-      const gap: Polygon = { type: "Polygon", coordinates: [hole] };
-      if (maxArea > 0 && polygonGeodesicArea(gap) > maxArea) {
-        skippedLarge += 1;
-        continue;
-      }
-      const box = geometryBBox(gap);
-      const neighbours = polygons.filter((p) => bboxesIntersect(p.box, box));
-      // Each gap edge is a piece of exactly one polygon's boundary: credit its
-      // length to the polygon whose boundary its midpoint lies on.
-      // The union merges collinear edges, so first split each gap edge at
-      // every neighbour vertex lying on it.
-      const neighbourVertices = neighbours.flatMap((n) => polygonVertices(n.feature.geometry));
-      const shared = new Map<number, number>();
-      for (let i = 0; i + 1 < hole.length; i++) {
-        const pieces = splitSegmentAt(hole[i], hole[i + 1], neighbourVertices);
-        for (let j = 0; j + 1 < pieces.length; j++) {
-          const a = pieces[j];
-          const b = pieces[j + 1];
-          const mid: Position = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-          let owner: number | null = null;
-          let best = SHARED_EDGE_TOLERANCE;
-          for (const n of neighbours) {
-            const d = distanceToBoundary(mid, n.feature.geometry);
-            if (d <= best) {
-              best = d;
-              owner = n.index;
+      const vacant = difference(
+        featureCollection<Polygon | MultiPolygon>([
+          asFeature({ type: "Polygon", coordinates: [hole] }),
+          merged,
+        ]),
+      );
+      if (!vacant) continue;
+      const gaps =
+        vacant.geometry.type === "Polygon"
+          ? [vacant.geometry.coordinates]
+          : vacant.geometry.coordinates;
+      for (const coordinates of gaps) {
+        const gap: Polygon = { type: "Polygon", coordinates };
+        if (maxArea > 0 && polygonGeodesicArea(gap) > maxArea) {
+          skippedLarge += 1;
+          continue;
+        }
+        const box = geometryBBox(gap);
+        const neighbours = polygons.filter((p) => bboxesIntersect(p.box, box));
+        // Each gap edge is a piece of exactly one polygon's boundary: credit its
+        // length to the polygon whose boundary its midpoint lies on.
+        // The union merges collinear edges, so first split each gap edge at
+        // every neighbour vertex lying on it.
+        const neighbourVertices = neighbours.flatMap((n) => polygonVertices(n.feature.geometry));
+        const shared = new Map<number, number>();
+        for (const boundary of gap.coordinates) {
+          for (let i = 0; i + 1 < boundary.length; i++) {
+            const pieces = splitSegmentAt(boundary[i], boundary[i + 1], neighbourVertices);
+            for (let j = 0; j + 1 < pieces.length; j++) {
+              const a = pieces[j];
+              const b = pieces[j + 1];
+              if (a[0] === b[0] && a[1] === b[1]) continue;
+              const mid: Position = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+              let owner: number | null = null;
+              let best = SHARED_EDGE_TOLERANCE;
+              for (const n of neighbours) {
+                const d = distanceToBoundary(mid, n.feature.geometry);
+                if (d <= best) {
+                  best = d;
+                  owner = n.index;
+                }
+              }
+              if (owner === null) continue;
+              shared.set(owner, (shared.get(owner) ?? 0) + segmentLengthM(a, b));
             }
           }
-          if (owner === null) continue;
-          shared.set(owner, (shared.get(owner) ?? 0) + segmentLengthM(a, b));
         }
-      }
-      if (shared.size < 2) {
-        // Bounded by one polygon only: an interior ring of that polygon.
-        skippedHoles += 1;
-        continue;
-      }
-      let winner = -1;
-      let longest = -Infinity;
-      for (const [index, length] of shared) {
-        // Ties (within a millimetre) go to the earlier feature, for determinism.
-        if (length > longest + 1e-3 || (Math.abs(length - longest) <= 1e-3 && index < winner)) {
-          winner = index;
-          longest = Math.max(length, longest);
+        if (shared.size < 2) {
+          // Bounded by one polygon only: an interior ring of that polygon.
+          skippedHoles += 1;
+          continue;
         }
+        let winner = -1;
+        let longest = -Infinity;
+        for (const [index, length] of shared) {
+          // Ties (within a millimetre) go to the earlier feature, for determinism.
+          if (length > longest + 1e-3 || (Math.abs(length - longest) <= 1e-3 && index < winner)) {
+            winner = index;
+            longest = Math.max(length, longest);
+          }
+        }
+        const list = additions.get(winner) ?? [];
+        list.push(gap);
+        additions.set(winner, list);
+        filled += 1;
       }
-      const list = additions.get(winner) ?? [];
-      list.push(gap);
-      additions.set(winner, list);
-      filled += 1;
     }
   }
 
@@ -1120,7 +1139,7 @@ export const fillPolygonGapsTool: ProcessingAlgorithm = {
       min: 0,
       step: 1,
       description:
-        "Gaps larger than this stay open; 0 fills every enclosed gap. Holes inside a single polygon are never filled.",
+        "Gaps larger than this stay open. Default 0 fills every enclosed gap without an area limit. Holes inside a single polygon are never filled.",
     },
   ],
   run: async (ctx) => {

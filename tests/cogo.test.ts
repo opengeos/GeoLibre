@@ -26,6 +26,9 @@ const project = (p: Position) => ({ x: p[0] * 100, y: -p[1] * 100 });
 describe("parseAngle / parseBearing", () => {
   it("parses decimal and DMS angles", () => {
     assert.equal(parseAngle("45.5"), 45.5);
+    assert.equal(parseAngle("-45"), null);
+    assert.equal(parseAngle("+45"), null);
+    assert.equal(parseBearing("-45"), null);
     assert.equal(parseAngle("45°30'"), 45.5);
     assert.equal(parseAngle("45 30 36"), 45.51);
     assert.equal(parseAngle("45-30-36"), 45.51);

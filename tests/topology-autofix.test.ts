@@ -283,3 +283,14 @@ describe("autofix tools", () => {
     assert.equal(planarArea(byName(results[0].geojson, "left")), 4);
   });
 });
+
+it("keeps occupied islands out of filled gaps", () => {
+  const island = rect(1.25, 1.5, 1.75, 2.5, { name: "island" });
+  const result = fillPolygonGaps(fcOf(BOTTOM, TOP, LEFT, RIGHT_LOW, RIGHT_HIGH, island), 0);
+  assert.equal(result.filled, 1);
+  assert.ok(planarArea(byName(result.collection, "island")) >= 0.5);
+  assert.equal(
+    result.collection.features.reduce((sum, feature) => sum + planarArea(feature), 0),
+    12,
+  );
+});

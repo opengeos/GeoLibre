@@ -158,7 +158,7 @@ GeoLibre's own tools, under **Processing → GeoLibre Toolbox**.
 | **Locate features along routes** | For each point, find the nearest route within a search radius (or every route within it) and record `route_id`, `measure`, and `distance_m`. |
 | **Dynamic segmentation** | Place an event table on routes: rows with a from and a to measure become route segments, rows with one measure become points. Event attributes are kept. |
 
-M values are stored as the fourth ordinate of each position, `[lng, lat, z, m]`, with `z` set to 0 when the line had no elevation, so a measure is never read as a height. They survive saving the project and exporting GeoJSON. Tools that rebuild geometry (other vector tools, the GeoEditor) drop them, so run **Create routes** again after reshaping a route. Locating and segmenting on a line without M values measures it by length in metres.
+M values are stored as the fourth ordinate of each position, `[lng, lat, z, m]`, with `z` set to 0 when the line had no elevation, so a measure is never read as a height. They survive saving the project and exporting GeoJSON. Other export formats do not guarantee M preservation, and a 2D route's zero Z placeholder is not a measured elevation. Keep a project or GeoJSON copy when measures must be preserved. Tools that rebuild geometry (other vector tools, the GeoEditor) drop them, so run **Create routes** again after reshaping a route. Locating and segmenting on a line without M values measures it by length in metres.
 
 **Data quality**
 

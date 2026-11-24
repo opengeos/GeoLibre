@@ -99,12 +99,16 @@ function snapCandidates(
   tolerance: number,
 ): Geometry[] {
   if (!map) return [];
-  const sw = map.unproject([click.x - tolerance, click.y + tolerance]);
-  const ne = map.unproject([click.x + tolerance, click.y - tolerance]);
-  const west = Math.min(sw.lng, ne.lng);
-  const east = Math.max(sw.lng, ne.lng);
-  const south = Math.min(sw.lat, ne.lat);
-  const north = Math.max(sw.lat, ne.lat);
+  const corners = [
+    map.unproject([click.x - tolerance, click.y - tolerance]),
+    map.unproject([click.x + tolerance, click.y - tolerance]),
+    map.unproject([click.x - tolerance, click.y + tolerance]),
+    map.unproject([click.x + tolerance, click.y + tolerance]),
+  ];
+  const west = Math.min(...corners.map((p) => p.lng));
+  const east = Math.max(...corners.map((p) => p.lng));
+  const south = Math.min(...corners.map((p) => p.lat));
+  const north = Math.max(...corners.map((p) => p.lat));
   const near = (geometry: Geometry) => {
     let minX = Infinity;
     let minY = Infinity;
@@ -196,7 +200,10 @@ function CogoTraceTool({
     }) => {
       const current = stateRef.current;
       if (current.mode === "idle") return;
-      const candidates = snapCandidates(map, event.point, current.tolerance);
+      const candidates =
+        current.mode === "traceTo" && current.traceStart
+          ? [current.traceStart.geometry]
+          : snapCandidates(map, event.point, current.tolerance);
       const snap = snapToGeometries(
         event.point,
         candidates,
