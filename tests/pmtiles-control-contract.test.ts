@@ -361,11 +361,16 @@ function statefulMap(document: Document, { mapbox = false } = {}) {
       removeLayer: (id: string) => layers.delete(id),
       // mapbox-gl has no getLayersOrder; its style's layer list is the only way to walk them.
       ...(mapbox
-        ? { getStyle: () => ({ layers: [...layers.values()] }) }
+        ? { getLayersOrder: undefined, getStyle: () => ({ layers: [...layers.values()] }) }
         : { getLayersOrder: () => [...layers.keys()] }),
       getCanvasContainer: () => document.createElement("div"),
     } as Record<string, unknown>,
-    { get: (target, key) => target[key as string] ?? (() => undefined) },
+    {
+      // An explicit `undefined` (mapbox-gl's missing getLayersOrder) stays missing; anything else
+      // the control asks of a map gets a no-op.
+      get: (target, key) =>
+        key in target ? target[key as string] : (target[key as string] ?? (() => undefined)),
+    },
   );
   return { map, layers, sources, refused };
 }

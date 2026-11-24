@@ -379,11 +379,15 @@ export function guardPMTilesSourceRemoval(control: PMTilesLayerControl): void {
     return onAdd(map);
   };
   target._removeLayer = (id?: string) => {
-    if (attached) {
-      const ids = id ? [id] : control.getState().layers.map((layer) => layer.id);
-      dropGeoLibreLayersOnSources(attached, new Set(ids));
+    // The control's own cleanup must run even if the captured map has been torn down and throws.
+    try {
+      if (attached) {
+        const ids = id ? [id] : control.getState().layers.map((layer) => layer.id);
+        dropGeoLibreLayersOnSources(attached, new Set(ids));
+      }
+    } finally {
+      original.call(control, id);
     }
-    original.call(control, id);
   };
 }
 

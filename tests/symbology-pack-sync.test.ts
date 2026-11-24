@@ -298,7 +298,7 @@ describe("PMTiles line decoration sync", () => {
     assert.deepEqual(sourceLayers.sort(), ["a b", "a_20b"]);
   });
 
-  it("offers the Style panel option exactly where the sync draws it", () => {
+  it("shares one predicate with the sync: it holds exactly where a decoration is drawn", () => {
     const raster = createPMTilesStoreLayer({
       id: "hillshade",
       name: "Hillshade",
