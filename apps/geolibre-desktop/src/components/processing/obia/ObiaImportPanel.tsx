@@ -1,4 +1,9 @@
-import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import {
+  fieldsOf,
+  hasPolygons,
+  selectImportVectorLayers,
+} from "../../../lib/obia/obia-import-layers";
+import { useAppStore, useLayerSlices } from "@geolibre/core";
 import {
   OBIA_SEGMENT_ID_FIELD,
   applyObjectFeatures,
@@ -17,7 +22,6 @@ import {
   parseClassSchema,
   parseFeatureTable,
   parseLevelMapping,
-  polygonsOf,
   rasterizeObjects,
   withClasses,
 } from "../../../lib/obia/obia-import";
@@ -31,20 +35,6 @@ import { useObiaSession } from "../../../lib/obia/obia-session";
 import { ObiaEcognitionImport } from "./ObiaEcognitionImport";
 import { ObiaStatus } from "./ObiaFields";
 import { labelStylePatch } from "./ObiaTrainStep";
-
-/** Whether a layer has a polygon feature (stops at the first). */
-function hasPolygons(layer: GeoLibreLayer): boolean {
-  return (layer.geojson?.features ?? []).some((f) => polygonsOf(f.geometry).length > 0);
-}
-
-/** Property names of a layer's first features. */
-function fieldsOf(layer: GeoLibreLayer | undefined): string[] {
-  const names = new Set<string>();
-  for (const feature of layer?.geojson?.features.slice(0, 50) ?? []) {
-    for (const key of Object.keys(feature.properties ?? {})) names.add(key);
-  }
-  return [...names];
-}
 
 const readText = async (accept: string, extensions: string[]) => {
   const file = await openLocalDataFileWithFallback({
@@ -62,7 +52,6 @@ const readText = async (accept: string, extensions: string[]) => {
  */
 export function ObiaImportPanel(): ReactElement {
   const { t } = useTranslation();
-  const layers = useAppStore((s) => s.layers);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const sourceLayerId = useObiaSession((s) => s.sourceLayerId);
   const bandIndexes = useObiaSession((s) => s.bandIndexes);
@@ -72,10 +61,7 @@ export function ObiaImportPanel(): ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
 
-  const vectorLayers = useMemo(
-    () => layers.filter((layer) => layer.geojson && layer.metadata.obiaRole !== "objects"),
-    [layers],
-  );
+  const vectorLayers = useLayerSlices(useMemo(selectImportVectorLayers, []));
   const polygonLayers = useMemo(() => vectorLayers.filter(hasPolygons), [vectorLayers]);
   const [objectsFrom, setObjectsFrom] = useState("");
   const [idField, setIdField] = useState("");
@@ -105,7 +91,7 @@ export function ObiaImportPanel(): ReactElement {
 
   const importObjects = () =>
     run("objects", async () => {
-      const source = layers.find((layer) => layer.id === sourceLayerId);
+      const source = useAppStore.getState().layers.find((layer) => layer.id === sourceLayerId);
       if (!source) throw new Error(t("obia.import.error.noImage"));
       if (!objectsLayer?.geojson) throw new Error(t("obia.import.error.noLayer"));
       const imported = await rasterizeObjects(
@@ -168,6 +154,7 @@ export function ObiaImportPanel(): ReactElement {
     run("samples", async () => {
       const state = useObiaSession.getState();
       const current = state.segmentation;
+      const { layers } = useAppStore.getState();
       const source = layers.find((layer) => layer.id === current?.sourceLayerId);
       const objects = layers.find((layer) => layer.id === current?.objectsLayerId);
       if (!current || !source || !objects?.geojson)

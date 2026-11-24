@@ -328,10 +328,18 @@ core:
 - `workers/collab` is the Cloudflare Durable Object used by the hosted service.
 - `workers/collab-node` is the self-hostable Node/SQLite relay. It is included
   as `geolibre-collab` in the root `docker-compose.yml`; its persistent database
-  is mounted at `/data/collab.sqlite`. Configure `COLLAB_MAX_SNAPSHOT_BYTES`
+  is mounted at `/data/collab.sqlite`. It serves the same HTTP endpoints as
+  the Worker, including the host-only session log, which it keeps in SQLite
+  under the same entry-count and byte bounds. Configure `COLLAB_MAX_SNAPSHOT_BYTES`
   (default 10,000,000 bytes everywhere: both relays and the compose file share
   `MAX_SNAPSHOT_BYTES` from `@geolibre/collab-core`) and `COLLAB_IDLE_TTL_MS`
   (default two hours) when needed.
+
+The Node relay currently stores the audit log as capped JSON and synchronously
+rewrites it on each recorded event, including snapshots. Per-frame session
+reads skip that log. This format suits smaller self-hosted deployments; measure
+event throughput before using a busy shared relay. Per-entry SQLite rows and
+byte counters are the next storage improvement for sustained high event rates.
 
 Both relay implementations accept `COLLAB_MAX_SNAPSHOT_BYTES` as a positive
 integer number of bytes. For the Cloudflare relay, set it as a Worker variable,

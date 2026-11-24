@@ -1,4 +1,4 @@
-import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import { useAppStore, useLayer, type GeoLibreLayer } from "@geolibre/core";
 import {
   OBIA_PREDICTED_FIELD,
   OBIA_RULE_OPS,
@@ -67,7 +67,6 @@ export function predictionStylePatch(
  */
 export function ObiaClassifyStep(): ReactElement | null {
   const { t } = useTranslation();
-  const layers = useAppStore((s) => s.layers);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const segmentation = useObiaSession((s) => s.segmentation);
   const features = useObiaSession((s) => s.features);
@@ -86,7 +85,7 @@ export function ObiaClassifyStep(): ReactElement | null {
   // A re-measure can drop columns a saved selection still names.
   const chosen = settings.fields ? settings.fields.filter((f) => measured.includes(f)) : measured;
 
-  const objectsLayer = layers.find((layer) => layer.id === segmentation?.objectsLayerId) ?? null;
+  const objectsLayer = useLayer(segmentation?.objectsLayerId) ?? null;
   const trainingCount = useMemo(
     () =>
       objectsLayer?.geojson

@@ -108,12 +108,6 @@ export interface SidecarHealth {
   status: string;
 }
 
-export interface SidecarAlgorithm {
-  id: string;
-  name: string;
-  description: string;
-}
-
 export type WhiteboxParameterKind =
   | "raster_in"
   | "raster_out"
@@ -209,7 +203,7 @@ export interface WhiteboxStatus {
 
 export interface WhiteboxJob {
   id: string;
-  status: "pending" | "running" | "succeeded" | "failed" | string;
+  status: "pending" | "running" | "succeeded" | "failed" | "cancelled" | string;
   tool_id: string;
   created_at: string;
   updated_at: string;
@@ -296,21 +290,6 @@ export async function checkSidecarHealth(
     return null;
   }
 }
-
-export async function fetchSidecarAlgorithms(
-  baseUrl = DEFAULT_SIDECAR_URL,
-): Promise<SidecarAlgorithm[]> {
-  try {
-    const res = await sidecarFetch(`${baseUrl}/algorithms`);
-    if (!res.ok) return [];
-    const data = (await res.json()) as { algorithms: SidecarAlgorithm[] };
-    return data.algorithms ?? [];
-  } catch {
-    return [];
-  }
-}
-
-// TODO(v0.5): POST /run with algorithm id and parameters
 
 export async function fetchWhiteboxStatus(baseUrl = DEFAULT_SIDECAR_URL): Promise<WhiteboxStatus> {
   let res: Response;
@@ -436,6 +415,30 @@ export async function fetchWhiteboxJob(
   return (await res.json()) as WhiteboxJob;
 }
 
+/**
+ * Ask the sidecar to stop a pending or running Whitebox job.
+ *
+ * The sidecar kills the tool's subprocess and the job then reports
+ * `cancelled`. Cancelling a job that already finished is a no-op that returns
+ * its final state, so racing completion is safe.
+ *
+ * @param jobId - The job id `runWhiteboxTool` returned.
+ * @param baseUrl - The sidecar base URL.
+ * @returns The job's state after the request.
+ */
+export async function cancelWhiteboxJob(
+  jobId: string,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<WhiteboxJob> {
+  const res = await sidecarFetch(`${baseUrl}/whitebox/jobs/${encodeURIComponent(jobId)}/cancel`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Could not cancel Whitebox job"));
+  }
+  return (await res.json()) as WhiteboxJob;
+}
+
 export async function fetchWhiteboxJsonOutput(
   path: string,
   baseUrl = DEFAULT_SIDECAR_URL,
@@ -454,7 +457,7 @@ export interface ConversionStatus {
 
 export interface ConversionJob {
   id: string;
-  status: "pending" | "running" | "succeeded" | "failed" | string;
+  status: "pending" | "running" | "succeeded" | "failed" | "cancelled" | string;
   tool_id: string;
   created_at: string;
   updated_at: string;
@@ -776,6 +779,35 @@ export async function fetchConversionJob(
   }
   if (!res.ok) {
     throw new Error(await responseErrorMessage(res, "Could not load conversion job"));
+  }
+  return (await res.json()) as ConversionJob;
+}
+
+/**
+ * Ask the sidecar to stop a pending or running conversion job.
+ *
+ * The sidecar kills the conversion subprocess, removes its partial output, and
+ * the job then reports `cancelled`. Cancelling a job that already finished is a
+ * no-op that returns its final state, so racing completion is safe.
+ *
+ * @param jobId - The job id a conversion start call returned.
+ * @param baseUrl - The sidecar base URL.
+ * @returns The job's state after the request.
+ */
+export async function cancelConversionJob(
+  jobId: string,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionJob> {
+  let res: Response;
+  try {
+    res = await sidecarFetch(`${baseUrl}/conversion/jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: "POST",
+    });
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Could not cancel conversion job"));
   }
   return (await res.json()) as ConversionJob;
 }

@@ -151,7 +151,7 @@ const COLUMN_SCAN_FEATURE_LIMIT = 50;
  * @returns Table name and its column names, in the same naming as registration.
  */
 export function previewLayerColumns(
-  layers: GeoLibreLayer[],
+  layers: readonly Pick<GeoLibreLayer, "id" | "name" | "geojson">[],
   geometryColumn: string = DEFAULT_LAYER_GEOMETRY_COLUMN,
   renameCaseDuplicates = true,
 ): SqlWorkspaceTableColumns[] {
