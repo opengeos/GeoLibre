@@ -107,7 +107,6 @@ export function installAnalytics(id: string, doc: Document = document): void {
   // array, so this stays a function declaration (an arrow function has none)
   // and pushes `arguments` instead of its rest parameters.
   function gtag(_command: string, ..._args: unknown[]): void {
-    // eslint-disable-next-line prefer-rest-params
     dataLayer.push(arguments);
   }
   // What gets reported as the page: origin + path, never the query string. A

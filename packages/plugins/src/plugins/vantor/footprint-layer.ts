@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type { Map, MapMouseEvent, GeoJSONSource } from "maplibre-gl";
 import type { StacItem } from "./types";
 import { INTERNAL_LAYER_METADATA, itemsToFeatureCollection } from "./utils";
@@ -22,7 +23,7 @@ export class FootprintLayer {
     const fc = itemsToFeatureCollection(items);
 
     if (this.map.getSource(SOURCE_ID)) {
-      (this.map.getSource(SOURCE_ID) as GeoJSONSource).setData(fc);
+      updateGeoJsonSourceData(this.map.getSource(SOURCE_ID) as GeoJSONSource, fc);
     } else {
       this.map.addSource(SOURCE_ID, {
         type: "geojson",

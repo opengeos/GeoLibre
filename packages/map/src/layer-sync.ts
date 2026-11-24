@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "./geojson-source-data";
 import { arcgisOpacity, arcgisVectorStyle } from "./vector-style";
 import {
   compileLayerFilters,
@@ -471,7 +472,7 @@ function rememberGeoJsonData(map: maplibregl.Map, sourceId: string, data: GeoJSO
 
 function setGeoJsonData(source: maplibregl.GeoJSONSource, data: GeoJSON): void {
   if (geoJsonSourceData.get(source) === data) return;
-  source.setData(data);
+  updateGeoJsonSourceData(source, data);
   geoJsonSourceData.set(source, data);
 }
 

@@ -104,7 +104,6 @@ describe("buildProjectHtml", () => {
     const html = buildProjectHtml({
       project: PROJECT,
       title: "T",
-      // eslint-disable-next-line no-script-url
       appUrl: "javascript:alert(1)",
     });
     assert.ok(!html.includes("javascript:alert(1)"));

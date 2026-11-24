@@ -331,8 +331,9 @@ core:
   is mounted at `/data/collab.sqlite`. It serves the same HTTP endpoints as
   the Worker, including the host-only session log, which it keeps in SQLite
   under the same entry-count and byte bounds. Configure `COLLAB_MAX_SNAPSHOT_BYTES`
-  (relay default 10,000,000; the compose file defaults it to 1,000,000) and
-  `COLLAB_IDLE_TTL_MS` (default two hours) when needed.
+  (default 10,000,000 bytes everywhere: both relays and the compose file share
+  `MAX_SNAPSHOT_BYTES` from `@geolibre/collab-core`) and `COLLAB_IDLE_TTL_MS`
+  (default two hours) when needed.
 
 The Node relay currently stores the audit log as capped JSON and synchronously
 rewrites it on each recorded event, including snapshots. Per-frame session
@@ -351,6 +352,10 @@ COLLAB_MAX_SNAPSHOT_BYTES = "10000000"
 
 The configured value must remain below the deployment platform's WebSocket
 message-size limit.
+
+**Upgrade note:** the Compose default increases from 1,000,000 to 10,000,000
+bytes (1 MB to 10 MB, a tenfold increase) to match both relay implementations.
+Set `COLLAB_MAX_SNAPSHOT_BYTES=1000000` to retain the earlier, lower limit.
 
 The hosted relay deploys to Cloudflare Workers the same way as `workers/viewer`:
 
@@ -378,8 +383,8 @@ environment. Until that env var is set, the feature stays dark.
 - **Payload size**: layers can embed `FeatureCollection`s. `projectFromStore`
   already strips redundant `geojson` for URL-backed layers, but a large
   in-memory/local-file layer can exceed the snapshot cap
-  (`COLLAB_MAX_SNAPSHOT_BYTES`: 10 MB by default for the relay, 1 MB in the
-  Docker Compose setup) and is rejected with
+  (`COLLAB_MAX_SNAPSHOT_BYTES`: 10 MB by default for the hosted relay, the
+  Node relay, and the Docker Compose setup) and is rejected with
   `error: too-large` (share via URL instead). v2: diff / chunked layer sync.
 - **Undo**: a remote apply clears local undo (see above).
 - v2 directions: per-action mutation or CRDT transport, coalesced remote-apply

@@ -688,8 +688,10 @@ export function MapLegendPanel({
             onKeyDown={(event) => {
               if (stepResize("right", event.key)) event.preventDefault();
             }}
+            // eslint-disable-next-line local/no-physical-tailwind -- the resize grips' drag math and cursors are physical corners.
             className="absolute bottom-0 right-0 z-10 h-6 w-6 cursor-nwse-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
+            {/* eslint-disable-next-line local/no-physical-tailwind -- the resize grips' drag math and cursors are physical corners. */}
             <span className="absolute bottom-1 right-1 h-2 w-2 border-b-2 border-r-2 border-muted-foreground/60" />
           </div>
           <div
@@ -702,8 +704,10 @@ export function MapLegendPanel({
             onKeyDown={(event) => {
               if (stepResize("left", event.key)) event.preventDefault();
             }}
+            // eslint-disable-next-line local/no-physical-tailwind -- the resize grips' drag math and cursors are physical corners.
             className="absolute bottom-0 left-0 z-10 h-6 w-6 cursor-nesw-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
+            {/* eslint-disable-next-line local/no-physical-tailwind -- the resize grips' drag math and cursors are physical corners. */}
             <span className="absolute bottom-1 left-1 h-2 w-2 border-b-2 border-l-2 border-muted-foreground/60" />
           </div>
         </>
