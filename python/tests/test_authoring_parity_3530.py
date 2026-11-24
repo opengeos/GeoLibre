@@ -513,6 +513,71 @@ def test_print_layout_settings_mirror_the_app_defaults():
     assert keys == set(_project.PRINT_LAYOUT_DEFAULTS)
 
 
+def test_print_cartography_settings_round_trip_without_aliasing():
+    """Preserve new composer fields and copy nested placement records."""
+    frame = {"x": 0.1, "y": 0.1, "w": 0.8, "h": 0.8}
+    offsets = {"legend": {"dx": 0.1, "dy": -0.2, "scale": 1.5}}
+    project = _project_with("A")
+    result = authoring.set_print_layout(
+        project,
+        show_inset=True,
+        inset_basemap="osm",
+        inset_zoom_offset=-3,
+        inset_extent_color="#f00",
+        inset_box=None,
+        show_grid=True,
+        grid_type="utm",
+        grid_interval=1000,
+        grid_font_size=12,
+        grid_lines=True,
+        map_frame_box=frame,
+        element_offsets=offsets,
+    )
+    assert result["showInset"] and result["showGrid"] and result["gridLines"]
+    assert result["insetBasemap"] == "osm"
+    assert result["gridInterval"] == 1000
+    assert result["mapFrameBox"] == frame
+    frame["x"] = 0.9
+    offsets["legend"]["scale"] = 3
+    assert project["printLayout"]["mapFrameBox"]["x"] == 0.1
+    assert project["printLayout"]["elementOffsets"]["legend"]["scale"] == 1.5
+
+
+def test_mgrs_spacing_normalizes_when_settings_are_merged():
+    """Keep kilometer precision when either setting changes independently."""
+    assert _project.print_layout_settings(grid_type="mgrs", grid_interval=500) == {
+        "gridType": "mgrs",
+        "gridInterval": 1000,
+    }
+    project = _project_with("A")
+    authoring.set_print_layout(project, grid_interval=500)
+    assert authoring.set_print_layout(project, grid_type="mgrs")["gridInterval"] == 1000
+    assert authoring.set_print_layout(project, grid_interval=10)["gridInterval"] == 1000
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"show_inset": "yes"},
+        {"inset_basemap": "satellite"},
+        {"inset_extent_color": "red"},
+        {"grid_interval": 10**400},
+        {"map_frame_box": {"x": 0.98, "y": 0, "w": 0.05, "h": 1}},
+        {"inset_box": {"x": 0, "y": 0, "w": 0.001, "h": 1}},
+        {"element_offsets": {"legend": {"dx": 0, "dy": 0, "scale": 0}}},
+        {"element_offsets": {"missing": {"dx": 0, "dy": 0, "scale": 1}}},
+    ],
+)
+def test_print_cartography_rejects_values_the_app_would_change(settings):
+    """Reject malformed new fields instead of silently losing them on load.
+
+    Args:
+        settings: A setting that the app cannot retain unchanged.
+    """
+    with pytest.raises(ValueError):
+        _project.print_layout_settings(**settings)
+
+
 # -- Map delegates to the same authoring ------------------------------------------
 
 

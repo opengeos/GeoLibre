@@ -5076,6 +5076,18 @@ PRINT_LAYOUT_DEFAULTS: dict[str, Any] = {
     "projectNumber": "",
     "crs": "",
     "revision": "",
+    "showInset": False,
+    "insetBasemap": "positron",
+    "insetZoomOffset": -4,
+    "insetExtentColor": "#dc2626",
+    "insetBox": None,
+    "showGrid": False,
+    "gridType": "dms",
+    "gridInterval": 0,
+    "gridFontSize": 7,
+    "gridLines": False,
+    "mapFrameBox": None,
+    "elementOffsets": {},
     "captureMode": "viewport",
     "extentBbox": None,
     "atlasEnabled": False,
@@ -5097,6 +5109,8 @@ _CORNERS = ("top-left", "top-right", "bottom-left", "bottom-right")
 _PAGE_FILTERS = ("all", "contained", "intersecting")
 #: Enumerated Print Layout settings and the values ``normalizePrintLayoutConfig`` keeps.
 PRINT_LAYOUT_CHOICES: dict[str, tuple[Any, ...]] = {
+    "insetBasemap": ("positron", "liberty", "bright", "dark", "fiord", "osm"),
+    "gridType": ("dms", "decimal", "utm", "mgrs"),
     "titlePlacement": ("outside", "inside"),
     "titleAlign": ("left", "center", "right"),
     "paperSize": (
@@ -5131,6 +5145,9 @@ PRINT_LAYOUT_CHOICES: dict[str, tuple[Any, ...]] = {
 }
 #: Numeric Print Layout settings and the range ``normalizePrintLayoutConfig`` clamps to.
 PRINT_LAYOUT_RANGES: dict[str, tuple[float, float]] = {
+    "insetZoomOffset": (-12, 0),
+    "gridInterval": (0, 10000000),
+    "gridFontSize": (3, 36),
     "customWidth": (1, 100000),
     "customHeight": (1, 100000),
     "pageBorderWidth": (1, 20),
@@ -5141,6 +5158,52 @@ PRINT_LAYOUT_RANGES: dict[str, tuple[float, float]] = {
 }
 #: Print Layout settings that hold a layer id.
 PRINT_LAYOUT_LAYER_FIELDS = ("tableLayerId", "chartLayerId", "atlasLayerId")
+
+
+def _print_layout_number(value: Any, low: float, high: float) -> bool:
+    """Check a bounded finite layout number without overflowing large integers.
+
+    Args:
+        value: The supplied setting.
+        low: Inclusive lower bound.
+        high: Inclusive upper bound.
+
+    Returns:
+        Whether the value is a finite number within the bounds.
+    """
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and (not isinstance(value, float) or math.isfinite(value))
+        and low <= value <= high
+    )
+
+
+def _print_layout_frame(value: Any, setting: str) -> dict[str, float] | None:
+    """Validate and copy a frame that fits within the page.
+
+    Args:
+        value: A page-fraction box or None for automatic placement.
+        setting: The setting name used in validation errors.
+
+    Returns:
+        A copied frame, or None.
+
+    Raises:
+        ValueError: If the app would discard or clamp the frame.
+    """
+    if value is None:
+        return None
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"x", "y", "w", "h"}
+        or not all(_print_layout_number(value[key], 0, 1) for key in ("x", "y"))
+        or not all(_print_layout_number(value[key], 0.01, 1) for key in ("w", "h"))
+        or value["x"] + value["w"] > 1 + 1e-12
+        or value["y"] + value["h"] > 1 + 1e-12
+    ):
+        raise ValueError(f"{setting} must be a page-fraction box with x, y, w, h inside the page")
+    return dict(value)
 
 
 def print_layout_settings(**settings: Any) -> dict[str, Any]:
@@ -5172,6 +5235,25 @@ def print_layout_settings(**settings: Any) -> dict[str, Any]:
             choices = PRINT_LAYOUT_CHOICES[key]
             if isinstance(value, bool) or value not in choices:
                 raise ValueError(f"{raw_key} must be one of {list(choices)}, got {value!r}")
+        elif key in ("mapFrameBox", "insetBox"):
+            value = _print_layout_frame(value, raw_key)
+        elif key == "elementOffsets":
+            allowed = {"title", "legend", "scaleBar", "northArrow", "footer"}
+            if not isinstance(value, dict) or set(value) - allowed:
+                raise ValueError("element_offsets must map movable element names to offsets")
+            copied = {}
+            for name, entry in value.items():
+                if (
+                    not isinstance(entry, dict)
+                    or set(entry) != {"dx", "dy", "scale"}
+                    or not all(_print_layout_number(entry[key], -1, 1) for key in ("dx", "dy"))
+                    or not _print_layout_number(entry["scale"], 0.25, 4)
+                ):
+                    raise ValueError(
+                        f"element_offsets[{name!r}] needs dx/dy in [-1, 1] and scale in [0.25, 4]"
+                    )
+                copied[name] = dict(entry)
+            value = copied
         elif key == "extentBbox":
             if value is not None:
                 box = _resolve_bounds(value)
@@ -5216,19 +5298,16 @@ def print_layout_settings(**settings: Any) -> dict[str, Any]:
                 raise ValueError(f"{raw_key} must be true or false")
         elif isinstance(default, (int, float)):
             low, high = PRINT_LAYOUT_RANGES[key]
-            if (
-                isinstance(value, bool)
-                or not isinstance(value, (int, float))
-                or not math.isfinite(value)
-                or not low <= value <= high
-            ):
+            if not _print_layout_number(value, low, high):
                 raise ValueError(f"{raw_key} must be a number from {low:g} to {high:g}")
         elif isinstance(default, str):
             if not isinstance(value, str):
                 raise ValueError(f"{raw_key} must be a string")
-            if key == "pageBackground" and not re.fullmatch(
+            if key in ("pageBackground", "insetExtentColor") and not re.fullmatch(
                 r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})", value.strip()
             ):
-                raise ValueError("page_background must be #rgb or #rrggbb")
+                raise ValueError(f"{raw_key} must be #rgb or #rrggbb")
         result[key] = value
+    if result.get("gridType") == "mgrs" and result.get("gridInterval", 0) > 0:
+        result["gridInterval"] = max(1000, result["gridInterval"])
     return result

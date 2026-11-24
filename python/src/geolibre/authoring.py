@@ -2850,6 +2850,14 @@ def set_print_layout(
     current = project.get("printLayout")
     stored = {} if reset or not isinstance(current, dict) else current
     stored.update(validated)
+    interval = stored.get("gridInterval", 0)
+    if (
+        stored.get("gridType") == "mgrs"
+        and not isinstance(interval, bool)
+        and isinstance(interval, (int, float))
+        and 0 < interval < 1000
+    ):
+        stored["gridInterval"] = 1000
     if stored:
         project["printLayout"] = stored
     else:
