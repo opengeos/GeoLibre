@@ -24,9 +24,9 @@ A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles pro
 | ------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `url`        | `url=https://share.geolibre.app/you/project.geolibre.json` | Loads a `.geolibre.json` project from a public URL.                                                                                   |
 | `loading`    | `loading=true` | Exposes screenshot readiness on the document element. Accepts a bare flag, `true`, `1`, `yes`, or `on`; disabled by default. See below. |
-| `data`       | `data=https://assets.geolibre.app/data/places.geojson`     | Loads public GeoJSON, GeoParquet, PMTiles, a COG, or a ZIP/REST response containing multiple GeoJSON files.                           |
+| `data`       | `data=https://assets.geolibre.app/data/places.geojson`     | Loads public GeoJSON, GeoParquet, FlatGeobuf, GPX, KML/KMZ, PMTiles, a COG, a 3D Tiles `tileset.json`, or a ZIP/REST response containing multiple GeoJSON files.                        |
 | `style`      | `style=https://assets.geolibre.app/data/sample.style.json` | Applies a GeoLibre/MapLibre vector style or raster-style JSON to the data loaded by `data`.                                            |
-| `dataType`   | `dataType=lidar`                                           | Names the format of a `data` URL whose path has no file extension: `lidar` for a point cloud, or a name an installed plugin declares; pairs with `data` by position. See [Open remote data](#open-remote-data). |
+| `dataType`   | `dataType=lidar`                                           | Names the format of a `data` URL whose path has no file extension: `lidar` for a point cloud, `3d-tiles` for a 3D Tiles tileset, or a name an installed plugin declares; pairs with `data` by position. See [Open remote data](#open-remote-data). |
 | `stac`       | `stac=https://earth-search.aws.element84.com/v1/collections/naip` | Opens the STAC Catalogs browser connected to a STAC catalog, API, or API collection. A collection URL is searched on load, so its item footprints appear as a layer. See [Open a STAC catalog](#open-a-stac-catalog). |
 | `layout`     | `layout=viewer`                                            | `viewer` provides read-only chrome: Layers, View, Controls, basemaps, search/identify, Help, and any quick filters the project's layers carry, with authoring UI hidden. `compact` is the icon-only full-app layout; `embed` and `iframe` are aliases. |
 | `draw`       | `layout=viewer&draw`                                       | Lets the geometry editor run in `layout=viewer`, so a host page can offer drawing without the rest of the authoring chrome. The bare flag or `true`, `1`, `yes`, `on` enable it. It has no effect in other layouts and needs the `project:edit` [deployment capability](../deployment-capabilities.md). See [Drawing in a viewer embed](#drawing-in-a-viewer-embed). |
@@ -260,7 +260,7 @@ stays fully read-only.
 
 ## Open remote data
 
-Use `data` to open public GeoJSON, GeoParquet, PMTiles, Cloud-Optimized GeoTIFF (COG), a LiDAR point cloud (LAS, LAZ, COPC, or an EPT `ept.json`), or a ZIP archive containing one or more `.geojson`/`.json` FeatureCollections. Each GeoJSON file in a ZIP becomes a separate layer. An optional `style` URL applies Mapbox/MapLibre style JSON to vector data:
+Use `data` to open public GeoJSON, GeoParquet, FlatGeobuf, GPX, KML/KMZ, PMTiles, Cloud-Optimized GeoTIFF (COG), a 3D Tiles tileset (a `tileset.json` URL, or `dataType=3d-tiles` for an endpoint named otherwise), a LiDAR point cloud (LAS, LAZ, COPC, or an EPT `ept.json`), or a ZIP archive containing one or more `.geojson`/`.json` FeatureCollections. Each GeoJSON file in a ZIP becomes a separate layer. An optional `style` URL applies Mapbox/MapLibre style JSON to vector data:
 
 ```text
 https://web.geolibre.app/?data=https://assets.geolibre.app/data/places.geojson&style=https://assets.geolibre.app/data/sample.style.json

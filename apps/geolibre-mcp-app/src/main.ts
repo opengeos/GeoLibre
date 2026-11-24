@@ -148,6 +148,12 @@ app.addEventListener("toolresult", async (result) => {
     updateStatus();
     map = renderProject(mapEl, project, {
       transformRequest: consent.transformRequest,
+      fetchRange: consent.fetchRange,
+      onNotice(notice) {
+        if (current !== generation) return;
+        if (!notices.includes(notice)) notices.push(notice);
+        updateStatus();
+      },
       onReady() {
         if (current !== generation) return;
         loading = "";

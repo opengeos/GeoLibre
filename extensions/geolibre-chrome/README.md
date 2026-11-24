@@ -1,8 +1,9 @@
 # Open data in GeoLibre
 
-A Manifest V3 Chrome extension that finds supported geospatial dataset links on
-the current page, reads back the geospatial service requests its interactive
-maps have already made, and opens selected data in GeoLibre.
+A Manifest V3 browser extension for Chrome (and other Chromium browsers) and
+Firefox that finds supported geospatial dataset links on the current page, reads
+back the geospatial service requests its interactive maps have already made, and
+opens selected data in GeoLibre.
 
 ## Install
 
@@ -16,6 +17,29 @@ The published extension is on the Chrome Web Store:
 2. Enable **Developer mode**.
 3. Choose **Load unpacked**.
 4. Select this `extensions/geolibre-chrome` directory.
+
+### Firefox
+
+Firefox runs the same code; only the manifest differs. It needs a stable add-on
+id under `browser_specific_settings.gecko` (which `storage.sync` and
+addons.mozilla.org key off) and a `data_collection_permissions` declaration, and
+it would warn on Chrome's `minimum_chrome_version`. So the Firefox build derives
+its manifest from `manifest.json` at package time
+(`scripts/extension-manifest.mjs`) rather than keeping a second copy in sync by
+hand. The extension has no background script, so there is no service worker
+versus event page difference to bridge, and Firefox implements the `chrome.*`
+namespace, `scripting.executeScript` and `activeTab` that the popup uses.
+
+1. From the repository root, run `npm ci`, then `npm run build:firefox-extension`.
+2. Open `about:debugging#/runtime/this-firefox`.
+3. Choose **Load Temporary Add-on…** and pick
+   `dist/geolibre-firefox/manifest.json`.
+
+The build also writes `dist/geolibre-firefox-<version>.zip`, the file to upload
+to addons.mozilla.org for signing. It requires Firefox 140 or later (the first
+release that reads `data_collection_permissions`). In Firefox the extension's
+permissions stay as small as in Chrome: `activeTab` is granted only when you
+click the toolbar button.
 
 Everything happens after you click the toolbar icon: the extension scans the
 document's links, and reads each reachable frame's Resource Timing buffer to
@@ -40,7 +64,8 @@ From the repository root, run:
 npm run build:chrome-extension
 ```
 
-The versioned upload ZIP is written to `dist/`. Store listing copy and
+The versioned upload ZIP is written to `dist/` (`npm run build:firefox-extension`
+writes the Firefox one beside it). Store listing copy and
 permission explanations are in `STORE_LISTING.md`; the publishable privacy
 policy source is in `PRIVACY.md`. The policy must be hosted at a public URL
 before submitting the listing.
@@ -48,8 +73,12 @@ before submitting the listing.
 ## Discovery
 
 The scanner recognizes GeoJSON/JSON, GeoParquet/Parquet, PMTiles, GeoTIFF/COG,
-LiDAR point clouds (LAS/LAZ/COPC and EPT `ept.json`), and ZIP links in anchors, linked resources, selected data attributes, and
-schema.org JSON-LD `contentUrl`/`downloadUrl` fields. Existing GeoLibre deep
+FlatGeobuf, GPX, KML/KMZ, Zarr stores, 3D Tiles (`tileset.json`), static STAC
+catalogs and collections (`catalog.json`, `collection.json`), LiDAR point clouds
+(LAS/LAZ/COPC and EPT `ept.json`), and ZIP links in anchors, linked resources,
+selected data attributes, and schema.org JSON-LD `contentUrl`/`downloadUrl`
+fields. A link into a Zarr store (its `.zmetadata` or a chunk key) is collapsed
+onto the store root. Existing GeoLibre deep
 links are unpacked, and a neighboring `name.style.json` or
 `name.geolibre.style.json` link is paired with the matching dataset. A point
 cloud whose URL has no LAS/LAZ suffix, found only because its link or metadata
@@ -60,7 +89,25 @@ Source Cooperative repository pages receive additional handling: the extension
 reads the complete embedded file inventory even when the visible table is
 virtualized, canonicalizes links to `data.source.coop`, and removes duplicate
 page/download links. The popup can filter discovered files by vector, raster,
-or LiDAR type without changing the current selection.
+or LiDAR type, or "Other" (3D Tiles and STAC catalogs), without changing the
+current selection.
+
+## How each result opens
+
+Every result opens through a deep link the GeoLibre web app already parses:
+
+| Result | GeoLibre link |
+| --- | --- |
+| GeoJSON, GeoParquet, FlatGeobuf, GPX, KML/KMZ, PMTiles, GeoTIFF/COG, LiDAR, ZIP, 3D Tiles | `?data=<url>` (repeatable) |
+| WMS, WMTS, WFS, WCS, OGC API Features, XYZ/TMS, vector tiles | `?add=<kind>&serviceUrl=<url>` |
+| ArcGIS Feature, Map and Image Services | `?add=arcgis&serviceUrl=<url>`; the dialog picks the layer type from the URL |
+| Zarr store | `?add=zarr&serviceUrl=<store>`, since a variable and value range must still be chosen |
+| STAC API, API collection, static catalog | `?stac=<url>`, which opens the STAC Catalogs browser |
+
+Several results can be selected and opened together. Files share one link, and
+that same link also carries the first selected service and the first STAC
+catalog, since GeoLibre opens one Add Data dialog and one STAC browser per
+launch. Each further service or catalog opens in a tab of its own.
 
 ## Services
 
@@ -69,9 +116,19 @@ links in the page. What the extension reads instead is `performance
 .getEntriesByType("resource")`, the record of its own requests that every
 document keeps, collected from the top frame and every same-origin frame below
 it. Recognized
-are WMS, WMTS, WFS, OGC API Features, ArcGIS Feature Services, XYZ/TMS image
-tiles, and PBF/MVT vector tiles. Tile requests are collapsed into reusable
-`{z}/{x}/{y}` templates, and repeated requests from the same service appear once.
+are WMS, WMTS, WFS, WCS, OGC API Features, STAC APIs, ArcGIS Feature, Map and
+Image Services, XYZ/TMS image tiles, and PBF/MVT vector tiles, plus the data
+files a page's own map library fetched: Zarr store metadata and chunks, 3D Tiles
+`tileset.json`, FlatGeobuf, GPX, and KML/KMZ. Tile requests are collapsed into
+reusable `{z}/{x}/{y}` templates, ArcGIS MapServer and ImageServer requests
+(`export`, `exportImage`, cached `tile/{z}/{y}/{x}`) into the service root, and
+repeated requests from the same service appear once. An ArcGIS VectorTileServer
+is still reached through its style document, as below.
+
+A STAC API is an OGC API Features server underneath, and nothing in an item
+request's URL tells the two apart except a name: a request is read as STAC only
+when its host or a path segment is `stac` (Planetary Computer's
+`/api/stac/v1/...`, a `stac.` host). Others stay OGC API Features.
 
 Three consequences of reading the buffer rather than watching the network:
 

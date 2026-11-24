@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import ipaddress
+import re
 import secrets
 import socket
 import ssl
@@ -344,10 +345,99 @@ class _PinnedBackend(httpcore.AsyncNetworkBackend):
         await anyio.sleep(seconds)
 
 
+_CONTENT_RANGE = re.compile(rb"^\s*bytes\s+(\d+)-(\d+)/(\d+|\*)\s*$", re.IGNORECASE)
+
+
+def _validate_range(offset: int | None, length: int | None) -> tuple[int, int] | None:
+    """Check an optional byte range before any network activity.
+
+    Args:
+        offset: First byte to read, or None for the whole resource.
+        length: Number of bytes to read, or None for the whole resource.
+
+    Returns:
+        The ``(offset, length)`` pair, or None when no range was requested.
+
+    Raises:
+        PreviewNetworkError: If only one bound is given or either is out of range.
+    """
+    if offset is None and length is None:
+        return None
+    if offset is None or length is None:
+        raise PreviewNetworkError("A byte range needs both an offset and a length.")
+    if isinstance(offset, bool) or isinstance(length, bool):
+        raise PreviewNetworkError("A byte range offset and length must be integers.")
+    if offset < 0 or offset > 2**53:
+        raise PreviewNetworkError("The byte range offset is out of bounds.")
+    if length < 1 or length > MAX_RESPONSE_BYTES:
+        raise PreviewNetworkError("A byte range must request between 1 byte and 4 MiB.")
+    return offset, length
+
+
+def _ranged_body(
+    status: int,
+    headers: dict[bytes, bytes],
+    body: bytes,
+    offset: int,
+    length: int,
+) -> tuple[bytes, int | None]:
+    """Return the requested slice of a ranged response and the resource size.
+
+    A server that honours the ``Range`` header answers 206 with a
+    ``Content-Range`` that must start at the requested offset. A server that
+    ignores it answers 200 with the whole resource, which is only usable here
+    because the whole body already fit under the 4 MiB cap.
+
+    Args:
+        status: The HTTP status code.
+        headers: The lower-cased response headers.
+        body: The (bounded) response body.
+        offset: The requested first byte.
+        length: The requested number of bytes.
+
+    Returns:
+        The bytes for the requested range and the total size, when known.
+
+    Raises:
+        PreviewNetworkError: If the response does not describe the requested range.
+    """
+    if status == 200:
+        return body[offset : offset + length], len(body)
+    if status != 206:
+        raise PreviewNetworkError(f"The resource server returned HTTP {status}.")
+    match = _CONTENT_RANGE.match(headers.get(b"content-range", b""))
+    if not match:
+        raise PreviewNetworkError("The resource server returned an invalid byte range.")
+    start, end = int(match.group(1)), int(match.group(2))
+    total = None if match.group(3) == b"*" else int(match.group(3))
+    if start != offset or end < start or end - start + 1 != len(body) or len(body) > length:
+        raise PreviewNetworkError("The resource server returned a different byte range.")
+    return bytes(body), total
+
+
 async def fetch_resource(
-    sessions: PreviewSessions, preview_id: str, grant: str, url: str
+    sessions: PreviewSessions,
+    preview_id: str,
+    grant: str,
+    url: str,
+    offset: int | None = None,
+    length: int | None = None,
 ) -> dict[str, Any]:
-    """Fetch one consented public HTTP resource and return bounded binary bytes."""
+    """Fetch one consented public HTTP resource and return bounded binary bytes.
+
+    Args:
+        sessions: The preview session registry.
+        preview_id: The preview session id.
+        grant: The origin grant token for the URL's origin.
+        url: The public HTTP(S) URL to fetch.
+        offset: Optional first byte of a range request (PMTiles, COG reads).
+        length: Optional number of bytes of a range request, at most 4 MiB.
+
+    Returns:
+        Base64 data and its MIME type, plus cache headers and, for a range
+        request, ``rangeStart`` and the ``totalSize`` when the server reports it.
+    """
+    byte_range = _validate_range(offset, length)
     sessions.authorize(preview_id, grant, url)
 
     def reauthorize() -> None:
@@ -372,6 +462,16 @@ async def fetch_resource(
                 headers=[
                     (b"accept-encoding", b"identity"),
                     (b"user-agent", b"GeoLibre-MCP-Preview"),
+                    *(
+                        [
+                            (
+                                b"range",
+                                f"bytes={byte_range[0]}-{sum(byte_range) - 1}".encode("ascii"),
+                            )
+                        ]
+                        if byte_range
+                        else []
+                    ),
                 ],
                 extensions={
                     "timeout": {
@@ -381,6 +481,16 @@ async def fetch_resource(
                     }
                 },
             ) as response:
+                headers = {key.lower(): value for key, value in response.headers}
+                if byte_range and response.status == 416:
+                    eof = re.fullmatch(rb"bytes \*/(\d+)", headers.get(b"content-range", b""))
+                    if eof and byte_range[0] >= int(eof[1]):
+                        return {
+                            "data": "",
+                            "mimeType": "application/octet-stream",
+                            "rangeStart": byte_range[0],
+                            "totalSize": int(eof[1]),
+                        }
                 if response.status >= 300 and response.status < 400:
                     raise PreviewNetworkError(
                         "Resource redirects are not allowed; use the direct destination URL."
@@ -389,11 +499,18 @@ async def fetch_resource(
                     raise PreviewNetworkError(
                         f"The resource server returned HTTP {response.status}."
                     )
-                headers = {key.lower(): value for key, value in response.headers}
                 encoding = headers.get(b"content-encoding", b"identity").strip().lower()
                 if encoding not in {b"", b"identity", b"gzip"}:
                     raise PreviewNetworkError("Compressed resource responses are not supported.")
+                if byte_range and encoding == b"gzip":
+                    # A byte range of a compressed representation is not a range of the file.
+                    raise PreviewNetworkError("Compressed byte-range responses are not supported.")
                 if int(headers.get(b"content-length", b"0")) > MAX_RESPONSE_BYTES:
+                    if byte_range and response.status == 200:
+                        raise PreviewNetworkError(
+                            "The resource server ignored the byte-range request; "
+                            "PMTiles and COG previews need a server that supports HTTP ranges."
+                        )
                     raise PreviewNetworkError("The resource response exceeds the 4 MiB limit.")
                 if encoding == b"gzip":
                     decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
@@ -463,10 +580,20 @@ async def fetch_resource(
                     .split(";", 1)[0]
                     .strip()
                 )
+                data = bytes(body)
+                total: int | None = None
+                if byte_range:
+                    data, total = _ranged_body(
+                        response.status, headers, data, byte_range[0], byte_range[1]
+                    )
                 result: dict[str, Any] = {
-                    "data": base64.b64encode(body).decode("ascii"),
+                    "data": base64.b64encode(data).decode("ascii"),
                     "mimeType": mime or "application/octet-stream",
                 }
+                if byte_range:
+                    result["rangeStart"] = byte_range[0]
+                    if total is not None:
+                        result["totalSize"] = total
                 for key, field_name in (
                     (b"cache-control", "cacheControl"),
                     (b"expires", "expires"),

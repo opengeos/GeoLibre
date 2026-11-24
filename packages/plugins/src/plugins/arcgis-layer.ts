@@ -89,6 +89,36 @@ export function parseArcGISLayerType(
 }
 
 /**
+ * The layer type an ArcGIS REST URL names by its service segment, so a deep
+ * link to a `…/MapServer` or `…/ImageServer` opens the form on the matching
+ * type instead of the Feature Service default, which would refuse it.
+ *
+ * @param url - An ArcGIS REST service or layer URL.
+ * @returns The layer type, or null when the URL names no known service type.
+ */
+export function arcgisLayerTypeFromUrl(url: string): ArcGISLayerType | null {
+  let path: string;
+  try {
+    path = new URL(url).pathname;
+  } catch {
+    return null;
+  }
+  const service = path.match(/\/(FeatureServer|MapServer|ImageServer|VectorTileServer)(?:\/|$)/i);
+  switch (service?.[1].toLowerCase()) {
+    case "featureserver":
+      return "feature";
+    case "mapserver":
+      return "map-service";
+    case "imageserver":
+      return "image-service";
+    case "vectortileserver":
+      return "vector-tile";
+    default:
+      return null;
+  }
+}
+
+/**
  * `metadata.sourceKind` for the two image-producing service types. A MapServer
  * or ImageServer renders as ordinary raster tiles, so the layer these produce is
  * a plain `raster` layer rather than an `arcgis` one; the source kind is what
