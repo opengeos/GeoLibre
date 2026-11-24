@@ -277,15 +277,18 @@ with zero cost, preserving the match without a degenerate route line.
 
 Local graph construction runs on the main thread and accepts at most 250,000
 vertices. Endpoint-to-node and endpoint-to-segment snapping share a 50-million
-candidate budget. Reduce the snap tolerance or extract a smaller network if it is
-exceeded. Point placement has a 50-million edge/point comparison budget, including
-far or antimeridian selections that use a full edge scan. Searches yield between
+budget for index visits and candidate checks. Reduce the snap tolerance or
+extract a smaller network if it is exceeded. Point placement also caps index
+storage, cell visits, overflow candidates, and fallback scans at 50 million
+visits per run. It has a separate 50-million edge/point comparison budget,
+including far or antimeridian selections that use a full edge scan. Searches yield between
 legs or incidents; graph construction itself is synchronous.
 
 Service-area polygon buffering accepts at most 1,000 reachable line pieces per
-area and 5,000 per run. Disable polygons to retain line-only output for larger
-areas. Input points farther than 1 km or ten times the endpoint snap tolerance
-(whichever is larger) produce a warning; snap-distance attributes remain in the
+area and 5,000 per run. An excessive selection returns an error; rerun with
+polygons disabled for line-only output. Input points farther than 1 km or ten
+times the endpoint snap tolerance (whichever is larger) produce a warning;
+snap-distance attributes remain in the
 result.
 
 Local multi-stop and closest-facility runs are limited to 50 million node-search

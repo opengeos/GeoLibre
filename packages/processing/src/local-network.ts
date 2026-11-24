@@ -241,11 +241,21 @@ class GridIndex {
   cellOf(x: number, y: number): [number, number] {
     return [Math.floor((x - this.originX) / this.cell), Math.floor((y - this.originY) / this.cell)];
   }
-  insert(id: number, minX: number, minY: number, maxX: number, maxY: number): void {
-    this.boxes.set(id, [minX, minY, maxX, maxY]);
+  insert(
+    id: number,
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+    charge?: (count: number) => void,
+  ): void {
     const [x0, y0] = this.cellOf(minX, minY);
     const [x1, y1] = this.cellOf(maxX, maxY);
-    if (![x0, y0, x1, y1].every(Number.isSafeInteger) || (x1 - x0 + 1) * (y1 - y0 + 1) > 256) {
+    const cells = (x1 - x0 + 1) * (y1 - y0 + 1);
+    const overflow = ![x0, y0, x1, y1].every(Number.isSafeInteger) || cells > 256;
+    charge?.(overflow ? 1 : cells + 1);
+    this.boxes.set(id, [minX, minY, maxX, maxY]);
+    if (overflow) {
       this.overflow.add(id);
       return;
     }
@@ -259,11 +269,19 @@ class GridIndex {
     }
   }
   /** Ids in the cells covering [minX, maxX] x [minY, maxY] (may repeat). */
-  query(minX: number, minY: number, maxX: number, maxY: number, out: number[]): void {
+  query(
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+    out: number[],
+    charge?: (count: number) => void,
+  ): void {
     const [x0, y0] = this.cellOf(minX, minY);
     const [x1, y1] = this.cellOf(maxX, maxY);
     const scan =
       ![x0, y0, x1, y1].every(Number.isSafeInteger) || (x1 - x0 + 1) * (y1 - y0 + 1) > 4096;
+    charge?.(scan ? this.boxes.size : this.overflow.size + (x1 - x0 + 1) * (y1 - y0 + 1));
     for (const id of scan ? this.boxes.keys() : this.overflow) {
       const box = this.boxes.get(id)!;
       if (box[0] <= maxX && box[2] >= minX && box[1] <= maxY && box[3] >= minY) out.push(id);
@@ -272,18 +290,36 @@ class GridIndex {
     for (let ix = x0; ix <= x1; ix++) {
       for (let iy = y0; iy <= y1; iy++) {
         const bucket = this.cells.get(this.key(ix, iy));
-        if (bucket) for (const id of bucket) out.push(id);
+        if (bucket) {
+          charge?.(bucket.length);
+          for (const id of bucket) out.push(id);
+        }
       }
     }
   }
   /** Ids in the ring of cells at Chebyshev distance `r` around (cx, cy). */
-  ring(cx: number, cy: number, r: number, out: number[]): void {
-    for (const id of this.overflow) out.push(id);
+  ring(cx: number, cy: number, r: number, out: number[], charge?: (count: number) => void): void {
+    // Unsafe cell integers cannot be advanced reliably with ++. The caller
+    // falls back to its bounded edge scan when rings return no candidates.
+    if (!Number.isSafeInteger(cx) || !Number.isSafeInteger(cy)) {
+      charge?.(1);
+      return;
+    }
+    charge?.(r === 0 ? this.overflow.size + 1 : 8 * r);
+    // Overflow edges are independent of the ring; inspect them only once.
+    if (r === 0) for (const id of this.overflow) out.push(id);
+    const append = (ix: number, iy: number) => {
+      const bucket = this.cells.get(this.key(ix, iy));
+      if (bucket) {
+        charge?.(bucket.length);
+        for (const id of bucket) out.push(id);
+      }
+    };
     for (let ix = cx - r; ix <= cx + r; ix++) {
-      for (let iy = cy - r; iy <= cy + r; iy++) {
-        if (r > 0 && Math.abs(ix - cx) !== r && Math.abs(iy - cy) !== r) continue;
-        const bucket = this.cells.get(this.key(ix, iy));
-        if (bucket) for (const id of bucket) out.push(id);
+      if (ix === cx - r || ix === cx + r) for (let iy = cy - r; iy <= cy + r; iy++) append(ix, iy);
+      else {
+        append(ix, cy - r);
+        append(ix, cy + r);
       }
     }
   }
@@ -297,7 +333,14 @@ class SegmentIndex {
     private originX: number,
     private originY: number,
   ) {}
-  insert(id: number, minX: number, minY: number, maxX: number, maxY: number): void {
+  insert(
+    id: number,
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+    charge?: (count: number) => void,
+  ): void {
     const span = Math.max(maxX - minX, maxY - minY);
     const level = Math.max(0, Math.ceil(Math.log2(Math.max(1, span / (8 * this.cell)))));
     let grid = this.levels.get(level);
@@ -305,10 +348,17 @@ class SegmentIndex {
       grid = new GridIndex(this.cell * 2 ** level, this.originX, this.originY);
       this.levels.set(level, grid);
     }
-    grid.insert(id, minX, minY, maxX, maxY);
+    grid.insert(id, minX, minY, maxX, maxY, charge);
   }
-  query(minX: number, minY: number, maxX: number, maxY: number, out: number[]): void {
-    for (const grid of this.levels.values()) grid.query(minX, minY, maxX, maxY, out);
+  query(
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+    out: number[],
+    charge?: (count: number) => void,
+  ): void {
+    for (const grid of this.levels.values()) grid.query(minX, minY, maxX, maxY, out, charge);
   }
 }
 
@@ -346,10 +396,11 @@ function queryWrapped(
   padX: number,
   padY: number,
   out: number[],
+  charge?: (count: number) => void,
 ): void {
-  index.query(x - padX, y - padY, x + padX, y + padY, out);
-  if (x - padX < -180) index.query(x - padX + 360, y - padY, 180, y + padY, out);
-  if (x + padX > 180) index.query(-180, y - padY, x + padX - 360, y + padY, out);
+  index.query(x - padX, y - padY, x + padX, y + padY, out, charge);
+  if (x - padX < -180) index.query(x - padX + 360, y - padY, 180, y + padY, out, charge);
+  if (x + padX > 180) index.query(-180, y - padY, x + padX - 360, y + padY, out, charge);
 }
 
 /** Result counters from {@link buildLocalNetwork}, for the tool log. */
@@ -382,6 +433,15 @@ export class LocalNetwork {
     segmentCandidates: 0,
   };
   private index: GridIndex | null = null;
+  private indexVisits = 0;
+  /** Bound index storage, cell visits, fallback scans, and candidate projections. */
+  private chargeIndexVisits = (count: number): void => {
+    this.indexVisits += count;
+    if (this.indexVisits > 50_000_000)
+      throw new RangeError(
+        "Network point placement exceeds the 50-million index-visit budget. Use fewer points or a smaller network.",
+      );
+  };
   private extent = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
 
   get nodeCount(): number {
@@ -407,7 +467,7 @@ export class LocalNetwork {
     this.adj[edge.a].push(id);
     this.adj[edge.b].push(id);
     this.updateHeuristic(edge);
-    this.index?.insert(id, ...this.edgeBox(id));
+    this.index?.insert(id, ...this.edgeBox(id), this.chargeIndexVisits);
     return id;
   }
 
@@ -458,7 +518,8 @@ export class LocalNetwork {
       Number.isFinite(minX) ? minX : 0,
       Number.isFinite(minY) ? minY : 0,
     );
-    for (let id = 0; id < this.edges.length; id++) this.index.insert(id, ...this.edgeBox(id));
+    for (let id = 0; id < this.edges.length; id++)
+      this.index.insert(id, ...this.edgeBox(id), this.chargeIndexVisits);
   }
 
   /**
@@ -487,9 +548,10 @@ export class LocalNetwork {
     for (let r = 0; r <= Math.min(maxRing, 32); r++) {
       if (best && best.distDeg < (r - 1) * cellReach) break;
       candidates.length = 0;
-      index.ring(cx, cy, r, candidates);
+      index.ring(cx, cy, r, candidates, this.chargeIndexVisits);
       for (const id of candidates) {
         if (seen.has(id)) continue;
+        this.chargeIndexVisits(1);
         seen.add(id);
         const { a, b } = this.edges[id];
         const hit = projectOnSegment(lon, lat, this.lon[a], this.lat[a], this.lon[b], this.lat[b]);
@@ -500,6 +562,7 @@ export class LocalNetwork {
     // Bound empty-ring work. Distant points and seam-adjacent queries use
     // one edge scan instead of walking arbitrarily many empty cells.
     if (!best || best.distDeg >= 30 * cellReach || Math.abs(lon) > 170 || maxX - minX > 180) {
+      this.chargeIndexVisits(this.edges.length);
       for (let id = 0; id < this.edges.length; id++) {
         const { a, b } = this.edges[id];
         const hit = projectOnSegment(lon, lat, this.lon[a], this.lat[a], this.lon[b], this.lat[b]);
@@ -872,7 +935,7 @@ export function buildLocalNetwork(
     const minLat = rawLat.reduce((min, value) => Math.min(min, value), Infinity);
     const nodeIndex = new GridIndex(toleranceDeg, minLon, minLat);
     for (let id = 0; id < rawLon.length; id++) {
-      nodeIndex.insert(id, rawLon[id], rawLat[id], rawLon[id], rawLat[id]);
+      nodeIndex.insert(id, rawLon[id], rawLat[id], rawLon[id], rawLat[id], chargeCandidates);
     }
     const near: number[] = [];
     for (const { node, neighbor } of endpoints) {
@@ -880,7 +943,7 @@ export function buildLocalNetwork(
       const x = rawLon[node];
       const y = rawLat[node];
       const padX = toleranceDeg / Math.max(Math.cos(y * DEG), 1e-6);
-      queryWrapped(nodeIndex, x, y, padX, toleranceDeg, near);
+      queryWrapped(nodeIndex, x, y, padX, toleranceDeg, near, chargeCandidates);
       chargeCandidates(near.length);
       let best = -1;
       let bestD = Infinity;
@@ -921,6 +984,7 @@ export function buildLocalNetwork(
         Math.min(ay, by),
         seam ? 180 : Math.max(ax, bx),
         Math.max(ay, by),
+        chargeCandidates,
       );
     });
     const candidates: number[] = [];
@@ -933,7 +997,7 @@ export function buildLocalNetwork(
       const y = rawLat[root];
       candidates.length = 0;
       const padX = toleranceDeg / Math.max(Math.cos(y * DEG), 1e-6);
-      queryWrapped(segIndex, x, y, padX, toleranceDeg, candidates);
+      queryWrapped(segIndex, x, y, padX, toleranceDeg, candidates, chargeCandidates);
       stats.segmentCandidates += candidates.length;
       chargeCandidates(candidates.length);
       let best: { seg: number; t: number; d: number } | null = null;

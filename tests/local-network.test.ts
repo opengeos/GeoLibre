@@ -18,6 +18,33 @@ import {
 } from "../packages/processing/src/local-network";
 
 describe("network review regressions", () => {
+  it("uses the bounded edge scan for an unindexable distant coordinate", () => {
+    const net = buildLocalNetwork(
+      [
+        line([
+          [0, 0],
+          [1, 0],
+        ]),
+      ],
+      { snapToleranceM: 0 },
+    );
+    const hit = net.nearestEdge(1e20, 0);
+    assert.ok(hit && Number.isFinite(hit.distance));
+  });
+  it("charges polar index scans even when they return few candidates", () => {
+    const features: Feature[] = Array.from({ length: 5001 }, (_, i) => ({
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [i * 0.01, 89.999 + i * 1e-7],
+          [i * 0.01 + 0.00001, 89.999 + i * 1e-7],
+        ],
+      },
+    }));
+    assert.throws(() => buildLocalNetwork(features, { snapToleranceM: 1 }), /candidate budget/);
+  });
   it("warns about distant observations while retaining their snap distances", async () => {
     const roads = layer("roads", [
       line([
