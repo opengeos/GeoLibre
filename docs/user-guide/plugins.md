@@ -106,6 +106,18 @@ GeoLibre registers 72 built-in plugins.
 | **Components** | Controls (Search, Legend, Measure, …) | `components` | The component panels; each is toggled from the Controls menu rather than as one plugin. See [Components](map-controls.md#component-tools). |
 <!-- plugin-reference:end -->
 
+### GeoEditor snapping, COGO and trace
+
+**Snapping tolerance.** **Settings → Geo editor → Snapping tolerance (px)** sets how close, in screen pixels, the pointer must be to a vertex or a segment before it snaps (default 18). A vertex in range always wins over a segment. The value is saved with the project and applies immediately to the GeoEditor's drawing tools and to COGO and trace picking.
+
+**COGO and trace** builds a line or polygon from survey-style input. Open it from the command palette (**COGO and trace digitizing**) or right-click the map → **Quick analysis → Start a COGO traverse here**.
+
+- **Pick start** places the first vertex; **Add points** adds vertices by clicking. Clicks snap to vertices and edges of visible vector layers within the snapping tolerance.
+- **Bearing** and **Distance** add a leg from the last vertex. A bearing is an azimuth in degrees (`135.5`, `135°30'`, `135 30 00`) or a quadrant bearing (`S44°30'E`, `N 12 30 W`). Distances can be entered in metres, kilometres, feet, US survey feet, or miles, and legs follow the great circle.
+- **Trace** follows an existing feature: click its edge where the trace should start, then click the same edge where it should end. On a ring the shorter way round is traced; tick **Trace the long way round a ring** for the other way.
+- The panel shows the vertex count, the total length, the last leg as a quadrant bearing, and for a polygon the length of the closing edge (a quick misclosure check). **Undo last step** removes a whole leg or trace.
+- **Add to editor** hands the shape to the GeoEditor as a new sketch, where it stays editable; **Save as layer** adds it as a new layer.
+
 ### God's Eye View
 
 God's Eye View is inspired by the MIT-licensed

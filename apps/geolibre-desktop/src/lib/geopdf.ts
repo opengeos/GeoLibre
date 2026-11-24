@@ -115,6 +115,8 @@ export function epsgFromCode(code: string): number | null {
  *     the map (the sky of a pitched view, space around the globe).
  *   projection: The CRS the map is drawn in.
  *   tolerancePx: How far, in image pixels, a checked point may miss.
+ *   options: Allow unwrapped longitudes for grid/inset cartography. GeoPDF
+ *     export still validates its own visible viewport independently.
  *
  * Returns:
  *   The georeference, or null when the image is not an affine view of the CRS
@@ -126,6 +128,7 @@ export function solveCaptureGeoref(
   locate: (px: number, py: number) => { lng: number; lat: number } | null,
   projection: GeorefProjection,
   tolerancePx = 1,
+  options: { allowUnwrappedLongitude?: boolean } = {},
 ): CaptureGeoref | null {
   if (!(width >= 2) || !(height >= 2)) return null;
   const project = (px: number, py: number): [number, number] | null => {
@@ -182,7 +185,7 @@ export function solveCaptureGeoref(
     [width, height],
   ]) {
     const [lng] = georefLngLat(georef, px, py);
-    if (!(Math.abs(lng) <= 180)) return null;
+    if (!options.allowUnwrappedLongitude && !(Math.abs(lng) <= 180)) return null;
   }
   return georef;
 }

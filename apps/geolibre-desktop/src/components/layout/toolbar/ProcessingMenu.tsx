@@ -469,6 +469,21 @@ export function ProcessingMenu({
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupLinearReferencing")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("create-routes")}>
+                      {t("toolbar.vectorTool.createRoutes")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => setVectorToolOpen("locate-features-along-routes")}
+                    >
+                      {t("toolbar.vectorTool.locateFeaturesAlongRoutes")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("dynamic-segmentation")}>
+                      {t("toolbar.vectorTool.dynamicSegmentation")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
                       {t("toolbar.item.subGroupDataQuality")}
                     </DropdownMenuLabel>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("check-validity")}>
@@ -482,6 +497,12 @@ export function ProcessingMenu({
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("fix-topology")}>
                       {t("toolbar.vectorTool.fixTopology")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("fix-polygon-overlaps")}>
+                      {t("toolbar.vectorTool.fixPolygonOverlaps")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("fill-polygon-gaps")}>
+                      {t("toolbar.vectorTool.fillPolygonGaps")}
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>

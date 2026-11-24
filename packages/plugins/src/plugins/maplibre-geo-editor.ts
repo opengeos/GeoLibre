@@ -6,6 +6,7 @@ import {
 } from "./geo-editor-sketch-attributes";
 import {
   normalizeGeoEditorSettings,
+  geoEditorSnapTolerancePx,
   isGeoEditorFieldName,
   currentEditorIdentity,
   editorTrackingFieldNames,
@@ -392,7 +393,10 @@ function activateGeoEditor(app: GeoLibreAppAPI): false | undefined {
     if (map) {
       geomanInstance = new geoman.Geoman(map, {
         layerStyles: geomanLayerStylesForMap(map, mapboxGl !== null),
-        settings: { useControlsUi: false },
+        settings: {
+          useControlsUi: false,
+          snapDistance: geoEditorSnapTolerancePx(useAppStore.getState().preferences.map.geoEditor),
+        },
       });
       // Before anything else: Geoman's deferred init loads its marker image
       // through the adapter member this swaps.
@@ -1164,6 +1168,30 @@ export function isGeoEditorAvailableForImport(): boolean {
   return pluginActive && geoEditorControl != null && editTargetLayerId == null;
 }
 
+/**
+ * Add a feature built outside Geoman's draw modes (a COGO traverse, a traced
+ * boundary) to the editor as a new sketch, exactly as if it had been drawn:
+ * it becomes editable in the editor and is synced to the Sketches layer.
+ *
+ * @param feature - A Point, LineString or Polygon feature in WGS84.
+ * @returns False when the editor is not active, is holding a layer's geometry
+ *   for in-place editing, or Geoman rejected the shape.
+ */
+export async function addFeatureToGeoEditor(feature: Feature): Promise<boolean> {
+  if (!isGeoEditorAvailableForImport() || !geomanInstance) return false;
+  await ensureGeomanReady();
+  const geoman = geomanInstance;
+  if (!geoman || !isGeoEditorAvailableForImport()) return false;
+  const imported = await geoman.features.importGeoJsonFeature(
+    structuredClone(feature) as Parameters<typeof geoman.features.importGeoJsonFeature>[0],
+  );
+  if (!imported) return false;
+  unionSketchesWithStoreOnNextSync = true;
+  syncSketchesToStore(imported.getGeoJson() as Feature);
+  applySketchesMapDisplay();
+  return true;
+}
+
 /** Number of features currently in the editor (for the load-confirm prompt). */
 export function getGeoEditorFeatureCount(): number {
   if (!geoEditorControl) return 0;
@@ -1891,10 +1919,28 @@ async function clearSketchesFromEditor(): Promise<void> {
   }
 }
 
+/**
+ * Apply the project's snapping tolerance to a live Geoman instance. Geoman's
+ * snapping helper reads `options.settings.snapDistance` on every pointer move,
+ * so a changed setting takes effect without re-creating the editor.
+ *
+ * @param geoman - The Geoman instance, or null when the editor is not mounted.
+ * @param settings - The project's (possibly unnormalized) editor settings.
+ */
+export function applyGeomanSnapTolerance(
+  geoman: Pick<Geoman, "options"> | null,
+  settings: Parameters<typeof geoEditorSnapTolerancePx>[0],
+): void {
+  const gmSettings = geoman?.options?.settings;
+  if (!gmSettings) return;
+  gmSettings.snapDistance = geoEditorSnapTolerancePx(settings);
+}
+
 function bindSketchesStoreSync(): void {
   geoEditorStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     if (!pluginActive) return;
     if (state.preferences.map.geoEditor !== previous.preferences.map.geoEditor) {
+      applyGeomanSnapTolerance(geomanInstance, state.preferences.map.geoEditor);
       geoEditorControl?.setAttributeSchema(geoEditorAttributeSchema());
       if (!normalizeGeoEditorSettings(state.preferences.map.geoEditor).showAfterDraw) {
         geoEditorControl?.closeAttributeEditor();

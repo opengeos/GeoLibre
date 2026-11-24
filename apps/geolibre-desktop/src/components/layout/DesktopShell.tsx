@@ -86,6 +86,7 @@ import { RasterSubsetPanel } from "./RasterSubsetPanel";
 import { BasemapExtractPanel } from "./BasemapExtractPanel";
 import { TerrainSettingsDialog } from "./TerrainSettingsDialog";
 import { LineOfSightPanel } from "./LineOfSightPanel";
+import { CogoTracePanel } from "./CogoTracePanel";
 import { NavigationPanel } from "../navigation/NavigationPanel";
 import { MapContextMenu } from "./MapContextMenu";
 import { KnowledgeCardPanel } from "./KnowledgeCardPanel";
@@ -933,6 +934,10 @@ export function DesktopShell({
                     onExplorePlace={handleExplorePlace}
                   />
                   <LineOfSightPanel
+                    mapControllerRef={mapControllerRef}
+                    mapReadyGeneration={mapReadyGeneration}
+                  />
+                  <CogoTracePanel
                     mapControllerRef={mapControllerRef}
                     mapReadyGeneration={mapReadyGeneration}
                   />

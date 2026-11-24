@@ -56,6 +56,7 @@ import type { Command } from "../../../lib/commands";
 import { resolveProjectStorage } from "../../../lib/project-storage";
 import { CVD_MODE_LABEL_KEYS, useCvdPreviewStore } from "../../../lib/cvd-preview-store";
 import { CVD_MODES } from "../../../lib/cvd-simulation";
+import { useCogoTool } from "../../../lib/cogo-store";
 import { useLineOfSightTool } from "../../../lib/line-of-sight-store";
 import { useNavigationTool } from "../../../lib/navigation/store";
 import { masHidesDataSource } from "../../../lib/mas-build";
@@ -584,6 +585,16 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
             keywords: "line of sight visibility intervisibility terrain elevation profile viewshed",
             icon: Eye,
             run: () => useLineOfSightTool.getState().openLineOfSight(),
+          },
+          // Draws a transient MapLibre preview, so it shares the same gate.
+          {
+            id: "proc.cogoTrace",
+            title: t("toolbar.command.cogoTrace"),
+            group: t("toolbar.commandGroup.processing"),
+            keywords:
+              "cogo bearing distance azimuth traverse survey trace digitize snapping vertex coordinate geometry",
+            icon: Compass,
+            run: () => useCogoTool.getState().openCogo(),
           },
         ]),
     ...CONVERSION_COMMANDS.map(({ kind, titleKey }) => ({

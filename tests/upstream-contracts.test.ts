@@ -699,6 +699,11 @@ describe("@geoman-io/maplibre-geoman-free", () => {
       );
       const message = (detail: string) =>
         contractMessage("@geoman-io/maplibre-geoman-free", section, detail, workspace);
+      assert.match(
+        text,
+        /return this\.gm\.options\.settings\.snapDistance\s*;/,
+        message("the snapping engine no longer reads options.settings.snapDistance"),
+      );
       assert.ok(
         text.includes("actionInstances = {}"),
         message("Geoman no longer has a plain `actionInstances` object"),

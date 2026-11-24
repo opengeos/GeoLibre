@@ -87,6 +87,13 @@ export function useLayoutOptions({
     projectNumber,
     crs,
     revision,
+    mapFrameBox,
+    elementOffsets,
+    showGrid,
+    gridType,
+    gridInterval,
+    gridFontSize,
+    gridLines,
   } = layout;
   const isCustom = paperSize === "custom";
   const customSize = useMemo<CustomSize | null>(
@@ -179,6 +186,17 @@ export function useLayoutOptions({
       mapImageHeight: captured?.height ?? 0,
       mapFit,
       mapGeoref: captured?.georef ?? null,
+      mapFrameBox,
+      elementOffsets,
+      grid: showGrid
+        ? {
+            type: gridType,
+            interval: gridInterval,
+            fontSizePt: gridFontSize,
+            lines: gridLines,
+            unavailableText: t("printLayout.grid.mgrsSingleSquare"),
+          }
+        : null,
     }),
     [
       resolvedTitle,
@@ -231,6 +249,13 @@ export function useLayoutOptions({
       markerIcons,
       captured,
       mapFit,
+      mapFrameBox,
+      elementOffsets,
+      showGrid,
+      gridType,
+      gridInterval,
+      gridFontSize,
+      gridLines,
       t,
     ],
   );

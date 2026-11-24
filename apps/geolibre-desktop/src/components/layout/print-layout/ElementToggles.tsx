@@ -108,6 +108,18 @@ export function ElementToggles({ layout, dispatch }: LayoutEditorProps) {
         checked={layout.showDataChart}
         onChange={toggle("showDataChart")}
       />
+      <ToggleField
+        id="el-inset"
+        label={t("printLayout.element.inset")}
+        checked={layout.showInset}
+        onChange={toggle("showInset")}
+      />
+      <ToggleField
+        id="el-grid"
+        label={t("printLayout.element.grid")}
+        checked={layout.showGrid}
+        onChange={toggle("showGrid")}
+      />
     </div>
   );
 }
