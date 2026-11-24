@@ -277,7 +277,11 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     setClientLog([]);
     setClientResult(null);
     setClientRunning(false);
-    setEngine(tool.supportsClient && (tool.clientOnly || sidecarRestriction(desktopServer)) ? "client" : "sidecar");
+    setEngine(
+      tool.supportsClient && (tool.clientOnly || sidecarRestriction(desktopServer))
+        ? "client"
+        : "sidecar",
+    );
   }, [open, tool, desktopServer]);
 
   // Permission changes block new runs without discarding an already dispatched
@@ -748,12 +752,9 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       );
       if (isStale()) return;
       // Tool-specific log lines (a transition matrix, flood pixel counts, ...).
-      const detail = run.messages.filter(
-        (line) => !line.startsWith("Loaded raster:") && !line.startsWith('Computed "'),
-      );
       setClientLog((prev) => [
         ...prev,
-        ...detail,
+        ...run.detailMessages,
         t("toolbar.rasterTool.computedInBrowser", { tool: tool.name }),
       ]);
       const outName = tool.defaultOutputName;

@@ -908,6 +908,7 @@ export interface ClientRasterResult {
   raster: RasterData;
   bytes: ArrayBuffer;
   messages: string[];
+  detailMessages: string[];
 }
 
 /**
@@ -1004,8 +1005,9 @@ export function runRasterToolClient(
       throw new Error(`"${toolId}" has no client-side implementation.`);
   }
 
+  const detailMessages = messages.slice(1);
   messages.push(`Computed "${toolId}" in the browser.`);
-  return { raster, bytes: writeRasterBands(raster), messages };
+  return { raster, bytes: writeRasterBands(raster), messages, detailMessages };
 }
 
 // --- Async dispatcher (every tool) -----------------------------------------
@@ -1033,6 +1035,8 @@ export type ClientToolResult =
       raster: RasterData;
       bytes: ArrayBuffer;
       messages: string[];
+      /** Engine diagnostics excluding loaded/computed lifecycle summaries. */
+      detailMessages: string[];
       /** The transition matrix, for `transition-matrix`. */
       matrix?: TransitionMatrix;
     }
@@ -1043,6 +1047,7 @@ export type ClientToolResult =
       /** The same features in WGS84, or null for an unreferenced download. */
       wgs84: FeatureCollection | null;
       messages: string[];
+      detailMessages: string[];
     };
 
 /** Tools {@link runRasterToolClient} computes synchronously. */
@@ -1103,13 +1108,13 @@ export async function runRasterToolClientAsync(
   parameters: Record<string, unknown>,
 ): Promise<ClientToolResult> {
   if (SYNC_CLIENT_TOOLS.has(toolId)) {
-    const { raster, bytes, messages } = runRasterToolClient(
+    const { raster, bytes, messages, detailMessages } = runRasterToolClient(
       toolId,
       requireRaster(inputs, toolId),
       parameters,
       inputs.rasters,
     );
-    return { kind: "raster", raster, bytes, messages };
+    return { kind: "raster", raster, bytes, messages, detailMessages };
   }
   const messages: string[] = [];
   if (inputs.raster) {
@@ -1124,6 +1129,7 @@ export async function runRasterToolClientAsync(
       raster,
       bytes: writeRasterBands(raster),
       messages,
+      detailMessages: extra,
     };
   };
   const vectorResult = async (
@@ -1133,15 +1139,20 @@ export async function runRasterToolClientAsync(
     exportWgs84 = false,
   ): Promise<ClientToolResult> => {
     messages.push(...extra, `Computed "${toolId}" in the browser.`);
+    const detailMessages = [...extra];
+    const diagnostic = (line: string): void => {
+      messages.push(line);
+      detailMessages.push(line);
+    };
     const wgs84 = definition ? await toWgs84(geojson, definition) : null;
     const download =
       exportWgs84 && wgs84 ? wgs84 : definition ? geojson : { ...geojson, crs: null };
     if (!definition)
-      messages.push(
+      diagnostic(
         "The raster has no CRS. The vector download retains unreferenced coordinates and is not added to the map.",
       );
     else if (exportWgs84)
-      messages.push(
+      diagnostic(
         "The source uses a custom CRS. The vector download is transformed to WGS84 (EPSG:4326).",
       );
     return {
@@ -1149,6 +1160,7 @@ export async function runRasterToolClientAsync(
       geojson: download,
       wgs84,
       messages,
+      detailMessages,
     };
   };
   const p = parameters;
@@ -1192,9 +1204,11 @@ export async function runRasterToolClientAsync(
       const raster = requireRaster(inputs, toolId);
       // Resolve a declared CRS before computing; unknown image coordinates
       // remain useful for download but must not be placed on a geographic map.
-      const definition = Object.keys(raster.geoKeys ?? {}).length
-        ? await rasterCrsDefinition(raster, toolId)
-        : null;
+      const keys = raster.geoKeys ?? {};
+      const hasCrs =
+        [1, 2, 3].includes(Number(keys.GTModelTypeGeoKey)) ||
+        Object.keys(keys).some((key) => /^(?:Projected|Geographic|Geog|Proj)/.test(key));
+      const definition = hasCrs ? await rasterCrsDefinition(raster, toolId) : null;
       const out =
         toolId === "polygonize"
           ? polygonizeRaster(raster, p as never)
@@ -1239,6 +1253,7 @@ export async function runRasterToolClientAsync(
         raster: out.raster,
         bytes: writeRasterBands(out.raster),
         messages,
+        detailMessages: out.messages,
         matrix: out.matrix,
       };
     }

@@ -148,6 +148,18 @@ it("keeps unreferenced vectors downloadable and exports custom projected vectors
   assert.equal(unreferenced.wgs84, null);
   assert.ok("crs" in unreferenced.geojson);
   assert.equal(unreferenced.geojson.crs, null);
+  const registrationOnly = await runRasterToolClientAsync(
+    "polygonize",
+    {
+      raster: {
+        ...input,
+        geoKeys: { GTRasterTypeGeoKey: 1 },
+      },
+    },
+    {},
+  );
+  assert.equal(registrationOnly.kind, "vector");
+  if (registrationOnly.kind === "vector") assert.equal(registrationOnly.wgs84, null);
   const projected = await runRasterToolClientAsync(
     "polygonize",
     {

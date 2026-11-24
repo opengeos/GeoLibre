@@ -15,6 +15,17 @@ import {
   type DeploymentCapability,
 } from "../packages/core/src/deployment-capabilities";
 import { ROLE_PRIVILEGES } from "../packages/core/src/capabilities";
+import { RASTER_TOOLS } from "@geolibre/processing";
+
+it("keeps raster sidecar gates consistent with the client-only registry", () => {
+  for (const tool of RASTER_TOOLS) {
+    assert.equal(
+      commandAppPrivileges(`proc.raster.${tool.id}`)?.privileges.includes("processing:sidecar"),
+      !tool.clientOnly,
+      tool.id,
+    );
+  }
+});
 
 function command(id: string): Command {
   return { id, title: id, group: "Group", run: () => {} };

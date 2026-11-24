@@ -363,18 +363,17 @@ function warp(plan: WarpPlan): { bands: Float32Array[]; nodata: number } {
     }
     let acc = 0;
     let div = 0;
-    const take = (c: number, r: number, w: number) => {
-      if (w === 0) return;
-      if (c < 0 || c >= W || r < 0 || r >= H) return;
+    for (let tap = 0; tap < 4; tap += 1) {
+      const c = ix + (tap & 1);
+      const r = iy + (tap >> 1);
+      const w = (tap & 1 ? 1 - rx : rx) * (tap & 2 ? 1 - ry : ry);
+      if (w === 0) continue;
+      if (c < 0 || c >= W || r < 0 || r >= H) continue;
       const i = r * W + c;
-      if (!valid(band, i)) return;
+      if (!valid(band, i)) continue;
       div += w;
       acc += band[i] * w;
-    };
-    take(ix, iy, rx * ry);
-    take(ix + 1, iy, (1 - rx) * ry);
-    take(ix, iy + 1, rx * (1 - ry));
-    take(ix + 1, iy + 1, (1 - rx) * (1 - ry));
+    }
     if (div < 0.00001) return masked ? null : 0;
     return div === 1 ? acc : acc / div;
   };
