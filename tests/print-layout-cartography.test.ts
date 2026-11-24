@@ -743,3 +743,8 @@ describe("drawLayout with the cartographic extras", () => {
     close(insetImage.x, 50, 1e-6);
   });
 });
+
+it("rejects MGRS square labels outside the supported latitude range", () => {
+  for (const lat of [-81, 84, 85, NaN]) assert.equal(mgrsSquareLabel(0, lat), null);
+  assert.ok(mgrsSquareLabel(0, 83.9));
+});

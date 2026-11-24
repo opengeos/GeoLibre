@@ -415,3 +415,10 @@ describe("cartographic extras (GH #3530)", () => {
     assert.equal(isDefaultPrintLayout(a), false);
   });
 });
+
+it("expands shorthand inset colors for native color inputs", () => {
+  assert.equal(
+    normalizePrintLayoutConfig({ insetExtentColor: "#f00" })?.insetExtentColor,
+    "#ff0000",
+  );
+});

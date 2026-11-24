@@ -609,7 +609,10 @@ export function normalizePrintLayoutConfig(value: unknown): PrintLayoutConfig | 
     showInset: bool(raw.showInset, d.showInset),
     insetBasemap: oneOf(raw.insetBasemap, PRINT_LAYOUT_INSET_BASEMAPS, d.insetBasemap),
     insetZoomOffset: num(raw.insetZoomOffset, d.insetZoomOffset, -12, 0),
-    insetExtentColor: hexColor(raw.insetExtentColor, d.insetExtentColor),
+    insetExtentColor: hexColor(raw.insetExtentColor, d.insetExtentColor).replace(
+      /^#([a-f\d])([a-f\d])([a-f\d])$/i,
+      "#$1$1$2$2$3$3",
+    ),
     insetBox: frameBox(raw.insetBox),
 
     showGrid: bool(raw.showGrid, d.showGrid),

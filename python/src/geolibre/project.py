@@ -5240,7 +5240,10 @@ def print_layout_settings(**settings: Any) -> dict[str, Any]:
         elif key == "elementOffsets":
             allowed = {"title", "legend", "scaleBar", "northArrow", "footer"}
             if not isinstance(value, dict) or set(value) - allowed:
-                raise ValueError("element_offsets must map movable element names to offsets")
+                raise ValueError(
+                    "element_offsets must map title, legend, scaleBar, northArrow, "
+                    "or footer to offsets"
+                )
             copied = {}
             for name, entry in value.items():
                 if (

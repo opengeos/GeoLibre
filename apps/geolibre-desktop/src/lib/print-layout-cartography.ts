@@ -330,6 +330,7 @@ export function utmProjector(zone: UtmZone): (lng: number, lat: number) => [numb
  * @returns The label, or null outside MGRS coverage (the poles).
  */
 export function mgrsSquareLabel(lng: number, lat: number): string | null {
+  if (!Number.isFinite(lng) || !Number.isFinite(lat) || lat < -80 || lat >= 84) return null;
   try {
     const ref = mgrs.forward([wrapLongitude(lng), lat], 0);
     const match = /^(\d{1,2}[A-Z])([A-Z]{2})$/.exec(ref);

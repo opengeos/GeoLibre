@@ -85,7 +85,9 @@ export function useExportActions({
   const setError = (error: string | null) => dispatch({ type: "setUi", patch: { error } });
   const requireInset = () => {
     if (insetReady) return true;
-    setError(t("printLayout.inset.waitForMap"));
+    setError(
+      t(captured?.georef ? "printLayout.inset.waitForMap" : "printLayout.inset.needsGeoref"),
+    );
     return false;
   };
   const atlasAbortRef = useRef<AbortController | null>(null);

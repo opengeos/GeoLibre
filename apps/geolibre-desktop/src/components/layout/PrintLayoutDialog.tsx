@@ -165,15 +165,6 @@ export function PrintLayoutDialog({
     t,
   });
 
-  // The overview / inset map renders on its own hidden map, so it joins the
-  // page options once it is ready (GH #3530).
-  const insetState = useInsetMap(open, layout, baseOptions, captured);
-  const { inset } = insetState;
-  const options = useMemo<LayoutOptions>(
-    () => (inset ? { ...baseOptions, inset } : baseOptions),
-    [baseOptions, inset],
-  );
-
   // ---- Atlas (map series) derivations (GH #1291) ----
   const atlas = useAtlasSeries({
     open,
@@ -199,17 +190,27 @@ export function PrintLayoutDialog({
   // Options with this page's atlas tokens resolved, fed to the preview, the
   // clipboard copy, and the single-page exports; the inputs keep the raw
   // template so the tokens stay editable.
-  const displayOptions = useMemo<LayoutOptions>(() => {
-    const withBlocks = { ...options, ...displayDataBlocks };
+  const resolvedOptions = useMemo<LayoutOptions>(() => {
+    const withBlocks = { ...baseOptions, ...displayDataBlocks };
     return atlasTokenCtx
       ? {
           ...withBlocks,
-          title: substituteAtlasTokens(options.title, atlasTokenCtx),
-          subtitle: substituteAtlasTokens(options.subtitle, atlasTokenCtx),
-          footerText: substituteAtlasTokens(options.footerText, atlasTokenCtx),
+          title: substituteAtlasTokens(baseOptions.title, atlasTokenCtx),
+          subtitle: substituteAtlasTokens(baseOptions.subtitle, atlasTokenCtx),
+          footerText: substituteAtlasTokens(baseOptions.footerText, atlasTokenCtx),
         }
       : withBlocks;
-  }, [options, displayDataBlocks, atlasTokenCtx]);
+  }, [baseOptions, displayDataBlocks, atlasTokenCtx]);
+  const insetState = useInsetMap(open, layout, resolvedOptions, captured);
+  const { inset } = insetState;
+  const displayOptions = useMemo<LayoutOptions>(
+    () => (inset ? { ...resolvedOptions, inset } : resolvedOptions),
+    [resolvedOptions, inset],
+  );
+  const options = useMemo<LayoutOptions>(
+    () => (inset ? { ...baseOptions, inset } : baseOptions),
+    [baseOptions, inset],
+  );
 
   const { captureAtlasPage, goToAtlasPage, goToAtlasPageRef } = useAtlasCapture({
     mapControllerRef,

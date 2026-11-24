@@ -40,6 +40,11 @@ export function ExportActions({
   } = actions;
   return (
     <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+      {!insetReady && !georeferenced && (
+        <span role="status" className="me-auto text-sm text-muted-foreground">
+          {t("printLayout.inset.needsGeoref")}
+        </span>
+      )}
       {/* Atlas export progress and cancel button, kept visible next to the export buttons. */}
       {atlasProgress && (
         <div className="me-auto flex items-center gap-2">

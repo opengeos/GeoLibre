@@ -1533,13 +1533,14 @@ function pageGeoref(
 }
 
 /**
- * Draw the coordinate grid around the main map frame: optional grid lines
- * clipped to the map, outward border ticks, and labels outside the frame
- * (left and right labels read bottom to top). Labels that would overlap a
- * neighbour on the same edge are skipped. Needs a georeferenced capture; a
- * globe or pitched view has none, so nothing is drawn.
+ * Compute the grid for the visible map frame.
+ * @returns The grid, or null when the capture has no georeference or grid.
  */
-export function layoutMapGrid(opts: LayoutOptions, W: number, H: number) {
+export function layoutMapGrid(
+  opts: LayoutOptions,
+  W: number,
+  H: number,
+): ReturnType<typeof computeMapGrid> | null {
   const geo = pageGeoref(opts, W, H);
   if (!geo || !opts.grid) return null;
   return computeMapGrid({
