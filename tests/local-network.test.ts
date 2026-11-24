@@ -18,6 +18,23 @@ import {
 } from "../packages/processing/src/local-network";
 
 describe("network review regressions", () => {
+  it("rejects excessive candidate work from a large snap tolerance", () => {
+    const features: Feature[] = Array.from({ length: 6_000 }, (_, index) => ({
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [index * 0.00001, 0],
+          [index * 0.00001, 0.000001],
+        ],
+      },
+    }));
+    assert.throws(
+      () => buildLocalNetwork(features, { snapToleranceM: 1_000_000 }),
+      /snapping exceeds.*candidate budget/,
+    );
+  });
   it("remembers explicit routing consent when browser storage is unavailable", async () => {
     const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
     Object.defineProperty(globalThis, "localStorage", {

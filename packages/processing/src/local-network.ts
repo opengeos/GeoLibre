@@ -858,6 +858,15 @@ export function buildLocalNetwork(
   const splits = new Map<number, { t: number; node: number }[]>();
 
   if (toleranceDeg > 0 && rawLon.length) {
+    let snapCandidates = 0;
+    /** Bound both snapping passes before scanning candidate lists. */
+    const chargeCandidates = (count: number) => {
+      snapCandidates += count;
+      if (snapCandidates > 50_000_000)
+        throw new RangeError(
+          "Network snapping exceeds the 50-million candidate budget. Reduce the snap tolerance or extract a smaller network.",
+        );
+    };
     // Node-to-node: snap each endpoint onto the nearest other vertex in range.
     const minLon = rawLon.reduce((min, value) => Math.min(min, value), Infinity);
     const minLat = rawLat.reduce((min, value) => Math.min(min, value), Infinity);
@@ -872,6 +881,7 @@ export function buildLocalNetwork(
       const y = rawLat[node];
       const padX = toleranceDeg / Math.max(Math.cos(y * DEG), 1e-6);
       queryWrapped(nodeIndex, x, y, padX, toleranceDeg, near);
+      chargeCandidates(near.length);
       let best = -1;
       let bestD = Infinity;
       for (const other of near) {
@@ -925,6 +935,7 @@ export function buildLocalNetwork(
       const padX = toleranceDeg / Math.max(Math.cos(y * DEG), 1e-6);
       queryWrapped(segIndex, x, y, padX, toleranceDeg, candidates);
       stats.segmentCandidates += candidates.length;
+      chargeCandidates(candidates.length);
       let best: { seg: number; t: number; d: number } | null = null;
       for (const segId of new Set(candidates)) {
         const seg = segments[segId];

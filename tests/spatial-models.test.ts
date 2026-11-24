@@ -784,3 +784,29 @@ it("reports features excluded from GWR and kriging samples", async () => {
   assert.equal(diagnostic.results.length, 1, diagnostic.messages.join("\n"));
   assert.match(diagnostic.messages.join("\n"), /Skipped 1 feature/);
 });
+
+it("reports unlocated features omitted by both clustering tools", async () => {
+  const points = pointLayer([
+    [0, 0, {}],
+    [0.00001, 0, {}],
+    [0.00002, 0, {}],
+    [1, 0, {}],
+    [1.00001, 0, {}],
+    [1.00002, 0, {}],
+  ]);
+  points.geojson!.features.push({
+    type: "Feature",
+    properties: {},
+    geometry: { type: "GeometryCollection", geometries: [] },
+  });
+  for (const tool of [dbscanTool, hdbscanTool]) {
+    const output = await runTool(tool, points, {
+      eps: 100,
+      minPoints: 2,
+      minClusterSize: 2,
+      minSamples: 2,
+    });
+    assert.equal(output.results[0].geojson.features.length, 6);
+    assert.match(output.messages.join("\n"), /Skipped 1 feature\(s\) without a location/);
+  }
+});

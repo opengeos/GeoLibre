@@ -346,7 +346,7 @@ export function StatisticsToolsDialog({
       else tracker.finish("success");
     } catch (error) {
       if (controller.signal.aborted) {
-        tracker.finish("error", "Cancelled");
+        tracker.finish("error", t("statistics.cancelled"));
         return;
       }
       appendLog(`Error: ${(error as Error).message}`);
@@ -355,7 +355,7 @@ export function StatisticsToolsDialog({
       if (abortRef.current === controller) abortRef.current = null;
       setRunning(false);
     }
-  }, [tool, params, layers, appendLog, addResultLayer, mapControllerRef, isParamVisible]);
+  }, [tool, params, layers, appendLog, addResultLayer, mapControllerRef, isParamVisible, t]);
 
   // Auto-run for a History "Re-run": kick off handleRun on the render after the
   // pre-fill effect committed the recorded parameters. The ref always points at

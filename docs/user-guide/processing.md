@@ -264,7 +264,9 @@ Coincident stops or incident/facility matches are recorded as point features
 with zero cost, preserving the match without a degenerate route line.
 
 Local graph construction runs on the main thread and accepts at most 250,000
-vertices. Point placement has a 50-million edge/point comparison budget, including
+vertices. Endpoint-to-node and endpoint-to-segment snapping share a 50-million
+candidate budget. Reduce the snap tolerance or extract a smaller network if it is
+exceeded. Point placement has a 50-million edge/point comparison budget, including
 far or antimeridian selections that use a full edge scan. Searches yield between
 legs or incidents; graph construction itself is synchronous.
 

@@ -2434,6 +2434,8 @@ export const dbscanTool: ProcessingAlgorithm = {
     const features = layer.geojson.features;
     const located = locatedFeatures(features);
     const n = located.coords.length;
+    if (n < features.length)
+      ctx.log(`Skipped ${features.length - n} feature(s) without a location.`);
     if (!n) {
       ctx.log("Error: the layer has no locatable features");
       return;
@@ -2515,6 +2517,8 @@ export const hdbscanTool: ProcessingAlgorithm = {
     const features = layer.geojson.features;
     const located = locatedFeatures(features);
     const n = located.coords.length;
+    if (n < features.length)
+      ctx.log(`Skipped ${features.length - n} feature(s) without a location.`);
     if (minSamples > n) {
       ctx.log(`Error: minimum samples must not exceed the ${n} locatable features.`);
       return;

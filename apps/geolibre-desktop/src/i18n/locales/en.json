@@ -6274,6 +6274,7 @@
     "styleFailed": "Could not style \"{{name}}\": {{reason}}"
   },
   "statistics": {
+    "cancelled": "Cancelled",
     "title": "Spatial statistics",
     "description": "Spatial autocorrelation, hotspot analysis, and density measures. Every tool runs client-side on your GeoJSON layers.",
     "heading": "Spatial statistics",
