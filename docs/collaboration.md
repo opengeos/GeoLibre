@@ -326,6 +326,13 @@ Two hosts implement the same protocol and import the same permission/validation
 core:
 
 - `workers/collab` is the Cloudflare Durable Object used by the hosted service.
+  New session creation requires the `COLLAB_RATE_LIMITER` binding configured
+  in `workers/collab/wrangler.toml`. A missing or failed binding returns `503`;
+  there is no isolate-local fallback that can reset the budget. Health checks
+  and existing session routes remain available. The [Cloudflare Rate Limiting
+  API](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
+  applies approximate limits per Cloudflare location, rather than a strict
+  global quota.
 - `workers/collab-node` is the self-hostable Node/SQLite relay. It is included
   as `geolibre-collab` in the root `docker-compose.yml`; its persistent database
   is mounted at `/data/collab.sqlite`. It serves the same HTTP endpoints as
