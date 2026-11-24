@@ -226,7 +226,15 @@ async def set_relay_access(request: Request) -> dict[str, bool]:
     async with _hub.access_lock:
         _access_allowed = payload["enabled"]
         if _access_allowed:
-            await run_in_threadpool(write_discovery_file)
+            published = await run_in_threadpool(write_discovery_file)
+            if published is None:
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "Live MCP discovery could not be published. "
+                        "Retry after checking runtime directory permissions."
+                    ),
+                )
         else:
             _access_generation += 1
             await run_in_threadpool(remove_discovery_file)

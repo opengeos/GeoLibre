@@ -22,6 +22,31 @@ from geolibre_server.app import main, relay
 SIDECAR_TOKEN = "sidecar-secret"
 
 
+@pytest.mark.parametrize("origin", ["http://[::1", "http://[invalid]", "https://[::1"])
+def test_malformed_origin_is_rejected(origin):
+    """Reject malformed URL headers without leaking a parse exception.
+
+    Args:
+        origin: A malformed browser Origin header.
+    """
+    assert not relay_protocol.is_allowed_origin(origin)
+
+
+def test_access_reports_failed_discovery_and_can_retry(client, monkeypatch):
+    """Surface publication failure to the desktop's retry path.
+
+    Args:
+        client: The shared-loop relay HTTP client.
+        monkeypatch: The pytest patch fixture.
+    """
+    write = relay.write_discovery_file
+    monkeypatch.setattr(relay, "write_discovery_file", lambda: None)
+    headers = {"X-GeoLibre-Token": SIDECAR_TOKEN}
+    assert client.post("/relay/access", json={"enabled": True}, headers=headers).status_code == 503
+    monkeypatch.setattr(relay, "write_discovery_file", write)
+    assert client.post("/relay/access", json={"enabled": True}, headers=headers).status_code == 200
+
+
 @pytest.mark.parametrize("reenabled", [False, True])
 def test_handshake_cannot_subscribe_after_access_is_revoked(enabled, monkeypatch, reenabled):
     """Reject a socket whose handshake finishes after revocation.

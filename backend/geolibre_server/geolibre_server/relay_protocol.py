@@ -84,10 +84,13 @@ def is_allowed_origin(origin: str | None) -> bool:
     """
     if not origin:
         return True
-    parsed = urlparse(origin)
-    if parsed.scheme not in _ALLOWED_ORIGIN_SCHEMES:
+    try:
+        parsed = urlparse(origin)
+        if parsed.scheme not in _ALLOWED_ORIGIN_SCHEMES:
+            return False
+        return (parsed.hostname or "") in _ALLOWED_ORIGIN_HOSTS
+    except ValueError:
         return False
-    return (parsed.hostname or "") in _ALLOWED_ORIGIN_HOSTS
 
 
 def result_timeout_seconds(method: str, requested: Any = None) -> float:
