@@ -414,3 +414,83 @@ def test_broadcast_drops_stalled_peers_without_blocking_healthy_windows(monkeypa
 )
 def test_result_timeout_is_per_method_and_clamped(method, requested, expected):
     assert relay_protocol.result_timeout_seconds(method, requested) == expected
+
+
+def test_discovery_write_failure_is_reported_without_disabling_explicit_transport(
+    enabled, monkeypatch, caplog
+):
+    """File publication failures stay visible while configured clients remain usable.
+
+    Args:
+        enabled: An isolated, enabled relay fixture.
+        monkeypatch: The pytest patch fixture.
+        caplog: Captured server logs.
+    """
+
+    def fail_file(*args, **kwargs):
+        """Simulate a directory that cannot accept the private discovery file.
+
+        Args:
+            *args: Temporary-file positional arguments.
+            **kwargs: Temporary-file keyword arguments.
+
+        Raises:
+            PermissionError: Always, to simulate denied filesystem access.
+        """
+        raise PermissionError("unwritable directory")
+
+    monkeypatch.setattr(relay.tempfile, "NamedTemporaryFile", fail_file)
+    assert relay.write_discovery_file() is None
+    assert "Could not publish Live MCP discovery file (PermissionError)" in caplog.text
+    assert relay.relay_token() not in caplog.text
+    assert relay.relay_enabled()
+    with TestClient(main.app) as client:
+        assert client.get("/relay/status", headers=_client_headers()).status_code == 200
+
+
+def test_large_frames_receive_a_bounded_proportional_send_budget(monkeypatch):
+    """A healthy socket can drain a large frame beyond the small-command deadline.
+
+    Args:
+        monkeypatch: The pytest patch fixture.
+    """
+    monkeypatch.setattr(relay, "SEND_TIMEOUT_SECONDS", 0.01)
+
+    async def exercise():
+        """Send a larger command over a temporarily busy socket."""
+        hub = relay._Hub()
+
+        class Socket:
+            """An app connection that takes longer than the base budget to drain."""
+
+            closed = False
+
+            async def send_text(self, encoded):
+                """Consume the frame after a brief simulated period of backpressure.
+
+                Args:
+                    encoded: The outgoing JSON frame.
+                """
+                await asyncio.sleep(0.04)
+                assert len(encoded) > 128 * 1024
+
+            async def close(self, code):
+                """Record whether the otherwise healthy connection was closed.
+
+                Args:
+                    code: The WebSocket close status.
+                """
+                self.closed = True
+
+        socket = Socket()
+        hub.listeners.append(socket)
+        assert (
+            await hub.broadcast(
+                {"method": "addRasterBytes", "params": {"data": "x" * (128 * 1024)}}
+            )
+            == 1
+        )
+        assert not socket.closed
+        assert hub.listeners == [socket]
+
+    asyncio.run(exercise())

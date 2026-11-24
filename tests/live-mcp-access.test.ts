@@ -42,7 +42,7 @@ it("stops retrying when the server stops", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   let requests = 0;
   const controller = createLiveMcpAccessController({
-    getEnabled: () => false,
+    getEnabled: () => true,
     send: async () => {
       requests += 1;
       throw new Error("offline");
@@ -81,5 +81,64 @@ it("does not publish a late enable after the preference has been revoked", async
   assert.deepEqual(requests, [true, false]);
   assert.equal(controller.getState().ready, null);
   assert.equal(controller.getState().enabled, false);
+  controller.setServer(null);
+});
+
+it("does not send or warn about revocation for a server that was never enabled", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let requests = 0;
+  const controller = createLiveMcpAccessController({
+    getEnabled: () => false,
+    send: async () => {
+      requests += 1;
+      throw new Error("offline");
+    },
+  });
+  controller.setServer(SERVER);
+  await controller.sync();
+  t.mock.timers.tick(60000);
+  await Promise.resolve();
+  assert.equal(requests, 0);
+  assert.deepEqual(controller.getState(), { ready: null, enabled: false, error: false });
+  controller.setServer(null);
+});
+
+it("revokes a possibly accepted enable even when its response was lost", async () => {
+  let enabled = true;
+  const requests: boolean[] = [];
+  const controller = createLiveMcpAccessController({
+    getEnabled: () => enabled,
+    send: async (_server, desired) => {
+      requests.push(desired);
+      if (desired) throw new Error("enable response lost");
+    },
+  });
+  controller.setServer(SERVER);
+  await controller.sync();
+  enabled = false;
+  await controller.sync();
+  await controller.sync();
+  assert.deepEqual(requests, [true, false]);
+  assert.equal(controller.getState().error, false);
+  controller.setServer(null);
+});
+
+it("keeps listener failures separate from server synchronization failures", async (t) => {
+  const warnings = t.mock.method(console, "error", () => {});
+  let requests = 0;
+  const controller = createLiveMcpAccessController({
+    getEnabled: () => true,
+    send: async () => {
+      requests += 1;
+    },
+  });
+  controller.subscribe(() => {
+    throw new Error("listener bug");
+  });
+  controller.setServer(SERVER);
+  await controller.sync();
+  assert.equal(requests, 1);
+  assert.deepEqual(controller.getState(), { ready: SERVER, enabled: true, error: false });
+  assert.ok(warnings.mock.callCount() > 0);
   controller.setServer(null);
 });

@@ -555,7 +555,7 @@ def test_print_layout_tool_rejects_reserved_settings(server, tmp_path, key):
         )
 
 
-@pytest.mark.parametrize("key", ["project", "layer", "widget_type"])
+@pytest.mark.parametrize("key", ["project", "layer", "layer_id", "widget_type"])
 def test_dashboard_tool_rejects_reserved_options(server, tmp_path, key):
     """Reject keyword collisions instead of exposing a Python argument error."""
     from mcp.server.mcpserver.exceptions import ToolError
@@ -650,3 +650,22 @@ def test_mcp_tools_cover_the_parity_surface(server, tmp_path):
     project = json.loads((tmp_path / "parity.geolibre.json").read_text())
     assert "widgets" not in project
     assert "layerGroups" not in project
+
+
+@pytest.mark.parametrize("kind", ["arcgis", "zarr"])
+@pytest.mark.parametrize("scheme", ["ftp", "file"])
+def test_invalid_scheme_errors_do_not_echo_embedded_credentials(kind, scheme):
+    """Scheme validation cannot expose credentials before userinfo validation.
+
+    Args:
+        kind: The layer builder to exercise.
+        scheme: An unsupported URL scheme carrying userinfo.
+    """
+    url = f"{scheme}://private-user:private-password@example.com/data?token=private-token"
+    with pytest.raises(ValueError) as error:
+        if kind == "arcgis":
+            _project.arcgis_layer("Private", url)
+        else:
+            _project.zarr_layer("Private", url, variable="temperature")
+    assert "private-password" not in str(error.value)
+    assert "private-token" not in str(error.value)

@@ -47,15 +47,12 @@ export async function startGeoLibreSidecar(): Promise<SidecarServerInfo> {
   // (which resolve the base URL themselves) are authenticated.
   if (generation === stopGeneration) {
     setSidecarAuthToken(info.token);
-    setLiveSidecar(info);
+    relayAccess.setServer(info);
     void updateLiveMcpAccess();
   }
   return info;
 }
 
-// The running sidecar, published so app-level consumers (the Live MCP command
-// relay in useJupyterRelay) connect whenever any feature has started it.
-let liveSidecar: SidecarServerInfo | null = null;
 let stopGeneration = 0;
 const relayAccess = createLiveMcpAccessController({
   getEnabled: () => useDesktopSettingsStore.getState().desktopSettings.startup.allowLiveMcp,
@@ -88,39 +85,6 @@ export function subscribeSidecarRelay(
 ): () => void {
   return relayAccess.subscribe((state) => listener(state.ready));
 }
-const sidecarListeners = new Set<(info: SidecarServerInfo | null) => void>();
-
-function sameSidecar(a: SidecarServerInfo | null, b: SidecarServerInfo | null): boolean {
-  if (a === null || b === null) return a === b;
-  return a.baseUrl === b.baseUrl && a.token === b.token;
-}
-
-function setLiveSidecar(info: SidecarServerInfo | null): void {
-  // Every processing call re-runs startGeoLibreSidecar and gets the same
-  // server back; only a real change should reconnect the relay socket.
-  if (sameSidecar(liveSidecar, info)) return;
-  liveSidecar = info;
-  relayAccess.setServer(info);
-  for (const listener of sidecarListeners) listener(info);
-}
-
-/**
- * Observe the desktop sidecar's lifecycle.
- *
- * @param listener - Called with the current sidecar (or null) immediately, then
- *   whenever it starts, changes, or stops.
- * @returns An unsubscribe function.
- */
-export function subscribeSidecarServer(
-  listener: (info: SidecarServerInfo | null) => void,
-): () => void {
-  sidecarListeners.add(listener);
-  listener(liveSidecar);
-  return () => {
-    sidecarListeners.delete(listener);
-  };
-}
-
 /**
  * `catch` handler for a best-effort start whose follow-up status request
  * reports a missing runtime better than the start error does. A stale sidecar
@@ -139,7 +103,7 @@ export async function stopGeoLibreSidecar(): Promise<void> {
   await invoke("stop_geolibre_sidecar");
   stopGeneration += 1;
   setSidecarAuthToken(null);
-  setLiveSidecar(null);
+  relayAccess.setServer(null);
 }
 
 function assertSidecarAllowed(): void {

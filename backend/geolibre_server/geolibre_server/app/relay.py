@@ -39,6 +39,7 @@ import asyncio
 import contextlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import tempfile
@@ -80,7 +81,11 @@ RELAY_CLIENT_PATHS = frozenset({"/relay/command", "/relay/status"})
 
 _RELAY_TOKEN = secrets.token_urlsafe(32)
 SEND_TIMEOUT_SECONDS = 1.0
+MAX_SEND_TIMEOUT_SECONDS = 30.0
+SEND_BYTES_PER_SECOND = 1024 * 1024
 _access_allowed = False
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/relay", tags=["relay"])
 
@@ -104,6 +109,11 @@ class _Hub:
             The number of windows reached.
         """
         encoded = json.dumps(message)
+        # ASCII JSON has one byte per character. Large GeoJSON and base64
+        # frames get a proportional transfer budget, still capped for stalls.
+        send_timeout = min(
+            MAX_SEND_TIMEOUT_SECONDS, SEND_TIMEOUT_SECONDS + len(encoded) / SEND_BYTES_PER_SECOND
+        )
         delivered = delivered if delivered is not None else [0]
 
         async def send(socket: WebSocket) -> int:
@@ -116,7 +126,7 @@ class _Hub:
                 One on delivery, or zero after dropping a stalled or dead peer.
             """
             try:
-                await asyncio.wait_for(socket.send_text(encoded), SEND_TIMEOUT_SECONDS)
+                await asyncio.wait_for(socket.send_text(encoded), send_timeout)
             except (Exception, asyncio.CancelledError):
                 # Cancellation can interrupt an ASGI frame write after bytes
                 # were accepted. Deliberately close that uncertain connection
@@ -231,7 +241,8 @@ def write_discovery_file() -> Path | None:
 
     Returns:
         The path written, or None when the relay is disabled or the file could
-        not be written (the relay still works through ``GEOLIBRE_RELAY_URL``).
+        not be written. Failures are logged; the relay still works through
+        explicit ``GEOLIBRE_RELAY_URL`` / ``GEOLIBRE_RELAY_TOKEN`` configuration.
     """
     port = _configured_port()
     if port is None or not relay_enabled():
@@ -256,7 +267,12 @@ def write_discovery_file() -> Path | None:
             temporary = Path(handle.name)
             json.dump(payload, handle)
         os.replace(temporary, target)
-    except OSError:
+    except OSError as error:
+        logger.warning(
+            "Could not publish Live MCP discovery file (%s); explicit "
+            "GEOLIBRE_RELAY_URL/GEOLIBRE_RELAY_TOKEN configuration remains available",
+            type(error).__name__,
+        )
         if temporary is not None:
             with contextlib.suppress(OSError):
                 temporary.unlink()

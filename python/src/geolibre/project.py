@@ -4561,7 +4561,7 @@ def arcgis_layer(
     if service not in ARCGIS_SERVICES:
         raise ValueError(f"service must be one of {sorted(ARCGIS_SERVICES)}, got {service!r}")
     if not isinstance(url, str) or not url.strip().lower().startswith(("https://", "http://")):
-        raise ValueError(f"url must be an http(s) ArcGIS REST service URL, got {url!r}")
+        raise ValueError("url must be an http(s) ArcGIS REST service URL")
     service_url = url.strip().split("?", 1)[0].split("#", 1)[0].rstrip("/")
     _assert_no_url_userinfo(service_url)
     if "token=" in url.lower():
@@ -4713,7 +4713,7 @@ def zarr_layer(
             "use a plain Zarr store URL"
         )
     if not re.match(r"^(https?|s3|gs)://", store_url, re.IGNORECASE):
-        raise ValueError(f"zarr_layer: url must be http(s)://, s3://, or gs://, got {url!r}")
+        raise ValueError("zarr_layer: url must be http(s)://, s3://, or gs://")
     _assert_no_url_userinfo(store_url)
     if not isinstance(variable, str) or not variable.strip():
         raise ValueError("zarr_layer: variable must be a non-empty string")

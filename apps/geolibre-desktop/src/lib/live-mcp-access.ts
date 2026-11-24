@@ -13,6 +13,7 @@ export function createLiveMcpAccessController(options: {
 }) {
   let server: SidecarServerInfo | null = null;
   let generation = 0;
+  let mayHaveGrantedAccess = false;
   let retry: ReturnType<typeof setTimeout> | null = null;
   let attempt = 0;
   let queue = Promise.resolve();
@@ -23,7 +24,14 @@ export function createLiveMcpAccessController(options: {
     if (state.ready === next.ready && state.enabled === next.enabled && state.error === next.error)
       return;
     state = next;
-    for (const listener of listeners) listener(state);
+    for (const listener of listeners) notifyListener(listener);
+  };
+  const notifyListener = (listener: (state: LiveMcpAccessState) => void) => {
+    try {
+      listener(state);
+    } catch (error) {
+      console.error("Live MCP access listener failed", error);
+    }
   };
   const clearRetry = () => {
     if (retry !== null) clearTimeout(retry);
@@ -41,10 +49,19 @@ export function createLiveMcpAccessController(options: {
       if (!info) return;
       const mine = generation;
       const desired = options.getEnabled();
+      if (!desired && !mayHaveGrantedAccess) {
+        attempt = 0;
+        publish({ ready: null, enabled: false, error: false });
+        return;
+      }
+      // An enable may reach the server even if its response is lost. A later
+      // opt-out must revoke that ambiguous grant, not only confirmed grants.
+      if (desired) mayHaveGrantedAccess = true;
       try {
         await options.send(info, desired);
         if (mine !== generation || desired !== options.getEnabled()) return;
         attempt = 0;
+        mayHaveGrantedAccess = desired;
         publish({ ready: desired ? info : null, enabled: desired, error: false });
       } catch {
         if (mine !== generation || desired !== options.getEnabled()) return;
@@ -70,13 +87,14 @@ export function createLiveMcpAccessController(options: {
       if (server?.baseUrl === info?.baseUrl && server?.token === info?.token) return;
       generation += 1;
       server = info;
+      mayHaveGrantedAccess = false;
       attempt = 0;
       clearRetry();
       publish({ ready: null, enabled: options.getEnabled(), error: false });
     },
     subscribe(listener: (state: LiveMcpAccessState) => void) {
       listeners.add(listener);
-      listener(state);
+      notifyListener(listener);
       return () => {
         listeners.delete(listener);
       };
