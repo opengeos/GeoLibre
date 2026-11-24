@@ -123,7 +123,7 @@
     "@cesium/engine": "^26.5.0",
     "@cesium/widgets": "^16.3.1",
     "@geolibre/core": "*",
-    "@maplibre/geojson-vt": "^6.3.1",
+    "@maplibre/geojson-vt": "^7.0.1",
     "@maplibre/vt-pbf": "^4.3.2",
     "@protomaps/basemaps": "^5.7.2",
     "@turf/bbox": "^7.4.0",
