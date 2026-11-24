@@ -2040,7 +2040,7 @@ function collectRegressionSample(
   explanatory: string[],
   requireLocation = true,
 ): RegressionSample {
-  const coords = featureCoords(features);
+  const coords = requireLocation ? featureCoords(features) : [];
   const out: RegressionSample = { indices: [], coords: [], y: [], x: [] };
   features.forEach((feature, index) => {
     const position = coords[index];
@@ -2070,7 +2070,12 @@ function readModelFields(
     ctx.log("Error: layer has no GeoJSON data");
     return null;
   }
-  const dependent = String(ctx.parameters.dependent ?? "").trim();
+  const selected = String(ctx.parameters.dependent ?? "");
+  const dependent = layer.geojson.features.some((feature) =>
+    Object.hasOwn(feature.properties ?? {}, selected),
+  )
+    ? selected
+    : selected.trim();
   if (!dependent) {
     ctx.log("Error: choose the dependent variable");
     return null;
@@ -2273,7 +2278,7 @@ export const gwrTool: ProcessingAlgorithm = {
     const fit = gwr(sample.x, sample.y, dm, bandwidth, options, true);
     if (!fit) {
       ctx.log(
-        "Error: a local regression is singular at this bandwidth (too few neighbors, or collinear fields); widen the bandwidth.",
+        "Error: local inference is unavailable at this bandwidth (too few neighbors, collinear fields, or no residual degrees of freedom); widen the bandwidth.",
       );
       return;
     }
@@ -2399,7 +2404,12 @@ export const dbscanTool: ProcessingAlgorithm = {
       ctx.log("Error: the search distance must be positive");
       return;
     }
-    const minPoints = Math.max(1, Math.round(Number(ctx.parameters.minPoints ?? 5)) || 5);
+    const minPoints = Math.max(
+      1,
+      Number.isFinite(Number(ctx.parameters.minPoints ?? 5))
+        ? Math.round(Number(ctx.parameters.minPoints ?? 5))
+        : 5,
+    );
     const features = layer.geojson.features;
     const located = locatedFeatures(features);
     const n = located.coords.length;
@@ -2478,7 +2488,12 @@ export const hdbscanTool: ProcessingAlgorithm = {
       ctx.log("Error: layer has no GeoJSON data");
       return;
     }
-    const minClusterSize = Math.max(2, Math.round(Number(ctx.parameters.minClusterSize ?? 5)) || 5);
+    const minClusterSize = Math.max(
+      2,
+      Number.isFinite(Number(ctx.parameters.minClusterSize ?? 5))
+        ? Math.round(Number(ctx.parameters.minClusterSize ?? 5))
+        : 5,
+    );
     const rawSamples = Math.round(Number(ctx.parameters.minSamples ?? 0));
     const minSamples = rawSamples > 0 ? rawSamples : minClusterSize;
     const features = layer.geojson.features;

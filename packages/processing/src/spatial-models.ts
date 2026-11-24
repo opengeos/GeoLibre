@@ -169,14 +169,7 @@ export interface OlsResult {
   aicc: number;
 }
 
-/**
- * Ordinary least squares with an intercept.
- *
- * @param x - n rows of explanatory values (without the intercept column).
- * @param y - n dependent values.
- * @returns The fit, or null when X'X is singular (collinear variables) or
- *   there are too few observations.
- */
+/** Center and scale predictors, with transforms back to original units. */
 function regressionBasis(x: number[][]) {
   const p = x[0]?.length ?? 0;
   const means = Array.from({ length: p }, (_, j) =>
@@ -198,19 +191,26 @@ function regressionBasis(x: number[][]) {
     rows: x.map((row) => [1, ...row.map((v, j) => (v - means[j]) / scales[j])]),
     coefficients: (beta: number[]) =>
       transform.map((row) => row.reduce((sum, value, j) => sum + value * beta[j], 0)),
-    covariance: (cov: number[][]) =>
-      transform.map((left) =>
-        transform.map((right) =>
-          left.reduce(
-            (sum, a, i) => sum + a * right.reduce((inner, b, j) => inner + b * cov[i][j], 0),
-            0,
-          ),
-        ),
+    covarianceDiagonal: (cov: number[][]) =>
+      transform.map((row, index) =>
+        index === 0
+          ? row.reduce(
+              (sum, a, i) => sum + a * row.reduce((inner, b, j) => inner + b * cov[i][j], 0),
+              0,
+            )
+          : cov[index][index] * row[index] ** 2,
       ),
   };
 }
 
-/** Fit OLS in a centered, scaled basis and return estimates in original units. */
+/**
+ * Ordinary least squares with an intercept.
+ *
+ * @param x - n rows of explanatory values (without the intercept column).
+ * @param y - n dependent values.
+ * @returns The fit, or null when X'X is singular (collinear variables) or
+ *   there are too few observations.
+ */
 export function ols(x: number[][], y: number[]): OlsResult | null {
   const n = y.length;
   const k = (x[0]?.length ?? 0) + 1;
@@ -239,8 +239,8 @@ export function ols(x: number[][], y: number[]): OlsResult | null {
   const sigma2 = rss / df;
   const coefficients = basis.coefficients(beta);
   const standardErrors = basis
-    .covariance(inv)
-    .map((row, j) => Math.sqrt(Math.max(0, row[j]) * sigma2));
+    .covarianceDiagonal(inv)
+    .map((value) => Math.sqrt(Math.max(0, value) * sigma2));
   const tValues = coefficients.map((b, j) => b / standardErrors[j]);
   const r2 = tss > 0 ? 1 - rss / tss : NaN;
   const fStatistic =
@@ -407,7 +407,7 @@ export function gwr(
   const rows = basis.rows;
   const w = new Float64Array(n);
   const coefficients: number[][] = [];
-  const covariances: number[][][] = [];
+  const covariances: number[][] = [];
   const fitted = new Array<number>(n);
   const influence = new Array<number>(n);
   let traceS = 0;
@@ -453,7 +453,7 @@ export function gwr(
       const cov = tmp.map((row) =>
         inv[0].map((_, c) => row.reduce((s, v, j) => s + v * inv[j][c], 0)),
       );
-      covariances.push(basis.covariance(cov));
+      covariances.push(basis.covarianceDiagonal(cov));
       traceSS += xi.reduce((s, v, a) => s + v * cov[a].reduce((t, u, b) => t + u * xi[b], 0), 0);
     }
   }
@@ -484,11 +484,15 @@ export function gwr(
     aicc: gwrAicc(rss, n, traceS),
   };
   if (!full) return result;
-  const sigma2 = rss / (n - 2 * traceS + traceSS);
+  const residualDf = n - 2 * traceS + traceSS;
+  if (residualDf <= 1e-10 * n) return null;
+  const sigma2 = rss / residualDf;
   result.sigma2 = sigma2;
   // GWR4: 1 - (1 - R²)(n - 1) / (n - 1 - k) with k = 2 tr(S) - tr(S'S).
   result.adjR2 = 1 - ((1 - r2) * (n - 1)) / (n - 1 - (2 * traceS - traceSS));
-  result.standardErrors = covariances.map((cov) => cov.map((row, j) => Math.sqrt(row[j] * sigma2)));
+  result.standardErrors = covariances.map((cov) =>
+    cov.map((value) => Math.sqrt(Math.max(0, value) * sigma2)),
+  );
   result.tValues = coefficients.map((beta, i) =>
     beta.map((b, j) => b / result.standardErrors[i][j]),
   );
@@ -548,6 +552,7 @@ export function searchGwrBandwidth(
 ): { bandwidth: number; aicc: number; evaluations: number } {
   const k = (x[0]?.length ?? 0) + 1;
   let [a, c] = bounds ?? gwrBandwidthBounds(dm, k, options);
+  const [minimum, maximum] = [a, c];
   const integer = options.adaptive;
   const cache = new Map<number, number>();
   const score = (bw: number): number => {
@@ -587,7 +592,7 @@ export function searchGwrBandwidth(
   let bestScore = score(best);
   if (integer) {
     for (let bw = Math.floor(a) - 1; bw <= Math.ceil(c) + 1; bw++) {
-      if (bw < 2 || bw > dm.n) continue;
+      if (bw < 2 || bw > dm.n || bw < minimum || bw > maximum) continue;
       const s = score(bw);
       if (s < bestScore) {
         bestScore = s;
@@ -1129,6 +1134,11 @@ export function krigingLeaveOneOut(
     }
   }
   k[n][n] = 0;
+  const scale = k
+    .slice(0, n)
+    .reduce((max, row) => Math.max(max, ...row.slice(0, n).map(Math.abs)), 0);
+  if (!(scale > 0) || !Number.isFinite(scale)) return null;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) k[i][j] /= scale;
   const inv = invertMatrix(k);
   if (!inv) return null;
   const predicted: number[] = [];
@@ -1141,7 +1151,7 @@ export function krigingLeaveOneOut(
     const bii = inv[i][i];
     // Variogram-form Dubrule: z_i - ẑ_-i = (B z̃)_i / B_ii, σ²_-i = -1 / B_ii.
     const residual = bz / bii;
-    const variance = -1 / bii;
+    const variance = -scale / bii;
     const pred = z[i] - residual;
     predicted.push(pred);
     errors.push(pred - z[i]);

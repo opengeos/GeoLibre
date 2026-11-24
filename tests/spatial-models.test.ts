@@ -111,7 +111,9 @@ describe("statistical review regressions", () => {
   it("keeps three stable coincident HDBSCAN pairs separate", () => {
     const locations = [0, 0, 1, 1, 10, 10];
     const result = hdbscan(6, (i, j) => Math.abs(locations[i] - locations[j]), 2, 2);
-    assert.equal(new Set(result.labels).size, 3);
+    assert.ok(result.labels.every((label) => label >= 0));
+    for (let i = 0; i < 6; i += 2) assert.equal(result.labels[i], result.labels[i + 1]);
+    assert.equal(new Set([result.labels[0], result.labels[2], result.labels[4]]).size, 3);
     assert.equal(result.probabilities.length, 6);
     assert.ok(result.probabilities.every(Number.isFinite));
   });
@@ -674,4 +676,35 @@ describe("regression and clustering tools", () => {
     }
     assert.equal(results[0].geojson.features.length, 61);
   });
+});
+
+it("keeps adaptive bandwidth candidates inside caller bounds", () => {
+  const found = searchGwrBandwidth(gX, gY, gDist, { kernel: "bisquare", adaptive: true }, [92, 92]);
+  assert.equal(found.bandwidth, 92);
+  assert.equal(found.evaluations, 1);
+});
+
+it("rejects GWR inference with no residual degrees of freedom", () => {
+  const sites = [0, 0, 100, 100, 200, 200];
+  const x = [[-1], [1], [-1], [1], [-1], [1]];
+  const y = [1, 3, 2, 4, 3, 5];
+  const dm = new DistanceMatrix(6, (i, j) => Math.abs(sites[i] - sites[j]));
+  assert.equal(gwr(x, y, dm, 50, { kernel: "bisquare", adaptive: false }, true), null);
+  assert.ok(gwr(x, y, dm, 500, { kernel: "bisquare", adaptive: false }, true));
+});
+
+it("keeps kriging predictions invariant under variogram rescaling", () => {
+  const run = (sill: number) =>
+    krigingLeaveOneOut(3, (i, j) => Math.abs(i - j), [1, 3, 2], {
+      model: "linear",
+      nugget: 0,
+      sill,
+      range: 100,
+      sse: 0,
+    });
+  const base = run(100);
+  const tiny = run(1e-12);
+  assert.ok(base && tiny);
+  base.predicted.forEach((value, i) => close(tiny.predicted[i], value, 1e-10));
+  base.variances.forEach((value, i) => close(tiny.variances[i] / 1e-14, value, 1e-10));
 });

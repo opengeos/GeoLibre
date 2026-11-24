@@ -301,6 +301,7 @@ describe("parseDirection", () => {
     assert.equal(parseDirection(1), "forward");
     assert.equal(parseDirection(true), "forward");
     assert.equal(parseDirection("FT"), "forward");
+    for (const alias of ["t", "f", "r"]) assert.equal(parseDirection(alias), "both");
     assert.equal(parseDirection("-1"), "backward");
     assert.equal(parseDirection("TF"), "backward");
     assert.equal(parseDirection("N"), "closed");
@@ -649,4 +650,51 @@ describe("local network tools", () => {
     assert.ok(Math.abs(lineLength(coords[0]) - 200) < 0.01);
     assert.ok(coords[0][0][0] >= deg(500) - 1e-12, "reachable only eastward");
   });
+});
+
+it("checks service area budgets after facility snapping splits edges", async () => {
+  const net = layer("net", [
+    line([
+      [0, 0],
+      [1000, 0],
+    ]),
+  ]);
+  const facilities = layer(
+    "facilities",
+    Array.from({ length: 800 }, (_, i) => point(i + 1, 0)),
+  );
+  const result = await run(localServiceAreaTool, [net, facilities], {
+    network: "net",
+    facilities: "facilities",
+    overlap: "separate",
+    polygonWidth: 0,
+    breaks: "1000,1100,1200,1300,1400,1500,1600,1700,1800,1900",
+    snapTolerance: 0.01,
+  });
+  assert.equal(result.results.length, 0);
+  assert.match(result.messages.join("\n"), /too large/);
+});
+
+it("lets cancellation run between shortest-path legs", async () => {
+  const net = layer("net", [
+    line([
+      [0, 0],
+      [1000, 0],
+    ]),
+  ]);
+  const stops = layer("stops", [point(0, 0), point(500, 0), point(1000, 0)]);
+  const controller = new AbortController();
+  let outputs = 0;
+  const pending = localShortestPathTool.run({
+    layers: [net, stops],
+    parameters: { network: "net", stops: "stops" },
+    signal: controller.signal,
+    log: () => {},
+    addResultLayer: () => {
+      outputs++;
+    },
+  });
+  controller.abort();
+  await pending;
+  assert.equal(outputs, 0);
 });

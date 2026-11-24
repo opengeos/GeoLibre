@@ -331,16 +331,23 @@ export function StatisticsToolsDialog({
         signal: controller.signal,
         log: appendLog,
         fitBounds: (bounds) => mapControllerRef.current?.fitBounds(bounds),
-        addResultLayer,
+        addResultLayer: (...args) => {
+          controller.signal.throwIfAborted();
+          addResultLayer(...args);
+        },
         viewportBounds: () => mapControllerRef.current?.getViewBounds() ?? null,
       };
       await runAlgorithmInBackground(tool, ctx);
+      controller.signal.throwIfAborted();
       // A logged "Error: ..." line marks a soft failure (the client tools
       // bail out without throwing); don't record those as successes.
       if (softErrorRef.current) tracker.finish("error", softErrorRef.current);
       else tracker.finish("success");
     } catch (error) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) {
+        tracker.finish("error", "Cancelled");
+        return;
+      }
       appendLog(`Error: ${(error as Error).message}`);
       tracker.finish("error", (error as Error).message);
     } finally {

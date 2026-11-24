@@ -1,5 +1,6 @@
 import { featureCollection } from "@turf/helpers";
 import buffer from "@turf/buffer";
+import { bodyLengthToEarth } from "@geolibre/core/worker-safe";
 import type { Feature, Point, Position } from "geojson";
 import {
   type GeoLibreLayer,
@@ -573,7 +574,7 @@ export const localShortestPathTool: ProcessingAlgorithm = {
     },
     ROUTE_ALGORITHM_PARAM,
   ],
-  run: (ctx) => {
+  run: async (ctx) => {
     const orderField = ((ctx.parameters.order_field as string | undefined) ?? "").trim();
     const stops = layerToSequencedPoints(getLayer(ctx, "stops"), orderField);
     if (stops.length < 2) {
@@ -594,6 +595,8 @@ export const localShortestPathTool: ProcessingAlgorithm = {
     let totalLength = 0;
     let unreachable = 0;
     for (let i = 1; i < placed.length; i++) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      if (ctx.signal?.aborted) return;
       const from = placed[i - 1];
       const to = placed[i];
       const path = net.shortestPath(from.node, to.node, astar);
@@ -676,7 +679,7 @@ export const localClosestFacilityTool: ProcessingAlgorithm = {
       ],
     },
   ],
-  run: (ctx) => {
+  run: async (ctx) => {
     const incidents = layerToRoutingPoints(getLayer(ctx, "incidents"));
     const facilities = layerToRoutingPoints(getLayer(ctx, "facilities"));
     if (!incidents.length || !facilities.length) {
@@ -713,6 +716,7 @@ export const localClosestFacilityTool: ProcessingAlgorithm = {
     const features: Feature[] = [];
     let short = 0;
     for (const incident of placedIncidents) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
       if (ctx.signal?.aborted) return;
       const found: { facility: PlacedPoint; node: number }[] = [];
       // Searching against edge direction from the incident gives costs from
@@ -844,6 +848,7 @@ export const localServiceAreaTool: ProcessingAlgorithm = {
     const separate = (ctx.parameters.overlap as string) === "separate";
     const toward = (ctx.parameters.travelDirection as string) === "to";
     const width = Math.max(0, Number(ctx.parameters.polygonWidth ?? 0) || 0);
+    const placed = placePoints(net, facilities);
     const passes = (separate ? facilities.length : 1) * breaks.length;
     if (passes * net.edges.length > 5_000_000 || (width > 0 && passes > 100)) {
       ctx.log(
@@ -851,7 +856,6 @@ export const localServiceAreaTool: ProcessingAlgorithm = {
       );
       return;
     }
-    const placed = placePoints(net, facilities);
     const groups: { id: string | number | null; nodes: number[] }[] = separate
       ? placed.map((facility) => ({ id: facility.id, nodes: [facility.node] }))
       : [{ id: null, nodes: placed.map((facility) => facility.node) }];
@@ -876,7 +880,7 @@ export const localServiceAreaTool: ProcessingAlgorithm = {
         };
         lines.push(lineFeat);
         if (width > 0) {
-          const area = buffer(lineFeat, width, { units: "meters" });
+          const area = buffer(lineFeat, bodyLengthToEarth(width), { units: "meters" });
           if (area?.geometry) {
             area.properties = { ...properties };
             polygons.push(area);

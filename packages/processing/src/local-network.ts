@@ -101,8 +101,8 @@ export function haversineMeters(lon1: number, lat1: number, lon2: number, lat2: 
   return 2 * getActiveMeanRadiusMeters() * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-const FORWARD_VALUES = new Set(["yes", "true", "1", "ft", "f", "forward", "fwd", "oneway"]);
-const BACKWARD_VALUES = new Set(["-1", "tf", "t", "reverse", "backward", "back", "r"]);
+const FORWARD_VALUES = new Set(["yes", "true", "1", "ft", "forward", "fwd", "oneway"]);
+const BACKWARD_VALUES = new Set(["-1", "tf", "reverse", "backward", "back"]);
 const CLOSED_VALUES = new Set(["n", "closed", "none", "no_travel"]);
 
 /**
