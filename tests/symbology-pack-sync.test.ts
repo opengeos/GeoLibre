@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LayerStyle } from "@geolibre/core";
-import { syncLayer } from "../packages/map/src/layer-sync";
+import { removeLayerFromMap, syncLayer } from "../packages/map/src/layer-sync";
+import {
+  createPMTilesStoreLayer,
+  pmtilesLayerDrawsLineDecorations,
+} from "../packages/map/src/pmtiles-layer";
 
 // Stateful fake MapLibre map, mirroring tests/point-renderer-sync.test.ts: it
 // tracks sources and layers across sync passes so a test can assert which
@@ -40,6 +44,7 @@ function makeMap() {
     setLayoutProperty: record("setLayoutProperty"),
     setLayerZoomRange: record("setLayerZoomRange"),
     moveLayer: record("moveLayer"),
+    getLayersOrder: () => [...layers.keys()],
     getStyle: () => ({
       layers: [...layers.values()],
       sources: Object.fromEntries(sources),
@@ -181,6 +186,192 @@ describe("line decoration sync", () => {
 
     syncLayer(map as never, lineLayer());
     assert.ok(!layers.has("layer-lines-line-decoration"));
+  });
+});
+
+// A vector PMTiles archive with two source layers, built the way Add Data →
+// PMTiles builds it.
+function pmtilesLayer(
+  style: Partial<LayerStyle> = {},
+  overrides: Partial<GeoLibreLayer> = {},
+): GeoLibreLayer {
+  const layer = createPMTilesStoreLayer({
+    id: "flow",
+    name: "Flow paths",
+    url: "https://example.org/flow.pmtiles",
+    tileType: "vector",
+    sourceLayers: ["streams", "basin boundary"],
+  });
+  return { ...layer, ...overrides, style: { ...layer.style, ...style } };
+}
+
+const STREAMS_DECORATION = "layer-flow-line-decoration-streams";
+const BOUNDARY_DECORATION = "layer-flow-line-decoration-basin%20boundary";
+
+describe("PMTiles line decoration sync", () => {
+  it("adds a line-placed arrow layer per source layer on the archive's source", () => {
+    const { map, layers, calls } = makeMap();
+    syncLayer(map as never, pmtilesLayer({ lineDecoration: "arrow", lineDecorationSpacing: 90 }));
+
+    for (const [id, sourceLayer] of [
+      [STREAMS_DECORATION, "streams"],
+      [BOUNDARY_DECORATION, "basin boundary"],
+    ]) {
+      const decoration = layers.get(id) as {
+        type: string;
+        source: string;
+        "source-layer": string;
+        layout: Record<string, unknown>;
+        metadata: Record<string, unknown>;
+      };
+      assert.ok(decoration, `missing ${id}`);
+      assert.equal(decoration.type, "symbol");
+      assert.equal(decoration.source, "flow");
+      assert.equal(decoration["source-layer"], sourceLayer);
+      assert.equal(decoration.layout["symbol-placement"], "line");
+      assert.equal(decoration.layout["symbol-spacing"], 90);
+      assert.match(String(decoration.layout["icon-image"]), /^geolibre-line-decoration-arrow-/);
+      assert.equal(decoration.metadata["geolibre:internal"], true);
+    }
+
+    // Added after the archive's own line layers, so the arrows draw on top.
+    const added = calls
+      .filter((call) => call.method === "addLayer")
+      .map((call) => (call.args[0] as { id: string }).id);
+    assert.ok(added.indexOf(STREAMS_DECORATION) > added.indexOf("flow-streams-line"));
+  });
+
+  it("removes decorations for source-layer names omitted by a same-id update", () => {
+    const { map, layers } = makeMap();
+    syncLayer(map as never, pmtilesLayer({ lineDecoration: "arrow" }));
+    assert.ok(layers.has(BOUNDARY_DECORATION));
+    const narrowed = createPMTilesStoreLayer({
+      id: "flow",
+      name: "Flow paths",
+      url: "https://example.org/flow.pmtiles",
+      tileType: "vector",
+      sourceLayers: ["streams"],
+    });
+    const styled = { ...narrowed, style: { ...narrowed.style, lineDecoration: "arrow" as const } };
+    syncLayer(map as never, styled);
+    assert.ok(layers.has(STREAMS_DECORATION));
+    assert.ok(!layers.has(BOUNDARY_DECORATION));
+    syncLayer(map as never, narrowed);
+    assert.ok(!layers.has(STREAMS_DECORATION));
+  });
+
+  it("deleting with narrowed metadata also removes previously rendered decorations", () => {
+    const { map, layers } = makeMap();
+    syncLayer(map as never, pmtilesLayer({ lineDecoration: "arrow" }));
+    const narrowed = createPMTilesStoreLayer({
+      id: "flow",
+      name: "Flow paths",
+      url: "https://example.org/flow.pmtiles",
+      tileType: "vector",
+      sourceLayers: ["streams"],
+    });
+    removeLayerFromMap(map as never, narrowed.id, narrowed);
+    assert.ok(!layers.has(STREAMS_DECORATION));
+    assert.ok(!layers.has(BOUNDARY_DECORATION));
+  });
+
+  it("removes recorded decorations when the caller no longer has a layer snapshot", () => {
+    const { map, layers } = makeMap();
+    syncLayer(map as never, pmtilesLayer({ lineDecoration: "arrow" }));
+    removeLayerFromMap(map as never, "flow");
+    assert.ok(!layers.has(STREAMS_DECORATION));
+    assert.ok(!layers.has(BOUNDARY_DECORATION));
+  });
+
+  it("hides the decorations with the layer and follows its opacity", () => {
+    const { map, layers } = makeMap();
+    syncLayer(
+      map as never,
+      pmtilesLayer({ lineDecoration: "arrow" }, { visible: false, opacity: 0.4 }),
+    );
+    const decoration = layers.get(STREAMS_DECORATION) as {
+      layout: Record<string, unknown>;
+      paint: Record<string, unknown>;
+    };
+    assert.equal(decoration.layout.visibility, "none");
+    assert.equal(decoration.paint["icon-opacity"], 0.4);
+  });
+
+  it("removes the decorations when switched off or extruded", () => {
+    const { map, layers } = makeMap();
+    syncLayer(map as never, pmtilesLayer({ lineDecoration: "arrow" }));
+    assert.ok(layers.has(STREAMS_DECORATION));
+
+    syncLayer(map as never, pmtilesLayer());
+    assert.ok(!layers.has(STREAMS_DECORATION));
+    assert.ok(!layers.has(BOUNDARY_DECORATION));
+
+    syncLayer(map as never, pmtilesLayer({ lineDecoration: "arrow" }));
+    syncLayer(map as never, pmtilesLayer({ lineDecoration: "arrow", extrusionEnabled: true }));
+    assert.ok(!layers.has(STREAMS_DECORATION));
+  });
+
+  it("draws nothing for a raster archive", () => {
+    const { map, layers } = makeMap();
+    const raster = createPMTilesStoreLayer({
+      id: "flow",
+      name: "Hillshade",
+      url: "https://example.org/hillshade.pmtiles",
+      tileType: "raster",
+      sourceLayers: [],
+    });
+    syncLayer(map as never, { ...raster, style: { ...raster.style, lineDecoration: "arrow" } });
+    assert.ok(![...layers.keys()].some((id) => id.includes("line-decoration")));
+  });
+
+  it("keeps two source layers whose encoded names would collide apart", () => {
+    const { map, layers } = makeMap();
+    const layer = createPMTilesStoreLayer({
+      id: "flow",
+      name: "Flow paths",
+      url: "https://example.org/flow.pmtiles",
+      tileType: "vector",
+      sourceLayers: ["a b", "a_20b"],
+    });
+    syncLayer(map as never, { ...layer, style: { ...layer.style, lineDecoration: "arrow" } });
+    const sourceLayers = [...layers.values()]
+      .filter((spec) => String(spec.id).includes("line-decoration"))
+      .map((spec) => spec["source-layer"]);
+    assert.deepEqual(sourceLayers.sort(), ["a b", "a_20b"]);
+  });
+
+  it("limits the shared decoration predicate to styled vector archives", () => {
+    const raster = createPMTilesStoreLayer({
+      id: "hillshade",
+      name: "Hillshade",
+      url: "https://example.org/hillshade.pmtiles",
+      tileType: "raster",
+      sourceLayers: [],
+    });
+    const notFromControl = pmtilesLayer({}, { metadata: { ...pmtilesLayer().metadata } });
+    delete notFromControl.metadata.externalNativeLayer;
+    // The panel hides the section for extruded layers on its own, so the shared predicate is
+    // compared against a flat render of each PMTiles layer. (GeoJSON layers have their own gate.)
+    for (const layer of [pmtilesLayer(), raster, notFromControl]) {
+      const { map, layers } = makeMap();
+      syncLayer(map as never, {
+        ...layer,
+        style: { ...layer.style, lineDecoration: "arrow", extrusionEnabled: false },
+      });
+      const drawn = [...layers.keys()].some((id) =>
+        id.startsWith(`layer-${layer.id}-line-decoration`),
+      );
+      const offered = pmtilesLayerDrawsLineDecorations(layer);
+      assert.equal(offered, drawn, `panel and sync disagree for ${layer.name}`);
+    }
+  });
+
+  it("removes the decorations with the layer", () => {
+    const { map, layers } = makeMap();
+    const layer = pmtilesLayer({ lineDecoration: "arrow" });
+    syncLayer(map as never, layer);
+    removeLayerFromMap(map as never, layer.id, layer);
+    assert.ok(![...layers.keys()].some((id) => id.includes("line-decoration")));
   });
 });
 

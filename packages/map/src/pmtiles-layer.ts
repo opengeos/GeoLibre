@@ -54,6 +54,57 @@ export function pmtilesControlLayerId(sourceId: string, sourceLayer: string, kin
 }
 
 /**
+ * The GeoLibre-owned symbol layer that repeats the line-decoration icon (flow
+ * arrows and the like) along one source layer of a PMTiles archive. Keyed on
+ * the store layer id, not the archive's source id, so two store layers split
+ * from one archive never share a decoration layer.
+ *
+ * @param layerId - The store layer id.
+ * @param sourceLayer - The archive source layer the decorations follow.
+ * @returns The decoration style layer id.
+ */
+export function pmtilesLineDecorationLayerId(layerId: string, sourceLayer: string): string {
+  // Plain percent-encoding, not encodeVectorTileLayerPart: that maps `%` to `_`, so `a b` and
+  // `a_20b` would share one decoration layer and the second would never be drawn.
+  return `layer-${layerId}-line-decoration-${encodeURIComponent(sourceLayer)}`;
+}
+
+/**
+ * Every line-decoration layer id a PMTiles store layer can have, one per source layer it names.
+ * The ids exist on the map only while decorations are on; callers check with `getLayer`.
+ *
+ * @param layer - The store layer.
+ * @returns The candidate decoration layer ids.
+ */
+export function pmtilesLineDecorationLayerIds(layer: GeoLibreLayer): string[] {
+  if (layer.type !== "pmtiles") return [];
+  const names = layer.source.sourceLayers ?? layer.metadata.sourceLayers;
+  return Array.isArray(names)
+    ? names
+        .filter((name): name is string => typeof name === "string" && name.length > 0)
+        .map((name) => pmtilesLineDecorationLayerId(layer.id, name))
+    : [];
+}
+
+/**
+ * Whether layer sync draws line decorations (flow arrows) for this PMTiles store layer: a vector
+ * archive added through the PMTiles control or Add Data, the only PMTiles path GeoLibre styles
+ * itself. Shared by the sync and the Style panel so the panel never offers a silent no-op.
+ *
+ * @param layer - The store layer.
+ * @returns Whether decorations apply to the layer.
+ */
+export function pmtilesLayerDrawsLineDecorations(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "pmtiles" &&
+    layer.metadata.sourceKind === "pmtiles-url" &&
+    layer.metadata.externalNativeLayer === true &&
+    layer.metadata.tileType !== "raster" &&
+    layer.source.type !== "raster"
+  );
+}
+
+/**
  * The MapLibre layer ids `syncLayers` creates for a `pmtiles` store layer, in
  * the exact naming scheme `ensurePMTilesExternalLayer` uses. A layer built
  * outside the PMTiles control (e.g. the offline basemap extract dialog) must

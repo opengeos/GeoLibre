@@ -26,6 +26,8 @@ import {
   pmtilesControlLayerId,
   pmtilesIdNamesSourceLayer,
   pmtilesLayerKinds,
+  pmtilesLayerDrawsLineDecorations,
+  pmtilesLineDecorationLayerId,
   pmtilesVectorLayerId,
 } from "./pmtiles-layer";
 import { encodeVectorTileLayerPart } from "./vector-tile-layer-ids";
@@ -700,6 +702,8 @@ function syncExternalNativeLayer(
     !controlOwnsPaint(layer) &&
     syncExternalNativeExtrusion(map, layer, nativeLayerIds, beforeId)
   ) {
+    // Extruded archives carry no line decorations; drop any left from 2D.
+    syncPMTilesLineDecorations(map, layer, nativeLayerIds, beforeId);
     return;
   }
 
@@ -740,6 +744,10 @@ function syncExternalNativeLayer(
 
     moveLayer(map, nativeLayerId, beforeId);
   }
+
+  // After the native layers have been moved, so the decorations land above
+  // the archive's own lines.
+  syncPMTilesLineDecorations(map, layer, nativeLayerIds, beforeId);
 }
 
 /**
@@ -1109,6 +1117,116 @@ function ensurePMTilesExternalLayer(
       beforeId,
     );
   }
+}
+
+// Bound cleanup to the decorations this map instance has actually created.
+const pmtilesDecorationOwners = new WeakMap<maplibregl.Map, Map<string, Set<string>>>();
+
+/**
+ * Line decorations (flow-direction arrows and other repeated symbols) for a
+ * vector PMTiles archive: one GeoLibre-owned symbol layer per rendered source
+ * layer, reading the archive's own source, mirroring
+ * {@link applyLineDecorationLayer} on the GeoJSON path. With line placement
+ * MapLibre rotates each icon to follow its line, so an arrow points along the
+ * direction the feature was digitized in. Decoration layers for source layers
+ * no longer rendered (or every one, when decorations are off, the layer is
+ * extruded, or the archive is raster) are removed.
+ *
+ * @param map - The MapLibre map to reconcile against.
+ * @param layer - The store layer.
+ * @param nativeLayerIds - Native layer ids registered for the archive.
+ * @param beforeId - The style layer the decorations are placed below.
+ */
+function syncPMTilesLineDecorations(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  nativeLayerIds: string[],
+  beforeId?: string,
+): void {
+  if (!isPMTilesExternalLayer(layer)) return;
+  const sourceId = getPMTilesSourceId(layer);
+  const imageId =
+    sourceId &&
+    map.getSource(sourceId) &&
+    pmtilesLayerDrawsLineDecorations(layer) &&
+    !layer.style.extrusionEnabled
+      ? prepareLineDecoration(layer.style)
+      : null;
+  const rendered = new Set(
+    imageId && sourceId ? getPMTilesRenderableSourceLayers(layer, sourceId, nativeLayerIds) : [],
+  );
+  removeStalePMTilesLineDecorations(
+    map,
+    layer.id,
+    new Set([...rendered].map((name) => pmtilesLineDecorationLayerId(layer.id, name))),
+  );
+  if (rendered.size > 0) ensureGeneratedImageHandler(map);
+  for (const sourceLayer of new Set([...getPMTilesSourceLayers(layer), ...rendered])) {
+    const decorationId = pmtilesLineDecorationLayerId(layer.id, sourceLayer);
+    if (!imageId || !sourceId || !rendered.has(sourceLayer)) {
+      removeIfExists(map, decorationId);
+      continue;
+    }
+    ensureLayer(
+      map,
+      decorationId,
+      {
+        id: decorationId,
+        type: "symbol",
+        source: sourceId,
+        "source-layer": sourceLayer,
+        ...styleLayerZoomRange(layer.style),
+        metadata: { "geolibre:internal": true, "geolibre:line-decoration-owner": layer.id },
+        filter: withFeatureFilters(layer, [
+          "match",
+          ["geometry-type"],
+          ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
+          true,
+          false,
+        ]),
+        layout: {
+          "icon-image": imageId,
+          "icon-size": 1,
+          "symbol-placement": "line",
+          "symbol-spacing": Math.max(1, styleValue(layer.style, "lineDecorationSpacing")),
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+          "icon-rotation-alignment": "map",
+          visibility: layer.visible ? "visible" : "none",
+        },
+        paint: { "icon-opacity": layer.opacity },
+      },
+      beforeId,
+    );
+    let owners = pmtilesDecorationOwners.get(map);
+    if (!owners) pmtilesDecorationOwners.set(map, (owners = new Map()));
+    let ids = owners.get(layer.id);
+    if (!ids) owners.set(layer.id, (ids = new Set()));
+    ids.add(decorationId);
+  }
+}
+
+/** Remove owned decorations absent from the desired set, including source layers no longer in metadata. */
+function removeStalePMTilesLineDecorations(
+  map: maplibregl.Map,
+  layerId: string,
+  keep: ReadonlySet<string> = new Set(),
+): void {
+  const owners = pmtilesDecorationOwners.get(map);
+  const ids = owners?.get(layerId);
+  if (!ids) return;
+  for (const id of ids) {
+    if (keep.has(id)) continue;
+    const metadata = map.getLayer(id)?.metadata as Record<string, unknown> | undefined;
+    if (
+      metadata?.["geolibre:internal"] === true &&
+      metadata["geolibre:line-decoration-owner"] === layerId
+    )
+      removeIfExists(map, id);
+    ids.delete(id);
+  }
+  if (ids.size === 0) owners?.delete(layerId);
+  if (owners?.size === 0) pmtilesDecorationOwners.delete(map);
 }
 
 function getPMTilesSourceId(layer: GeoLibreLayer): string | undefined {
@@ -4039,10 +4157,17 @@ export function removeLayerFromMap(
   // Drop cached paint-bridge state so a later layer reusing this id never
   // skips a fresh opacity/visibility apply against a new bridge.
   appliedBridgeState.delete(layerId);
+  // Ownership is recorded per map, so this is safe (and needed) even when the caller has no layer.
+  removeStalePMTilesLineDecorations(map, layerId);
   for (const id of [
     ...getExternalNativeLayerIds(layer),
     ...getExternalNativeLayerIds(layer).map(externalExtrusionLayerId),
     ...(layer ? mbtilesAllStyleLayerIds(layer) : []),
+    ...(layer?.type === "pmtiles"
+      ? getPMTilesSourceLayers(layer).map((sourceLayer) =>
+          pmtilesLineDecorationLayerId(layerId, sourceLayer),
+        )
+      : []),
     fillLayerId(layerId),
     fillExtrusionLayerId(layerId),
     lineLayerId(layerId),

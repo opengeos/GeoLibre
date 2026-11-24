@@ -11,8 +11,10 @@ import { Button, Label, ScrollArea, Separator } from "@geolibre/ui";
 import {
   arcgisUnsupportedStyleSettings,
   mapboxUnsupportedStyleSettings,
+  rendererCapabilities,
   type MapEngine,
 } from "@geolibre/map";
+import { pmtilesLayerDrawsLineDecorations } from "@geolibre/map/pmtiles-layer";
 import { ClipboardType, Palette, PanelRightClose } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
@@ -140,6 +142,7 @@ export function VectorStylePanel({
   mapReadyGeneration,
 }: VectorStylePanelProps) {
   const { t } = useTranslation();
+  const primaryRenderer = useAppStore((state) => state.primaryRenderer);
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
   const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
   const updateLayer = useAppStore((s) => s.updateLayer);
@@ -179,23 +182,25 @@ export function VectorStylePanel({
     hasVectorPaintControls && !extrusionEnabled && !controlPainted && geometryFlags.hasPolygon;
   const showMarkerControls =
     hasVectorPaintControls && supportsPointRenderer && pointRenderer === "single";
-  // The symbology-pack renders (inverted mask, line decorations, geometry
-  // generator) are drawn by the core GeoJSON render path
-  // (applyVectorDataRenderLayers), so they don't apply to vector tiles,
-  // external deck layers, or control-painted (external native) layers — hide
-  // the controls there rather than offer a silent no-op.
+  // Inverted masks and geometry generators use the core GeoJSON render path
+  // (applyVectorDataRenderLayers). Their controls require store-owned GeoJSON.
+  // Line decorations additionally support vector PMTiles on style-spec engines.
   const supportsDerivedGeometry =
     layer.type === "geojson" &&
     !!layer.geojson &&
     !hasExternalDeckLayer(layer) &&
     !hasExternalNativeLayers(layer);
+  // Vector PMTiles archives get the same decorations from their own sync path
+  // (syncPMTilesLineDecorations in @geolibre/map).
   const showLineDecorationControls =
     hasVectorPaintControls &&
     !extrusionEnabled &&
-    layer.type === "geojson" &&
-    !!layer.geojson &&
-    !hasExternalDeckLayer(layer) &&
-    !hasExternalNativeLayers(layer) &&
+    ((layer.type === "geojson" &&
+      !!layer.geojson &&
+      !hasExternalDeckLayer(layer) &&
+      !hasExternalNativeLayers(layer)) ||
+      (pmtilesLayerDrawsLineDecorations(layer) &&
+        rendererCapabilities(primaryRenderer).styleSpec)) &&
     (geometryFlags.hasLine || geometryFlags.hasPolygon);
   const showGeneratorControls =
     hasVectorPaintControls && !extrusionEnabled && supportsDerivedGeometry;
