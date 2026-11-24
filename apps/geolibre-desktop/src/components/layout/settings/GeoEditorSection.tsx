@@ -1,9 +1,12 @@
 import {
   DEFAULT_GEO_EDITOR_SETTINGS,
+  GEO_EDITOR_SNAP_TOLERANCE_RANGE,
+  geoEditorSnapTolerancePx,
   type GeoEditorAttributeField,
   type GeoEditorSettings,
 } from "@geolibre/core";
 import { Button, Input, Label, Select } from "@geolibre/ui";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsDraft } from "./SettingsDraftContext";
 
@@ -12,6 +15,9 @@ export function GeoEditorSection() {
   const { t } = useTranslation();
   const { draftPreferences, setDraftPreferences } = useSettingsDraft();
   const settings = draftPreferences.map.geoEditor ?? DEFAULT_GEO_EDITOR_SETTINGS;
+  const tolerance = geoEditorSnapTolerancePx(settings);
+  const [snapText, setSnapText] = useState(String(tolerance));
+  useEffect(() => setSnapText(String(tolerance)), [tolerance]);
   const update = (
     patch:
       | Partial<GeoEditorSettings>
@@ -44,6 +50,32 @@ export function GeoEditorSection() {
           onChange={(event) => update({ showAfterDraw: event.target.checked })}
         />
         {t("settings.geoEditor.showAfterDraw")}
+      </Label>
+      <Label className="grid gap-1">
+        {t("settings.geoEditor.snapTolerance")}
+        <Input
+          type="number"
+          min={GEO_EDITOR_SNAP_TOLERANCE_RANGE[0]}
+          max={GEO_EDITOR_SNAP_TOLERANCE_RANGE[1]}
+          step={1}
+          value={snapText}
+          onChange={(event) => setSnapText(event.target.value)}
+          onBlur={() => {
+            const value = snapText.trim() ? Number(snapText) : NaN;
+            const normalized = Number.isFinite(value)
+              ? geoEditorSnapTolerancePx({ snapTolerancePx: value })
+              : tolerance;
+            update({ snapTolerancePx: normalized });
+            setSnapText(String(normalized));
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+          }}
+          className="w-28"
+        />
+        <span className="text-xs font-normal text-muted-foreground">
+          {t("settings.geoEditor.snapToleranceHelp")}
+        </span>
       </Label>
       <div className="grid gap-3">
         {settings.fields.map((field, index) => (

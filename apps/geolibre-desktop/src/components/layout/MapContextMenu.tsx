@@ -16,6 +16,7 @@ import {
   BookOpen,
   Braces,
   Circle,
+  Compass,
   Crosshair,
   Earth,
   Eye,
@@ -53,6 +54,7 @@ import {
   beginQuickAnalysisRun,
   type QuickBufferPreset,
 } from "../../lib/quick-analysis";
+import { useCogoTool } from "../../lib/cogo-store";
 import { useLineOfSightTool } from "../../lib/line-of-sight-store";
 import { useNavigationTool } from "../../lib/navigation/store";
 import { hasRoutingConsent, recordRoutingConsent } from "../../lib/routing-consent";
@@ -316,6 +318,12 @@ export function MapContextMenu({
     if (!menu) return;
     openLineOfSight({ lng: menu.lng, lat: menu.lat });
   }, [menu, openLineOfSight]);
+  // COGO and trace draws a transient MapLibre preview, so it shares the gate.
+  const openCogo = useCogoTool((s) => s.openCogo);
+  const cogoHere = useCallback(() => {
+    if (!menu) return;
+    openCogo({ lng: menu.lng, lat: menu.lat });
+  }, [menu, openCogo]);
   // Navigation draws MapLibre style layers too, so it shares the same gate.
   const openNavigation = useNavigationTool((s) => s.openNavigation);
   const directionsHere = useCallback(
@@ -553,6 +561,12 @@ export function MapContextMenu({
                 <DropdownMenuItem onSelect={lineOfSightHere} className="gap-2">
                   <Spline className="h-4 w-4 shrink-0 text-muted-foreground" />
                   {t("quickAnalysis.lineOfSightHere")}
+                </DropdownMenuItem>
+              ) : null}
+              {lineOfSightAvailable ? (
+                <DropdownMenuItem onSelect={cogoHere} className="gap-2">
+                  <Compass className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  {t("quickAnalysis.cogoHere")}
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuSeparator />

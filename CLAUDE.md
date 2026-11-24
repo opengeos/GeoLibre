@@ -88,7 +88,10 @@ truth. Data flows one way:
 4. `MapCanvas` subscribes to `layers`; `MapController.syncLayers`
    (`@geolibre/map`) reconciles MapLibre sources/layers and the layer control.
    **You don't mutate MapLibre directly from UI** — change store state and let
-   sync apply it.
+   sync apply it. Transient construction and analysis previews, including
+   COGO/trace and Line of Sight, may own temporary map sources and layers.
+   Keep them outside saved project layers and remove them when the preview
+   closes or its map is replaced. Saved results still enter through the store.
 
 Rendering is MapLibre GL JS in the webview, with **deck.gl** for
 raster/point-cloud/3D overlays.

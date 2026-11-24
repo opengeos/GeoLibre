@@ -59,10 +59,15 @@ export type VectorToolKind =
   | "decode-polyline"
   | "encode-polyline"
   | "merge-layers"
+  | "create-routes"
+  | "locate-features-along-routes"
+  | "dynamic-segmentation"
   | "check-validity"
   | "fix-geometries"
   | "check-topology-rules"
-  | "fix-topology";
+  | "fix-topology"
+  | "fix-polygon-overlaps"
+  | "fill-polygon-gaps";
 
 /** Identifiers of the network-analysis tools (`NETWORK_TOOLS` ids). */
 export type NetworkToolKind = "isochrone" | "od-matrix" | "sequential-route";
