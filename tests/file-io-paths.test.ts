@@ -131,6 +131,14 @@ describe("isGeojsonSourcePath", () => {
 });
 
 describe("ensureGeoLibreProjectExtension", () => {
+  it("preserves opaque Android document identities from the save picker", () => {
+    for (const uri of [
+      "content://com.android.providers.downloads.documents/document/1",
+      "content://provider/document/primary%3ADownload%2Fmap.json?grant=42",
+    ]) {
+      assert.equal(ensureGeoLibreProjectExtension(uri), uri);
+    }
+  });
   it("keeps recognized project names", () => {
     assert.equal(ensureGeoLibreProjectExtension("/h/a.geolibre.json"), "/h/a.geolibre.json");
     assert.equal(ensureGeoLibreProjectExtension("C:\\a.GeoLibre"), "C:\\a.GeoLibre");

@@ -21,6 +21,7 @@ import {
   RASTER_DROP_EXTENSIONS,
 } from "./paths";
 import { toArrayBuffer } from "./shared";
+import { notifyNativeDataCopies, pickNativeDataFiles } from "./native-data-copy";
 
 export interface DroppedRaster {
   name: string;
@@ -105,7 +106,7 @@ export async function readRasterFileAtPath(path: string): Promise<string> {
  */
 export async function pickLocalRasterFiles(): Promise<{ file: File | string; path: string }[]> {
   if (!isTauri()) return [];
-  const selected = await open({
+  const selected = await pickNativeDataFiles({
     multiple: true,
     filters: [
       {
@@ -127,6 +128,7 @@ export async function pickLocalRasterFiles(): Promise<{ file: File | string; pat
       notifyFileReadFailed(path, error);
     }
   }
+  notifyNativeDataCopies(picked.map(({ path }) => path));
   return picked;
 }
 

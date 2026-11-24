@@ -24,6 +24,17 @@ pub enum OpenResponse {
     File(Option<FilePath>),
 }
 
+// iOS copy-mode picks are sandboxed file URLs. Path-based data readers need
+// their decoded local paths; scoped project picks must retain their URI.
+fn picked_file_path(file: FilePath, copied: bool) -> FilePath {
+    if copied {
+        if let Ok(path) = file.clone().into_path() {
+            return FilePath::Path(path).simplified();
+        }
+    }
+    file.simplified()
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -145,6 +156,10 @@ pub(crate) async fn open<R: Runtime>(
         let extensions: Vec<&str> = filter.extensions.iter().map(|s| &**s).collect();
         dialog_builder = dialog_builder.add_filter(filter.name, &extensions);
     }
+    let copied = matches!(
+        options.file_access_mode.as_ref(),
+        Some(FileAccessMode::Copy)
+    );
     if let Some(file_access_mode) = options.file_access_mode {
         dialog_builder = dialog_builder.set_file_access_mode(file_access_mode);
     }
@@ -187,6 +202,13 @@ pub(crate) async fn open<R: Runtime>(
     } else if options.multiple {
         let tauri_scope = window.state::<tauri::scope::Scopes>();
 
+        #[cfg(mobile)]
+        let files = if copied {
+            crate::mobile::pick_data_files(dialog_builder, true)?
+        } else {
+            dialog_builder.blocking_pick_files()
+        };
+        #[cfg(desktop)]
         let files = dialog_builder.blocking_pick_files();
         if let Some(files) = &files {
             for file in files {
@@ -199,9 +221,22 @@ pub(crate) async fn open<R: Runtime>(
                 }
             }
         }
-        OpenResponse::Files(files.map(|files| files.into_iter().map(|f| f.simplified()).collect()))
+        OpenResponse::Files(files.map(|files| {
+            files
+                .into_iter()
+                .map(|f| picked_file_path(f, copied))
+                .collect()
+        }))
     } else {
         let tauri_scope = window.state::<tauri::scope::Scopes>();
+        #[cfg(mobile)]
+        let file = if copied {
+            crate::mobile::pick_data_files(dialog_builder, false)?
+                .and_then(|files| files.into_iter().next())
+        } else {
+            dialog_builder.blocking_pick_file()
+        };
+        #[cfg(desktop)]
         let file = dialog_builder.blocking_pick_file();
 
         if let Some(file) = &file
@@ -212,7 +247,7 @@ pub(crate) async fn open<R: Runtime>(
             }
             tauri_scope.allow_file(&path)?;
         }
-        OpenResponse::File(file.map(|f| f.simplified()))
+        OpenResponse::File(file.map(|f| picked_file_path(f, copied)))
     };
     Ok(res)
 }
@@ -287,4 +322,35 @@ pub(crate) async fn message<R: Runtime>(
     }
 
     Ok(builder.blocking_show_with_result())
+}
+
+#[cfg(all(test, unix))]
+mod geolibre_copy_tests {
+    use super::picked_file_path;
+    use crate::FilePath;
+    use std::path::PathBuf;
+
+    #[test]
+    fn copy_mode_returns_decoded_sandbox_path() {
+        let file =
+            FilePath::Url(tauri::Url::parse("file:///private/Documents/My%20map.tif").unwrap());
+        let selected = picked_file_path(file, true);
+        assert!(
+            matches!(selected, FilePath::Path(ref path) if path == &PathBuf::from("/private/Documents/My map.tif"))
+        );
+    }
+
+    #[test]
+    fn source_project_urls_are_unchanged() {
+        let url = tauri::Url::parse("file:///private/Documents/My%20map.geolibre.json").unwrap();
+        let selected = picked_file_path(FilePath::Url(url.clone()), false);
+        assert!(matches!(selected, FilePath::Url(ref value) if value == &url));
+    }
+
+    #[test]
+    fn content_uris_are_never_misrepresented_as_filesystem_paths() {
+        let url = tauri::Url::parse("content://provider/document/42").unwrap();
+        let selected = picked_file_path(FilePath::Url(url.clone()), true);
+        assert!(matches!(selected, FilePath::Url(ref value) if value == &url));
+    }
 }

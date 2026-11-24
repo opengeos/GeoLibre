@@ -4,6 +4,53 @@
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+/// Explicit data copies distinguish cancellation from a failed provider read.
+#[cfg(any(mobile, test))]
+#[derive(Deserialize)]
+pub(crate) struct DataFilePickerResponse {
+    files: Option<Vec<crate::FilePath>>,
+    error: Option<String>,
+}
+
+#[cfg(any(mobile, test))]
+impl DataFilePickerResponse {
+    pub(crate) fn into_result(self) -> crate::Result<Option<Vec<crate::FilePath>>> {
+        if let Some(error) = self.error {
+            return Err(std::io::Error::other(error).into());
+        }
+        Ok(self.files)
+    }
+}
+
+#[cfg(test)]
+mod data_picker_tests {
+    use super::DataFilePickerResponse;
+
+    #[test]
+    fn copy_failures_are_not_cancellations() {
+        let response: DataFilePickerResponse = serde_json::from_str(
+            r#"{"files":null,"error":"Could not copy the selected document"}"#,
+        )
+        .unwrap();
+        assert!(
+            response
+                .into_result()
+                .unwrap_err()
+                .to_string()
+                .contains("Could not copy")
+        );
+    }
+
+    #[test]
+    fn cancellation_and_success_remain_distinct() {
+        let cancelled: DataFilePickerResponse = serde_json::from_str(r#"{"files":null}"#).unwrap();
+        assert!(cancelled.into_result().unwrap().is_none());
+        let copied: DataFilePickerResponse =
+            serde_json::from_str(r#"{"files":["/data/roads.gpkg"]}"#).unwrap();
+        assert_eq!(copied.into_result().unwrap().unwrap().len(), 1);
+    }
+}
+
 /// Types of message, ask and confirm dialogs.
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Default)]

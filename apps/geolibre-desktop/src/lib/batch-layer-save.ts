@@ -57,6 +57,7 @@ import {
 import { resolvePostgisConnection } from "./postgis-connections";
 import { startGeoLibreSidecar } from "./sidecar";
 import { writeLocalGeojsonFile, writeNewTextFileToPath } from "./tauri-io";
+import { isImportedDocumentCopyPath } from "./file-io/paths";
 import { resolveLayerGeojson } from "./vector-export";
 
 export type WritableLayerSourceKind = "geojson" | "geopackage" | "postgis" | "mssql" | "arcgis";
@@ -676,7 +677,12 @@ export async function writeLayerEditsToSource(
       clearGeometryEdited(layer.id, requestProjectGeneration, geojson);
       return {
         status: "success",
-        message: t("layers.saveEditsSuccess", { count: geojson.features.length }),
+        message: t(
+          isImportedDocumentCopyPath(path)
+            ? "layers.saveEditsImportedCopySuccess"
+            : "layers.saveEditsSuccess",
+          { count: geojson.features.length },
+        ),
       };
     }
 
@@ -690,7 +696,12 @@ export async function writeLayerEditsToSource(
     clearGeometryEdited(layer.id, requestProjectGeneration, geojson);
     return {
       status: "success",
-      message: t("layers.saveEditsSuccess", { count: result.feature_count }),
+      message: t(
+        isImportedDocumentCopyPath(path)
+          ? "layers.saveEditsImportedCopySuccess"
+          : "layers.saveEditsSuccess",
+        { count: result.feature_count },
+      ),
     };
   } catch (error) {
     if (isMssql && !isCurrentMssqlRequest()) {

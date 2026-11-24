@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import androidx.activity.result.ActivityResult
 import app.tauri.Logger
@@ -22,6 +23,8 @@ import app.tauri.plugin.JSArray
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import java.io.File
+import java.io.IOException
 
 @InvokeArg
 class Filter {
@@ -33,6 +36,7 @@ class FilePickerOptions {
   lateinit var filters: Array<Filter>
   var multiple: Boolean? = null
   var pickerMode: String? = null
+  var fileAccessMode: String? = null
 }
 
 @InvokeArg
@@ -71,8 +75,8 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
       // stays readable after the app process restarts. ACTION_GET_CONTENT's
       // grant dies with the activity that received it (GeoLibre#3216). Photo
       // and video picks keep ACTION_GET_CONTENT for the gallery apps it offers.
-      val isMediaPick = args.pickerMode == "image" || args.pickerMode == "video" ||
-        args.pickerMode == "media"
+      val isMediaPick = args.fileAccessMode != "copy" &&
+        (args.pickerMode == "image" || args.pickerMode == "video" || args.pickerMode == "media")
       val intent = Intent(if (isMediaPick) Intent.ACTION_GET_CONTENT else Intent.ACTION_OPEN_DOCUMENT)
       intent.addCategory(Intent.CATEGORY_OPENABLE)
       // No grant flags on the request: the document picker itself returns
@@ -106,13 +110,30 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
   @ActivityCallback
   fun filePickerResult(invoke: Invoke, result: ActivityResult) {
     try {
+      val copy = invoke.parseArgs(FilePickerOptions::class.java).fileAccessMode == "copy"
       when (result.resultCode) {
         Activity.RESULT_OK -> {
-          val callResult = createPickFilesResult(result.data)
           takePersistableGrants(result.data)
-          invoke.resolve(callResult)
+          val complete = Runnable {
+            try {
+              val callResult = createPickFilesResult(result.data, copy)
+              activity.runOnUiThread { invoke.resolve(callResult) }
+            } catch (ex: Exception) {
+              val message = ex.message ?: "Failed to copy the selected documents"
+              Logger.error(message)
+              activity.runOnUiThread {
+                if (copy) invoke.resolve(JSObject().put("files", null).put("error", message))
+                else invoke.reject(message)
+              }
+            }
+          }
+          // A provider may stream a multi-gigabyte raster. Never copy on the UI thread.
+          if (copy) Thread(complete, "GeoLibre document import").start() else complete.run()
         }
-        Activity.RESULT_CANCELED -> invoke.reject("File picker cancelled")
+        Activity.RESULT_CANCELED -> {
+          if (copy) invoke.resolve(JSObject().put("files", null))
+          else invoke.reject("File picker cancelled")
+        }
         else -> invoke.reject("Failed to pick files")
       }
     } catch (ex: java.lang.Exception) {
@@ -186,23 +207,48 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
     }
   }
 
-  private fun createPickFilesResult(data: Intent?): JSObject {
+  private fun createPickFilesResult(data: Intent?, copy: Boolean): JSObject {
     val callResult = JSObject()
     if (data == null) {
       callResult.put("files", null)
       return callResult
     }
-    val uris: MutableList<String?> = ArrayList()
+    val uris: MutableList<Uri> = ArrayList()
     if (data.clipData == null) {
       val uri: Uri? = data.data
-      uris.add(uri?.toString())
+      uri?.let { uris.add(it) }
     } else {
       for (i in 0 until data.clipData!!.itemCount) {
         val uri: Uri = data.clipData!!.getItemAt(i).uri
-        uris.add(uri.toString())
+        uris.add(uri)
       }
     }
-    callResult.put("files", JSArray.from(uris.toTypedArray()))
+    check(uris.isNotEmpty()) { "The picker returned no documents" }
+    if (!copy) {
+      callResult.put("files", JSArray.from(uris.map { it.toString() }.toTypedArray()))
+      return callResult
+    }
+    DocumentCopyBatch(File(activity.filesDir, "picked-documents")).use { batch ->
+      val documents = JSArray()
+      val paths = uris.map { uri ->
+        val name = activity.contentResolver.query(
+          uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null
+        )?.use { cursor ->
+          if (cursor.moveToFirst()) cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
+          else null
+        } ?: throw IOException("The document provider did not supply a file name")
+        val copied = batch.copy(name) {
+          activity.contentResolver.openInputStream(uri)
+            ?: throw IOException("Could not open the selected document")
+        }
+        documents.put(JSObject().put("name", name).put("sourceUri", uri.toString())
+          .put("bytes", copied.bytes).put("sha256", copied.sha256))
+        copied.file.absolutePath
+      }
+      batch.commit(JSObject().put("version", 1).put("importedAt", System.currentTimeMillis())
+        .put("documents", documents).toString())
+      callResult.put("files", JSArray.from(paths.toTypedArray()))
+    }
     return callResult
   }
 

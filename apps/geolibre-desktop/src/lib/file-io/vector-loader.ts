@@ -6,7 +6,6 @@
 
 import { hasPathTraversal } from "@geolibre/core";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import type { FeatureCollection } from "geojson";
 import i18next from "i18next";
@@ -56,6 +55,7 @@ import {
 import { loadShapefileZip } from "./shapefile-zip";
 import { notifyFileReadFailed } from "./notify-read-failure";
 import { toArrayBuffer } from "./shared";
+import { notifyNativeDataCopies, pickNativeDataFiles } from "./native-data-copy";
 import {
   isDelimitedTextFileName,
   parseDelimitedTextFile,
@@ -373,7 +373,7 @@ export interface PickedVectorFile {
  * @returns The picked vector files, each with its shapefile sidecars.
  */
 export async function pickVectorFilesWithSidecars(): Promise<PickedVectorFile[]> {
-  const selected = await open({
+  const selected = await pickNativeDataFiles({
     filters: vectorFileDialogFilters(),
     multiple: true,
   });
@@ -403,6 +403,7 @@ export async function pickVectorFilesWithSidecars(): Promise<PickedVectorFile[]>
       notifyFileReadFailed(path, error);
     }
   }
+  notifyNativeDataCopies(picked.map(({ sourcePath }) => sourcePath));
   return picked;
 }
 

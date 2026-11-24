@@ -6,8 +6,8 @@ GeoLibre vendors it because the upstream Android file picker launches
 user picked could then not be read on the next launch, and the startup restore
 fell back to a stale stored copy (GeoLibre#3216).
 
-The GeoLibre-specific delta is intentionally limited to
-`android/src/main/java/DialogPlugin.kt`:
+The GeoLibre-specific changes preserve document grants and adapt data-file picks
+to the local paths used by GeoLibre's readers:
 
 - `showFilePicker`: launch `ACTION_OPEN_DOCUMENT` instead of
   `ACTION_GET_CONTENT`, except for the `image`/`video`/`media` picker modes,
@@ -30,6 +30,30 @@ The GeoLibre-specific delta is intentionally limited to
   they were greyed out ("BIN file") whenever another extension in the filter
   mapped (GeoLibre#3325). A filter of only unmapped extensions still yields no
   MIME types, which leaves the picker unfiltered as upstream does.
+
+- Explicit `fileAccessMode: "copy"` data picks on Android stream the selected
+  documents into `files/picked-documents/<selection>/data/`, using the provider's
+  display names rather than interpreting opaque document IDs as filenames.
+  `DocumentCopyBatch.kt` keeps a selection's companions together, rejects unsafe
+  or duplicate names, and removes the entire selection when copying fails.
+  Copying runs off the UI thread with a bounded buffer. A sibling `source.json`
+  retains each original URI, filename, byte count and SHA-256 fingerprint.
+  The app can therefore reopen the local data offline while retaining its source
+  reference for the offline catalog and conflict-aware sync work in #3530.
+  Explicit copies use the document picker even for images, retaining persistable
+  grants where the provider allows them. Project picks do not request this mode
+  and retain their existing URI behavior.
+- Explicit data-copy failures use a result-bearing mobile bridge rather than
+  the upstream callback-only picker API, which collapses errors into a cancelled
+  selection. Cancellation still returns no selection; provider and storage
+  failures reach the caller as errors. `src/models.rs` tests that distinction.
+- `src/commands.rs` decodes copy-mode file URLs to local paths, including iOS
+  document-picker copies. It leaves scoped project URLs and Android content URIs
+  intact. Scope grants still come from the selected file before it is returned.
+
+`android/src/test/java/DocumentCopyBatchTest.kt` checks streaming, fingerprints,
+companion placement, rollback, unsafe names and collision handling. The Rust
+`geolibre_copy_tests` cover copy-mode file URLs and unchanged source URIs.
 
 Known limitation: every document pick persists, data files as well as
 projects, so after more distinct picks than the cap the least recently picked

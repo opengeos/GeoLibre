@@ -64,7 +64,7 @@ pub enum PickerMode {
     Video,
 }
 
-/// The file access mode of the dialog, used to control how a picked file is exposed to the app on iOS.
+/// How a picked file is exposed on iOS, and for explicit copy-mode Android data picks.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum FileAccessMode {

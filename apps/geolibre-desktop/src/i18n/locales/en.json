@@ -1,5 +1,9 @@
 {
   "fileDialogs": {
+    "dataImportError": "Could not import the selected files.",
+    "importedDataCopies_one": "Imported {{count}} file into GeoLibre.",
+    "importedDataCopies_other": "Imported {{count}} files into GeoLibre.",
+    "importedDataCopiesDescription": "Edits are saved to the imported copies. Export a file to update the original document.",
     "shareClosed": "Share sheet closed for {{fileName}}.",
     "shareClosedDescription": "If no share targets appeared, you can download the file directly instead.",
     "downloadInstead": "Download instead"
@@ -10666,6 +10670,9 @@
     "exportLidarSuccess": "Point cloud exported.",
     "exportLidarError": "Could not export this point cloud.",
     "saveEditsToSource": "Save edits to source file",
+    "saveEditsToImportedCopy": "Save edits to imported copy",
+    "importedCopyDestination": "GeoLibre copy: {{name}}",
+    "saveEditsImportedCopySuccess": "Saved {{count}} feature(s) to the imported copy in GeoLibre. The original document was not changed.",
     "saveEditsSuccess": "Saved {{count}} feature(s) to the source file.",
     "saveEditsNoFeatures": "This layer has no features to save.",
     "saveEditsError": "Could not save edits to the source file.",

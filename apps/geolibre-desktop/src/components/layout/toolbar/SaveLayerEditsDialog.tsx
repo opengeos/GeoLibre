@@ -23,6 +23,7 @@ import {
 import { AlertTriangle, Archive, CheckCircle2, FolderOutput, Loader2, XCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
+import { browserSafeFileName, isImportedDocumentCopyPath } from "../../../lib/file-io/paths";
 import {
   defaultSelectedWritableLayerIds,
   listWritableLayerCandidates,
@@ -352,7 +353,11 @@ export function SaveLayerEditsDialog({
                           className="block truncate text-xs text-muted-foreground"
                           title={destinationLabel}
                         >
-                          {destinationLabel}
+                          {isImportedDocumentCopyPath(layer.sourcePath)
+                            ? t("layers.importedCopyDestination", {
+                                name: browserSafeFileName(layer.sourcePath ?? ""),
+                              })
+                            : destinationLabel}
                         </span>
                         {disabledReason && (
                           <span className="mt-0.5 block text-xs text-muted-foreground">

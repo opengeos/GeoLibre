@@ -211,6 +211,32 @@ describe("clearLayerGeometryEditedFlag", () => {
 });
 
 describe("writeLayerEditsToSource and saveLayerEditsBatch", () => {
+  it("writes an imported document copy and identifies that destination in the result", async () => {
+    const path =
+      "/data/user/0/org.geolibre.app/files/picked-documents/3cb9b477-d563-4d3e-8503-263ec23c01c5/data/roads.geojson";
+    const layer = makeLayer("roads", "Roads", { sourcePath: path });
+    const written: string[] = [];
+    const result = await writeLayerEditsToSource(layer, {
+      map: undefined,
+      t,
+      canEditLayer: () => true,
+      deps: {
+        isDesktop: () => true,
+        commitDrafts: () => "none",
+        readLatestLayer: () => layer,
+        readProjectGeneration: () => 1,
+        resolveGeojson: async () => layer.geojson!,
+        writeLocalGeojson: async (target) => {
+          written.push(target);
+        },
+        clearGeometryEdited: () => {},
+      },
+    });
+    assert.equal(result.status, "success");
+    assert.deepEqual(written, [path]);
+    assert.match(result.message, /^layers.saveEditsImportedCopySuccess:/);
+  });
+
   it("writes local GeoJSON directly on desktop and clears geometryEdited", async () => {
     const written: Array<{ path: string; count: number }> = [];
     const cleared: string[] = [];
