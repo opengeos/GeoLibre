@@ -1,3 +1,4 @@
+import { isProcessingParameterVisible } from "../../lib/processing-parameter-visibility";
 import {
   shouldZoomToNewLayers,
   getRoutingConfig,
@@ -238,16 +239,9 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
   // Hide a parameter whose `visibleWhen` condition is not met (e.g. the cost
   // field while the local-network tools cost edges by length).
   const isParamVisible = useCallback(
-    (param: AlgorithmParameter): boolean => {
-      const vw = param.visibleWhen;
-      if (!vw) return true;
-      const current = params[vw.param] as string | undefined;
-      if ("in" in vw) return current != null && vw.in.includes(current);
-      return current == null || !vw.notIn.includes(current);
-    },
+    (param: AlgorithmParameter) => isProcessingParameterVisible(param, params),
     [params],
   );
-
   const handleRun = useCallback(async () => {
     setLog([]);
     softErrorRef.current = null;

@@ -2005,7 +2005,7 @@ const MAX_HDBSCAN_FEATURES = 5000;
 /** DBSCAN uses a grid index, so it scales much further. */
 const MAX_DBSCAN_FEATURES = 200_000;
 /** Leave-one-out kriging inverts an (n + 1)² matrix per variogram model. */
-const MAX_KRIGING_CV_FEATURES = 1000;
+const MAX_KRIGING_CV_FEATURES = 300;
 
 /** Great-circle distance in metres on the active body. */
 function greatCircleM(a: [number, number], b: [number, number]): number {

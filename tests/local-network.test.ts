@@ -18,6 +18,35 @@ import {
 } from "../packages/processing/src/local-network";
 
 describe("network review regressions", () => {
+  it("warns about distant observations while retaining their snap distances", async () => {
+    const roads = layer("roads", [
+      line([
+        [0, 0],
+        [1000, 0],
+      ]),
+    ]);
+    const stops = layer("stops", [point(500, 20000), point(1000, 20000)]);
+    const output = await run(localShortestPathTool, [roads, stops], {
+      network: "roads",
+      stops: "stops",
+    });
+    assert.equal(output.results.length, 1);
+    assert.match(output.messages.join("\n"), /Warning: 2 input point\(s\) attached/);
+  });
+
+  it("rejects excessive service-area polygon complexity before buffering", async () => {
+    const roads = layer("roads", [line(Array.from({ length: 1002 }, (_, i) => [i, 0]))]);
+    const facilities = layer("facilities", [point(0, 0)]);
+    const output = await run(localServiceAreaTool, [roads, facilities], {
+      network: "roads",
+      facilities: "facilities",
+      breaks: "10000",
+      polygonWidth: 1,
+      snapTolerance: 0,
+    });
+    assert.equal(output.results.length, 0);
+    assert.match(output.messages.join("\n"), /polygon buffering exceeds/);
+  });
   it("rejects excessive candidate work from a large snap tolerance", () => {
     const features: Feature[] = Array.from({ length: 6_000 }, (_, index) => ({
       type: "Feature",

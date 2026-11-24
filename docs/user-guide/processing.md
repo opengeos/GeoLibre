@@ -282,6 +282,12 @@ exceeded. Point placement has a 50-million edge/point comparison budget, includi
 far or antimeridian selections that use a full edge scan. Searches yield between
 legs or incidents; graph construction itself is synchronous.
 
+Service-area polygon buffering accepts at most 1,000 reachable line pieces per
+area and 5,000 per run. Disable polygons to retain line-only output for larger
+areas. Input points farther than 1 km or ten times the endpoint snap tolerance
+(whichever is larger) produce a warning; snap-distance attributes remain in the
+result.
+
 Local multi-stop and closest-facility runs are limited to 50 million node-search
 entries, counted after snapping. This bounds repeated graph-state allocations;
 use fewer stops/incidents or a smaller network extract for larger selections.
@@ -320,7 +326,9 @@ Distances in these tools are great-circle metres. The OLS and GWR output
 matches GWR4 on its Georgia example data, and the clustering matches
 scikit-learn's `DBSCAN` and `HDBSCAN` (its defaults: excess-of-mass selection,
 no single root cluster). GWR handles up to 1,500 features, HDBSCAN 5,000, and
-the kriging cross-validation 1,000 distinct locations. DBSCAN accepts at most
+the kriging cross-validation 300 distinct locations. Dense kriging inversion
+scales cubically with the number of samples; reduce the sample size for faster
+runs. Cancel terminates the processing worker without waiting for a model fit. DBSCAN accepts at most
 200,000 features and stops after 20 million candidate comparisons across its
 core-point and expansion passes. Dense data can reach this work limit below the
 feature cap; reduce the search radius or process a smaller area.

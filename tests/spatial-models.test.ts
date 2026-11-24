@@ -810,3 +810,12 @@ it("reports unlocated features omitted by both clustering tools", async () => {
     assert.match(output.messages.join("\n"), /Skipped 1 feature\(s\) without a location/);
   }
 });
+
+it("rejects dense kriging diagnostics beyond the cubic-work sample cap", async () => {
+  const points = pointLayer(
+    Array.from({ length: 301 }, (_, i) => [i * 0.001, 0, { z: Math.sin(i) }]),
+  );
+  const output = await runTool(krigingDiagnosticsTool, points, { field: "z", model: "linear" });
+  assert.equal(output.results.length, 0);
+  assert.match(output.messages.join("\n"), /300-point limit/);
+});

@@ -549,16 +549,34 @@ interface PlacedPoint {
 }
 
 /** Attaches every point to the network, in order. */
-function placePoints(net: LocalNetwork, points: RoutingPoint[]): PlacedPoint[] {
+function placePoints(
+  net: LocalNetwork,
+  points: RoutingPoint[],
+  ctx: ProcessingContext,
+): PlacedPoint[] {
   if (points.length * net.edges.length > 50_000_000)
     throw new RangeError(
       "Local network point placement is too large; reduce points or use a smaller extract",
     );
   const placed: PlacedPoint[] = [];
+  const rawTolerance = Number(ctx.parameters.snapTolerance ?? 1);
+  const warningDistance = Math.max(1000, 10 * (Number.isFinite(rawTolerance) ? rawTolerance : 1));
+  let far = 0;
+  let maxDistance = 0;
   for (const point of points) {
     const hit = net.insertPoint(point.lon, point.lat);
-    if (hit) placed.push({ id: point.id, node: hit.node, snap: round(hit.snapDistance, 2) });
+    if (hit) {
+      placed.push({ id: point.id, node: hit.node, snap: round(hit.snapDistance, 2) });
+      if (hit.snapDistance > warningDistance) {
+        far++;
+        maxDistance = Math.max(maxDistance, hit.snapDistance);
+      }
+    }
   }
+  if (far)
+    ctx.log(
+      `Warning: ${far} input point(s) attached more than ${round(warningDistance, 0)} m from the network (maximum ${round(maxDistance, 0)} m). Inspect the result snap-distance fields.`,
+    );
   return placed;
 }
 
@@ -572,15 +590,16 @@ function lineFeature(coordinates: Position[], properties: Record<string, unknown
       properties,
       geometry: { type: "Point", coordinates: coordinates[0] },
     };
-  const source = coordinates.length >= 2 ? coordinates : [coordinates[0], coordinates[0]];
-  const pieces = splitNetworkLine(source);
+  const pieces = splitNetworkLine(coordinates);
   return {
     type: "Feature",
     properties,
     geometry:
       pieces.length > 1
         ? { type: "MultiLineString", coordinates: pieces }
-        : { type: "LineString", coordinates: pieces[0] ?? source },
+        : pieces.length
+          ? { type: "LineString", coordinates: pieces[0] }
+          : { type: "Point", coordinates: coordinates[0] },
   };
 }
 
@@ -624,7 +643,7 @@ export const localShortestPathTool: ProcessingAlgorithm = {
     if (!built) return;
     const { net, unit } = built;
     const astar = (ctx.parameters.algorithm as string) !== "dijkstra";
-    const placed = placePoints(net, stops);
+    const placed = placePoints(net, stops, ctx);
     if ((placed.length - 1) * net.nodeCount > 50_000_000) {
       ctx.log(
         "Error: routing selection is too large; reduce stops or use a smaller network extract",
@@ -746,8 +765,8 @@ export const localClosestFacilityTool: ProcessingAlgorithm = {
     const rawMax = Number(ctx.parameters.maxCost ?? 0);
     const maxCost = Number.isFinite(rawMax) && rawMax > 0 ? rawMax : Infinity;
     const fromFacility = (ctx.parameters.travelDirection as string) === "from";
-    const placedFacilities = placePoints(net, facilities);
-    const placedIncidents = placePoints(net, incidents);
+    const placedFacilities = placePoints(net, facilities, ctx);
+    const placedIncidents = placePoints(net, incidents, ctx);
     if (placedIncidents.length * net.nodeCount > 50_000_000) {
       ctx.log(
         "Error: closest-facility selection is too large; reduce incidents or use a smaller network extract",
@@ -895,7 +914,7 @@ export const localServiceAreaTool: ProcessingAlgorithm = {
     const separate = (ctx.parameters.overlap as string) === "separate";
     const toward = (ctx.parameters.travelDirection as string) === "to";
     const width = Math.max(0, Number(ctx.parameters.polygonWidth ?? 0) || 0);
-    const placed = placePoints(net, facilities);
+    const placed = placePoints(net, facilities, ctx);
     const passes = (separate ? facilities.length : 1) * breaks.length;
     if (passes * net.edges.length > 5_000_000 || (width > 0 && passes > 100)) {
       ctx.log(
@@ -909,6 +928,7 @@ export const localServiceAreaTool: ProcessingAlgorithm = {
     const maxBreak = breaks[breaks.length - 1];
     const lines: Feature[] = [];
     const polygons: Feature[] = [];
+    let bufferedPieces = 0;
     for (const group of groups) {
       if (ctx.signal?.aborted) return;
       const result = net.search(group.nodes, { maxCost: maxBreak, reverse: toward });
@@ -927,7 +947,16 @@ export const localServiceAreaTool: ProcessingAlgorithm = {
         };
         lines.push(lineFeat);
         if (width > 0) {
+          bufferedPieces += pieces.length;
+          if (pieces.length > 1000 || bufferedPieces > 5000) {
+            ctx.log(
+              "Error: service-area polygon buffering exceeds 1,000 line pieces per area or 5,000 per run. Disable polygons, reduce the breaks, or use a smaller network.",
+            );
+            return;
+          }
           const { feature: input, referenceLon } = prepareAntimeridianInput(lineFeat);
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          if (ctx.signal?.aborted) return;
           const area = buffer(input, bodyLengthToEarth(width), { units: "meters" });
           if (area?.geometry)
             area.geometry = splitPolygonalAtAntimeridian(

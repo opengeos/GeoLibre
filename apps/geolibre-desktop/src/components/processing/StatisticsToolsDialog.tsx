@@ -1,3 +1,4 @@
+import { isProcessingParameterVisible } from "../../lib/processing-parameter-visibility";
 import { shouldZoomToNewLayers, useAppStore, useLayersWhen } from "@geolibre/core";
 import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
@@ -282,16 +283,9 @@ export function StatisticsToolsDialog({
   );
 
   const isParamVisible = useCallback(
-    (param: AlgorithmParameter): boolean => {
-      const vw = param.visibleWhen;
-      if (!vw) return true;
-      const current = params[vw.param] as string | undefined;
-      if ("in" in vw) return current != null && vw.in.includes(current);
-      return current == null || !vw.notIn.includes(current);
-    },
+    (param: AlgorithmParameter) => isProcessingParameterVisible(param, params),
     [params],
   );
-
   // All required parameters; used for the asterisk legend condition.
   const requiredParams = useMemo(() => tool.parameters.filter((param) => param.required), [tool]);
   // Visible required params that are still unset — disables the Run button.
