@@ -4,6 +4,8 @@ import type { Feature, FeatureCollection } from "geojson";
 import { DEFAULT_LAYER_STYLE, setActiveEllipsoidId, type GeoLibreLayer } from "@geolibre/core";
 import {
   VECTOR_TOOLS,
+  STATISTICS_TOOLS,
+  getStatisticsTool,
   WORKER_VECTOR_TOOL_IDS,
   VECTOR_TOOL_WORKER_IDLE_MS,
   canRunVectorToolOnWorker,
@@ -237,6 +239,35 @@ const CASES: [string, Record<string, unknown>][] = [
 ];
 
 describe("runAlgorithmInBackground", () => {
+  for (const [id, parameters] of [
+    ["ols-regression", { dependent: "y", explanatory: "x" }],
+    [
+      "gwr",
+      { dependent: "y", explanatory: "x", bandwidth: 20, kernel: "gaussian", adaptive: true },
+    ],
+    ["dbscan", { eps: 2000, minPoints: 2 }],
+    ["hdbscan", { minClusterSize: 2, minSamples: 2 }],
+    ["kriging-diagnostics", { field: "y", model: "compare" }],
+  ] as const) {
+    it(`matches direct statistical execution in the worker: ${id}`, async () => {
+      const tool = getStatisticsTool(id)!;
+      const sample = layer(
+        "sample",
+        Array.from({ length: 20 }, (_, i) =>
+          point(i * 0.01, (i % 3) * 0.01, { x: i, y: 3 * i + (i % 4) }),
+        ),
+      );
+      const params = { layer: sample.id, ...parameters };
+      const direct = recordingContext(params, [sample]);
+      await tool.run(direct.ctx);
+      installFakeWorker();
+      const background = recordingContext(params, [sample]);
+      await runAlgorithmInBackground(tool, background.ctx);
+      assert.deepEqual(background.calls, direct.calls);
+      assert.equal(spawned, 1);
+      assert.ok(direct.calls.some((call) => call[0] === "addResultLayer"));
+    });
+  }
   for (const [toolId, parameters] of CASES) {
     it(`matches direct execution: ${toolId} ${JSON.stringify(parameters)}`, async () => {
       const { direct, worker } = await runBoth(toolId, parameters);
@@ -651,7 +682,7 @@ describe("createVectorToolSession", () => {
 
 describe("WORKER_VECTOR_TOOL_IDS", () => {
   it("names only registered vector tools", () => {
-    const ids = new Set(VECTOR_TOOLS.map((tool) => tool.id));
+    const ids = new Set([...VECTOR_TOOLS, ...STATISTICS_TOOLS].map((tool) => tool.id));
     for (const id of WORKER_VECTOR_TOOL_IDS) assert.ok(ids.has(id), id);
   });
 
@@ -665,6 +696,7 @@ describe("WORKER_VECTOR_TOOL_IDS", () => {
       "centroids",
       "clip",
       "convex-hull",
+      "dbscan",
       "decode-polyline",
       "detect-stops",
       "difference",
@@ -673,8 +705,12 @@ describe("WORKER_VECTOR_TOOL_IDS", () => {
       "explode",
       "extract-vertices",
       "grid",
+      "gwr",
+      "hdbscan",
       "intersection",
+      "kriging-diagnostics",
       "merge-layers",
+      "ols-regression",
       "points-along-geometry",
       "random-extract",
       "select-by-location",
@@ -692,7 +728,7 @@ describe("WORKER_VECTOR_TOOL_IDS", () => {
 
   it("resolves each id to the registry's own tool", () => {
     for (const id of WORKER_VECTOR_TOOL_IDS) {
-      const tool = getVectorTool(id);
+      const tool = getVectorTool(id) ?? getStatisticsTool(id);
       assert.ok(tool && canRunVectorToolOnWorkerWhenAvailable(tool), id);
     }
   });

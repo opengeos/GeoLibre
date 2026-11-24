@@ -22,8 +22,7 @@ import {
   type VectorToolWorkerMessage,
   type VectorToolWorkerRequest,
 } from "./vector-tool-protocol";
-import { getVectorTool } from "./vector-tool-registry";
-import { WORKER_VECTOR_TOOL_IDS } from "./vector-tool-worker-tools";
+import { WORKER_VECTOR_TOOL_IDS, WORKER_VECTOR_TOOLS } from "./vector-tool-worker-tools";
 
 export { WORKER_VECTOR_TOOL_IDS };
 
@@ -41,7 +40,7 @@ export function canRunVectorToolOnWorker(tool: ProcessingAlgorithm): boolean {
   return (
     typeof Worker !== "undefined" &&
     WORKER_VECTOR_TOOL_IDS.has(tool.id) &&
-    getVectorTool(tool.id) === tool
+    WORKER_VECTOR_TOOLS.get(tool.id) === tool
   );
 }
 

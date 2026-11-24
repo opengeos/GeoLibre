@@ -1,7 +1,31 @@
 import { fromArrayBuffer, writeArrayBuffer } from "geotiff";
+import type { FeatureCollection } from "geojson";
 import type { RasterToolId } from "./raster-tools";
 import { buildSpectralIndexExpression } from "./spectral-indices";
 import { compileRasterExpression } from "./raster-expr";
+import {
+  bandDifference,
+  ndviChange,
+  transitionMatrix,
+  type TransitionMatrix,
+} from "./raster-change";
+import {
+  crsTransform,
+  epsgDefinition,
+  geojsonEpsg,
+  mapGeometry,
+  rasterCrsDefinition,
+  rasterEpsg,
+} from "./raster-geo";
+import { interpolatePoints } from "./raster-interpolate";
+import { dualPolRgb, floodMap, sarDbConvert, speckleFilter } from "./raster-sar";
+import {
+  clipRasterByMask,
+  contourRaster,
+  polygonizeRaster,
+  zonalStatistics,
+} from "./raster-vector";
+import { mosaicRasters, reprojectRaster, resampleRaster } from "./raster-warp";
 
 /**
  * In-browser raster processing engine.
@@ -53,7 +77,12 @@ export interface RasterData {
   geoKeys: Record<string, unknown>;
 }
 
-/** The raster tools that have an in-browser implementation. */
+/**
+ * The raster tools that have an in-browser implementation: every tool of the
+ * raster toolbox. The first group runs synchronously through
+ * {@link runRasterToolClient}; the rest need CRS lookups, vector inputs or a
+ * second raster and run through {@link runRasterToolClientAsync}.
+ */
 export const CLIENT_RASTER_TOOL_IDS: ReadonlySet<RasterToolId> = new Set<RasterToolId>([
   "hillshade",
   "slope",
@@ -63,6 +92,21 @@ export const CLIENT_RASTER_TOOL_IDS: ReadonlySet<RasterToolId> = new Set<RasterT
   "raster-calc",
   "spectral-index",
   "focal",
+  "reproject",
+  "resample",
+  "clip-mask",
+  "polygonize",
+  "contour",
+  "interpolate",
+  "zonal",
+  "mosaic",
+  "change-difference",
+  "ndvi-change",
+  "transition-matrix",
+  "sar-db",
+  "speckle-filter",
+  "sar-rgb",
+  "flood-map",
 ]);
 
 /** Whether a tool can run in the browser without the sidecar. */
@@ -168,7 +212,7 @@ export async function readRasterData(
       "This raster is too large for the in-browser engine. Use the sidecar (rasterio/GDAL) engine instead.",
     );
   }
-  const [originX, originY] = image.getOrigin();
+  let [originX, originY] = image.getOrigin();
   let [resolutionX, resolutionY] = image.getResolution();
   let rotated = false;
   const modelTransform = image.fileDirectory.getValue("ModelTransformation") as
@@ -192,9 +236,32 @@ export async function readRasterData(
     options.samples ? { samples: [...options.samples] } : undefined,
   );
   const rawBands = (Array.isArray(result) ? result : [result]) as ArrayLike<number>[];
-  const bands = rawBands.map((band) => Float32Array.from(band));
-
   const noData = image.getGDALNoData();
+  // Preserve masks before integer/Float64 values can collide when rounded to
+  // Float32. Float32 sources already have a distinguishable stored sentinel.
+  const outputNoData =
+    noData == null
+      ? null
+      : !Number.isFinite(Math.fround(noData)) ||
+          rawBands.some(
+            (band) =>
+              band instanceof Float64Array ||
+              (!(band instanceof Float32Array) && Math.abs(noData) >= 2 ** 24),
+          )
+        ? Number.NaN
+        : Math.fround(noData);
+  const bands = rawBands.map((band) => {
+    const sourceNoData =
+      band instanceof Float32Array && noData != null ? Math.fround(noData) : noData;
+    if (noData == null || outputNoData === sourceNoData || Number.isNaN(noData))
+      return Float32Array.from(band);
+    return Float32Array.from(band, (value) => (value === sourceNoData ? outputNoData! : value));
+  });
+  const geoKeys = (image.getGeoKeys() as Record<string, unknown>) ?? {};
+  if (Number(geoKeys.GTRasterTypeGeoKey) === 2) {
+    originX -= resolutionX / 2;
+    originY -= resolutionY / 2;
+  }
   return {
     bands,
     width,
@@ -209,8 +276,8 @@ export async function readRasterData(
     flipX: resolutionX < 0,
     flipY: resolutionY > 0,
     ...(rotated ? { rotated: true } : {}),
-    nodata: noData != null && Number.isFinite(noData) ? noData : null,
-    geoKeys: (image.getGeoKeys() as Record<string, unknown>) ?? {},
+    nodata: outputNoData,
+    geoKeys,
   };
 }
 
@@ -268,9 +335,17 @@ function writeInterleaved<T extends Float32Array | Uint8Array>(
     width: raster.width,
     height: raster.height,
     ModelPixelScale: [raster.resX, raster.resY, 0],
-    ModelTiepoint: [0, 0, 0, raster.originX, raster.originY, 0],
+    ModelTiepoint: [
+      0,
+      0,
+      0,
+      raster.originX + (Number(raster.geoKeys.GTRasterTypeGeoKey) === 2 ? raster.resX / 2 : 0),
+      raster.originY - (Number(raster.geoKeys.GTRasterTypeGeoKey) === 2 ? raster.resY / 2 : 0),
+      0,
+    ],
   };
-  if (raster.nodata != null) metadata.GDAL_NODATA = String(raster.nodata);
+  if (raster.nodata != null)
+    metadata.GDAL_NODATA = Number.isNaN(raster.nodata) ? "nan" : String(raster.nodata);
   for (const key of PRESERVED_GEO_KEYS) {
     const value = raster.geoKeys[key];
     if (value != null) metadata[key] = value;
@@ -359,7 +434,10 @@ const DEGREES_PER_ANGULAR_UNIT: Record<number, number> = {
  * Without this, slope on a 4326 DEM comes back ~111,320x too steep and
  * saturates at 90 degrees.
  */
-function gradientResolutions(input: RasterData): { resX: number; resY: number } {
+function gradientResolutions(input: RasterData): {
+  resX: number;
+  resY: number;
+} {
   const geoKeys = input.geoKeys ?? {};
   const modelType = geoKeys.GTModelTypeGeoKey as number | undefined;
   const isGeographic =
@@ -837,6 +915,7 @@ export interface ClientRasterResult {
   raster: RasterData;
   bytes: ArrayBuffer;
   messages: string[];
+  detailMessages: string[];
 }
 
 /**
@@ -933,6 +1012,281 @@ export function runRasterToolClient(
       throw new Error(`"${toolId}" has no client-side implementation.`);
   }
 
+  const detailMessages = messages.slice(1);
   messages.push(`Computed "${toolId}" in the browser.`);
-  return { raster, bytes: writeRasterBands(raster), messages };
+  return { raster, bytes: writeRasterBands(raster), messages, detailMessages };
+}
+
+// --- Async dispatcher (every tool) -----------------------------------------
+
+/** Inputs for {@link runRasterToolClientAsync}. */
+export interface ClientToolInputs {
+  /** The primary raster (absent for `interpolate`, whose input is points). */
+  raster?: RasterData;
+  /**
+   * Secondary rasters keyed by parameter id (`raster_2`, `after_path`, ...),
+   * or by letter (`B`, `C`) for the raster calculator.
+   */
+  rasters?: Record<string, RasterData>;
+  /**
+   * GeoJSON inputs keyed by parameter id (`mask_path`, `zones_path`); the
+   * primary point layer of `interpolate` is keyed `input`.
+   */
+  vectors?: Record<string, unknown>;
+}
+
+/** The outcome of a client tool run: a raster or a vector layer. */
+export type ClientToolResult =
+  | {
+      kind: "raster";
+      raster: RasterData;
+      bytes: ArrayBuffer;
+      messages: string[];
+      /** Engine diagnostics excluding loaded/computed lifecycle summaries. */
+      detailMessages: string[];
+      /** The transition matrix, for `transition-matrix`. */
+      matrix?: TransitionMatrix;
+    }
+  | {
+      kind: "vector";
+      /** The GeoJSON as the sidecar writes it (source CRS, legacy `crs` member). */
+      geojson: FeatureCollection;
+      /** The same features in WGS84, or null for an unreferenced download. */
+      wgs84: FeatureCollection | null;
+      messages: string[];
+      detailMessages: string[];
+    };
+
+/** Tools {@link runRasterToolClient} computes synchronously. */
+const SYNC_CLIENT_TOOLS = new Set([
+  "hillshade",
+  "slope",
+  "aspect",
+  "clip-extent",
+  "reclassify",
+  "raster-calc",
+  "spectral-index",
+  "focal",
+]);
+
+/** Whether a tool's primary input is a GeoJSON layer rather than a raster. */
+export function rasterToolTakesVectorInput(toolId: string): boolean {
+  return toolId === "interpolate";
+}
+
+async function toWgs84(fc: FeatureCollection, definition: string): Promise<FeatureCollection> {
+  if (definition === "EPSG:4326") return { type: "FeatureCollection", features: fc.features };
+  const fn = await crsTransform(definition, "EPSG:4326");
+  return {
+    type: "FeatureCollection",
+    features: fc.features.map((f) => ({
+      ...f,
+      geometry: f.geometry ? mapGeometry(f.geometry, fn) : f.geometry,
+    })),
+  };
+}
+
+function requireRaster(inputs: ClientToolInputs, toolId: string): RasterData {
+  if (!inputs.raster) throw new Error(`"${toolId}" needs an input raster.`);
+  return inputs.raster;
+}
+
+function requireVector(inputs: ClientToolInputs, key: string, label: string): unknown {
+  const v = inputs.vectors?.[key];
+  if (v == null) throw new Error(`Choose the ${label} GeoJSON file.`);
+  return v;
+}
+
+function requireSecondary(inputs: ClientToolInputs, key: string, label: string): RasterData {
+  const r = inputs.rasters?.[key];
+  if (!r) throw new Error(`Choose the ${label} raster.`);
+  return r;
+}
+
+/**
+ * Run any raster tool in the browser and return a raster (with encoded
+ * GeoTIFF bytes) or a vector result. Tools that need a CRS resolve it from the
+ * raster's GeoKeys; GeoJSON inputs follow the sidecar's convention (a legacy
+ * `crs` member, else WGS84).
+ */
+export async function runRasterToolClientAsync(
+  toolId: string,
+  inputs: ClientToolInputs,
+  parameters: Record<string, unknown>,
+): Promise<ClientToolResult> {
+  if (SYNC_CLIENT_TOOLS.has(toolId)) {
+    const { raster, bytes, messages, detailMessages } = runRasterToolClient(
+      toolId,
+      requireRaster(inputs, toolId),
+      parameters,
+      inputs.rasters,
+    );
+    return { kind: "raster", raster, bytes, messages, detailMessages };
+  }
+  const messages: string[] = [];
+  if (inputs.raster) {
+    messages.push(
+      `Loaded raster: ${inputs.raster.width}×${inputs.raster.height}, ${inputs.raster.bands.length} band(s).`,
+    );
+  }
+  const rasterResult = (raster: RasterData, extra: string[] = []): ClientToolResult => {
+    messages.push(...extra, `Computed "${toolId}" in the browser.`);
+    return {
+      kind: "raster",
+      raster,
+      bytes: writeRasterBands(raster),
+      messages,
+      detailMessages: extra,
+    };
+  };
+  const vectorResult = async (
+    geojson: FeatureCollection,
+    definition: string | null,
+    extra: string[],
+    exportWgs84 = false,
+  ): Promise<ClientToolResult> => {
+    messages.push(...extra, `Computed "${toolId}" in the browser.`);
+    const detailMessages = [...extra];
+    const diagnostic = (line: string): void => {
+      messages.push(line);
+      detailMessages.push(line);
+    };
+    const wgs84 = definition ? await toWgs84(geojson, definition) : null;
+    const download =
+      exportWgs84 && wgs84 ? wgs84 : definition ? geojson : { ...geojson, crs: null };
+    if (!definition)
+      diagnostic(
+        "The raster has no CRS. The vector download retains unreferenced coordinates and is not added to the map.",
+      );
+    else if (exportWgs84)
+      diagnostic(
+        "The source uses a custom CRS. The vector download is transformed to WGS84 (EPSG:4326).",
+      );
+    return {
+      kind: "vector",
+      geojson: download,
+      wgs84,
+      messages,
+      detailMessages,
+    };
+  };
+  const p = parameters;
+  switch (toolId) {
+    case "reproject":
+      return rasterResult(
+        await reprojectRaster(requireRaster(inputs, toolId), {
+          dst_crs: String(p.dst_crs ?? ""),
+          resampling: (p.resampling as string) ?? "nearest",
+        }),
+        [`Reprojected to ${String(p.dst_crs)}.`],
+      );
+    case "resample":
+      return rasterResult(
+        resampleRaster(requireRaster(inputs, toolId), {
+          resolution: Number(p.resolution),
+          resampling: (p.resampling as string) ?? "bilinear",
+        }),
+      );
+    case "clip-mask": {
+      const out = await clipRasterByMask(
+        requireRaster(inputs, toolId),
+        requireVector(inputs, "mask_path", "mask"),
+        { crop: p.crop !== false, all_touched: p.all_touched === true },
+      );
+      return rasterResult(out.raster, out.messages);
+    }
+    case "mosaic": {
+      const extras = ["raster_2", "raster_3", "raster_4", "raster_5"]
+        .map((k) => inputs.rasters?.[k])
+        .filter((r): r is RasterData => r != null);
+      const out = mosaicRasters([requireRaster(inputs, toolId), ...extras], p.method);
+      return rasterResult(out.raster, [...out.messages, `Merged ${extras.length + 1} rasters.`]);
+    }
+    case "interpolate": {
+      const out = await interpolatePoints(requireVector(inputs, "input", "point"), p as never);
+      return rasterResult(out.raster, out.messages);
+    }
+    case "polygonize":
+    case "contour": {
+      const raster = requireRaster(inputs, toolId);
+      // Resolve a declared CRS before computing; unknown image coordinates
+      // remain useful for download but must not be placed on a geographic map.
+      const keys = raster.geoKeys ?? {};
+      const hasCrs =
+        [1, 2, 3].includes(Number(keys.GTModelTypeGeoKey)) ||
+        Object.keys(keys).some((key) => /^(?:Projected|Geographic|Geog|Proj)/.test(key));
+      const definition = hasCrs ? await rasterCrsDefinition(raster, toolId) : null;
+      const out =
+        toolId === "polygonize"
+          ? polygonizeRaster(raster, p as never)
+          : contourRaster(raster, p as never);
+      return vectorResult(
+        out.geojson,
+        definition,
+        out.messages,
+        definition !== null && rasterEpsg(raster) === null,
+      );
+    }
+    case "zonal": {
+      const zones = requireVector(inputs, "zones_path", "zones");
+      const out = await zonalStatistics(requireRaster(inputs, toolId), zones, p as never);
+      return vectorResult(out.geojson, await epsgDefinition(geojsonEpsg(zones)), out.messages);
+    }
+    case "change-difference": {
+      const out = bandDifference(
+        requireRaster(inputs, toolId),
+        requireSecondary(inputs, "after_path", "after"),
+        p as never,
+      );
+      return rasterResult(out.raster, out.messages);
+    }
+    case "ndvi-change": {
+      const out = ndviChange(
+        requireRaster(inputs, toolId),
+        requireSecondary(inputs, "after_path", "after"),
+        p as never,
+      );
+      return rasterResult(out.raster, out.messages);
+    }
+    case "transition-matrix": {
+      const out = transitionMatrix(
+        requireRaster(inputs, toolId),
+        requireSecondary(inputs, "after_path", "after"),
+        p as never,
+      );
+      messages.push(...out.messages, `Computed "${toolId}" in the browser.`);
+      return {
+        kind: "raster",
+        raster: out.raster,
+        bytes: writeRasterBands(out.raster),
+        messages,
+        detailMessages: out.messages,
+        matrix: out.matrix,
+      };
+    }
+    case "sar-db":
+      return rasterResult(sarDbConvert(requireRaster(inputs, toolId), p as never));
+    case "speckle-filter": {
+      const out = speckleFilter(requireRaster(inputs, toolId), p as never);
+      return rasterResult(out.raster, out.messages);
+    }
+    case "sar-rgb": {
+      const out = dualPolRgb(
+        requireRaster(inputs, toolId),
+        inputs.rasters?.vh_path ?? null,
+        p as never,
+      );
+      return rasterResult(out.raster, out.messages);
+    }
+    case "flood-map": {
+      const out = floodMap(
+        requireRaster(inputs, toolId),
+        inputs.rasters?.pre_path ?? null,
+        p as never,
+      );
+      return rasterResult(out.raster, out.messages);
+    }
+    default:
+      throw new Error(`"${toolId}" has no client-side implementation.`);
+  }
 }

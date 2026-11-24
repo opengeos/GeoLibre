@@ -1,4 +1,5 @@
-import { useAppStore, useLayersWhen } from "@geolibre/core";
+import { isProcessingParameterVisible } from "../../lib/processing-parameter-visibility";
+import { useAppCapability, useAppStore, useLayersWhen } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { addRasterToMap } from "@geolibre/plugins";
@@ -9,7 +10,9 @@ import {
   fetchConversionJob,
   runRasterTool,
   readRasterData,
-  runRasterToolClient,
+  runRasterToolClientAsync,
+  rasterToolTakesVectorInput,
+  type RasterData,
   convertRasterDataToCog,
   exceedsBrowserCogConversionLimit,
   buildSpectralIndexExpression,
@@ -52,13 +55,14 @@ import {
 import { useTranslation } from "react-i18next";
 import type { ParseKeys } from "i18next";
 import {
-  isTauri,
+  FileTooLargeError,
   openLocalDataFileWithFallback,
   pickLocalPathWithFallback,
   pickSavePathWithFallback,
   saveBinaryFileWithFallback,
 } from "../../lib/tauri-io";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
+import { isDesktopRuntime } from "../../lib/is-mobile";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
 import {
   beginProcessingRun,
@@ -68,9 +72,12 @@ import {
 import { createAppAPI } from "../../hooks/usePlugins";
 import {
   ClientRasterInputError,
+  MAX_CLIENT_VECTOR_BYTES,
+  clientInputForParam,
+  clientRasterOutputBands,
+  parseGeoJsonBytes,
   loadClientAdditionalRasters,
   omitClientSecondaryInput,
-  secondaryRasterLetterForParam,
   type ClientRasterInputEntry,
 } from "../../lib/client-raster-inputs";
 import { RasterParameterField } from "./RasterParameterField";
@@ -130,6 +137,22 @@ interface RasterToolsDialogProps {
   mapControllerRef: RefObject<MapEngine | null>;
 }
 
+/** Read current privileges at execution time, including stale UI handlers. */
+function sidecarRestriction(
+  platformAvailable: boolean,
+):
+  | "toolbar.rasterTool.processingRestricted"
+  | "toolbar.rasterTool.sidecarRestricted"
+  | "toolbar.rasterTool.needsDesktopSidecar"
+  | "masBuild.unavailable"
+  | null {
+  const privileges = useAppStore.getState().capabilities.privileges;
+  if (!privileges.includes("processing:run")) return "toolbar.rasterTool.processingRestricted";
+  if (!platformAvailable)
+    return IS_MAS_BUILD ? "masBuild.unavailable" : "toolbar.rasterTool.needsDesktopSidecar";
+  return privileges.includes("processing:sidecar") ? null : "toolbar.rasterTool.sidecarRestricted";
+}
+
 export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps): ReactElement {
   const { t } = useTranslation();
   const openTool = useAppStore((s) => s.ui.rasterToolOpen);
@@ -141,11 +164,13 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);
 
   const open = openTool !== null;
-  const desktop = isTauri();
   // Whether this build can run the sidecar engine: desktop, except the Mac App
   // Store build, whose App Sandbox forbids the sidecar process. The client
   // (in-browser) engine keeps working either way.
-  const desktopServer = desktop && !IS_MAS_BUILD;
+  const desktopServer = isDesktopRuntime() && !IS_MAS_BUILD;
+  const processingCap = useAppCapability("processing:run");
+  const sidecarCap = useAppCapability("processing:sidecar");
+  const sidecarAllowed = desktopServer && processingCap.granted && sidecarCap.granted;
   const [selectedId, setSelectedId] = useState<string>(openTool ?? RASTER_TOOLS[0].id);
   const [inputPath, setInputPath] = useState("");
   const [outputPath, setOutputPath] = useState("");
@@ -163,8 +188,10 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   // Aborts an in-flight layer-bytes fetch when the dialog closes/unmounts or a
   // new pick supersedes it, so its state setters never fire on a dead component.
   const layerFetchAbortRef = useRef<AbortController | null>(null);
-  // Incremented on reset so stale async secondary file reads are ignored.
+  // Incremented on reset so stale async primary and secondary reads are ignored.
   const formSessionRef = useRef(0);
+  // File and map-layer picks share a sequence so the newest primary input wins.
+  const primaryPickTokenRef = useRef(0);
   // Incremented whenever inputs change or the form resets so an in-flight
   // client run cannot write stale result/log/map output after input edits.
   const clientRunIdRef = useRef(0);
@@ -178,12 +205,17 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
 
   // Client-engine state. The browser fallback reads a GeoTIFF into memory,
   // computes a new raster, adds it to the map, and offers a download.
-  const [engine, setEngine] = useState<RasterEngine>(desktopServer ? "sidecar" : "client");
+  const [engine, setEngine] = useState<RasterEngine>(sidecarAllowed ? "sidecar" : "client");
   const [clientInput, setClientInput] = useState<{
     name: string;
     bytes: ArrayBuffer;
   } | null>(null);
   const [clientAdditionalInputs, setClientAdditionalInputs] = useState<
+    Record<string, ClientRasterInputEntry>
+  >({});
+  // GeoJSON path parameters (clip mask, zones) for the client engine, keyed by
+  // parameter id.
+  const [clientVectorInputs, setClientVectorInputs] = useState<
     Record<string, ClientRasterInputEntry>
   >({});
   const [clientLog, setClientLog] = useState<string[]>([]);
@@ -193,7 +225,9 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   const [clientResult, setClientResult] = useState<{
     name: string;
     bytes: ArrayBuffer;
+    kind: "raster" | "vector";
   } | null>(null);
+  const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
 
   const tool = useMemo(() => getRasterTool(selectedId) ?? RASTER_TOOLS[0], [selectedId]);
   const groups = useMemo(groupedTools, []);
@@ -204,14 +238,13 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   }, [openTool]);
 
   const checkRuntime = useCallback(async () => {
-    if (!desktopServer) {
+    const restriction = sidecarRestriction(desktopServer);
+    if (restriction) {
       // Raster tools' sidecar engine cannot run in a pure web build (no real
       // file paths) or in the Mac App Store build (no sidecar process); only
       // the client engine works there.
       setRuntimeAvailable(false);
-      setRuntimeMessage(
-        IS_MAS_BUILD ? t("masBuild.unavailable") : t("toolbar.rasterTool.needsDesktopSidecar"),
-      );
+      setRuntimeMessage(t(restriction));
       return;
     }
     setRuntimeAvailable(null);
@@ -224,16 +257,19 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       setRuntimeAvailable(false);
       setRuntimeMessage(err instanceof Error ? err.message : t("toolbar.rasterTool.errorConnect"));
     }
-  }, [desktopServer, t]);
+  }, [desktopServer, processingCap.granted, sidecarCap.granted, t]);
 
   // Reset per-tool state whenever the dialog opens or the selected tool changes.
   // Also reset the engine here (not only on tool change) so reopening the dialog
   // on the same tool restores the default: client only on a client-capable tool
   // without a sidecar, otherwise sidecar.
   useEffect(() => {
-    if (!open) return;
     formSessionRef.current += 1;
     clientRunIdRef.current += 1;
+    primaryPickTokenRef.current += 1;
+    layerFetchAbortRef.current?.abort();
+    setResolvingLayer(false);
+    if (!open) return;
     secondaryPickTokensRef.current = {};
     setInputPath("");
     setOutputPath("");
@@ -242,11 +278,22 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     setJob(null);
     setClientInput(null);
     setClientAdditionalInputs({});
+    setClientVectorInputs({});
     setClientLog([]);
     setClientResult(null);
     setClientRunning(false);
-    setEngine(tool.supportsClient && !desktopServer ? "client" : "sidecar");
+    setEngine(
+      tool.supportsClient && (tool.clientOnly || sidecarRestriction(desktopServer))
+        ? "client"
+        : "sidecar",
+    );
   }, [open, tool, desktopServer]);
+
+  // Permission changes block new runs without discarding an already dispatched
+  // job, its polling state, or the user's form inputs.
+  useEffect(() => {
+    if (!sidecarAllowed && !job && tool.supportsClient) setEngine("client");
+  }, [sidecarAllowed, job, tool]);
 
   // Pre-fill from a pending History re-run once the requested tool is selected.
   // Declared after the reset effect above so the recorded parameters win over
@@ -323,11 +370,13 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     [],
   );
 
-  const clearClientSecondaryInput = useCallback((letter: string) => {
-    secondaryPickTokensRef.current[letter] = (secondaryPickTokensRef.current[letter] ?? 0) + 1;
+  const clearClientSecondaryInput = useCallback((kind: "raster" | "vector", key: string) => {
+    const token = `${kind}:${key}`;
+    secondaryPickTokensRef.current[token] = (secondaryPickTokensRef.current[token] ?? 0) + 1;
     clientRunIdRef.current += 1;
     setClientRunning(false);
-    setClientAdditionalInputs((prev) => omitClientSecondaryInput(prev, letter));
+    if (kind === "raster") setClientAdditionalInputs((prev) => omitClientSecondaryInput(prev, key));
+    else setClientVectorInputs((prev) => omitClientSecondaryInput(prev, key));
     setClientResult(null);
     setClientLog([]);
   }, []);
@@ -335,22 +384,13 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   // Whether a parameter is shown, given another parameter's value (e.g. hide
   // the IDW power field when the kriging method is selected).
   const isParamVisible = useCallback(
-    (param: AlgorithmParameter): boolean => {
-      const vw = param.visibleWhen;
-      if (!vw) return true;
-      // Fall back to the controlling param's declared default, so dependent
-      // fields resolve correctly on the first render — before the effect that
-      // seeds `params` from toolDefaults has run (avoids a one-frame flicker).
-      const controller = tool.parameters.find((p) => p.id === vw.param);
-      const current = (params[vw.param] ?? controller?.default) as string | undefined;
-      if ("in" in vw) return current != null && vw.in.includes(current);
-      return current == null || !vw.notIn.includes(current);
-    },
+    (param: AlgorithmParameter) => isProcessingParameterVisible(param, params, tool.parameters),
     [params, tool],
   );
-
   const pickInput = useCallback(async () => {
-    const path = await pickLocalPathWithFallback({ filters: tool.inputFilters });
+    const path = await pickLocalPathWithFallback({
+      filters: tool.inputFilters,
+    });
     if (path) setInputPath(path);
   }, [tool]);
 
@@ -364,20 +404,28 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
 
   const pickPathParam = useCallback(
     async (param: AlgorithmParameter) => {
-      const letter = engine === "client" ? secondaryRasterLetterForParam(param.id) : null;
-      if (letter) {
+      // The client engine reads secondary GeoTIFFs and GeoJSON layers into
+      // memory instead of passing a path to the sidecar.
+      const clientParam = engine === "client" ? clientInputForParam(param) : null;
+      if (clientParam) {
+        const { kind, key } = clientParam;
+        const token = `${kind}:${key}`;
         const session = formSessionRef.current;
-        const pickToken = (secondaryPickTokensRef.current[letter] ?? 0) + 1;
-        secondaryPickTokensRef.current[letter] = pickToken;
+        const pickToken = (secondaryPickTokensRef.current[token] ?? 0) + 1;
+        secondaryPickTokensRef.current[token] = pickToken;
         try {
           const picked = await openLocalDataFileWithFallback({
             filters: param.fileFilters ?? tool.inputFilters,
-            accept: ".tif,.tiff,image/tiff",
+            accept:
+              kind === "raster"
+                ? ".tif,.tiff,image/tiff"
+                : ".geojson,.json,application/geo+json,application/json",
             readBinary: true,
+            maxBytes: kind === "vector" ? MAX_CLIENT_VECTOR_BYTES : undefined,
           });
           if (
             session !== formSessionRef.current ||
-            secondaryPickTokensRef.current[letter] !== pickToken ||
+            secondaryPickTokensRef.current[token] !== pickToken ||
             !picked?.data
           ) {
             return;
@@ -387,28 +435,42 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
           setError(null);
           setClientResult(null);
           setClientLog([]);
-          setClientAdditionalInputs((prev) => ({
-            ...prev,
-            [letter]: { name: picked.path, bytes: picked.data! },
-          }));
+          const entry = { name: picked.path, bytes: picked.data };
+          if (kind === "raster") setClientAdditionalInputs((prev) => ({ ...prev, [key]: entry }));
+          else setClientVectorInputs((prev) => ({ ...prev, [key]: entry }));
         } catch (err) {
           if (
             session !== formSessionRef.current ||
-            secondaryPickTokensRef.current[letter] !== pickToken
+            secondaryPickTokensRef.current[token] !== pickToken
           ) {
             return;
           }
-          setError(err instanceof Error ? err.message : t("toolbar.rasterTool.layerLoadError"));
+          setError(
+            err instanceof FileTooLargeError
+              ? t("toolbar.rasterTool.vectorMemoryLimit", {
+                  limit: MAX_CLIENT_VECTOR_BYTES / 1024 ** 2,
+                })
+              : err instanceof Error
+                ? err.message
+                : t("toolbar.rasterTool.layerLoadError"),
+          );
         }
         return;
       }
-      const path = await pickLocalPathWithFallback({ filters: param.fileFilters });
+      const path = await pickLocalPathWithFallback({
+        filters: param.fileFilters,
+      });
       if (path) setParam(param.id, path);
     },
     [engine, setParam, tool.inputFilters, t],
   );
 
   const startServer = useCallback(async () => {
+    const restriction = sidecarRestriction(desktopServer);
+    if (restriction) {
+      setError(t(restriction));
+      return;
+    }
     setStartingServer(true);
     setError(null);
     try {
@@ -419,13 +481,20 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     } finally {
       setStartingServer(false);
     }
-  }, [checkRuntime]);
+  }, [checkRuntime, desktopServer, t]);
 
   // Validate required operation parameters. A hidden parameter (e.g. an IDW
   // knob while kriging is selected) is skipped. Returns an error string or null.
   const validateParams = useCallback((): string | null => {
     for (const param of tool.parameters) {
       if (!param.required || !isParamVisible(param)) continue;
+      // The client engine keeps picked files out of `params`.
+      const clientParam = engine === "client" ? clientInputForParam(param) : null;
+      if (clientParam) {
+        const entries = clientParam.kind === "raster" ? clientAdditionalInputs : clientVectorInputs;
+        if (!entries[clientParam.key]) return `"${param.label}" is required.`;
+        continue;
+      }
       const value = params[param.id];
       if (
         value === undefined ||
@@ -437,27 +506,53 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       }
     }
     return null;
-  }, [tool, params, isParamVisible]);
+  }, [tool, params, isParamVisible, engine, clientAdditionalInputs, clientVectorInputs]);
 
-  // Browser engine: pick a GeoTIFF and read its bytes into memory (works in both
-  // desktop and web, unlike the sidecar path which needs a real file path).
+  // Interpolation reads a point GeoJSON instead of a raster.
+  const vectorPrimaryInput = rasterToolTakesVectorInput(tool.id);
+
+  // Browser engine: pick a GeoTIFF (or the point GeoJSON) and read its bytes
+  // into memory (works in both desktop and web, unlike the sidecar path which
+  // needs a real file path).
   const pickClientInput = useCallback(async () => {
+    const session = formSessionRef.current;
+    const token = ++primaryPickTokenRef.current;
+    const stale = () => session !== formSessionRef.current || token !== primaryPickTokenRef.current;
+    layerFetchAbortRef.current?.abort();
+    setResolvingLayer(false);
     setError(null);
-    const picked = await openLocalDataFileWithFallback({
-      filters: tool.inputFilters,
-      accept: ".tif,.tiff,image/tiff",
-      readBinary: true,
-    });
-    if (picked?.data) {
-      clientRunIdRef.current += 1;
-      setClientRunning(false);
-      setClientInput({ name: picked.path, bytes: picked.data });
-      // Drop any prior run's result/log so the Download button can't offer a
-      // GeoTIFF computed from the previous input.
-      setClientResult(null);
-      setClientLog([]);
+    try {
+      const picked = await openLocalDataFileWithFallback({
+        filters: tool.inputFilters,
+        accept: vectorPrimaryInput
+          ? ".geojson,.json,application/geo+json,application/json"
+          : ".tif,.tiff,image/tiff",
+        readBinary: true,
+        maxBytes: vectorPrimaryInput ? MAX_CLIENT_VECTOR_BYTES : undefined,
+      });
+      if (stale()) return;
+      if (picked?.data) {
+        clientRunIdRef.current += 1;
+        setClientRunning(false);
+        setClientInput({ name: picked.path, bytes: picked.data });
+        // Drop any prior run's result/log so the Download button can't offer a
+        // GeoTIFF computed from the previous input.
+        setClientResult(null);
+        setClientLog([]);
+      }
+    } catch (err) {
+      if (!stale())
+        setError(
+          err instanceof FileTooLargeError
+            ? t("toolbar.rasterTool.vectorMemoryLimit", {
+                limit: MAX_CLIENT_VECTOR_BYTES / 1024 ** 2,
+              })
+            : err instanceof Error
+              ? err.message
+              : t("toolbar.rasterTool.layerLoadError"),
+        );
     }
-  }, [tool]);
+  }, [tool, vectorPrimaryInput, t]);
 
   // Raster layers already on the map that can seed this tool's input, so the
   // user need not browse to a file again. The client engine reads any raster's
@@ -495,6 +590,10 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       }
       const url = rasterExportUrl(layer);
       if (!url) return;
+      const session = formSessionRef.current;
+      const token = ++primaryPickTokenRef.current;
+      const stale = () =>
+        session !== formSessionRef.current || token !== primaryPickTokenRef.current;
       // Supersede any prior in-flight fetch and tie this one to an abort signal
       // so closing the dialog mid-fetch cancels it instead of updating state on
       // an unmounted component.
@@ -506,27 +605,40 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         const response = await fetch(url, { signal: controller.signal });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const bytes = await response.arrayBuffer();
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || stale()) return;
         clientRunIdRef.current += 1;
         setClientRunning(false);
         setClientInput({ name: layer.name, bytes });
         setClientResult(null);
         setClientLog([]);
       } catch (err) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || stale()) return;
         setError(err instanceof Error ? err.message : t("toolbar.rasterTool.layerLoadError"));
       } finally {
-        if (!controller.signal.aborted) setResolvingLayer(false);
+        if (!controller.signal.aborted && !stale()) setResolvingLayer(false);
       }
     },
     [layers, engine, t],
   );
 
   // Abort any in-flight layer-bytes fetch when the dialog unmounts.
-  useEffect(() => () => layerFetchAbortRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      formSessionRef.current += 1;
+      primaryPickTokenRef.current += 1;
+      clientRunIdRef.current += 1;
+      layerFetchAbortRef.current?.abort();
+    },
+    [],
+  );
 
   const runSidecar = useCallback(async () => {
     setError(null);
+    const restriction = sidecarRestriction(desktopServer);
+    if (restriction) {
+      setError(t(restriction));
+      return;
+    }
     if (!inputPath.trim()) {
       setError("Choose an input file.");
       return;
@@ -585,13 +697,23 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       tracker.finish("error", message);
       setError(message);
     }
-  }, [tool, inputPath, outputPath, params, validateParams, t]);
+  }, [tool, inputPath, outputPath, params, validateParams, desktopServer, t]);
 
   const runClient = useCallback(async () => {
     setError(null);
+    if (!useAppStore.getState().capabilities.privileges.includes("processing:run")) {
+      setError(t("toolbar.rasterTool.processingRestricted"));
+      return;
+    }
     setClientResult(null);
     if (!clientInput) {
-      setError(t("toolbar.rasterTool.chooseInputRaster"));
+      setError(
+        t(
+          vectorPrimaryInput
+            ? "toolbar.rasterTool.chooseInputPoints"
+            : "toolbar.rasterTool.chooseInputRaster",
+        ),
+      );
       return;
     }
     const invalid = validateParams();
@@ -614,22 +736,39 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       { inputPath: clientInput.name },
     );
     try {
-      const raster = await readRasterData(clientInput.bytes);
-      if (isStale()) return;
-      setClientLog((prev) => [
-        ...prev,
-        t("toolbar.rasterTool.loadedRaster", {
-          width: raster.width,
-          height: raster.height,
-          bands: raster.bands.length,
-        }),
-      ]);
+      const parseVector = (entry: ClientRasterInputEntry): unknown => {
+        const value = parseGeoJsonBytes(entry.bytes);
+        if (value == null) {
+          throw new Error(t("toolbar.rasterTool.invalidGeoJson", { name: entry.name }));
+        }
+        return value;
+      };
+      const vectors: Record<string, unknown> = {};
+      for (const [key, entry] of Object.entries(clientVectorInputs)) {
+        vectors[key] = parseVector(entry);
+      }
+      let raster: RasterData | undefined;
+      if (vectorPrimaryInput) {
+        vectors.input = parseVector(clientInput);
+      } else {
+        raster = await readRasterData(clientInput.bytes);
+        if (isStale()) return;
+        const loaded = raster;
+        setClientLog((prev) => [
+          ...prev,
+          t("toolbar.rasterTool.loadedRaster", {
+            width: loaded.width,
+            height: loaded.height,
+            bands: loaded.bands.length,
+          }),
+        ]);
+      }
       // Compute is a synchronous pixel loop (millions of iterations for a large
       // DEM). Yield once so React paints the "running" spinner before the main
       // thread blocks; a Web Worker would be the full fix for very large rasters.
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
       if (isStale()) return;
-      const pixelCount = raster.width * raster.height;
+      const pixelCount = raster ? raster.width * raster.height : 0;
       if (pixelCount > 2_000_000) {
         setClientLog((prev) => [
           ...prev,
@@ -640,28 +779,51 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
         if (isStale()) return;
       }
-      const additionalInputs =
-        tool.id === "raster-calc"
-          ? await loadClientAdditionalRasters(raster, clientAdditionalInputs, {
-              expression: typeof params.expression === "string" ? params.expression : undefined,
-            })
-          : undefined;
+      // The primary is already decoded under readRasterData's size guard.
+      // Check its footprint together with output and secondary estimates
+      // before decoding the secondary files.
+      const additionalInputs = raster
+        ? await loadClientAdditionalRasters(raster, clientAdditionalInputs, {
+            outputBands: clientRasterOutputBands(tool.id, raster.bands.length),
+            expression:
+              tool.id === "raster-calc" && typeof params.expression === "string"
+                ? params.expression
+                : undefined,
+          })
+        : undefined;
       if (isStale()) return;
-      const { raster: result, bytes } = runRasterToolClient(
+      const run = await runRasterToolClientAsync(
         tool.id,
-        raster,
+        { raster, rasters: additionalInputs, vectors },
         params,
-        additionalInputs,
       );
       if (isStale()) return;
+      // Tool-specific log lines (a transition matrix, flood pixel counts, ...).
       setClientLog((prev) => [
         ...prev,
+        ...run.detailMessages,
         t("toolbar.rasterTool.computedInBrowser", { tool: tool.name }),
       ]);
       const outName = tool.defaultOutputName;
+      if (run.kind === "vector") {
+        const text = JSON.stringify(run.geojson);
+        setClientResult({
+          name: outName,
+          bytes: new TextEncoder().encode(text).buffer as ArrayBuffer,
+          kind: "vector",
+        });
+        if (run.wgs84) {
+          addGeoJsonLayer(outName.replace(/\.(geo)?json$/i, ""), run.wgs84);
+          setClientLog((prev) => [...prev, t("toolbar.rasterTool.addedToMap", { name: outName })]);
+          tracker.addOutputLayer(outName);
+        }
+        tracker.finish("success");
+        return;
+      }
+      const { raster: result, bytes } = run;
       // Persist the result before the map add so the Download button survives a
       // render failure (the compute already succeeded — don't discard it).
-      setClientResult({ name: outName, bytes });
+      setClientResult({ name: outName, bytes, kind: "raster" });
       const resultSampleCount = result.width * result.height * result.bands.length;
       if (exceedsBrowserCogConversionLimit(resultSampleCount)) {
         const message = t("raster.cogConvertTooLarge", { name: outName });
@@ -677,13 +839,17 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         // order and corrupt otherwise-correct calculated values. NoData goes in
         // as NaN so the overviews the auto stretch reads hold no NoData blends
         // (#3255); the Download button keeps the raster's own sentinel.
-        const cogBytes = await convertRasterDataToCog(result, { nanNodata: true });
+        const cogBytes = await convertRasterDataToCog(result, {
+          nanNodata: true,
+        });
         if (isStale()) return;
         await addRasterToMap(
           app,
           // TypeScript widens wasm byte buffers to ArrayBufferLike, which is
           // not directly assignable to BlobPart's ArrayBufferView.
-          new File([cogBytes as Uint8Array<ArrayBuffer>], outName, { type: "image/tiff" }),
+          new File([cogBytes as Uint8Array<ArrayBuffer>], outName, {
+            type: "image/tiff",
+          }),
           {
             name: outName.replace(/\.tiff?$/i, ""),
           },
@@ -709,11 +875,15 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     } catch (err) {
       if (isStale()) return;
       const message =
-        err instanceof ClientRasterInputError && err.code === "COMBINED_TOO_LARGE"
-          ? t("toolbar.rasterTool.combinedInputsTooLarge")
-          : err instanceof Error
-            ? err.message
-            : t("toolbar.rasterTool.runError");
+        err instanceof ClientRasterInputError && err.code === "VECTOR_TOO_LARGE"
+          ? t("toolbar.rasterTool.vectorMemoryLimit", {
+              limit: MAX_CLIENT_VECTOR_BYTES / 1024 ** 2,
+            })
+          : err instanceof ClientRasterInputError && err.code === "COMBINED_TOO_LARGE"
+            ? t("toolbar.rasterTool.clientMemoryLimit")
+            : err instanceof Error
+              ? err.message
+              : t("toolbar.rasterTool.runError");
       tracker.finish("error", message);
       setError(message);
       setClientLog((prev) => [...prev, message]);
@@ -724,7 +894,18 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         setClientRunning(false);
       }
     }
-  }, [tool, params, clientInput, clientAdditionalInputs, validateParams, mapControllerRef, t]);
+  }, [
+    tool,
+    params,
+    clientInput,
+    clientAdditionalInputs,
+    clientVectorInputs,
+    vectorPrimaryInput,
+    validateParams,
+    mapControllerRef,
+    addGeoJsonLayer,
+    t,
+  ]);
 
   const handleRun = useCallback(
     () => (engine === "client" ? runClient() : runSidecar()),
@@ -733,12 +914,25 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
 
   const downloadClientResult = useCallback(async () => {
     if (!clientResult) return;
+    const vector = clientResult.kind === "vector";
     try {
       await saveBinaryFileWithFallback(new Uint8Array(clientResult.bytes), {
         defaultName: clientResult.name,
         filters: tool.outputFilters,
-        browserTypes: [{ description: "GeoTIFF", accept: { "image/tiff": [".tif", ".tiff"] } }],
-        mimeType: "image/tiff",
+        browserTypes: vector
+          ? [
+              {
+                description: "GeoJSON",
+                accept: { "application/geo+json": [".geojson", ".json"] },
+              },
+            ]
+          : [
+              {
+                description: "GeoTIFF",
+                accept: { "image/tiff": [".tif", ".tiff"] },
+              },
+            ],
+        mimeType: vector ? "application/geo+json" : "image/tiff",
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : t("toolbar.rasterTool.saveError"));
@@ -798,18 +992,28 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
               {translateToolDescription(t, "raster", tool)}
             </p>
 
-            {/* Engine selector (only for tools with a browser implementation). */}
-            {tool.supportsClient && (
+            {/* Engine selector (only for tools with both engines). */}
+            {tool.clientOnly && (
+              <p className="text-xs text-muted-foreground">
+                {t("toolbar.rasterTool.clientOnlyHint")}
+              </p>
+            )}
+            {tool.supportsClient && !tool.clientOnly && (
               <div className="flex flex-col gap-1">
                 <Label className="flex items-center gap-1.5 text-xs">
                   <Server className="h-3.5 w-3.5" /> {t("toolbar.rasterTool.engine")}
                 </Label>
-                <Select value={engine} onChange={(e) => setEngine(e.target.value as RasterEngine)}>
+                <Select
+                  value={engine}
+                  onChange={(e) =>
+                    setEngine(e.target.value === "sidecar" && sidecarAllowed ? "sidecar" : "client")
+                  }
+                >
                   <option value="client">{t("toolbar.rasterTool.engineClient")}</option>
                   {/* The Mac App Store build has no sidecar at all, so the
                       option is dropped rather than shown disabled. */}
                   {!IS_MAS_BUILD && (
-                    <option value="sidecar" disabled={!desktop}>
+                    <option value="sidecar" disabled={!sidecarAllowed}>
                       {t("toolbar.rasterTool.engineSidecar")}
                     </option>
                   )}
@@ -828,7 +1032,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                   {runtimeMessage}
                 </p>
-                {desktopServer && (
+                {sidecarAllowed && (
                   <Button
                     type="button"
                     variant="outline"
@@ -892,7 +1096,11 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                   <Input
                     id="raster-input"
                     value={clientInput?.name ?? ""}
-                    placeholder={t("toolbar.rasterTool.chooseGeoTiff")}
+                    placeholder={t(
+                      vectorPrimaryInput
+                        ? "toolbar.rasterTool.chooseGeoJson"
+                        : "toolbar.rasterTool.chooseGeoTiff",
+                    )}
                     readOnly
                   />
                   <Button
@@ -955,17 +1163,26 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
 
             {/* Operation parameters */}
             {tool.parameters.filter(isParamVisible).map((param) => {
-              const letter = engine === "client" ? secondaryRasterLetterForParam(param.id) : null;
-              const entry = letter ? clientAdditionalInputs[letter] : undefined;
+              const clientParam = engine === "client" ? clientInputForParam(param) : null;
+              const entry = clientParam
+                ? (clientParam.kind === "raster" ? clientAdditionalInputs : clientVectorInputs)[
+                    clientParam.key
+                  ]
+                : undefined;
               return (
                 <RasterParameterField
                   key={param.id}
                   param={translateParameter(t, "raster", tool.id, param)}
-                  value={letter ? (entry?.name ?? "") : params[param.id]}
+                  value={clientParam ? (entry?.name ?? "") : params[param.id]}
                   onChange={(value) => setParam(param.id, value)}
                   onPick={() => void pickPathParam(param)}
-                  readOnly={letter !== null}
-                  onClear={letter && entry ? () => clearClientSecondaryInput(letter) : undefined}
+                  readOnly={clientParam !== null}
+                  inputKind={clientParam?.kind}
+                  onClear={
+                    clientParam && entry
+                      ? () => clearClientSecondaryInput(clientParam.kind, clientParam.key)
+                      : undefined
+                  }
                 />
               );
             })}
@@ -975,6 +1192,8 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                 onClick={() => void handleRun()}
                 disabled={
                   running ||
+                  !processingCap.granted ||
+                  (engine === "sidecar" && !sidecarAllowed) ||
                   (engine === "sidecar" && runtimeAvailable !== true) ||
                   (engine === "client" && !clientInput)
                 }
@@ -1053,7 +1272,9 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                     className="gap-2"
                   >
                     <Download className="h-4 w-4" />
-                    {t("toolbar.rasterTool.downloadGeoTiff")}
+                    {clientResult.kind === "vector"
+                      ? t("toolbar.rasterTool.downloadGeoJson")
+                      : t("toolbar.rasterTool.downloadGeoTiff")}
                   </Button>
                 )}
               </div>

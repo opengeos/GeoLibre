@@ -11,7 +11,26 @@ export interface ClientRasterInputEntry {
   bytes: ArrayBuffer;
 }
 
-export type ClientRasterInputErrorCode = "COMBINED_TOO_LARGE";
+export type ClientRasterInputErrorCode = "COMBINED_TOO_LARGE" | "VECTOR_TOO_LARGE";
+
+/** Bound GeoJSON text/JSON expansion independently of decoded raster buffers. */
+export const MAX_CLIENT_VECTOR_BYTES = 32 * 1024 * 1024;
+
+/** Number of Float32 output bands reserved on the primary raster grid. */
+export function clientRasterOutputBands(toolId: string, inputBands: number): number {
+  if (toolId === "sar-rgb") return 3;
+  return [
+    "reproject",
+    "resample",
+    "clip-extent",
+    "clip-mask",
+    "mosaic",
+    "sar-db",
+    "speckle-filter",
+  ].includes(toolId)
+    ? inputBands
+    : 1;
+}
 
 export class ClientRasterInputError extends Error {
   readonly code: ClientRasterInputErrorCode;
@@ -30,6 +49,49 @@ export function secondaryRasterLetterForParam(paramId: string): "B" | "C" | null
   return null;
 }
 
+/** The file-picker shape of a tool parameter, as `clientInputForParam` reads it. */
+export interface ClientPathParam {
+  id: string;
+  type: string;
+  fileFilters?: { extensions: string[] }[];
+}
+
+/**
+ * How the client engine reads a path parameter: a secondary GeoTIFF (keyed by
+ * the calculator letter for `b_path`/`c_path`, else the parameter id) or a
+ * GeoJSON layer (keyed by the parameter id). Null for anything else.
+ */
+export function clientInputForParam(
+  param: ClientPathParam,
+): { kind: "raster" | "vector"; key: string } | null {
+  if (param.type !== "path") return null;
+  const extensions = (param.fileFilters ?? []).flatMap((f) =>
+    f.extensions.map((e) => e.toLowerCase()),
+  );
+  if (extensions.includes("tif") || extensions.includes("tiff")) {
+    return {
+      kind: "raster",
+      key: secondaryRasterLetterForParam(param.id) ?? param.id,
+    };
+  }
+  if (extensions.includes("geojson") || extensions.includes("json")) {
+    return { kind: "vector", key: param.id };
+  }
+  return null;
+}
+
+/** Decode a picked GeoJSON file; null when it is not a JSON object. */
+export function parseGeoJsonBytes(bytes: ArrayBuffer): unknown {
+  if (bytes.byteLength > MAX_CLIENT_VECTOR_BYTES)
+    throw new ClientRasterInputError("VECTOR_TOO_LARGE");
+  try {
+    const value: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    return value && typeof value === "object" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Remove one secondary input letter from the record without mutating the original object. */
 export function omitClientSecondaryInput(
   inputs: Record<string, ClientRasterInputEntry>,
@@ -43,20 +105,21 @@ export function omitClientSecondaryInput(
 
 /**
  * Validate combined decoded Float32 memory for primary + secondary inputs +
- * output before decoding secondary GeoTIFF buffers for client Raster Calculator.
+ * output before decoding secondary GeoTIFF buffers. Operations that change the
+ * grid extent also enforce their own output allocation limits.
  */
 export async function loadClientAdditionalRasters(
   primary: Pick<RasterData, "width" | "height" | "bands">,
   entries: Record<string, ClientRasterInputEntry>,
   deps: {
     expression?: string;
+    outputBands?: number;
     estimateBytes?: (bytes: ArrayBuffer) => Promise<number>;
     readRaster?: (bytes: ArrayBuffer) => Promise<RasterData>;
     maxBytes?: number;
   } = {},
 ): Promise<Record<string, RasterData> | undefined> {
   let activeEntries: [string, ClientRasterInputEntry][] = Object.entries(entries);
-  if (activeEntries.length === 0) return undefined;
 
   if (deps.expression !== undefined) {
     let referenced: Set<string> | null = null;
@@ -68,7 +131,6 @@ export async function loadClientAdditionalRasters(
     }
     if (referenced) {
       activeEntries = activeEntries.filter(([letter]) => referenced.has(letter));
-      if (activeEntries.length === 0) return undefined;
     }
   }
 
@@ -78,14 +140,22 @@ export async function loadClientAdditionalRasters(
 
   const primaryBytes =
     primary.width * primary.height * primary.bands.length * Float32Array.BYTES_PER_ELEMENT;
-  const outputBytes = primary.width * primary.height * Float32Array.BYTES_PER_ELEMENT;
+  const outputBytes =
+    primary.width *
+    primary.height *
+    Math.max(1, deps.outputBands ?? 1) *
+    Float32Array.BYTES_PER_ELEMENT;
   let combinedBytes = primaryBytes + outputBytes;
+  if (!Number.isFinite(combinedBytes) || combinedBytes > maxBytes)
+    throw new ClientRasterInputError("COMBINED_TOO_LARGE");
   for (const [, entry] of activeEntries) {
     combinedBytes += await estimateBytes(entry.bytes);
     if (!Number.isFinite(combinedBytes) || combinedBytes > maxBytes) {
       throw new ClientRasterInputError("COMBINED_TOO_LARGE");
     }
   }
+
+  if (activeEntries.length === 0) return undefined;
 
   const decoded: Record<string, RasterData> = {};
   for (const [letter, entry] of activeEntries) {
