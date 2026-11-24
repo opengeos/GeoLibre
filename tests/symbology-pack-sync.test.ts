@@ -275,6 +275,14 @@ describe("PMTiles line decoration sync", () => {
     assert.ok(!layers.has(BOUNDARY_DECORATION));
   });
 
+  it("removes recorded decorations when the caller no longer has a layer snapshot", () => {
+    const { map, layers } = makeMap();
+    syncLayer(map as never, pmtilesLayer({ lineDecoration: "arrow" }));
+    removeLayerFromMap(map as never, "flow");
+    assert.ok(!layers.has(STREAMS_DECORATION));
+    assert.ok(!layers.has(BOUNDARY_DECORATION));
+  });
+
   it("hides the decorations with the layer and follows its opacity", () => {
     const { map, layers } = makeMap();
     syncLayer(

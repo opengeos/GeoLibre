@@ -16,7 +16,10 @@ import {
   MapController,
   storyScaledPaintValue,
 } from "../packages/map/src/map-controller";
-import { createPMTilesStoreLayer } from "../packages/map/src/pmtiles-layer";
+import {
+  createPMTilesStoreLayer,
+  pmtilesLineDecorationLayerId,
+} from "../packages/map/src/pmtiles-layer";
 
 // Internal shape of MapController we reach into to inject a fake map. The
 // controller only ever constructs a real maplibregl.Map through init(), which
@@ -1660,6 +1663,34 @@ describe("MapController camera and query helpers", () => {
 
     assert.equal(controller.identifyFeatures([0, 0], "a").length, 0);
     assert.equal(controller.identifyFeatures([0, 0], "b").length, 1);
+  });
+
+  it("fades and restores PMTiles line decorations along with their archive", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const base = createPMTilesStoreLayer({
+      id: "flow",
+      name: "Flow",
+      url: "https://example.org/flow.pmtiles",
+      tileType: "vector",
+      sourceLayers: ["streams"],
+    });
+    const layer = { ...base, style: { ...base.style, lineDecoration: "arrow" as const } };
+    controller.syncLayers([layer]);
+    const id = pmtilesLineDecorationLayerId(layer.id, "streams");
+    assert.ok(fake.layers.has(id));
+    fake.calls.length = 0;
+    controller.setStoryLayerOpacity(layer.id, 0.25, 0);
+    const writes = () =>
+      fake.calls.filter(
+        (call) =>
+          call.method === "setPaintProperty" &&
+          call.args[0] === id &&
+          call.args[1] === "icon-opacity",
+      );
+    assert.equal(writes().at(-1)?.args[2], 0.25);
+    controller.restoreLayerStyles();
+    assert.equal(writes().at(-1)?.args[2], 1);
   });
 
   it("writes story opacity to the native paint property in place of the layer opacity", () => {
