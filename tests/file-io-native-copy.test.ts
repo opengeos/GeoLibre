@@ -138,7 +138,7 @@ it("explains that mobile edits stay in the imported files", async () => {
     });
     const notification = useNotificationStore.getState().notifications.at(-1);
     assert.equal(notification?.message, "Imported 1 file into GeoLibre.");
-    assert.match(notification?.description ?? "", /Edits are saved to the imported copies/);
+    assert.match(notification?.description ?? "", /Export edited data to a new file/);
   } finally {
     clearNotifications();
     if (original) Object.defineProperty(navigator, "userAgent", original);

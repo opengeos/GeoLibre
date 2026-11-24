@@ -42,7 +42,7 @@ import {
 import { participantCanEditLayer } from "./collab-protocol";
 import { databaseBaselineKeys, databaseFeatureKeys } from "./database-tables";
 import { embedEditedGeometry, hasEditedGeometry } from "./edited-geometry-save";
-import { isGeojsonSourcePath, joinLocalPath } from "./file-io/paths";
+import { isGeojsonSourcePath, isImportedDocumentCopyPath, joinLocalPath } from "./file-io/paths";
 import { collectGeojsonLayersForExport, type CollectGeojsonExportDeps } from "./geojson-zip-export";
 import { isTauri } from "./is-tauri";
 import { isDesktopRuntime } from "./is-mobile";
@@ -58,7 +58,6 @@ import {
 import { resolvePostgisConnection } from "./postgis-connections";
 import { startGeoLibreSidecar } from "./sidecar";
 import { writeLocalGeojsonFile, writeNewTextFileToPath } from "./tauri-io";
-import { isImportedDocumentCopyPath } from "./file-io/paths";
 import { resolveLayerGeojson } from "./vector-export";
 
 export type WritableLayerSourceKind = "geojson" | "geopackage" | "postgis" | "mssql" | "arcgis";

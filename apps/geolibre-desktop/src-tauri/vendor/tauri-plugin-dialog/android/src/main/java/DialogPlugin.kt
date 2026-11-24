@@ -11,6 +11,8 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
+import android.system.Os
+import android.system.OsConstants
 import android.webkit.MimeTypeMap
 import androidx.activity.result.ActivityResult
 import app.tauri.Logger
@@ -207,6 +209,13 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
     }
   }
 
+  private fun syncDocumentDirectory(directory: File) {
+    val flags = OsConstants.O_RDONLY or
+      (if (Build.VERSION.SDK_INT >= 27) OsConstants.O_CLOEXEC else 0)
+    val descriptor = Os.open(directory.absolutePath, flags, 0)
+    try { Os.fsync(descriptor) } finally { Os.close(descriptor) }
+  }
+
   private fun createPickFilesResult(data: Intent?, copy: Boolean): JSObject {
     val callResult = JSObject()
     if (data == null) {
@@ -228,7 +237,7 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
       callResult.put("files", JSArray.from(uris.map { it.toString() }.toTypedArray()))
       return callResult
     }
-    DocumentCopyBatch(File(activity.filesDir, "picked-documents")).use { batch ->
+    DocumentCopyBatch(File(activity.filesDir, "picked-documents"), ::syncDocumentDirectory).use { batch ->
       val documents = JSArray()
       for (uri in uris) {
         val name = activity.contentResolver.query(

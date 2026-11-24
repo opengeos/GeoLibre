@@ -516,8 +516,8 @@ impl<R: Runtime> FileDialogBuilder<R> {
     }
 
     /// Set the file access mode of the dialog.
-    /// This is only used on iOS.
-    /// On desktop and Android, this option is ignored.
+    /// Used on iOS and for explicit Android data-file copies.
+    /// Desktop dialogs ignore this option.
     pub fn set_file_access_mode(mut self, mode: FileAccessMode) -> Self {
         self.file_access_mode.replace(mode);
         self

@@ -51,8 +51,21 @@ to the local paths used by GeoLibre's readers:
   plus SHA-256 fingerprints; existing files are rehashed before reuse so local
   edits are never overwritten or mistaken for the original document. Distinct
   provider documents retain separate copies even when their bytes match. A
-  process-wide commit lock prevents concurrent picks from publishing duplicates.
+  bounded set of locks serializes identical selections without one global queue
+  for every import.
   Temporary duplicates are removed before paths are returned.
+- Imports first stream into private `.pending-<selection>` folders. Files,
+  manifests, and directory entries are synced before the folder is renamed to
+  its published UUID; the storage root and its existing parent are synced before
+  any path is returned. Android uses `Os.open`, `Os.fsync`, and `Os.close` for
+  directory synchronization. A post-rename failure rolls back while holding the
+  selection's commit lock, so another import cannot reuse a folder that cleanup
+  then deletes.
+- The app process tracks active stages under a lifecycle lock. A new import
+  removes abandoned staging folders left by an interrupted previous process,
+  while retaining current imports and all published/legacy folders. Staging
+  paths are never returned to callers, so this cleanup cannot invalidate a
+  saved project's source path.
 - Published copies are durable project data, not an evictable cache. Removing a
   layer or closing a project does not delete them, because another saved project
   can reference the same path. Modified copies and new source versions therefore
