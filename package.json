@@ -20,7 +20,7 @@
     "build:firefox-extension": "node scripts/package-chrome-extension.mjs --target=firefox",
     "bundle:report": "node scripts/bundle-report.mjs",
     "typecheck": "npm run build",
-    "lint": "eslint apps packages workers tests --max-warnings 114",
+    "lint": "npm run lint:syntax && npm run lint:typed",
     "test": "npm run test:frontend",
     "test:frontend": "node --import tsx --test tests/*.test.ts",
     "test:frontend:coverage": "node scripts/coverage-check.mjs",
@@ -61,7 +61,9 @@
     "tauri:build:native-duckdb": "node scripts/tauri-build.mjs --native-duckdb",
     "tauri:build:mas": "node scripts/tauri-build.mjs --mas",
     "msix:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/msix/build-msix.ps1",
-    "portable:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/portable/build-portable.ps1"
+    "portable:build": "pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/portable/build-portable.ps1",
+    "lint:syntax": "eslint apps packages workers tests --max-warnings 79",
+    "lint:typed": "node scripts/lint-typed.mjs --max-warnings 35"
   },
   "dependencies": {
     "patch-package": "^8.0.1"
@@ -80,6 +82,8 @@
     "fflate": "^0.8.3",
     "happy-dom": "^21.0.4",
     "linkedom": "^0.18.15",
+    "oxlint": "1.95.0",
+    "oxlint-tsgolint": "7.0.2008",
     "tsx": "^4.23.15",
     "typescript-eslint": "^8.73.0"
   },

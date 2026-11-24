@@ -1,0 +1,26 @@
+{
+  "plugins": ["typescript"],
+  "categories": { "correctness": "off" },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/dist-embed/**",
+    "**/build/**",
+    "**/target/**",
+    "**/node_modules/**",
+    "**/static/**",
+    "**/public/plugins/**",
+    "**/public/jupyterlite/**",
+    "**/*.min.js",
+    "**/*.d.ts"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "apps/geolibre-desktop/src/**/*.{ts,tsx}",
+        "packages/*/src/**/*.{ts,tsx}",
+        "workers/*/src/**/*.ts"
+      ],
+      "rules": { "typescript/no-floating-promises": "warn" }
+    }
+  ]
+}
