@@ -89,6 +89,12 @@ fail again with "Unsupported data format/bitsPerSample";
 
 ### `maplibre-gl`
 
+MapLibre is pinned to 6.18.0 and its style spec to 26.7.0. Before upgrading,
+adapt `map-transform-compat.ts` and the deck.gl integrations to the camera API
+that replaces `_camera.transform` in 6.19, and verify blend composites against
+the renderer as well as the style spec. The 26.9 spec adds a fill-extrusion
+composite that the current renderer integration does not elect.
+
 - **`GLOBE_CONTROL_TOGGLE_SELECTOR`** (`packages/map/src/globe-control-toggle.ts`)
   mirrors the class names MapLibre's own `GlobeControl` puts on its toggle button
   — `maplibregl-ctrl-globe` and `maplibregl-ctrl-globe-enabled`, swapped on every
@@ -152,6 +158,10 @@ fail again with "Unsupported data format/bitsPerSample";
   on the Arctic view and Zoom to layer must explain why it cannot move.
 
 ### `mapbox-gl`
+
+Mapbox is pinned to 3.35.0 pending a provider-style smoke test with a valid
+access token. Keep the npm version, CDN version, and integrity hashes together
+when that check permits an upgrade.
 
 Mapbox GL JS v2+ is proprietary, so it must never enter a build: the app loads
 it from Mapbox's CDN (`packages/map/src/mapbox-gl-loader.ts`) and the npm package

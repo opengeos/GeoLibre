@@ -81,7 +81,7 @@
     "happy-dom": "^21.0.4",
     "linkedom": "^0.18.15",
     "tsx": "^4.23.15",
-    "typescript-eslint": "^8.72.2"
+    "typescript-eslint": "^8.73.0"
   },
   "overrides": {
     "@deck.gl/geo-layers": {
@@ -93,6 +93,7 @@
     "@loaders.gl/compression": {
       "fflate": "^0.8.3"
     },
+    "@maplibre/maplibre-gl-style-spec": "26.7.0",
     "@typescript-eslint/typescript-estree": {
       "minimatch": "^11.0.5"
     },
@@ -108,7 +109,7 @@
       ".": "^2.0.2",
       "minimatch": "^11.0.5"
     },
-    "maplibre-gl": "^6.16.0",
+    "maplibre-gl": "6.18.0",
     "miniflare": {
       "undici": "^7.29.0"
     },
