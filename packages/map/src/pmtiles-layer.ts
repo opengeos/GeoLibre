@@ -70,6 +70,23 @@ export function pmtilesLineDecorationLayerId(layerId: string, sourceLayer: strin
 }
 
 /**
+ * Every line-decoration layer id a PMTiles store layer can have, one per source layer it names.
+ * The ids exist on the map only while decorations are on; callers check with `getLayer`.
+ *
+ * @param layer - The store layer.
+ * @returns The candidate decoration layer ids.
+ */
+export function pmtilesLineDecorationLayerIds(layer: GeoLibreLayer): string[] {
+  if (layer.type !== "pmtiles") return [];
+  const names = layer.source.sourceLayers ?? layer.metadata.sourceLayers;
+  return Array.isArray(names)
+    ? names
+        .filter((name): name is string => typeof name === "string" && name.length > 0)
+        .map((name) => pmtilesLineDecorationLayerId(layer.id, name))
+    : [];
+}
+
+/**
  * Whether layer sync draws line decorations (flow arrows) for this PMTiles store layer: a vector
  * archive added through the PMTiles control or Add Data, the only PMTiles path GeoLibre styles
  * itself. Shared by the sync and the Style panel so the panel never offers a silent no-op.

@@ -369,6 +369,7 @@ export function guardPMTilesSourceRemoval(control: PMTilesLayerControl): void {
   const target = control as unknown as {
     _removeLayer?: (id?: string) => void;
     onAdd: (map: unknown) => HTMLElement;
+    onRemove?: () => void;
   };
   const original = target._removeLayer;
   if (typeof original !== "function") return;
@@ -378,6 +379,17 @@ export function guardPMTilesSourceRemoval(control: PMTilesLayerControl): void {
     attached = map as CompanionLayerMap;
     return onAdd(map);
   };
+  // onRemove clears every archive through `_removeLayer()` below, so the map is released after it.
+  const onRemove = target.onRemove?.bind(control);
+  if (onRemove) {
+    target.onRemove = () => {
+      try {
+        onRemove();
+      } finally {
+        attached = null;
+      }
+    };
+  }
   target._removeLayer = (id?: string) => {
     try {
       if (attached) {

@@ -4157,7 +4157,8 @@ export function removeLayerFromMap(
   // Drop cached paint-bridge state so a later layer reusing this id never
   // skips a fresh opacity/visibility apply against a new bridge.
   appliedBridgeState.delete(layerId);
-  if (layer?.type === "pmtiles") removeStalePMTilesLineDecorations(map, layerId);
+  // Ownership is recorded per map, so this is safe (and needed) even when the caller has no layer.
+  removeStalePMTilesLineDecorations(map, layerId);
   for (const id of [
     ...getExternalNativeLayerIds(layer),
     ...getExternalNativeLayerIds(layer).map(externalExtrusionLayerId),

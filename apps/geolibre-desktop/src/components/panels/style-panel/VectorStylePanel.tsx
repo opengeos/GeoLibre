@@ -186,7 +186,8 @@ export function VectorStylePanel({
   // generator) are drawn by the core GeoJSON render path
   // (applyVectorDataRenderLayers), so they don't apply to vector tiles,
   // external deck layers, or control-painted (external native) layers — hide
-  // the controls there rather than offer a silent no-op.
+  // the controls there rather than offer a silent no-op. The one exception is
+  // line decorations on vector PMTiles, which their own sync path draws.
   const supportsDerivedGeometry =
     layer.type === "geojson" &&
     !!layer.geojson &&

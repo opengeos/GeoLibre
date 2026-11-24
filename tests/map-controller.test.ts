@@ -16,6 +16,7 @@ import {
   MapController,
   storyScaledPaintValue,
 } from "../packages/map/src/map-controller";
+import { createPMTilesStoreLayer } from "../packages/map/src/pmtiles-layer";
 
 // Internal shape of MapController we reach into to inject a fake map. The
 // controller only ever constructs a real maplibregl.Map through init(), which
@@ -2436,6 +2437,29 @@ describe("MapController story-map layer helpers", () => {
     // The primary fill still fades too.
     const fill = fake.layers.get("layer-a-fill")?.paint as Record<string, unknown>;
     assert.equal(fill["fill-opacity"], 0);
+  });
+
+  it("setStoryLayerOpacity fades a PMTiles archive's line decorations with it", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const archive = createPMTilesStoreLayer({
+      id: "flow",
+      name: "Flow paths",
+      url: "https://example.org/flow.pmtiles",
+      tileType: "vector",
+      sourceLayers: ["streams"],
+    });
+    controller.syncLayers([{ ...archive, style: { ...archive.style, lineDecoration: "arrow" } }]);
+    assert.ok(fake.layers.get("layer-flow-line-decoration-streams"), "decoration synced");
+
+    controller.setStoryLayerOpacity("flow", 0, 400);
+
+    const paint = fake.layers.get("layer-flow-line-decoration-streams")?.paint as Record<
+      string,
+      unknown
+    >;
+    assert.equal(paint["icon-opacity"], 0);
+    assert.deepEqual(paint["icon-opacity-transition"], { duration: 400 });
   });
 
   it("setStoryLayerOpacity keeps the generator's own translucency when fading back in", () => {

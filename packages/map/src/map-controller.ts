@@ -73,6 +73,7 @@ import {
   syncLayerBlendModes,
 } from "./layer-blend-modes";
 import { ensureGeneratedImageHandler } from "./generated-images";
+import { pmtilesLineDecorationLayerIds } from "./pmtiles-layer";
 import { installSelectionDragGuard } from "./selection-drag-guard";
 import { installGlobePopupOcclusion } from "./globe-popup-occlusion";
 import { isMapboxStyleUrl, loadMapboxStyle, redactMapboxStyleUrl } from "./mapbox-style";
@@ -788,6 +789,14 @@ export class MapController implements MapEngine {
    */
   private getStoryStyleLayerIds(layer: GeoLibreLayer): string[] {
     const ids = this.getNativeLayerIds(layer);
+    if (layer.type === "pmtiles") {
+      // Vector archives draw their own line decorations, one per source layer.
+      const seen = new Set(ids);
+      for (const id of pmtilesLineDecorationLayerIds(layer)) {
+        if (!seen.has(id) && this.map?.getLayer(id)) ids.push(id);
+      }
+      return ids;
+    }
     if (layer.type !== "geojson") return ids;
     const seen = new Set(ids);
     for (const id of [
