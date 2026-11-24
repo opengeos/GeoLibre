@@ -218,9 +218,7 @@ export function unsupportedContent(project: GeoLibreProject): string[] {
       : layer.type === "video"
         ? "video loading bypasses the consent-gated request path"
         : layer.type === "pmtiles" && !desktopOnly
-          ? pmtilesArchiveUrl(layer)
-            ? t("pmtilesMissingMetadata")
-            : t("pmtilesUnreadable")
+          ? t("pmtilesUnreadable")
           : missing
             ? missing
             : desktopOnly

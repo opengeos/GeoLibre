@@ -194,22 +194,25 @@ describe("consent-backed PMTiles source-layer discovery", () => {
   });
 
   it("rejects missing, malformed, excessive, and colliding source-layer names", async () => {
-    for (const metadata of [
-      null,
-      {},
-      { vector_layers: [] },
-      { vector_layers: [{ id: 42 }] },
-      { vector_layers: [{ id: "a/b" }, { id: "a_2Fb" }] },
-      {
-        vector_layers: Array.from({ length: MAX_PMTILES_SOURCE_LAYERS + 1 }, (_, n) => ({
-          id: `layer${n}`,
-        })),
-      },
-    ]) {
+    for (const [metadata, expected] of [
+      [null, /does not declare vector source-layer names/],
+      [{}, /does not declare vector source-layer names/],
+      [{ vector_layers: [] }, /does not declare vector source-layer names/],
+      [{ vector_layers: [{ id: 42 }] }, /declares an invalid source-layer name/],
+      [{ vector_layers: [{ id: "a/b" }, { id: "a_2Fb" }] }, /source-layer names conflict/],
+      [
+        {
+          vector_layers: Array.from({ length: MAX_PMTILES_SOURCE_LAYERS + 1 }, (_, n) => ({
+            id: `layer${n}`,
+          })),
+        },
+        /declares too many source layers/,
+      ],
+    ] as const) {
       const opened = openArchive(archiveBytes(metadata));
       await assert.rejects(
         discoverPreviewPMTilesLayer(layer(), opened.archive, opened.controller.signal),
-        /source.layer|too many/i,
+        expected,
       );
     }
   });
@@ -225,6 +228,19 @@ describe("consent-backed PMTiles source-layer discovery", () => {
       /metadata is too large/,
     );
     assert.deepEqual(opened.calls, [[0, 16384]]);
+  });
+
+  it("rejects unsupported tile compression before reading metadata", async () => {
+    for (const compression of [Compression.Brotli, Compression.Zstd]) {
+      const bytes = archiveBytes({ vector_layers: [{ id: "data" }] });
+      bytes[98] = compression;
+      const opened = openArchive(bytes);
+      await assert.rejects(
+        discoverPreviewPMTilesLayer(layer(), opened.archive, opened.controller.signal),
+        /compression is not supported/,
+      );
+      assert.deepEqual(opened.calls, [[0, 16384]]);
+    }
   });
 
   it("rejects unknown tile formats without treating them as raster imagery", async () => {

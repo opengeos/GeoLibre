@@ -6,7 +6,6 @@
   },
   "mcpPreview": {
     "content": {
-      "pmtilesMissingMetadata": "no usable source-layer metadata, so this preview cannot draw it",
       "pmtilesUnreadable": "not an archive layer this preview can read",
       "layer": "Layer “{{name}}” ({{kind}}): {{reason}}.",
       "cogPreview": "Layer “{{name}}” ({{kind}}): shown as a downsampled preview image; Identify is not available for it."

@@ -71,6 +71,11 @@ export async function discoverPreviewPMTilesLayer(
   signal.throwIfAborted();
   const header = await archive.getHeader();
   signal.throwIfAborted();
+  if (
+    ![Compression.None, Compression.Unknown, Compression.Gzip].includes(header.tileCompression) ||
+    (header.tileCompression === Compression.Gzip && typeof DecompressionStream === "undefined")
+  )
+    throw new Error(t("unsupportedCompression"));
   const vector = header.tileType === TileType.Mvt || header.tileType === TileType.Mlt;
   if (
     !vector &&
@@ -97,7 +102,7 @@ export async function discoverPreviewPMTilesLayer(
     }
   }
   const sourceId =
-    (typeof layer.metadata.sourceId === "string" && layer.metadata.sourceId) ||
+    (typeof layer.metadata?.sourceId === "string" && layer.metadata.sourceId) ||
     (typeof layer.source.sourceId === "string" && layer.source.sourceId) ||
     layer.id;
   const nativeLayerIds = pmtilesNativeLayerIds(sourceId, kind, names);
@@ -204,7 +209,7 @@ export async function decompressPreviewPMTilesDirectory(
 export function previewPMTilesStyleLayerIds(layer: GeoLibreLayer): string[] {
   if (layer.type !== "pmtiles") return [];
   const sourceId =
-    typeof layer.metadata.sourceId === "string"
+    typeof layer.metadata?.sourceId === "string"
       ? layer.metadata.sourceId
       : typeof layer.source.sourceId === "string"
         ? layer.source.sourceId
