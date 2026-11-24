@@ -55,7 +55,6 @@ import {
 import { useTranslation } from "react-i18next";
 import type { ParseKeys } from "i18next";
 import {
-  isTauri,
   openLocalDataFileWithFallback,
   pickLocalPathWithFallback,
   pickSavePathWithFallback,
@@ -163,7 +162,6 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);
 
   const open = openTool !== null;
-  const desktop = isTauri();
   // Whether this build can run the sidecar engine: desktop, except the Mac App
   // Store build, whose App Sandbox forbids the sidecar process. The client
   // (in-browser) engine keeps working either way.
@@ -733,8 +731,9 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
         if (isStale()) return;
       }
-      // Secondary rasters (calculator B/C, mosaic inputs, the after/VH/pre
-      // images), memory-checked together with the primary before decoding.
+      // The primary is already decoded under readRasterData's size guard.
+      // Check its footprint together with output and secondary estimates
+      // before decoding the secondary files.
       const additionalInputs = raster
         ? await loadClientAdditionalRasters(raster, clientAdditionalInputs, {
             outputBands: clientRasterOutputBands(tool.id, raster.bands.length),
