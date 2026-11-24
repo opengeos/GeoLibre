@@ -1,3 +1,6 @@
+import { SAMGEO_PLUGIN_ID } from "../plugin-ids";
+export { SAMGEO_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 /**
  * Interactive SAM3 segmentation backed by segment-geospatial's REST API.
  *
@@ -14,7 +17,6 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import { useAppStore, withGeoKeysDatumShift } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
-export const SAMGEO_PLUGIN_ID = "maplibre-samgeo";
 const PANEL_ID = "samgeo-segmentation-panel";
 const PROMPT_SOURCE = "samgeo-prompt-source";
 const PROMPT_FILL = "samgeo-prompt-fill";
@@ -1082,10 +1084,8 @@ function buildPanel(container: HTMLElement): () => void {
 }
 
 export const maplibreSamGeoPlugin: GeoLibrePlugin = {
-  id: SAMGEO_PLUGIN_ID,
-  name: "SamGeo",
-  version: "0.1.0",
-  engines: ["maplibre"],
+  ...builtInPluginProperties("maplibre-samgeo"),
+
   activate(app) {
     appRef = app;
     unregisterPanel =

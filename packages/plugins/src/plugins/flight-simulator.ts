@@ -1,3 +1,8 @@
+import { FLIGHT_SIMULATOR_PLUGIN_ID } from "../plugin-ids";
+export { FLIGHT_SIMULATOR_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
+import { DEFAULT_FLIGHT_SIMULATOR_SETTINGS } from "../builtin-plugin-defaults";
+export { DEFAULT_FLIGHT_SIMULATOR_SETTINGS } from "../builtin-plugin-defaults";
 /**
  * Flight Simulator plugin — an interactive, keyboard-driven free-flight camera
  * over GeoLibre's terrain and 3D layers (issue #1454).
@@ -40,8 +45,6 @@ import {
   constrainToTerrain,
   stepFlight,
 } from "./flight-simulator-physics";
-
-export const FLIGHT_SIMULATOR_PLUGIN_ID = "geolibre-flight-simulator";
 
 /**
  * Marker merged into the event data of every camera jump the simulator makes.
@@ -167,14 +170,6 @@ export const FLIGHT_MAX_SPEED_MIN = 30;
 export const FLIGHT_MAX_SPEED_MAX = 400;
 export const FLIGHT_MIN_AGL_MIN = 5;
 export const FLIGHT_MIN_AGL_MAX = 500;
-
-export const DEFAULT_FLIGHT_SIMULATOR_SETTINGS: FlightSimulatorSettings = {
-  maxSpeedMps: DEFAULT_FLIGHT_MODEL.maxSpeedMps,
-  minAltitudeAglMeters: DEFAULT_FLIGHT_MODEL.minAltitudeAglMeters,
-  bankCamera: true,
-  invertPitch: false,
-  units: "imperial",
-};
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   // Coerce only real numbers and non-empty numeric strings. `Number(null)`,
@@ -1180,11 +1175,8 @@ export function restoreFlightSimulator(app: GeoLibreAppAPI, state: unknown): boo
 }
 
 export const flightSimulatorPlugin: GeoLibrePlugin = {
-  id: FLIGHT_SIMULATOR_PLUGIN_ID,
-  name: "Flight Simulator",
-  version: "1.2.0",
-  activeByDefault: false,
-  engines: ["maplibre", "mapbox", "cesium"],
+  ...builtInPluginProperties("geolibre-flight-simulator"),
+
   activate: (app: GeoLibreAppAPI) => openFlightSimulatorPanel(app),
   deactivate: (app: GeoLibreAppAPI) => closeFlightSimulatorPanel(app),
   // Persist the panel flag and the handling/HUD preferences, but never the

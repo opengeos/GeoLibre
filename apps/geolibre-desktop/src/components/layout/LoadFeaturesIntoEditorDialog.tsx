@@ -4,18 +4,19 @@ import type { MapEngine } from "@geolibre/map";
 import {
   buildEditorSaveCollection,
   getGeoEditorFeatureCount,
-  getStyleMap,
   getGeometryEditTargetLayerId,
   hasViewImportBaseline,
   isGeoEditorAvailableForImport,
   loadViewFeaturesIntoEditor,
-  queryViewLayerFeatures,
-  resolveStoreLayerViewSource,
   SKETCHES_SOURCE_KIND,
   subscribeGeometryEdit,
-  type ViewImportMap,
-  type ViewVectorLayer,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/maplibre-geo-editor";
+import { getStyleMap } from "@geolibre/plugins/style-map";
+import {
+  queryViewLayerFeatures,
+  resolveStoreLayerViewSource,
+} from "@geolibre/plugins/geo-editor-view-import";
+import { type ViewImportMap, type ViewVectorLayer } from "@geolibre/plugins";
 import type { Feature } from "geojson";
 import { ChevronDown, ChevronUp, GripVertical, RefreshCw, X } from "lucide-react";
 import {

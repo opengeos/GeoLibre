@@ -1,7 +1,8 @@
+import { DECK_VIZ_PLUGIN_ID } from "../plugin-ids";
+export { DECK_VIZ_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import type { GeoLibrePlugin } from "../types";
 import { activateDeckViz, deactivateDeckViz } from "./deckgl-viz/overlay";
-
-export const DECK_VIZ_PLUGIN_ID = "maplibre-deckgl-viz";
 
 /**
  * Renders user-built deck.gl visualizations (created through the Add Data →
@@ -14,14 +15,12 @@ export const DECK_VIZ_PLUGIN_ID = "maplibre-deckgl-viz";
  * plugin manager marks default plugins active without calling activate().
  */
 export const maplibreDeckGlVizPlugin: GeoLibrePlugin = {
-  id: DECK_VIZ_PLUGIN_ID,
-  name: "Deck.gl Layer",
-  version: "0.1.0",
-  activeByDefault: true,
+  ...builtInPluginProperties("maplibre-deckgl-viz"),
+
   // The overlay binds to `app.getMap()`, `app.getMapboxMap()` or
   // `app.getArcgisView()`, so it stays active across renderer swaps (the
   // plugin manager deactivates plugins that omit the new engine).
-  engines: ["maplibre", "mapbox", "arcgis"],
+
   activate: (app) => {
     void activateDeckViz(app);
   },

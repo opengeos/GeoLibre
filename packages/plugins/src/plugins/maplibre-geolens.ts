@@ -1,3 +1,6 @@
+import { GEOLENS_PLUGIN_ID } from "../plugin-ids";
+export { GEOLENS_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-metadata";
 /**
  * GeoLens catalog browser plugin.
  *
@@ -66,8 +69,6 @@ import {
   type GeoLensFetch,
 } from "./geolens-api";
 import { setGeoLensProjectState, snapshotGeoLensProjectState } from "./geolens-project-state";
-
-export const GEOLENS_PLUGIN_ID = "maplibre-gl-geolens";
 
 /**
  * Metadata `sourceKind` of a layer loaded from GeoLens as editable GeoJSON —
@@ -2304,10 +2305,13 @@ function createGeoLensPlugin(config: GeoLensPluginConfig): GeoLibrePlugin {
   };
 }
 
-export const maplibreGeoLensPlugin: GeoLibrePlugin = createGeoLensPlugin({
-  id: GEOLENS_PLUGIN_ID,
-  name: "GeoLens",
-});
+export const maplibreGeoLensPlugin: GeoLibrePlugin = defineBuiltInPlugin(
+  "maplibre-gl-geolens",
+  createGeoLensPlugin({
+    id: GEOLENS_PLUGIN_ID,
+    name: builtInPluginMetadata("maplibre-gl-geolens").name,
+  }),
+);
 
 /** Exposed for unit tests: build a plugin over an injected transport. */
 export { createGeoLensPlugin };

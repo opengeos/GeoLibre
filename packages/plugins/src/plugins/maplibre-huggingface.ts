@@ -1,3 +1,6 @@
+import { HUGGINGFACE_PLUGIN_ID } from "../plugin-ids";
+export { HUGGINGFACE_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin } from "../builtin-plugin-metadata";
 /**
  * Hugging Face dataset browser (Plugins > Web Services).
  *
@@ -73,8 +76,6 @@ import {
   type HfIdentity,
   type HfUploadProgress,
 } from "./huggingface-api";
-
-export const HUGGINGFACE_PLUGIN_ID = "maplibre-gl-huggingface";
 
 /** The `app.credentials` name the user's access token is saved under. */
 const TOKEN_CREDENTIAL_NAME = "token";
@@ -2158,62 +2159,65 @@ export function setHuggingFaceLabels(next: Partial<HuggingFaceLabels>): void {
  * vector/raster files on the map, and — with an access token — create a dataset
  * repo and upload files to it.
  */
-export const maplibreHuggingFacePlugin: GeoLibrePlugin = (() => {
-  let appRef: GeoLibreAppAPI | null = null;
-  let unregisterPanel: (() => void) | null = null;
-  // The mounted container and its teardown, tracked so a language change can
-  // rebuild the panel in place (see setHuggingFaceLabels).
-  let panelContainer: HTMLElement | null = null;
-  let disposePanel: (() => void) | null = null;
+export const maplibreHuggingFacePlugin: GeoLibrePlugin = defineBuiltInPlugin(
+  "maplibre-gl-huggingface",
+  (() => {
+    let appRef: GeoLibreAppAPI | null = null;
+    let unregisterPanel: (() => void) | null = null;
+    // The mounted container and its teardown, tracked so a language change can
+    // rebuild the panel in place (see setHuggingFaceLabels).
+    let panelContainer: HTMLElement | null = null;
+    let disposePanel: (() => void) | null = null;
 
-  function mountPanel(container: HTMLElement): void {
-    disposePanel?.();
-    container.replaceChildren();
-    panelContainer = container;
-    disposePanel = buildPanel(container, appRef);
-  }
+    function mountPanel(container: HTMLElement): void {
+      disposePanel?.();
+      container.replaceChildren();
+      panelContainer = container;
+      disposePanel = buildPanel(container, appRef);
+    }
 
-  const remount = (): void => {
-    if (panelContainer) mountPanel(panelContainer);
-  };
+    const remount = (): void => {
+      if (panelContainer) mountPanel(panelContainer);
+    };
 
-  return {
-    id: HUGGINGFACE_PLUGIN_ID,
-    name: "Hugging Face",
-    version: "0.1.0",
-    // Store-only: the browser adds ordinary GeoLibre layers and never touches
-    // the map itself.
-    engines: ["maplibre", "mapbox", "arcgis", "cesium"],
-    activate: (app: GeoLibreAppAPI) => {
-      appRef = app;
-      mountedPanels.add(remount);
-      unregisterPanel =
-        app.registerRightPanel?.({
-          id: HUGGINGFACE_PLUGIN_ID,
-          title: pluginDisplayTitle(app, HUGGINGFACE_PLUGIN_ID, "Hugging Face"),
-          dock: "replace-style",
-          defaultWidth: 340,
-          render: (container) => {
-            mountPanel(container);
-            return () => {
-              disposePanel?.();
-              disposePanel = null;
-              if (panelContainer === container) panelContainer = null;
-            };
-          },
-        }) ?? null;
-      app.openRightPanel?.(HUGGINGFACE_PLUGIN_ID);
-    },
-    deactivate: (app: GeoLibreAppAPI) => {
-      app.closeRightPanel?.(HUGGINGFACE_PLUGIN_ID);
-      unregisterPanel?.();
-      unregisterPanel = null;
-      mountedPanels.delete(remount);
-      // Layers the user added stay on the map: they are ordinary GeoLibre
-      // layers now, owned by the Layers panel, not by this browser.
-      appRef = null;
-    },
-  };
-})();
+    return {
+      id: HUGGINGFACE_PLUGIN_ID,
+      name: "Hugging Face",
+      version: "0.1.0",
+      // Store-only: the browser adds ordinary GeoLibre layers and never touches
+      // the map itself.
+      engines: ["maplibre", "mapbox", "arcgis", "cesium"],
+      activate: (app: GeoLibreAppAPI) => {
+        appRef = app;
+        mountedPanels.add(remount);
+        unregisterPanel =
+          app.registerRightPanel?.({
+            id: HUGGINGFACE_PLUGIN_ID,
+            title: pluginDisplayTitle(app, HUGGINGFACE_PLUGIN_ID, "Hugging Face"),
+            dock: "replace-style",
+            defaultWidth: 340,
+            render: (container) => {
+              mountPanel(container);
+              return () => {
+                disposePanel?.();
+                disposePanel = null;
+                if (panelContainer === container) panelContainer = null;
+              };
+            },
+          }) ?? null;
+        app.openRightPanel?.(HUGGINGFACE_PLUGIN_ID);
+      },
+      deactivate: (app: GeoLibreAppAPI) => {
+        app.closeRightPanel?.(HUGGINGFACE_PLUGIN_ID);
+        unregisterPanel?.();
+        unregisterPanel = null;
+        mountedPanels.delete(remount);
+        // Layers the user added stay on the map: they are ordinary GeoLibre
+        // layers now, owned by the Layers panel, not by this browser.
+        appRef = null;
+      },
+    };
+  })(),
+);
 
 export default maplibreHuggingFacePlugin;

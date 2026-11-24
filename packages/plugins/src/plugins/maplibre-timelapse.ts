@@ -1,3 +1,6 @@
+import { TIMELAPSE_PLUGIN_ID } from "../plugin-ids";
+export { TIMELAPSE_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 /**
  * Timelapse mode — animate through annual satellite imagery basemaps.
  *
@@ -46,8 +49,6 @@ import {
 } from "./timelapse-providers";
 import { getStyleMap } from "./style-map";
 import { withSelectChevron } from "../panel-dom";
-
-export const TIMELAPSE_PLUGIN_ID = "geolibre-timelapse";
 
 /** Floating-panel card id (registered with the host's panel registry). */
 export const TIMELAPSE_PANEL_ID = "geolibre-timelapse-panel";
@@ -1396,14 +1397,13 @@ function activateWithFrames(
 }
 
 export const maplibreTimelapsePlugin: GeoLibrePlugin = {
-  id: TIMELAPSE_PLUGIN_ID,
-  name: "Timelapse",
-  version: "0.2.0",
+  ...builtInPluginProperties("geolibre-timelapse"),
+
   // The frame stack is plain raster tile sources and layers, and recording
   // reads the map canvas (which the Mapbox pane keeps drawable), so the plugin
   // runs on either 2D engine; the store mirror is plugin-owned on Mapbox
   // (`isMapboxPluginLayer`), as its `providerId` source is not compilable.
-  engines: ["maplibre", "mapbox"],
+
   activate: (app: GeoLibreAppAPI) => {
     const session = ++activationSession;
     const provider = getTimelapseProvider(savedState?.providerId);

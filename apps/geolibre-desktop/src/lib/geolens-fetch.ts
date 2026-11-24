@@ -1,10 +1,6 @@
-import {
-  createGeoLensHostFetch,
-  GEOLENS_SAMPLE_SERVERS,
-  setGeoLensFetch,
-  type GeoLensFetch,
-  type GeoLensHttpResponse,
-} from "@geolibre/plugins";
+import { createGeoLensHostFetch, setGeoLensFetch } from "@geolibre/plugins/geolens-api";
+import { GEOLENS_SAMPLE_SERVERS } from "@geolibre/plugins/maplibre-geolens";
+import { type GeoLensFetch, type GeoLensHttpResponse } from "@geolibre/plugins";
 
 /** Domain suffix of the GeoLens deployments GeoLibre operates. */
 const GEOLIBRE_HOST_SUFFIX = ".geolibre.app";

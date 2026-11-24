@@ -22,44 +22,7 @@ import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/
  * WEB_SERVICE_SOURCE_KINDS in `@geolibre/map`'s layer-sync, which rebuilds
  * these layers after style reloads.
  */
-export const WEB_SERVICE_PLUGIN_IDS = [
-  "maplibre-gl-fema-wms",
-  "maplibre-gl-nasa-earthdata",
-  "maplibre-gl-enviroatlas",
-  "maplibre-gl-national-map",
-  "maplibre-usgs-nldi",
-  "maplibre-gl-vantor",
-  "maplibre-gl-usgs-dem",
-  "geolibre-planet-open-data",
-  "maplibre-gl-earthdata-gis",
-  "geolibre-earthaccess",
-  "maplibre-gl-openaerialmap",
-  "geolibre-osm-downloader",
-  "geolibre-ign-lidar-hd",
-  "geolibre-arcgis-portal",
-  "maplibre-gl-arcgis-hub",
-  "geolibre-tennessee-gis",
-  "geolibre-us-federal-gis",
-  "geolibre-us-state-gis",
-  "geolibre-us-local-gis",
-  "geolibre-india-gis",
-  "maplibre-gl-socrata",
-  "maplibre-gl-ckan",
-  "geolibre-stac-catalogs",
-  "geolibre-portolan",
-  "maplibre-gl-source-coop",
-  "geolibre-s3-browser",
-  "maplibre-gl-natural-earth",
-  "maplibre-gl-huggingface",
-  "geolibre-satellite-embeddings",
-  "geolibre-fields-of-the-world",
-  "geolibre-sentinel2-explorer",
-  "geolibre-ocean-data-platform",
-  "geolibre-dynamical",
-  "geolibre-jaxa-earth",
-  "maplibre-gl-geolens",
-  "maplibre-gl-usgs-lidar",
-] as const;
+export { WEB_SERVICE_PLUGIN_IDS } from "../builtin-plugin-metadata";
 
 /** One active layer reported by a web service control. */
 export interface WebServiceLayerEntry {

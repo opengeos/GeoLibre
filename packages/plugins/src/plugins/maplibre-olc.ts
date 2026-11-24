@@ -1,3 +1,6 @@
+import { OLC_PLUGIN_ID } from "../plugin-ids";
+export { OLC_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-metadata";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import OpenLocationCodeModule from "open-location-code-typescript";
 import {
@@ -13,8 +16,6 @@ import {
 // default import is either the class or the exports object wrapping it.
 const OpenLocationCode = ((OpenLocationCodeModule as { default?: unknown }).default ??
   OpenLocationCodeModule) as typeof OpenLocationCodeModule;
-
-export const OLC_PLUGIN_ID = "maplibre-olc";
 
 /** Prevent a fine code length over a large viewport from freezing the browser. */
 export const OLC_VIEWPORT_CELL_LIMIT = 20_000;
@@ -270,7 +271,7 @@ export function olcNeighborCells(cell: string): string[] {
 
 const grid = createGridPlugin<OlcGridSettings, OlcLabels>({
   id: OLC_PLUGIN_ID,
-  name: "OLC",
+  name: builtInPluginMetadata("maplibre-olc").name,
   slug: "olc",
   parentKey: "includeParent",
   defaultSettings: DEFAULT_OLC_GRID_SETTINGS,
@@ -315,7 +316,7 @@ const grid = createGridPlugin<OlcGridSettings, OlcLabels>({
   exportBaseName: (codeLength) => `olc-l${codeLength}`,
 });
 
-export const maplibreOlcPlugin = grid.plugin;
+export const maplibreOlcPlugin = defineBuiltInPlugin("maplibre-olc", grid.plugin);
 export const setOlcLabels = grid.setLabels;
 export const getOlcGridSettings = grid.getSettings;
 export const setOlcGridSettings = grid.setSettings;

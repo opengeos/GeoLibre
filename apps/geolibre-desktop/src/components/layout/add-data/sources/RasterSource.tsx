@@ -1,5 +1,5 @@
 import { Button, Input, Label } from "@geolibre/ui";
-import { addRasterToMap } from "@geolibre/plugins";
+import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../../../hooks/usePlugins";

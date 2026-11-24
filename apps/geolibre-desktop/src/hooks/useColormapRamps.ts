@@ -1,4 +1,4 @@
-import { colormapColors, warmColormapColors } from "@geolibre/plugins";
+import { colormapColors, warmColormapColors } from "@geolibre/plugins/colormap-colors";
 import type { ColorRampOption } from "@geolibre/ui";
 import { COLORMAP_OPTIONS } from "../lib/raster-picker-mirror";
 import { useEffect, useState } from "react";

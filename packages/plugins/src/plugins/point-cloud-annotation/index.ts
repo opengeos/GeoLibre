@@ -1,3 +1,6 @@
+import { POINT_CLOUD_ANNOTATION_PLUGIN_ID } from "../../plugin-ids";
+export { POINT_CLOUD_ANNOTATION_PLUGIN_ID } from "../../plugin-ids";
+import { builtInPluginProperties } from "../../builtin-plugin-metadata";
 // Point Cloud Annotation: select LiDAR points on the map with a box or lasso
 // and assign ASPRS classes, then export the edited cloud as LAS 1.4 or a
 // Segments.ai segmentation label. First slice of opengeos/GeoLibre#2749.
@@ -67,7 +70,6 @@ import {
 } from "./selection";
 import { createPluginTranslator } from "../../plugin-i18n";
 
-export const POINT_CLOUD_ANNOTATION_PLUGIN_ID = "geolibre-point-cloud-annotation";
 const PANEL_ID = POINT_CLOUD_ANNOTATION_PLUGIN_ID;
 const SELECTION_LAYER_ID = "pointcloud-annotation-selection";
 const OVERLAY_CLASS = "geolibre-pc-annotation-overlay";
@@ -2343,14 +2345,13 @@ let disposePanel: (() => void) | null = null;
 
 /** Label LiDAR points with ASPRS classes and export them (issue #2749). */
 export const pointCloudAnnotationPlugin: GeoLibrePlugin = {
-  id: POINT_CLOUD_ANNOTATION_PLUGIN_ID,
-  name: "Point Cloud Annotation",
-  version: "0.1.0",
+  ...builtInPluginProperties("geolibre-point-cloud-annotation"),
+
   // Edits the maplibre-gl-lidar overlay, which only the MapLibre engine hosts
   // with the camera the selection projects through.
-  engines: ["maplibre"],
+
   // Labels are project data: opening a project without them must clear them.
-  clearsStateOnProjectLoad: true,
+
   activate: (app) => {
     unregisterPanel =
       app.registerRightPanel?.({

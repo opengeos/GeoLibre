@@ -77,7 +77,7 @@ registerHooks({
     if (specifier === "@geolibre/processing") {
       source = `export * from ${JSON.stringify(processingUrl)};
         export { convertGeoTiffToCog, readGeoTiffInfo } from ${JSON.stringify(helperUrl)};`;
-    } else if (specifier === "@geolibre/plugins") {
+    } else if (specifier === "@geolibre/plugins/maplibre-raster") {
       source = `export { setNonTiledRasterHandler, addRasterToMap } from ${JSON.stringify(helperUrl)};
         export const setLocalRasterFileReader = () => {};
         export const setLocalRasterPicker = () => {};

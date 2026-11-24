@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, type Dispatch } from "react";
 import type { TFunction } from "i18next";
 import type { GeoLibreLayer, PrintLayoutConfig } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { GRATICULE_LABEL_LAYER_ID } from "@geolibre/plugins";
+import { GRATICULE_LABEL_LAYER_ID } from "@geolibre/plugins/plugin-ids";
 import {
   computeScaleRatio,
   mapBodyAspectRatio,

@@ -1,3 +1,6 @@
+import { SATELLITE_EMBEDDINGS_PLUGIN_ID } from "../plugin-ids";
+export { SATELLITE_EMBEDDINGS_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
@@ -67,7 +70,6 @@ import { addRasterToMap, getRasterRenderEngine } from "./maplibre-raster";
 import { getControlMap } from "./style-map";
 import { createPluginTranslator } from "../plugin-i18n";
 
-export const SATELLITE_EMBEDDINGS_PLUGIN_ID = "geolibre-satellite-embeddings";
 const PANEL_ID = SATELLITE_EMBEDDINGS_PLUGIN_ID;
 
 /** Longest side, in pixels, of a rendered AlphaEarth composite. */
@@ -1616,13 +1618,12 @@ function clearOverlays(app: GeoLibreAppAPI): void {
  * PCA), and downloads (clipped GeoTIFFs, source tiles and files).
  */
 export const maplibreSatelliteEmbeddingsPlugin: GeoLibrePlugin = {
-  id: SATELLITE_EMBEDDINGS_PLUGIN_ID,
-  name: "Satellite Embeddings",
-  version: "0.1.0",
+  ...builtInPluginProperties("geolibre-satellite-embeddings"),
+
   // Footprints, the image composites and the point layers are Style Spec
   // sources and layers, so both 2D engines host them, and the host's control
   // map draws them on ArcGIS.
-  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
+
   activate: (app) => {
     appRef = app;
     unregisterPanel =

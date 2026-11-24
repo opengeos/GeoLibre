@@ -18,7 +18,8 @@ import {
   type WhiteboxLayerInput,
   type WhiteboxTool,
 } from "@geolibre/processing";
-import { SKETCHES_SOURCE_KIND, addRasterToMap } from "@geolibre/plugins";
+import { SKETCHES_SOURCE_KIND } from "@geolibre/plugins/maplibre-geo-editor";
+import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
 import type { Feature, FeatureCollection } from "geojson";
 import type { RefObject } from "react";
 import type { MapEngine } from "@geolibre/map";

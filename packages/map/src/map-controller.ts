@@ -2551,7 +2551,10 @@ export class MapController implements MapEngine {
 
   private addLayerControl(): boolean {
     if (!this.map || !this.controlVisibility["layer-control"]) return false;
-    return this.layerControlHost.add(this.controlPositions["layer-control"]);
+    return (
+      this.layerControlHost.add(this.controlPositions["layer-control"]) ||
+      this.layerControlHost.isMounted()
+    );
   }
 
   private removeLayerControl(): void {

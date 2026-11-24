@@ -1,3 +1,6 @@
+import { DYNAMICAL_PLUGIN_ID } from "../plugin-ids";
+export { DYNAMICAL_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { useAppStore, VECTOR_COLOR_RAMPS } from "@geolibre/core";
 import proj4 from "proj4";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
@@ -52,7 +55,6 @@ import {
 } from "./stac-icechunk";
 import { parseCfTimeUnits } from "./zarr-time-axis";
 
-export const DYNAMICAL_PLUGIN_ID = "geolibre-dynamical";
 const PANEL_ID = DYNAMICAL_PLUGIN_ID;
 const PLUGIN_NAME = "Dynamical";
 /** `metadata.sourceKind` is the Zarr control's; this key marks the layers this panel added. */
@@ -1728,11 +1730,10 @@ function mountPanel(container: HTMLElement): void {
  * messages in the browser; analyses and ensembles draw from a minimum zoom.
  */
 export const maplibreDynamicalPlugin: GeoLibrePlugin = {
-  id: DYNAMICAL_PLUGIN_ID,
-  name: PLUGIN_NAME,
-  version: "0.1.0",
+  ...builtInPluginProperties("geolibre-dynamical"),
+
   // The layers go through the shared Zarr control.
-  engines: ["maplibre", "mapbox"],
+
   activate: (app) => {
     appRef = app;
     unregisterPanel =

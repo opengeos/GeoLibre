@@ -1,21 +1,21 @@
 import { useAppStore } from "@geolibre/core";
 import {
   bandOptionsFromResults,
-  isSelectorTimeBinding,
   hasTimeSliderRasterStack,
-  type LabeledPixelTimeSeries,
-  type PixelTimeSeriesResult,
   queryPixelTimeSeries,
   seriesToFeatureCollection,
-  TIME_SLIDER_PLUGIN_ID,
   valueAtBand,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/time-slider-pixel-series";
+import { isSelectorTimeBinding } from "@geolibre/plugins/temporal-layers";
+import { type LabeledPixelTimeSeries, type PixelTimeSeriesResult } from "@geolibre/plugins";
+import { TIME_SLIDER_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import { Button, Input, Select } from "@geolibre/ui";
 import { Crosshair, Download, GripVertical, LineChart, Loader2, Trash2, X } from "lucide-react";
 import { type RefObject, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { MapEngine } from "@geolibre/map";
-import { createAnnotationMarker, type AnnotationMarker } from "@geolibre/plugins";
+import { createAnnotationMarker } from "@geolibre/plugins/annotation-marker";
+import { type AnnotationMarker } from "@geolibre/plugins";
 import { engineMarkerMap } from "../../lib/engine-style-map";
 import { type ChartDomain, resolveChartDomain } from "../../lib/chart-domain";
 import { useFloatingPanelRect } from "../../hooks/useFloatingPanelRect";

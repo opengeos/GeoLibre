@@ -102,9 +102,13 @@ raster/point-cloud/3D overlays.
 (plugin interface + built-in plugins) · `@geolibre/embed` (typed iframe embed
 client) · `geolibre-desktop` (shell layout, Tauri I/O, composition).
 
-**Plugins:** built-in plugins live in `packages/plugins/src/plugins/`, are
-exported from that package's `index.ts`, and registered in
-`apps/geolibre-desktop/src/hooks/usePlugins.ts`. External plugins load from zips
+**Plugins:** built-in implementations live in `packages/plugins/src/plugins/`.
+Their canonical metadata is in `builtin-plugin-metadata.ts` and lazy module
+loaders are in `builtin-plugins.ts` in the same package. `usePlugins.ts`
+registers those descriptors with `manager.registerLazy`; host code uses specific
+package entrypoints. The root `index.ts` retains SDK exports. When adding a
+built-in, follow [the catalog recipe](docs/plugin-api.md#add-a-built-in-plugin-in-this-repository).
+External plugins load from zips
 or a `plugin.json` manifest; bundled drop-ins under
 `apps/geolibre-desktop/public/plugins/<id>/` bake into both web and desktop
 builds. See `docs/plugin-api.md`.

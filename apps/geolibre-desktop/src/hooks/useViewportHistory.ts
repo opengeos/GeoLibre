@@ -1,6 +1,6 @@
 import { useAppStore, type MapViewState } from "@geolibre/core";
 import type { CameraIdleEvent, MapEngine } from "@geolibre/map";
-import { isFlying } from "@geolibre/plugins";
+import { isFlying } from "@geolibre/plugins/flight-simulator";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**

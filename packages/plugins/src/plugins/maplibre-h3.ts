@@ -1,3 +1,6 @@
+import { H3_PLUGIN_ID } from "../plugin-ids";
+export { H3_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-metadata";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import {
   cellToBoundary,
@@ -28,8 +31,6 @@ import {
  */
 const ICOSAHEDRON_GEOJSON_URL =
   "https://raw.githubusercontent.com/opengeoshub/vgrid-maplibre/main/H3/icosahedron.geojson";
-
-export const H3_PLUGIN_ID = "maplibre-h3-grid";
 
 const ICOSAHEDRON_SOURCE_ID = "geolibre-h3-icosahedron-source";
 const ICOSAHEDRON_LINE_LAYER_ID = "geolibre-h3-icosahedron-line";
@@ -234,7 +235,7 @@ function cellRing(cell: string): [number, number][] {
 
 const grid = createGridPlugin<H3GridSettings, H3Labels>({
   id: H3_PLUGIN_ID,
-  name: "H3 Grid",
+  name: builtInPluginMetadata("maplibre-h3-grid").name,
   slug: "h3",
   parentKey: "includeParents",
   extraBooleanKeys: ["showIcosahedron"],
@@ -307,7 +308,7 @@ const grid = createGridPlugin<H3GridSettings, H3Labels>({
   },
 });
 
-export const maplibreH3Plugin = grid.plugin;
+export const maplibreH3Plugin = defineBuiltInPlugin("maplibre-h3-grid", grid.plugin);
 export const setH3Labels = grid.setLabels;
 export const getH3GridSettings = grid.getSettings;
 export const setH3GridSettings = grid.setSettings;

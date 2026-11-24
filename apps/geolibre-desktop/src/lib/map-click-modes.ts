@@ -1,4 +1,4 @@
-import { DIRECTIONS_PLUGIN_ID, REVERSE_GEOCODE_PLUGIN_ID } from "@geolibre/plugins";
+import { DIRECTIONS_PLUGIN_ID, REVERSE_GEOCODE_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 
 /**
  * The click-to-interact map modes (the ones `MapModeBanner` announces): while

@@ -1,4 +1,5 @@
 /// <reference path="../earthengine.d.ts" />
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 
 import type { GeoAgentControl, GeoAgentControlOptions } from "maplibre-gl-geoagent";
 import type { Map as MapLibreMap } from "maplibre-gl";
@@ -97,14 +98,13 @@ export { GEOAGENT_PLUGIN_ID };
  * {@link mountMapControlInPanel}).
  */
 export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
-  id: GEOAGENT_PLUGIN_ID,
-  name: "GeoAgent",
-  version: "0.5.0",
+  ...builtInPluginProperties("maplibre-gl-geoagent"),
+
   // Both 2D engines: the tools that cannot stay on the shared Style Spec
   // surface follow `mapEngine` (see geoAgentMapEngine). A renderer swap tears
   // every active plugin down and re-activates it, so the rebuilt control is
   // told the engine that is now primary.
-  engines: ["maplibre", "mapbox"],
+
   activate: (app: GeoLibreAppAPI) => {
     if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     geoAgentActive = true;

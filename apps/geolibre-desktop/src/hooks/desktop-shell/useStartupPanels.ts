@@ -1,5 +1,5 @@
 import type { MapEngine } from "@geolibre/map";
-import { S3_BROWSER_PLUGIN_ID } from "@geolibre/plugins";
+import { S3_BROWSER_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import { getActiveRightPanel } from "@geolibre/plugins/right-panel-registry";
 import { useEffect, useRef, type RefObject } from "react";
 import { getDeploymentPolicy } from "../../lib/deployment-env";

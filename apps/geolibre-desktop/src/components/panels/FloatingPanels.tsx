@@ -1,4 +1,8 @@
-import { closeFloatingPanel, focusFloatingPanel, getFloatingPanel } from "@geolibre/plugins";
+import {
+  closeFloatingPanel,
+  focusFloatingPanel,
+  getFloatingPanel,
+} from "@geolibre/plugins/runtime";
 import { notifyPanelRenderFailed } from "../../lib/panel-render-failure";
 import { BottomSheet, Button } from "@geolibre/ui";
 import { GripVertical, X } from "lucide-react";

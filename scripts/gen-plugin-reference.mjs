@@ -4,10 +4,8 @@
 //
 // The plugin list, ids, and order come from the registry itself:
 //
-// - BUILT_IN_PLUGINS in apps/geolibre-desktop/src/hooks/usePlugins.ts names
-//   every registered plugin object, in Plugins-menu order;
-// - each object's `id` and `name` are read from its definition under
-//   packages/plugins/src (object literal or factory call);
+// - BUILT_IN_PLUGIN_METADATA supplies ids, names, and registration order
+//   without loading implementation modules;
 // - the display name is the English catalog entry toolbar.plugin.<id>, falling
 //   back to the registered name, exactly as pluginDisplayName() resolves it;
 // - the menu location follows PluginsMenu.tsx: WEB_SERVICE_PLUGIN_IDS and
@@ -24,9 +22,16 @@
 // Usage: node scripts/gen-plugin-reference.mjs          # rewrite plugins.md
 //        node scripts/gen-plugin-reference.mjs --check  # exit 1 if it is stale
 
+import { require as tsRequire } from "tsx/cjs/api";
+
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
+const { BUILT_IN_PLUGIN_METADATA, DGGS_PLUGIN_IDS, WEB_SERVICE_PLUGIN_IDS } = tsRequire(
+  "../packages/plugins/src/builtin-plugin-metadata.ts",
+  import.meta.url,
+);
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const PLUGIN_DOC_PATH = join(root, "docs/user-guide/plugins.md");
@@ -104,79 +109,6 @@ function resolveValue(sources, expr) {
 }
 
 /**
- * Resolves the id and registered name of one exported plugin object.
- *
- * Handles the definition shapes the plugins package uses: an object literal,
- * `createXPlugin({ id, name, ... })`, `createXPlugin(ID, "Name", ...)`,
- * `factoryResult.plugin`, and a no-argument factory whose body returns the
- * object literal.
- *
- * @param {{ path: string, text: string }[]} sources - Plugins package sources.
- * @param {string} ident - The exported identifier, e.g. `maplibreSwipePlugin`.
- * @returns {{ id: string, name: string, file: string }} The plugin metadata.
- */
-function resolvePlugin(sources, ident) {
-  const defRe = new RegExp(`export const ${ident}\\b[^=]*=\\s*`);
-  for (const { path, text } of sources) {
-    const def = defRe.exec(text);
-    if (!def) continue;
-    const rhsStart = def.index + def[0].length;
-    const rhs = text.slice(rhsStart, rhsStart + 200);
-    let anchor = rhsStart;
-    const member = rhs.match(/^([A-Za-z0-9_]+)\.plugin\s*;/);
-    const noArgFactory = rhs.match(/^([A-Za-z0-9_]+)\(\)\s*;/);
-    const positional = rhs.match(/^[A-Za-z0-9_]+\(\s*([A-Z0-9_]+|"[^"]*")\s*,\s*("[^"]*")/);
-    if (positional) {
-      return {
-        id: resolveValue(sources, positional[1]),
-        name: resolveValue(sources, positional[2]),
-        file: path,
-      };
-    }
-    if (member) {
-      const at = text.search(new RegExp(`const ${member[1]}\\s*=`));
-      if (at < 0) throw new Error(`${ident}: cannot find const ${member[1]}`);
-      anchor = at;
-    } else if (noArgFactory) {
-      const at = text.search(new RegExp(`function ${noArgFactory[1]}\\s*\\(`));
-      if (at < 0) throw new Error(`${ident}: cannot find function ${noArgFactory[1]}`);
-      anchor = at;
-    }
-    const body = text.slice(anchor);
-    const id = body.match(/\n\s+id:\s*([^,\n]+),/);
-    const name = body.match(/\n\s+name:\s*([^,\n]+),/);
-    if (!id || !name) throw new Error(`${ident}: cannot find id/name in ${path}`);
-    return {
-      id: resolveValue(sources, id[1]),
-      name: resolveValue(sources, name[1]),
-      file: path,
-    };
-  }
-  throw new Error(`Cannot find the definition of ${ident} in packages/plugins/src`);
-}
-
-/**
- * Reads the items of an exported array of ids (`export const X = [...]`).
- *
- * @param {{ path: string, text: string }[]} sources - Plugins package sources.
- * @param {string} name - The array's name.
- * @returns {string[]} The resolved ids.
- */
-function resolveIdArray(sources, name) {
-  const re = new RegExp(`export const ${name}\\b[^=]*=\\s*\\[([\\s\\S]*?)\\]`);
-  for (const { text } of sources) {
-    const match = text.match(re);
-    if (!match) continue;
-    return match[1]
-      .split(",")
-      .map((item) => item.replace(/\/\/.*$/gm, "").trim())
-      .filter(Boolean)
-      .map((item) => resolveValue(sources, item));
-  }
-  throw new Error(`Cannot find the id array ${name} in packages/plugins/src`);
-}
-
-/**
  * The `?plugin=` link name for each allowed id: the short name when it
  * resolves to that plugin alone, otherwise the full id. Mirrors
  * pluginDeepLinkNames() in plugin-deep-link.ts.
@@ -216,14 +148,6 @@ function deepLinkNames(ids) {
 export function collectBuiltInPlugins() {
   const sources = loadPluginSources();
   const usePlugins = readFileSync(USE_PLUGINS_PATH, "utf8");
-  const start = usePlugins.indexOf("const BUILT_IN_PLUGINS");
-  const end = usePlugins.indexOf("];", start);
-  if (start < 0 || end < 0) throw new Error("Cannot find BUILT_IN_PLUGINS in usePlugins.ts");
-  const idents = [...usePlugins.slice(start, end).matchAll(/^\s+([A-Za-z0-9_]+),\s*$/gm)].map(
-    (match) => match[1],
-  );
-  if (idents.length === 0) throw new Error("BUILT_IN_PLUGINS parsed as empty");
-
   const gatedBlock = usePlugins.match(/CONSENT_GATED_PLUGIN_IDS[^=]*=\s*new Set\(\[([\s\S]*?)\]\)/);
   if (!gatedBlock) throw new Error("Cannot find CONSENT_GATED_PLUGIN_IDS in usePlugins.ts");
   const gated = new Set(
@@ -240,13 +164,13 @@ export function collectBuiltInPlugins() {
       resolveConstant(sources, m[1]),
     ),
   );
-  const webServices = new Set(resolveIdArray(sources, "WEB_SERVICE_PLUGIN_IDS"));
-  const dggs = new Set(resolveIdArray(sources, "DGGS_PLUGIN_IDS"));
+  const webServices = new Set(WEB_SERVICE_PLUGIN_IDS);
+  const dggs = new Set(DGGS_PLUGIN_IDS);
 
   const catalogNames = JSON.parse(readFileSync(EN_CATALOG_PATH, "utf8")).toolbar?.plugin ?? {};
   const descriptions = JSON.parse(readFileSync(DESCRIPTIONS_PATH, "utf8"));
 
-  const plugins = idents.map((ident) => resolvePlugin(sources, ident));
+  const plugins = BUILT_IN_PLUGIN_METADATA;
   const ids = plugins.map((plugin) => plugin.id);
   const duplicate = ids.find((id, index) => ids.indexOf(id) !== index);
   if (duplicate) throw new Error(`Plugin id ${duplicate} is registered twice`);

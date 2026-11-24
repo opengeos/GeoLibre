@@ -1,3 +1,6 @@
+import { EFFECTS_PLUGIN_ID } from "../plugin-ids";
+export { EFFECTS_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import type { CesiumSceneHandle } from "@geolibre/map";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { getActiveEllipsoid } from "@geolibre/core";
@@ -29,8 +32,6 @@ import { getStyleMap } from "./style-map";
  * space) of its own, and the plugin drives those instead — see
  * {@link CesiumEffectsEngine} and {@link cesiumAtmosphereShifts}.
  */
-
-export const EFFECTS_PLUGIN_ID = "maplibre-atmosphere-effects";
 
 /**
  * User-tunable appearance of the globe atmosphere. Persisted with the project
@@ -1179,11 +1180,8 @@ export function restoreEffects(app: GeoLibreAppAPI, active: boolean, settings?: 
 }
 
 export const maplibreEffectsPlugin: GeoLibrePlugin = {
-  id: EFFECTS_PLUGIN_ID,
-  name: "Atmospheric Effects",
-  version: "1.1.0",
-  activeByDefault: true,
-  engines: ["maplibre", "cesium", "mapbox"],
+  ...builtInPluginProperties("maplibre-atmosphere-effects"),
+
   activate: (app: GeoLibreAppAPI) => attachEngine(app),
   deactivate: (app: GeoLibreAppAPI) => detachEngine(app),
   // Persist the appearance only when it differs from the defaults, so untouched

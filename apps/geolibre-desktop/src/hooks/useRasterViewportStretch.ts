@@ -1,6 +1,8 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { RASTER_SOURCE_KIND, readRasterWindow, savedRasterSymbology } from "@geolibre/plugins";
+import { RASTER_SOURCE_KIND } from "@geolibre/plugins/raster-symbology-texture";
+import { readRasterWindow } from "@geolibre/plugins/maplibre-raster";
+import { savedRasterSymbology } from "@geolibre/plugins/raster-symbology";
 import { useEffect, useRef } from "react";
 import type { RefObject } from "react";
 import {

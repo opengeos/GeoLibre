@@ -1,11 +1,12 @@
+import { DGGAL_PLUGIN_ID } from "../plugin-ids";
+export { DGGAL_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { getControlMap } from "./style-map";
 import { withSelectChevron } from "../panel-dom";
-
-export const DGGAL_PLUGIN_ID = "maplibre-dggal";
 
 const PANEL_ID = "geolibre-dggal-panel";
 const SOURCE_ID = "geolibre-dggal-grid-source";
@@ -1088,14 +1089,13 @@ function settingsEqual(a: DggalGridSettings, b: DggalGridSettings): boolean {
 }
 
 export const maplibreDggalPlugin: GeoLibrePlugin = {
-  id: DGGAL_PLUGIN_ID,
-  name: "DGGAL",
-  version: "1.0.0",
+  ...builtInPluginProperties("maplibre-dggal"),
+
   // Draws the grid through the Style Spec surface both 2D engines share
   // (GeoJSON sources, fill/line/symbol layers, camera and pointer events), read
   // through getControlMap so the Mapbox renderer hosts it as well. On ArcGIS
   // and the Cesium globe the host draws the same GeoJSON layers natively.
-  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
+
   activate: async (app) => {
     const activeMap = getControlMap(app);
     if (!activeMap) return false;

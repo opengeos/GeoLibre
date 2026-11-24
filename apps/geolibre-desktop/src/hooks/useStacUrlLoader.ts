@@ -1,4 +1,5 @@
-import { cancelStacCatalogRequest, requestStacCatalogUrl, STAC_PLUGIN_ID } from "@geolibre/plugins";
+import { cancelStacCatalogRequest, requestStacCatalogUrl } from "@geolibre/plugins/maplibre-stac";
+import { STAC_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import { useEffect, useMemo, useRef } from "react";
 import { stacUrlParameter } from "../lib/data-url";
 import type { createAppAPI } from "./usePlugins";

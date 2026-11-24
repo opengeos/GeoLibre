@@ -1,3 +1,6 @@
+import { US_FEDERAL_GIS_PLUGIN_ID } from "../plugin-ids";
+export { US_FEDERAL_GIS_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-metadata";
 import type { GeoLibrePlugin } from "../types";
 import { ARCGIS_HUB_SEARCH_TYPES } from "./arcgis-hub-api";
 import {
@@ -6,8 +9,6 @@ import {
   type ArcGisHubLabels,
 } from "./maplibre-arcgis-hub";
 import { US_FEDERAL_GIS_CATALOGS } from "./us-federal-gis-catalogs";
-
-export const US_FEDERAL_GIS_PLUGIN_ID = "geolibre-us-federal-gis";
 
 // Federal agencies publish much of their national data as map and image
 // services (NOAA radar, LANDFIRE and land cover rasters, NAIP), which add as
@@ -28,7 +29,7 @@ export const DEFAULT_US_FEDERAL_GIS_LABELS: ArcGisHubLabels = {
 
 const usFederalGis = createArcGisHubPlugin({
   id: US_FEDERAL_GIS_PLUGIN_ID,
-  name: "US Federal GIS",
+  name: builtInPluginMetadata("geolibre-us-federal-gis").name,
   defaultLabels: DEFAULT_US_FEDERAL_GIS_LABELS,
   types: US_FEDERAL_GIS_TYPES,
   catalogSets: US_FEDERAL_GIS_CATALOGS,
@@ -39,7 +40,10 @@ const usFederalGis = createArcGisHubPlugin({
   filenameFallback: "federal-gis-data",
 });
 
-export const maplibreUsFederalGisPlugin: GeoLibrePlugin = usFederalGis.plugin;
+export const maplibreUsFederalGisPlugin: GeoLibrePlugin = defineBuiltInPlugin(
+  "geolibre-us-federal-gis",
+  usFederalGis.plugin,
+);
 export const setUsFederalGisLabels = usFederalGis.setLabels;
 
 export default maplibreUsFederalGisPlugin;

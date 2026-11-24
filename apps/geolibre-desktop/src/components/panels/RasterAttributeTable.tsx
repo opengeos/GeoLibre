@@ -1,5 +1,6 @@
 import { type GeoLibreLayer, useAppStore, useLayer } from "@geolibre/core";
-import { getPaletteLegend, savedRasterSymbology } from "@geolibre/plugins";
+import { getPaletteLegend } from "@geolibre/plugins/raster-palette";
+import { savedRasterSymbology } from "@geolibre/plugins/raster-symbology";
 import { type RasterData, readRasterData } from "@geolibre/processing";
 import { Button, Input, Select } from "@geolibre/ui";
 import { FileDown, ListChecks, Paintbrush, RefreshCw, Table2, X } from "lucide-react";

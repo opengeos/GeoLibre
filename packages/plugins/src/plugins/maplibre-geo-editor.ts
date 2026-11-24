@@ -1,3 +1,4 @@
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import {
   planSketchAttributeUpdates,
   normalizeEditorFormProperties,
@@ -309,13 +310,12 @@ interface ThirdPartyEventTarget {
 export { GEO_EDITOR_PLUGIN_ID };
 
 export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
-  id: GEO_EDITOR_PLUGIN_ID,
-  name: "GeoEditor",
-  version: "0.9.0",
+  ...builtInPluginProperties("maplibre-gl-geo-editor"),
+
   // Geoman and the toolbar both stay on the Style Spec surface the two 2D
   // engines share once their few MapLibre object constructions are swapped for
   // mapbox-gl's (see `adaptGeomanToMapbox` and the `createPopup` option below).
-  engines: ["maplibre", "mapbox"],
+
   activate: (app: GeoLibreAppAPI) => {
     if (geoEditorControl || geoEditorModules) return activateGeoEditor(app);
     const generation = ++geoEditorActivationGeneration;

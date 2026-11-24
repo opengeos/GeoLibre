@@ -1,6 +1,7 @@
 import type { MapCanvasRasterIdentify } from "@geolibre/map";
 import { isPlanetaryComputerLayer } from "@geolibre/core";
-import { identifyPlanetaryComputerLayer, readRasterPixel } from "@geolibre/plugins";
+import { identifyPlanetaryComputerLayer } from "@geolibre/plugins/maplibre-planetary-computer";
+import { readRasterPixel } from "@geolibre/plugins/maplibre-raster";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {

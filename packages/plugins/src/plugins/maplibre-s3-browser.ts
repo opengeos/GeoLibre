@@ -1,3 +1,6 @@
+import { S3_BROWSER_PLUGIN_ID } from "../plugin-ids";
+export { S3_BROWSER_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin } from "../builtin-plugin-metadata";
 /**
  * S3 Browser (Plugins > Web Services).
  *
@@ -32,8 +35,6 @@ import {
   type S3BrowserObject,
   type S3TextFetch,
 } from "./s3-browser-api";
-
-export const S3_BROWSER_PLUGIN_ID = "geolibre-s3-browser";
 
 const LAST_LOCATION_KEY = "geolibre:s3-browser:location";
 
@@ -764,6 +765,9 @@ function createS3BrowserPlugin(): GeoLibrePlugin {
   };
 }
 
-export const maplibreS3BrowserPlugin: GeoLibrePlugin = createS3BrowserPlugin();
+export const maplibreS3BrowserPlugin: GeoLibrePlugin = defineBuiltInPlugin(
+  "geolibre-s3-browser",
+  createS3BrowserPlugin(),
+);
 
 export default maplibreS3BrowserPlugin;

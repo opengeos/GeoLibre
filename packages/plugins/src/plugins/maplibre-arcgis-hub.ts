@@ -1,3 +1,6 @@
+import { ARCGIS_HUB_PLUGIN_ID } from "../plugin-ids";
+export { ARCGIS_HUB_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-metadata";
 import type { Feature } from "geojson";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { addArcGISLayer } from "./arcgis-layer";
@@ -15,7 +18,6 @@ import {
 import type { ArcGISLayerType } from "./arcgis-layer";
 import { featureCollectionBounds, searchSocrataCatalog } from "./socrata-api";
 
-export const ARCGIS_HUB_PLUGIN_ID = "maplibre-gl-arcgis-hub";
 const PAGE_SIZE = 20;
 // Start fetching the next page this far before the list's bottom edge, so the
 // new cards are usually in place by the time the user scrolls to them.
@@ -961,11 +963,14 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
 
 const arcGisHub = createArcGisHubPlugin({
   id: ARCGIS_HUB_PLUGIN_ID,
-  name: "ArcGIS Hub",
+  name: builtInPluginMetadata("maplibre-gl-arcgis-hub").name,
   defaultLabels: DEFAULT_ARCGIS_HUB_LABELS,
 });
 
-export const maplibreArcGisHubPlugin: GeoLibrePlugin = arcGisHub.plugin;
+export const maplibreArcGisHubPlugin: GeoLibrePlugin = defineBuiltInPlugin(
+  "maplibre-gl-arcgis-hub",
+  arcGisHub.plugin,
+);
 export const setArcGisHubLabels = arcGisHub.setLabels;
 
 export default maplibreArcGisHubPlugin;

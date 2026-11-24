@@ -1,8 +1,5 @@
-import {
-  type GeoLibreToolbarMenu,
-  type GeoLibreToolbarMenuItem,
-  resolveToolbarLabel,
-} from "@geolibre/plugins";
+import { type GeoLibreToolbarMenu, type GeoLibreToolbarMenuItem } from "@geolibre/plugins";
+import { resolveToolbarLabel } from "@geolibre/plugins/runtime";
 import {
   Button,
   DropdownMenu,

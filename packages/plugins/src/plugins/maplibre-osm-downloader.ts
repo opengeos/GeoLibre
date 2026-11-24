@@ -1,3 +1,6 @@
+import { OSM_DOWNLOADER_PLUGIN_ID } from "../plugin-ids";
+export { OSM_DOWNLOADER_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import type { FeatureCollection } from "geojson";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
@@ -12,7 +15,6 @@ import {
 import { createPluginTranslator } from "../plugin-i18n";
 import { getControlMap } from "./style-map";
 
-export const OSM_DOWNLOADER_PLUGIN_ID = "geolibre-osm-downloader";
 const PANEL_ID = OSM_DOWNLOADER_PLUGIN_ID;
 
 let unregisterPanel: (() => void) | null = null;
@@ -534,10 +536,8 @@ function mountPanel(container: HTMLElement, app: GeoLibreAppAPI): void {
 
 /** Preview and add OpenStreetMap vector features from Overpass or the OSM map API. */
 export const maplibreOsmDownloaderPlugin: GeoLibrePlugin = {
-  id: OSM_DOWNLOADER_PLUGIN_ID,
-  name: "OSM Downloader",
-  version: "0.1.0",
-  engines: ["maplibre", "mapbox", "cesium", "arcgis"],
+  ...builtInPluginProperties("geolibre-osm-downloader"),
+
   activate: (app) => {
     unregisterPanel =
       app.registerRightPanel?.({

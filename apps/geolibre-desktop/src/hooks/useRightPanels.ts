@@ -1,8 +1,5 @@
-import {
-  getRightPanelSnapshot,
-  subscribeRightPanels,
-  type RightPanelSnapshot,
-} from "@geolibre/plugins";
+import { getRightPanelSnapshot, subscribeRightPanels } from "@geolibre/plugins/runtime";
+import { type RightPanelSnapshot } from "@geolibre/plugins";
 import { useSyncExternalStore } from "react";
 
 /**

@@ -5,7 +5,7 @@ import {
   setLocalRasterPicker,
   setNonTiledRasterHandler,
   setUnrestorableRasterHandler,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/maplibre-raster";
 import {
   convertGeoTiffToCog,
   exceedsBrowserCogConversionLimit,

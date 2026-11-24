@@ -6,7 +6,8 @@
  * with axes and captions; this one has to fit the Style panel's width and map
  * pointer positions back to values.
  */
-import { getRasterBandStats, type RasterBandStats } from "@geolibre/plugins";
+import { getRasterBandStats } from "@geolibre/plugins/raster-symbology-texture";
+import { type RasterBandStats } from "@geolibre/plugins";
 import {
   useCallback,
   useEffect,

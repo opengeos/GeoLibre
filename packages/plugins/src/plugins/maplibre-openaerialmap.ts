@@ -1,3 +1,6 @@
+import { OPENAERIALMAP_PLUGIN_ID } from "../plugin-ids";
+export { OPENAERIALMAP_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { useAppStore } from "@geolibre/core";
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
@@ -22,7 +25,6 @@ import {
   searchOpenAerialMap,
 } from "./openaerialmap-api";
 
-export const OPENAERIALMAP_PLUGIN_ID = "maplibre-gl-openaerialmap";
 const PANEL_ID = OPENAERIALMAP_PLUGIN_ID;
 const PAGE_SIZE = 20;
 // The OpenAerialMap metadata API is CORS-locked to the OAM web app origin, so a
@@ -1335,14 +1337,13 @@ export function setOpenAerialMapLabels(next: Partial<OpenAerialMapLabels>): void
  * GeoTIFF.
  */
 export const maplibreOpenAerialMapPlugin: GeoLibrePlugin = {
-  id: OPENAERIALMAP_PLUGIN_ID,
-  name: "OpenAerialMap",
-  version: "0.1.0",
+  ...builtInPluginProperties("maplibre-gl-openaerialmap"),
+
   // Footprints, the bbox preview and the imagery tile layers are all Style
   // Spec sources and layers, so both 2D engines host them. On ArcGIS the
   // host's control map draws the footprint overlays and the imagery is a store
   // tile layer.
-  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
+
   activate: (app: GeoLibreAppAPI) => {
     appRef = app;
     unregisterPanel =

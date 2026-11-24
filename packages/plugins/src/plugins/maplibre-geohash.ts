@@ -1,3 +1,6 @@
+import { GEOHASH_PLUGIN_ID } from "../plugin-ids";
+export { GEOHASH_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-metadata";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import geohash from "ngeohash";
 import {
@@ -6,8 +9,6 @@ import {
   type GridLabelsBase,
   type GridSettingsBase,
 } from "./grid-plugin-factory";
-
-export const GEOHASH_PLUGIN_ID = "maplibre-geohash";
 
 /** Prevent a fine precision over a large viewport from freezing the browser. */
 export const GEOHASH_VIEWPORT_CELL_LIMIT = 20_000;
@@ -216,7 +217,7 @@ export function geohashNeighborCells(cell: string): string[] {
 
 const grid = createGridPlugin<GeohashGridSettings, GeohashLabels>({
   id: GEOHASH_PLUGIN_ID,
-  name: "Geohash",
+  name: builtInPluginMetadata("maplibre-geohash").name,
   slug: "geohash",
   parentKey: "includeParent",
   defaultSettings: DEFAULT_GEOHASH_GRID_SETTINGS,
@@ -260,7 +261,7 @@ const grid = createGridPlugin<GeohashGridSettings, GeohashLabels>({
   exportBaseName: (precision) => `geohash-p${precision}`,
 });
 
-export const maplibreGeohashPlugin = grid.plugin;
+export const maplibreGeohashPlugin = defineBuiltInPlugin("maplibre-geohash", grid.plugin);
 export const setGeohashLabels = grid.setLabels;
 export const getGeohashGridSettings = grid.getSettings;
 export const setGeohashGridSettings = grid.setSettings;

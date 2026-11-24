@@ -6,7 +6,7 @@ import {
   type VectorStyleMode,
   type VectorStyleStop,
 } from "@geolibre/core";
-import { getVectorLayerPropertyValues } from "@geolibre/plugins";
+import { getVectorLayerPropertyValues } from "@geolibre/plugins/maplibre-vector";
 import type { MapEngine } from "@geolibre/map";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {

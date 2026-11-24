@@ -1,3 +1,6 @@
+import { ELEVATION_PROFILE_PLUGIN_ID } from "../../plugin-ids";
+export { ELEVATION_PROFILE_PLUGIN_ID } from "../../plugin-ids";
+import { builtInPluginProperties } from "../../builtin-plugin-metadata";
 import { createPluginTranslator, pluginDisplayTitle } from "../../plugin-i18n";
 import { getActiveRightPanel, isRightPanelCollapsed } from "../../right-panel-registry";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../../types";
@@ -23,7 +26,6 @@ import { ELEVATION_LINE_PARAM, maybeHandleDeepLink } from "./utils/deep-link";
  * file, and a `?elevation-line=lng,lat;lng,lat` URL parameter restores a shared
  * profile on load.
  */
-export const ELEVATION_PROFILE_PLUGIN_ID = "geolibre-elevation-profile";
 
 const PANEL_ID = "elevation-profile-panel";
 // The control's toolbar button is hidden (the dock owns opening and closing),
@@ -179,14 +181,10 @@ function isPluginState(value: unknown): value is Partial<ElevationProfileState> 
 }
 
 export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
-  id: ELEVATION_PROFILE_PLUGIN_ID,
+  ...builtInPluginProperties("geolibre-elevation-profile"),
   // The control draws its line and markers through the style API both 2D
   // engines share and samples elevations from tiles it fetches itself, so the
   // Mapbox renderer hosts it as MapLibre does; the globe gets its own adapter.
-  engines: ["maplibre", "cesium", "mapbox"],
-  name: "Elevation Profile",
-  version: "0.1.0",
-  urlParameterNames: [ELEVATION_LINE_PARAM],
 
   // The panel's `collapsed` flag round-trips through getProjectState, so the
   // saved project decides whether the dock opens or sits on its rail. Without
@@ -195,7 +193,6 @@ export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
   // the dock's onCollapse mirrors into the control, the next save would write
   // `collapsed: true` back and the user's preference would be lost for good.
   // maplibre-time-slider carries the same flag for the same reason.
-  restoresPanelCollapseState: true,
 
   activate(app) {
     if (!app.registerRightPanel || !app.openRightPanel) return false;

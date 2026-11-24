@@ -1,14 +1,14 @@
 import { shouldZoomToNewLayers, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
+import { arcGISLayerCreationTemplates } from "@geolibre/plugins/arcgis-defaults";
 import {
-  arcGISLayerCreationTemplates,
   endLayerGeometryEdit,
   getGeometryEditTargetLayerId,
-  isPluginEngineSupported,
   maplibreGeoEditorPlugin,
   selectGeometryEditFeature,
   startLayerGeometryEdit,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/maplibre-geo-editor";
+import { isPluginEngineSupported } from "@geolibre/plugins/runtime";
 import type { TFunction } from "i18next";
 import { type Dispatch, type RefObject, type SetStateAction, useCallback, useRef } from "react";
 import {

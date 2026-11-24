@@ -1,6 +1,6 @@
 import type { MapEngine } from "@geolibre/map";
 import i18next from "i18next";
-import { isViewerBlockedPlugin } from "@geolibre/plugins";
+import { isViewerBlockedPlugin } from "@geolibre/plugins/runtime";
 import {
   useCallback,
   useEffect,

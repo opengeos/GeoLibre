@@ -5,9 +5,8 @@ import {
   renderTileUrl,
   specFromTileUrl,
   withRenderStyle,
-  type RenderRamp,
-  type RenderStyle,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/stac-render";
+import { type RenderRamp, type RenderStyle } from "@geolibre/plugins";
 import { Button, Input, Label, Select, Separator } from "@geolibre/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";

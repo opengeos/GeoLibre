@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { describe, it } from "node:test";
+import { BUILT_IN_PLUGIN_METADATA } from "../packages/plugins/src/builtin-plugin-metadata";
 
 // Cesium-capable plugins must not read the map through MapLibre-only doors
 // (issue #2262). `app.getMap()` answers null on the globe, so a plugin that
@@ -14,6 +15,19 @@ import { describe, it } from "node:test";
 // is a property of the whole directory, not of any one module.
 
 const PLUGIN_DIR = resolve(import.meta.dirname, "..", "packages", "plugins", "src", "plugins");
+
+/** Engine declarations in generic factories or canonical built-in metadata. */
+function declaredEngines(source: string): string[] {
+  const lists = [...source.matchAll(/engines:\s*\[[^\]]*\]/g)].map((match) => match[0]);
+  for (const match of source.matchAll(
+    /(?:builtInPluginProperties|defineBuiltInPlugin)\(\s*["']([^"']+)["']/g,
+  )) {
+    const metadata = BUILT_IN_PLUGIN_METADATA.find(({ id }) => id === match[1]);
+    assert.ok(metadata, `unknown built-in metadata: ${match[1]}`);
+    if ("engines" in metadata) lists.push(`engines: ${JSON.stringify(metadata.engines)}`);
+  }
+  return lists;
+}
 
 /** Declares Cesium in its `engines` list, whatever the order, spacing, or quotes. */
 const DECLARES_CESIUM = /engines:\s*\[[^\]]*["']cesium["'][^\]]*\]/;
@@ -194,7 +208,11 @@ function pluginClosures(declares: RegExp): { plugin: string; files: string[] }[]
       }
       return entry.name.endsWith(".ts") ? [join(PLUGIN_DIR, entry.name)] : [];
     })
-    .filter((file) => declares.test(blankComments(readFileSync(file, "utf8"))))
+    .filter((file) =>
+      declaredEngines(blankComments(readFileSync(file, "utf8"))).some((list) =>
+        declares.test(list),
+      ),
+    )
     .map((file) => ({ plugin: relative(PLUGIN_DIR, file), files: importClosure(file) }));
 }
 
@@ -227,8 +245,8 @@ function styleMapReads(file: string): number[] {
   const raw = readFileSync(file, "utf8");
   const rawLines = raw.split("\n");
   const source = blankComments(raw);
-  const ownEngines = /engines:\s*\[[^\]]*\]/.exec(source);
-  if (ownEngines && !DECLARES_ARCGIS.test(ownEngines[0])) return [];
+  const ownEngines = declaredEngines(source);
+  if (ownEngines.length && !ownEngines.some((list) => DECLARES_ARCGIS.test(list))) return [];
   const lines = new Set<number>();
   for (const pattern of [STYLE_MAP_READ, GETMAP_INDIRECT])
     for (const match of source.matchAll(pattern)) {
@@ -291,6 +309,15 @@ function maplibreOnlyCalls(file: string): string[] {
 }
 
 describe("plugin engine audit", () => {
+  it("includes plugins whose engine declarations live in the catalog", () => {
+    const entries = mapboxPluginClosures().map(({ plugin }) => plugin);
+    assert.ok(entries.includes("maplibre-geo-editor.ts"));
+    assert.ok(entries.includes(join("elevation-profile", "index.ts")));
+    const arcgisEntries = arcgisPluginClosures().map(({ plugin }) => plugin);
+    assert.ok(arcgisEntries.includes("maplibre-fema-wms.ts"));
+    assert.ok(!arcgisEntries.includes("maplibre-geo-editor.ts"));
+  });
+
   it("finds the Cesium-capable plugins to audit", () => {
     // A regex that stops matching would make every assertion below vacuous.
     assert.ok(cesiumPluginClosures().length > 0, "no plugin declares Cesium support");

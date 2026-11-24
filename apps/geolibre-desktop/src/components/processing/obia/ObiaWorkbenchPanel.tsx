@@ -1,5 +1,5 @@
 import type { MapEngine } from "@geolibre/map";
-import { addRasterToMap } from "@geolibre/plugins";
+import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
 import { useCallback, useEffect, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../../hooks/usePlugins";

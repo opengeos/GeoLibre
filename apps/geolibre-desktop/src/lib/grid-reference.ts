@@ -10,7 +10,7 @@
  * the point it was read at.
  */
 
-import { utmToLngLat } from "@geolibre/plugins/maplibre-graticule";
+import { utmToLngLat } from "@geolibre/plugins/graticule-coordinates";
 import { parseMgrsReference, utmBandRange } from "@geolibre/plugins/mgrs-reference";
 import { parseLatLon } from "./coordinates";
 

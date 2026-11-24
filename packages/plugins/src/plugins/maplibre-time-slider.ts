@@ -1,3 +1,6 @@
+import { TIME_SLIDER_PLUGIN_ID } from "../plugin-ids";
+export { TIME_SLIDER_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
   resolveUrl,
@@ -142,7 +145,6 @@ let savedConfig: TimeSliderConfig | null = null;
 let detachStoreSync: (() => void) | null = null;
 
 /** Stable id of this plugin, exported so the UI can activate/query it. */
-export const TIME_SLIDER_PLUGIN_ID = "maplibre-gl-time-slider";
 
 /**
  * Returns the live {@link TimeSliderControl} instance while the plugin is
@@ -157,21 +159,20 @@ export function getActiveTimeSliderControl(): TimeSliderControl | null {
 }
 
 export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
-  id: "maplibre-gl-time-slider",
-  name: "Time Slider",
-  version: "1.0.3",
+  ...builtInPluginProperties("maplibre-gl-time-slider"),
+
   // The dock only uses the style API both 2D engines share (raster tile and
   // GeoJSON sources, filters, paint), so it mounts on the Mapbox renderer too;
   // its store mirrors are plugin-owned there (`isMapboxPluginLayer`). COG and
   // mosaic sources render through maplibre-gl-raster, whose tile protocol only
   // registers with MapLibre, so those source types stay blank on Mapbox while
   // XYZ, WMS and GeoJSON sources animate as usual.
-  engines: ["maplibre", "mapbox"],
+
   // The dock's `collapsed` flag round-trips through getProjectState /
   // configToOptions, so the restored config decides whether it opens. Without
   // this the host's restore-time collapse sweep hid the dock entirely (its
   // collapsed style is `display: none`) even for a project saved expanded.
-  restoresPanelCollapseState: true,
+
   activate: (app: GeoLibreAppAPI) => {
     if (timeSliderControl) return;
     activeHost = app;

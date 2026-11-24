@@ -6,7 +6,7 @@ import {
   styleValue,
   type GeoLibreLayer,
 } from "@geolibre/core";
-import { countAtlasDroppedDiagrams } from "@geolibre/plugins";
+import { countAtlasDroppedDiagrams } from "@geolibre/plugins/deckgl-viz/diagrams";
 import { useMemo } from "react";
 import { getAttributePropertyNames } from "../../../lib/expression-inputs";
 import { buildStyleSuggestions } from "../../../lib/style-suggestions";

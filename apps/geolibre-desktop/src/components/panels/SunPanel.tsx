@@ -10,7 +10,7 @@ import {
   SUN_SPEED_MIN,
   subscribeSunPanel,
   subscribeSunSettings,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/maplibre-sun";
 import { Button, Slider } from "@geolibre/ui";
 import { Clock3, Pause, Play, Repeat, SkipBack, SkipForward, Sun, X } from "lucide-react";
 import { type PointerEvent as ReactPointerEvent, useState, useSyncExternalStore } from "react";
