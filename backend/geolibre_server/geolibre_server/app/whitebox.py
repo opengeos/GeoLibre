@@ -300,8 +300,26 @@ class ExternalRuntimeSession:
         args_json: str,
         callback: Callable[[Any], None] | None = None,
         working_directory: str | None = None,
+        on_process: Callable[[subprocess.Popen[str]], bool] | None = None,
     ) -> str:
-        """Run a Whitebox tool and stream progress events to a callback."""
+        """Run a Whitebox tool and stream progress events to a callback.
+
+        Args:
+            tool_id: Whitebox tool identifier.
+            args_json: JSON-encoded tool arguments.
+            callback: Receives each progress event the runner emits.
+            working_directory: Working directory for the runner subprocess.
+            on_process: Called with the runner subprocess as soon as it starts,
+                so a job can register it for cancellation. Returning True kills
+                the subprocess immediately (the job was cancelled before it
+                started).
+
+        Returns:
+            The runner's JSON result text.
+
+        Raises:
+            RuntimeBootstrapError: If the tool fails, times out or is killed.
+        """
         payload = {
             "include_pro": self.include_pro,
             "tier": self.tier,
@@ -350,6 +368,8 @@ class ExternalRuntimeSession:
                 process.stderr.read()
 
         try:
+            if on_process is not None and on_process(process):
+                _try_kill(process)
             if process.stdout is None:
                 raise RuntimeBootstrapError("Whitebox subprocess stdout is unexpectedly None")
             stderr_thread = threading.Thread(target=_drain_stderr, daemon=True)
@@ -1004,12 +1024,51 @@ def _append_job_message(job_id: str, event: Any) -> None:
     _JOB_MANAGER.append_message(job_id, message)
 
 
+def _is_cancelled(job_id: str) -> bool:
+    """Return True if *job_id* has been marked for cancellation.
+
+    Args:
+        job_id: The Whitebox job id.
+
+    Returns:
+        Whether a client asked to cancel the job.
+    """
+    return _JOB_MANAGER.is_cancelled(job_id)
+
+
+def _cancel_job(job_id: str) -> None:
+    """Stop a pending or running Whitebox job; it then reports ``cancelled``.
+
+    Args:
+        job_id: The Whitebox job id.
+    """
+    _JOB_MANAGER.cancel(job_id)
+
+
+class _JobCancelled(Exception):
+    """Raised inside a job runner once the job has been cancelled."""
+
+
+def _raise_if_cancelled(job_id: str) -> None:
+    """Abort the job runner when the job has been cancelled.
+
+    Args:
+        job_id: The Whitebox job id.
+
+    Raises:
+        _JobCancelled: If a client cancelled the job.
+    """
+    if _is_cancelled(job_id):
+        raise _JobCancelled
+
+
 def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
     """Run a Whitebox job in a background thread."""
     temp_paths: list[Path] = []
     try:
         _job_update(job_id, status="running")
         args, working_directory = _prepare_arguments(request, temp_paths)
+        _raise_if_cancelled(job_id)
         session = create_runtime_session(
             include_pro=request.include_pro,
             tier=request.tier or "open",
@@ -1019,7 +1078,9 @@ def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
             json.dumps(args),
             lambda event: _append_job_message(job_id, event),
             working_directory=working_directory,
+            on_process=lambda process: _JOB_MANAGER.register_process(job_id, process),
         )
+        _raise_if_cancelled(job_id)
         result = _parse_json_maybe(raw_result)
         _ensure_raster_outputs_are_cogs(
             args,
@@ -1027,6 +1088,7 @@ def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
             lambda message: _append_job_message(job_id, message),
             temp_paths,
         )
+        _raise_if_cancelled(job_id)
         _job_update(
             job_id,
             status="succeeded",
@@ -1035,7 +1097,12 @@ def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
                 result, args, request.tool, working_directory=working_directory
             ),
         )
-    except Exception:
+    except Exception as exc:
+        # A cancelled run is killed mid-stream, so the runner reports a failure;
+        # the cancellation, not that failure, is what the client asked for.
+        if isinstance(exc, _JobCancelled) or _is_cancelled(job_id):
+            _job_update(job_id, status="cancelled", error="Cancelled.")
+            return
         # The exception (a RuntimeBootstrapError) carries the subprocess's full
         # traceback and interpreter path; log it server-side and surface only a
         # generic message so /run and /jobs/{id} don't leak internals to clients
@@ -1048,6 +1115,7 @@ def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
             error="Tool execution failed. See the sidecar logs for details.",
         )
     finally:
+        _JOB_MANAGER.clear_process(job_id)
         for path in temp_paths:
             if path.is_dir():
                 shutil.rmtree(path, ignore_errors=True)
@@ -1144,6 +1212,31 @@ def whitebox_job(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@router.post("/jobs/{job_id}/cancel")
+def whitebox_cancel(job_id: str):
+    """Request cancellation of a pending or running Whitebox job.
+
+    Cancelling a job that has already finished is a no-op that returns its final
+    state, so a client racing completion never sees an error. Cancellation is
+    best-effort: work already completing may still report success, and completed
+    output is not rolled back. The response is the current state; clients should
+    keep polling until a terminal state.
+
+    Args:
+        job_id: The Whitebox job id.
+
+    Returns:
+        The job's current state.
+
+    Raises:
+        HTTPException: 404 if the job is unknown (or owned by another tenant).
+    """
+    if _JOB_MANAGER.get(job_id) is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _cancel_job(job_id)
+    return _JOB_MANAGER.get(job_id)
 
 
 def _normalize_output_path(path: str) -> str:

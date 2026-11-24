@@ -265,7 +265,7 @@ export function DesktopShell({
   // the Raster Subset panel and opened from the Add Data menu in the toolbar.
   const [basemapExtractOpen, setBasemapExtractOpen] = useState(false);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
-  const layers = useAppStore((s) => s.layers);
+  const layerCount = useAppStore((s) => s.layers.length);
   // Register the Browser as a movable/dockable right panel; its body is portaled
   // into a dedicated content host (below) that the dock slots adopt.
   useRegisterBrowserPanel();
@@ -292,7 +292,6 @@ export function DesktopShell({
   const replaceStylePanelId = useReplaceStylePanelId();
   const replaceLayersPanelId = useReplaceLayersPanelId();
   const layerRefresh = useLayerRefresh({
-    layers,
     isCollapsed:
       layoutOptions.panelsHidden ||
       layoutOptions.viewer ||
@@ -1214,7 +1213,7 @@ export function DesktopShell({
         <MobileBottomNav
           activeTab={mobile.activeMobileTab}
           onSelectTab={mobile.handleSelectMobileTab}
-          layerCount={layers.length}
+          layerCount={layerCount}
           showLayers={layoutOptions.layerPanelVisible}
           showStyle={layoutOptions.stylePanelVisible}
           showAdd={layoutOptions.toolbarVisible && mobileCanAddData}
