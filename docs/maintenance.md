@@ -393,6 +393,11 @@ black — it declines the stack.
   `#eee` row rules for a white popup, which is near-invisible on the dark
   popover. `tests/upstream-contracts.test.ts` checks the class still ships;
   after a bump, click a Zarr layer in dark mode and confirm the popup reads.
+- **The PMTiles feature-picking popup classes** (`maplibre-gl-pmtiles-popup*`)
+  are re-themed in `index.css` the same way: upstream hardcodes a white table
+  with a `#f0f0f0` header. `tests/upstream-contracts.test.ts` checks the
+  classes still ship; after a bump, enable feature picking on a PMTiles layer,
+  click a feature in dark mode and confirm the table follows the theme.
 
 ### `maplibre-gl-basemap-control` (`packages/plugins/package.json`)
 
