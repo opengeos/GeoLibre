@@ -16,7 +16,7 @@
     "geotiff": "^3.0.5",
     "i18next": "^27.2.2",
     "lucide": "^1.77.0",
-    "maplibre-gl": "^6.19.0",
+    "maplibre-gl": "6.18.0",
     "pmtiles": "^4.5.0",
     "zod": "^4.6.7"
   },

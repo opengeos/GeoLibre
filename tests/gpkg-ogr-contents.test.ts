@@ -14,7 +14,7 @@ let SQL: SqlJsStatic;
 
 before(async () => {
   const wasmPath = require.resolve("sql.js/dist/sql-wasm.wasm");
-  SQL = await initSqlJs({ locateFile: () => wasmPath });
+  SQL = await initSqlJs({ locateFile: () => wasmPath, useOldExtensionFunctions: true });
 });
 
 /** Build a minimal in-memory GeoPackage and return its bytes. */

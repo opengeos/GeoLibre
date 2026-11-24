@@ -89,6 +89,12 @@ fail again with "Unsupported data format/bitsPerSample";
 
 ### `maplibre-gl`
 
+MapLibre is pinned to 6.18.0 and its style spec to 26.7.0. Before upgrading,
+adapt `map-transform-compat.ts` and the deck.gl integrations to the camera API
+that replaces `_camera.transform` in 6.19, and verify blend composites against
+the renderer as well as the style spec. The 26.9 spec adds a fill-extrusion
+composite that the current renderer integration does not elect.
+
 - **`GLOBE_CONTROL_TOGGLE_SELECTOR`** (`packages/map/src/globe-control-toggle.ts`)
   mirrors the class names MapLibre's own `GlobeControl` puts on its toggle button
   — `maplibregl-ctrl-globe` and `maplibregl-ctrl-globe-enabled`, swapped on every

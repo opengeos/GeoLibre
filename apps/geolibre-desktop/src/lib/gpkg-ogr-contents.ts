@@ -190,7 +190,7 @@ export async function loadSqlJs(): Promise<SqlJsStatic> {
       // Bundled locally by Vite (works offline and in the Tauri webview).
       import("sql.js/dist/sql-wasm.wasm?url"),
     ]);
-    return initSqlJs({ locateFile: () => wasmUrl });
+    return initSqlJs({ locateFile: () => wasmUrl, useOldExtensionFunctions: true });
   })();
   try {
     return await sqlJsPromise;
