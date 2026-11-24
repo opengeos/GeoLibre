@@ -12,6 +12,11 @@
  * `tests/print-layout-cartography.test.ts`; `print-layout.ts` does the drawing.
  */
 
+import type {
+  PrintLayoutGridType,
+  PrintLayoutElementOffset,
+  PrintLayoutFrameBox,
+} from "@geolibre/core";
 import * as mgrsModule from "mgrs";
 import proj4, { type Converter } from "proj4";
 
@@ -41,7 +46,7 @@ export interface Point {
 // ---------------------------------------------------------------------------
 
 /** How the map-frame grid labels its ticks. */
-export type MapGridType = "dms" | "decimal" | "utm" | "mgrs";
+export type MapGridType = PrintLayoutGridType;
 
 /** One side of the map frame. */
 export type FrameEdge = "top" | "bottom" | "left" | "right";
@@ -674,19 +679,10 @@ function mercatorLatFromY(y0: number): number {
  * translation as fractions of the page width/height, and a uniform scale
  * about the element's anchor.
  */
-export interface ElementOffset {
-  dx: number;
-  dy: number;
-  scale: number;
-}
+export type ElementOffset = PrintLayoutElementOffset;
 
 /** A frame placed on the page, as fractions of the page width/height. */
-export interface FrameBox {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+export type FrameBox = PrintLayoutFrameBox;
 
 export const MIN_ELEMENT_SCALE = 0.25;
 export const MAX_ELEMENT_SCALE = 4;

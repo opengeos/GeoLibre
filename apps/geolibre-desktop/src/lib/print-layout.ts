@@ -14,6 +14,7 @@ import {
   getRoundNum,
   scaleDenomination,
   type MapScaleUnit,
+  type PrintLayoutMovableElement,
   type MarkerShape,
 } from "@geolibre/core";
 import { prefersLightForeground } from "./theme-schemes";
@@ -578,7 +579,7 @@ export interface LayoutOptions {
 }
 
 /** Furniture the user can drag and resize on the layout canvas. */
-export type LayoutMovableElement = "title" | "legend" | "scaleBar" | "northArrow" | "footer";
+export type LayoutMovableElement = PrintLayoutMovableElement;
 
 /** Every element the layout reports a box for (furniture plus frames). */
 export type LayoutElementId = LayoutMovableElement | "map" | "inset";

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { PRINT_LAYOUT_INSET_BASEMAPS, type PrintLayoutInsetBasemap } from "@geolibre/core";
@@ -12,6 +13,16 @@ interface InsetMapEditorProps extends LayoutEditorProps {
 /** The overview / inset locator map's basemap, zoom and extent colour (GH #3530). */
 export function InsetMapEditor({ layout, dispatch, georeferenced, status }: InsetMapEditorProps) {
   const { t } = useTranslation();
+  const [zoomDraft, setZoomDraft] = useState(String(-layout.insetZoomOffset));
+  useEffect(() => setZoomDraft(String(-layout.insetZoomOffset)), [layout.insetZoomOffset]);
+  const commitZoom = () => {
+    const value = zoomDraft.trim() ? Number(zoomDraft) : NaN;
+    const normalized = Number.isFinite(value)
+      ? Math.max(0, Math.min(12, value))
+      : -layout.insetZoomOffset;
+    dispatch({ type: "setLayout", patch: { insetZoomOffset: -normalized } });
+    setZoomDraft(String(normalized));
+  };
   return (
     <div className="space-y-3">
       <p className="text-sm font-medium">{t("printLayout.inset.heading")}</p>
@@ -45,15 +56,12 @@ export function InsetMapEditor({ layout, dispatch, georeferenced, status }: Inse
             step={1}
             // Shown as a positive "zoom out by N levels"; stored as a negative
             // offset from the main frame's fitted zoom.
-            value={-layout.insetZoomOffset}
-            onChange={(e) =>
-              dispatch({
-                type: "setLayout",
-                patch: {
-                  insetZoomOffset: -Math.max(0, Math.min(12, Number(e.target.value) || 0)),
-                },
-              })
-            }
+            value={zoomDraft}
+            onChange={(event) => setZoomDraft(event.target.value)}
+            onBlur={commitZoom}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
           />
         </div>
         <div className="space-y-1.5">

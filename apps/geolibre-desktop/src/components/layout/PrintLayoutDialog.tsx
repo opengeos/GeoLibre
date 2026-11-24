@@ -212,6 +212,7 @@ export function PrintLayoutDialog({
     [baseOptions, inset],
   );
 
+  const canGeoPdf = useMemo(() => canGeoreferencePrint(options), [options]);
   const { captureAtlasPage, goToAtlasPage, goToAtlasPageRef } = useAtlasCapture({
     mapControllerRef,
     layout,
@@ -481,7 +482,7 @@ export function PrintLayoutDialog({
           insetReady={insetState.ready}
           ui={state}
           hasCapture={Boolean(captured)}
-          georeferenced={canGeoreferencePrint(options)}
+          georeferenced={canGeoPdf}
           atlasEnabled={atlasEnabled}
           atlas={atlas}
           actions={actions}
