@@ -1,3 +1,4 @@
+import { godsEyeViewRuntime } from "../builtin-plugin-panels";
 import { GODS_EYE_VIEW_PLUGIN_ID } from "../plugin-ids";
 export { GODS_EYE_VIEW_PLUGIN_ID } from "../plugin-ids";
 import { builtInPluginProperties } from "../builtin-plugin-metadata";
@@ -1639,3 +1640,5 @@ export const godsEyeViewPlugin: GeoLibrePlugin = {
     return true;
   },
 };
+
+godsEyeViewRuntime.reattach = reattachGodsEyeView;

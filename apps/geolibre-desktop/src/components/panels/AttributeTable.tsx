@@ -43,7 +43,7 @@ import {
   SKETCHES_SOURCE_KIND,
   getGeometryEditTargetLayerId,
   subscribeGeometryEdit,
-} from "@geolibre/plugins/maplibre-geo-editor";
+} from "@geolibre/plugins/geo-editor-state";
 import {
   stripEditorProperties,
   isInternalEditorProperty,

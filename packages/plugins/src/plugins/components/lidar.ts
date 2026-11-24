@@ -367,6 +367,8 @@ async function openStandaloneLidarControl(
     lidarControlMounted = true;
   }
 
+  // engine-audit-allow: arcgis-null-map: only 2D maps need this projection guard; null is a no-op.
+
   ensureMercatorProjection(app.getMap?.() ?? app.getMapboxMap?.());
   startLidarThemeSync();
   refreshLidarMeasureMirror(app);
@@ -463,6 +465,7 @@ export async function restoreLidarLayers(
     // The deck.gl point-cloud overlay only renders under the Mercator
     // projection (the streaming loader's viewport math breaks under the default
     // globe), matching the USGS LiDAR plugin and the other deck.gl controls.
+    // engine-audit-allow: arcgis-null-map: only 2D maps need this projection guard; null is a no-op.
     ensureMercatorProjection(app.getMap?.() ?? app.getMapboxMap?.());
 
     for (const layer of pending) {

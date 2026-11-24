@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { describe, it } from "node:test";
+import ts from "typescript";
 import { BUILT_IN_PLUGIN_METADATA } from "../packages/plugins/src/builtin-plugin-metadata";
 
 // Cesium-capable plugins must not read the map through MapLibre-only doors
@@ -162,6 +163,8 @@ function resolveImport(fromFile: string, specifier: string): string | null {
  * shaped that way): the manifest with the `engines` declaration is in one
  * file, and the map access is in a helper next to it.
  */
+const runtimeImportsByFile = new Map<string, string[]>();
+
 function importClosure(entry: string): string[] {
   const seen = new Set<string>();
   const pending = [resolve(entry)];
@@ -169,15 +172,63 @@ function importClosure(entry: string): string[] {
     const file = pending.pop()!;
     if (seen.has(file)) continue;
     seen.add(file);
-    const source = blankComments(readFileSync(file, "utf8"));
-    // `from "./x"`, the side-effect form `import "./x"`, and the dynamic
-    // `import("./x")` a plugin uses to defer a heavy helper — all three reach
-    // code that would otherwise sit outside the audit. Either quote style, so
-    // a file that escapes the formatter is still followed.
-    for (const match of source.matchAll(/(?:\bfrom|\bimport)\s*\(?\s*["'](\.[^"']*)["']/g)) {
-      const resolved = resolveImport(file, match[1]);
-      if (resolved) pending.push(resolved);
+    const cached = runtimeImportsByFile.get(file);
+    if (cached) {
+      pending.push(...cached);
+      continue;
     }
+    const targets: string[] = [];
+    const source = ts.createSourceFile(
+      file,
+      readFileSync(file, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const follow = (specifier: string): void => {
+      if (!specifier.startsWith(".")) return;
+      const resolved = resolveImport(file, specifier);
+      if (resolved) targets.push(resolved);
+    };
+    // Type queries in lightweight runtime facades do not evaluate providers.
+    // Follow actual static imports/re-exports and dynamic import calls instead.
+    const visit = (node: ts.Node): void => {
+      if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+        const clause = node.importClause;
+        const bindings = clause?.namedBindings;
+        const typeOnly =
+          clause?.isTypeOnly ||
+          (!clause?.name &&
+            bindings &&
+            ts.isNamedImports(bindings) &&
+            bindings.elements.length > 0 &&
+            bindings.elements.every((entry) => entry.isTypeOnly));
+        if (!typeOnly) follow(node.moduleSpecifier.text);
+      } else if (
+        ts.isExportDeclaration(node) &&
+        node.moduleSpecifier &&
+        ts.isStringLiteral(node.moduleSpecifier)
+      ) {
+        const clause = node.exportClause;
+        const typeOnly =
+          node.isTypeOnly ||
+          (clause &&
+            ts.isNamedExports(clause) &&
+            clause.elements.length > 0 &&
+            clause.elements.every((entry) => entry.isTypeOnly));
+        if (!typeOnly) follow(node.moduleSpecifier.text);
+      } else if (
+        ts.isCallExpression(node) &&
+        node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+        node.arguments[0] &&
+        ts.isStringLiteral(node.arguments[0])
+      ) {
+        follow(node.arguments[0].text);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    runtimeImportsByFile.set(file, targets);
+    pending.push(...targets);
   }
   return [...seen];
 }
@@ -336,6 +387,12 @@ describe("plugin engine audit", () => {
       files.includes(join("vantor", "control.ts")),
       `expected the vantor plugin's own modules in its closure, got: ${files.join(", ")}`,
     );
+  });
+
+  it("does not evaluate Directions through Reverse Geocode's shared type-only runtime facade", () => {
+    const files = importClosure(join(PLUGIN_DIR, "maplibre-reverse-geocode.ts"));
+    assert.ok(files.includes(resolve(PLUGIN_DIR, "../map-mode-state.ts")));
+    assert.ok(!files.includes(join(PLUGIN_DIR, "maplibre-directions.ts")));
   });
 
   it("finds the Mapbox-capable plugins to audit", () => {

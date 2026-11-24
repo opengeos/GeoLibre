@@ -17,24 +17,13 @@ import {
   HALO_EXTENT_MIN,
   HALO_OPACITY_MAX,
   HALO_OPACITY_MIN,
-} from "@geolibre/plugins/maplibre-effects";
+} from "@geolibre/plugins/effects-settings";
 import {
   type EffectsSettings,
   type WeatherAnimationState,
   type WeatherLayerController,
 } from "@geolibre/plugins";
-import {
-  getCloudsAnimationState,
-  setCloudsFrame,
-  subscribeClouds,
-  toggleCloudsPlaying,
-} from "@geolibre/plugins/maplibre-clouds";
-import {
-  getPrecipitationAnimationState,
-  setPrecipitationFrame,
-  subscribePrecipitation,
-  togglePrecipitationPlaying,
-} from "@geolibre/plugins/maplibre-precipitation";
+import { cloudsAnimation, precipitationAnimation } from "@geolibre/plugins/weather-animation";
 
 import { isPluginEngineSupported } from "@geolibre/plugins/runtime";
 
@@ -875,18 +864,8 @@ type WeatherControllerHandle = Pick<
 >;
 
 // Stable module-level controllers so each submenu's subscribe effect runs once.
-const CLOUDS_CONTROLLER: WeatherControllerHandle = {
-  getState: getCloudsAnimationState,
-  setFrame: setCloudsFrame,
-  togglePlaying: toggleCloudsPlaying,
-  subscribe: subscribeClouds,
-};
-const PRECIPITATION_CONTROLLER: WeatherControllerHandle = {
-  getState: getPrecipitationAnimationState,
-  setFrame: setPrecipitationFrame,
-  togglePlaying: togglePrecipitationPlaying,
-  subscribe: subscribePrecipitation,
-};
+const CLOUDS_CONTROLLER: WeatherControllerHandle = cloudsAnimation;
+const PRECIPITATION_CONTROLLER: WeatherControllerHandle = precipitationAnimation;
 
 interface WeatherLayerSubmenuProps {
   label: string;

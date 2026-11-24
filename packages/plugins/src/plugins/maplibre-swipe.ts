@@ -4,6 +4,7 @@ import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { useAppStore } from "@geolibre/core";
 import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, TransformConstrainFunction } from "maplibre-gl";
+import { provideSwipeLoadState } from "../swipe-load-state";
 import {
   SwipeControl,
   type CreateSwipeComparisonMap,
@@ -22,7 +23,7 @@ import {
   getSwipeMaplibreRasters,
   subscribeSwipeCogChanges,
   type SwipeCogRasterSnapshot,
-} from "./maplibre-components";
+} from "./components/cog";
 import { SwipeCogMirror } from "./swipe-cog-mirror";
 import { getRasterMainVisibility, setRasterMainVisibility } from "./maplibre-raster";
 import { setTransientRasterVisibility } from "./raster-layer-sync";
@@ -754,3 +755,5 @@ function areSwipeStatesEqual(
 ): boolean {
   return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 }
+
+provideSwipeLoadState(getSwipeRasterLoadState);

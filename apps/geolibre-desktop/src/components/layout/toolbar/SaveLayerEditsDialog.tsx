@@ -11,7 +11,7 @@ import { useAppCapability, useAppStore, useLayersWhen } from "@geolibre/core";
 import {
   getGeometryEditTargetLayerId,
   subscribeGeometryEdit,
-} from "@geolibre/plugins/maplibre-geo-editor";
+} from "@geolibre/plugins/geo-editor-state";
 import {
   Button,
   Dialog,

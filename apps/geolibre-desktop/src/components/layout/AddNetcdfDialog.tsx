@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { addCloudNetcdfLayer } from "@geolibre/plugins/maplibre-components";
+import { addCloudNetcdfLayer } from "@geolibre/plugins/component-helpers";
 import {
   composeRgbImage,
   crossesAntimeridian,

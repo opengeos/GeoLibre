@@ -1,3 +1,4 @@
+import { sunPanelStore } from "../builtin-plugin-panels";
 import { SUN_PLUGIN_ID } from "../plugin-ids";
 export { SUN_PLUGIN_ID } from "../plugin-ids";
 import { builtInPluginProperties } from "../builtin-plugin-metadata";
@@ -644,6 +645,7 @@ const panelListeners = new Set<() => void>();
 const stateListeners = new Set<() => void>();
 
 function notifyPanel(): void {
+  sunPanelStore.setVisible(panelVisible);
   for (const listener of panelListeners) listener();
 }
 function notifyState(): void {
@@ -811,3 +813,7 @@ export const maplibreSunPlugin: GeoLibrePlugin = {
   },
   applyProjectState: (app: GeoLibreAppAPI, state: unknown) => restoreSun(app, state),
 };
+
+sunPanelStore.runtime.reattach = reattachSun;
+sunPanelStore.runtime.open = openSunPanel;
+sunPanelStore.runtime.close = closeSunPanel;

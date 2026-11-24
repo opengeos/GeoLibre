@@ -3,7 +3,9 @@ import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { getRasterLoadState } from "@geolibre/plugins/maplibre-raster";
 import { getSharedDeckLoadState } from "@geolibre/plugins/shared-deck-overlay";
-import { getSwipeRasterLoadState } from "@geolibre/plugins/maplibre-swipe";
+import { getSwipeRasterLoadState } from "@geolibre/plugins/swipe-load-state";
+import { getPendingBuiltInPluginModuleIds } from "@geolibre/plugins/builtin-plugins";
+import { getPluginManager } from "./usePlugins";
 import { inspectScreenshotLayers, screenshotReadinessEnabled } from "../lib/screenshot-readiness";
 
 /** Opt-in DOM contract for browser automation; adds no pixels to the screenshot. */
@@ -73,8 +75,13 @@ export function useScreenshotReadiness(
       const errors: string[] = [];
       if (loadError) errors.push(loadError);
       const store = useAppStore.getState();
-      const result =
-        cesium && engine && pluginsReady && !projectBusy
+      const manager = getPluginManager();
+      const initializingPlugins =
+        getPendingBuiltInPluginModuleIds().length > 0 ||
+        manager.list().some(({ id }) => manager.pendingActivation(id) !== undefined);
+      const result = initializingPlugins
+        ? { pending: ["Plugin initialization"], errors: [] }
+        : cesium && engine && pluginsReady && !projectBusy
           ? engine.getRenderStatus()
           : map && pluginsReady && !projectBusy
             ? inspectScreenshotLayers(map, store.layers, store.layerGroups, {

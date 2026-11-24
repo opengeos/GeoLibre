@@ -10,7 +10,7 @@ import {
   normalizeImageUrl,
   isRatioHeightInRange,
   parseAspectRatio,
-} from "@geolibre/plugins/maplibre-components";
+} from "@geolibre/plugins/component-helpers";
 import {
   Button,
   Dialog,

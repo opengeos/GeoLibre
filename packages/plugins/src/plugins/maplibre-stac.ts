@@ -1,3 +1,5 @@
+import { consumeStacCatalogRequest, provideStacCatalogRuntime } from "../stac-catalog-request";
+export { cancelStacCatalogRequest, requestStacCatalogUrl } from "../stac-catalog-request";
 import { STAC_PLUGIN_ID } from "../plugin-ids";
 export { STAC_PLUGIN_ID } from "../plugin-ids";
 import { PORTOLAN_PLUGIN_ID } from "../plugin-ids";
@@ -92,7 +94,8 @@ import {
 } from "./stac-render";
 import { el, setDisabled } from "../panel-dom";
 import { addVectorLayersFromUrl } from "./maplibre-vector";
-import { addLidarLayerFromUrl, addZarrRasterLayer } from "./maplibre-components";
+import { addLidarLayerFromUrl } from "./components/lidar";
+import { addZarrRasterLayer } from "./components/zarr";
 import {
   icechunkLayerUrl,
   icechunkTimeAttributesReader,
@@ -496,9 +499,6 @@ let unregisterPanel: (() => void) | null = null;
 let disposePanel: (() => void) | null = null;
 let panelContainer: HTMLElement | null = null;
 let initialCatalogUrl = "";
-// A catalog asked for from outside the panel (the `?stac=` deep link), taking the place of the
-// plugin's own preset on its next activation.
-let requestedCatalogUrl = "";
 // Which createStacPlugin() instance owns the shared state above, since they all share it.
 let activePluginId: string | null = null;
 interface CatalogBrowserOptions {
@@ -2422,31 +2422,14 @@ function mountPanel(container: HTMLElement): void {
   disposePanel = buildPanel(container);
 }
 
-/** Drop a {@link requestStacCatalogUrl} request no activation took up. */
-export function cancelStacCatalogRequest(): void {
-  requestedCatalogUrl = "";
-}
-
-/**
- * Open the STAC Catalogs browser on a catalog, API, or API collection URL and connect to it.
- *
- * Takes effect on the STAC Catalogs plugin's next activation, or at once when it is already active.
- *
- * Args:
- *   url: The STAC URL to connect to.
- */
-export function requestStacCatalogUrl(url: string): void {
-  // Only the STAC Catalogs browser takes the request in place. A sibling's (Planet, Portolan) state
-  // is left for the activation that replaces it, which reads the request.
-  if (activePluginId !== STAC_PLUGIN_ID) {
-    requestedCatalogUrl = url;
-    return;
-  }
+// The lightweight request queue also accepts links before this module loads.
+provideStacCatalogRuntime((url) => {
+  if (activePluginId !== STAC_PLUGIN_ID) return false;
   initialCatalogUrl = url;
   if (panelContainer) mountPanel(panelContainer);
-  // Active with its panel closed: opening the panel mounts it on the requested catalog.
   else appRef?.openRightPanel?.(STAC_PLUGIN_ID);
-}
+  return true;
+});
 
 /**
  * Factory creating a STAC catalog browser plugin instance with optional preset catalog URL.
@@ -2472,8 +2455,8 @@ function createStacPlugin(
     exclusiveGroup: "stac-catalog-browser",
     activate(app) {
       // The `?stac=` request is for the STAC Catalogs browser, never a sibling preset.
-      initialCatalogUrl = (id === STAC_PLUGIN_ID && requestedCatalogUrl) || presetCatalogUrl;
-      if (id === STAC_PLUGIN_ID) requestedCatalogUrl = "";
+      initialCatalogUrl =
+        (id === STAC_PLUGIN_ID && consumeStacCatalogRequest()) || presetCatalogUrl;
       activePluginId = id;
       browserOptions = options;
       appRef = app;

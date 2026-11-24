@@ -32,7 +32,7 @@ import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-me
 import { useAppStore } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { isVectorLayerSelectionCancelled } from "maplibre-gl-vector/errors";
-import { addPMTilesLayerFromUrl } from "./maplibre-components";
+import { addPMTilesLayerFromUrl } from "./components/pmtiles";
 import { addVectorLayerFromUrl } from "./maplibre-vector";
 import {
   canStream,

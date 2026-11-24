@@ -164,11 +164,12 @@ export interface AppApiHost extends Pick<
   | "getLastGeometryEditEnd"
   | "subscribeGeometryEdit"
   | "isPluginEngineSupported"
-  | "maplibreGeoEditorPlugin"
   | "startLayerGeometryEdit"
   | "addLidarLayerFromUrl"
   | "addLidarLayerFromBytes"
 > {
+  /** Metadata needed to decide whether the edit session supports the engine. */
+  maplibreGeoEditorPlugin: Parameters<PluginsModule["isPluginEngineSupported"]>[0];
   /** The shared plugin manager, for `activatePlugin`/`deactivatePlugin`. */
   plugins: Pick<
     PluginManager,

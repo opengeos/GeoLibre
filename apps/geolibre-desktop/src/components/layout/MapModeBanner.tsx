@@ -6,7 +6,7 @@ import {
   isDirectionsRouteLoading,
   removeLastDirectionsWaypoint,
   subscribeDirectionsState,
-} from "@geolibre/plugins/maplibre-directions";
+} from "@geolibre/plugins/map-mode-state";
 import { DIRECTIONS_PLUGIN_ID, REVERSE_GEOCODE_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import type { MapEngine } from "@geolibre/map";
 import { Clock, MapPin, Navigation, Route, Trash2, Undo2, X } from "lucide-react";

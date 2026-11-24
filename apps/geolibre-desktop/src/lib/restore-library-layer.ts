@@ -22,7 +22,7 @@ import {
   ADOPTED_VECTOR_SOURCE_KIND,
   VECTOR_SOURCE_KIND,
 } from "@geolibre/plugins/vector-layer-sync";
-import { LIDAR_SOURCE_KIND, restoreLidarLayers } from "@geolibre/plugins/maplibre-components";
+import { LIDAR_SOURCE_KIND, restoreLidarLayers } from "@geolibre/plugins/component-helpers";
 import {
   PLANETARY_COMPUTER_SOURCE_KIND,
   restorePlanetaryComputerLayers,

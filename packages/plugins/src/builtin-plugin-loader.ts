@@ -40,6 +40,7 @@ export function createBuiltInPluginModules<
 
   return {
     loadModule: load,
+    pendingModuleIds: (): Id[] => [...pending.keys()],
     peekModule: <Key extends Id>(id: Key): Module<Key> | undefined =>
       loaded.get(id) as Module<Key> | undefined,
     // A failed initializer remains required until its host replaces it: never

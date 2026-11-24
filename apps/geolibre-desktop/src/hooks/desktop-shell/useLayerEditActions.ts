@@ -1,13 +1,14 @@
+import { builtInPluginMetadata } from "@geolibre/plugins/builtin-plugin-metadata";
+import { GEO_EDITOR_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import { shouldZoomToNewLayers, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { arcGISLayerCreationTemplates } from "@geolibre/plugins/arcgis-defaults";
 import {
   endLayerGeometryEdit,
   getGeometryEditTargetLayerId,
-  maplibreGeoEditorPlugin,
   selectGeometryEditFeature,
   startLayerGeometryEdit,
-} from "@geolibre/plugins/maplibre-geo-editor";
+} from "@geolibre/plugins/geo-editor-state";
 import { isPluginEngineSupported } from "@geolibre/plugins/runtime";
 import type { TFunction } from "i18next";
 import { type Dispatch, type RefObject, type SetStateAction, useCallback, useRef } from "react";
@@ -17,6 +18,7 @@ import {
 } from "../../lib/geometry-edit-session";
 import { useCreationTemplatePrompt } from "../useCreationTemplatePrompt";
 import { createAppAPI, getPluginManager } from "../usePlugins";
+const maplibreGeoEditorPlugin = builtInPluginMetadata(GEO_EDITOR_PLUGIN_ID);
 
 const GEOMETRY_EDIT_START_ERRORS = {
   "unsupported-renderer": "renderer.pluginUnsupported",

@@ -3,7 +3,7 @@ import { rendererCapabilities, type MapEngine } from "@geolibre/map";
 import {
   addFeatureToGeoEditor,
   isGeoEditorAvailableForImport,
-} from "@geolibre/plugins/maplibre-geo-editor";
+} from "@geolibre/plugins/geo-editor-state";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import type { Geometry, Position } from "geojson";
 import { Compass, Crosshair, Layers, PenLine, RotateCcw, Route, Undo2, X } from "lucide-react";

@@ -1,4 +1,5 @@
 import { DIRECTIONS_PLUGIN_ID } from "../plugin-ids";
+import { provideDirectionsRuntime } from "../map-mode-state";
 export { DIRECTIONS_PLUGIN_ID } from "../plugin-ids";
 import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import type MapLibreGlDirections from "@maplibre/maplibre-gl-directions";
@@ -380,3 +381,14 @@ export const maplibreDirectionsPlugin: GeoLibrePlugin = {
   activate: (app: GeoLibreAppAPI) => attach(app),
   deactivate: (app: GeoLibreAppAPI) => teardown(app),
 };
+
+provideDirectionsRuntime({
+  getDirectionsWaypointCount,
+  getDirectionsRouteMetrics,
+  isDirectionsRouteLoading,
+  isDirectionsRemovalInFlight,
+  removeLastDirectionsWaypoint,
+  clearDirectionsWaypoints,
+  subscribeDirectionsState,
+  restoreDirections,
+});

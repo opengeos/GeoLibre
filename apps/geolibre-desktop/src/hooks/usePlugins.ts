@@ -1,4 +1,5 @@
 import { BUILT_IN_PLUGINS } from "@geolibre/plugins/builtin-plugins";
+import { builtInPluginMetadata } from "@geolibre/plugins/builtin-plugin-metadata";
 import { configureHostPluginModule as configureBuiltInPluginModule } from "../lib/configure-plugin-module";
 import { setOverpassEndpoint } from "@geolibre/plugins/osm-downloader-api";
 import { useAppStore } from "@geolibre/core";
@@ -49,25 +50,27 @@ import {
   setZarrLocalStoreProvider,
   addLidarLayerFromUrl,
   addLidarLayerFromBytes,
-} from "@geolibre/plugins/maplibre-components";
+} from "@geolibre/plugins/component-helpers";
 import {
   buildSelectorTimeBinding,
   registerTemporalLayer,
   unregisterTemporalLayer,
 } from "@geolibre/plugins/temporal-layers";
-import { isTimeSliderIdle } from "@geolibre/plugins/maplibre-time-slider";
+import { isTimeSliderIdle } from "@geolibre/plugins/time-slider-state";
 import {
   TIME_SLIDER_PLUGIN_ID,
   SWIPE_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
+  EFFECTS_PLUGIN_ID,
+  GEO_EDITOR_PLUGIN_ID,
 } from "@geolibre/plugins/plugin-ids";
 import { type TemporalLayerAdapter, type EffectsSettings } from "@geolibre/plugins";
 import {
-  maplibreEffectsPlugin,
-  getEffectsSettings,
-  setEffectsSettings,
-} from "@geolibre/plugins/maplibre-effects";
+  DEFAULT_EFFECTS_SETTINGS,
+  normalizeEffectsSettings,
+  effectsSettingsEqual,
+} from "@geolibre/plugins/effects-settings";
 import { registerSentinel2CompositeProtocol } from "@geolibre/plugins/sentinel2-composite";
 import { registerStacRenderProtocol } from "@geolibre/plugins/stac-render";
 import { registerJaxaEarthProtocol } from "@geolibre/plugins/jaxa-earth-api";
@@ -77,7 +80,7 @@ import {
   getLastGeometryEditEnd,
   subscribeGeometryEdit,
   startLayerGeometryEdit,
-} from "@geolibre/plugins/maplibre-geo-editor";
+} from "@geolibre/plugins/geo-editor-state";
 import { getDeploymentPolicy, readDeploymentEnvValue } from "../lib/deployment-env";
 import type { DeploymentPolicy } from "../lib/deployment-policy";
 import { evaluatePlugin, type PluginPolicyDenial } from "../lib/plugin-policy";
@@ -757,7 +760,13 @@ export function usePluginRegistry() {
       }
       persistProjectPluginState(before);
     },
-    getEffectsSettings,
+    getEffectsSettings: () =>
+      normalizeEffectsSettings(
+        manager
+          .list()
+          .find(({ id }) => id === EFFECTS_PLUGIN_ID)
+          ?.getProjectState?.(),
+      ),
     // Live preview: push the appearance change straight to the engine for an
     // instant redraw, but do NOT persist. A color-picker drag or slider scrub
     // fires this every frame, so keeping persistence out avoids marking the
@@ -767,9 +776,19 @@ export function usePluginRegistry() {
       // canvas code (engine.applySettings) that can throw and escape React's
       // error boundaries; surface it in diagnostics instead of crashing.
       try {
-        setEffectsSettings(next);
+        const plugin = manager.list().find(({ id }) => id === EFFECTS_PLUGIN_ID);
+        if (!plugin?.applyProjectState)
+          throw new Error("The effects settings provider is unavailable.");
+        const settings = normalizeEffectsSettings({
+          ...normalizeEffectsSettings(plugin.getProjectState?.()),
+          ...next,
+        });
+        plugin.applyProjectState(
+          createAppAPI(),
+          effectsSettingsEqual(settings, DEFAULT_EFFECTS_SETTINGS) ? undefined : settings,
+        );
       } catch (error) {
-        reportPluginError(maplibreEffectsPlugin.id, "preview-effects", error);
+        reportPluginError(EFFECTS_PLUGIN_ID, "preview-effects", error);
       }
     },
     // Commit: called once when an edit gesture ends (slider release, color
@@ -778,15 +797,17 @@ export function usePluginRegistry() {
     // no-op gesture does not flag the project dirty.
     commitEffectsSettings: () => {
       try {
-        const storedSettings =
-          useAppStore.getState().projectPlugins?.settings?.[maplibreEffectsPlugin.id];
-        const currentSettings = maplibreEffectsPlugin.getProjectState?.();
+        const storedSettings = useAppStore.getState().projectPlugins?.settings?.[EFFECTS_PLUGIN_ID];
+        const currentSettings = manager
+          .list()
+          .find(({ id }) => id === EFFECTS_PLUGIN_ID)
+          ?.getProjectState?.();
         if (JSON.stringify(storedSettings ?? null) === JSON.stringify(currentSettings ?? null)) {
           return;
         }
         useAppStore.getState().setProjectPlugins(projectPluginStateSnapshot());
       } catch (error) {
-        reportPluginError(maplibreEffectsPlugin.id, "commit-effects", error);
+        reportPluginError(EFFECTS_PLUGIN_ID, "commit-effects", error);
       }
     },
   };
@@ -1294,7 +1315,7 @@ const appApiHost: AppApiHost = {
   getLastGeometryEditEnd,
   subscribeGeometryEdit,
   isPluginEngineSupported,
-  maplibreGeoEditorPlugin: manager.list().find((plugin) => plugin.id === "maplibre-gl-geo-editor")!,
+  maplibreGeoEditorPlugin: builtInPluginMetadata(GEO_EDITOR_PLUGIN_ID),
   startLayerGeometryEdit,
   addLidarLayerFromUrl,
   addLidarLayerFromBytes,
