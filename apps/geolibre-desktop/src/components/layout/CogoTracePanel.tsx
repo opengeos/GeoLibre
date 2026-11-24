@@ -4,7 +4,16 @@ import { addFeatureToGeoEditor, isGeoEditorAvailableForImport } from "@geolibre/
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import type { Geometry, Position } from "geojson";
 import { Compass, Crosshair, Layers, PenLine, RotateCcw, Route, Undo2, X } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type SetStateAction,
+  type RefObject,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI, getPluginManager } from "../../hooks/usePlugins";
 import {
@@ -91,6 +100,7 @@ type StatusKey =
   | "savedLayer";
 
 const UNITS = Object.keys(COGO_DISTANCE_UNITS) as CogoDistanceUnit[];
+const snapBounds = new WeakMap<object, WeakMap<Geometry, [number, number, number, number]>>();
 
 /** Visible vector features near a screen point, for snapping. */
 function snapCandidates(
@@ -109,26 +119,31 @@ function snapCandidates(
   const east = Math.max(...corners.map((p) => p.lng));
   const south = Math.min(...corners.map((p) => p.lat));
   const north = Math.max(...corners.map((p) => p.lat));
-  const near = (geometry: Geometry) => {
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const path of geometryPaths(geometry)) {
-      for (const [x, y] of path) {
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x > maxX) maxX = x;
-        if (y > maxY) maxY = y;
-      }
+  const near = (geometry: Geometry, cache: WeakMap<Geometry, [number, number, number, number]>) => {
+    let box = cache.get(geometry);
+    if (!box) {
+      box = [Infinity, Infinity, -Infinity, -Infinity];
+      for (const path of geometryPaths(geometry))
+        for (const [x, y] of path) {
+          box[0] = Math.min(box[0], x);
+          box[1] = Math.min(box[1], y);
+          box[2] = Math.max(box[2], x);
+          box[3] = Math.max(box[3], y);
+        }
+      cache.set(geometry, box);
     }
-    return minX <= east && maxX >= west && minY <= north && maxY >= south;
+    return box[0] <= east && box[2] >= west && box[1] <= north && box[3] >= south;
   };
   const geometries: Geometry[] = [];
   for (const layer of useAppStore.getState().layers) {
     if (!layer.visible || !layer.geojson?.features?.length) continue;
+    let cache = snapBounds.get(layer.geojson);
+    if (!cache) {
+      cache = new WeakMap<Geometry, [number, number, number, number]>();
+      snapBounds.set(layer.geojson, cache);
+    }
     for (const feature of layer.geojson.features) {
-      if (feature.geometry && near(feature.geometry)) geometries.push(feature.geometry);
+      if (feature.geometry && near(feature.geometry, cache)) geometries.push(feature.geometry);
     }
   }
   return geometries;
@@ -151,7 +166,14 @@ function CogoTraceTool({
 
   // Each action (a pick, a leg, a trace) adds one step, so Undo removes a
   // whole trace rather than one of its many vertices.
-  const [steps, setSteps] = useState<Position[][]>(() => (seed ? [[[seed.lng, seed.lat]]] : []));
+  const draftRevision = useRef(0);
+  const [steps, setStepsState] = useState<Position[][]>(() =>
+    seed ? [[[seed.lng, seed.lat]]] : [],
+  );
+  const setSteps = useCallback((next: SetStateAction<Position[][]>) => {
+    draftRevision.current += 1;
+    setStepsState(next);
+  }, []);
   const [kind, setKind] = useState<"line" | "polygon">("polygon");
   const [mode, setMode] = useState<PickMode>(seed ? "idle" : "start");
   const [traceStart, setTraceStart] = useState<TraceStart | null>(null);
@@ -180,7 +202,7 @@ function CogoTraceTool({
     setMode(seed ? "idle" : "start");
     setTraceStart(null);
     setStatus(null);
-  }, [request, seed]);
+  }, [request, seed, setSteps]);
 
   const number = useMemo(
     () => new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 }),
@@ -203,7 +225,11 @@ function CogoTraceTool({
       const candidates =
         current.mode === "traceTo" && current.traceStart
           ? [current.traceStart.geometry]
-          : snapCandidates(map, event.point, current.tolerance);
+          : snapCandidates(map, event.point, current.tolerance).filter(
+              (geometry) =>
+                current.mode !== "traceFrom" ||
+                (geometry.type !== "Point" && geometry.type !== "MultiPoint"),
+            );
       const snap = snapToGeometries(
         event.point,
         candidates,
@@ -261,7 +287,7 @@ function CogoTraceTool({
       releaseClaim();
       canvas.style.cursor = "";
     };
-  }, [mapControllerRef, mapReadyGeneration]);
+  }, [mapControllerRef, mapReadyGeneration, setSteps]);
 
   // Crosshair while a click is expected.
   useEffect(() => {
@@ -324,7 +350,7 @@ function CogoTraceTool({
     setSteps((previous) => [...previous, [next]]);
     setDistance("");
     setStatus(null);
-  }, [vertices, bearing, distance, unit]);
+  }, [vertices, bearing, distance, unit, setSteps]);
 
   const finish = useCallback(
     async (target: "editor" | "layer") => {
@@ -343,6 +369,7 @@ function CogoTraceTool({
         setStatus({ key: "savedLayer", kind: "info" });
         return;
       }
+      const submittedRevision = draftRevision.current;
       setBusy(true);
       try {
         if (!isGeoEditorAvailableForImport()) {
@@ -355,9 +382,11 @@ function CogoTraceTool({
           setStatus({ key: "editorUnavailable", kind: "error" });
           return;
         }
-        setSteps([]);
-        setMode("start");
-        setStatus({ key: "addedToEditor", kind: "info" });
+        if (draftRevision.current === submittedRevision) {
+          setSteps([]);
+          setMode("start");
+          setStatus({ key: "addedToEditor", kind: "info" });
+        }
       } catch (error) {
         console.warn("COGO: adding the feature to the editor failed", error);
         setStatus({ key: "editorUnavailable", kind: "error" });
@@ -365,20 +394,20 @@ function CogoTraceTool({
         setBusy(false);
       }
     },
-    [vertices, kind, t, mapControllerRef],
+    [vertices, kind, t, mapControllerRef, setSteps],
   );
 
   const undo = useCallback(() => {
     setSteps((previous) => previous.slice(0, -1));
     setStatus(null);
-  }, []);
+  }, [setSteps]);
 
   const clear = useCallback(() => {
     setSteps([]);
     setTraceStart(null);
     setMode("start");
     setStatus(null);
-  }, []);
+  }, [setSteps]);
 
   let hint: string;
   if (mode === "start") hint = t("cogo.hint.start");
@@ -463,7 +492,10 @@ function CogoTraceTool({
           <Select
             id={`${ids}-kind`}
             value={kind}
-            onChange={(event) => setKind(event.target.value as "line" | "polygon")}
+            onChange={(event) => {
+              draftRevision.current += 1;
+              setKind(event.target.value as "line" | "polygon");
+            }}
             className="h-8"
           >
             <option value="polygon">{t("cogo.polygon")}</option>

@@ -221,3 +221,16 @@ describe("tracePath", () => {
     assert.deepEqual(traced[2], [1, 1]);
   });
 });
+
+it("traces a complete ring for coincident endpoints in long-way mode", () => {
+  const ring = [
+    [0, 0],
+    [1, 0],
+    [1, 1],
+    [0, 1],
+    [0, 0],
+  ];
+  const location = { path: 0, segment: 0, t: 0 };
+  assert.deepEqual(tracePath(ring, location, location, false), [[0, 0]]);
+  assert.deepEqual(tracePath(ring, location, location, true), ring);
+});

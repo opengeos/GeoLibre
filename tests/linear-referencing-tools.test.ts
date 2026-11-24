@@ -405,3 +405,32 @@ it("places zero-length line events as points and warns about repeated route IDs"
   assert.match(result.logs.join("\n"), /multiple features/);
   assert.ok(!result.logs.some((message) => message.includes("outside their route")));
 });
+
+it("locates nearby routes across the antimeridian and reports missing IDs", async () => {
+  const routes = layerOf("routes", [
+    {
+      type: "Feature",
+      properties: { id: "A" },
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [-179.999, -0.01],
+          [-179.999, 0.01],
+        ],
+      },
+    },
+    { type: "Feature", properties: {}, geometry: EQUATOR_LINE },
+  ]);
+  const points = layerOf("points", [
+    { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [179.999, 0] } },
+  ]);
+  const result = await run(locateFeaturesAlongRoutesTool.run, [routes, points], {
+    layer: "points",
+    routes: "routes",
+    routeIdField: "id",
+    radius: 500,
+  });
+  assert.equal(result.results[0].features.length, 1);
+  assert.ok(Number(result.results[0].features[0].properties?.distance_m) < 250);
+  assert.match(result.logs.join("\n"), /empty route ID/);
+});

@@ -388,6 +388,14 @@ export function tracePath(
     points.push(pointAt(path, locationOf(b)));
     return withoutRepeats(points);
   };
+  if (Math.abs((((e - s) % n) + n) % n) < 1e-12) {
+    const origin = pointAt(path, locationOf(s));
+    if (!longWay) return [origin];
+    const circuit: Position[] = [origin];
+    for (let i = Math.floor(s) + 1; i < s + n; i++) circuit.push(path[i % n]);
+    circuit.push(origin);
+    return withoutRepeats(circuit);
+  }
   const ahead = forward(s, e);
   const behind = forward(e, s).reverse();
   const aheadShorter = pathLength(ahead) <= pathLength(behind);

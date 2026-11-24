@@ -171,13 +171,14 @@ function locatePointInParts(parts: Position[][] | null, point: Position): RouteL
     for (let i = 0; i + 1 < part.length; i++) {
       const a = part[i];
       const b = part[i + 1];
-      const ax = (a[0] - point[0]) * kx;
+      const ax = (((a[0] - point[0] + 540) % 360) - 180) * kx;
       const ay = a[1] - point[1];
-      const dx = (b[0] - a[0]) * kx;
+      const longitudeSpan = ((b[0] - a[0] + 540) % 360) - 180;
+      const dx = longitudeSpan * kx;
       const dy = b[1] - a[1];
       const lengthSq = dx * dx + dy * dy;
       const t = lengthSq === 0 ? 0 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / lengthSq));
-      const lng = a[0] + t * (b[0] - a[0]);
+      const lng = a[0] + t * longitudeSpan;
       const lat = a[1] + t * (b[1] - a[1]);
       const distance = haversineMeters(point, [lng, lat]);
       if (best && distance >= best.distance) continue;
@@ -239,7 +240,12 @@ export function sliceRouteByMeasure(
         const t = mb === ma ? 0 : (m - ma) / (mb - ma);
         const za = a[2] ?? 0;
         const zb = b[2] ?? 0;
-        return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), za + t * (zb - za), m];
+        return [
+          a[0] + t * (((b[0] - a[0] + 540) % 360) - 180),
+          a[1] + t * (b[1] - a[1]),
+          za + t * (zb - za),
+          m,
+        ];
       };
       const start = ma >= lo && ma <= hi ? a : at(ma < lo ? lo : hi);
       const end = mb >= lo && mb <= hi ? b : at(mb < lo ? lo : hi);
@@ -437,10 +443,14 @@ function collectRoutes(
 ): Map<string, IndexedRoute[]> {
   const routes = new Map<string, IndexedRoute[]>();
   let fallback = 0;
+  let missingId = 0;
   fc.features.forEach((feature, index) => {
     if (!lineParts(feature.geometry)) return;
     const id = routeIdOf(feature, routeIdField, index);
-    if (!id) return;
+    if (!id) {
+      missingId++;
+      return;
+    }
     const source = lineParts(feature.geometry);
     const parts = measuredParts(feature.geometry);
     if (!source || !parts) return;
@@ -457,12 +467,13 @@ function collectRoutes(
     list.push({ id, geometry: { type: "MultiLineString", coordinates: parts }, parts, bounds });
     routes.set(id, list);
   });
+  if (missingId) log(`Skipped ${missingId} route(s) with an empty route ID`);
   if (fallback)
     log(`${fallback} route(s) have incomplete M values and were measured by length in metres`);
   const repeated = [...routes.values()].filter((parts) => parts.length > 1).length;
   if (repeated)
     log(
-      `${repeated} route ID(s) occur on multiple features; event measures use the first matching feature`,
+      `${repeated} route ID(s) occur on multiple features; event measures use the first feature whose measure range covers the event`,
     );
   return routes;
 }
@@ -543,7 +554,9 @@ export const locateFeaturesAlongRoutesTool: ProcessingAlgorithm = {
           if (position[1] < south - pad || position[1] > north + pad) continue;
           const lat = Math.max(Math.abs(position[1]), Math.abs(south), Math.abs(north));
           const padX = pad / Math.max(1e-6, Math.cos((Math.min(90, lat) * Math.PI) / 180));
-          if (east - west < 180 && (position[0] < west - padX || position[0] > east + padX))
+          const nearLongitude =
+            position[0] + 360 * Math.round(((west + east) / 2 - position[0]) / 360);
+          if (east - west < 180 && (nearLongitude < west - padX || nearLongitude > east + padX))
             continue;
           const location = locatePointInParts(route.parts, position);
           if (location && location.distance <= radius)

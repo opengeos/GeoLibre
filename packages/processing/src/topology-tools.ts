@@ -18,6 +18,7 @@
 //   coverage rules wbtopology cannot fix, client-side with polyclip-ts (the
 //   clipper behind @turf/union and @turf/difference).
 import difference from "@turf/difference";
+import intersect from "@turf/intersect";
 import { featureCollection } from "@turf/helpers";
 import union from "@turf/union";
 import type {
@@ -815,9 +816,20 @@ export function resolvePolygonOverlaps(
       );
       geometry = result?.geometry ?? null;
       if (geometry && isUsableGeometry(geometry)) {
-        // A blocker that only touched the polygon leaves its area unchanged:
-        // keep the original coordinates rather than the clipper's rewrite.
-        if (polygonGeodesicArea(geometry) < entry.area * (1 - 1e-9)) modified += 1;
+        // Boundary contact has no polygonal intersection. Preserve the original
+        // coordinates only when no area was clipped.
+        if (
+          blockers.some(
+            (blocker) =>
+              intersect(
+                featureCollection<Polygon | MultiPolygon>([
+                  entry.feature,
+                  asFeature(blocker.geometry),
+                ]),
+              ) !== null,
+          )
+        )
+          modified += 1;
         else geometry = entry.feature.geometry;
       }
     }
@@ -850,6 +862,8 @@ export interface FillGapsResult {
   skippedLarge: number;
   /** Holes bounded by a single polygon (its own interior ring), left alone. */
   skippedHoles: number;
+  /** Gaps whose enclosing boundary could not be assigned reliably. */
+  skippedUnassigned: number;
 }
 
 function pointSegmentDistance(p: Position, a: Position, b: Position): number {
@@ -942,6 +956,7 @@ export function fillPolygonGaps(fc: FeatureCollection, maxArea: number): FillGap
     filled: 0,
     skippedLarge: 0,
     skippedHoles: 0,
+    skippedUnassigned: 0,
   };
   if (polygons.length === 0) return unchanged;
   const merged =
@@ -958,6 +973,7 @@ export function fillPolygonGaps(fc: FeatureCollection, maxArea: number): FillGap
   let filled = 0;
   let skippedLarge = 0;
   let skippedHoles = 0;
+  let skippedUnassigned = 0;
   for (const rings of parts) {
     for (const hole of rings.slice(1)) {
       const vacant = difference(
@@ -985,7 +1001,9 @@ export function fillPolygonGaps(fc: FeatureCollection, maxArea: number): FillGap
         // every neighbour vertex lying on it.
         const neighbourVertices = neighbours.flatMap((n) => polygonVertices(n.feature.geometry));
         const shared = new Map<number, number>();
-        for (const boundary of gap.coordinates) {
+        let unassigned = false;
+        // Interior islands occupy the gap but cannot claim its enclosing shell.
+        for (const boundary of gap.coordinates.slice(0, 1)) {
           for (let i = 0; i + 1 < boundary.length; i++) {
             const pieces = splitSegmentAt(boundary[i], boundary[i + 1], neighbourVertices);
             for (let j = 0; j + 1 < pieces.length; j++) {
@@ -1002,10 +1020,17 @@ export function fillPolygonGaps(fc: FeatureCollection, maxArea: number): FillGap
                   owner = n.index;
                 }
               }
-              if (owner === null) continue;
+              if (owner === null) {
+                unassigned = true;
+                continue;
+              }
               shared.set(owner, (shared.get(owner) ?? 0) + segmentLengthM(a, b));
             }
           }
+        }
+        if (unassigned || shared.size === 0) {
+          skippedUnassigned++;
+          continue;
         }
         if (shared.size < 2) {
           // Bounded by one polygon only: an interior ring of that polygon.
@@ -1029,7 +1054,7 @@ export function fillPolygonGaps(fc: FeatureCollection, maxArea: number): FillGap
     }
   }
 
-  if (filled === 0) return { ...unchanged, skippedLarge, skippedHoles };
+  if (filled === 0) return { ...unchanged, skippedLarge, skippedHoles, skippedUnassigned };
   const features = fc.features.map((feature, index) => {
     const gaps = additions.get(index);
     if (!gaps || !isPolygonFeature(feature)) return feature;
@@ -1043,6 +1068,7 @@ export function fillPolygonGaps(fc: FeatureCollection, maxArea: number): FillGap
     filled,
     skippedLarge,
     skippedHoles,
+    skippedUnassigned,
   };
 }
 
@@ -1153,6 +1179,10 @@ export const fillPolygonGapsTool: ProcessingAlgorithm = {
     if (result.skippedHoles) {
       ctx.log(`${result.skippedHoles} hole(s) inside a single polygon were left alone`);
     }
+    if (result.skippedUnassigned)
+      ctx.log(
+        `${result.skippedUnassigned} gap(s) have uncertain boundary owners and were left open`,
+      );
     if (result.filled === 0) {
       ctx.log("No gaps to fill");
       return;

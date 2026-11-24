@@ -288,9 +288,32 @@ it("keeps occupied islands out of filled gaps", () => {
   const island = rect(1.25, 1.5, 1.75, 2.5, { name: "island" });
   const result = fillPolygonGaps(fcOf(BOTTOM, TOP, LEFT, RIGHT_LOW, RIGHT_HIGH, island), 0);
   assert.equal(result.filled, 1);
-  assert.ok(planarArea(byName(result.collection, "island")) >= 0.5);
+  assert.equal(planarArea(byName(result.collection, "island")), 0.5);
+  assert.equal(planarArea(byName(result.collection, "left")), 3.5);
   assert.equal(
     result.collection.features.reduce((sum, feature) => sum + planarArea(feature), 0),
     12,
   );
+});
+
+it("keeps clipped topology when new vertices increase the geodesic area estimate", () => {
+  const first = rect(4.9, 29.9, 5.1, 30.1, { name: "first" });
+  const triangle: Feature<Polygon> = {
+    type: "Feature",
+    properties: { name: "triangle" },
+    geometry: {
+      type: "Polygon",
+      coordinates: [
+        [
+          [0, 0],
+          [10, 0],
+          [10, 60],
+          [0, 0],
+        ],
+      ],
+    },
+  };
+  const result = resolvePolygonOverlaps(fcOf(first, triangle), { rule: "first" });
+  assert.equal(result.modified, 1);
+  assert.ok(planarArea(byName(result.collection, "triangle")) < 300);
 });
