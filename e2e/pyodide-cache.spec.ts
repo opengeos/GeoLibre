@@ -18,13 +18,8 @@ async function expectModuleLoads(page: Page): Promise<void> {
   ).toBe(true);
 }
 
-test("classic worker and console imports share CORS-readable offline engine assets", async ({
-  page,
-  context,
-}) => {
-  test.setTimeout(120_000);
-  await waitForServiceWorker(page);
-  const workerResult = await page.evaluate(async (url) => {
+async function loadClassicWorker(page: Page): Promise<string> {
+  return page.evaluate(async (url) => {
     const source = `try { importScripts(${JSON.stringify(url)}); postMessage("loaded"); } catch (error) { postMessage(String(error)); }`;
     const blobUrl = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
     const worker = new Worker(blobUrl);
@@ -38,6 +33,15 @@ test("classic worker and console imports share CORS-readable offline engine asse
       URL.revokeObjectURL(blobUrl);
     }
   }, ASM_URL);
+}
+
+test("classic worker and console imports share CORS-readable offline engine assets", async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(120_000);
+  await waitForServiceWorker(page);
+  const workerResult = await loadClassicWorker(page);
   expect(workerResult).toBe("loaded");
   await expect
     .poll(() =>
@@ -64,8 +68,9 @@ test("classic worker and console imports share CORS-readable offline engine asse
   }
 });
 
-test("a legacy opaque engine entry is replaced without clearing other cached engines", async ({
+test("a legacy opaque entry supports offline workers and is repaired online", async ({
   page,
+  context,
 }) => {
   test.setTimeout(120_000);
   await waitForServiceWorker(page);
@@ -73,7 +78,7 @@ test("a legacy opaque engine entry is replaced without clearing other cached eng
     async ({ url, cacheName, version }) => {
       // This npm path is outside the engine rule. A real no-cors response models
       // the opaque entry left by the old worker without faking browser semantics.
-      const opaque = await fetch(`https://cdn.jsdelivr.net/npm/pyodide@${version}/README.md`, {
+      const opaque = await fetch(`https://cdn.jsdelivr.net/npm/pyodide@${version}/pyodide.asm.js`, {
         mode: "no-cors",
       });
       const cache = await caches.open(cacheName);
@@ -84,6 +89,12 @@ test("a legacy opaque engine entry is replaced without clearing other cached eng
     { url: ASM_URL, cacheName: ENGINE_CACHE, version: PYODIDE_VERSION },
   );
   expect(seededType).toBe("opaque");
+  await context.setOffline(true);
+  try {
+    expect(await loadClassicWorker(page)).toBe("loaded");
+  } finally {
+    await context.setOffline(false);
+  }
   await expectModuleLoads(page);
   await expect
     .poll(() =>

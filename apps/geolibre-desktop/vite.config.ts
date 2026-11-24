@@ -1550,6 +1550,13 @@ function pwaPlugin(): Plugin[] {
                 }: {
                   cachedResponse?: Response;
                 }) => (cachedResponse?.status === 200 ? cachedResponse : undefined),
+                // A legacy opaque entry is still usable by a classic worker
+                // offline. Never return it to a CORS/module request.
+                handlerDidError: async ({ request }: { request: Request }) => {
+                  if (request.mode !== "no-cors") return undefined;
+                  const cached = await (await caches.open("geolibre-cdn-engines")).match(request);
+                  return cached?.type === "opaque" ? cached : undefined;
+                },
               },
             ],
           },

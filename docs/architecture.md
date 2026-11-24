@@ -148,8 +148,10 @@ So each of these CDN engines needs the network on **first** use, then works offl
 The CDN engine cache requires CORS-readable status-200 responses, including
 requests from classic workers. Opaque entries stored by older service workers
 are bypassed and replaced on the next online fetch (issue #3607). Until that
-fetch, an affected asset cannot load offline, including through a classic
-worker. Readable cached engine assets are retained for offline use.
+fetch, an affected asset cannot satisfy a console module import. If the network
+is unavailable, classic workers may still use an existing opaque response;
+CORS and module requests never receive that fallback. Readable cached engine
+assets are retained for offline use.
 
 To strip **all GeoLibre-controlled** external CDN references from the build output — for deployments that cannot load any resource from untrusted CDNs — use `GEOLIBRE_NO_EXTERNAL_CDN=1`. This implies `GEOLIBRE_PGLITE_CDN=0`, `GEOLIBRE_CEREUS_CDN=0`, `GEOLIBRE_GDAL_CDN=0`, and `GEOLIBRE_DUCKDB_WASM_CDN=0`, and additionally disables features whose code references external CDNs: storymap HTML export (which injects `<script>` tags from `unpkg.com`), built-in object detection models (YOLO ONNX weights from `cdn.jsdelivr.net`), Segment Everything, 3D Tiles Draco/KTX2 decoders, GDAL export, and the Mapbox renderer (Mapbox GL JS loads from Mapbox's CDN). Pyodide remains available when `VITE_PYODIDE_INDEX_URL` points to an approved mirror. Runtime `deployment.json` configures client policy; it does not change this build-time CDN packaging.
 
