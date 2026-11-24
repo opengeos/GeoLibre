@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Feature, FeatureCollection, Position } from "geojson";
@@ -242,9 +243,7 @@ function setSourceData(
   data: FeatureCollection | Feature,
 ): void {
   const src = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
-  void Promise.resolve(src?.setData(data)).catch((error: unknown) => {
-    console.warn("Failed to update map source", error);
-  });
+  updateGeoJsonSourceData(src, data);
 }
 
 function removeGpsSources(map: maplibregl.Map): void {

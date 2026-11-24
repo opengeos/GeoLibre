@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { Feature, FeatureCollection, Position } from "geojson";
 // A value (not type-only) namespace import: main added runtime use of
@@ -1927,9 +1928,7 @@ function setPreview(map: maplibregl.Map, data: FeatureCollection): void {
     // The preview paint is data-driven (below), so the regenerated features —
     // which carry the current color/width — update the appearance on their own;
     // no per-property repaint is needed when color/width changes mid-draw.
-    void Promise.resolve(existing.setData(data)).catch((error: unknown) => {
-      console.warn("Failed to update map source", error);
-    });
+    updateGeoJsonSourceData(existing, data);
     return;
   }
   map.addSource(PREVIEW_SOURCE_ID, { type: "geojson", data });

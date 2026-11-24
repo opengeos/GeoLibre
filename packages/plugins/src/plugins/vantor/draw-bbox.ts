@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type { Map, MapMouseEvent, GeoJSONSource } from "maplibre-gl";
 import type { BBox } from "./types";
 import { INTERNAL_LAYER_METADATA } from "./utils";
@@ -100,9 +101,7 @@ export class DrawBBox {
   clear(): void {
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (source) {
-      void Promise.resolve(source.setData(EMPTY_FC)).catch((error: unknown) => {
-        console.warn("Failed to update map source", error);
-      });
+      updateGeoJsonSourceData(source, EMPTY_FC);
     }
   }
 
@@ -110,30 +109,26 @@ export class DrawBBox {
     this.initLayers();
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (source) {
-      void Promise.resolve(
-        source.setData({
-          type: "FeatureCollection",
-          features: [
-            {
-              type: "Feature",
-              geometry: {
-                type: "Polygon",
-                coordinates: [
-                  [
-                    [bbox.west, bbox.south],
-                    [bbox.east, bbox.south],
-                    [bbox.east, bbox.north],
-                    [bbox.west, bbox.north],
-                    [bbox.west, bbox.south],
-                  ],
+      updateGeoJsonSourceData(source, {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [bbox.west, bbox.south],
+                  [bbox.east, bbox.south],
+                  [bbox.east, bbox.north],
+                  [bbox.west, bbox.north],
+                  [bbox.west, bbox.south],
                 ],
-              },
-              properties: {},
+              ],
             },
-          ],
-        }),
-      ).catch((error: unknown) => {
-        console.warn("Failed to update map source", error);
+            properties: {},
+          },
+        ],
       });
     }
   }
@@ -183,30 +178,26 @@ export class DrawBBox {
     const east = Math.max(start[0], end[0]);
     const north = Math.max(start[1], end[1]);
 
-    void Promise.resolve(
-      source.setData({
-        type: "FeatureCollection",
-        features: [
-          {
-            type: "Feature",
-            geometry: {
-              type: "Polygon",
-              coordinates: [
-                [
-                  [west, south],
-                  [east, south],
-                  [east, north],
-                  [west, north],
-                  [west, south],
-                ],
+    updateGeoJsonSourceData(source, {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [west, south],
+                [east, south],
+                [east, north],
+                [west, north],
+                [west, south],
               ],
-            },
-            properties: {},
+            ],
           },
-        ],
-      }),
-    ).catch((error: unknown) => {
-      console.warn("Failed to update map source", error);
+          properties: {},
+        },
+      ],
     });
   }
 

@@ -7,7 +7,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./parameters": "./src/sidecar-client.ts",
+    "./parameters": "./src/parameters.ts",
     "./output-format": "./src/output-format.ts"
   },
   "dependencies": {

@@ -884,6 +884,7 @@ describe("processing controller isolation", () => {
       "../apps/geolibre-desktop/src/lib/processing-dialog-model.ts",
       import.meta.url,
     ).href;
+    const storeUrl = new URL("../packages/core/src/store.ts", import.meta.url).href;
     const result = spawnSync(
       process.execPath,
       [
@@ -892,11 +893,18 @@ describe("processing controller isolation", () => {
         "--input-type=module",
         "--eval",
         `
-      import { registerHooks } from "node:module";
-      registerHooks({ load(url, context, next) {
-        if (url.includes("/core/src/store")) throw new Error("Controller initialized the store");
-        return next(url, context);
-      }});
+      import { register } from "node:module";
+      register("data:text/javascript," + encodeURIComponent(
+        "export async function load(url, context, next) { " +
+        "if(url.includes('/core/src/store')) throw new Error('Controller initialized the store'); " +
+        "return next(url, context); }"
+      ), import.meta.url);
+      try {
+        await import(${JSON.stringify(storeUrl)});
+        throw new Error("Store guard did not run");
+      } catch (error) {
+        if (!(error instanceof Error) || !error.message.includes("Controller initialized the store")) throw error;
+      }
       await import(${JSON.stringify(modelUrl)});
     `,
       ],

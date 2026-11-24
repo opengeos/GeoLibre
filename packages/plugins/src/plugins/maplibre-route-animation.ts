@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { Feature, LineString, Point } from "geojson";
 import type { Layer } from "@deck.gl/core";
@@ -527,14 +528,8 @@ class RouteAnimationEngine {
     // placeholder feature (e.g. the initial [0, 0] point) never lingers on the
     // map before a layer is picked or after the selected layer is removed.
     if (this.totalMeters <= 0) {
-      void Promise.resolve(
-        markerSource?.setData({ type: "FeatureCollection", features: [] }),
-      ).catch((error: unknown) => {
-        console.warn("Failed to update map source", error);
-      });
-      void Promise.resolve(trailSource?.setData(emptyLine())).catch((error: unknown) => {
-        console.warn("Failed to update map source", error);
-      });
+      updateGeoJsonSourceData(markerSource, { type: "FeatureCollection", features: [] });
+      updateGeoJsonSourceData(trailSource, emptyLine());
       this.clearDeck();
       return;
     }
@@ -548,34 +543,18 @@ class RouteAnimationEngine {
     // they ride the visualized 3D line rather than its flat ground projection
     // (#1210). The 2D MapLibre marker/trail are cleared so nothing double-draws.
     if (this.render3d(distance, point)) {
-      void Promise.resolve(
-        markerSource?.setData({ type: "FeatureCollection", features: [] }),
-      ).catch((error: unknown) => {
-        console.warn("Failed to update map source", error);
-      });
-      void Promise.resolve(trailSource?.setData(emptyLine())).catch((error: unknown) => {
-        console.warn("Failed to update map source", error);
-      });
+      updateGeoJsonSourceData(markerSource, { type: "FeatureCollection", features: [] });
+      updateGeoJsonSourceData(trailSource, emptyLine());
     } else {
       this.clearDeck();
-      if (markerSource)
-        void Promise.resolve(markerSource.setData(markerFeature(coord, bearing))).catch(
-          (error: unknown) => {
-            console.warn("Failed to update map source", error);
-          },
-        );
+      if (markerSource) updateGeoJsonSourceData(markerSource, markerFeature(coord, bearing));
       if (this.settings.showTrail) {
-        void Promise.resolve(
-          trailSource?.setData(
-            lineFeature(sliceLineAtDistance(this.coords, this.cumulative, distance)),
-          ),
-        ).catch((error: unknown) => {
-          console.warn("Failed to update map source", error);
-        });
+        updateGeoJsonSourceData(
+          trailSource,
+          lineFeature(sliceLineAtDistance(this.coords, this.cumulative, distance)),
+        );
       } else {
-        void Promise.resolve(trailSource?.setData(emptyLine())).catch((error: unknown) => {
-          console.warn("Failed to update map source", error);
-        });
+        updateGeoJsonSourceData(trailSource, emptyLine());
       }
     }
 

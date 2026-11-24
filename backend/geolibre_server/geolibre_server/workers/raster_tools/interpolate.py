@@ -258,7 +258,15 @@ def main() -> None:
             rhs[:n, :] = model(dt).T
             rhs[n, :] = 1.0
             weights = big_inv @ rhs  # (n + 1, m)
-            out[i : i + chunk] = pz @ weights[:n, :]
+            predicted = pz @ weights[:n, :]
+            # Keep exact-values semantics when a Gaussian system loses
+            # precision in the pseudoinverse. As with IDW, the first sample
+            # wins when several observations share the output coordinate.
+            hit = dt == 0
+            hit_rows = hit.any(axis=1)
+            if hit_rows.any():
+                predicted[hit_rows] = pz[np.argmax(hit[hit_rows], axis=1)]
+            out[i : i + chunk] = predicted
         return out
 
     if method == "kriging":

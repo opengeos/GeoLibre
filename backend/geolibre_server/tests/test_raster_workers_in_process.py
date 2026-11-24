@@ -7,12 +7,12 @@ happy paths and the validation errors are measured.
 
 from __future__ import annotations
 
-import importlib
 import json
-import sys
 from pathlib import Path
 
 import pytest
+from worker_test_helpers import run_worker as _run_worker
+from worker_test_helpers import worker_result as _result
 
 from geolibre_server.workers import RESULT_MARKER
 
@@ -22,33 +22,6 @@ rasterio = pytest.importorskip("rasterio")
 from rasterio.transform import from_origin  # noqa: E402
 
 CUSTOM_TMERC = "+proj=tmerc +lat_0=0 +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs"
-
-
-def _run_worker(monkeypatch: pytest.MonkeyPatch, module_name: str, params: dict) -> None:
-    """Run a worker's ``main()`` in this process with JSON params on ``sys.argv``.
-
-    Args:
-        monkeypatch: The pytest monkeypatch fixture used to patch ``sys.argv``.
-        module_name: The dotted worker name under ``geolibre_server.workers``.
-        params: The parameters the worker reads from ``sys.argv[1]``.
-    """
-    mod = importlib.import_module(f"geolibre_server.workers.{module_name}")
-    monkeypatch.setattr(sys, "argv", [module_name, json.dumps(params)])
-    mod.main()
-
-
-def _result(capsys: pytest.CaptureFixture[str]) -> dict:
-    """Parse the JSON payload a worker printed after the result marker.
-
-    Args:
-        capsys: The pytest capture fixture holding the worker's stdout.
-
-    Returns:
-        The decoded result object.
-    """
-    out = capsys.readouterr().out
-    line = next(x for x in out.splitlines() if x.startswith(RESULT_MARKER))
-    return json.loads(line[len(RESULT_MARKER) :])
 
 
 def _write_raster(

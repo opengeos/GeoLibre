@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type { Feature, FeatureCollection, LineString, Point } from "geojson";
 import type {
   ExpressionSpecification,
@@ -1102,16 +1103,14 @@ function refreshGeometry(): void {
   if (!whenStyleReady(activeMap)) return;
   ensureLayers(activeMap);
   const geometry = buildGeometry(activeMap);
-  void Promise.resolve(
-    (activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(geometry.lines),
-  ).catch((error: unknown) => {
-    console.warn("Failed to update map source", error);
-  });
-  void Promise.resolve(
-    (activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined)?.setData(geometry.labels),
-  ).catch((error: unknown) => {
-    console.warn("Failed to update map source", error);
-  });
+  updateGeoJsonSourceData(
+    activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined,
+    geometry.lines,
+  );
+  updateGeoJsonSourceData(
+    activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined,
+    geometry.labels,
+  );
 }
 
 /**
@@ -1146,18 +1145,14 @@ function redrawWhenStyleSwaps(activeMap: MapLibreMap): void {
       if (activeMap.getLayer(LINE_LAYER_ID) && activeMap.getLayer(LABEL_LAYER_ID)) return;
       ensureLayers(activeMap);
       const geometry = buildGeometry(activeMap);
-      void Promise.resolve(
-        (activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(geometry.lines),
-      ).catch((error: unknown) => {
-        console.warn("Failed to update map source", error);
-      });
-      void Promise.resolve(
-        (activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
-          geometry.labels,
-        ),
-      ).catch((error: unknown) => {
-        console.warn("Failed to update map source", error);
-      });
+      updateGeoJsonSourceData(
+        activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined,
+        geometry.lines,
+      );
+      updateGeoJsonSourceData(
+        activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined,
+        geometry.labels,
+      );
       applyStyleProps(activeMap);
     } catch {
       // The style is still loading; the next styledata (or idle) retries.

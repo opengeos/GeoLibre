@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "./geojson-source-data";
 import { arcgisOpacity, arcgisVectorStyle } from "./vector-style";
 import {
   compileLayerFilters,
@@ -471,9 +472,7 @@ function rememberGeoJsonData(map: maplibregl.Map, sourceId: string, data: GeoJSO
 
 function setGeoJsonData(source: maplibregl.GeoJSONSource, data: GeoJSON): void {
   if (geoJsonSourceData.get(source) === data) return;
-  void Promise.resolve(source.setData(data)).catch((error: unknown) => {
-    console.warn("Failed to update map source", error);
-  });
+  updateGeoJsonSourceData(source, data);
   geoJsonSourceData.set(source, data);
 }
 

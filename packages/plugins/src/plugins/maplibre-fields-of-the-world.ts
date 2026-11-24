@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { createPMTilesStoreLayer } from "@geolibre/map/pmtiles-layer";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
@@ -605,13 +606,9 @@ function setFootprints(map: MapLibreMap, results: ZoneResult[]): void {
     map.on("mouseenter", FOOTPRINT_FILL_LAYER_ID, handleFootprintEnter);
     map.on("mouseleave", FOOTPRINT_FILL_LAYER_ID, handleFootprintLeave);
   }
-  void Promise.resolve(
-    (map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource).setData({
-      type: "FeatureCollection",
-      features,
-    }),
-  ).catch((error: unknown) => {
-    console.warn("Failed to update map source", error);
+  updateGeoJsonSourceData(map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource, {
+    type: "FeatureCollection",
+    features,
   });
   // Without host registration there is no store layer, and the store
   // subscription would read that as the user deleting the footprints.
@@ -677,13 +674,9 @@ function setOutline(map: MapLibreMap, boxes: LonLatBbox[]): void {
   }
   // Field layers added since would otherwise hide the outline.
   map.moveLayer(HOVER_LINE_LAYER_ID);
-  void Promise.resolve(
-    (map.getSource(HOVER_SOURCE_ID) as GeoJSONSource).setData({
-      type: "FeatureCollection",
-      features: boxes.map((box) => polygonFeature(bboxRing(box), {})),
-    }),
-  ).catch((error: unknown) => {
-    console.warn("Failed to update map source", error);
+  updateGeoJsonSourceData(map.getSource(HOVER_SOURCE_ID) as GeoJSONSource, {
+    type: "FeatureCollection",
+    features: boxes.map((box) => polygonFeature(bboxRing(box), {})),
   });
 }
 
@@ -711,13 +704,9 @@ function setDrawBox(map: MapLibreMap, bbox: LonLatBbox | null): void {
     });
   }
   const features: Feature<Polygon>[] = bbox ? [polygonFeature(bboxRing(bbox), {})] : [];
-  void Promise.resolve(
-    (map.getSource(DRAW_SOURCE_ID) as GeoJSONSource).setData({
-      type: "FeatureCollection",
-      features,
-    }),
-  ).catch((error: unknown) => {
-    console.warn("Failed to update map source", error);
+  updateGeoJsonSourceData(map.getSource(DRAW_SOURCE_ID) as GeoJSONSource, {
+    type: "FeatureCollection",
+    features,
   });
 }
 

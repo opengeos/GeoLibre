@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { Feature, FeatureCollection, Position } from "geojson";
 // A value (not type-only) namespace import: v6 has no default export (see the
@@ -1164,9 +1165,7 @@ function handleMouseMove(event: maplibregl.MapMouseEvent): void {
 function setPreview(map: maplibregl.Map, data: FeatureCollection): void {
   const existing = map.getSource(PREVIEW_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
   if (existing) {
-    void Promise.resolve(existing.setData(data)).catch((error: unknown) => {
-      console.warn("Failed to update map source", error);
-    });
+    updateGeoJsonSourceData(existing, data);
     return;
   }
   map.addSource(PREVIEW_SOURCE_ID, { type: "geojson", data });

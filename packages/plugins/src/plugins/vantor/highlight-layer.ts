@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type { Map, GeoJSONSource } from "maplibre-gl";
 import type { StacItem } from "./types";
 import { INTERNAL_LAYER_METADATA } from "./utils";
@@ -52,19 +53,15 @@ export class HighlightLayer {
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (!source || !item.geometry) return;
 
-    void Promise.resolve(
-      source.setData({
-        type: "FeatureCollection",
-        features: [
-          {
-            type: "Feature",
-            geometry: item.geometry,
-            properties: { id: item.id },
-          },
-        ],
-      }),
-    ).catch((error: unknown) => {
-      console.warn("Failed to update map source", error);
+    updateGeoJsonSourceData(source, {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: item.geometry,
+          properties: { id: item.id },
+        },
+      ],
     });
 
     // Fly to the footprint
@@ -82,9 +79,7 @@ export class HighlightLayer {
   clear(): void {
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (source) {
-      void Promise.resolve(source.setData(EMPTY_FC)).catch((error: unknown) => {
-        console.warn("Failed to update map source", error);
-      });
+      updateGeoJsonSourceData(source, EMPTY_FC);
     }
   }
 

@@ -208,6 +208,7 @@ export function ProcessingDialog({
   const [tools, setTools] = useState<WhiteboxTool[]>([]);
   const [selectedToolId, setSelectedToolId] = useState("");
   const [values, setValues] = useState<ParameterValues>({});
+  const [historyRestoreRevision, setHistoryRestoreRevision] = useState(0);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   // Tool provenance filter: "All" | "geolibre" | "whitebox". Only meaningful in
@@ -898,6 +899,9 @@ export function ProcessingDialog({
       ...createDefaultValues(selectedTool),
       ...(rerun.parameters as ParameterValues),
     });
+    // A restore must reset local field drafts even when its stored degrees
+    // equal the last value pushed by a metric field at another latitude.
+    setHistoryRestoreRevision((revision) => revision + 1);
     setProcessingRerun(null);
   }, [open, rerun, selectedTool, loadingTools, tools, setProcessingRerun, t]);
 
@@ -1889,7 +1893,9 @@ export function ProcessingDialog({
                       // tool id React reuses the field instance across a tool
                       // switch, carrying a distance field's unit and typed draft
                       // over to a parameter that reset to another tool's default.
-                      key={`${selectedTool.id}:${param.name}`}
+                      // History restores also reset those local drafts, while
+                      // ordinary input-layer changes retain their metric units.
+                      key={`${selectedTool.id}:${param.name}:${historyRestoreRevision}`}
                       param={param}
                       layers={layers}
                       toolId={selectedTool.id}

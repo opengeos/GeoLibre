@@ -226,6 +226,8 @@ export function computePanelResize(
 /**
  * Maps an arrow key on a resize handle to the edge movement it stands for.
  * Left/Right grow the side the handle is on; Up/Down adjust the bottom edge.
+ * The corner argument keeps the handle-callback contract uniform; edge motion
+ * is the same for both corners, and computePanelResize determines the width.
  *
  * @param _corner The corner the focused handle sits on.
  * @param key The `KeyboardEvent.key` value.

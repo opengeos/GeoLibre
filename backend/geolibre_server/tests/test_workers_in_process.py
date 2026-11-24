@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import base64
 import csv
-import importlib
 import json
 import sys
 import types
@@ -18,35 +17,10 @@ import zlib
 from pathlib import Path
 
 import pytest
+from worker_test_helpers import run_worker as _run_worker
+from worker_test_helpers import worker_result as _result
 
 from geolibre_server.workers import RESULT_MARKER
-
-
-def _run_worker(monkeypatch: pytest.MonkeyPatch, module_name: str, params: dict) -> None:
-    """Run a worker's ``main()`` in this process with JSON params on ``sys.argv``.
-
-    Args:
-        monkeypatch: The pytest monkeypatch fixture used to patch ``sys.argv``.
-        module_name: The dotted worker name under ``geolibre_server.workers``.
-        params: The parameters the worker reads from ``sys.argv[1]``.
-    """
-    mod = importlib.import_module(f"geolibre_server.workers.{module_name}")
-    monkeypatch.setattr(sys, "argv", [module_name, json.dumps(params)])
-    mod.main()
-
-
-def _result(capsys: pytest.CaptureFixture[str]) -> dict:
-    """Parse the JSON payload a worker printed after the result marker.
-
-    Args:
-        capsys: The pytest capture fixture holding the worker's stdout.
-
-    Returns:
-        The decoded result object.
-    """
-    out = capsys.readouterr().out
-    line = next(x for x in out.splitlines() if x.startswith(RESULT_MARKER))
-    return json.loads(line[len(RESULT_MARKER) :])
 
 
 def _write_raster(path: Path, data, crs: str | None = "EPSG:32617", nodata=None, res: float = 10.0):

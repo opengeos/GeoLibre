@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { useAppStore } from "@geolibre/core";
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import type {
@@ -531,11 +532,7 @@ function setFootprints(map: MapLibreMap, images: OamImage[]): void {
       footprintById.set(image.id, feature);
     }
   }
-  void Promise.resolve(source.setData({ type: "FeatureCollection", features })).catch(
-    (error: unknown) => {
-      console.warn("Failed to update map source", error);
-    },
-  );
+  updateGeoJsonSourceData(source, { type: "FeatureCollection", features });
   if (features.length > 0) syncFootprintStoreLayer(features);
   else unregisterFootprintLayer();
 }
@@ -545,13 +542,10 @@ function setSelectedFootprint(map: MapLibreMap, id: string | null): void {
   const source = map.getSource(SELECT_SOURCE_ID) as GeoJSONSource | undefined;
   if (!source) return;
   const feature = id ? footprintById.get(id) : undefined;
-  void Promise.resolve(
-    source.setData(
-      feature ? { type: "FeatureCollection", features: [feature] } : emptyCollection(),
-    ),
-  ).catch((error: unknown) => {
-    console.warn("Failed to update map source", error);
-  });
+  updateGeoJsonSourceData(
+    source,
+    feature ? { type: "FeatureCollection", features: [feature] } : emptyCollection(),
+  );
 }
 
 /**
@@ -637,9 +631,7 @@ function ensureDrawLayers(map: MapLibreMap): void {
 function setDrawBox(map: MapLibreMap, bbox: [number, number, number, number] | null): void {
   ensureDrawLayers(map);
   const source = map.getSource(DRAW_SOURCE_ID) as GeoJSONSource | undefined;
-  void Promise.resolve(source?.setData(boxCollection(bbox))).catch((error: unknown) => {
-    console.warn("Failed to update map source", error);
-  });
+  updateGeoJsonSourceData(source, boxCollection(bbox));
 }
 
 /** Removes the drawn-box overlay. */

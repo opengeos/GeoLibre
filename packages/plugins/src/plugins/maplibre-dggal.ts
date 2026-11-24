@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
@@ -684,11 +685,7 @@ function refresh(): void {
       error instanceof RangeError ? labels.tooManyCells(DGGAL_VIEWPORT_CELL_LIMIT) : String(error);
   }
   applyStyle();
-  void Promise.resolve(
-    (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid),
-  ).catch((error: unknown) => {
-    console.warn("Failed to update map source", error);
-  });
+  updateGeoJsonSourceData(map.getSource(SOURCE_ID) as GeoJSONSource | undefined, currentGrid);
   updateSelectedSource();
   // Pan/zoom only updates the status line (and auto-resolution readout) —
   // rebuilding the whole panel would destroy open color pickers / focused inputs.
@@ -781,37 +778,25 @@ function updateSelectedSource(): void {
   const engine = activeDggrs();
   if (!engine) return;
   const source = map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
-  void Promise.resolve(
-    source?.setData({
-      type: "FeatureCollection",
-      features: selectedCell ? [dggalZoneFeature(engine, selectedCell)] : [],
-    }),
-  ).catch((error: unknown) => {
-    console.warn("Failed to update map source", error);
+  updateGeoJsonSourceData(source, {
+    type: "FeatureCollection",
+    features: selectedCell ? [dggalZoneFeature(engine, selectedCell)] : [],
   });
   const neighborsSource = map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined;
-  void Promise.resolve(
-    neighborsSource?.setData({
-      type: "FeatureCollection",
-      features:
-        settings.includeNeighbors && selectedCell
-          ? neighborCells(selectedCell).map((cell) => dggalZoneFeature(engine, cell))
-          : [],
-    }),
-  ).catch((error: unknown) => {
-    console.warn("Failed to update map source", error);
+  updateGeoJsonSourceData(neighborsSource, {
+    type: "FeatureCollection",
+    features:
+      settings.includeNeighbors && selectedCell
+        ? neighborCells(selectedCell).map((cell) => dggalZoneFeature(engine, cell))
+        : [],
   });
   const parentsSource = map?.getSource(PARENTS_SOURCE_ID) as GeoJSONSource | undefined;
-  void Promise.resolve(
-    parentsSource?.setData({
-      type: "FeatureCollection",
-      features:
-        settings.includeParents && selectedCell
-          ? dggalParentZones(engine, selectedCell).map((cell) => dggalZoneFeature(engine, cell))
-          : [],
-    }),
-  ).catch((error: unknown) => {
-    console.warn("Failed to update map source", error);
+  updateGeoJsonSourceData(parentsSource, {
+    type: "FeatureCollection",
+    features:
+      settings.includeParents && selectedCell
+        ? dggalParentZones(engine, selectedCell).map((cell) => dggalZoneFeature(engine, cell))
+        : [],
   });
 }
 

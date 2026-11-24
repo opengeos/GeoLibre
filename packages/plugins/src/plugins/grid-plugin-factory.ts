@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
@@ -517,11 +518,7 @@ export function createGridPlugin<S extends GridSettingsBase, L extends GridLabel
         error instanceof RangeError ? labels.tooManyCells(config.viewportCellLimit) : String(error);
     }
     applyStyle();
-    void Promise.resolve(
-      (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid),
-    ).catch((error: unknown) => {
-      console.warn("Failed to update map source", error);
-    });
+    updateGeoJsonSourceData(map.getSource(SOURCE_ID) as GeoJSONSource | undefined, currentGrid);
     updateSelectedSource();
     if (panelContainer) renderPanel(panelContainer);
   }
@@ -529,33 +526,20 @@ export function createGridPlugin<S extends GridSettingsBase, L extends GridLabel
   function updateSelectedSource(): void {
     const toFeatures = (cells: string[]): Feature<Polygon>[] =>
       cells.map((cell) => config.cellFeature(cell));
-    void Promise.resolve(
-      (map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined)?.setData({
-        type: "FeatureCollection",
-        features: selectedCell ? toFeatures([selectedCell]) : [],
-      }),
-    ).catch((error: unknown) => {
-      console.warn("Failed to update map source", error);
+    updateGeoJsonSourceData(map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined, {
+      type: "FeatureCollection",
+      features: selectedCell ? toFeatures([selectedCell]) : [],
     });
-    void Promise.resolve(
-      (map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined)?.setData({
-        type: "FeatureCollection",
-        features:
-          settings.includeNeighbors && selectedCell
-            ? toFeatures(config.neighborCells(selectedCell))
-            : [],
-      }),
-    ).catch((error: unknown) => {
-      console.warn("Failed to update map source", error);
+    updateGeoJsonSourceData(map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined, {
+      type: "FeatureCollection",
+      features:
+        settings.includeNeighbors && selectedCell
+          ? toFeatures(config.neighborCells(selectedCell))
+          : [],
     });
-    void Promise.resolve(
-      (map?.getSource(PARENT_SOURCE_ID) as GeoJSONSource | undefined)?.setData({
-        type: "FeatureCollection",
-        features:
-          parentEnabled() && selectedCell ? toFeatures(config.parentCells(selectedCell)) : [],
-      }),
-    ).catch((error: unknown) => {
-      console.warn("Failed to update map source", error);
+    updateGeoJsonSourceData(map?.getSource(PARENT_SOURCE_ID) as GeoJSONSource | undefined, {
+      type: "FeatureCollection",
+      features: parentEnabled() && selectedCell ? toFeatures(config.parentCells(selectedCell)) : [],
     });
   }
 
