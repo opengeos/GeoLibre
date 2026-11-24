@@ -1,9 +1,5 @@
-import {
-  outputTextFormatHint,
-  type WhiteboxJob,
-  type WhiteboxTool,
-  type WhiteboxToolParameter,
-} from "@geolibre/processing";
+import { outputTextFormatHint } from "@geolibre/processing/output-format";
+import type { WhiteboxJob, WhiteboxTool, WhiteboxToolParameter } from "@geolibre/processing";
 import type { FeatureCollection } from "geojson";
 import type { TFunction } from "i18next";
 import { humanizeIdentifier, translateToolName } from "./processing-tool-i18n";

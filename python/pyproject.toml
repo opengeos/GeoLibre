@@ -40,6 +40,7 @@ mcp = ["mcp>=2.0", "httpcore[asyncio]>=1.0.9,<2"]
 spaceborne = ["h5py>=3.8", "numpy>=1.24"]
 dev = [
   "pytest",
+  "pytest-cov",
   "build",
   "anywidget[dev]",
   "jupyter-server",
@@ -98,3 +99,10 @@ path = "hatch_build.py"
 # "." puts hatch_build.py on the path so tests/test_credential_scan.py can import
 # the credential scanner the build hook uses.
 pythonpath = ["src", "."]
+
+[tool.coverage.report]
+# Coverage floor for `npm run test:python:coverage` and the publish-python
+# workflow, which pass `--cov-config=python/pyproject.toml`. A ratchet like the
+# other floors (see "Coverage floors" in docs/maintenance.md): a few points
+# under the measured total; raise it when coverage rises.
+fail_under = 88

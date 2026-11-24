@@ -48,7 +48,6 @@ export function defaultIndexBands(bandIndexes: readonly number[]): ObiaIndexBand
  */
 export function ObiaMeasureStep(): ReactElement | null {
   const { t } = useTranslation();
-  const layers = useAppStore((s) => s.layers);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const segmentation = useObiaSession((s) => s.segmentation);
   const options = useObiaSession((s) => s.featureOptions);
@@ -78,6 +77,7 @@ export function ObiaMeasureStep(): ReactElement | null {
 
   const handleMeasure = useCallback(async () => {
     if (runningRef.current || !segmentation) return;
+    const { layers } = useAppStore.getState();
     const sourceLayer = layers.find((layer) => layer.id === segmentation.sourceLayerId);
     const objectsLayer = layers.find((layer) => layer.id === segmentation.objectsLayerId);
     if (!sourceLayer || !objectsLayer?.geojson) {
@@ -169,7 +169,7 @@ export function ObiaMeasureStep(): ReactElement | null {
       runningRef.current = false;
       setRunning(false);
     }
-  }, [segmentation, layers, options, updateLayer, setFeatures, progress, t]);
+  }, [segmentation, options, updateLayer, setFeatures, progress, t]);
 
   if (!segmentation) return null;
   const native = isNativeMethod(segmentation.method);

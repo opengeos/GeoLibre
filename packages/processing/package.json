@@ -6,7 +6,9 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./parameters": "./src/parameters.ts",
+    "./output-format": "./src/output-format.ts"
   },
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "^0.4.2",
@@ -36,7 +38,7 @@
     "a5-js": "^1.0.0",
     "dggal": "^0.0.7",
     "fflate": "^0.8.3",
-    "geolibre-wasm": "^1.8.2",
+    "geolibre-wasm": "^1.8.4",
     "geotiff": "^3.0.5",
     "geotiff-geokeys-to-proj4": "^2026.10.9",
     "onnxruntime-web": "1.31.1",

@@ -35,6 +35,7 @@ function settings(patch: Partial<StartupSettings> = {}): StartupSettings {
     layerStyles: null,
     layers: null,
     openS3Browser: false,
+    allowLiveMcp: false,
     ...patch,
   };
 }

@@ -695,7 +695,7 @@ export function ProjectGalleryDialog({
             aria-label={t("gallery.resizeDialog")}
             title={t("gallery.resizeDialog")}
             onPointerDown={startDialogResize}
-            className="absolute bottom-0 right-0 z-10 hidden h-5 w-5 cursor-nwse-resize touch-none select-none text-muted-foreground hover:text-foreground md:block"
+            className="absolute bottom-0 right-0 z-10 hidden h-5 w-5 cursor-nwse-resize touch-none select-none text-muted-foreground hover:text-foreground md:block" // eslint-disable-line local/no-physical-tailwind -- the resize grip's drag math and cursor are physical (bottom-right).
           >
             <svg viewBox="0 0 16 16" className="h-full w-full" aria-hidden="true">
               <path

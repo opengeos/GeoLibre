@@ -21,6 +21,7 @@
     "ocean-data-platform.test.ts",
     "osm-overpass-proxy.test.ts",
     "reproject.test.ts",
-    "transit-proxy.test.ts"
+    "transit-proxy.test.ts",
+    "collab-rate-limit.test.ts"
   ]
 }

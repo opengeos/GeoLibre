@@ -116,12 +116,14 @@ export {
 } from "./store";
 export {
   NO_LAYERS,
+  createLayerSliceSelector,
   selectLayerById,
   selectLayerIds,
   selectLayerSummaries,
   selectLayersWhen,
   useLayer,
   useLayerIds,
+  useLayerSlices,
   useLayerSummaries,
   useLayersWhen,
   type LayerSummary,

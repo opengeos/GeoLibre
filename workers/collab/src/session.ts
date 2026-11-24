@@ -68,8 +68,8 @@ export interface Env {
    * Set it with `wrangler secret put COLLAB_IDENTITY_SECRET`.
    */
   COLLAB_IDENTITY_SECRET?: string;
-  /** Optional Cloudflare Rate Limiting binding for `POST /sessions`. */
-  COLLAB_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+  /** Cloudflare Rate Limiting binding required for `POST /sessions`. */
+  COLLAB_RATE_LIMITER: RateLimit;
 }
 
 // The snapshot cap, empty-session TTL, and chat limits now live in

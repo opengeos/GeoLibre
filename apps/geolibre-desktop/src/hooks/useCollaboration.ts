@@ -102,7 +102,6 @@ export function useCollaboration(
       disconnect();
       useAppStore.getState().resetCollaboration();
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -128,7 +127,6 @@ export function useCollaboration(
     };
     // bindPresence is deliberately local to this hook; renderer/session state
     // is the lifecycle boundary for its DOM and camera listeners.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collaborationActive, primaryRenderer, mapReadyGeneration, mapControllerRef]);
 
   const canEdit = (): boolean => {

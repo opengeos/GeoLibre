@@ -11,6 +11,8 @@ mod plugin_http;
 #[cfg(not(feature = "mas"))]
 mod process_lifetime;
 mod remote_download;
+#[cfg(not(feature = "mas"))]
+mod uv_bootstrap;
 // Earth Engine sign-in uses Google's OAuth loopback-redirect flow, which binds
 // a listener on 127.0.0.1 to accept the browser's redirect. Accepting an
 // inbound connection requires the `com.apple.security.network.server`
@@ -329,8 +331,6 @@ const JUPYTER_PORT: u16 = 8766;
 // first-run `uv sync` of JupyterLab on a cold cache.
 #[cfg(not(feature = "mas"))]
 const JUPYTER_HEALTH_ATTEMPTS: usize = 240;
-#[cfg(not(feature = "mas"))]
-const UV_INSTALL_BASE_URL: &str = "https://astral.sh/uv";
 const REMOTE_TILE_TIMEOUT_SECS: u64 = 8;
 const MAX_HTTP_REDIRECTS: usize = 10;
 const REMOTE_TILE_CONNECT_TIMEOUT_SECS: u64 = 4;
@@ -3812,6 +3812,10 @@ fn start_geolibre_sidecar_blocking(
         .current_dir(&project_dir)
         .env("GEOLIBRE_UV", &uv)
         .env("GEOLIBRE_SIDECAR_TOKEN", sidecar_token())
+        // Makes the Live MCP relay available on this desktop port. Access is
+        // disabled until the authenticated /relay/access request applies the
+        // user's setting, including when processing starts the sidecar first.
+        .env("GEOLIBRE_LIVE_RELAY_PORT", SIDECAR_PORT.to_string())
         .env("GEOLIBRE_RUNTIME_DIR", &runtime_dir)
         .env(POSTGIS_HOSTS_ENV, &postgis_hosts)
         .env(MSSQL_HOSTS_ENV, &mssql_hosts)
@@ -4367,7 +4371,7 @@ fn sidecar_health_is_ready(base_url: &str) -> bool {
 /// Whether the sidecar already listening at `base_url` accepts `token`.
 ///
 /// `/health` is token-exempt, so it cannot reveal a token mismatch. This probes
-/// `/algorithms` (a cheap authenticated endpoint) *with* the token so an orphan
+/// `/token-check` (a no-op authenticated endpoint) *with* the token so an orphan
 /// sidecar from a previous launch — started with a different per-launch token,
 /// and not killed because `Drop` doesn't run on `SIGKILL` — is detected rather
 /// than silently 401ing every later request. A tokenless dev sidecar
@@ -4379,7 +4383,7 @@ fn sidecar_accepts_token(base_url: &str, token: &str) -> bool {
         return false;
     };
     client
-        .get(format!("{base_url}/algorithms"))
+        .get(format!("{base_url}/token-check"))
         .header("x-geolibre-token", token)
         .send()
         .map(|response| response.status().is_success())
@@ -5400,89 +5404,9 @@ fn ensure_managed_uv(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 #[cfg(not(feature = "mas"))]
 fn install_managed_uv(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let uv_dir = app_runtime_dir(app)?.join("uv-bin");
-    let uv = uv_dir.join(uv_executable_name());
-    if uv.exists() {
-        return Ok(uv);
-    }
-
-    fs::create_dir_all(&uv_dir)
-        .map_err(|error| format!("Could not create uv cache directory: {error}"))?;
-    let script = download_uv_installer(app)?;
-    let mut command = if cfg!(target_os = "windows") {
-        let mut command = Command::new("powershell");
-        command
-            .arg("-NoProfile")
-            .arg("-ExecutionPolicy")
-            .arg("Bypass")
-            .arg("-File")
-            .arg(&script);
-        command
-    } else {
-        let mut command = Command::new("sh");
-        command.arg(&script);
-        command
-    };
-    // First run only, but it is the one that would flash a PowerShell window
-    // across the user's desktop while uv installs.
-    hide_console_window(&mut command);
-    let output = command
-        .env("UV_UNMANAGED_INSTALL", &uv_dir)
-        .output()
-        .map_err(|error| format!("Could not run uv installer: {error}"))?;
-    let _ = fs::remove_file(script);
-    if !output.status.success() {
-        let detail = String::from_utf8_lossy(if output.stderr.is_empty() {
-            &output.stdout
-        } else {
-            &output.stderr
-        });
-        return Err(format!("uv installer failed: {detail}"));
-    }
-    if !uv.exists() {
-        return Err(format!("uv installer did not create {}", uv.display()));
-    }
-    Ok(uv)
-}
-
-#[cfg(not(feature = "mas"))]
-fn download_uv_installer(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let url = if cfg!(target_os = "windows") {
-        format!("{UV_INSTALL_BASE_URL}/install.ps1")
-    } else {
-        format!("{UV_INSTALL_BASE_URL}/install.sh")
-    };
-    let response = reqwest::blocking::Client::builder()
-        .user_agent("GeoLibre Desktop")
-        .build()
-        .map_err(|error| format!("Could not create HTTP client: {error}"))?
-        .get(url)
-        .send()
-        .map_err(|error| format!("Could not download uv installer: {error}"))?;
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!("uv installer download failed with status {status}"));
-    }
-    let extension = if cfg!(target_os = "windows") {
-        "ps1"
-    } else {
-        "sh"
-    };
-    let installer_dir = app
-        .path()
-        .app_cache_dir()
-        .map_err(|error| format!("Could not resolve app cache directory: {error}"))?
-        .join("installers");
-    fs::create_dir_all(&installer_dir)
-        .map_err(|error| format!("Could not create installer cache directory: {error}"))?;
-    let script = installer_dir.join(format!("uv-install.{extension}"));
-    fs::write(
-        &script,
-        response
-            .bytes()
-            .map_err(|error| format!("Could not read uv installer: {error}"))?,
-    )
-    .map_err(|error| format!("Could not write uv installer: {error}"))?;
-    Ok(script)
+    // A pinned release archive, SHA-256 verified before extraction; no remote
+    // install script is ever run. The shared lock covers sidecar and Jupyter.
+    uv_bootstrap::ensure_pinned_uv(&uv_dir)
 }
 
 #[cfg(not(feature = "mas"))]
