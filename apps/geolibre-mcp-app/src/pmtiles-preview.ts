@@ -7,6 +7,7 @@ import { previewI18n } from "./preview-i18n";
 const PMTILES_PREFIX = "pmtiles://";
 const MAX_METADATA_BYTES = 1024 * 1024;
 const MAX_DIRECTORY_ENTRIES = 65_536;
+export const MAX_PMTILES_RANGE_BYTES = 4 * 1024 * 1024;
 export const MAX_PMTILES_BLOCK_BYTES = 16 * 1024 * 1024;
 export const MAX_PMTILES_SOURCE_LAYERS = 128;
 const t = previewI18n.getFixedT(null, "translation", "mcpPreview.pmtiles");
@@ -83,7 +84,7 @@ export async function discoverPreviewPMTilesLayer(
   )
     throw new Error(t("unsupportedTiles"));
   const kind = vector ? "vector" : "raster";
-  let names: string[] = [];
+  const names: string[] = [];
   if (vector) {
     if (header.jsonMetadataLength > MAX_METADATA_BYTES) throw new Error(t("metadataTooLarge"));
     if (header.jsonMetadataLength === 0) throw new Error(t("missingLayers"));
@@ -256,7 +257,7 @@ export class ConsentPMTilesSource implements Source {
         ? AbortSignal.any([this.lifecycle, signal])
         : (this.lifecycle ?? signal);
     effective?.throwIfAborted();
-    if (length > MAX_PMTILES_BLOCK_BYTES) throw new Error(t("blockTooLarge"));
+    if (length > MAX_PMTILES_RANGE_BYTES) throw new Error(t("blockTooLarge"));
     const range = await this.fetchRange(this.url, offset, length, effective);
     effective?.throwIfAborted();
     return {

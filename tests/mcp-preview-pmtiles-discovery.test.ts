@@ -16,6 +16,7 @@ import {
   decompressPreviewPMTilesDirectory,
   discoverPreviewPMTilesLayer,
   MAX_PMTILES_BLOCK_BYTES,
+  MAX_PMTILES_RANGE_BYTES,
   MAX_PMTILES_SOURCE_LAYERS,
   needsPMTilesDiscovery,
   previewPMTilesStyleLayerIds,
@@ -301,8 +302,10 @@ describe("consent-backed PMTiles source-layer discovery", () => {
     const lifecycle = new AbortController();
     const tile = new AbortController();
     let active: AbortSignal | undefined;
+    const reads: number[] = [];
     const fetchRange: NetworkConsent["fetchRange"] = async (_url, _offset, length, signal) => {
       active = signal;
+      reads.push(length);
       return { data: new ArrayBuffer(length) };
     };
     const source = new ConsentPMTilesSource(
@@ -321,7 +324,9 @@ describe("consent-backed PMTiles source-layer discovery", () => {
       "https://example.com/archive.pmtiles",
       fetchRange,
     );
-    await assert.rejects(fresh.getBytes(0, MAX_PMTILES_BLOCK_BYTES + 1), /too large/);
+    await fresh.getBytes(0, MAX_PMTILES_RANGE_BYTES);
+    await assert.rejects(fresh.getBytes(0, MAX_PMTILES_RANGE_BYTES + 1), /too large/);
+    assert.deepEqual(reads, [4, MAX_PMTILES_RANGE_BYTES]);
   });
 });
 
