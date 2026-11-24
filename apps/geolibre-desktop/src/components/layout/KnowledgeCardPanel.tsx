@@ -171,6 +171,7 @@ export function KnowledgeCardPanel({ place, lang, onClose, onFlyTo }: KnowledgeC
     // so it clears MapLibre's bottom-left scale/attribution control. As a large
     // z-20 panel it overlays the small bottom-left badges while open; see the
     // stacking notes in BoundsRestrictionIndicator and CollaborationStatusBadge.
+    // eslint-disable-next-line local/no-physical-tailwind -- anchored to the map, whose controls sit at physical corners in every locale.
     <div className="pointer-events-auto absolute bottom-12 left-2 z-20 flex max-h-[calc(100%-7.5rem)] w-[min(22rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl">
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
         <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">

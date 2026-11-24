@@ -139,7 +139,6 @@ export const SecondaryMapCanvas = memo(function SecondaryMapCanvas({
       mc.destroy();
       controller.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Reconcile the shared layers (with this pane's overrides) whenever they or

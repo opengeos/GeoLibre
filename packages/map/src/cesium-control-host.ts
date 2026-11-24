@@ -307,7 +307,7 @@ class CesiumMapFacade extends maplibregl.Evented {
     return this.host.hasControl(control);
   }
 
-  setStyle(style: any, options?: any) {
+  setStyle(style: unknown, _options?: unknown) {
     if (typeof style === "string") {
       useAppStore.getState().setBasemapStyleUrl(style);
       // Best-effort `style.load`, not a real readiness signal. The store update
@@ -326,9 +326,9 @@ class CesiumMapFacade extends maplibregl.Evented {
     return this;
   }
 
-  jumpTo(options: maplibregl.JumpToOptions) {
+  jumpTo(options: maplibregl.CameraOptions) {
     const currentView = useAppStore.getState().mapView;
-    const update: any = {};
+    const update: Partial<typeof currentView> = {};
     if (options.center) {
       const center = maplibregl.LngLat.convert(options.center);
       update.center = [center.lng, center.lat];
@@ -344,11 +344,11 @@ class CesiumMapFacade extends maplibregl.Evented {
   }
 
   flyTo(options: maplibregl.FlyToOptions) {
-    return this.jumpTo(options as any);
+    return this.jumpTo(options);
   }
 
   easeTo(options: maplibregl.EaseToOptions) {
-    return this.jumpTo(options as any);
+    return this.jumpTo(options);
   }
 
   /**

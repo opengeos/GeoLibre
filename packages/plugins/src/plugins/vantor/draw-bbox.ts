@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type { Map, MapMouseEvent, GeoJSONSource } from "maplibre-gl";
 import type { BBox } from "./types";
 import { INTERNAL_LAYER_METADATA } from "./utils";
@@ -100,7 +101,7 @@ export class DrawBBox {
   clear(): void {
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (source) {
-      source.setData(EMPTY_FC);
+      updateGeoJsonSourceData(source, EMPTY_FC);
     }
   }
 
@@ -108,7 +109,7 @@ export class DrawBBox {
     this.initLayers();
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (source) {
-      source.setData({
+      updateGeoJsonSourceData(source, {
         type: "FeatureCollection",
         features: [
           {
@@ -177,7 +178,7 @@ export class DrawBBox {
     const east = Math.max(start[0], end[0]);
     const north = Math.max(start[1], end[1]);
 
-    source.setData({
+    updateGeoJsonSourceData(source, {
       type: "FeatureCollection",
       features: [
         {

@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { DraftDesktopSettings as SettingsDraft } from "./settings/settings-draft";
 import {
   DEFAULT_OLLAMA_BASE_URL,
   discoverOllamaModels,
@@ -54,23 +55,11 @@ function selectableProviders(current: AssistantProviderId): AssistantProviderId[
   );
 }
 
-// ── Locally-defined types to avoid circular import with SettingsDialog ──
-
-export interface DraftDesktopSettings {
-  layout: unknown;
-  shareToken: string;
-  cesiumIonToken: string;
-  aiProfiles: AssistantProfile[];
-  defaultAiProfileId: string | null;
-  uiProfile: unknown;
-  updates: unknown;
-}
-
 interface AiSectionContentProps {
-  draftDesktopSettings: DraftDesktopSettings;
+  draftDesktopSettings: SettingsDraft;
   /** The draft project Environment variables (enabled rows only). */
   draftEnv: Record<string, string>;
-  setDraftDesktopSettings: React.Dispatch<React.SetStateAction<any>>;
+  setDraftDesktopSettings: React.Dispatch<React.SetStateAction<SettingsDraft>>;
   editingProfileId: string | null;
   setEditingProfileId: (id: string | null) => void;
   isCreatingProfile: boolean;
@@ -346,9 +335,9 @@ export function AiSectionContent({
 
   /** Delete a profile by id. */
   const deleteProfile = (id: string) => {
-    setDraftDesktopSettings((current: any) => ({
+    setDraftDesktopSettings((current) => ({
       ...current,
-      aiProfiles: current.aiProfiles.filter((p: any) => p.id !== id),
+      aiProfiles: current.aiProfiles.filter((p) => p.id !== id),
       // Clear default if the deleted profile was the default.
       defaultAiProfileId: current.defaultAiProfileId === id ? null : current.defaultAiProfileId,
     }));
@@ -359,7 +348,7 @@ export function AiSectionContent({
 
   /** Set a profile as the default. */
   const setAsDefault = (id: string) => {
-    setDraftDesktopSettings((current: any) => ({
+    setDraftDesktopSettings((current) => ({
       ...current,
       defaultAiProfileId: id,
     }));
@@ -381,7 +370,7 @@ export function AiSectionContent({
           : defaultModelFor(newProfileProvider, modelEnv)),
       fieldValues: { ...newProfileFieldValues },
     };
-    setDraftDesktopSettings((current: any) => ({
+    setDraftDesktopSettings((current) => ({
       ...current,
       aiProfiles: [...current.aiProfiles, profile],
     }));
@@ -699,7 +688,7 @@ export function AiSectionContent({
 
 interface ProfileEditorProps {
   profile: AssistantProfile;
-  setDraftDesktopSettings: React.Dispatch<React.SetStateAction<any>>;
+  setDraftDesktopSettings: React.Dispatch<React.SetStateAction<SettingsDraft>>;
   onBack: () => void;
   onDelete: () => void;
   scopedOsEnv: Record<string, string>;
@@ -728,9 +717,9 @@ function ProfileEditor({
   const ollamaDiscovery = useOllamaModels();
 
   const updateName = (name: string) => {
-    setDraftDesktopSettings((current: any) => ({
+    setDraftDesktopSettings((current) => ({
       ...current,
-      aiProfiles: current.aiProfiles.map((p: any) => (p.id === profile.id ? { ...p, name } : p)),
+      aiProfiles: current.aiProfiles.map((p) => (p.id === profile.id ? { ...p, name } : p)),
     }));
   };
 
@@ -741,9 +730,9 @@ function ProfileEditor({
     // An OS-supplied value wins: the field surfaces that on its own.
     const seedBaseUrl =
       provider === "ollama" && !scopedOsEnv.OLLAMA_BASE_URL && !scopedOsEnv.OLLAMA_HOST;
-    setDraftDesktopSettings((current: any) => ({
+    setDraftDesktopSettings((current) => ({
       ...current,
-      aiProfiles: current.aiProfiles.map((p: any) =>
+      aiProfiles: current.aiProfiles.map((p) =>
         p.id === profile.id
           ? {
               ...p,
@@ -763,9 +752,9 @@ function ProfileEditor({
   };
 
   const updateModel = (modelId: string) => {
-    setDraftDesktopSettings((current: any) => ({
+    setDraftDesktopSettings((current) => ({
       ...current,
-      aiProfiles: current.aiProfiles.map((p: any) => (p.id === profile.id ? { ...p, modelId } : p)),
+      aiProfiles: current.aiProfiles.map((p) => (p.id === profile.id ? { ...p, modelId } : p)),
     }));
   };
 

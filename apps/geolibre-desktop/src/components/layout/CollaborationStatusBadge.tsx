@@ -259,6 +259,7 @@ export function CollaborationStatusBadge({ api, mapControllerRef }: Collaboratio
 
   return (
     <div
+      // eslint-disable-next-line local/no-physical-tailwind -- anchored to the map, whose controls sit at physical corners in every locale.
       className={`pointer-events-none absolute left-2 z-10 flex w-60 max-w-[calc(100%-1rem)] flex-col gap-1.5 ${
         // Clear the bottom-left scale control (~32px tall); when the
         // bounds-restriction badge (bottom-12) is also showing, sit above it

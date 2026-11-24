@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type { Feature, FeatureCollection, Polygon, Position } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
@@ -896,7 +897,7 @@ function refresh(): void {
       error instanceof RangeError ? labels.tooManyCells(DGGRID_VIEWPORT_CELL_LIMIT) : String(error);
   }
   applyStyle();
-  (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
+  updateGeoJsonSourceData(map.getSource(SOURCE_ID) as GeoJSONSource | undefined, currentGrid);
   updateSelectedSource();
   // Pan/zoom only updates the status line (and auto-resolution readout) —
   // rebuilding the whole panel would destroy open color pickers / focused inputs.
@@ -953,12 +954,12 @@ function parentCells(cell: string): string[] {
 function updateSelectedSource(): void {
   if (!dggs) return;
   const source = map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
-  source?.setData({
+  updateGeoJsonSourceData(source, {
     type: "FeatureCollection",
     features: selectedCell ? [dggridCellFeature(dggs, selectedCell, selectedResolution)] : [],
   });
   const neighborsSource = map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined;
-  neighborsSource?.setData({
+  updateGeoJsonSourceData(neighborsSource, {
     type: "FeatureCollection",
     features:
       settings.includeNeighbors && selectedCell
@@ -968,7 +969,7 @@ function updateSelectedSource(): void {
         : [],
   });
   const parentsSource = map?.getSource(PARENTS_SOURCE_ID) as GeoJSONSource | undefined;
-  parentsSource?.setData({
+  updateGeoJsonSourceData(parentsSource, {
     type: "FeatureCollection",
     features:
       settings.includeParents && selectedCell

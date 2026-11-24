@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type {
   GeoJSONSource,
   MapGeoJSONFeature,
@@ -345,7 +346,8 @@ function setSelectedMarker(lngLat: { lng: number; lat: number } | null): void {
   if (!map) return;
   const source = map.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
   if (!source) return;
-  source.setData(
+  updateGeoJsonSourceData(
+    source,
     lngLat
       ? {
           type: "FeatureCollection",
