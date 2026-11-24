@@ -178,6 +178,11 @@ length is missing or understated. The server requests identity encoding and
 rejects compressed responses. Video sources inside a fetched style are removed
 because MapLibre loads video outside the consent-controlled request path.
 
+The COG preview’s 64 MiB budget counts requested range bytes, rather than total
+network transfer. If a server ignores Range and returns a complete resource within
+the 4 MiB response limit, later reads can download that body again. For predictable
+transfer sizes, serve COG and PMTiles resources with HTTP Range support.
+
 After updating a checkout, run these commands from the monorepo root.
 Install JavaScript dependencies and rebuild the view before the editable Python
 install, whose build hook can build any missing frontend assets:

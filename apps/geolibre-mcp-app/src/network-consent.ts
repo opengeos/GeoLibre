@@ -419,10 +419,7 @@ export function createNetworkConsent(
       throw new Error(
         "The server returned invalid resource data. Reopen the preview or update the GeoLibre MCP server.",
       );
-    if (range && parsed.data.rangeStart !== range.offset)
-      throw new Error(
-        "The server returned a different byte range. Update the GeoLibre MCP server to preview PMTiles or COG layers.",
-      );
+    if (range && parsed.data.rangeStart !== range.offset) throw new Error(t("unexpectedByteRange"));
     return { bytes: decodeResource(parsed.data.data), resource: parsed.data };
   }
 
@@ -438,7 +435,7 @@ export function createNetworkConsent(
     signal.throwIfAborted();
     const url = remoteUrl(value);
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 1)
-      throw new Error("The preview byte range is invalid.");
+      throw new Error(t("invalidByteRange"));
     try {
       const chunks: Uint8Array[] = [];
       let received = 0;
@@ -455,8 +452,7 @@ export function createNetworkConsent(
           cacheControl: resource.cacheControl,
           expires: resource.expires,
         };
-        if (bytes.byteLength > want)
-          throw new Error("The server returned more bytes than the preview requested.");
+        if (bytes.byteLength > want) throw new Error(t("excessRangeBytes"));
         chunks.push(new Uint8Array(bytes));
         received += bytes.byteLength;
         // A server may return a partial chunk before EOF. Keep filling the

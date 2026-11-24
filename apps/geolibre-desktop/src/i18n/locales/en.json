@@ -6,8 +6,8 @@
   },
   "mcpPreview": {
     "content": {
-      "pmtilesMissingMetadata": "is a PMTiles archive without usable source-layer metadata, so this preview cannot draw it",
-      "pmtilesUnreadable": "is not a PMTiles archive layer this preview can read",
+      "pmtilesMissingMetadata": "no usable source-layer metadata, so this preview cannot draw it",
+      "pmtilesUnreadable": "not an archive layer this preview can read",
       "layer": "Layer “{{name}}” ({{kind}}): {{reason}}.",
       "cogPreview": "Layer “{{name}}” ({{kind}}): shown as a downsampled preview image; Identify is not available for it."
     },
@@ -40,7 +40,10 @@
       "allowed": "Allowed",
       "blocked": "Blocked",
       "allowAll": "Allow all",
-      "blockAll": "Block all"
+      "blockAll": "Block all",
+      "invalidByteRange": "The preview byte range is invalid.",
+      "unexpectedByteRange": "The server returned a different byte range. Update the GeoLibre MCP server to preview PMTiles or COG layers.",
+      "excessRangeBytes": "The server returned more bytes than the preview requested."
     }
   },
   "projectHistory": {
@@ -10817,7 +10820,11 @@
       "hideKey": "Hide key",
       "showKeyAria": "Show Google Maps API key",
       "hideKeyAria": "Hide Google Maps API key",
-      "toggleLayerAria": "Toggle {{name}}"
+      "toggleLayerAria": "Toggle {{name}}",
+      "extentHttp": "Could not read the 3D Tiles extent (HTTP {{status}}).",
+      "extentTooLarge": "The 3D Tiles extent manifest exceeds the 4 MiB preview limit.",
+      "extentEmpty": "The 3D Tiles extent manifest is empty.",
+      "extentNoVolume": "The 3D Tiles manifest has no usable root bounding volume."
     },
     "geolibre-osm-downloader": {
       "title": "OSM downloader",

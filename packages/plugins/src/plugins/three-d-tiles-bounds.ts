@@ -2,6 +2,8 @@ import { createBoundingVolume } from "@loaders.gl/tiles";
 import { Matrix4 } from "@math.gl/core";
 import { Ellipsoid } from "@math.gl/geospatial";
 
+import { createPluginTranslator, type PluginTranslate } from "../plugin-i18n";
+
 type Bounds = [number, number, number, number];
 
 /** A camera extent from a 3D Tiles root volume, including its root transform. */
@@ -62,22 +64,29 @@ export function threeDTilesRootBounds(value: unknown): Bounds | null {
 export async function loadThreeDTilesBounds(
   url: string,
   signal?: AbortSignal,
+  t: PluginTranslate = createPluginTranslator(null, "3d-tiles"),
 ): Promise<Bounds | null> {
   const timeout = AbortSignal.timeout(30_000);
   const response = await fetch(url, {
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
   if (!response.ok)
-    throw new Error(`Could not read the 3D Tiles extent (HTTP ${response.status}).`);
+    throw new Error(
+      t("extentHttp", "Could not read the 3D Tiles extent (HTTP {{status}}).", {
+        status: response.status,
+      }),
+    );
   // Root manifests can contain many children. Bound this metadata-only read
   // independently of the renderer's later, on-demand tileset loading.
   const limit = 4 * 1024 * 1024;
   if (Number(response.headers.get("content-length")) > limit) {
     await response.body?.cancel();
-    throw new Error("The 3D Tiles extent manifest exceeds the 4 MiB preview limit.");
+    throw new Error(
+      t("extentTooLarge", "The 3D Tiles extent manifest exceeds the 4 MiB preview limit."),
+    );
   }
   const reader = response.body?.getReader();
-  if (!reader) throw new Error("The 3D Tiles extent manifest is empty.");
+  if (!reader) throw new Error(t("extentEmpty", "The 3D Tiles extent manifest is empty."));
   const chunks: Uint8Array[] = [];
   let size = 0;
   try {
@@ -86,7 +95,9 @@ export async function loadThreeDTilesBounds(
       if (done) break;
       size += value.byteLength;
       if (size > limit)
-        throw new Error("The 3D Tiles extent manifest exceeds the 4 MiB preview limit.");
+        throw new Error(
+          t("extentTooLarge", "The 3D Tiles extent manifest exceeds the 4 MiB preview limit."),
+        );
       chunks.push(value);
     }
   } finally {
@@ -100,6 +111,9 @@ export async function loadThreeDTilesBounds(
     offset += chunk.byteLength;
   }
   const bounds = threeDTilesRootBounds(JSON.parse(new TextDecoder().decode(bytes)));
-  if (!bounds) throw new Error("The 3D Tiles manifest has no usable root bounding volume.");
+  if (!bounds)
+    throw new Error(
+      t("extentNoVolume", "The 3D Tiles manifest has no usable root bounding volume."),
+    );
   return bounds;
 }

@@ -40,7 +40,7 @@ describe("MCP preview omitted content", () => {
         metadata: { sourceKind: "pmtiles-url", externalNativeLayer: true },
       }),
     ]);
-    assert.match(unsupportedContent(saved).join("\n"), /without usable source-layer metadata/);
+    assert.match(unsupportedContent(saved).join("\n"), /no usable source-layer metadata/);
   });
   it("keeps WMS sources while rejecting plugin archives, video, and desktop sources", () => {
     const saved = project([

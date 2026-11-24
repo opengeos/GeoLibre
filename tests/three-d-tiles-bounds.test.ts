@@ -109,3 +109,15 @@ it("rejects a failed metadata read without adding a loading record", async (t) =
   t.mock.method(globalThis, "fetch", async () => new Response("unavailable", { status: 503 }));
   await assert.rejects(loadThreeDTilesBounds("https://example.com/tileset.json"), /HTTP 503/);
 });
+
+it("uses the host translator for metadata errors", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => new Response("unavailable", { status: 503 }));
+  await assert.rejects(
+    loadThreeDTilesBounds(
+      "https://example.com/tileset.json",
+      undefined,
+      (key, _fallback, params) => `${key}: ${params?.status}`,
+    ),
+    /extentHttp: 503/,
+  );
+});

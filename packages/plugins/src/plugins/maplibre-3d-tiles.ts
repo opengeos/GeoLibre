@@ -1342,7 +1342,7 @@ export async function addThreeDTilesLayerFromUrl(
     try {
       bounds = await (
         await import("./three-d-tiles-bounds")
-      ).loadThreeDTilesBounds(url, options.signal);
+      ).loadThreeDTilesBounds(url, options.signal, translate);
     } catch (error) {
       if (options.signal?.aborted) throw error;
       throw new Error(
