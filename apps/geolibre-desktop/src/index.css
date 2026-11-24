@@ -4368,14 +4368,14 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 /* maplibre-gl-components' PMTiles "Enable feature picking" popup hardcodes a
    light table (#fff rows, #f0f0f0 header, #333 text), so in dark mode it sat as
    a white block inside the themed popup frame. Re-key it onto the app theme
-   tokens so it follows the in-app light/dark toggle. The extra
-   .maplibregl-popup ancestor outranks the upstream single-class rules
-   regardless of stylesheet order. */
-.maplibregl-popup .maplibre-gl-pmtiles-popup {
+   tokens so it follows the in-app light/dark toggle. The html prefix
+   outranks the upstream single-class rules regardless of stylesheet order,
+   matching the Zarr popup overrides. */
+html .maplibregl-popup .maplibre-gl-pmtiles-popup {
   color: hsl(var(--popover-foreground));
 }
 
-.maplibregl-popup .maplibre-gl-pmtiles-popup-header {
+html .maplibregl-popup .maplibre-gl-pmtiles-popup-header {
   background: hsl(var(--muted));
   border-bottom-color: hsl(var(--border));
   color: hsl(var(--foreground));
@@ -4383,22 +4383,22 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   padding-inline-end: 28px;
 }
 
-.maplibregl-popup .maplibre-gl-pmtiles-popup-table,
-.maplibregl-popup .maplibre-gl-pmtiles-popup-table tr {
+html .maplibregl-popup .maplibre-gl-pmtiles-popup-table,
+html .maplibregl-popup .maplibre-gl-pmtiles-popup-table tr {
   background: transparent;
 }
 
-.maplibregl-popup .maplibre-gl-pmtiles-popup-key {
+html .maplibregl-popup .maplibre-gl-pmtiles-popup-key {
   border-bottom-color: hsl(var(--border));
   color: hsl(var(--foreground));
 }
 
-.maplibregl-popup .maplibre-gl-pmtiles-popup-value {
+html .maplibregl-popup .maplibre-gl-pmtiles-popup-value {
   border-bottom-color: hsl(var(--border));
   color: hsl(var(--popover-foreground) / 0.85);
 }
 
-.maplibregl-popup .maplibre-gl-pmtiles-popup-empty {
+html .maplibregl-popup .maplibre-gl-pmtiles-popup-empty {
   color: hsl(var(--muted-foreground));
 }
 
