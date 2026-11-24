@@ -21,7 +21,14 @@ export type RasterToolId =
   | "spectral-index"
   | "reclassify"
   | "mosaic"
-  | "focal";
+  | "focal"
+  | "change-difference"
+  | "ndvi-change"
+  | "transition-matrix"
+  | "sar-db"
+  | "speckle-filter"
+  | "sar-rgb"
+  | "flood-map";
 
 /** A native file-dialog filter (Tauri `open`/`save` shape). */
 export interface FileFilter {
@@ -30,9 +37,9 @@ export interface FileFilter {
 }
 
 /**
- * A raster processing tool. Most raster tools execute on the Python sidecar
- * (rasterio/GDAL) with a file path in and a file path out. A subset also has an
- * in-browser implementation (`supportsClient`) backed by `geotiff.js`, so the
+ * A raster processing tool. The classic tools execute on the Python sidecar
+ * (rasterio/GDAL) with a file path in and a file path out, and every tool also has an
+ * in-browser implementation (`supportsClient`, see `raster-client.ts`), so the
  * toolbox degrades gracefully when no sidecar is running, mirroring the vector
  * tools. The tool only declares its operation parameters; the dialog always
  * renders the primary input/output file pickers from `inputFilters` /
@@ -42,7 +49,15 @@ export interface RasterTool {
   id: RasterToolId;
   name: string;
   description: string;
-  group: "Terrain" | "Reproject" | "Clip" | "Raster to Vector" | "Vector to Raster" | "Analysis";
+  group:
+    | "Terrain"
+    | "Reproject"
+    | "Clip"
+    | "Raster to Vector"
+    | "Vector to Raster"
+    | "Analysis"
+    | "Change Detection"
+    | "SAR";
   /** Raster output writes a GeoTIFF; vector output writes a GeoJSON. */
   outputKind: "raster" | "vector";
   defaultOutputName: string;
@@ -61,6 +76,11 @@ export interface RasterTool {
    * these tools and adds the computed raster straight to the map.
    */
   supportsClient?: boolean;
+  /**
+   * The tool runs only in the browser (the sidecar has no worker for it), so
+   * the dialog offers no engine choice.
+   */
+  clientOnly?: boolean;
   /** Operation knobs (not the primary input/output paths). */
   parameters: AlgorithmParameter[];
 }
@@ -171,6 +191,7 @@ export const reprojectTool: RasterTool = {
   defaultOutputName: "reprojected.tif",
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOTIFF_OUTPUT,
+  supportsClient: true,
   parameters: [
     {
       id: "dst_crs",
@@ -199,6 +220,7 @@ export const resampleTool: RasterTool = {
   defaultOutputName: "resampled.tif",
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOTIFF_OUTPUT,
+  supportsClient: true,
   parameters: [
     {
       id: "resolution",
@@ -230,10 +252,34 @@ export const clipExtentTool: RasterTool = {
   outputFilters: GEOTIFF_OUTPUT,
   supportsClient: true,
   parameters: [
-    { id: "minx", label: "Min X", type: "number", required: true, step: 0.0001 },
-    { id: "miny", label: "Min Y", type: "number", required: true, step: 0.0001 },
-    { id: "maxx", label: "Max X", type: "number", required: true, step: 0.0001 },
-    { id: "maxy", label: "Max Y", type: "number", required: true, step: 0.0001 },
+    {
+      id: "minx",
+      label: "Min X",
+      type: "number",
+      required: true,
+      step: 0.0001,
+    },
+    {
+      id: "miny",
+      label: "Min Y",
+      type: "number",
+      required: true,
+      step: 0.0001,
+    },
+    {
+      id: "maxx",
+      label: "Max X",
+      type: "number",
+      required: true,
+      step: 0.0001,
+    },
+    {
+      id: "maxy",
+      label: "Max Y",
+      type: "number",
+      required: true,
+      step: 0.0001,
+    },
   ],
 };
 
@@ -246,6 +292,7 @@ export const clipMaskTool: RasterTool = {
   defaultOutputName: "masked.tif",
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOTIFF_OUTPUT,
+  supportsClient: true,
   parameters: [
     {
       id: "mask_path",
@@ -280,8 +327,17 @@ export const polygonizeTool: RasterTool = {
   defaultOutputName: "polygons.geojson",
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOJSON_OUTPUT,
+  supportsClient: true,
   parameters: [
-    { id: "band", label: "Band", type: "number", default: 1, min: 1, max: 99, step: 1 },
+    {
+      id: "band",
+      label: "Band",
+      type: "number",
+      default: 1,
+      min: 1,
+      max: 99,
+      step: 1,
+    },
     {
       id: "connectivity",
       label: "Connectivity",
@@ -310,8 +366,17 @@ export const contourTool: RasterTool = {
   defaultOutputName: "contours.geojson",
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOJSON_OUTPUT,
+  supportsClient: true,
   parameters: [
-    { id: "band", label: "Band", type: "number", default: 1, min: 1, max: 99, step: 1 },
+    {
+      id: "band",
+      label: "Band",
+      type: "number",
+      default: 1,
+      min: 1,
+      max: 99,
+      step: 1,
+    },
     {
       id: "interval",
       label: "Interval",
@@ -342,6 +407,7 @@ export const interpolateTool: RasterTool = {
   inputFilters: GEOJSON_INPUT,
   outputFilters: GEOTIFF_OUTPUT,
   inputLabel: "toolbar.rasterTool.inputPoints",
+  supportsClient: true,
   parameters: [
     {
       id: "field",
@@ -409,6 +475,7 @@ export const zonalStatisticsTool: RasterTool = {
   defaultOutputName: "zonal-stats.geojson",
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOJSON_OUTPUT,
+  supportsClient: true,
   parameters: [
     {
       id: "zones_path",
@@ -419,7 +486,15 @@ export const zonalStatisticsTool: RasterTool = {
       description:
         "A GeoJSON polygon layer defining the zones. It is reprojected to the raster's CRS automatically (a GeoJSON with no CRS is assumed to be WGS84).",
     },
-    { id: "band", label: "Band", type: "number", default: 1, min: 1, max: 99, step: 1 },
+    {
+      id: "band",
+      label: "Band",
+      type: "number",
+      default: 1,
+      min: 1,
+      max: 99,
+      step: 1,
+    },
     {
       id: "prefix",
       label: "Field prefix",
@@ -515,7 +590,10 @@ export const spectralIndexTool: RasterTool = {
       label: "Sensor / band layout",
       type: "select",
       default: SENSOR_IDS[0],
-      options: SENSOR_IDS.map((id) => ({ value: id, label: SENSOR_LABELS[id] })),
+      options: SENSOR_IDS.map((id) => ({
+        value: id,
+        label: SENSOR_LABELS[id],
+      })),
       description:
         "Preset band numbers for common sensors. Choose Custom to map bands by hand for a differently stacked GeoTIFF.",
     },
@@ -562,7 +640,15 @@ export const reclassifyTool: RasterTool = {
   outputFilters: GEOTIFF_OUTPUT,
   supportsClient: true,
   parameters: [
-    { id: "band", label: "Band", type: "number", default: 1, min: 1, max: 99, step: 1 },
+    {
+      id: "band",
+      label: "Band",
+      type: "number",
+      default: 1,
+      min: 1,
+      max: 99,
+      step: 1,
+    },
     {
       id: "table",
       label: "Rules",
@@ -588,12 +674,13 @@ export const mosaicTool: RasterTool = {
   id: "mosaic",
   name: "Mosaic / merge",
   description:
-    "Combine up to five rasters (sharing a CRS) into a single raster covering their union.",
+    "Combine up to five rasters (sharing a CRS) into a single raster covering their union. In the browser the rasters must also share a pixel grid.",
   group: "Analysis",
   outputKind: "raster",
   defaultOutputName: "mosaic.tif",
   inputFilters: GEOTIFF_INPUT,
   outputFilters: GEOTIFF_OUTPUT,
+  supportsClient: true,
   inputLabel: "toolbar.rasterTool.inputRaster1",
   parameters: [
     {
@@ -648,7 +735,15 @@ export const focalStatisticsTool: RasterTool = {
   outputFilters: GEOTIFF_OUTPUT,
   supportsClient: true,
   parameters: [
-    { id: "band", label: "Band", type: "number", default: 1, min: 1, max: 99, step: 1 },
+    {
+      id: "band",
+      label: "Band",
+      type: "number",
+      default: 1,
+      min: 1,
+      max: 99,
+      step: 1,
+    },
     {
       id: "statistic",
       label: "Statistic",
@@ -677,6 +772,390 @@ export const focalStatisticsTool: RasterTool = {
   ],
 };
 
+/** A required second-date raster for the change detection tools. */
+const AFTER_RASTER_PARAM: AlgorithmParameter = {
+  id: "after_path",
+  label: "After raster",
+  type: "path",
+  required: true,
+  fileFilters: GEOTIFF_INPUT,
+  description:
+    "The later image, on the same pixel grid as the before raster (reproject or resample it first if needed).",
+};
+
+const CHANGE_THRESHOLD_VISIBLE = { param: "output", in: ["classified"] };
+
+export const bandDifferenceTool: RasterTool = {
+  id: "change-difference",
+  name: "Band difference",
+  description:
+    "Compare one band of two dates pixel by pixel: difference, percent change, ratio, or log ratio (dB), optionally thresholded into decrease / no change / increase classes.",
+  group: "Change Detection",
+  outputKind: "raster",
+  defaultOutputName: "change.tif",
+  inputFilters: GEOTIFF_INPUT,
+  outputFilters: GEOTIFF_OUTPUT,
+  inputLabel: "toolbar.rasterTool.inputBefore",
+  supportsClient: true,
+  clientOnly: true,
+  parameters: [
+    AFTER_RASTER_PARAM,
+    {
+      id: "band",
+      label: "Band",
+      type: "number",
+      default: 1,
+      min: 1,
+      max: 99,
+      step: 1,
+    },
+    {
+      id: "mode",
+      label: "Change metric",
+      type: "select",
+      default: "difference",
+      options: [
+        { value: "difference", label: "Difference (after - before)" },
+        { value: "percent", label: "Percent change" },
+        { value: "ratio", label: "Ratio (after / before)" },
+        { value: "log-ratio", label: "Log ratio (dB)" },
+      ],
+    },
+    {
+      id: "output",
+      label: "Output",
+      type: "select",
+      default: "continuous",
+      options: [
+        { value: "continuous", label: "Continuous change" },
+        {
+          value: "classified",
+          label: "Classes (-1 decrease, 0 none, 1 increase)",
+        },
+      ],
+    },
+    {
+      id: "threshold",
+      label: "Change threshold",
+      type: "number",
+      default: 0,
+      min: 0,
+      step: 0.1,
+      visibleWhen: CHANGE_THRESHOLD_VISIBLE,
+      description:
+        "Minimum change counted as an increase or decrease, in the metric's units (a ratio is compared to 1).",
+    },
+  ],
+};
+
+export const ndviChangeTool: RasterTool = {
+  id: "ndvi-change",
+  name: "NDVI change",
+  description:
+    "Compute NDVI for two dates of a multiband image and their difference (after - before), optionally classified into vegetation loss / stable / gain with a threshold.",
+  group: "Change Detection",
+  outputKind: "raster",
+  defaultOutputName: "ndvi-change.tif",
+  inputFilters: GEOTIFF_INPUT,
+  outputFilters: GEOTIFF_OUTPUT,
+  inputLabel: "toolbar.rasterTool.inputBefore",
+  supportsClient: true,
+  clientOnly: true,
+  parameters: [
+    AFTER_RASTER_PARAM,
+    {
+      id: "sensor",
+      label: "Sensor / band layout",
+      type: "select",
+      default: SENSOR_IDS[0],
+      options: SENSOR_IDS.map((id) => ({
+        value: id,
+        label: SENSOR_LABELS[id],
+      })),
+      description: "Preset red/NIR band numbers. Choose Custom to set them by hand.",
+    },
+    bandParam("red", "Red band number"),
+    bandParam("nir", "NIR band number"),
+    {
+      id: "output",
+      label: "Output",
+      type: "select",
+      default: "classified",
+      options: [
+        { value: "difference", label: "NDVI difference" },
+        { value: "classified", label: "Classes (-1 loss, 0 stable, 1 gain)" },
+      ],
+    },
+    {
+      id: "threshold",
+      label: "NDVI change threshold",
+      type: "number",
+      default: 0.2,
+      min: 0,
+      max: 2,
+      step: 0.05,
+      visibleWhen: CHANGE_THRESHOLD_VISIBLE,
+      description: "Minimum NDVI difference counted as loss or gain.",
+    },
+  ],
+};
+
+export const transitionMatrixTool: RasterTool = {
+  id: "transition-matrix",
+  name: "Transition matrix",
+  description:
+    "Cross-tabulate two categorical (land cover) rasters: log the from/to class transition matrix and write a raster coding each pixel's transition as from x 10^n + to.",
+  group: "Change Detection",
+  outputKind: "raster",
+  defaultOutputName: "transitions.tif",
+  inputFilters: GEOTIFF_INPUT,
+  outputFilters: GEOTIFF_OUTPUT,
+  inputLabel: "toolbar.rasterTool.inputBefore",
+  supportsClient: true,
+  clientOnly: true,
+  parameters: [
+    AFTER_RASTER_PARAM,
+    {
+      id: "band",
+      label: "Band",
+      type: "number",
+      default: 1,
+      min: 1,
+      max: 99,
+      step: 1,
+    },
+  ],
+};
+
+const SAR_UNITS_PARAM: AlgorithmParameter = {
+  id: "units",
+  label: "Input units",
+  type: "select",
+  default: "linear",
+  options: [
+    { value: "linear", label: "Linear power (sigma0 / gamma0)" },
+    { value: "db", label: "Decibels (dB)" },
+  ],
+};
+
+export const sarDbTool: RasterTool = {
+  id: "sar-db",
+  name: "Linear / dB conversion",
+  description:
+    "Convert SAR backscatter between linear units and decibels (10 log10 for power, 20 log10 for amplitude). When converting linear units to dB, values at or below zero have no dB value and become NoData.",
+  group: "SAR",
+  outputKind: "raster",
+  defaultOutputName: "backscatter-db.tif",
+  inputFilters: GEOTIFF_INPUT,
+  outputFilters: GEOTIFF_OUTPUT,
+  supportsClient: true,
+  clientOnly: true,
+  parameters: [
+    {
+      id: "direction",
+      label: "Direction",
+      type: "select",
+      default: "to-db",
+      options: [
+        { value: "to-db", label: "Linear to dB" },
+        { value: "to-linear", label: "dB to linear" },
+      ],
+    },
+    {
+      id: "quantity",
+      label: "Quantity",
+      type: "select",
+      default: "power",
+      options: [
+        { value: "power", label: "Power / intensity (10 log10)" },
+        { value: "amplitude", label: "Amplitude (20 log10)" },
+      ],
+    },
+  ],
+};
+
+export const speckleFilterTool: RasterTool = {
+  id: "speckle-filter",
+  name: "Speckle filter",
+  description:
+    "Reduce SAR speckle with the Lee filter or the edge-preserving refined Lee filter. Filtering runs on linear power; dB input is converted and converted back.",
+  group: "SAR",
+  outputKind: "raster",
+  defaultOutputName: "despeckled.tif",
+  inputFilters: GEOTIFF_INPUT,
+  outputFilters: GEOTIFF_OUTPUT,
+  supportsClient: true,
+  clientOnly: true,
+  parameters: [
+    {
+      id: "method",
+      label: "Filter",
+      type: "select",
+      default: "refined-lee",
+      options: [
+        { value: "refined-lee", label: "Refined Lee (7x7, edge-aligned)" },
+        { value: "lee", label: "Lee" },
+      ],
+    },
+    {
+      id: "size",
+      label: "Window size",
+      type: "number",
+      default: 7,
+      min: 3,
+      max: 15,
+      step: 2,
+      visibleWhen: { param: "method", in: ["lee"] },
+      description: "Odd window size in pixels.",
+    },
+    {
+      id: "enl",
+      label: "Equivalent number of looks",
+      type: "number",
+      default: 4.4,
+      min: 0.1,
+      step: 0.1,
+      description:
+        "Speckle strength (noise variance = 1 / ENL). About 4.4 for Sentinel-1 IW GRD high resolution.",
+    },
+    SAR_UNITS_PARAM,
+  ],
+};
+
+export const dualPolRgbTool: RasterTool = {
+  id: "sar-rgb",
+  name: "Dual-pol RGB composite",
+  description:
+    "Build a Sentinel-1 false-colour composite: red = VV, green = VH, blue = VV/VH ratio, each stretched over a dB range. VH comes from a second raster or from another band of the input.",
+  group: "SAR",
+  outputKind: "raster",
+  defaultOutputName: "vv-vh-rgb.tif",
+  inputFilters: GEOTIFF_INPUT,
+  outputFilters: GEOTIFF_OUTPUT,
+  inputLabel: "toolbar.rasterTool.inputVv",
+  supportsClient: true,
+  clientOnly: true,
+  parameters: [
+    {
+      id: "vh_path",
+      label: "VH raster (optional)",
+      type: "path",
+      fileFilters: GEOTIFF_INPUT,
+      description:
+        "A separate VH image on the same grid. Leave empty to read VH from a band of the input.",
+    },
+    SAR_UNITS_PARAM,
+    {
+      id: "vv_band",
+      label: "VV band",
+      type: "number",
+      default: 1,
+      min: 1,
+      max: 99,
+      step: 1,
+    },
+    {
+      id: "vh_band",
+      label: "VH band",
+      type: "number",
+      min: 1,
+      max: 99,
+      step: 1,
+      description:
+        "Leave blank for band 1 of a separate VH raster, or band 2 of the stacked input. Enter a band number to override.",
+    },
+    {
+      id: "vv_min",
+      label: "VV min (dB)",
+      type: "number",
+      default: -25,
+      step: 1,
+    },
+    { id: "vv_max", label: "VV max (dB)", type: "number", default: 0, step: 1 },
+    {
+      id: "vh_min",
+      label: "VH min (dB)",
+      type: "number",
+      default: -30,
+      step: 1,
+    },
+    {
+      id: "vh_max",
+      label: "VH max (dB)",
+      type: "number",
+      default: -5,
+      step: 1,
+    },
+    {
+      id: "ratio_min",
+      label: "VV/VH min (dB)",
+      type: "number",
+      default: 0,
+      step: 1,
+    },
+    {
+      id: "ratio_max",
+      label: "VV/VH max (dB)",
+      type: "number",
+      default: 15,
+      step: 1,
+    },
+  ],
+};
+
+export const floodMapTool: RasterTool = {
+  id: "flood-map",
+  name: "Flood mapping (SAR threshold)",
+  description:
+    "Map open water from VV backscatter with a dB threshold. With a pre-event image, separate new flooding from permanent water using the backscatter drop.",
+  group: "SAR",
+  outputKind: "raster",
+  defaultOutputName: "flood.tif",
+  inputFilters: GEOTIFF_INPUT,
+  outputFilters: GEOTIFF_OUTPUT,
+  inputLabel: "toolbar.rasterTool.inputPostEvent",
+  supportsClient: true,
+  clientOnly: true,
+  parameters: [
+    {
+      id: "pre_path",
+      label: "Pre-event raster (optional)",
+      type: "path",
+      fileFilters: GEOTIFF_INPUT,
+      description:
+        "A pre-flood image on the same grid. Output: 0 neither permanent water nor new flooding, 1 permanent water, 2 new flooding. Without it: 0 not water, 1 water.",
+    },
+    SAR_UNITS_PARAM,
+    {
+      id: "band",
+      label: "VV band",
+      type: "number",
+      default: 1,
+      min: 1,
+      max: 99,
+      step: 1,
+    },
+    {
+      id: "threshold_db",
+      label: "Water threshold (dB)",
+      type: "number",
+      default: -18,
+      step: 0.5,
+      description: "VV backscatter below this is water. Typical values are -15 to -20 dB.",
+    },
+    {
+      id: "change_db",
+      label: "Minimum drop (dB)",
+      type: "number",
+      default: 3,
+      min: 0,
+      step: 0.5,
+      description:
+        "With a pre-event image: how much darker a pixel must get to count as new flooding.",
+    },
+  ],
+};
+
 /** Every raster tool, in display order (grouped by `group`). */
 export const RASTER_TOOLS: RasterTool[] = [
   hillshadeTool,
@@ -695,6 +1174,13 @@ export const RASTER_TOOLS: RasterTool[] = [
   reclassifyTool,
   mosaicTool,
   focalStatisticsTool,
+  bandDifferenceTool,
+  ndviChangeTool,
+  transitionMatrixTool,
+  sarDbTool,
+  speckleFilterTool,
+  dualPolRgbTool,
+  floodMapTool,
 ];
 
 export function getRasterTool(id: string): RasterTool | undefined {

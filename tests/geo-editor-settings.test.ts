@@ -3,13 +3,18 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   createEmptyProject,
+  DEFAULT_GEO_EDITOR_SNAP_TOLERANCE_PX,
   DEFAULT_LAYER_STYLE,
+  geoEditorSnapTolerancePx,
   normalizeGeoEditorSettings,
   parseProject,
   serializeProject,
 } from "@geolibre/core";
 import { useAppStore } from "../packages/core/src/store";
-import { getGeoEditorOptions } from "../packages/plugins/src/plugins/maplibre-geo-editor";
+import {
+  applyGeomanSnapTolerance,
+  getGeoEditorOptions,
+} from "../packages/plugins/src/plugins/maplibre-geo-editor";
 
 describe("GeoEditor project settings", () => {
   it("keeps the existing height form and automatic popup by default", () => {
@@ -49,6 +54,29 @@ describe("GeoEditor project settings", () => {
       parseProject(serializeProject(project)).preferences.map.geoEditor,
       project.preferences.map.geoEditor,
     );
+  });
+  it("clamps and round-trips the snapping tolerance", () => {
+    assert.equal(geoEditorSnapTolerancePx(undefined), DEFAULT_GEO_EDITOR_SNAP_TOLERANCE_PX);
+    assert.equal(geoEditorSnapTolerancePx({ snapTolerancePx: 0 }), 1);
+    assert.equal(geoEditorSnapTolerancePx({ snapTolerancePx: 500 }), 100);
+    assert.equal(geoEditorSnapTolerancePx({ snapTolerancePx: 7.6 }), 8);
+    assert.equal(normalizeGeoEditorSettings({ snapTolerancePx: 250 }).snapTolerancePx, 100);
+    assert.equal(normalizeGeoEditorSettings({ snapTolerancePx: "x" }).snapTolerancePx, undefined);
+    const project = createEmptyProject("Snapping");
+    project.preferences.map.geoEditor = { showAfterDraw: true, fields: [], snapTolerancePx: 30 };
+    assert.equal(
+      parseProject(serializeProject(project)).preferences.map.geoEditor?.snapTolerancePx,
+      30,
+    );
+  });
+  it("applies the snapping tolerance to a live Geoman instance", () => {
+    const geoman = { options: { settings: { snapDistance: 18 } } };
+    applyGeomanSnapTolerance(geoman as never, { snapTolerancePx: 40 });
+    assert.equal(geoman.options.settings.snapDistance, 40);
+    applyGeomanSnapTolerance(geoman as never, undefined);
+    assert.equal(geoman.options.settings.snapDistance, DEFAULT_GEO_EDITOR_SNAP_TOLERANCE_PX);
+    // No editor mounted: nothing to update, and no throw.
+    applyGeomanSnapTolerance(null, { snapTolerancePx: 40 });
   });
   it("uses configured fields for their geometry scopes in the actual editor options", () => {
     const original = useAppStore.getState().preferences;

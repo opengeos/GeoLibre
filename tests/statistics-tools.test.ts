@@ -99,11 +99,16 @@ describe("statistics tools registry", () => {
     assert.deepEqual(STATISTICS_TOOLS.map((t) => t.id).sort(), [
       "average-nearest-neighbor",
       "composite-score",
+      "dbscan",
       "emerging-hot-spot",
       "getis-ord-gi",
       "global-morans-i",
+      "gwr",
+      "hdbscan",
       "kernel-density",
+      "kriging-diagnostics",
       "local-morans-i",
+      "ols-regression",
     ]);
   });
 

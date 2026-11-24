@@ -24,6 +24,7 @@ describe("startup project settings", () => {
       layerStyles: null,
       layers: null,
       openS3Browser: false,
+      allowLiveMcp: false,
     });
   });
 
@@ -49,6 +50,7 @@ describe("startup project settings", () => {
         layerStyles: null,
         layers: null,
         openS3Browser: false,
+        allowLiveMcp: false,
       },
     );
   });
@@ -70,6 +72,18 @@ describe("startup project settings", () => {
       normalizeDesktopSettings({ startup: { openS3Browser: "yes" } }).startup.openS3Browser,
       false,
     );
+  });
+
+  it("allows Live MCP at startup only when explicitly enabled", () => {
+    assert.equal(
+      normalizeDesktopSettings({ startup: { allowLiveMcp: true } }).startup.allowLiveMcp,
+      true,
+    );
+    assert.equal(
+      normalizeDesktopSettings({ startup: { allowLiveMcp: "yes" } }).startup.allowLiveMcp,
+      false,
+    );
+    assert.equal(normalizeDesktopSettings({}).startup.allowLiveMcp, false);
   });
 
   it("normalizes the empty-workspace camera", () => {

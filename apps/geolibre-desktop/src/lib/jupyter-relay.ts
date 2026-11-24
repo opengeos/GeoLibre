@@ -37,6 +37,33 @@ export function relaySocketUrl(info: JupyterServerInfo): string {
   return url.toString();
 }
 
+/** Connection details of the desktop sidecar, as `startGeoLibreSidecar` returns. */
+export interface SidecarRelayTarget {
+  /** Base URL, e.g. `http://127.0.0.1:8765`. */
+  baseUrl: string;
+  /** Per-launch sidecar token. */
+  token: string;
+}
+
+/**
+ * Build the app-side WebSocket URL for the sidecar-hosted Live MCP relay
+ * (backend/geolibre_server/geolibre_server/app/relay.py). It speaks the same
+ * frames as the Jupyter relay, so the same handlers serve both.
+ *
+ * @param info - The running sidecar's base URL and token.
+ * @returns A `ws://` URL for the sidecar relay socket.
+ */
+export function sidecarRelaySocketUrl(info: SidecarRelayTarget): string {
+  const url = new URL(`${info.baseUrl.replace(/\/+$/, "")}/relay/socket`);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return url.toString();
+}
+
+/** Send sidecar authentication in the handshake, outside logged URL paths. */
+export function sidecarRelaySocketProtocols(info: SidecarRelayTarget): string[] {
+  return ["geolibre-relay", `geolibre-token.${encodeURIComponent(info.token)}`];
+}
+
 /**
  * Parse one relay frame into a command, rejecting anything malformed.
  *

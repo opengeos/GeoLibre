@@ -337,6 +337,8 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `add_czml(url=None, name=, data=, source_path=, **style)` | Add a CZML (Cesium Language) dynamic 3D scene by URL or inline packets: orbits, vehicle tracks, moving models. Renders on the 3D globe, which follows the document's clock. |
 | `add_cesium_kml(url=None, name=, data=, source_path=, **style)` | Native KML/KMZ on the globe with document styles and overlays. Supply a URL, inline XML, or a KMZ data URL; use `add_kml` for vector conversion. |
 | `add_video(urls, coordinates, name=, **style)` | Add a georeferenced video (four `[lng, lat]` corners). |
+| `add_arcgis_layer(url, name=, service=, sublayers=, rendering_rule=, max_features=, bounds=, attribution=, **style)` | Add an ArcGIS REST MapServer or ImageServer (`service="map"`/`"image"`, raster tiles from the export endpoint) or a FeatureServer layer (`service="feature"`, features in view loaded when the project opens with the MapLibre renderer). |
+| `add_zarr(url, variable, name=, selector=, clim=, colormap=, bounds=, crs=, spatial_dimensions=, **style)` | Add one variable of a Zarr data cube, drawn by the app's Zarr control. Icechunk and local stores cannot be saved in a project. |
 | `add_basemap(basemap)` / `set_basemap(basemap)` | Set the background basemap. |
 | `split_map(left_layers=None, right_layers=None, orientation=, position=, control_position=)` | Add a swipe (split-map) comparison slider between two layer sets. |
 | `set_map_legend(title=None, position=, group_by_layer=, visible=, collapsed=)` | Show the map legend (Controls → Legend), whose rows come from each visible layer's symbology. One per map; calling it again updates it. |
@@ -362,6 +364,9 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `move_story_chapter(chapter, index)` / `remove_story_chapter(chapter)` | Reorder or drop a chapter by id, title, or 0-based index. |
 | `add_bookmark(name, center=, zoom=, pitch=, bearing=, folder=, visible_layers=)` | Save a view to the Bookmarks panel; camera values left out come from the saved view. `folder` is a folder id or name (a new name creates it); `visible_layers` lists the layers (ids, names, or handles) to show when it is opened. |
 | `remove_bookmark(bookmark)` | Drop a bookmark by id, name, or 0-based index. |
+| `add_layer_group(name, layers=, parent=, collapsed=, visible=, opacity=)` / `set_layer_group(layers, group)` / `remove_layer_group(group)` | Group layers into (nested) Layers panel folders. A group's visibility and opacity apply on top of each member's; removing a group keeps its layers. |
+| `add_dashboard_widget(layer, widget_type, **options)` / `remove_dashboard_widget(widget)` / `set_dashboard_columns(columns)` | Build the Dashboard panel (`histogram`, `scatter`, `bar`, `line`, `box`, `pie`, `indicator`, `selector`, `list`). Options such as `field`, `category`, `aggregation` are validated the way the app reads them. |
+| `set_print_layout(reset=False, **settings)` | Set Print Layout composer settings (`title`, `paper_size`, `show_inset`, `grid_type`, `map_frame_box`, `element_offsets`, ...). With `reset=False`, unspecified settings are preserved and `element_offsets` merges by element name. With `reset=True`, all settings, including the title, return to defaults before the supplied settings apply. |
 | `set_identify(layer="all")` | Arm the Identify tool so a click opens the popup: on one layer (id, name, or handle), on a list of layers, on every visible layer (`"all"`), or off (`None`). |
 | `show_control(name, visible=True, *, collapsed=None, distance_unit=None, area_unit=None)` / `hide_control(name)` | Show or hide a toolbar panel (`bookmark`, `search`, `measure`, `minimap`, `print`) or a built-in map control (`navigation`, `fullscreen`, `compass`, `geolocate`, `globe`, `scale`, `attribution`, `logo`). `collapsed=True` opens `measure` or `minimap` as just its on-map button; `distance_unit` and `area_unit` set Measure's starting units. |
 | `set_projection(projection)` / `projection` | Draw the map as a `"globe"` (the default) or flat `"mercator"` map; saved in the project. |
@@ -371,6 +376,14 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 
 Style keyword arguments (for example `fillColor`, `strokeColor`, `strokeWidth`,
 `circleRadius`) map to the GeoLibre [layer style fields](project-format.md).
+
+WFS, Zarr, video, and ArcGIS builders reject URLs containing embedded
+usernames or passwords, which browser fetch cannot use. Signed query URLs for
+WFS, Zarr, and video remain supported in trusted local projects. `Map.save_project`
+and `Map.to_project` redact credentials by default; `keep_credentials=True`
+preserves them for private use. Low-level `authoring.save_project` and MCP file
+edits preserve the existing project's contents, so use a redacted Map export
+when sharing a project.
 
 ### Marker symbology
 
@@ -657,6 +670,14 @@ geolibre-mcp --root ~/maps
 It builds projects through the same builders this package uses, so anything it
 writes opens in the widget (and in the desktop and web apps) unchanged. See
 [MCP server](mcp.md) for the tool list and client configuration.
+
+The built-in Notebook panel's kernel client uses the same method budgets as Live MCP:
+60 seconds for GeoJSON layer additions, feature reads, and image exports;
+120 seconds for raster-byte additions; 30 minutes for algorithms and Whitebox
+tools; and one hour for model graphs. Other requests keep the five-second
+default. The kernel socket waits one second longer than the command budget so
+the relay can report a result timeout. An accepted layer addition that times
+out is not sent again; use `list_layers()` to find the layer when it completes.
 
 ## Building from source
 

@@ -80,6 +80,7 @@ for (const [outcome, cleanup] of [
     const methods: string[] = [];
     const requests: IncomingHttpHeaders[] = [];
     let streams = 0;
+    const streamClosures: Promise<void>[] = [];
     let deleteStarted: number | undefined;
     // Synthetic MCP fixture: real HTTP, each RPC flushes an event and stays open.
     const server = createServer(async (req, res) => {
@@ -88,7 +89,14 @@ for (const [outcome, cleanup] of [
         deleteStarted = performance.now();
         if (cleanup === "stalls") {
           streams++;
-          res.on("close", () => streams--);
+          streamClosures.push(
+            new Promise<void>((resolve) =>
+              res.once("close", () => {
+                streams--;
+                resolve();
+              }),
+            ),
+          );
           if (outcome === "cancel during DELETE") caller.abort();
         } else {
           res.writeHead(500).end();
@@ -137,7 +145,14 @@ for (const [outcome, cleanup] of [
         "Mcp-Session-Id": "synthetic",
       });
       streams++;
-      res.on("close", () => streams--);
+      streamClosures.push(
+        new Promise<void>((resolve) =>
+          res.once("close", () => {
+            streams--;
+            resolve();
+          }),
+        ),
+      );
       res.write(
         `event: message\r\ndata: ${JSON.stringify(outcome === "error" && rpc.method === "tools/call" ? { jsonrpc: "2.0", id: rpc.id, error: { code: -32000, message: "synthetic primary" } } : { jsonrpc: "2.0", id: rpc.id, result })}\r\n\r\n`,
       );
@@ -168,7 +183,19 @@ for (const [outcome, cleanup] of [
       assert.equal(deadline.aborted, false, "teardown used the whole caller budget");
       assertAnonymousRequests(requests);
       assert.ok(methods.includes("notifications/initialized"));
-      await new Promise((resolve) => setTimeout(resolve, 30));
+      let closeTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        // Await actual socket closure, rather than assuming a loaded CI
+        // event loop delivers every close notification within 30 ms.
+        await Promise.race([
+          Promise.all(streamClosures),
+          new Promise<void>((resolve) => {
+            closeTimer = setTimeout(resolve, 1500);
+          }),
+        ]);
+      } finally {
+        clearTimeout(closeTimer);
+      }
       assert.equal(streams, 0);
     } finally {
       server.closeAllConnections();

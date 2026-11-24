@@ -95,6 +95,26 @@ describe("solveCaptureGeoref", () => {
       return { lng, lat };
     };
     assert.equal(solveCaptureGeoref(WIDTH, HEIGHT, locate, WEB_MERCATOR), null);
+    const cartography = solveCaptureGeoref(WIDTH, HEIGHT, locate, WEB_MERCATOR, 1, {
+      allowUnwrappedLongitude: true,
+    });
+    assert.ok(cartography);
+    assert.equal(
+      geoPdfViewportEntry(
+        cartography,
+        {
+          clip: { x: 0, y: 0, w: WIDTH, h: HEIGHT },
+          dx: 0,
+          dy: 0,
+          scale: 1,
+        },
+        WIDTH,
+        HEIGHT,
+        500,
+        350,
+      ),
+      null,
+    );
   });
 
   it("refuses, rather than throws, when the projection throws", () => {

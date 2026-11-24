@@ -60,14 +60,27 @@ export function scanDocumentForDatasets() {
     return canonical;
   };
 
-  const canonicalUrl = (url) => {
-    if (huggingFaceHost(url)) return huggingFaceFileUrl(url) ?? url;
-    if (url.hostname !== "source.coop") return url;
-    const parts = url.pathname.split("/").filter(Boolean);
-    if (parts.length < 3) return url;
+  // A Zarr store is a directory, so its metadata documents and chunk keys all
+  // name the same dataset: collapse them onto the store root GeoLibre opens.
+  const zarrStoreUrl = (url) => {
+    const store = url.pathname.match(/^(.*?\.zarr)(?:\/.*)?$/i);
+    if (!store) return null;
     const canonical = new URL(url.href);
-    canonical.hostname = "data.source.coop";
+    canonical.pathname = store[1];
+    canonical.hash = "";
     return canonical;
+  };
+
+  const canonicalUrl = (url) => {
+    let canonical = huggingFaceHost(url) ? (huggingFaceFileUrl(url) ?? url) : url;
+    if (
+      canonical.hostname === "source.coop" &&
+      canonical.pathname.split("/").filter(Boolean).length >= 3
+    ) {
+      canonical = new URL(canonical.href);
+      canonical.hostname = "data.source.coop";
+    }
+    return zarrStoreUrl(canonical) ?? canonical;
   };
 
   const canonicalHttpUrl = (raw) => {
@@ -116,6 +129,21 @@ export function scanDocumentForDatasets() {
     }
     if (/\.pmtiles$/.test(path) || says(/pmtiles/)) {
       return { format: "PMTiles", kind: "vector", confidence: 3 };
+    }
+    if (/\.(?:fgb|flatgeobuf)$/.test(path)) {
+      return { format: "FlatGeobuf", kind: "vector", confidence: 3 };
+    }
+    if (/\.gpx$/.test(path)) return { format: "GPX", kind: "vector", confidence: 3 };
+    if (/\.(?:kml|kmz)$/.test(path) || says(/vnd\.google-earth\.km[lz]/)) {
+      return { format: "KML", kind: "vector", confidence: 3 };
+    }
+    // A store root, after canonicalUrl has cut any metadata or chunk key off it.
+    if (/\.zarr$/.test(path)) return { format: "Zarr", kind: "raster", confidence: 3 };
+    // Before the JSON rule below: a tileset and a static STAC catalog are JSON
+    // documents whose names say what they are, whatever the link text reads.
+    if (/\/tileset\.json$/.test(path)) return { format: "3D Tiles", kind: "3d", confidence: 3 };
+    if (/\/(?:catalog|collection)\.json$/.test(path)) {
+      return { format: "STAC", kind: "catalog", confidence: 3 };
     }
     // Before the JSON rule below, which would otherwise hold an EPT `ept.json`
     // to the spatial-wording test a generic JSON link needs.
@@ -203,14 +231,21 @@ export function scanDocumentForDatasets() {
     // A GeoLibre link that already says `dataType=lidar` is a point cloud
     // whatever its path or the wording around it suggests.
     const kind =
-      explicitDataType === "lidar"
+      explicitDataType === "3d-tiles"
         ? {
-            format: "LiDAR",
-            kind: "lidar",
+            format: "3D Tiles",
+            kind: "3d",
             confidence: 3,
-            ...(classify(url)?.kind === "lidar" ? {} : { dataType: "lidar" }),
+            ...(classify(url)?.kind === "3d" ? {} : { dataType: "3d-tiles" }),
           }
-        : classify(url, hint);
+        : explicitDataType === "lidar"
+          ? {
+              format: "LiDAR",
+              kind: "lidar",
+              confidence: 3,
+              ...(classify(url)?.kind === "lidar" ? {} : { dataType: "lidar" }),
+            }
+          : classify(url, hint);
     if (!kind) return;
     const existing = datasets.get(url.href);
     // Hub links carry UI chrome as their text ("Download", "History", "308 kB

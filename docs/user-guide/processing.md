@@ -150,6 +150,16 @@ GeoLibre's own tools, under **Processing → GeoLibre Toolbox**.
 | --- | --- |
 | **Merge layers** | Combine several layers into one, through a multi-layer picker that unites their attribute schemas and can record each feature's source layer in a new field. |
 
+**Linear referencing**
+
+| Tool | Description |
+| --- | --- |
+| **Create routes** | Add M (measure) values to lines, either their cumulative geodesic length (in metres, kilometres, feet, or miles) or a range read from start and end measure fields. Each route gets `route_id`, `m_from`, and `m_to` fields. |
+| **Locate features along routes** | For each point, find the nearest route within a search radius (or every route within it) and record `route_id`, `measure`, and `distance_m`. |
+| **Dynamic segmentation** | Place an event table on routes: selecting a To measure field applies to the whole table and creates segments; rows without a numeric To value are skipped. Leaving To empty creates point events, and equal From/To values also create points. Event attributes are kept. |
+
+M values are stored as the fourth ordinate of each position, `[lng, lat, z, m]`, with `z` set to 0 when the line had no elevation, so a measure is never read as a height. They survive saving the project and exporting GeoJSON. Other export formats may mark zero-Z placeholder routes as 3D and do not guarantee M preservation, and a 2D route's zero Z placeholder is not a measured elevation. Keep a project or GeoJSON copy when measures must be preserved. Tools that rebuild geometry (other vector tools, the GeoEditor) drop them, so run **Create routes** again after reshaping a route. Locating and segmenting on a line without M values measures it by length in metres.
+
 **Data quality**
 
 | Tool | Description |
@@ -158,6 +168,8 @@ GeoLibre's own tools, under **Processing → GeoLibre Toolbox**.
 | **Fix geometries** | Repair invalid geometries with `ST_MakeValid`; valid features pass through untouched. |
 | **Check topology rules** | Validate a layer against topology rules (overlaps, gaps, self-intersections, dangles) and mark each violation. |
 | **Fix topology** | Snap nearly-connected line endpoints, fix dangles, and project points onto lines. Free ends with nothing nearby are left alone. |
+| **Fix polygon overlaps** | Give every area covered by more than one polygon to exactly one of them (the largest, the smallest, the first in the layer, or the highest or lowest value of a priority field) and cut it out of the rest. A polygon covered completely is removed. |
+| **Fill polygon gaps** | Merge each gap enclosed by the layer's polygons (up to a maximum area) into the neighbour sharing the longest boundary with it. Holes inside a single polygon are left alone. |
 
 #### Engines
 
@@ -171,11 +183,59 @@ See the [Vector Analysis tutorial](../tutorials/vector-analysis.md).
 
 ### Raster
 
-**Processing → GeoLibre Toolbox → Raster** opens the Raster tools dialog. Most raster tools run on the rasterio Python sidecar: they take a file path in and write a file path out, then add the result to the map.
+**Processing → GeoLibre Toolbox → Raster** opens the Raster tools dialog. The classic tools run on the rasterio Python sidecar: they take a file path in and write a file path out, then add the result to the map.
 
 ![The Raster tools dialog, with the tool list at the top and the engine picker above the parameters](https://assets.geolibre.app/images/geolibre-raster-tools.webp)
 
-Eight of them also offer a **Client (browser)** engine that computes on the loaded raster with no sidecar at all, so they work on the web build and on mobile: **Hillshade**, **Slope**, **Aspect**, **Clip by extent**, **Raster calculator**, **Spectral index**, **Reclassify**, and **Focal statistics**. The rest — Reproject, Resample, Clip by mask layer, Polygonize, Contour, Interpolation, Zonal statistics, and Mosaic / merge — need the sidecar. The engine picker in the dialog shows which engines a tool accepts, and the line beneath it says what the selected one will do.
+Every raster tool also offers a **Client (browser)** engine that computes on the loaded raster with no sidecar at all. These computations are supported by the web and mobile runtimes. The engine picker in the dialog shows which engines a tool accepts, and the line beneath it says what the selected one will do. The browser engine follows the sidecar's algorithms (GDAL's warp kernels and output grid for Reproject and Resample, GDAL's rasterization rules for Clip by mask layer and Zonal statistics, ContourPy's marching squares for Contour, the same IDW and kriging pipeline for Interpolation), and a parity test replays sidecar outputs against it. A few inputs stay sidecar-only, and the browser engine says so when it meets them: a Reproject target that is not an EPSG code, Mosaic inputs on different pixel grids, zonal statistics over line zones, and a kriging system that is singular (for example, duplicate sample locations). The Change detection and SAR tools run in the browser only.
+
+Browser interpolation also enforces a 200-million-operation work estimate,
+including point/grid comparisons and the kriging dense solve. This can limit a
+request below the separate point or cell caps. Thin the points, use a coarser
+pixel size, or select the sidecar for larger kriging jobs. Transition-matrix
+outputs require codes within the exact Float32 integer range (up to 16,777,216);
+reclassify larger labels to smaller non-negative integers first.
+
+Floating browser change, interpolation, warp, and mosaic outputs use NaN for
+NoData, preserving valid finite values such as `-9999`. Clip by mask also uses
+NaN when the source has no declared NoData. Browser masks support polygon and
+point geometries; use the sidecar for line masks or line zones. Mosaic requires
+matching known EPSG codes and aligned pixel sizes.
+
+Warp and mosaic buffers have a 256 MiB allocation budget that includes
+all bands, warp scanline scratch, and mosaic validity flags. Contouring accepts at most 8 million
+pixels, 10,000 levels, 50 million level/pixel visits, and 250,000 output segments.
+Increase the interval or crop the raster when these limits are reached.
+Warp, polygonization, and contour computation currently run synchronously in
+the browser. Large jobs can pause the interface until computation returns;
+use a smaller input or the sidecar engine for these jobs. Worker execution
+and interruption within the compute loops remain follow-up work.
+
+Browser polygonization accepts at most 8 million pixels and 250,000 directed
+boundary edges. Noisy classified rasters can reach the edge budget well below
+the pixel limit. Crop or simplify them, or select the sidecar.
+
+Speckle filtering counts every input band against its work and scratch-memory
+budgets before copying the raster. The shared input preflight also reserves
+all output bands, including the three channels of SAR RGB.
+GeoJSON inputs have a separate 32 MiB limit before text decoding and JSON
+parsing. File pickers also reject larger GeoJSON files before reading their
+bytes when the size is available. Use a smaller vector input or the sidecar
+engine for larger masks, zones, or interpolation samples.
+
+Polygon and contour downloads from a custom projected CRS are transformed to
+WGS84. An image without a CRS can produce an unreferenced vector download with
+an explicit null CRS; it is not added to the geographic map.
+Explicit unsupported GeoJSON CRS declarations are rejected with sidecar guidance.
+PixelIsPoint input tie points are normalized to pixel corners internally and
+restored on export, preserving sample centers through reprojection.
+
+In deployments with restricted capabilities, classic raster command entry
+points retain their existing `processing:run` and `processing:sidecar`
+requirements. The dialog checks current permissions before probing, starting,
+or running the sidecar, including after switching tools. Browser execution
+requires `processing:run`. Browser-only SAR and change groups are available
+on mobile; the sidecar engine requires the desktop app and its permission.
 
 **Terrain**
 
@@ -223,6 +283,23 @@ Eight of them also offer a **Client (browser)** engine that computes on the load
 | **Mosaic / merge** | Combine several rasters into one. |
 | **Focal statistics** | Compute a moving-window statistic (mean, min, max, …) over a raster. |
 
+**Change detection** (browser only; the two dates must share a pixel grid)
+
+| Tool | Description |
+| --- | --- |
+| **Band difference** | Compare one band of two dates: difference, percent change, ratio, or log ratio (dB), optionally thresholded into decrease / no change / increase classes. |
+| **NDVI change** | Compute NDVI for both dates from a sensor band preset and map the difference, or classify it into vegetation loss / stable / gain. |
+| **Transition matrix** | Cross-tabulate two land-cover rasters. The log shows the from/to matrix and the output codes each pixel as `from × 10ⁿ + to`. |
+
+**SAR** (browser only)
+
+| Tool | Description |
+| --- | --- |
+| **Linear / dB conversion** | Convert backscatter between linear power (or amplitude) and decibels. |
+| **Speckle filter** | Lee or refined Lee (edge-aligned 7×7) speckle filtering, driven by the equivalent number of looks. dB input is filtered in linear power. |
+| **Dual-pol RGB composite** | Sentinel-1 false colour: red = VV, green = VH, blue = VV/VH, each stretched over a dB range. |
+| **Flood mapping (SAR threshold)** | Water where VV falls below a dB threshold. With a pre-event image, separates new flooding from permanent water. |
+
 **Download Global DEM** sits at the top of the same submenu: it downloads a DEM for the current map view or a box drawn on the map from the public AWS Terrain Tiles dataset (no API key needed), and opens in the Whitebox Toolbox dialog rather than the Raster tools dialog. **Georeferencing** sits at the bottom: it pins a non-georeferenced image to the map with ground control points using a least-squares affine fit, reporting per-GCP and RMS residuals.
 
 See the [Terrain Analysis tutorial](../tutorials/terrain-analysis.md).
@@ -260,6 +337,40 @@ The sidecar can also confine conversion inputs and outputs to an allowlist of di
 | **OD cost matrix** | Travel time and distance for every origin-destination pair between two point layers. |
 | **Sequential route (directions)** | Route through a set of stops in order, with turn-by-turn directions. |
 
+Coincident stops or incident/facility matches are recorded as point features
+with zero cost, preserving the match without a degenerate route line.
+
+Local graph construction runs on the main thread and accepts at most 250,000
+vertices. Endpoint-to-node and endpoint-to-segment snapping share a 50-million
+budget for index visits and candidate checks. Reduce the snap tolerance or
+extract a smaller network if it is exceeded. Point placement also caps index
+storage, cell visits, overflow candidates, and fallback scans at 50 million
+visits per run. Seam-adjacent queries and networks wider than 180 degrees
+currently use a full edge scan for correct wrapped placement, so they can reach
+this work limit with fewer points. Use a smaller local extract for those runs.
+It has a separate 50-million edge/point comparison budget,
+including far or antimeridian selections that use a full edge scan. Searches yield between
+legs or incidents; graph construction itself is synchronous.
+
+Service-area polygon buffering accepts at most 1,000 reachable line pieces per
+area and 5,000 per run. An excessive selection returns an error; rerun with
+polygons disabled for line-only output. Input points farther than 1 km or ten
+times the endpoint snap tolerance (whichever is larger) produce a warning;
+snap-distance attributes remain in the
+result.
+
+Local multi-stop and closest-facility runs are limited to 50 million node-search
+entries, counted after snapping. This bounds repeated graph-state allocations;
+use fewer stops/incidents or a smaller network extract for larger selections.
+
+The same menu also routes over **your own line layer**, entirely in the browser and with no server: trails, pipes, rivers, a road extract, or any other line network. The tool builds a graph from the lines (lines that share a vertex are connected, and line ends within the snap tolerance of another line are joined to it; lines that only cross stay apart, like a bridge over a road). Each edge costs its length in metres, a cost field (the cost of traversing the whole feature, spread over it by length), or the travel time in minutes from a speed field in km/h. An optional one-way field accepts the OSM (`yes`, `-1`, `no`) and Esri (`FT`, `TF`, `B`, `N`) conventions. Points are attached at the closest spot on the nearest line, and each result records how far it was moved (`*_snap_m`).
+
+| Tool | Description |
+| --- | --- |
+| **Shortest path (local network)** | Route through stops in order (or sorted by a field) with A\* or Dijkstra. Each leg records its cost and length. |
+| **Closest facility (local network)** | For each incident, the k nearest facilities by network cost, with an optional cost limit and travel direction, drawn as ranked routes. |
+| **Service area (local network)** | The parts of the network reachable from facilities within each cost break, clipped partway along edges, as lines and optionally as polygons buffered by a trim width. Facilities can share one area per break or get their own. |
+
 ### Spatial Statistics
 
 **Processing → GeoLibre Toolbox → Spatial Statistics** runs pattern analysis on a point or polygon layer and adds the result to the map.
@@ -273,6 +384,25 @@ The sidecar can also confine conversion inputs and outputs to an allowlist of di
 | **Kernel density (heatmap)** | A continuous density surface from a point layer. |
 | **Emerging Hot Spot (space-time cube)** | Hot-spot trends over time from a space-time cube. |
 | **Composite score (suitability index)** | Normalize, weight, and combine several numeric fields into one index (0-100 by default, or 0-1), styled on the map by the score. |
+| **Ordinary least squares (OLS)** | Global linear regression of a field on comma-separated explanatory fields: coefficients with standard errors, t and p values, R², F, AIC and AICc in the log, and fitted values and (standardized) residuals on each feature. |
+| **Geographically weighted regression (GWR)** | Local regression with a bisquare or Gaussian kernel and an adaptive (nearest neighbors) or fixed (metres) bandwidth. Leave the bandwidth at 0 to choose it by AICc golden-section search. Each feature gets its local coefficients, t values, fitted value, residuals, and local R². |
+| **DBSCAN clustering** | Density clusters from a search distance in metres and a minimum point count; each feature gets a cluster id (-1 for noise) and whether it is a core, border, or noise point. |
+| **HDBSCAN clustering** | Hierarchical density clusters that adapt to varying density. Set the minimum cluster size and optionally minimum samples (defaults to the cluster size); each feature gets a cluster id and a membership probability. |
+| **Kriging variogram and cross-validation** | The empirical semivariogram of a point field, a spherical, exponential, Gaussian or linear model fitted as the Interpolation (IDW / Kriging) raster tool fits it, and leave-one-out cross-validation of ordinary kriging (mean error, RMSE, RMSSE) per model, with per-point predictions and standardized errors. |
+
+Generated model fields keep their documented names. If one matches a source
+attribute, the original value is preserved under a unique `_source` suffix.
+
+Distances in these tools are great-circle metres. The OLS and GWR output
+matches GWR4 on its Georgia example data, and the clustering matches
+scikit-learn's `DBSCAN` and `HDBSCAN` (its defaults: excess-of-mass selection,
+no single root cluster). GWR handles up to 1,500 features, HDBSCAN 5,000, and
+the kriging cross-validation 300 distinct locations. Dense kriging inversion
+scales cubically with the number of samples; reduce the sample size for faster
+runs. Cancel terminates the processing worker without waiting for a model fit. DBSCAN accepts at most
+200,000 features and stops after 20 million candidate comparisons across its
+core-point and expansion passes. Dense data can reach this work limit below the
+feature cap; reduce the search radius or process a smaller area.
 
 
 The **Composite score** builder is the suitability and index workflow: pick two
@@ -410,4 +540,4 @@ The Processing menu also opens the **Planetary Computer** and **Earth Engine** p
 The raster tools, the sidecar conversion tools, and the optional GeoPandas vector engine use a local FastAPI sidecar that the desktop app starts on demand. The Whitebox Toolbox can *optionally* use it too, but does not need it — it runs in WebAssembly by default. The vector tools' client engine and the browser-based conversions need no sidecar either. See [Getting Started](../getting-started.md#optional-python-sidecar) for setup and [Reference → Architecture](../architecture.md#python-sidecar) for how it works.
 
 !!! note "Browser vs desktop"
-    The [Whitebox Toolbox](#whitebox-toolbox), the client-side vector tools, every [Conversion](#conversion) tool, and the eight [raster tools with a client engine](#raster) run in the browser. Vector to Vector's full any-format output and the remaining raster tools require the desktop app and the Python sidecar.
+    The [Whitebox Toolbox](#whitebox-toolbox), the client-side vector tools, every [Conversion](#conversion) tool, and every [raster tool](#raster) can run in the browser. Vector to Vector's full any-format output requires the desktop app and the Python sidecar.

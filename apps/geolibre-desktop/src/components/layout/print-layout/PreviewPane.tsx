@@ -1,7 +1,11 @@
 import { useTranslation } from "react-i18next";
+import type { Dispatch } from "react";
+import type { PrintLayoutConfig } from "@geolibre/core";
 import { Button } from "@geolibre/ui";
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, Move, RefreshCw, RotateCcw } from "lucide-react";
 import type { AtlasSeries } from "./useAtlasSeries";
+import { ArrangeOverlay, type ArrangeFrame } from "./ArrangeOverlay";
+import type { PrintLayoutAction } from "./state";
 
 interface PreviewPaneProps {
   atlas: AtlasSeries;
@@ -13,6 +17,12 @@ interface PreviewPaneProps {
   previewBoxRef: React.RefObject<HTMLDivElement | null>;
   onRecapture: () => void;
   onGoToAtlasPage: (index: number) => Promise<void>;
+  /** True while the drag/resize handles are shown over the page. */
+  arranging: boolean;
+  /** Where the preview last drew each element. */
+  arrangeFrame: ArrangeFrame | null;
+  layout: PrintLayoutConfig;
+  dispatch: Dispatch<PrintLayoutAction>;
 }
 
 /** The page preview: recapture button, atlas page stepper, canvas and error. */
@@ -25,6 +35,10 @@ export function PreviewPane({
   previewBoxRef,
   onRecapture,
   onGoToAtlasPage,
+  arranging,
+  arrangeFrame,
+  layout,
+  dispatch,
 }: PreviewPaneProps) {
   const { t } = useTranslation();
   const { atlasActive, clampedAtlasIndex, atlasPageCount, currentAtlasPage } = atlas;
@@ -36,15 +50,39 @@ export function PreviewPane({
     >
       <div className="flex w-full items-center justify-between">
         <span className="text-sm text-muted-foreground">{t("printLayout.preview")}</span>
-        {/* In atlas mode, recapture must re-drive the current page
+        <div className="flex items-center gap-1">
+          <Button
+            variant={arranging ? "secondary" : "ghost"}
+            size="sm"
+            aria-pressed={arranging}
+            onClick={() => dispatch({ type: "setUi", patch: { arranging: !arranging } })}
+          >
+            <Move className="me-2 h-3.5 w-3.5" />
+            {arranging ? t("printLayout.arrange.done") : t("printLayout.arrange.toggle")}
+          </Button>
+          {arranging && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => dispatch({ type: "resetArrangement" })}
+            >
+              <RotateCcw className="me-2 h-3.5 w-3.5" />
+              {t("printLayout.arrange.reset")}
+            </Button>
+          )}
+          {/* In atlas mode, recapture must re-drive the current page
             (never the plain viewport/extent capture, which would clip to
             an unrelated print-extent box and skip the fixed-scale
             correction). */}
-        <Button variant="ghost" size="sm" disabled={atlasBusy} onClick={onRecapture}>
-          <RefreshCw className="me-2 h-3.5 w-3.5" />
-          {t("printLayout.recapture")}
-        </Button>
+          <Button variant="ghost" size="sm" disabled={atlasBusy} onClick={onRecapture}>
+            <RefreshCw className="me-2 h-3.5 w-3.5" />
+            {t("printLayout.recapture")}
+          </Button>
+        </div>
       </div>
+      {arranging && (
+        <p className="w-full text-xs text-muted-foreground">{t("printLayout.arrange.hint")}</p>
+      )}
       {/* Atlas page stepper: flip through the series before exporting. */}
       {atlasActive && (
         <div className="flex w-full min-w-0 items-center justify-center gap-2">
@@ -92,7 +130,12 @@ export function PreviewPane({
       >
         {/* The canvas width/height (backing + CSS) are set imperatively in
             the draw effect to fit this pane, so it scales with the dialog. */}
-        <canvas ref={previewRef} className="shadow-md" style={{ imageRendering: "auto" }} />
+        <div className="relative">
+          <canvas ref={previewRef} className="block shadow-md" style={{ imageRendering: "auto" }} />
+          {arranging && arrangeFrame && (
+            <ArrangeOverlay frame={arrangeFrame} layout={layout} dispatch={dispatch} />
+          )}
+        </div>
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
     </div>

@@ -24,10 +24,31 @@ export {
   fixGeometriesTool,
   checkTopologyRulesTool,
   fixTopologyTool,
+  fixPolygonOverlapsTool,
+  fillPolygonGapsTool,
+  resolvePolygonOverlaps,
+  fillPolygonGaps,
+  polygonGeodesicArea,
   setTopologyWasmRunner,
+  type OverlapRule,
   type WasmToolRunner,
   type WasmToolRunResult,
 } from "./topology-tools";
+export {
+  LINEAR_REFERENCING_TOOLS,
+  createRoutesTool,
+  locateFeaturesAlongRoutesTool,
+  dynamicSegmentationTool,
+  measureLine,
+  locatePointOnRoute,
+  sliceRouteByMeasure,
+  pointAtMeasure,
+  getMeasure,
+  withMeasure,
+  MEASURE_UNITS,
+  type MeasureUnit,
+  type RouteLocation,
+} from "./linear-referencing-tools";
 export {
   runAlgorithmCapture,
   runModel,
@@ -42,7 +63,25 @@ export {
   VECTOR_TOOL_WORKER_IDLE_MS,
   WORKER_VECTOR_TOOL_IDS,
 } from "./vector-tool-runner";
-export { NETWORK_TOOLS, getNetworkTool, layerToSequencedPoints } from "./network-tools";
+export {
+  NETWORK_TOOLS,
+  getNetworkTool,
+  layerToSequencedPoints,
+  localShortestPathTool,
+  localClosestFacilityTool,
+  localServiceAreaTool,
+  parseCostBreaks,
+} from "./network-tools";
+export {
+  LocalNetwork,
+  buildLocalNetwork,
+  parseDirection,
+  type LocalNetworkOptions,
+  type NetworkCostMode,
+  type NetworkDirection,
+  type NetworkEdge,
+  type NetworkPath,
+} from "./local-network";
 export {
   STATISTICS_TOOLS,
   getStatisticsTool,
@@ -54,6 +93,12 @@ export {
   emergingHotSpotTool,
   emergingPattern,
   compositeScoreTool,
+  olsRegressionTool,
+  gwrTool,
+  dbscanTool,
+  hdbscanTool,
+  krigingDiagnosticsTool,
+  parseFieldList,
   computeCompositeScores,
   normalizeFieldValues,
   numericFieldValue,
@@ -176,6 +221,59 @@ export {
   type CompiledRasterExpression,
 } from "./raster-expr";
 export {
+  bandDifference,
+  ndviChange,
+  transitionMatrix,
+  formatTransitionMatrix,
+  assertSameGrid,
+  CHANGE_NODATA,
+  type BandDifferenceParams,
+  type DifferenceMode,
+  type NdviChangeParams,
+  type TransitionMatrix,
+  type TransitionParams,
+} from "./raster-change";
+export {
+  sarDbConvert,
+  speckleFilter,
+  dualPolRgb,
+  floodMap,
+  SAR_NODATA,
+  type DbConvertParams,
+  type SpeckleParams,
+  type DualPolRgbParams,
+  type FloodMapParams,
+} from "./raster-sar";
+export {
+  clipRasterByMask,
+  zonalStatistics,
+  polygonizeRaster,
+  contourRaster,
+  contourLevels,
+  type ClipMaskParams,
+  type ZonalParams,
+  type PolygonizeParams,
+  type ContourParams,
+} from "./raster-vector";
+export {
+  interpolatePoints,
+  type InterpolateParams,
+  type VariogramModel,
+} from "./raster-interpolate";
+export { toNorthUp, rasterEpsg, geojsonEpsg, crsMember, geoKeysForEpsg } from "./raster-geo";
+export {
+  resampleRaster,
+  reprojectRaster,
+  mosaicRasters,
+  suggestedWarpOutput,
+  approxTransformRow,
+  parseEpsgCode,
+  type WarpResampling,
+  type ResampleParams,
+  type ReprojectParams,
+  type MosaicMethod,
+} from "./raster-warp";
+export {
   CLIENT_RASTER_TOOL_IDS,
   TERRAIN_NODATA,
   supportsClientRaster,
@@ -186,6 +284,8 @@ export {
   writeRasterData,
   writeRasterBands,
   runRasterToolClient,
+  runRasterToolClientAsync,
+  rasterToolTakesVectorInput,
   hillshade,
   slope,
   aspect,
@@ -196,6 +296,8 @@ export {
   focalStatistics,
   type RasterData,
   type ClientRasterResult,
+  type ClientToolInputs,
+  type ClientToolResult,
   type HillshadeParams,
   type SlopeParams,
   type ClipExtentParams,
@@ -208,6 +310,7 @@ export {
   LOCAL_SIDECAR_URL,
   checkSidecarHealth,
   setSidecarAuthToken,
+  setSidecarRelayAccess,
   setSidecarFetch,
   clearRemoteWhiteboxCatalogSnapshotCache,
   cancelConversionJob,

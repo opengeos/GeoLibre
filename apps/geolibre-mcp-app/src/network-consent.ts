@@ -2,19 +2,10 @@ import type { App } from "@modelcontextprotocol/ext-apps";
 import type { AddProtocolAction, RequestTransformFunction } from "maplibre-gl";
 import type { CallToolResult } from "@modelcontextprotocol/client";
 import { z } from "zod";
-import { createInstance } from "i18next";
 import { createElement, Map as MapIcon } from "lucide";
-import { mcpPreview } from "../../geolibre-desktop/src/i18n/locales/en.json";
+import { previewI18n } from "./preview-i18n";
 
-const consentI18n = createInstance();
-void consentI18n.init({
-  lng: "en",
-  fallbackLng: "en",
-  initAsync: false,
-  resources: { en: { translation: { mcpPreview } } },
-  interpolation: { escapeValue: false },
-});
-const t = consentI18n.getFixedT("en", "translation", "mcpPreview.networkConsent");
+const t = previewI18n.getFixedT(null, "translation", "mcpPreview.networkConsent");
 
 const PREFIX = "geolibre-preview://";
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -27,15 +18,41 @@ const resourceSchema = z.object({
   mimeType: z.string().min(1),
   cacheControl: z.string().optional(),
   expires: z.string().optional(),
+  rangeStart: z.number().int().nonnegative().optional(),
+  totalSize: z.number().int().nonnegative().optional(),
 });
+
+/** Bytes one {@link NetworkConsent.fetchRange} call returns. */
+export interface PreviewRange {
+  data: ArrayBuffer;
+  /** The resource's full size, when the server reported it. */
+  totalSize?: number;
+  cacheControl?: string;
+  expires?: string;
+}
 
 export type PreviewToolTransport = App["callServerTool"];
 
 export interface NetworkConsent {
   transformRequest: RequestTransformFunction;
   load: AddProtocolAction;
+  /**
+   * Read `length` bytes at `offset` through the same consent and grant path as
+   * {@link load}. A read larger than the server's 4 MiB response cap is split
+   * into several requests. Used for PMTiles archives and Cloud Optimized
+   * GeoTIFFs, which are read by HTTP range rather than whole.
+   */
+  fetchRange(
+    url: string,
+    offset: number,
+    length: number,
+    signal?: AbortSignal,
+  ): Promise<PreviewRange>;
   dispose(): Promise<void>;
 }
+
+/** The largest single range the Python server returns (its response cap). */
+export const MAX_RANGE_BYTES = MAX_BYTES;
 
 export async function closeMapPreview(
   previewId: string,
@@ -377,37 +394,95 @@ export function createNetworkConsent(
     throw new Error(`This preview cannot fetch ${url.protocol} resources.`);
   };
 
+  /** One consented `fetch_map_resource` call, optionally for a byte range. */
+  async function fetchResource(
+    url: URL,
+    signal: AbortSignal,
+    range?: { offset: number; length: number },
+  ): Promise<{ bytes: ArrayBuffer; resource: z.infer<typeof resourceSchema> }> {
+    await approve(url.origin, signal);
+    const grant = await getGrant(url.origin, signal);
+    signal.throwIfAborted();
+    const result = await abortable(
+      callServerTool(
+        {
+          name: "fetch_map_resource",
+          arguments: { preview_id: previewId, grant, url: url.href, ...range },
+        },
+        { signal },
+      ),
+      signal,
+    );
+    signal.throwIfAborted();
+    const parsed = resourceSchema.safeParse(toolPayload(result));
+    if (!parsed.success)
+      throw new Error(
+        "The server returned invalid resource data. Reopen the preview or update the GeoLibre MCP server.",
+      );
+    if (range && parsed.data.rangeStart !== range.offset) throw new Error(t("unexpectedByteRange"));
+    return { bytes: decodeResource(parsed.data.data), resource: parsed.data };
+  }
+
+  function remoteUrl(value: string): URL {
+    const url = parseUrl(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:")
+      throw new Error(`This preview cannot fetch ${url.protocol} resources.`);
+    return url;
+  }
+
+  const fetchRange: NetworkConsent["fetchRange"] = async (value, offset, length, outer) => {
+    const signal = outer ? AbortSignal.any([outer, lifecycle.signal]) : lifecycle.signal;
+    signal.throwIfAborted();
+    const url = remoteUrl(value);
+    if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 1)
+      throw new Error(t("invalidByteRange"));
+    try {
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      let totalSize: number | undefined;
+      let headers: { cacheControl?: string; expires?: string } = {};
+      while (received < length) {
+        const want = Math.min(MAX_RANGE_BYTES, length - received);
+        const { bytes, resource } = await fetchResource(url, signal, {
+          offset: offset + received,
+          length: want,
+        });
+        totalSize = resource.totalSize ?? totalSize;
+        headers = {
+          cacheControl: resource.cacheControl,
+          expires: resource.expires,
+        };
+        if (bytes.byteLength > want) throw new Error(t("excessRangeBytes"));
+        chunks.push(new Uint8Array(bytes));
+        received += bytes.byteLength;
+        // A server may return a partial chunk before EOF. Keep filling the
+        // requested range until it reports EOF or the known resource ends.
+        if (bytes.byteLength === 0 || (totalSize !== undefined && offset + received >= totalSize))
+          break;
+      }
+      const data = new Uint8Array(received);
+      let position = 0;
+      for (const chunk of chunks) {
+        data.set(chunk, position);
+        position += chunk.byteLength;
+      }
+      return { data: data.buffer, totalSize, ...headers };
+    } catch (error) {
+      signal.throwIfAborted();
+      throw new Error(`Could not fetch from ${url.origin}: ${safeReason(error)}`);
+    }
+  };
+
   const load: AddProtocolAction = async (request, controller) => {
     const signal = AbortSignal.any([controller.signal, lifecycle.signal]);
     signal.throwIfAborted();
     if (!request.url.startsWith(PREFIX))
       throw new Error("The preview resource protocol is invalid.");
-    const url = parseUrl(request.url.slice(PREFIX.length));
-    if (url.protocol !== "http:" && url.protocol !== "https:")
-      throw new Error(`This preview cannot fetch ${url.protocol} resources.`);
+    const url = remoteUrl(request.url.slice(PREFIX.length));
     if ((request.method && request.method !== "GET") || request.body != null)
       throw new Error(`The preview supports only public GET resources from ${url.origin}.`);
     try {
-      await approve(url.origin, signal);
-      const grant = await getGrant(url.origin, signal);
-      signal.throwIfAborted();
-      const result = await abortable(
-        callServerTool(
-          {
-            name: "fetch_map_resource",
-            arguments: { preview_id: previewId, grant, url: url.href },
-          },
-          { signal },
-        ),
-        signal,
-      );
-      signal.throwIfAborted();
-      const parsed = resourceSchema.safeParse(toolPayload(result));
-      if (!parsed.success)
-        throw new Error(
-          "The server returned invalid resource data. Reopen the preview or update the GeoLibre MCP server.",
-        );
-      const bytes = decodeResource(parsed.data.data);
+      const { bytes, resource } = await fetchResource(url, signal);
       let data = request.type === "string" ? new TextDecoder().decode(bytes) : bytes;
       if (request.type === "json") {
         try {
@@ -449,7 +524,11 @@ export function createNetworkConsent(
             );
         }
       }
-      return { data, cacheControl: parsed.data.cacheControl, expires: parsed.data.expires };
+      return {
+        data,
+        cacheControl: resource.cacheControl,
+        expires: resource.expires,
+      };
     } catch (error) {
       signal.throwIfAborted();
       throw new Error(`Could not fetch from ${url.origin}: ${safeReason(error)}`);
@@ -459,6 +538,7 @@ export function createNetworkConsent(
   return {
     transformRequest,
     load,
+    fetchRange,
     dispose(): Promise<void> {
       if (disposal) return disposal;
       lifecycle.abort(new DOMException("Preview closed", "AbortError"));

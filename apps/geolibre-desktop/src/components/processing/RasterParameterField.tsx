@@ -10,6 +10,7 @@ export interface RasterParameterFieldProps {
   onChange: (value: unknown) => void;
   onPick: () => void;
   readOnly?: boolean;
+  inputKind?: "raster" | "vector";
   onClear?: () => void;
 }
 
@@ -19,6 +20,7 @@ export function RasterParameterField({
   onChange,
   onPick,
   readOnly = false,
+  inputKind = "raster",
   onClear,
 }: RasterParameterFieldProps): ReactElement {
   const { t } = useTranslation();
@@ -98,7 +100,13 @@ export function RasterParameterField({
             id={param.id}
             value={(value as string) ?? ""}
             placeholder={
-              readOnly ? t("toolbar.rasterTool.chooseGeoTiff") : t("processing.filePicker.filePath")
+              readOnly
+                ? t(
+                    inputKind === "vector"
+                      ? "toolbar.rasterTool.chooseGeoJson"
+                      : "toolbar.rasterTool.chooseGeoTiff",
+                  )
+                : t("processing.filePicker.filePath")
             }
             readOnly={readOnly}
             onChange={readOnly ? undefined : (e) => onChange(e.target.value)}

@@ -14,7 +14,21 @@
 //   (whitebox-wasm#9/#10 made endpoint/dangle fixes real); the gaps rule still
 //   has no automatic fix, so `fix-topology` does not offer it (see
 //   FIXABLE_TOPOLOGY_RULES).
-import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
+// - `fix-polygon-overlaps` / `fill-polygon-gaps` repair the two polygon
+//   coverage rules wbtopology cannot fix, client-side with polyclip-ts (the
+//   clipper behind @turf/union and @turf/difference).
+import difference from "@turf/difference";
+import intersect from "@turf/intersect";
+import { featureCollection } from "@turf/helpers";
+import union from "@turf/union";
+import type {
+  Feature,
+  FeatureCollection,
+  Geometry,
+  MultiPolygon,
+  Polygon,
+  Position,
+} from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { DuckDbCapability, ProcessingAlgorithm, ProcessingContext } from "./types";
 
@@ -626,9 +640,584 @@ export const fixTopologyTool: ProcessingAlgorithm = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Polygon overlap and gap autofix (client-side, polyclip-ts via Turf)
+// ---------------------------------------------------------------------------
+//
+// wbtopology reports overlaps and gaps but has no automatic fix for either, so
+// these two tools repair polygon coverages directly with the same robust
+// polygon clipping library (polyclip-ts, through @turf/union and
+// @turf/difference) that the Union and Difference vector tools use.
+
+type PolygonFeature = Feature<Polygon | MultiPolygon>;
+type BBox = [number, number, number, number];
+
+/** WGS84 mean radius used by `@turf/area`, so areas match the other vector tools. */
+const EARTH_RADIUS_M = 6371008.8;
+
+function ringGeodesicArea(ring: Position[]): number {
+  // Spherical excess formula (Chamberlain and Duquette), as in @turf/area.
+  const n = ring.length;
+  if (n <= 2) return 0;
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    const lower = ring[i];
+    const middle = ring[(i + 1) % n];
+    const upper = ring[(i + 2) % n];
+    total += (((upper[0] - lower[0]) * Math.PI) / 180) * Math.sin((middle[1] * Math.PI) / 180);
+  }
+  return Math.abs((total * EARTH_RADIUS_M * EARTH_RADIUS_M) / 2);
+}
+
+/**
+ * Geodesic area of a polygon or multipolygon in square metres (holes
+ * subtracted), using the same formula and earth radius as `@turf/area`.
+ *
+ * @param geometry - A Polygon or MultiPolygon in WGS84 longitude/latitude.
+ * @returns The area in square metres.
+ */
+export function polygonGeodesicArea(geometry: Polygon | MultiPolygon): number {
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  let area = 0;
+  for (const rings of polygons) {
+    rings.forEach((ring, index) => {
+      area += index === 0 ? ringGeodesicArea(ring) : -ringGeodesicArea(ring);
+    });
+  }
+  return Math.max(0, area);
+}
+
+function isPolygonFeature(feature: Feature): feature is PolygonFeature {
+  return feature.geometry?.type === "Polygon" || feature.geometry?.type === "MultiPolygon";
+}
+
+function geometryBBox(geometry: Polygon | MultiPolygon): BBox {
+  const box: BBox = [Infinity, Infinity, -Infinity, -Infinity];
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  for (const rings of polygons) {
+    for (const [x, y] of rings[0] ?? []) {
+      if (x < box[0]) box[0] = x;
+      if (y < box[1]) box[1] = y;
+      if (x > box[2]) box[2] = x;
+      if (y > box[3]) box[3] = y;
+    }
+  }
+  return box;
+}
+
+function bboxesIntersect(a: BBox, b: BBox): boolean {
+  return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
+}
+
+function asFeature(geometry: Polygon | MultiPolygon): PolygonFeature {
+  return { type: "Feature", properties: {}, geometry };
+}
+
+/** Which polygon keeps an overlapping area. */
+export type OverlapRule = "largest" | "smallest" | "attribute" | "first";
+
+export interface ResolveOverlapsOptions {
+  rule: OverlapRule;
+  /** For `rule: "attribute"`: the field whose value ranks the polygons. */
+  priorityField?: string;
+  /** For `rule: "attribute"`: whether the highest value wins (default) or the lowest. */
+  priorityOrder?: "high" | "low";
+}
+
+export interface ResolveOverlapsResult {
+  collection: FeatureCollection;
+  /** Polygon features whose geometry changed. */
+  modified: number;
+  /** Polygon features entirely covered by higher-priority polygons, so removed. */
+  removed: number;
+}
+
+function isMissingValue(value: unknown): boolean {
+  return value === null || value === undefined || value === "";
+}
+
+function compareValues(a: unknown, b: unknown): number {
+  const aNum = typeof a === "number" ? a : Number(a);
+  const bNum = typeof b === "number" ? b : Number(b);
+  const aIsNum = Number.isFinite(aNum),
+    bIsNum = Number.isFinite(bNum);
+  if (aIsNum && bIsNum) return aNum - bNum;
+  if (aIsNum !== bIsNum) return aIsNum ? -1 : 1;
+  return String(a).localeCompare(String(b));
+}
+
+/**
+ * Resolve overlaps in a polygon layer: every area covered by more than one
+ * polygon is kept by exactly one of them, chosen by `rule`, and cut out of the
+ * others. Polygons are processed in priority order, and each keeps only what
+ * the higher-priority polygons already processed have not claimed.
+ *
+ * - `largest` / `smallest`: the polygon with the larger / smaller original
+ *   (geodesic) area wins.
+ * - `attribute`: ranked by `priorityField` (highest first unless
+ *   `priorityOrder` is `"low"`); features with no value rank last.
+ * - `first`: the earlier feature in the layer wins.
+ *
+ * Ties keep layer order. Non-polygon features pass through untouched; a
+ * polygon covered completely by higher-priority polygons is removed.
+ *
+ * @param fc - The input layer.
+ * @param options - The rule deciding which polygon keeps a shared area.
+ * @returns The repaired collection (original feature order) and counts.
+ */
+export function resolvePolygonOverlaps(
+  fc: FeatureCollection,
+  options: ResolveOverlapsOptions,
+): ResolveOverlapsResult {
+  const polygons: { index: number; feature: PolygonFeature; area: number; box: BBox }[] = [];
+  fc.features.forEach((feature, index) => {
+    if (!isPolygonFeature(feature) || !isUsableGeometry(feature.geometry)) return;
+    polygons.push({
+      index,
+      feature,
+      area: polygonGeodesicArea(feature.geometry),
+      box: geometryBBox(feature.geometry),
+    });
+  });
+  const order = polygons.slice();
+  if (options.rule === "largest") {
+    order.sort((a, b) => b.area - a.area || a.index - b.index);
+  } else if (options.rule === "smallest") {
+    order.sort((a, b) => a.area - b.area || a.index - b.index);
+  } else if (options.rule === "attribute") {
+    const field = options.priorityField ?? "";
+    const sign = options.priorityOrder === "low" ? 1 : -1;
+    order.sort((a, b) => {
+      const av = a.feature.properties?.[field];
+      const bv = b.feature.properties?.[field];
+      const aMissing = isMissingValue(av);
+      const bMissing = isMissingValue(bv);
+      // Missing values rank last whatever the direction.
+      if (aMissing || bMissing) {
+        return aMissing === bMissing ? a.index - b.index : aMissing ? 1 : -1;
+      }
+      return sign * compareValues(av, bv) || a.index - b.index;
+    });
+  }
+
+  const claimed: { geometry: Polygon | MultiPolygon; box: BBox }[] = [];
+  const output = new Map<number, Feature | null>();
+  let modified = 0;
+  let removed = 0;
+  for (const entry of order) {
+    const blockers = claimed.filter((c) => bboxesIntersect(c.box, entry.box));
+    let geometry: Polygon | MultiPolygon | null = entry.feature.geometry;
+    if (blockers.length > 0) {
+      const result = difference(
+        featureCollection<Polygon | MultiPolygon>([
+          entry.feature,
+          ...blockers.map((b) => asFeature(b.geometry)),
+        ]),
+      );
+      geometry = result?.geometry ?? null;
+      if (geometry && isUsableGeometry(geometry)) {
+        // Boundary contact has no polygonal intersection. Preserve the original
+        // coordinates only when no area was clipped.
+        if (
+          blockers.some(
+            (blocker) =>
+              intersect(
+                featureCollection<Polygon | MultiPolygon>([
+                  entry.feature,
+                  asFeature(blocker.geometry),
+                ]),
+              ) !== null,
+          )
+        )
+          modified += 1;
+        else geometry = entry.feature.geometry;
+      }
+    }
+    if (!geometry || !isUsableGeometry(geometry)) {
+      removed += 1;
+      output.set(entry.index, null);
+      continue;
+    }
+    output.set(entry.index, { ...entry.feature, geometry });
+    claimed.push({ geometry, box: geometryBBox(geometry) });
+  }
+
+  const features: Feature[] = [];
+  fc.features.forEach((feature, index) => {
+    if (!output.has(index)) {
+      features.push(feature);
+      return;
+    }
+    const replaced = output.get(index);
+    if (replaced) features.push(replaced);
+  });
+  return { collection: { type: "FeatureCollection", features }, modified, removed };
+}
+
+export interface FillGapsResult {
+  collection: FeatureCollection;
+  /** Gaps merged into a neighbouring polygon. */
+  filled: number;
+  /** Enclosed gaps left open because they exceed the area threshold. */
+  skippedLarge: number;
+  /** Holes bounded by a single polygon (its own interior ring), left alone. */
+  skippedHoles: number;
+  /** Gaps whose enclosing boundary could not be assigned reliably. */
+  skippedUnassigned: number;
+}
+
+function pointSegmentDistance(p: Position, a: Position, b: Position): number {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const lengthSq = dx * dx + dy * dy;
+  let t = lengthSq === 0 ? 0 : ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / lengthSq;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+}
+
+function distanceToBoundary(p: Position, geometry: Polygon | MultiPolygon): number {
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  let best = Infinity;
+  for (const rings of polygons) {
+    for (const ring of rings) {
+      for (let i = 0; i + 1 < ring.length; i++) {
+        const d = pointSegmentDistance(p, ring[i], ring[i + 1]);
+        if (d < best) best = d;
+      }
+    }
+  }
+  return best;
+}
+
+/** Great-circle length of a segment in metres (haversine). */
+function segmentLengthM(a: Position, b: Position): number {
+  const toRad = Math.PI / 180;
+  const dLat = (b[1] - a[1]) * toRad;
+  const dLng = (b[0] - a[0]) * toRad;
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(a[1] * toRad) * Math.cos(b[1] * toRad) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Coordinate tolerance (degrees) for "this gap edge lies on that polygon's boundary". */
+const SHARED_EDGE_TOLERANCE = 1e-8;
+
+function polygonVertices(geometry: Polygon | MultiPolygon): Position[] {
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  return polygons.flat(2);
+}
+
+/**
+ * Split segment a-b at every vertex in `vertices` lying strictly inside it.
+ *
+ * @param a - Segment start.
+ * @param b - Segment end.
+ * @param vertices - Candidate split points.
+ * @returns The segment's points in order, from `a` to `b`.
+ */
+function splitSegmentAt(a: Position, b: Position, vertices: Position[]): Position[] {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const lengthSq = dx * dx + dy * dy;
+  if (lengthSq === 0) return [a, b];
+  const cuts: { t: number; p: Position }[] = [];
+  for (const p of vertices) {
+    const t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / lengthSq;
+    if (t <= 1e-12 || t >= 1 - 1e-12) continue;
+    if (pointSegmentDistance(p, a, b) > SHARED_EDGE_TOLERANCE) continue;
+    cuts.push({ t, p });
+  }
+  cuts.sort((x, y) => x.t - y.t);
+  return [a, ...cuts.map((c) => c.p), b];
+}
+
+/**
+ * Fill gaps in a polygon coverage. A gap is an area completely enclosed by the
+ * layer's polygons but covered by none of them (a hole in the union of the
+ * layer). Each gap no larger than `maxArea` square metres is merged into the
+ * neighbouring polygon sharing the longest stretch of its boundary. Holes
+ * bounded entirely by one polygon (its own interior ring) are deliberate
+ * holes, not gaps, and are left alone, as are slivers open to the outside of
+ * the coverage, which have no enclosing boundary to detect.
+ *
+ * @param fc - The input layer.
+ * @param maxArea - Largest gap to fill, in square metres; 0 or less fills every enclosed gap.
+ * @returns The repaired collection (original feature order) and counts.
+ */
+export function fillPolygonGaps(fc: FeatureCollection, maxArea: number): FillGapsResult {
+  const polygons: { index: number; feature: PolygonFeature; box: BBox }[] = [];
+  fc.features.forEach((feature, index) => {
+    if (!isPolygonFeature(feature) || !isUsableGeometry(feature.geometry)) return;
+    polygons.push({ index, feature, box: geometryBBox(feature.geometry) });
+  });
+  const unchanged: FillGapsResult = {
+    collection: fc,
+    filled: 0,
+    skippedLarge: 0,
+    skippedHoles: 0,
+    skippedUnassigned: 0,
+  };
+  if (polygons.length === 0) return unchanged;
+  const merged =
+    polygons.length === 1
+      ? polygons[0].feature
+      : union(featureCollection<Polygon | MultiPolygon>(polygons.map((p) => p.feature)));
+  if (!merged) return unchanged;
+  const parts =
+    merged.geometry.type === "Polygon"
+      ? [merged.geometry.coordinates]
+      : merged.geometry.coordinates;
+
+  const additions = new Map<number, Polygon[]>();
+  let filled = 0;
+  let skippedLarge = 0;
+  let skippedHoles = 0;
+  let skippedUnassigned = 0;
+  for (const rings of parts) {
+    for (const hole of rings.slice(1)) {
+      const vacant = difference(
+        featureCollection<Polygon | MultiPolygon>([
+          asFeature({ type: "Polygon", coordinates: [hole] }),
+          merged,
+        ]),
+      );
+      if (!vacant) continue;
+      const gaps =
+        vacant.geometry.type === "Polygon"
+          ? [vacant.geometry.coordinates]
+          : vacant.geometry.coordinates;
+      for (const coordinates of gaps) {
+        const gap: Polygon = { type: "Polygon", coordinates };
+        if (maxArea > 0 && polygonGeodesicArea(gap) > maxArea) {
+          skippedLarge += 1;
+          continue;
+        }
+        const box = geometryBBox(gap);
+        const neighbours = polygons.filter((p) => bboxesIntersect(p.box, box));
+        // An overlapping neighbour may share an existing hole edge. Preserve
+        // that hole whenever one original polygon bounds the entire shell.
+        const shell = gap.coordinates[0];
+        const enclosedByOne = neighbours.some((neighbour) => {
+          const vertices = polygonVertices(neighbour.feature.geometry);
+          for (let i = 0; i + 1 < shell.length; i++) {
+            const pieces = splitSegmentAt(shell[i], shell[i + 1], vertices);
+            for (let j = 0; j + 1 < pieces.length; j++) {
+              const a = pieces[j];
+              const b = pieces[j + 1];
+              const midpoint: Position = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+              if (distanceToBoundary(midpoint, neighbour.feature.geometry) > SHARED_EDGE_TOLERANCE)
+                return false;
+            }
+          }
+          return true;
+        });
+        if (enclosedByOne) {
+          skippedHoles++;
+          continue;
+        }
+        // Each gap edge is a piece of exactly one polygon's boundary: credit its
+        // length to the polygon whose boundary its midpoint lies on.
+        // The union merges collinear edges, so first split each gap edge at
+        // every neighbour vertex lying on it.
+        const neighbourVertices = neighbours.flatMap((n) => polygonVertices(n.feature.geometry));
+        const shared = new Map<number, number>();
+        let unassigned = false;
+        // Interior islands occupy the gap but cannot claim its enclosing shell.
+        for (const boundary of gap.coordinates.slice(0, 1)) {
+          for (let i = 0; i + 1 < boundary.length; i++) {
+            const pieces = splitSegmentAt(boundary[i], boundary[i + 1], neighbourVertices);
+            for (let j = 0; j + 1 < pieces.length; j++) {
+              const a = pieces[j];
+              const b = pieces[j + 1];
+              if (a[0] === b[0] && a[1] === b[1]) continue;
+              const mid: Position = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+              let owner: number | null = null;
+              let best = SHARED_EDGE_TOLERANCE;
+              for (const n of neighbours) {
+                const d = distanceToBoundary(mid, n.feature.geometry);
+                if (d <= best) {
+                  best = d;
+                  owner = n.index;
+                }
+              }
+              if (owner === null) {
+                unassigned = true;
+                continue;
+              }
+              shared.set(owner, (shared.get(owner) ?? 0) + segmentLengthM(a, b));
+            }
+          }
+        }
+        if (unassigned || shared.size === 0) {
+          skippedUnassigned++;
+          continue;
+        }
+        if (shared.size < 2) {
+          // Bounded by one polygon only: an interior ring of that polygon.
+          skippedHoles += 1;
+          continue;
+        }
+        let winner = -1;
+        let longest = -Infinity;
+        for (const [index, length] of shared) {
+          // Ties (within a millimetre) go to the earlier feature, for determinism.
+          if (length > longest + 1e-3 || (Math.abs(length - longest) <= 1e-3 && index < winner)) {
+            winner = index;
+            longest = Math.max(length, longest);
+          }
+        }
+        const list = additions.get(winner) ?? [];
+        list.push(gap);
+        additions.set(winner, list);
+        filled += 1;
+      }
+    }
+  }
+
+  if (filled === 0) return { ...unchanged, skippedLarge, skippedHoles, skippedUnassigned };
+  const features = fc.features.map((feature, index) => {
+    const gaps = additions.get(index);
+    if (!gaps || !isPolygonFeature(feature)) return feature;
+    const grown = union(
+      featureCollection<Polygon | MultiPolygon>([feature, ...gaps.map((g) => asFeature(g))]),
+    );
+    return grown ? { ...feature, geometry: grown.geometry } : feature;
+  });
+  return {
+    collection: { type: "FeatureCollection", features },
+    filled,
+    skippedLarge,
+    skippedHoles,
+    skippedUnassigned,
+  };
+}
+
+export const fixPolygonOverlapsTool: ProcessingAlgorithm = {
+  id: "fix-polygon-overlaps",
+  name: "Fix polygon overlaps",
+  description:
+    "Remove overlaps between polygons: each overlapping area is kept by one polygon (largest, smallest, first, or by attribute priority) and cut out of the others",
+  group: "Data quality",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["polygon"],
+    },
+    {
+      id: "rule",
+      label: "Overlap goes to",
+      type: "select",
+      default: "largest",
+      options: [
+        { value: "largest", label: "Largest polygon" },
+        { value: "smallest", label: "Smallest polygon" },
+        { value: "attribute", label: "Attribute priority" },
+        { value: "first", label: "First feature in the layer" },
+      ],
+    },
+    {
+      id: "priorityField",
+      label: "Priority field",
+      type: "field",
+      visibleWhen: { param: "rule", in: ["attribute"] },
+      description: "Features with no value rank last.",
+    },
+    {
+      id: "priorityOrder",
+      label: "Priority order",
+      type: "select",
+      default: "high",
+      visibleWhen: { param: "rule", in: ["attribute"] },
+      options: [
+        { value: "high", label: "Highest value wins" },
+        { value: "low", label: "Lowest value wins" },
+      ],
+    },
+  ],
+  run: async (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const rule = String(ctx.parameters.rule ?? "largest") as OverlapRule;
+    const priorityField = ctx.parameters.priorityField as string | undefined;
+    if (rule === "attribute" && !priorityField) {
+      ctx.log("Error: choose a priority field");
+      return;
+    }
+    const result = resolvePolygonOverlaps(fc, {
+      rule,
+      priorityField,
+      priorityOrder: ctx.parameters.priorityOrder === "low" ? "low" : "high",
+    });
+    if (result.modified === 0 && result.removed === 0) {
+      ctx.log("No overlapping polygons found");
+      return;
+    }
+    ctx.log(
+      `Trimmed ${result.modified} polygon(s)` +
+        (result.removed ? `; removed ${result.removed} completely covered polygon(s)` : ""),
+    );
+    ctx.addResultLayer?.("Overlaps fixed", result.collection);
+  },
+};
+
+export const fillPolygonGapsTool: ProcessingAlgorithm = {
+  id: "fill-polygon-gaps",
+  name: "Fill polygon gaps",
+  description:
+    "Fill gaps enclosed by a polygon layer: each gap up to a maximum area is merged into the neighbouring polygon that shares the longest boundary with it",
+  group: "Data quality",
+  parameters: [
+    {
+      id: "layer",
+      label: "Input layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["polygon"],
+    },
+    {
+      id: "maxArea",
+      label: "Maximum gap area (m²)",
+      type: "number",
+      default: 0,
+      min: 0,
+      step: 1,
+      description:
+        "Gaps larger than this stay open. Default 0 fills every enclosed gap without an area limit. Holes inside a single polygon are never filled.",
+    },
+  ],
+  run: async (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const maxArea = Number(ctx.parameters.maxArea ?? 0);
+    const result = fillPolygonGaps(fc, Number.isFinite(maxArea) ? maxArea : 0);
+    if (result.skippedLarge) {
+      ctx.log(`${result.skippedLarge} gap(s) larger than the maximum area were left open`);
+    }
+    if (result.skippedHoles) {
+      ctx.log(`${result.skippedHoles} hole(s) inside a single polygon were left alone`);
+    }
+    if (result.skippedUnassigned)
+      ctx.log(
+        `${result.skippedUnassigned} gap(s) have uncertain boundary owners and were left open`,
+      );
+    if (result.filled === 0) {
+      ctx.log("No gaps to fill");
+      return;
+    }
+    ctx.log(`Filled ${result.filled} gap(s)`);
+    ctx.addResultLayer?.("Gaps filled", result.collection);
+  },
+};
+
 export const TOPOLOGY_TOOLS: ProcessingAlgorithm[] = [
   checkValidityTool,
   fixGeometriesTool,
   checkTopologyRulesTool,
   fixTopologyTool,
+  fixPolygonOverlapsTool,
+  fillPolygonGapsTool,
 ];
