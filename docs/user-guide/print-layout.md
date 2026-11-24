@@ -103,8 +103,10 @@ marks the spot instead.
 
 The overview map renders on its own hidden map, so it never moves your map or
 changes its basemap. The extent rectangle is drawn from the captured map's
-georeference, so it needs a flat 2D view (rotated is fine); a globe or tilted
-view shows the overview map without a rectangle.
+georeference, so the overview needs a flat 2D view (rotated is fine). A globe or
+tilted capture cannot render the overview. Recapture in 2D or turn the overview
+off before exporting. Export waits until the matching overview basemap has
+loaded; a failed load shows a retry button.
 
 ### Coordinate grid
 

@@ -60,6 +60,7 @@ export async function renderInsetMap(
   view: MercatorView,
   signal?: AbortSignal,
 ): Promise<HTMLCanvasElement> {
+  if (signal?.aborted) throw new DOMException("Inset render aborted", "AbortError");
   const container = document.createElement("div");
   // Off screen but laid out, so MapLibre sizes its canvas from the container.
   Object.assign(container.style, {
@@ -89,16 +90,30 @@ export async function renderInsetMap(
     // Tile fetch failures are not fatal: the inset keeps what did load.
     live.on("error", () => {});
     await new Promise<void>((resolve, reject) => {
-      const timer = window.setTimeout(resolve, INSET_RENDER_TIMEOUT_MS);
-      const finish = () => {
-        window.clearTimeout(timer);
-        resolve();
+      let hasTile = false;
+      const loaded = (event: import("maplibre-gl").MapSourceDataEvent) => {
+        if (event.tile?.state === "loaded") hasTile = true;
       };
-      live.once("idle", finish);
-      signal?.addEventListener("abort", () => {
+      const cleanup = () => {
         window.clearTimeout(timer);
+        live.off("idle", finish);
+        live.off("sourcedata", loaded);
+        signal?.removeEventListener("abort", aborted);
+      };
+      const finish = () => {
+        cleanup();
+        if (hasTile) resolve();
+        else reject(new Error("The overview basemap did not load any imagery."));
+      };
+      const aborted = () => {
+        cleanup();
         reject(new DOMException("Inset render aborted", "AbortError"));
-      });
+      };
+      const timer = window.setTimeout(finish, INSET_RENDER_TIMEOUT_MS);
+      live.on("sourcedata", loaded);
+      live.once("idle", finish);
+      signal?.addEventListener("abort", aborted, { once: true });
+      if (signal?.aborted) aborted();
     });
     live.redraw();
     const source = live.getCanvas();

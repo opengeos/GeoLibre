@@ -1,4 +1,4 @@
-import { useRef, type Dispatch } from "react";
+import { useEffect, useRef, type Dispatch } from "react";
 import { useTranslation } from "react-i18next";
 import type { PrintLayoutConfig } from "@geolibre/core";
 import type {
@@ -62,6 +62,15 @@ interface ArrangeOverlayProps {
 export function ArrangeOverlay({ frame, layout, dispatch }: ArrangeOverlayProps) {
   const { t } = useTranslation();
   const gestureRef = useRef<Gesture | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const pendingRef = useRef<{ gesture: Gesture; dx: number; dy: number } | null>(null);
+  const applyRef = useRef<((gesture: Gesture, dx: number, dy: number) => void) | null>(null);
+  useEffect(
+    () => () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    },
+    [],
+  );
   const { boxes, pageW, pageH, cssW, cssH } = frame;
   if (!(pageW > 0 && pageH > 0 && cssW > 0 && cssH > 0)) return null;
   const toCss = cssW / pageW;
@@ -89,6 +98,13 @@ export function ArrangeOverlay({ frame, layout, dispatch }: ArrangeOverlayProps)
       patch: { elementOffsets: { ...start.elementOffsets, [id as LayoutMovableElement]: next } },
     });
   };
+  applyRef.current = apply;
+  const flush = () => {
+    rafRef.current = null;
+    const pending = pendingRef.current;
+    pendingRef.current = null;
+    if (pending) applyRef.current?.(pending.gesture, pending.dx, pending.dy);
+  };
 
   const begin = (
     e: React.PointerEvent<HTMLElement>,
@@ -105,10 +121,13 @@ export function ArrangeOverlay({ frame, layout, dispatch }: ArrangeOverlayProps)
   const move = (e: React.PointerEvent<HTMLElement>) => {
     const gesture = gestureRef.current;
     if (!gesture) return;
-    apply(gesture, e.clientX - gesture.x, e.clientY - gesture.y);
+    pendingRef.current = { gesture, dx: e.clientX - gesture.x, dy: e.clientY - gesture.y };
+    if (rafRef.current === null) rafRef.current = requestAnimationFrame(flush);
   };
   const end = (e: React.PointerEvent<HTMLElement>) => {
     if (!gestureRef.current) return;
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    flush();
     gestureRef.current = null;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);

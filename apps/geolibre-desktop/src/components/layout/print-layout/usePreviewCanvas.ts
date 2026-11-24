@@ -14,6 +14,7 @@ export function usePreviewCanvas(open: boolean, displayOptions: LayoutOptions) {
   const previewRef = useRef<HTMLCanvasElement | null>(null);
   const previewBoxRef = useRef<HTMLDivElement | null>(null);
   const [arrangeFrame, setArrangeFrame] = useState<ArrangeFrame | null>(null);
+  const arrangeKeyRef = useRef("");
 
   // Redraw the preview whenever the layout options change, sizing the canvas to
   // fill the preview pane (so it grows when the dialog is resized) while keeping
@@ -53,13 +54,18 @@ export function usePreviewCanvas(open: boolean, displayOptions: LayoutOptions) {
       canvas.style.width = `${Math.round(dispW)}px`;
       canvas.style.height = `${Math.round(dispH)}px`;
       const boxes = drawLayout(canvas, displayOptions);
-      setArrangeFrame({
+      const frame = {
         boxes,
         pageW: canvas.width,
         pageH: canvas.height,
         cssW: Math.round(dispW),
         cssH: Math.round(dispH),
-      });
+      };
+      const key = JSON.stringify(frame);
+      if (key !== arrangeKeyRef.current) {
+        arrangeKeyRef.current = key;
+        setArrangeFrame(frame);
+      }
       if (!observer) {
         // Coalesce resize-driven re-renders to one drawLayout per frame so a
         // fast splitter/grip drag doesn't run the draw synchronously per event.

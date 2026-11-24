@@ -1341,12 +1341,23 @@ export function drawLayoutContext(
         };
     placed("northArrow", center, () => {
       drawNorthArrow(ctx, colors, center.x, center.y, arrowRadius, opts.bearingDeg, unit);
-      const top = center.y - arrowRadius - unit * 2.6;
+      const bearing = (opts.bearingDeg * Math.PI) / 180;
+      const distance = arrowRadius + unit * 1.4;
+      const labelX = center.x - Math.sin(bearing) * distance;
+      const labelY = center.y - Math.cos(bearing) * distance;
+      ctx.save();
+      ctx.font = `700 ${unit * 1.8}px system-ui, sans-serif`;
+      const labelHalfWidth = ctx.measureText("N").width / 2;
+      ctx.restore();
+      const left = Math.min(center.x - discRadius, labelX - labelHalfWidth);
+      const right = Math.max(center.x + discRadius, labelX + labelHalfWidth);
+      const top = Math.min(center.y - discRadius, labelY - unit * 1.2);
+      const bottom = Math.max(center.y + discRadius, labelY + unit * 1.2);
       return {
-        x: center.x - discRadius,
-        y: Math.min(top, center.y - discRadius),
-        w: discRadius * 2,
-        h: center.y + discRadius - Math.min(top, center.y - discRadius),
+        x: left,
+        y: top,
+        w: right - left,
+        h: bottom - top,
       };
     });
   }

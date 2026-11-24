@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { useEffect, useState } from "react";
 import { Input, Label, Select } from "@geolibre/ui";
 import type { PrintLayoutGridType } from "@geolibre/core";
 import { ToggleField } from "./ToggleField";
@@ -21,6 +22,25 @@ export function MapGridEditor({
 }: MapGridEditorProps) {
   const { t } = useTranslation();
   const projected = layout.gridType === "utm" || layout.gridType === "mgrs";
+  const [intervalDraft, setIntervalDraft] = useState(String(layout.gridInterval));
+  const [fontDraft, setFontDraft] = useState(String(layout.gridFontSize));
+  useEffect(
+    () => setIntervalDraft(String(layout.gridInterval)),
+    [layout.gridInterval, layout.gridType],
+  );
+  useEffect(() => setFontDraft(String(layout.gridFontSize)), [layout.gridFontSize]);
+  const commitInterval = () => {
+    const parsed = Number(intervalDraft);
+    const value = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+    const interval = layout.gridType === "mgrs" && value > 0 ? Math.max(1000, value) : value;
+    setIntervalDraft(String(interval));
+    dispatch({ type: "setLayout", patch: { gridInterval: interval } });
+  };
+  const commitFont = () => {
+    const value = Math.max(3, Math.min(36, Number(fontDraft) || 7));
+    setFontDraft(String(value));
+    dispatch({ type: "setLayout", patch: { gridFontSize: value } });
+  };
   return (
     <div className="space-y-3">
       <p className="text-sm font-medium">{t("printLayout.grid.heading")}</p>
@@ -69,16 +89,11 @@ export function MapGridEditor({
             type="number"
             min={0}
             step={projected ? 1000 : 0.25}
-            value={layout.gridInterval}
-            onChange={(e) => {
-              const value = Math.max(0, Number(e.target.value) || 0);
-              dispatch({
-                type: "setLayout",
-                patch: {
-                  gridInterval:
-                    layout.gridType === "mgrs" && value > 0 ? Math.max(1000, value) : value,
-                },
-              });
+            value={intervalDraft}
+            onChange={(e) => setIntervalDraft(e.target.value)}
+            onBlur={commitInterval}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
             }}
           />
           {layout.gridType === "mgrs" && (
@@ -101,13 +116,12 @@ export function MapGridEditor({
             type="number"
             min={3}
             max={36}
-            value={layout.gridFontSize}
-            onChange={(e) =>
-              dispatch({
-                type: "setLayout",
-                patch: { gridFontSize: Math.max(3, Math.min(36, Number(e.target.value) || 7)) },
-              })
-            }
+            value={fontDraft}
+            onChange={(e) => setFontDraft(e.target.value)}
+            onBlur={commitFont}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
           />
         </div>
       </div>

@@ -9,6 +9,7 @@ import type { useExportActions } from "./useExportActions";
 interface ExportActionsProps {
   ui: Pick<PrintLayoutUiState, "atlasProgress" | "atlasBusy" | "exporting" | "copied">;
   hasCapture: boolean;
+  insetReady: boolean;
   /** Whether the capture carries a georeference, so the PDF is a GeoPDF. */
   georeferenced: boolean;
   /** The atlas setting, AND-ed with the renderer being able to drive it. */
@@ -21,6 +22,7 @@ interface ExportActionsProps {
 export function ExportActions({
   ui,
   hasCapture,
+  insetReady,
   georeferenced,
   atlasEnabled,
   atlas,
@@ -64,7 +66,7 @@ export function ExportActions({
       {/* Copy the composed layout straight to the clipboard (GH #773). */}
       <Button
         variant="outline"
-        disabled={exporting || atlasBusy || !hasCapture}
+        disabled={exporting || atlasBusy || !hasCapture || !insetReady}
         onClick={() => void handleCopy()}
       >
         {copied ? <Check className="me-2 h-4 w-4" /> : <ClipboardCopy className="me-2 h-4 w-4" />}
@@ -73,7 +75,7 @@ export function ExportActions({
       {!atlasEnabled && (
         <Button
           variant="outline"
-          disabled={exporting || atlasBusy || !hasCapture}
+          disabled={exporting || atlasBusy || !hasCapture || !insetReady}
           onClick={() => void handleExport("svg")}
         >
           <FileImage className="me-2 h-4 w-4" />
@@ -89,6 +91,7 @@ export function ExportActions({
           exporting ||
           atlasBusy ||
           atlasConfigBlocked ||
+          !insetReady ||
           (atlasEnabled ? !atlasActive : !hasCapture)
         }
         onClick={() => void (atlasActive ? handleAtlasExport("zip") : handleExport("png"))}
@@ -102,6 +105,7 @@ export function ExportActions({
           exporting ||
           atlasBusy ||
           atlasConfigBlocked ||
+          !insetReady ||
           (atlasEnabled ? !atlasActive : !hasCapture)
         }
         // Say whether the PDF carries map coordinates (GeoPDF, GH #3523): a

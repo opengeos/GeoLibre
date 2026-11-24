@@ -160,15 +160,24 @@ export function findEdgeTicks(
       // Closed [lo, hi]: a multiple landing exactly on a shared sample is found
       // by both segments and merged below. `+ 0` turns -0 into 0.
       const eps = 1e-9 * interval;
-      const first = Math.ceil((lo - eps) / interval);
-      const last = Math.floor((hi + eps) / interval);
-      if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last) || last - first > 4096)
+      const worldFirst = periodic ? Math.floor((lo + 180) / 360) : 0;
+      const worldLast = periodic ? Math.floor((hi + 180) / 360) : 0;
+      if (![worldFirst, worldLast].every(Number.isSafeInteger) || worldLast - worldFirst > 4096)
         return [];
-      for (let k = first; k <= last; k++) {
-        const value = k * interval + 0;
-        const f = Math.min(1, Math.max(0, (value - prev.v) / (v - prev.v)));
-        out.push({ t: prev.t + f * (t - prev.t), value });
-        if (out.length >= 4096) return out;
+      for (let world = worldFirst; world <= worldLast; world++) {
+        const shift = world * 360;
+        const localLo = periodic ? Math.max(-180, lo - shift) : lo;
+        const localHi = periodic ? Math.min(180, hi - shift) : hi;
+        const first = Math.ceil((localLo - eps) / interval);
+        const last = Math.floor((localHi + eps) / interval);
+        if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last) || last - first > 4096)
+          return [];
+        for (let k = first; k <= last; k++) {
+          const value = k * interval + shift + 0;
+          const f = Math.min(1, Math.max(0, (value - prev.v) / (v - prev.v)));
+          out.push({ t: prev.t + f * (t - prev.t), value });
+          if (out.length >= 4096) return out;
+        }
       }
     }
     prev = { t, v };
@@ -430,7 +439,9 @@ export function computeMapGrid(input: MapGridInput): MapGrid | null {
     input.interval > 0 && Number.isFinite(input.interval)
       ? input.interval
       : autoGridInterval(span, type);
-  interval = Math.max(interval, largestSpan / 200, type === "mgrs" ? 1000 : 0);
+  const precisionFloor =
+    type === "mgrs" ? 1000 : type === "utm" ? 1 : type === "dms" ? 1 / 3600 : 1e-6;
+  interval = Math.max(interval, largestSpan / 200, precisionFloor);
 
   if (type === "mgrs") {
     const square = mgrsSquareLabel(center[0], center[1]);
@@ -833,9 +844,15 @@ export function adjustFrameBox(
   dy: number,
 ): FrameBox {
   if (mode === "move") return clampFrameBox({ ...box, x: box.x + dx, y: box.y + dy });
-  const w = Math.min(1 - box.x, Math.max(MIN_FRAME_SIZE, box.w + dx));
-  const h = Math.min(1 - box.y, Math.max(MIN_FRAME_SIZE, box.h + dy));
-  return { ...box, w, h };
+  const w = Math.min(box.w < MIN_FRAME_SIZE ? 1 : 1 - box.x, Math.max(MIN_FRAME_SIZE, box.w + dx));
+  const h = Math.min(box.h < MIN_FRAME_SIZE ? 1 : 1 - box.y, Math.max(MIN_FRAME_SIZE, box.h + dy));
+  return {
+    ...box,
+    x: box.w < MIN_FRAME_SIZE ? Math.min(box.x, 1 - w) : box.x,
+    y: box.h < MIN_FRAME_SIZE ? Math.min(box.y, 1 - h) : box.y,
+    w,
+    h,
+  };
 }
 
 /**

@@ -86,6 +86,20 @@ describe("findEdgeTicks", () => {
     );
   });
 
+  it("keeps a non-divisor longitude lattice identical in repeated worlds", () => {
+    const base = findEdgeTicks((t) => 20 * t, 7, true);
+    const repeated = findEdgeTicks((t) => 360 + 20 * t, 7, true);
+    assert.deepEqual(
+      base.map((tick) => tick.value),
+      [0, 7, 14],
+    );
+    assert.deepEqual(
+      repeated.map((tick) => tick.value - 360),
+      [0, 7, 14],
+    );
+    base.forEach((tick, i) => close(repeated[i].t, tick.t, 1e-9));
+  });
+
   it("skips gaps where the edge leaves the map", () => {
     const ticks = findEdgeTicks((t) => (t > 0.4 && t < 0.6 ? null : 100 * t), 10);
     assert.ok(!ticks.some((tk) => tk.value === 50));
@@ -195,6 +209,20 @@ describe("computeMapGrid", () => {
     close(grid.interval, 5, 1e-12);
   });
 
+  it("floors fixed intervals to the precision their labels can represent", () => {
+    const small = (x: number, y: number): [number, number] => [
+      10 + ((x - frame.x) / frame.w) * 0.01,
+      45 + ((y - frame.y) / frame.h) * 0.01,
+    ];
+    const dms = computeMapGrid({ frame, pageToLngLat: small, type: "dms", interval: 0.0001 });
+    assert.ok(dms && dms.interval >= 1 / 3600);
+    const ticks = dms.ticks.filter((tick) => tick.edge === "top" && tick.axis === 0);
+    assert.ok(ticks.length > 2);
+    assert.equal(new Set(ticks.map((tick) => tick.label)).size, ticks.length);
+    const utm = computeMapGrid({ frame, pageToLngLat: small, type: "utm", interval: 0.1 });
+    assert.ok(utm && utm.interval >= 1);
+  });
+
   it("draws a UTM grid in the centre's zone and labels the zone", () => {
     const small = (x: number, y: number): [number, number] => [
       14.5 + ((x - 100) / 800) * 1,
@@ -216,6 +244,7 @@ describe("computeMapGrid", () => {
       interval: 1000,
     });
     assert.match(mgrs?.zoneLabel ?? "", /^33U [A-Z]{2}$/);
+    assert.ok(mgrs && mgrs.ticks.length > 0);
     assert.ok(mgrs?.ticks.every((tk) => /^\d\d$/.test(tk.label)));
   });
 
@@ -392,6 +421,14 @@ describe("frame boxes", () => {
     assert.deepEqual(clampFrameBox({ x: -1, y: 2, w: 3, h: 0 }), { x: 0, y: 0.95, w: 1, h: 0.05 });
   });
 
+  it("lets a small saved edge frame grow by moving its opposite edge", () => {
+    const grown = adjustFrameBox({ x: 0.98, y: 0.98, w: 0.02, h: 0.02 }, "resize", 0.2, 0.1);
+    assert.ok(grown.w >= 0.05 && grown.h >= 0.05);
+    close(grown.x + grown.w, 1, 1e-12);
+    close(grown.y + grown.h, 1, 1e-12);
+    close(grown.w, 0.22, 1e-12);
+  });
+
   it("puts the default inset in the frame's lower-left corner", () => {
     const body = { x: 50, y: 80, w: 800, h: 500 };
     const r = defaultInsetRect(body, 5);
@@ -544,6 +581,7 @@ describe("drawLayout with the cartographic extras", () => {
       }),
     );
     const lastFrame = paint.lastIndexOf("image");
+    assert.equal(paint.filter((item) => item === "image").length, 2);
     assert.ok(paint.indexOf("text:Map") > lastFrame);
     assert.ok(paint.indexOf("text:Footer") > lastFrame);
   });
@@ -556,13 +594,29 @@ describe("drawLayout with the cartographic extras", () => {
     const original = render(1, 0);
     assert.ok(original);
     assert.equal(render(1, 0.1), original);
-    assert.notEqual(render(2, 0), original);
+    const resized = render(2, 0);
+    assert.ok(resized);
+    assert.notEqual(resized, original);
     const plain = drawLayout(recordingCanvas().canvas, options());
     const doubled = drawLayout(
       recordingCanvas().canvas,
       options({ elementOffsets: { scaleBar: { dx: 0, dy: 0, scale: 2 } } }),
     );
     close(doubled.scaleBar!.box.w, plain.scaleBar!.box.w * 2, 1e-9);
+  });
+
+  it("includes the rotated upright north label in its arrange box", () => {
+    for (const bearingDeg of [0, 90, 180, 270]) {
+      const entry = drawLayout(recordingCanvas().canvas, options({ bearingDeg })).northArrow;
+      assert.ok(entry?.anchor);
+      const angle = (bearingDeg * Math.PI) / 180;
+      const x = entry.anchor.x - Math.sin(angle) * 7 * 4;
+      const y = entry.anchor.y - Math.cos(angle) * 7 * 4;
+      assert.ok(x - 2.5 >= entry.box.x - 1e-8 && x + 2.5 <= entry.box.x + entry.box.w + 1e-8);
+      assert.ok(
+        y - 7 * 1.2 >= entry.box.y - 1e-8 && y + 7 * 1.2 <= entry.box.y + entry.box.h + 1e-8,
+      );
+    }
   });
   it("keeps full-page grid labels inside the page", () => {
     const { canvas, fills, transforms } = recordingCanvas();

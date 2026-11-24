@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PrintLayoutConfig } from "@geolibre/core";
 import { georefLngLat } from "../../../lib/geopdf";
 import {
@@ -94,7 +94,7 @@ export function useInsetMap(
   layout: PrintLayoutConfig,
   options: LayoutOptions,
   captured: CapturedMap | null,
-): InsetMapOptions | null {
+) {
   const { showInset, insetBasemap, insetZoomOffset, insetExtentColor, insetBox } = layout;
   const bounds = useMemo(() => capturedBounds(captured, options), [captured, options]);
   // The inset frame's aspect, rounded so a drag does not re-render per pixel.
@@ -116,11 +116,18 @@ export function useInsetMap(
     key: string;
   } | null>(null);
   const requestKey = view ? JSON.stringify([insetBasemap, view]) : null;
+  const [failedKey, setFailedKey] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => {
+    setFailedKey(null);
+    setAttempt((value) => value + 1);
+  }, []);
 
   useEffect(() => {
     if (!open || !showInset || !view || !requestKey || rendered?.key === requestKey) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
+      setFailedKey(null);
       renderInsetMap(insetBasemap, view, controller.signal)
         .then((image) => {
           if (!controller.signal.aborted)
@@ -129,15 +136,16 @@ export function useInsetMap(
         .catch(() => {
           // A failed replacement keeps its placeholder; a cached image is
           // reusable only for the same basemap, camera, and render dimensions.
+          if (!controller.signal.aborted) setFailedKey(requestKey);
         });
     }, RENDER_DEBOUNCE_MS);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [open, showInset, view, insetBasemap, requestKey, rendered?.key]);
+  }, [open, showInset, view, insetBasemap, requestKey, rendered?.key, attempt]);
 
-  return useMemo(() => {
+  const inset = useMemo<InsetMapOptions | null>(() => {
     if (!showInset) return null;
     const current = rendered?.key === requestKey ? rendered : null;
     return {
@@ -151,4 +159,11 @@ export function useInsetMap(
           : "OpenFreeMap · © OpenMapTiles · © OpenStreetMap contributors",
     };
   }, [showInset, insetBox, rendered, view, insetExtentColor, insetBasemap, requestKey]);
+  return {
+    inset,
+    ready: !showInset || Boolean(inset?.image),
+    loading: showInset && Boolean(view) && !inset?.image && failedKey !== requestKey,
+    failed: showInset && Boolean(requestKey) && failedKey === requestKey,
+    retry,
+  };
 }

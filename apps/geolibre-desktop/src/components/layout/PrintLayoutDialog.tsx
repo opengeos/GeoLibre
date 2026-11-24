@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
   Separator,
+  Button,
 } from "@geolibre/ui";
 import { layoutMapGrid, resolvePageSize, type LayoutOptions } from "../../lib/print-layout";
 import { canGeoreferencePrint } from "../../lib/print-layout-export";
@@ -167,7 +168,8 @@ export function PrintLayoutDialog({
 
   // The overview / inset map renders on its own hidden map, so it joins the
   // page options once it is ready (GH #3530).
-  const inset = useInsetMap(open, layout, baseOptions, captured);
+  const insetState = useInsetMap(open, layout, baseOptions, captured);
+  const { inset } = insetState;
   const effectiveGridInterval = useMemo(() => {
     if (!baseOptions.grid || !(baseOptions.grid.interval > 0)) return undefined;
     const page = resolvePageSize(baseOptions);
@@ -275,6 +277,7 @@ export function PrintLayoutDialog({
   });
   const { previewRef, previewBoxRef, arrangeFrame } = usePreviewCanvas(open, displayOptions);
   const actions = useExportActions({
+    insetReady: insetState.ready,
     layout,
     projectName,
     captured,
@@ -413,7 +416,22 @@ export function PrintLayoutDialog({
               <DataChartEditor {...editorProps} atlasLayers={atlas.atlasLayers} blocks={blocks} />
             )}
             {layout.showInset && (
-              <InsetMapEditor {...editorProps} georeferenced={Boolean(captured?.georef)} />
+              <>
+                <InsetMapEditor {...editorProps} georeferenced={Boolean(captured?.georef)} />
+                {insetState.loading && (
+                  <p role="status" className="text-xs text-muted-foreground">
+                    {t("printLayout.inset.loading")}
+                  </p>
+                )}
+                {insetState.failed && (
+                  <div role="alert" className="space-y-2 text-xs">
+                    <p>{t("printLayout.inset.failed")}</p>
+                    <Button size="sm" variant="outline" onClick={insetState.retry}>
+                      {t("printLayout.inset.retry")}
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
             {layout.showGrid && (
               <MapGridEditor
@@ -482,6 +500,7 @@ export function PrintLayoutDialog({
         </div>
 
         <ExportActions
+          insetReady={insetState.ready}
           ui={state}
           hasCapture={Boolean(captured)}
           georeferenced={canGeoreferencePrint(options)}
