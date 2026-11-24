@@ -302,6 +302,7 @@ function createPMTilesControl(
 /** The slice of a MapLibre or Mapbox map {@link dropGeoLibreLayersOnSources} touches. */
 interface CompanionLayerMap {
   getLayersOrder?: () => string[];
+  getStyle?: () => { layers?: { id: string }[] } | undefined;
   getLayer: (id: string) => { source?: unknown; metadata?: unknown } | undefined | null;
   removeLayer: (id: string) => unknown;
 }
@@ -322,11 +323,25 @@ export function dropGeoLibreLayersOnSources(
   sourceIds: ReadonlySet<string>,
 ): void {
   if (sourceIds.size === 0) return;
-  for (const id of map.getLayersOrder?.() ?? []) {
+  for (const id of styleLayerIds(map)) {
     const layer = map.getLayer(id);
     if (!layer || typeof layer.source !== "string" || !sourceIds.has(layer.source)) continue;
     const metadata = layer.metadata as Record<string, unknown> | undefined;
     if (metadata?.["geolibre:internal"] === true) map.removeLayer(id);
+  }
+}
+
+/**
+ * The map's style layer ids. mapbox-gl has no `getLayersOrder`, so fall back to the style's layer
+ * list there; its `getStyle` throws while a style is still loading, which leaves nothing to drop.
+ */
+function styleLayerIds(map: CompanionLayerMap): string[] {
+  const order = map.getLayersOrder?.();
+  if (Array.isArray(order)) return order;
+  try {
+    return (map.getStyle?.()?.layers ?? []).map(({ id }) => id);
+  } catch {
+    return [];
   }
 }
 

@@ -344,7 +344,7 @@ describe("adding an archive by URL while the panel holds a stale tick", () => {
  * style layer still reads it (MapLibre reports an error event and keeps the source; it does not
  * throw, so the control's try/catch cannot notice).
  */
-function statefulMap(document: Document) {
+function statefulMap(document: Document, { mapbox = false } = {}) {
   const layers = new Map<string, { id: string; source?: string; metadata?: unknown }>();
   const sources = new Set<string>();
   const refused: string[] = [];
@@ -359,7 +359,10 @@ function statefulMap(document: Document) {
       addLayer: (layer: { id: string; source?: string }) => layers.set(layer.id, layer),
       getLayer: (id: string) => layers.get(id),
       removeLayer: (id: string) => layers.delete(id),
-      getLayersOrder: () => [...layers.keys()],
+      // mapbox-gl has no getLayersOrder; its style's layer list is the only way to walk them.
+      ...(mapbox
+        ? { getStyle: () => ({ layers: [...layers.values()] }) }
+        : { getLayersOrder: () => [...layers.keys()] }),
       getCanvasContainer: () => document.createElement("div"),
     } as Record<string, unknown>,
     { get: (target, key) => target[key as string] ?? (() => undefined) },
@@ -374,7 +377,7 @@ function statefulMap(document: Document) {
  * source stranded on the map.
  */
 describe("removing an archive GeoLibre has decorated", () => {
-  async function decoratedArchive(guarded: boolean) {
+  async function decoratedArchive(guarded: boolean, mapbox = false) {
     const { document, window } = parseHTML("<!doctype html><html><body></body></html>");
     const globals = globalThis as Record<string, unknown>;
     const restore = { document: globals.document, window: globals.window, fetch: globals.fetch };
@@ -388,7 +391,7 @@ describe("removing an archive GeoLibre has decorated", () => {
         removeLayer: (id: string) => void;
         getState: () => { layers: { id: string }[]; error: string | null };
       };
-      const fake = statefulMap(document as unknown as Document);
+      const fake = statefulMap(document as unknown as Document, { mapbox });
       control.onAdd(fake.map);
       if (guarded) {
         guardPMTilesSourceRemoval(control as never, { getMap: () => fake.map } as never);
@@ -423,5 +426,12 @@ describe("removing an archive GeoLibre has decorated", () => {
     assert.ok(!sources.has(archiveId), "the archive's source is gone");
     assert.ok(!layers.has("layer-x-line-decoration-streams"));
     assert.equal(layers.size, 0, "and so is everything the control drew");
+  });
+
+  it("does the same on a Mapbox map, which has no getLayersOrder", async () => {
+    const { layers, sources, refused, archiveId } = await decoratedArchive(true, true);
+    assert.deepEqual(refused, []);
+    assert.ok(!sources.has(archiveId));
+    assert.equal(layers.size, 0);
   });
 });

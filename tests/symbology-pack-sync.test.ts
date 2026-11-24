@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LayerStyle } from "@geolibre/core";
 import { removeLayerFromMap, syncLayer } from "../packages/map/src/layer-sync";
-import { createPMTilesStoreLayer } from "../packages/map/src/pmtiles-layer";
-import { isDecoratablePMTilesLayer } from "../apps/geolibre-desktop/src/components/panels/style-panel/layer-capabilities";
+import {
+  createPMTilesStoreLayer,
+  pmtilesLayerDrawsLineDecorations,
+} from "../packages/map/src/pmtiles-layer";
 
 // Stateful fake MapLibre map, mirroring tests/point-renderer-sync.test.ts: it
 // tracks sources and layers across sync passes so a test can assert which
@@ -204,7 +206,7 @@ function pmtilesLayer(
 }
 
 const STREAMS_DECORATION = "layer-flow-line-decoration-streams";
-const BOUNDARY_DECORATION = "layer-flow-line-decoration-basin_20boundary";
+const BOUNDARY_DECORATION = "layer-flow-line-decoration-basin%20boundary";
 
 describe("PMTiles line decoration sync", () => {
   it("adds a line-placed arrow layer per source layer on the archive's source", () => {
@@ -280,8 +282,23 @@ describe("PMTiles line decoration sync", () => {
     assert.ok(![...layers.keys()].some((id) => id.includes("line-decoration")));
   });
 
+  it("keeps two source layers whose encoded names would collide apart", () => {
+    const { map, layers } = makeMap();
+    const layer = createPMTilesStoreLayer({
+      id: "flow",
+      name: "Flow paths",
+      url: "https://example.org/flow.pmtiles",
+      tileType: "vector",
+      sourceLayers: ["a b", "a_20b"],
+    });
+    syncLayer(map as never, { ...layer, style: { ...layer.style, lineDecoration: "arrow" } });
+    const sourceLayers = [...layers.values()]
+      .filter((spec) => String(spec.id).includes("line-decoration"))
+      .map((spec) => spec["source-layer"]);
+    assert.deepEqual(sourceLayers.sort(), ["a b", "a_20b"]);
+  });
+
   it("offers the Style panel option exactly where the sync draws it", () => {
-    assert.equal(isDecoratablePMTilesLayer(pmtilesLayer()), true);
     const raster = createPMTilesStoreLayer({
       id: "hillshade",
       name: "Hillshade",
@@ -289,8 +306,20 @@ describe("PMTiles line decoration sync", () => {
       tileType: "raster",
       sourceLayers: [],
     });
-    assert.equal(isDecoratablePMTilesLayer(raster), false);
-    assert.equal(isDecoratablePMTilesLayer(lineLayer()), false);
+    const notFromControl = pmtilesLayer({}, { metadata: { ...pmtilesLayer().metadata } });
+    delete notFromControl.metadata.externalNativeLayer;
+    // The panel hides the section for extruded layers on its own, so the shared predicate is
+    // compared against a flat render of each layer.
+    for (const layer of [pmtilesLayer(), raster, notFromControl, lineLayer()]) {
+      const { map, layers } = makeMap();
+      syncLayer(map as never, {
+        ...layer,
+        style: { ...layer.style, lineDecoration: "arrow", extrusionEnabled: false },
+      });
+      const drawn = [...layers.keys()].some((id) => id.startsWith("layer-flow-line-decoration"));
+      const offered = pmtilesLayerDrawsLineDecorations(layer);
+      assert.equal(offered, drawn, `panel and sync disagree for ${layer.name}`);
+    }
   });
 
   it("removes the decorations with the layer", () => {

@@ -46,25 +46,6 @@ export function hasTextMarkerFeatures(layer: {
   });
 }
 
-/**
- * True when a vector PMTiles archive gets GeoLibre-drawn line decorations
- * (flow arrows and other repeated symbols). Mirrors the `isPMTilesExternalLayer`
- * gate in `@geolibre/map`'s layer sync, which is the only PMTiles path that
- * draws them, so the Style panel never offers a silent no-op.
- *
- * @param layer - The store layer.
- * @returns Whether the layer is a vector PMTiles archive GeoLibre styles.
- */
-export function isDecoratablePMTilesLayer(layer: GeoLibreLayer): boolean {
-  return (
-    layer.type === "pmtiles" &&
-    layer.metadata.sourceKind === "pmtiles-url" &&
-    layer.metadata.externalNativeLayer === true &&
-    layer.metadata.tileType !== "raster" &&
-    layer.source.type !== "raster"
-  );
-}
-
 export function supportsExtrusionControls(layer: {
   type: LayerType;
   source: Record<string, unknown>;

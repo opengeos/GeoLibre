@@ -64,7 +64,27 @@ export function pmtilesControlLayerId(sourceId: string, sourceLayer: string, kin
  * @returns The decoration style layer id.
  */
 export function pmtilesLineDecorationLayerId(layerId: string, sourceLayer: string): string {
-  return `layer-${layerId}-line-decoration-${encodeVectorTileLayerPart(sourceLayer)}`;
+  // Plain percent-encoding, not encodeVectorTileLayerPart: that maps `%` to `_`, so `a b` and
+  // `a_20b` would share one decoration layer and the second would never be drawn.
+  return `layer-${layerId}-line-decoration-${encodeURIComponent(sourceLayer)}`;
+}
+
+/**
+ * Whether layer sync draws line decorations (flow arrows) for this PMTiles store layer: a vector
+ * archive added through the PMTiles control or Add Data, the only PMTiles path GeoLibre styles
+ * itself. Shared by the sync and the Style panel so the panel never offers a silent no-op.
+ *
+ * @param layer - The store layer.
+ * @returns Whether decorations apply to the layer.
+ */
+export function pmtilesLayerDrawsLineDecorations(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "pmtiles" &&
+    layer.metadata.sourceKind === "pmtiles-url" &&
+    layer.metadata.externalNativeLayer === true &&
+    layer.metadata.tileType !== "raster" &&
+    layer.source.type !== "raster"
+  );
 }
 
 /**

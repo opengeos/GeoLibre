@@ -26,6 +26,7 @@ import {
   pmtilesControlLayerId,
   pmtilesIdNamesSourceLayer,
   pmtilesLayerKinds,
+  pmtilesLayerDrawsLineDecorations,
   pmtilesLineDecorationLayerId,
   pmtilesVectorLayerId,
 } from "./pmtiles-layer";
@@ -1144,7 +1145,7 @@ function syncPMTilesLineDecorations(
   const imageId =
     sourceId &&
     map.getSource(sourceId) &&
-    getPMTilesTileType(layer) === "vector" &&
+    pmtilesLayerDrawsLineDecorations(layer) &&
     !layer.style.extrusionEnabled
       ? prepareLineDecoration(layer.style)
       : null;

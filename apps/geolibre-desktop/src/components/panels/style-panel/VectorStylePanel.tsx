@@ -13,6 +13,7 @@ import {
   mapboxUnsupportedStyleSettings,
   type MapEngine,
 } from "@geolibre/map";
+import { pmtilesLayerDrawsLineDecorations } from "@geolibre/map/pmtiles-layer";
 import { ClipboardType, Palette, PanelRightClose } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
@@ -35,7 +36,6 @@ import {
   hasExternalDeckLayer,
   hasExternalNativeLayers,
   isControlPaintedVectorLayer,
-  isDecoratablePMTilesLayer,
   type GeometryFlags,
 } from "./layer-capabilities";
 import { ProportionalSizeSection } from "./ProportionalSizeSection";
@@ -199,7 +199,7 @@ export function VectorStylePanel({
       !!layer.geojson &&
       !hasExternalDeckLayer(layer) &&
       !hasExternalNativeLayers(layer)) ||
-      isDecoratablePMTilesLayer(layer)) &&
+      pmtilesLayerDrawsLineDecorations(layer)) &&
     (geometryFlags.hasLine || geometryFlags.hasPolygon);
   const showGeneratorControls =
     hasVectorPaintControls && !extrusionEnabled && supportsDerivedGeometry;
