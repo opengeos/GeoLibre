@@ -15,6 +15,17 @@ import {
   type DeploymentCapability,
 } from "../packages/core/src/deployment-capabilities";
 import { ROLE_PRIVILEGES } from "../packages/core/src/capabilities";
+import { RASTER_TOOLS } from "@geolibre/processing";
+
+it("keeps raster sidecar gates consistent with the client-only registry", () => {
+  for (const tool of RASTER_TOOLS) {
+    assert.equal(
+      commandAppPrivileges(`proc.raster.${tool.id}`)?.privileges.includes("processing:sidecar"),
+      !tool.clientOnly,
+      tool.id,
+    );
+  }
+});
 
 function command(id: string): Command {
   return { id, title: id, group: "Group", run: () => {} };
@@ -222,10 +233,20 @@ describe("commandAppPrivileges", () => {
     // A sidecar tool is a processing tool first, which is how ProcessingMenu
     // gates the same three. `proc.conversion.*` and `proc.raster.*` must not
     // fall through to the generic `proc.` entry.
-    const sidecar = { privileges: ["processing:run", "processing:sidecar"], mode: "all" };
+    const sidecar = {
+      privileges: ["processing:run", "processing:sidecar"],
+      mode: "all",
+    };
     assert.deepEqual(commandAppPrivileges("proc.segmentation"), sidecar);
     assert.deepEqual(commandAppPrivileges("proc.conversion.vector-to-pmtiles"), sidecar);
     assert.deepEqual(commandAppPrivileges("proc.raster.hillshade"), sidecar);
+    // The browser-only raster tools (change detection, SAR) need no sidecar.
+    for (const kind of ["ndvi-change", "flood-map", "sar-db"]) {
+      assert.deepEqual(commandAppPrivileges(`proc.raster.${kind}`), {
+        privileges: ["processing:run"],
+        mode: "any",
+      });
+    }
     // Turf runs client-side, so the vector tools need only processing:run.
     assert.deepEqual(commandAppPrivileges("proc.vector.buffer"), {
       privileges: ["processing:run"],
@@ -347,19 +368,35 @@ describe("entryMenuOffered", () => {
   const all = new Set<DeploymentCapability>(["data:add", "plugins:install"]);
   it("offers a menu only when not in the viewer, visible, and granted", () => {
     assert.equal(
-      entryMenuOffered("addData", { viewer: false, capabilities: all, menuVisible: true }),
+      entryMenuOffered("addData", {
+        viewer: false,
+        capabilities: all,
+        menuVisible: true,
+      }),
       true,
     );
     assert.equal(
-      entryMenuOffered("plugins", { viewer: false, capabilities: all, menuVisible: true }),
+      entryMenuOffered("plugins", {
+        viewer: false,
+        capabilities: all,
+        menuVisible: true,
+      }),
       true,
     );
     assert.equal(
-      entryMenuOffered("addData", { viewer: true, capabilities: all, menuVisible: true }),
+      entryMenuOffered("addData", {
+        viewer: true,
+        capabilities: all,
+        menuVisible: true,
+      }),
       false,
     );
     assert.equal(
-      entryMenuOffered("plugins", { viewer: false, capabilities: all, menuVisible: false }),
+      entryMenuOffered("plugins", {
+        viewer: false,
+        capabilities: all,
+        menuVisible: false,
+      }),
       false,
     );
     assert.equal(
@@ -371,7 +408,11 @@ describe("entryMenuOffered", () => {
       false,
     );
     assert.equal(
-      entryMenuOffered("addData", { viewer: false, capabilities: new Set(), menuVisible: true }),
+      entryMenuOffered("addData", {
+        viewer: false,
+        capabilities: new Set(),
+        menuVisible: true,
+      }),
       false,
     );
   });

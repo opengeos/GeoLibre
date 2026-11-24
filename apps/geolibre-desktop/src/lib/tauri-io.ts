@@ -75,6 +75,7 @@ export {
 } from "./file-io/vector-loader";
 export {
   browserSaveFallsBackToDownload,
+  FileTooLargeError,
   openLocalDataFileWithFallback,
   openLocalDataFilesWithFallback,
   pickLocalPathWithFallback,

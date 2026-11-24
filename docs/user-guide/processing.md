@@ -183,11 +183,59 @@ See the [Vector Analysis tutorial](../tutorials/vector-analysis.md).
 
 ### Raster
 
-**Processing → GeoLibre Toolbox → Raster** opens the Raster tools dialog. Most raster tools run on the rasterio Python sidecar: they take a file path in and write a file path out, then add the result to the map.
+**Processing → GeoLibre Toolbox → Raster** opens the Raster tools dialog. The classic tools run on the rasterio Python sidecar: they take a file path in and write a file path out, then add the result to the map.
 
 ![The Raster tools dialog, with the tool list at the top and the engine picker above the parameters](https://assets.geolibre.app/images/geolibre-raster-tools.webp)
 
-Eight of them also offer a **Client (browser)** engine that computes on the loaded raster with no sidecar at all, so they work on the web build and on mobile: **Hillshade**, **Slope**, **Aspect**, **Clip by extent**, **Raster calculator**, **Spectral index**, **Reclassify**, and **Focal statistics**. The rest — Reproject, Resample, Clip by mask layer, Polygonize, Contour, Interpolation, Zonal statistics, and Mosaic / merge — need the sidecar. The engine picker in the dialog shows which engines a tool accepts, and the line beneath it says what the selected one will do.
+Every raster tool also offers a **Client (browser)** engine that computes on the loaded raster with no sidecar at all. These computations are supported by the web and mobile runtimes. The engine picker in the dialog shows which engines a tool accepts, and the line beneath it says what the selected one will do. The browser engine follows the sidecar's algorithms (GDAL's warp kernels and output grid for Reproject and Resample, GDAL's rasterization rules for Clip by mask layer and Zonal statistics, ContourPy's marching squares for Contour, the same IDW and kriging pipeline for Interpolation), and a parity test replays sidecar outputs against it. A few inputs stay sidecar-only, and the browser engine says so when it meets them: a Reproject target that is not an EPSG code, Mosaic inputs on different pixel grids, zonal statistics over line zones, and a kriging system that is singular (for example, duplicate sample locations). The Change detection and SAR tools run in the browser only.
+
+Browser interpolation also enforces a 200-million-operation work estimate,
+including point/grid comparisons and the kriging dense solve. This can limit a
+request below the separate point or cell caps. Thin the points, use a coarser
+pixel size, or select the sidecar for larger kriging jobs. Transition-matrix
+outputs require codes within the exact Float32 integer range (up to 16,777,216);
+reclassify larger labels to smaller non-negative integers first.
+
+Floating browser change, interpolation, warp, and mosaic outputs use NaN for
+NoData, preserving valid finite values such as `-9999`. Clip by mask also uses
+NaN when the source has no declared NoData. Browser masks support polygon and
+point geometries; use the sidecar for line masks or line zones. Mosaic requires
+matching known EPSG codes and aligned pixel sizes.
+
+Warp and mosaic buffers have a 256 MiB allocation budget that includes
+all bands, warp scanline scratch, and mosaic validity flags. Contouring accepts at most 8 million
+pixels, 10,000 levels, 50 million level/pixel visits, and 250,000 output segments.
+Increase the interval or crop the raster when these limits are reached.
+Warp, polygonization, and contour computation currently run synchronously in
+the browser. Large jobs can pause the interface until computation returns;
+use a smaller input or the sidecar engine for these jobs. Worker execution
+and interruption within the compute loops remain follow-up work.
+
+Browser polygonization accepts at most 8 million pixels and 250,000 directed
+boundary edges. Noisy classified rasters can reach the edge budget well below
+the pixel limit. Crop or simplify them, or select the sidecar.
+
+Speckle filtering counts every input band against its work and scratch-memory
+budgets before copying the raster. The shared input preflight also reserves
+all output bands, including the three channels of SAR RGB.
+GeoJSON inputs have a separate 32 MiB limit before text decoding and JSON
+parsing. File pickers also reject larger GeoJSON files before reading their
+bytes when the size is available. Use a smaller vector input or the sidecar
+engine for larger masks, zones, or interpolation samples.
+
+Polygon and contour downloads from a custom projected CRS are transformed to
+WGS84. An image without a CRS can produce an unreferenced vector download with
+an explicit null CRS; it is not added to the geographic map.
+Explicit unsupported GeoJSON CRS declarations are rejected with sidecar guidance.
+PixelIsPoint input tie points are normalized to pixel corners internally and
+restored on export, preserving sample centers through reprojection.
+
+In deployments with restricted capabilities, classic raster command entry
+points retain their existing `processing:run` and `processing:sidecar`
+requirements. The dialog checks current permissions before probing, starting,
+or running the sidecar, including after switching tools. Browser execution
+requires `processing:run`. Browser-only SAR and change groups are available
+on mobile; the sidecar engine requires the desktop app and its permission.
 
 **Terrain**
 
@@ -234,6 +282,23 @@ Eight of them also offer a **Client (browser)** engine that computes on the load
 | **Reclassify** | Map pixel value ranges onto new values. |
 | **Mosaic / merge** | Combine several rasters into one. |
 | **Focal statistics** | Compute a moving-window statistic (mean, min, max, …) over a raster. |
+
+**Change detection** (browser only; the two dates must share a pixel grid)
+
+| Tool | Description |
+| --- | --- |
+| **Band difference** | Compare one band of two dates: difference, percent change, ratio, or log ratio (dB), optionally thresholded into decrease / no change / increase classes. |
+| **NDVI change** | Compute NDVI for both dates from a sensor band preset and map the difference, or classify it into vegetation loss / stable / gain. |
+| **Transition matrix** | Cross-tabulate two land-cover rasters. The log shows the from/to matrix and the output codes each pixel as `from × 10ⁿ + to`. |
+
+**SAR** (browser only)
+
+| Tool | Description |
+| --- | --- |
+| **Linear / dB conversion** | Convert backscatter between linear power (or amplitude) and decibels. |
+| **Speckle filter** | Lee or refined Lee (edge-aligned 7×7) speckle filtering, driven by the equivalent number of looks. dB input is filtered in linear power. |
+| **Dual-pol RGB composite** | Sentinel-1 false colour: red = VV, green = VH, blue = VV/VH, each stretched over a dB range. |
+| **Flood mapping (SAR threshold)** | Water where VV falls below a dB threshold. With a pre-event image, separates new flooding from permanent water. |
 
 **Download Global DEM** sits at the top of the same submenu: it downloads a DEM for the current map view or a box drawn on the map from the public AWS Terrain Tiles dataset (no API key needed), and opens in the Whitebox Toolbox dialog rather than the Raster tools dialog. **Georeferencing** sits at the bottom: it pins a non-georeferenced image to the map with ground control points using a least-squares affine fit, reporting per-GCP and RMS residuals.
 
@@ -475,4 +540,4 @@ The Processing menu also opens the **Planetary Computer** and **Earth Engine** p
 The raster tools, the sidecar conversion tools, and the optional GeoPandas vector engine use a local FastAPI sidecar that the desktop app starts on demand. The Whitebox Toolbox can *optionally* use it too, but does not need it — it runs in WebAssembly by default. The vector tools' client engine and the browser-based conversions need no sidecar either. See [Getting Started](../getting-started.md#optional-python-sidecar) for setup and [Reference → Architecture](../architecture.md#python-sidecar) for how it works.
 
 !!! note "Browser vs desktop"
-    The [Whitebox Toolbox](#whitebox-toolbox), the client-side vector tools, every [Conversion](#conversion) tool, and the eight [raster tools with a client engine](#raster) run in the browser. Vector to Vector's full any-format output and the remaining raster tools require the desktop app and the Python sidecar.
+    The [Whitebox Toolbox](#whitebox-toolbox), the client-side vector tools, every [Conversion](#conversion) tool, and every [raster tool](#raster) can run in the browser. Vector to Vector's full any-format output requires the desktop app and the Python sidecar.

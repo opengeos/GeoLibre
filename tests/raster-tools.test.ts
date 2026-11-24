@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { RASTER_TOOLS, getRasterTool } from "@geolibre/processing";
+import { RASTER_TOOLS, getRasterTool, supportsClientRaster } from "@geolibre/processing";
 
 const EXPECTED_IDS = [
   "hillshade",
@@ -19,6 +19,13 @@ const EXPECTED_IDS = [
   "reclassify",
   "mosaic",
   "focal",
+  "change-difference",
+  "ndvi-change",
+  "transition-matrix",
+  "sar-db",
+  "speckle-filter",
+  "sar-rgb",
+  "flood-map",
 ];
 
 describe("raster tools registry", () => {
@@ -54,6 +61,20 @@ describe("raster tools registry", () => {
         tool.defaultOutputName.endsWith(expectedExt),
         `${tool.id} default output ends with ${expectedExt}`,
       );
+    }
+  });
+
+  it("gives every tool a browser engine that the client dispatcher knows", () => {
+    for (const tool of RASTER_TOOLS) {
+      assert.equal(tool.supportsClient, true, `${tool.id} supports the client engine`);
+      assert.equal(supportsClientRaster(tool.id), true, `${tool.id} is in CLIENT_RASTER_TOOL_IDS`);
+    }
+  });
+
+  it("marks only the change detection and SAR tools as browser-only", () => {
+    for (const tool of RASTER_TOOLS) {
+      const browserOnly = tool.group === "Change Detection" || tool.group === "SAR";
+      assert.equal(Boolean(tool.clientOnly), browserOnly, `${tool.id} clientOnly`);
     }
   });
 });

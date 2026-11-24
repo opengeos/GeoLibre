@@ -114,7 +114,14 @@ export type RasterToolKind =
   | "spectral-index"
   | "reclassify"
   | "mosaic"
-  | "focal";
+  | "focal"
+  | "change-difference"
+  | "ndvi-change"
+  | "transition-matrix"
+  | "sar-db"
+  | "speckle-filter"
+  | "sar-rgb"
+  | "flood-map";
 
 /** Unsaved cell text, keyed by feature id and field name. Kept only for this project session. */
 export type AttributeTableDrafts = Record<string, Record<string, string>>;

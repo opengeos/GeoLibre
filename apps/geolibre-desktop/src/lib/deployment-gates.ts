@@ -119,6 +119,17 @@ function all(...privileges: AppPrivilege[]): CommandPrivilegeRule {
   return { privileges, mode: "all" };
 }
 
+/** Raster tools (`proc.raster.<kind>`) that run only in the browser. */
+const BROWSER_ONLY_RASTER_TOOLS = [
+  "change-difference",
+  "ndvi-change",
+  "transition-matrix",
+  "sar-db",
+  "speckle-filter",
+  "sar-rgb",
+  "flood-map",
+] as const;
+
 /**
  * The application privileges each command family needs, keyed by command-id
  * prefix.
@@ -144,6 +155,12 @@ const COMMAND_PRIVILEGE_PREFIXES: ReadonlyArray<readonly [string, CommandPrivile
   // palette. `proc.vector.*` is deliberately absent: Turf runs client-side.
   ["proc.segmentation", all("processing:run", "processing:sidecar")],
   ["proc.conversion.", all("processing:run", "processing:sidecar")],
+  // The raster Change detection and SAR tools have no sidecar worker; they run
+  // in the browser only, so the Processing menu lists them outside the
+  // sidecar gate and so does the palette.
+  ...BROWSER_ONLY_RASTER_TOOLS.map(
+    (kind) => [`proc.raster.${kind}`, any("processing:run")] as const,
+  ),
   ["proc.raster.", all("processing:run", "processing:sidecar")],
   // Two catalog browsers filed under `proc.` that add remote imagery rather than
   // run a tool. Classified with the Processing menu's own gates for them, so the

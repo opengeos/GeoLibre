@@ -4260,6 +4260,16 @@
       "reclassify": "Reclassify",
       "mosaic": "Mosaic / merge",
       "focal": "Focal statistics",
+      "changeDifference": "Band difference",
+      "ndviChange": "NDVI change",
+      "transitionMatrix": "Transition matrix",
+      "sarDb": "Linear / dB conversion",
+      "speckleFilter": "Speckle filter",
+      "sarRgb": "Dual-pol RGB composite",
+      "floodMap": "Flood mapping (SAR threshold)",
+      "inputBefore": "Before raster",
+      "inputVv": "VV raster",
+      "inputPostEvent": "Post-event raster",
       "inputRaster": "Input raster",
       "inputRasterA": "Input raster A",
       "inputRaster1": "First raster",
@@ -4267,11 +4277,20 @@
       "engine": "Engine",
       "engineClient": "Client (browser)",
       "engineSidecar": "Sidecar (rasterio/GDAL)",
+      "processingRestricted": "Raster processing is unavailable under the current application permissions.",
+      "sidecarRestricted": "Sidecar execution is unavailable under the current application permissions. Choose the browser engine.",
+      "clientMemoryLimit": "The decoded inputs and output exceed the browser memory limit. Crop or downsample the rasters before running this tool.",
+      "vectorMemoryLimit": "GeoJSON inputs are limited to {{limit}} MiB in the browser. Use a smaller file or the sidecar engine.",
       "clientHint": "Computes in your browser and adds the result to the map. For large rasters or geographic-CRS terrain, prefer the sidecar.",
       "switchToClientHint": "Or switch the engine to Client to run this tool in your browser.",
       "chooseGeoTiff": "Choose a GeoTIFF",
+      "chooseGeoJson": "Choose a GeoJSON file",
       "downloadGeoTiff": "Download GeoTIFF",
+      "downloadGeoJson": "Download GeoJSON",
       "chooseInputRaster": "Choose an input raster.",
+      "chooseInputPoints": "Choose an input point layer (GeoJSON).",
+      "invalidGeoJson": "\"{{name}}\" is not valid GeoJSON.",
+      "clientOnlyHint": "This tool runs in your browser and adds the result to the map.",
       "useAddedLayer": "Use a layer on the map",
       "useAddedLayerPlaceholder": "Choose a layer…",
       "loadingLayer": "Loading layer…",
@@ -4433,6 +4452,8 @@
       "subGroupRasterToVector": "Raster to vector",
       "subGroupVectorToRaster": "Vector to raster",
       "subGroupAnalysis": "Analysis",
+      "subGroupChangeDetection": "Change detection",
+      "subGroupSar": "SAR",
       "mapControls": "Map controls",
       "fieldCollection": "Field collection…",
       "gpsTracking": "GPS tracking…",
@@ -8746,7 +8767,7 @@
         },
         "mosaic": {
           "name": "Mosaic / merge",
-          "description": "Combine up to five rasters (sharing a CRS) into a single raster covering their union.",
+          "description": "Combine up to five rasters (sharing a CRS) into a single raster covering their union. In the browser the rasters must also share a pixel grid.",
           "params": {
             "raster_2": {
               "label": "Second raster"
@@ -8796,11 +8817,213 @@
               "description": "Odd neighbourhood size in pixels (3 = 3×3). Capped at 25."
             }
           }
+        },
+        "change-difference": {
+          "name": "Band difference",
+          "description": "Compare one band of two dates pixel by pixel: difference, percent change, ratio, or log ratio (dB), optionally thresholded into decrease / no change / increase classes.",
+          "params": {
+            "after_path": {
+              "label": "After raster",
+              "description": "The later image, on the same pixel grid as the before raster (reproject or resample it first if needed)."
+            },
+            "band": {
+              "label": "Band"
+            },
+            "mode": {
+              "label": "Change metric",
+              "options": {
+                "difference": "Difference (after - before)",
+                "percent": "Percent change",
+                "ratio": "Ratio (after / before)",
+                "log-ratio": "Log ratio (dB)"
+              }
+            },
+            "output": {
+              "label": "Output",
+              "options": {
+                "continuous": "Continuous change",
+                "classified": "Classes (-1 decrease, 0 none, 1 increase)"
+              }
+            },
+            "threshold": {
+              "label": "Change threshold",
+              "description": "Minimum change counted as an increase or decrease, in the metric's units (a ratio is compared to 1)."
+            }
+          }
+        },
+        "ndvi-change": {
+          "name": "NDVI change",
+          "description": "Compute NDVI for two dates of a multiband image and their difference (after - before), optionally classified into vegetation loss / stable / gain with a threshold.",
+          "params": {
+            "after_path": {
+              "label": "After raster",
+              "description": "The later image, on the same pixel grid as the before raster (reproject or resample it first if needed)."
+            },
+            "sensor": {
+              "label": "Sensor / band layout",
+              "description": "Preset red/NIR band numbers. Choose Custom to set them by hand.",
+              "options": {
+                "sentinel2": "Sentinel-2 (B2, B3, B4, B8, B11, B12)",
+                "landsat89": "Landsat 8/9 (B1–B7)",
+                "naip": "NAIP (R, G, B, NIR)",
+                "custom": "Custom (set band numbers below)"
+              }
+            },
+            "red": {
+              "label": "Red band number"
+            },
+            "nir": {
+              "label": "NIR band number"
+            },
+            "output": {
+              "label": "Output",
+              "options": {
+                "difference": "NDVI difference",
+                "classified": "Classes (-1 loss, 0 stable, 1 gain)"
+              }
+            },
+            "threshold": {
+              "label": "NDVI change threshold",
+              "description": "Minimum NDVI difference counted as loss or gain."
+            }
+          }
+        },
+        "transition-matrix": {
+          "name": "Transition matrix",
+          "description": "Cross-tabulate two categorical (land cover) rasters: log the from/to class transition matrix and write a raster coding each pixel's transition as from x 10^n + to.",
+          "params": {
+            "after_path": {
+              "label": "After raster",
+              "description": "The later image, on the same pixel grid as the before raster (reproject or resample it first if needed)."
+            },
+            "band": {
+              "label": "Band"
+            }
+          }
+        },
+        "sar-db": {
+          "name": "Linear / dB conversion",
+          "description": "Convert SAR backscatter between linear units and decibels (10 log10 for power, 20 log10 for amplitude). When converting linear units to dB, values at or below zero have no dB value and become NoData.",
+          "params": {
+            "direction": {
+              "label": "Direction",
+              "options": {
+                "to-db": "Linear to dB",
+                "to-linear": "dB to linear"
+              }
+            },
+            "quantity": {
+              "label": "Quantity",
+              "options": {
+                "power": "Power / intensity (10 log10)",
+                "amplitude": "Amplitude (20 log10)"
+              }
+            }
+          }
+        },
+        "speckle-filter": {
+          "name": "Speckle filter",
+          "description": "Reduce SAR speckle with the Lee filter or the edge-preserving refined Lee filter. Filtering runs on linear power; dB input is converted and converted back.",
+          "params": {
+            "method": {
+              "label": "Filter",
+              "options": {
+                "refined-lee": "Refined Lee (7x7, edge-aligned)",
+                "lee": "Lee"
+              }
+            },
+            "size": {
+              "label": "Window size",
+              "description": "Odd window size in pixels."
+            },
+            "enl": {
+              "label": "Equivalent number of looks",
+              "description": "Speckle strength (noise variance = 1 / ENL). About 4.4 for Sentinel-1 IW GRD high resolution."
+            },
+            "units": {
+              "label": "Input units",
+              "options": {
+                "linear": "Linear power (sigma0 / gamma0)",
+                "db": "Decibels (dB)"
+              }
+            }
+          }
+        },
+        "sar-rgb": {
+          "name": "Dual-pol RGB composite",
+          "description": "Build a Sentinel-1 false-colour composite: red = VV, green = VH, blue = VV/VH ratio, each stretched over a dB range. VH comes from a second raster or from another band of the input.",
+          "params": {
+            "vh_path": {
+              "label": "VH raster (optional)",
+              "description": "A separate VH image on the same grid. Leave empty to read VH from a band of the input."
+            },
+            "units": {
+              "label": "Input units",
+              "options": {
+                "linear": "Linear power (sigma0 / gamma0)",
+                "db": "Decibels (dB)"
+              }
+            },
+            "vv_band": {
+              "label": "VV band"
+            },
+            "vh_band": {
+              "label": "VH band",
+              "description": "Leave blank for band 1 of a separate VH raster, or band 2 of the stacked input. Enter a band number to override."
+            },
+            "vv_min": {
+              "label": "VV min (dB)"
+            },
+            "vv_max": {
+              "label": "VV max (dB)"
+            },
+            "vh_min": {
+              "label": "VH min (dB)"
+            },
+            "vh_max": {
+              "label": "VH max (dB)"
+            },
+            "ratio_min": {
+              "label": "VV/VH min (dB)"
+            },
+            "ratio_max": {
+              "label": "VV/VH max (dB)"
+            }
+          }
+        },
+        "flood-map": {
+          "name": "Flood mapping (SAR threshold)",
+          "description": "Map open water from VV backscatter with a dB threshold. With a pre-event image, separate new flooding from permanent water using the backscatter drop.",
+          "params": {
+            "pre_path": {
+              "label": "Pre-event raster (optional)",
+              "description": "A pre-flood image on the same grid. Output: 0 neither permanent water nor new flooding, 1 permanent water, 2 new flooding. Without it: 0 not water, 1 water."
+            },
+            "units": {
+              "label": "Input units",
+              "options": {
+                "linear": "Linear power (sigma0 / gamma0)",
+                "db": "Decibels (dB)"
+              }
+            },
+            "band": {
+              "label": "VV band"
+            },
+            "threshold_db": {
+              "label": "Water threshold (dB)",
+              "description": "VV backscatter below this is water. Typical values are -15 to -20 dB."
+            },
+            "change_db": {
+              "label": "Minimum drop (dB)",
+              "description": "With a pre-event image: how much darker a pixel must get to count as new flooding."
+            }
+          }
         }
       }
     },
     "toolGroup": {
       "analysis": "Analysis",
+      "changeDetection": "Change Detection",
       "clip": "Clip",
       "dataManagement": "Data management",
       "dataQuality": "Data quality",
@@ -8816,6 +9039,7 @@
       "overlay": "Overlay",
       "rasterToVector": "Raster to Vector",
       "reproject": "Reproject",
+      "sar": "SAR",
       "select": "Select",
       "spatialRegression": "Spatial Regression",
       "spatialStatistics": "Spatial Statistics",

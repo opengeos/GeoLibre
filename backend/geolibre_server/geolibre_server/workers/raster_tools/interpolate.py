@@ -120,12 +120,12 @@ def main() -> None:
     minx, maxx = float(px.min()), float(px.max())
     miny, maxy = float(py.min()), float(py.max())
     # A degenerate extent (all points share an x or y) still needs a 1-cell span.
-    if maxx <= minx:
-        maxx = minx + resolution
-    if maxy <= miny:
+    zero_x = maxx <= minx
+    zero_y = maxy <= miny
+    if zero_y:
         maxy = miny + resolution
-    width = max(1, int(np.ceil((maxx - minx) / resolution)))
-    height = max(1, int(np.ceil((maxy - miny) / resolution)))
+    width = 1 if zero_x else max(1, int(np.ceil((maxx - minx) / resolution)))
+    height = 1 if zero_y else max(1, int(np.ceil((maxy - miny) / resolution)))
     cells = width * height
     cap = MAX_CELLS_KRIGE if method == "kriging" else MAX_CELLS_IDW
     if cells > cap:
@@ -188,6 +188,7 @@ def main() -> None:
     def _fit_variogram(h, gamma, name, hmax):
         """Least-squares fit of nugget/sill/range over a coarse range sweep."""
         best = None
+        sse_floor = 64 * np.finfo(float).eps * float(np.square(gamma).sum())
         for r in np.linspace(hmax * 0.1, hmax * 1.5, 25):
             shape = _variogram_shape(h / r, name)
             design = np.column_stack([np.ones_like(shape), shape])
@@ -195,7 +196,11 @@ def main() -> None:
             nugget = max(0.0, float(coef[0]))
             sill = max(1e-12, float(coef[1]))
             sse = float((((nugget + sill * shape) - gamma) ** 2).sum())
-            if best is None or sse < best[0]:
+            # Keep the smallest range among (near-)equal fits: once every bin
+            # sits below the range (e.g. a linear model), the SSE is flat in r
+            # and floating-point noise alone would pick the winner, which the
+            # browser engine could not reproduce.
+            if best is None or best[0] - sse > max(best[0] * 1e-9, sse_floor):
                 best = (sse, float(r), sill, nugget)
         return best[1], best[2], best[3]
 
