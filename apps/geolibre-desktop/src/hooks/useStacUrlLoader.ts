@@ -1,4 +1,7 @@
-import { cancelStacCatalogRequest, requestStacCatalogUrl } from "@geolibre/plugins/maplibre-stac";
+import {
+  cancelStacCatalogRequest,
+  beginStacCatalogRequest,
+} from "@geolibre/plugins/stac-catalog-request";
 import { STAC_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import { useEffect, useMemo, useRef } from "react";
 import { stacUrlParameter } from "../lib/data-url";
@@ -30,13 +33,13 @@ export function useStacUrlLoader(
   useEffect(() => {
     if (!url || viewer || !mapAppAPI || requested.current) return;
     requested.current = true;
-    requestStacCatalogUrl(url);
+    const request = beginStacCatalogRequest(url);
     void Promise.resolve(mapAppAPI.activatePlugin?.(STAC_PLUGIN_ID))
       .catch((error: unknown) => {
         console.error("[GeoLibre] Could not open the STAC Catalogs browser", error);
       })
       // An activation that bailed out or threw leaves the request queued, and the next manual
       // open of the browser must not reconnect to this one-time link's catalog.
-      .finally(cancelStacCatalogRequest);
+      .finally(() => cancelStacCatalogRequest(request));
   }, [mapAppAPI, url, viewer]);
 }

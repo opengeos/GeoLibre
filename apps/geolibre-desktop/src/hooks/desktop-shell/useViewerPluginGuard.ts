@@ -1,6 +1,6 @@
 import type { MapEngine } from "@geolibre/map";
 import { VIEWER_BLOCKED_PLUGIN_IDS, isViewerBlockedPlugin } from "@geolibre/plugins/runtime";
-import { setGeoEditorFileTools } from "@geolibre/plugins/maplibre-geo-editor";
+import { setGeoEditorFileTools } from "@geolibre/plugins/geo-editor-state";
 import { useCallback, useEffect, type RefObject } from "react";
 import type { LayoutOptions } from "../useLayoutOptions";
 import { createAppAPI, getPluginManager } from "../usePlugins";

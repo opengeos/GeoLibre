@@ -1,6 +1,6 @@
 import { type CogSourceSpec, type MosaicSourceSpec, resolveUrl } from "maplibre-gl-time-slider";
 import type { BandReading } from "maplibre-gl-raster";
-import { getActiveTimeSliderControl } from "./maplibre-time-slider";
+import { getActiveTimeSliderControl } from "../time-slider-state";
 import { usesMosaicManifest } from "./time-slider-source-url";
 
 /**

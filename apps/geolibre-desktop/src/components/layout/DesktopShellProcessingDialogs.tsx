@@ -1,6 +1,6 @@
 import { shouldZoomToNewLayers } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { addLidarLayerFromBytes } from "@geolibre/plugins/maplibre-components";
+import { addLidarLayerFromBytes } from "@geolibre/plugins/component-helpers";
 import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
 import { Suspense, type RefObject } from "react";
 import { createAppAPI } from "../../hooks/usePlugins";

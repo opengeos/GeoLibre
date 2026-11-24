@@ -1,3 +1,4 @@
+import { routeAnimationPanelStore } from "../builtin-plugin-panels";
 import { ROUTE_ANIMATION_PLUGIN_ID } from "../plugin-ids";
 export { ROUTE_ANIMATION_PLUGIN_ID } from "../plugin-ids";
 import { builtInPluginProperties } from "../builtin-plugin-metadata";
@@ -733,6 +734,7 @@ const panelListeners = new Set<() => void>();
 const stateListeners = new Set<() => void>();
 
 function notifyPanel(): void {
+  routeAnimationPanelStore.setVisible(panelVisible);
   for (const listener of panelListeners) listener();
 }
 function notifyState(): void {
@@ -1319,3 +1321,7 @@ export const maplibreRouteAnimationPlugin: GeoLibrePlugin = {
   },
   applyProjectState: (app: GeoLibreAppAPI, state: unknown) => restoreRouteAnimation(app, state),
 };
+
+routeAnimationPanelStore.runtime.reattach = reattachRouteAnimation;
+routeAnimationPanelStore.runtime.open = openRouteAnimationPanel;
+routeAnimationPanelStore.runtime.close = closeRouteAnimationPanel;

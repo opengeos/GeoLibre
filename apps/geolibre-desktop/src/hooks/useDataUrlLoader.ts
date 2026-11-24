@@ -1,9 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import { applyMapboxStyleImport, parseMapboxStyle } from "@geolibre/map";
-import {
-  addLidarLayerFromUrl,
-  addPMTilesLayerFromUrl,
-} from "@geolibre/plugins/maplibre-components";
+import { addLidarLayerFromUrl, addPMTilesLayerFromUrl } from "@geolibre/plugins/component-helpers";
 import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
 import { addThreeDTilesLayerFromUrl } from "@geolibre/plugins/maplibre-3d-tiles";
 import { addVectorLayerFromUrl, routeKmlFileSelection } from "@geolibre/plugins/maplibre-vector";

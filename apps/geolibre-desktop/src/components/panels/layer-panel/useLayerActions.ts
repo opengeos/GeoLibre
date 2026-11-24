@@ -1,8 +1,8 @@
 import { getTemporalLayerAdapter } from "@geolibre/plugins/temporal-layers";
 import { isEmbeddableLocalVectorLayer } from "@geolibre/plugins/vector-layer-sync";
-import { isTimeSliderIdle } from "@geolibre/plugins/maplibre-time-slider";
+import { isTimeSliderIdle } from "@geolibre/plugins/time-slider-state";
 import { materializeEmbeddableVectorLayers } from "@geolibre/plugins/maplibre-vector";
-import { SKETCHES_SOURCE_KIND } from "@geolibre/plugins/maplibre-geo-editor";
+import { SKETCHES_SOURCE_KIND } from "@geolibre/plugins/geo-editor-state";
 import { TIME_SLIDER_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import {
   type Dispatch,

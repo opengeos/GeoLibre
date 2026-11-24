@@ -31,7 +31,7 @@ import { useAppStore, VECTOR_COLOR_RAMPS } from "@geolibre/core";
 import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { isVectorLayerSelectionCancelled } from "maplibre-gl-vector/errors";
-import { addPMTilesLayerFromUrl } from "./maplibre-components";
+import { addPMTilesLayerFromUrl } from "./components/pmtiles";
 import {
   addRasterToMap,
   type RasterRenderEngine,

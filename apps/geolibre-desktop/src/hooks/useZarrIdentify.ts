@@ -1,7 +1,7 @@
 import { isMapClickClaimed, isPopupClickEnabled, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import type * as maplibregl from "maplibre-gl";
-import { isNativeZarrRenderer } from "@geolibre/plugins/maplibre-components";
+import { isNativeZarrRenderer } from "@geolibre/plugins/component-helpers";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { createEnginePopup, engineStyleMap } from "../lib/engine-style-map";

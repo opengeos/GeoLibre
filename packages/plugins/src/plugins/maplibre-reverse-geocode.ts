@@ -1,4 +1,5 @@
 import { REVERSE_GEOCODE_PLUGIN_ID } from "../plugin-ids";
+import { reverseGeocodeRuntime } from "../map-mode-state";
 export { REVERSE_GEOCODE_PLUGIN_ID } from "../plugin-ids";
 import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { GeocoderServiceError, GeocoderUnsupportedError, geocodeReverse } from "@geolibre/core";
@@ -217,3 +218,5 @@ export const maplibreReverseGeocodePlugin: GeoLibrePlugin = {
   activate: (app: GeoLibreAppAPI) => attach(app),
   deactivate: (app: GeoLibreAppAPI) => teardown(app),
 };
+
+reverseGeocodeRuntime.restore = restoreReverseGeocode;

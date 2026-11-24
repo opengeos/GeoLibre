@@ -42,7 +42,7 @@ import {
   isArcGISQuantizedFeatureSet,
   type ArcGISRecordIdentity,
 } from "./arcgis-quantized";
-import { getGeometryEditTargetLayerId } from "./maplibre-geo-editor";
+import { getGeometryEditTargetLayerId } from "../geo-editor-state";
 import { LocalizedError, localizedMessage } from "../localized-error";
 
 let arcGISFetchOverride: typeof globalThis.fetch | null = null;

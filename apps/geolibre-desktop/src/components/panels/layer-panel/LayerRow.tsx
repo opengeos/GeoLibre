@@ -28,7 +28,7 @@ import {
   placeholderMessage,
 } from "@geolibre/map";
 import { arcGISLayerHasPendingEdits, isArcGISWritableLayer } from "@geolibre/plugins/arcgis-layer";
-import { isNativeZarrRenderer } from "@geolibre/plugins/maplibre-components";
+import { isNativeZarrRenderer } from "@geolibre/plugins/component-helpers";
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@geolibre/ui";
 import {
   ChevronDown,

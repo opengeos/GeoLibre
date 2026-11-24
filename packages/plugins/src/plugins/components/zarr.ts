@@ -309,6 +309,7 @@ export async function addCloudNetcdfLayer(
 
   // The untiled Zarr renderer draws in Web Mercator; switch off globe first
   // (matching the COG raster flow) so the layer paints, on either 2D engine.
+  // engine-audit-allow: arcgis-null-map: only 2D maps need this projection guard; null is a no-op.
   ensureMercatorProjection(app.getMap?.() ?? app.getMapboxMap?.());
 
   const refs =

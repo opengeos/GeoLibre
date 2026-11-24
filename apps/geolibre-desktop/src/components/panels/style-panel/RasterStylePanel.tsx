@@ -1,7 +1,7 @@
 import { DEFAULT_LAYER_STYLE, styleValue, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { Button, ScrollArea, Separator } from "@geolibre/ui";
 import { RASTER_SOURCE_KIND } from "@geolibre/plugins/raster-symbology-texture";
-import { TIME_SLIDER_SOURCE_KIND } from "@geolibre/plugins/maplibre-time-slider";
+import { TIME_SLIDER_SOURCE_KIND } from "@geolibre/plugins/time-slider-state";
 import type { MapEngine } from "@geolibre/map";
 import { PanelRightClose } from "lucide-react";
 import type { ReactNode, RefObject } from "react";

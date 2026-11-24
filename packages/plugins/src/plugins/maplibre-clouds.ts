@@ -1,4 +1,5 @@
 import { CLOUDS_PLUGIN_ID } from "../plugin-ids";
+import { cloudsAnimation } from "../weather-animation";
 export { CLOUDS_PLUGIN_ID } from "../plugin-ids";
 import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
@@ -119,3 +120,5 @@ export const maplibreCloudsPlugin: GeoLibrePlugin = {
   activate: (app: GeoLibreAppAPI) => controller.activate(app),
   deactivate: () => controller.deactivate(),
 };
+
+cloudsAnimation.provide(controller);

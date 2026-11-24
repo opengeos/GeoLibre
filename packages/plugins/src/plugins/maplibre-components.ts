@@ -15,7 +15,6 @@ export { setTerrainMeasureBodyNames, setTerrainMeasureLabels } from "./terrain-m
 import type { ControlGrid, ControlGridOptions, DefaultControlName } from "maplibre-gl-components";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
-import { teardownBookmarkControl } from "./components/bookmark";
 import {
   colorbarControl,
   colorbarPanelVisible,
@@ -24,7 +23,6 @@ import {
   themeColorbarControlOutputs,
 } from "./components/colorbar";
 import { getComponentsConstructors } from "./components/constructors";
-import { teardownFlatGeobufControl } from "./components/flatgeobuf";
 import {
   type ComponentsProjectState,
   normalizeColorbarState,
@@ -47,165 +45,9 @@ import {
   teardownLegendControl,
   themeLegendControlOutputs,
 } from "./components/legend";
-import { teardownLidarControl } from "./components/lidar";
-import { teardownMeasureControl } from "./components/measure";
-import { teardownMinimapControl } from "./components/minimap";
-import { teardownPMTilesControl } from "./components/pmtiles";
-import { teardownPrintControl } from "./components/print";
-import { teardownSearchControl } from "./components/search";
-import { teardownSpinGlobeControl } from "./components/spin-globe";
-import { teardownSplattingControl } from "./components/splatting";
-import { teardownStacSearchControl } from "./components/stac-search";
-import { teardownViewStateControl } from "./components/view-state";
-import { teardownZarrControl } from "./components/zarr";
 
-export {
-  closeBookmarkPanel,
-  isBookmarkPanelVisible,
-  openBookmarkPanel,
-  setBookmarkLabels,
-  subscribeBookmarkPanel,
-} from "./components/bookmark";
-export {
-  clearMirrorCogLayers,
-  createSwipeCogMirrorControl,
-  getSwipeCogRasters,
-  getSwipeMaplibreRasters,
-  mirrorAddCogLayer,
-  mirrorRemoveCogLayer,
-  mirrorSetCogOpacity,
-  subscribeSwipeCogChanges,
-  type SwipeCogRasterSnapshot,
-  type SwipeMaplibreRasterSnapshot,
-} from "./components/cog";
-export {
-  closeColorbarPanel,
-  isColorbarPanelVisible,
-  openColorbarPanel,
-  subscribeColorbarPanel,
-} from "./components/colorbar";
-export {
-  __setComponentsModuleLoaderForTests,
-  type ComponentsModules,
-  getComponentsConstructors,
-} from "./components/constructors";
-export { openFlatGeobufAddVectorLayerPanel } from "./components/flatgeobuf";
-export { normalizeColorbarState } from "./components/gui-state";
-export {
-  closeHtmlPanel,
-  isHtmlPanelVisible,
-  openHtmlPanel,
-  openHtmlPanelWithEntry,
-  subscribeHtmlPanel,
-} from "./components/html";
-export {
-  closeImagePanel,
-  getImageControlStates,
-  isImagePanelVisible,
-  removeImageControl,
-  setImageControl,
-  setImageLabels,
-  subscribeImagePanel,
-} from "./components/image";
-export {
-  type ComponentImageState,
-  type ImageSizeMode,
-  IMAGE_RATIO_MAX,
-  IMAGE_RATIO_MIN,
-  IMAGE_SIZE_MAX,
-  IMAGE_SIZE_MIN,
-  MAX_IMAGE_CONTROLS,
-  DEFAULT_IMAGE_STATE,
-  formatAspectRatio,
-  normalizeImageUrl,
-  isRatioHeightInRange,
-  ratioHeight,
-  parseAspectRatio,
-} from "./components/image-model";
-export {
-  closeLegendPanel,
-  isLegendPanelVisible,
-  openLegendPanel,
-  openLegendPanelWithItems,
-  subscribeLegendPanel,
-} from "./components/legend";
-export {
-  addLidarLayerFromBytes,
-  addLidarLayerFromUrl,
-  LIDAR_SOURCE_KIND,
-  openLidarLayerPanel,
-  restoreLidarLayers,
-  withLidarAutoZoomSuppressed,
-} from "./components/lidar";
-export {
-  closeMeasurePanel,
-  isMeasurePanelVisible,
-  openMeasurePanel,
-  subscribeMeasurePanel,
-} from "./components/measure";
-export {
-  closeMinimapPanel,
-  isMinimapPanelVisible,
-  openMinimapPanel,
-  subscribeMinimapPanel,
-} from "./components/minimap";
-export {
-  __beginProgrammaticPMTilesAddForTests,
-  __getPMTilesControlForTests,
-  __mountPMTilesControlForTests,
-  __resetPMTilesControlForTests,
-  addPMTilesLayerFromUrl,
-  createPMTilesLayerAddHandler,
-  createPMTilesLayerRemoveHandler,
-  guardPMTilesSourceRemoval,
-  openPMTilesLayerPanel,
-  pmtilesArchivesFullyRemoved,
-  pmtilesLayerIdsToRemove,
-  pmtilesStoreLayers,
-  teardownPMTilesControl,
-} from "./components/pmtiles";
-export {
-  closePrintPanel,
-  isPrintPanelVisible,
-  openPrintPanel,
-  subscribePrintPanel,
-} from "./components/print";
-export {
-  closeSearchPlacesPanel,
-  isSearchPlacesPanelVisible,
-  openSearchPlacesPanel,
-  subscribeSearchPlacesPanel,
-} from "./components/search";
-export {
-  closeSpinGlobePanel,
-  isSpinGlobePanelVisible,
-  openSpinGlobePanel,
-  subscribeSpinGlobePanel,
-} from "./components/spin-globe";
-export { openSplattingLayerPanel, restoreSplattingLayers } from "./components/splatting";
-export { applyStacSearchLayerOrder, openStacSearchLayerPanel } from "./components/stac-search";
-export {
-  closeViewStatePanel,
-  isViewStatePanelVisible,
-  openViewStatePanel,
-  setViewStateLabels,
-  subscribeViewStatePanel,
-} from "./components/view-state";
-export {
-  addCloudNetcdfLayer,
-  addZarrRasterLayer,
-  type CloudNetcdfLayerOptions,
-  openZarrLayerPanel,
-  isNativeZarrRenderer,
-  queryZarrLayer,
-  restoreArcgisZarrLayers,
-  restoreZarrLayers,
-  setZarrLayerSelector,
-  setZarrLocalStoreProvider,
-  type ZarrRasterLayerOptions,
-  type ZarrReadableStore,
-  type ZarrTimeAttributesReader,
-} from "./components/zarr";
+export * from "../component-helpers";
+import { closeMaplibreComponentControls } from "../component-helpers";
 
 let componentsControlPosition: GeoLibreMapControlPosition = "top-right";
 
@@ -330,23 +172,7 @@ export const maplibreComponentsPlugin: GeoLibrePlugin = {
   deactivate: (app: GeoLibreAppAPI) => {
     pluginActive = false;
     componentsControlRevision += 1;
-    teardownFlatGeobufControl(app);
-    teardownPMTilesControl(app);
-    teardownPrintControl(app);
-    teardownSearchControl(app);
-    teardownSpinGlobeControl(app);
-    teardownMeasureControl(app);
-    teardownBookmarkControl(app);
-    teardownMinimapControl(app);
-    teardownViewStateControl(app);
-    teardownStacSearchControl(app);
-    teardownZarrControl(app);
-    teardownColorbarControl(app);
-    teardownLegendControl(app);
-    teardownHtmlControl(app);
-    teardownImageControl(app);
-    teardownLidarControl(app);
-    teardownSplattingControl(app);
+    closeMaplibreComponentControls(app);
     if (!componentsControl) return;
     app.removeMapControl(componentsControl);
     componentsControl = null;
@@ -409,26 +235,6 @@ function applyComponentsProjectState(app: GeoLibreAppAPI, state: unknown): void 
   } else {
     teardownImageControl(app);
   }
-}
-
-export function closeMaplibreComponentControls(app: GeoLibreAppAPI): void {
-  teardownFlatGeobufControl(app);
-  teardownPMTilesControl(app);
-  teardownPrintControl(app);
-  teardownSearchControl(app);
-  teardownSpinGlobeControl(app);
-  teardownMeasureControl(app);
-  teardownBookmarkControl(app);
-  teardownMinimapControl(app);
-  teardownViewStateControl(app);
-  teardownStacSearchControl(app);
-  teardownZarrControl(app);
-  teardownColorbarControl(app);
-  teardownLegendControl(app);
-  teardownHtmlControl(app);
-  teardownImageControl(app);
-  teardownLidarControl(app);
-  teardownSplattingControl(app);
 }
 
 function getComponentsOptions(app: GeoLibreAppAPI): ControlGridOptions {

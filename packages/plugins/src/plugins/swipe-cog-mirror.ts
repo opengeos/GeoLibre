@@ -7,7 +7,7 @@ import {
   mirrorRemoveCogLayer,
   mirrorSetCogOpacity,
   type SwipeCogRasterSnapshot,
-} from "./maplibre-components";
+} from "./components/cog";
 
 // The non-opacity visualization of a mirrored raster; a change here needs a
 // reload (re-add), whereas an opacity-only change is applied in place.

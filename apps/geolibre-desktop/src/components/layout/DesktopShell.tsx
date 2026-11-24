@@ -7,7 +7,7 @@ import { addRasterToMap, openRasterLayerPanel } from "@geolibre/plugins/maplibre
 import {
   getGeometryEditTargetLayerId,
   subscribeGeometryEdit,
-} from "@geolibre/plugins/maplibre-geo-editor";
+} from "@geolibre/plugins/geo-editor-state";
 import { openRightPanel } from "@geolibre/plugins/runtime";
 import {
   Suspense,
@@ -113,9 +113,7 @@ import { LayerPanel } from "../panels/LayerPanel";
 import { useLayerRefresh } from "../panels/layer-panel/useLayerRefresh";
 import { ViewerLayerPanel } from "../panels/ViewerLayerPanel";
 import { FloatingPanels } from "../panels/FloatingPanels";
-import { SunPanel } from "../panels/SunPanel";
-import { RouteAnimationPanel } from "../panels/RouteAnimationPanel";
-import { FlightSimulatorPanel } from "../panels/FlightSimulatorPanel";
+import { DeferredPluginPanels } from "../panels/DeferredPluginPanels";
 import { PluginRightPanel } from "../panels/PluginRightPanel";
 import { StylePanel } from "../panels/StylePanel";
 import { SharedSidebar } from "../panels/SharedSidebar";
@@ -1030,24 +1028,7 @@ export function DesktopShell({
                 </Suspense>
               </MountWhenOpened>
             </SectionErrorBoundary>
-            <SectionErrorBoundary
-              label="Sun simulation panel"
-              displayName={t("shell.section.sunSimulationPanel")}
-            >
-              <SunPanel />
-            </SectionErrorBoundary>
-            <SectionErrorBoundary
-              label="Route animation panel"
-              displayName={t("shell.section.routeAnimationPanel")}
-            >
-              <RouteAnimationPanel mapControllerRef={mapControllerRef} />
-            </SectionErrorBoundary>
-            <SectionErrorBoundary
-              label="Flight simulator panel"
-              displayName={t("shell.section.flightSimulatorPanel")}
-            >
-              <FlightSimulatorPanel />
-            </SectionErrorBoundary>
+            <DeferredPluginPanels mapControllerRef={mapControllerRef} />
             <KnowledgeCardConsentDialog
               open={knowledgeNoticeOpen}
               onOpenChange={(open) => {

@@ -1,3 +1,4 @@
+import { PluginOperationSupersededError } from "@geolibre/plugins/runtime";
 import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { setExternalDeckLayerOrderHandler } from "@geolibre/map";
@@ -8,23 +9,24 @@ import {
   restoreZarrLayers,
   restoreLidarLayers,
   restoreSplattingLayers,
-} from "@geolibre/plugins/maplibre-components";
+} from "@geolibre/plugins/component-helpers";
 import {
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
 } from "@geolibre/plugins/plugin-ids";
-import { reattachFlightSimulator } from "@geolibre/plugins/flight-simulator";
-import { reattachGodsEyeView } from "@geolibre/plugins/gods-eye-view";
-import { reattachRouteAnimation } from "@geolibre/plugins/maplibre-route-animation";
-import { reattachSun } from "@geolibre/plugins/maplibre-sun";
+import {
+  sunPanelStore,
+  routeAnimationPanelStore,
+  flightSimulatorPanelStore,
+  godsEyeViewRuntime,
+} from "../../lib/plugin-panel-stores";
 import { restoreArcGISViewportLayers } from "@geolibre/plugins/arcgis-layer";
 import { restoreDeckViz } from "@geolibre/plugins/deckgl-viz/overlay";
-import { restoreDirections } from "@geolibre/plugins/maplibre-directions";
-import { restoreEffects } from "@geolibre/plugins/maplibre-effects";
+import { restoreDirections, reverseGeocodeRuntime } from "@geolibre/plugins/map-mode-state";
+import { peekBuiltInPluginModule } from "@geolibre/plugins/builtin-plugins";
 import { restorePlanetaryComputerLayers } from "@geolibre/plugins/maplibre-planetary-computer";
-import { restoreReverseGeocode } from "@geolibre/plugins/maplibre-reverse-geocode";
 import { probeArcgisI3sLayers } from "@geolibre/plugins/arcgis-i3s-tiles";
 import { restoreThreeDTilesLayers } from "@geolibre/plugins/maplibre-3d-tiles";
 import { restoreVectorLayers } from "@geolibre/plugins/maplibre-vector";
@@ -35,7 +37,12 @@ import { startupActivationSettled } from "../../lib/settle-gate";
 import { restoreLocalFileLayers } from "../../lib/restore-local-layers";
 import { restoreRemoteGeoJsonLayers } from "../../lib/restore-remote-geojson-layers";
 import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
-import { createAppAPI, getPluginManager, markPluginActivationSettled } from "../usePlugins";
+import {
+  createAppAPI,
+  getPluginManager,
+  markPluginActivationSettled,
+  reportPluginError,
+} from "../usePlugins";
 
 /** Saved point clouds that could not be reloaded vanish from the map otherwise. */
 function notifyLidarRestoreFailed(error: unknown): void {
@@ -160,6 +167,11 @@ export function usePluginStateRestore({
     pluginManager.restoreProjectState(useAppStore.getState().projectPlugins, appAPI, {
       mapReplaced: restoredPluginEngine.current !== null && restoredPluginEngine.current !== engine,
     });
+    // This device's consent applies on every renderer, before a lazy activation
+    // can attach a map-click listener and before renderer-specific restores.
+    if (pluginManager.isActive(REVERSE_GEOCODE_PLUGIN_ID) && !hasReverseGeocodeConsent()) {
+      pluginManager.deactivate(REVERSE_GEOCODE_PLUGIN_ID, appAPI);
+    }
     restoredPluginEngine.current = engine;
     restoredPluginGeneration.current = projectGeneration;
     restoredPluginRenderer.current = useAppStore.getState().primaryRenderer;
@@ -184,24 +196,37 @@ export function usePluginStateRestore({
     // same way on both — a renderer swap rebuilds the engine, so the host
     // re-attaches them exactly as it does after a MapLibre re-init.
     //
-    // activeByDefault plugins are marked active without activate() being
-    // called, so the effects engine must be kicked explicitly to match the
-    // restored active state (idempotent).
-    restoreEffects(
-      appAPI,
-      pluginManager.isActive(EFFECTS_PLUGIN_ID),
-      useAppStore.getState().projectPlugins?.settings?.[EFFECTS_PLUGIN_ID],
-    );
+    // Missing appearance settings reset this project's look before preparation.
+    // The lazy proxy retains later previews while the implementation loads.
+    const effectsPlugin = pluginManager.list().find(({ id }) => id === EFFECTS_PLUGIN_ID);
+    if (useAppStore.getState().projectPlugins?.settings?.[EFFECTS_PLUGIN_ID] === undefined)
+      effectsPlugin?.applyProjectState?.(appAPI, undefined);
+    // Even an inactive effects plugin must turn off Cesium's default sky.
+    // Prepare the current project scope before reattaching either engine.
+    void pluginManager
+      .runPluginHelper(EFFECTS_PLUGIN_ID, appAPI, (_implementation, preparedApp) => {
+        const module = peekBuiltInPluginModule("effects");
+        if (!module) throw new Error("Prepared effects implementation is unavailable.");
+        module.restoreEffects(
+          preparedApp,
+          pluginManager.isActive(EFFECTS_PLUGIN_ID),
+          effectsPlugin?.getProjectState?.(),
+        );
+      })
+      .catch((error: unknown) => {
+        if (error instanceof PluginOperationSupersededError) return;
+        reportPluginError(EFFECTS_PLUGIN_ID, "restore", error);
+      });
     // The sun simulation reads/writes native map layers, so it must re-bind to
     // the (possibly new) map instance after a map re-init or basemap change.
     // Reattach only — it must NOT derive open/closed state here, which would
     // reset a locally-opened panel on an unrelated basemap swap or remote edit.
     // Project loads open/close it via the plugin's applyProjectState (invoked by
     // restoreProjectState above).
-    reattachSun(appAPI);
+    sunPanelStore.runtime.reattach(appAPI);
     // The flight simulator holds a reference to the live map (and suspends its
     // interaction handlers while flying), so rebind it after a map re-init too.
-    reattachFlightSimulator(appAPI);
+    flightSimulatorPanelStore.runtime.reattach(appAPI);
     // VectorControl has a Cesium bridge and must restore on either engine.
     restoreVectorLayers(appAPI);
     // Engines that host the deck.gl overlay without a MapLibre map restore these
@@ -222,12 +247,12 @@ export function usePluginStateRestore({
     // binds to either 2D engine through getStyleMap, so it sits above the
     // native-map gate like the deck.gl overlay; on Cesium the plugin manager
     // has already deactivated it and this only detaches the engine.
-    reattachRouteAnimation(appAPI);
+    routeAnimationPanelStore.runtime.reattach(appAPI);
     // God's Eye View holds the Cesium handle it pushes its CZML feeds at, so it
     // has to rebind after a renderer swap too. It sits above the native-map gate
     // because the handle it wants is the globe's, which that gate excludes.
     // Reattach only — the per-feed toggles come from its applyProjectState.
-    reattachGodsEyeView(appAPI);
+    godsEyeViewRuntime.reattach(appAPI);
     // ArcGIS scene layers: read each one's layer document once, on any engine.
     // The 2D overlay probes as it mounts, but the globe draws scene layers
     // itself and has no other reader for the Building sublayer tree and base
@@ -291,15 +316,9 @@ export function usePluginStateRestore({
     // Rebind the directions tool to the (possibly new) map instance after a
     // map re-init, since restoreProjectState skips an already-active plugin.
     restoreDirections(appAPI, pluginManager.isActive(DIRECTIONS_PLUGIN_ID));
-    // Reverse geocode sends clicked coordinates to a public geocoder. If a
-    // restored project marks it active but this device never acknowledged the
-    // privacy notice, deactivate it so no coordinates are sent without consent;
-    // the user must re-enable it (which shows the notice). This makes the
-    // consent gate cover every activation path, not just the toolbar toggle.
-    if (pluginManager.isActive(REVERSE_GEOCODE_PLUGIN_ID) && !hasReverseGeocodeConsent()) {
-      pluginManager.deactivate(REVERSE_GEOCODE_PLUGIN_ID, appAPI);
-    }
-    restoreReverseGeocode(appAPI, pluginManager.isActive(REVERSE_GEOCODE_PLUGIN_ID));
+    // Consent was checked before the renderer-specific branches above; rebind
+    // only a provider that has already loaded and survived that guard.
+    reverseGeocodeRuntime.restore(appAPI, pluginManager.isActive(REVERSE_GEOCODE_PLUGIN_ID));
     return () => {
       current = false;
     };

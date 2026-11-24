@@ -82,6 +82,8 @@ const modules = createBuiltInPluginModules({
 });
 
 export const loadBuiltInPluginModule = modules.loadModule;
+export const peekBuiltInPluginModule = modules.peekModule;
+export const getPendingBuiltInPluginModuleIds = modules.pendingModuleIds;
 export const configureBuiltInPluginModule = modules.configure;
 
 const pluginLoaders = {

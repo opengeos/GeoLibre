@@ -1,3 +1,4 @@
+import { flightSimulatorPanelStore } from "../builtin-plugin-panels";
 import { FLIGHT_SIMULATOR_PLUGIN_ID } from "../plugin-ids";
 export { FLIGHT_SIMULATOR_PLUGIN_ID } from "../plugin-ids";
 import { builtInPluginProperties } from "../builtin-plugin-metadata";
@@ -989,6 +990,7 @@ const panelListeners = new Set<() => void>();
 const hudListeners = new Set<() => void>();
 
 function notifyPanel(): void {
+  flightSimulatorPanelStore.setVisible(panelVisible);
   for (const listener of panelListeners) listener();
 }
 
@@ -1188,3 +1190,8 @@ export const flightSimulatorPlugin: GeoLibrePlugin = {
   },
   applyProjectState: (app: GeoLibreAppAPI, state: unknown) => restoreFlightSimulator(app, state),
 };
+
+flightSimulatorPanelStore.runtime.reattach = reattachFlightSimulator;
+flightSimulatorPanelStore.runtime.open = openFlightSimulatorPanel;
+flightSimulatorPanelStore.runtime.close = closeFlightSimulatorPanel;
+flightSimulatorPanelStore.runtime.isFlying = isFlying;

@@ -1,3 +1,5 @@
+import { geoEditorFileTools, provideGeoEditorRuntime } from "../geo-editor-state";
+export { setGeoEditorFileTools } from "../geo-editor-state";
 import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import {
   planSketchAttributeUpdates,
@@ -114,18 +116,6 @@ let geoEditorLabels: GeoEditorLabels = { ...DEFAULT_GEO_EDITOR_LABELS };
  */
 export function setGeoEditorLabels(next: Partial<GeoEditorLabels>): void {
   geoEditorLabels = { ...geoEditorLabels, ...next };
-}
-
-let geoEditorFileTools = true;
-
-/**
- * Show or hide the toolbar's Open/Save GeoJSON file buttons. The host turns
- * them off in the read-only viewer, where they would import and export data
- * around the deployment's capability gates. Read at construction, so it
- * applies the next time the plugin is activated.
- */
-export function setGeoEditorFileTools(enabled: boolean): void {
-  geoEditorFileTools = enabled;
 }
 
 let geoEditorPosition: GeoLibreMapControlPosition = "top-left";
@@ -2440,3 +2430,19 @@ function isGeomanTextMarkerLayer(
   if (layer.type !== "symbol" || !isGeomanDisplayLayer(layer)) return false;
   return JSON.stringify(layer.layout?.["text-field"] ?? "").includes(GEOMAN_TEXT_PROPERTY);
 }
+
+provideGeoEditorRuntime({
+  getGeometryEditTargetLayerId,
+  getLastGeometryEditEnd,
+  isGeoEditorUsingRightClick,
+  subscribeGeometryEdit,
+  startLayerGeometryEdit,
+  selectGeometryEditFeature,
+  endLayerGeometryEdit,
+  isGeoEditorAvailableForImport,
+  addFeatureToGeoEditor,
+  getGeoEditorFeatureCount,
+  hasViewImportBaseline,
+  loadViewFeaturesIntoEditor,
+  buildEditorSaveCollection,
+});

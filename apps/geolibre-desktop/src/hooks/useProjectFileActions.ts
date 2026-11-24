@@ -19,7 +19,7 @@ import {
 import { addArcGISLayer } from "@geolibre/plugins/arcgis-layer";
 import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
 import { fetchPortalUser } from "@geolibre/plugins/arcgis-portal-api";
-import { getGeometryEditTargetLayerId } from "@geolibre/plugins/maplibre-geo-editor";
+import { getGeometryEditTargetLayerId } from "@geolibre/plugins/geo-editor-state";
 import { isRecoverableNonTiledRasterError } from "@geolibre/plugins/non-tiled-raster-error";
 import { materializeEmbeddableVectorLayers } from "@geolibre/plugins/maplibre-vector";
 import { type ArcGISLayerOptions } from "@geolibre/plugins";

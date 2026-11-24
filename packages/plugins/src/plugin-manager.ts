@@ -1,5 +1,9 @@
 import { isPluginEngineSupported } from "./types";
-import { createLazyPlugin, type LazyPluginRegistration } from "./builtin-plugin-lifecycle";
+import {
+  createLazyPlugin,
+  PluginOperationSupersededError,
+  type LazyPluginRegistration,
+} from "./builtin-plugin-lifecycle";
 import {
   getAssistantToolOwnerScope,
   unregisterAssistantToolsByOwner,
@@ -202,7 +206,7 @@ export class PluginManager {
       restorePass !== this.restorePass ||
       renderer !== (app.getMapRenderer?.() ?? "maplibre")
     )
-      throw new Error(`Plugin '${id}' helper was superseded.`);
+      throw new PluginOperationSupersededError(`Plugin '${id}' helper was superseded.`);
     const result = action(
       implementation,
       this.scopeAppToPlugin(app, id, { hostHelper: true }, restorePass),

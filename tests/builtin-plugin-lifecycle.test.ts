@@ -407,6 +407,36 @@ describe("lazy plugin lifecycle", () => {
     assert.deepEqual(manager.getProjectState().activePluginIds, []);
   });
 
+  it("mounts only the replacement map when an import spans a same-renderer map replacement", async () => {
+    const test = harness();
+    const manager = new PluginManager();
+    const first = { id: "first-map" };
+    const second = { id: "replacement-map" };
+    let currentMap = first;
+    const mounted: unknown[] = [];
+    const scopedApp = {
+      getMapRenderer: () => "maplibre",
+      getMap: () => currentMap,
+    } as unknown as GeoLibreAppAPI;
+    test.implementation.activate = (current) => {
+      mounted.push(current.getMap?.());
+    };
+    manager.registerLazy({
+      ...test.registration,
+      metadata: { ...test.registration.metadata, sessionScoped: true },
+    });
+    manager.restoreProjectState(null, scopedApp);
+    const obsolete = manager.activate("lazy", scopedApp);
+    currentMap = second;
+    manager.restoreProjectState(null, scopedApp, { mapReplaced: true });
+    const replacement = manager.pendingActivation("lazy");
+    assert.ok(replacement);
+    test.pending.resolve(test.implementation);
+    assert.equal(await obsolete, false);
+    assert.equal(await replacement, true);
+    assert.deepEqual(mounted, [second]);
+  });
+
   it("keeps pending snapshots and restores positions before settings", async () => {
     const test = harness();
     test.adapter.plugin.applyProjectState!(app, undefined);

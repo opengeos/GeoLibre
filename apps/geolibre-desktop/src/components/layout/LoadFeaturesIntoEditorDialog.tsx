@@ -10,7 +10,7 @@ import {
   loadViewFeaturesIntoEditor,
   SKETCHES_SOURCE_KIND,
   subscribeGeometryEdit,
-} from "@geolibre/plugins/maplibre-geo-editor";
+} from "@geolibre/plugins/geo-editor-state";
 import { getStyleMap } from "@geolibre/plugins/style-map";
 import {
   queryViewLayerFeatures,

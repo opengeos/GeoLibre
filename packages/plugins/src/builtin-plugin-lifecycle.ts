@@ -1,6 +1,11 @@
 import type { BuiltInPluginMetadata } from "./builtin-plugin-metadata";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "./types";
 
+/** Expected cancellation when a newer project, renderer, or registration replaces an operation. */
+export class PluginOperationSupersededError extends Error {
+  override name = "PluginOperationSupersededError";
+}
+
 export interface LazyPluginRegistration {
   metadata: BuiltInPluginMetadata;
   load: () => Promise<GeoLibrePlugin>;
@@ -103,7 +108,9 @@ export function createLazyPlugin(registration: LazyPluginRegistration, context: 
       generation !== context.restoreGeneration() ||
       renderer !== (app.getMapRenderer?.() ?? "maplibre")
     )
-      throw new Error(`Plugin '${metadata.id}' preparation was superseded.`);
+      throw new PluginOperationSupersededError(
+        `Plugin '${metadata.id}' preparation was superseded.`,
+      );
     loadedImplementation = implementation;
     applyPending(implementation, app);
     return implementation;

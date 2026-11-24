@@ -29,6 +29,15 @@ describe("built-in plugin imports", () => {
       "../apps/geolibre-desktop/src/hooks/desktop-shell/useTranslatedPluginLabels.ts",
       "../packages/plugins/src/planetary-computer-labels.ts",
       "../packages/plugins/src/runtime.ts",
+      "../apps/geolibre-desktop/src/lib/plugin-panel-stores.ts",
+      "../apps/geolibre-desktop/src/components/panels/DeferredPluginPanels.tsx",
+      "../packages/plugins/src/weather-animation.ts",
+      "../packages/plugins/src/effects-settings.ts",
+      "../packages/plugins/src/map-mode-state.ts",
+      "../packages/plugins/src/swipe-load-state.ts",
+      "../packages/plugins/src/time-slider-state.ts",
+      "../packages/plugins/src/geo-editor-state.ts",
+      "../packages/plugins/src/stac-catalog-request.ts",
     ].map((file) => new URL(file, import.meta.url).href);
     const args = [
       "--loader",
@@ -95,14 +104,17 @@ describe("built-in plugin imports", () => {
     loaders.configure("catalog", { labels: (loaded) => loaded.setLabel("old") });
     assert.equal(imports, 0);
     assert.equal(loaders.peekModule("catalog"), undefined);
+    assert.deepEqual(loaders.pendingModuleIds(), []);
     const first = loaders.loadModule("catalog");
     const second = loaders.loadModule("catalog");
+    assert.deepEqual(loaders.pendingModuleIds(), ["catalog"]);
     loaders.configure("catalog", { labels: (loaded) => loaded.setLabel("latest") });
     release();
     const [resolved, resolvedModule] = await Promise.all([first, second]);
     assert.equal(resolved, module);
     assert.equal(resolvedModule, module);
     assert.equal(loaders.peekModule("catalog"), module);
+    assert.deepEqual(loaders.pendingModuleIds(), []);
     assert.equal(imports, 1);
     assert.equal(label, "latest");
     assert.equal(saver, "save");

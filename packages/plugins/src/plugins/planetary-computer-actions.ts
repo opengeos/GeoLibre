@@ -18,8 +18,9 @@ import {
   planetaryComputerItemDate,
   setPlanetaryComputerCustomActions,
 } from "./maplibre-planetary-computer";
-import { requestStacCatalogUrl, STAC_PLUGIN_ID } from "./maplibre-stac";
-import { applyTimeSliderConfig, registerTimeSliderSourceRehydrator } from "./maplibre-time-slider";
+import { requestStacCatalogUrl } from "../stac-catalog-request";
+import { STAC_PLUGIN_ID } from "../plugin-ids";
+import { applyTimeSliderConfig, registerTimeSliderSourceRehydrator } from "../time-slider-state";
 import { PLANETARY_COMPUTER_STAC_URL } from "./planetary-computer-stac";
 import { type PixelSeriesStepReader, registerPixelSeriesReader } from "./time-slider-pixel-series";
 

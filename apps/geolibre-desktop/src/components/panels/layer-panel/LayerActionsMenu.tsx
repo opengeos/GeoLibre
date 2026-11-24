@@ -19,8 +19,8 @@ import type {
   GeoLibreLayer,
   LayerGroup,
 } from "@geolibre/core";
-import { canEditLayerGeometry, SKETCHES_SOURCE_KIND } from "@geolibre/plugins/maplibre-geo-editor";
-import { getLayerTimeBinding } from "@geolibre/plugins/maplibre-time-slider";
+import { canEditLayerGeometry, SKETCHES_SOURCE_KIND } from "@geolibre/plugins/geo-editor-state";
+import { getLayerTimeBinding } from "@geolibre/plugins/time-slider-state";
 import { getTemporalLayerAdapter } from "@geolibre/plugins/temporal-layers";
 import { isArcGISWritableLayer } from "@geolibre/plugins/arcgis-layer";
 import { isEmbeddableLocalVectorLayer } from "@geolibre/plugins/vector-layer-sync";

@@ -7,7 +7,7 @@ import {
   openPMTilesLayerPanel,
   openSplattingLayerPanel,
   openZarrLayerPanel,
-} from "@geolibre/plugins/maplibre-components";
+} from "@geolibre/plugins/component-helpers";
 import { closePlanetaryComputerPanel } from "@geolibre/plugins/maplibre-planetary-computer";
 import { closeRasterLayerPanel, openRasterLayerPanel } from "@geolibre/plugins/maplibre-raster";
 import {

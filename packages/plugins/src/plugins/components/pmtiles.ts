@@ -172,6 +172,7 @@ export async function addPMTilesLayerFromUrl(
     pmtilesControl.hide();
   }
 
+  // engine-audit-allow: arcgis-null-map: the optional 2D camera-event mirror is skipped without a style map.
   const map = options.fit === false ? (app.getMap?.() ?? app.getMapboxMap?.()) : undefined;
   const cameraEvents = map as
     | {

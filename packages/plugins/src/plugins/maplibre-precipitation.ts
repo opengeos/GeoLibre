@@ -1,4 +1,5 @@
 import { PRECIPITATION_PLUGIN_ID } from "../plugin-ids";
+import { precipitationAnimation } from "../weather-animation";
 export { PRECIPITATION_PLUGIN_ID } from "../plugin-ids";
 import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
@@ -182,3 +183,5 @@ export const maplibrePrecipitationPlugin: GeoLibrePlugin = {
   activate: (app: GeoLibreAppAPI) => controller.activate(app),
   deactivate: () => controller.deactivate(),
 };
+
+precipitationAnimation.provide(controller);

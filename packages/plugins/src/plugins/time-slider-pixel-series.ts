@@ -2,7 +2,7 @@ import { generateSteps, resolveUrl, type SourceSpec } from "maplibre-gl-time-sli
 import type { BandReading, PixelReading } from "maplibre-gl-raster";
 import type { Feature, FeatureCollection, Point } from "geojson";
 import { useAppStore } from "@geolibre/core";
-import { getActiveTimeSliderControl } from "./maplibre-time-slider";
+import { getActiveTimeSliderControl } from "../time-slider-state";
 import {
   getTemporalLayerAdapter,
   isSelectorTimeBinding,

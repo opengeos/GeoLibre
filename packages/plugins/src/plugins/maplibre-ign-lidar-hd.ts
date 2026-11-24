@@ -16,7 +16,7 @@ import {
   LIDAR_SOURCE_KIND,
   restoreLidarLayers,
   withLidarAutoZoomSuppressed,
-} from "./maplibre-components";
+} from "./components/lidar";
 import { getControlMap } from "./style-map";
 import { createPluginTranslator } from "../plugin-i18n";
 

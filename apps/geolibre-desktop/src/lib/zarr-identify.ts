@@ -4,7 +4,7 @@ import {
   isSelectorTimeBinding,
   toEpochMsAxis,
 } from "@geolibre/plugins/temporal-layers";
-import { queryZarrLayer } from "@geolibre/plugins/maplibre-components";
+import { queryZarrLayer } from "@geolibre/plugins/component-helpers";
 import { zarrPointValue } from "@geolibre/plugins/zarr-time-axis";
 
 /** Localized labels for the rows {@link readZarrIdentifyRows} returns. */

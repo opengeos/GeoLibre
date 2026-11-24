@@ -14,6 +14,7 @@ export {
 } from "./assistant-tool-registry";
 export * from "./types";
 export { PluginManager } from "./plugin-manager";
+export { PluginOperationSupersededError } from "./builtin-plugin-lifecycle";
 export {
   registerRightPanel,
   unregisterRightPanel,
