@@ -732,3 +732,26 @@ it("preserves source attributes when regression output names collide", async () 
   assert.equal(props.ols_pred_source, "existing alias");
   assert.equal(typeof props.ols_pred, "number");
 });
+
+it("preserves finite inference with very small predictor units", () => {
+  const x = Array.from({ length: 300 }, (_, i) => [((i % 3) - 1) * 1e-155]);
+  const y = Array.from(
+    { length: 300 },
+    (_, i) => (i % 3) - 1 + (Math.floor(i / 3) % 2 ? 0.1 : -0.1),
+  );
+  const fit = ols(x, y);
+  assert.ok(fit);
+  assert.ok(Number.isFinite(fit.standardErrors[1]));
+  assert.ok(fit.tValues[1] > 10);
+  assert.ok(fit.pValues[1] < 0.01);
+});
+
+it("preserves DBSCAN source cluster_type attributes", async () => {
+  const layer = pointLayer([
+    [0, 0, { cluster_type: "source" }],
+    [0.00001, 0, { cluster_type: "other" }],
+  ]);
+  const output = await runTool(dbscanTool, layer, { eps: 100, minPoints: 1 });
+  assert.equal(output.results[0].geojson.features[0].properties?.cluster_type_source, "source");
+  assert.equal(output.results[0].geojson.features[0].properties?.cluster_type, "core");
+});

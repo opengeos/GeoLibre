@@ -260,6 +260,11 @@ The sidecar can also confine conversion inputs and outputs to an allowlist of di
 | **OD cost matrix** | Travel time and distance for every origin-destination pair between two point layers. |
 | **Sequential route (directions)** | Route through a set of stops in order, with turn-by-turn directions. |
 
+Local graph construction runs on the main thread and accepts at most 250,000
+vertices. Point placement has a 50-million edge/point comparison budget, including
+far or antimeridian selections that use a full edge scan. Searches yield between
+legs or incidents; graph construction itself is synchronous.
+
 Local multi-stop and closest-facility runs are limited to 50 million node-search
 entries, counted after snapping. This bounds repeated graph-state allocations;
 use fewer stops/incidents or a smaller network extract for larger selections.

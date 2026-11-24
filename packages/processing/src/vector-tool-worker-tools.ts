@@ -2,8 +2,8 @@
 // this: vector-tool-runner.ts to decide what to post, and the worker session
 // (vector-tool-protocol.ts) to resolve the posted id. It imports the tools from
 // vector-tools.ts directly rather than through the registry, so the worker
-// bundle carries only the Turf tools, not the DGGS and topology modules the
-// full registry lists.
+// bundle carries the supported Turf and spatial-statistics tools, excluding
+// the DGGS and topology modules from the full registry.
 import type { ProcessingAlgorithm } from "./types";
 import {
   olsRegressionTool,

@@ -1,7 +1,7 @@
 import { featureCollection } from "@turf/helpers";
 import buffer from "@turf/buffer";
 import { bodyLengthToEarth } from "@geolibre/core/worker-safe";
-import type { Feature, Point, Position } from "geojson";
+import type { Feature, Point, Position, Polygon, MultiPolygon } from "geojson";
 import {
   type GeoLibreLayer,
   type RoutingMetric,
@@ -21,7 +21,17 @@ import {
   requestRoute,
   routeResponseToFeatures,
 } from "@geolibre/core";
-import { buildLocalNetwork, type LocalNetwork, type NetworkCostMode } from "./local-network";
+import {
+  buildLocalNetwork,
+  splitNetworkLine,
+  type LocalNetwork,
+  type NetworkCostMode,
+} from "./local-network";
+import {
+  prepareAntimeridianInput,
+  unwrapPolygonal,
+  splitPolygonalAtAntimeridian,
+} from "./antimeridian-buffer";
 import type { AlgorithmParameter, ProcessingAlgorithm, ProcessingContext } from "./types";
 
 /**
@@ -489,6 +499,18 @@ function buildNetworkFromParams(
     ctx.log("Error: the network layer has no line features");
     return null;
   }
+  let vertices = 0;
+  for (const feature of features) {
+    if (feature.geometry?.type === "LineString") vertices += feature.geometry.coordinates.length;
+    else if (feature.geometry?.type === "MultiLineString")
+      for (const part of feature.geometry.coordinates) vertices += part.length;
+  }
+  if (vertices > 250_000) {
+    ctx.log(
+      "Error: local network construction supports at most 250,000 vertices; use a smaller extract",
+    );
+    return null;
+  }
   const mode = ((ctx.parameters.costMode as string) || "length") as NetworkCostMode;
   const costField = ((ctx.parameters.costField as string | undefined) ?? "").trim();
   if (mode !== "length" && !costField) {
@@ -528,6 +550,10 @@ interface PlacedPoint {
 
 /** Attaches every point to the network, in order. */
 function placePoints(net: LocalNetwork, points: RoutingPoint[]): PlacedPoint[] {
+  if (points.length * net.edges.length > 50_000_000)
+    throw new RangeError(
+      "Local network point placement is too large; reduce points or use a smaller extract",
+    );
   const placed: PlacedPoint[] = [];
   for (const point of points) {
     const hit = net.insertPoint(point.lon, point.lat);
@@ -537,15 +563,15 @@ function placePoints(net: LocalNetwork, points: RoutingPoint[]): PlacedPoint[] {
 }
 
 function lineFeature(coordinates: Position[], properties: Record<string, unknown>): Feature {
+  const source = coordinates.length >= 2 ? coordinates : [coordinates[0], coordinates[0]];
+  const pieces = splitNetworkLine(source);
   return {
     type: "Feature",
     properties,
-    // A zero-length route (stop on top of the next) stays a LineString so the
-    // layer keeps one geometry type.
-    geometry: {
-      type: "LineString",
-      coordinates: coordinates.length >= 2 ? coordinates : [coordinates[0], coordinates[0]],
-    },
+    geometry:
+      pieces.length > 1
+        ? { type: "MultiLineString", coordinates: pieces }
+        : { type: "LineString", coordinates: pieces[0] ?? source },
   };
 }
 
@@ -892,7 +918,13 @@ export const localServiceAreaTool: ProcessingAlgorithm = {
         };
         lines.push(lineFeat);
         if (width > 0) {
-          const area = buffer(lineFeat, bodyLengthToEarth(width), { units: "meters" });
+          const { feature: input, referenceLon } = prepareAntimeridianInput(lineFeat);
+          const area = buffer(input, bodyLengthToEarth(width), { units: "meters" });
+          if (area?.geometry)
+            area.geometry = splitPolygonalAtAntimeridian(
+              unwrapPolygonal(area.geometry as Polygon | MultiPolygon, referenceLon),
+              referenceLon,
+            );
           if (area?.geometry) {
             area.properties = { ...properties };
             polygons.push(area);

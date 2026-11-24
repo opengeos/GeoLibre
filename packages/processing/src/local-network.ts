@@ -289,9 +289,58 @@ class GridIndex {
   }
 }
 
+/** Keep long segments in separate grid levels from short segments. */
+class SegmentIndex {
+  private levels = new Map<number, GridIndex>();
+  constructor(
+    private cell: number,
+    private originX: number,
+    private originY: number,
+  ) {}
+  insert(id: number, minX: number, minY: number, maxX: number, maxY: number): void {
+    const span = Math.max(maxX - minX, maxY - minY);
+    const level = Math.max(0, Math.ceil(Math.log2(Math.max(1, span / (8 * this.cell)))));
+    let grid = this.levels.get(level);
+    if (!grid) {
+      grid = new GridIndex(this.cell * 2 ** level, this.originX, this.originY);
+      this.levels.set(level, grid);
+    }
+    grid.insert(id, minX, minY, maxX, maxY);
+  }
+  query(minX: number, minY: number, maxX: number, maxY: number, out: number[]): void {
+    for (const grid of this.levels.values()) grid.query(minX, minY, maxX, maxY, out);
+  }
+}
+
+/** Cut short-path longitude jumps into renderable pieces at the world seam. */
+export function splitNetworkLine(coordinates: Position[]): Position[][] {
+  if (!coordinates.length) return [];
+  let part: Position[] = [[longitudeDelta(0, coordinates[0][0]), ...coordinates[0].slice(1)]];
+  const parts: Position[][] = [];
+  for (const raw of coordinates.slice(1)) {
+    const a = part[part.length - 1];
+    const longitude = longitudeDelta(0, raw[0]);
+    const end = a[0] + longitudeDelta(a[0], longitude);
+    if (end > 180 || end < -180) {
+      const boundary = end > 180 ? 180 : -180;
+      const t = (boundary - a[0]) / (end - a[0]);
+      const crossing: Position = [
+        boundary,
+        ...a.slice(1).map((value, i) => value + t * ((raw[i + 1] ?? value) - value)),
+      ];
+      if (t > 0) part.push(crossing);
+      if (part.length >= 2) parts.push(part);
+      part = [[-boundary, ...crossing.slice(1)]];
+    }
+    part.push([end >= -180 && end <= 180 ? end : longitude, ...raw.slice(1)]);
+  }
+  if (part.length >= 2) parts.push(part);
+  return parts;
+}
+
 /** Query both longitude representations when a snap window crosses the seam. */
 function queryWrapped(
-  index: GridIndex,
+  index: Pick<GridIndex, "query">,
   x: number,
   y: number,
   padX: number,
@@ -309,6 +358,8 @@ export interface NetworkBuildStats {
   skippedFeatures: number;
   snappedEndpoints: number;
   splitSegments: number;
+  /** Candidate segment visits during endpoint snapping. */
+  segmentCandidates: number;
 }
 
 /**
@@ -328,6 +379,7 @@ export class LocalNetwork {
     skippedFeatures: 0,
     snappedEndpoints: 0,
     splitSegments: 0,
+    segmentCandidates: 0,
   };
   private index: GridIndex | null = null;
   private extent = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
@@ -665,7 +717,7 @@ export class LocalNetwork {
       if (fromA > 0) pieces.push([lerp(edge, 0), lerp(edge, fromA)]);
       if (fromB > 0) pieces.push([lerp(edge, 1 - fromB), lerp(edge, 1)]);
     }
-    return pieces;
+    return pieces.flatMap(splitNetworkLine);
   }
 }
 
@@ -739,6 +791,7 @@ export function buildLocalNetwork(
     skippedFeatures: 0,
     snappedEndpoints: 0,
     splitSegments: 0,
+    segmentCandidates: 0,
   };
 
   const vertexNode = (pos: Position): number => {
@@ -845,17 +898,7 @@ export function buildLocalNetwork(
       degree.set(a, (degree.get(a) ?? 0) + 1);
       degree.set(b, (degree.get(b) ?? 0) + 1);
     }
-    let totalSpan = 0;
-    for (const seg of segments) {
-      const a = uf.find(seg.a),
-        b = uf.find(seg.b);
-      totalSpan += Math.max(
-        Math.abs(longitudeDelta(rawLon[a], rawLon[b])),
-        Math.abs(rawLat[a] - rawLat[b]),
-      );
-    }
-    const meanSpan = segments.length ? totalSpan / segments.length : 0;
-    const segIndex = new GridIndex(Math.max(toleranceDeg * 4, meanSpan * 2, 1e-7), minLon, minLat);
+    const segIndex = new SegmentIndex(Math.max(toleranceDeg * 4, 1e-7), minLon, minLat);
     segments.forEach((seg, id) => {
       const ax = rawLon[uf.find(seg.a)];
       const ay = rawLat[uf.find(seg.a)];
@@ -881,6 +924,7 @@ export function buildLocalNetwork(
       candidates.length = 0;
       const padX = toleranceDeg / Math.max(Math.cos(y * DEG), 1e-6);
       queryWrapped(segIndex, x, y, padX, toleranceDeg, candidates);
+      stats.segmentCandidates += candidates.length;
       let best: { seg: number; t: number; d: number } | null = null;
       for (const segId of new Set(candidates)) {
         const seg = segments[segId];

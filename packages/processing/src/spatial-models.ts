@@ -198,7 +198,7 @@ function regressionBasis(x: number[][]) {
               (sum, a, i) => sum + a * row.reduce((inner, b, j) => inner + b * cov[i][j], 0),
               0,
             )
-          : cov[index][index] * row[index] ** 2,
+          : cov[index][index] * row[index] * row[index],
       ),
   };
 }

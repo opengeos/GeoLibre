@@ -394,6 +394,7 @@ export function StatisticsToolsDialog({
                 <button
                   key={entry.id}
                   type="button"
+                  disabled={running}
                   onClick={() => setSelectedId(entry.id)}
                   className={cn(
                     "w-full rounded-md px-2 py-1.5 text-start text-sm transition-colors hover:bg-accent",

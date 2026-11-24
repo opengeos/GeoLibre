@@ -2121,7 +2121,7 @@ const MODEL_FIELD_PARAMS = [
 function withModelFields(
   features: Feature[],
   indices: number[],
-  fields: (row: number) => Record<string, number>,
+  fields: (row: number) => Record<string, number | string>,
 ): Feature[] {
   if (!indices.length) return [];
   const generated = Object.keys(fields(0));
@@ -2453,13 +2453,8 @@ export const dbscanTool: ProcessingAlgorithm = {
     );
     const out = withModelFields(features, located.indices, (row) => ({
       cluster: result.labels[row],
+      cluster_type: result.labels[row] < 0 ? "noise" : result.core[row] ? "core" : "border",
     }));
-    out.forEach((feature, row) => {
-      feature.properties = {
-        ...feature.properties,
-        cluster_type: result.labels[row] < 0 ? "noise" : result.core[row] ? "core" : "border",
-      };
-    });
     ctx.addResultLayer?.(`${layer.name} (DBSCAN)`, featureCollection(out), {
       graduatedField: "cluster",
     });

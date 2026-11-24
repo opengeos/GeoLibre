@@ -6270,7 +6270,8 @@
     "outputPlaceholder": "Output will appear here.",
     "endpointNotice": "Point coordinates are sent to the routing server ({{endpoint}}). The default is a shared public Valhalla server (FOSSGIS), which is rate-limited. For heavy use, enter your own server's URL in the \"Routing server (Valhalla)\" field above.",
     "localNotice": "This tool runs in your browser over the selected line layer. Nothing is sent to a routing server.",
-    "consentRequired": "This tool sends point coordinates to a routing server. Open it from the Processing menu to review and accept the routing notice first."
+    "consentRequired": "This tool sends point coordinates to a routing server. Open it from the Processing menu to review and accept the routing notice first.",
+    "styleFailed": "Could not style \"{{name}}\": {{reason}}"
   },
   "statistics": {
     "title": "Spatial statistics",

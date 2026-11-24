@@ -11,7 +11,11 @@ import {
   parseDirection,
 } from "@geolibre/processing";
 import type { Feature, FeatureCollection, LineString, MultiLineString, Position } from "geojson";
-import { LocalNetwork, haversineMeters } from "../packages/processing/src/local-network";
+import {
+  LocalNetwork,
+  haversineMeters,
+  splitNetworkLine,
+} from "../packages/processing/src/local-network";
 
 describe("network review regressions", () => {
   it("remembers explicit routing consent when browser storage is unavailable", async () => {
@@ -705,11 +709,112 @@ it("bounds repeated search allocations on a large graph", async () => {
     "stops",
     Array.from({ length: 450 }, (_, i) => point(i, 0)),
   );
-  const result = await run(localShortestPathTool, [net, stops], {
+  await assert.rejects(
+    run(localShortestPathTool, [net, stops], {
+      network: "net",
+      stops: "stops",
+      snapTolerance: 0,
+    }),
+    /point placement is too large/,
+  );
+});
+
+it("keeps mixed long and short segments in bounded snapping buckets", () => {
+  const features: Feature[] = [
+    {
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [0, 0],
+          [90, 0],
+        ],
+      },
+    },
+  ];
+  for (let i = 0; i < 2000; i++) {
+    const x = 100 + (i % 50) * 5,
+      y = 100 + Math.floor(i / 50) * 5;
+    features.push(
+      line([
+        [x, y],
+        [x + 2, y],
+      ]),
+    );
+  }
+  const net = buildLocalNetwork(features, { snapToleranceM: 1 });
+  assert.equal(net.stats.snappedEndpoints, 0);
+  assert.ok(net.stats.segmentCandidates < 100000, String(net.stats.segmentCandidates));
+});
+
+it("splits route lines at the antimeridian without a world-spanning segment", () => {
+  for (const coords of [
+    [
+      [179.9, 0],
+      [-179.9, 1],
+    ],
+    [
+      [-179.9, 0],
+      [179.9, 1],
+    ],
+    [
+      [180, 0],
+      [-179.9, 1],
+    ],
+  ]) {
+    const parts = splitNetworkLine(coords);
+    assert.ok(parts.length >= 1);
+    for (const part of parts)
+      for (let i = 1; i < part.length; i++) assert.ok(Math.abs(part[i][0] - part[i - 1][0]) <= 180);
+    assert.deepEqual(parts.at(-1)?.at(-1), [coords.at(-1)![0], 1]);
+  }
+});
+
+it("keeps dateline service-area lines and polygons continuous", async () => {
+  const net = layer("net", [
+    {
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [179.9, 0],
+          [-179.9, 0],
+        ],
+      },
+    },
+  ]);
+  const facilities = layer("facilities", [
+    { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [179.95, 0] } },
+  ]);
+  const stops = layer(
+    "stops",
+    [179.95, -179.95].map((longitude) => ({
+      type: "Feature",
+      properties: {},
+      geometry: { type: "Point", coordinates: [longitude, 0] },
+    })),
+  );
+  const route = await run(localShortestPathTool, [net, stops], { network: "net", stops: "stops" });
+  assert.equal(route.results[0].geojson.features[0].geometry?.type, "MultiLineString");
+  const length = Number(route.results[0].geojson.features[0].properties?.length_m);
+  assert.ok(length > 11000 && length < 11250, String(length));
+  const output = await run(localServiceAreaTool, [net, facilities], {
     network: "net",
-    stops: "stops",
-    snapTolerance: 0,
+    facilities: "facilities",
+    breaks: "30000",
+    polygonWidth: 500,
   });
-  assert.equal(result.results.length, 0);
-  assert.match(result.messages.join("\n"), /routing selection is too large/);
+  assert.equal(output.results.length, 2, output.messages.join("\n"));
+  const walk = (value: unknown): void => {
+    if (!Array.isArray(value)) return;
+    if (Array.isArray(value[0]) && typeof value[0][0] === "number") {
+      for (let i = 1; i < value.length; i++)
+        assert.ok(Math.abs(value[i][0] - value[i - 1][0]) <= 180);
+    } else value.forEach(walk);
+  };
+  for (const result of output.results)
+    for (const feature of result.geojson.features)
+      if (feature.geometry && "coordinates" in feature.geometry) walk(feature.geometry.coordinates);
 });

@@ -209,12 +209,12 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
             }),
           );
         } catch (error) {
-          appendLog(`Could not style "${name}": ${(error as Error).message}`);
+          appendLog(t("network.styleFailed", { name, reason: (error as Error).message }));
         }
       }
       if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
     },
-    [addGeoJsonLayer, appendLog, mapControllerRef, setLayerStyle],
+    [addGeoJsonLayer, appendLog, mapControllerRef, setLayerStyle, t],
   );
 
   // Update a parameter. When a layer parameter changes, also clear any
