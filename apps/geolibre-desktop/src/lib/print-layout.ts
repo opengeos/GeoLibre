@@ -1134,6 +1134,11 @@ export function drawLayoutContext(
   }
   boxes.map = { box: { x: bodyX, y: bodyY, w: bodyW, h: bodyH } };
 
+  // --- Coordinate grid (border ticks + labels, GH #3530) -----------------
+  if (opts.grid) {
+    drawMapGrid(ctx, opts, opts.grid, W, H, unit, pageInk);
+  }
+
   // --- Overview / inset map (GH #3530) -----------------------------------
   if (opts.inset) {
     const rect = insetRectFor(opts, opts.inset.box, W, H);
@@ -1211,11 +1216,6 @@ export function drawLayoutContext(
       }
       return { x: margin, y: baselineY - footSize * 0.8, w: W - margin * 2, h: footSize * 1.6 };
     });
-
-  // --- Coordinate grid (border ticks + labels, GH #3530) -----------------
-  if (opts.grid) {
-    drawMapGrid(ctx, opts, opts.grid, W, H, unit, pageInk);
-  }
 
   // --- Title block (inside the map) --------------------------------------
   // Overlaid at the top of the map body with a translucent backing for legibility.

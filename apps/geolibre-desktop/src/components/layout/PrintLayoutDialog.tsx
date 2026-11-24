@@ -480,7 +480,7 @@ export function PrintLayoutDialog({
 
         <ExportActions
           insetReady={insetState.ready}
-          insetNeedsGeoref={Boolean(captured && !captured.georef)}
+          insetNeedsGeoref={insetState.unavailable}
           ui={state}
           hasCapture={Boolean(captured)}
           georeferenced={canGeoPdf}

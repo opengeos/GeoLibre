@@ -543,6 +543,20 @@ def test_print_cartography_settings_round_trip_without_aliasing():
     assert project["printLayout"]["elementOffsets"]["legend"]["scale"] == 1.5
 
 
+def test_print_element_offset_updates_preserve_other_elements():
+    """Merge element offsets by name and allow reset to discard old offsets."""
+    project = _project_with("A")
+    title = {"dx": 0.1, "dy": 0.2, "scale": 1}
+    legend = {"dx": 0.2, "dy": 0.3, "scale": 1.5}
+    authoring.set_print_layout(project, element_offsets={"title": title})
+    result = authoring.set_print_layout(project, element_offsets={"legend": legend})
+    assert result["elementOffsets"] == {"title": title, "legend": legend}
+    result["elementOffsets"]["title"]["dx"] = 0.9
+    assert project["printLayout"]["elementOffsets"]["title"]["dx"] == 0.1
+    result = authoring.set_print_layout(project, reset=True, element_offsets={"legend": legend})
+    assert result["elementOffsets"] == {"legend": legend}
+
+
 def test_mgrs_spacing_normalizes_when_settings_are_merged():
     """Keep kilometer precision when either setting changes independently."""
     assert _project.print_layout_settings(grid_type="mgrs", grid_interval=500) == {

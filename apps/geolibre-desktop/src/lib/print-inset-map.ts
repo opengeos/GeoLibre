@@ -87,8 +87,6 @@ export async function renderInsetMap(
       canvasContextAttributes: { preserveDrawingBuffer: true },
     });
     const live = map;
-    // Tile fetch failures are not fatal: the inset keeps what did load.
-    live.on("error", () => {});
     await new Promise<void>((resolve, reject) => {
       let hasTile = false;
       const loaded = (event: import("maplibre-gl").MapSourceDataEvent) => {
@@ -98,6 +96,7 @@ export async function renderInsetMap(
         window.clearTimeout(timer);
         live.off("idle", finish);
         live.off("sourcedata", loaded);
+        live.off("error", failed);
         signal?.removeEventListener("abort", aborted);
       };
       const finish = () => {
@@ -109,8 +108,19 @@ export async function renderInsetMap(
         cleanup();
         reject(new DOMException("Inset render aborted", "AbortError"));
       };
+      const failed = (
+        event: import("maplibre-gl").ErrorEvent & { sourceId?: string; tile?: unknown },
+      ) => {
+        // Tile/source failures may leave usable imagery. A style-level
+        // failure before style load cannot recover without another attempt.
+        if (!live.isStyleLoaded() && !event.sourceId && !event.tile) {
+          cleanup();
+          reject(event.error);
+        }
+      };
       const timer = window.setTimeout(finish, INSET_RENDER_TIMEOUT_MS);
       live.on("sourcedata", loaded);
+      live.on("error", failed);
       live.once("idle", finish);
       signal?.addEventListener("abort", aborted, { once: true });
       if (signal?.aborted) aborted();

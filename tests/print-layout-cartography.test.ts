@@ -478,6 +478,7 @@ function recordingCanvas(width = 1000, height = 700) {
           images.push({ x, y, w, h });
         };
       }
+      if (prop === "stroke") return () => paint.push("stroke");
       if (prop === "translate" || prop === "scale" || prop === "rotate") {
         return (...args: number[]) => transforms.push(`${String(prop)}(${args.join(",")})`);
       }
@@ -574,6 +575,7 @@ describe("drawLayout with the cartographic extras", () => {
     drawLayout(
       canvas,
       options({
+        grid: { type: "decimal", interval: 5, fontSizePt: 7, lines: true },
         inset: {
           box: null,
           image: {} as CanvasImageSource,
@@ -584,6 +586,10 @@ describe("drawLayout with the cartographic extras", () => {
     );
     const lastFrame = paint.lastIndexOf("image");
     assert.equal(paint.filter((item) => item === "image").length, 2);
+    assert.ok(paint.slice(0, lastFrame).includes("stroke"), "grid strokes precede the inset");
+    // Later furniture can stroke, so identify the grid through its labels too.
+    const gridLabel = paint.findIndex((item) => /text:.*[°]/.test(item));
+    assert.ok(gridLabel >= 0 && gridLabel < lastFrame);
     assert.ok(paint.indexOf("text:Map") > lastFrame);
     assert.ok(paint.indexOf("text:Footer") > lastFrame);
   });

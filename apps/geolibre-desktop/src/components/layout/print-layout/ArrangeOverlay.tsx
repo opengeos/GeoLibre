@@ -45,6 +45,7 @@ interface Gesture {
   y: number;
   entry: LayoutElementBox;
   layout: PrintLayoutConfig;
+  moved?: boolean;
 }
 
 interface ArrangeOverlayProps {
@@ -126,7 +127,11 @@ export function ArrangeOverlay({ frame, layout, dispatch }: ArrangeOverlayProps)
   const move = (e: React.PointerEvent<HTMLElement>) => {
     const gesture = gestureRef.current;
     if (!gesture) return;
-    pendingRef.current = { gesture, dx: e.clientX - gesture.x, dy: e.clientY - gesture.y };
+    const dx = e.clientX - gesture.x;
+    const dy = e.clientY - gesture.y;
+    if (!gesture.moved && Math.hypot(dx, dy) < 3) return;
+    gesture.moved = true;
+    pendingRef.current = { gesture, dx, dy };
     if (rafRef.current === null) rafRef.current = requestAnimationFrame(flush);
   };
   const end = (e: React.PointerEvent<HTMLElement>) => {

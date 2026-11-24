@@ -109,6 +109,7 @@ export function useInsetMap(
   return {
     inset,
     ready: !showInset || Boolean(inset?.image),
+    unavailable: showInset && !requestKey,
     loading: showInset && Boolean(view) && !inset?.image && failedKey !== requestKey,
     failed: showInset && Boolean(requestKey) && failedKey === requestKey,
     retry,
