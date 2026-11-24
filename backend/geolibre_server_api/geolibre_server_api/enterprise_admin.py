@@ -37,6 +37,7 @@ from geolibre_server_api.oidc import OidcError, fetch_json
 from geolibre_server_api.org_models import Group, OrganizationRole
 from geolibre_server_api.policy import organization_role, require_organization_admin
 from geolibre_server_api.proxy_identity import client_ip, normalize_ip_network
+from geolibre_server_api.secret_crypto import SecretKeyError, validate_plaintext_secret
 
 SCOPE_TOKEN_RE = re.compile(r"^[A-Za-z0-9:._-]{1,64}$")
 
@@ -366,6 +367,19 @@ def build_enterprise_admin_router() -> APIRouter:
             raise HTTPException(422, "scopes must include openid and use simple scope tokens")
         if provider is None and body.client_secret is None:
             raise HTTPException(422, "clientSecret is required")
+        if body.client_secret is not None and getattr(
+            request.app.state, "secrets_unprotected", False
+        ):
+            raise HTTPException(
+                503,
+                "GEOLIBRE_SECRET_KEYS must be configured before storing an identity provider "
+                "client secret",
+            )
+        if body.client_secret is not None:
+            try:
+                validate_plaintext_secret(body.client_secret)
+            except SecretKeyError as exc:
+                raise HTTPException(422, str(exc)) from exc
         group_ids = {mapping.group_id for mapping in body.group_mappings}
         if group_ids:
             found = set(

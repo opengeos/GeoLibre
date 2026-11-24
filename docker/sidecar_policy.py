@@ -25,9 +25,8 @@ ROUTE_CAPABILITIES = {
 UNGUARDED_PREFIXES = frozenset(
     {
         "health",
-        "algorithms",
+        "token-check",
         "shutdown",
-        "run",
         "docs",
         "redoc",
         "openapi.json",

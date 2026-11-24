@@ -1,9 +1,11 @@
+import { useSidecarJobCancellation } from "../../hooks/useSidecarJobCancellation";
 import { useAppStore, type ConversionToolKind } from "@geolibre/core";
 import {
   COG_WASM_COMPRESSIONS,
   MAX_VECTOR_PMTILES_ZOOM,
   PMTILES_COLORMAPS,
   PMTILES_RESAMPLING_METHODS,
+  cancelConversionJob,
   fetchConversionJob,
   fetchConversionStatus,
   runCsvToGeoParquet,
@@ -1537,6 +1539,17 @@ export function ConversionDialog() {
   };
 
   const running = Boolean(job && RUNNING_JOB_STATUSES.has(job.status));
+  // A sidecar job (not a browser run, which the COG abort controller handles)
+  // can be stopped on the server; polling then picks up its `cancelled` state.
+  const sidecarJobRunning = Boolean(running && job && job.id !== BROWSER_JOB_ID);
+  const { cancellingJob, cancelSidecarJob } = useSidecarJobCancellation(
+    job,
+    sidecarJobRunning,
+    cancelConversionJob,
+    setJob,
+    setError,
+    t("toolbar.conversion.errorCancel"),
+  );
 
   return (
     <Dialog
@@ -1850,6 +1863,16 @@ export function ConversionDialog() {
           <div className="flex items-center justify-end gap-2">
             {cogConverting && (
               <Button type="button" variant="outline" onClick={() => cogAbortRef.current?.abort()}>
+                {t("common.cancel")}
+              </Button>
+            )}
+            {sidecarJobRunning && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void cancelSidecarJob()}
+                disabled={cancellingJob}
+              >
                 {t("common.cancel")}
               </Button>
             )}

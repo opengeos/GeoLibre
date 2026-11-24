@@ -203,7 +203,6 @@ export function remoteFileName(url: string, disposition: string | null): string 
     name = name
       .split(/[\\/]/)
       .at(-1)!
-      // eslint-disable-next-line no-control-regex
       .replace(/[\u0000-\u001f\u007f]/g, "")
       .trim()
       .slice(-255);

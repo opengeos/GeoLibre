@@ -542,6 +542,7 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
 
       {/* Resize grip (bottom-right); mouse/touch-only, so presentational. */}
       <div
+        // eslint-disable-next-line local/no-physical-tailwind -- the resize grip's drag math and cursor are physical (bottom-right).
         className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none"
         onPointerDown={handleResizeStart}
         role="presentation"

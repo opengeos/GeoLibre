@@ -3,6 +3,7 @@ import { beforeEach, describe, it } from "node:test";
 import { shallow } from "zustand/shallow";
 import {
   NO_LAYERS,
+  createLayerSliceSelector,
   selectLayerById,
   selectLayerIds,
   selectLayerSummaries,
@@ -117,5 +118,51 @@ describe("layer selectors", () => {
     const active = selectLayersWhen(true);
     assert.equal(active(useAppStore.getState()), useAppStore.getState().layers);
     assert.ok(Object.isFrozen(NO_LAYERS));
+  });
+
+  it("createLayerSliceSelector keeps slices stable across edits outside the picked fields", () => {
+    const [a, b] = addLayers();
+    let picks = 0;
+    const select = createLayerSliceSelector((layer) => {
+      picks += 1;
+      return layer.name === "Beta" ? null : { id: layer.id, geojson: layer.geojson };
+    });
+    const before = select(useAppStore.getState());
+    assert.equal(before.length, 1);
+    assert.equal(before[0].id, a);
+    assert.equal(picks, 2);
+
+    // Unchanged `layers`: the same array, and no layer is picked again.
+    assert.equal(select(useAppStore.getState()), before);
+    assert.equal(picks, 2);
+
+    // An opacity edit replaces the record but not the picked fields: only that
+    // layer is re-picked, and the slice keeps its identity.
+    useAppStore.getState().updateLayer(a, { opacity: 0.4 });
+    const afterOpacity = select(useAppStore.getState());
+    assert.equal(picks, 3);
+    assert.ok(shallow(before, afterOpacity));
+    assert.equal(afterOpacity[0], before[0]);
+
+    // A data edit changes a picked field, so the slice is replaced.
+    useAppStore.getState().updateLayer(a, { geojson: { ...pointCollection } });
+    const afterData = select(useAppStore.getState());
+    assert.ok(!shallow(afterOpacity, afterData));
+    assert.notEqual(afterData[0], afterOpacity[0]);
+
+    // Renaming the skipped layer so the predicate picks it adds a slice.
+    useAppStore.getState().updateLayer(b, { name: "Gamma" });
+    const afterRename = select(useAppStore.getState());
+    assert.deepEqual(
+      afterRename.map((slice) => slice.id),
+      [a, b],
+    );
+    assert.equal(afterRename[0], afterData[0]);
+
+    useAppStore.getState().removeLayer(a);
+    assert.deepEqual(
+      select(useAppStore.getState()).map((slice) => slice.id),
+      [b],
+    );
   });
 });

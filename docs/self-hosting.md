@@ -206,7 +206,7 @@ capabilities. If the final grant contains neither `processing:run` nor
 `data:add`, uvicorn is not started and all `/sidecar/` requests return that JSON
 403 response. `GEOLIBRE_DISABLE_SIDECAR=1` does the same regardless of the grant.
 
-When uvicorn runs, `/health`, `/algorithms`, `/shutdown`, `/run`, `/docs`,
+When uvicorn runs, `/health`, `/token-check`, `/shutdown`, `/docs`,
 `/redoc`, and `/openapi.json` remain unguarded by capability grants. This is a
 route-family policy, not per-method authorization. Guards use nginx's normalized
 URI, including duplicate-slash merging and percent-decoded prefixes.

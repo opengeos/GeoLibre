@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import importlib
-import json
-import sys
 import threading
 import time
 from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
+from worker_test_helpers import run_worker as _run_worker
 
 from geolibre_server.app.job_manager import JobManager
 from geolibre_server.app.runtime import JobState
@@ -195,12 +194,6 @@ def _write_test_dem(path: Path, data) -> Path:
     ) as dst:
         dst.write(arr.astype("float32"))
     return path
-
-
-def _run_worker(monkeypatch: pytest.MonkeyPatch, module_name: str, params: dict) -> None:
-    mod = importlib.import_module(f"geolibre_server.workers.{module_name}")
-    monkeypatch.setattr(sys, "argv", [module_name, json.dumps(params)])
-    mod.main()
 
 
 def test_raster_workers_in_process_terrain_and_masking(

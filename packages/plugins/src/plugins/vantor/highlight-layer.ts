@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type { Map, GeoJSONSource } from "maplibre-gl";
 import type { StacItem } from "./types";
 import { INTERNAL_LAYER_METADATA } from "./utils";
@@ -52,7 +53,7 @@ export class HighlightLayer {
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (!source || !item.geometry) return;
 
-    source.setData({
+    updateGeoJsonSourceData(source, {
       type: "FeatureCollection",
       features: [
         {
@@ -78,7 +79,7 @@ export class HighlightLayer {
   clear(): void {
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (source) {
-      source.setData(EMPTY_FC);
+      updateGeoJsonSourceData(source, EMPTY_FC);
     }
   }
 

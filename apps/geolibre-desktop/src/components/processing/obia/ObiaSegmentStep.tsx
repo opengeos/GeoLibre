@@ -1,4 +1,11 @@
-import { shouldZoomToNewLayers, useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import {
+  shouldZoomToNewLayers,
+  useAppStore,
+  useLayer,
+  useLayerSummaries,
+  type GeoLibreLayer,
+  type LayerSummary,
+} from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { fingerprintSegmentLabels } from "@geolibre/processing";
 import { Button, Label, Select } from "@geolibre/ui";
@@ -46,7 +53,7 @@ interface ObiaSegmentStepProps {
 }
 
 /** Raster layers the workbench can read in the browser (GeoTIFF/COG). */
-function isImageLayer(layer: GeoLibreLayer): boolean {
+function isImageLayer(layer: Pick<GeoLibreLayer, "type">): boolean {
   return layer.type === "raster" || layer.type === "cog";
 }
 
@@ -66,7 +73,6 @@ export function ObiaSegmentStep({
   onAddRaster,
 }: ObiaSegmentStepProps): ReactElement {
   const { t } = useTranslation();
-  const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
 
@@ -83,8 +89,14 @@ export function ObiaSegmentStep({
   const segmentation = useObiaSession((s) => s.segmentation);
   const setSegmentation = useObiaSession((s) => s.setSegmentation);
 
-  const imageLayers = useMemo(() => layers.filter(isImageLayer), [layers]);
-  const sourceLayer = imageLayers.find((layer) => layer.id === sourceLayerId) ?? null;
+  // The picker lists image layers by name; only the chosen one is read whole.
+  const layerSummaries = useLayerSummaries();
+  const imageLayers = useMemo<LayerSummary[]>(
+    () => layerSummaries.filter(isImageLayer),
+    [layerSummaries],
+  );
+  const candidateLayer = useLayer(sourceLayerId);
+  const sourceLayer = candidateLayer && isImageLayer(candidateLayer) ? candidateLayer : null;
 
   const [summary, setSummary] = useState<ObiaSourceInfo | null>(null);
   const [loadingImage, setLoadingImage] = useState(false);

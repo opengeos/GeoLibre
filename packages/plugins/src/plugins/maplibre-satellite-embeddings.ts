@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import type {
@@ -466,7 +467,7 @@ function setFootprints(map: MapLibreMap, rows: ResultRow[]): void {
     map.on("mouseenter", FOOTPRINT_FILL_LAYER_ID, handleFootprintEnter);
     map.on("mouseleave", FOOTPRINT_FILL_LAYER_ID, handleFootprintLeave);
   }
-  (map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource).setData({
+  updateGeoJsonSourceData(map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource, {
     type: "FeatureCollection",
     features,
   });
@@ -535,7 +536,7 @@ function setOutline(map: MapLibreMap, rings: [number, number][][]): void {
   // Layers added since (an AlphaEarth COG covering the whole footprint) would
   // otherwise hide the outline, so keep it on top.
   map.moveLayer(HOVER_LINE_LAYER_ID);
-  (map.getSource(HOVER_SOURCE_ID) as GeoJSONSource).setData({
+  updateGeoJsonSourceData(map.getSource(HOVER_SOURCE_ID) as GeoJSONSource, {
     type: "FeatureCollection",
     features: rings.map((ring) => polygonFeature(ring, {})),
   });
@@ -565,7 +566,10 @@ function setDrawBox(map: MapLibreMap, bbox: LonLatBbox | null): void {
     });
   }
   const features: Feature<Polygon>[] = bbox ? [polygonFeature(bboxRing(bbox), {})] : [];
-  (map.getSource(DRAW_SOURCE_ID) as GeoJSONSource).setData({ type: "FeatureCollection", features });
+  updateGeoJsonSourceData(map.getSource(DRAW_SOURCE_ID) as GeoJSONSource, {
+    type: "FeatureCollection",
+    features,
+  });
 }
 
 /** Removes the plugin-private overlays (hover outline, drawn box). */
