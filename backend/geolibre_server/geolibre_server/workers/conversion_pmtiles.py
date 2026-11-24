@@ -2,11 +2,11 @@
 
 
 def main() -> None:
+    """Convert the requested vector dataset using parent-owned scratch storage."""
     import json
     import os
     import shutil
     import sys
-    import tempfile
     import uuid
 
     import duckdb
@@ -27,6 +27,14 @@ def main() -> None:
     max_zoom = int(params.get("max_zoom", 14))
 
     def quote(value):
+        """Quote a value as a DuckDB string literal.
+
+        Args:
+            value: The value to escape.
+
+        Returns:
+            A single-quoted SQL literal.
+        """
         return "'" + str(value).replace("'", "''") + "'"
 
     con = duckdb.connect()
@@ -43,9 +51,10 @@ def main() -> None:
     else:
         relation = f"ST_Read({quote(input_path)})"
 
-    tmp_dir = tempfile.mkdtemp(prefix="geolibre-pmtiles-")
+    tmp_dir = params["scratch_dir"]
     tmp_parquet = os.path.join(tmp_dir, uuid.uuid4().hex + ".parquet")
-    # try/finally so the temp dir is removed even if tiling raises or is killed.
+    # The parent also removes this directory after the worker exits, including
+    # when cancellation or a timeout kills it before this finally can run.
     try:
         print(f"Preparing {input_path} for tiling")
         con.execute(f"COPY (SELECT * FROM {relation}) TO {quote(tmp_parquet)} (FORMAT PARQUET)")

@@ -401,7 +401,11 @@ function setFootprints(
   const source = map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource | undefined;
   if (!source) return;
   const features = tiles.map((tile) => tileFeature(tile, selectedIds.has(tile.id)));
-  void source.setData({ type: "FeatureCollection", features });
+  void Promise.resolve(source.setData({ type: "FeatureCollection", features })).catch(
+    (error: unknown) => {
+      console.warn("Failed to update map source", error);
+    },
+  );
   if (features.length > 0) syncFootprintStoreLayer(app, features);
   else unregisterFootprintStoreLayer(app);
 }
@@ -453,9 +457,13 @@ function setHoveredTile(app: GeoLibreAppAPI, tile: IgnLidarHdTile | null): void 
   ensureHoverLayer(map);
   const source = map.getSource(HOVER_SOURCE_ID) as GeoJSONSource | undefined;
   if (!source) return;
-  void source.setData(
-    tile ? { type: "FeatureCollection", features: [tileFeature(tile)] } : emptyCollection(),
-  );
+  void Promise.resolve(
+    source.setData(
+      tile ? { type: "FeatureCollection", features: [tileFeature(tile)] } : emptyCollection(),
+    ),
+  ).catch((error: unknown) => {
+    console.warn("Failed to update map source", error);
+  });
 }
 
 /** Removes the hover-highlight source/layers. */

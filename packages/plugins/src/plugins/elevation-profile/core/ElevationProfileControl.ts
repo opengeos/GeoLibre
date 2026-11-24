@@ -642,7 +642,10 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     if (!map) return;
     const lineSource = map.getSource(SOURCE_LINE) as GeoJSONSource | undefined;
     const vertexSource = map.getSource(SOURCE_VERTICES) as GeoJSONSource | undefined;
-    if (lineSource) void lineSource.setData(lineFeature(coords));
+    if (lineSource)
+      void Promise.resolve(lineSource.setData(lineFeature(coords))).catch((error: unknown) => {
+        console.warn("Failed to update map source", error);
+      });
     if (vertexSource) {
       // Dense imported routes such as GPX tracks can contain thousands of
       // vertices. Drawing a circle at every one obscures the line itself, so a
@@ -650,7 +653,11 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
       // hand-drawn lines remain small enough to show every editable vertex.
       const visibleVertices =
         !this._drawing && coords.length > 50 ? [coords[0], coords[coords.length - 1]] : coords;
-      void vertexSource.setData(pointCollection(visibleVertices));
+      void Promise.resolve(vertexSource.setData(pointCollection(visibleVertices))).catch(
+        (error: unknown) => {
+          console.warn("Failed to update map source", error);
+        },
+      );
     }
   }
 
@@ -675,7 +682,11 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     if (!map) return;
     const source = map.getSource(SOURCE_HOVER) as GeoJSONSource | undefined;
     if (!source) return;
-    void source.setData(coord ? pointFeature(coord) : emptyFeatureCollection());
+    void Promise.resolve(
+      source.setData(coord ? pointFeature(coord) : emptyFeatureCollection()),
+    ).catch((error: unknown) => {
+      console.warn("Failed to update map source", error);
+    });
   }
 
   private _fitToLine(coords: LngLat[]): void {

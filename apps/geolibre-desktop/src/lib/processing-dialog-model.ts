@@ -1,16 +1,16 @@
+import { fileOutputTargetExtension } from "@geolibre/processing/output-format";
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
-  fileOutputTargetExtension,
   normalizeVectorOutputFormat,
   type VectorOutputFormat,
   type WhiteboxJob,
   type WhiteboxLayerInput,
   type WhiteboxTool,
   type WhiteboxToolParameter,
-} from "@geolibre/processing";
+} from "@geolibre/processing/parameters";
 import type { FeatureCollection } from "geojson";
 import type { TFunction } from "i18next";
-import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "./global-dem";
+import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "./global-dem-id";
 import {
   LAYER_TOKEN_PREFIX,
   createDefaultValues,

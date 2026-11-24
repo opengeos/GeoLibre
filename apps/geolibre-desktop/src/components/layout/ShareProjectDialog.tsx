@@ -78,7 +78,7 @@ import {
   readinessCopyKeys,
   readinessInputFromState,
   readinessLabel,
-  readinessListKey,
+  readinessReactKey,
   remoteReadiness,
   revokeErrorMessage,
   ROLE_LABEL_KEYS,
@@ -146,7 +146,7 @@ function LocalDataWarning({
       <p className="text-xs text-muted-foreground">{t("share.localWarningBody", { shareHost })}</p>
       <ul className="max-h-40 space-y-1 overflow-y-auto">
         {problems.map((item) => (
-          <li key={readinessListKey(item)} className="space-y-0.5">
+          <li key={readinessReactKey(item)} className="space-y-0.5">
             <p className="truncate font-medium" title={item.url || undefined}>
               {readinessLabel(item, t)}
             </p>
@@ -902,7 +902,7 @@ export function ShareProjectDialog({
                       {remoteProblems.map((item) => {
                         const copy = readinessCopyKeys(item);
                         return (
-                          <li key={readinessListKey(item)} className="space-y-0.5">
+                          <li key={readinessReactKey(item)} className="space-y-0.5">
                             <p className="truncate font-medium" title={item.url || undefined}>
                               {readinessLabel(item, t)}
                             </p>

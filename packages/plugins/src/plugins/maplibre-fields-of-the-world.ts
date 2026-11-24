@@ -605,9 +605,13 @@ function setFootprints(map: MapLibreMap, results: ZoneResult[]): void {
     map.on("mouseenter", FOOTPRINT_FILL_LAYER_ID, handleFootprintEnter);
     map.on("mouseleave", FOOTPRINT_FILL_LAYER_ID, handleFootprintLeave);
   }
-  void (map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource).setData({
-    type: "FeatureCollection",
-    features,
+  void Promise.resolve(
+    (map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource).setData({
+      type: "FeatureCollection",
+      features,
+    }),
+  ).catch((error: unknown) => {
+    console.warn("Failed to update map source", error);
   });
   // Without host registration there is no store layer, and the store
   // subscription would read that as the user deleting the footprints.
@@ -673,9 +677,13 @@ function setOutline(map: MapLibreMap, boxes: LonLatBbox[]): void {
   }
   // Field layers added since would otherwise hide the outline.
   map.moveLayer(HOVER_LINE_LAYER_ID);
-  void (map.getSource(HOVER_SOURCE_ID) as GeoJSONSource).setData({
-    type: "FeatureCollection",
-    features: boxes.map((box) => polygonFeature(bboxRing(box), {})),
+  void Promise.resolve(
+    (map.getSource(HOVER_SOURCE_ID) as GeoJSONSource).setData({
+      type: "FeatureCollection",
+      features: boxes.map((box) => polygonFeature(bboxRing(box), {})),
+    }),
+  ).catch((error: unknown) => {
+    console.warn("Failed to update map source", error);
   });
 }
 
@@ -703,9 +711,13 @@ function setDrawBox(map: MapLibreMap, bbox: LonLatBbox | null): void {
     });
   }
   const features: Feature<Polygon>[] = bbox ? [polygonFeature(bboxRing(bbox), {})] : [];
-  void (map.getSource(DRAW_SOURCE_ID) as GeoJSONSource).setData({
-    type: "FeatureCollection",
-    features,
+  void Promise.resolve(
+    (map.getSource(DRAW_SOURCE_ID) as GeoJSONSource).setData({
+      type: "FeatureCollection",
+      features,
+    }),
+  ).catch((error: unknown) => {
+    console.warn("Failed to update map source", error);
   });
 }
 

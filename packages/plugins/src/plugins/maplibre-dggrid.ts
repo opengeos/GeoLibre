@@ -896,7 +896,11 @@ function refresh(): void {
       error instanceof RangeError ? labels.tooManyCells(DGGRID_VIEWPORT_CELL_LIMIT) : String(error);
   }
   applyStyle();
-  void (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
+  void Promise.resolve(
+    (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid),
+  ).catch((error: unknown) => {
+    console.warn("Failed to update map source", error);
+  });
   updateSelectedSource();
   // Pan/zoom only updates the status line (and auto-resolution readout) —
   // rebuilding the whole panel would destroy open color pickers / focused inputs.
@@ -953,29 +957,41 @@ function parentCells(cell: string): string[] {
 function updateSelectedSource(): void {
   if (!dggs) return;
   const source = map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
-  void source?.setData({
-    type: "FeatureCollection",
-    features: selectedCell ? [dggridCellFeature(dggs, selectedCell, selectedResolution)] : [],
+  void Promise.resolve(
+    source?.setData({
+      type: "FeatureCollection",
+      features: selectedCell ? [dggridCellFeature(dggs, selectedCell, selectedResolution)] : [],
+    }),
+  ).catch((error: unknown) => {
+    console.warn("Failed to update map source", error);
   });
   const neighborsSource = map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined;
-  void neighborsSource?.setData({
-    type: "FeatureCollection",
-    features:
-      settings.includeNeighbors && selectedCell
-        ? neighborCells(selectedCell).map((cell) =>
-            dggridCellFeature(dggs!, cell, selectedResolution),
-          )
-        : [],
+  void Promise.resolve(
+    neighborsSource?.setData({
+      type: "FeatureCollection",
+      features:
+        settings.includeNeighbors && selectedCell
+          ? neighborCells(selectedCell).map((cell) =>
+              dggridCellFeature(dggs!, cell, selectedResolution),
+            )
+          : [],
+    }),
+  ).catch((error: unknown) => {
+    console.warn("Failed to update map source", error);
   });
   const parentsSource = map?.getSource(PARENTS_SOURCE_ID) as GeoJSONSource | undefined;
-  void parentsSource?.setData({
-    type: "FeatureCollection",
-    features:
-      settings.includeParents && selectedCell
-        ? parentCells(selectedCell).map((cell) =>
-            dggridCellFeature(dggs!, cell, selectedResolution - 1),
-          )
-        : [],
+  void Promise.resolve(
+    parentsSource?.setData({
+      type: "FeatureCollection",
+      features:
+        settings.includeParents && selectedCell
+          ? parentCells(selectedCell).map((cell) =>
+              dggridCellFeature(dggs!, cell, selectedResolution - 1),
+            )
+          : [],
+    }),
+  ).catch((error: unknown) => {
+    console.warn("Failed to update map source", error);
   });
 }
 

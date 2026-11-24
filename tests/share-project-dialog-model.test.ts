@@ -20,8 +20,8 @@ import {
   readinessCopyKeys,
   readinessInputFromState,
   readinessLabel,
-  readinessListKey,
-  readinessRowKey,
+  readinessReactKey,
+  readinessIdentity,
   remoteReadiness,
   revokeErrorMessage,
   ROLE_LABEL_KEYS,
@@ -173,17 +173,17 @@ describe("readinessCopyKeys", () => {
 
 describe("readiness row keys", () => {
   it("keys a layer row by layer id and a project row by field plus URL", () => {
-    assert.equal(readinessRowKey(item()), "layer-1");
+    assert.equal(readinessIdentity(item()), "layer-1");
     assert.equal(
-      readinessRowKey(item({ layerId: null, field: "basemapStyleUrl", url: "https://s" })),
+      readinessIdentity(item({ layerId: null, field: "basemapStyleUrl", url: "https://s" })),
       "basemapStyleUrl:https://s",
     );
   });
 
   it("builds list keys that include the URL for layer rows too", () => {
-    assert.equal(readinessListKey(item()), "layer-1:https://example.com/roads.pmtiles");
+    assert.equal(readinessReactKey(item()), "layer-1:https://example.com/roads.pmtiles");
     assert.equal(
-      readinessListKey(item({ layerId: null, field: "basemapStyleUrl", url: "https://s" })),
+      readinessReactKey(item({ layerId: null, field: "basemapStyleUrl", url: "https://s" })),
       "basemapStyleUrl:https://s",
     );
   });

@@ -21,8 +21,7 @@ const noop = () => {};
 
 /** Render the Layers panel with the same shell-owned refresh hook. */
 function LayerPanelHarness() {
-  const layers = useAppStore((state) => state.layers);
-  const refresh = useLayerRefresh({ layers, isCollapsed: false });
+  const refresh = useLayerRefresh({ isCollapsed: false });
   return createElement(LayerPanel, {
     themeMode: "light",
     mapControllerRef: { current: null },

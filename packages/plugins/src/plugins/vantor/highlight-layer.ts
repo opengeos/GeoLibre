@@ -52,15 +52,19 @@ export class HighlightLayer {
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (!source || !item.geometry) return;
 
-    void source.setData({
-      type: "FeatureCollection",
-      features: [
-        {
-          type: "Feature",
-          geometry: item.geometry,
-          properties: { id: item.id },
-        },
-      ],
+    void Promise.resolve(
+      source.setData({
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: item.geometry,
+            properties: { id: item.id },
+          },
+        ],
+      }),
+    ).catch((error: unknown) => {
+      console.warn("Failed to update map source", error);
     });
 
     // Fly to the footprint
@@ -78,7 +82,9 @@ export class HighlightLayer {
   clear(): void {
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (source) {
-      void source.setData(EMPTY_FC);
+      void Promise.resolve(source.setData(EMPTY_FC)).catch((error: unknown) => {
+        console.warn("Failed to update map source", error);
+      });
     }
   }
 

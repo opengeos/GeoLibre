@@ -15,11 +15,15 @@
  *   layer, for components that only list layers.
  * - {@link useLayersWhen} — the full array, but only while `active` (a dialog
  *   is open, a search has a query); a constant empty array otherwise.
+ * - {@link useLayerSlices} — a caller-defined slice per matching layer, built
+ *   by a selector from {@link createLayerSliceSelector}, for components that
+ *   need a few more fields than a summary (a layer's features, a source URL).
  *
  * The plain `select*` functions are exported so the selection semantics can be
  * tested without React.
  */
 import { useShallow } from "zustand/react/shallow";
+import { shallow } from "zustand/shallow";
 import { type AppState, useAppStore } from "./store";
 import type { GeoLibreLayer, LayerType } from "./types";
 
@@ -194,4 +198,69 @@ export function useLayerSummaries(): LayerSummary[] {
  */
 export function useLayersWhen(active: boolean): GeoLibreLayer[] {
   return useAppStore(selectLayersWhen(active));
+}
+
+/**
+ * Build a selector that projects each layer onto a small, caller-defined slice.
+ *
+ * `pick` returns the fields a component reads from one layer (for example
+ * `{ id, name, geojson }`), or `null`/`undefined` to leave the layer out. Each
+ * slice keeps its identity while it stays shallow-equal to the previous one,
+ * and `pick` runs again only for a layer whose record changed, so the returned
+ * array is shallow-equal to the previous one after any edit that touches none
+ * of the picked fields. While `layers` itself is unchanged (a camera move, a
+ * dialog flag) the previous array is returned as is.
+ *
+ * Create the selector once per component mount with `useMemo`, and subscribe with
+ * {@link useLayerSlices}. Like {@link selectLayerSummaries}, its cache is shared
+ * by every subscriber of that selector and re-checked against the current
+ * layers, so sharing can cause a cache miss but never a stale slice. Do not
+ * retain selectors at module scope: their caches keep full layer data alive.
+ *
+ * @param pick - Projects one layer onto its slice, or skips it.
+ * @returns A selector returning one slice per picked layer, in store order.
+ */
+export function createLayerSliceSelector<T extends object>(
+  pick: (layer: GeoLibreLayer) => T | null | undefined,
+): (state: Pick<AppState, "layers">) => T[] {
+  let lastLayers: readonly GeoLibreLayer[] | undefined;
+  let lastResult: T[] = [];
+  let cache = new Map<string, { layer: GeoLibreLayer; slice: T | null }>();
+  return (state) => {
+    if (state.layers === lastLayers) return lastResult;
+    const next = new Map<string, { layer: GeoLibreLayer; slice: T | null }>();
+    const result: T[] = [];
+    for (const layer of state.layers) {
+      const previous = cache.get(layer.id);
+      let slice: T | null;
+      if (previous && previous.layer === layer) {
+        slice = previous.slice;
+      } else {
+        const picked = pick(layer) ?? null;
+        slice =
+          picked && previous?.slice && shallow(previous.slice, picked) ? previous.slice : picked;
+      }
+      next.set(layer.id, { layer, slice });
+      if (slice) result.push(slice);
+    }
+    cache = next;
+    lastLayers = state.layers;
+    lastResult = result;
+    return result;
+  };
+}
+
+/**
+ * Subscribe to the slices a {@link createLayerSliceSelector} selector builds.
+ *
+ * Re-renders only when a picked layer is added, removed or reordered, or one of
+ * its picked fields changes.
+ *
+ * @param selector - A selector made once by {@link createLayerSliceSelector}.
+ * @returns One slice per picked layer, in store order (bottom to top).
+ */
+export function useLayerSlices<T extends object>(
+  selector: (state: Pick<AppState, "layers">) => T[],
+): T[] {
+  return useAppStore(useShallow(selector));
 }

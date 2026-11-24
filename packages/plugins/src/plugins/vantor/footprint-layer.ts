@@ -22,7 +22,11 @@ export class FootprintLayer {
     const fc = itemsToFeatureCollection(items);
 
     if (this.map.getSource(SOURCE_ID)) {
-      void (this.map.getSource(SOURCE_ID) as GeoJSONSource).setData(fc);
+      void Promise.resolve((this.map.getSource(SOURCE_ID) as GeoJSONSource).setData(fc)).catch(
+        (error: unknown) => {
+          console.warn("Failed to update map source", error);
+        },
+      );
     } else {
       this.map.addSource(SOURCE_ID, {
         type: "geojson",

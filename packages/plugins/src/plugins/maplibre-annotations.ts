@@ -1927,7 +1927,9 @@ function setPreview(map: maplibregl.Map, data: FeatureCollection): void {
     // The preview paint is data-driven (below), so the regenerated features —
     // which carry the current color/width — update the appearance on their own;
     // no per-property repaint is needed when color/width changes mid-draw.
-    void existing.setData(data);
+    void Promise.resolve(existing.setData(data)).catch((error: unknown) => {
+      console.warn("Failed to update map source", error);
+    });
     return;
   }
   map.addSource(PREVIEW_SOURCE_ID, { type: "geojson", data });

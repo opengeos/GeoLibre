@@ -471,7 +471,9 @@ function rememberGeoJsonData(map: maplibregl.Map, sourceId: string, data: GeoJSO
 
 function setGeoJsonData(source: maplibregl.GeoJSONSource, data: GeoJSON): void {
   if (geoJsonSourceData.get(source) === data) return;
-  void source.setData(data);
+  void Promise.resolve(source.setData(data)).catch((error: unknown) => {
+    console.warn("Failed to update map source", error);
+  });
   geoJsonSourceData.set(source, data);
 }
 

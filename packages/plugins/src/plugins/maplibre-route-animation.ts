@@ -527,8 +527,14 @@ class RouteAnimationEngine {
     // placeholder feature (e.g. the initial [0, 0] point) never lingers on the
     // map before a layer is picked or after the selected layer is removed.
     if (this.totalMeters <= 0) {
-      void markerSource?.setData({ type: "FeatureCollection", features: [] });
-      void trailSource?.setData(emptyLine());
+      void Promise.resolve(
+        markerSource?.setData({ type: "FeatureCollection", features: [] }),
+      ).catch((error: unknown) => {
+        console.warn("Failed to update map source", error);
+      });
+      void Promise.resolve(trailSource?.setData(emptyLine())).catch((error: unknown) => {
+        console.warn("Failed to update map source", error);
+      });
       this.clearDeck();
       return;
     }
@@ -542,17 +548,34 @@ class RouteAnimationEngine {
     // they ride the visualized 3D line rather than its flat ground projection
     // (#1210). The 2D MapLibre marker/trail are cleared so nothing double-draws.
     if (this.render3d(distance, point)) {
-      void markerSource?.setData({ type: "FeatureCollection", features: [] });
-      void trailSource?.setData(emptyLine());
+      void Promise.resolve(
+        markerSource?.setData({ type: "FeatureCollection", features: [] }),
+      ).catch((error: unknown) => {
+        console.warn("Failed to update map source", error);
+      });
+      void Promise.resolve(trailSource?.setData(emptyLine())).catch((error: unknown) => {
+        console.warn("Failed to update map source", error);
+      });
     } else {
       this.clearDeck();
-      if (markerSource) void markerSource.setData(markerFeature(coord, bearing));
-      if (this.settings.showTrail) {
-        void trailSource?.setData(
-          lineFeature(sliceLineAtDistance(this.coords, this.cumulative, distance)),
+      if (markerSource)
+        void Promise.resolve(markerSource.setData(markerFeature(coord, bearing))).catch(
+          (error: unknown) => {
+            console.warn("Failed to update map source", error);
+          },
         );
+      if (this.settings.showTrail) {
+        void Promise.resolve(
+          trailSource?.setData(
+            lineFeature(sliceLineAtDistance(this.coords, this.cumulative, distance)),
+          ),
+        ).catch((error: unknown) => {
+          console.warn("Failed to update map source", error);
+        });
       } else {
-        void trailSource?.setData(emptyLine());
+        void Promise.resolve(trailSource?.setData(emptyLine())).catch((error: unknown) => {
+          console.warn("Failed to update map source", error);
+        });
       }
     }
 

@@ -7,7 +7,7 @@
  * (Save copies to folder on desktop, or Export layers as GeoJSON ZIP).
  */
 
-import { useAppCapability, useAppStore } from "@geolibre/core";
+import { useAppCapability, useAppStore, useLayersWhen } from "@geolibre/core";
 import { getGeometryEditTargetLayerId, subscribeGeometryEdit } from "@geolibre/plugins";
 import {
   Button,
@@ -82,7 +82,9 @@ export function SaveLayerEditsDialog({
   candidatesOverride,
 }: SaveLayerEditsDialogProps) {
   const { t } = useTranslation();
-  const layers = useAppStore((s) => s.layers);
+  // The candidate rows are listed only while the dialog is open; closed, it
+  // ignores layer edits.
+  const layers = useLayersWhen(open);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const collaboration = useAppStore((s) => s.collaboration);
   const attributeTableDrafts = useAppStore((s) => s.ui.attributeTableDrafts);

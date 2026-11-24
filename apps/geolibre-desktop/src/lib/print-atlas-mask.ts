@@ -52,7 +52,10 @@ export function showAtlasFeatureMask(
     return false;
   }
   const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
-  if (source) void source.setData(mask);
+  if (source)
+    void Promise.resolve(source.setData(mask)).catch((error: unknown) => {
+      console.warn("Failed to update map source", error);
+    });
   else map.addSource(SOURCE_ID, { type: "geojson", data: mask });
   const fillLayer = map.getLayer(FILL_LAYER_ID);
   const targetLayerId =

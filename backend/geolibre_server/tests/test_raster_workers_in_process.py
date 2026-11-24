@@ -204,8 +204,8 @@ def test_interpolate_kriging_is_exact_at_samples(
     capsys: pytest.CaptureFixture[str],
     model: str,
 ) -> None:
-    # A 4 x 4 lattice of samples, each on an output cell centre, with z = x + y.
-    feats = [_point(x, y, z=x + y) for x in (5, 15, 25, 35) for y in (5, 15, 25, 35)]
+    # Boundary points put the interior samples on output cell centres.
+    feats = [_point(x, y, z=x + y) for x in (0, 5, 15, 25, 35, 40) for y in (0, 5, 15, 25, 35, 40)]
     points = _write_geojson(
         tmp_path / "pts.geojson", {"type": "FeatureCollection", "features": feats}
     )
@@ -229,9 +229,10 @@ def test_interpolate_kriging_is_exact_at_samples(
         assert ds.crs.to_epsg() == 4326
         arr = ds.read(1)
         transform = ds.transform
-    # Ordinary kriging honours the samples, so the cell holding (15, 25) is exact.
-    row, col = rasterio.transform.rowcol(transform, 15, 25)
-    assert arr[row, col] == pytest.approx(40.0, abs=1e-3)
+    for x, y in ((5, 15), (15, 25), (25, 5), (35, 25)):
+        row, col = rasterio.transform.rowcol(transform, x, y)
+        assert rasterio.transform.xy(transform, row, col) == (x, y)
+        assert arr[row, col] == pytest.approx(x + y, abs=1e-3)
     assert np.isfinite(arr).all()
 
 

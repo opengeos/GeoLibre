@@ -55,20 +55,8 @@ function selectableProviders(current: AssistantProviderId): AssistantProviderId[
   );
 }
 
-// ── Locally-defined types to avoid circular import with SettingsDialog ──
-
-export interface DraftDesktopSettings {
-  layout: unknown;
-  shareToken: string;
-  cesiumIonToken: string;
-  aiProfiles: AssistantProfile[];
-  defaultAiProfileId: string | null;
-  uiProfile: unknown;
-  updates: unknown;
-}
-
 interface AiSectionContentProps {
-  draftDesktopSettings: DraftDesktopSettings;
+  draftDesktopSettings: SettingsDraft;
   /** The draft project Environment variables (enabled rows only). */
   draftEnv: Record<string, string>;
   setDraftDesktopSettings: React.Dispatch<React.SetStateAction<SettingsDraft>>;

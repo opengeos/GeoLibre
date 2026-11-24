@@ -24,6 +24,7 @@ import {
   sanitizeCursor,
   sanitizeView,
   setParticipantOverride,
+  timingSafeEqual,
   toWireParticipant,
   validateComment,
   validateReply,
@@ -33,6 +34,7 @@ import {
   type CollaborationMode,
   type PresenceEntry,
   type ServerMessage,
+  type SessionLogEntry,
   type SessionParticipant,
 } from "@geolibre/collab-core";
 import { WebSocket, WebSocketServer } from "ws";
@@ -120,14 +122,37 @@ function send(peer: Peer, message: ServerMessage): void {
   sendRaw(peer, JSON.stringify(message));
 }
 
-function json(response: import("node:http").ServerResponse, status: number, body: unknown): void {
+/** CORS headers for every HTTP response; matches the Worker's `CORS_HEADERS`. */
+const CORS_HEADERS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+  "access-control-allow-headers": "Content-Type, Authorization",
+  "access-control-max-age": "86400",
+} as const;
+
+function json(
+  response: import("node:http").ServerResponse,
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = {},
+): void {
   response.writeHead(status, {
     "content-type": "application/json",
-    "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET, POST, OPTIONS",
-    "access-control-allow-headers": "Content-Type",
+    ...CORS_HEADERS,
+    ...headers,
   });
   response.end(JSON.stringify(body));
+}
+
+/**
+ * Read the bearer token from an `Authorization` header.
+ *
+ * @param header - The raw header value, if any.
+ * @returns The trimmed token, or `""` when the header is missing or not a
+ *   bearer credential.
+ */
+function bearerToken(header: string | undefined): string {
+  return header?.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";
 }
 
 export function createRelay(options: RelayOptions = {}): {
@@ -234,9 +259,29 @@ export function createRelay(options: RelayOptions = {}): {
     );
   }
 
+  /**
+   * Record an event in the host-only session log, as the Worker does.
+   *
+   * Best-effort: a persistence failure must not abort the caller, which still
+   * has to broadcast or tear down the peer after logging.
+   *
+   * @param id - The session code.
+   * @param entry - The event to record.
+   */
+  function appendLog(id: string, entry: SessionLogEntry): void {
+    try {
+      store.appendSessionLog(id, entry);
+    } catch {
+      // The state change the entry describes has already been applied.
+    }
+  }
+
   function closePeer(id: string, session: LiveSession, peer: Peer): void {
     if (!session.peers.delete(peer)) return;
-    if (peer.participant) session.presence.delete(peer.participant.clientId);
+    if (peer.participant) {
+      session.presence.delete(peer.participant.clientId);
+      appendLog(id, { type: "leave", ts: Date.now(), clientId: peer.participant.clientId });
+    }
     broadcastParticipants(session);
     if (session.peers.size === 0) {
       session.cleanup = setTimeout(() => {
@@ -318,6 +363,12 @@ export function createRelay(options: RelayOptions = {}): {
 
       peer.participant = joined.participant;
       const { role } = joined;
+      appendLog(id, {
+        type: "join",
+        ts: Date.now(),
+        clientId: peer.participant.clientId,
+        identity: joined.identity,
+      });
       const welcomeInvites = role === "host" ? store.getInvites(id) : undefined;
 
       send(peer, {
@@ -379,6 +430,12 @@ export function createRelay(options: RelayOptions = {}): {
       const nextRev = (persisted.rev ?? 0) + 1;
       store.saveSnapshot(id, project, nextRev);
       persisted.rev = nextRev;
+      appendLog(id, {
+        type: "snapshot",
+        ts: Date.now(),
+        rev: nextRev,
+        origin: participant.clientId,
+      });
       broadcast(
         session,
         { type: "snapshot", project, origin: participant.clientId, rev: nextRev },
@@ -397,6 +454,7 @@ export function createRelay(options: RelayOptions = {}): {
       }
       const mode = normalizeMode(message.mode);
       store.saveMode(id, mode);
+      appendLog(id, { type: "set-mode", ts: Date.now(), mode });
       const list = participants(session);
       if (clearParticipantOverrides(list)) broadcastParticipants(session);
       // Also clear persisted durable overrides so disconnected participants
@@ -427,6 +485,13 @@ export function createRelay(options: RelayOptions = {}): {
         if (targetPeer?.participant) {
           const targetKey = getParticipantKey(targetPeer.participant);
           store.saveDurableOverride(id, targetKey, targetPeer.participant.editOverride);
+          appendLog(id, {
+            type: "set-participant-mode",
+            ts: Date.now(),
+            clientId: message.clientId,
+            // The normalized value actually applied, not the raw client input.
+            canEdit: targetPeer.participant.editOverride === true,
+          });
         }
         broadcastParticipants(session);
       }
@@ -830,6 +895,27 @@ export function createRelay(options: RelayOptions = {}): {
         });
       });
       return;
+    }
+    // Host-only session log: GET downloads it, DELETE clears it (the session
+    // and its snapshot are untouched). The host token is a bearer credential, so
+    // it travels in the Authorization header rather than the query string. An
+    // unknown session answers 403 like a wrong token, as on the Worker, so the
+    // endpoint does not reveal which session codes exist.
+    const logMatch = url.pathname.match(/^\/sessions\/([^/]+)\/log$/);
+    if (logMatch && (request.method === "GET" || request.method === "DELETE")) {
+      const sessionId = logMatch[1];
+      const hostToken = store.getHostToken(sessionId) ?? "";
+      const clientToken = bearerToken(request.headers.authorization);
+      if (!hostToken || !clientToken || !timingSafeEqual(hostToken, clientToken)) {
+        return json(response, 403, { error: "Forbidden" });
+      }
+      if (request.method === "DELETE") {
+        store.clearSessionLog(sessionId);
+        response.writeHead(204, CORS_HEADERS);
+        response.end();
+        return;
+      }
+      return json(response, 200, store.getSessionLog(sessionId), { "cache-control": "no-store" });
     }
     json(response, 404, { error: "Not found" });
   });

@@ -820,6 +820,10 @@ def test_vector_layers_lists_gpkg_zip_and_gdb(
 ) -> None:
     src = _points_geojson(tmp_path / "pts.geojson")
     con = _connect(duckdb_spatial)
+    if "geometry_always_xy" in {
+        row[0] for row in con.execute("SELECT name FROM duckdb_settings()").fetchall()
+    }:
+        con.execute("SET geometry_always_xy = true")
     gpkg = tmp_path / "pts.gpkg"
     con.execute(
         # Only real fields: GDAL's GeoPackage writer rejects ST_Read's OGC_FID column.
@@ -881,24 +885,39 @@ def test_pmtiles_prepares_parquet_for_freestiler(
     )
     src = _points_geojson(tmp_path / "pts.geojson")
     out = tmp_path / "pts.pmtiles"
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
     _run_worker(
         monkeypatch,
         "conversion_pmtiles",
-        {"input_path": str(src), "output_path": str(out), "min_zoom": 2, "max_zoom": 9},
+        {
+            "input_path": str(src),
+            "output_path": str(out),
+            "min_zoom": 2,
+            "max_zoom": 9,
+            "scratch_dir": str(scratch),
+        },
     )
     assert _result(capsys) == {"output_path": str(out), "layer_name": "data"}
     assert calls == [(3, {"layer_name": "data", "min_zoom": 2, "max_zoom": 9, "quiet": True})]
     assert out.read_bytes() == b"PMTiles"
+    assert not scratch.exists()
 
     # A GeoParquet input is read directly, under a custom layer name.
     parquet = tmp_path / "pts.parquet"
     _connect(duckdb_spatial).execute(
         f"COPY (SELECT * FROM ST_Read('{src}')) TO '{parquet}' (FORMAT PARQUET)"
     )
+    scratch.mkdir()
     _run_worker(
         monkeypatch,
         "conversion_pmtiles",
-        {"input_path": str(parquet), "output_path": str(out), "layer_name": "cities"},
+        {
+            "input_path": str(parquet),
+            "output_path": str(out),
+            "layer_name": "cities",
+            "scratch_dir": str(scratch),
+        },
     )
     assert _result(capsys)["layer_name"] == "cities"
     assert calls[-1][1]["layer_name"] == "cities"

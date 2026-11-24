@@ -1164,7 +1164,9 @@ function handleMouseMove(event: maplibregl.MapMouseEvent): void {
 function setPreview(map: maplibregl.Map, data: FeatureCollection): void {
   const existing = map.getSource(PREVIEW_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
   if (existing) {
-    void existing.setData(data);
+    void Promise.resolve(existing.setData(data)).catch((error: unknown) => {
+      console.warn("Failed to update map source", error);
+    });
     return;
   }
   map.addSource(PREVIEW_SOURCE_ID, { type: "geojson", data });

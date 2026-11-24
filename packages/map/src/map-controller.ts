@@ -2472,7 +2472,11 @@ export class MapController implements MapEngine {
 
     const source = map.getSource(highlightSourceId());
     if (source) {
-      void (source as maplibregl.GeoJSONSource).setData(featureCollection);
+      void Promise.resolve((source as maplibregl.GeoJSONSource).setData(featureCollection)).catch(
+        (error: unknown) => {
+          console.warn("Failed to update map source", error);
+        },
+      );
     } else {
       map.addSource(highlightSourceId(), {
         type: "geojson",

@@ -1102,10 +1102,16 @@ function refreshGeometry(): void {
   if (!whenStyleReady(activeMap)) return;
   ensureLayers(activeMap);
   const geometry = buildGeometry(activeMap);
-  void (activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(geometry.lines);
-  void (activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
-    geometry.labels,
-  );
+  void Promise.resolve(
+    (activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(geometry.lines),
+  ).catch((error: unknown) => {
+    console.warn("Failed to update map source", error);
+  });
+  void Promise.resolve(
+    (activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined)?.setData(geometry.labels),
+  ).catch((error: unknown) => {
+    console.warn("Failed to update map source", error);
+  });
 }
 
 /**
@@ -1140,12 +1146,18 @@ function redrawWhenStyleSwaps(activeMap: MapLibreMap): void {
       if (activeMap.getLayer(LINE_LAYER_ID) && activeMap.getLayer(LABEL_LAYER_ID)) return;
       ensureLayers(activeMap);
       const geometry = buildGeometry(activeMap);
-      void (activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
-        geometry.lines,
-      );
-      void (activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
-        geometry.labels,
-      );
+      void Promise.resolve(
+        (activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(geometry.lines),
+      ).catch((error: unknown) => {
+        console.warn("Failed to update map source", error);
+      });
+      void Promise.resolve(
+        (activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
+          geometry.labels,
+        ),
+      ).catch((error: unknown) => {
+        console.warn("Failed to update map source", error);
+      });
       applyStyleProps(activeMap);
     } catch {
       // The style is still loading; the next styledata (or idle) retries.

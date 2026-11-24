@@ -531,7 +531,11 @@ function setFootprints(map: MapLibreMap, images: OamImage[]): void {
       footprintById.set(image.id, feature);
     }
   }
-  void source.setData({ type: "FeatureCollection", features });
+  void Promise.resolve(source.setData({ type: "FeatureCollection", features })).catch(
+    (error: unknown) => {
+      console.warn("Failed to update map source", error);
+    },
+  );
   if (features.length > 0) syncFootprintStoreLayer(features);
   else unregisterFootprintLayer();
 }
@@ -541,9 +545,13 @@ function setSelectedFootprint(map: MapLibreMap, id: string | null): void {
   const source = map.getSource(SELECT_SOURCE_ID) as GeoJSONSource | undefined;
   if (!source) return;
   const feature = id ? footprintById.get(id) : undefined;
-  void source.setData(
-    feature ? { type: "FeatureCollection", features: [feature] } : emptyCollection(),
-  );
+  void Promise.resolve(
+    source.setData(
+      feature ? { type: "FeatureCollection", features: [feature] } : emptyCollection(),
+    ),
+  ).catch((error: unknown) => {
+    console.warn("Failed to update map source", error);
+  });
 }
 
 /**
@@ -629,7 +637,9 @@ function ensureDrawLayers(map: MapLibreMap): void {
 function setDrawBox(map: MapLibreMap, bbox: [number, number, number, number] | null): void {
   ensureDrawLayers(map);
   const source = map.getSource(DRAW_SOURCE_ID) as GeoJSONSource | undefined;
-  void source?.setData(boxCollection(bbox));
+  void Promise.resolve(source?.setData(boxCollection(bbox))).catch((error: unknown) => {
+    console.warn("Failed to update map source", error);
+  });
 }
 
 /** Removes the drawn-box overlay. */

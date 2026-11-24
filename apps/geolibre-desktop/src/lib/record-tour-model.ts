@@ -219,7 +219,7 @@ export function computePanelResize(
   // that is what keeps the left edge from crossing x = 0 when `pos.x` is set to
   // `right - width`.
   const maxWidthBeforeEdge = base.left + base.width;
-  const width = Math.max(MIN_PANEL_WIDTH, Math.min(base.width + dx, maxWidthBeforeEdge));
+  const width = Math.max(MIN_PANEL_WIDTH, Math.min(base.width - dx, maxWidthBeforeEdge));
   return { pos: { x: maxWidthBeforeEdge - width, y: base.top }, size: { width, height } };
 }
 
@@ -227,12 +227,12 @@ export function computePanelResize(
  * Maps an arrow key on a resize handle to the edge movement it stands for.
  * Left/Right grow the side the handle is on; Up/Down adjust the bottom edge.
  *
- * @param corner The corner the focused handle sits on.
+ * @param _corner The corner the focused handle sits on.
  * @param key The `KeyboardEvent.key` value.
  * @returns The `dx`/`dy` to resize by, or null for keys that do not resize.
  */
 export function resizeKeyDelta(
-  corner: ResizeCorner,
+  _corner: ResizeCorner,
   key: string,
 ): { dx: number; dy: number } | null {
   switch (key) {
@@ -242,9 +242,9 @@ export function resizeKeyDelta(
       return { dx: 0, dy: -RESIZE_KEY_STEP };
     case "ArrowLeft":
       // For the left handle, pressing Left extends the panel leftward.
-      return { dx: corner === "sw" ? RESIZE_KEY_STEP : -RESIZE_KEY_STEP, dy: 0 };
+      return { dx: -RESIZE_KEY_STEP, dy: 0 };
     case "ArrowRight":
-      return { dx: corner === "sw" ? -RESIZE_KEY_STEP : RESIZE_KEY_STEP, dy: 0 };
+      return { dx: RESIZE_KEY_STEP, dy: 0 };
     default:
       return null;
   }

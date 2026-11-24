@@ -140,13 +140,13 @@ describe("record tour model: panel geometry", () => {
 
   it("sw resize keeps the right edge fixed and stops at x = 0", () => {
     const grown = computePanelResize("sw", base, 50, 0, VIEWPORT);
-    assert.deepEqual(grown, { pos: { x: 150, y: 100 }, size: { width: 450, height: 400 } });
+    assert.deepEqual(grown, { pos: { x: 250, y: 100 }, size: { width: 350, height: 400 } });
     // Right edge stays at left + width = 600.
     assert.equal(grown.pos.x + grown.size.width, 600);
-    const maxed = computePanelResize("sw", base, 5000, 0, VIEWPORT);
+    const maxed = computePanelResize("sw", base, -5000, 0, VIEWPORT);
     assert.deepEqual(maxed.pos, { x: 0, y: 100 });
     assert.equal(maxed.size.width, 600);
-    const shrunk = computePanelResize("sw", base, -5000, 0, VIEWPORT);
+    const shrunk = computePanelResize("sw", base, 5000, 0, VIEWPORT);
     assert.equal(shrunk.size.width, MIN_PANEL_WIDTH);
     assert.equal(shrunk.pos.x, 600 - MIN_PANEL_WIDTH);
   });
@@ -154,9 +154,9 @@ describe("record tour model: panel geometry", () => {
   it("resizeKeyDelta maps arrows per corner and ignores other keys", () => {
     assert.deepEqual(resizeKeyDelta("se", "ArrowDown"), { dx: 0, dy: RESIZE_KEY_STEP });
     assert.deepEqual(resizeKeyDelta("sw", "ArrowUp"), { dx: 0, dy: -RESIZE_KEY_STEP });
-    assert.deepEqual(resizeKeyDelta("sw", "ArrowLeft"), { dx: RESIZE_KEY_STEP, dy: 0 });
+    assert.deepEqual(resizeKeyDelta("sw", "ArrowLeft"), { dx: -RESIZE_KEY_STEP, dy: 0 });
     assert.deepEqual(resizeKeyDelta("se", "ArrowLeft"), { dx: -RESIZE_KEY_STEP, dy: 0 });
-    assert.deepEqual(resizeKeyDelta("sw", "ArrowRight"), { dx: -RESIZE_KEY_STEP, dy: 0 });
+    assert.deepEqual(resizeKeyDelta("sw", "ArrowRight"), { dx: RESIZE_KEY_STEP, dy: 0 });
     assert.deepEqual(resizeKeyDelta("se", "ArrowRight"), { dx: RESIZE_KEY_STEP, dy: 0 });
     assert.equal(resizeKeyDelta("se", "Enter"), null);
   });

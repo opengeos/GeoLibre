@@ -1,4 +1,5 @@
 import {
+  cancelConversionJob,
   fetchConversionJob,
   runVectorLayers,
   runVectorToVector,
@@ -31,8 +32,8 @@ const POLL_TIMEOUT_MS = 10 * 60 * 1000;
  * how to surface a failure.
  *
  * @param signal - Stops the wait (rejecting with its reason), including while
- *   a status request is in flight. The sidecar has no cancel endpoint, so the
- *   job itself still finishes.
+ *   a status request is in flight. It only stops waiting; a caller that
+ *   also wants the job stopped cancels it with `cancelConversionJob`.
  */
 async function waitForConversionJob(
   initial: ConversionJob,
@@ -125,11 +126,15 @@ export async function readFileGeodatabaseLayer(
       job = await waitForConversionJob(await untilAborted(starting, signal), signal);
     } catch (error) {
       // Abandoned (even before the job's id came back): the caller stops
-      // waiting, but the job keeps writing its file, so keep polling in the
-      // background and remove it once the job is done.
+      // waiting, so stop the job on the sidecar too, then keep polling in the
+      // background until it has settled and remove any file it left. A cancel
+      // request that fails (an older sidecar) just lets the job run out.
       if (signal?.aborted) {
         void starting
-          .then((started) => waitForConversionJob(started))
+          .then(async (started) => {
+            await cancelConversionJob(started.id).catch(() => undefined);
+            return waitForConversionJob(started);
+          })
           .then(() => remove(outputPath))
           .catch(() => undefined);
       }

@@ -5,7 +5,8 @@ import {
   type WhiteboxTool,
 } from "@geolibre/processing";
 
-export const DOWNLOAD_GLOBAL_DEM_TOOL_ID = "download_global_dem";
+import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "./global-dem-id";
+export { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "./global-dem-id";
 
 const TILE_SIZE = 512;
 const MAX_ZOOM = 12;

@@ -1,7 +1,9 @@
+import { geojsonLayer } from "./helpers/layer-fixtures";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   appendFeature,
+  createCollectionLayerSelector,
   buildGeometryFeature,
   buildProperties,
   buildPhotoProperties,
@@ -374,4 +376,13 @@ describe("line/polygon geometry", () => {
       "Polygon",
     );
   });
+});
+
+it("selects collection layer names without invalidating on style edits", () => {
+  const layer = geojsonLayer({ metadata: { fieldCollection: true } });
+  const select = createCollectionLayerSelector();
+  const first = select({ layers: [layer, geojsonLayer({ id: "other" })] });
+  assert.deepEqual(first, [{ id: layer.id, name: layer.name }]);
+  assert.equal(select({ layers: [{ ...layer, opacity: 0.2 }] })[0], first[0]);
+  assert.deepEqual(select({ layers: [] }), []);
 });

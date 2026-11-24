@@ -345,23 +345,27 @@ function setSelectedMarker(lngLat: { lng: number; lat: number } | null): void {
   if (!map) return;
   const source = map.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
   if (!source) return;
-  void source.setData(
-    lngLat
-      ? {
-          type: "FeatureCollection",
-          features: [
-            {
-              type: "Feature",
-              geometry: {
-                type: "Point",
-                coordinates: [lngLat.lng, lngLat.lat],
+  void Promise.resolve(
+    source.setData(
+      lngLat
+        ? {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                geometry: {
+                  type: "Point",
+                  coordinates: [lngLat.lng, lngLat.lat],
+                },
+                properties: {},
               },
-              properties: {},
-            },
-          ],
-        }
-      : emptyCollection(),
-  );
+            ],
+          }
+        : emptyCollection(),
+    ),
+  ).catch((error: unknown) => {
+    console.warn("Failed to update map source", error);
+  });
   raiseSelectionLayers();
 }
 

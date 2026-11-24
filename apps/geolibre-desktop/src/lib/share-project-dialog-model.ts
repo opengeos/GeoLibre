@@ -189,7 +189,7 @@ export function readinessCopyKeys(item: Pick<ShareReadinessItem, "status" | "rea
  * Returns:
  *   A key unique within one report.
  */
-export function readinessListKey(item: Pick<ShareReadinessItem, "layerId" | "field" | "url">) {
+export function readinessReactKey(item: Pick<ShareReadinessItem, "layerId" | "field" | "url">) {
   return `${item.layerId ?? item.field}:${item.url}`;
 }
 
@@ -203,7 +203,7 @@ export function readinessListKey(item: Pick<ShareReadinessItem, "layerId" | "fie
  * Returns:
  *   The row identity.
  */
-export function readinessRowKey(item: Pick<ShareReadinessItem, "layerId" | "field" | "url">) {
+export function readinessIdentity(item: Pick<ShareReadinessItem, "layerId" | "field" | "url">) {
   return item.layerId ?? `${item.field}:${item.url}`;
 }
 
@@ -233,9 +233,9 @@ export function remoteReadiness(
   readiness: ShareReadinessReport | null,
   localProblems: readonly ShareReadinessItem[],
 ): RemoteReadiness {
-  const missingKeys = new Set(localProblems.map(readinessRowKey));
+  const missingKeys = new Set(localProblems.map(readinessIdentity));
   const isRemoteRow = (item: ShareReadinessItem) =>
-    !isMissingForRecipients(item) && !missingKeys.has(readinessRowKey(item));
+    !isMissingForRecipients(item) && !missingKeys.has(readinessIdentity(item));
   return {
     remoteProblems: readiness?.problems.filter(isRemoteRow) ?? [],
     remoteItemCount: readiness?.items.filter(isRemoteRow).length ?? 0,

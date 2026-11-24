@@ -672,7 +672,9 @@ function showDrawGeometry(map: StacMap, geometry: Geometry): void {
   };
   const source = map.getSource(DRAW_SOURCE) as GeoJSONSource | undefined;
   if (source) {
-    void source.setData(data);
+    void Promise.resolve(source.setData(data)).catch((error: unknown) => {
+      console.warn("Failed to update map source", error);
+    });
     return;
   }
   map.addSource(DRAW_SOURCE, { type: "geojson", data });
@@ -956,7 +958,9 @@ function showSelectionHighlight(geometry: Geometry | null): void {
   };
   const source = map.getSource(SELECT_SOURCE) as GeoJSONSource | undefined;
   if (source) {
-    void source.setData(data);
+    void Promise.resolve(source.setData(data)).catch((error: unknown) => {
+      console.warn("Failed to update map source", error);
+    });
     return;
   }
   map.addSource(SELECT_SOURCE, { type: "geojson", data });

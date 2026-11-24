@@ -100,7 +100,9 @@ export class DrawBBox {
   clear(): void {
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (source) {
-      void source.setData(EMPTY_FC);
+      void Promise.resolve(source.setData(EMPTY_FC)).catch((error: unknown) => {
+        console.warn("Failed to update map source", error);
+      });
     }
   }
 
@@ -108,26 +110,30 @@ export class DrawBBox {
     this.initLayers();
     const source = this.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (source) {
-      void source.setData({
-        type: "FeatureCollection",
-        features: [
-          {
-            type: "Feature",
-            geometry: {
-              type: "Polygon",
-              coordinates: [
-                [
-                  [bbox.west, bbox.south],
-                  [bbox.east, bbox.south],
-                  [bbox.east, bbox.north],
-                  [bbox.west, bbox.north],
-                  [bbox.west, bbox.south],
+      void Promise.resolve(
+        source.setData({
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              geometry: {
+                type: "Polygon",
+                coordinates: [
+                  [
+                    [bbox.west, bbox.south],
+                    [bbox.east, bbox.south],
+                    [bbox.east, bbox.north],
+                    [bbox.west, bbox.north],
+                    [bbox.west, bbox.south],
+                  ],
                 ],
-              ],
+              },
+              properties: {},
             },
-            properties: {},
-          },
-        ],
+          ],
+        }),
+      ).catch((error: unknown) => {
+        console.warn("Failed to update map source", error);
       });
     }
   }
@@ -177,26 +183,30 @@ export class DrawBBox {
     const east = Math.max(start[0], end[0]);
     const north = Math.max(start[1], end[1]);
 
-    void source.setData({
-      type: "FeatureCollection",
-      features: [
-        {
-          type: "Feature",
-          geometry: {
-            type: "Polygon",
-            coordinates: [
-              [
-                [west, south],
-                [east, south],
-                [east, north],
-                [west, north],
-                [west, south],
+    void Promise.resolve(
+      source.setData({
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [west, south],
+                  [east, south],
+                  [east, north],
+                  [west, north],
+                  [west, south],
+                ],
               ],
-            ],
+            },
+            properties: {},
           },
-          properties: {},
-        },
-      ],
+        ],
+      }),
+    ).catch((error: unknown) => {
+      console.warn("Failed to update map source", error);
     });
   }
 

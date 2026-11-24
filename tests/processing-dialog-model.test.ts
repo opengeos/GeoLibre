@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { GeoLibreLayer } from "@geolibre/core";
@@ -578,13 +579,14 @@ describe("resolveRunInputs", () => {
   });
 
   it("keeps several browsed files as a list", async () => {
-    const bytes = new Uint8Array([1]);
+    const firstBytes = new Uint8Array([1]);
+    const secondBytes = new Uint8Array([2]);
     const browsedInputs = new Map<string, BrowsedInput[]>([
       [
         "inputs",
         [
-          { name: "a.tif", bytes },
-          { name: "b.tif", bytes },
+          { name: "a.tif", bytes: firstBytes },
+          { name: "b.tif", bytes: secondBytes },
         ],
       ],
     ]);
@@ -595,7 +597,10 @@ describe("resolveRunInputs", () => {
       }),
     );
     assert.ok(result.ok);
-    assert.equal((result.layerInputs.inputs as unknown[]).length, 2);
+    assert.deepEqual(result.layerInputs.inputs, [
+      { name: "a.tif", kind: "raster_in", bytes: firstBytes },
+      { name: "b.tif", kind: "raster_in", bytes: secondBytes },
+    ]);
   });
 
   it("resolves a single layer token by kind and mode", async () => {
@@ -870,5 +875,33 @@ describe("latitudeLabelKey", () => {
       key: "processing.distance.equator",
       latitude: "0.0",
     });
+  });
+});
+
+describe("processing controller isolation", () => {
+  it("imports without initializing the application store", () => {
+    const modelUrl = new URL(
+      "../apps/geolibre-desktop/src/lib/processing-dialog-model.ts",
+      import.meta.url,
+    ).href;
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "--input-type=module",
+        "--eval",
+        `
+      import { registerHooks } from "node:module";
+      registerHooks({ load(url, context, next) {
+        if (url.includes("/core/src/store")) throw new Error("Controller initialized the store");
+        return next(url, context);
+      }});
+      await import(${JSON.stringify(modelUrl)});
+    `,
+      ],
+      { encoding: "utf8", timeout: 30000 },
+    );
+    assert.equal(result.status, 0, result.stderr);
   });
 });
