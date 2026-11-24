@@ -10,7 +10,11 @@ import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 
 test("a pre-import STAC request survives sibling activation, is consumed once, and supports reopening", async () => {
   const url = "https://planetarycomputer.microsoft.com/api/stac/v1/collections/sentinel-2-l2a";
-  requestStacCatalogUrl(url);
+  assert.equal(
+    requestStacCatalogUrl(url),
+    undefined,
+    "the SDK request keeps its void return contract",
+  );
   const native = await import("../packages/plugins/src/plugins/maplibre-stac");
   assert.equal(native.requestStacCatalogUrl, requestStacCatalogUrl);
   assert.equal(native.cancelStacCatalogRequest, cancelStacCatalogRequest);

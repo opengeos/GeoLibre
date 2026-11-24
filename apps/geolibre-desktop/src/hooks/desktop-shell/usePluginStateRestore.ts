@@ -1,3 +1,4 @@
+import { PluginOperationSupersededError } from "@geolibre/plugins/runtime";
 import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { setExternalDeckLayerOrderHandler } from "@geolibre/map";
@@ -212,7 +213,10 @@ export function usePluginStateRestore({
           effectsPlugin?.getProjectState?.(),
         );
       })
-      .catch((error: unknown) => reportPluginError(EFFECTS_PLUGIN_ID, "restore", error));
+      .catch((error: unknown) => {
+        if (error instanceof PluginOperationSupersededError) return;
+        reportPluginError(EFFECTS_PLUGIN_ID, "restore", error);
+      });
     // The sun simulation reads/writes native map layers, so it must re-bind to
     // the (possibly new) map instance after a map re-init or basemap change.
     // Reattach only — it must NOT derive open/closed state here, which would

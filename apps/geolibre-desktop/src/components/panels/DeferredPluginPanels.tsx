@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+import { SectionErrorBoundary } from "../common/error-boundaries";
 import { lazy, Suspense, useSyncExternalStore, type ComponentProps } from "react";
 import {
   sunPanelStore,
@@ -55,4 +57,31 @@ export function FlightSimulatorPanel() {
       <LoadedFlightSimulatorPanel />
     </Suspense>
   ) : null;
+}
+
+/** Compose the independent simulation boundaries without loading their hidden interfaces. */
+export function DeferredPluginPanels(props: ComponentProps<typeof RouteAnimationPanel>) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <SectionErrorBoundary
+        label="Sun simulation panel"
+        displayName={t("shell.section.sunSimulationPanel")}
+      >
+        <SunPanel />
+      </SectionErrorBoundary>
+      <SectionErrorBoundary
+        label="Route animation panel"
+        displayName={t("shell.section.routeAnimationPanel")}
+      >
+        <RouteAnimationPanel {...props} />
+      </SectionErrorBoundary>
+      <SectionErrorBoundary
+        label="Flight simulator panel"
+        displayName={t("shell.section.flightSimulatorPanel")}
+      >
+        <FlightSimulatorPanel />
+      </SectionErrorBoundary>
+    </>
+  );
 }

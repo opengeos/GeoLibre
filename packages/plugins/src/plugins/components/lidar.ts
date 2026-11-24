@@ -368,7 +368,6 @@ async function openStandaloneLidarControl(
   }
 
   // engine-audit-allow: arcgis-null-map: only 2D maps need this projection guard; null is a no-op.
-
   ensureMercatorProjection(app.getMap?.() ?? app.getMapboxMap?.());
   startLidarThemeSync();
   refreshLidarMeasureMirror(app);

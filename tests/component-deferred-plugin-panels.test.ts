@@ -5,13 +5,13 @@ import { createElement } from "react";
 import { render } from "@testing-library/react";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 
-const { SunPanel } =
+const { DeferredPluginPanels } =
   await import("../apps/geolibre-desktop/src/components/panels/DeferredPluginPanels");
 const { loadBuiltInPluginModule } = await import("../packages/plugins/src/builtin-plugins");
 
-it("opens the deferred Sun UI with provider state and unmounts it on close", async () => {
+it("opens the composed deferred Sun UI with provider state and unmounts it on close", async () => {
   const app = { getMap: () => null } as unknown as GeoLibreAppAPI;
-  const view = render(createElement(SunPanel));
+  const view = render(createElement(DeferredPluginPanels, { mapControllerRef: { current: null } }));
   assert.equal(screen.queryByRole("dialog"), null);
   const module = await loadBuiltInPluginModule("sun");
   try {

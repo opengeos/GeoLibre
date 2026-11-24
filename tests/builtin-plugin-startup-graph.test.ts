@@ -19,11 +19,12 @@ test("the authoring static graph does not evaluate built-in plugin wrappers or t
   const catalogPath = path.join(root, "packages/plugins/src/builtin-plugins.ts");
   const catalog = readFileSync(catalogPath, "utf8");
   const wrappers = new Set(
-    [...catalog.matchAll(/import\("(\.\/plugins\/[^"]+)"\)/g)].map(
-      (match) =>
-        ts.resolveModuleName(match[1]!, catalogPath, options, ts.sys).resolvedModule
-          ?.resolvedFileName,
-    ),
+    [...catalog.matchAll(/import\("(\.\/plugins\/[^"]+)"\)/g)].map((match) => {
+      const resolved = ts.resolveModuleName(match[1]!, catalogPath, options, ts.sys).resolvedModule
+        ?.resolvedFileName;
+      assert.ok(resolved, `resolve catalog implementation ${match[1]}`);
+      return resolved;
+    }),
   );
   assert.ok(wrappers.size >= 68, "discover all catalog implementation modules");
   const pending = ["main.tsx", "App.tsx", "hooks/usePlugins.ts"].map((entry) =>
