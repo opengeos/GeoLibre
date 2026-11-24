@@ -1309,16 +1309,42 @@ not a count of untested code.
 
 ## Lint warning ratchet
 
-`npm run lint` passes `--max-warnings` (in the root `package.json`) set to the
-current warning count, so lint warnings work like the coverage floors: the
-count can only go down. The warnings come from `react-hooks/exhaustive-deps`,
+`npm run lint` runs two sequential passes, each with its own warning ratchet
+in the root `package.json`: `lint:syntax` allows 79 ESLint warnings and
+`lint:typed` allows 35 floating-promise warnings. Their combined budget remains
+114; fixing one kind cannot make room for a new warning of the other kind.
+The warnings come from `react-hooks/exhaustive-deps`,
 `@typescript-eslint/no-explicit-any`, the type-aware
-`@typescript-eslint/no-floating-promises` (app, package and worker `src/`
+`typescript/no-floating-promises` (desktop app, package and worker `src/`
 only, checked against each file's nearest `tsconfig.json`), and
 `local/no-physical-tailwind` (`eslint-rules/no-physical-tailwind.mjs`, the
 right-to-left rule from [Internationalization](i18n.md#right-to-left-languages)),
 and two `eslint-plugin-jsx-a11y` rules (`control-has-associated-label`,
 `no-static-element-interactions`) on app and package `.tsx`.
+
+ESLint retains the syntax, accessibility, React, and local architecture rules.
+The semantic pass uses pinned Oxlint and `oxlint-tsgolint` versions through
+`scripts/lint-typed.mjs` and `.oxlintrc.json`. It does not load every workspace's
+TypeScript program into ESLint's process. Native compiler/configuration errors
+fail the command. Source roots deliberately exclude vendored Tauri projects;
+the MCP App is outside the existing typed-rule scope. Full type checking still
+runs separately in CI.
+
+A local comparison on 2026-11-24 used the original ESLint configuration and
+the new complete command sequentially on the same source snapshot (Linux,
+16 available CPUs, Node 26.10.0, one run each):
+
+| Lint command | Wall time | Largest child peak RSS |
+| --- | ---: | ---: |
+| Original type-aware ESLint | 95.79 s | 9.58 GiB |
+| Syntax ESLint + typed Oxlint | 52.28 s | 2.12 GiB |
+
+All 114 diagnostic locations and rules matched. The baseline used a 16 GiB
+Node heap limit; the new command used the default heap. RSS was measured with
+`resource.getrusage`/`wait4` and describes the largest child process, not
+aggregate process-tree memory. These are single local measurements, not CI
+performance guarantees. Pinned native backend upgrades still need semantic
+fixtures and comparison against the existing diagnostics.
 
 `eslint-plugin-jsx-a11y` 6.10 declares ESLint up to 9 as a peer. It runs under
 ESLint 10, and the `overrides` entry for it in the root `package.json` points its
@@ -1332,8 +1358,8 @@ loudly; pin ESLint or disable the two rules rather than reaching for
   rejection. For a class that must stay physical (a map-anchored overlay, say),
   add `// eslint-disable-next-line local/no-physical-tailwind -- <why>`. Do
   not raise the limit.
-- **A PR fixes warnings:** lower the limit to the new total that ESLint prints,
-  in the same PR, so the gain is kept.
+- **A PR fixes warnings:** lower the corresponding syntax or typed limit to
+  its new count in the same PR, so the gain is kept.
 - **A disable directive goes stale:** ESLint reports an `eslint-disable`
   comment that no longer suppresses anything as an **error**
   (`reportUnusedDisableDirectives`), so the ratchet cannot be dodged by a
@@ -1341,6 +1367,12 @@ loudly; pin ESLint or disable the two rules rather than reaching for
   (`eslint --fix` removes it, but leaves a blank line and any `--` reason that
   wrapped onto the next line, so tidy those up). In JSX children a directive
   has to be a `{/* eslint-disable-next-line ... */}` expression comment.
+  Typed exceptions use `// oxlint-disable-next-line typescript/no-floating-promises -- <why>`.
+  The typed runner reports stale Oxlint directives as errors even below its
+  warning budget. It leaves unused `eslint-disable` diagnostics to ESLint,
+  because the typed pass does not run the rules those comments suppress.
+  Do not use an ESLint directive for the migrated promise rule: ESLint's
+  unused-directive check rejects it.
 - **A PR turns on a new rule:** the one time the limit goes up. Raise it by
   exactly the new rule's count on the code as it is, say so in the PR, and fix
   those warnings over time like the rest.

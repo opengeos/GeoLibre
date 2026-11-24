@@ -15,15 +15,8 @@ import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 import local from "./eslint-rules/index.mjs";
 
-// Source compiled into the app, the packages and the workers. Type-aware rules
-// run only here: each file is checked against the tsconfig.json nearest to it
-// (typescript-eslint's project service), and scripts/tests/configs outside a
-// tsconfig are left to the syntactic rules.
-const TYPED_SOURCES = [
-  "apps/geolibre-desktop/src/**/*.{ts,tsx}",
-  "packages/*/src/**/*.{ts,tsx}",
-  "workers/*/src/**/*.ts",
-];
+// Semantic promise checking runs separately through scripts/lint-typed.mjs.
+// This process retains only syntax trees, not every workspace TypeScript program.
 
 export default [
   {
@@ -141,21 +134,6 @@ export default [
     ignores: ["packages/map/**"],
     rules: {
       "local/no-renderer-kind-checks": "error",
-    },
-  },
-  {
-    files: TYPED_SOURCES,
-    languageOptions: {
-      parserOptions: {
-        projectService: true,
-        tsconfigRootDir: import.meta.dirname,
-      },
-    },
-    rules: {
-      // A promise nobody awaits or catches turns a rejection into an
-      // unhandled one: the failure never reaches the user or the diagnostics
-      // log. Mark a deliberate fire-and-forget with `void`.
-      "@typescript-eslint/no-floating-promises": "warn",
     },
   },
 ];
