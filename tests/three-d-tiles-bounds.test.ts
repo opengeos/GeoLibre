@@ -45,6 +45,37 @@ it("rejects malformed volumes and treats a sphere at the Earth centre as global"
   );
 });
 
+it("encloses every box corner under a nonuniform root transform", () => {
+  const bounds = threeDTilesRootBounds({
+    root: {
+      transform: [1, 0, 0, 0, 0, 10, 0, 0, 0, 0, 1, 0, 6378137, 0, 0, 1],
+      boundingVolume: { box: [0, 0, 0, 100, 100, 0, 100, -100, 0, 0, 0, 100] },
+    },
+  });
+  assert.ok(bounds && bounds[2] > 0.018);
+});
+
+it("bounds a chunked manifest and cancels its remaining body", async (t) => {
+  let cancelled = false;
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Response(
+        new ReadableStream({
+          pull(controller) {
+            controller.enqueue(new Uint8Array(1024 * 1024));
+          },
+          cancel() {
+            cancelled = true;
+          },
+        }),
+      ),
+  );
+  await assert.rejects(loadThreeDTilesBounds("https://example.com/tileset.json"), /4 MiB/);
+  assert.equal(cancelled, true);
+});
+
 it("makes a batch tileset available to the shared extent calculation before returning", async (t) => {
   const previous = useAppStore.getState().layers;
   t.mock.method(

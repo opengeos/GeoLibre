@@ -136,8 +136,15 @@ export function previewRenderLayers(
   for (const layer of project.layers) {
     if (!layer.visible) continue;
     if (native.has(layer)) layers.push({ layer, kind: "native" });
-    else if (isPreviewPMTilesLayer(layer)) layers.push({ layer, kind: "pmtiles" });
-    else if (isPreviewCogLayer(layer) && !isDesktopOnly(layer)) layers.push({ layer, kind: "cog" });
+    else if (isPreviewPMTilesLayer(layer)) {
+      // Use the same validated address for native layer sync and consent's
+      // archive registration, including a sourcePath fallback.
+      layers.push({
+        layer: { ...layer, source: { ...layer.source, url: pmtilesArchiveUrl(layer)! } },
+        kind: "pmtiles",
+      });
+    } else if (isPreviewCogLayer(layer) && !isDesktopOnly(layer))
+      layers.push({ layer, kind: "cog" });
   }
   return layers;
 }

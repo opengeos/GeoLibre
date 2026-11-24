@@ -644,6 +644,11 @@ async function decodeCogPreview(
   if (masks.length && !mask) {
     throw new Error("The COG has no matching transparency mask for this preview level.");
   }
+  if (mask && mask.getWidth() * mask.getHeight() > PREVIEW_COG_MAX_READ_PIXELS) {
+    throw new Error(
+      "The COG transparency mask is too large to decode in this preview; add mask overviews or open it in GeoLibre.",
+    );
+  }
   const maskValues = mask
     ? ((await mask.readRasters({
         samples: [0],

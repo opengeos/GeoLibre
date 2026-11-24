@@ -468,8 +468,10 @@ export function createNetworkConsent(
           throw new Error("The server returned more bytes than the preview requested.");
         chunks.push(new Uint8Array(bytes));
         received += bytes.byteLength;
-        // A short read is the end of the resource.
-        if (bytes.byteLength < want) break;
+        // A server may return a partial chunk before EOF. Keep filling the
+        // requested range until it reports EOF or the known resource ends.
+        if (bytes.byteLength === 0 || (totalSize !== undefined && offset + received >= totalSize))
+          break;
       }
       const data = new Uint8Array(received);
       let position = 0;

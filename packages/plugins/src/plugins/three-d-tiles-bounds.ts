@@ -22,6 +22,25 @@ export function threeDTilesRootBounds(value: unknown): Bounds | null {
   const volume = createBoundingVolume(header, new Matrix4(root.transform as number[] | undefined));
   const sphere: { center: number[]; radius: number } =
     typeof volume.getBoundingSphere === "function" ? volume.getBoundingSphere() : volume;
+  if (numbers(header.box, 12)) {
+    // Under nonuniform scale/shear, u+v+w may be the shortest corner rather
+    // than the farthest one. Enclose all eight transformed corner offsets.
+    const axes: ArrayLike<number> = volume.halfAxes;
+    let radius = 0;
+    for (const x of [-1, 1])
+      for (const y of [-1, 1])
+        for (const z of [-1, 1]) {
+          radius = Math.max(
+            radius,
+            Math.hypot(
+              x * axes[0] + y * axes[3] + z * axes[6],
+              x * axes[1] + y * axes[4] + z * axes[7],
+              x * axes[2] + y * axes[5] + z * axes[8],
+            ),
+          );
+        }
+    sphere.radius = radius;
+  }
   if (!Number.isFinite(sphere.radius) || sphere.radius < 0) return null;
   const center = Ellipsoid.WGS84.cartesianToCartographic(sphere.center);
   if (!center || !center.every(Number.isFinite)) return [-180, -90, 180, 90];
@@ -50,7 +69,37 @@ export async function loadThreeDTilesBounds(
   });
   if (!response.ok)
     throw new Error(`Could not read the 3D Tiles extent (HTTP ${response.status}).`);
-  const bounds = threeDTilesRootBounds(await response.json());
+  // Root manifests can contain many children. Bound this metadata-only read
+  // independently of the renderer's later, on-demand tileset loading.
+  const limit = 4 * 1024 * 1024;
+  if (Number(response.headers.get("content-length")) > limit) {
+    await response.body?.cancel();
+    throw new Error("The 3D Tiles extent manifest exceeds the 4 MiB preview limit.");
+  }
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("The 3D Tiles extent manifest is empty.");
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit)
+        throw new Error("The 3D Tiles extent manifest exceeds the 4 MiB preview limit.");
+      chunks.push(value);
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const bounds = threeDTilesRootBounds(JSON.parse(new TextDecoder().decode(bytes)));
   if (!bounds) throw new Error("The 3D Tiles manifest has no usable root bounding volume.");
   return bounds;
 }

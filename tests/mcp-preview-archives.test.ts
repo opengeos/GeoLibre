@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, parseProject, type GeoLibreLayer } from "@geolibre/core";
 import { writeArrayBuffer } from "geotiff";
@@ -109,6 +110,16 @@ function project(layers: GeoLibreLayer[]) {
 }
 
 describe("MCP preview PMTiles and COG classification", () => {
+  it("uses a validated sourcePath fallback for both sync and archive registration", () => {
+    const archive = pmtilesLayer("fallback", "file:///missing.pmtiles");
+    archive.sourcePath = "https://tiles.example.com/fallback.pmtiles";
+    const [planned] = previewRenderLayers(project([archive]));
+    assert.equal(planned.kind, "pmtiles");
+    assert.equal(planned.layer.source.url, archive.sourcePath);
+    assert.equal(pmtilesArchiveKey(planned.layer), archive.sourcePath);
+    assert.equal(pmtilesArchiveUrl(planned.layer), archive.sourcePath);
+    assert.equal(archive.source.url, "file:///missing.pmtiles");
+  });
   it("includes realized vector IDs for Identify while retaining saved control IDs", () => {
     const archive = pmtilesLayer("roads", "https://example.com/a.pmtiles");
     archive.metadata.nativeLayerIds = ["roads", "saved-control-line"];
@@ -322,6 +333,19 @@ describe("MCP preview COG rendering helpers", () => {
 });
 
 describe("MCP preview COG loading", () => {
+  it("rejects a large primary mask before decoding it for a small color overview", async () => {
+    // GDAL: sparse 4097x4097 uint8 image, 5x5 color overview, and a
+    // full-resolution internal mask with no mask overview.
+    const bytes = readFileSync(new URL("./fixtures/cog-large-mask.tif", import.meta.url));
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    await assert.rejects(
+      loadCogPreview(
+        cogLayer("large-mask", "https://cogs.example.com/large-mask.tif"),
+        rangeReader(buffer).fetchRange,
+      ),
+      /mask is too large/,
+    );
+  });
   it("applies a separate internal transparency mask", async () => {
     // A GDAL-generated 2x2 uint8 TIFF with a separate one-bit internal mask.
     const bytes = Buffer.from(
@@ -553,5 +577,26 @@ describe("MCP preview ranged fetches", () => {
     const pending = consent.fetchRange("https://tiles.example.com/a.pmtiles", 0, 8);
     await allow(panel);
     await assert.rejects(pending, /different byte range/);
+  });
+
+  it("continues short partial reads until the requested range is complete", async () => {
+    const { consent, fetches, panel } = consentWith((args) => ({
+      data: encode(Math.min(3, Number(args.length)), Number(args.offset)),
+      mimeType: "application/octet-stream",
+      rangeStart: args.offset,
+      totalSize: 100,
+    }));
+    const pending = consent.fetchRange("https://tiles.example.com/a.pmtiles", 10, 8);
+    await allow(panel);
+    const result = await pending;
+    assert.deepEqual(
+      fetches.map(({ offset, length }) => [offset, length]),
+      [
+        [10, 8],
+        [13, 5],
+        [16, 2],
+      ],
+    );
+    assert.deepEqual([...new Uint8Array(result.data)], [10, 10, 10, 13, 13, 13, 16, 16]);
   });
 });
