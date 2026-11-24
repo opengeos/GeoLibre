@@ -1,5 +1,6 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 import { BaseClient, BaseResponse, fromCustomClient } from "geotiff";
+import type { BlockedSourceOptions, RemoteSourceOptions } from "geotiff";
 import type { NetworkConsent } from "./network-consent";
 
 /** Longest side, in pixels, of the image a COG layer is previewed as. */
@@ -562,11 +563,17 @@ async function decodeCogPreview(
   client: PreviewRangeClient,
   signal: AbortSignal | undefined,
 ): Promise<CogPreviewImage> {
+  // geotiff forwards these options to makeCustomSource, whose declaration
+  // includes BlockedSourceOptions, though fromCustomClient's omits them.
+  const sourceOptions: RemoteSourceOptions & BlockedSourceOptions = {
+    blockSize: 256 * 1024,
+    maxRanges: 0,
+  };
   const tiff = await fromCustomClient(
     client,
     // The server caps one response at 4 MiB, and several small blocks merged
     // into one range keep the number of tool calls down.
-    { blockSize: 256 * 1024 } as never,
+    sourceOptions,
     signal,
   );
   const count = await tiff.getImageCount();
@@ -574,6 +581,18 @@ async function decodeCogPreview(
     Array.from({ length: count }, (_value, index) => tiff.getImage(index)),
   );
   const primary = images[0];
+  const transform = primary.getFileDirectory().getValue("ModelTransformation");
+  if (
+    transform &&
+    (transform[1] !== 0 || transform[4] !== 0 || transform[0] <= 0 || transform[5] >= 0)
+  ) {
+    throw new Error(
+      "This preview cannot place a rotated, skewed, or flipped COG; open it in GeoLibre.",
+    );
+  }
+  const isMask = (image: (typeof images)[number]) =>
+    (Number(image.getFileDirectory().getValue("NewSubfileType") ?? 0) & 4) !== 0;
+  const colorImages = images.filter((image) => !isMask(image));
   const crs = cogEpsg(primary.getGeoKeys() as Record<string, unknown> | null);
   if (!isPreviewCogCrs(crs)) {
     throw new Error(
@@ -583,9 +602,9 @@ async function decodeCogPreview(
     );
   }
   const level =
-    images[
+    colorImages[
       pickPreviewImage(
-        images.map((image) => ({
+        colorImages.map((image) => ({
           width: image.getWidth(),
           height: image.getHeight(),
         })),
@@ -613,15 +632,38 @@ async function decodeCogPreview(
   })) as unknown as ArrayLike<number>[];
   let bands = style.bands.map((band) => rasters[samples.indexOf(band - 1)]);
   const alpha = alphaIndex >= 0 ? rasters[samples.indexOf(alphaIndex)] : null;
+  const masks = images.filter(isMask);
+  const mask =
+    masks.find(
+      (image) => image.getWidth() === level.getWidth() && image.getHeight() === level.getHeight(),
+    ) ??
+    masks.find(
+      (image) =>
+        image.getWidth() === primary.getWidth() && image.getHeight() === primary.getHeight(),
+    );
+  if (masks.length && !mask) {
+    throw new Error("The COG has no matching transparency mask for this preview level.");
+  }
+  const maskValues = mask
+    ? ((await mask.readRasters({
+        samples: [0],
+        width: size.width,
+        height: size.height,
+        resampleMethod: "nearest",
+        interleave: true,
+        signal,
+      })) as ArrayLike<number>)
+    : null;
   const alphaMax =
     alphaIndex >= 0 && level.getSampleFormat(alphaIndex) === 3
       ? 1
       : 2 ** (alphaIndex >= 0 ? level.getBitsPerSample(alphaIndex) : 8) - 1;
   const alphaFraction = (index: number) => {
+    if (maskValues && !maskValues[index]) return 0;
     const value = alpha ? alpha[index] / alphaMax : 1;
     return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
   };
-  if (alpha) {
+  if (alpha || maskValues) {
     // Transparent borders must not affect the color stretch. Associated-alpha
     // TIFFs store premultiplied samples; undo that before coloring them.
     bands = bands.map((band) =>
@@ -642,7 +684,7 @@ async function decodeCogPreview(
     style,
     typeof nodataValue === "number" && Number.isFinite(nodataValue) ? nodataValue : null,
   );
-  if (alpha)
+  if (alpha || maskValues)
     for (let index = 0; index < size.width * size.height; index += 1) {
       rgba[index * 4 + 3] = Math.round(rgba[index * 4 + 3] * alphaFraction(index));
     }

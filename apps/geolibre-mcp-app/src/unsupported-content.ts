@@ -207,7 +207,9 @@ export function unsupportedContent(project: GeoLibreProject): string[] {
       : layer.type === "video"
         ? "video loading bypasses the consent-gated request path"
         : layer.type === "pmtiles" && !desktopOnly
-          ? "is not a PMTiles archive layer this preview can read"
+          ? pmtilesArchiveUrl(layer)
+            ? "is a PMTiles archive without usable source-layer metadata, so this preview cannot draw it"
+            : "is not a PMTiles archive layer this preview can read"
           : desktopOnly
             ? "requires a desktop-local source"
             : missing

@@ -114,7 +114,25 @@ function stacApiUrl(url) {
   // On a path-named API the root sits at or below the `stac` segment; a
   // `search` in some unrelated route above it is not this API's.
   if (inPath >= 0 && rest[1].split("/").length - 1 < inPath) return null;
-  const api = new URL(url.origin);
+  const api = new URL(
+    serviceEndpoint(
+      url,
+      new Set([
+        "collections",
+        "datetime",
+        "filter",
+        "filter-lang",
+        "ids",
+        "intersects",
+        "limit",
+        "next",
+        "page",
+        "query",
+        "sortby",
+        "fields",
+      ]),
+    ),
+  );
   api.pathname = rest[2] ? `${rest[1]}/collections/${rest[2]}` : rest[1] || "/";
   return api.href;
 }
@@ -246,12 +264,40 @@ export function classifyServiceRequest(rawUrl) {
   const arcgisService = path.match(/^(.*\/(MapServer|ImageServer))(?:\/.*)?$/i);
   if (arcgisService) {
     const label = arcgisService[2].toLowerCase() === "mapserver" ? "Map" : "Image";
+    const endpoint = new URL(
+      serviceEndpoint(
+        url,
+        new Set([
+          "f",
+          "bboxsr",
+          "imagesr",
+          "size",
+          "dpi",
+          "layers",
+          "layerdefs",
+          "time",
+          "mosaicrule",
+          "renderingrule",
+          "pixeltype",
+          "nodata",
+          "nodatainterpretation",
+          "compressionquality",
+          "bandids",
+          "interpolation",
+          "dynamiclayers",
+          "mapscale",
+          "rotation",
+          "datumtransformations",
+        ]),
+      ),
+    );
+    endpoint.pathname = arcgisService[1];
     return candidate(
       url,
       `ArcGIS ${label} Service`,
       "raster",
       `ArcGIS ${label.toLowerCase()} service`,
-      url.origin + arcgisService[1],
+      endpoint.href,
     );
   }
 

@@ -322,6 +322,38 @@ describe("MCP preview COG rendering helpers", () => {
 });
 
 describe("MCP preview COG loading", () => {
+  it("applies a separate internal transparency mask", async () => {
+    // A GDAL-generated 2x2 uint8 TIFF with a separate one-bit internal mask.
+    const bytes = Buffer.from(
+      "SUkqAAgAAAAPAAABAwABAAAAAgAAAAEBAwABAAAAAgAAAAIBAwABAAAACAAAAAMBAwABAAAAAQAAAAYBAwABAAAAAQAAABEBBAABAAAAawEAABUBAwABAAAAAQAAABYBAwABAAAAAgAAABcBBAABAAAABAAAABwBAwABAAAAAQAAAFMBAwABAAAAAQAAAA6DDAADAAAAwgAAAIKEDAAGAAAA2gAAAK+HAwAgAAAACgEAALGHAgAhAAAASgEAAHABAAAAAAAAAECPQAAAAAAAQI9AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQJ9AAAAAAAAAAAABAAEAAAAHAAAEAAABAAEAAQQAAAEAAQACBLGHGQAAAAEIsYcHABkABggAAAEAjiMADAAAAQARDwQMAAABACkjV0dTIDg0IC8gUHNldWRvLU1lcmNhdG9yfFdHUyA4NHwAAAECAwANAP4ABAABAAAABAAAAAABAwABAAAAAgAAAAEBAwABAAAAAgAAAAIBAwABAAAAAQAAAAMBAwABAAAACAAAAAYBAwABAAAABAAAABEBBAABAAAAEgIAABUBAwABAAAAAQAAABYBAwABAAAAAgAAABcBBAABAAAADQAAABwBAwABAAAAAQAAAD0BAwABAAAAAQAAAFMBAwABAAAAAQAAAAAAAAB4nAECAP3/gEABQgDB",
+      "base64",
+    );
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    const image = await loadCogPreview(
+      cogLayer("mask", "https://cogs.example.com/mask.tif"),
+      rangeReader(buffer).fetchRange,
+    );
+    assert.deepEqual(
+      [image.rgba[3], image.rgba[7], image.rgba[11], image.rgba[15]],
+      [255, 0, 0, 255],
+    );
+  });
+  it("rejects an affine footprint instead of stretching it onto its bounding rectangle", async () => {
+    const buffer = writeArrayBuffer([0, 1, 2, 3], {
+      width: 2,
+      height: 2,
+      ModelTransformation: [1000, 500, 0, 0, 0, -1000, 0, 2000, 0, 0, 1, 0, 0, 0, 0, 1],
+      GTModelTypeGeoKey: 1,
+      ProjectedCSTypeGeoKey: 3857,
+    } as never);
+    await assert.rejects(
+      loadCogPreview(
+        cogLayer("affine", "https://cogs.example.com/affine.tif"),
+        rangeReader(buffer).fetchRange,
+      ),
+      /rotated, skewed, or flipped/,
+    );
+  });
   it("unpremultiplies associated-alpha TIFF colors before applying transparency", async () => {
     const buffer = writeArrayBuffer([64, 0, 0, 128, 128, 0, 0, 255], {
       width: 2,
@@ -388,6 +420,7 @@ describe("MCP preview COG loading", () => {
       fetchRange,
     );
     assert.ok(reads.length > 0);
+    assert.equal(reads[0][1], 256 * 1024);
     assert.equal(image.width, 4);
     assert.equal(image.height, 3);
     assert.deepEqual(image.corners[0], [10, 50]);

@@ -177,11 +177,12 @@ export async function loadDataUrl(
     if (rawStyle !== null) {
       throw new Error(i18next.t("map.dataUrl3dTilesStyleUnsupported"));
     }
-    // The tileset's extent is only known once its root tile loads, so the
-    // layer frames itself then rather than joining the batch's fit.
+    // Batch loads read the root manifest's bounding volume before returning,
+    // so the shell can combine the tileset extent with the other datasets.
     const id = await addThreeDTilesLayerFromUrl(mapAppAPI, remote.url, {
       name: remote.name,
       flyTo: fit,
+      signal: options.signal,
     });
     if (options.signal?.aborted) {
       store.removeLayer(id);

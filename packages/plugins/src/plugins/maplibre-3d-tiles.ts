@@ -539,10 +539,10 @@ function restoreThreeDTilesMapLayer(
   layer: GeoLibreLayer,
   url: string,
   flyToOnLoad = false,
-): void {
+): boolean {
   const map = control.getMap();
   const controlLayers = getThreeDTilesControlLayers(control);
-  if (!map || !controlLayers || !hasStyleLayerApi(map)) return;
+  if (!map || !controlLayers || !hasStyleLayerApi(map)) return false;
 
   const id = layer.id;
   const layerId = restoredThreeDTilesLayerId(layer);
@@ -596,12 +596,12 @@ function restoreThreeDTilesMapLayer(
 
   if (map.getLayer(layerId)) {
     moveThreeDTilesMapLayer(map, layerId, beforeId);
-    return;
+    return true;
   }
 
   if (loadHeaders && Object.keys(loadHeaders).length > 0 && !allowsCredentialHeaders(url)) {
     updateThreeDTilesError(control, id, new Error(THREE_D_TILES_INSECURE_HEADERS));
-    return;
+    return false;
   }
   if (hasHeaderReferences(requestHeaders)) {
     threeDTilesResolvedHeaders.set(id, JSON.stringify(loadHeaders ?? null));
@@ -626,7 +626,13 @@ function restoreThreeDTilesMapLayer(
   // loadTileset/removeTileset in the library), so removeTileset(id) reaches
   // this entry. The ThreeDTilesLayer itself carries the native map layer id.
   controlLayers.set(id, restoredLayer);
-  map.addLayer(restoredLayer, beforeId);
+  try {
+    map.addLayer(restoredLayer, beforeId);
+  } catch (error) {
+    controlLayers.delete(id);
+    throw error;
+  }
+  return true;
 }
 
 const THREE_D_TILES_INSECURE_HEADERS =
@@ -774,6 +780,9 @@ function createThreeDTilesLayerUpdate(
   existingLayer: GeoLibreLayer,
   layer: GeoLibreLayer,
 ): Partial<GeoLibreLayer> | null {
+  if (existingLayer.metadata.bounds && !layer.metadata.bounds) {
+    layer = { ...layer, metadata: { ...layer.metadata, bounds: existingLayer.metadata.bounds } };
+  }
   const update: Partial<GeoLibreLayer> = {};
   const name = existingLayer.name || layer.name;
 
@@ -1316,7 +1325,7 @@ function addThreeDTilesLayerForGlobe(
 export async function addThreeDTilesLayerFromUrl(
   app: GeoLibreAppAPI,
   url: string,
-  options: { name?: string; flyTo?: boolean } = {},
+  options: { name?: string; flyTo?: boolean; signal?: AbortSignal } = {},
 ): Promise<string> {
   const translate = createPluginTranslator(app, "3d-tiles");
   if (isGooglePhotorealisticTilesetUrl(url) || isArcgisI3sSceneLayerUrl(url)) {
@@ -1328,6 +1337,20 @@ export async function addThreeDTilesLayerFromUrl(
     );
   }
   const flyTo = options.flyTo ?? true;
+  let bounds: [number, number, number, number] | null = null;
+  if (!flyTo) {
+    try {
+      bounds = await (
+        await import("./three-d-tiles-bounds")
+      ).loadThreeDTilesBounds(url, options.signal);
+    } catch (error) {
+      if (options.signal?.aborted) throw error;
+      throw new Error(
+        translate("extentUnavailable", "The 3D Tiles extent could not be read for batch framing."),
+        { cause: error },
+      );
+    }
+  }
   const id = `tiles-${crypto.randomUUID()}`;
   const tileset: ThreeDTilesItemState = {
     id,
@@ -1343,11 +1366,13 @@ export async function addThreeDTilesLayerFromUrl(
   // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   if (renderer === "cesium") {
     const layer = createThreeDTilesGlobeStoreLayer({ ...tileset, status: "loaded" });
+    if (bounds) layer.metadata.bounds = bounds;
     useAppStore.getState().addLayer(layer);
     if (flyTo) app.fitLayer?.(layer.id);
     return layer.id;
   }
   const layer = createThreeDTilesStoreLayer(tileset);
+  if (bounds) layer.metadata.bounds = bounds;
   // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   if (renderer === "mapbox" || renderer === "arcgis") {
     activeThreeDTilesApp = app;
@@ -1366,11 +1391,43 @@ export async function addThreeDTilesLayerFromUrl(
     throw new Error(
       translate("controlUnavailable", "The 3D Tiles control could not be added to the map."),
     );
+  const map = control.getMap();
+  if (!map)
+    throw new Error(
+      translate("controlUnavailable", "The 3D Tiles control could not be added to the map."),
+    );
+  if (!map.isStyleLoaded()) {
+    await new Promise<void>((resolve, reject) => {
+      const ready = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        map.off("idle", ready);
+        reject(
+          new Error(
+            translate("styleTimeout", "The map style did not finish loading for 3D Tiles."),
+          ),
+        );
+      }, 30_000);
+      map.once("idle", ready);
+    });
+  }
   runWithThreeDTilesStoreSyncSuspended(() => {
     showThreeDTilesControl(control);
     control.collapse();
     useAppStore.getState().addLayer(layer);
-    restoreThreeDTilesMapLayer(control, layer, url, flyTo);
+    try {
+      if (!restoreThreeDTilesMapLayer(control, layer, url, flyTo)) {
+        throw new Error(
+          translate("controlUnavailable", "The 3D Tiles control could not be added to the map."),
+        );
+      }
+    } catch (error) {
+      control.removeTileset(id);
+      useAppStore.getState().removeLayer(id);
+      throw error;
+    }
   });
   return id;
 }

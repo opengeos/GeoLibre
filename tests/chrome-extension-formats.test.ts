@@ -188,6 +188,23 @@ describe("GeoLibre extension: service requests", () => {
     );
   });
 
+  it("keeps service access parameters while discarding individual request parameters", () => {
+    assert.equal(
+      classifyServiceRequest(
+        "https://stac.example.com/v1/collections/c/items?token=abc&limit=10&bbox=1,2,3,4",
+      )?.url,
+      "https://stac.example.com/v1/collections/c?token=abc",
+    );
+    for (const kind of ["MapServer", "ImageServer"]) {
+      assert.equal(
+        classifyServiceRequest(
+          `https://gis.example.com/Roads/${kind}/export?token=abc&bbox=1,2,3,4&size=256,256&f=image`,
+        )?.url,
+        `https://gis.example.com/Roads/${kind}?token=abc`,
+      );
+    }
+  });
+
   it("recognizes data files a page's map library fetched", () => {
     const urls = [
       "https://data.example.com/store.zarr/.zmetadata",
