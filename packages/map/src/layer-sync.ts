@@ -1119,6 +1119,9 @@ function ensurePMTilesExternalLayer(
   }
 }
 
+// Bound cleanup to the decorations this map instance has actually created.
+const pmtilesDecorationOwners = new WeakMap<maplibregl.Map, Map<string, Set<string>>>();
+
 /**
  * Line decorations (flow-direction arrows and other repeated symbols) for a
  * vector PMTiles archive: one GeoLibre-owned symbol layer per rendered source
@@ -1195,6 +1198,11 @@ function syncPMTilesLineDecorations(
       },
       beforeId,
     );
+    let owners = pmtilesDecorationOwners.get(map);
+    if (!owners) pmtilesDecorationOwners.set(map, (owners = new Map()));
+    let ids = owners.get(layer.id);
+    if (!ids) owners.set(layer.id, (ids = new Set()));
+    ids.add(decorationId);
   }
 }
 
@@ -1204,17 +1212,21 @@ function removeStalePMTilesLineDecorations(
   layerId: string,
   keep: ReadonlySet<string> = new Set(),
 ): void {
-  for (const id of map.getLayersOrder?.() ??
-    map.getStyle?.()?.layers?.map((layer) => layer.id) ??
-    []) {
+  const owners = pmtilesDecorationOwners.get(map);
+  const ids = owners?.get(layerId);
+  if (!ids) return;
+  for (const id of ids) {
+    if (keep.has(id)) continue;
     const metadata = map.getLayer(id)?.metadata as Record<string, unknown> | undefined;
     if (
       metadata?.["geolibre:internal"] === true &&
-      metadata["geolibre:line-decoration-owner"] === layerId &&
-      !keep.has(id)
+      metadata["geolibre:line-decoration-owner"] === layerId
     )
       removeIfExists(map, id);
+    ids.delete(id);
   }
+  if (ids.size === 0) owners?.delete(layerId);
+  if (owners?.size === 0) pmtilesDecorationOwners.delete(map);
 }
 
 function getPMTilesSourceId(layer: GeoLibreLayer): string | undefined {
