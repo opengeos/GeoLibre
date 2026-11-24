@@ -91,7 +91,7 @@ import type { GeoLibrePlugin, GeoLibreMapControlPosition } from "@geolibre/plugi
 import { invoke } from "@tauri-apps/api/core";
 import { readFile } from "@tauri-apps/plugin-fs";
 import type { RefObject } from "react";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { bundledPluginManifestPaths } from "virtual:bundled-plugins";
 import {
   assertBundleNotBlocklisted,
@@ -694,6 +694,7 @@ export function listPluginArchivesFromFile(): Promise<InstalledWebPlugin[]> {
 }
 
 export function usePluginRegistry() {
+  const effectsPreviewApp = useRef<ReturnType<typeof createAppAPI> | null>(null);
   useSyncExternalStore(
     (listener) => manager.subscribe(listener),
     () => manager.getVersion(),
@@ -769,7 +770,8 @@ export function usePluginRegistry() {
       ),
     // Live preview: push the appearance change straight to the engine for an
     // instant redraw, but do NOT persist. A color-picker drag or slider scrub
-    // fires this every frame, so keeping persistence out avoids marking the
+    // fires this every frame. Reuse its app API until commit, and keep
+    // persistence out to avoid marking the
     // project dirty and sweeping Zustand subscribers on every pixel of movement.
     previewEffectsSettings: (next: Partial<EffectsSettings>) => {
       // Contained like toggle/reposition: setEffectsSettings drives imperative
@@ -784,7 +786,7 @@ export function usePluginRegistry() {
           ...next,
         });
         plugin.applyProjectState(
-          createAppAPI(),
+          (effectsPreviewApp.current ??= createAppAPI()),
           effectsSettingsEqual(settings, DEFAULT_EFFECTS_SETTINGS) ? undefined : settings,
         );
       } catch (error) {
@@ -808,6 +810,8 @@ export function usePluginRegistry() {
         useAppStore.getState().setProjectPlugins(projectPluginStateSnapshot());
       } catch (error) {
         reportPluginError(EFFECTS_PLUGIN_ID, "commit-effects", error);
+      } finally {
+        effectsPreviewApp.current = null;
       }
     },
   };

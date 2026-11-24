@@ -76,6 +76,9 @@ export function useScreenshotReadiness(
       if (loadError) errors.push(loadError);
       const store = useAppStore.getState();
       const manager = getPluginManager();
+      // Even an inactive saved plugin can add canvas content when its state
+      // finishes loading. This opt-in contract waits for all requested work;
+      // the existing 120-second deadline below reports a stalled import.
       const initializingPlugins =
         getPendingBuiltInPluginModuleIds().length > 0 ||
         manager.list().some(({ id }) => manager.pendingActivation(id) !== undefined);

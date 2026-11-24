@@ -13,6 +13,7 @@ import {
   canEditAttributeValues,
   canOpenLayerAttributeTable,
 } from "../../lib/attribute-table-source";
+
 const maplibreGeoEditorPlugin = builtInPluginMetadata(GEO_EDITOR_PLUGIN_ID);
 
 interface IdentifyEditActionsOptions {

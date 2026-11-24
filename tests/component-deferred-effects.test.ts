@@ -65,3 +65,40 @@ it("previews pending effects immediately and preserves the latest appearance thr
     manager.registerLazy(descriptor);
   }
 });
+
+it("reuses the preview app during a gesture and releases it on commit", async () => {
+  const id = "maplibre-atmosphere-effects";
+  const descriptor = BUILT_IN_PLUGINS.find(({ metadata }) => metadata.id === id);
+  assert.ok(descriptor);
+  const manager = getPluginManager();
+  const app = createAppAPI({ current: null });
+  const native = await descriptor.load();
+  const original = native.applyProjectState;
+  assert.ok(original);
+  const apps: Parameters<typeof original>[0][] = [];
+  native.applyProjectState = (context, state) => {
+    apps.push(context);
+    return original(context, state);
+  };
+  manager.unregister(id, app);
+  manager.registerLazy(descriptor);
+  await manager.preparePlugin(id, app);
+  const hook = renderHook(() => usePluginRegistry());
+  try {
+    act(() => {
+      hook.result.current.previewEffectsSettings({ haloColor: "#123456" });
+      hook.result.current.previewEffectsSettings({ haloColor: "#234567" });
+    });
+    assert.equal(apps.length, 2);
+    assert.equal(apps[0], apps[1]);
+    act(() => hook.result.current.commitEffectsSettings());
+    act(() => hook.result.current.previewEffectsSettings({ haloColor: "#345678" }));
+    assert.equal(apps.length, 3);
+    assert.notEqual(apps[1], apps[2]);
+  } finally {
+    native.applyProjectState = original;
+    hook.unmount();
+    manager.unregister(id, app);
+    manager.registerLazy(descriptor);
+  }
+});

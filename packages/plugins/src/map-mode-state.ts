@@ -49,7 +49,9 @@ export const restoreDirections = (app: GeoLibreAppAPI, active: boolean): void =>
   directions?.restoreDirections(app, active);
 export function subscribeDirectionsState(listener: () => void): () => void {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 /** An unloaded reverse-geocode provider has no click subscription to rebind. */

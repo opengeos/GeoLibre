@@ -18,6 +18,7 @@ import {
 } from "../../lib/geometry-edit-session";
 import { useCreationTemplatePrompt } from "../useCreationTemplatePrompt";
 import { createAppAPI, getPluginManager } from "../usePlugins";
+
 const maplibreGeoEditorPlugin = builtInPluginMetadata(GEO_EDITOR_PLUGIN_ID);
 
 const GEOMETRY_EDIT_START_ERRORS = {
