@@ -218,6 +218,10 @@ the pixel limit. Crop or simplify them, or select the sidecar.
 Speckle filtering counts every input band against its work and scratch-memory
 budgets before copying the raster. The shared input preflight also reserves
 all output bands, including the three channels of SAR RGB.
+GeoJSON inputs have a separate 32 MiB limit before text decoding and JSON
+parsing. File pickers also reject larger GeoJSON files before reading their
+bytes when the size is available. Use a smaller vector input or the sidecar
+engine for larger masks, zones, or interpolation samples.
 
 Polygon and contour downloads from a custom projected CRS are transformed to
 WGS84. An image without a CRS can produce an unreferenced vector download with

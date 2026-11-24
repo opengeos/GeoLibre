@@ -1,5 +1,6 @@
 import { act, cleanup, render, screen, fireEvent, useAppStore, i18n, waitFor } from "./helpers/dom";
 import { setSidecarFetch } from "@geolibre/processing";
+import { MAX_CLIENT_VECTOR_BYTES } from "../apps/geolibre-desktop/src/lib/client-raster-inputs";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { createElement } from "react";
@@ -8,6 +9,36 @@ const { RasterToolsDialog } =
   await import("../apps/geolibre-desktop/src/components/processing/RasterToolsDialog");
 
 describe("Raster tools browser inputs", () => {
+  it("rejects an oversized GeoJSON file before reading its bytes", async () => {
+    let reads = 0;
+    mock.method(HTMLInputElement.prototype, "click", function (this: HTMLInputElement) {
+      Object.defineProperty(this, "files", {
+        configurable: true,
+        value: [
+          {
+            name: "large.geojson",
+            size: MAX_CLIENT_VECTOR_BYTES + 1,
+            arrayBuffer: async () => {
+              reads += 1;
+              return new ArrayBuffer(0);
+            },
+          },
+        ],
+      });
+      this.dispatchEvent(new Event("change"));
+    });
+    try {
+      useAppStore.getState().setRasterToolOpen("interpolate");
+      render(createElement(RasterToolsDialog, { mapControllerRef: { current: null } }));
+      fireEvent.click(screen.getByTitle(i18n.t("processing.filePicker.chooseInputFile")));
+      await screen.findByText(i18n.t("toolbar.rasterTool.vectorMemoryLimit", { limit: 32 }));
+      assert.equal(reads, 0);
+      assert.equal((document.getElementById("raster-input") as HTMLInputElement).value, "");
+    } finally {
+      cleanup();
+      mock.restoreAll();
+    }
+  });
   it("drops a primary file read after changing tools", async () => {
     const pending = Promise.withResolvers<ArrayBuffer>();
     mock.method(HTMLInputElement.prototype, "click", function (this: HTMLInputElement) {

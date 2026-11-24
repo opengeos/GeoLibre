@@ -55,6 +55,7 @@ import {
 import { useTranslation } from "react-i18next";
 import type { ParseKeys } from "i18next";
 import {
+  FileTooLargeError,
   openLocalDataFileWithFallback,
   pickLocalPathWithFallback,
   pickSavePathWithFallback,
@@ -71,6 +72,7 @@ import {
 import { createAppAPI } from "../../hooks/usePlugins";
 import {
   ClientRasterInputError,
+  MAX_CLIENT_VECTOR_BYTES,
   clientInputForParam,
   clientRasterOutputBands,
   parseGeoJsonBytes,
@@ -419,6 +421,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                 ? ".tif,.tiff,image/tiff"
                 : ".geojson,.json,application/geo+json,application/json",
             readBinary: true,
+            maxBytes: kind === "vector" ? MAX_CLIENT_VECTOR_BYTES : undefined,
           });
           if (
             session !== formSessionRef.current ||
@@ -442,7 +445,15 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
           ) {
             return;
           }
-          setError(err instanceof Error ? err.message : t("toolbar.rasterTool.layerLoadError"));
+          setError(
+            err instanceof FileTooLargeError
+              ? t("toolbar.rasterTool.vectorMemoryLimit", {
+                  limit: MAX_CLIENT_VECTOR_BYTES / 1024 ** 2,
+                })
+              : err instanceof Error
+                ? err.message
+                : t("toolbar.rasterTool.layerLoadError"),
+          );
         }
         return;
       }
@@ -517,6 +528,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
           ? ".geojson,.json,application/geo+json,application/json"
           : ".tif,.tiff,image/tiff",
         readBinary: true,
+        maxBytes: vectorPrimaryInput ? MAX_CLIENT_VECTOR_BYTES : undefined,
       });
       if (stale()) return;
       if (picked?.data) {
@@ -528,9 +540,17 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         setClientResult(null);
         setClientLog([]);
       }
-    } catch (error) {
+    } catch (err) {
       if (!stale())
-        setError(error instanceof Error ? error.message : t("toolbar.rasterTool.layerLoadError"));
+        setError(
+          err instanceof FileTooLargeError
+            ? t("toolbar.rasterTool.vectorMemoryLimit", {
+                limit: MAX_CLIENT_VECTOR_BYTES / 1024 ** 2,
+              })
+            : err instanceof Error
+              ? err.message
+              : t("toolbar.rasterTool.layerLoadError"),
+        );
     }
   }, [tool, vectorPrimaryInput, t]);
 
@@ -855,11 +875,15 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     } catch (err) {
       if (isStale()) return;
       const message =
-        err instanceof ClientRasterInputError && err.code === "COMBINED_TOO_LARGE"
-          ? t("toolbar.rasterTool.clientMemoryLimit")
-          : err instanceof Error
-            ? err.message
-            : t("toolbar.rasterTool.runError");
+        err instanceof ClientRasterInputError && err.code === "VECTOR_TOO_LARGE"
+          ? t("toolbar.rasterTool.vectorMemoryLimit", {
+              limit: MAX_CLIENT_VECTOR_BYTES / 1024 ** 2,
+            })
+          : err instanceof ClientRasterInputError && err.code === "COMBINED_TOO_LARGE"
+            ? t("toolbar.rasterTool.clientMemoryLimit")
+            : err instanceof Error
+              ? err.message
+              : t("toolbar.rasterTool.runError");
       tracker.finish("error", message);
       setError(message);
       setClientLog((prev) => [...prev, message]);

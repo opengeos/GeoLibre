@@ -665,6 +665,14 @@ describe("client-raster-inputs path parameters", () => {
 });
 
 describe("client-raster-inputs helper", () => {
+  it("rejects oversized GeoJSON before decoding text", async () => {
+    const { parseGeoJsonBytes, MAX_CLIENT_VECTOR_BYTES } =
+      await import("../apps/geolibre-desktop/src/lib/client-raster-inputs");
+    assert.throws(
+      () => parseGeoJsonBytes(new ArrayBuffer(MAX_CLIENT_VECTOR_BYTES + 1)),
+      /VECTOR_TOO_LARGE/,
+    );
+  });
   it("reserves all RGB and preserved output bands even without secondary files", async () => {
     const { loadClientAdditionalRasters, clientRasterOutputBands } =
       await import("../apps/geolibre-desktop/src/lib/client-raster-inputs");

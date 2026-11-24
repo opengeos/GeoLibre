@@ -115,6 +115,29 @@ it("keeps integer missing samples separate when Float32 values collide", async (
   }
 });
 
+it("normalizes infinite and overflowing Float32 NoData to NaN", async () => {
+  for (const [tag, sentinel] of [
+    ["Infinity", Infinity],
+    ["-Infinity", -Infinity],
+    ["1e100", Infinity],
+  ] as const) {
+    const bytes = writeArrayBuffer(Float32Array.of(sentinel, 1), {
+      width: 2,
+      height: 1,
+      GDAL_NODATA: tag,
+      ModelPixelScale: [1, 1, 0],
+      ModelTiepoint: [0, 0, 0, 0, 1, 0],
+    });
+    const decoded = await readRasterData(bytes);
+    assert.ok(Number.isNaN(decoded.nodata));
+    assert.ok(Number.isNaN(decoded.bands[0][0]));
+    assert.equal(decoded.bands[0][1], 1);
+    const roundtrip = await readRasterData(writeRasterData(decoded));
+    assert.ok(Number.isNaN(roundtrip.nodata));
+    assert.ok(Number.isNaN(roundtrip.bands[0][0]));
+  }
+});
+
 it("preserves exact small-integer class sentinels", async () => {
   for (const values of [Uint8Array.of(0, 1), Uint16Array.of(0, 1), Uint32Array.of(0, 1)]) {
     const bytes = writeArrayBuffer(values, {

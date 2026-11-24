@@ -11,7 +11,10 @@ export interface ClientRasterInputEntry {
   bytes: ArrayBuffer;
 }
 
-export type ClientRasterInputErrorCode = "COMBINED_TOO_LARGE";
+export type ClientRasterInputErrorCode = "COMBINED_TOO_LARGE" | "VECTOR_TOO_LARGE";
+
+/** Bound GeoJSON text/JSON expansion independently of decoded raster buffers. */
+export const MAX_CLIENT_VECTOR_BYTES = 32 * 1024 * 1024;
 
 /** Number of Float32 output bands reserved on the primary raster grid. */
 export function clientRasterOutputBands(toolId: string, inputBands: number): number {
@@ -79,6 +82,8 @@ export function clientInputForParam(
 
 /** Decode a picked GeoJSON file; null when it is not a JSON object. */
 export function parseGeoJsonBytes(bytes: ArrayBuffer): unknown {
+  if (bytes.byteLength > MAX_CLIENT_VECTOR_BYTES)
+    throw new ClientRasterInputError("VECTOR_TOO_LARGE");
   try {
     const value: unknown = JSON.parse(new TextDecoder().decode(bytes));
     return value && typeof value === "object" ? value : null;

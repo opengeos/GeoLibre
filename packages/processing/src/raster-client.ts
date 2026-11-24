@@ -242,7 +242,8 @@ export async function readRasterData(
   const outputNoData =
     noData == null
       ? null
-      : rawBands.some(
+      : !Number.isFinite(Math.fround(noData)) ||
+          rawBands.some(
             (band) =>
               band instanceof Float64Array ||
               (!(band instanceof Float32Array) && Math.abs(noData) >= 2 ** 24),
@@ -250,14 +251,11 @@ export async function readRasterData(
         ? Number.NaN
         : Math.fround(noData);
   const bands = rawBands.map((band) => {
-    if (
-      noData == null ||
-      band instanceof Float32Array ||
-      outputNoData === noData ||
-      Number.isNaN(noData)
-    )
+    const sourceNoData =
+      band instanceof Float32Array && noData != null ? Math.fround(noData) : noData;
+    if (noData == null || outputNoData === sourceNoData || Number.isNaN(noData))
       return Float32Array.from(band);
-    return Float32Array.from(band, (value) => (value === noData ? outputNoData! : value));
+    return Float32Array.from(band, (value) => (value === sourceNoData ? outputNoData! : value));
   });
   const geoKeys = (image.getGeoKeys() as Record<string, unknown>) ?? {};
   if (Number(geoKeys.GTRasterTypeGeoKey) === 2) {

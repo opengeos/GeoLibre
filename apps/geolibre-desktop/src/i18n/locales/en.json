@@ -4280,6 +4280,7 @@
       "processingRestricted": "Raster processing is unavailable under the current application permissions.",
       "sidecarRestricted": "Sidecar execution is unavailable under the current application permissions. Choose the browser engine.",
       "clientMemoryLimit": "The decoded inputs and output exceed the browser memory limit. Crop or downsample the rasters before running this tool.",
+      "vectorMemoryLimit": "GeoJSON inputs are limited to {{limit}} MiB in the browser. Use a smaller file or the sidecar engine.",
       "clientHint": "Computes in your browser and adds the result to the map. For large rasters or geographic-CRS terrain, prefer the sidecar.",
       "switchToClientHint": "Or switch the engine to Client to run this tool in your browser.",
       "chooseGeoTiff": "Choose a GeoTIFF",
