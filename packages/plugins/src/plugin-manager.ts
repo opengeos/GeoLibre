@@ -82,7 +82,7 @@ export class PluginManager {
       canAddControl: () =>
         this.plugins.get(id) === plugin &&
         (app.getMapRenderer?.() ?? "maplibre") === renderer &&
-        this.supportsEngine(id, app) &&
+        (options.hostHelper || this.supportsEngine(id, app)) &&
         this.activationGenerations.get(id) === generation &&
         (this.activating.has(id) ||
           this.active.has(id) ||
@@ -179,10 +179,10 @@ export class PluginManager {
   /** Prepare saved settings before a host invokes a module's data/UI helper. */
   async preparePlugin(id: string, app: GeoLibreAppAPI): Promise<GeoLibrePlugin | undefined> {
     const plugin = this.plugins.get(id);
-    if (!plugin || !this.supportsEngine(id, app)) return undefined;
+    if (!plugin) return undefined;
     const controller = this.lazyPlugins.get(id);
     return controller
-      ? controller.prepare(this.scopeAppToPlugin(app, id, {}, this.restorePass))
+      ? controller.prepare(this.scopeAppToPlugin(app, id, { hostHelper: true }, this.restorePass))
       : plugin;
   }
 
@@ -194,11 +194,19 @@ export class PluginManager {
   ): Promise<Result | undefined> {
     const registered = this.plugins.get(id);
     const restorePass = this.restorePass;
+    const renderer = app.getMapRenderer?.() ?? "maplibre";
     const implementation = await this.preparePlugin(id, app);
     if (!implementation) return;
-    if (registered !== this.plugins.get(id) || restorePass !== this.restorePass)
+    if (
+      registered !== this.plugins.get(id) ||
+      restorePass !== this.restorePass ||
+      renderer !== (app.getMapRenderer?.() ?? "maplibre")
+    )
       throw new Error(`Plugin '${id}' helper was superseded.`);
-    const result = action(implementation, this.scopeAppToPlugin(app, id, {}, restorePass));
+    const result = action(
+      implementation,
+      this.scopeAppToPlugin(app, id, { hostHelper: true }, restorePass),
+    );
     this.notify();
     return result;
   }
@@ -939,6 +947,8 @@ export class PluginManager {
  * applies.
  */
 interface ScopeAppOptions {
+  /** Host helpers can use controls supported beyond their plugin panel's engines. */
+  hostHelper?: boolean;
   canAddControl?: () => boolean;
   /**
    * Called with every control a plugin adds through `addMapControl` while the

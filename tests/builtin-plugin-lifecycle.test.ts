@@ -5,6 +5,7 @@ import {
   type LazyPluginRegistration,
 } from "../packages/plugins/src/builtin-plugin-lifecycle";
 import { PluginManager } from "../packages/plugins/src/plugin-manager";
+import { createBuiltInPluginModules } from "../packages/plugins/src/builtin-plugin-loader";
 import type {
   GeoLibreAppAPI,
   GeoLibreMapControlPosition,
@@ -107,6 +108,123 @@ function harness() {
 }
 
 describe("lazy plugin lifecycle", () => {
+  it("retains live settings and teardown after a later configuration failure evicts the module", async () => {
+    const test = harness();
+    let imports = 0;
+    let failSetup = false;
+    const modules = createBuiltInPluginModules({
+      native: async () => {
+        imports++;
+        return { plugin: test.implementation };
+      },
+    });
+    const setup = () => {
+      if (failSetup) throw new Error("labels failed");
+    };
+    modules.configure("native", { labels: setup });
+    const lazy = createLazyPlugin(
+      {
+        ...test.registration,
+        load: async () => (await modules.loadModule("native")).plugin,
+        peek: () => modules.peekModule("native")?.plugin,
+      },
+      {
+        restoreGeneration: () => 0,
+        isRegistered: () => true,
+        changed: () => {},
+        reportError: (error) => {
+          throw error;
+        },
+      },
+    );
+    await lazy.plugin.activate(app);
+    test.implementation.applyProjectState?.(app, { value: 42 });
+    failSetup = true;
+    assert.throws(() => modules.configure("native", { labels: setup }), /labels failed/);
+    assert.equal(modules.peekModule("native"), undefined);
+    assert.deepEqual(lazy.plugin.getProjectState?.(), { value: 42 });
+    lazy.plugin.deactivate(app);
+    assert.equal(test.calls.at(-1), "deactivate");
+    failSetup = false;
+    await lazy.prepare(app);
+    assert.equal(imports, 2);
+  });
+
+  it("does not activate an implementation loaded for an obsolete renderer", async () => {
+    const test = harness();
+    let renderer: "mapbox" | "cesium" = "mapbox";
+    const host = { getMapRenderer: () => renderer } as unknown as GeoLibreAppAPI;
+    const activation = test.adapter.plugin.activate(host);
+    renderer = "cesium";
+    test.pending.resolve(test.implementation);
+    assert.equal(await activation, false);
+    assert.deepEqual(test.calls, []);
+  });
+
+  it("cancels pending helper and state writes as soon as the renderer changes", async () => {
+    const test = harness();
+    const manager = new PluginManager();
+    let renderer: "mapbox" | "cesium" = "mapbox";
+    const host = { getMapRenderer: () => renderer } as unknown as GeoLibreAppAPI;
+    manager.registerLazy({
+      ...test.registration,
+      metadata: { ...test.registration.metadata, engines: ["mapbox", "cesium"] },
+    });
+    manager.restoreProjectState(
+      {
+        manifestUrls: [],
+        activePluginIds: [],
+        mapControlPositions: {},
+        settings: { lazy: { value: 42 } },
+      },
+      host,
+    );
+    let called = false;
+    const helper = manager.runPluginHelper("lazy", host, () => {
+      called = true;
+    });
+    renderer = "cesium";
+    test.pending.resolve(test.implementation);
+    await assert.rejects(helper, /superseded/);
+    assert.equal(called, false);
+    assert.deepEqual(test.calls, []);
+    assert.deepEqual(manager.getProjectState().settings.lazy, { value: 42 });
+    manager.restoreProjectState(null, host);
+    await tick();
+    assert.deepEqual(test.calls, ['state:{"value":42}']);
+  });
+
+  it("allows a supported host control helper without activating an unsupported plugin panel", async () => {
+    const test = harness();
+    const manager = new PluginManager();
+    let mounts = 0;
+    let renderer: "mapbox" | "cesium" = "mapbox";
+    const host = {
+      getMapRenderer: () => renderer,
+      addMapControl: () => {
+        mounts++;
+        return true;
+      },
+    } as unknown as GeoLibreAppAPI;
+    manager.registerLazy({
+      ...test.registration,
+      metadata: { ...test.registration.metadata, engines: ["maplibre"] },
+    });
+    assert.equal(manager.activate("lazy", host), false);
+    let retained: GeoLibreAppAPI | undefined;
+    const helper = manager.runPluginHelper("lazy", host, (_implementation, scoped) => {
+      retained = scoped;
+      return scoped.addMapControl({ onAdd: () => ({}) as HTMLElement, onRemove() {} });
+    });
+    test.pending.resolve(test.implementation);
+    assert.equal(await helper, true);
+    assert.equal(mounts, 1);
+    assert.equal(manager.isActive("lazy"), false);
+    renderer = "cesium";
+    retained!.addMapControl({ onAdd: () => ({}) as HTMLElement, onRemove() {} });
+    assert.equal(mounts, 1);
+  });
+
   it("prepares state before a host helper and fences its retained app scope", async () => {
     const test = harness();
     const manager = new PluginManager();

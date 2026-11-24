@@ -53,7 +53,8 @@ pending project settings and control positions for synchronous snapshots until
 the implementation can apply them. Restore generations and registration identity
 reject stale completions. Host panel actions use `runPluginHelper` to prepare
 saved settings and receive an app scope owned by the current project before
-calling implementation helpers. The import guard in
+calling implementation helpers. Host helpers use the engine's control adapter
+capabilities; plugin activation still follows the metadata engine list. The import guard in
 `tests/builtin-plugin-loader.test.ts` checks that registries, metadata, and label
 hooks remain importable without implementations.
 

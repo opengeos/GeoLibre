@@ -28,6 +28,11 @@ export function createLazyPlugin(registration: LazyPluginRegistration, context: 
   let state: unknown;
   let position: GeoLibreMapControlPosition | undefined;
   let activationTask: Promise<boolean | void> | undefined;
+  let loadedImplementation: GeoLibrePlugin | undefined;
+  const currentImplementation = (): GeoLibrePlugin | undefined => {
+    loadedImplementation = registration.peek() ?? loadedImplementation;
+    return loadedImplementation;
+  };
 
   const applyPending = (implementation: GeoLibrePlugin, app: GeoLibreAppAPI): boolean | void => {
     if (position) {
@@ -49,6 +54,7 @@ export function createLazyPlugin(registration: LazyPluginRegistration, context: 
   const queueRestore = (app: GeoLibreAppAPI): void => {
     const ticket = ++restoreTicket;
     const generation = context.restoreGeneration();
+    const renderer = app.getMapRenderer?.() ?? "maplibre";
     lastRestoreGeneration = generation;
     // An untouched/reset plugin needs no implementation until it is used.
     if (!statePending || state === undefined) return;
@@ -57,9 +63,11 @@ export function createLazyPlugin(registration: LazyPluginRegistration, context: 
         if (
           !context.isRegistered() ||
           ticket !== restoreTicket ||
-          generation !== context.restoreGeneration()
+          generation !== context.restoreGeneration() ||
+          renderer !== (app.getMapRenderer?.() ?? "maplibre")
         )
           return;
+        loadedImplementation = implementation;
         try {
           applyPending(implementation, app);
           context.changed();
@@ -71,7 +79,8 @@ export function createLazyPlugin(registration: LazyPluginRegistration, context: 
         if (
           context.isRegistered() &&
           ticket === restoreTicket &&
-          generation === context.restoreGeneration()
+          generation === context.restoreGeneration() &&
+          renderer === (app.getMapRenderer?.() ?? "maplibre")
         )
           context.reportError(error);
       },
@@ -83,9 +92,16 @@ export function createLazyPlugin(registration: LazyPluginRegistration, context: 
     isCurrent: () => boolean = () => true,
   ): Promise<GeoLibrePlugin> => {
     const generation = context.restoreGeneration();
+    const renderer = app.getMapRenderer?.() ?? "maplibre";
     const implementation = await registration.load();
-    if (!context.isRegistered() || !isCurrent() || generation !== context.restoreGeneration())
+    if (
+      !context.isRegistered() ||
+      !isCurrent() ||
+      generation !== context.restoreGeneration() ||
+      renderer !== (app.getMapRenderer?.() ?? "maplibre")
+    )
       throw new Error(`Plugin '${metadata.id}' preparation was superseded.`);
+    loadedImplementation = implementation;
     applyPending(implementation, app);
     return implementation;
   };
@@ -104,12 +120,23 @@ export function createLazyPlugin(registration: LazyPluginRegistration, context: 
     sessionScoped: metadata.sessionScoped,
     activate: async (app) => {
       const generation = ++activationGeneration;
+      const renderer = app.getMapRenderer?.() ?? "maplibre";
       const task = (async () => {
         const implementation = await registration.load();
-        if (!context.isRegistered() || generation !== activationGeneration) return false;
+        if (
+          !context.isRegistered() ||
+          generation !== activationGeneration ||
+          renderer !== (app.getMapRenderer?.() ?? "maplibre")
+        )
+          return false;
+        loadedImplementation = implementation;
         applyPending(implementation, app);
         const result = await implementation.activate(app);
-        return generation === activationGeneration && context.isRegistered() ? result : false;
+        return generation === activationGeneration &&
+          context.isRegistered() &&
+          renderer === (app.getMapRenderer?.() ?? "maplibre")
+          ? result
+          : false;
       })();
       activationTask = task;
       try {
@@ -123,19 +150,19 @@ export function createLazyPlugin(registration: LazyPluginRegistration, context: 
       restoreTicket++;
       if (statePending && registration.deactivatePendingState)
         state = registration.deactivatePendingState(state);
-      registration.peek()?.deactivate(app);
+      currentImplementation()?.deactivate(app);
     },
   };
 
   if (hooks.has("getMapControlPosition"))
     plugin.getMapControlPosition = () =>
       position ??
-      registration.peek()?.getMapControlPosition?.() ??
+      currentImplementation()?.getMapControlPosition?.() ??
       metadata.defaultMapControlPosition ??
       "top-right";
   if (hooks.has("setMapControlPosition"))
     plugin.setMapControlPosition = (app, target) => {
-      const implementation = registration.peek();
+      const implementation = currentImplementation();
       if (implementation) {
         if (!implementation.setMapControlPosition)
           throw new Error(`Plugin '${metadata.id}' cannot restore its control position.`);
@@ -146,12 +173,12 @@ export function createLazyPlugin(registration: LazyPluginRegistration, context: 
     };
   if (hooks.has("getProjectState"))
     plugin.getProjectState = () =>
-      statePending ? state : registration.peek()?.getProjectState?.();
+      statePending ? state : currentImplementation()?.getProjectState?.();
   if (hooks.has("applyProjectState"))
     plugin.applyProjectState = (app, value) => {
       state = value;
       statePending = true;
-      const implementation = registration.peek();
+      const implementation = currentImplementation();
       if (implementation) {
         restoreTicket++;
         return applyPending(implementation, app);
