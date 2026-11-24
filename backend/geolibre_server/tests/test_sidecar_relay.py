@@ -520,10 +520,58 @@ def test_discovery_cleanup_does_not_create_unused_runtime_files(enabled):
 
 
 def test_lifespan_writes_and_removes_the_discovery_file(enabled):
+    """Publish only after explicit access and remove the record at shutdown.
+
+    Args:
+        enabled: The isolated relay configuration.
+    """
     path = relay.discovery_file()
-    with TestClient(main.app):
+    with TestClient(main.app) as shared:
+        assert not path.exists()
+        assert (
+            shared.post(
+                "/relay/access", json={"enabled": True}, headers={"X-GeoLibre-Token": SIDECAR_TOKEN}
+            ).status_code
+            == 200
+        )
         assert path.exists()
     assert not path.exists()
+
+
+def test_shutdown_discovery_cleanup_runs_off_the_event_loop(monkeypatch):
+    """Move potentially contended discovery locking to a worker thread.
+
+    Args:
+        monkeypatch: The pytest patch fixture.
+    """
+    cleanup_threads = []
+    monkeypatch.setattr(
+        main, "remove_discovery_file", lambda: cleanup_threads.append(threading.get_ident())
+    )
+    loop_thread = threading.get_ident()
+
+    async def exercise():
+        """Enter and exit the actual application lifespan."""
+        async with main._lifespan(main.app):
+            assert not cleanup_threads
+
+    asyncio.run(exercise())
+    assert len(cleanup_threads) == 1
+    assert cleanup_threads[0] != loop_thread
+
+
+def test_command_stream_is_bounded_before_json_decode(client, monkeypatch):
+    """Reject an oversized chunked command without buffering its remaining body.
+
+    Args:
+        client: The shared-loop relay HTTP client.
+        monkeypatch: The pytest patch fixture.
+    """
+    monkeypatch.setattr(relay, "MAX_COMMAND_BYTES", 32)
+    response = client.post(
+        "/relay/command", content=iter([b" " * 20, b" " * 20]), headers=_client_headers()
+    )
+    assert response.status_code == 413
 
 
 def test_socket_fails_closed_without_a_configured_token(client, monkeypatch):

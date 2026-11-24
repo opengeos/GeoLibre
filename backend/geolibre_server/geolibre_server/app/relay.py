@@ -85,6 +85,7 @@ _RELAY_TOKEN = secrets.token_urlsafe(32)
 SEND_TIMEOUT_SECONDS = 1.0
 MAX_SEND_TIMEOUT_SECONDS = 30.0
 SEND_BYTES_PER_SECOND = 1024 * 1024
+MAX_COMMAND_BYTES = 8 * 1024 * 1024
 _access_allowed = False
 _access_generation = 0
 
@@ -437,7 +438,12 @@ async def relay_command(request: Request) -> dict[str, Any]:
     """Relay one command to every app window, waiting for a correlated result."""
     check_client_token(request)
     try:
-        payload = json.loads(await request.body() or b"{}")
+        body = bytearray()
+        async for chunk in request.stream():
+            if len(body) + len(chunk) > MAX_COMMAND_BYTES:
+                raise HTTPException(status_code=413, detail="Live command exceeds the 8 MB limit.")
+            body.extend(chunk)
+        payload = json.loads(body or b"{}")
         message = normalize_command(payload)
     except (ValueError, json.JSONDecodeError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -465,7 +471,11 @@ async def relay_command(request: Request) -> dict[str, Any]:
         try:
             await asyncio.wait({future, broadcast}, return_when=asyncio.FIRST_COMPLETED)
             if future.done():
-                return max(1, delivered[0]), future.result()
+                result = future.result()
+                # An app response proves delivery, even if send completion has
+                # not resumed yet. A disconnect-generated error proves none.
+                reached = max(1, delivered[0]) if "requestId" in result else delivered[0]
+                return reached, result
             reached = broadcast.result()
             if reached == 0:
                 return 0, None

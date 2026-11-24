@@ -21,6 +21,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .. import __version__
@@ -38,7 +39,7 @@ from .obia import router as obia_router
 from .pointcloud import router as pointcloud_router
 from .postgis import router as postgis_router
 from .raster import router as raster_router
-from .relay import RELAY_CLIENT_PATHS, remove_discovery_file, write_discovery_file
+from .relay import RELAY_CLIENT_PATHS, remove_discovery_file
 from .relay import router as relay_router
 from .sql import router as sql_router
 from .tenant import (
@@ -71,15 +72,11 @@ _TOKEN_EXEMPT_PATHS = frozenset({"/health"})
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Advertise the Live MCP relay to local MCP clients while this process runs.
-
-    Both steps are no-ops unless the desktop shell enabled the relay.
-    """
-    write_discovery_file()
+    """Remove discovery state on shutdown without blocking the HTTP event loop."""
     try:
         yield
     finally:
-        remove_discovery_file()
+        await run_in_threadpool(remove_discovery_file)
 
 
 app = FastAPI(title="GeoLibre Server", version=__version__, lifespan=_lifespan)
