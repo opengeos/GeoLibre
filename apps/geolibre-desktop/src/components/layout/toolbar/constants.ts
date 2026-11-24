@@ -212,6 +212,14 @@ export const VECTOR_TOOL_COMMANDS: Array<{
   { kind: "dggs-grid", titleKey: "toolbar.vectorTool.dggsGenerator" },
   { kind: "dggs-bin", titleKey: "toolbar.vectorTool.dggsBinning" },
   { kind: "dggs-compact", titleKey: "toolbar.vectorTool.dggsCompact" },
+  { kind: "create-routes", titleKey: "toolbar.vectorTool.createRoutes" },
+  {
+    kind: "locate-features-along-routes",
+    titleKey: "toolbar.vectorTool.locateFeaturesAlongRoutes",
+  },
+  { kind: "dynamic-segmentation", titleKey: "toolbar.vectorTool.dynamicSegmentation" },
+  { kind: "fix-polygon-overlaps", titleKey: "toolbar.vectorTool.fixPolygonOverlaps" },
+  { kind: "fill-polygon-gaps", titleKey: "toolbar.vectorTool.fillPolygonGaps" },
 ];
 
 /**
