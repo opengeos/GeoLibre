@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import subprocess
+import tempfile
 import threading
 from pathlib import Path
 from typing import Any
@@ -531,6 +533,7 @@ def _run_conversion_job(
 ) -> None:
     """Run a conversion script in the managed runtime and record the result."""
     process: subprocess.Popen[str] | None = None
+    scratch_dir: str | None = None
     timed_out = threading.Event()
     # Set from a marker line when the script rejects the user's input; see
     # _SCRIPT_DRIVER. Anything else stays a generic failure.
@@ -541,6 +544,11 @@ def _run_conversion_job(
     # overwrote the file in place before failing, that partial write stays on disk).
     output_existed = bool(params.get("output_path")) and Path(params["output_path"]).exists()
     try:
+        if script == _PMTILES_SCRIPT:
+            # The parent owns cleanup because cancellation kills the worker
+            # before its Python finally blocks can run.
+            scratch_dir = tempfile.mkdtemp(prefix="geolibre-pmtiles-")
+            params = {**params, "scratch_dir": scratch_dir}
         _job_update(job_id, status="running")
         python = _runtime_python()
         process = subprocess.Popen(
@@ -649,6 +657,8 @@ def _run_conversion_job(
             except subprocess.TimeoutExpired:
                 pass
         _JOB_MANAGER.clear_process(job_id)
+        if scratch_dir is not None:
+            shutil.rmtree(scratch_dir, ignore_errors=True)
 
 
 def _start_job(
@@ -930,3 +940,29 @@ def conversion_job(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@router.post("/jobs/{job_id}/cancel")
+def conversion_cancel(job_id: str):
+    """Request cancellation of a pending or running conversion job.
+
+    Cancelling a job that has already finished is a no-op that returns its final
+    state, so a client racing completion never sees an error. When cancellation
+    wins before completion, the job reports ``cancelled`` and its partial output
+    is removed. Cancellation is best-effort: work already completing may still
+    report success, and completed output is not rolled back. The response is
+    the current state; clients should keep polling until a terminal state.
+
+    Args:
+        job_id: The conversion job id.
+
+    Returns:
+        The job's current state.
+
+    Raises:
+        HTTPException: 404 if the job is unknown (or owned by another tenant).
+    """
+    if _JOB_MANAGER.get(job_id) is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _cancel_job(job_id)
+    return _JOB_MANAGER.get(job_id)

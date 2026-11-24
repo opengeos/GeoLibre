@@ -39,11 +39,30 @@ Deployment protections remain the operator's responsibility:
   1–365 day lifetime where bounded credentials are needed, and revoke or rotate
   delete-only and legacy tokens operationally.
 - **Rate limiting.** The OAuth consent flow caps pending interactions per
-  browser binding, but a fresh cookie bypasses that cap; the reference server
-  has no general request limiter. Before enabling OAuth publicly, enforce
-  per-client-IP limits at the ingress on **GET and POST** `/oauth/authorize`,
+  browser binding, but a fresh cookie bypasses that cap. The reference server
+  has a built-in per-client-IP limiter (`GEOLIBRE_RATE_LIMIT_AUTH`, default
+  30 requests per 60 seconds on the credential routes below, and
+  `GEOLIBRE_RATE_LIMIT_API`, default 600 per 60 seconds elsewhere; over budget
+  answers `429` with `Retry-After`), but its counters live in each worker
+  process, so they multiply with workers and replicas and reset on restart.
+  IPv6 clients in the same /64 share a budget, so rotating host addresses
+  within that subnet does not reset the limit. IPv4 budgets remain per address.
+  Configure `GEOLIBRE_TRUSTED_PROXIES` with the actual reverse proxy's source
+  IP or network. Without it, proxied users all share the proxy's IP and one
+  deployment-wide budget: by default 30 credential requests and 600 other
+  requests per minute. Public deployments log a startup reminder when rate
+  limiting is enabled without trusted proxies. Requests whose ASGI scope has
+  no peer address share an unknown-client budget and log one configuration
+  warning; the ASGI server must supply the original peer address for per-client
+  limits. Forwarding headers are ignored without a trusted peer. The proxy must replace incoming forwarding headers;
+  trusting arbitrary client-supplied `X-Forwarded-For` would bypass the limits.
+  Before enabling OAuth publicly, also enforce per-client-IP limits at the
+  ingress on **GET and POST** `/oauth/authorize`,
   `GET /oauth/sso/callback`, `POST /oauth/token`, `POST /api/auth/token`,
-  `POST /api/accounts`, and `POST /api/account/password`. The last four POSTs
+  `POST /api/accounts`, `POST /api/account/password`,
+  `POST /api/auth/password-reset/request`, `POST /api/auth/password-reset/confirm`,
+  `POST /api/auth/verify-email/request`, `POST /api/auth/verify-email/confirm`,
+  and `/api/account/mfa/totp` (including its `/enroll` and `/confirm` paths). These
   include password or token operations; consent login and the PAT/account
   routes run scrypt, and the single sign-on callback calls the organization's
   identity provider. Add per-username limits where the
@@ -57,13 +76,14 @@ Deployment protections remain the operator's responsibility:
   limit_req_zone $binary_remote_addr zone=geolibre_auth:10m rate=12r/m;
 
   # TLS issuer server context; proxy other API routes separately.
-  location ~ ^/(oauth/(authorize|token|sso/callback)|api/(auth/token|accounts|account/password))$ {
+  location ~ ^/(oauth/(authorize|token|sso/callback)|api/(auth/(token|password-reset/(request|confirm)|verify-email/(request|confirm))|accounts|account/(password|mfa/totp(/(enroll|confirm))?)))$ {
       limit_req zone=geolibre_auth burst=6 nodelay;
       limit_req_status 429;
       client_max_body_size 16k;
       access_log off;
       proxy_pass http://127.0.0.1:8000;
       proxy_set_header Host $http_host;
+      proxy_set_header X-Forwarded-For $remote_addr;
   }
   ```
 
@@ -74,10 +94,19 @@ Deployment protections remain the operator's responsibility:
   Suppress authorization request query strings, callback `Location` headers,
   and callback request query strings at the web ingress in proxy, WAF, and
   load-balancer logs.
-- **A request-size limit.** The server rejects an oversized *declared*
-  `Content-Length` before reading the body, but a chunked or HTTP/2 request
-  declares no length and is parsed in full before the per-route limit applies.
-  Cap request size at the proxy as well.
+- **A request-size limit.** The server rejects a body over
+  `GEOLIBRE_MAX_REQUEST_BYTES` (default six times the project limit plus
+  1 KiB): an oversized declared `Content-Length` before reading the body, and a
+  chunked or HTTP/2 body as soon as the streamed bytes cross the ceiling.
+  Capping request size at the proxy as well keeps oversized uploads off the
+  application workers entirely.
+- **The secret encryption key.** Set `GEOLIBRE_SECRET_KEYS` (comma-separated
+  Fernet keys; see `backend/geolibre_server_api/README.md`) before configuring
+  organization single sign-on, including with the default localhost public URL.
+  Store it apart from the database and its backups; losing it means re-entering every
+  identity provider's client secret. An explicit
+  `GEOLIBRE_ALLOW_PLAINTEXT_SECRETS=1` opt-out is available only for loopback
+  development servers that are not publicly reachable.
 - **Database pooling and schema migrations.** For PostgreSQL and other
   non-SQLite databases, the SQLAlchemy pool defaults to `GEOLIBRE_DB_POOL_SIZE=10`,
   `GEOLIBRE_DB_MAX_OVERFLOW=20` (up to 30 connections per worker process), and
@@ -656,8 +685,56 @@ and `identity provider discovery failed`. Out-of-range values are a generic
   single sign-on have no way to sign in. A provider configured later links
   subjects afresh, so their next sign-in creates new accounts; remove the old
   ones.
-- **Secret storage:** `clientSecret` is stored unencrypted in the database, at
-  the same trust level as the rest of its contents.
+- **Secret storage:** `clientSecret` is encrypted at rest with Fernet under the
+  first key in `GEOLIBRE_SECRET_KEYS` and decrypted only when calling the
+  provider's token endpoint. By default a server without the key refuses to
+  store a secret (`503`), even with the default localhost public URL, and
+  fails startup while secrets are stored; startup and `alembic upgrade head`
+  encrypt secrets left in plaintext by earlier releases. Development servers
+  with a loopback public URL can explicitly opt out using
+  `GEOLIBRE_ALLOW_PLAINTEXT_SECRETS=1`. In that mode, plaintext secrets beginning
+  with `enc:v1:` are rejected (`422`) to keep stored values unambiguous.
+
+### Recovering an ambiguous legacy secret
+
+An older build could save plaintext beginning with `enc:v1:`, the prefix now
+reserved for encrypted values. This is indistinguishable from damaged
+ciphertext. Startup and migration refuse to guess and identify the affected
+identity-provider row in the error, without logging its secret. For actual
+ciphertext, restore the key used to write it. For a confirmed legacy plaintext
+credential, re-enter its known value encrypted under the configured key.
+Back up the database first. Run this in the installed server API environment,
+with `GEOLIBRE_DATABASE_URL` and `GEOLIBRE_SECRET_KEYS` configured and
+`GEOLIBRE_REPAIR_PROVIDER_ID` set to the row id reported by the error:
+
+```python
+import getpass
+import os
+
+from sqlalchemy import create_engine, text
+from geolibre_server_api.secret_crypto import encrypt_secret, secret_ciphers
+
+if secret_ciphers() is None:
+    raise RuntimeError("Configure GEOLIBRE_SECRET_KEYS before repairing the secret")
+engine = create_engine(os.environ["GEOLIBRE_DATABASE_URL"])
+with engine.begin() as connection:
+    result = connection.execute(
+        text("UPDATE organization_identity_providers SET client_secret=:secret WHERE id=:id"),
+        {
+            "id": os.environ["GEOLIBRE_REPAIR_PROVIDER_ID"],
+            "secret": encrypt_secret(getpass.getpass("Identity provider client secret: ")),
+        },
+    )
+    if result.rowcount != 1:
+        raise RuntimeError("Expected exactly one identity provider row; transaction rolled back")
+engine.dispose()
+```
+
+Retry the migration or startup afterward. Repair only the secret column;
+deleting and recreating the provider would also remove its linked identities.
+Alembic reads `GEOLIBRE_PUBLIC_URL` to restrict the development opt-out. Set it
+to the actual deployment URL even when your application passes `public_url`
+directly to `create_app`.
 
 ### Single sign-on on the consent page
 

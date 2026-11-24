@@ -230,6 +230,7 @@ function FloatingPanelCard({ id, initialOffset }: { id: string; initialOffset: n
         aria-label={t("pluginPanel.resize")}
         title={t("pluginPanel.resize")}
         onPointerDown={handleResizeStart}
+        // eslint-disable-next-line local/no-physical-tailwind -- the resize grip's drag math and cursor are physical (bottom-right).
         className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize touch-none"
         style={{
           background:

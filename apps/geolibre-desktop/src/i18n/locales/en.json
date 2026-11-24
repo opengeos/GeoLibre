@@ -3961,6 +3961,7 @@
       "readFeatures": "Read {{features}} features from {{name}}",
       "savedFile": "Saved {{name}}",
       "cancelled": "Conversion cancelled.",
+      "errorCancel": "Could not cancel the conversion.",
       "saveCanceled": "Conversion finished; save was canceled.",
       "vectorToGeoparquet": "Vector to GeoParquet",
       "vectorToFlatgeobuf": "Vector to FlatGeobuf",
@@ -6620,7 +6621,8 @@
         "pending": "Pending",
         "running": "Running",
         "succeeded": "Succeeded",
-        "failed": "Failed"
+        "failed": "Failed",
+        "cancelled": "Cancelled"
       },
       "categoryGeneral": "General",
       "categoryAll": "All ({{total}})",
@@ -6628,6 +6630,7 @@
       "errorLoadLive": "Could not load live catalog.",
       "errorConnect": "Could not connect to sidecar.",
       "errorPoll": "Could not poll job.",
+      "errorCancel": "Could not cancel the job.",
       "errorStartTool": "Could not start Whitebox tool.",
       "errorStartSidecar": "Could not start GeoLibre sidecar.",
       "errorStopSidecar": "Could not stop GeoLibre sidecar.",

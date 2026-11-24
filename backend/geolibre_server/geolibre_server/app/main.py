@@ -1,14 +1,11 @@
 """
 GeoLibre processing sidecar (FastAPI).
 
-Future integrations (v0.9+):
-- GDAL / Rasterio — raster I/O, warping, COG
-- GeoPandas — vector operations, reproject, buffer
-- WhiteboxTools — hydrology, terrain analysis
-- Leafmap — interactive mapping helpers
-- GeoAI / SamGeo — segmentation and ML workflows
-
-Spatial SQL is served by the ``/sql`` router (Apache Sedona / SedonaDB).
+Each capability lives in its own router: Whitebox tools (``/whitebox``), format
+conversion (``/conversion``), raster (``/raster``) and vector (``/vector``)
+tools, PostGIS and SQL Server (``/postgis``, ``/mssql``), spatial SQL with
+Apache Sedona / SedonaDB (``/sql``), point clouds (``/pointcloud``),
+segmentation (``/ml``) and OBIA (``/obia``).
 """
 
 from __future__ import annotations
@@ -22,9 +19,9 @@ import time
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from .. import __version__
 from .conversion import router as conversion_router
 from .ml import router as ml_router
 from .ml import stop_child_server
@@ -67,7 +64,8 @@ _SIDECAR_TOKEN_BYTES = SIDECAR_TOKEN.encode("utf-8")
 # readiness poll and the frontend before it holds a token) and CORS preflight.
 _TOKEN_EXEMPT_PATHS = frozenset({"/health"})
 
-app = FastAPI(title="GeoLibre Server", version="0.8.0")
+
+app = FastAPI(title="GeoLibre Server", version=__version__)
 app.add_exception_handler(MssqlWriteRolledBack, mssql_write_rolled_back_handler)
 
 
@@ -165,11 +163,6 @@ app.include_router(ml_router)
 app.include_router(obia_router)
 
 
-class RunRequest(BaseModel):
-    algorithm_id: str
-    parameters: dict = {}
-
-
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -198,49 +191,15 @@ def _terminate_current_process() -> None:
     signal.raise_signal(signal.SIGINT)
 
 
-@app.get("/algorithms")
-def algorithms():
-    return {
-        "algorithms": [
-            {
-                "id": "calculate-bounds",
-                "name": "Calculate layer bounds",
-                "description": "GDAL/GeoPandas-backed bounds (placeholder)",
-            },
-            {
-                "id": "buffer",
-                "name": "Buffer",
-                "description": "GeoPandas buffer (placeholder)",
-            },
-            {
-                "id": "reproject",
-                "name": "Reproject",
-                "description": "GDAL warp (placeholder)",
-            },
-        ]
-    }
+@app.get("/token-check")
+def token_check():
+    """Confirm the caller presented an accepted sidecar token.
 
-
-@app.post("/run")
-def run_algorithm(req: RunRequest):
-    # TODO(v0.5): Dispatch to GDAL, GeoPandas, WhiteboxTools, etc.
-    raise HTTPException(
-        status_code=501,
-        detail={
-            "message": "Sidecar /run not implemented yet",
-            "algorithm_id": req.algorithm_id,
-            "planned": [
-                "GDAL",
-                "Rasterio",
-                "GeoPandas",
-                "DuckDB Spatial",
-                "WhiteboxTools",
-                "Leafmap",
-                "GeoAI",
-                "SamGeo",
-            ],
-        },
-    )
+    Unlike ``/health`` this route is not token-exempt, so the desktop shell
+    probes it to tell whether a sidecar already listening on the port (an orphan
+    from a previous launch) accepts this launch's token. It does no work.
+    """
+    return {"status": "ok"}
 
 
 def run():

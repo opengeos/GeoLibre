@@ -1,4 +1,4 @@
-import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import { useAppStore, useLayerSummaries, type GeoLibreLayer } from "@geolibre/core";
 import {
   applyPredictions,
   classifyByRules,
@@ -53,7 +53,7 @@ import {
 } from "./ObiaFields";
 
 /** Raster layers the workbench can read in the browser (GeoTIFF/COG). */
-function isImageLayer(layer: GeoLibreLayer): boolean {
+function isImageLayer(layer: Pick<GeoLibreLayer, "type">): boolean {
   return layer.type === "raster" || layer.type === "cog";
 }
 
@@ -66,7 +66,7 @@ function isImageLayer(layer: GeoLibreLayer): boolean {
  */
 export function ObiaBatchStep(): ReactElement | null {
   const { t } = useTranslation();
-  const layers = useAppStore((s) => s.layers);
+  const layerSummaries = useLayerSummaries();
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const segmentation = useObiaSession((s) => s.segmentation);
@@ -84,9 +84,13 @@ export function ObiaBatchStep(): ReactElement | null {
   const runningRef = useRef(false);
   const progress = useObiaRun();
 
+  // The checklist lists the other images by name; the run reads them whole.
   const targets = useMemo(
-    () => layers.filter((layer) => isImageLayer(layer) && layer.id !== segmentation?.sourceLayerId),
-    [layers, segmentation?.sourceLayerId],
+    () =>
+      layerSummaries.filter(
+        (layer) => isImageLayer(layer) && layer.id !== segmentation?.sourceLayerId,
+      ),
+    [layerSummaries, segmentation?.sourceLayerId],
   );
 
   const handleRun = useCallback(async () => {
@@ -98,7 +102,14 @@ export function ObiaBatchStep(): ReactElement | null {
       setError(t("obia.measure.error.layersMissing"));
       return;
     }
-    const chosen = targets.filter((layer) => selected.includes(layer.id));
+    const chosen = useAppStore
+      .getState()
+      .layers.filter(
+        (layer) =>
+          isImageLayer(layer) &&
+          layer.id !== segmentation.sourceLayerId &&
+          selected.includes(layer.id),
+      );
     if (!chosen.length) return;
     runningRef.current = true;
     setRunning(true);
@@ -282,7 +293,6 @@ export function ObiaBatchStep(): ReactElement | null {
     features,
     classification,
     classes,
-    targets,
     selected,
     addGeoJsonLayer,
     updateLayer,

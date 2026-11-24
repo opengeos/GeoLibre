@@ -16,8 +16,7 @@ const { useLayerRefresh } =
 const LAYER_ID = "wfs-hydration";
 
 function RefreshHost() {
-  const layers = useAppStore((state) => state.layers);
-  const refresh = useLayerRefresh({ layers, isCollapsed: true });
+  const refresh = useLayerRefresh({ isCollapsed: true });
   return createElement(
     "output",
     { "data-testid": "refresh-status" },
