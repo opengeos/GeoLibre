@@ -1398,12 +1398,21 @@ export async function addThreeDTilesLayerFromUrl(
     );
   if (!map.isStyleLoaded()) {
     await new Promise<void>((resolve, reject) => {
-      const ready = () => {
+      const cleanup = () => {
         clearTimeout(timer);
+        map.off("idle", ready);
+        options.signal?.removeEventListener("abort", aborted);
+      };
+      const ready = () => {
+        cleanup();
         resolve();
       };
+      const aborted = () => {
+        cleanup();
+        reject(new DOMException("3D Tiles loading was aborted.", "AbortError"));
+      };
       const timer = setTimeout(() => {
-        map.off("idle", ready);
+        cleanup();
         reject(
           new Error(
             translate("styleTimeout", "The map style did not finish loading for 3D Tiles."),
@@ -1411,8 +1420,12 @@ export async function addThreeDTilesLayerFromUrl(
         );
       }, 30_000);
       map.once("idle", ready);
+      options.signal?.addEventListener("abort", aborted, { once: true });
+      if (options.signal?.aborted) aborted();
     });
   }
+  if (options.signal?.aborted)
+    throw new DOMException("3D Tiles loading was aborted.", "AbortError");
   runWithThreeDTilesStoreSyncSuspended(() => {
     showThreeDTilesControl(control);
     control.collapse();

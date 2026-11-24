@@ -311,6 +311,44 @@ def test_range_ignored_by_a_server_is_sliced_from_a_small_full_response(monkeypa
     assert result["totalSize"] == len(payload)
 
 
+@pytest.mark.parametrize(
+    "content_range,offset,valid",
+    [
+        ("bytes */100000", 100000, True),
+        ("bytes */100000", 99999, False),
+        ("invalid", 100000, False),
+    ],
+)
+def test_validated_unsatisfied_range_reports_eof(monkeypatch, content_range, offset, valid):
+    """Accept only a validated end-of-file response for an exhausted byte range.
+
+    Args:
+        monkeypatch: The pytest patch fixture.
+        content_range: The server's unsatisfied-range header.
+        offset: The requested byte offset.
+        valid: Whether the response proves EOF.
+    """
+    with resource_server(status=416, headers={"Content-Range": content_range}) as port:
+        patch_public_dns(monkeypatch, port)
+        sessions, preview, grant = authorized_session()
+        if valid:
+            result = asyncio.run(
+                network.fetch_resource(
+                    sessions, preview, grant, "http://tiles.example.test/c.tif", offset, 100
+                )
+            )
+            assert result["data"] == ""
+            assert result["totalSize"] == 100000
+            assert result["rangeStart"] == offset
+        else:
+            with pytest.raises(network.PreviewNetworkError, match="416"):
+                asyncio.run(
+                    network.fetch_resource(
+                        sessions, preview, grant, "http://tiles.example.test/c.tif", offset, 100
+                    )
+                )
+
+
 def test_range_ignored_by_a_server_for_a_large_file_is_actionable(monkeypatch):
     with resource_server(
         payload=b"", headers={"Content-Length": str(network.MAX_RESPONSE_BYTES + 1)}

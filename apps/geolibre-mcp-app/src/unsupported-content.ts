@@ -66,6 +66,7 @@ function missingData(layer: GeoLibreLayer): string | undefined {
 }
 
 function isDesktopOnly(layer: GeoLibreLayer): boolean {
+  if (layer.type === "cog") return cogLayerUrl(layer) === null;
   if (layer.type === "mbtiles") return true;
   // An in-memory extract or local archive has no URL the preview can reach.
   if (layer.type === "pmtiles" && pmtilesArchiveUrl(layer) === null) return true;

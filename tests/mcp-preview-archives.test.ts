@@ -110,6 +110,13 @@ function project(layers: GeoLibreLayer[]) {
 }
 
 describe("MCP preview PMTiles and COG classification", () => {
+  it("classifies a COG by its resolved remote fallback", () => {
+    const archive = cogLayer("fallback-cog", "file:///missing.tif");
+    archive.sourcePath = "https://cogs.example.com/dem.tif";
+    const saved = project([archive]);
+    assert.equal(previewRenderLayers(saved)[0].kind, "cog");
+    assert.ok(!unsupportedContent(saved).join("\n").includes("desktop-local"));
+  });
   it("uses a validated sourcePath fallback for both sync and archive registration", () => {
     const archive = pmtilesLayer("fallback", "file:///missing.pmtiles");
     archive.sourcePath = "https://tiles.example.com/fallback.pmtiles";

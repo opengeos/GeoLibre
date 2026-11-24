@@ -208,19 +208,19 @@ export function renderProject(
 
   const registerLayers = (): void => {
     for (const { layer, kind } of plan) {
-      if (kind === "cog") {
-        // Holds the COG's place in the stack while it decodes, so it lands
-        // under the layers above it rather than on top of everything.
-        const anchorId = `${layer.id}-cog-anchor`;
-        map.addLayer({
-          id: anchorId,
-          type: "background",
-          layout: { visibility: "none" },
-        });
-        void addCogLayer(layer, anchorId);
-        continue;
-      }
       try {
+        if (kind === "cog") {
+          // Holds the COG's place in the stack while it decodes, so it lands
+          // under the layers above it rather than on top of everything.
+          const anchorId = `${layer.id}-cog-anchor`;
+          map.addLayer({
+            id: anchorId,
+            type: "background",
+            layout: { visibility: "none" },
+          });
+          void addCogLayer(layer, anchorId);
+          continue;
+        }
         // One sync owner per layer isolates failures while preserving the project’s
         // bottom-to-top order: each successful MapLibre layer is added above the last.
         createLayerSync(map).sync([layer]);

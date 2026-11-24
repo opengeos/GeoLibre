@@ -571,8 +571,9 @@ async function decodeCogPreview(
   };
   const tiff = await fromCustomClient(
     client,
-    // The server caps one response at 4 MiB, and several small blocks merged
-    // into one range keep the number of tool calls down.
+    // BlockedSource merges adjacent 256 KiB blocks into contiguous ranges.
+    // maxRanges: 0 disables multipart HTTP ranges, which this client does not
+    // support. Consent splits contiguous ranges at the server's 4 MiB cap.
     sourceOptions,
     signal,
   );

@@ -481,6 +481,16 @@ async def fetch_resource(
                     }
                 },
             ) as response:
+                headers = {key.lower(): value for key, value in response.headers}
+                if byte_range and response.status == 416:
+                    eof = re.fullmatch(rb"bytes \*/(\d+)", headers.get(b"content-range", b""))
+                    if eof and byte_range[0] >= int(eof[1]):
+                        return {
+                            "data": "",
+                            "mimeType": "application/octet-stream",
+                            "rangeStart": byte_range[0],
+                            "totalSize": int(eof[1]),
+                        }
                 if response.status >= 300 and response.status < 400:
                     raise PreviewNetworkError(
                         "Resource redirects are not allowed; use the direct destination URL."
@@ -489,7 +499,6 @@ async def fetch_resource(
                     raise PreviewNetworkError(
                         f"The resource server returned HTTP {response.status}."
                     )
-                headers = {key.lower(): value for key, value in response.headers}
                 encoding = headers.get(b"content-encoding", b"identity").strip().lower()
                 if encoding not in {b"", b"identity", b"gzip"}:
                     raise PreviewNetworkError("Compressed resource responses are not supported.")
