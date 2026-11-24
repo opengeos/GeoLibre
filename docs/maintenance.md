@@ -1186,6 +1186,16 @@ would silently do nothing. Keep `docs/user-guide/layers.md` and
 for") in step with that gate; build the test's mocks the way the real controls
 build their metadata, or they pass on shapes that never occur.
 
+## CDN cache browser tests
+
+`e2e/pyodide-cache.spec.ts` runs against the production service worker and
+requires HTTPS access to `cdn.jsdelivr.net`. It loads the pinned Pyodide
+runtime script and an npm README used to create a real opaque response.
+Run it with `npm exec playwright -- test e2e/pyodide-cache.spec.ts --project=features`.
+The dev server has no service worker, and offline-only runners cannot execute
+this network-bound regression. Keep real browser CORS and Cache Storage
+semantics in the test rather than replacing responses with route mocks.
+
 ## Coverage floors
 
 The `:coverage` test variants run the same suites and print a coverage summary;

@@ -39,18 +39,18 @@ test("classic worker and console imports share CORS-readable offline engine asse
     }
   }, ASM_URL);
   expect(workerResult).toBe("loaded");
-  await expectModuleLoads(page);
   await expect
     .poll(() =>
       page.evaluate(
         async ({ url, cacheName }) => {
           const response = await (await caches.open(cacheName)).match(url);
-          return response?.status;
+          return { type: response?.type, status: response?.status };
         },
         { url: ASM_URL, cacheName: ENGINE_CACHE },
       ),
     )
-    .toBe(200);
+    .toEqual({ type: "cors", status: 200 });
+  await expectModuleLoads(page);
 
   await context.setOffline(true);
   try {
