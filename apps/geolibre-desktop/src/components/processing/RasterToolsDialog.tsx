@@ -186,8 +186,10 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   // Aborts an in-flight layer-bytes fetch when the dialog closes/unmounts or a
   // new pick supersedes it, so its state setters never fire on a dead component.
   const layerFetchAbortRef = useRef<AbortController | null>(null);
-  // Incremented on reset so stale async secondary file reads are ignored.
+  // Incremented on reset so stale async primary and secondary reads are ignored.
   const formSessionRef = useRef(0);
+  // File and map-layer picks share a sequence so the newest primary input wins.
+  const primaryPickTokenRef = useRef(0);
   // Incremented whenever inputs change or the form resets so an in-flight
   // client run cannot write stale result/log/map output after input edits.
   const clientRunIdRef = useRef(0);
@@ -260,9 +262,12 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   // on the same tool restores the default: client only on a client-capable tool
   // without a sidecar, otherwise sidecar.
   useEffect(() => {
-    if (!open) return;
     formSessionRef.current += 1;
     clientRunIdRef.current += 1;
+    primaryPickTokenRef.current += 1;
+    layerFetchAbortRef.current?.abort();
+    setResolvingLayer(false);
+    if (!open) return;
     secondaryPickTokensRef.current = {};
     setInputPath("");
     setOutputPath("");
@@ -499,24 +504,35 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   // into memory (works in both desktop and web, unlike the sidecar path which
   // needs a real file path).
   const pickClientInput = useCallback(async () => {
+    const session = formSessionRef.current;
+    const token = ++primaryPickTokenRef.current;
+    const stale = () => session !== formSessionRef.current || token !== primaryPickTokenRef.current;
+    layerFetchAbortRef.current?.abort();
+    setResolvingLayer(false);
     setError(null);
-    const picked = await openLocalDataFileWithFallback({
-      filters: tool.inputFilters,
-      accept: vectorPrimaryInput
-        ? ".geojson,.json,application/geo+json,application/json"
-        : ".tif,.tiff,image/tiff",
-      readBinary: true,
-    });
-    if (picked?.data) {
-      clientRunIdRef.current += 1;
-      setClientRunning(false);
-      setClientInput({ name: picked.path, bytes: picked.data });
-      // Drop any prior run's result/log so the Download button can't offer a
-      // GeoTIFF computed from the previous input.
-      setClientResult(null);
-      setClientLog([]);
+    try {
+      const picked = await openLocalDataFileWithFallback({
+        filters: tool.inputFilters,
+        accept: vectorPrimaryInput
+          ? ".geojson,.json,application/geo+json,application/json"
+          : ".tif,.tiff,image/tiff",
+        readBinary: true,
+      });
+      if (stale()) return;
+      if (picked?.data) {
+        clientRunIdRef.current += 1;
+        setClientRunning(false);
+        setClientInput({ name: picked.path, bytes: picked.data });
+        // Drop any prior run's result/log so the Download button can't offer a
+        // GeoTIFF computed from the previous input.
+        setClientResult(null);
+        setClientLog([]);
+      }
+    } catch (error) {
+      if (!stale())
+        setError(error instanceof Error ? error.message : t("toolbar.rasterTool.layerLoadError"));
     }
-  }, [tool, vectorPrimaryInput]);
+  }, [tool, vectorPrimaryInput, t]);
 
   // Raster layers already on the map that can seed this tool's input, so the
   // user need not browse to a file again. The client engine reads any raster's
@@ -554,6 +570,10 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       }
       const url = rasterExportUrl(layer);
       if (!url) return;
+      const session = formSessionRef.current;
+      const token = ++primaryPickTokenRef.current;
+      const stale = () =>
+        session !== formSessionRef.current || token !== primaryPickTokenRef.current;
       // Supersede any prior in-flight fetch and tie this one to an abort signal
       // so closing the dialog mid-fetch cancels it instead of updating state on
       // an unmounted component.
@@ -565,24 +585,32 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         const response = await fetch(url, { signal: controller.signal });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const bytes = await response.arrayBuffer();
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || stale()) return;
         clientRunIdRef.current += 1;
         setClientRunning(false);
         setClientInput({ name: layer.name, bytes });
         setClientResult(null);
         setClientLog([]);
       } catch (err) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || stale()) return;
         setError(err instanceof Error ? err.message : t("toolbar.rasterTool.layerLoadError"));
       } finally {
-        if (!controller.signal.aborted) setResolvingLayer(false);
+        if (!controller.signal.aborted && !stale()) setResolvingLayer(false);
       }
     },
     [layers, engine, t],
   );
 
   // Abort any in-flight layer-bytes fetch when the dialog unmounts.
-  useEffect(() => () => layerFetchAbortRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      formSessionRef.current += 1;
+      primaryPickTokenRef.current += 1;
+      clientRunIdRef.current += 1;
+      layerFetchAbortRef.current?.abort();
+    },
+    [],
+  );
 
   const runSidecar = useCallback(async () => {
     setError(null);

@@ -1,13 +1,61 @@
 import { act, cleanup, render, screen, fireEvent, useAppStore, i18n, waitFor } from "./helpers/dom";
 import { setSidecarFetch } from "@geolibre/processing";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 import { createElement } from "react";
 
 const { RasterToolsDialog } =
   await import("../apps/geolibre-desktop/src/components/processing/RasterToolsDialog");
 
 describe("Raster tools browser inputs", () => {
+  it("drops a primary file read after changing tools", async () => {
+    const pending = Promise.withResolvers<ArrayBuffer>();
+    mock.method(HTMLInputElement.prototype, "click", function (this: HTMLInputElement) {
+      Object.defineProperty(this, "files", {
+        configurable: true,
+        value: [{ name: "points.geojson", arrayBuffer: () => pending.promise }],
+      });
+      this.dispatchEvent(new Event("change"));
+    });
+    try {
+      useAppStore.getState().setRasterToolOpen("interpolate");
+      render(createElement(RasterToolsDialog, { mapControllerRef: { current: null } }));
+      fireEvent.click(screen.getByTitle(i18n.t("processing.filePicker.chooseInputFile")));
+      fireEvent.click(screen.getByRole("button", { name: i18n.t("toolbar.rasterTool.sarDb") }));
+      await screen.findByText(i18n.t("toolbar.rasterTool.clientOnlyHint"));
+      await act(async () => pending.resolve(new ArrayBuffer(8)));
+      assert.equal((document.getElementById("raster-input") as HTMLInputElement).value, "");
+    } finally {
+      cleanup();
+      mock.restoreAll();
+    }
+  });
+  it("keeps the newest primary file when reads finish out of order", async () => {
+    const reads: ReturnType<typeof Promise.withResolvers<ArrayBuffer>>[] = [];
+    mock.method(HTMLInputElement.prototype, "click", function (this: HTMLInputElement) {
+      const pending = Promise.withResolvers<ArrayBuffer>();
+      reads.push(pending);
+      Object.defineProperty(this, "files", {
+        configurable: true,
+        value: [{ name: `${reads.length}.tif`, arrayBuffer: () => pending.promise }],
+      });
+      this.dispatchEvent(new Event("change"));
+    });
+    try {
+      useAppStore.getState().setRasterToolOpen("sar-db");
+      render(createElement(RasterToolsDialog, { mapControllerRef: { current: null } }));
+      fireEvent.click(screen.getByTitle(i18n.t("processing.filePicker.chooseInputFile")));
+      fireEvent.click(screen.getByTitle(i18n.t("processing.filePicker.chooseInputFile")));
+      assert.equal(reads.length, 2);
+      await act(async () => reads[1].resolve(new ArrayBuffer(8)));
+      assert.equal((document.getElementById("raster-input") as HTMLInputElement).value, "2.tif");
+      await act(async () => reads[0].resolve(new ArrayBuffer(8)));
+      assert.equal((document.getElementById("raster-input") as HTMLInputElement).value, "2.tif");
+    } finally {
+      cleanup();
+      mock.restoreAll();
+    }
+  });
   it("tracks a dispatched sidecar job to completion after permission is revoked", async () => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
     useAppStore.getState().resetAppCapabilities();
