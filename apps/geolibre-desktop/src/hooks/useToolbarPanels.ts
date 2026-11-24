@@ -1,4 +1,5 @@
 import { useAppStore } from "@geolibre/core";
+import { PluginOperationSupersededError } from "@geolibre/plugins/runtime";
 import {
   closeBookmarkPanel,
   closeColorbarPanel,
@@ -107,7 +108,10 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
   const runPanelAction = (id: BuiltInPluginId, action: (app: GeoLibreAppAPI) => void) => {
     void getPluginManager()
       .runPluginHelper(id, appApi, (_implementation, preparedApp) => action(preparedApp))
-      .catch((error: unknown) => reportPluginError(id, "update-panel", error));
+      .catch((error: unknown) => {
+        if (error instanceof PluginOperationSupersededError) return;
+        reportPluginError(id, "update-panel", error);
+      });
   };
   const searchPlacesVisible = useSyncExternalStore(
     subscribeSearchPlacesPanel,
