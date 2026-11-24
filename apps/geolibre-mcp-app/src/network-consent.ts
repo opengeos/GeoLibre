@@ -2,19 +2,10 @@ import type { App } from "@modelcontextprotocol/ext-apps";
 import type { AddProtocolAction, RequestTransformFunction } from "maplibre-gl";
 import type { CallToolResult } from "@modelcontextprotocol/client";
 import { z } from "zod";
-import { createInstance } from "i18next";
 import { createElement, Map as MapIcon } from "lucide";
-import { mcpPreview } from "../../geolibre-desktop/src/i18n/locales/en.json";
+import { previewI18n } from "./preview-i18n";
 
-const consentI18n = createInstance();
-void consentI18n.init({
-  lng: "en",
-  fallbackLng: "en",
-  initAsync: false,
-  resources: { en: { translation: { mcpPreview } } },
-  interpolation: { escapeValue: false },
-});
-const t = consentI18n.getFixedT("en", "translation", "mcpPreview.networkConsent");
+const t = previewI18n.getFixedT(null, "translation", "mcpPreview.networkConsent");
 
 const PREFIX = "geolibre-preview://";
 const MAX_BYTES = 4 * 1024 * 1024;

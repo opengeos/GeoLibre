@@ -2,6 +2,9 @@ import type { GeoLibreLayer } from "@geolibre/core";
 import { BaseClient, BaseResponse, fromCustomClient } from "geotiff";
 import type { BlockedSourceOptions, RemoteSourceOptions } from "geotiff";
 import type { NetworkConsent } from "./network-consent";
+import { previewI18n } from "./preview-i18n";
+
+const t = previewI18n.getFixedT(null, "translation", "mcpPreview.cog");
 
 /** Longest side, in pixels, of the image a COG layer is previewed as. */
 export const PREVIEW_COG_MAX_DIMENSION = 1024;
@@ -507,18 +510,13 @@ class PreviewRangeClient extends BaseClient {
   async request(options: RequestInit = {}): Promise<BaseResponse> {
     const headers = new Headers(options.headers);
     const match = headers.get("range")?.match(/^bytes=(\d+)-(\d+)$/);
-    if (!match) throw new Error("The COG preview only reads byte ranges.");
+    if (!match) throw new Error(t("byteRangesOnly"));
     const offset = Number(match[1]);
     const length = Number(match[2]) - offset + 1;
     try {
       this.spent += length;
       if (this.spent > this.budget)
-        throw new Error(
-          `The COG preview stopped after reading ${Math.max(
-            1,
-            Math.round(this.budget / 1048576),
-          )} MiB; open the project in GeoLibre to view it.`,
-        );
+        throw new Error(t("byteBudget", { limit: Math.max(1, Math.round(this.budget / 1048576)) }));
       const range = await this.fetchRange(this.url, offset, length, options.signal ?? undefined);
       return new PreviewRangeResponse(range.data, offset, range.totalSize);
     } catch (error) {
@@ -543,7 +541,7 @@ export async function loadCogPreview(
   budget = PREVIEW_COG_BYTE_BUDGET,
 ): Promise<CogPreviewImage> {
   const url = cogLayerUrl(layer);
-  if (!url) throw new Error("The COG layer has no public URL.");
+  if (!url) throw new Error(t("noPublicUrl"));
   const client = new PreviewRangeClient(url, fetchRange, budget);
   try {
     return await decodeCogPreview(layer, client, signal);
@@ -587,20 +585,14 @@ async function decodeCogPreview(
     transform &&
     (transform[1] !== 0 || transform[4] !== 0 || transform[0] <= 0 || transform[5] >= 0)
   ) {
-    throw new Error(
-      "This preview cannot place a rotated, skewed, or flipped COG; open it in GeoLibre.",
-    );
+    throw new Error(t("affineUnsupported"));
   }
   const isMask = (image: (typeof images)[number]) =>
     (Number(image.getFileDirectory().getValue("NewSubfileType") ?? 0) & 4) !== 0;
   const colorImages = images.filter((image) => !isMask(image));
   const crs = cogEpsg(primary.getGeoKeys() as Record<string, unknown> | null);
   if (!isPreviewCogCrs(crs)) {
-    throw new Error(
-      crs === null
-        ? "The COG declares no coordinate reference system, so the preview cannot place it."
-        : `The COG uses EPSG:${crs}; this preview places only EPSG:4326 and EPSG:3857 rasters.`,
-    );
+    throw new Error(crs === null ? t("noCrs") : t("unsupportedCrs", { crs }));
   }
   const level =
     colorImages[
@@ -612,9 +604,7 @@ async function decodeCogPreview(
       )
     ];
   if (!level) {
-    throw new Error(
-      "The COG has no overview small enough to preview; add overviews or open it in GeoLibre.",
-    );
+    throw new Error(t("overviewTooLarge"));
   }
   const style = cogPreviewStyle(layer.metadata?.rasterState, primary.getSamplesPerPixel());
   const size = previewSize(level.getWidth(), level.getHeight());
@@ -643,12 +633,10 @@ async function decodeCogPreview(
         image.getWidth() === primary.getWidth() && image.getHeight() === primary.getHeight(),
     );
   if (masks.length && !mask) {
-    throw new Error("The COG has no matching transparency mask for this preview level.");
+    throw new Error(t("noMatchingMask"));
   }
   if (mask && mask.getWidth() * mask.getHeight() > PREVIEW_COG_MAX_READ_PIXELS) {
-    throw new Error(
-      "The COG transparency mask is too large to decode in this preview; add mask overviews or open it in GeoLibre.",
-    );
+    throw new Error(t("maskTooLarge"));
   }
   const maskValues = mask
     ? ((await mask.readRasters({

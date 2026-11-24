@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, parseProject, type GeoLibreLayer } from "@geolibre/core";
 import { writeArrayBuffer } from "geotiff";
+import { previewI18n } from "../apps/geolibre-mcp-app/src/preview-i18n";
 import {
   cogCorners,
   cogEpsg,
@@ -340,6 +341,24 @@ describe("MCP preview COG rendering helpers", () => {
 });
 
 describe("MCP preview COG loading", () => {
+  it("resolves preview errors through the shared catalog with English fallback", async () => {
+    previewI18n.addResourceBundle("es", "translation", {
+      mcpPreview: { cog: { noPublicUrl: "La capa COG no tiene URL pública." } },
+    });
+    try {
+      await previewI18n.changeLanguage("es");
+      await assert.rejects(
+        loadCogPreview(cogLayer("local", "file:///missing.tif"), async () => {
+          throw new Error("Network must not be reached");
+        }),
+        /La capa COG no tiene URL pública/,
+      );
+      assert.match(previewI18n.t("mcpPreview.cog.byteBudget", { limit: 64 }), /64 MiB/);
+    } finally {
+      await previewI18n.changeLanguage("en");
+      previewI18n.removeResourceBundle("es", "translation");
+    }
+  });
   it("rejects a large primary mask before decoding it for a small color overview", async () => {
     // GDAL: sparse 4097x4097 uint8 image, 5x5 color overview, and a
     // full-resolution internal mask with no mask overview.

@@ -13,6 +13,9 @@ import {
 } from "@geolibre/map/headless";
 import { cogLayerUrl, isPreviewCogLayer } from "./cog-preview";
 import { isPreviewPMTilesLayer, pmtilesArchiveUrl } from "./pmtiles-preview";
+import { previewI18n } from "./preview-i18n";
+
+const t = previewI18n.getFixedT(null, "translation", "mcpPreview.content");
 
 const LAYER_KIND_NAMES: Record<string, string> = {
   arcgis: "ArcGIS service",
@@ -216,8 +219,8 @@ export function unsupportedContent(project: GeoLibreProject): string[] {
         ? "video loading bypasses the consent-gated request path"
         : layer.type === "pmtiles" && !desktopOnly
           ? pmtilesArchiveUrl(layer)
-            ? "is a PMTiles archive without usable source-layer metadata, so this preview cannot draw it"
-            : "is not a PMTiles archive layer this preview can read"
+            ? t("pmtilesMissingMetadata")
+            : t("pmtilesUnreadable")
           : desktopOnly
             ? "requires a desktop-local source"
             : missing
@@ -231,13 +234,9 @@ export function unsupportedContent(project: GeoLibreProject): string[] {
                     : layerKindSupport(MAPLIBRE_SUPPORTED_LAYER_KINDS, kind) === "unsupported"
                       ? "not supported by this preview renderer"
                       : undefined;
-    if (reason) notices.push(`Layer “${layer.name}” (${layerKindName(layer)}): ${reason}.`);
+    if (reason) notices.push(t("layer", { name: layer.name, kind: layerKindName(layer), reason }));
     if (previewDrawn && layer.type === "cog") {
-      notices.push(
-        `Layer “${layer.name}” (${layerKindName(
-          layer,
-        )}): shown as a downsampled preview image; Identify is not available for it.`,
-      );
+      notices.push(t("cogPreview", { name: layer.name, kind: layerKindName(layer) }));
     }
     if (hasImagePopupFields(layer)) {
       notices.push(

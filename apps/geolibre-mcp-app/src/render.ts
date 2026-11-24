@@ -28,6 +28,9 @@ import {
   previewPMTilesStyleLayerIds,
 } from "./pmtiles-preview";
 import { previewRenderLayers } from "./unsupported-content";
+import { previewI18n } from "./preview-i18n";
+
+const t = previewI18n.getFixedT(null, "translation", "mcpPreview.render");
 
 export interface PreviewRenderOptions {
   transformRequest: RequestTransformFunction;
@@ -53,10 +56,10 @@ async function encodePng(
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d");
-  if (!context) throw new Error("The preview could not create a canvas for the COG image.");
+  if (!context) throw new Error(t("canvasFailed"));
   context.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0);
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-  if (!blob) throw new Error("The preview could not encode the COG image.");
+  if (!blob) throw new Error(t("encodeFailed"));
   return blob.arrayBuffer();
 }
 
@@ -145,7 +148,7 @@ export function renderProject(
   };
   maplibregl.addProtocol(COG_PROTOCOL, async (request) => {
     const data = cogImages.get(request.url);
-    if (!data) throw new Error("The COG preview image is no longer available.");
+    if (!data) throw new Error(t("imageUnavailable"));
     return { data };
   });
   const lifecycle = new AbortController();
@@ -177,7 +180,7 @@ export function renderProject(
       const image = await loadCogPreview(layer, options.fetchRange, lifecycle.signal);
       if (image.unknownColormap) {
         options.onNotice?.(
-          `Layer “${layer.name}”: the colormap “${image.unknownColormap}” is not available in this preview, so it is shown in grayscale.`,
+          t("unknownColormap", { name: layer.name, colormap: image.unknownColormap }),
         );
       }
       const png = await encodePng(image.rgba, image.width, image.height);
@@ -225,10 +228,7 @@ export function renderProject(
         // bottom-to-top order: each successful MapLibre layer is added above the last.
         createLayerSync(map).sync([layer]);
       } catch {
-        options.onError(
-          layer.id,
-          `Could not register layer “${layer.name}”; other layers will still be shown.`,
-        );
+        options.onError(layer.id, t("registrationFailed", { name: layer.name }));
       }
     }
     if (!notifiedReady) {

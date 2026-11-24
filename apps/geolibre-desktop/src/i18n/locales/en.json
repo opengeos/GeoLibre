@@ -5,6 +5,30 @@
     "downloadInstead": "Download instead"
   },
   "mcpPreview": {
+    "content": {
+      "pmtilesMissingMetadata": "is a PMTiles archive without usable source-layer metadata, so this preview cannot draw it",
+      "pmtilesUnreadable": "is not a PMTiles archive layer this preview can read",
+      "layer": "Layer “{{name}}” ({{kind}}): {{reason}}.",
+      "cogPreview": "Layer “{{name}}” ({{kind}}): shown as a downsampled preview image; Identify is not available for it."
+    },
+    "cog": {
+      "byteRangesOnly": "The COG preview only reads byte ranges.",
+      "byteBudget": "The COG preview stopped after reading {{limit}} MiB; open the project in GeoLibre to view it.",
+      "noPublicUrl": "The COG layer has no public URL.",
+      "affineUnsupported": "This preview cannot place a rotated, skewed, or flipped COG; open it in GeoLibre.",
+      "noCrs": "The COG declares no coordinate reference system, so the preview cannot place it.",
+      "unsupportedCrs": "The COG uses EPSG:{{crs}}; this preview places only EPSG:4326 and EPSG:3857 rasters.",
+      "overviewTooLarge": "The COG has no overview small enough to preview; add overviews or open it in GeoLibre.",
+      "noMatchingMask": "The COG has no matching transparency mask for this preview level.",
+      "maskTooLarge": "The COG transparency mask is too large to decode in this preview; add mask overviews or open it in GeoLibre."
+    },
+    "render": {
+      "canvasFailed": "The preview could not create a canvas for the COG image.",
+      "encodeFailed": "The preview could not encode the COG image.",
+      "imageUnavailable": "The COG preview image is no longer available.",
+      "unknownColormap": "Layer “{{name}}”: the colormap “{{colormap}}” is not available in this preview, so it is shown in grayscale.",
+      "registrationFailed": "Could not register layer “{{name}}”; other layers will still be shown."
+    },
     "networkConsent": {
       "previewLabel": "GeoLibre map preview",
       "title": "Allow map connections?",
