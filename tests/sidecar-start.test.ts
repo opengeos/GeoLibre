@@ -23,8 +23,19 @@ const STALE =
 const globals: { window?: unknown } = globalThis;
 let rejection: unknown;
 let previousWindow: unknown;
+let previousStorage: PropertyDescriptor | undefined;
 
 beforeEach(() => {
+  previousStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const ledger = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => ledger.get(key) ?? null,
+      setItem: (key: string, value: string) => ledger.set(key, value),
+      removeItem: (key: string) => ledger.delete(key),
+    },
+  });
   previousWindow = globals.window;
   globals.window = {
     __TAURI_INTERNALS__: {
@@ -37,6 +48,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  if (previousStorage) Object.defineProperty(globalThis, "localStorage", previousStorage);
+  else Reflect.deleteProperty(globalThis, "localStorage");
   globals.window = previousWindow;
 });
 

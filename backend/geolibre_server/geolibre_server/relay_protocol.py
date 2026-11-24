@@ -106,7 +106,7 @@ def result_timeout_seconds(method: str, requested: Any = None) -> float:
     if (
         isinstance(requested, (int, float))
         and not isinstance(requested, bool)
-        and math.isfinite(requested)
+        and (not isinstance(requested, float) or math.isfinite(requested))
         and requested > 0
     ):
         return float(min(max(requested, MIN_RESULT_TIMEOUT_SECONDS), MAX_RESULT_TIMEOUT_SECONDS))

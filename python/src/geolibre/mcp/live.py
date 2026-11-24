@@ -228,7 +228,7 @@ def command_timeout_seconds(method: str, requested: float | None = None) -> floa
     if (
         isinstance(requested, bool)
         or not isinstance(requested, (int, float))
-        or not math.isfinite(requested)
+        or (isinstance(requested, float) and not math.isfinite(requested))
         or requested <= 0
     ):
         raise LiveError("timeout_seconds must be a positive number of seconds.")

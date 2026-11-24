@@ -4686,6 +4686,8 @@ def zarr_layer(
     Args:
         name: Layer display name.
         url: An ``http(s)://``, ``s3://``, or ``gs://`` Zarr store URL.
+            Google Storage URLs are saved as public HTTPS endpoints, preserving
+            their query parameters so the app can reopen them.
         variable: The array to draw (e.g. ``"tas"``).
         selector: Non-spatial dimension values to slice, e.g.
             ``{"time": 0}`` or ``{"band": "B04"}``.
@@ -4715,6 +4717,13 @@ def zarr_layer(
     if not re.match(r"^(https?|s3|gs)://", store_url, re.IGNORECASE):
         raise ValueError("zarr_layer: url must be http(s)://, s3://, or gs://")
     _assert_no_url_userinfo(store_url)
+    if store_url.lower().startswith("gs://"):
+        parts = urlsplit(store_url)
+        if not parts.hostname:
+            raise ValueError("zarr_layer: a gs:// URL must name a bucket")
+        store_url = parts._replace(
+            scheme="https", netloc="storage.googleapis.com", path=f"/{parts.netloc}{parts.path}"
+        ).geturl()
     if not isinstance(variable, str) or not variable.strip():
         raise ValueError("zarr_layer: variable must be a non-empty string")
     if selector is not None and (

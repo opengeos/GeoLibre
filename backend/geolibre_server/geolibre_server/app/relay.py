@@ -43,6 +43,7 @@ import logging
 import os
 import secrets
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
@@ -84,6 +85,7 @@ SEND_TIMEOUT_SECONDS = 1.0
 MAX_SEND_TIMEOUT_SECONDS = 30.0
 SEND_BYTES_PER_SECOND = 1024 * 1024
 _access_allowed = False
+_access_generation = 0
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +99,7 @@ class _Hub:
         self.listeners: list[WebSocket] = []
         self.pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
         self.pending_request_ids: set[str] = set()
+        self.recipients: dict[str, set[WebSocket]] = {}
 
     async def broadcast(self, message: dict[str, Any], delivered: list[int] | None = None) -> int:
         """Send concurrently, recording deliveries before the slowest peer finishes.
@@ -115,6 +118,10 @@ class _Hub:
             MAX_SEND_TIMEOUT_SECONDS, SEND_TIMEOUT_SECONDS + len(encoded) / SEND_BYTES_PER_SECOND
         )
         delivered = delivered if delivered is not None else [0]
+        sockets = list(self.listeners)
+        request_id = message.get("requestId")
+        if request_id in self.pending:
+            self.recipients[request_id] = set(sockets)
 
         async def send(socket: WebSocket) -> int:
             """Deliver to one window within the socket send budget.
@@ -141,12 +148,24 @@ class _Hub:
             delivered[0] += 1
             return 1
 
-        return sum(await asyncio.gather(*(send(socket) for socket in list(self.listeners))))
+        return sum(await asyncio.gather(*(send(socket) for socket in sockets)))
 
     def drop(self, socket: WebSocket) -> None:
         """Unregister a socket, tolerating one that is already gone."""
         if socket in self.listeners:
             self.listeners.remove(socket)
+        for request_id, recipients in self.recipients.items():
+            if socket not in recipients:
+                continue
+            recipients.discard(socket)
+            future = self.pending.get(request_id)
+            if not recipients and future is not None and not future.done():
+                future.set_result(
+                    {
+                        "ok": False,
+                        "error": "GeoLibre disconnected before returning a result.",
+                    }
+                )
 
     def resolve(self, raw: str) -> None:
         """Hand an app result frame to the request waiting for it."""
@@ -198,11 +217,12 @@ async def set_relay_access(request: Request) -> dict[str, bool]:
         raise HTTPException(status_code=400, detail="Expected an enabled boolean") from error
     if not isinstance(payload, dict) or not isinstance(payload.get("enabled"), bool):
         raise HTTPException(status_code=400, detail="Expected an enabled boolean")
-    global _access_allowed
+    global _access_allowed, _access_generation
     _access_allowed = payload["enabled"]
     if _access_allowed:
         write_discovery_file()
     else:
+        _access_generation += 1
         remove_discovery_file()
         for future in _hub.pending.values():
             if not future.done():
@@ -233,6 +253,43 @@ def discovery_file() -> Path:
     return Path.home() / ".geolibre" / "runtime" / "live-relay.json"
 
 
+@contextlib.contextmanager
+def _discovery_lock(target: Path) -> Iterator[None]:
+    """Serialize discovery publication and conditional removal across processes.
+
+    Args:
+        target: The shared discovery file path.
+
+    Yields:
+        While this process holds the adjacent lock file. The lock file remains
+        in place so all processes continue locking the same inode.
+    """
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(str(target) + ".lock", os.O_CREAT | os.O_RDWR, 0o600)
+    with os.fdopen(descriptor, "r+b") as handle:
+        if os.name == "nt":
+            import msvcrt
+
+            if not handle.read(1):
+                handle.write(b"\0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def write_discovery_file() -> Path | None:
     """Advertise the relay URL, token, and pid to local Live MCP clients.
 
@@ -256,17 +313,18 @@ def write_discovery_file() -> Path | None:
     }
     temporary: Path | None = None
     try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=target.parent,
-            prefix=f".{target.name}.",
-            delete=False,
-        ) as handle:
-            temporary = Path(handle.name)
-            json.dump(payload, handle)
-        os.replace(temporary, target)
+        with _discovery_lock(target):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=target.parent,
+                prefix=f".{target.name}.",
+                delete=False,
+            ) as handle:
+                temporary = Path(handle.name)
+                json.dump(payload, handle)
+            os.replace(temporary, target)
     except OSError as error:
         logger.warning(
             "Could not publish Live MCP discovery file (%s); explicit "
@@ -287,12 +345,12 @@ def remove_discovery_file() -> None:
     """
     target = discovery_file()
     try:
-        info = json.loads(target.read_text(encoding="utf-8"))
+        with _discovery_lock(target):
+            info = json.loads(target.read_text(encoding="utf-8"))
+            if isinstance(info, dict) and info.get("pid") == os.getpid():
+                target.unlink()
     except (OSError, UnicodeError, json.JSONDecodeError):
         return
-    if isinstance(info, dict) and info.get("pid") == os.getpid():
-        with contextlib.suppress(OSError):
-            target.unlink()
 
 
 def check_client_token(request: Request) -> None:
@@ -344,7 +402,11 @@ async def relay_socket(websocket: WebSocket) -> None:
     ):
         await websocket.close(code=1008)
         return
+    generation = _access_generation
     await websocket.accept(subprotocol="geolibre-relay")
+    if not relay_enabled() or generation != _access_generation:
+        await websocket.close(code=1008)
+        return
     _hub.listeners.append(websocket)
     try:
         await websocket.send_text(json.dumps({"type": "geolibre:relay-ready"}))
@@ -411,6 +473,7 @@ async def relay_command(request: Request) -> dict[str, Any]:
         return {"delivered": delivered, **result}
     finally:
         _hub.pending.pop(dispatch_id, None)
+        _hub.recipients.pop(dispatch_id, None)
         _hub.pending_request_ids.discard(request_id)
         if not future.done():
             future.cancel()

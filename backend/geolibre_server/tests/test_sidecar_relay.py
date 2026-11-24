@@ -6,7 +6,10 @@ import asyncio
 import json
 import os
 import stat
+import subprocess
+import sys
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -17,6 +20,134 @@ from geolibre_server import relay_protocol
 from geolibre_server.app import main, relay
 
 SIDECAR_TOKEN = "sidecar-secret"
+
+
+@pytest.mark.parametrize("reenabled", [False, True])
+def test_handshake_cannot_subscribe_after_access_is_revoked(enabled, monkeypatch, reenabled):
+    """Reject a socket whose handshake finishes after revocation.
+
+    Args:
+        enabled: An enabled relay fixture.
+        monkeypatch: The pytest patch fixture.
+        reenabled: Whether a new grant follows revocation before acceptance.
+    """
+    closed = []
+
+    async def accept(**_kwargs):
+        """Revoke access while the handshake yields to another task.
+
+        Args:
+            **_kwargs: The requested WebSocket subprotocol.
+        """
+        monkeypatch.setattr(relay, "_access_allowed", reenabled)
+        monkeypatch.setattr(relay, "_access_generation", relay._access_generation + 1)
+
+    async def close(*, code):
+        """Capture the rejected connection's close status.
+
+        Args:
+            code: The policy violation status code.
+        """
+        closed.append(code)
+
+    socket = SimpleNamespace(
+        headers={"origin": "http://localhost:5173"},
+        scope={"subprotocols": ["geolibre-relay", f"geolibre-token.{SIDECAR_TOKEN}"]},
+        accept=accept,
+        close=close,
+    )
+    asyncio.run(relay.relay_socket(socket))
+    assert closed == [1008]
+    assert not relay._hub.listeners
+
+
+def test_pending_command_fails_when_all_its_recipients_disconnect():
+    """Fail promptly after losing the last original recipient, preserving live peers."""
+
+    async def exercise():
+        """Deliver a correlated command and disconnect its two recipients."""
+        hub = relay._Hub()
+
+        class Socket:
+            """An app window that accepts a frame without returning a result."""
+
+            async def send_text(self, _encoded):
+                """Accept the encoded command frame.
+
+                Args:
+                    _encoded: The outgoing JSON envelope.
+                """
+
+        first, second = Socket(), Socket()
+        hub.listeners.extend([first, second])
+        future = asyncio.get_running_loop().create_future()
+        hub.pending["dispatch"] = future
+        assert await hub.broadcast({"requestId": "dispatch", "method": "runAlgorithm"}) == 2
+        hub.drop(first)
+        assert not future.done()
+        hub.drop(second)
+        result = await asyncio.wait_for(future, 0.1)
+        assert result["ok"] is False
+        assert "disconnected" in result["error"]
+
+    asyncio.run(exercise())
+
+
+def test_discovery_publication_waits_for_conditional_removal(enabled, monkeypatch):
+    """Keep a different process's replacement record after revoking this owner.
+
+    Args:
+        enabled: An isolated enabled relay fixture.
+        monkeypatch: The pytest patch fixture.
+    """
+    target = relay.write_discovery_file()
+    original_read = Path.read_text
+    processes = []
+
+    def read_while_publisher_waits(path, *args, **kwargs):
+        """Start a competing publisher during the ownership read.
+
+        Args:
+            path: The file being read.
+            *args: Positional read arguments.
+            **kwargs: Keyword read arguments.
+
+        Returns:
+            The current file contents before the competing publication.
+        """
+        data = original_read(path, *args, **kwargs)
+        if path == target:
+            process = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "from geolibre_server.app import relay; "
+                        "relay._access_allowed = True; "
+                        "print('publishing', flush=True); "
+                        "assert relay.write_discovery_file() is not None"
+                    ),
+                ],
+                stdout=subprocess.PIPE,
+                text=True,
+            )
+            processes.append(process)
+            assert process.stdout.readline().strip() == "publishing"
+            with pytest.raises(subprocess.TimeoutExpired):
+                process.wait(timeout=0.2)
+        return data
+
+    monkeypatch.setattr(Path, "read_text", read_while_publisher_waits)
+    try:
+        relay.remove_discovery_file()
+        assert len(processes) == 1
+        assert processes[0].wait(timeout=10) == 0
+        assert json.loads(original_read(target))["pid"] == processes[0].pid
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+            process.communicate(timeout=10)
 
 
 @pytest.fixture
@@ -406,6 +537,7 @@ def test_broadcast_drops_stalled_peers_without_blocking_healthy_windows(monkeypa
         ("getView", 12, 12.0),
         ("runAlgorithm", 0.01, relay_protocol.MIN_RESULT_TIMEOUT_SECONDS),
         ("runAlgorithm", 10**9, relay_protocol.MAX_RESULT_TIMEOUT_SECONDS),
+        ("runAlgorithm", 10**400, relay_protocol.MAX_RESULT_TIMEOUT_SECONDS),
         ("getView", float("nan"), relay_protocol.DEFAULT_RESULT_TIMEOUT_SECONDS),
         ("getView", -3, relay_protocol.DEFAULT_RESULT_TIMEOUT_SECONDS),
         ("getView", True, relay_protocol.DEFAULT_RESULT_TIMEOUT_SECONDS),

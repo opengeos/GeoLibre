@@ -279,6 +279,12 @@ def test_arcgis_layer_refuses_a_token():
         _project.arcgis_layer("x", "https://example.com/A/MapServer?token=abc")
 
 
+def test_google_storage_zarr_uses_a_restorable_https_endpoint():
+    """Normalize Google Storage stores while preserving their access query."""
+    layer = _project.zarr_layer("Cube", "gs://public-bucket/a.zarr?token=abc", "tas")
+    assert layer["source"]["url"] == "https://storage.googleapis.com/public-bucket/a.zarr?token=abc"
+
+
 def test_zarr_layer_matches_the_restorable_record():
     layer = _project.zarr_layer(
         "Air temperature",

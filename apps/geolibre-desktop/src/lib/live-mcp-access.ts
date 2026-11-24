@@ -10,6 +10,10 @@ export interface LiveMcpAccessState {
 export function createLiveMcpAccessController(options: {
   getEnabled: () => boolean;
   send: (info: SidecarServerInfo, enabled: boolean) => Promise<void>;
+  grants?: {
+    get: (info: SidecarServerInfo) => boolean;
+    set: (info: SidecarServerInfo, granted: boolean) => void;
+  };
 }) {
   let server: SidecarServerInfo | null = null;
   let generation = 0;
@@ -56,12 +60,16 @@ export function createLiveMcpAccessController(options: {
       }
       // An enable may reach the server even if its response is lost. A later
       // opt-out must revoke that ambiguous grant, not only confirmed grants.
-      if (desired) mayHaveGrantedAccess = true;
+      if (desired) {
+        mayHaveGrantedAccess = true;
+        options.grants?.set(info, true);
+      }
       try {
         await options.send(info, desired);
         if (mine !== generation || desired !== options.getEnabled()) return;
         attempt = 0;
         mayHaveGrantedAccess = desired;
+        options.grants?.set(info, desired);
         publish({ ready: desired ? info : null, enabled: desired, error: false });
       } catch {
         if (mine !== generation || desired !== options.getEnabled()) return;
@@ -87,7 +95,7 @@ export function createLiveMcpAccessController(options: {
       if (server?.baseUrl === info?.baseUrl && server?.token === info?.token) return;
       generation += 1;
       server = info;
-      mayHaveGrantedAccess = false;
+      mayHaveGrantedAccess = info ? (options.grants?.get(info) ?? false) : false;
       attempt = 0;
       clearRetry();
       publish({ ready: null, enabled: options.getEnabled(), error: false });

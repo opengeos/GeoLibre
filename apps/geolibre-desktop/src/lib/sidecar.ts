@@ -57,6 +57,25 @@ let stopGeneration = 0;
 const relayAccess = createLiveMcpAccessController({
   getEnabled: () => useDesktopSettingsStore.getState().desktopSettings.startup.allowLiveMcp,
   send: (info, enabled) => setSidecarRelayAccess(info.baseUrl, enabled),
+  grants: {
+    get: (info) => {
+      try {
+        return localStorage.getItem(`geolibre.live-mcp-grant:${info.baseUrl}`) === "1";
+      } catch {
+        // An inaccessible ledger cannot prove a reused sidecar was never enabled.
+        return true;
+      }
+    },
+    set: (info, granted) => {
+      try {
+        const key = `geolibre.live-mcp-grant:${info.baseUrl}`;
+        if (granted) localStorage.setItem(key, "1");
+        else localStorage.removeItem(key);
+      } catch {
+        // Reads fail closed and will retry revocation on the next attachment.
+      }
+    },
+  },
 });
 let accessNotice: string | null = null;
 relayAccess.subscribe((state) => {

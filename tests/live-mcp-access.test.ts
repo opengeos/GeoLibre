@@ -4,6 +4,41 @@ import { createLiveMcpAccessController } from "../apps/geolibre-desktop/src/lib/
 
 const SERVER = { baseUrl: "http://127.0.0.1:8765", port: 8765, token: "test" };
 
+it("retries a possible grant after a renderer reload or sidecar reattachment", async () => {
+  let granted = false;
+  let enabled = true;
+  let fail = false;
+  const requests: boolean[] = [];
+  const options = {
+    getEnabled: () => enabled,
+    grants: {
+      get: () => granted,
+      set: (_info: typeof SERVER, value: boolean) => {
+        granted = value;
+      },
+    },
+    send: async (_info: typeof SERVER, value: boolean) => {
+      requests.push(value);
+      if (fail) throw new Error("offline");
+    },
+  };
+  const first = createLiveMcpAccessController(options);
+  first.setServer(SERVER);
+  await first.sync();
+  enabled = false;
+  fail = true;
+  await first.sync();
+  first.setServer(null);
+  assert.equal(granted, true);
+  const reloaded = createLiveMcpAccessController(options);
+  reloaded.setServer(SERVER);
+  fail = false;
+  await reloaded.sync();
+  assert.deepEqual(requests, [true, false, false]);
+  assert.equal(granted, false);
+  reloaded.setServer(null);
+});
+
 it("retries a failed revocation while immediately removing the app subscription", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   let enabled = true;

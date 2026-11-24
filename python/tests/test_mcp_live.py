@@ -663,6 +663,7 @@ def test_command_timeout_override_is_clamped_and_validated(relay_server, monkeyp
     require().call("runAlgorithm", timeout=90)
     assert relay_server.body["timeoutSeconds"] == 90.0
     assert command_timeout_seconds("runAlgorithm", 10**9) == MAX_TIMEOUT_SECONDS
+    assert command_timeout_seconds("runAlgorithm", 10**400) == MAX_TIMEOUT_SECONDS
     for bad in (0, -1, float("inf"), True):
         with pytest.raises(LiveError, match="positive"):
             command_timeout_seconds("runAlgorithm", bad)
