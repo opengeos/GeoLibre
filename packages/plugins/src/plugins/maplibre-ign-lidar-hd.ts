@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { Feature, FeatureCollection } from "geojson";
 import type {
@@ -401,7 +402,7 @@ function setFootprints(
   const source = map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource | undefined;
   if (!source) return;
   const features = tiles.map((tile) => tileFeature(tile, selectedIds.has(tile.id)));
-  source.setData({ type: "FeatureCollection", features });
+  updateGeoJsonSourceData(source, { type: "FeatureCollection", features });
   if (features.length > 0) syncFootprintStoreLayer(app, features);
   else unregisterFootprintStoreLayer(app);
 }
@@ -453,7 +454,8 @@ function setHoveredTile(app: GeoLibreAppAPI, tile: IgnLidarHdTile | null): void 
   ensureHoverLayer(map);
   const source = map.getSource(HOVER_SOURCE_ID) as GeoJSONSource | undefined;
   if (!source) return;
-  source.setData(
+  updateGeoJsonSourceData(
+    source,
     tile ? { type: "FeatureCollection", features: [tileFeature(tile)] } : emptyCollection(),
   );
 }

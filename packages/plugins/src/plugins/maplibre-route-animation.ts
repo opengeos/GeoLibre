@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { Feature, LineString, Point } from "geojson";
 import type { Layer } from "@deck.gl/core";
@@ -527,8 +528,8 @@ class RouteAnimationEngine {
     // placeholder feature (e.g. the initial [0, 0] point) never lingers on the
     // map before a layer is picked or after the selected layer is removed.
     if (this.totalMeters <= 0) {
-      markerSource?.setData({ type: "FeatureCollection", features: [] });
-      trailSource?.setData(emptyLine());
+      updateGeoJsonSourceData(markerSource, { type: "FeatureCollection", features: [] });
+      updateGeoJsonSourceData(trailSource, emptyLine());
       this.clearDeck();
       return;
     }
@@ -542,17 +543,18 @@ class RouteAnimationEngine {
     // they ride the visualized 3D line rather than its flat ground projection
     // (#1210). The 2D MapLibre marker/trail are cleared so nothing double-draws.
     if (this.render3d(distance, point)) {
-      markerSource?.setData({ type: "FeatureCollection", features: [] });
-      trailSource?.setData(emptyLine());
+      updateGeoJsonSourceData(markerSource, { type: "FeatureCollection", features: [] });
+      updateGeoJsonSourceData(trailSource, emptyLine());
     } else {
       this.clearDeck();
-      if (markerSource) markerSource.setData(markerFeature(coord, bearing));
+      if (markerSource) updateGeoJsonSourceData(markerSource, markerFeature(coord, bearing));
       if (this.settings.showTrail) {
-        trailSource?.setData(
+        updateGeoJsonSourceData(
+          trailSource,
           lineFeature(sliceLineAtDistance(this.coords, this.cumulative, distance)),
         );
       } else {
-        trailSource?.setData(emptyLine());
+        updateGeoJsonSourceData(trailSource, emptyLine());
       }
     }
 

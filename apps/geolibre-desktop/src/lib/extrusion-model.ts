@@ -524,7 +524,6 @@ export function encodeGlb(model: ExtrusionModel, layerName: string): Uint8Array 
  * comment, and control characters confuse line-based parsers.
  */
 function objName(name: string): string {
-  // eslint-disable-next-line no-control-regex
   return name.replace(/[\s#\u0000-\u001f\u007f]+/g, "_") || "feature";
 }
 

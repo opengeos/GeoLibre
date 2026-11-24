@@ -2,7 +2,7 @@ import {
   identifierWords,
   isMultipleWhiteboxDatasetParameter,
   type WhiteboxToolParameter,
-} from "@geolibre/processing";
+} from "@geolibre/processing/parameters";
 
 // Re-exported so the dialog helpers keep one import site for parameter
 // classification; the implementation is shared with the WASM runner.

@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
@@ -517,7 +518,7 @@ export function createGridPlugin<S extends GridSettingsBase, L extends GridLabel
         error instanceof RangeError ? labels.tooManyCells(config.viewportCellLimit) : String(error);
     }
     applyStyle();
-    (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
+    updateGeoJsonSourceData(map.getSource(SOURCE_ID) as GeoJSONSource | undefined, currentGrid);
     updateSelectedSource();
     if (panelContainer) renderPanel(panelContainer);
   }
@@ -525,18 +526,18 @@ export function createGridPlugin<S extends GridSettingsBase, L extends GridLabel
   function updateSelectedSource(): void {
     const toFeatures = (cells: string[]): Feature<Polygon>[] =>
       cells.map((cell) => config.cellFeature(cell));
-    (map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined)?.setData({
+    updateGeoJsonSourceData(map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined, {
       type: "FeatureCollection",
       features: selectedCell ? toFeatures([selectedCell]) : [],
     });
-    (map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined)?.setData({
+    updateGeoJsonSourceData(map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined, {
       type: "FeatureCollection",
       features:
         settings.includeNeighbors && selectedCell
           ? toFeatures(config.neighborCells(selectedCell))
           : [],
     });
-    (map?.getSource(PARENT_SOURCE_ID) as GeoJSONSource | undefined)?.setData({
+    updateGeoJsonSourceData(map?.getSource(PARENT_SOURCE_ID) as GeoJSONSource | undefined, {
       type: "FeatureCollection",
       features: parentEnabled() && selectedCell ? toFeatures(config.parentCells(selectedCell)) : [],
     });

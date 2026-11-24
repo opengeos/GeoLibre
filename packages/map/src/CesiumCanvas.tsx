@@ -602,7 +602,6 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   useEffect(() => {
     if (!ready) return;
     applyBasemapLook();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, basemapVisible, basemapOpacity]);
 
   // Retranslate the Cesium toolbar tooltips when the UI language changes. The

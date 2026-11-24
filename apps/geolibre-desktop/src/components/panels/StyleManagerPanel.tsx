@@ -662,6 +662,7 @@ export function StyleManagerPanel() {
         "w-[min(24rem,calc(100vw-1.5rem))]",
         // Physical (not logical) anchor: the drag handler writes physical
         // left/top inline, and RasterSubsetPanel sets the same precedent.
+        // eslint-disable-next-line local/no-physical-tailwind -- default spot of a draggable panel whose drag handler writes physical left/top.
         !pos && "left-3 top-3",
       )}
       style={pos ? { left: pos.x, top: pos.y } : undefined}

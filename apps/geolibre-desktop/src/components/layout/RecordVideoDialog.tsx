@@ -377,6 +377,7 @@ export function RecordVideoDialog({
         style={pos ? { left: pos.x, top: pos.y } : undefined}
         className={cn(
           "fixed z-40 flex w-80 max-w-[95vw] flex-col rounded-lg border bg-card text-card-foreground shadow-xl",
+          // eslint-disable-next-line local/no-physical-tailwind -- default spot of a draggable panel whose drag handler writes physical left/top.
           pos ? "" : "left-4 top-16",
         )}
       >

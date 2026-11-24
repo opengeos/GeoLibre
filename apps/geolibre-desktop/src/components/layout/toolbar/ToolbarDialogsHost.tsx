@@ -194,7 +194,6 @@ export function ToolbarDialogsHost({
             const safeName = defaultProjectName.replace(
               // Includes U+007F (DEL) alongside the C0 control range; both are
               // non-printing and rejected by some filesystems and HTTP servers.
-              // eslint-disable-next-line no-control-regex
               /[\u0000-\u001f\u007f/\\:*?"<>|]/g,
               "_",
             );
