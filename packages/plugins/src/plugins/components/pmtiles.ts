@@ -389,6 +389,10 @@ export function guardPMTilesSourceRemoval(control: PMTilesLayerControl): void {
           .map((layer) => layer.id);
         dropGeoLibreLayersOnSources(attached, new Set(ids));
       }
+    } catch (error) {
+      // Companion cleanup is best effort. Preserve the rest of onRemove and
+      // the public removeLayer caller, including other store subscribers.
+      console.warn("Could not remove PMTiles companion layers", error);
     } finally {
       // A disposed map may reject companion cleanup; the control still owns
       // its archive state and must always get its teardown call.

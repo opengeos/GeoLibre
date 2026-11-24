@@ -457,8 +457,24 @@ describe("removing an archive GeoLibre has decorated", () => {
         throw new Error("map disposed");
       },
     });
-    assert.throws(() => control._removeLayer("owned"), /map disposed/);
+    assert.doesNotThrow(() => control._removeLayer("owned"));
     assert.equal(calls, 1);
+  });
+
+  it("preserves the original archive-removal error", () => {
+    const failure = new Error("native removal failed");
+    const control = {
+      onAdd: () => ({}),
+      getState: () => ({ layers: [] }),
+      _removeLayer: (_id?: string) => {
+        throw failure;
+      },
+    };
+    guardPMTilesSourceRemoval(control as never);
+    assert.throws(
+      () => control._removeLayer("owned"),
+      (error) => error === failure,
+    );
   });
 
   it("strands the source without the guard, which is why it exists", async () => {

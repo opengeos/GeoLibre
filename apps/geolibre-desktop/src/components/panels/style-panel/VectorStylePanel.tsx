@@ -11,6 +11,7 @@ import { Button, Label, ScrollArea, Separator } from "@geolibre/ui";
 import {
   arcgisUnsupportedStyleSettings,
   mapboxUnsupportedStyleSettings,
+  rendererCapabilities,
   type MapEngine,
 } from "@geolibre/map";
 import { pmtilesLayerDrawsLineDecorations } from "@geolibre/map/pmtiles-layer";
@@ -141,6 +142,7 @@ export function VectorStylePanel({
   mapReadyGeneration,
 }: VectorStylePanelProps) {
   const { t } = useTranslation();
+  const primaryRenderer = useAppStore((state) => state.primaryRenderer);
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
   const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
   const updateLayer = useAppStore((s) => s.updateLayer);
@@ -199,7 +201,8 @@ export function VectorStylePanel({
       !!layer.geojson &&
       !hasExternalDeckLayer(layer) &&
       !hasExternalNativeLayers(layer)) ||
-      pmtilesLayerDrawsLineDecorations(layer)) &&
+      (pmtilesLayerDrawsLineDecorations(layer) &&
+        rendererCapabilities(primaryRenderer).styleSpec)) &&
     (geometryFlags.hasLine || geometryFlags.hasPolygon);
   const showGeneratorControls =
     hasVectorPaintControls && !extrusionEnabled && supportsDerivedGeometry;
