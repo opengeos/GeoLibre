@@ -379,13 +379,19 @@ export function guardPMTilesSourceRemoval(control: PMTilesLayerControl): void {
     return onAdd(map);
   };
   target._removeLayer = (id?: string) => {
-    // The control's own cleanup must run even if the captured map has been torn down and throws.
     try {
       if (attached) {
-        const ids = id ? [id] : control.getState().layers.map((layer) => layer.id);
+        // Unknown IDs are a no-op in the control. Only archives it owns may
+        // authorize removal of GeoLibre companions on their source.
+        const ids = control
+          .getState()
+          .layers.filter((layer) => !id || layer.id === id)
+          .map((layer) => layer.id);
         dropGeoLibreLayersOnSources(attached, new Set(ids));
       }
     } finally {
+      // A disposed map may reject companion cleanup; the control still owns
+      // its archive state and must always get its teardown call.
       original.call(control, id);
     }
   };

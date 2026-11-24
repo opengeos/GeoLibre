@@ -1152,6 +1152,11 @@ function syncPMTilesLineDecorations(
   const rendered = new Set(
     imageId && sourceId ? getPMTilesRenderableSourceLayers(layer, sourceId, nativeLayerIds) : [],
   );
+  removeStalePMTilesLineDecorations(
+    map,
+    layer.id,
+    new Set([...rendered].map((name) => pmtilesLineDecorationLayerId(layer.id, name))),
+  );
   if (rendered.size > 0) ensureGeneratedImageHandler(map);
   for (const sourceLayer of new Set([...getPMTilesSourceLayers(layer), ...rendered])) {
     const decorationId = pmtilesLineDecorationLayerId(layer.id, sourceLayer);
@@ -1168,7 +1173,7 @@ function syncPMTilesLineDecorations(
         source: sourceId,
         "source-layer": sourceLayer,
         ...styleLayerZoomRange(layer.style),
-        metadata: { "geolibre:internal": true },
+        metadata: { "geolibre:internal": true, "geolibre:line-decoration-owner": layer.id },
         filter: withFeatureFilters(layer, [
           "match",
           ["geometry-type"],
@@ -1190,6 +1195,25 @@ function syncPMTilesLineDecorations(
       },
       beforeId,
     );
+  }
+}
+
+/** Remove owned decorations absent from the desired set, including source layers no longer in metadata. */
+function removeStalePMTilesLineDecorations(
+  map: maplibregl.Map,
+  layerId: string,
+  keep: ReadonlySet<string> = new Set(),
+): void {
+  for (const id of map.getLayersOrder?.() ??
+    map.getStyle?.()?.layers?.map((layer) => layer.id) ??
+    []) {
+    const metadata = map.getLayer(id)?.metadata as Record<string, unknown> | undefined;
+    if (
+      metadata?.["geolibre:internal"] === true &&
+      metadata["geolibre:line-decoration-owner"] === layerId &&
+      !keep.has(id)
+    )
+      removeIfExists(map, id);
   }
 }
 
@@ -4121,6 +4145,7 @@ export function removeLayerFromMap(
   // Drop cached paint-bridge state so a later layer reusing this id never
   // skips a fresh opacity/visibility apply against a new bridge.
   appliedBridgeState.delete(layerId);
+  if (layer?.type === "pmtiles") removeStalePMTilesLineDecorations(map, layerId);
   for (const id of [
     ...getExternalNativeLayerIds(layer),
     ...getExternalNativeLayerIds(layer).map(externalExtrusionLayerId),

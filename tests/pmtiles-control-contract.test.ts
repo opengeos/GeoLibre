@@ -366,10 +366,8 @@ function statefulMap(document: Document, { mapbox = false } = {}) {
       getCanvasContainer: () => document.createElement("div"),
     } as Record<string, unknown>,
     {
-      // An explicit `undefined` (mapbox-gl's missing getLayersOrder) stays missing; anything else
-      // the control asks of a map gets a no-op.
-      get: (target, key) =>
-        key in target ? target[key as string] : (target[key as string] ?? (() => undefined)),
+      // Keep explicitly absent Mapbox methods absent; remaining control probes are no-ops.
+      get: (target, key) => (key in target ? target[key as string] : () => undefined),
     },
   );
   return { map, layers, sources, refused };
@@ -417,6 +415,51 @@ describe("removing an archive GeoLibre has decorated", () => {
       globals.fetch = restore.fetch;
     }
   }
+
+  it("ignores an unknown archive id without touching another source's companions", () => {
+    const { document, window } = parseHTML("<!doctype html><html><body></body></html>");
+    const globals = globalThis as Record<string, unknown>;
+    const previous = { document: globals.document, window: globals.window };
+    globals.document = document;
+    globals.window = Object.assign(window, { maplibregl: { addProtocol: () => {} } });
+    try {
+      const control = new PMTilesLayerControl({});
+      const fake = statefulMap(document as unknown as Document);
+      guardPMTilesSourceRemoval(control);
+      control.onAdd(fake.map as never);
+      fake.sources.add("unrelated-source");
+      fake.layers.set("unrelated-companion", {
+        id: "unrelated-companion",
+        source: "unrelated-source",
+        metadata: { "geolibre:internal": true },
+      });
+      control.removeLayer("unrelated-source");
+      assert.ok(fake.layers.has("unrelated-companion"));
+      assert.ok(fake.sources.has("unrelated-source"));
+    } finally {
+      globals.document = previous.document;
+      globals.window = previous.window;
+    }
+  });
+
+  it("always calls archive teardown when a disposed map rejects companion cleanup", () => {
+    let calls = 0;
+    const control = {
+      onAdd: () => ({}),
+      getState: () => ({ layers: [{ id: "owned" }] }),
+      _removeLayer: (_id?: string) => {
+        calls++;
+      },
+    };
+    guardPMTilesSourceRemoval(control as never);
+    (control.onAdd as (map: unknown) => unknown)({
+      getLayersOrder: () => {
+        throw new Error("map disposed");
+      },
+    });
+    assert.throws(() => control._removeLayer("owned"), /map disposed/);
+    assert.equal(calls, 1);
+  });
 
   it("strands the source without the guard, which is why it exists", async () => {
     const { sources, refused, archiveId } = await decoratedArchive(false);

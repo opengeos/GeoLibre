@@ -241,6 +241,40 @@ describe("PMTiles line decoration sync", () => {
     assert.ok(added.indexOf(STREAMS_DECORATION) > added.indexOf("flow-streams-line"));
   });
 
+  it("removes decorations for source-layer names omitted by a same-id update", () => {
+    const { map, layers } = makeMap();
+    syncLayer(map as never, pmtilesLayer({ lineDecoration: "arrow" }));
+    assert.ok(layers.has(BOUNDARY_DECORATION));
+    const narrowed = createPMTilesStoreLayer({
+      id: "flow",
+      name: "Flow paths",
+      url: "https://example.org/flow.pmtiles",
+      tileType: "vector",
+      sourceLayers: ["streams"],
+    });
+    const styled = { ...narrowed, style: { ...narrowed.style, lineDecoration: "arrow" as const } };
+    syncLayer(map as never, styled);
+    assert.ok(layers.has(STREAMS_DECORATION));
+    assert.ok(!layers.has(BOUNDARY_DECORATION));
+    syncLayer(map as never, narrowed);
+    assert.ok(!layers.has(STREAMS_DECORATION));
+  });
+
+  it("deleting with narrowed metadata also removes previously rendered decorations", () => {
+    const { map, layers } = makeMap();
+    syncLayer(map as never, pmtilesLayer({ lineDecoration: "arrow" }));
+    const narrowed = createPMTilesStoreLayer({
+      id: "flow",
+      name: "Flow paths",
+      url: "https://example.org/flow.pmtiles",
+      tileType: "vector",
+      sourceLayers: ["streams"],
+    });
+    removeLayerFromMap(map as never, narrowed.id, narrowed);
+    assert.ok(!layers.has(STREAMS_DECORATION));
+    assert.ok(!layers.has(BOUNDARY_DECORATION));
+  });
+
   it("hides the decorations with the layer and follows its opacity", () => {
     const { map, layers } = makeMap();
     syncLayer(
@@ -298,7 +332,7 @@ describe("PMTiles line decoration sync", () => {
     assert.deepEqual(sourceLayers.sort(), ["a b", "a_20b"]);
   });
 
-  it("shares one predicate with the sync: it holds exactly where a decoration is drawn", () => {
+  it("limits the shared decoration predicate to styled vector archives", () => {
     const raster = createPMTilesStoreLayer({
       id: "hillshade",
       name: "Hillshade",
