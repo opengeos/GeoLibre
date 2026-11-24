@@ -1,3 +1,5 @@
+import { downloadBytes } from "../../lib/download-bytes";
+import { useSidecarJobCancellation } from "../../hooks/useSidecarJobCancellation";
 import {
   shouldZoomToNewLayers,
   useAppStore,
@@ -7,6 +9,7 @@ import {
 import { getLayerBounds, type MapEngine } from "@geolibre/map";
 import {
   clearRemoteWhiteboxCatalogSnapshotCache,
+  cancelWhiteboxJob,
   fetchWhiteboxJob,
   fetchWhiteboxJsonOutput,
   fetchRemoteWhiteboxCatalogSnapshot,
@@ -166,22 +169,6 @@ const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
 // stays usable (left list + a readable parameter form).
 const PANEL_MIN_W = 560;
 const PANEL_MIN_H = 400;
-
-/** Save bytes to the user's downloads via a transient object URL. */
-function downloadBytes(bytes: Uint8Array, filename: string): void {
-  // Cast required: TS types Uint8Array as Uint8Array<ArrayBufferLike>, which is
-  // not directly assignable to BlobPart under this lib (mirrors DesktopShell).
-  const url = URL.createObjectURL(new Blob([bytes as BlobPart]));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  // Defer revoke so the browser can fetch the blob first (Firefox races and
-  // silently drops the download if the URL is revoked synchronously).
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
 
 export function ProcessingDialog({
   mapControllerRef,
@@ -1726,6 +1713,18 @@ export function ProcessingDialog({
   };
 
   const running = runningLocal || Boolean(job && RUNNING_JOB_STATUSES.has(job.status));
+  // Only a sidecar job can be pending or running: WASM runs arrive terminal.
+  // Cancelling kills the tool on the sidecar; polling then picks up the
+  // job's `cancelled` state.
+  const sidecarJobRunning = !runningLocal && Boolean(job && RUNNING_JOB_STATUSES.has(job.status));
+  const { cancellingJob, cancelSidecarJob } = useSidecarJobCancellation(
+    job,
+    sidecarJobRunning,
+    cancelWhiteboxJob,
+    setJob,
+    setError,
+    t("processing.whitebox.errorCancel"),
+  );
   const serverBusy = loadingTools || startingServer || stoppingServer;
 
   if (!open) return null;
@@ -2071,6 +2070,16 @@ export function ProcessingDialog({
                   ? t("processing.whitebox.copyLinkCopied")
                   : t("processing.whitebox.copyLink")}
               </Button>
+              {sidecarJobRunning ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void cancelSidecarJob()}
+                  disabled={cancellingJob}
+                >
+                  {t("common.cancel")}
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 onClick={runSelectedTool}
@@ -2278,7 +2287,7 @@ function JobOutputPanel({ job }: { job: WhiteboxJob }) {
       <p className={cn("flex items-center gap-2 text-sm font-medium", jobStatusTone(job))}>
         {job.status === "succeeded" ? (
           <CheckCircle2 className="h-4 w-4" />
-        ) : job.status === "failed" ? (
+        ) : job.status === "cancelled" ? null : job.status === "failed" ? (
           <AlertCircle className="h-4 w-4" />
         ) : (
           <Loader2 className="h-4 w-4 animate-spin" />

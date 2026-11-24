@@ -5,7 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { WebSocket } from "ws";
-import { RELAY_SNAPSHOT_ORIGIN, signIdentityToken } from "@geolibre/collab-core";
+import {
+  MAX_SESSION_LOG_STORAGE_BYTES,
+  RELAY_SNAPSHOT_ORIGIN,
+  SESSION_LOG_LIMIT,
+  signIdentityToken,
+} from "@geolibre/collab-core";
 import { createRelay } from "../src/server.js";
 
 /** Issuer secret for the identity tests; a relay without one rejects all tokens. */
@@ -681,5 +686,147 @@ describe("Node collaboration relay", () => {
       body: JSON.stringify({ mode: "co-edit" }),
     });
     assert.equal(eleventh.status, 429);
+  });
+
+  it("serves the host-only session log and lets the host clear it", async () => {
+    const { http } = await start();
+    const created = await createSession(http, "view-only");
+    const logUrl = `${http}/sessions/${created.sessionId}/log`;
+    const asHost = { authorization: `Bearer ${created.hostToken}` };
+
+    const host = await connect(http, created.sessionId);
+    const guest = await connect(http, created.sessionId);
+    const hostWelcome = await joinSession(host, created.hostToken, "Host");
+    const guestWelcome = await joinSession(guest, undefined, "Guest");
+    const hostId = hostWelcome.clientId as string;
+    const guestId = guestWelcome.clientId as string;
+
+    host.send(JSON.stringify({ type: "set-mode", mode: "co-edit" }));
+    await next(guest, "mode");
+    host.send(JSON.stringify({ type: "set-participant-mode", clientId: guestId, canEdit: false }));
+    await next(guest, "participants");
+    host.send(JSON.stringify({ type: "snapshot", project: { name: "logged" }, rev: 0 }));
+    await next(guest, "snapshot");
+    guest.close();
+
+    // The leave is logged from the socket's close handler, so poll for it.
+    let log: Message[] = [];
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const response = await fetch(logUrl, { headers: asHost });
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      log = (await response.json()) as Message[];
+      if (log.some((entry) => entry.type === "leave")) break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assert.deepEqual(
+      log.map(({ ts, ...rest }) => {
+        assert.equal(typeof ts, "number");
+        return rest;
+      }),
+      [
+        { type: "join", clientId: hostId, identity: null },
+        { type: "join", clientId: guestId, identity: null },
+        { type: "set-mode", mode: "co-edit" },
+        { type: "set-participant-mode", clientId: guestId, canEdit: false },
+        { type: "snapshot", rev: 1, origin: hostId },
+        { type: "leave", clientId: guestId },
+      ],
+    );
+
+    // Anything but the exact host token is refused, including the token in the
+    // query string, a guest without one, and an unknown session code.
+    for (const [url, headers] of [
+      [logUrl, {}],
+      [logUrl, { authorization: "Bearer wrong-token" }],
+      [logUrl, { authorization: created.hostToken }],
+      [`${logUrl}?hostToken=${created.hostToken}`, {}],
+      [`${http}/sessions/NOTFOUND/log`, asHost],
+    ] as const) {
+      assert.equal((await fetch(url, { headers })).status, 403);
+      assert.equal((await fetch(url, { method: "DELETE", headers })).status, 403);
+    }
+
+    const cleared = await fetch(logUrl, { method: "DELETE", headers: asHost });
+    assert.equal(cleared.status, 204);
+    assert.equal(cleared.headers.get("access-control-allow-origin"), "*");
+    assert.deepEqual(await (await fetch(logUrl, { headers: asHost })).json(), []);
+
+    // Clearing the log leaves the session and its snapshot intact.
+    const rejoin = await connect(http, created.sessionId);
+    const welcome = await joinSession(rejoin, created.hostToken, "Host");
+    assert.deepEqual(welcome.snapshot, { name: "logged" });
+    host.close();
+    rejoin.close();
+  });
+
+  it("authorizes log requests without loading the session snapshot", async (t) => {
+    const { relay, http } = await start();
+    const created = await createSession(http);
+    relay.store.saveSnapshot(created.sessionId, { data: "x".repeat(2_000_000) }, 1);
+    const fullReads = t.mock.method(relay.store, "get");
+    const logUrl = `${http}/sessions/${created.sessionId}/log`;
+    const asHost = { authorization: `Bearer ${created.hostToken}` };
+    assert.equal((await fetch(logUrl, { headers: asHost })).status, 200);
+    assert.equal((await fetch(logUrl, { method: "DELETE", headers: asHost })).status, 204);
+    const unauthorized = { authorization: "Bearer wrong-token" };
+    assert.equal((await fetch(logUrl, { headers: unauthorized })).status, 403);
+    assert.equal((await fetch(logUrl, { method: "DELETE", headers: unauthorized })).status, 403);
+    assert.equal(fullReads.mock.callCount(), 0);
+  });
+
+  it("allows DELETE and the Authorization header in CORS preflight", async () => {
+    const { http } = await start();
+    const preflight = await fetch(`${http}/sessions/ABCDEFGH/log`, { method: "OPTIONS" });
+    assert.equal(preflight.status, 204);
+    assert.match(preflight.headers.get("access-control-allow-methods") ?? "", /\bDELETE\b/);
+    assert.match(preflight.headers.get("access-control-allow-headers") ?? "", /\bAuthorization\b/);
+  });
+
+  it("bounds the session log by entry count and bytes and persists it across restarts", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "geolibre-collab-log-"));
+    cleanups.push(() => rm(dir, { recursive: true, force: true }));
+    const dbPath = join(dir, "collab.sqlite");
+    const first = await start({ dbPath });
+    const created = await createSession(first.http);
+
+    // Enough entries to pass the byte budget well before the count limit.
+    const appended = 2500;
+    for (let rev = 1; rev <= appended; rev++) {
+      first.relay.store.appendSessionLog(created.sessionId, {
+        type: "snapshot",
+        ts: rev,
+        rev,
+        origin: "o",
+      });
+    }
+    const counted = first.relay.store.getSessionLog(created.sessionId);
+    assert.ok(counted.length > 0 && counted.length < appended);
+    assert.ok(counted.length <= SESSION_LOG_LIMIT);
+    assert.ok(
+      new TextEncoder().encode(JSON.stringify(counted)).length <= MAX_SESSION_LOG_STORAGE_BYTES,
+    );
+    // The oldest entries are the ones dropped.
+    assert.equal(counted.at(-1)?.ts, appended);
+    assert.equal(counted[0]?.ts, appended - counted.length + 1);
+
+    // An entry bigger than the whole budget is still kept, alone, rather than
+    // the log being dropped.
+    const big = {
+      type: "join" as const,
+      ts: 0,
+      clientId: "big",
+      identity: { provider: "test", userId: "x".repeat(120_000), username: "big" },
+    };
+    first.relay.store.appendSessionLog(created.sessionId, big);
+    assert.deepEqual(first.relay.store.getSessionLog(created.sessionId), [big]);
+    await cleanups.pop()?.();
+
+    const second = await start({ dbPath });
+    const response = await fetch(`${second.http}/sessions/${created.sessionId}/log`, {
+      headers: { authorization: `Bearer ${created.hostToken}` },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(((await response.json()) as Message[]).length, 1);
   });
 });

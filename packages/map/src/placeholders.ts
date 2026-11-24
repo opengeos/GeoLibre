@@ -23,8 +23,10 @@ export function placeholderMessage(layer: GeoLibreLayer): string {
   switch (layer.type) {
     // PMTiles, COG, FlatGeobuf, and GeoParquet now render natively (each creates
     // its own `nativeLayerIds`, which short-circuits isPlaceholderLayer above).
-    // Reaching this branch therefore means native layer creation did not happen
-    // for this layer, not that the format is unimplemented.
+    // DuckDB query layers render through the DuckDB plugin, whose records carry
+    // `externalDeckLayer`, which short-circuits it too. Reaching this branch
+    // therefore means native layer creation did not happen for this layer, not
+    // that the format is unimplemented.
     case "pmtiles":
       return "This PMTiles layer could not be displayed.";
     case "cog":
@@ -34,8 +36,7 @@ export function placeholderMessage(layer: GeoLibreLayer): string {
     case "geoparquet":
       return "This GeoParquet layer could not be displayed.";
     case "duckdb-query":
-      // TODO(v0.4): DuckDB Spatial query results as layers
-      return "DuckDB query layers planned for v0.4";
+      return "This DuckDB query layer could not be displayed. Run the query again in the DuckDB panel.";
     default:
       return "Layer type not yet implemented";
   }
