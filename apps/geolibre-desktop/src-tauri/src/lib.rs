@@ -4371,7 +4371,7 @@ fn sidecar_health_is_ready(base_url: &str) -> bool {
 /// Whether the sidecar already listening at `base_url` accepts `token`.
 ///
 /// `/health` is token-exempt, so it cannot reveal a token mismatch. This probes
-/// `/algorithms` (a cheap authenticated endpoint) *with* the token so an orphan
+/// `/token-check` (a no-op authenticated endpoint) *with* the token so an orphan
 /// sidecar from a previous launch — started with a different per-launch token,
 /// and not killed because `Drop` doesn't run on `SIGKILL` — is detected rather
 /// than silently 401ing every later request. A tokenless dev sidecar
@@ -4383,7 +4383,7 @@ fn sidecar_accepts_token(base_url: &str, token: &str) -> bool {
         return false;
     };
     client
-        .get(format!("{base_url}/algorithms"))
+        .get(format!("{base_url}/token-check"))
         .header("x-geolibre-token", token)
         .send()
         .map(|response| response.status().is_success())

@@ -138,10 +138,10 @@ function sanitizeTableName(layerName: string, layerId: string): string {
  * numeric suffix on collision. Shared by registration and the UI preview so the
  * names cannot drift.
  */
-export function assignTableNames(
-  layers: GeoLibreLayer[],
-): Array<{ layer: GeoLibreLayer; tableName: string }> {
-  const assigned: Array<{ layer: GeoLibreLayer; tableName: string }> = [];
+export function assignTableNames<L extends Pick<GeoLibreLayer, "id" | "name" | "geojson">>(
+  layers: readonly L[],
+): Array<{ layer: L; tableName: string }> {
+  const assigned: Array<{ layer: L; tableName: string }> = [];
   const usedNames = new Set<string>();
   for (const layer of layers) {
     if (!layer.geojson) continue;

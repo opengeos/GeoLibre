@@ -1,7 +1,7 @@
 import { arcGISLayerHasPendingEdits } from "@geolibre/plugins";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useAppStore } from "@geolibre/core";
+import { createLayerSliceSelector, useAppStore, useLayerIds, useLayerSlices } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { reloadVectorControlLayer, replayVectorControlLayerById } from "@geolibre/plugins";
 import {
@@ -37,10 +37,45 @@ import {
 } from "../../../lib/mssql-writeback";
 
 interface UseLayerRefreshOptions {
-  /** The project's layers, in store order. */
-  layers: GeoLibreLayer[];
   /** Whether the panel is collapsed to its rail (pauses the sync clock). */
   isCollapsed: boolean;
+}
+
+// The hook is called by the app shell, so it subscribes only to the layer
+// fields each scheduler reads rather than to the whole `layers` array: an
+// opacity drag or a style edit must not re-render the shell. Each effect below
+// does the same work it would on any layer change, but now runs only when its
+// own slice changes, and reads the full, current layer record from the store
+// when it needs one.
+
+/** WFS GetFeature layers, for the hydration bootstrap. */
+const selectWfsLayers = () =>
+  createLayerSliceSelector((layer) =>
+    layer.type === "geojson" && layer.metadata.sourceKind === "wfs-getfeature"
+      ? { id: layer.id, url: layer.source.url as unknown, hasGeojson: Boolean(layer.geojson) }
+      : null,
+  );
+
+/** Layers with auto-refresh on, and their cadence. */
+const selectAutoRefreshLayers = () =>
+  createLayerSliceSelector((layer) => {
+    const config = getLayerRefreshConfig(layer);
+    if (!config.enabled || !isRefreshableLayer(layer) || !supportsAutoRefresh(layer)) return null;
+    return { id: layer.id, intervalMs: config.intervalMs };
+  });
+
+/** Local-file layers with watch mode on, and the path to watch. */
+const selectWatchedLayers = () =>
+  createLayerSliceSelector((layer) => {
+    if (!isLocalFileLayer(layer) || !getLayerWatchConfig(layer).enabled) return null;
+    const path = layer.sourcePath;
+    if (typeof path !== "string" || !path) return null;
+    return { id: layer.id, path };
+  });
+
+/** Read one layer's current record from the store. */
+function currentLayer(layerId: string): GeoLibreLayer | undefined {
+  return useAppStore.getState().layers.find((candidate) => candidate.id === layerId);
 }
 
 /**
@@ -50,10 +85,10 @@ interface UseLayerRefreshOptions {
  * the feedback row the layer actions write to (export, save, style copy), so
  * the setters are returned alongside the refresh handlers.
  *
- * @param options - The layers to schedule and the panel's collapse state.
+ * @param options - The panel's collapse state.
  * @returns The status map, its setters, and the refresh handlers.
  */
-export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions) {
+export function useLayerRefresh({ isCollapsed }: UseLayerRefreshOptions) {
   const { t } = useTranslation();
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const updateLayer = useAppStore((s) => s.updateLayer);
@@ -69,7 +104,13 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
   // until an unrelated re-render happened to recompute it. Tick once a minute
   // while the panel is open and at least one layer carries a sync timestamp.
   const [, setSyncClockTick] = useState(0);
-  const hasSyncTimestamps = layers.some((layer) => Boolean(layer.connection?.lastSyncedAt));
+  const hasSyncTimestamps = useAppStore((s) =>
+    s.layers.some((layer) => Boolean(layer.connection?.lastSyncedAt)),
+  );
+  const layerIds = useLayerIds();
+  const wfsLayers = useLayerSlices(useMemo(selectWfsLayers, []));
+  const autoRefreshLayers = useLayerSlices(useMemo(selectAutoRefreshLayers, []));
+  const watchedLayers = useLayerSlices(useMemo(selectWatchedLayers, []));
   useEffect(() => {
     if (isCollapsed || !hasSyncTimestamps) return;
     const timer = window.setInterval(
@@ -456,79 +497,75 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
         }
       }
     }
-    const currentIds = new Set(layers.map((layer) => layer.id));
+    // Only WFS layers are observed: a removed layer, or one that stopped being
+    // a WFS layer, is forgotten.
+    const wfsIds = new Set(wfsLayers.map((layer) => layer.id));
     for (const id of observedWfsSourceUrlsRef.current.keys()) {
-      if (!currentIds.has(id)) observedWfsSourceUrlsRef.current.delete(id);
+      if (!wfsIds.has(id)) observedWfsSourceUrlsRef.current.delete(id);
     }
-    for (const layer of layers) {
-      if (layer.type !== "geojson" || layer.metadata.sourceKind !== "wfs-getfeature") {
-        observedWfsSourceUrlsRef.current.delete(layer.id);
+    for (const { id, url, hasGeojson } of wfsLayers) {
+      const alreadyObserved = observedWfsSourceUrlsRef.current.has(id);
+      if (alreadyObserved && observedWfsSourceUrlsRef.current.get(id) === url) {
         continue;
       }
-      const alreadyObserved = observedWfsSourceUrlsRef.current.has(layer.id);
-      if (alreadyObserved && observedWfsSourceUrlsRef.current.get(layer.id) === layer.source.url) {
-        continue;
-      }
-      observedWfsSourceUrlsRef.current.set(layer.id, layer.source.url);
+      observedWfsSourceUrlsRef.current.set(id, url);
       // A hydrated layer present at first observation needs no bootstrap. Once
       // observed, a changed URL must refresh even if old features are still set.
-      if (layer.geojson && !alreadyObserved) continue;
-      if (typeof layer.source.url !== "string") continue;
+      if (hasGeojson && !alreadyObserved) continue;
+      if (typeof url !== "string") continue;
       let requestUrl: URL;
       try {
-        requestUrl = new URL(layer.source.url);
+        requestUrl = new URL(url);
       } catch {
         continue;
       }
       if (requestUrl.protocol !== "http:" && requestUrl.protocol !== "https:") continue;
-      void handleRefreshLayerRef.current(layer);
+      const layer = currentLayer(id);
+      if (layer) void handleRefreshLayerRef.current(layer);
     }
-  }, [layers, projectGeneration]);
+  }, [wfsLayers, projectGeneration]);
 
   // Drop the status notes (and their fade timers) of layers that were removed.
   useEffect(() => {
-    const layerIds = new Set(layers.map((layer) => layer.id));
+    const currentIds = new Set(layerIds);
     for (const id of refreshStatusTimersRef.current.keys()) {
-      if (!layerIds.has(id)) clearRefreshStatusTimer(id);
+      if (!currentIds.has(id)) clearRefreshStatusTimer(id);
     }
     setRefreshStatuses((current) => {
       let changed = false;
       const next = { ...current };
       for (const id of Object.keys(next)) {
-        if (!layerIds.has(id)) {
+        if (!currentIds.has(id)) {
           delete next[id];
           changed = true;
         }
       }
       return changed ? next : current;
     });
-  }, [clearRefreshStatusTimer, layers]);
+  }, [clearRefreshStatusTimer, layerIds]);
 
   useEffect(() => {
     const activeLayerIds = new Set<string>();
 
-    for (const layer of layers) {
-      const config = getLayerRefreshConfig(layer);
-      if (!config.enabled || !isRefreshableLayer(layer) || !supportsAutoRefresh(layer)) continue;
-
-      activeLayerIds.add(layer.id);
-      const existing = refreshTimersRef.current.get(layer.id);
-      if (existing?.intervalMs === config.intervalMs) continue;
+    for (const { id: layerId, intervalMs } of autoRefreshLayers) {
+      activeLayerIds.add(layerId);
+      const existing = refreshTimersRef.current.get(layerId);
+      if (existing?.intervalMs === intervalMs) continue;
 
       if (existing) window.clearInterval(existing.timer);
       const timer = window.setInterval(() => {
         if (document.hidden) return;
-        const latest = useAppStore.getState().layers.find((candidate) => candidate.id === layer.id);
+        const latest = currentLayer(layerId);
         if (!latest) return;
 
         const latestConfig = getLayerRefreshConfig(latest);
         if (!latestConfig.enabled || !isRefreshableLayer(latest)) return;
         if (!supportsAutoRefresh(latest)) return;
         void handleRefreshLayerRef.current(latest, true);
-      }, config.intervalMs);
+      }, intervalMs);
 
-      refreshTimersRef.current.set(layer.id, {
-        intervalMs: config.intervalMs,
+      refreshTimersRef.current.set(layerId, {
+        intervalMs,
         timer,
       });
     }
@@ -538,7 +575,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
       window.clearInterval(entry.timer);
       refreshTimersRef.current.delete(id);
     }
-  }, [layers]);
+  }, [autoRefreshLayers]);
 
   // Timers pause while the tab is hidden. On return, immediately catch up any
   // connection whose last successful sync is older than its configured cadence.
@@ -569,13 +606,8 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
     if (!isTauri()) return;
     const activeLayerIds = new Set<string>();
 
-    for (const layer of layers) {
-      if (!isLocalFileLayer(layer) || !getLayerWatchConfig(layer).enabled) {
-        continue;
-      }
-      const path = layer.sourcePath;
-      if (typeof path !== "string" || !path) continue;
-
+    for (const layer of watchedLayers) {
+      const { path } = layer;
       activeLayerIds.add(layer.id);
       const existing = watchUnsubsRef.current.get(layer.id);
       // Already watching this exact path (or a start is in flight for it).
@@ -608,9 +640,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
           watch(
             path,
             () => {
-              const latest = useAppStore
-                .getState()
-                .layers.find((candidate) => candidate.id === layer.id);
+              const latest = currentLayer(layer.id);
               if (!latest || !getLayerWatchConfig(latest).enabled) return;
               void handleRefreshLayerRef.current(latest, true);
             },
@@ -650,7 +680,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
       entry.unwatch();
       watchUnsubsRef.current.delete(id);
     }
-  }, [layers, scheduleStatusClear, t]);
+  }, [watchedLayers, scheduleStatusClear, t]);
 
   useEffect(() => {
     const watchers = watchUnsubsRef.current;

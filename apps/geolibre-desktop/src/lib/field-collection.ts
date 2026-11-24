@@ -13,6 +13,7 @@
  */
 import {
   coerceAttributeFormValue,
+  createLayerSliceSelector,
   getAttributeFormField,
   PHOTO_FULL_PROPERTY,
   PHOTO_PROPERTY,
@@ -520,3 +521,13 @@ export function relatedRecordTargets(
   }
   return targets;
 }
+
+/**
+ * The collection layers, as the `{ id, name }` the target picker and the
+ * session effects read, so an edit to any other layer field does not
+ * re-render this always-mounted dialog.
+ */
+export const createCollectionLayerSelector = () =>
+  createLayerSliceSelector((layer) =>
+    isCollectionLayer(layer) ? { id: layer.id, name: layer.name } : null,
+  );
