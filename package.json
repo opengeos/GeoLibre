@@ -17,6 +17,7 @@
     "build:embed": "node scripts/build-embed.mjs",
     "build:mcp-app": "node scripts/build-mcp-app.mjs",
     "build:chrome-extension": "node scripts/package-chrome-extension.mjs",
+    "build:firefox-extension": "node scripts/package-chrome-extension.mjs --target=firefox",
     "bundle:report": "node scripts/bundle-report.mjs",
     "typecheck": "npm run build",
     "lint": "eslint apps packages workers tests --max-warnings 114",

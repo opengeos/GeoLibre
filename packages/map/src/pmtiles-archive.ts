@@ -1,5 +1,5 @@
 import { addProtocol, config } from "maplibre-gl";
-import { FileSource, PMTiles, Protocol } from "pmtiles";
+import { FileSource, PMTiles, Protocol, type Source } from "pmtiles";
 import { PMTILES_PROTOCOL, remotePMTilesArchive } from "./pmtiles-layer";
 
 // The process-wide `pmtiles://` archive registry.
@@ -64,6 +64,27 @@ export function registerPMTilesArchive(key: string, bytes: Uint8Array): string {
   // Keyed explicitly (not via protocol.add) so the lookup key is exactly the
   // name embedded in the layer URL, independent of FileSource.getKey().
   protocol.tiles.set(name, new PMTiles(new FileSource(file)));
+  getRegisteredPMTilesArchiveKeys().add(name);
+  return `${PMTILES_PROTOCOL}://${name}`;
+}
+
+/**
+ * Registers an archive read through a caller-supplied byte source under the
+ * source's key, so a store layer whose URL is that key draws through it instead
+ * of the default `FetchSource`. The MCP map preview uses this to route every
+ * range read through its consent-gated server tool. Freed like an in-memory
+ * archive, by {@link unregisterPMTilesArchive}.
+ *
+ * @param source The byte source; `getKey()` is the archive URL, with or without `pmtiles://`.
+ * @returns The `pmtiles://<key>` URL MapLibre requests tiles under.
+ */
+export function registerPMTilesSource(source: Source): string {
+  const protocol = getSharedPMTilesProtocol();
+  if (!isMapLibreProtocolRegistered()) {
+    addProtocol(PMTILES_PROTOCOL, protocol.tile);
+  }
+  const name = stripPMTilesProtocol(source.getKey());
+  protocol.tiles.set(name, new PMTiles(source));
   getRegisteredPMTilesArchiveKeys().add(name);
   return `${PMTILES_PROTOCOL}://${name}`;
 }

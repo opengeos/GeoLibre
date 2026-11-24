@@ -43,7 +43,7 @@
       <section id="error" class="state-panel state-error" hidden role="alert">
         <strong>This page cannot be inspected</strong>
         <span id="error-message"
-          >Chrome protects browser and extension pages from scanning.</span
+          >The browser protects its own pages and extension pages from scanning.</span
         >
       </section>
 
@@ -99,6 +99,15 @@
             aria-pressed="false"
           >
             LiDAR <span id="lidar-count">0</span>
+          </button>
+          <button
+            class="filter-tab"
+            type="button"
+            data-filter="other"
+            aria-pressed="false"
+            title="3D Tiles and STAC catalogs"
+          >
+            Other <span id="other-count">0</span>
           </button>
         </div>
         <div class="dataset-frame">

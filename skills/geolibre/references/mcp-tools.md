@@ -375,7 +375,7 @@ Positions are `top-left`, `top-right`, `bottom-left`, `bottom-right`.
 show_map(path)
 get_map_preview(path)
 approve_map_origin(preview_id, origin)
-fetch_map_resource(preview_id, grant, url)
+fetch_map_resource(preview_id, grant, url, offset=None, length=None)
 close_map_preview(preview_id)
 ```
 
