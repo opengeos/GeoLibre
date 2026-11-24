@@ -61,8 +61,25 @@ export function capturedBounds(
       lats.push(lat);
     }
   }
+  // The walk ends where it began, so whole turns mean it circles a pole: a
+  // globe seen from above it (GH #3551). The pole is then inside the frame.
+  const turns = Math.round((lngs[lngs.length - 1] - lngs[0]) / 360);
+  if (turns !== 0) lats.push(lats.reduce((sum, lat) => sum + lat, 0) >= 0 ? 90 : -90);
+  // A grid's interior can reach further north or south than its frame edge.
+  if (!georef && lngLatGrid) {
+    const { cols, rows } = lngLatGrid;
+    for (let row = 0; row <= rows; row++) {
+      const py = (height * row) / rows;
+      if (py < y0 || py > y1) continue;
+      for (let col = 0; col <= cols; col++) {
+        const px = (width * col) / cols;
+        if (px >= x0 && px <= x1) lats.push(lngLatGrid.lats[row * (cols + 1) + col]);
+      }
+    }
+  }
   const west = Math.min(...lngs),
     east = Math.max(...lngs);
-  if (east - west >= 360 - 1e-7) return [-180, Math.min(...lats), 180, Math.max(...lats)];
+  if (turns !== 0 || east - west >= 360 - 1e-7)
+    return [-180, Math.min(...lats), 180, Math.max(...lats)];
   return [west, Math.min(...lats), east, Math.max(...lats)];
 }

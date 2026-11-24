@@ -32,7 +32,7 @@ const GRID_CELLS = 16;
  * @param height - Capture height in image pixels.
  * @param locate - Longitude/latitude at an image pixel, or null off the map.
  * @param cells - Grid cells along each axis.
- * @returns The grid, or null when any sample cannot be located.
+ * @returns The grid, or null when no sample can be located.
  */
 export function sampleCaptureLngLatGrid(
   width: number,
@@ -43,20 +43,57 @@ export function sampleCaptureLngLatGrid(
   if (!(width > 0) || !(height > 0) || !(cells >= 1)) return null;
   const cols = cells;
   const rows = cells;
-  const lngs: number[] = [];
-  const lats: number[] = [];
+  const stride = cols + 1;
+  const count = stride * (rows + 1);
+  const raw: ([number, number] | null)[] = [];
+  let queue: number[] = [];
   for (let row = 0; row <= rows; row++) {
     for (let col = 0; col <= cols; col++) {
-      const ll = locate((width * col) / cols, (height * row) / rows);
-      if (!ll || !Number.isFinite(ll.lng) || !Number.isFinite(ll.lat)) return null;
-      // Unwrap against the left neighbour (the one above for a row's first
-      // sample), so interpolation never averages across the antimeridian.
-      const index = row * (cols + 1) + col;
-      const ref = col > 0 ? lngs[index - 1] : row > 0 ? lngs[index - cols - 1] : undefined;
-      const lng = ref === undefined ? ll.lng : ll.lng + 360 * Math.round((ref - ll.lng) / 360);
-      lngs.push(lng);
-      lats.push(Math.max(-90, Math.min(90, ll.lat)));
+      let ll: { lng: number; lat: number } | null = null;
+      try {
+        ll = locate((width * col) / cols, (height * row) / rows);
+      } catch {
+        ll = null;
+      }
+      const ok = ll && Number.isFinite(ll.lng) && Number.isFinite(ll.lat);
+      raw.push(ok ? [ll!.lng, Math.max(-90, Math.min(90, ll!.lat))] : null);
+      if (ok) queue.push(raw.length - 1);
     }
+  }
+  if (!queue.length) return null;
+  // A pixel off the ground (sky beside a globe on Cesium or ArcGIS, above a
+  // steep horizon) takes its nearest located neighbour's position, so a
+  // partly empty capture still locates the ground it shows.
+  while (queue.length) {
+    const next: number[] = [];
+    for (const index of queue) {
+      const row = Math.floor(index / stride);
+      const col = index % stride;
+      for (const [r, c] of [
+        [row - 1, col],
+        [row + 1, col],
+        [row, col - 1],
+        [row, col + 1],
+      ]) {
+        if (r < 0 || r > rows || c < 0 || c > cols) continue;
+        const neighbour = r * stride + c;
+        if (raw[neighbour]) continue;
+        raw[neighbour] = raw[index];
+        next.push(neighbour);
+      }
+    }
+    queue = next;
+  }
+  const lngs: number[] = [];
+  const lats: number[] = [];
+  for (let index = 0; index < count; index++) {
+    const [lng, lat] = raw[index]!;
+    // Unwrap against the left neighbour (the one above for a row's first
+    // sample), so interpolation never averages across the antimeridian.
+    const col = index % stride;
+    const ref = col > 0 ? lngs[index - 1] : index > 0 ? lngs[index - stride] : undefined;
+    lngs.push(ref === undefined ? lng : lng + 360 * Math.round((ref - lng) / 360));
+    lats.push(lat);
   }
   return { cols, rows, width, height, lngs, lats };
 }

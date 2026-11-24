@@ -318,17 +318,32 @@ describe("inset view", () => {
     assert.equal(new Set(ring.map((point) => point.x)).size, 2);
     assert.equal(new Set(ring.map((point) => point.y)).size, 2);
   });
-  it("closes a boundary that circles a pole along that pole's edge (GH #3551)", () => {
+  it("closes a boundary that circles a pole along the view's world (GH #3551)", () => {
     const view = insetViewForBounds([-180, 20, 180, 85], 480, 360, 0);
-    const boundary: [number, number][] = [];
-    for (let lng = -180; lng < 180; lng += 30) boundary.push([lng, 30 + (lng % 60 === 0 ? 5 : 0)]);
-    const ring = insetFootprint(view, boundary);
-    assert.equal(ring.length, boundary.length + 3);
+    const worldPx = 512 * 2 ** view.zoom;
     const top = mercatorViewPx(view, 0, 85.0511287798066, false).y;
-    // The last two vertices run along the north edge, one world apart.
-    close(ring.at(-1)!.y, top, 1e-6);
-    close(ring.at(-2)!.y, top, 1e-6);
-    close(Math.abs(ring.at(-2)!.x - ring.at(-1)!.x), 512 * 2 ** view.zoom, 1e-6);
+    const left = mercatorViewPx(view, -180, 0, false).x;
+    const ring = (startLng: number, dir: 1 | -1) => {
+      const boundary: [number, number][] = [];
+      for (let k = 0; k < 12; k++) {
+        const lng = startLng + dir * 30 * k;
+        boundary.push([((lng + 540) % 360) - 180, 30 + (k % 2) * 5]);
+      }
+      return insetFootprint(view, boundary);
+    };
+    for (const [startLng, dir] of [
+      [-180, 1],
+      [-90, 1],
+      [45, -1],
+    ] as const) {
+      const footprint = ring(startLng, dir);
+      const xs = footprint.map((p) => p.x);
+      // The cap covers exactly the rendered world, wherever the ring started.
+      close(Math.min(...xs), left, 1e-6);
+      close(Math.max(...xs) - Math.min(...xs), worldPx, 1e-6);
+      close(footprint.at(-1)!.y, top, 1e-6);
+      close(footprint.at(-2)!.y, top, 1e-6);
+    }
   });
   it("centres on the extent and zooms out by the offset", () => {
     const bounds: [number, number, number, number] = [-1, -1, 1, 1];
@@ -601,7 +616,41 @@ describe("captured lng/lat grid without a georeference (GH #3551)", () => {
     assert.ok(Math.abs(lng - locate(500, 250).lng) < 0.2, `lng ${lng}`);
     assert.ok(Math.abs(lat - 50) < 1e-9);
   });
-  it("is refused when a sample cannot be located", () => {
+  it("fills samples off the ground from their located neighbours", () => {
+    // The top-left quarter is sky (as on a Cesium or ArcGIS globe surface).
+    const grid = sampleCaptureLngLatGrid(1000, 500, (px, py) =>
+      px < 500 && py < 250 ? null : locate(px, py),
+    );
+    assert.ok(grid);
+    assert.ok(grid.lngs.every(Number.isFinite) && grid.lats.every(Number.isFinite));
+    assert.deepEqual(gridLngLat(grid, 1000, 500), [locate(1000, 500).lng, locate(1000, 500).lat]);
+  });
+  it("includes a pole the frame circles in the inset bounds", () => {
+    // Looking straight down on the north pole: the frame edge stays at 60N.
+    const polar = (px: number, py: number) => {
+      const dx = px - 500;
+      const dy = py - 250;
+      return {
+        lng: (Math.atan2(dx, -dy) * 180) / Math.PI,
+        lat: 90 - Math.hypot(dx, dy) / 25,
+      };
+    };
+    const bounds = capturedBounds({
+      image: {} as HTMLCanvasElement,
+      width: 1000,
+      height: 500,
+      metersPerPixel: 100,
+      pixelRatio: 1,
+      bearingDeg: 0,
+      georef: null,
+      lngLatGrid: sampleCaptureLngLatGrid(1000, 500, polar),
+    });
+    assert.ok(bounds);
+    assert.equal(bounds[0], -180);
+    assert.equal(bounds[2], 180);
+    assert.equal(bounds[3], 90);
+  });
+  it("is refused when no sample can be located", () => {
     assert.equal(
       sampleCaptureLngLatGrid(100, 100, () => null),
       null,

@@ -610,6 +610,57 @@ export function mercatorViewPx(view: MercatorView, lng: number, lat: number, wra
   return { x, y };
 }
 
+/**
+ * The footprint of a boundary that circles a pole, closed along that pole's
+ * map edge. The ring restarts at the view's world seam so the cap spans
+ * exactly the rendered world, whichever vertex the boundary started on.
+ *
+ * @param view - The inset view.
+ * @param boundary - The ring, in order, without its closing vertex.
+ * @param dir - 1 when the ring travels east, -1 when it travels west.
+ * @returns The footprint in view pixels.
+ */
+function polarFootprint(
+  view: MercatorView,
+  boundary: readonly [number, number][],
+  dir: 1 | -1,
+): Point[] {
+  const pole =
+    boundary.reduce((sum, point) => sum + point[1], 0) >= 0 ? MAX_MERCATOR_LAT : -MAX_MERCATOR_LAT;
+  const seam = view.center[0] - 180;
+  const offset = (lng: number) => (((lng - seam) % 360) + 360) % 360;
+  // Eastward rings start just east of the seam, westward ones just west of it.
+  let start = 0;
+  for (let i = 1; i < boundary.length; i++) {
+    const delta = offset(boundary[i][0]) - offset(boundary[start][0]);
+    if (dir * delta < 0) start = i;
+  }
+  const ring: [number, number][] = [];
+  for (let k = 0; k < boundary.length; k++) {
+    const [lng, lat] = boundary[(start + k) % boundary.length];
+    const previous = ring.at(-1)?.[0];
+    ring.push([
+      previous === undefined ? seam + offset(lng) : lng + 360 * Math.round((previous - lng) / 360),
+      lat,
+    ]);
+  }
+  const head = ring[0];
+  const tail = ring[ring.length - 1];
+  // The ring re-crosses the seam between its tail and its (next-world) head.
+  const enter = dir > 0 ? seam : seam + 360;
+  const exit = dir > 0 ? seam + 360 : seam;
+  const headNext = head[0] + 360 * dir;
+  const t = headNext !== tail[0] ? (exit - tail[0]) / (headNext - tail[0]) : 0;
+  const seamLat = tail[1] + (head[1] - tail[1]) * Math.max(0, Math.min(1, t));
+  return [
+    [enter, seamLat] as [number, number],
+    ...ring,
+    [exit, seamLat],
+    [exit, pole],
+    [enter, pole],
+  ].map(([lng, lat]) => mercatorViewPx(view, lng, lat, false));
+}
+
 /** Project an ordered, densified boundary without folding it at the dateline. */
 export function insetFootprint(view: MercatorView, boundary: readonly [number, number][]): Point[] {
   const unwrapped: [number, number][] = [];
@@ -621,23 +672,11 @@ export function insetFootprint(view: MercatorView, boundary: readonly [number, n
     ]);
   }
   if (!unwrapped.length) return [];
-  const first = unwrapped[0];
-  const last = unwrapped[unwrapped.length - 1];
-  // Where the boundary closes: its first point, unwrapped next to its last.
-  const closing = first[0] + 360 * Math.round((last[0] - first[0]) / 360);
-  if (Math.abs(closing - first[0]) > 180) {
-    // The boundary goes once round the world: it encloses a pole (a globe
-    // view from above it, GH #3551). Close it along that pole's map edge.
-    const pole =
-      unwrapped.reduce((sum, point) => sum + point[1], 0) >= 0
-        ? MAX_MERCATOR_LAT
-        : -MAX_MERCATOR_LAT;
-    const mid = (first[0] + closing) / 2;
-    const shift = 360 * Math.round((view.center[0] - mid) / 360);
-    return [...unwrapped, [closing, last[1]], [closing, pole], [first[0], pole]].map(([lng, lat]) =>
-      mercatorViewPx(view, lng + shift, lat, false),
-    );
-  }
+  // The boundary is a closed ring sampled up to (not including) its start, so
+  // whole turns between its ends mean it circles a pole: a globe seen from
+  // above it (GH #3551). An open curve is not expected here.
+  const turns = Math.round((unwrapped[unwrapped.length - 1][0] - unwrapped[0][0]) / 360);
+  if (turns !== 0) return polarFootprint(view, boundary, turns > 0 ? 1 : -1);
   const west = Math.min(...unwrapped.map((point) => point[0]));
   const east = Math.max(...unwrapped.map((point) => point[0]));
   if (east - west >= 360 - 1e-7) {
