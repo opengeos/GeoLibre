@@ -221,10 +221,10 @@ export function unsupportedContent(project: GeoLibreProject): string[] {
           ? pmtilesArchiveUrl(layer)
             ? t("pmtilesMissingMetadata")
             : t("pmtilesUnreadable")
-          : desktopOnly
-            ? "requires a desktop-local source"
-            : missing
-              ? missing
+          : missing
+            ? missing
+            : desktopOnly
+              ? "requires a desktop-local source"
               : isDeckOnlyGeoJson(layer)
                 ? "requires the deck.gl elevation renderer"
                 : pluginOwned

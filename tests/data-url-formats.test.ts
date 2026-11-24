@@ -1,3 +1,4 @@
+import { Window } from "happy-dom";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
@@ -19,7 +20,7 @@ function noFetch() {
 }
 
 describe("?data= formats added for the browser extension", () => {
-  it("hands FlatGeobuf and GPX to the vector control by URL", async () => {
+  it("hands FlatGeobuf to the vector control by URL", async () => {
     const { calls, fetchImpl } = noFetch();
     assert.deepEqual(await fetchRemoteData("https://example.com/parcels.fgb", { fetchImpl }), {
       kind: "vector",
@@ -38,12 +39,6 @@ describe("?data= formats added for the browser extension", () => {
         format: "flatgeobuf",
       },
     );
-    assert.deepEqual(await fetchRemoteData("https://example.com/ride.GPX", { fetchImpl }), {
-      kind: "vector",
-      name: "ride",
-      url: "https://example.com/ride.GPX",
-      format: "gpx",
-    });
     assert.deepEqual(calls, []);
   });
 
@@ -130,4 +125,31 @@ describe("arcgisLayerTypeFromUrl", () => {
     assert.equal(arcgisLayerTypeFromUrl("not a url"), null);
     assert.equal(arcgisLayerTypeFromUrl("https://example.com/MapServerless/x"), null);
   });
+});
+
+it("parses GPX waypoints, tracks and routes through the desktop GPX parser", async () => {
+  const window = new Window();
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "DOMParser");
+  Object.defineProperty(globalThis, "DOMParser", { configurable: true, value: window.DOMParser });
+  try {
+    const xml =
+      '<gpx version="1.1"><wpt lat="35" lon="-84"><name>Start</name></wpt><trk><name>Track</name><trkseg><trkpt lat="35" lon="-84"/><trkpt lat="36" lon="-83"/></trkseg></trk><rte><name>Route</name><rtept lat="35" lon="-84"/><rtept lat="35.5" lon="-83.5"/></rte></gpx>';
+    const data = await fetchRemoteData("https://example.com/ride.GPX?token=abc", {
+      fetchImpl: async () => new Response(xml),
+    });
+    assert.equal(data.kind, "geojson");
+    if (data.kind !== "geojson") throw Error("Expected split GPX layers");
+    assert.equal(data.layers.length, 3);
+    assert.deepEqual(
+      data.layers.map((layer) => layer.data.features[0].geometry?.type),
+      ["Point", "LineString", "LineString"],
+    );
+    assert.ok(
+      data.layers.every((layer) => layer.sourcePath === "https://example.com/ride.GPX?token=abc"),
+    );
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, "DOMParser", descriptor);
+    else Reflect.deleteProperty(globalThis, "DOMParser");
+    await window.happyDOM.close();
+  }
 });

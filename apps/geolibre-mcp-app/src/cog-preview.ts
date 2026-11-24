@@ -387,14 +387,14 @@ export function colorizeBands(
   if (style.mode === "rgb") {
     const [red, green, blue] = bands;
     for (let pixel = 0; pixel < pixels; pixel += 1) {
-      const values = [red[pixel], green[pixel], blue[pixel]];
-      if (values.every(isEmpty)) continue;
+      const r = red[pixel],
+        g = green[pixel],
+        b = blue[pixel];
+      if (isEmpty(r) && isEmpty(g) && isEmpty(b)) continue;
       const offset = pixel * 4;
-      for (let channel = 0; channel < 3; channel += 1) {
-        rgba[offset + channel] = isEmpty(values[channel])
-          ? 0
-          : scaled(values[channel], ranges[channel]);
-      }
+      rgba[offset] = isEmpty(r) ? 0 : scaled(r, ranges[0]);
+      rgba[offset + 1] = isEmpty(g) ? 0 : scaled(g, ranges[1]);
+      rgba[offset + 2] = isEmpty(b) ? 0 : scaled(b, ranges[2]);
       rgba[offset + 3] = 255;
     }
     return { rgba, unknownColormap: null };

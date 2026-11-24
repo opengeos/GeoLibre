@@ -2,6 +2,9 @@ import { type GeoLibreLayer, unionLonLatExtents } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import { AsyncUnzipInflate, strFromU8, Unzip, UnzipPassThrough, type UnzipFile } from "fflate";
 import { isFileHandlerDataType } from "@geolibre/plugins/file-handler-registry";
+import i18next from "i18next";
+import { parseGpxLayer } from "./gpx";
+import { proxyFeedRequestUrl } from "./feed-request";
 import { kmlFileNameFromUrl, kmlImportFile } from "./kml-import-file";
 import {
   type DataUrlFileHandlers,
@@ -78,13 +81,12 @@ export function serviceUrlParameter(search: string): ServiceUrlParameter | null 
   };
 }
 /** Vector formats a `?data=` link hands to the vector control by URL instead of downloading here. */
-export type RemoteVectorFormat = "geoparquet" | "flatgeobuf" | "gpx";
+export type RemoteVectorFormat = "geoparquet" | "flatgeobuf";
 
 /** The display name of each {@link RemoteVectorFormat}, for load errors. */
 export const REMOTE_VECTOR_FORMAT_LABELS: Record<RemoteVectorFormat, string> = {
   geoparquet: "GeoParquet",
   flatgeobuf: "FlatGeobuf",
-  gpx: "GPX",
 };
 
 /**
@@ -554,12 +556,42 @@ export async function fetchRemoteData(
   if (ext === "parquet" || ext === "geoparquet") {
     return { kind: "vector", name: remoteName(url), url, format: "geoparquet" };
   }
-  // The vector control reads both from the URL itself through DuckDB, the same
-  // path GeoParquet takes, so neither is downloaded and parsed as GeoJSON here.
+  // FlatGeobuf uses the vector control, like GeoParquet.
   if (ext === "fgb" || ext === "flatgeobuf") {
     return { kind: "vector", name: remoteName(url), url, format: "flatgeobuf" };
   }
-  if (ext === "gpx") return { kind: "vector", name: remoteName(url), url, format: "gpx" };
+  if (ext === "gpx") {
+    const response = await fetchOk(
+      proxyFeedRequestUrl(url),
+      options.signal,
+      options.fetchImpl ?? fetch,
+    );
+    const bytes = await readCappedBytes(response, url);
+    options.signal?.throwIfAborted();
+    const parsed = parseGpxLayer(strFromU8(bytes));
+    const groups = [
+      { data: parsed.waypoints, key: "waypoints", fallback: "Waypoints" },
+      { data: parsed.tracks, key: "tracks", fallback: "Tracks" },
+      { data: parsed.routes, key: "routes", fallback: "Routes" },
+    ];
+    const layers = groups
+      .filter((group) => group.data.features.length > 0)
+      .map((group) => ({
+        data: group.data,
+        sourcePath: url,
+        name:
+          remoteName(url) +
+          " " +
+          i18next.t("addData.gpx." + group.key, { defaultValue: group.fallback }),
+      }));
+    if (!layers.length)
+      throw new Error(
+        i18next.t("addData.gpx.errorNotFound", {
+          defaultValue: "The selected GPX layer types were not found.",
+        }),
+      );
+    return { kind: "geojson", layers };
+  }
   const response = await fetchOk(url, options.signal, options.fetchImpl ?? fetch);
   const bytes = await readCappedBytes(response, url);
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";

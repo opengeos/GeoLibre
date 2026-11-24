@@ -171,3 +171,10 @@ describe("MCP preview omitted content", () => {
     );
   });
 });
+
+it("reports a missing COG URL before a desktop-only restriction", () => {
+  const saved = project([layer("cog", { source: { type: "raster" }, sourcePath: undefined })]);
+  const notice = unsupportedContent(saved).join("\n");
+  assert.match(notice, /missing a raster URL/);
+  assert.ok(!notice.includes("desktop-local"));
+});
