@@ -7818,7 +7818,7 @@
             },
             "maxArea": {
               "label": "Maximum gap area (m²)",
-              "description": "Gaps larger than this stay open; 0 fills every enclosed gap. Holes inside a single polygon are never filled."
+              "description": "Gaps larger than this stay open. Default 0 fills every enclosed gap without an area limit. Holes inside a single polygon are never filled."
             }
           }
         }
