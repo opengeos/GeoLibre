@@ -91,9 +91,10 @@ run();
           "export async function run() { return 1; }\nrun();\n",
         );
       }
-      const report = runTypedLint({ cwd: fixture, maxWarnings: 5 });
+      writeFileSync(path.join(source, "sample.ts"), "export {};\n");
+      const report = runTypedLint({ cwd: fixture, maxWarnings: 2 });
       assert.equal(report.ok, true);
-      assert.equal(report.warnings, 5);
+      assert.equal(report.warnings, 2);
       for (const project of projects)
         assert.equal(
           report.diagnostics.filter((item: { filename: string }) =>
@@ -124,6 +125,8 @@ void run();
     assert.equal(report.ok, false);
     assert.equal(report.errors, 1);
     assert.match(report.diagnostics[0].message, /Unused/);
+    // Pinned Oxlint exits successfully and emits a warning; our policy makes it fatal.
+    assert.equal(report.diagnostics[0].severity, "warning");
   });
 
   it("keeps syntax-pass suppression errors enabled", async () => {

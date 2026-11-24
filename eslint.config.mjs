@@ -5,9 +5,9 @@
 // runtime with "Rendered more hooks than during the previous render", and
 // `react-hooks/rules-of-hooks` catches exactly that class of bug statically.
 //
-// Everything else is a warning held by a ratchet: `npm run lint` passes
-// `--max-warnings` set to today's count, so the number can only go down. When
-// you fix warnings, lower the limit in package.json to the new count in the
+// Everything else is a warning held by a ratchet: `npm run lint` runs the
+// syntax and typed passes with separate warning limits. Counts can only go
+// down. When you fix warnings, lower that pass's limit in package.json in the
 // same PR (the lint output prints it). Never raise it to make a PR pass; fix
 // the new warning or disable it on that line with a reason.
 import jsxA11y from "eslint-plugin-jsx-a11y";
