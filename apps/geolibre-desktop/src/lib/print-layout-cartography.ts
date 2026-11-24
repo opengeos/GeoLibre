@@ -621,6 +621,23 @@ export function insetFootprint(view: MercatorView, boundary: readonly [number, n
     ]);
   }
   if (!unwrapped.length) return [];
+  const first = unwrapped[0];
+  const last = unwrapped[unwrapped.length - 1];
+  // Where the boundary closes: its first point, unwrapped next to its last.
+  const closing = first[0] + 360 * Math.round((last[0] - first[0]) / 360);
+  if (Math.abs(closing - first[0]) > 180) {
+    // The boundary goes once round the world: it encloses a pole (a globe
+    // view from above it, GH #3551). Close it along that pole's map edge.
+    const pole =
+      unwrapped.reduce((sum, point) => sum + point[1], 0) >= 0
+        ? MAX_MERCATOR_LAT
+        : -MAX_MERCATOR_LAT;
+    const mid = (first[0] + closing) / 2;
+    const shift = 360 * Math.round((view.center[0] - mid) / 360);
+    return [...unwrapped, [closing, last[1]], [closing, pole], [first[0], pole]].map(([lng, lat]) =>
+      mercatorViewPx(view, lng + shift, lat, false),
+    );
+  }
   const west = Math.min(...unwrapped.map((point) => point[0]));
   const east = Math.max(...unwrapped.map((point) => point[0]));
   if (east - west >= 360 - 1e-7) {

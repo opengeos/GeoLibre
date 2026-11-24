@@ -19,6 +19,7 @@ import {
 } from "@geolibre/core";
 import { prefersLightForeground } from "./theme-schemes";
 import { georefLngLat, type CaptureGeoref, type MapImagePlacement } from "./geopdf";
+import { gridLngLat, type CaptureLngLatGrid } from "./print-capture-grid";
 import {
   clampElementScale,
   computeMapGrid,
@@ -562,6 +563,11 @@ export interface LayoutOptions {
    * absent exports a plain PDF.
    */
   mapGeoref?: CaptureGeoref | null;
+  /**
+   * Longitude/latitude sampled over {@link mapImage} when it has no affine
+   * {@link mapGeoref} (globe, pitch); only the inset footprint reads it.
+   */
+  mapLngLatGrid?: CaptureLngLatGrid | null;
   /**
    * Where the main map frame sits on the page, as page fractions; absent or
    * null keeps the automatic body rectangle (GH #3530).
@@ -1504,22 +1510,30 @@ export function drawLayoutContext(
 /**
  * Page pixel to longitude/latitude through the captured map's georeference,
  * for a page drawn at `W` x `H`; null when the capture has no georeference.
+ * With `approximate`, a capture without one (globe, pitch) falls back to its
+ * sampled longitude/latitude grid: good enough to locate it, not to grid it.
  */
 function pageGeoref(
   opts: LayoutOptions,
   W: number,
   H: number,
+  approximate = false,
 ): { frame: Rect; toLngLat: (x: number, y: number) => [number, number] | null } | null {
   const georef = opts.mapGeoref;
-  if (!georef) return null;
+  const grid = approximate ? opts.mapLngLatGrid : null;
+  const locate = georef
+    ? (px: number, py: number) => georefLngLat(georef, px, py)
+    : grid
+      ? (px: number, py: number) => gridLngLat(grid, px, py)
+      : null;
+  if (!locate) return null;
   const placement = mapImagePlacement(opts, W, H);
   if (!placement || !(placement.scale > 0)) return null;
   return {
     frame: placement.clip,
     toLngLat: (x, y) => {
       try {
-        const ll = georefLngLat(
-          georef,
+        const ll = locate(
           (x - placement.dx) / placement.scale,
           (y - placement.dy) / placement.scale,
         );
@@ -1719,7 +1733,7 @@ function drawInsetMap(
         // A tainted inset leaves the placeholder; the footprint still draws.
       }
     }
-    const geo = pageGeoref(opts, W, H);
+    const geo = pageGeoref(opts, W, H, true);
     if (geo) {
       // Densify each side of the main frame so a rotated or non-Mercator main
       // map still traces its true footprint.

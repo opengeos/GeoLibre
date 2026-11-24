@@ -1,11 +1,13 @@
 import { georefLngLat } from "./geopdf";
+import { gridLngLat } from "./print-capture-grid";
 import { mapImagePlacement, resolvePageSize, type LayoutOptions } from "./print-layout";
 import type { CapturedMap } from "./print-layout-export";
 
 /**
  * The longitude/latitude extent of a georeferenced capture, sampled along
  * its visible boundary, as `[west, south, east, north]` (east may exceed 180 across the
- * antimeridian). Null when the capture has no georeference.
+ * antimeridian). Read through the affine georeference, or the sampled
+ * longitude/latitude grid of a globe or pitched view; null when it has neither.
  *
  * @param captured - The main map capture.
  * @param options - Page geometry, when the map capture is cropped.
@@ -15,8 +17,14 @@ export function capturedBounds(
   captured: CapturedMap | null,
   options?: LayoutOptions,
 ): [number, number, number, number] | null {
-  if (!captured?.georef) return null;
-  const { width, height, georef } = captured;
+  if (!captured) return null;
+  const { width, height, georef, lngLatGrid } = captured;
+  const locate = georef
+    ? (px: number, py: number) => georefLngLat(georef, px, py)
+    : lngLatGrid
+      ? (px: number, py: number) => gridLngLat(lngLatGrid, px, py)
+      : null;
+  if (!locate) return null;
   let x0 = 0,
     y0 = 0,
     x1 = width,
@@ -43,8 +51,7 @@ export function capturedBounds(
     const a = corners[edge],
       b = corners[(edge + 1) % 4];
     for (let step = 0; step <= 128; step++) {
-      let [lng, lat] = georefLngLat(
-        georef,
+      let [lng, lat] = locate(
         a[0] + ((b[0] - a[0]) * step) / 128,
         a[1] + ((b[1] - a[1]) * step) / 128,
       );

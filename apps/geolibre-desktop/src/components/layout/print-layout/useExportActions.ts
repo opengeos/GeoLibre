@@ -230,6 +230,7 @@ export function useExportActions({
             mapImageHeight: cap.height,
             mapFit: atlasMapFit,
             mapGeoref: cap.georef,
+            mapLngLatGrid: cap.lngLatGrid ?? null,
           };
         },
       };
