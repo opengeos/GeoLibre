@@ -25,7 +25,6 @@
   "apps/geolibre-desktop/src/components/layout/toolbar/ProjectFileDialogs.tsx": 512,
   "apps/geolibre-desktop/src/components/layout/TopToolbar.tsx": 640,
   "apps/geolibre-desktop/src/components/legend/MapLegendPanel.tsx": 1005,
-  "apps/geolibre-desktop/src/components/panels/BrowserPanel.tsx": 938,
   "apps/geolibre-desktop/src/components/panels/DashboardPanel.tsx": 795,
   "apps/geolibre-desktop/src/components/panels/PythonConsolePanel.tsx": 535,
   "apps/geolibre-desktop/src/components/panels/RasterAttributeTable.tsx": 788,

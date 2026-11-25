@@ -599,6 +599,8 @@ export function BrowserPanel({
               }),
             );
           }
+        } catch (error) {
+          setError(errorMessage(error, t("fileDialogs.dataImportError")));
         } finally {
           endBusy();
         }

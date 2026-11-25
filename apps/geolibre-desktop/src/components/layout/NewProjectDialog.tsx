@@ -21,6 +21,7 @@ import {
 import { planetaryBasemapLabel, planetaryBasemapSectionKey } from "../../lib/planetary-sections";
 import { buildRemotePmtilesBasemap, isPmtilesStyleUrl } from "../../lib/pmtiles-basemap-url";
 import { clearProjectSnapshots } from "../../lib/project-history-store";
+import { notify } from "../../lib/notify";
 import {
   fetchStartupLayerData,
   startupLayerIds,
@@ -310,7 +311,14 @@ export function NewProjectDialog({
         : templateName;
     // The user is creating a project from a template they picked, so its
     // basemap is their choice and needs no regional-basemap confirmation.
-    loadProject({ ...copy, name: finalName }, null, { trustBasemap: true });
+    try {
+      loadProject({ ...copy, name: finalName }, null, { trustBasemap: true });
+    } catch (error) {
+      notify.error(error instanceof Error ? error.message : t("fileDialogs.dataImportError"), {
+        error,
+      });
+      return;
+    }
     void clearProjectSnapshots().catch((error) =>
       console.error("Could not clear project history for the new project.", error),
     );

@@ -106,7 +106,8 @@ to the local paths used by GeoLibre's readers:
   the source fingerprint records import provenance rather than forbidding edits.
   Root preparation and root-directory inventory failures reject initialization,
   so the frontend holds retained-file projects before publication. Per-import
-  failures and inventory synchronization warnings preserve the healthy inventory.
+  failures preserve the healthy inventory. Inventory synchronization warnings
+  remain native diagnostics and do not mark readable imports as unavailable.
   A failed file entry does not stop scanning later files in the same selection.
 - iOS storage operations receive an existing, platform-resolved sandbox anchor
   (the Library directory containing local app data). Successful publication syncs

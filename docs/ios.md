@@ -533,6 +533,9 @@ Failure to prepare or read the import root activates this hold; problems with
 individual import folders are reported while healthy files remain authorized.
 An individual file disappearing during the scan does not hide the later healthy
 files in that same selection.
+Inventory directory synchronization warnings are written to native diagnostics;
+they do not report readable files as unavailable. Import inspection or access
+grant failures still produce the restoration warning.
 Copy publication synchronizes all storage ancestors through the existing app
 Library directory, including directories created by an earlier failed attempt.
 Synchronization stays inside the app sandbox.

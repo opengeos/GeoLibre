@@ -257,7 +257,8 @@ fn inventory_selections(
 /// Inventory only published regular data files for reauthorization at startup.
 /// Stages, symlinks, manifests, and unrelated directories never enter the scope.
 /// The trusted, existing sandbox `anchor` contains the storage root. Root-level
-/// failures are fatal; individual imports and sync warnings enter `problems`.
+/// failures are fatal; unavailable individual imports enter `problems`.
+/// Inventory sync warnings are native diagnostics, not unavailable-file errors.
 pub fn retained_document_files(
     root: &Path,
     anchor: &Path,
@@ -266,12 +267,15 @@ pub fn retained_document_files(
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let (root, parents) = prepare_root(root, anchor)?;
-    let (files, mut problems) = inventory_selections(&root, fs::read_dir(&root)?)?;
+    let (files, problems) = inventory_selections(&root, fs::read_dir(&root)?)?;
     // Inventory is read recovery, not publication: a durability warning must
     // not discard grants for healthy files that were already published.
     for path in std::iter::once(&root).chain(parents.iter()) {
         if let Err(error) = sync_directory(path) {
-            problems.push(format!("{}: {error}", path.display()));
+            eprintln!(
+                "[GeoLibre] Could not synchronize retained import directory {}: {error}",
+                path.display()
+            );
         }
     }
     Ok((files, problems))
