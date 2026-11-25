@@ -10247,8 +10247,6 @@
   },
   "commandPalette": {
     "title": "לוח פקודות",
-    "searchAria": "חיפוש פקודות",
-    "searchPlaceholder": "חיפוש פקודות…",
     "listAria": "פקודות",
     "noMatches": "אין פקודות תואמות"
   },

@@ -10039,8 +10039,6 @@
   },
   "commandPalette": {
     "title": "कमांड पैलेट",
-    "searchAria": "कमांड खोजें",
-    "searchPlaceholder": "कमांड खोजें…",
     "listAria": "कमांड",
     "noMatches": "कोई मेल खाता कमांड नहीं"
   },

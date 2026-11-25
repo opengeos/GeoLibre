@@ -9,8 +9,16 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { type Command, filterCommands, formatShortcut, isMacPlatform } from "../../lib/commands";
-import { groupRankedCommands, paletteRows } from "../../lib/palette-rows";
+import type { PaletteSearch } from "../../hooks/toolbar/usePaletteSearch";
+import {
+  type Command,
+  formatShortcut,
+  isMacPlatform,
+  type RankedCommand,
+  rankCommands,
+} from "../../lib/commands";
+import { paletteRows } from "../../lib/palette-rows";
+import { mergePaletteResults, refineFeatureResults } from "../../lib/palette-search";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -21,6 +29,11 @@ interface CommandPaletteProps {
    * so the empty palette opens on the short list of actions.
    */
   searchOnlyCommands?: Command[];
+  /**
+   * Results beyond commands (matching layers, features and a place search),
+   * merged into the same ranked list. Omit to search commands only.
+   */
+  search?: PaletteSearch;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -29,6 +42,19 @@ const GROUP_ROW_HEIGHT = 28;
 const COMMAND_ROW_HEIGHT = 32;
 
 const NO_COMMANDS: Command[] = [];
+const NO_RESULTS: RankedCommand[] = [];
+const NO_SCAN: { query: string; version: number; results: RankedCommand[] } = {
+  query: "",
+  version: -1,
+  results: NO_RESULTS,
+};
+
+/**
+ * Pause in typing before the attribute scan runs. The scan is capped (see
+ * `feature-search.ts`) but not free, so it waits like the Layers panel search
+ * box's local scan does rather than running on every keystroke.
+ */
+const DEFERRED_SEARCH_MS = 120;
 
 /**
  * A searchable command palette (Cmd/Ctrl-K) built from the shared command
@@ -37,29 +63,71 @@ const NO_COMMANDS: Command[] = [];
  *
  * With the per-tool entries a broad query can match a thousand commands, so
  * the list is virtualized: only the rows in and around the viewport mount.
+ *
+ * With `search`, a query also lists the layers and features it matches and a
+ * last "Search places" row, ranked on the same scale as the commands.
  */
 export function CommandPalette({
   open,
   commands,
   searchOnlyCommands = NO_COMMANDS,
+  search,
   onOpenChange,
 }: CommandPaletteProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  // The command the user moved the highlight to (arrows, Home/End, hover), so
+  // it stays highlighted when a feature scan lands and inserts rows above it.
+  // Cleared when the query changes, so an untouched palette keeps the best match.
+  const chosenId = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const isMac = useMemo(() => isMacPlatform(), []);
   const listboxId = "command-palette-listbox";
-  const optionId = (command: Command) => `command-option-${command.id}`;
+  // Encoded because search rows carry feature ids from the data, which can hold
+  // whitespace, and an element id (and so `aria-activedescendant`) cannot.
+  const optionId = (command: Command) => `command-option-${encodeURIComponent(command.id)}`;
 
-  const searchable = useMemo(
-    () => (searchOnlyCommands.length ? [...commands, ...searchOnlyCommands] : commands),
-    [commands, searchOnlyCommands],
-  );
-  const filtered = useMemo(
-    () => (query.trim() ? groupRankedCommands(filterCommands(searchable, query)) : commands),
-    [commands, searchable, query],
-  );
+  // The last attribute scan, and the query it ran for. Until the next scan
+  // lands, its rows are carried over to the query as typed now
+  // (`refineFeatureResults`): every listed row matches, and the ones that still
+  // do stay put instead of flickering away on each keystroke.
+  // Bumped whenever the project data the search reads changes while the
+  // palette is open: a scan from an older version is dropped at once (its rows
+  // may no longer match, or belong to a now-hidden layer or field) and a new
+  // scan is scheduled.
+  const [dataVersion, setDataVersion] = useState(0);
+  useEffect(() => {
+    if (!open || !search) return;
+    return search.subscribe(() => setDataVersion((version) => version + 1));
+  }, [open, search]);
+
+  const [scan, setScan] = useState(NO_SCAN);
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!search || !trimmed) {
+      setScan(NO_SCAN);
+      return;
+    }
+    const handle = setTimeout(
+      () => setScan({ query: trimmed, version: dataVersion, results: search.deferred(trimmed) }),
+      DEFERRED_SEARCH_MS,
+    );
+    return () => clearTimeout(handle);
+  }, [search, query, dataVersion]);
+
+  const filtered = useMemo(() => {
+    const trimmed = query.trim();
+    if (!trimmed) return commands;
+    const scanned = scan.version === dataVersion ? scan.results : NO_RESULTS;
+    const features = scan.query === trimmed ? scanned : refineFeatureResults(scanned, trimmed);
+    return mergePaletteResults(
+      rankCommands(commands, trimmed),
+      search ? [...search.instant(trimmed), ...features] : NO_RESULTS,
+      rankCommands(searchOnlyCommands, trimmed),
+    );
+    // `dataVersion` also re-reads the layers `search.instant` matches by name.
+  }, [commands, searchOnlyCommands, search, scan, query, dataVersion]);
   const activeCommand = filtered[activeIndex];
   const { rows, rowOfCommand } = useMemo(() => paletteRows(filtered), [filtered]);
 
@@ -89,13 +157,24 @@ export function CommandPalette({
     if (open) {
       setQuery("");
       setActiveIndex(0);
+      chosenId.current = null;
     }
   }, [open]);
 
-  // Keep the highlight within bounds as the filtered list shrinks/grows.
+  // Follow the chosen command when the list changes under it, else keep the
+  // highlight within bounds as the filtered list shrinks/grows.
   useEffect(() => {
-    setActiveIndex((index) => (filtered.length === 0 ? 0 : Math.min(index, filtered.length - 1)));
-  }, [filtered.length]);
+    const chosen = chosenId.current;
+    const found = chosen ? filtered.findIndex((command) => command.id === chosen) : -1;
+    setActiveIndex((index) =>
+      found >= 0 ? found : filtered.length === 0 ? 0 : Math.min(index, filtered.length - 1),
+    );
+  }, [filtered]);
+
+  const choose = (index: number) => {
+    setActiveIndex(index);
+    chosenId.current = filtered[index]?.id ?? null;
+  };
 
   // Scroll the highlighted row into view as the user navigates. The row may not
   // be mounted (virtualized), so scroll by index rather than by element. The
@@ -115,18 +194,16 @@ export function CommandPalette({
   const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex((index) => (filtered.length === 0 ? 0 : (index + 1) % filtered.length));
+      choose(filtered.length === 0 ? 0 : (activeIndex + 1) % filtered.length);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActiveIndex((index) =>
-        filtered.length === 0 ? 0 : (index - 1 + filtered.length) % filtered.length,
-      );
+      choose(filtered.length === 0 ? 0 : (activeIndex - 1 + filtered.length) % filtered.length);
     } else if (event.key === "Home") {
       event.preventDefault();
-      setActiveIndex(0);
+      choose(0);
     } else if (event.key === "End") {
       event.preventDefault();
-      setActiveIndex(Math.max(0, filtered.length - 1));
+      choose(Math.max(0, filtered.length - 1));
     } else if (event.key === "Enter") {
       event.preventDefault();
       const command = filtered[activeIndex];
@@ -147,18 +224,19 @@ export function CommandPalette({
           <input
             autoFocus
             role="combobox"
-            aria-label={t("commandPalette.searchAria")}
+            aria-label={t("commandPalette.searchAllAria")}
             aria-expanded={true}
             aria-controls={listboxId}
             aria-activedescendant={
               activeCommand && activeMounted ? optionId(activeCommand) : undefined
             }
             className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            placeholder={t("commandPalette.searchPlaceholder")}
+            placeholder={t("commandPalette.searchPlaceholderAll")}
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
               setActiveIndex(0);
+              chosenId.current = null;
             }}
             onKeyDown={handleInputKeyDown}
           />
@@ -196,7 +274,7 @@ export function CommandPalette({
                         id={optionId(row.command)}
                         active={row.index === activeIndex}
                         isMac={isMac}
-                        onHover={() => setActiveIndex(row.index)}
+                        onHover={() => choose(row.index)}
                         onRun={() => runCommand(row.command)}
                       />
                     )}
@@ -238,7 +316,12 @@ function CommandRow({ command, id, active, isMac, onHover, onRun }: CommandRowPr
       onClick={onRun}
     >
       {Icon ? <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : null}
-      <span className="min-w-0 flex-1 truncate">{command.title}</span>
+      <span className="min-w-0 flex-1 truncate">
+        {command.title}
+        {command.detail ? (
+          <span className="ms-2 text-xs text-muted-foreground">{command.detail}</span>
+        ) : null}
+      </span>
       {command.disabledReason ? (
         <span className="text-xs text-muted-foreground">{command.disabledReason}</span>
       ) : null}

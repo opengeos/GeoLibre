@@ -9895,8 +9895,6 @@
   },
   "commandPalette": {
     "title": "命令面板",
-    "searchAria": "搜索命令",
-    "searchPlaceholder": "搜索命令…",
     "listAria": "命令",
     "noMatches": "没有匹配的命令"
   },

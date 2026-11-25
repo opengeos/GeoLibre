@@ -10039,8 +10039,6 @@
   },
   "commandPalette": {
     "title": "پالت فرمان",
-    "searchAria": "جستجوی فرمان‌ها",
-    "searchPlaceholder": "جستجوی فرمان‌ها…",
     "listAria": "فرمان‌ها",
     "noMatches": "فرمان هم‌خوانی نیست"
   },

@@ -10039,8 +10039,6 @@
   },
   "commandPalette": {
     "title": "Opdrachtenpalet",
-    "searchAria": "Opdrachten zoeken",
-    "searchPlaceholder": "Opdrachten zoeken…",
     "listAria": "Opdrachten",
     "noMatches": "Geen overeenkomende opdrachten"
   },

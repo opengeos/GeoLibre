@@ -9895,8 +9895,6 @@
   },
   "commandPalette": {
     "title": "コマンドパレット",
-    "searchAria": "コマンドを検索",
-    "searchPlaceholder": "コマンドを検索…",
     "listAria": "コマンド",
     "noMatches": "一致するコマンドがありません"
   },

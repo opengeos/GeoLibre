@@ -10039,8 +10039,6 @@
   },
   "commandPalette": {
     "title": "Palette de commandes",
-    "searchAria": "Rechercher des commandes",
-    "searchPlaceholder": "Rechercher des commandes…",
     "listAria": "Commandes",
     "noMatches": "Aucune commande correspondante"
   },

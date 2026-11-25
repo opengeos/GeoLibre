@@ -10039,8 +10039,6 @@
   },
   "commandPalette": {
     "title": "Befehlspalette",
-    "searchAria": "Befehle suchen",
-    "searchPlaceholder": "Befehle suchen…",
     "listAria": "Befehle",
     "noMatches": "Keine passenden Befehle"
   },

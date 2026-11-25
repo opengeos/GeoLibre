@@ -9895,8 +9895,6 @@
   },
   "commandPalette": {
     "title": "พาเลตต์คำสั่ง",
-    "searchAria": "ค้นหาคำสั่ง",
-    "searchPlaceholder": "ค้นหาคำสั่ง…",
     "listAria": "คำสั่ง",
     "noMatches": "ไม่พบคำสั่งที่ตรงกัน"
   },
