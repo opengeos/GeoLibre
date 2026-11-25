@@ -1,5 +1,16 @@
 import type { AsyncReadable } from "zarrita";
 import { assertSecureRequestHeaders } from "./kerchunk-reference-store";
+import { openIcechunkStore, parseIcechunkLayerUrl } from "./icechunk-store";
+export {
+  DEFAULT_ICECHUNK_BRANCH,
+  __resetIcechunkRepositoriesForTests,
+  icechunkLayerUrl,
+  openIcechunkStore,
+  parseIcechunkLayerUrl,
+  repositoryKey,
+  shareRepositoryOpen,
+  type ZarrKeyReader,
+} from "./icechunk-store";
 
 // Store objects stay out of project JSON. Local folders and kerchunk manifests
 // register the same reader used by their importer before adding their record.
@@ -12,6 +23,25 @@ export function registerZarrStore(id: string, store: AsyncReadable): () => void 
 }
 export function getZarrStore(id: string): AsyncReadable | undefined {
   return stores.get(id);
+}
+
+/** Reconstruct a saved non-HTTP store, or return undefined for a plain Zarr URL. */
+export async function resolveZarrStore(
+  layer: Pick<import("@geolibre/core").GeoLibreLayer, "id" | "source">,
+): Promise<AsyncReadable | undefined> {
+  const registered = getZarrStore(layer.id);
+  if (registered) return registered;
+  const source = layer.source;
+  const url = String(source.url).trim();
+  if (source.kerchunkRefs) {
+    const { KerchunkReferenceStore } = await import("./kerchunk-reference-store");
+    return new KerchunkReferenceStore(
+      source.kerchunkRefs as import("./kerchunk-reference-store").KerchunkRefs,
+      { headers: zarrRequestHeaders(layer), sourceUrl: url },
+    );
+  }
+  const icechunk = parseIcechunkLayerUrl(url);
+  return icechunk ? openIcechunkStore(icechunk.url, icechunk.branch) : undefined;
 }
 
 // Request headers for authenticated stores (a bearer token, an API key) are
@@ -58,19 +88,9 @@ export async function readNativeZarrDimensions(
   const zarr = await import("zarrita");
   const source = layer.source;
   const headers = zarrRequestHeaders(layer);
-  const referenceStore = source.kerchunkRefs
-    ? new (await import("./kerchunk-reference-store")).KerchunkReferenceStore(
-        source.kerchunkRefs as import("./kerchunk-reference-store").KerchunkRefs,
-        {
-          headers,
-          sourceUrl: String(source.url),
-        },
-      )
-    : undefined;
-  if (!referenceStore && !getZarrStore(layer.id))
-    assertSecureRequestHeaders(String(source.url), headers);
+  const referenceStore = await resolveZarrStore(layer);
+  if (!referenceStore) assertSecureRequestHeaders(String(source.url), headers);
   const store =
-    getZarrStore(layer.id) ??
     referenceStore ??
     new zarr.FetchStore(String(source.url), {
       overrides: {

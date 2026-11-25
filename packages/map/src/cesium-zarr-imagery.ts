@@ -1,11 +1,7 @@
 import { interpolateRampColors, type GeoLibreLayer } from "@geolibre/core";
 import type { ImageryProvider } from "@cesium/engine";
-import {
-  assertSecureRequestHeaders,
-  KerchunkReferenceStore,
-  type KerchunkRefs,
-} from "./kerchunk-reference-store";
-import { getZarrStore, zarrRequestHeaders } from "./zarr-source";
+import { assertSecureRequestHeaders } from "./kerchunk-reference-store";
+import { resolveZarrStore, zarrRequestHeaders } from "./zarr-source";
 
 // Zarr layers on the globe (opengeos/GeoLibre#2261).
 //
@@ -357,13 +353,7 @@ export async function createZarrImageryProvider(
   if (!variable) throw new Error("A Zarr variable is required");
   const crs = zarrGlobeCrs(layer);
   const headers = zarrRequestHeaders(layer);
-  let store = getZarrStore(layer.id) as import("zarrita").Readable | undefined;
-  if (!store && source.kerchunkRefs) {
-    store = new KerchunkReferenceStore(source.kerchunkRefs as KerchunkRefs, {
-      headers,
-      sourceUrl: url,
-    });
-  }
+  const store = await resolveZarrStore(layer);
   if (!store) {
     if (!url) throw new Error("The Zarr layer has no store URL");
     assertSecureRequestHeaders(url, headers);

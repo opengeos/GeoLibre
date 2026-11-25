@@ -2,7 +2,7 @@ import { interpolateRampColors, withDatumShift, type GeoLibreLayer } from "@geol
 import proj4 from "proj4";
 import type { ArcgisRasterLayer, ArcgisSdk } from "./arcgis-sdk";
 import { assertSecureRequestHeaders } from "./kerchunk-reference-store";
-import { getZarrStore, zarrRequestHeaders } from "./zarr-source";
+import { resolveZarrStore, zarrRequestHeaders } from "./zarr-source";
 import { cssToArcgisColor } from "./arcgis-layers";
 
 async function projectionFromWgs84(crs: string, signal: AbortSignal) {
@@ -33,21 +33,10 @@ export async function openArcgisZarrGrid(layer: GeoLibreLayer, signal: AbortSign
   if (!variable) throw new Error("A Zarr variable is required");
   const cache = new Map<string, Uint8Array | undefined>();
   let cacheBytes = 0;
-  const refs = source.kerchunkRefs;
   const headers = zarrRequestHeaders(layer);
-  const referenceStore = refs
-    ? new (await import("./kerchunk-reference-store")).KerchunkReferenceStore(
-        refs as import("./kerchunk-reference-store").KerchunkRefs,
-        {
-          headers,
-          sourceUrl: String(source.url),
-        },
-      )
-    : undefined;
-  if (!referenceStore && !getZarrStore(layer.id))
-    assertSecureRequestHeaders(String(source.url), headers);
+  const referenceStore = await resolveZarrStore(layer);
+  if (!referenceStore) assertSecureRequestHeaders(String(source.url), headers);
   const base =
-    getZarrStore(layer.id) ??
     referenceStore ??
     new zarr.FetchStore(String(source.url), {
       overrides: {
