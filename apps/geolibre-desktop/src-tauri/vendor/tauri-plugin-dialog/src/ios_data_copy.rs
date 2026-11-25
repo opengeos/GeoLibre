@@ -16,6 +16,8 @@ use uuid::Uuid;
 // A picker selection is published as one batch, including companion files.
 // Serializing imports also lets recovery distinguish abandoned private stages
 // from a selection still being copied in this app process.
+// It protects no in-memory state: unwind cleanup and disk inspection let the
+// next operation safely resume after a previous holder panics.
 static COPY_LOCK: Mutex<()> = Mutex::new(());
 
 struct Stage {
@@ -152,7 +154,7 @@ fn prepare_root(root: &Path) -> io::Result<(PathBuf, Vec<PathBuf>)> {
 pub fn retained_document_files(root: &Path) -> io::Result<(Vec<PathBuf>, Vec<String>)> {
     let _lock = COPY_LOCK
         .lock()
-        .map_err(|_| io::Error::other("Document import lock is unavailable"))?;
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let (root, parents) = prepare_root(root)?;
     let mut files = Vec::new();
     let mut problems = Vec::new();
@@ -225,7 +227,7 @@ pub(crate) fn persist_selection(root: &Path, sources: &[PathBuf]) -> io::Result<
     }
     let _lock = COPY_LOCK
         .lock()
-        .map_err(|_| io::Error::other("Document import lock is unavailable"))?;
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let (root, storage_parents) = prepare_root(root)?;
     if let Err(error) = recover_stages(&root) {
         eprintln!(
@@ -314,6 +316,40 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn inventory_and_import_recover_after_a_copy_holder_panics() {
+        let fixture = Fixture::new();
+        let source = fixture.source("roads.geojson", b"original");
+        let earlier = persist_selection(&fixture.root(), &[source.clone()]).unwrap();
+        fs::write(&earlier[0], b"local edits").unwrap();
+        let pending = fixture.root().join(format!(".pending-{}", Uuid::new_v4()));
+        let abandoned = pending.clone();
+        let panicked = std::thread::spawn(move || {
+            let _lock = COPY_LOCK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            fs::create_dir(&abandoned).unwrap();
+            let _stage = Stage {
+                path: abandoned.clone(),
+            };
+            fs::write(abandoned.join("partial.geojson"), b"partial").unwrap();
+            panic!("injected copy-holder panic");
+        })
+        .join();
+        assert!(panicked.is_err());
+        assert!(COPY_LOCK.is_poisoned());
+        assert!(!pending.exists());
+        let (files, problems) = retained_document_files(&fixture.root()).unwrap();
+        assert_eq!(files, earlier);
+        assert!(problems.is_empty());
+        let later = persist_selection(&fixture.root(), &[source.clone()]).unwrap();
+        assert_ne!(earlier, later);
+        assert_eq!(fs::read(&earlier[0]).unwrap(), b"local edits");
+        assert_eq!(fs::read(&later[0]).unwrap(), b"original");
+        assert_eq!(fs::read(source).unwrap(), b"original");
+        assert_eq!(fs::read_dir(fixture.root()).unwrap().count(), 2);
     }
 
     #[test]

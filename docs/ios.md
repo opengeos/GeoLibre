@@ -518,6 +518,11 @@ initialization succeeds. This preserves their references instead of treating
 old container paths as missing files and removing their layers.
 Configured startup layers and inline project links are preserved for retry,
 and creating a blank workspace remains available during the outage.
+Restart GeoLibre to retry initialization. Until it succeeds, both existing
+retained imports and newly picked data files are held before layer publication.
+A new pick can still create its managed copy, but it cannot open in the workspace
+until access initialization succeeds. Those copies remain available for a later
+successful launch.
 
 The copy store and path handling have automated tests. Real iOS device checks
 for picking, rendering, offline restart, and provider cancellation remain
