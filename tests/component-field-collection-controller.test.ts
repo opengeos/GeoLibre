@@ -557,27 +557,43 @@ it("keeps a pending attachment when its input unmounts for same-draft dismissal"
   assert.equal(capture(hook).readingPhotos, false);
 });
 
-it("reports an attachment read failure after same-draft dismissal", async () => {
-  addCollection("A", "none", {
-    fields: [{ key: "image", label: "Image", type: "text", required: false }],
+for (const dismissed of [false, true]) {
+  it(`clears a failed attachment notice on retry ${dismissed ? "after same-draft dismissal" : "while mounted"}`, async () => {
+    addCollection("A", "none", {
+      fields: [{ key: "image", label: "Image", type: "text", required: false }],
+    });
+    useAppStore.getState().updateLayer("A", {
+      attributeForm: { fields: [{ field: "image", widget: "attachment" }] },
+    });
+    Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
+    const hook = controller();
+    let view = render(fieldsFor(hook));
+    const input = view.container.querySelector('input[type="file"]');
+    assert.ok(input);
+    fireEvent.change(input, { target: { files: [new File(["failed"], "failed.jpg")] } });
+    if (dismissed) {
+      act(() => hook.result.current.onDialogOpenChange(false));
+      hook.rerender({ open: false });
+      view.unmount();
+    }
+    await act(async () => PendingReader.pending[0].fail());
+    if (dismissed) {
+      hook.rerender({ open: true });
+      view = render(fieldsFor(hook));
+    }
+    assert.equal(hook.result.current.notice, i18n.t("fieldCollection.photoReadError"));
+    assert.equal(capture(hook).readingPhotos, false);
+    const retry = view.container.querySelector('input[type="file"]');
+    assert.ok(retry);
+    fireEvent.change(retry, { target: { files: [new File(["retry"], "retry.jpg")] } });
+    assert.equal(hook.result.current.notice, null);
+    assert.equal(capture(hook).readingPhotos, true);
+    await act(async () => PendingReader.pending[1].finish("retry"));
+    assert.equal(capture(hook).values.image, `data:image/jpeg;base64,${btoa("retry")}`);
+    assert.equal(capture(hook).readingPhotos, false);
+    assert.equal(hook.result.current.notice, null);
   });
-  useAppStore.getState().updateLayer("A", {
-    attributeForm: { fields: [{ field: "image", widget: "attachment" }] },
-  });
-  Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
-  const hook = controller();
-  const view = render(fieldsFor(hook));
-  const input = view.container.querySelector('input[type="file"]');
-  assert.ok(input);
-  fireEvent.change(input, { target: { files: [new File(["failed"], "failed.jpg")] } });
-  act(() => hook.result.current.onDialogOpenChange(false));
-  hook.rerender({ open: false });
-  view.unmount();
-  await act(async () => PendingReader.pending[0].fail());
-  hook.rerender({ open: true });
-  assert.equal(hook.result.current.notice, i18n.t("fieldCollection.photoReadError"));
-  assert.equal(capture(hook).readingPhotos, false);
-});
+}
 
 /** A table with a photo field drawn by the Attribute Form's attachment widget. */
 function addPhotoTable(id: string) {

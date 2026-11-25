@@ -1070,6 +1070,7 @@ export function useFieldCollectionController({
             // A read belongs to the capture it began in. A completion releases
             // only a read still being held, never a newer one.
             if (delta > 0) {
+              setNotice(null);
               attachmentReadsRef.current.add(readId);
               setPhotoReads((count) => count + 1);
               return;
