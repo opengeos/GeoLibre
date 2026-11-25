@@ -16,7 +16,10 @@ import {
   type PrintLayoutConfig,
 } from "../print-layout-config";
 import { reapplyLayerJoins } from "../joins";
-import { rebaseImportedDocumentLayer } from "../imported-document-paths";
+import {
+  assertImportedDocumentCopiesAvailable,
+  rebaseImportedDocumentLayer,
+} from "../imported-document-paths";
 import { gateRegionalBasemap } from "../regional-basemaps";
 import {
   DEFAULT_BASEMAP,
@@ -62,7 +65,10 @@ function normalizeRecentProjects(projects: RecentProjectEntry[]): RecentProjectE
 export interface ProjectSlice {
   /** Current native copy root, installed before startup loads; never serialized. */
   nativeDocumentCopyRoot: string | null;
+  /** Localized startup failure; blocks retained references without changing their project. */
+  nativeDocumentCopyError: string | null;
   setNativeDocumentCopyRoot: (root: string | null) => void;
+  setNativeDocumentCopyError: (error: string) => void;
   projectName: string;
   projectPath: string | null;
   projectGeneration: number;
@@ -128,7 +134,11 @@ export interface ProjectSlice {
 
 export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
   nativeDocumentCopyRoot: null,
-  setNativeDocumentCopyRoot: (root) => set({ nativeDocumentCopyRoot: root }),
+  nativeDocumentCopyError: null,
+  setNativeDocumentCopyRoot: (root) =>
+    set({ nativeDocumentCopyRoot: root, nativeDocumentCopyError: null }),
+  setNativeDocumentCopyError: (error) =>
+    set({ nativeDocumentCopyRoot: null, nativeDocumentCopyError: error }),
   projectName: DEFAULT_PROJECT_NAME,
   projectPath: null,
   projectGeneration: 0,
@@ -176,6 +186,7 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
   markSaved: () => set({ isDirty: false }),
 
   newProject: (options = {}) => {
+    assertImportedDocumentCopiesAvailable(options.layers ?? [], get().nativeDocumentCopyError);
     const project = {
       ...createEmptyProject(options.name, options),
       ...(options.layers ? { layers: options.layers } : {}),
@@ -243,6 +254,7 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
   },
 
   loadProject: (project, path = null, options = {}) => {
+    assertImportedDocumentCopiesAvailable(project.layers, get().nativeDocumentCopyError);
     const applied = applyProjectToStore(project);
     applied.layers = applied.layers.map((layer) =>
       rebaseImportedDocumentLayer(layer, get().nativeDocumentCopyRoot),

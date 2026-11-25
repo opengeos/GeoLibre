@@ -5,19 +5,10 @@ import { hasPathTraversal, isAbsoluteFilesystemPath } from "./paths";
 const COPY_PATH =
   /^\/.*\/Library\/Application Support\/org\.geolibre\.app\/picked-documents\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\/data\/([^/]+)$/i;
 
-/** Keep the selection identity and file name, replacing only the container root. */
-export function rebaseImportedDocumentPath(path: string, root: string): string {
-  if (
-    !root.startsWith("/") ||
-    !isAbsoluteFilesystemPath(root) ||
-    hasPathTraversal(root) ||
-    !root.endsWith("/picked-documents") ||
-    !isAbsoluteFilesystemPath(path) ||
-    hasPathTraversal(path)
-  )
-    return path;
+function retainedDocumentSuffix(path: string): string | null {
+  if (!isAbsoluteFilesystemPath(path) || hasPathTraversal(path)) return null;
   const match = COPY_PATH.exec(path);
-  if (!match) return path;
+  if (!match) return null;
   const [, selection, name] = match;
   if (
     name === "." ||
@@ -26,12 +17,25 @@ export function rebaseImportedDocumentPath(path: string, root: string): string {
     name.length > 255 ||
     new TextEncoder().encode(name).length > 255
   )
+    return null;
+  return `${selection}/data/${name}`;
+}
+
+/** Keep the selection identity and file name, replacing only the container root. */
+export function rebaseImportedDocumentPath(path: string, root: string): string {
+  if (
+    !root.startsWith("/") ||
+    !isAbsoluteFilesystemPath(root) ||
+    hasPathTraversal(root) ||
+    !root.endsWith("/picked-documents")
+  )
     return path;
-  return `${root}/${selection}/data/${name}`;
+  const suffix = retainedDocumentSuffix(path);
+  return suffix === null ? path : `${root}/${suffix}`;
 }
 
 /** Only rewrite native local-media URLs, preserving tile coordinate templates. */
-function rebaseMediaUrl(value: string, root: string): string {
+function mapMediaUrl(value: string, mapPath: (path: string) => string): string {
   const prefix = value.startsWith("pmtiles://") ? "pmtiles://" : "";
   const raw = prefix ? value.slice(prefix.length) : value;
   if (
@@ -50,7 +54,7 @@ function rebaseMediaUrl(value: string, root: string): string {
     if (queryMedia) {
       const path = url.searchParams.get("path");
       if (!path) return value;
-      const current = rebaseImportedDocumentPath(path, root);
+      const current = mapPath(path);
       return current === path
         ? value
         : prefix +
@@ -63,7 +67,7 @@ function rebaseMediaUrl(value: string, root: string): string {
       const path = decodeURIComponent(
         /^\/%2f/i.test(url.pathname) ? url.pathname.slice(1) : url.pathname,
       );
-      const current = rebaseImportedDocumentPath(path, root);
+      const current = mapPath(path);
       return current === path
         ? value
         : `${url.protocol}//${url.host}/${encodeURIComponent(current)}${url.search}${url.hash}`;
@@ -74,38 +78,64 @@ function rebaseMediaUrl(value: string, root: string): string {
   return value;
 }
 
-/** The root is native runtime state, never a field supplied by a saved project. */
-export function rebaseImportedDocumentLayer(
+function mapImportedDocumentLayer(
   layer: GeoLibreLayer,
-  root: string | null,
+  mapPath: (path: string) => string,
 ): GeoLibreLayer {
-  if (!root) return layer;
   let result = layer;
   if (typeof layer.sourcePath === "string") {
-    const path = rebaseImportedDocumentPath(layer.sourcePath, root);
+    const path = mapPath(layer.sourcePath);
     if (path !== layer.sourcePath) result = { ...result, sourcePath: path };
   }
   for (const key of ["localFilePath", "localBytesUrl"]) {
     const value = layer.metadata[key];
     if (typeof value !== "string") continue;
-    const next =
-      key === "localFilePath"
-        ? rebaseImportedDocumentPath(value, root)
-        : rebaseMediaUrl(value, root);
+    const next = key === "localFilePath" ? mapPath(value) : mapMediaUrl(value, mapPath);
     if (next !== value) result = { ...result, metadata: { ...result.metadata, [key]: next } };
   }
   if (typeof layer.source.url === "string") {
-    const url = rebaseMediaUrl(layer.source.url, root);
+    const url = mapMediaUrl(layer.source.url, mapPath);
     if (url !== layer.source.url) result = { ...result, source: { ...result.source, url } };
   }
   if (Array.isArray(layer.source.tiles)) {
     const original = layer.source.tiles;
     const tiles = original.map((value) =>
-      typeof value === "string" ? rebaseMediaUrl(value, root) : value,
+      typeof value === "string" ? mapMediaUrl(value, mapPath) : value,
     );
     if (tiles.some((value, index) => value !== original[index])) {
       result = { ...result, source: { ...result.source, tiles } };
     }
   }
   return result;
+}
+
+/** The root is native runtime state, never a field supplied by a saved project. */
+export function rebaseImportedDocumentLayer(
+  layer: GeoLibreLayer,
+  root: string | null,
+): GeoLibreLayer {
+  return root
+    ? mapImportedDocumentLayer(layer, (path) => rebaseImportedDocumentPath(path, root))
+    : layer;
+}
+
+/** Refuse publication before readers can discard copies whose root is unavailable. */
+export function assertImportedDocumentCopiesAvailable(
+  layers: readonly GeoLibreLayer[],
+  failure: string | null,
+): void {
+  if (failure === null) return;
+  for (const layer of layers) {
+    if (hasImportedDocumentCopyReference(layer)) throw new Error(failure);
+  }
+}
+
+/** Recognize retained references without changing the layer or following remote URLs. */
+export function hasImportedDocumentCopyReference(layer: GeoLibreLayer): boolean {
+  let retained = false;
+  mapImportedDocumentLayer(layer, (path) => {
+    retained ||= retainedDocumentSuffix(path) !== null;
+    return path;
+  });
+  return retained;
 }

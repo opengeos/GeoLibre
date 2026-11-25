@@ -24,8 +24,17 @@ export async function restoreNativeDocumentCopies(
       notify.error(i18next.t("notifications.nativeDocumentCopiesFailed"));
     }
   } catch (error) {
+    const key = "notifications.nativeDocumentCopiesInitFailed";
+    // Block publication immediately, before translation readiness or the first render.
+    useAppStore
+      .getState()
+      .setNativeDocumentCopyError(
+        "Could not restore access to imported files. Restart GeoLibre or open a new workspace. Details are in Diagnostics.",
+      );
     console.error("[GeoLibre] Failed to restore retained imports", error);
     await translationReady;
-    notify.error(i18next.t("notifications.nativeDocumentCopiesInitFailed"), { error });
+    const message = i18next.t(key);
+    useAppStore.getState().setNativeDocumentCopyError(message);
+    notify.error(message, { error });
   }
 }

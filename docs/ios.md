@@ -512,6 +512,12 @@ library references retain their selection identity and filename but are rebased
 to that current location before readers see them, since iOS can change the
 container prefix during an app update. Local edits remain readable; the original
 import fingerprint is a provenance record rather than a read-time integrity gate.
+If startup cannot initialize imported-file access, the workspace still opens,
+but projects and library entries that need retained copies stay unloaded until
+initialization succeeds. This preserves their references instead of treating
+old container paths as missing files and removing their layers.
+Configured startup layers and inline project links are preserved for retry,
+and creating a blank workspace remains available during the outage.
 
 The copy store and path handling have automated tests. Real iOS device checks
 for picking, rendering, offline restart, and provider cancellation remain

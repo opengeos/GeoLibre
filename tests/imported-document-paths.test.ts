@@ -72,6 +72,10 @@ describe("retained iOS document references", () => {
     try {
       await restoreNativeDocumentCopies(Promise.resolve());
       assert.equal(useAppStore.getState().nativeDocumentCopyRoot, null);
+      assert.equal(
+        useAppStore.getState().nativeDocumentCopyError,
+        en.notifications.nativeDocumentCopiesInitFailed,
+      );
       const notices = useNotificationStore.getState().notifications;
       assert.equal(notices.length, 1);
       assert.equal(notices[0].message, en.notifications.nativeDocumentCopiesInitFailed);
@@ -79,6 +83,122 @@ describe("retained iOS document references", () => {
     } finally {
       clearMocks();
       clearNotifications();
+      useAppStore.getState().setNativeDocumentCopyRoot(null);
+    }
+  });
+
+  it("holds retained references before publication during an outage and recovers the original project", async () => {
+    await i18next.init({ lng: "en", resources: { en: { translation: en } } });
+    const store = useAppStore.getState();
+    store.newProject({ name: "Keep this workspace", layers: [geojsonLayer({ id: "keep" })] });
+    store.addLayer(geojsonLayer({ id: "keep-also" }));
+    store.setProjectPath("/tmp/keep.geolibre.json");
+    clearNotifications();
+    mockIPC(() => {
+      throw new Error("Storage path unavailable");
+    });
+    let translate!: () => void;
+    const translationReady = new Promise<void>((resolve) => {
+      translate = resolve;
+    });
+    let blocked!: () => void;
+    const failureReady = new Promise<void>((resolve) => {
+      blocked = resolve;
+    });
+    const unsubscribe = useAppStore.subscribe((state) => {
+      if (state.nativeDocumentCopyError !== null) blocked();
+    });
+    let ready: Promise<void> | undefined;
+    try {
+      ready = restoreNativeDocumentCopies(translationReady);
+      await failureReady;
+      assert.equal(useNotificationStore.getState().notifications.length, 0);
+      const before = useAppStore.getState();
+      const pastCount = useAppStore.temporal.getState().pastStates.length;
+      const futureCount = useAppStore.temporal.getState().futureStates.length;
+      const project = createEmptyProject("Retained source");
+      const references = [
+        geojsonLayer({ sourcePath: oldPath }),
+        geojsonLayer({ metadata: { localFilePath: oldPath } }),
+        geojsonLayer({
+          metadata: { localBytesUrl: `asset://localhost/${encodeURIComponent(oldPath)}` },
+        }),
+        geojsonLayer({
+          source: {
+            type: "vector",
+            url: `pmtiles://local-pmtiles://localhost/file?path=${encodeURIComponent(oldPath)}`,
+          },
+        }),
+        geojsonLayer({
+          type: "raster",
+          geojson: undefined,
+          source: {
+            type: "raster",
+            tiles: [`geolibre-mbtiles://tile/{z}/{x}/{y}?path=${encodeURIComponent(oldPath)}`],
+          },
+        }),
+      ];
+      let published = 0;
+      const observeLayers = useAppStore.subscribe((state) => {
+        if (state.layers !== before.layers) published++;
+      });
+      try {
+        for (const layer of references) {
+          project.layers = [layer];
+          assert.throws(
+            () => store.loadProject(project, "/tmp/retained.geolibre.json"),
+            /Could not restore access/,
+          );
+          assert.throws(() => store.newProject({ layers: [layer] }), /Could not restore access/);
+          assert.throws(() => store.addLayer(layer), /Could not restore access/);
+        }
+        const after = useAppStore.getState();
+        assert.equal(published, 0);
+        assert.equal(after.projectGeneration, before.projectGeneration);
+        assert.equal(after.projectLoadCount, before.projectLoadCount);
+        assert.equal(after.projectPath, before.projectPath);
+        assert.equal(after.isDirty, before.isDirty);
+        assert.equal(after.layers === before.layers, true);
+        assert.equal(useAppStore.temporal.getState().pastStates.length, pastCount);
+        assert.equal(useAppStore.temporal.getState().futureStates.length, futureCount);
+      } finally {
+        observeLayers();
+      }
+
+      // An unrelated workspace remains available while retained files are held.
+      store.newProject();
+      const remote = createEmptyProject("Remote data");
+      remote.layers = [
+        geojsonLayer({
+          source: {
+            type: "geojson",
+            url: `https://example.com/data?path=${encodeURIComponent(oldPath)}`,
+          },
+        }),
+      ];
+      store.loadProject(remote);
+      assert.equal(useAppStore.getState().layers[0].source.url, remote.layers[0].source.url);
+      assert.equal("nativeDocumentCopyError" in projectFromStore(useAppStore.getState()), false);
+
+      translate();
+      await ready;
+      clearNotifications();
+      mockIPC(() => ({ root: currentRoot, problems: [] }));
+      await restoreNativeDocumentCopies(Promise.resolve());
+      assert.equal(useAppStore.getState().nativeDocumentCopyError, null);
+      assert.equal(useNotificationStore.getState().notifications.length, 0);
+      project.layers = [references[0]];
+      store.loadProject(project, "/tmp/retained.geolibre.json");
+      assert.equal(useAppStore.getState().layers[0].sourcePath, currentPath);
+      assert.equal(project.layers[0].sourcePath, oldPath);
+    } finally {
+      translate();
+      await ready;
+      unsubscribe();
+      clearMocks();
+      clearNotifications();
+      useAppStore.getState().setNativeDocumentCopyRoot(null);
+      useAppStore.getState().newProject();
     }
   });
 
