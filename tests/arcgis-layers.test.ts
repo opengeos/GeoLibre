@@ -913,6 +913,30 @@ describe("ArcGIS raster, service and media compilation", () => {
       source: { type: "raster", url: "https://host/arcgis/rest/services/X/ImageServer" },
     };
     assert.equal(compileArcgisLayer(image).kind, "imagery");
+    // A saved rendered image cache must remain tiled on this renderer too.
+    const cachedImage = compileArcgisLayer({
+      ...base,
+      type: "raster",
+      source: {
+        type: "raster",
+        tiles: ["https://host/arcgis/rest/services/X/ImageServer/tile/{z}/{y}/{x}"],
+        tileSize: 256,
+      },
+      sourcePath: "https://host/arcgis/rest/services/X/ImageServer",
+      metadata: {
+        sourceKind: "arcgis-image-service",
+        arcgisLayerType: "image-service",
+        arcgisSourceType: "url",
+        arcgisTiled: true,
+        hasAccessToken: false,
+      },
+    });
+    assert.equal(cachedImage.kind, "web-tile");
+    if (cachedImage.kind !== "web-tile") throw new Error("Expected a rendered cache template");
+    assert.equal(
+      cachedImage.urlTemplate,
+      "https://host/arcgis/rest/services/X/ImageServer/tile/{level}/{row}/{col}",
+    );
     // A hosted tiled imagery layer caches raw LERC values: flagged, or
     // recognized by its ArcGIS Online host when the flag is absent.
     assert.equal(
