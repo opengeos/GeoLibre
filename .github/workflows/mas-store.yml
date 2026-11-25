@@ -253,15 +253,23 @@ jobs:
             echo "::error::App bundle carries com.apple.security.network.server; App Review rejects it without an inbound-connection feature (see mas/Entitlements.mas.plist.template)"
             exit 1
           fi
-          # DTSDKName is the SDK the shipped binary was actually built against,
-          # the value App Store Connect checks against its SDK floor.
-          sdk="$(/usr/libexec/PlistBuddy -c 'Print :DTSDKName' "$app/Contents/Info.plist")"
-          sdk_major="$(printf '%s' "$sdk" | sed -E 's/^macosx([0-9]+).*/\1/')"
-          if ! printf '%s' "$sdk_major" | grep -qE '^[0-9]+$' || [ "$sdk_major" -lt 27 ]; then
-            echo "::error::App bundle was built against '$sdk'; expected the macOS 27 SDK or later"
+          # The SDK each architecture slice was linked against, from its
+          # LC_BUILD_VERSION load command: the value App Store Connect checks
+          # against its SDK floor. Read from the binary because the Tauri
+          # bundler does not write DTSDKName into Info.plist (only Xcode does).
+          bin="$app/Contents/MacOS/geolibre-desktop"
+          sdks="$(xcrun vtool -show-build "$bin" | awk '$1 == "sdk" {print $2}')"
+          if [ -z "$sdks" ]; then
+            echo "::error::Could not read the build SDK from $bin"
             exit 1
           fi
-          echo "::notice::Built against $sdk"
+          for sdk in $sdks; do
+            if [ "${sdk%%.*}" -lt 27 ]; then
+              echo "::error::$bin has a slice built against the macOS $sdk SDK; expected 27 or later"
+              exit 1
+            fi
+          done
+          echo "::notice::Built against macOS SDK $(echo $sdks | tr ' ' ',')"
           version="$(node -p "require('./apps/geolibre-desktop/src-tauri/tauri.conf.json').version")"
           pkg="GeoLibre.Desktop_${version}_universal_mas.pkg"
           xcrun productbuild --sign "$APPLE_MAS_INSTALLER_IDENTITY" \

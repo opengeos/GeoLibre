@@ -205,7 +205,9 @@ to App Store Connect — that step stays manual (see *Submitting* below).
 
 The job runs on GitHub's `xcode-27` runner, the same as `ios.yml`, and selects the
 newest Xcode on it. It fails before building if that Xcode is older than 27, and
-again before packaging if the app's `DTSDKName` is below `macosx27`. That keeps
+again before packaging if any slice of the app binary was linked against a
+macOS SDK below 27 (read with `vtool -show-build`; the Tauri bundler writes no
+`DTSDKName`). That keeps
 the store build on the current SDK: App Store Connect requires the iOS 27 SDK for
 iOS uploads from April 2027 (ITMS-90725), and the macOS floor tends to move with
 it. Xcode 27 also needs rustup's `llvm-tools` component, locally too; see the
