@@ -92,7 +92,7 @@ jobs:
         # from the run rather than guessed at.
         run: |
           set -euo pipefail
-          newest="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)"
+          newest="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1 || true)"
           if [ -z "$newest" ]; then
             echo "::error::No Xcode found on the runner"
             exit 1

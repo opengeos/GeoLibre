@@ -131,7 +131,7 @@ jobs:
         # before the build if it is older than 27, and log the SDKs.
         run: |
           set -euo pipefail
-          newest="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)"
+          newest="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1 || true)"
           if [ -z "$newest" ]; then
             echo "::error::No Xcode found on the runner"
             exit 1
@@ -180,16 +180,16 @@ jobs:
         # job later holds the App Store signing certificates in its keychain.
         # Update deliberately when bumping the toolchain action.
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          # Xcode 27's SwiftPM internalizes the @_cdecl exports of Swift plugin
+          # packages, and swift-rs promotes them back to global with rustup's
+          # llvm-objcopy. Without it swift-rs only prints a cargo warning and
+          # the link fails later with undefined `_init_plugin_*` symbols. See
+          # ios.yml and docs/ios.md.
+          components: llvm-tools
 
       - name: Install universal-build Rust targets
-        # llvm-tools: Xcode 27's SwiftPM internalizes the @_cdecl exports of
-        # Swift plugin packages, and swift-rs promotes them back to global with
-        # rustup's llvm-objcopy. Without it swift-rs only prints a cargo warning
-        # and the link fails later with undefined `_init_plugin_*` symbols.
-        # See ios.yml and docs/ios.md.
-        run: |
-          rustup target add aarch64-apple-darwin x86_64-apple-darwin
-          rustup component add llvm-tools
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - name: Install frontend dependencies
         run: npm ci
