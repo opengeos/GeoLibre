@@ -20,12 +20,14 @@ import uuid
 import warnings
 import zlib
 from decimal import Decimal
+from http.client import HTTPException
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.error import URLError
 from urllib.parse import quote, unquote, unquote_plus, urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
 
+from ._arcgis_cache import cached_arcgis_source
 from .basemaps import DEFAULT_BASEMAP
 
 # Shared TS/Python constants synced from packages/core/src/project-constants.json.
@@ -394,7 +396,7 @@ class _PublicOnlyRedirectHandler(HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-# Opener used for all remote GeoJSON fetches: follows redirects but rejects any
+# Opener used for public JSON fetches: follows redirects but rejects any
 # hop that points at a non-public address (SSRF defence).
 _GEOJSON_OPENER = build_opener(_PublicOnlyRedirectHandler)
 
@@ -4522,6 +4524,52 @@ ARCGIS_SERVICES: dict[str, tuple[str, str]] = {
 _ARCGIS_EXPORT_TILE_SIZE = 256
 
 
+def _load_arcgis_cached_source(service_url: str) -> dict[str, Any]:
+    """Read bounded public service metadata and validate its image tile cache.
+
+    Args:
+        service_url: The normalized MapServer or ImageServer URL.
+
+    Returns:
+        The validated raster source shape.
+
+    Raises:
+        ValueError: If the request is unsafe, fails, exceeds the size limit or
+            describes an incompatible cache.
+    """
+    url = f"{service_url}?f=json"
+    _assert_public_url(url)
+    limit = 2 * 1024 * 1024
+    deadline = time.monotonic() + 30
+    chunks: list[bytes] = []
+    size = 0
+    try:
+        with _GEOJSON_OPENER.open(url, timeout=30) as response:  # noqa: S310 - public URL checked
+            # The socket timeout bounds each read, not the whole response, so
+            # read one buffer at a time and enforce a total deadline as well.
+            read = getattr(response, "read1", response.read)
+            while size <= limit:
+                if time.monotonic() > deadline:
+                    raise ValueError("ArcGIS cache metadata took longer than 30 seconds to load")
+                chunk = read(min(65536, limit + 1 - size))
+                if time.monotonic() > deadline:
+                    raise ValueError("ArcGIS cache metadata took longer than 30 seconds to load")
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                size += len(chunk)
+    except (OSError, HTTPException) as exc:
+        raise ValueError("Could not load ArcGIS cache metadata") from exc
+    raw = b"".join(chunks)
+    if len(raw) > limit:
+        raise ValueError("ArcGIS cache metadata exceeds the 2 MiB size limit")
+    try:
+        info = json.loads(raw.decode("utf-8"))
+    except RecursionError as exc:
+        raise ValueError("ArcGIS cache metadata is too deeply nested") from exc
+    return cached_arcgis_source(info, service_url)
+
+
 def _arcgis_export_tile_url(
     service_url: str, *, image: bool, sublayers: str | None, rendering_rule: str | None
 ) -> str:
@@ -4564,6 +4612,7 @@ def arcgis_layer(
     url: str,
     *,
     service: str = "map",
+    tiled: bool = False,
     sublayers: str | list[int] | None = None,
     rendering_rule: str | dict[str, Any] | None = None,
     max_features: int | None = None,
@@ -4582,12 +4631,23 @@ def arcgis_layer(
       MapLibre map. Other renderers show it empty until it is refreshed.
 
     Credentials are not supported: a token would be written into the project.
+    With ``tiled=True``, map/image services use their existing image cache.
+    Public service metadata is fetched to verify the Web Mercator XYZ grid;
+    incompatible caches are refused rather than saved with misplaced tiles.
 
     Args:
         name: Layer display name.
         url: The service URL, e.g. ``.../MapServer``, ``.../ImageServer``, or
             ``.../FeatureServer/0``.
         service: ``"map"``, ``"image"``, or ``"feature"``.
+        tiled: Use a validated public map/image cache instead of dynamic export.
+            Cannot be combined with sublayers or a rendering rule. Raw LERC
+            caches are not supported by this raster authoring path. Metadata
+            reads have a 2 MiB size limit and a 30-second deadline checked
+            before and after each read. An in-flight socket read can delay
+            reporting a deadline error until that read finishes or times out.
+            Connect, redirect and header processing use the socket inactivity
+            timeout; the elapsed-time checks only run around body reads.
         sublayers: MapServer sublayer ids to show (``"0,2"`` or ``[0, 2]``).
         rendering_rule: ImageServer rendering rule, as a dict or JSON string
             (e.g. ``{"rasterFunction": "Hillshade"}``).
@@ -4602,10 +4662,15 @@ def arcgis_layer(
 
     Raises:
         ValueError: If ``service`` is unknown, ``url`` is not an http(s) URL,
-            carries credentials or a ``token``, or an option does not apply to ``service``.
+            carries credentials or a ``token``, an option does not apply to
+            ``service``, or a requested cache cannot be read or is incompatible.
     """
     if service not in ARCGIS_SERVICES:
         raise ValueError(f"service must be one of {sorted(ARCGIS_SERVICES)}, got {service!r}")
+    if not isinstance(tiled, bool):
+        raise ValueError("tiled must be a boolean")
+    if tiled and (service == "feature" or sublayers is not None or rendering_rule is not None):
+        raise ValueError("tiled requires a map/image service without sublayers or a rendering_rule")
     if not isinstance(url, str) or not url.strip().lower().startswith(("https://", "http://")):
         raise ValueError("url must be an http(s) ArcGIS REST service URL")
     service_url = url.strip().split("?", 1)[0].split("#", 1)[0].rstrip("/")
@@ -4676,15 +4741,18 @@ def arcgis_layer(
             raise ValueError("rendering_rule must be a JSON object")
     image = service == "image"
     layer = _layer_base(name, "raster", **style)
-    raster_source: dict[str, Any] = {
-        "type": "raster",
-        "tiles": [
-            _arcgis_export_tile_url(
-                service_url, image=image, sublayers=sublayer_text, rendering_rule=rule_text
-            )
-        ],
-        "tileSize": _ARCGIS_EXPORT_TILE_SIZE,
-    }
+    if tiled:
+        raster_source = _load_arcgis_cached_source(service_url)
+    else:
+        raster_source = {
+            "type": "raster",
+            "tiles": [
+                _arcgis_export_tile_url(
+                    service_url, image=image, sublayers=sublayer_text, rendering_rule=rule_text
+                )
+            ],
+            "tileSize": _ARCGIS_EXPORT_TILE_SIZE,
+        }
     if resolved_bounds is not None:
         raster_source["bounds"] = resolved_bounds
     if attribution:
@@ -4693,7 +4761,7 @@ def arcgis_layer(
     raster_metadata: dict[str, Any] = {
         "arcgisLayerType": layer_type,
         "arcgisSourceType": "url",
-        "arcgisTiled": False,
+        "arcgisTiled": tiled,
         "hasAccessToken": False,
         "sourceKind": source_kind,
     }
