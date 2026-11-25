@@ -813,6 +813,11 @@ fn canonicalize_allowed_mbtiles(path: &str) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
+/// Resolve a selected MBTiles source under existing native file permissions.
+pub(crate) fn authorized_mbtiles_source(app: &AppHandle, path: &str) -> Result<PathBuf, String> {
+    canonicalize_scoped_media_path(app, path, &[".mbtiles"])
+}
+
 fn canonicalize_scoped_media_path(
     app: &AppHandle,
     path: &str,

@@ -92,6 +92,32 @@ before a project renders. They are not portable archive URLs: another device
 must import the archive and select its own package. Do not invent these ids
 when authoring a project or replace the address with an export/share result.
 
+Native PMTiles and MBTiles packages can back these addresses. Raster packages
+use image tiles without glyph or sprite downloads; generic vector MBTiles are
+project layers rather than Protomaps basemaps. Obtain package references from a
+project exported on the device that owns the archive. Project exports preserve
+references, rather than bundling the archives.
+
+Preserve exported tile templates for managed vector MBTiles. Android and
+custom-scheme platforms use `geolibre-native-mbtiles://tile/` to dispatch reads
+through the main document; replacing it with native HTTP breaks Android worker
+reads. Windows keeps the native HTTP form, also usable by Mapbox. Mapbox does
+not support the custom protocols on the other platforms.
+
+MBTiles extraction does not generate overview tiles. Newly extracted or
+reapplied packages open at or above their minimum tile zoom; zooming below the
+stored pyramid can show an empty map.
+
+For local MBTiles area extraction in the native app, use a non-wrapping extent
+and zooms 0 through 30. The native writer preserves encoded tile bytes,
+normalizes rows to TMS, and limits each output to 200,000 tiles, 32 MiB per tile,
+1 MiB of metadata in at most 1,024 rows, and a final SQLite file of 512 MiB.
+These are accepted-data limits, not a whole-process memory bound. Cancellation
+interrupts SQLite work and staged publication; an already committed package may
+remain in the catalog after a late cancel. Prepared/running jobs are limited to
+eight, with unclaimed preparations expiring after 60 seconds. Native iOS device
+verification remains outstanding.
+
 ## The layer object
 
 ```json

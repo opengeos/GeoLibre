@@ -7,6 +7,8 @@ mod fs_util;
 mod http_client;
 mod in_flight;
 mod local_media_protocol;
+mod offline_extraction_jobs;
+mod offline_mbtiles;
 mod offline_package_commands;
 mod offline_packages;
 mod plugin_http;
@@ -654,6 +656,10 @@ pub fn run() {
 
     let app = builder
         .invoke_handler(tauri::generate_handler![
+            offline_package_commands::prepare_native_offline_extraction,
+            offline_package_commands::cancel_native_offline_extraction,
+            offline_package_commands::inspect_native_mbtiles_source,
+            offline_package_commands::extract_native_mbtiles_package,
             offline_package_commands::list_native_offline_packages,
             offline_package_commands::save_native_offline_package,
             offline_package_commands::verify_native_offline_package,
@@ -5776,6 +5782,14 @@ fn read_mbtiles_metadata_from_connection(
     connection: &Connection,
 ) -> Result<MbtilesMetadata, String> {
     let metadata = read_metadata_rows(connection)?;
+    read_mbtiles_metadata_from_rows(path, connection, &metadata)
+}
+
+fn read_mbtiles_metadata_from_rows(
+    path: &str,
+    connection: &Connection,
+    metadata: &std::collections::BTreeMap<String, String>,
+) -> Result<MbtilesMetadata, String> {
     let metadata_min_zoom = metadata
         .get("minzoom")
         .and_then(|value| value.parse::<i64>().ok());
@@ -5894,7 +5908,7 @@ fn open_mbtiles(path: &str) -> Result<Connection, String> {
 
 fn read_metadata_rows(
     connection: &Connection,
-) -> Result<std::collections::HashMap<String, String>, String> {
+) -> Result<std::collections::BTreeMap<String, String>, String> {
     let mut statement = connection
         .prepare("SELECT name, value FROM metadata")
         .map_err(|error| format!("Could not read MBTiles metadata: {error}"))?;
@@ -5904,7 +5918,7 @@ fn read_metadata_rows(
         })
         .map_err(|error| format!("Could not query MBTiles metadata: {error}"))?;
 
-    let mut metadata = std::collections::HashMap::new();
+    let mut metadata = std::collections::BTreeMap::new();
     for row in rows {
         let (name, value) =
             row.map_err(|error| format!("Could not parse MBTiles metadata: {error}"))?;

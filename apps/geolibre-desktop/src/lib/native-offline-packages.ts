@@ -11,7 +11,8 @@ import {
   registerPersistentOfflineBasemapStyle,
   type ProtomapsFlavor,
 } from "@geolibre/map";
-import { nativeLocalPmtilesProtocolUrl } from "./local-media-url";
+import { nativeLocalPmtilesProtocolUrl, nativeMbtilesProtocolUrl } from "./local-media-url";
+import { nativeMbtilesTileUrl, registerNativeMbtilesProtocol } from "./native-mbtiles-protocol";
 import {
   deleteOfflineBasemap,
   loadOfflineBasemaps,
@@ -156,18 +157,21 @@ export async function deleteSavedOfflineBasemap(entry: OfflineBasemap): Promise<
 export function forgetNativeOfflinePackage(entry: OfflineBasemap): void {
   const key =
     packageArchiveKeys.get(entry.id) ??
-    (entry.savedPath ? nativeLocalPmtilesProtocolUrl(entry.savedPath) : undefined);
+    (entry.savedPath && entry.archiveFormat !== "mbtiles"
+      ? nativeLocalPmtilesProtocolUrl(entry.savedPath)
+      : undefined);
   if (key) unregisterPMTilesSource(key);
   packageArchiveKeys.delete(entry.id);
   evictOfflineBasemapStyle(entry.id);
 }
 
 function rememberPackageArchive(entry: NativeOfflinePackage): void {
+  if (entry.archiveFormat !== "pmtiles") return;
   const key = nativeLocalPmtilesProtocolUrl(entry.savedPath);
   packageArchiveKeys.set(entry.id, key);
   // Range-backed readers are lightweight and make no request until used.
   // Overlay and raster packages need the same ownership as styled packages.
-  if (entry.archiveFormat === "pmtiles" && !hasPMTilesArchive(key)) registerPMTilesRangeSource(key);
+  if (!hasPMTilesArchive(key)) registerPMTilesRangeSource(key);
 }
 
 /** Verify on explicit use; inventory loading does not rehash every package. */
@@ -179,17 +183,55 @@ export function verifyNativeOfflinePackage(id: string): Promise<NativeOfflinePac
  * Stable package URLs let an old saved project resolve its own flavor. */
 export function registerNativeOfflinePackageStyles(entry: NativeOfflinePackage): void {
   rememberPackageArchive(entry);
-  if (entry.archiveFormat !== "pmtiles" || entry.tileType !== "vector" || entry.flavor == null)
-    return;
-  const sourceUrl = nativeLocalPmtilesProtocolUrl(entry.savedPath);
+  if (entry.archiveFormat === "mbtiles") registerNativeMbtilesProtocol();
+  if (entry.tileType === "vector" && entry.flavor == null) return;
+  const mbtiles = entry.archiveFormat === "mbtiles";
+  const sourceUrl = mbtiles
+    ? entry.tileType === "vector"
+      ? nativeMbtilesTileUrl(entry.savedPath)
+      : nativeMbtilesProtocolUrl(entry.savedPath)
+    : nativeLocalPmtilesProtocolUrl(entry.savedPath);
   const assetsBaseUrl = new URL(`${import.meta.env.BASE_URL}basemaps-assets`, document.baseURI)
     .href;
   for (const flavor of PROTOMAPS_FLAVORS) {
     registerPersistentOfflineBasemapStyle(entry.id, flavor, () => {
       // This source belongs to the managed package, unlike a shared remote URL.
       // Register ownership so deletion can release its reader and cached tiles.
-      if (!hasPMTilesArchive(sourceUrl)) registerPMTilesRangeSource(sourceUrl);
-      return buildProtomapsBasemapStyle({ sourceUrl, flavor, assetsBaseUrl });
+      if (!mbtiles && !hasPMTilesArchive(sourceUrl)) registerPMTilesRangeSource(sourceUrl);
+      if (entry.tileType === "raster")
+        return {
+          version: 8,
+          sources: {
+            offlineRaster: {
+              type: "raster",
+              ...(mbtiles ? { tiles: [sourceUrl] } : { url: "pmtiles://" + sourceUrl }),
+              tileSize: 256,
+              bounds: entry.bbox,
+              minzoom: entry.minZoom,
+              maxzoom: entry.maxZoom,
+            },
+          },
+          layers: [
+            {
+              id: "offline-background",
+              type: "background",
+              paint: {
+                "background-color": flavor === "dark" || flavor === "black" ? "#111111" : "#f8f9fa",
+              },
+            },
+            { id: "offline-raster", type: "raster", source: "offlineRaster" },
+          ],
+        };
+      const style = buildProtomapsBasemapStyle({ sourceUrl, flavor, assetsBaseUrl });
+      if (mbtiles)
+        style.sources.protomaps = {
+          type: "vector",
+          tiles: [sourceUrl],
+          bounds: entry.bbox,
+          minzoom: entry.minZoom,
+          maxzoom: entry.maxZoom,
+        };
+      return style;
     });
   }
 }

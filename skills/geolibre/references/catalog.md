@@ -84,7 +84,7 @@ widths then vary, so the legend must show the breaks.
 | Shapefile (`.zip`) | Converted in-browser (`shpjs`, DuckDB fallback) |
 | GeoPackage, KML/KMZ, GPX, CSV, delimited text | Converted on import |
 | COG / GeoTIFF | `cog` layer, rendered on the GPU or through a tiler |
-| PMTiles, MBTiles | Tiled sources (MBTiles is desktop-only, via a local protocol) |
+| PMTiles, MBTiles | Tiled sources; native files use local protocols, and browser MBTiles use an in-memory reader |
 | WMS, WMTS, WFS | OGC service layers |
 | ArcGIS FeatureServer / MapServer / ImageServer / VectorTileServer | Native support |
 | Zarr, LiDAR (COPC/LAZ), 3D Tiles, Gaussian splats | Through the bundled plugins |

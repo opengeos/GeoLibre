@@ -43,3 +43,27 @@ it("does not mistake other packages or remote query parameters for owned package
   ])
     assert.equal(referencesNativeOfflinePackage({ source: { url }, metadata: {} }, id), false, url);
 });
+
+it("protects managed MBTiles references in native and JavaScript tile templates", () => {
+  const mbtilesPath = path.replace(".pmtiles", ".mbtiles");
+  for (const url of [
+    nativeMbtilesProtocolUrl(mbtilesPath, "android"),
+    `geolibre-mbtiles://tile/{z}/{x}/{y}?path=${encodeURIComponent(mbtilesPath)}`,
+    `geolibre-native-mbtiles://tile/{z}/{x}/{y}?path=${encodeURIComponent(mbtilesPath)}`,
+  ]) {
+    assert.equal(
+      referencesNativeOfflinePackage({ source: { tiles: [url] }, metadata: {} }, id),
+      true,
+    );
+    assert.equal(
+      referencesNativeOfflinePackage(
+        {
+          source: { tiles: [url.replace(id, "pkg-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")] },
+          metadata: {},
+        },
+        id,
+      ),
+      false,
+    );
+  }
+});
