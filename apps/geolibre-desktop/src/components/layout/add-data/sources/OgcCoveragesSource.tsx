@@ -96,12 +96,16 @@ export function OgcCoveragesSource({ initialUrl = "" }: { initialUrl?: string })
       const url = ogcCoverageUrl(collection, area, { datetime, subset });
       const { file, bands } = await downloadOgcCoverage(collection, url, request.signal, parameter);
       request.signal.throwIfAborted();
+      const projectLoadCount = useAppStore.getState().projectLoadCount;
       const id = await addRasterToMap(createAppAPI(source.shell.mapControllerRef), file, {
         name: source.layerName.trim() || collection.title,
         beforeId: source.beforeLayer ?? undefined,
         signal: request.signal,
       });
-      request.signal.throwIfAborted();
+      // A resolved add has committed its raster. Finish its metadata even if
+      // the dialog unmounts in the promise continuation, but never touch a
+      // replacement project. The raster helper owns cancellation before commit.
+      if (useAppStore.getState().projectLoadCount !== projectLoadCount) return;
       const state = useAppStore.getState(),
         layer = state.layers.find((item) => item.id === id);
       if (layer)
@@ -115,7 +119,7 @@ export function OgcCoveragesSource({ initialUrl = "" }: { initialUrl?: string })
           },
         });
       state.moveLayerToGroup(id, source.shell.targetGroupId, source.beforeLayer);
-      source.shell.closeDialog();
+      if (!request.signal.aborted) source.shell.closeDialog();
     } catch (error) {
       throw new Error(errorText(error));
     }

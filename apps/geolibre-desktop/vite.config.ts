@@ -877,6 +877,7 @@ function wmsProxyPlugin(): Plugin {
         try {
           await proxyBinaryRequestGuarded(req, res, OGC_COVERAGE_PROXY_PATH, {
             forwardAccept: true,
+            discardErrorBody: true,
           });
         } catch {
           res.statusCode = 502;

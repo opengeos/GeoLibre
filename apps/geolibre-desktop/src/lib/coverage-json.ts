@@ -77,7 +77,7 @@ function axis(value: unknown): Axis {
     )
       throw new CoverageError("grid");
     step = bounds[1] - bounds[0];
-    if (Math.abs((bounds[0] + bounds[1]) / 2 - first) > Math.abs(step) * 1e-9)
+    if (Math.abs((bounds[0] + bounds[1]) / 2 - first) > coordinateTolerance(first, step))
       throw new CoverageError("grid");
   }
   if (!Number.isFinite(step) || step === 0) throw new CoverageError("grid");

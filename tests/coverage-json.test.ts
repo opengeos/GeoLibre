@@ -160,6 +160,22 @@ test("accepts singleton time slices and explicit singleton cell bounds", () => {
   assert.deepEqual(Array.from(parsed.bands[0]), [1, 2]);
 });
 
+test("accepts rounded singleton bounds near a large coordinate", () => {
+  const doc = grid();
+  Object.assign(doc.domain.axes, {
+    x: { values: [179.9], bounds: [179.89999550842358, 179.9000044915764] },
+  });
+  Object.assign(doc.ranges.t, { shape: [2, 1], values: [1, 2] });
+  const parsed = parseCoverageJson(doc);
+  assert.equal(parsed.width, 1);
+  assert.equal(parsed.west, 179.9);
+  assert.deepEqual(Array.from(parsed.bands[0]), [1, 2]);
+  Object.assign(doc.domain.axes, {
+    x: { values: [179.9], bounds: [179.89998, 179.9] },
+  });
+  assert.throws(() => parseCoverageJson(doc), CoverageError);
+});
+
 test("accepts omitted singleton dimensions in one-column, one-row and scalar grids", () => {
   const column = grid();
   Object.assign(column.domain.axes, { x: { values: [10], bounds: [9.5, 10.5] } });
