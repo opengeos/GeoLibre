@@ -73,6 +73,10 @@ export function CommandPalette({
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  // The command the user moved the highlight to (arrows, Home/End, hover), so
+  // it stays highlighted when a feature scan lands and inserts rows above it.
+  // Cleared when the query changes, so an untouched palette keeps the best match.
+  const chosenId = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const isMac = useMemo(() => isMacPlatform(), []);
   const listboxId = "command-palette-listbox";
@@ -138,13 +142,24 @@ export function CommandPalette({
     if (open) {
       setQuery("");
       setActiveIndex(0);
+      chosenId.current = null;
     }
   }, [open]);
 
-  // Keep the highlight within bounds as the filtered list shrinks/grows.
+  // Follow the chosen command when the list changes under it, else keep the
+  // highlight within bounds as the filtered list shrinks/grows.
   useEffect(() => {
-    setActiveIndex((index) => (filtered.length === 0 ? 0 : Math.min(index, filtered.length - 1)));
-  }, [filtered.length]);
+    const chosen = chosenId.current;
+    const found = chosen ? filtered.findIndex((command) => command.id === chosen) : -1;
+    setActiveIndex((index) =>
+      found >= 0 ? found : filtered.length === 0 ? 0 : Math.min(index, filtered.length - 1),
+    );
+  }, [filtered]);
+
+  const choose = (index: number) => {
+    setActiveIndex(index);
+    chosenId.current = filtered[index]?.id ?? null;
+  };
 
   // Scroll the highlighted row into view as the user navigates. The row may not
   // be mounted (virtualized), so scroll by index rather than by element. The
@@ -164,18 +179,16 @@ export function CommandPalette({
   const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex((index) => (filtered.length === 0 ? 0 : (index + 1) % filtered.length));
+      choose(filtered.length === 0 ? 0 : (activeIndex + 1) % filtered.length);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActiveIndex((index) =>
-        filtered.length === 0 ? 0 : (index - 1 + filtered.length) % filtered.length,
-      );
+      choose(filtered.length === 0 ? 0 : (activeIndex - 1 + filtered.length) % filtered.length);
     } else if (event.key === "Home") {
       event.preventDefault();
-      setActiveIndex(0);
+      choose(0);
     } else if (event.key === "End") {
       event.preventDefault();
-      setActiveIndex(Math.max(0, filtered.length - 1));
+      choose(Math.max(0, filtered.length - 1));
     } else if (event.key === "Enter") {
       event.preventDefault();
       const command = filtered[activeIndex];
@@ -208,6 +221,7 @@ export function CommandPalette({
             onChange={(event) => {
               setQuery(event.target.value);
               setActiveIndex(0);
+              chosenId.current = null;
             }}
             onKeyDown={handleInputKeyDown}
           />
@@ -245,7 +259,7 @@ export function CommandPalette({
                         id={optionId(row.command)}
                         active={row.index === activeIndex}
                         isMac={isMac}
-                        onHover={() => setActiveIndex(row.index)}
+                        onHover={() => choose(row.index)}
                         onRun={() => runCommand(row.command)}
                       />
                     )}

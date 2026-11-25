@@ -6,7 +6,7 @@ import {
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { Layers, MapPin, Table2 } from "lucide-react";
-import { type RefObject, useMemo } from "react";
+import { type RefObject, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { RankedCommand } from "../../lib/commands";
 import { notify } from "../../lib/notify";
@@ -49,14 +49,19 @@ function currentLayers(): { layers: GeoLibreLayer[]; groups: PaletteSearchOption
  */
 export function usePaletteSearch(mapControllerRef: RefObject<MapEngine | null>): PaletteSearch {
   const { t } = useTranslation();
+  // Only the latest place pick may move the map: an earlier lookup that
+  // resolves after a newer one is dropped.
+  const latestPlaceRequest = useRef(0);
 
   return useMemo(() => {
     const searchPlace = (query: string) => {
       const engine = mapControllerRef.current;
       if (!engine) return;
+      const request = ++latestPlaceRequest.current;
       const config = resolveGeocoderConfig(useAppStore.getState().preferences.geocoding);
       geocodeForward(query, { config, limit: 1 }).then(
         (matches) => {
+          if (request !== latestPlaceRequest.current) return;
           const match = matches[0];
           if (!match) {
             notify.info(t("commandPalette.placeNotFound", { query }));
@@ -65,7 +70,9 @@ export function usePaletteSearch(mapControllerRef: RefObject<MapEngine | null>):
           flyToGeocodeMatch(engine, match);
           notify.info(t("commandPalette.placeClosestMatch", { name: match.displayName }));
         },
-        () => notify.error(t("layers.searchPlacesError")),
+        () => {
+          if (request === latestPlaceRequest.current) notify.error(t("layers.searchPlacesError"));
+        },
       );
     };
 
