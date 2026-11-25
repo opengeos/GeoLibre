@@ -90,6 +90,7 @@ export function useNativeMbtilesExtraction(open: boolean, requests: OfflineBasem
       });
       if (!picked?.path || operation.controller.signal.aborted || !operation.request.isCurrent())
         return null;
+      setSource(null);
       const metadata = await inspectNativeMbtilesSource(picked.path, operation.controller.signal);
       if (operation.controller.signal.aborted || !operation.request.isCurrent()) return null;
       const selected = { path: picked.path, metadata };

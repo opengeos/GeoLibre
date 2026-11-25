@@ -51,16 +51,61 @@ function mountPanel() {
   );
 }
 
-async function chooseSource() {
+async function chooseSource(maximum = 19) {
   fireEvent.change(screen.getByRole("combobox", { name: "Source" }), {
     target: { value: "mbtiles" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Choose MBTiles file…" }));
   await waitFor(() =>
-    assert.equal((screen.getByLabelText("Max zoom") as HTMLInputElement).value, "19"),
+    assert.equal((screen.getByLabelText("Max zoom") as HTMLInputElement).value, String(maximum)),
   );
   fireEvent.change(screen.getByLabelText("East"), { target: { value: "-122.258" } });
 }
+
+it("clears a previous source after a failed replacement but preserves it after a canceled picker", async () => {
+  let picks = 0;
+  let extracts = 0;
+  mockIPC((command, args) => {
+    if (command === "list_native_offline_packages") return { packages: [], problems: [] };
+    if (command === "plugin:dialog|open")
+      return ++picks === 1 ? "/data/first.mbtiles" : picks === 2 ? null : "/data/invalid.mbtiles";
+    if (command === "prepare_native_offline_extraction") return `inspect-${picks}`;
+    if (command === "inspect_native_mbtiles_source") {
+      if (Reflect.get(args ?? {}, "path") === "/data/invalid.mbtiles")
+        throw new Error("Invalid replacement archive");
+      return rasterMetadata;
+    }
+    if (command === "extract_native_mbtiles_package") {
+      extracts++;
+      return undefined;
+    }
+    if (command === "cancel_native_offline_extraction" || command.startsWith("plugin:event|"))
+      return 1;
+    throw new Error(`Unexpected command: ${command}`);
+  });
+  mountPanel();
+  await chooseSource();
+  assert.equal(
+    (screen.getByRole("button", { name: "Extract" }) as HTMLButtonElement).disabled,
+    false,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Choose MBTiles file…" }));
+  await waitFor(() => assert.equal(picks, 2));
+  await waitFor(() =>
+    assert.equal(
+      (screen.getByRole("button", { name: "Extract" }) as HTMLButtonElement).disabled,
+      false,
+    ),
+  );
+  assert.ok(screen.getByText("Berkeley", { exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: "Choose MBTiles file…" }));
+  await screen.findByText("Invalid replacement archive");
+  assert.equal(screen.queryByText("Berkeley", { exact: true }) === null, true);
+  const extract = screen.getByRole("button", { name: "Extract" }) as HTMLButtonElement;
+  assert.equal(extract.disabled, true);
+  fireEvent.click(extract);
+  assert.equal(extracts, 0);
+});
 
 for (const maximum of [18, 24]) {
   it(`refuses a saved package above the supported maximum zoom ${maximum} before changing the map`, async () => {
@@ -78,7 +123,11 @@ for (const maximum of [18, 24]) {
     const before = useAppStore.getState().basemapStyleUrl;
     mountPanel();
     fireEvent.click(await screen.findByRole("button", { name: "Use as basemap" }));
-    await screen.findByText(new RegExp(`This package needs zoom ${minimum}`));
+    const error = await screen.findByText(new RegExp(`This package needs zoom ${minimum}`));
+    if (minimum > 24) {
+      assert.match(error.textContent ?? "", /supported maximum of 24/);
+      assert.equal(error.textContent?.includes("Increase"), false);
+    }
     assert.equal(useAppStore.getState().basemapStyleUrl, before);
     assert.equal(useAppStore.getState().layers.length, 0);
     assert.equal(screen.queryByText("Using the package saved on this device.") === null, true);
@@ -133,6 +182,43 @@ for (const actualMinimumHigher of [false, true]) {
       assert.ok(await screen.findByRole("button", { name: "Use as basemap" }));
   });
 }
+
+it("gives lower-zoom guidance when the committed package exceeds the renderer's hard limit", async () => {
+  const unsupported = { ...entry, minZoom: 25, maxZoom: 25 };
+  let saved = false;
+  mockIPC((command) => {
+    if (command === "list_native_offline_packages")
+      return { packages: saved ? [unsupported] : [], problems: [] };
+    if (command === "plugin:dialog|open") return "/data/detail-only.mbtiles";
+    if (command === "prepare_native_offline_extraction") return "extract-above-renderer";
+    if (command === "inspect_native_mbtiles_source")
+      return { ...rasterMetadata, minZoom: 0, maxZoom: 25 };
+    if (command === "extract_native_mbtiles_package") {
+      saved = true;
+      return {
+        package: unsupported,
+        tileCount: 1,
+        payloadBytes: 100,
+        tileFormat: "png",
+        sourceLayers: [],
+      };
+    }
+    if (command === "cancel_native_offline_extraction" || command.startsWith("plugin:event|"))
+      return 1;
+    throw new Error(`Unexpected command: ${command}`);
+  });
+  const before = useAppStore.getState().basemapStyleUrl;
+  mountPanel();
+  await chooseSource(25);
+  fireEvent.click(screen.getByRole("button", { name: "Extract" }));
+  const error = await screen.findByText(
+    /Saved "Berkeley subset" on this device, but this map cannot display tiles starting at zoom 25/,
+  );
+  assert.match(error.textContent ?? "", /Choose an archive with tiles at zoom 24 or below/);
+  assert.equal(error.textContent?.includes("Increase"), false);
+  assert.equal(saved, true);
+  assert.equal(useAppStore.getState().basemapStyleUrl, before);
+});
 
 it("an unsupported extract supersedes an older pending saved-package apply", async () => {
   const preferences = useAppStore.getState().preferences;

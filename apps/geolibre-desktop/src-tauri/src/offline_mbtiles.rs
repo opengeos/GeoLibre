@@ -175,8 +175,8 @@ pub(crate) fn source_metadata(source: &Connection) -> Result<BTreeMap<String, St
     // untrusted, and one huge JSON value must not allocate unbounded memory.
     let mut statement = source
         .prepare(
-            "SELECT CASE WHEN length(name) <= 1024 THEN name END,
-                CASE WHEN length(value) <= 1048576 THEN value END
+            "SELECT CASE WHEN length(CAST(name AS BLOB)) <= 1024 THEN name END,
+                CASE WHEN length(CAST(value AS BLOB)) <= 1048576 THEN value END
          FROM metadata LIMIT 1025",
         )
         .map_err(|error| format!("Could not read MBTiles metadata: {error}"))?;
@@ -805,6 +805,31 @@ mod tests {
             assert!(source_metadata(&source)
                 .unwrap_err()
                 .contains("duplicate keys"));
+        }
+    }
+
+    #[test]
+    fn rejects_utf8_metadata_by_bytes_before_transferring_strings() {
+        for (key, value, error) in [
+            (
+                "name".to_string(),
+                "🗺".repeat(MAX_METADATA_BYTES / 4 + 1),
+                "metadata value is too large",
+            ),
+            (
+                "🗺".repeat(257),
+                "small".to_string(),
+                "metadata key is too large",
+            ),
+        ] {
+            let source = Connection::open_in_memory().unwrap();
+            source
+                .execute_batch("CREATE TABLE metadata(name TEXT,value TEXT)")
+                .unwrap();
+            source
+                .execute("INSERT INTO metadata VALUES (?1,?2)", params![key, value])
+                .unwrap();
+            assert!(source_metadata(&source).unwrap_err().contains(error));
         }
     }
 }

@@ -1,6 +1,6 @@
 //! Prepared native extraction jobs bridge the interval between UI preparation
-//! and worker startup. Cancellation uses the app's shared generation-safe
-//! registry; bounded reservations and RAII cleanup own each job's lifetime.
+//! and worker startup. Cancellation reuses the app's generation-safe registry
+//! implementation; bounded reservations and RAII cleanup own each job's lifetime.
 
 use crate::in_flight::{CancelGuard, CancelRegistry};
 use std::collections::HashMap;

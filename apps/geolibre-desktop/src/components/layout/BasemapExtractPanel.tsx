@@ -764,7 +764,14 @@ export function BasemapExtractPanel({
     clearStatus();
     if (minZoomValue > Math.min(24, useAppStore.getState().preferences.map.maxZoom)) {
       applicationRequests.invalidate();
-      setError(t("basemapExtract.errorPackageZoom", { zoom: minZoomValue }));
+      setError(
+        t(
+          minZoomValue > 24
+            ? "basemapExtract.errorPackageZoomUnsupported"
+            : "basemapExtract.errorPackageZoom",
+          { zoom: minZoomValue },
+        ),
+      );
       return;
     }
     const completed = await nativeMbtiles.extract(
@@ -781,7 +788,12 @@ export function BasemapExtractPanel({
       const { package: entry, sourceLayers, tileFormat } = completed.result;
       if (entry.minZoom > Math.min(24, useAppStore.getState().preferences.map.maxZoom))
         throw new Error(
-          t("basemapExtract.errorSavedPackageZoom", { name: entry.name, zoom: entry.minZoom }),
+          t(
+            entry.minZoom > 24
+              ? "basemapExtract.errorSavedPackageZoomUnsupported"
+              : "basemapExtract.errorSavedPackageZoom",
+            { name: entry.name, zoom: entry.minZoom },
+          ),
         );
       if (entry.tileType === "raster" || entry.flavor != null) {
         setBasemapStyleUrl(
@@ -1047,7 +1059,14 @@ export function BasemapExtractPanel({
           const verified = await verifyNativeOfflinePackage(entry.id);
           if (!request.isCurrent()) return;
           if (verified.minZoom > Math.min(24, useAppStore.getState().preferences.map.maxZoom))
-            throw new Error(t("basemapExtract.errorPackageZoom", { zoom: verified.minZoom }));
+            throw new Error(
+              t(
+                verified.minZoom > 24
+                  ? "basemapExtract.errorPackageZoomUnsupported"
+                  : "basemapExtract.errorPackageZoom",
+                { zoom: verified.minZoom },
+              ),
+            );
           if (
             verified.archiveFormat === "mbtiles" &&
             verified.tileType === "vector" &&
