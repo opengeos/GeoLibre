@@ -655,6 +655,7 @@
 - [x] **Offline basemap packages in the native apps (v3.10.1)**: Offline Basemap saves extracted and opened PMTiles into app-managed storage that survives a restart, with verify, rename, export, and delete, and it can extract an area and zoom range from a local MBTiles file into the same catalog. See [Offline basemap](user-guide/projects.md#offline-basemap)
 - [x] **Edge lengths on selected polygons (v3.10.1)**: **Edit → Show edge lengths** labels each side of the selected polygons with its length, corner to corner, so a parcel's frontage reads at a glance. See [Attribute Table](user-guide/attribute-table.md)
 - [x] **Refreshable SQL query snapshots from Python and MCP (v3.10.1)**: `Map.add_sql_query_layer` and the matching MCP tool author a SQL Workspace query layer with an embedded result that **Refresh** re-runs against the project's other layers. See [MCP server](mcp.md)
+- [x] **Imported data stays put on iOS (v3.10.1)**: GeoPackage, MBTiles, raster, and GeoJSON imports are copied into app-managed storage, so projects reopen with their data after a restart. See [iOS](ios.md)
 
 ## Plugin marketplace and registry (design)
 
