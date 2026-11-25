@@ -291,7 +291,7 @@ impl MbtilesConnectionPool {
     }
 
     pub(crate) fn read_tile(&self, path: &str, z: u32, x: u32, y: u32) -> Result<Vec<u8>, String> {
-        if z > crate::MAX_MBTILES_ZOOM {
+        if z > crate::mbtiles::MAX_MBTILES_ZOOM {
             return Err("Tile zoom level is too large".to_string());
         }
         let canonical = canonicalize_allowed_mbtiles(path)?;
@@ -305,7 +305,7 @@ impl MbtilesConnectionPool {
         x: u32,
         y: u32,
     ) -> Result<Vec<u8>, String> {
-        if z > crate::MAX_MBTILES_ZOOM {
+        if z > crate::mbtiles::MAX_MBTILES_ZOOM {
             return Err("Tile zoom level is too large".to_string());
         }
         let pooled = self.get_or_open_canonical(canonical)?;
@@ -321,7 +321,7 @@ impl MbtilesConnectionPool {
             let tx = connection
                 .transaction()
                 .map_err(|error| format!("Could not start MBTiles read transaction: {error}"))?;
-            let scheme = crate::read_metadata_value(&tx, "scheme")?
+            let scheme = crate::mbtiles::read_metadata_value(&tx, "scheme")?
                 .map(|value| value.to_ascii_lowercase())
                 .unwrap_or_else(|| "tms".to_string());
             let tile_row = if scheme == "xyz" {
@@ -346,7 +346,7 @@ impl MbtilesConnectionPool {
         };
 
         Ok(tile_data
-            .map(crate::decompress_tile_data)
+            .map(crate::mbtiles::decompress_tile_data)
             .transpose()?
             .unwrap_or_default())
     }
