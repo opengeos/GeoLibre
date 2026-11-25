@@ -760,7 +760,7 @@
                     "name": "A",
                     "kind": "a",
                     "pop": 10,
-                    "__geolibre_label_area": 1.0000507734366348
+                    "__geolibre_label_area": 0.9999619230641713
                   },
                   "geometry": {
                     "type": "Point",
@@ -773,7 +773,7 @@
                     "name": "B",
                     "kind": "b",
                     "pop": 20,
-                    "__geolibre_label_area": 1.0000507734366348
+                    "__geolibre_label_area": 0.9999619230641713
                   },
                   "geometry": {
                     "type": "Point",
@@ -786,7 +786,7 @@
                     "name": "C",
                     "kind": "a",
                     "pop": 30,
-                    "__geolibre_label_area": 1.0000507734366348
+                    "__geolibre_label_area": 0.9999619230641713
                   },
                   "geometry": {
                     "type": "Point",
@@ -987,7 +987,7 @@
                   "name": "A",
                   "kind": "a",
                   "pop": 10,
-                  "__geolibre_label_area": 1.0000507734366348
+                  "__geolibre_label_area": 0.9999619230641713
                 },
                 "geometry": {
                   "type": "Point",
@@ -1000,7 +1000,7 @@
                   "name": "B",
                   "kind": "b",
                   "pop": 20,
-                  "__geolibre_label_area": 1.0000507734366348
+                  "__geolibre_label_area": 0.9999619230641713
                 },
                 "geometry": {
                   "type": "Point",
@@ -1013,7 +1013,7 @@
                   "name": "C",
                   "kind": "a",
                   "pop": 30,
-                  "__geolibre_label_area": 1.0000507734366348
+                  "__geolibre_label_area": 0.9999619230641713
                 },
                 "geometry": {
                   "type": "Point",
@@ -1503,7 +1503,7 @@
                     "name": "A",
                     "kind": "a",
                     "pop": 10,
-                    "__geolibre_label_area": 1.0000507734366348
+                    "__geolibre_label_area": 0.9999619230641713
                   },
                   "geometry": {
                     "type": "Point",
@@ -1516,7 +1516,7 @@
                     "name": "B",
                     "kind": "b",
                     "pop": 20,
-                    "__geolibre_label_area": 1.0000507734366348
+                    "__geolibre_label_area": 0.9999619230641713
                   },
                   "geometry": {
                     "type": "Point",
@@ -1529,7 +1529,7 @@
                     "name": "C",
                     "kind": "a",
                     "pop": 30,
-                    "__geolibre_label_area": 1.0000507734366348
+                    "__geolibre_label_area": 0.9999619230641713
                   },
                   "geometry": {
                     "type": "Point",
@@ -1728,7 +1728,7 @@
                   "name": "A",
                   "kind": "a",
                   "pop": 10,
-                  "__geolibre_label_area": 1.0000507734366348
+                  "__geolibre_label_area": 0.9999619230641713
                 },
                 "geometry": {
                   "type": "Point",
@@ -1741,7 +1741,7 @@
                   "name": "B",
                   "kind": "b",
                   "pop": 20,
-                  "__geolibre_label_area": 1.0000507734366348
+                  "__geolibre_label_area": 0.9999619230641713
                 },
                 "geometry": {
                   "type": "Point",
@@ -1754,7 +1754,7 @@
                   "name": "C",
                   "kind": "a",
                   "pop": 30,
-                  "__geolibre_label_area": 1.0000507734366348
+                  "__geolibre_label_area": 0.9999619230641713
                 },
                 "geometry": {
                   "type": "Point",
@@ -6739,7 +6739,7 @@
                     "name": "A",
                     "kind": "a",
                     "pop": 10,
-                    "__geolibre_label_area": 1.0000507734366348
+                    "__geolibre_label_area": 0.9999619230641713
                   },
                   "geometry": {
                     "type": "Point",
@@ -6752,7 +6752,7 @@
                     "name": "B",
                     "kind": "b",
                     "pop": 20,
-                    "__geolibre_label_area": 1.0000507734366348
+                    "__geolibre_label_area": 0.9999619230641713
                   },
                   "geometry": {
                     "type": "Point",
@@ -6765,7 +6765,7 @@
                     "name": "C",
                     "kind": "a",
                     "pop": 30,
-                    "__geolibre_label_area": 1.0000507734366348
+                    "__geolibre_label_area": 0.9999619230641713
                   },
                   "geometry": {
                     "type": "Point",

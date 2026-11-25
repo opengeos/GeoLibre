@@ -2756,7 +2756,9 @@ function dedupedAttributeLabels(
  * GeoArrow-only layer has no feature collection to derive points from).
  * Attribute filters need no gating here (unlike dedup) because each point
  * keeps its feature's properties, so the label layer's filter still evaluates
- * on it. A filter or label expression that tests the geometry type does need
+ * on it. Past MAX_POLYGON_LABEL_FEATURES polygons it is null too (the search
+ * would stall the first draw). A filter or label expression that tests the
+ * geometry type does need
  * it: the derived feature is a Point, so `["geometry-type"]` would no longer
  * match "Polygon" and the label would vanish. Those keep MapLibre's placement.
  */

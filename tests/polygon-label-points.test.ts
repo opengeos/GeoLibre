@@ -4,6 +4,7 @@ import type { FeatureCollection, Polygon, Position } from "geojson";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LabelStyle } from "@geolibre/core";
 import { syncLayer } from "../packages/map/src/layer-sync";
 import {
+  MAX_POLYGON_LABEL_FEATURES,
   POLYGON_LABEL_AREA_PROPERTY,
   polygonLabelPoint,
   polygonLabelPoints,
@@ -103,6 +104,24 @@ describe("polygonLabelPoint", () => {
     assert.ok(Date.now() - start < 1000);
   });
 
+  it("ranks parts by ground size, not Mercator size", () => {
+    // A high-latitude part that is larger in Mercator but smaller on the ground.
+    const north = square(0, 70, 4);
+    const south = square(20, 0, 3);
+    const point = polygonLabelPoint({ type: "MultiPolygon", coordinates: [[north], [south]] })!;
+    assert.ok(insidePolygon(point, south), `${point} should be in the equatorial part`);
+  });
+
+  it("stays inside when thinning the outline drops a deep notch", () => {
+    // A square with a notch reaching almost to the bottom edge, which carries
+    // ~2,000 vertices so the thinned search copy loses the notch tip.
+    const bottom: Position[] = [];
+    for (let i = 0; i < 1997; i += 1) bottom.push([(i / 1996) * 2, 0]);
+    const ring: Position[] = [...bottom, [2, 2], [1.8, 2], [1, 0.1], [0.2, 2], [0, 2], [0, 0]];
+    const point = polygonLabelPoint({ type: "Polygon", coordinates: [ring] })!;
+    assert.ok(insidePolygon(point, ring), `${point} should be inside the notched square`);
+  });
+
   it("stays fast on a long flat sliver", () => {
     const start = Date.now();
     const point = polygonLabelPoint({
@@ -177,19 +196,32 @@ describe("polygonLabelPoints", () => {
   };
 
   it("turns each polygon feature into one point, keeping id and properties", () => {
-    const result = polygonLabelPoints(collection);
+    const result = polygonLabelPoints(collection)!;
     assert.equal(result.features.length, 2);
     const [country, road] = result.features;
     assert.equal(country.geometry.type, "Point");
     assert.equal(country.id, 7);
     const { [POLYGON_LABEL_AREA_PROPERTY]: area, ...properties } = country.properties!;
     assert.deepEqual(properties, { NAME: "Netherlands" });
-    assert.ok((area as number) > 9, "the area of the largest (3x3 degree) part, in Mercator");
+    // 9 square degrees at ~52.5° N, scaled by cos(lat).
+    assert.ok(Math.abs((area as number) - 9 * Math.cos((52.5 * Math.PI) / 180)) < 0.01);
     assert.equal(road, collection.features[1], "non-polygons pass through unchanged");
   });
 
   it("memoizes by collection reference", () => {
     assert.equal(polygonLabelPoints(collection), polygonLabelPoints(collection));
+  });
+
+  it("skips layers past the polygon budget", () => {
+    const many: FeatureCollection = {
+      type: "FeatureCollection",
+      features: Array.from({ length: MAX_POLYGON_LABEL_FEATURES + 1 }, (_, i) => ({
+        type: "Feature" as const,
+        properties: { i },
+        geometry: { type: "Polygon" as const, coordinates: [square(i * 0.01, 0, 0.005)] },
+      })),
+    };
+    assert.equal(polygonLabelPoints(many), null);
   });
 });
 

@@ -233,7 +233,7 @@ export function poleOfInaccessibility(rings: Ring[]): [number, number] {
 
 /**
  * The label anchor of a Polygon or MultiPolygon: the pole of inaccessibility
- * of its largest part (by area in Web Mercator), or null for other geometries
+ * of its largest part (by ground area), or null for other geometries
  * or degenerate polygons.
  *
  * @param geometry - The feature geometry.
@@ -244,8 +244,8 @@ export function polygonLabelPoint(geometry: Geometry | null | undefined): Positi
 }
 
 /**
- * Feature property carrying the labeled part's area (square Mercator degrees),
- * which the label layer sorts on so a large polygon's single label wins a
+ * Feature property carrying the labeled part's approximate ground area (see
+ * groundArea), which the label layer sorts on so a large polygon's single label wins a
  * collision against a small neighbour's.
  */
 export const POLYGON_LABEL_AREA_PROPERTY = "__geolibre_label_area";
@@ -261,24 +261,51 @@ function polygonLabelAnchor(
         ? geometry.coordinates
         : null;
   if (!polygons) return null;
-  let largest: Ring[] | null = null;
+  let largest: Position[][] | null = null;
   let largestArea = -Infinity;
   for (const polygon of polygons) {
     if (!polygon[0] || polygon[0].length < 3) continue;
+    const rings = polygon.filter((ring) => ring.length >= 3);
     // A zero-area (collinear) part is degenerate: MapLibre draws nothing
-    // there. Tested before projecting, which would bend a straight line.
-    if (polygonArea([polygon[0] as Ring]) === 0) continue;
-    const rings = polygon
-      .filter((ring) => ring.length >= 3)
-      .map((ring) => thinRing(ring).map(toMercator));
-    const area = polygonArea(rings);
-    if (area > largestArea) {
+    // there.
+    const area = groundArea(rings);
+    if (area > 0 && area > largestArea) {
       largestArea = area;
       largest = rings;
     }
   }
   if (!largest) return null;
-  return { point: fromMercator(poleOfInaccessibility(largest)), area: largestArea };
+  // The search runs on a thinned copy of the outline (see thinRing), which can
+  // shave off a deep notch; a candidate that lands outside the real outline
+  // falls back to a scanline point, which is inside by construction.
+  const full = largest.map((ring) => ring.map(toMercator));
+  let anchor = poleOfInaccessibility(largest.map((ring) => thinRing(ring).map(toMercator)));
+  if (signedDistance(anchor[0], anchor[1], full) <= 0) {
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const [, y] of full[0]) {
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    anchor = scanlineInteriorPoint(full, (minY + maxY) / 2) ?? anchor;
+  }
+  return { point: fromMercator(anchor), area: largestArea };
+}
+
+/**
+ * Approximate ground area of a polygon part, in square degrees scaled by the
+ * cosine of its latitude, so parts compare by real size: Web Mercator would
+ * rank Greenland above Brazil. Computed on the full outline.
+ */
+function groundArea(rings: Position[][]): number {
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  for (const [, lat] of rings[0]) {
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+  }
+  const cosLat = Math.cos(((minLat + maxLat) / 2) * DEG);
+  return Math.max(0, polygonArea(rings as Ring[]) * cosLat);
 }
 
 // The search scans every vertex for every cell it scores, so a very detailed
@@ -297,7 +324,16 @@ function thinRing(ring: Position[]): Position[] {
   return thinned;
 }
 
-const labelPointCache = new WeakMap<FeatureCollection, FeatureCollection>();
+/**
+ * Most polygon features one layer derives label points for. The search costs
+ * tens of microseconds per polygon on the main thread, so a 50k-parcel layer
+ * would stall its first draw for seconds; past this budget the layer keeps
+ * MapLibre's own placement, which suits such layers anyway (parcel-sized
+ * polygons rarely span more than one tile).
+ */
+export const MAX_POLYGON_LABEL_FEATURES = 10_000;
+
+const labelPointCache = new WeakMap<FeatureCollection, FeatureCollection | null>();
 
 /**
  * The collection with each polygon feature replaced by a single label point
@@ -306,11 +342,20 @@ const labelPointCache = new WeakMap<FeatureCollection, FeatureCollection>();
  * would not label them either.
  *
  * @param collection - The layer's features.
- * @returns A collection safe to feed a point-placed symbol layer.
+ * @returns A collection safe to feed a point-placed symbol layer, or null when
+ *   the layer has more than {@link MAX_POLYGON_LABEL_FEATURES} polygons.
  */
-export function polygonLabelPoints(collection: FeatureCollection): FeatureCollection {
-  const cached = labelPointCache.get(collection);
-  if (cached) return cached;
+export function polygonLabelPoints(collection: FeatureCollection): FeatureCollection | null {
+  if (labelPointCache.has(collection)) return labelPointCache.get(collection)!;
+  let polygonCount = 0;
+  for (const feature of collection.features) {
+    const type = feature.geometry?.type;
+    if (type === "Polygon" || type === "MultiPolygon") polygonCount += 1;
+  }
+  if (polygonCount > MAX_POLYGON_LABEL_FEATURES) {
+    labelPointCache.set(collection, null);
+    return null;
+  }
   const features: Feature[] = [];
   for (const feature of collection.features) {
     const type = feature.geometry?.type;

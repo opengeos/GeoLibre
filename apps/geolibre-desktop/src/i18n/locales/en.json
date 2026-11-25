@@ -9966,7 +9966,7 @@
       "lineGapHint": "Prints the text in a gap in its line, like contour values on a topographic map, so it reads without a halo. Set the halo width to 0 for a clean gap.",
       "lineGapPadding": "Gap padding (px)",
       "onePerPolygon": "One label per polygon",
-      "onePerPolygonHint": "Places a single label inside the largest part of each polygon, as QGIS does. Turn off to label every part and repeat the label across large polygons.",
+      "onePerPolygonHint": "Places a single label inside the largest part of each polygon, as QGIS does. Turn off to label every part and repeat the label across large polygons. Has no effect while a filter or label expression tests the geometry type.",
       "lineSpacing": "Label spacing (px)",
       "textSize": "Text size",
       "haloWidth": "Halo width",
