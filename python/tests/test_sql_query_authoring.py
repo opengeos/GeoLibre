@@ -68,6 +68,43 @@ def test_style_keys_do_not_bind_snapshot_source_parameters():
     assert "sourcePath" not in layer
 
 
+@pytest.mark.parametrize(
+    "feature",
+    [
+        None,
+        42,
+        "Feature",
+        [],
+        {},
+        {"type": "FeatureCollection", "features": []},
+        {"type": "Feature"},
+        {"type": "Feature", "geometry": None, "properties": "invalid"},
+        {"type": "Feature", "geometry": 42, "properties": {}},
+    ],
+)
+def test_snapshot_rejects_malformed_feature_entries(feature):
+    """Reject malformed result entries before returning a query layer.
+
+    Args:
+        feature: Invalid snapshot entry under test.
+    """
+    with pytest.raises(ValueError, match="GeoJSON Feature"):
+        project.sql_query_layer("Result", {"type": "FeatureCollection", "features": [feature]}, SQL)
+
+
+@pytest.mark.parametrize(
+    "features", [[], [{"type": "Feature", "geometry": None, "properties": None}]]
+)
+def test_snapshot_accepts_empty_results_and_null_geometry(features):
+    """Preserve valid empty and nonspatial query results.
+
+    Args:
+        features: Valid result entries under test.
+    """
+    data = {"type": "FeatureCollection", "features": features}
+    assert project.sql_query_layer("Result", data, SQL)["geojson"] == data
+
+
 @pytest.mark.parametrize("sql", [None, 42, True, [], "", " \n\t"])
 def test_invalid_sql_does_not_read_result(sql, monkeypatch):
     """Reject invalid query definitions before loading any result input.
@@ -105,6 +142,8 @@ def test_map_saves_a_refreshable_query_snapshot(tmp_path, monkeypatch):
     before = copy.deepcopy(model.project)
     with pytest.raises(ValueError, match="non-empty DuckDB SQL"):
         model.add_sql_query_layer(SNAPSHOT, " ")
+    with pytest.raises(ValueError, match="GeoJSON Feature"):
+        model.add_sql_query_layer({"type": "FeatureCollection", "features": [None]}, SQL)
     assert model.project == before
     destination = tmp_path / "query.geolibre.json"
     model.save_project(destination)
@@ -156,7 +195,12 @@ def test_mcp_query_snapshot_and_workspace_boundaries(tmp_path):
     assert query["style"]["circleRadius"] == 9
     assert "sourcePath" not in query
     before = destination.read_bytes()
-    for invalid in [{"sql": " "}, {"data": str(outside)}, {"style": {"sql": "SELECT 1"}}]:
+    for invalid in [
+        {"sql": " "},
+        {"data": str(outside)},
+        {"style": {"sql": "SELECT 1"}},
+        {"data": json.dumps({"type": "FeatureCollection", "features": [None]})},
+    ]:
         with pytest.raises(ToolError):
             asyncio.run(server.call_tool("add_sql_query_layer", {**arguments, **invalid}))
         assert destination.read_bytes() == before

@@ -1470,6 +1470,18 @@ def sql_query_layer(name: str, data: Any, sql: str, **style: Any) -> dict[str, A
     if not isinstance(sql, str) or not sql.strip():
         raise ValueError("sql must be a non-empty DuckDB SQL string")
     snapshot = copy.deepcopy(load_featurecollection(data))
+    for index, feature in enumerate(snapshot["features"]):
+        if (
+            not isinstance(feature, dict)
+            or feature.get("type") != "Feature"
+            or "geometry" not in feature
+            or "properties" not in feature
+            or (feature["geometry"] is not None and not isinstance(feature["geometry"], dict))
+            or (feature["properties"] is not None and not isinstance(feature["properties"], dict))
+        ):
+            raise ValueError(
+                f"Snapshot entry {index} must be a GeoJSON Feature with geometry and properties"
+            )
     layer = _layer_base(name, "geojson", **style)
     layer["source"] = {"type": "geojson"}
     layer["geojson"] = snapshot
