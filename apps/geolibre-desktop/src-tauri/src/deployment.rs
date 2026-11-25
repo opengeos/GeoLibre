@@ -2,7 +2,7 @@
 //! `deployment.json` policy, the legacy admin UI profile, and the policy-gated
 //! `read_allowed_file` command for external plugins.
 
-use crate::is_safe_absolute_path;
+use crate::local_files::is_safe_absolute_path;
 use crate::plugins_io::MAX_PLUGIN_ENTRY_BYTES;
 use serde_json::Value;
 use std::collections::HashSet;

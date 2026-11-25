@@ -925,14 +925,14 @@ impl TlsRequirement {
         let Some(path) = &self.root_cert else {
             return Ok(build_default_root_store(native_root_certs()));
         };
-        if !crate::is_safe_absolute_path(path) {
+        if !crate::local_files::is_safe_absolute_path(path) {
             return Err("sslrootcert must be an absolute local certificate file path".to_string());
         }
         let canonical = std::fs::canonicalize(path)
             .map_err(|_| "Could not read sslrootcert file".to_string())?;
         let resolved = canonical.to_string_lossy();
         let lower = resolved.to_ascii_lowercase();
-        if crate::is_unc_resolved_path(&resolved)
+        if crate::local_files::is_unc_resolved_path(&resolved)
             || !canonical.is_file()
             || !(lower.ends_with(".pem") || lower.ends_with(".crt") || lower.ends_with(".cer"))
         {

@@ -169,7 +169,7 @@ fn native_options_with_bbox(
     bbox: Option<[f64; 4]>,
 ) -> Result<NativeVectorOptions, String> {
     let bbox = validate_bbox(bbox)?;
-    if !crate::is_allowed_local_vector_path(&path) {
+    if !crate::local_files::is_allowed_local_vector_path(&path) {
         return Err(format!(
             "Refusing to read \"{path}\": not an absolute local vector file path"
         ));
@@ -189,12 +189,12 @@ fn native_options_with_bbox(
     let resolved = canonical
         .to_str()
         .ok_or_else(|| format!("Refusing to read \"{path}\": resolved path is not valid UTF-8"))?;
-    if crate::is_unc_resolved_path(resolved) {
+    if crate::local_files::is_unc_resolved_path(resolved) {
         return Err(format!(
             "Refusing to read \"{path}\": resolves to a network path"
         ));
     }
-    if !crate::has_allowed_local_vector_extension(resolved) {
+    if !crate::local_files::has_allowed_local_vector_extension(resolved) {
         return Err(format!(
             "Refusing to read \"{path}\": resolves to a non-vector file"
         ));
@@ -202,7 +202,7 @@ fn native_options_with_bbox(
     if !canonical.is_file() {
         return Err(format!("Refusing to read \"{path}\": not a regular file"));
     }
-    let canonical_path = crate::canonical_local_path_string(&canonical)
+    let canonical_path = crate::local_files::canonical_local_path_string(&canonical)
         .map_err(|error| format!("Refusing to read \"{path}\": {error}"))?;
     if has_duckdb_glob_metacharacter(&canonical_path) {
         return Err(format!(
@@ -1913,7 +1913,7 @@ mod tests {
             std::process::id()
         );
         std::fs::write(&path, []).expect("create literal bracket file");
-        let expected = crate::canonical_local_path_string(
+        let expected = crate::local_files::canonical_local_path_string(
             &std::fs::canonicalize(&path).expect("canonicalize literal bracket file"),
         )
         .expect("utf-8 canonical path");

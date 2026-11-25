@@ -1,10 +1,10 @@
 //! MBTiles metadata and tile commands, plus the SQLite and decompression
 //! helpers the offline package and `mbtiles://` protocol code share.
 
+#[cfg(test)]
+use crate::local_files::{is_safe_absolute_path, is_unc_resolved_path};
 use crate::local_media_protocol;
 use crate::offline_mbtiles;
-#[cfg(test)]
-use crate::{is_safe_absolute_path, is_unc_resolved_path};
 use flate2::read::{GzDecoder, ZlibDecoder};
 #[cfg(test)]
 use rusqlite::OpenFlags;
