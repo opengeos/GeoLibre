@@ -13,11 +13,20 @@ import {
   type NmeaConnection,
   type PairedBluetoothDevice,
 } from "../lib/nmea-source";
-import { nmeaErrorText } from "../components/layout/GpsBluetoothReceiverControls";
-import { useNtripCorrections } from "../components/layout/GpsNtripControls";
+import { nmeaErrorText } from "../lib/gps-nmea-errors";
+import { useNtripCorrections } from "./useNtripCorrections";
 import { logGpsFailure } from "../lib/gps-diagnostics";
 
 const NMEA_BAUD_STORAGE_KEY = "geolibre.gpsTracking.nmeaBaudRate";
+
+/** Release a receiver without leaking a rejected cleanup promise. */
+async function releaseConnection(connection: NmeaConnection | null): Promise<void> {
+  try {
+    await connection?.close();
+  } catch (error) {
+    logGpsFailure("GPS: the NMEA receiver did not close cleanly", error, "warning");
+  }
+}
 
 /**
  * Where fixes come from: the device's own Geolocation API, or an external NMEA
@@ -51,7 +60,7 @@ interface GpsPositionSourceOptions {
 /** Own the device watch, receiver connection, and correction session independently of dialog visibility. */
 export function useGpsPositionSource({
   onFix: handleFix,
-  onError: setError,
+  onError: reportError,
   onActivity,
 }: GpsPositionSourceOptions) {
   const { t } = useTranslation();
@@ -73,7 +82,7 @@ export function useGpsPositionSource({
   /** Whether the connected receiver's transport can take corrections. */
   const [nmeaHasCorrections, setNmeaHasCorrections] = useState(false);
   /**
-   * Bumped whenever an in-flight connect is superseded — by another connect, a
+   * Bumped whenever an in-flight connect is superseded by another connect, a
    * source change, stopping, or unmount. A Bluetooth `gatt.connect()` can stay
    * pending for seconds, and nothing stops the user abandoning it meanwhile, so
    * a late success must close itself rather than silently reactivating a
@@ -82,7 +91,7 @@ export function useGpsPositionSource({
   const connectGenerationRef = useRef(0);
 
   // The watchPosition subscription follows `tracking`, and only runs for the
-  // device source — an NMEA receiver drives handleFix from its own stream
+  // device source. An NMEA receiver drives handleFix from its own stream
   // instead. On Tauri mobile this routes through the native geolocation plugin
   // (which requests the OS location permission first); elsewhere it wraps
   // navigator.geolocation. Starting a native watch is async, so the effect
@@ -99,11 +108,11 @@ export function useGpsPositionSource({
       (err) => {
         if (cancelled) return;
         if (err.permissionDenied) {
-          setError(t("gps.permissionDenied"));
+          reportError(t("gps.permissionDenied"));
           setTracking(false);
         } else {
           // Transient (no signal / timeout): keep watching, tell the user.
-          setError(t("gps.waitingForFix"));
+          reportError(t("gps.waitingForFix"));
         }
       },
       { enableHighAccuracy: true, maximumAge: 0 },
@@ -117,14 +126,14 @@ export function useGpsPositionSource({
         // A denied permission is the user's choice; anything else is a real
         // failure hidden behind the generic "no geolocation" message.
         if (!err?.permissionDenied) logGpsFailure("GPS: starting the position watch failed", err);
-        setError(t(err?.permissionDenied ? "gps.permissionDenied" : "gps.noGeolocation"));
+        reportError(t(err?.permissionDenied ? "gps.permissionDenied" : "gps.noGeolocation"));
         setTracking(false);
       });
     return () => {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [tracking, source, handleFix, setError, t]);
+  }, [tracking, source, handleFix, reportError, t]);
 
   /**
    * Release the live connection and clear its readout, leaving the generation
@@ -139,15 +148,7 @@ export function useGpsPositionSource({
     // Closing the receiver ends its correction session natively.
     resetNtrip();
     setNmeaHasCorrections(false);
-    try {
-      await conn?.close();
-    } catch (error) {
-      // A device that will not release cleanly (unplugged mid-close, GATT
-      // already gone) must not surface as an unhandled rejection from the
-      // `void disconnectNmea()` call sites. The readout is cleared regardless;
-      // keep a warning so a receiver that never releases can be diagnosed.
-      logGpsFailure("GPS: the NMEA receiver did not close cleanly", error, "warning");
-    }
+    await releaseConnection(conn);
   }, [resetNtrip]);
 
   /** Abandon any in-flight connect as well as closing the live connection. */
@@ -169,7 +170,7 @@ export function useGpsPositionSource({
    */
   const connectNmea = useCallback(
     async (transport: NmeaTransport, device?: PairedBluetoothDevice) => {
-      setError(null);
+      reportError(null);
       onActivity();
       // Claim a generation synchronously, before the first await: closing the
       // previous connection suspends, and two invocations that both captured
@@ -177,7 +178,7 @@ export function useGpsPositionSource({
       const generation = ++connectGenerationRef.current;
       const isStale = () => generation !== connectGenerationRef.current;
       // Show the indicator before the first await, so there is no window in
-      // which an attempt is in flight but the buttons look idle — closing a
+      // which an attempt is in flight but the buttons look idle. Closing a
       // live connection below can take real time. closeNmea deliberately does
       // not clear it; only the abandon path (disconnectNmea) does.
       setConnecting(transport);
@@ -198,7 +199,7 @@ export function useGpsPositionSource({
           // leaving a stale position on the map.
           onError: (err: NmeaError) => {
             if (isStale()) return;
-            setError(nmeaErrorText(err, t));
+            reportError(nmeaErrorText(err, t));
             setTracking(false);
             void disconnectNmea();
           },
@@ -214,7 +215,7 @@ export function useGpsPositionSource({
         if (isStale()) {
           // The user moved on while the device was still opening: release it
           // rather than resurrecting a session they already abandoned.
-          await conn.close();
+          await releaseConnection(conn);
           return;
         }
         nmeaConnRef.current = conn;
@@ -228,9 +229,9 @@ export function useGpsPositionSource({
       } catch (err) {
         if (isStale()) return;
         if (err instanceof NmeaError) {
-          if (!err.cancelled) setError(nmeaErrorText(err, t));
+          if (!err.cancelled) reportError(nmeaErrorText(err, t));
         } else {
-          setError(err instanceof Error ? err.message : t("gps.nmeaConnectFailed"));
+          reportError(err instanceof Error ? err.message : t("gps.nmeaConnectFailed"));
         }
       } finally {
         // A superseded attempt must not clear the newer attempt's indicator;
@@ -239,7 +240,7 @@ export function useGpsPositionSource({
         if (!isStale()) setConnecting(null);
       }
     },
-    [baudRate, closeNmea, disconnectNmea, handleFix, resumeNtripFor, t, setError, onActivity],
+    [baudRate, closeNmea, disconnectNmea, handleFix, resumeNtripFor, t, reportError, onActivity],
   );
 
   // Poll the assembler's counters while connected so the readout shows the
@@ -268,15 +269,15 @@ export function useGpsPositionSource({
       setSource(next);
       setTracking(false);
       void disconnectNmea();
-      setError(null);
+      reportError(null);
       onActivity();
     },
-    [source, disconnectNmea, setError, onActivity],
+    [source, disconnectNmea, reportError, onActivity],
   );
 
   /**
    * Whether anything can actually feed {@link handleFix} right now. The device
-   * watch starts on demand, but an NMEA receiver has to be connected first —
+   * watch starts on demand, but an NMEA receiver has to be connected first;
    * otherwise starting a recording produces a session that silently logs
    * nothing, reports no error, and hides the "connect a receiver" hint.
    */
@@ -284,10 +285,10 @@ export function useGpsPositionSource({
 
   const handleStart = useCallback(() => {
     if (!canTrack) return;
-    setError(null);
+    reportError(null);
     onActivity();
     setTracking(true);
-  }, [canTrack, setError, onActivity]);
+  }, [canTrack, reportError, onActivity]);
 
   const handleStop = useCallback(() => {
     setTracking(false);
@@ -299,11 +300,7 @@ export function useGpsPositionSource({
       connectGenerationRef.current += 1;
       const connection = nmeaConnRef.current;
       nmeaConnRef.current = null;
-      void connection
-        ?.close()
-        .catch((error: unknown) =>
-          logGpsFailure("GPS: the NMEA receiver did not close cleanly", error, "warning"),
-        );
+      void releaseConnection(connection);
     },
     [],
   );
