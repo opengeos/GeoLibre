@@ -118,7 +118,7 @@ mod active {
         #[cfg(target_os = "windows")]
         {
             if let Ok(exe) = std::env::current_exe() {
-                return crate::is_msix_install(&exe);
+                return crate::deep_links::is_msix_install(&exe);
             }
         }
         false

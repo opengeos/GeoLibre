@@ -196,7 +196,7 @@ pub(crate) async fn inspect_native_mbtiles_source(
     state: State<'_, NativeOfflinePackages>,
     job_id: String,
     path: String,
-) -> Result<crate::MbtilesMetadata, String> {
+) -> Result<crate::mbtiles::MbtilesMetadata, String> {
     let job = state.extractions.claim(&job_id)?;
     tauri::async_runtime::spawn_blocking(move || {
         let _job = job;
@@ -204,8 +204,11 @@ pub(crate) async fn inspect_native_mbtiles_source(
         let source = offline_mbtiles::open_mbtiles_source(&path, _job.cancelled.clone())?;
         source.execute_batch("BEGIN").map_err(|e| e.to_string())?;
         let metadata = offline_mbtiles::source_metadata(&source)?;
-        let info =
-            crate::read_mbtiles_metadata_from_rows(&path.to_string_lossy(), &source, &metadata)?;
+        let info = crate::mbtiles::read_mbtiles_metadata_from_rows(
+            &path.to_string_lossy(),
+            &source,
+            &metadata,
+        )?;
         if _job.cancelled.load(Ordering::Relaxed) {
             return Err("MBTiles inspection canceled".into());
         }
@@ -253,8 +256,11 @@ pub(crate) async fn extract_native_mbtiles_package(
         // Keep inspection and the copy on the same read snapshot.
         source.execute_batch("BEGIN").map_err(|e| e.to_string())?;
         let metadata = offline_mbtiles::source_metadata(&source)?;
-        let info =
-            crate::read_mbtiles_metadata_from_rows(&path.to_string_lossy(), &source, &metadata)?;
+        let info = crate::mbtiles::read_mbtiles_metadata_from_rows(
+            &path.to_string_lossy(),
+            &source,
+            &metadata,
+        )?;
         offline_mbtiles::validate_source_style(
             &info.tile_type,
             &info.source_layers,

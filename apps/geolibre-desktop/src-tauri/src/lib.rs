@@ -2,11 +2,14 @@ mod app_error;
 mod arcgis_http;
 mod aws_credentials;
 mod aws_sts;
+mod deep_links;
 mod desktop_updater;
 mod fs_util;
 mod http_client;
 mod in_flight;
+mod linux_webkit;
 mod local_media_protocol;
+mod mbtiles;
 mod native_document_copies;
 mod offline_extraction_jobs;
 mod offline_mbtiles;
@@ -16,6 +19,8 @@ mod plugin_http;
 #[cfg(not(feature = "mas"))]
 mod process_lifetime;
 mod remote_download;
+#[cfg(test)]
+mod test_support;
 #[cfg(not(feature = "mas"))]
 mod uv_bootstrap;
 // Earth Engine sign-in uses Google's OAuth loopback-redirect flow, which binds
@@ -153,10 +158,8 @@ mod secure_store;
 #[cfg(not(any(feature = "mas", target_os = "ios")))]
 use earth_engine_oauth::EarthEngineOAuthState;
 use earth_engine_oauth::{poll_earth_engine_oauth, start_earth_engine_oauth};
-use flate2::read::{GzDecoder, ZlibDecoder};
-#[cfg(test)]
-use rusqlite::OpenFlags;
-use rusqlite::{Connection, OptionalExtension};
+#[cfg(not(feature = "mas"))]
+use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashSet, VecDeque};
@@ -522,7 +525,7 @@ impl Drop for JupyterProcess {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    configure_linux_webkit();
+    linux_webkit::configure_linux_webkit();
 
     let pending_project_paths = PendingProjectPaths(Mutex::new(VecDeque::from(
         project_paths_from_args(env::args_os().skip(1), &current_working_directory()),
@@ -724,8 +727,8 @@ pub fn run() {
             read_project_file,
             read_shapefile_siblings,
             resolve_url_redirect,
-            read_mbtiles_metadata,
-            read_mbtiles_tile,
+            mbtiles::read_mbtiles_metadata,
+            mbtiles::read_mbtiles_tile,
             start_martin_server,
             stop_martin_server,
             start_geolibre_sidecar,
@@ -770,7 +773,7 @@ pub fn run() {
             // shells out to update-desktop-database and xdg-mime, and window
             // creation must not wait on them.
             #[cfg(target_os = "linux")]
-            spawn_deep_link_registration(app);
+            deep_links::spawn_deep_link_registration(app);
             // The portable zip has no installer step, so nothing registers the
             // OAuth callback scheme and a sign-in link from the browser never
             // reaches the app (#2667). `build-portable.ps1` drops a marker next
@@ -782,8 +785,8 @@ pub fn run() {
             // alone, and MSIX declares it in the package manifest and
             // virtualizes HKCU writes.
             #[cfg(windows)]
-            if windows_deep_link_needs_registration() {
-                spawn_deep_link_registration(app);
+            if deep_links::windows_deep_link_needs_registration() {
+                deep_links::spawn_deep_link_registration(app);
             }
             Ok(())
         })
@@ -838,110 +841,8 @@ fn take_and_drop<T>(slot: &Mutex<Option<T>>) {
     }
 }
 
-#[cfg(any(target_os = "linux", windows))]
-fn spawn_deep_link_registration(app: &tauri::App) {
-    use tauri_plugin_deep_link::DeepLinkExt;
-    let handle = app.handle().clone();
-    std::thread::spawn(move || {
-        if let Err(error) = handle.deep_link().register_all() {
-            eprintln!("Deep link: could not register URL schemes ({error}).");
-        }
-    });
-}
-
 fn current_working_directory() -> PathBuf {
     env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-}
-
-/// Marker file `packaging/portable/build-portable.ps1` writes next to the exe.
-#[cfg(any(windows, test))]
-const PORTABLE_MARKER_FILE: &str = "portable.marker";
-
-/// URL scheme the share-server OAuth callback uses (`plugins > deep-link` in
-/// `tauri.conf.json`).
-#[cfg(windows)]
-const DEEP_LINK_SCHEME: &str = "org.geolibre.desktop";
-
-/// Whether this process should claim the OAuth callback scheme at startup.
-///
-/// The portable build always does. An MSIX install never does. Any other
-/// build (an NSIS/MSI install, or the bare exe from the release page) does
-/// only when the scheme has no live handler, so a bare exe never takes the
-/// scheme away from an installed copy.
-#[cfg(windows)]
-fn windows_deep_link_needs_registration() -> bool {
-    let Ok(exe) = env::current_exe() else {
-        return false;
-    };
-    if exe_has_portable_marker(&exe) {
-        return true;
-    }
-    if is_msix_install(&exe) {
-        return false;
-    }
-    // Without a `URL Protocol` value Windows never launches the key's command
-    // for a URI, so such a key counts as no handler at all.
-    let command = windows_registry::CLASSES_ROOT
-        .open(DEEP_LINK_SCHEME)
-        .ok()
-        .filter(|scheme| scheme.get_string("URL Protocol").is_ok())
-        .and_then(|scheme| {
-            scheme
-                .open("shell\\open\\command")
-                .and_then(|key| key.get_string(""))
-                .ok()
-        });
-    scheme_handler_missing(command.as_deref(), Path::is_file)
-}
-
-/// Whether a portable marker file sits next to `exe`. Kept free of
-/// `current_exe()` so the check is testable on every platform.
-#[cfg(any(windows, test))]
-fn exe_has_portable_marker(exe: &Path) -> bool {
-    exe.parent()
-        .is_some_and(|dir| dir.join(PORTABLE_MARKER_FILE).is_file())
-}
-
-/// Whether `exe` runs from an MSIX package, which Windows always installs
-/// under `...\WindowsApps\`.
-#[cfg(any(windows, test))]
-fn is_msix_install(exe: &Path) -> bool {
-    exe.components().any(|component| {
-        component
-            .as_os_str()
-            .to_string_lossy()
-            .eq_ignore_ascii_case("WindowsApps")
-    })
-}
-
-/// Whether a scheme's registered `shell\open\command` fails to launch an
-/// existing program: nothing registered, an unparsable command, or a program
-/// that was moved or deleted (such as a bare exe run once from Downloads).
-/// So another handler is never overwritten on a guess, a program path with `%`
-/// (an unexpanded `REG_EXPAND_SZ` variable) counts as live, and so does an
-/// unquoted command: its path may contain spaces, and the handlers Tauri, NSIS
-/// and MSI write are always quoted, so an unquoted one belongs to another app.
-#[cfg(any(windows, test))]
-fn scheme_handler_missing(command: Option<&str>, exists: impl Fn(&Path) -> bool) -> bool {
-    let Some(command) = command.map(str::trim).filter(|command| !command.is_empty()) else {
-        return true;
-    };
-    if !command.starts_with('"') {
-        return false;
-    }
-    match handler_program(command) {
-        Some(program) => !program.contains('%') && !exists(Path::new(program)),
-        None => true,
-    }
-}
-
-/// The program path of a quoted `shell\open\command` value
-/// (`"C:\Program Files\App\app.exe" "%1"`), or `None` when the value is
-/// unquoted or the quotes are empty.
-#[cfg(any(windows, test))]
-fn handler_program(command: &str) -> Option<&str> {
-    let program = command.trim_start().strip_prefix('"')?.split('"').next()?;
-    (!program.is_empty()).then_some(program)
 }
 
 fn has_geolibre_project_extension(path: &Path) -> bool {
@@ -5762,281 +5663,6 @@ fn wait_for_martin_health(
     ))
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct MbtilesMetadata {
-    name: String,
-    format: String,
-    tile_type: String,
-    source_layers: Vec<String>,
-    source_layer_fields: std::collections::BTreeMap<String, Vec<String>>,
-    min_zoom: Option<i64>,
-    max_zoom: Option<i64>,
-    bounds: Option<[f64; 4]>,
-    center: Option<[f64; 3]>,
-    scheme: String,
-}
-
-#[tauri::command]
-async fn read_mbtiles_metadata(
-    app: tauri::AppHandle,
-    path: String,
-) -> Result<MbtilesMetadata, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let pools = app.state::<local_media_protocol::LocalMediaPools>();
-        let pooled = pools.mbtiles.get_or_open(&path)?;
-        let connection = pooled
-            .connection
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        read_mbtiles_metadata_from_connection(&path, &connection)
-    })
-    .await
-    .map_err(|error| format!("Could not join MBTiles metadata task: {error}"))?
-}
-
-fn read_mbtiles_metadata_from_connection(
-    path: &str,
-    connection: &Connection,
-) -> Result<MbtilesMetadata, String> {
-    let metadata = read_metadata_rows(connection)?;
-    read_mbtiles_metadata_from_rows(path, connection, &metadata)
-}
-
-fn read_mbtiles_metadata_from_rows(
-    path: &str,
-    connection: &Connection,
-    metadata: &std::collections::BTreeMap<String, String>,
-) -> Result<MbtilesMetadata, String> {
-    let metadata_min_zoom = metadata
-        .get("minzoom")
-        .and_then(|value| value.parse::<i64>().ok());
-    let metadata_max_zoom = metadata
-        .get("maxzoom")
-        .and_then(|value| value.parse::<i64>().ok());
-    let (tile_min_zoom, tile_max_zoom) = read_mbtiles_zoom_range(
-        connection,
-        metadata_min_zoom.is_none(),
-        metadata_max_zoom.is_none(),
-    )?;
-    let fallback_name = Path::new(path)
-        .file_stem()
-        .and_then(|name| name.to_str())
-        .unwrap_or("MBTiles Layer")
-        .to_string();
-    let format = metadata
-        .get("format")
-        .map(|value| value.to_ascii_lowercase())
-        .unwrap_or_else(|| "pbf".to_string());
-    let tile_type = match format.as_str() {
-        "pbf" | "mvt" | "protobuf" => "vector",
-        _ => "raster",
-    }
-    .to_string();
-
-    Ok(MbtilesMetadata {
-        name: metadata
-            .get("name")
-            .filter(|value| !value.trim().is_empty())
-            .cloned()
-            .unwrap_or(fallback_name),
-        format,
-        tile_type,
-        source_layers: read_vector_source_layers(metadata.get("json")),
-        source_layer_fields: offline_mbtiles::vector_source_layer_fields(
-            metadata.get("json").map(String::as_str),
-        ),
-        min_zoom: metadata_min_zoom.or(tile_min_zoom),
-        max_zoom: metadata_max_zoom.or(tile_max_zoom),
-        bounds: metadata.get("bounds").and_then(|value| parse_bounds(value)),
-        center: metadata.get("center").and_then(|value| parse_center(value)),
-        scheme: metadata
-            .get("scheme")
-            .map(|value| value.to_ascii_lowercase())
-            .unwrap_or_else(|| "tms".to_string()),
-    })
-}
-
-fn read_mbtiles_zoom_range(
-    connection: &Connection,
-    need_min: bool,
-    need_max: bool,
-) -> Result<(Option<i64>, Option<i64>), String> {
-    let read = |aggregate: &str| {
-        connection
-            .query_row(
-                &format!("SELECT {aggregate}(zoom_level) FROM tiles"),
-                [],
-                |row| row.get(0),
-            )
-            .map_err(|error| format!("Could not read MBTiles zoom range: {error}"))
-    };
-    Ok((
-        if need_min { read("MIN")? } else { None },
-        if need_max { read("MAX")? } else { None },
-    ))
-}
-
-pub(crate) const MAX_MBTILES_ZOOM: u32 = 30;
-const MAX_DECOMPRESSED_TILE_BYTES: u64 = 32 * 1024 * 1024;
-
-#[tauri::command]
-async fn read_mbtiles_tile(
-    app: tauri::AppHandle,
-    path: String,
-    z: u32,
-    x: u32,
-    y: u32,
-) -> Result<tauri::ipc::Response, String> {
-    let bytes = tauri::async_runtime::spawn_blocking(move || {
-        let pools = app.state::<local_media_protocol::LocalMediaPools>();
-        pools.mbtiles.read_tile(&path, z, x, y)
-    })
-    .await
-    .map_err(|error| format!("Could not join MBTiles tile task: {error}"))??;
-    Ok(tauri::ipc::Response::new(bytes))
-}
-
-#[cfg(test)]
-fn read_mbtiles_tile_blocking(path: String, z: u32, x: u32, y: u32) -> Result<Vec<u8>, String> {
-    local_media_protocol::MbtilesConnectionPool::default().read_tile(&path, z, x, y)
-}
-
-#[cfg(test)]
-fn open_mbtiles(path: &str) -> Result<Connection, String> {
-    if !is_safe_absolute_path(path) || !path.to_ascii_lowercase().ends_with(".mbtiles") {
-        return Err(format!(
-            "Refusing to open \"{path}\": not an absolute local MBTiles file path"
-        ));
-    }
-    let canonical = fs::canonicalize(path)
-        .map_err(|_| "The selected MBTiles file does not exist".to_string())?;
-    let resolved = canonical.to_string_lossy();
-    if is_unc_resolved_path(&resolved) {
-        return Err(format!(
-            "Refusing to open \"{path}\": resolves to a network path"
-        ));
-    }
-    if !resolved.to_ascii_lowercase().ends_with(".mbtiles") || !canonical.is_file() {
-        return Err(format!(
-            "Refusing to open \"{path}\": resolves to a non-MBTiles file"
-        ));
-    }
-
-    Connection::open_with_flags(&canonical, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|error| format!("Could not open MBTiles file: {error}"))
-}
-
-fn read_metadata_rows(
-    connection: &Connection,
-) -> Result<std::collections::BTreeMap<String, String>, String> {
-    let mut statement = connection
-        .prepare("SELECT name, value FROM metadata")
-        .map_err(|error| format!("Could not read MBTiles metadata: {error}"))?;
-    let rows = statement
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })
-        .map_err(|error| format!("Could not query MBTiles metadata: {error}"))?;
-
-    let mut metadata = std::collections::BTreeMap::new();
-    for row in rows {
-        let (name, value) =
-            row.map_err(|error| format!("Could not parse MBTiles metadata: {error}"))?;
-        metadata.insert(name.to_ascii_lowercase(), value);
-    }
-    Ok(metadata)
-}
-
-pub(crate) fn read_metadata_value(
-    connection: &Connection,
-    name: &str,
-) -> Result<Option<String>, String> {
-    connection
-        .query_row(
-            "SELECT value FROM metadata WHERE lower(name) = lower(?1)",
-            [name],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(|error| format!("Could not read MBTiles metadata: {error}"))
-}
-
-fn read_vector_source_layers(json: Option<&String>) -> Vec<String> {
-    let Some(json) = json else {
-        return Vec::new();
-    };
-    let Ok(value) = serde_json::from_str::<Value>(json) else {
-        return Vec::new();
-    };
-    value
-        .get("vector_layers")
-        .and_then(Value::as_array)
-        .map(|layers| {
-            layers
-                .iter()
-                .filter_map(|layer| layer.get("id").and_then(Value::as_str))
-                .map(ToString::to_string)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn parse_bounds(value: &str) -> Option<[f64; 4]> {
-    let values = parse_number_list(value);
-    if values.len() != 4 {
-        return None;
-    }
-    Some([values[0], values[1], values[2], values[3]])
-}
-
-fn parse_center(value: &str) -> Option<[f64; 3]> {
-    let values = parse_number_list(value);
-    if values.len() < 2 {
-        return None;
-    }
-    Some([values[0], values[1], values.get(2).copied().unwrap_or(0.0)])
-}
-
-fn parse_number_list(value: &str) -> Vec<f64> {
-    value
-        .split(',')
-        .filter_map(|part| part.trim().parse::<f64>().ok())
-        .collect()
-}
-
-pub(crate) fn decompress_tile_data(data: Vec<u8>) -> Result<Vec<u8>, String> {
-    if data.starts_with(&[0x1f, 0x8b]) {
-        let decoder = GzDecoder::new(data.as_slice());
-        let mut decoded = Vec::new();
-        decoder
-            .take(MAX_DECOMPRESSED_TILE_BYTES + 1)
-            .read_to_end(&mut decoded)
-            .map_err(|error| format!("Could not decompress gzip tile: {error}"))?;
-        if decoded.len() as u64 > MAX_DECOMPRESSED_TILE_BYTES {
-            return Err("Decompressed gzip tile exceeds the size limit".to_string());
-        }
-        return Ok(decoded);
-    }
-
-    if data.len() > 2 && data[0] == 0x78 {
-        let decoder = ZlibDecoder::new(data.as_slice());
-        let mut decoded = Vec::new();
-        if decoder
-            .take(MAX_DECOMPRESSED_TILE_BYTES + 1)
-            .read_to_end(&mut decoded)
-            .is_ok()
-        {
-            if decoded.len() as u64 > MAX_DECOMPRESSED_TILE_BYTES {
-                return Err("Decompressed zlib tile exceeds the size limit".to_string());
-            }
-            return Ok(decoded);
-        }
-    }
-
-    Ok(data)
-}
-
 fn create_main_window(app: &mut tauri::App) -> tauri::Result<()> {
     let window_config = app
         .config()
@@ -6103,203 +5729,6 @@ fn create_oauth_popup_window(
     tauri::webview::NewWindowResponse::Create { window }
 }
 
-#[cfg(target_os = "linux")]
-fn nvidia_is_primary_gpu(drm_root: &Path) -> bool {
-    let Ok(entries) = fs::read_dir(drm_root) else {
-        return false;
-    };
-    entries.filter_map(Result::ok).any(|entry| {
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if !name.starts_with("card") || name.contains('-') {
-            return false;
-        }
-        let device = entry.path().join("device");
-        fs::read_to_string(device.join("vendor"))
-            .is_ok_and(|vendor| vendor.trim().eq_ignore_ascii_case("0x10de"))
-            && fs::read_to_string(device.join("boot_vga"))
-                .is_ok_and(|boot_vga| boot_vga.trim() == "1")
-            && fs::read_link(device.join("driver")).is_ok_and(|driver| {
-                driver
-                    .file_name()
-                    .is_some_and(|name| name.eq_ignore_ascii_case("nvidia"))
-            })
-    })
-}
-
-#[cfg(target_os = "linux")]
-fn linux_uses_nvidia_renderer(
-    drm_root: &Path,
-    prime_offload: Option<&std::ffi::OsStr>,
-    glx_vendor: Option<&std::ffi::OsStr>,
-) -> bool {
-    prime_offload.is_some_and(|value| value != "0")
-        || glx_vendor.is_some_and(|value| value.eq_ignore_ascii_case("nvidia"))
-        || nvidia_is_primary_gpu(drm_root)
-}
-
-#[cfg(target_os = "linux")]
-#[derive(Debug, PartialEq, Eq)]
-enum LinuxDmabufWorkaround {
-    Disable,
-    ForceShm,
-}
-
-#[cfg(target_os = "linux")]
-fn linux_dmabuf_workaround(
-    webkit_version: (u32, u32),
-    uses_nvidia: bool,
-) -> Option<LinuxDmabufWorkaround> {
-    if webkit_version < (2, 48) || (uses_nvidia && webkit_version < (2, 52)) {
-        Some(LinuxDmabufWorkaround::Disable)
-    } else if uses_nvidia {
-        Some(LinuxDmabufWorkaround::ForceShm)
-    } else {
-        None
-    }
-}
-
-/// JavaScriptCore options that keep WebKitGTK's WebAssembly tier-up off its
-/// OSR-entry path (see `configure_linux_webkit`). Both are needed: the first
-/// covers OSR entry out of the WebAssembly interpreter, the second the loop
-/// tier-up checks the baseline (BBQ) JIT emits. Leaving either on still
-/// reaches the trampoline.
-#[cfg(target_os = "linux")]
-const WASM_OSR_ENTRY_JSC_OPTIONS: [&str; 2] = ["JSC_useWasmOSR", "JSC_useBBQTierUpChecks"];
-
-/// Whether this CPU implements AVX. The trampoline behind GeoLibre#2087 is
-/// x86-only, so every other architecture answers yes and skips the workaround.
-#[cfg(all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")))]
-fn cpu_supports_avx() -> bool {
-    std::arch::is_x86_feature_detected!("avx")
-}
-
-#[cfg(all(
-    target_os = "linux",
-    not(any(target_arch = "x86", target_arch = "x86_64"))
-))]
-fn cpu_supports_avx() -> bool {
-    true
-}
-
-/// Whether an explicit value for one of `WASM_OSR_ENTRY_JSC_OPTIONS` leaves it
-/// off. JavaScriptCore reads `false`, `no` (either in any case) and `0` as off
-/// and `true`, `yes` and `1` as on, and keeps the option's default, which for
-/// both of these is on, for anything it cannot parse. Answer the way it does
-/// rather than treating "set" as "off".
-#[cfg(target_os = "linux")]
-fn jsc_option_is_off(value: &std::ffi::OsStr) -> bool {
-    value.to_str().is_some_and(|value| {
-        value.eq_ignore_ascii_case("false") || value.eq_ignore_ascii_case("no") || value == "0"
-    })
-}
-
-/// Whether `WASM_OSR_ENTRY_JSC_OPTIONS` has to be pinned off, given whether the
-/// CPU supports AVX and whether either option is explicitly *on*. The two are
-/// one decision, not two: leaving half the pair applied costs WebAssembly
-/// performance without keeping the renderer alive. So an option somebody has
-/// already turned off is fine to build on (the other half still gets applied),
-/// while an option somebody has turned on is the escape hatch and takes the
-/// whole workaround out of GeoLibre's hands, as does pinning `JSC_useBBQJIT`
-/// instead.
-#[cfg(target_os = "linux")]
-fn linux_needs_wasm_osr_workaround(cpu_supports_avx: bool, opted_out: bool) -> bool {
-    !cpu_supports_avx && !opted_out
-}
-
-#[cfg(target_os = "linux")]
-fn configure_linux_webkit() {
-    // WebKitGTK's DMABUF renderer could fail to allocate GBM buffers on older
-    // graphics stacks, leaving the Tauri window blank, so it used to be
-    // disabled here unconditionally. Disabling it also forces a slow readback
-    // compositing path that visibly drops MapLibre pan/zoom FPS, and the
-    // allocation bugs are fixed on most current graphics stacks. Nvidia's GBM
-    // allocation still fails on current drivers, but WebKitGTK 2.52 added a
-    // modern shared-memory fallback that avoids both the blank window and the
-    // slow legacy renderer selected by WEBKIT_DISABLE_DMABUF_RENDERER. Keep the
-    // legacy escape hatch for older WebKitGTK. An explicit user/distributor
-    // value always wins.
-    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-        let webkit_version = unsafe {
-            (
-                webkit2gtk_sys::webkit_get_major_version(),
-                webkit2gtk_sys::webkit_get_minor_version(),
-            )
-        };
-        let prime_offload = std::env::var_os("__NV_PRIME_RENDER_OFFLOAD");
-        let glx_vendor = std::env::var_os("__GLX_VENDOR_LIBRARY_NAME");
-        let uses_nvidia = webkit_version >= (2, 48)
-            && linux_uses_nvidia_renderer(
-                Path::new("/sys/class/drm"),
-                prime_offload.as_deref(),
-                glx_vendor.as_deref(),
-            );
-        match linux_dmabuf_workaround(webkit_version, uses_nvidia) {
-            Some(LinuxDmabufWorkaround::Disable) => {
-                std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-            }
-            Some(LinuxDmabufWorkaround::ForceShm) => {
-                if std::env::var_os("WEBKIT_DMABUF_RENDERER_FORCE_SHM").is_none() {
-                    std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "0");
-                    std::env::set_var("WEBKIT_DMABUF_RENDERER_FORCE_SHM", "1");
-                }
-            }
-            None => {}
-        }
-    }
-    // WebAssembly tier-up kills the renderer on x86-64 CPUs without AVX
-    // (GeoLibre#2087). When a loop inside a WebAssembly function gets hot,
-    // JavaScriptCore performs OSR entry into a JIT tier, and that path runs
-    // `ctiMasmProbeTrampoline`, which spills xmm0-xmm15 with VEX-encoded
-    // `vmovaps` and no runtime AVX check. On a CPU without AVX the first of
-    // those instructions raises SIGILL, the WebKitWebProcess dies, and the
-    // window stays blank forever with nothing shown to the user. It is an
-    // upstream WebKit bug that no GeoLibre code can avoid emitting, and it is
-    // reached in normal use because the app runs WebAssembly (DuckDB-WASM,
-    // Whitebox) in a worker. All we can do is keep JavaScriptCore off the OSR
-    // entry path. WebAssembly still gets baseline-compiled when a function is
-    // called repeatedly, so the cost is bounded (a few times slower on repeated
-    // calls; a single long-running call with a hot loop stays interpreted)
-    // instead of the app being unusable. Verified against WebKitGTK 2.52.6 by
-    // breakpointing the trampoline in the web process: with both options off it
-    // is never entered, with either one on it still is.
-    let cpu_supports_avx = cpu_supports_avx();
-    let kept_on = WASM_OSR_ENTRY_JSC_OPTIONS
-        .into_iter()
-        .find(|option| std::env::var_os(option).is_some_and(|value| !jsc_option_is_off(&value)));
-    if linux_needs_wasm_osr_workaround(cpu_supports_avx, kept_on.is_some()) {
-        for option in WASM_OSR_ENTRY_JSC_OPTIONS {
-            if std::env::var_os(option).is_none() {
-                std::env::set_var(option, "false");
-            }
-        }
-        eprintln!(
-            "GeoLibre: this CPU has no AVX, so WebAssembly tier-up would crash the WebKit \
-             renderer (see GeoLibre issue 2087). {} are off to keep the app running; \
-             WebAssembly-heavy work will be slower.",
-            WASM_OSR_ENTRY_JSC_OPTIONS.join(" and ")
-        );
-    } else if !cpu_supports_avx {
-        if let Some(option) = kept_on {
-            eprintln!(
-                "GeoLibre: this CPU has no AVX, but {option} is set to keep WebAssembly tier-up \
-                 on, so the workaround for GeoLibre issue 2087 was left alone. The renderer can \
-                 still die with SIGILL unless {} are both off.",
-                WASM_OSR_ENTRY_JSC_OPTIONS.join(" and ")
-            );
-        }
-    }
-
-    // Prefer portal-backed native dialogs on Linux. This avoids GTK/GIO file
-    // metadata warnings that can appear around file and folder pickers.
-    if std::env::var_os("GTK_USE_PORTAL").is_none() {
-        std::env::set_var("GTK_USE_PORTAL", "1");
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
-fn configure_linux_webkit() {}
-
 #[cfg(test)]
 mod tests {
     use super::{
@@ -6308,16 +5737,10 @@ mod tests {
         is_allowed_project_path, is_disallowed_ip, is_geolibre_sidecar_command_line,
         is_image_picker_path, is_persisted_image_file, is_safe_absolute_path, is_ssrf_guard_error,
         is_unc_resolved_path, path_is_under, project_path_string, project_paths_from_args,
-        read_mbtiles_zoom_range, resolve_fetch_timeout_secs, tcp_table_port,
-        write_local_geojson_file, MAX_FETCH_TIMEOUT_SECS, REMOTE_TILE_TIMEOUT_SECS,
-        SSRF_BLOCKED_MESSAGE,
+        resolve_fetch_timeout_secs, tcp_table_port, write_local_geojson_file,
+        MAX_FETCH_TIMEOUT_SECS, REMOTE_TILE_TIMEOUT_SECS, SSRF_BLOCKED_MESSAGE,
     };
-    #[cfg(target_os = "linux")]
-    use super::{
-        cpu_supports_avx, jsc_option_is_off, linux_dmabuf_workaround,
-        linux_needs_wasm_osr_workaround, linux_uses_nvidia_renderer, nvidia_is_primary_gpu,
-        LinuxDmabufWorkaround, WASM_OSR_ENTRY_JSC_OPTIONS,
-    };
+    use crate::test_support::ScratchDir;
     use std::fs;
     // Everything these imports feed is compiled out of the `mas` build, so the
     // tests that exercise it (and their scaffolding) are gated with it.
@@ -6340,6 +5763,7 @@ mod tests {
     #[cfg(not(feature = "mas"))]
     use std::io::{Cursor, Write};
     use std::net::IpAddr;
+    #[cfg(not(feature = "mas"))]
     use std::path::PathBuf;
     #[cfg(not(feature = "mas"))]
     use std::process::Command;
@@ -6352,30 +5776,6 @@ mod tests {
     // environment must not run concurrently with each other.
     #[cfg(not(feature = "mas"))]
     static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-    #[test]
-    fn derives_mbtiles_zoom_range_from_tile_rows() {
-        let connection = rusqlite::Connection::open_in_memory().unwrap();
-        connection
-            .execute("CREATE TABLE tiles (zoom_level INTEGER NOT NULL)", [])
-            .unwrap();
-        for zoom in [4, 9, 6] {
-            connection
-                .execute("INSERT INTO tiles (zoom_level) VALUES (?1)", [zoom])
-                .unwrap();
-        }
-
-        assert_eq!(
-            read_mbtiles_zoom_range(&connection, true, true).unwrap(),
-            (Some(4), Some(9))
-        );
-
-        let no_tiles_table = rusqlite::Connection::open_in_memory().unwrap();
-        assert_eq!(
-            read_mbtiles_zoom_range(&no_tiles_table, false, false).unwrap(),
-            (None, None)
-        );
-    }
 
     #[cfg(not(feature = "mas"))]
     #[test]
@@ -6403,31 +5803,6 @@ mod tests {
         add_sidecar_python_pin(&mut command);
         let args: Vec<_> = command.get_args().collect();
         assert_eq!(args, [OsStr::new("--python"), OsStr::new("3.12")]);
-    }
-
-    // A throwaway directory tree under the system temp dir that removes itself
-    // on drop, so scratch dirs are cleaned up even when an assertion panics.
-    // Uses the process id (no rand dependency) and clears any leftover from a
-    // prior run at construction.
-    struct ScratchDir(PathBuf);
-
-    impl ScratchDir {
-        fn new(name: &str) -> Self {
-            let dir = std::env::temp_dir().join(format!("geolibre-{name}-{}", std::process::id()));
-            let _ = std::fs::remove_dir_all(&dir);
-            std::fs::create_dir_all(&dir).unwrap();
-            Self(dir)
-        }
-
-        fn path(&self) -> &std::path::Path {
-            &self.0
-        }
-    }
-
-    impl Drop for ScratchDir {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
     }
 
     #[test]
@@ -6654,77 +6029,6 @@ mod tests {
         assert!(res.unwrap_err().contains("not in the fileAccess allowlist"));
     }
 
-    // Only a regular marker file next to the exe marks the portable build: an
-    // installed exe must never claim the scheme, and a same-named directory
-    // (or a marker elsewhere) is not the packaging script's output.
-    #[cfg(not(feature = "mas"))]
-    #[test]
-    fn portable_marker_requires_a_file_next_to_the_exe() {
-        let root = ScratchDir::new("portable-marker");
-        let exe = root.path().join("geolibre-desktop.exe");
-        assert!(!super::exe_has_portable_marker(&exe));
-
-        std::fs::create_dir(root.path().join(super::PORTABLE_MARKER_FILE)).unwrap();
-        assert!(!super::exe_has_portable_marker(&exe));
-        std::fs::remove_dir(root.path().join(super::PORTABLE_MARKER_FILE)).unwrap();
-
-        let nested = root.path().join("bin");
-        std::fs::create_dir(&nested).unwrap();
-        std::fs::write(root.path().join(super::PORTABLE_MARKER_FILE), "").unwrap();
-        assert!(super::exe_has_portable_marker(&exe));
-        assert!(!super::exe_has_portable_marker(
-            &nested.join("geolibre-desktop.exe")
-        ));
-    }
-
-    // The bare release exe claims the OAuth callback scheme only when no live
-    // handler exists (#3042): an installed copy's handler stays put, while a
-    // missing key or a handler pointing at a deleted exe gets replaced.
-    #[cfg(not(feature = "mas"))]
-    #[test]
-    fn scheme_handler_missing_only_without_a_live_program() {
-        let installed = r#""C:\Program Files\GeoLibre Desktop\geolibre-desktop.exe" "%1""#;
-        assert_eq!(
-            super::handler_program(installed),
-            Some(r"C:\Program Files\GeoLibre Desktop\geolibre-desktop.exe")
-        );
-        assert_eq!(super::handler_program(r"C:\Tools\geolibre.exe %1"), None);
-        assert_eq!(super::handler_program(r#""" "%1""#), None);
-        assert_eq!(super::handler_program("   "), None);
-
-        assert!(super::scheme_handler_missing(None, |_| true));
-        assert!(super::scheme_handler_missing(Some(""), |_| true));
-        assert!(!super::scheme_handler_missing(Some(installed), |_| true));
-        assert!(super::scheme_handler_missing(Some(installed), |_| false));
-        assert!(!super::scheme_handler_missing(
-            Some(r#""%ProgramFiles%\GeoLibre Desktop\geolibre-desktop.exe" "%1""#),
-            |_| false
-        ));
-        // An unquoted path may hold spaces, so another app's handler is kept.
-        assert!(!super::scheme_handler_missing(
-            Some(r"C:\Program Files\Other App\app.exe %1"),
-            |_| false
-        ));
-        assert!(super::scheme_handler_missing(Some(r#""" "%1""#), |_| true));
-    }
-
-    #[cfg(not(feature = "mas"))]
-    #[test]
-    fn msix_install_is_detected_by_windowsapps_path() {
-        assert!(super::is_msix_install(std::path::Path::new(
-            "/Program Files/WindowsApps/OpenGeospatialSolutions.GeoLibre_3.3.0.0_x64__abc/geolibre-desktop.exe"
-        )));
-        assert!(super::is_msix_install(std::path::Path::new(
-            "/program files/windowsapps/pkg/geolibre-desktop.exe"
-        )));
-        assert!(!super::is_msix_install(std::path::Path::new(
-            "/Users/me/Downloads/geolibre-desktop_windows_x64.exe"
-        )));
-        assert!(!super::is_msix_install(std::path::Path::new(
-            "/Users/me/MyWindowsAppsBackup/geolibre-desktop.exe"
-        )));
-    }
-
     #[cfg(not(feature = "mas"))]
     #[test]
     fn resolves_only_existing_project_arguments() {
@@ -6824,159 +6128,6 @@ mod tests {
         std::os::unix::fs::symlink(&target, &link).unwrap();
 
         assert!(project_paths_from_args([link.into_os_string()], root.path()).is_empty());
-    }
-
-    #[cfg(all(target_os = "linux", not(feature = "mas")))]
-    #[test]
-    fn detects_primary_nvidia_gpu() {
-        let root = ScratchDir::new("nvidia-primary");
-        let device = root.path().join("card0/device");
-        std::fs::create_dir_all(&device).unwrap();
-        std::fs::write(device.join("vendor"), "0x10de\n").unwrap();
-        std::fs::write(device.join("boot_vga"), "1\n").unwrap();
-        std::os::unix::fs::symlink("/sys/bus/pci/drivers/nvidia", device.join("driver")).unwrap();
-
-        assert!(nvidia_is_primary_gpu(root.path()));
-    }
-
-    #[cfg(all(target_os = "linux", not(feature = "mas")))]
-    #[test]
-    fn ignores_secondary_nvidia_gpu() {
-        let root = ScratchDir::new("nvidia-secondary");
-        let device = root.path().join("card1/device");
-        std::fs::create_dir_all(&device).unwrap();
-        std::fs::write(device.join("vendor"), "0x10de\n").unwrap();
-        std::fs::write(device.join("boot_vga"), "0\n").unwrap();
-        std::os::unix::fs::symlink("/sys/bus/pci/drivers/nvidia", device.join("driver")).unwrap();
-
-        assert!(!nvidia_is_primary_gpu(root.path()));
-    }
-
-    #[cfg(all(target_os = "linux", not(feature = "mas")))]
-    #[test]
-    fn ignores_primary_nvidia_gpu_using_nouveau() {
-        let root = ScratchDir::new("nouveau-primary");
-        let device = root.path().join("card0/device");
-        std::fs::create_dir_all(&device).unwrap();
-        std::fs::write(device.join("vendor"), "0x10de\n").unwrap();
-        std::fs::write(device.join("boot_vga"), "1\n").unwrap();
-        std::os::unix::fs::symlink("/sys/bus/pci/drivers/nouveau", device.join("driver")).unwrap();
-
-        assert!(!nvidia_is_primary_gpu(root.path()));
-    }
-
-    #[cfg(all(target_os = "linux", not(feature = "mas")))]
-    #[test]
-    fn detects_explicit_nvidia_renderer_environment() {
-        let root = ScratchDir::new("nvidia-renderer-env");
-
-        assert!(linux_uses_nvidia_renderer(
-            root.path(),
-            Some(OsStr::new("1")),
-            None,
-        ));
-        assert!(linux_uses_nvidia_renderer(
-            root.path(),
-            None,
-            Some(OsStr::new("NVIDIA")),
-        ));
-        assert!(!linux_uses_nvidia_renderer(
-            root.path(),
-            Some(OsStr::new("0")),
-            Some(OsStr::new("mesa")),
-        ));
-    }
-
-    #[cfg(all(target_os = "linux", not(feature = "mas")))]
-    #[test]
-    fn selects_modern_shm_fallback_for_current_nvidia_webkitgtk() {
-        assert_eq!(
-            linux_dmabuf_workaround((2, 47), false),
-            Some(LinuxDmabufWorkaround::Disable)
-        );
-        assert_eq!(
-            linux_dmabuf_workaround((2, 51), true),
-            Some(LinuxDmabufWorkaround::Disable)
-        );
-        assert_eq!(
-            linux_dmabuf_workaround((2, 52), true),
-            Some(LinuxDmabufWorkaround::ForceShm)
-        );
-        assert_eq!(linux_dmabuf_workaround((2, 52), false), None);
-    }
-
-    // Regression for issue #2087: on an x86-64 CPU without AVX, WebKitGTK's
-    // WebAssembly OSR entry runs an unconditionally AVX trampoline and takes
-    // the renderer down with SIGILL, so both options have to be pinned off.
-    #[cfg(all(target_os = "linux", not(feature = "mas")))]
-    #[test]
-    fn disables_wasm_osr_entry_only_without_avx() {
-        assert!(linux_needs_wasm_osr_workaround(false, false));
-        assert!(!linux_needs_wasm_osr_workaround(true, false));
-    }
-
-    // Turning either option back on is the escape hatch, and it takes the whole
-    // pair out of GeoLibre's hands: half the workaround costs WebAssembly
-    // performance without saving the renderer.
-    #[cfg(all(target_os = "linux", not(feature = "mas")))]
-    #[test]
-    fn keeps_an_explicit_wasm_osr_setting() {
-        assert!(!linux_needs_wasm_osr_workaround(false, true));
-        assert!(!linux_needs_wasm_osr_workaround(true, true));
-    }
-
-    // An option someone already turned off is not an opt-out, so the other half
-    // of the pair still gets applied. Which values count as off is
-    // JavaScriptCore's rule, verified against WebKitGTK 2.52.6: `false` and
-    // `no` in any case, and `0`, disable an option; `true`, `yes` and `1` turn
-    // it on; and a value it cannot parse leaves the default, which for both of
-    // these options is on.
-    #[cfg(all(target_os = "linux", not(feature = "mas")))]
-    #[test]
-    fn reads_wasm_osr_values_the_way_javascriptcore_does() {
-        for off in ["false", "FALSE", "False", "no", "NO", "No", "0"] {
-            assert!(jsc_option_is_off(OsStr::new(off)), "{off}");
-        }
-        for on in ["true", "TRUE", "1", "yes", "YES", "garbage", ""] {
-            assert!(!jsc_option_is_off(OsStr::new(on)), "{on}");
-        }
-    }
-
-    // Both options are needed: with either one left on, the web process still
-    // enters the trampoline (measured on WebKitGTK 2.52.6). They are read by
-    // JavaScriptCore straight out of the environment, so the names carry the
-    // `JSC_` prefix.
-    #[cfg(all(target_os = "linux", not(feature = "mas")))]
-    #[test]
-    fn pins_both_javascriptcore_wasm_osr_options() {
-        assert_eq!(
-            WASM_OSR_ENTRY_JSC_OPTIONS,
-            ["JSC_useWasmOSR", "JSC_useBBQTierUpChecks"]
-        );
-    }
-
-    // Every architecture other than x86 skips the workaround, and the x86
-    // answer has to come from the running CPU rather than from build flags.
-    #[cfg(all(target_os = "linux", not(feature = "mas")))]
-    #[test]
-    fn reports_avx_support_for_this_cpu() {
-        let supported = cpu_supports_avx();
-        if !cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
-            assert!(supported);
-            return;
-        }
-        // Cross-check against the kernel where it reports the flags. A
-        // hypervisor can mask them, and a restricted /proc need not carry a
-        // `flags` line at all, so a missing line means "nothing to compare",
-        // not a failure.
-        let cpuinfo = std::fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
-        let mut flag_lines = cpuinfo.lines().filter(|line| line.starts_with("flags"));
-        if let Some(flags) = flag_lines.next() {
-            assert_eq!(
-                supported,
-                flags.split_whitespace().any(|flag| flag == "avx")
-            );
-        }
     }
 
     // Regression for issue #1223: installed builds place the bundled sidecar at
@@ -8062,36 +7213,6 @@ mod tests {
     #[test]
     fn stale_sidecar_error_keeps_the_phrase_the_frontend_matches() {
         assert!(super::STALE_SIDECAR_ERROR.contains("does not accept this session's token"));
-    }
-
-    #[test]
-    fn open_mbtiles_rejects_non_mbtiles_and_unc_paths() {
-        assert!(super::open_mbtiles("relative.mbtiles").is_err());
-        assert!(super::open_mbtiles("/etc/passwd").is_err());
-        assert!(super::open_mbtiles(r"\\evil\share\tiles.mbtiles").is_err());
-        assert!(super::open_mbtiles("/tmp/../etc/tiles.mbtiles").is_err());
-    }
-
-    #[test]
-    fn read_mbtiles_tile_rejects_excessive_zoom() {
-        let err =
-            super::read_mbtiles_tile_blocking("/tmp/nonexistent.mbtiles".to_string(), 63, 0, 0)
-                .expect_err("zoom 63 must be rejected");
-        assert!(err.contains("zoom level is too large"));
-    }
-
-    #[test]
-    fn decompress_tile_data_caps_decompressed_size() {
-        use flate2::{write::GzEncoder, Compression};
-        use std::io::Write;
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
-        let chunk = vec![0u8; 1024 * 1024];
-        for _ in 0..33 {
-            encoder.write_all(&chunk).unwrap();
-        }
-        let bomb = encoder.finish().unwrap();
-        let err = super::decompress_tile_data(bomb).expect_err("oversized gzip tile must fail");
-        assert!(err.contains("exceeds the size limit"));
     }
 
     #[cfg(unix)]
