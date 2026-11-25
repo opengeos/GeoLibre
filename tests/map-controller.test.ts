@@ -3260,7 +3260,9 @@ describe("MapController edge length labels", () => {
     controller.highlightFeature(layer, ["parcel"]);
     controller.highlightFeature(layer, ["parcel"]);
     assert.equal(
-      fake.calls.some((c) => c.method === "addLayer" && (c.args[0] as { id: string }).id === EDGE_LENGTH_LAYER_ID),
+      fake.calls.some(
+        (c) => c.method === "addLayer" && (c.args[0] as { id: string }).id === EDGE_LENGTH_LAYER_ID,
+      ),
       false,
     );
   });
@@ -3274,7 +3276,10 @@ describe("MapController edge length labels", () => {
     const layer = parcelLayer();
     controller.setEdgeLengthLabels(true);
     controller.highlightFeature(layer, ["parcel"]);
-    const styleMap = map as { removeLayer: (id: string) => void; removeSource: (id: string) => void };
+    const styleMap = map as {
+      removeLayer: (id: string) => void;
+      removeSource: (id: string) => void;
+    };
     for (const id of [...fake.layers.keys()]) styleMap.removeLayer(id);
     for (const id of [...fake.sources.keys()]) styleMap.removeSource(id);
 

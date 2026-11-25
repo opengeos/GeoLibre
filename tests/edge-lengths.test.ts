@@ -153,7 +153,14 @@ describe("ringSides", () => {
     ];
     assert.equal(ringSides(ring).length, 4);
     // The same with the stub ending at the corner.
-    const atCorner: Position[] = [[0, 0], [s - stub, 0], [s, rise], [s, s], [0, s], [0, 0]];
+    const atCorner: Position[] = [
+      [0, 0],
+      [s - stub, 0],
+      [s, rise],
+      [s, s],
+      [0, s],
+      [0, 0],
+    ];
     assert.equal(ringSides(atCorner).length, 4);
   });
 
