@@ -79,6 +79,8 @@ export function browserMbtilesKeysInLayers(
 }
 
 export interface MbtilesMetadata {
+  /** Native inspection includes declared classification fields when available. */
+  sourceLayerFields?: Record<string, string[]>;
   name: string;
   format: string;
   tileType: "raster" | "vector";

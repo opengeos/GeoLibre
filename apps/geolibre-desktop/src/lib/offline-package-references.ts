@@ -7,12 +7,13 @@ export function referencesNativeOfflinePackage(
   id: string,
 ): boolean {
   if (layer.metadata.nativeOfflinePackageId === id) return true;
-  for (const reference of [layer.sourcePath, layer.source.url]) {
+  const tiles = Array.isArray(layer.source.tiles) ? layer.source.tiles : [];
+  for (const reference of [layer.sourcePath, layer.source.url, ...tiles]) {
     if (typeof reference !== "string") continue;
     const url = reference.replace(/^pmtiles:\/\//, "");
     let path = url;
     if (
-      /^(?:https?:\/\/(?:local-pmtiles|mbtiles)\.localhost|(?:local-pmtiles|mbtiles):\/\/localhost)\//.test(
+      /^(?:https?:\/\/(?:local-pmtiles|mbtiles)\.localhost|(?:local-pmtiles|mbtiles):\/\/localhost|geolibre-(?:native-)?mbtiles:\/\/tile)\//.test(
         url,
       )
     ) {

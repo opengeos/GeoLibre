@@ -44,6 +44,8 @@ pub(crate) fn decode_byte_array(
 pub(crate) struct PackageDetails {
     pub name: String,
     pub bbox: [f64; 4],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view_center: Option<[f64; 3]>,
     pub min_zoom: u8,
     pub max_zoom: u8,
     pub flavor: Option<String>,
@@ -113,7 +115,7 @@ fn hex(bytes: &[u8]) -> String {
     result
 }
 
-fn validate_details(details: &PackageDetails) -> Result<(), String> {
+pub(crate) fn validate_details(details: &PackageDetails) -> Result<(), String> {
     let [west, south, east, north] = details.bbox;
     let flavor_valid = details
         .flavor
@@ -132,11 +134,28 @@ fn validate_details(details: &PackageDetails) -> Result<(), String> {
         || south > north
         || details.min_zoom > details.max_zoom
         || details.max_zoom > 30
+        || details
+            .view_center
+            .is_some_and(|[longitude, latitude, zoom]| {
+                let longitude_inside = if west <= east {
+                    longitude >= west && longitude <= east
+                } else {
+                    longitude >= west || longitude <= east
+                };
+                ![longitude, latitude, zoom]
+                    .iter()
+                    .all(|value| value.is_finite())
+                    || !(-180.0..=180.0).contains(&longitude)
+                    || !longitude_inside
+                    || latitude < south
+                    || latitude > north
+                    || zoom < details.min_zoom as f64
+                    || zoom > details.max_zoom as f64
+            })
         || !["vector", "raster"].contains(&details.tile_type.as_str())
         || !["pmtiles", "mbtiles"].contains(&details.archive_format.as_str())
         || !flavor_valid
-        || (details.flavor.is_some()
-            && (details.tile_type != "vector" || details.archive_format != "pmtiles"))
+        || (details.flavor.is_some() && details.tile_type != "vector")
     {
         return Err("Invalid offline package metadata".into());
     }
@@ -314,20 +333,122 @@ impl PackageStore {
                     .map_err(|e| e.to_string())?
                     .as_millis() as u64,
             };
-            self.write_manifest(&stage, &manifest)?;
-            sync_directory(&stage)?;
-            fs::rename(&stage, &published).map_err(|e| e.to_string())?;
-            if let Err(error) = sync_directory(&self.root) {
-                let _ = fs::remove_dir_all(&published);
-                let _ = sync_directory(&self.root);
-                return Err(error);
-            }
-            self.read(&id)
+            self.publish_stage(&stage, &published, &manifest)
         })();
         if result.is_err() {
             let _ = fs::remove_dir_all(stage);
         }
         result
+    }
+
+    /// Generate an archive directly in a private stage, then stream its checksum
+    /// and atomically publish it. The producer must close all database handles
+    /// before returning. No archive-sized buffer or frontend byte transfer is
+    /// required. Cancellation before the publication point removes the stage.
+    pub fn generate(
+        &self,
+        format: &str,
+        producer: impl FnOnce(&Path) -> Result<PackageDetails, String>,
+        cancelled: impl Fn() -> bool,
+    ) -> Result<OfflinePackage, String> {
+        if !["mbtiles", "pmtiles"].contains(&format) {
+            return Err("Unsupported generated archive format".into());
+        }
+        if cancelled() {
+            return Err("Offline package generation canceled".into());
+        }
+        let id = random_id()?;
+        let stage = self.root.join(format!(".pending-{id}"));
+        let published = self.root.join(&id);
+        fs::create_dir(&stage).map_err(|e| e.to_string())?;
+        let result = (|| {
+            let archive = stage.join(format!("archive.{format}"));
+            let mut details = producer(&archive)?;
+            validate_details(&details)?;
+            if details.archive_format != format {
+                return Err("Generated package format does not match its manifest".into());
+            }
+            details.name = details.name.trim().to_string();
+            let length = regular_file(&archive)?.len();
+            if length > MAX_PACKAGE_BYTES as u64 {
+                return Err("Offline package exceeds 512 MiB".into());
+            }
+            let mut file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&archive)
+                .map_err(|e| e.to_string())?;
+            let mut prefix = [0_u8; 16];
+            file.read_exact(&mut prefix).map_err(|e| e.to_string())?;
+            let valid = match format {
+                "mbtiles" => length >= 100 && prefix.starts_with(b"SQLite format 3\0"),
+                "pmtiles" => length >= 127 && prefix.starts_with(b"PMTiles\x03"),
+                _ => false,
+            };
+            if !valid {
+                return Err("Invalid generated archive signature".into());
+            }
+            use std::io::{Seek, SeekFrom};
+            file.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+            let mut hash = Sha256::new();
+            let mut buffer = [0_u8; 128 * 1024];
+            let mut bytes = 0_u64;
+            loop {
+                if cancelled() {
+                    return Err("Offline package generation canceled".into());
+                }
+                let count = file.read(&mut buffer).map_err(|e| e.to_string())?;
+                if count == 0 {
+                    break;
+                }
+                bytes += count as u64;
+                if bytes > MAX_PACKAGE_BYTES as u64 {
+                    return Err("Offline package exceeds 512 MiB".into());
+                }
+                hash.update(&buffer[..count]);
+            }
+            if bytes != length {
+                return Err("Generated archive changed during publication".into());
+            }
+            file.sync_all().map_err(|e| e.to_string())?;
+            drop(file);
+            if cancelled() {
+                return Err("Offline package generation canceled".into());
+            }
+            let manifest = Manifest {
+                version: 1,
+                id,
+                details,
+                bytes,
+                sha256: hex(&hash.finalize()),
+                created_at: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map_err(|e| e.to_string())?
+                    .as_millis() as u64,
+            };
+            self.publish_stage(&stage, &published, &manifest)
+        })();
+        if result.is_err() {
+            let _ = fs::remove_dir_all(stage);
+        }
+        result
+    }
+
+    fn publish_stage(
+        &self,
+        stage: &Path,
+        published: &Path,
+        manifest: &Manifest,
+    ) -> Result<OfflinePackage, String> {
+        self.write_manifest(stage, manifest)?;
+        sync_directory(stage)?;
+        fs::rename(stage, published).map_err(|e| e.to_string())?;
+        if let Err(error) = sync_directory(&self.root) {
+            let _ = fs::remove_dir_all(published);
+            let _ = sync_directory(&self.root);
+            return Err(error);
+        }
+        self.read(&manifest.id)
     }
 
     fn write_manifest(&self, directory: &Path, manifest: &Manifest) -> Result<(), String> {
@@ -457,6 +578,7 @@ mod tests {
         PackageDetails {
             name: "Berkeley".into(),
             bbox: [-123.0, 37.0, -122.0, 38.0],
+            view_center: None,
             min_zoom: 0,
             max_zoom: 14,
             flavor: Some("light".into()),
@@ -554,6 +676,30 @@ mod tests {
         );
         cross.bbox[0] = 181.0;
         assert!(root.store().save(cross, &archive()).is_err());
+    }
+
+    #[test]
+    fn view_centers_round_trip_on_both_sides_of_wrapped_bounds() {
+        let root = TestRoot::new();
+        let mut cross = details();
+        cross.bbox = [170.0, -10.0, -170.0, 10.0];
+        for longitude in [175.0, -175.0] {
+            cross.view_center = Some([longitude, 0.0, 5.0]);
+            let saved = root.store().save(cross.clone(), &archive()).unwrap();
+            assert_eq!(
+                root.store()
+                    .verify(saved.id())
+                    .unwrap()
+                    .manifest
+                    .details
+                    .view_center,
+                cross.view_center
+            );
+        }
+        for longitude in [0.0, 185.0, -185.0, f64::NAN] {
+            cross.view_center = Some([longitude, 0.0, 5.0]);
+            assert!(validate_details(&cross).is_err());
+        }
     }
 
     #[test]
@@ -705,5 +851,111 @@ mod tests {
         symlink(&target, &entry.saved_path).unwrap();
         assert!(store.verify(&entry.manifest.id).is_err());
         assert!(target.exists());
+    }
+    #[test]
+    fn generated_archives_publish_with_streamed_checksums_and_clean_failed_stages() {
+        let root = TestRoot::new();
+        let store = root.store();
+        let entry = store
+            .generate(
+                "pmtiles",
+                |path| {
+                    fs::write(path, archive()).map_err(|e| e.to_string())?;
+                    Ok(details())
+                },
+                || false,
+            )
+            .unwrap();
+        assert_eq!(
+            store.verify(entry.id()).unwrap().manifest.sha256,
+            hex(&Sha256::digest(archive()))
+        );
+        let result = store.generate(
+            "pmtiles",
+            |path| {
+                fs::write(path, archive()).unwrap();
+                Err("producer failed".into())
+            },
+            || false,
+        );
+        assert!(result.unwrap_err().contains("producer failed"));
+        assert_eq!(fs::read_dir(&store.root).unwrap().count(), 1);
+        let cancelled = std::cell::Cell::new(false);
+        let result = store.generate(
+            "pmtiles",
+            |path| {
+                fs::write(path, archive()).unwrap();
+                cancelled.set(true);
+                Ok(details())
+            },
+            || cancelled.get(),
+        );
+        assert!(result.unwrap_err().contains("canceled"));
+        assert_eq!(fs::read_dir(&store.root).unwrap().count(), 1);
+        assert_eq!(store.list().unwrap().packages.len(), 1);
+    }
+    #[test]
+    fn generated_archives_reject_wrong_signatures_formats_and_oversized_sparse_files() {
+        let root = TestRoot::new();
+        let store = root.store();
+        for mode in 0..3 {
+            let error = store
+                .generate(
+                    "pmtiles",
+                    |path| {
+                        let mut metadata = details();
+                        match mode {
+                            0 => {
+                                fs::write(path, vec![0_u8; 127]).unwrap();
+                            }
+                            1 => {
+                                fs::write(path, archive()).unwrap();
+                                metadata.archive_format = "mbtiles".into();
+                                metadata.flavor = None;
+                            }
+                            _ => {
+                                File::create(path)
+                                    .unwrap()
+                                    .set_len(MAX_PACKAGE_BYTES as u64 + 1)
+                                    .unwrap();
+                            }
+                        }
+                        Ok(metadata)
+                    },
+                    || false,
+                )
+                .unwrap_err();
+            assert!(error.contains(match mode {
+                0 => "signature",
+                1 => "format",
+                _ => "512 MiB",
+            }));
+            assert_eq!(fs::read_dir(&store.root).unwrap().count(), 0);
+        }
+    }
+
+    #[test]
+    fn cancellation_during_streamed_hash_keeps_generated_archive_unpublished() {
+        let root = TestRoot::new();
+        let store = root.store();
+        let checks = std::cell::Cell::new(0);
+        let error = store
+            .generate(
+                "pmtiles",
+                |path| {
+                    let mut bytes = archive();
+                    bytes.resize(256 * 1024, 7);
+                    fs::write(path, bytes).unwrap();
+                    Ok(details())
+                },
+                || {
+                    checks.set(checks.get() + 1);
+                    checks.get() >= 3
+                },
+            )
+            .unwrap_err();
+        assert!(error.contains("canceled"));
+        assert_eq!(checks.get(), 3);
+        assert_eq!(fs::read_dir(&store.root).unwrap().count(), 0);
     }
 }

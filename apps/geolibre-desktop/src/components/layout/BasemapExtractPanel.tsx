@@ -41,6 +41,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { screenOverlayCovers, useExtentScreenOverlay } from "../../hooks/useExtentScreenOverlay";
+import { useNativeMbtilesExtraction } from "../../hooks/useNativeMbtilesExtraction";
 import { clamp } from "../../lib/clamp";
 import {
   loadOfflineBasemaps,
@@ -58,12 +59,19 @@ import {
   saveNativeOfflinePackage,
   setSavedOfflineBasemapFlavor,
   verifyNativeOfflinePackage,
+  type NativeOfflinePackage,
 } from "../../lib/native-offline-packages";
-import { nativeLocalPmtilesProtocolUrl } from "../../lib/local-media-url";
+import { nativeLocalPmtilesProtocolUrl, nativeMbtilesProtocolUrl } from "../../lib/local-media-url";
+import { inspectNativeMbtilesSource } from "../../lib/native-mbtiles-extraction";
+import { frameNativeOfflinePackage } from "../../lib/native-offline-package-view";
+import {
+  nativeMbtilesTileUrl,
+  registerNativeMbtilesProtocol,
+} from "../../lib/native-mbtiles-protocol";
 import { referencesNativeOfflinePackage } from "../../lib/offline-package-references";
 import { OfflineBasemapRequests } from "../../lib/offline-basemap-requests";
 import { formatBytes } from "../../lib/offline-regions";
-import { layerNameFromPath } from "./add-data/helpers";
+import { createBaseLayer, layerNameFromPath } from "./add-data/helpers";
 import {
   isTauri,
   openLocalDataFileWithFallback,
@@ -184,10 +192,52 @@ const PROTOMAPS_SCHEMA_LAYERS = ["earth", "water", "roads", "places", "landcover
  * (plus two schema layers overall) keeps a non-Protomaps archive that merely
  * has a `roads`/`places` layer from being styled with Protomaps-specific
  * expressions and rendering blank. */
-function isProtomapsCompatible(sourceLayers: string[]): boolean {
+function isProtomapsCompatible(
+  sourceLayers: string[],
+  sourceLayerFields?: Record<string, string[]>,
+): boolean {
   const set = new Set(sourceLayers);
   if (!set.has("earth") && !set.has("water")) return false;
+  if (
+    ["roads", "places", "landcover"].some((layer) => {
+      const fields = sourceLayerFields?.[layer];
+      return fields != null && !fields.includes("kind");
+    })
+  )
+    return false;
   return PROTOMAPS_SCHEMA_LAYERS.filter((l) => set.has(l)).length >= 2;
+}
+
+/** Build a project-owned overlay whose source stays in managed native storage. */
+function managedMbtilesLayer(entry: NativeOfflinePackage, sourceLayers: string[], format: string) {
+  registerNativeMbtilesProtocol();
+  return {
+    ...createBaseLayer(
+      entry.name,
+      "mbtiles",
+      {
+        type: entry.tileType,
+        tiles: [nativeMbtilesTileUrl(entry.savedPath)],
+        sourceLayers,
+        tileSize: 256,
+        bounds: entry.bbox,
+        minzoom: entry.minZoom,
+        maxzoom: entry.maxZoom,
+      },
+      {
+        nativeOfflinePackageId: entry.id,
+        sourceKind: "mbtiles-file",
+        sourceLayers,
+        tileType: entry.tileType,
+        format,
+        scheme: "tms",
+        bounds: entry.bbox,
+        minzoom: entry.minZoom,
+        maxzoom: entry.maxZoom,
+      },
+    ),
+    sourcePath: entry.savedPath,
+  };
 }
 
 /** Bundled Protomaps glyphs/sprites live under the app's public dir. Resolve
@@ -294,6 +344,7 @@ export function BasemapExtractPanel({
   const [coords, setCoords] = useState<CoordFields>(EMPTY_COORDS);
   const [drawing, setDrawing] = useState(false);
   const [url, setUrl] = useState("");
+  const [sourceKind, setSourceKind] = useState<"pmtiles" | "mbtiles">("pmtiles");
   const [minZoom, setMinZoom] = useState("0");
   const [maxZoom, setMaxZoom] = useState("15");
   // When set, apply the extract as a styled Protomaps basemap in this flavor
@@ -347,6 +398,11 @@ export function BasemapExtractPanel({
   const [applicationRequests] = useState(
     () => new OfflineBasemapRequests(() => useAppStore.getState()),
   );
+  const nativeMbtiles = useNativeMbtilesExtraction(
+    open && sourceKind === "mbtiles",
+    applicationRequests,
+  );
+  const cancelNativeMbtiles = nativeMbtiles.cancel;
   useEffect(() => {
     if (!open) {
       applicationRequests.invalidate();
@@ -674,11 +730,88 @@ export function BasemapExtractPanel({
     minZoomValue > maxZoomValue;
 
   const urlValue = url.trim();
-  const running = phase === "running";
-  const canExtract = !running && urlValue !== "" && bbox !== null && !zoomInvalid;
+  const running = phase === "running" || nativeMbtiles.busy;
+  const nativeVectorMissingLayers =
+    nativeMbtiles.source?.metadata.tileType === "vector" &&
+    nativeMbtiles.source.metadata.sourceLayers.length === 0;
+  const nativeCanStyle =
+    nativeMbtiles.source?.metadata.tileType === "vector" &&
+    isProtomapsCompatible(
+      nativeMbtiles.source.metadata.sourceLayers,
+      nativeMbtiles.source.metadata.sourceLayerFields,
+    );
+  const canExtract =
+    !running &&
+    bbox !== null &&
+    !zoomInvalid &&
+    (sourceKind === "mbtiles"
+      ? nativeMbtiles.source != null && !nativeVectorMissingLayers
+      : urlValue !== "");
+
+  const handlePickMbtiles = async () => {
+    setApplyingId(null);
+    clearStatus();
+    const selected = await nativeMbtiles.selectSource();
+    if (!selected) return;
+    if (selected.metadata.bounds) setCoords(coordsFromBbox(selected.metadata.bounds));
+    setMinZoom(String(Math.max(0, selected.metadata.minZoom ?? 0)));
+    setMaxZoom(String(Math.min(30, selected.metadata.maxZoom ?? 15)));
+  };
+
+  const handleExtractMbtiles = async () => {
+    if (!bbox || zoomInvalid) return;
+    setApplyingId(null);
+    clearStatus();
+    if (minZoomValue > Math.min(24, useAppStore.getState().preferences.map.maxZoom)) {
+      applicationRequests.invalidate();
+      setError(
+        t(
+          minZoomValue > 24
+            ? "basemapExtract.errorPackageZoomUnsupported"
+            : "basemapExtract.errorPackageZoom",
+          { zoom: minZoomValue },
+        ),
+      );
+      return;
+    }
+    const completed = await nativeMbtiles.extract(
+      { bbox, minZoom: minZoomValue, maxZoom: maxZoomValue },
+      nativeCanStyle && flavor ? flavor : null,
+    );
+    if (!completed) return;
+    void refreshSavedBasemaps().catch((failure: unknown) => {
+      if (completed.request.isProjectCurrent() && !completed.signal.aborted)
+        setError(failure instanceof Error ? failure.message : String(failure));
+    });
+    if (completed.signal.aborted || !completed.request.isCurrent()) return;
+    try {
+      const { package: entry, sourceLayers, tileFormat } = completed.result;
+      if (entry.minZoom > Math.min(24, useAppStore.getState().preferences.map.maxZoom))
+        throw new Error(
+          t(
+            entry.minZoom > 24
+              ? "basemapExtract.errorSavedPackageZoomUnsupported"
+              : "basemapExtract.errorSavedPackageZoom",
+            { name: entry.name, zoom: entry.minZoom },
+          ),
+        );
+      if (entry.tileType === "raster" || entry.flavor != null) {
+        setBasemapStyleUrl(
+          nativeOfflineBasemapStyleUrl(entry, (entry.flavor as ProtomapsFlavor | null) ?? "light"),
+        );
+        trackStyledBasemap(entry.id, nativeMbtilesProtocolUrl(entry.savedPath), true);
+      } else addLayer(managedMbtilesLayer(entry, sourceLayers, tileFormat));
+      frameNativeOfflinePackage(mapControllerRef.current, entry);
+      setSuccess(t("basemapExtract.successMbtiles", { count: completed.result.tileCount }));
+    } catch (failure) {
+      if (completed.request.isProjectCurrent() && !completed.signal.aborted)
+        setError(failure instanceof Error ? failure.message : String(failure));
+    }
+  };
 
   const handleExtract = useCallback(async () => {
     if (!bbox || zoomInvalid || urlValue === "") return;
+    cancelNativeMbtiles();
     abortRef.current?.abort();
     const controller = new AbortController();
     const request = applicationRequests.begin();
@@ -884,6 +1017,7 @@ export function BasemapExtractPanel({
     setBasemapStyleUrl,
     refreshSavedBasemaps,
     applicationRequests,
+    cancelNativeMbtiles,
     t,
   ]);
 
@@ -908,12 +1042,14 @@ export function BasemapExtractPanel({
       // as overlays (user picked "None", or the archive failed the Protomaps
       // schema check) have `flavor === null` — forcing them through
       // buildProtomapsBasemapStyle would render a blank/broken basemap.
+      const nativeTilePackage =
+        entry.managed && (entry.archiveFormat === "mbtiles" || entry.tileType === "raster");
       if (
-        entry.tileType !== "vector" ||
-        entry.flavor == null ||
+        (!nativeTilePackage && (entry.tileType !== "vector" || entry.flavor == null)) ||
         deletingPackageIds.current.has(entry.id)
       )
         return;
+      cancelNativeMbtiles();
       setApplyingId(entry.id);
       setError(null);
       setSuccess(null);
@@ -922,9 +1058,45 @@ export function BasemapExtractPanel({
         if (entry.managed) {
           const verified = await verifyNativeOfflinePackage(entry.id);
           if (!request.isCurrent()) return;
-          const useFlavor = entry.flavor as ProtomapsFlavor;
-          setBasemapStyleUrl(nativeOfflineBasemapStyleUrl(verified, useFlavor));
-          trackStyledBasemap(entry.id, nativeLocalPmtilesProtocolUrl(verified.savedPath), true);
+          if (verified.minZoom > Math.min(24, useAppStore.getState().preferences.map.maxZoom))
+            throw new Error(
+              t(
+                verified.minZoom > 24
+                  ? "basemapExtract.errorPackageZoomUnsupported"
+                  : "basemapExtract.errorPackageZoom",
+                { zoom: verified.minZoom },
+              ),
+            );
+          if (
+            verified.archiveFormat === "mbtiles" &&
+            verified.tileType === "vector" &&
+            verified.flavor == null
+          ) {
+            const metadata = await inspectNativeMbtilesSource(
+              verified.savedPath,
+              new AbortController().signal,
+            );
+            if (!request.isCurrent()) return;
+            if (metadata.sourceLayers.length === 0)
+              throw new Error(t("basemapExtract.errorNoSourceLayers"));
+            const alreadyOnMap = useAppStore
+              .getState()
+              .layers.some((layer) => referencesNativeOfflinePackage(layer, verified.id));
+            if (!alreadyOnMap)
+              addLayer(managedMbtilesLayer(verified, metadata.sourceLayers, metadata.format));
+          } else {
+            const useFlavor = (entry.flavor as ProtomapsFlavor | null) ?? "light";
+            setBasemapStyleUrl(nativeOfflineBasemapStyleUrl(verified, useFlavor));
+            trackStyledBasemap(
+              entry.id,
+              verified.archiveFormat === "mbtiles"
+                ? nativeMbtilesProtocolUrl(verified.savedPath)
+                : nativeLocalPmtilesProtocolUrl(verified.savedPath),
+              true,
+            );
+          }
+          if (verified.archiveFormat === "mbtiles")
+            frameNativeOfflinePackage(mapControllerRef.current, verified);
           setSuccess(t("basemapExtract.successCachedApplied"));
           return;
         }
@@ -960,7 +1132,7 @@ export function BasemapExtractPanel({
         if (request.isLatest()) setApplyingId(null);
       }
     },
-    [applicationRequests, setBasemapStyleUrl, t],
+    [applicationRequests, setBasemapStyleUrl, cancelNativeMbtiles, addLayer, mapControllerRef, t],
   );
 
   // Change a saved basemap's flavor. Persists it, and re-styles live if the
@@ -1016,6 +1188,7 @@ export function BasemapExtractPanel({
   // "Saved basemaps".
   const [opening, setOpening] = useState(false);
   const openPmtilesAsBasemap = useCallback(async () => {
+    cancelNativeMbtiles();
     setOpening(true);
     setError(null);
     setSuccess(null);
@@ -1109,7 +1282,14 @@ export function BasemapExtractPanel({
     } finally {
       setOpening(false);
     }
-  }, [applicationRequests, flavor, refreshSavedBasemaps, setBasemapStyleUrl, t]);
+  }, [
+    applicationRequests,
+    flavor,
+    refreshSavedBasemaps,
+    setBasemapStyleUrl,
+    cancelNativeMbtiles,
+    t,
+  ]);
 
   const percent =
     progress && progress.dataBytesTotal > 0
@@ -1174,22 +1354,66 @@ export function BasemapExtractPanel({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3 text-sm">
-          <div className="space-y-1">
-            <Label htmlFor="basemap-extract-url" className="text-xs">
-              {t("basemapExtract.url")}
-            </Label>
-            <Input
-              id="basemap-extract-url"
-              type="url"
-              placeholder={t("basemapExtract.urlPlaceholder")}
-              value={url}
-              disabled={running}
-              onChange={(e) => {
-                setUrl(e.target.value);
-                clearStatus();
-              }}
-            />
-          </div>
+          {isTauri() ? (
+            <div className="space-y-1">
+              <Label htmlFor="basemap-extract-source" className="text-xs">
+                {t("basemapExtract.source")}
+              </Label>
+              <Select
+                id="basemap-extract-source"
+                value={sourceKind}
+                disabled={running}
+                onChange={(event) => {
+                  cancelNativeMbtiles();
+                  setSourceKind(event.target.value as "pmtiles" | "mbtiles");
+                  clearStatus();
+                }}
+              >
+                <option value="pmtiles">{t("basemapExtract.remotePmtiles")}</option>
+                <option value="mbtiles">{t("basemapExtract.localMbtiles")}</option>
+              </Select>
+            </div>
+          ) : null}
+          {sourceKind === "pmtiles" ? (
+            <div className="space-y-1">
+              <Label htmlFor="basemap-extract-url" className="text-xs">
+                {t("basemapExtract.url")}
+              </Label>
+              <Input
+                id="basemap-extract-url"
+                type="url"
+                placeholder={t("basemapExtract.urlPlaceholder")}
+                value={url}
+                disabled={running}
+                onChange={(e) => {
+                  setUrl(e.target.value);
+                  clearStatus();
+                }}
+              />
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={running}
+                onClick={() => void handlePickMbtiles()}
+              >
+                <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                {t("basemapExtract.chooseMbtiles")}
+              </Button>
+              {nativeMbtiles.source ? (
+                <p className="text-xs break-words">{nativeMbtiles.source.metadata.name}</p>
+              ) : null}
+              <p className="text-xs text-muted-foreground">{t("basemapExtract.mbtilesHint")}</p>
+              {nativeVectorMissingLayers ? (
+                <p className="text-xs text-destructive">
+                  {t("basemapExtract.errorNoSourceLayers")}
+                </p>
+              ) : null}
+            </div>
+          )}
 
           <div className="flex gap-2">
             <Button
@@ -1308,32 +1532,38 @@ export function BasemapExtractPanel({
             <p className="text-xs text-destructive">{t("basemapExtract.zoomHint")}</p>
           ) : null}
 
-          <div className="space-y-1">
-            <Label htmlFor="basemap-extract-style" className="text-xs">
-              {t("basemapExtract.style")}
-            </Label>
-            <Select
-              id="basemap-extract-style"
-              value={flavor}
-              disabled={running}
-              onChange={(e) => {
-                setFlavor(e.target.value as ProtomapsFlavor | "");
-                clearStatus();
-              }}
-            >
-              {PROTOMAPS_FLAVORS.map((f) => (
-                <option key={f} value={f}>
-                  {t(`basemapExtract.flavor.${f}`)}
-                </option>
-              ))}
-              <option value="">{t("basemapExtract.flavorOverlay")}</option>
-            </Select>
+          {sourceKind === "pmtiles" || nativeCanStyle ? (
+            <div className="space-y-1">
+              <Label htmlFor="basemap-extract-style" className="text-xs">
+                {t("basemapExtract.style")}
+              </Label>
+              <Select
+                id="basemap-extract-style"
+                value={flavor}
+                disabled={running}
+                onChange={(e) => {
+                  setFlavor(e.target.value as ProtomapsFlavor | "");
+                  clearStatus();
+                }}
+              >
+                {PROTOMAPS_FLAVORS.map((f) => (
+                  <option key={f} value={f}>
+                    {t(`basemapExtract.flavor.${f}`)}
+                  </option>
+                ))}
+                <option value="">{t("basemapExtract.flavorOverlay")}</option>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {flavor === ""
+                  ? t("basemapExtract.styleHintOverlay")
+                  : t("basemapExtract.styleHintBasemap")}
+              </p>
+            </div>
+          ) : (
             <p className="text-xs text-muted-foreground">
-              {flavor === ""
-                ? t("basemapExtract.styleHintOverlay")
-                : t("basemapExtract.styleHintBasemap")}
+              {t("basemapExtract.mbtilesRenderingHint")}
             </p>
-          </div>
+          )}
 
           {pendingPlan ? (
             <div className="space-y-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3">
@@ -1369,7 +1599,7 @@ export function BasemapExtractPanel({
             </div>
           ) : null}
 
-          {running && !pendingPlan ? (
+          {phase === "running" && !pendingPlan ? (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>{phaseLabel}</span>
@@ -1408,9 +1638,19 @@ export function BasemapExtractPanel({
             </div>
           ) : null}
 
-          {error ? (
+          {nativeMbtiles.busy ? (
+            <p className="text-xs text-muted-foreground" role="status">
+              {nativeMbtiles.phase === "inspect"
+                ? t("basemapExtract.inspectingMbtiles")
+                : t("basemapExtract.mbtilesProgress", {
+                    count: nativeMbtiles.progress?.tileCount ?? 0,
+                    size: formatBytes(nativeMbtiles.progress?.payloadBytes ?? 0),
+                  })}
+            </p>
+          ) : null}
+          {error || nativeMbtiles.error ? (
             <p className="text-xs text-destructive" role="alert">
-              {error}
+              {error ?? nativeMbtiles.error}
             </p>
           ) : null}
           {success ? (
@@ -1422,7 +1662,12 @@ export function BasemapExtractPanel({
 
           <div className="flex flex-wrap justify-end gap-2">
             {running && !pendingPlan ? (
-              <Button type="button" size="sm" variant="outline" onClick={handleCancel}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={sourceKind === "mbtiles" ? cancelNativeMbtiles : handleCancel}
+              >
                 {t("common.cancel")}
               </Button>
             ) : null}
@@ -1430,7 +1675,9 @@ export function BasemapExtractPanel({
               type="button"
               size="sm"
               disabled={!canExtract}
-              onClick={() => void handleExtract()}
+              onClick={() =>
+                void (sourceKind === "mbtiles" ? handleExtractMbtiles() : handleExtract())
+              }
             >
               {running ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -1569,13 +1816,31 @@ export function BasemapExtractPanel({
                               type="button"
                               className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
                               disabled={
-                                entry.tileType !== "vector" ||
-                                entry.flavor == null ||
+                                (!(
+                                  entry.managed &&
+                                  (entry.archiveFormat === "mbtiles" || entry.tileType === "raster")
+                                ) &&
+                                  (entry.tileType !== "vector" || entry.flavor == null)) ||
+                                Boolean(entry.unavailableReason) ||
                                 applyingId === entry.id
                               }
                               onClick={() => void applySaved(entry)}
-                              title={t("basemapExtract.apply")}
-                              aria-label={t("basemapExtract.apply")}
+                              title={t(
+                                entry.managed &&
+                                  entry.archiveFormat === "mbtiles" &&
+                                  entry.tileType === "vector" &&
+                                  entry.flavor == null
+                                  ? "basemapExtract.addPackageToMap"
+                                  : "basemapExtract.apply",
+                              )}
+                              aria-label={t(
+                                entry.managed &&
+                                  entry.archiveFormat === "mbtiles" &&
+                                  entry.tileType === "vector" &&
+                                  entry.flavor == null
+                                  ? "basemapExtract.addPackageToMap"
+                                  : "basemapExtract.apply",
+                              )}
                             >
                               {applyingId === entry.id ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />

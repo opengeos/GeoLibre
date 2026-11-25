@@ -250,3 +250,46 @@ it("rejects oversized native plans and payloads before binary IPC", async () => 
   );
   assert.equal(called, false);
 });
+
+it("restores vector MBTiles flavors through native tile templates without PMTiles readers", () => {
+  const mbtiles: NativeOfflinePackage = {
+    ...entry,
+    id: "pkg-33333333333333333333333333333333",
+    archiveFormat: "mbtiles",
+    savedPath: "/data/vector.mbtiles",
+  };
+  for (const flavor of ["light", "dark"] as const) {
+    const url = nativeOfflineBasemapStyleUrl(mbtiles, flavor);
+    const style = getOfflineBasemapStyle(url);
+    assert.ok(style);
+    assert.equal(style.sources.protomaps.type, "vector");
+    assert.deepEqual(Reflect.get(style.sources.protomaps, "tiles"), [
+      "geolibre-native-mbtiles://tile/{z}/{x}/{y}?path=%2Fdata%2Fvector.mbtiles",
+    ]);
+    assert.equal(Reflect.get(style.sources.protomaps, "url"), undefined);
+    assert.match(Reflect.get(style.sources.protomaps, "attribution") ?? "", /OpenStreetMap/);
+    assert.ok(style.layers.length > 10);
+  }
+  assert.equal(hasPMTilesArchive(nativeLocalPmtilesProtocolUrl(mbtiles.savedPath)), false);
+});
+
+it("restores raster package basemaps with bounded native tile sources and no font requests", () => {
+  const raster: NativeOfflinePackage = {
+    ...entry,
+    id: "pkg-44444444444444444444444444444444",
+    archiveFormat: "mbtiles",
+    tileType: "raster",
+    flavor: null,
+    savedPath: "/data/raster.mbtiles",
+    minZoom: 19,
+    maxZoom: 19,
+  };
+  const style = getOfflineBasemapStyle(nativeOfflineBasemapStyleUrl(raster, "light"));
+  assert.ok(style);
+  assert.equal(style.sources.offlineRaster.type, "raster");
+  assert.equal(Reflect.get(style.sources.offlineRaster, "minzoom"), 19);
+  assert.equal(Reflect.get(style.sources.offlineRaster, "maxzoom"), 19);
+  assert.equal(style.glyphs, undefined);
+  assert.equal(style.sprite, undefined);
+  assert.equal(style.layers[1].type, "raster");
+});

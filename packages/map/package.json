@@ -29,6 +29,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./headless": "./src/headless.ts",
+    "./globe-fit-bounds": "./src/globe-fit-bounds.ts",
     "./derived-geometry": "./src/derived-geometry.ts",
     "./pmtiles-layer": "./src/pmtiles-layer.ts",
     "./style-import": "./src/style-import.ts",
@@ -55,6 +56,10 @@
       "./headless": {
         "types": "./dist/headless.d.mts",
         "import": "./dist/headless.mjs"
+      },
+      "./globe-fit-bounds": {
+        "types": "./dist/globe-fit-bounds.d.mts",
+        "import": "./dist/globe-fit-bounds.mjs"
       },
       "./derived-geometry": {
         "types": "./dist/derived-geometry.d.mts",
@@ -116,7 +121,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts src/style-import.ts src/mapbox-style-export.ts src/style-layer-ids.ts src/tile-request-headers.ts src/layer-labels.ts src/map-capture.ts src/arcgis-sdk.ts src/arcgis-control-adapters.ts src/zarr-source.ts src/kerchunk-reference-store.ts src/epsg-proj4.ts src/geojson-source-data.ts --format esm --dts"
+    "build": "tsdown src/headless.ts src/globe-fit-bounds.ts src/derived-geometry.ts src/pmtiles-layer.ts src/style-import.ts src/mapbox-style-export.ts src/style-layer-ids.ts src/tile-request-headers.ts src/layer-labels.ts src/map-capture.ts src/arcgis-sdk.ts src/arcgis-control-adapters.ts src/zarr-source.ts src/kerchunk-reference-store.ts src/epsg-proj4.ts src/geojson-source-data.ts --format esm --dts"
   },
   "dependencies": {
     "@cesium/core": "^0.1.1",
