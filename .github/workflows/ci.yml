@@ -463,10 +463,11 @@ jobs:
 
       # `cargo check` and unit tests never run `tauri::Builder::build`, so a
       # plugin whose config fails to deserialize only crashes at launch.
-      # v3.10.0 shipped that way (#3631, #3632). Build the shell as a release
-      # build would (custom-protocol, default features) and make sure it stays
-      # up. The stubbed dist above is enough: the crash happens before any page
-      # loads.
+      # v3.10.0 shipped that way (#3631, #3632). Build the shell with the same
+      # features as a release build (custom-protocol, default features), in the
+      # faster debug profile, and make sure it stays up. Plugin config is read
+      # the same way in either profile, and the stubbed dist above is enough:
+      # the crash happens before any page loads.
       - name: Build the Tauri shell for a launch smoke test
         run: cargo build --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml --features tauri/custom-protocol
 

@@ -15,22 +15,27 @@ set -euo pipefail
 binary="${1:?usage: desktop-launch-smoke.sh <binary> [seconds]}"
 seconds="${2:-20}"
 log="$(mktemp)"
-
 # A throwaway HOME keeps the launch from reading or writing a real profile.
 home="$(mktemp -d)"
+trap 'rm -rf "$log" "$home"' EXIT
+
 HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share" \
   "$binary" >"$log" 2>&1 &
 pid=$!
 
-for _ in $(seq "$seconds"); do
+fail_if_exited() {
   if ! kill -0 "$pid" 2>/dev/null; then
-    status=0
+    local status=0
     wait "$pid" || status=$?
     echo "::error::GeoLibre Desktop exited during startup (status $status)"
     cat "$log"
     exit 1
   fi
+}
+
+for _ in $(seq "$seconds"); do
   sleep 1
+  fail_if_exited
 done
 
 kill "$pid" 2>/dev/null || true

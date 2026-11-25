@@ -607,10 +607,10 @@ pub fn run() {
     let context = tauri::generate_context!();
 
     // Signed desktop auto-updater for non-Store desktop builds. The plugin
-    // panics during app build when `plugins.updater` is missing from the
-    // Tauri config (its `pubkey` is required), so only register it when the
-    // build actually carries updater settings. Otherwise the update commands
-    // report `configured: false` (issue #3631).
+    // panics during app build when `plugins.updater` is missing or invalid
+    // (its `pubkey` is required), so only register it when its own config
+    // deserializer accepts the block. Otherwise the update commands report
+    // `configured: false` (issue #3631).
     #[cfg(all(
         any(target_os = "macos", target_os = "windows", target_os = "linux"),
         feature = "desktop-updater",
