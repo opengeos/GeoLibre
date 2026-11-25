@@ -168,7 +168,8 @@ add_cesium_kml_layer(path, name, url=None, data=None, index=None)
   This mode refuses dynamic sublayers/rendering rules, incompatible grids and
   raw LERC caches; use the default export mode for dynamic rendering. Public
   metadata reads are limited to 2 MiB with a 30-second network timeout, including
-  public-address checks on redirects.
+  public-address checks on redirects. The declared grid must stay within one
+  pixel of the standard XYZ grid over each full zoom-level extent.
 - `add_zarr_layer`: `selector` fixes the non-spatial dimensions
   (`{"time": 0}`), `clim` is the `[min, max]` color range. The app re-adds
   the layer through its Zarr control on open and gives it a new id.

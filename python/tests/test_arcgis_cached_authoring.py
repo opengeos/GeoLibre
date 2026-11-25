@@ -4,6 +4,7 @@ import asyncio
 import copy
 import io
 import json
+import math
 import ssl
 from http.client import IncompleteRead
 
@@ -253,3 +254,43 @@ def test_deeply_nested_metadata_uses_the_documented_error(cache_metadata, monkey
     )
     with pytest.raises(ValueError, match="too deeply nested"):
         project_api.arcgis_layer("Nested", "https://example.org/A/MapServer", tiled=True)
+
+
+@pytest.mark.parametrize("change", ["origin", "resolution"])
+def test_nearly_standard_cache_cannot_save_misregistered_tiles(cache_metadata, change):
+    """Reject small metadata changes that produce a material geographic shift.
+
+    Args:
+        cache_metadata: The mutable service metadata fixture.
+        change: The origin or resolution perturbation to introduce.
+    """
+    info, _ = cache_metadata
+    grid = info["tileInfo"]
+    grid["rows"] = grid["cols"] = 256
+    grid["lods"] = [{"level": 23, "resolution": 0.01866138385297604}]
+    if change == "origin":
+        grid["origin"]["x"] += 0.5
+    else:
+        grid["lods"][0]["resolution"] *= 1.005
+    with pytest.raises(ValueError, match="cache"):
+        project_api.arcgis_layer("Shifted", "https://example.org/A/MapServer", tiled=True)
+
+
+def test_real_standard_resolution_rounding_stays_within_one_pixel(cache_metadata):
+    """Accept World Imagery's rounded grid while bounding its full-world error.
+
+    Args:
+        cache_metadata: The mutable service metadata fixture.
+    """
+    info, _ = cache_metadata
+    grid = info["tileInfo"]
+    grid["rows"] = grid["cols"] = 256
+    grid["lods"] = [{"level": 23, "resolution": 0.01866138385297604}]
+    source = project_api.arcgis_layer("Standard", "https://example.org/A/MapServer", tiled=True)[
+        "source"
+    ]
+    assert source["maxzoom"] == 23
+    resolution = grid["lods"][0]["resolution"]
+    declared_east = grid["origin"]["x"] + resolution * 256 * 2**23
+    expected_east = math.pi * 6378137
+    assert abs(declared_east - expected_east) / resolution < 1

@@ -33,7 +33,9 @@ def cached_arcgis_source(info: Any, service_url: str) -> dict[str, Any]:
     """Build a raster source only for an image cache using the standard XYZ grid.
 
     The projection, both origin coordinates, tile dimensions and each level's
-    resolution must agree. A source min/max range cannot represent missing
+    resolution must agree to metadata rounding. Geographic registration error
+    over the full world must stay within one pixel at every advertised level.
+    A source min/max range cannot represent missing
     intermediate levels, and ordinary raster renderers cannot decode raw LERC.
 
     Args:
@@ -66,11 +68,10 @@ def cached_arcgis_source(info: Any, service_url: str) -> dict[str, Any]:
     origin = tile_info.get("origin")
     if not isinstance(origin, dict):
         raise ValueError("ArcGIS cache metadata is missing its XYZ origin")
-    if (
-        abs(_number(origin.get("x")) + 20037508.342787) > 1
-        or abs(_number(origin.get("y")) - 20037508.342787) > 1
-    ):
-        raise ValueError("ArcGIS cache must use the standard Web Mercator XYZ origin")
+    origin_error = max(
+        abs(_number(origin.get("x")) + 20037508.342787),
+        abs(_number(origin.get("y")) - 20037508.342787),
+    )
     lods = tile_info.get("lods")
     if not isinstance(lods, list) or not lods:
         raise ValueError("ArcGIS cache metadata must list its zoom levels")
@@ -87,7 +88,16 @@ def cached_arcgis_source(info: Any, service_url: str) -> dict[str, Any]:
         except OverflowError as exc:
             raise ValueError("ArcGIS cache zoom level exceeds the XYZ resolution range") from exc
         resolution = _number(lod.get("resolution"))
-        if expected <= 0 or resolution <= 0 or abs(resolution - expected) / expected >= 0.01:
+        if expected <= 0 or resolution <= 0:
+            raise ValueError("ArcGIS cache resolutions do not match the standard XYZ zoom levels")
+        if origin_error > expected:
+            raise ValueError("ArcGIS cache must use the standard Web Mercator XYZ origin")
+        # A relative percentage magnifies into kilometres at a world's edge.
+        # Bound that edge error in pixels instead. One pixel accommodates the
+        # legacy standard LOD rounding (about 0.66 pixels at World Imagery z23).
+        world_width = 156543.03392800014 * 256
+        edge_error = origin_error + abs(resolution - expected) / expected * world_width
+        if edge_error > expected:
             raise ValueError("ArcGIS cache resolutions do not match the standard XYZ zoom levels")
         levels.append(level)
     ordered = sorted(set(levels))
