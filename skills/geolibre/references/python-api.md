@@ -40,6 +40,7 @@ sharing.
 ```python
 m.add_geojson(data, name="GeoJSON", **style)          # URL, path, or a dict
 m.add_sql_query_layer(data, sql, name="SQL query", **style)  # result snapshot; SQL runs on app Refresh
+m.add_zarr(url, variable, icechunk_branch="main", selector={"time": 0})  # public HTTP(S) Icechunk; omit branch for plain Zarr
 m.add_gdf(gdf, name="GeoDataFrame", column=None)      # GeoPandas
 m.add_data(data, column=None, name="Data")            # dispatches on the format
 m.add_vector(data, name="Vector", render_mode="geojson", data_format=None)

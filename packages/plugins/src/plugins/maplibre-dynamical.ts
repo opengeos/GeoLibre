@@ -471,6 +471,11 @@ function applyRegionalZoomRange(app: GeoLibreAppAPI, layerId: string, minZoom: n
     const renderer = native.implementation;
     if (renderer && typeof renderer.minZoom === "number") renderer.minZoom = threshold;
   }
+  if (layer.source.minZoom !== threshold) {
+    useAppStore.getState().updateLayer(layerId, {
+      source: { ...layer.source, minZoom: threshold },
+    });
+  }
 }
 
 /** Read a 1-D coordinate array. */

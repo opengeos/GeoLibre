@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { parseIcechunkLayerUrl } from "../packages/map/src/zarr-source";
 import {
   __resetIcechunkRepositoriesForTests,
   DEFAULT_ICECHUNK_BRANCH,
@@ -13,6 +14,29 @@ import {
 } from "../packages/plugins/src/plugins/stac-icechunk.ts";
 
 const encode = (value: unknown): Uint8Array => new TextEncoder().encode(JSON.stringify(value));
+
+describe("saved Icechunk branch URLs", () => {
+  it("decodes branch names exactly once and leaves plain Zarr URLs alone", () => {
+    assert.deepEqual(
+      parseIcechunkLayerUrl("https://example.org/repo#icechunk=release%2F2026%20%231%2B%2520"),
+      {
+        url: "https://example.org/repo",
+        branch: "release/2026 #1+%20",
+      },
+    );
+    assert.equal(parseIcechunkLayerUrl("https://example.org/cube.zarr"), null);
+  });
+  it("rejects malformed, empty or non-HTTP repository definitions", () => {
+    for (const url of [
+      "https://example.org/repo#icechunk=",
+      "https://example.org/repo#icechunk=%FF",
+      "https://example.org/repo#icechunk=%ZZ",
+      "s3://bucket/repo#icechunk=main",
+    ]) {
+      assert.throws(() => parseIcechunkLayerUrl(url));
+    }
+  });
+});
 
 // An Icechunk repository serves nothing at its URL, so the Time Slider's usual
 // metadata walk 404s six times and never binds. The reader answers the same

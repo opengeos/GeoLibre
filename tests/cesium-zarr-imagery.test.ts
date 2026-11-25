@@ -16,7 +16,12 @@ import {
   ZARR_DIMENSION_ALIASES,
   type ZarrCesiumModule,
 } from "../packages/map/src/cesium-zarr-imagery";
-import { registerZarrHeaders } from "../packages/map/src/zarr-source";
+import {
+  registerZarrHeaders,
+  repositoryKey,
+  shareRepositoryOpen,
+  __resetIcechunkRepositoriesForTests,
+} from "../packages/map/src/zarr-source";
 
 // Zarr layers on the globe (opengeos/GeoLibre#2261). zarr-cesium itself needs
 // WebGL and a real store, so the provider is a stand-in that records what it
@@ -200,6 +205,26 @@ describe("zarr layer translation", () => {
 });
 
 describe("createZarrImageryProvider", () => {
+  it("reopens a saved Icechunk branch before constructing the globe provider", async () => {
+    __resetIcechunkRepositoriesForTests();
+    const reader = { get: async () => undefined };
+    await shareRepositoryOpen(
+      repositoryKey("https://example.org/globe", "release/v1"),
+      async () => reader,
+    );
+    const { module, built } = fakeZarrCesium();
+    try {
+      await createZarrImageryProvider(
+        Cesium,
+        module,
+        zarrLayer({ url: "https://example.org/globe#icechunk=release%2Fv1" }),
+      );
+      assert.equal(built[0].options.store, reader);
+      assert.equal(built[0].options.url, undefined);
+    } finally {
+      __resetIcechunkRepositoriesForTests();
+    }
+  });
   afterEach(() => registerZarrHeaders("z1", undefined));
 
   it("opens the store with the layer's selection, limits, ramp, and dimensions", async () => {

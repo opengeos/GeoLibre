@@ -25,7 +25,7 @@ Pick by what the data **is**:
 | A WMS or WMTS endpoint | `add_ogc_layer` | `service="wms"` or `"wmts"`. |
 | A WFS feature type | `add_wfs_layer` | Fetched by the app each time the project opens; the endpoint must return GeoJSON. |
 | An ArcGIS REST MapServer, ImageServer, or FeatureServer layer | `add_arcgis_layer` | `service="map"`, `"image"`, or `"feature"`; `tiled=True` uses a validated public map/image cache. No tokens. A VectorTileServer goes to `add_tiles_layer`. |
-| A Zarr data cube (climate, ocean, imagery stacks) | `add_zarr_layer` | One `variable`, sliced with `selector`. Not Icechunk or local stores. |
+| A Zarr data cube (climate, ocean, imagery stacks) | `add_zarr_layer` | One `variable`, sliced with `selector`. For a public HTTP(S) Icechunk repository, set `icechunk_branch="main"`. Local stores need a session reader. |
 | A georeferenced video | `add_video_layer` | `https://` URLs plus four corner coordinates. |
 | A LAS/LAZ/COPC/EPT point cloud | `add_lidar_layer` | COPC and EPT stream by level of detail; the app's Point Cloud Annotation plugin can label it. |
 | An ICESat-2 (ATL06, ATL08) or GEDI (L2A, L2B, L4A) `.h5` granule | `add_spaceborne_lidar_layer` | Local file in the workspace; needs `geolibre[spaceborne]`. `bbox` for a regional subset of a GEDI orbit. |
@@ -102,7 +102,7 @@ add_arcgis_layer(path, name, url, service="map", tiled=False, sublayers=None,
                  rendering_rule=None, max_features=None, bounds=None,
                  attribution=None, index=None)
 add_zarr_layer(path, name, url, variable, selector=None, clim=None,
-               colormap=None, bounds=None, crs=None, index=None)
+               colormap=None, bounds=None, crs=None, index=None, icechunk_branch=None)
 add_video_layer(path, name, urls, coordinates, index=None)
 add_tiles_layer(path, name, url, kind="pmtiles", tile_type="vector",
                 source_layers=None, style=None, index=None)

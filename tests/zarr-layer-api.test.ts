@@ -21,6 +21,12 @@ import {
   type ComponentsModules,
 } from "../packages/plugins/src/plugins/maplibre-components.ts";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
+import {
+  __resetIcechunkRepositoriesForTests,
+  repositoryKey,
+  shareRepositoryOpen,
+  type ZarrKeyReader,
+} from "../packages/plugins/src/plugins/stac-icechunk";
 
 // `addZarrLayer` lets a plugin render a Zarr store through GeoLibre's own
 // @carbonplan/zarr-layer instance instead of bundling a second copy and adding a
@@ -29,6 +35,7 @@ import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 // for maplibre-gl-components' ZarrLayerControl.
 
 interface StubAddOptions {
+  store?: ZarrKeyReader;
   selector?: Record<string, number | string>;
   clim?: [number, number];
   colormap?: string[];
@@ -52,6 +59,7 @@ const RESOLVED_SPATIAL_REFERENCE = {
 };
 
 const addCalls: { url?: string; variable?: string; options?: StubAddOptions }[] = [];
+const metadataMinimumZooms: (number | undefined)[] = [];
 const opacityCalls: { layerId: string; opacity: number }[] = [];
 const visibilityCalls: { layerId: string; visible: boolean; opacity?: number }[] = [];
 const selectorCalls: Record<string, number | string>[] = [];
@@ -94,6 +102,7 @@ class ZarrLayerControlStub {
   private instances = new Map<
     string,
     {
+      minZoom?: number;
       setSelector: (s: never) => Promise<void>;
       queryData: (
         geometry: unknown,
@@ -151,6 +160,7 @@ class ZarrLayerControlStub {
       },
     });
     this.emit("layeradd", { url, layerId: id, state: { layers: this.layers } });
+    metadataMinimumZooms.push(this.instances.get(id)?.minZoom);
   }
 
   getLayersMap() {
@@ -192,9 +202,35 @@ const app = {
 
 afterEach(() => {
   useAppStore.setState({ layers: [] });
+  __resetIcechunkRepositoriesForTests();
 });
 
 describe("addZarrRasterLayer", () => {
+  it("retains a regional minimum zoom before the first restored metadata fetch", async () => {
+    installStubModule();
+    metadataMinimumZooms.length = 0;
+    const id = await addZarrRasterLayer(app, {
+      url: "https://example.org/regional.zarr",
+      variable: "air",
+      minZoom: 4.95,
+    });
+    assert.equal(metadataMinimumZooms.at(-1), 4.95, "the first add is guarded");
+    const saved = parseProject(serializeProject(projectFromStore(useAppStore.getState())));
+    const layer = saved.layers.find((entry) => entry.id === id)!;
+    assert.equal(
+      layer.source.minZoom,
+      4.95,
+      "the applied threshold survives project serialization",
+    );
+    useAppStore.setState({ layers: [] });
+    useAppStore.setState({ layers: saved.layers });
+    const addsBeforeRestore = addCalls.length;
+    await restoreZarrLayers(app);
+    assert.equal(addCalls.length, addsBeforeRestore + 1, "the project layer was reopened");
+    assert.equal(metadataMinimumZooms.at(-1), 4.95, "restore guards the first metadata fetch too");
+    assert.equal(useAppStore.getState().layers[0].source.minZoom, 4.95);
+  });
+
   it("forwards CRS, colormap, and selector to the renderer and mirrors the layer", async () => {
     installStubModule();
     addCalls.length = 0;
@@ -801,7 +837,6 @@ describe("restoreZarrLayers", () => {
       layers: [
         savedZarrLayer("saved-sst", "SST"),
         savedZarrLayer("local", "Folder", "local-zarr:cube?1"),
-        savedZarrLayer("icechunk", "Repo", "https://example.org/repo#icechunk=main"),
       ],
     });
     addCalls.length = 0;
@@ -813,7 +848,106 @@ describe("restoreZarrLayers", () => {
       addCalls.map((call) => call.url),
       [SST_URL],
     );
-    assert.equal(useAppStore.getState().layers.length, 3);
+    assert.equal(useAppStore.getState().layers.length, 2);
+  });
+
+  it("reopens a saved Icechunk branch once with its reader and saved settings", async () => {
+    installStubModule();
+    __resetIcechunkRepositoriesForTests();
+    const url = "https://example.org/repo#icechunk=release%2F2026%20%231%2Btest";
+    const reader: ZarrKeyReader = { get: async () => undefined };
+    await shareRepositoryOpen(
+      repositoryKey("https://example.org/repo", "release/2026 #1+test"),
+      async () => reader,
+    );
+    const initial = savedZarrLayer("saved-ice", "Saved repository", url);
+    const saved = {
+      ...initial,
+      visible: false,
+      source: { ...initial.source, selector: { time: 2 } },
+    };
+    useAppStore.setState({ layers: [saved] });
+    addCalls.length = 0;
+    await Promise.all([restoreZarrLayers(app), restoreZarrLayers(app)]);
+    await restoreZarrLayers(app);
+    assert.equal(addCalls.length, 1);
+    assert.equal(addCalls[0].url, url);
+    assert.equal(addCalls[0].options?.store, reader);
+    assert.deepEqual(addCalls[0].options?.selector, { time: 2 });
+    assert.deepEqual(addCalls[0].options?.clim, [-2, 32]);
+    const restored = useAppStore.getState().layers[0];
+    assert.equal(restored.source.url, url);
+    assert.equal(restored.name, saved.name);
+    assert.equal(restored.visible, false);
+    assert.equal(restored.opacity, saved.opacity);
+    __resetIcechunkRepositoriesForTests();
+  });
+
+  it("does not publish an Icechunk restore into a replacement project with the same source", async () => {
+    installStubModule();
+    __resetIcechunkRepositoriesForTests();
+    let finish!: (reader: ZarrKeyReader) => void;
+    const opening = shareRepositoryOpen(
+      repositoryKey("https://example.org/replaced", "main"),
+      () =>
+        new Promise<ZarrKeyReader>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const url = "https://example.org/replaced#icechunk=main";
+    const layer = savedZarrLayer("same-id", "Old project", url);
+    useAppStore.setState({ layers: [layer] });
+    addCalls.length = 0;
+    const pending = restoreZarrLayers(app);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    useAppStore.getState().newProject({ layers: [{ ...layer, name: "Replacement project" }] });
+    const replacement = restoreZarrLayers(app);
+    finish({ get: async () => undefined });
+    await opening;
+    await pending;
+    await replacement;
+    assert.equal(addCalls.length, 1);
+    assert.equal(useAppStore.getState().layers[0].name, "Replacement project");
+    __resetIcechunkRepositoriesForTests();
+  });
+
+  it("preserves a failed Icechunk placeholder and permits a later retry", async () => {
+    installStubModule();
+    __resetIcechunkRepositoriesForTests();
+    let fail!: (error: Error) => void;
+    const key = repositoryKey("https://example.org/retry", "main");
+    const opening = shareRepositoryOpen(
+      key,
+      () =>
+        new Promise<ZarrKeyReader>((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    void opening.catch(() => {});
+    const layer = savedZarrLayer(
+      "retry",
+      "Keep this layer",
+      "https://example.org/retry#icechunk=main",
+    );
+    useAppStore.setState({ layers: [layer] });
+    addCalls.length = 0;
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      const pending = restoreZarrLayers(app);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      fail(new Error("Repository temporarily unavailable"));
+      await pending;
+      assert.equal(addCalls.length, 0);
+      assert.equal(useAppStore.getState().layers[0], layer);
+      await shareRepositoryOpen(key, async () => ({ get: async () => undefined }));
+      await restoreZarrLayers(app);
+      assert.equal(addCalls.length, 1);
+      assert.equal(useAppStore.getState().layers[0].name, layer.name);
+    } finally {
+      console.warn = warn;
+      __resetIcechunkRepositoriesForTests();
+    }
   });
 
   it("leaves the record in place when the store fails to load", async () => {

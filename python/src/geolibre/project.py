@@ -24,7 +24,7 @@ from http.client import HTTPException
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.error import URLError
-from urllib.parse import quote, unquote_plus, urlsplit
+from urllib.parse import quote, unquote, unquote_plus, urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
 
 from ._arcgis_cache import cached_arcgis_source
@@ -4779,6 +4779,7 @@ def zarr_layer(
     url: str,
     variable: str,
     *,
+    icechunk_branch: str | None = None,
     selector: dict[str, int | float | str] | None = None,
     clim: list[float] | None = None,
     colormap: str | None = None,
@@ -4792,8 +4793,8 @@ def zarr_layer(
     The app re-adds it through the Zarr control when the project opens
     (``restoreZarrLayers``), which assigns the live layer a new id.
 
-    Icechunk repositories (``#icechunk=`` URLs) and local stores cannot be
-    reopened from a project, so they are refused.
+    Public Icechunk repositories retain their branch in the URL so the app can
+    reopen their reader. Local stores still require a session-only reader.
 
     Args:
         name: Layer display name.
@@ -4801,6 +4802,9 @@ def zarr_layer(
             Google Storage URLs are saved as public HTTPS endpoints, preserving
             their query parameters so the app can reopen them.
         variable: The array to draw (e.g. ``"tas"``).
+        icechunk_branch: Branch of a public HTTP(S) Icechunk repository, e.g.
+            ``"main"``. Omit for a plain Zarr store. Encoded ``#icechunk=``
+            URLs from saved projects are also accepted.
         selector: Non-spatial dimension values to slice, e.g.
             ``{"time": 0}`` or ``{"band": "B04"}``.
         clim: ``[min, max]`` color range.
@@ -4815,16 +4819,15 @@ def zarr_layer(
         A layer dict for the project's ``layers`` array.
 
     Raises:
-        ValueError: If ``url`` or ``variable`` is blank, the URL is an Icechunk
-            or local store, embeds credentials, or an option is malformed.
+        ValueError: If the URL, branch, variable, or options are invalid, or the
+            URL names a local store or embeds credentials.
     """
     if not isinstance(url, str) or not url.strip():
         raise ValueError("zarr_layer: url must be a non-empty string")
     store_url = url.strip()
-    if "#icechunk=" in store_url or re.match(r"^local(-zarr)?:", store_url):
+    if re.match(r"^local(-zarr)?:", store_url):
         raise ValueError(
-            "zarr_layer: Icechunk and local stores cannot be reopened from a project; "
-            "use a plain Zarr store URL"
+            "zarr_layer: local stores cannot be reopened from a project; use a public store URL"
         )
     if not re.match(r"^(https?|s3|gs)://", store_url, re.IGNORECASE):
         raise ValueError("zarr_layer: url must be http(s)://, s3://, or gs://")
@@ -4836,6 +4839,24 @@ def zarr_layer(
         store_url = parts._replace(
             scheme="https", netloc="storage.googleapis.com", path=f"/{parts.netloc}{parts.path}"
         ).geturl()
+    parts = urlsplit(store_url)
+    if parts.fragment.startswith("icechunk="):
+        encoded_branch = parts.fragment[len("icechunk=") :]
+        if re.search(r"%(?![0-9a-fA-F]{2})", encoded_branch):
+            raise ValueError("zarr_layer: invalid encoded Icechunk branch")
+        try:
+            saved_branch = unquote(encoded_branch, errors="strict")
+        except UnicodeDecodeError as error:
+            raise ValueError("zarr_layer: invalid encoded Icechunk branch") from error
+        if icechunk_branch is not None and icechunk_branch != saved_branch:
+            raise ValueError("zarr_layer: conflicting Icechunk branches")
+        icechunk_branch = saved_branch
+    if icechunk_branch is not None:
+        if not isinstance(icechunk_branch, str) or not icechunk_branch.strip():
+            raise ValueError("zarr_layer: icechunk_branch must be a non-empty string")
+        if parts.scheme.lower() not in {"http", "https"}:
+            raise ValueError("zarr_layer: an Icechunk repository requires an HTTP(S) URL")
+        store_url = parts._replace(fragment="icechunk=" + quote(icechunk_branch, safe="")).geturl()
     if not isinstance(variable, str) or not variable.strip():
         raise ValueError("zarr_layer: variable must be a non-empty string")
     if selector is not None and (
