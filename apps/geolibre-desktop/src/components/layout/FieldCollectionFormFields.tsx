@@ -37,8 +37,11 @@ interface FieldCollectionFormFieldsProps {
   errorText: (code: string | undefined) => string | null;
   /** Changes with each record, so a picture still loading stays with its own. */
   captureKey: string;
-  /** Told when a picture read starts (+1) and finishes (-1), so Save can wait. */
-  onReadingChange: (delta: 1 | -1, readId: number) => void;
+  /**
+   * Told when a picture read starts (+1) and finishes (-1), so Save can wait.
+   * Returns whether the read still belongs to the current capture.
+   */
+  onReadingChange: (delta: 1 | -1, readId: number) => boolean;
 }
 
 /**
@@ -109,7 +112,7 @@ interface FormFieldProps {
   onChange: (value: string) => void;
   error: string | null;
   captureKey: string;
-  onReadingChange: (delta: 1 | -1, readId: number) => void;
+  onReadingChange: (delta: 1 | -1, readId: number) => boolean;
 }
 
 function FormField({
@@ -209,7 +212,7 @@ function AttachmentInput({
   value: string;
   onChange: (value: string) => void;
   captureKey: string;
-  onReadingChange: (delta: 1 | -1, readId: number) => void;
+  onReadingChange: (delta: 1 | -1, readId: number) => boolean;
 }) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -241,15 +244,22 @@ function AttachmentInput({
     const seq = (readSeq.current += 1);
     const reader = new FileReader();
     // Save is held while the picture loads, so a quick save cannot store the
-    // record without it. Released exactly once, however the read ends.
+    // record without it. Released exactly once, however the read ends: the
+    // controller ignores a second release of the same read. The release also
+    // says whether the capture still wants the result, which `readSeq` cannot
+    // tell once a dismissed dialog has unmounted this input.
     const readId = (lastAttachmentReadId += 1);
     onReadingChange(1, readId);
-    reader.onloadend = () => onReadingChange(-1, readId);
+    reader.onloadend = () => {
+      onReadingChange(-1, readId);
+    };
     reader.onerror = () => {
-      if (readSeq.current === seq) setProblem(t("fieldCollection.photoReadError"));
+      const wanted = onReadingChange(-1, readId);
+      if (wanted && readSeq.current === seq) setProblem(t("fieldCollection.photoReadError"));
     };
     reader.onload = () => {
-      if (readSeq.current !== seq) return;
+      const wanted = onReadingChange(-1, readId);
+      if (!wanted || readSeq.current !== seq) return;
       const src = typeof reader.result === "string" ? reader.result : "";
       if (!RASTER_DATA_URL.test(src)) setProblem(t("fieldCollection.photoReadError"));
       // The stored value is base64, about 4/3 the size of the file it holds.

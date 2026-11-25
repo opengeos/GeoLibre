@@ -1056,15 +1056,18 @@ export function useFieldCollectionController({
           attributeForm,
           pending: capturePending,
           captureKey: recordKey,
-          onAttachmentReading: (delta: 1 | -1, readId: number) => {
+          onAttachmentReading: (delta: 1 | -1, readId: number): boolean => {
             // A read belongs to the capture it began in. A completion releases
-            // only a read still being held, never a newer one.
+            // only a read still being held, never a newer one, and reports
+            // whether its result is still wanted.
             if (delta > 0) {
               attachmentReadsRef.current.add(readId);
               setPhotoReads((count) => count + 1);
-            } else if (attachmentReadsRef.current.delete(readId)) {
-              setPhotoReads((count) => Math.max(0, count - 1));
+              return true;
             }
+            const held = attachmentReadsRef.current.delete(readId);
+            if (held) setPhotoReads((count) => Math.max(0, count - 1));
+            return held;
           },
           values,
           setValue,

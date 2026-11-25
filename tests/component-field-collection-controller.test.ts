@@ -128,12 +128,14 @@ class PendingReader {
   result: string | null = null;
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;
+  onloadend: (() => void) | null = null;
   readAsDataURL(_file: File) {
     PendingReader.pending.push(this);
   }
   finish(name: string) {
     this.result = `data:image/jpeg;base64,${btoa(name)}`;
     this.onload?.();
+    this.onloadend?.();
   }
 }
 
@@ -442,4 +444,62 @@ it("releases Save only when the attachment read that held it finishes", () => {
   assert.equal(capture(hook).readingPhotos, true);
   act(() => capture(hook).onAttachmentReading(-1, 2));
   assert.equal(capture(hook).readingPhotos, false);
+});
+
+/** A table with a photo field drawn by the Attribute Form's attachment widget. */
+function addPhotoTable(id: string) {
+  useAppStore.getState().addLayer(
+    geojsonLayer({
+      id,
+      name: id,
+      metadata: collectionMetadata(
+        { fields: [{ key: "photo", label: "Photo", type: "text", required: false }] },
+        "none",
+      ),
+      attributeForm: { fields: [{ field: "photo", widget: "attachment" }] },
+    }),
+  );
+}
+
+function photoDialog(open: boolean) {
+  return createElement(FieldCollectionDialog, {
+    open,
+    onOpenChange: () => {},
+    mapControllerRef: { current: null },
+    mapReadyGeneration: 0,
+  });
+}
+
+function pickAttachment(name: string) {
+  const input = document.querySelector<HTMLInputElement>("#fc-photo");
+  assert.ok(input, "the attachment field renders a file input");
+  fireEvent.change(input, { target: { files: [new File([name], name)] } });
+}
+
+const saveRecord = () =>
+  screen.getByRole("button", { name: i18n.t("fieldCollection.save.none") }) as HTMLButtonElement;
+
+it("holds Save while an attachment field reads its picture", async () => {
+  addPhotoTable("Photos");
+  Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
+  render(photoDialog(true));
+  pickAttachment("site.jpg");
+  assert.equal(saveRecord().disabled, true);
+  await act(async () => PendingReader.pending[0].finish("site"));
+  assert.equal(saveRecord().disabled, false);
+  assert.ok(screen.getByRole("img", { name: i18n.t("fieldCollection.photo") }));
+});
+
+it("drops a picture whose read the capture abandoned while its input was unmounted", async () => {
+  addPhotoTable("Photos");
+  Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
+  const view = render(photoDialog(true));
+  pickAttachment("old.jpg");
+  // Done ends the session and the capture; the dialog content unmounts.
+  fireEvent.click(screen.getByRole("button", { name: i18n.t("common.done") }));
+  view.rerender(photoDialog(false));
+  view.rerender(photoDialog(true));
+  await act(async () => PendingReader.pending[0].finish("old"));
+  assert.equal(saveRecord().disabled, false);
+  assert.equal(screen.queryByRole("img", { name: i18n.t("fieldCollection.photo") }), null);
 });
