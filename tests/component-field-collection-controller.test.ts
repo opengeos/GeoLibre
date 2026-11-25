@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, i18n, render, screen, useAppStore, waitFor } from "./helpers/dom";
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, it } from "node:test";
+import { afterEach, beforeEach, it, mock } from "node:test";
 import { createElement } from "react";
 import type { MapEngine, MapRenderSurface } from "@geolibre/map";
 import { renderHook } from "@testing-library/react";
@@ -8,23 +8,34 @@ import { geojsonLayer } from "./helpers/layer-fixtures";
 import {
   collectionMetadata,
   type CollectionSchema,
+  type GeometryType,
 } from "../apps/geolibre-desktop/src/lib/field-collection";
 
 const { useFieldCollectionController } =
   await import("../apps/geolibre-desktop/src/hooks/useFieldCollectionController");
 const { FieldCollectionDialog } =
   await import("../apps/geolibre-desktop/src/components/layout/FieldCollectionDialog");
+const { FieldCollectionFormFields } =
+  await import("../apps/geolibre-desktop/src/components/layout/FieldCollectionFormFields");
 const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
 const readerDescriptor = Object.getOwnPropertyDescriptor(globalThis, "FileReader");
 const schema: CollectionSchema = {
   fields: [{ key: "condition", label: "Condition", type: "text", required: true }],
 };
 
-function addCollection(id: string) {
+function addCollection(id: string, geometry: GeometryType = "point", fields = schema) {
   useAppStore
     .getState()
-    .addLayer(geojsonLayer({ id, name: id, metadata: collectionMetadata(schema) }));
+    .addLayer(geojsonLayer({ id, name: id, metadata: collectionMetadata(fields, geometry) }));
 }
+
+// A table whose records carry a link to a parent record.
+const linkedSchema: CollectionSchema = {
+  fields: [
+    { key: "parent_id", label: "Parent", type: "text", required: false },
+    { key: "condition", label: "Condition", type: "text", required: false },
+  ],
+};
 
 function hardware() {
   const requests: { resolve: PositionCallback; reject?: PositionErrorCallback | null }[] = [];
@@ -83,6 +94,21 @@ function capture(hook: ReturnType<typeof controller>) {
   return model;
 }
 
+function fieldsFor(hook: ReturnType<typeof controller>) {
+  const model = capture(hook);
+  return createElement(FieldCollectionFormFields, {
+    schema: model.schema,
+    attributeForm: model.attributeForm,
+    candidateProps: null,
+    values: model.values,
+    setValue: model.setValue,
+    errors: model.errors,
+    errorText: model.errorText,
+    captureKey: model.captureKey,
+    onReadingChange: model.onAttachmentReading,
+  });
+}
+
 const containers: HTMLElement[] = [];
 
 function liveMap() {
@@ -119,12 +145,18 @@ class PendingReader {
   result: string | null = null;
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;
+  onloadend: (() => void) | null = null;
   readAsDataURL(_file: File) {
     PendingReader.pending.push(this);
   }
   finish(name: string) {
     this.result = `data:image/jpeg;base64,${btoa(name)}`;
     this.onload?.();
+    this.onloadend?.();
+  }
+  fail() {
+    this.onerror?.();
+    this.onloadend?.();
   }
 }
 
@@ -135,6 +167,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  mock.restoreAll();
   cleanup();
   for (const container of containers.splice(0)) container.remove();
   for (const [key, descriptor] of [
@@ -296,4 +329,429 @@ it("saves a point from the rendered collection form", async () => {
     useAppStore.getState().layers[0].geojson?.features[0].properties?.condition,
     "Observed",
   );
+});
+
+it("keeps a related-record link across dismissal after a child save", () => {
+  addCollection("Parent", "none", linkedSchema);
+  addCollection("Child", "none", linkedSchema);
+  let now = 10_000;
+  mock.method(Date, "now", () => now);
+  const hook = controller();
+  act(() => capture(hook).setValue("condition", "parent"));
+  act(() => capture(hook).onSave());
+  act(() => hook.result.current.related?.onAdd("Child", { parent_id: "p-1" }));
+  now += 1000;
+  act(() => capture(hook).setValue("condition", "first child"));
+  act(() => capture(hook).onSave());
+  act(() => hook.result.current.onDialogOpenChange(false));
+  hook.rerender({ open: false });
+  hook.rerender({ open: true });
+  assert.equal(capture(hook).values.parent_id, "p-1");
+  now += 1000;
+  act(() => capture(hook).setValue("condition", "second child"));
+  act(() => capture(hook).onSave());
+  const saved = useAppStore.getState().layers.find((layer) => layer.id === "Child")?.geojson;
+  assert.equal(saved?.features.length, 2);
+  assert.equal(saved?.features[1].properties?.parent_id, "p-1");
+});
+
+it("drops a related-record prefill when its child table is deleted and the target falls back", () => {
+  addCollection("Parent", "none", linkedSchema);
+  addCollection("Child", "none", linkedSchema);
+  // Step past the double-save guard between saves without waiting for it.
+  let now = 10_000;
+  mock.method(Date, "now", () => now);
+  const hook = controller();
+  assert.equal(hook.result.current.target.selected, "Parent");
+  act(() => capture(hook).setValue("condition", "parent"));
+  act(() => capture(hook).onSave());
+  const related = hook.result.current.related;
+  assert.ok(related, "a saved parent offers Add Related");
+  act(() => related.onAdd("Child", { parent_id: "p-1" }));
+  assert.equal(hook.result.current.target.selected, "Child");
+  // Consecutive saves in the same related workflow keep the link.
+  now += 1000;
+  act(() => capture(hook).setValue("condition", "child"));
+  act(() => capture(hook).onSave());
+  assert.equal(capture(hook).values.parent_id, "p-1");
+  act(() => hook.result.current.onDialogOpenChange(false));
+  hook.rerender({ open: false });
+  act(() => useAppStore.getState().removeLayer("Child"));
+  assert.equal(hook.result.current.target.selected, "Parent");
+  hook.rerender({ open: true });
+  now += 1000;
+  act(() => capture(hook).setValue("condition", "another parent"));
+  act(() => capture(hook).onSave());
+  const saved = useAppStore.getState().layers.find((layer) => layer.id === "Parent")?.geojson;
+  assert.equal(saved?.features.length, 2);
+  assert.equal(saved?.features[1].properties?.parent_id ?? "", "");
+  assert.equal(capture(hook).values.parent_id, undefined);
+});
+
+it("keeps an edited table record across dismissal", () => {
+  addCollection("Table", "none");
+  const hook = controller();
+  act(() => capture(hook).setValue("condition", "Typed"));
+  act(() => hook.result.current.onDialogOpenChange(false));
+  hook.rerender({ open: false });
+  hook.rerender({ open: true });
+  assert.equal(capture(hook).values.condition, "Typed");
+});
+
+for (const geometry of ["point", "line"] as const) {
+  it(`keeps edited ${geometry} attributes across dismissal before geometry is placed`, () => {
+    addCollection("A", geometry);
+    const hook = controller();
+    act(() => capture(hook).setValue("condition", "Typed before placement"));
+    act(() => hook.result.current.onDialogOpenChange(false));
+    hook.rerender({ open: false });
+    hook.rerender({ open: true });
+    assert.equal(capture(hook).values.condition, "Typed before placement");
+  });
+}
+
+it("keeps a capture whose photo is still being read across dismissal", async () => {
+  addCollection("A");
+  hardware();
+  Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
+  const hook = controller();
+  const inputView = render(
+    createElement("input", { type: "file", onChange: capture(hook).onPhotos }),
+  );
+  const input = inputView.container.querySelector("input");
+  assert.ok(input);
+  fireEvent.change(input, { target: { files: [new File(["photo"], "photo.jpg")] } });
+  act(() => hook.result.current.onDialogOpenChange(false));
+  hook.rerender({ open: false });
+  hook.rerender({ open: true });
+  assert.equal(capture(hook).readingPhotos, true);
+  await act(async () => PendingReader.pending[0].finish("photo"));
+  assert.equal(capture(hook).readingPhotos, false);
+  assert.deepEqual(
+    capture(hook).photos.map((photo) => photo.name),
+    ["photo.jpg"],
+  );
+});
+
+it("clears the GPS busy state when a dismissal keeps a setup draft", async () => {
+  addCollection("A");
+  const requests = hardware();
+  const hook = controller();
+  act(() => hook.result.current.setup.onLayerName("Half-composed"));
+  act(() => capture(hook).onUseGps());
+  assert.equal(capture(hook).locating, true);
+  act(() => hook.result.current.onDialogOpenChange(false));
+  hook.rerender({ open: false });
+  hook.rerender({ open: true });
+  assert.equal(hook.result.current.setup.layerName, "Half-composed");
+  assert.equal(capture(hook).locating, false);
+  await act(async () => requests[0].resolve(position()));
+  assert.equal(capture(hook).pending, null);
+});
+
+for (const exit of ["finish", "cancel"] as const) {
+  it(`drops a GPS vertex that arrives after drawing is ${exit === "finish" ? "finished" : "cancelled"}`, async () => {
+    addCollection("Line", "line");
+    const requests = hardware();
+    const map = liveMap();
+    const hook = controller(map.ref);
+    act(() => capture(hook).onStartDrawing());
+    hook.rerender({ open: false });
+    for (const [index, lng] of [-84, -83].entries()) {
+      act(() => hook.result.current.draw?.onAddGps());
+      await act(async () => requests[index].resolve(position(lng)));
+    }
+    assert.equal(hook.result.current.draw?.count, 2);
+    act(() => hook.result.current.draw?.onAddGps());
+    assert.equal(hook.result.current.draw?.locating, true);
+    const draw = hook.result.current.draw;
+    assert.ok(draw);
+    act(() => (exit === "finish" ? draw.onFinish() : draw.onCancel()));
+    hook.rerender({ open: true });
+    assert.equal(capture(hook).locating, false);
+    const preview = map.container.querySelector("[data-field-collection-preview]");
+    await act(async () => requests[2].resolve(position(-82)));
+    assert.equal(map.flights.length, 2);
+    if (exit === "finish") {
+      assert.deepEqual(capture(hook).pending, [
+        [-84, 35.95],
+        [-83, 35.95],
+      ]);
+      assert.equal(map.container.querySelector("[data-field-collection-preview]"), preview);
+      assert.equal(preview?.querySelectorAll("circle").length, 2);
+    } else {
+      assert.equal(preview, null);
+      assert.equal(map.container.querySelector("[data-field-collection-preview]"), null);
+    }
+  });
+}
+
+it("releases Save only when the attachment read that held it finishes", () => {
+  addCollection("A");
+  addCollection("B");
+  const hook = controller();
+  // Pick a picture in A, leave for B and come back: the record key is the same.
+  act(() => capture(hook).onAttachmentReading(1, 1));
+  act(() => hook.result.current.target.onChange("B"));
+  act(() => hook.result.current.target.onChange("A"));
+  act(() => capture(hook).onAttachmentReading(1, 2));
+  assert.equal(capture(hook).readingPhotos, true);
+  // The first read's late completion must not release the second's hold.
+  act(() => capture(hook).onAttachmentReading(-1, 1));
+  assert.equal(capture(hook).readingPhotos, true);
+  act(() => capture(hook).onAttachmentReading(-1, 2));
+  assert.equal(capture(hook).readingPhotos, false);
+});
+
+for (const returnToOriginal of [false, true]) {
+  it(`drops an attachment from an unmounted input after ${returnToOriginal ? "switching targets away and back" : "switching to a schema without that field"}`, async () => {
+    addCollection("A", "none", {
+      fields: [{ key: "image", label: "Image", type: "text", required: false }],
+    });
+    useAppStore.getState().updateLayer("A", {
+      attributeForm: { fields: [{ field: "image", widget: "attachment" }] },
+    });
+    addCollection("B", "none");
+    Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
+    const hook = controller();
+    act(() => hook.result.current.target.onChange("A"));
+    const view = render(fieldsFor(hook));
+    const input = view.container.querySelector('input[type="file"]');
+    assert.ok(input);
+    fireEvent.change(input, { target: { files: [new File(["old"], "old.jpg")] } });
+    assert.equal(capture(hook).readingPhotos, true);
+    act(() => hook.result.current.target.onChange("B"));
+    view.rerender(fieldsFor(hook));
+    assert.equal(view.container.querySelector('input[type="file"]'), null);
+    if (returnToOriginal) {
+      act(() => hook.result.current.target.onChange("A"));
+      view.rerender(fieldsFor(hook));
+    }
+    const before = { ...capture(hook).values };
+    await act(async () => PendingReader.pending[0].finish("old"));
+    assert.deepEqual(capture(hook).values, before);
+    assert.equal(capture(hook).readingPhotos, false);
+  });
+}
+
+it("keeps a pending attachment when its input unmounts for same-draft dismissal", async () => {
+  addCollection("A", "none", {
+    fields: [{ key: "image", label: "Image", type: "text", required: false }],
+  });
+  useAppStore.getState().updateLayer("A", {
+    attributeForm: { fields: [{ field: "image", widget: "attachment" }] },
+  });
+  Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
+  const hook = controller();
+  const view = render(fieldsFor(hook));
+  const input = view.container.querySelector('input[type="file"]');
+  assert.ok(input);
+  fireEvent.change(input, { target: { files: [new File(["kept"], "kept.jpg")] } });
+  act(() => hook.result.current.onDialogOpenChange(false));
+  hook.rerender({ open: false });
+  view.unmount();
+  assert.equal(capture(hook).readingPhotos, true);
+  await act(async () => PendingReader.pending[0].finish("kept"));
+  hook.rerender({ open: true });
+  assert.equal(capture(hook).values.image, `data:image/jpeg;base64,${btoa("kept")}`);
+  assert.equal(capture(hook).readingPhotos, false);
+});
+
+for (const dismissed of [false, true]) {
+  it(`clears a failed attachment notice on retry ${dismissed ? "after same-draft dismissal" : "while mounted"}`, async () => {
+    addCollection("A", "none", {
+      fields: [{ key: "image", label: "Image", type: "text", required: false }],
+    });
+    useAppStore.getState().updateLayer("A", {
+      attributeForm: { fields: [{ field: "image", widget: "attachment" }] },
+    });
+    Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
+    const hook = controller();
+    let view = render(fieldsFor(hook));
+    const input = view.container.querySelector('input[type="file"]');
+    assert.ok(input);
+    fireEvent.change(input, { target: { files: [new File(["failed"], "failed.jpg")] } });
+    if (dismissed) {
+      act(() => hook.result.current.onDialogOpenChange(false));
+      hook.rerender({ open: false });
+      view.unmount();
+    }
+    await act(async () => PendingReader.pending[0].fail());
+    if (dismissed) {
+      hook.rerender({ open: true });
+      view = render(fieldsFor(hook));
+    }
+    assert.equal(hook.result.current.notice, i18n.t("fieldCollection.photoReadError"));
+    assert.equal(capture(hook).readingPhotos, false);
+    const retry = view.container.querySelector('input[type="file"]');
+    assert.ok(retry);
+    fireEvent.change(retry, { target: { files: [new File(["retry"], "retry.jpg")] } });
+    assert.equal(hook.result.current.notice, null);
+    assert.equal(capture(hook).readingPhotos, true);
+    await act(async () => PendingReader.pending[1].finish("retry"));
+    assert.equal(capture(hook).values.image, `data:image/jpeg;base64,${btoa("retry")}`);
+    assert.equal(capture(hook).readingPhotos, false);
+    assert.equal(hook.result.current.notice, null);
+  });
+}
+
+/** A table with a photo field drawn by the Attribute Form's attachment widget. */
+function addPhotoTable(id: string) {
+  useAppStore.getState().addLayer(
+    geojsonLayer({
+      id,
+      name: id,
+      metadata: collectionMetadata(
+        { fields: [{ key: "photo", label: "Photo", type: "text", required: false }] },
+        "none",
+      ),
+      attributeForm: { fields: [{ field: "photo", widget: "attachment" }] },
+    }),
+  );
+}
+
+function photoDialog(open: boolean) {
+  return createElement(FieldCollectionDialog, {
+    open,
+    onOpenChange: () => {},
+    mapControllerRef: { current: null },
+    mapReadyGeneration: 0,
+  });
+}
+
+function pickAttachment(name: string) {
+  const input = document.querySelector<HTMLInputElement>("#fc-photo");
+  assert.ok(input, "the attachment field renders a file input");
+  fireEvent.change(input, { target: { files: [new File([name], name)] } });
+}
+
+const saveRecord = () =>
+  screen.getByRole("button", { name: i18n.t("fieldCollection.save.none") }) as HTMLButtonElement;
+
+it("holds Save while an attachment field reads its picture", async () => {
+  addPhotoTable("Photos");
+  Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
+  render(photoDialog(true));
+  pickAttachment("site.jpg");
+  assert.equal(saveRecord().disabled, true);
+  await act(async () => PendingReader.pending[0].finish("site"));
+  assert.equal(saveRecord().disabled, false);
+  assert.ok(screen.getByRole("img", { name: i18n.t("fieldCollection.photo") }));
+});
+
+it("drops a picture whose read the capture abandoned while its input was unmounted", async () => {
+  addPhotoTable("Photos");
+  Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
+  const view = render(photoDialog(true));
+  pickAttachment("old.jpg");
+  // Done ends the session and the capture; the dialog content unmounts.
+  fireEvent.click(screen.getByRole("button", { name: i18n.t("common.done") }));
+  view.rerender(photoDialog(false));
+  view.rerender(photoDialog(true));
+  await act(async () => PendingReader.pending[0].finish("old"));
+  assert.equal(saveRecord().disabled, false);
+  assert.equal(screen.queryByRole("img", { name: i18n.t("fieldCollection.photo") }), null);
+});
+
+for (const removeNewer of [false, true]) {
+  it(`keeps ${removeNewer ? "a removal" : "the newer attachment"} when an old read finishes after same-draft remount`, async () => {
+    addCollection("A", "none", {
+      fields: [{ key: "image", label: "Image", type: "text", required: false }],
+    });
+    useAppStore
+      .getState()
+      .updateLayer("A", { attributeForm: { fields: [{ field: "image", widget: "attachment" }] } });
+    Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
+    const hook = controller();
+    let view = render(fieldsFor(hook));
+    const pick = (name: string) => {
+      const input = view.container.querySelector('input[type="file"]');
+      assert.ok(input);
+      fireEvent.change(input, { target: { files: [new File([name], `${name}.jpg`)] } });
+    };
+    pick("old");
+    act(() => hook.result.current.onDialogOpenChange(false));
+    hook.rerender({ open: false });
+    view.unmount();
+    hook.rerender({ open: true });
+    view = render(fieldsFor(hook));
+    pick("new");
+    await act(async () => PendingReader.pending[1].finish("new"));
+    view.rerender(fieldsFor(hook));
+    if (removeNewer)
+      fireEvent.click(view.getByRole("button", { name: i18n.t("fieldCollection.removePhoto") }));
+    await act(async () => PendingReader.pending[0].finish("old"));
+    assert.equal(
+      capture(hook).values.image,
+      removeNewer ? "" : `data:image/jpeg;base64,${btoa("new")}`,
+    );
+    assert.equal(capture(hook).readingPhotos, false);
+    act(() => capture(hook).onSave());
+    const features = useAppStore.getState().layers.find((layer) => layer.id === "A")
+      ?.geojson?.features;
+    assert.equal(features?.length, 1);
+    assert.equal(
+      features?.[0].properties?.image,
+      removeNewer ? undefined : `data:image/jpeg;base64,${btoa("new")}`,
+    );
+  });
+}
+
+it("keeps remounted attachment reads for different fields independent", async () => {
+  addCollection("A", "none", {
+    fields: ["first", "second"].map((key) => ({ key, label: key, type: "text", required: false })),
+  });
+  useAppStore.getState().updateLayer("A", {
+    attributeForm: {
+      fields: ["first", "second"].map((field) => ({ field, widget: "attachment" })),
+    },
+  });
+  Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
+  const hook = controller();
+  let view = render(fieldsFor(hook));
+  const first = view.container.querySelectorAll('input[type="file"]')[0];
+  assert.ok(first);
+  fireEvent.change(first, { target: { files: [new File(["first"], "first.jpg")] } });
+  act(() => hook.result.current.onDialogOpenChange(false));
+  hook.rerender({ open: false });
+  view.unmount();
+  hook.rerender({ open: true });
+  view = render(fieldsFor(hook));
+  const second = view.container.querySelectorAll('input[type="file"]')[1];
+  assert.ok(second);
+  fireEvent.change(second, { target: { files: [new File(["second"], "second.jpg")] } });
+  await act(async () => PendingReader.pending[1].finish("second"));
+  await act(async () => PendingReader.pending[0].finish("first"));
+  assert.equal(capture(hook).values.first, `data:image/jpeg;base64,${btoa("first")}`);
+  assert.equal(capture(hook).values.second, `data:image/jpeg;base64,${btoa("second")}`);
+  assert.equal(capture(hook).readingPhotos, false);
+});
+
+it("ignores an older remounted read failure after the newer photo completes", async () => {
+  addCollection("A", "none", {
+    fields: [{ key: "image", label: "Image", type: "text", required: false }],
+  });
+  useAppStore
+    .getState()
+    .updateLayer("A", { attributeForm: { fields: [{ field: "image", widget: "attachment" }] } });
+  Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
+  const hook = controller();
+  let view = render(fieldsFor(hook));
+  const pick = () => {
+    const input = view.container.querySelector('input[type="file"]');
+    assert.ok(input);
+    fireEvent.change(input, { target: { files: [new File(["photo"], "photo.jpg")] } });
+  };
+  pick();
+  act(() => hook.result.current.onDialogOpenChange(false));
+  hook.rerender({ open: false });
+  view.unmount();
+  hook.rerender({ open: true });
+  view = render(fieldsFor(hook));
+  pick();
+  await act(async () => PendingReader.pending[1].finish("new"));
+  await act(async () => PendingReader.pending[0].fail());
+  assert.equal(capture(hook).values.image, `data:image/jpeg;base64,${btoa("new")}`);
+  assert.equal(hook.result.current.notice, null);
+  assert.equal(capture(hook).readingPhotos, false);
 });

@@ -371,10 +371,13 @@ interface CaptureStepProps {
   pending: Vertex[] | null;
   /** Identifies the record being filled in; changes on save and on a new target. */
   captureKey: string;
-  /** A photo field started (+1) or finished (-1) reading a picture; Save waits for it. */
-  onAttachmentReading: (delta: 1 | -1, captureKey: string) => void;
+  /**
+   * A photo field started (+1) or finished (-1) reading a picture; Save waits
+   * for it. A completion can report an error after the input unmounts.
+   */
+  onAttachmentReading: (delta: 1 | -1, readId: number, error?: string, fieldKey?: string) => void;
   values: Record<string, string>;
-  setValue: (key: string, value: string) => void;
+  setValue: (key: string, value: string, readId?: number) => void;
   errors: Record<string, string>;
   errorText: (code: string | undefined) => string | null;
   photos: CollectionPhoto[];
@@ -496,7 +499,7 @@ function CaptureStep({
           </Button>
 
           <div className="space-y-1.5">
-            <Label htmlFor="fc-photo">{t("fieldCollection.photoOptional")}</Label>
+            <Label htmlFor="fc-optional-photo">{t("fieldCollection.photoOptional")}</Label>
             {photos.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {photos.map((photo, index) => (
@@ -524,7 +527,7 @@ function CaptureStep({
                 a new one (capture="environment" forces the camera on iOS). */}
             <input
               ref={photoInputRef}
-              id="fc-photo"
+              id="fc-optional-photo"
               type="file"
               accept="image/*"
               multiple

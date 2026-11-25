@@ -22,6 +22,14 @@ import {
 const RASTER_DATA_URL = /^data:image\/(?:png|jpeg|gif|webp|bmp);base64,/i;
 /** Longest data URL of a picture within {@link MAX_PHOTO_BYTES}. */
 const MAX_ATTACHMENT_DATA_URL_LENGTH = Math.ceil((MAX_PHOTO_BYTES * 4) / 3) + 64;
+/** Source of attachment read ids, unique across every input on the page. */
+let lastAttachmentReadId = 0;
+type AttachmentReadingChange = (
+  delta: 1 | -1,
+  readId: number,
+  error?: string,
+  fieldKey?: string,
+) => void;
 
 interface FieldCollectionFormFieldsProps {
   schema: CollectionSchema;
@@ -30,13 +38,13 @@ interface FieldCollectionFormFieldsProps {
   /** Candidate properties for visibility expressions; null without a form. */
   candidateProps: Record<string, unknown> | null;
   values: Record<string, string>;
-  setValue: (key: string, value: string) => void;
+  setValue: (key: string, value: string, readId?: number) => void;
   errors: Record<string, string>;
   errorText: (code: string | undefined) => string | null;
   /** Changes with each record, so a picture still loading stays with its own. */
   captureKey: string;
-  /** Told when a picture starts (+1) and finishes (-1) loading, so Save can wait. */
-  onReadingChange: (delta: 1 | -1, captureKey: string) => void;
+  /** Told when a picture read starts (+1) and finishes (-1), so Save can wait. */
+  onReadingChange: AttachmentReadingChange;
 }
 
 /**
@@ -75,10 +83,12 @@ export function FieldCollectionFormFields({
               field={field}
               config={config}
               value={values[field.key] ?? ""}
-              onChange={(value) => setValue(field.key, value)}
+              onChange={(value, readId) => setValue(field.key, value, readId)}
               error={errorText(errors[field.key])}
               captureKey={captureKey}
-              onReadingChange={onReadingChange}
+              onReadingChange={(delta, readId, error) =>
+                onReadingChange(delta, readId, error, field.key)
+              }
             />,
           ];
         });
@@ -104,10 +114,10 @@ interface FormFieldProps {
   field: CollectionField;
   config: AttributeFormFieldConfig | undefined;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, readId?: number) => void;
   error: string | null;
   captureKey: string;
-  onReadingChange: (delta: 1 | -1, captureKey: string) => void;
+  onReadingChange: AttachmentReadingChange;
 }
 
 function FormField({
@@ -205,9 +215,9 @@ function AttachmentInput({
 }: {
   id: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, readId?: number) => void;
   captureKey: string;
-  onReadingChange: (delta: 1 | -1, captureKey: string) => void;
+  onReadingChange: AttachmentReadingChange;
 }) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -226,12 +236,13 @@ function AttachmentInput({
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    const tooLarge = () =>
-      setProblem(
-        t("fieldCollection.photoTooLarge", {
-          max: `${Math.round(MAX_PHOTO_BYTES / (1024 * 1024))} MB`,
-        }),
-      );
+    const tooLarge = () => {
+      const message = t("fieldCollection.photoTooLarge", {
+        max: `${Math.round(MAX_PHOTO_BYTES / (1024 * 1024))} MB`,
+      });
+      setProblem(message);
+      return message;
+    };
     if (file.size > MAX_PHOTO_BYTES) {
       tooLarge();
       return;
@@ -240,20 +251,27 @@ function AttachmentInput({
     const reader = new FileReader();
     // Save is held while the picture loads, so a quick save cannot store the
     // record without it. Released exactly once, however the read ends.
-    onReadingChange(1, captureKey);
-    reader.onloadend = () => onReadingChange(-1, captureKey);
+    const readId = (lastAttachmentReadId += 1);
+    let readError: string | undefined;
+    onReadingChange(1, readId);
+    reader.onloadend = () => onReadingChange(-1, readId, readError);
     reader.onerror = () => {
-      if (readSeq.current === seq) setProblem(t("fieldCollection.photoReadError"));
+      if (readSeq.current !== seq) return;
+      readError = t("fieldCollection.photoReadError");
+      setProblem(readError);
     };
     reader.onload = () => {
       if (readSeq.current !== seq) return;
       const src = typeof reader.result === "string" ? reader.result : "";
-      if (!RASTER_DATA_URL.test(src)) setProblem(t("fieldCollection.photoReadError"));
+      if (!RASTER_DATA_URL.test(src)) {
+        readError = t("fieldCollection.photoReadError");
+        setProblem(readError);
+      }
       // The stored value is base64, about 4/3 the size of the file it holds.
-      else if (src.length > MAX_ATTACHMENT_DATA_URL_LENGTH) tooLarge();
+      else if (src.length > MAX_ATTACHMENT_DATA_URL_LENGTH) readError = tooLarge();
       else {
         setProblem(null);
-        onChange(src);
+        onChange(src, readId);
       }
     };
     reader.readAsDataURL(file);
