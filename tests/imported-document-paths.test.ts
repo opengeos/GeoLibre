@@ -1,5 +1,6 @@
 import { useAppStore } from "./helpers/dom";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { createEmptyProject, projectFromStore } from "@geolibre/core";
 import {
@@ -9,6 +10,7 @@ import {
 import { geojsonLayer } from "./helpers/layer-fixtures";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import { initializeNativeDocumentCopies } from "../apps/geolibre-desktop/src/lib/native-document-copies";
+import { isImportedDocumentCopyPath } from "../apps/geolibre-desktop/src/lib/file-io/paths";
 
 const selection = "3cb9b477-d563-4d3e-8503-263ec23c01c5";
 const oldRoot =
@@ -19,6 +21,20 @@ const oldPath = `${oldRoot}/${selection}/data/map % # é.geojson`;
 const currentPath = `${currentRoot}/${selection}/data/map % # é.geojson`;
 
 describe("retained iOS document references", () => {
+  it("recognizes and rebases the copy layout for the shipped iOS identifier", () => {
+    const config = JSON.parse(
+      readFileSync(
+        new URL("../apps/geolibre-desktop/src-tauri/tauri.ios.conf.json", import.meta.url),
+        "utf8",
+      ),
+    );
+    const configuredOldPath = oldPath.replace("org.geolibre.app", config.identifier);
+    const configuredRoot = currentRoot.replace("org.geolibre.app", config.identifier);
+    const expected = currentPath.replace("org.geolibre.app", config.identifier);
+    assert.equal(isImportedDocumentCopyPath(configuredOldPath), true);
+    assert.equal(rebaseImportedDocumentPath(configuredOldPath, configuredRoot), expected);
+  });
+
   it("installs the current root even when an individual import is unavailable", async () => {
     mockIPC((command) => {
       assert.equal(command, "initialize_native_document_copies");

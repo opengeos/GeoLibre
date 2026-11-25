@@ -197,8 +197,13 @@ pub fn retained_document_files(root: &Path) -> io::Result<(Vec<PathBuf>, Vec<Str
             problems.push(error.to_string());
         }
     }
-    sync_directory(&root)?;
-    parents.iter().try_for_each(|path| sync_directory(path))?;
+    // Inventory is read recovery, not publication: a durability warning must
+    // not discard grants for healthy files that were already published.
+    for path in std::iter::once(&root).chain(parents.iter()) {
+        if let Err(error) = sync_directory(path) {
+            problems.push(format!("{}: {error}", path.display()));
+        }
+    }
     Ok((files, problems))
 }
 
@@ -405,11 +410,9 @@ mod tests {
         fs::write(&copies[0], b"local edits").unwrap();
         let new = fixture.0.join("new-container");
         fs::rename(&old, &new).unwrap();
-        let current = fs::canonicalize(
-            new.join("Library/Application Support/org.geolibre.app/picked-documents"),
-        )
-        .unwrap();
-        let (files, problems) = retained_document_files(&current).unwrap();
+        let unresolved = new.join("Library/Application Support/org.geolibre.app/picked-documents");
+        let current = fs::canonicalize(&unresolved).unwrap();
+        let (files, problems) = retained_document_files(&unresolved).unwrap();
         assert!(problems.is_empty());
         assert_eq!(files.len(), 1);
         assert!(files[0].starts_with(&current));
@@ -431,12 +434,14 @@ mod tests {
         let unreadable = fs::read_dir(directory).is_err();
         let result = retained_document_files(&fixture.root());
         fs::set_permissions(directory, permissions).unwrap();
+        assert!(
+            unreadable,
+            "Permission-isolation tests require an unprivileged filesystem user"
+        );
         let (files, problems) = result.unwrap();
         assert!(files.contains(&healthy[0]));
-        if unreadable {
-            assert!(!files.contains(&broken[0]));
-            assert_eq!(problems.len(), 1);
-        }
+        assert!(!files.contains(&broken[0]));
+        assert_eq!(problems.len(), 1);
     }
 
     #[cfg(unix)]
