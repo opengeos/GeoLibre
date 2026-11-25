@@ -254,6 +254,18 @@ corner such as `top-left`. Rarer settings go in `options` by name: `offset_x`,
 `color_expression`, `opacity_expression`, `visibility_expression`,
 `priority_expression`.
 
+`options={"one_per_polygon": True}` is the default for point-placed polygon
+labels on MapLibre inline GeoJSON. Each feature gets one interior anchor in
+its largest polygon part; other renderers, tiled sources, line placement,
+and control-painted layers retain their renderer's placement. Filters or
+label expressions that read geometry (`geometry-type`, `$type`, `within`,
+`distance`) also retain the original geometry and renderer placement.
+Derivation falls back above 10,000 polygons or 1,000,000 polygon vertices;
+individual searches are bounded and simplify detailed outlines for scoring
+while verifying anchors against the original rings. Set `one_per_polygon`
+to `False` for the original placement. `live_set_labels` accepts the same
+option.
+
 ### Plugin state and story maps
 
 ```text

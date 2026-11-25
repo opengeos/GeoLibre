@@ -2757,10 +2757,9 @@ function dedupedAttributeLabels(
  * Attribute filters need no gating here (unlike dedup) because each point
  * keeps its feature's properties, so the label layer's filter still evaluates
  * on it. Past MAX_POLYGON_LABEL_FEATURES polygons it is null too (the search
- * would stall the first draw). A filter or label expression that tests the
- * geometry type does need
- * it: the derived feature is a Point, so `["geometry-type"]` would no longer
- * match "Polygon" and the label would vanish. Those keep MapLibre's placement.
+ * would stall the first draw). Geometry-dependent filters and expressions
+ * keep MapLibre's placement: a derived Point can have a different geometry
+ * type, containment, or distance result than the original polygon.
  */
 function onePerPolygonLabelPoints(
   ctx: VectorRenderContext,
@@ -2775,14 +2774,15 @@ function onePerPolygonLabelPoints(
   ) {
     return null;
   }
-  return testsGeometryType(layer, labels) ? null : polygonLabelPoints(layer.geojson);
+  return readsFeatureGeometry(layer, labels) ? null : polygonLabelPoints(layer.geojson);
 }
 
 /**
  * Whether the label layer's filter or any label expression reads the feature's
- * geometry type (`["geometry-type"]`, or the legacy `"$type"` filter key).
+ * geometry type, containment, or distance. These must evaluate on the original
+ * geometry rather than on a derived label anchor.
  */
-function testsGeometryType(layer: GeoLibreLayer, labels: LabelStyle): boolean {
+function readsFeatureGeometry(layer: GeoLibreLayer, labels: LabelStyle): boolean {
   const sources = [
     JSON.stringify(withFeatureFilters(layer, ["all"] as unknown as maplibregl.FilterSpecification)),
     labels.expression,
@@ -2792,7 +2792,7 @@ function testsGeometryType(layer: GeoLibreLayer, labels: LabelStyle): boolean {
     labels.visibilityExpression,
     labels.priorityExpression,
   ];
-  return sources.some((text) => /"(?:geometry-type|\$type)"/.test(text || ""));
+  return sources.some((text) => /"(?:geometry-type|\$type|within|distance)"/.test(text || ""));
 }
 
 /**

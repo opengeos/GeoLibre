@@ -404,6 +404,43 @@ describe("one label per polygon (layer sync)", () => {
     assert.match(JSON.stringify(label.filter), /"t"/);
   });
 
+  it("preserves original polygons for containment and distance filters", () => {
+    const boundary = { type: "Polygon", coordinates: [square(-1, -1, 2)] };
+    for (const filter of [
+      ["within", boundary],
+      ["<", ["distance", { type: "Point", coordinates: [0, 0] }], 1000],
+    ]) {
+      const { map, layers, sources } = makeMap();
+      const layer = polygonLayer({});
+      // The anchor [0, 0] is within the filter but the polygon extends outside
+      // it. Evaluating on a derived point would show a label for a hidden shape.
+      layer.geojson!.features[0].geometry = {
+        type: "Polygon",
+        coordinates: [square(-2, -2, 4)],
+      };
+      layer.filterExpression = filter;
+      syncLayer(map as never, layer);
+      assert.equal((layers.get(LABEL_ID) as { source: string }).source, "source-lyr");
+      assert.ok(!sources.has(LABEL_SOURCE_ID));
+      assert.match(JSON.stringify(layers.get(LABEL_ID)?.filter), /within|distance/);
+    }
+  });
+
+  it("preserves original geometry for label overrides as well as layer filters", () => {
+    for (const patch of [
+      {
+        visibilityExpression:
+          '["within", {"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}]',
+      },
+      { sizeExpression: '["distance", {"type":"Point","coordinates":[0,0]}]' },
+    ]) {
+      const { map, layers, sources } = makeMap();
+      syncLayer(map as never, polygonLayer(patch));
+      assert.equal((layers.get(LABEL_ID) as { source: string }).source, "source-lyr");
+      assert.ok(!sources.has(LABEL_SOURCE_ID));
+    }
+  });
+
   it("falls back to MapLibre placement when turned off, and drops the label source", () => {
     const { map, layers, sources } = makeMap();
     syncLayer(map as never, polygonLayer({}));
