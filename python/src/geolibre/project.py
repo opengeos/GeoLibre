@@ -4540,11 +4540,25 @@ def _load_arcgis_cached_source(service_url: str) -> dict[str, Any]:
     url = f"{service_url}?f=json"
     _assert_public_url(url)
     limit = 2 * 1024 * 1024
+    deadline = time.monotonic() + 30
+    chunks: list[bytes] = []
+    size = 0
     try:
         with _GEOJSON_OPENER.open(url, timeout=30) as response:  # noqa: S310 - public URL checked
-            raw = response.read(limit + 1)
+            # The socket timeout bounds each read, not the whole response, so
+            # read one buffer at a time and enforce a total deadline as well.
+            read = getattr(response, "read1", response.read)
+            while size <= limit:
+                if time.monotonic() > deadline:
+                    raise ValueError("ArcGIS cache metadata took longer than 30 seconds to load")
+                chunk = read(min(65536, limit + 1 - size))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                size += len(chunk)
     except (OSError, HTTPException) as exc:
         raise ValueError("Could not load ArcGIS cache metadata") from exc
+    raw = b"".join(chunks)
     if len(raw) > limit:
         raise ValueError("ArcGIS cache metadata exceeds the 2 MiB size limit")
     try:
@@ -4627,7 +4641,7 @@ def arcgis_layer(
         tiled: Use a validated public map/image cache instead of dynamic export.
             Cannot be combined with sublayers or a rendering rule. Raw LERC
             caches are not supported by this raster authoring path. Metadata
-            reads have a 2 MiB size limit and a 30-second network timeout.
+            reads have a 2 MiB size limit and a 30-second total deadline.
         sublayers: MapServer sublayer ids to show (``"0,2"`` or ``[0, 2]``).
         rendering_rule: ImageServer rendering rule, as a dict or JSON string
             (e.g. ``{"rasterFunction": "Hillshade"}``).

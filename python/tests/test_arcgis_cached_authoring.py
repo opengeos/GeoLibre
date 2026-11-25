@@ -236,9 +236,57 @@ def test_interrupted_metadata_read_uses_the_documented_error(cache_metadata, mon
             """
             raise error
 
+        read1 = read
+
     monkeypatch.setattr(project_api._GEOJSON_OPENER, "open", lambda *_args, **_kwargs: Response())
     with pytest.raises(ValueError, match="Could not load ArcGIS cache metadata"):
         project_api.arcgis_layer("Interrupted", "https://example.org/A/MapServer", tiled=True)
+
+
+def test_slow_metadata_stream_stops_at_the_total_deadline(cache_metadata, monkeypatch):
+    """Stop a response that keeps each read inside the socket timeout.
+
+    Args:
+        cache_metadata: The fixture disabling actual network access.
+        monkeypatch: Pytest fixture for the response and the clock.
+    """
+    clock = iter(range(0, 1000, 10))
+    monkeypatch.setattr(project_api.time, "monotonic", lambda: next(clock))
+
+    class Response(io.BytesIO):
+        """A response that returns one byte per read, forever."""
+
+        def read1(self, size=-1):
+            """Return a single byte, as a server dripping its body would.
+
+            Args:
+                size: The requested bounded read length.
+
+            Returns:
+                One byte of a never-ending body.
+            """
+            return b" "
+
+    monkeypatch.setattr(project_api._GEOJSON_OPENER, "open", lambda *_args, **_kwargs: Response())
+    with pytest.raises(ValueError, match="longer than 30 seconds"):
+        project_api.arcgis_layer("Slow", "https://example.org/A/MapServer", tiled=True)
+
+
+def test_remote_attribution_markup_is_reduced_to_text(cache_metadata):
+    """Keep provider credit text but drop markup a remote service supplies.
+
+    Args:
+        cache_metadata: The mutable service metadata fixture.
+    """
+    info, _ = cache_metadata
+    info["copyrightText"] = (
+        '<a href="x" onclick="alert(1)">Esri</a>,  <img src=x onerror=y>Maxar <b'
+    )
+    layer = project_api.arcgis_layer("Imagery", "https://example.org/A/MapServer", tiled=True)
+    assert layer["source"]["attribution"] == "Esri, Maxar"
+    info["copyrightText"] = "<span></span>"
+    layer = project_api.arcgis_layer("Imagery", "https://example.org/A/MapServer", tiled=True)
+    assert "attribution" not in layer["source"]
 
 
 def test_deeply_nested_metadata_uses_the_documented_error(cache_metadata, monkeypatch):

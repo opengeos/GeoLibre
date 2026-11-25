@@ -70,7 +70,7 @@ m.add_wmts(endpoint, name, bounds=None)
 m.add_wfs(endpoint, type_name, max_features=1000)
 m.add_arcgis_layer(url, name="ArcGIS Layer", service="map", tiled=False)
 # tiled=True validates a public Web Mercator image cache; sublayers and rendering rules need tiled=False
-# Public metadata reads: 2 MiB limit, 30-second network timeout; raw LERC caches are refused.
+# Public metadata reads: 2 MiB limit, 30-second deadline; raw LERC caches are refused.
 m.add_lidar(url, name=None)                          # LAS/LAZ/COPC/EPT point cloud by URL
 m.add_icesat2(path, bbox=None, fields=None)          # ICESat-2 ATL06/ATL08 footprints (geolibre[spaceborne])
 m.add_gedi(path, bbox=None, fields=None)             # GEDI L2A/L2B/L4A shots (geolibre[spaceborne])

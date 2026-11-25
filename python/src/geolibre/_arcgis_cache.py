@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
 
 
@@ -111,6 +112,10 @@ def cached_arcgis_source(info: Any, service_url: str) -> dict[str, Any]:
         "maxzoom": ordered[-1],
     }
     credit = info.get("copyrightText")
-    if isinstance(credit, str) and credit.strip():
-        source["attribution"] = credit.strip()
+    if isinstance(credit, str):
+        # MapLibre's attribution control renders HTML, so keep only the text of
+        # a remote credit, as arcgis-basemap.ts does for the catalog's copy.
+        text = " ".join(re.sub(r"<[^>]*>?", "", credit).replace("<", "").split())
+        if text:
+            source["attribution"] = text
     return source
