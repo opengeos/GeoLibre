@@ -405,7 +405,10 @@ mod tests {
         fs::write(&copies[0], b"local edits").unwrap();
         let new = fixture.0.join("new-container");
         fs::rename(&old, &new).unwrap();
-        let current = new.join("Library/Application Support/org.geolibre.app/picked-documents");
+        let current = fs::canonicalize(
+            new.join("Library/Application Support/org.geolibre.app/picked-documents"),
+        )
+        .unwrap();
         let (files, problems) = retained_document_files(&current).unwrap();
         assert!(problems.is_empty());
         assert_eq!(files.len(), 1);
