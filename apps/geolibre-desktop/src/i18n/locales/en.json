@@ -11223,7 +11223,7 @@
   },
   "notifications": {
     "nativeDocumentCopiesFailed": "Some imported files could not be restored. Open a new workspace or import the affected files again. Details are in Diagnostics.",
-    "nativeDocumentCopiesInitFailed": "Could not restore access to imported files. Restart GeoLibre or open a new workspace. Details are in Diagnostics.",
+    "nativeDocumentCopiesInitFailed": "Could not restore access to imported files. Restart GeoLibre to retry. You can use a blank workspace meanwhile. Details are in Diagnostics.",
     "liveMcpEnableRetry": "Live MCP access could not be enabled. Retrying automatically; processing remains available.",
     "liveMcpDisableRetry": "Live MCP server access has not been revoked yet. This window is disconnected and GeoLibre is retrying; processing remains available.",
     "regionLabel": "Notifications",

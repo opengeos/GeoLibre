@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "@geolibre/core";
 import i18next from "i18next";
+import en from "../i18n/locales/en.json";
 import { notify } from "./notify";
 
 /** Complete authorization and path rebasing before startup can load a project. */
@@ -29,7 +30,7 @@ export async function restoreNativeDocumentCopies(
     useAppStore
       .getState()
       .setNativeDocumentCopyError(
-        "Could not restore access to imported files. Restart GeoLibre or open a new workspace. Details are in Diagnostics.",
+        i18next.t(key, { defaultValue: en.notifications.nativeDocumentCopiesInitFailed }),
       );
     console.error("[GeoLibre] Failed to restore retained imports", error);
     await translationReady;
