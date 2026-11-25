@@ -47,6 +47,11 @@ interface FetchUrlBytesOptions extends NativeHttpOptions {
   maxBytes?: number;
 }
 
+interface FetchUrlResponseOptions extends FetchUrlBytesOptions {
+  /** Content negotiation for protocols whose representations share one URL. */
+  accept?: string;
+}
+
 function diagnosticUrl(url: string): string {
   try {
     const parsed = new URL(url);
@@ -127,7 +132,7 @@ export function nativeHttpFailureRecord(
 async function invokeNativeHttp<T>(
   command: NativeHttpCommand,
   url: string,
-  options?: FetchUrlBytesOptions,
+  options?: FetchUrlResponseOptions,
 ): Promise<T> {
   const startedAt = performance.now();
   try {
@@ -137,6 +142,7 @@ async function invokeNativeHttp<T>(
       url,
       ...(options?.timeoutSecs === undefined ? {} : { timeoutSecs: options.timeoutSecs }),
       ...(options?.maxBytes === undefined ? {} : { maxBytes: options.maxBytes }),
+      ...(options?.accept === undefined ? {} : { accept: options.accept }),
     });
     appendDiagnostic(
       nativeHttpSuccessRecord(
@@ -179,6 +185,7 @@ export function fetchUrlBytes(
 
 /** A native response that keeps the status and body of a non-2xx answer. */
 export interface NativeHttpResponse {
+  url: string;
   status: number;
   contentType: string | null;
   body: Uint8Array;
@@ -197,15 +204,17 @@ export interface NativeHttpResponse {
  */
 export async function fetchUrlResponse(
   url: string,
-  options?: FetchUrlBytesOptions,
+  options?: FetchUrlResponseOptions,
 ): Promise<NativeHttpResponse> {
   const raw = await invokeNativeHttp<{
     status: number;
+    final_url?: string;
     content_type: string | null;
     body: number[] | Uint8Array;
   }>("fetch_url_response", url, options);
   return {
     status: raw.status,
+    url: raw.final_url ?? url,
     contentType: raw.content_type,
     body: raw.body instanceof Uint8Array ? raw.body : new Uint8Array(raw.body),
   };

@@ -50,6 +50,8 @@ export const COG_WASM_COMPRESSIONS = ["deflate", "lzw", "packbits", "none"] as c
 export type CogWasmCompression = (typeof COG_WASM_COMPRESSIONS)[number];
 
 export interface ConvertGeoTiffToCogOptions {
+  /** Encode non-byte samples as Float64 instead of the default Float32. */
+  float64?: boolean;
   /** Tile compression codec. Defaults to `"deflate"`. */
   compression?: CogWasmCompression;
   /**
@@ -183,7 +185,10 @@ export async function convertGeoTiffToCog(
       const geoTransform = reader.geo_transform();
       if (geoTransform.length >= 6) builder.set_geo_transform(geoTransform);
       const nodata = reader.nodata;
-      if (typeof nodata === "number" && Number.isFinite(nodata)) {
+      if (
+        typeof nodata === "number" &&
+        (Number.isFinite(nodata) || (options.float64 && Number.isNaN(nodata)))
+      ) {
         builder.set_nodata(nodata);
       }
       builder.set_tile_size(COG_TILE_SIZE);
@@ -202,6 +207,7 @@ export async function convertGeoTiffToCog(
       // pixel), matching what CogBuilder expects.
       const pixels = reader.read_all_f64();
       const isByte = info.sample_format === "uint" && info.bits_per_sample <= 8;
+      if (!isByte && options.float64) return builder.write_f64(pixels);
       return isByte
         ? builder.write_u8(Uint8Array.from(pixels))
         : builder.write_f32(Float32Array.from(pixels));

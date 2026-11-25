@@ -942,6 +942,8 @@ export async function proxyBinaryRequestGuarded(
   const headers = new Headers();
   const range = req.headers.range;
   if (range) headers.set("range", range);
+  const accept = req.headers.accept;
+  if (accept) headers.set("accept", accept);
 
   let response: Response;
   try {
@@ -972,6 +974,8 @@ export async function proxyBinaryRequestGuarded(
   res.setHeader("access-control-allow-origin", "*");
   res.setHeader("cache-control", "public, max-age=3600");
   res.setHeader("content-type", contentType);
+  res.setHeader("x-geolibre-final-url", response.url || target);
+  res.setHeader("vary", "Accept");
   for (const header of ["accept-ranges", "content-range"]) {
     const value = response.headers.get(header);
     if (value) res.setHeader(header, value);

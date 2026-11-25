@@ -43,10 +43,14 @@ export async function convertGeoTiffToCog(
   bytes: Uint8Array,
   options: ConvertGeoTiffToCogOptions = {},
 ): Promise<Uint8Array> {
-  const { signal, transferInput, compression, overviews } = options;
+  const { signal, transferInput, compression, overviews, float64 } = options;
   signal?.throwIfAborted();
   if (typeof Worker === "undefined") {
-    const result = await convertInline(bytes, { compression, overviews });
+    const result = await convertInline(bytes, {
+      compression,
+      overviews,
+      float64,
+    });
     signal?.throwIfAborted();
     return result;
   }
@@ -94,7 +98,14 @@ export async function convertGeoTiffToCog(
           ? bytes
           : new Uint8Array(bytes);
       worker.postMessage(
-        { bytes: input, options: { compression, overviews } } satisfies CogConvertRequest,
+        {
+          bytes: input,
+          options: {
+            compression,
+            overviews,
+            ...(float64 === undefined ? {} : { float64 }),
+          },
+        } satisfies CogConvertRequest,
         [input.buffer as ArrayBuffer],
       );
     } catch (error) {

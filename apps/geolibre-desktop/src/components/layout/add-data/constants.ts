@@ -19,6 +19,7 @@ export type KindI18nKey =
   | "wfs"
   | "wmts"
   | "ogcFeatures"
+  | "ogcCoverages"
   | "ogcVectorTiles"
   | "gpx"
   | "geopdf"
@@ -58,6 +59,7 @@ export const KIND_I18N_KEY: Record<
   wfs: "wfs",
   wmts: "wmts",
   "ogc-features": "ogcFeatures",
+  "ogc-coverages": "ogcCoverages",
   "ogc-vector-tiles": "ogcVectorTiles",
   gpx: "gpx",
   geopdf: "geopdf",
