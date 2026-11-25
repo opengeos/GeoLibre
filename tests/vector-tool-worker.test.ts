@@ -5,6 +5,8 @@ import { DEFAULT_LAYER_STYLE, setActiveEllipsoidId, type GeoLibreLayer } from "@
 import {
   VECTOR_TOOLS,
   STATISTICS_TOOLS,
+  NETWORK_TOOLS,
+  getNetworkTool,
   getStatisticsTool,
   WORKER_VECTOR_TOOL_IDS,
   VECTOR_TOOL_WORKER_IDLE_MS,
@@ -262,6 +264,53 @@ describe("runAlgorithmInBackground", () => {
       await tool.run(direct.ctx);
       installFakeWorker();
       const background = recordingContext(params, [sample]);
+      await runAlgorithmInBackground(tool, background.ctx);
+      assert.deepEqual(background.calls, direct.calls);
+      assert.equal(spawned, 1);
+      assert.ok(direct.calls.some((call) => call[0] === "addResultLayer"));
+    });
+  }
+  // A small street grid with ids, one-way-free, and a turn table that
+  // prohibits one turn, so the worker run exercises the turn-rule path too.
+  const streets = layer(
+    "streets",
+    [
+      [[0, 0], [0.001, 0], "a"],
+      [[0.001, 0], [0.001, 0.001], "b"],
+      [[0.001, 0], [0.002, 0], "c"],
+      [[0.002, 0], [0.002, 0.0005], "d"],
+      [[0.002, 0.0005], [0.001, 0.001], "e"],
+    ].map(([from, to, id]) => ({
+      type: "Feature" as const,
+      properties: { id },
+      geometry: { type: "LineString" as const, coordinates: [from, to] as number[][] },
+    })),
+  );
+  const stops = layer("stops", [point(0, 0, { name: "S" }), point(0.001, 0.001, { name: "N" })]);
+  const turnTable = layer("turns", [
+    { type: "Feature", properties: { from: "a", to: "b" }, geometry: null as never },
+  ]);
+  const turnParams = {
+    network: "streets",
+    turns: "rules",
+    turnTable: "turns",
+    networkIdField: "id",
+    turnFromField: "from",
+    turnToField: "to",
+  };
+  for (const [id, parameters] of [
+    ["local-shortest-path", { network: "streets", stops: "stops" }],
+    ["local-shortest-path", { ...turnParams, stops: "stops" }],
+    ["local-closest-facility", { ...turnParams, incidents: "stops", facilities: "stops" }],
+    ["local-service-area", { ...turnParams, facilities: "stops", breaks: "100,200" }],
+  ] as const) {
+    it(`matches direct local network execution in the worker: ${id} ${"turns" in parameters ? "with turn rules" : ""}`, async () => {
+      const tool = getNetworkTool(id)!;
+      const layers = [streets, stops, turnTable];
+      const direct = recordingContext(parameters, layers);
+      await tool.run(direct.ctx);
+      installFakeWorker();
+      const background = recordingContext(parameters, layers);
       await runAlgorithmInBackground(tool, background.ctx);
       assert.deepEqual(background.calls, direct.calls);
       assert.equal(spawned, 1);
@@ -682,7 +731,9 @@ describe("createVectorToolSession", () => {
 
 describe("WORKER_VECTOR_TOOL_IDS", () => {
   it("names only registered vector tools", () => {
-    const ids = new Set([...VECTOR_TOOLS, ...STATISTICS_TOOLS].map((tool) => tool.id));
+    const ids = new Set(
+      [...VECTOR_TOOLS, ...STATISTICS_TOOLS, ...NETWORK_TOOLS].map((tool) => tool.id),
+    );
     for (const id of WORKER_VECTOR_TOOL_IDS) assert.ok(ids.has(id), id);
   });
 
@@ -709,6 +760,9 @@ describe("WORKER_VECTOR_TOOL_IDS", () => {
       "hdbscan",
       "intersection",
       "kriging-diagnostics",
+      "local-closest-facility",
+      "local-service-area",
+      "local-shortest-path",
       "merge-layers",
       "ols-regression",
       "points-along-geometry",
@@ -728,7 +782,7 @@ describe("WORKER_VECTOR_TOOL_IDS", () => {
 
   it("resolves each id to the registry's own tool", () => {
     for (const id of WORKER_VECTOR_TOOL_IDS) {
-      const tool = getVectorTool(id) ?? getStatisticsTool(id);
+      const tool = getVectorTool(id) ?? getStatisticsTool(id) ?? getNetworkTool(id);
       assert.ok(tool && canRunVectorToolOnWorkerWhenAvailable(tool), id);
     }
   });

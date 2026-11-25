@@ -75,12 +75,20 @@ export {
 export {
   LocalNetwork,
   buildLocalNetwork,
+  createNetworkSearchBudget,
+  MAX_NETWORK_ADJACENCY_VISITS,
   parseDirection,
+  turnRulesActive,
   type LocalNetworkOptions,
   type NetworkCostMode,
   type NetworkDirection,
   type NetworkEdge,
   type NetworkPath,
+  type NetworkSearchBudget,
+  type NetworkSearchOptions,
+  type TurnRules,
+  type TurnTableEntry,
+  type UTurnPolicy,
 } from "./local-network";
 export {
   STATISTICS_TOOLS,

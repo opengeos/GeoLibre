@@ -9,6 +9,7 @@ import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
   NETWORK_TOOLS,
   getNetworkTool,
+  runAlgorithmInBackground,
   type AlgorithmParameter,
   type GeometryFamily,
   type ProcessingContext,
@@ -283,24 +284,38 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
         parameters: params,
         log: appendLog,
         fitBounds: (bounds) => mapControllerRef.current?.fitBounds(bounds),
-        addResultLayer,
+        // A late result from a cancelled run must not reach the map.
+        addResultLayer: (...args) => {
+          controller.signal.throwIfAborted();
+          addResultLayer(...args);
+        },
         signal: controller.signal,
       };
-      await tool.run(ctx);
+      // The local-network tools build their graph and search it on the
+      // processing worker, so a large network no longer freezes the map;
+      // Cancel terminates that worker. The Valhalla tools run inline.
+      await runAlgorithmInBackground(tool, ctx);
+      controller.signal.throwIfAborted();
       // A logged "Error: ..." line marks a soft failure (the client tools
       // bail out without throwing); don't record those as successes.
       if (softErrorRef.current) tracker.finish("error", softErrorRef.current);
       else tracker.finish("success");
     } catch (error) {
-      // A user-initiated cancel (closing the dialog or starting a new run)
-      // rejects with an AbortError; that is not a failed run, so don't log it
-      // or record it in the Processing History.
-      if (controller.signal.aborted) return;
+      // A user-initiated cancel (closing the dialog, starting a new run or
+      // the Cancel button) rejects with an AbortError; that is not a failed
+      // run, so don't record it in the Processing History. Only the Cancel
+      // button leaves this run's controller current, and only then is the log
+      // still on screen to say so.
+      if (controller.signal.aborted) {
+        if (abortRef.current === controller) appendLog(t("network.cancelled"));
+        return;
+      }
       appendLog(`Error: ${(error as Error).message}`);
       tracker.finish("error", (error as Error).message);
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
-      setRunning(false);
+      // An older run can settle after a close/reopen starts another run.
+      if (!abortRef.current) setRunning(false);
     }
   }, [tool, params, layers, appendLog, addResultLayer, mapControllerRef, isParamVisible, t]);
 
@@ -396,6 +411,15 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
                 )}
                 {t("network.run")}
               </Button>
+              {running && (
+                <Button
+                  variant="outline"
+                  className="ms-2"
+                  onClick={() => abortRef.current?.abort()}
+                >
+                  {t("common.cancel")}
+                </Button>
+              )}
             </div>
 
             <ScrollArea className="h-24 rounded-md border bg-muted/30 p-2 font-mono text-xs">

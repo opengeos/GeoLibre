@@ -340,8 +340,11 @@ The sidecar can also confine conversion inputs and outputs to an allowlist of di
 Coincident stops or incident/facility matches are recorded as point features
 with zero cost, preserving the match without a degenerate route line.
 
-Local graph construction runs on the main thread and accepts at most 250,000
-vertices. Endpoint-to-node and endpoint-to-segment snapping share a 50-million
+Local network runs (graph construction, point placement, and the searches)
+execute on the processing worker, so the map stays responsive, and Cancel
+terminates the worker without adding a result. Where Web Workers are
+unavailable they run on the main thread instead. Graph construction accepts at
+most 250,000 vertices. Endpoint-to-node and endpoint-to-segment snapping share a 50-million
 budget for index visits and candidate checks. Reduce the snap tolerance or
 extract a smaller network if it is exceeded. Point placement also caps index
 storage, cell visits, overflow candidates, and fallback scans at 50 million
@@ -349,8 +352,14 @@ visits per run. Seam-adjacent queries and networks wider than 180 degrees
 currently use a full edge scan for correct wrapped placement, so they can reach
 this work limit with fewer points. Use a smaller local extract for those runs.
 It has a separate 50-million edge/point comparison budget,
-including far or antimeridian selections that use a full edge scan. Searches yield between
-legs or incidents; graph construction itself is synchronous.
+including far or antimeridian selections that use a full edge scan.
+
+Network searches also share a 50-million adjacency-visit allowance across all
+legs, incidents, or service-area groups in one run. Visits count even when an
+edge is already settled or its turn is prohibited, bounding high-degree hubs
+under turn-aware searches. Exceeding the allowance stops the run with an error;
+use a smaller network or selection. The existing state/allocation preflights
+remain in place to bound memory separately.
 
 Service-area polygon buffering accepts at most 1,000 reachable line pieces per
 area and 5,000 per run. An excessive selection returns an error; rerun with
@@ -360,8 +369,11 @@ snap-distance attributes remain in the
 result.
 
 Local multi-stop and closest-facility runs are limited to 50 million node-search
-entries, counted after snapping. This bounds repeated graph-state allocations;
-use fewer stops/incidents or a smaller network extract for larger selections.
+entries, counted after snapping. With turn rules each search tracks every
+direction of every edge rather than every node, about twice the edge count, so
+the same limit admits fewer stops or incidents. This bounds repeated graph-state
+allocations; use fewer stops/incidents or a smaller network extract for larger
+selections.
 
 The same menu also routes over **your own line layer**, entirely in the browser and with no server: trails, pipes, rivers, a road extract, or any other line network. The tool builds a graph from the lines (lines that share a vertex are connected, and line ends within the snap tolerance of another line are joined to it; lines that only cross stay apart, like a bridge over a road). Each edge costs its length in metres, a cost field (the cost of traversing the whole feature, spread over it by length), or the travel time in minutes from a speed field in km/h. An optional one-way field accepts the OSM (`yes`, `-1`, `no`) and Esri (`FT`, `TF`, `B`, `N`) conventions. Points are attached at the closest spot on the nearest line, and each result records how far it was moved (`*_snap_m`).
 
@@ -370,6 +382,14 @@ The same menu also routes over **your own line layer**, entirely in the browser 
 | **Shortest path (local network)** | Route through stops in order (or sorted by a field) with A\* or Dijkstra. Each leg records its cost and length. |
 | **Closest facility (local network)** | For each incident, the k nearest facilities by network cost, with an optional cost limit and travel direction, drawn as ranked routes. |
 | **Service area (local network)** | The parts of the network reachable from facilities within each cost break, clipped partway along edges, as lines and optionally as polygons buffered by a trim width. Facilities can share one area per break or get their own. |
+
+Set **Turn rules** to *Turn restrictions and costs* to make turns matter. All three local tools accept the same rules, and with turn rules left at *None* routes are exactly as before.
+
+- **Turn table**: any layer with one row per turn (its geometry is ignored). The *from-line* and *to-line* fields name network lines by the value of the *network line id field*, such as OSM way ids. A row applies wherever the two lines meet, so give each line its own id. Without a *turn cost field* every row prohibits its turn; with one, a number adds that cost and a blank, negative, or non-numeric value prohibits the turn. When rows repeat a pair, the larger cost wins. The log reports matched, prohibited, and unmatched rows.
+- **Left and right turn costs** are added at junctions where three or more edges meet, when the route bends by more than 30 degrees. Bends along a single road are free.
+- **U-turns** (reversing along the edge just traveled) can be allowed anywhere, only at junctions and dead ends, only at dead ends, or never, with an optional cost each. Each leg of a route starts fresh at its stop, so a route can still reverse direction at a stop.
+
+Turn costs are in the edge cost unit (metres, cost-field units, or minutes), are included in each result's `cost`, and count toward service-area breaks.
 
 ### Spatial Statistics
 
