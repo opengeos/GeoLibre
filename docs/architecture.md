@@ -72,6 +72,22 @@ Every layer action replaces the `layers` array, so `useAppStore((s) => s.layers)
 
 `useAppStore` is one Zustand store, but its code is split into slices under `packages/core/src/store/` (project, map view, layers, layer groups, project content, processing, libraries, session, collaboration, capabilities, and the `ui` dialog flags), composed in `packages/core/src/store.ts`. Add a new field or action to the slice that owns its data; an action that must also update another slice's fields (as `removeLayer` scrubs references everywhere) reads and writes the whole state through `set`/`get`. Undo history (`store/undo-history.ts`) tracks only the fields `partializeHistory` lists (layers, layer groups, basemap, story map, comments, dashboard widgets, legend). Everything else, including the whole `ui` sub-state, the selection and the camera, never records an undo step and is never reverted by undo or redo. Secondary panes and the Print Layout also reference layers but stay untracked (panes carry their own camera and must match the untracked grid layout; the composer writes back a local copy), so each undo/redo step scrubs their references to layers the step removed.
 
+### GPS session ownership
+
+`useGpsPositionSource` owns the device location watch, external NMEA receiver,
+connection generations, receiver statistics, and NTRIP correction session. The
+always-mounted GPS dialog uses its state and actions; closing the dialog body
+does not stop tracking. A source change, stop, or unmount invalidates pending
+receiver connections and releases late arrivals. Device callbacks from a stopped
+watch are ignored before they can recreate a position overlay or change errors.
+
+`GpsTrackingDialog` owns track recording, capture, and transient map overlays.
+Fixes enter the recording before map availability is checked, so recording works
+while a renderer is absent. Pause/resume creates separate segments; only saved
+tracks and captured points become project layers. The controller tests exercise
+the real geolocation and NMEA adapters through browser hardware interfaces, and
+dialog tests cover recording, capture, visibility changes, and teardown.
+
 ## Rendering-engine model
 
 The Zustand store is renderer-neutral: it contains plain `GeoLibreLayer`
