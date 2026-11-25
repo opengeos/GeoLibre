@@ -18,6 +18,8 @@ interface LabelsSectionProps {
   updateLabels: (patch: Partial<LabelStyle>) => void;
   /** Whether the layer has polygons, which the one-label-per-polygon option needs. */
   hasPolygons: boolean;
+  /** The current engine implements the derived polygon-anchor label source. */
+  supportsPolygonAnchors: boolean;
   vectorStylePropertyOptions: string[];
   setExpressionBuilderTarget: (target: ExpressionBuilderTarget | null) => void;
 }
@@ -35,6 +37,7 @@ export function LabelsSection({
   labels,
   updateLabels,
   hasPolygons,
+  supportsPolygonAnchors,
   vectorStylePropertyOptions,
   setExpressionBuilderTarget,
 }: LabelsSectionProps) {
@@ -176,7 +179,11 @@ export function LabelsSection({
               <option value="line">{t("style.labels.placementLine")}</option>
             </Select>
           </div>
-          {labels.placement === "point" && !controlPainted && hasPolygons && layer.geojson ? (
+          {supportsPolygonAnchors &&
+          labels.placement === "point" &&
+          !controlPainted &&
+          hasPolygons &&
+          layer.geojson ? (
             <div className="space-y-2">
               <label
                 htmlFor="labelOnePerPolygon"

@@ -404,6 +404,108 @@ describe("one label per polygon (layer sync)", () => {
     assert.match(JSON.stringify(label.filter), /"t"/);
   });
 
+  it("preserves original polygons for containment and distance filters", () => {
+    const boundary = { type: "Polygon", coordinates: [square(-1, -1, 2)] };
+    for (const filter of [
+      ["within", boundary],
+      ["<", ["distance", { type: "Point", coordinates: [0, 0] }], 1000],
+    ]) {
+      const { map, layers, sources } = makeMap();
+      const layer = polygonLayer({});
+      // The anchor [0, 0] is within the filter but the polygon extends outside
+      // it. Evaluating on a derived point would show a label for a hidden shape.
+      layer.geojson!.features[0].geometry = {
+        type: "Polygon",
+        coordinates: [square(-2, -2, 4)],
+      };
+      layer.filterExpression = filter;
+      syncLayer(map as never, layer);
+      assert.equal((layers.get(LABEL_ID) as { source: string }).source, "source-lyr");
+      assert.ok(!sources.has(LABEL_SOURCE_ID));
+      assert.match(JSON.stringify(layers.get(LABEL_ID)?.filter), /within|distance/);
+    }
+  });
+
+  it("preserves original geometry for label overrides as well as layer filters", () => {
+    for (const patch of [
+      {
+        visibilityExpression:
+          '["within", {"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}]',
+      },
+      { sizeExpression: '["distance", {"type":"Point","coordinates":[0,0]}]' },
+    ]) {
+      const { map, layers, sources } = makeMap();
+      syncLayer(map as never, polygonLayer(patch));
+      assert.equal((layers.get(LABEL_ID) as { source: string }).source, "source-lyr");
+      assert.ok(!sources.has(LABEL_SOURCE_ID));
+    }
+  });
+
+  it("does not confuse attribute names or literal arrays with geometry operators", () => {
+    for (const expression of [
+      '["get", "distance"]',
+      '["get", "within"]',
+      '["get", "geometry-type"]',
+      '["get", "$type"]',
+      '["to-string", ["literal", ["within", "distance"]]]',
+    ]) {
+      const { map, layers } = makeMap();
+      const layer = polygonLayer({ expression });
+      layer.filterExpression = ["==", ["get", "distance"], 5];
+      syncLayer(map as never, layer);
+      assert.equal((layers.get(LABEL_ID) as { source: string }).source, LABEL_SOURCE_ID);
+    }
+  });
+
+  it("recognizes geometry operators in overrides with accepted trailing commas", () => {
+    const { map, layers, sources } = makeMap();
+    syncLayer(
+      map as never,
+      polygonLayer({
+        visibilityExpression:
+          '["within", {"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,0]]]},]',
+      }),
+    );
+    assert.equal((layers.get(LABEL_ID) as { source: string }).source, "source-lyr");
+    assert.ok(!sources.has(LABEL_SOURCE_ID));
+  });
+
+  it("reads the first semiliteral expression and expression-valued format options", () => {
+    const { map, layers } = makeMap();
+    const layer = polygonLayer({});
+    layer.filterExpression = ["!=", ["at", 0, ["semiliteral", [["geometry-type"]]]], "Polygon"];
+    syncLayer(map as never, layer);
+    assert.equal((layers.get(LABEL_ID) as { source: string }).source, "source-lyr");
+    const formatted = makeMap();
+    syncLayer(
+      formatted.map as never,
+      polygonLayer({
+        expression:
+          '["format",["get","NAME"],{"font-scale":["case",["==",["geometry-type"],"Polygon"],2,1]}]',
+      }),
+    );
+    assert.equal((formatted.layers.get(LABEL_ID) as { source: string }).source, "source-lyr");
+  });
+
+  it("ignores match label arrays and recognizes escaped geometry operators", () => {
+    const { map, layers } = makeMap();
+    syncLayer(
+      map as never,
+      polygonLayer({
+        expression: '["match",["get","kind"],["within","distance"],"A","B"]',
+      }),
+    );
+    assert.equal((layers.get(LABEL_ID) as { source: string }).source, LABEL_SOURCE_ID);
+    const escaped = makeMap();
+    syncLayer(
+      escaped.map as never,
+      polygonLayer({
+        visibilityExpression: '["==",["geometry-\\u0074ype"],"Polygon"]',
+      }),
+    );
+    assert.equal((escaped.layers.get(LABEL_ID) as { source: string }).source, "source-lyr");
+  });
+
   it("falls back to MapLibre placement when turned off, and drops the label source", () => {
     const { map, layers, sources } = makeMap();
     syncLayer(map as never, polygonLayer({}));

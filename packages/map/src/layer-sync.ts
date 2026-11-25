@@ -10,6 +10,7 @@ import {
   labelFieldTextField,
   pluginOwnsPaint,
   proportionalRadiusExpression,
+  removeTrailingJsonCommas,
   ruleBasedVisibilityFilter,
   shouldUseTiledRendering,
   styleValue,
@@ -2757,10 +2758,9 @@ function dedupedAttributeLabels(
  * Attribute filters need no gating here (unlike dedup) because each point
  * keeps its feature's properties, so the label layer's filter still evaluates
  * on it. Past MAX_POLYGON_LABEL_FEATURES polygons it is null too (the search
- * would stall the first draw). A filter or label expression that tests the
- * geometry type does need
- * it: the derived feature is a Point, so `["geometry-type"]` would no longer
- * match "Polygon" and the label would vanish. Those keep MapLibre's placement.
+ * would stall the first draw). Geometry-dependent filters and expressions
+ * keep MapLibre's placement: a derived Point can have a different geometry
+ * type, containment, or distance result than the original polygon.
  */
 function onePerPolygonLabelPoints(
   ctx: VectorRenderContext,
@@ -2775,14 +2775,15 @@ function onePerPolygonLabelPoints(
   ) {
     return null;
   }
-  return testsGeometryType(layer, labels) ? null : polygonLabelPoints(layer.geojson);
+  return readsFeatureGeometry(layer, labels) ? null : polygonLabelPoints(layer.geojson);
 }
 
 /**
  * Whether the label layer's filter or any label expression reads the feature's
- * geometry type (`["geometry-type"]`, or the legacy `"$type"` filter key).
+ * geometry type, containment, or distance. These must evaluate on the original
+ * geometry rather than on a derived label anchor.
  */
-function testsGeometryType(layer: GeoLibreLayer, labels: LabelStyle): boolean {
+function readsFeatureGeometry(layer: GeoLibreLayer, labels: LabelStyle): boolean {
   const sources = [
     JSON.stringify(withFeatureFilters(layer, ["all"] as unknown as maplibregl.FilterSpecification)),
     labels.expression,
@@ -2792,7 +2793,49 @@ function testsGeometryType(layer: GeoLibreLayer, labels: LabelStyle): boolean {
     labels.visibilityExpression,
     labels.priorityExpression,
   ];
-  return sources.some((text) => /"(?:geometry-type|\$type)"/.test(text || ""));
+  return sources.some((text) => {
+    // Escaped operator names must still be parsed (for example \u0064istance).
+    if (!text || !/geometry-type|\$type|within|distance|\\/.test(text)) return false;
+    let expression: unknown;
+    try {
+      expression = JSON.parse(removeTrailingJsonCommas(text));
+    } catch {
+      return false;
+    }
+    const pending = [expression];
+    while (pending.length) {
+      const current = pending.pop();
+      if (!Array.isArray(current) || current[0] === "literal") continue;
+      const operator = current[0];
+      if (operator === "geometry-type" || operator === "within" || operator === "distance")
+        return true;
+      if (operator === "semiliteral" && Array.isArray(current[1])) {
+        for (const item of current[1]) pending.push(item);
+        continue;
+      }
+      if (
+        current[1] === "$type" &&
+        ["==", "!=", ">", ">=", "<", "<=", "in", "!in", "has", "!has"].includes(operator)
+      )
+        return true;
+      for (let i = 1; i < current.length; i++) {
+        // Match labels are literal arrays, unlike its input and outputs.
+        if (operator === "match" && i >= 2 && i < current.length - 1 && i % 2 === 0) continue;
+        if (
+          operator === "format" &&
+          current[i] &&
+          !Array.isArray(current[i]) &&
+          typeof current[i] === "object"
+        ) {
+          for (const key of ["font-scale", "text-font", "text-color", "vertical-align"]) {
+            if (Array.isArray(current[i][key])) pending.push(current[i][key]);
+          }
+        }
+        if (Array.isArray(current[i])) pending.push(current[i]);
+      }
+    }
+    return false;
+  });
 }
 
 /**

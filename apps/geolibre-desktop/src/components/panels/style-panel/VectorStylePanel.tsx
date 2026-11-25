@@ -272,6 +272,10 @@ export function VectorStylePanel({
       labels={labels}
       updateLabels={updateLabels}
       hasPolygons={geometryFlags.hasPolygon}
+      supportsPolygonAnchors={
+        (mapControllerRef.current?.capabilities ?? rendererCapabilities(primaryRenderer))
+          .nativeMapInstance
+      }
       vectorStylePropertyOptions={vectorStylePropertyOptions}
       setExpressionBuilderTarget={setExpressionBuilderTarget}
     />
