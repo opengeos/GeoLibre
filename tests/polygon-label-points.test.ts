@@ -470,6 +470,42 @@ describe("one label per polygon (layer sync)", () => {
     assert.ok(!sources.has(LABEL_SOURCE_ID));
   });
 
+  it("reads the first semiliteral expression and expression-valued format options", () => {
+    const { map, layers } = makeMap();
+    const layer = polygonLayer({});
+    layer.filterExpression = ["!=", ["at", 0, ["semiliteral", [["geometry-type"]]]], "Polygon"];
+    syncLayer(map as never, layer);
+    assert.equal((layers.get(LABEL_ID) as { source: string }).source, "source-lyr");
+    const formatted = makeMap();
+    syncLayer(
+      formatted.map as never,
+      polygonLayer({
+        expression:
+          '["format",["get","NAME"],{"font-scale":["case",["==",["geometry-type"],"Polygon"],2,1]}]',
+      }),
+    );
+    assert.equal((formatted.layers.get(LABEL_ID) as { source: string }).source, "source-lyr");
+  });
+
+  it("ignores match label arrays and recognizes escaped geometry operators", () => {
+    const { map, layers } = makeMap();
+    syncLayer(
+      map as never,
+      polygonLayer({
+        expression: '["match",["get","kind"],["within","distance"],"A","B"]',
+      }),
+    );
+    assert.equal((layers.get(LABEL_ID) as { source: string }).source, LABEL_SOURCE_ID);
+    const escaped = makeMap();
+    syncLayer(
+      escaped.map as never,
+      polygonLayer({
+        visibilityExpression: '["==",["geometry-\\u0074ype"],"Polygon"]',
+      }),
+    );
+    assert.equal((escaped.layers.get(LABEL_ID) as { source: string }).source, "source-lyr");
+  });
+
   it("falls back to MapLibre placement when turned off, and drops the label source", () => {
     const { map, layers, sources } = makeMap();
     syncLayer(map as never, polygonLayer({}));

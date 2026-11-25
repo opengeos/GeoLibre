@@ -2794,7 +2794,8 @@ function readsFeatureGeometry(layer: GeoLibreLayer, labels: LabelStyle): boolean
     labels.priorityExpression,
   ];
   return sources.some((text) => {
-    if (!text) return false;
+    // Escaped operator names must still be parsed (for example \u0064istance).
+    if (!text || !/geometry-type|\$type|within|distance|\\/.test(text)) return false;
     let expression: unknown;
     try {
       expression = JSON.parse(removeTrailingJsonCommas(text));
@@ -2808,12 +2809,28 @@ function readsFeatureGeometry(layer: GeoLibreLayer, labels: LabelStyle): boolean
       const operator = current[0];
       if (operator === "geometry-type" || operator === "within" || operator === "distance")
         return true;
+      if (operator === "semiliteral" && Array.isArray(current[1])) {
+        for (const item of current[1]) pending.push(item);
+        continue;
+      }
       if (
         current[1] === "$type" &&
         ["==", "!=", ">", ">=", "<", "<=", "in", "!in", "has", "!has"].includes(operator)
       )
         return true;
       for (let i = 1; i < current.length; i++) {
+        // Match labels are literal arrays, unlike its input and outputs.
+        if (operator === "match" && i >= 2 && i < current.length - 1 && i % 2 === 0) continue;
+        if (
+          operator === "format" &&
+          current[i] &&
+          !Array.isArray(current[i]) &&
+          typeof current[i] === "object"
+        ) {
+          for (const key of ["font-scale", "text-font", "text-color", "vertical-align"]) {
+            if (Array.isArray(current[i][key])) pending.push(current[i][key]);
+          }
+        }
         if (Array.isArray(current[i])) pending.push(current[i]);
       }
     }
