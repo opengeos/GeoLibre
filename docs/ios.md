@@ -523,6 +523,11 @@ retained imports and newly picked data files are held before layer publication.
 A new pick can still create its managed copy, but it cannot open in the workspace
 until access initialization succeeds. Those copies remain available for a later
 successful launch.
+Failure to prepare or read the import root activates this hold; problems with
+individual import folders are reported while healthy files remain authorized.
+Copy publication synchronizes all storage ancestors through the existing app
+Library directory, including directories created by an earlier failed attempt.
+Synchronization stays inside the app sandbox.
 
 The copy store and path handling have automated tests. Real iOS device checks
 for picking, rendering, offline restart, and provider cancellation remain

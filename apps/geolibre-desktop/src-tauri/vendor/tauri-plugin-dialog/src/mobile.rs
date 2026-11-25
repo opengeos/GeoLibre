@@ -93,7 +93,11 @@ fn pick_data_files_blocking<R: Runtime>(
             })
             .collect::<std::io::Result<Vec<_>>>()?;
         let root = app.path().app_local_data_dir()?.join("picked-documents");
-        return crate::ios_data_copy::persist_selection(&root, &sources)
+        let local_data = app.path().local_data_dir()?;
+        let anchor = local_data
+            .parent()
+            .ok_or_else(|| std::io::Error::other("Missing local storage ancestor"))?;
+        return crate::ios_data_copy::persist_selection(&root, anchor, &sources)
             .map(|paths| Some(paths.into_iter().map(FilePath::Path).collect()))
             .map_err(Into::into);
     }

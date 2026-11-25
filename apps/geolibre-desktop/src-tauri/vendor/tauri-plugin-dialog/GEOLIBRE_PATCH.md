@@ -104,6 +104,14 @@ to the local paths used by GeoLibre's readers:
   It returns the current trusted root so project and library hydration can rebase
   saved references after iOS moves the app container. Edited files remain eligible;
   the source fingerprint records import provenance rather than forbidding edits.
+  Root preparation and root-directory inventory failures reject initialization,
+  so the frontend holds retained-file projects before publication. Per-import
+  failures and inventory synchronization warnings preserve the healthy inventory.
+- iOS storage operations receive an existing, platform-resolved sandbox anchor
+  (the Library directory containing local app data). Successful publication syncs
+  every directory through that anchor, including ancestors left by failed earlier
+  attempts. It never tries to sync ancestors outside the app sandbox. Relative
+  storage paths are resolved against the canonical anchor and checked for escape.
 
 `android/src/test/java/DocumentCopyBatchTest.kt` checks streaming, fingerprints,
 companion placement, rollback, unsafe names and collision handling. The Rust

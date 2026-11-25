@@ -20,10 +20,15 @@ pub(crate) async fn initialize_native_document_copies(
                 .app_local_data_dir()
                 .map_err(|error| error.to_string())?
                 .join("picked-documents");
-            let (files, mut problems) = match tauri_plugin_dialog::retained_document_files(&root) {
-                Ok(inventory) => inventory,
-                Err(error) => (Vec::new(), vec![error.to_string()]),
-            };
+            let local_data = app
+                .path()
+                .local_data_dir()
+                .map_err(|error| error.to_string())?;
+            let anchor = local_data
+                .parent()
+                .ok_or("Missing local storage ancestor")?;
+            let (files, mut problems) = tauri_plugin_dialog::retained_document_files(&root, anchor)
+                .map_err(|error| error.to_string())?;
             for path in files {
                 for result in [
                     app.fs_scope().allow_file(&path),
@@ -34,8 +39,8 @@ pub(crate) async fn initialize_native_document_copies(
                     }
                 }
             }
-            // The app-resolved root remains useful for rebasing even if a damaged
-            // import cannot be inventoried. Readers report unavailable files normally.
+            // Per-import failures retain the root and healthy grants. Root-level
+            // failures propagate above so the frontend holds retained projects.
             let canonical = std::fs::canonicalize(&root).unwrap_or(root);
             Ok(NativeDocumentCopies {
                 root: Some(crate::canonical_local_path_string(&canonical)?),

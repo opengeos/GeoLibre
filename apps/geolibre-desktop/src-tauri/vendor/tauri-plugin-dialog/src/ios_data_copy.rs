@@ -123,39 +123,65 @@ fn copy_file(source: &Path, destination: &Path) -> io::Result<(u64, String)> {
     Ok((bytes, sha256))
 }
 
-fn prepare_root(root: &Path) -> io::Result<(PathBuf, Vec<PathBuf>)> {
-    if !root.is_absolute() {
+fn prepare_root(root: &Path, anchor: &Path) -> io::Result<(PathBuf, Vec<PathBuf>)> {
+    if !root.is_absolute() || !anchor.is_absolute() {
         return Err(io::Error::other(
             "Document storage must be an absolute path",
         ));
     }
-    // Synchronize newly created storage ancestors too on the first import.
-    let mut storage_parents = Vec::new();
-    let mut parent = root.parent();
-    while let Some(path) = parent {
-        storage_parents.push(path.to_path_buf());
-        match fs::metadata(path) {
-            Ok(_) => break,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => parent = path.parent(),
-            Err(error) => return Err(error),
-        }
+    // The platform supplies an existing sandbox ancestor. Never synchronize
+    // directories above it, which iOS may forbid the app from opening.
+    let relative = root
+        .strip_prefix(anchor)
+        .map_err(|_| io::Error::other("Document storage is outside its anchor"))?;
+    if relative.as_os_str().is_empty()
+        || relative
+            .components()
+            .any(|part| matches!(part, std::path::Component::ParentDir))
+    {
+        return Err(io::Error::other("Document storage is outside its anchor"));
     }
-    fs::create_dir_all(root)?;
+    let anchor = fs::canonicalize(anchor)?;
+    if !anchor.is_dir() {
+        return Err(io::Error::other(
+            "Document storage anchor is not a directory",
+        ));
+    }
+    let root = anchor.join(relative);
+    fs::create_dir_all(&root)?;
     // The storage root is app-owned, never a user-selected destination. Reject
     // a symlink at that root before sweeping or publishing private stages.
-    if !fs::symlink_metadata(root)?.file_type().is_dir() {
+    if !fs::symlink_metadata(&root)?.file_type().is_dir() {
         return Err(io::Error::other("Document storage is not a directory"));
     }
-    Ok((fs::canonicalize(root)?, storage_parents))
+    let root = fs::canonicalize(root)?;
+    if !root.starts_with(&anchor) || root == anchor {
+        return Err(io::Error::other("Document storage is outside its anchor"));
+    }
+    // Include existing ancestors on retries too: an earlier failed attempt
+    // may have created them without making their parent entries durable.
+    let mut storage_parents = Vec::new();
+    for path in root.ancestors().skip(1) {
+        storage_parents.push(path.to_path_buf());
+        if path == anchor {
+            break;
+        }
+    }
+    Ok((root, storage_parents))
 }
 
 /// Inventory only published regular data files for reauthorization at startup.
 /// Stages, symlinks, manifests, and unrelated directories never enter the scope.
-pub fn retained_document_files(root: &Path) -> io::Result<(Vec<PathBuf>, Vec<String>)> {
+/// The trusted, existing sandbox `anchor` contains the storage root. Root-level
+/// failures are fatal; individual imports and sync warnings enter `problems`.
+pub fn retained_document_files(
+    root: &Path,
+    anchor: &Path,
+) -> io::Result<(Vec<PathBuf>, Vec<String>)> {
     let _lock = COPY_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let (root, parents) = prepare_root(root)?;
+    let (root, parents) = prepare_root(root, anchor)?;
     let mut files = Vec::new();
     let mut problems = Vec::new();
     for entry in fs::read_dir(&root)? {
@@ -221,14 +247,20 @@ pub fn retained_document_files(root: &Path) -> io::Result<(Vec<PathBuf>, Vec<Str
 ///
 /// Each pick gets a separate identity: UIKit's temporary URLs do not identify
 /// the original provider document reliably enough to deduplicate selections.
-pub(crate) fn persist_selection(root: &Path, sources: &[PathBuf]) -> io::Result<Vec<PathBuf>> {
+/// Synchronization includes every ancestor through the trusted, existing sandbox
+/// `anchor`, including directories left by an earlier failed attempt.
+pub(crate) fn persist_selection(
+    root: &Path,
+    anchor: &Path,
+    sources: &[PathBuf],
+) -> io::Result<Vec<PathBuf>> {
     if sources.is_empty() {
         return Err(io::Error::other("The picker returned no documents"));
     }
     let _lock = COPY_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let (root, storage_parents) = prepare_root(root)?;
+    let (root, storage_parents) = prepare_root(root, anchor)?;
     if let Err(error) = recover_stages(&root) {
         eprintln!(
             "[GeoLibre] Could not finish import-stage recovery in {}: {error}",
@@ -319,10 +351,73 @@ mod tests {
     }
 
     #[test]
+    fn retry_keeps_every_storage_ancestor_in_the_durability_plan() {
+        let fixture = Fixture::new();
+        let library = fixture.0.join("Library");
+        let support = library.join("Application Support");
+        let app = support.join("org.geolibre.app");
+        let root = app.join("picked-documents");
+        assert!(persist_selection(&root, &fixture.0, &[fixture.0.join("missing.tif")]).is_err());
+        let (_, parents) = prepare_root(&root, &fixture.0).unwrap();
+        assert_eq!(
+            parents,
+            vec![
+                fs::canonicalize(app).unwrap(),
+                fs::canonicalize(support).unwrap(),
+                fs::canonicalize(library).unwrap(),
+                fs::canonicalize(&fixture.0).unwrap(),
+            ]
+        );
+        let source = fixture.source("roads.geojson", b"original");
+        let copies = persist_selection(&root, &fixture.0, &[source]).unwrap();
+        assert_eq!(fs::read(&copies[0]).unwrap(), b"original");
+    }
+
+    #[test]
+    fn rejects_storage_outside_the_anchor_before_creating_directories() {
+        let fixture = Fixture::new();
+        let anchor = fixture.0.join("anchor");
+        fs::create_dir(&anchor).unwrap();
+        let outside = fixture.0.join("outside/picked-documents");
+        assert!(prepare_root(&outside, &anchor).is_err());
+        assert!(!outside.exists());
+        let escaped = anchor.join("../escaped/picked-documents");
+        assert!(prepare_root(&escaped, &anchor).is_err());
+        assert!(!fixture.0.join("escaped").exists());
+        assert!(prepare_root(&anchor, &anchor).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_storage_root_is_a_fatal_inventory_error() {
+        use std::os::unix::fs::PermissionsExt;
+        let fixture = Fixture::new();
+        let source = fixture.source("roads.geojson", b"original");
+        let copies = persist_selection(&fixture.root(), &fixture.0, &[source]).unwrap();
+        let permissions = fs::metadata(fixture.root()).unwrap().permissions();
+        fs::set_permissions(fixture.root(), fs::Permissions::from_mode(0)).unwrap();
+        let blocked = fs::read_dir(fixture.root()).is_err();
+        let result = retained_document_files(&fixture.root(), &fixture.0);
+        fs::set_permissions(fixture.root(), permissions).unwrap();
+        assert!(
+            blocked,
+            "this denial-path test requires an unprivileged runner"
+        );
+        assert!(
+            result.is_err(),
+            "root failure must not become a partial inventory"
+        );
+        assert_eq!(fs::read(&copies[0]).unwrap(), b"original");
+        let (files, problems) = retained_document_files(&fixture.root(), &fixture.0).unwrap();
+        assert_eq!(files, copies);
+        assert!(problems.is_empty());
+    }
+
+    #[test]
     fn inventory_and_import_recover_after_a_copy_holder_panics() {
         let fixture = Fixture::new();
         let source = fixture.source("roads.geojson", b"original");
-        let earlier = persist_selection(&fixture.root(), &[source.clone()]).unwrap();
+        let earlier = persist_selection(&fixture.root(), &fixture.0, &[source.clone()]).unwrap();
         fs::write(&earlier[0], b"local edits").unwrap();
         let pending = fixture.root().join(format!(".pending-{}", Uuid::new_v4()));
         let abandoned = pending.clone();
@@ -341,10 +436,10 @@ mod tests {
         assert!(panicked.is_err());
         assert!(COPY_LOCK.is_poisoned());
         assert!(!pending.exists());
-        let (files, problems) = retained_document_files(&fixture.root()).unwrap();
+        let (files, problems) = retained_document_files(&fixture.root(), &fixture.0).unwrap();
         assert_eq!(files, earlier);
         assert!(problems.is_empty());
-        let later = persist_selection(&fixture.root(), &[source.clone()]).unwrap();
+        let later = persist_selection(&fixture.root(), &fixture.0, &[source.clone()]).unwrap();
         assert_ne!(earlier, later);
         assert_eq!(fs::read(&earlier[0]).unwrap(), b"local edits");
         assert_eq!(fs::read(&later[0]).unwrap(), b"original");
@@ -357,7 +452,8 @@ mod tests {
         let fixture = Fixture::new();
         let shp = fixture.source("Berkeley é.shp", b"geometry");
         let dbf = fixture.source("Berkeley é.dbf", b"attributes");
-        let copies = persist_selection(&fixture.root(), &[shp.clone(), dbf.clone()]).unwrap();
+        let copies =
+            persist_selection(&fixture.root(), &fixture.0, &[shp.clone(), dbf.clone()]).unwrap();
         assert_eq!(copies[0].parent(), copies[1].parent());
         fs::remove_file(shp).unwrap();
         fs::remove_file(dbf).unwrap();
@@ -386,9 +482,10 @@ mod tests {
     fn failed_batch_does_not_publish_partial_data_or_remove_earlier_copies() {
         let fixture = Fixture::new();
         let source = fixture.source("map.mbtiles", b"archive");
-        let earlier = persist_selection(&fixture.root(), &[source.clone()]).unwrap();
+        let earlier = persist_selection(&fixture.root(), &fixture.0, &[source.clone()]).unwrap();
         let failed = persist_selection(
             &fixture.root(),
+            &fixture.0,
             &[source.clone(), fixture.0.join("missing.tif")],
         );
         assert!(failed.is_err());
@@ -402,7 +499,7 @@ mod tests {
         let fixture = Fixture::new();
         let a = fixture.source("roads.shp", b"a");
         let b = fixture.source("ROADS.SHP", b"b");
-        assert!(persist_selection(&fixture.root(), &[a, b]).is_err());
+        assert!(persist_selection(&fixture.root(), &fixture.0, &[a, b]).is_err());
         assert_eq!(fs::read_dir(fixture.root()).unwrap().count(), 0);
     }
 
@@ -410,9 +507,9 @@ mod tests {
     fn distinct_picks_and_edited_copies_are_never_aliased() {
         let fixture = Fixture::new();
         let source = fixture.source("roads.geojson", b"original");
-        let first = persist_selection(&fixture.root(), &[source.clone()]).unwrap();
+        let first = persist_selection(&fixture.root(), &fixture.0, &[source.clone()]).unwrap();
         fs::write(&first[0], b"edited").unwrap();
-        let second = persist_selection(&fixture.root(), &[source.clone()]).unwrap();
+        let second = persist_selection(&fixture.root(), &fixture.0, &[source.clone()]).unwrap();
         assert_ne!(first[0], second[0]);
         assert_eq!(fs::read(&first[0]).unwrap(), b"edited");
         assert_eq!(fs::read(&second[0]).unwrap(), b"original");
@@ -429,7 +526,7 @@ mod tests {
         let unrelated = fixture.root().join(".pending-not-an-import");
         fs::create_dir(&unrelated).unwrap();
         let source = fixture.source("map.tif", b"raster");
-        persist_selection(&fixture.root(), &[source]).unwrap();
+        persist_selection(&fixture.root(), &fixture.0, &[source]).unwrap();
         assert!(!abandoned.exists());
         assert!(unrelated.is_dir());
     }
@@ -438,14 +535,14 @@ mod tests {
     fn sanitizes_names_without_changing_extensions() {
         let fixture = Fixture::new();
         let source = fixture.source("roads\\draft\n.geojson", b"data");
-        let copies = persist_selection(&fixture.root(), &[source]).unwrap();
+        let copies = persist_selection(&fixture.root(), &fixture.0, &[source]).unwrap();
         assert_eq!(copies[0].file_name().unwrap(), "roads_draft_.geojson");
     }
 
     #[test]
     fn an_empty_selection_creates_no_storage() {
         let fixture = Fixture::new();
-        assert!(persist_selection(&fixture.root(), &[]).is_err());
+        assert!(persist_selection(&fixture.root(), &fixture.0, &[]).is_err());
         assert!(!fixture.root().exists());
     }
 
@@ -455,13 +552,13 @@ mod tests {
         let old = fixture.0.join("old-container");
         let root = old.join("Library/Application Support/org.geolibre.app/picked-documents");
         let source = fixture.source("roads.geojson", b"original");
-        let copies = persist_selection(&root, &[source]).unwrap();
+        let copies = persist_selection(&root, &fixture.0, &[source]).unwrap();
         fs::write(&copies[0], b"local edits").unwrap();
         let new = fixture.0.join("new-container");
         fs::rename(&old, &new).unwrap();
         let unresolved = new.join("Library/Application Support/org.geolibre.app/picked-documents");
         let current = fs::canonicalize(&unresolved).unwrap();
-        let (files, problems) = retained_document_files(&unresolved).unwrap();
+        let (files, problems) = retained_document_files(&unresolved, &fixture.0).unwrap();
         assert!(problems.is_empty());
         assert_eq!(files.len(), 1);
         assert!(files[0].starts_with(&current));
@@ -480,7 +577,7 @@ mod tests {
         fs::set_permissions(&stage, fs::Permissions::from_mode(0o500)).unwrap();
         let blocked = fs::remove_dir_all(&stage).is_err();
         let source = fixture.source("roads.geojson", b"new import");
-        let result = persist_selection(&fixture.root(), &[source]);
+        let result = persist_selection(&fixture.root(), &fixture.0, &[source]);
         let retained = stage.exists();
         if retained {
             fs::set_permissions(&stage, fs::Permissions::from_mode(0o700)).unwrap();
@@ -500,13 +597,13 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let fixture = Fixture::new();
         let source = fixture.source("roads.geojson", b"data");
-        let broken = persist_selection(&fixture.root(), &[source.clone()]).unwrap();
-        let healthy = persist_selection(&fixture.root(), &[source]).unwrap();
+        let broken = persist_selection(&fixture.root(), &fixture.0, &[source.clone()]).unwrap();
+        let healthy = persist_selection(&fixture.root(), &fixture.0, &[source]).unwrap();
         let directory = broken[0].parent().unwrap();
         let permissions = fs::metadata(directory).unwrap().permissions();
         fs::set_permissions(directory, fs::Permissions::from_mode(0)).unwrap();
         let unreadable = fs::read_dir(directory).is_err();
-        let result = retained_document_files(&fixture.root());
+        let result = retained_document_files(&fixture.root(), &fixture.0);
         fs::set_permissions(directory, permissions).unwrap();
         assert!(
             unreadable,
@@ -524,12 +621,12 @@ mod tests {
         use std::os::unix::fs::symlink;
         let fixture = Fixture::new();
         let source = fixture.source("roads.geojson", b"data");
-        let copies = persist_selection(&fixture.root(), &[source.clone()]).unwrap();
+        let copies = persist_selection(&fixture.root(), &fixture.0, &[source.clone()]).unwrap();
         symlink(&source, copies[0].parent().unwrap().join("outside.geojson")).unwrap();
         let stage = fixture.root().join(format!(".pending-{}", Uuid::new_v4()));
         fs::create_dir_all(stage.join("data")).unwrap();
         fs::write(stage.join("data/staged.geojson"), b"partial").unwrap();
-        let (files, problems) = retained_document_files(&fixture.root()).unwrap();
+        let (files, problems) = retained_document_files(&fixture.root(), &fixture.0).unwrap();
         assert!(problems.is_empty());
         assert_eq!(files, copies);
         assert!(stage.exists());
@@ -543,10 +640,10 @@ mod tests {
         let source = fixture.source("map.tif", b"raster");
         let link = fixture.0.join("link.tif");
         symlink(&source, &link).unwrap();
-        assert!(persist_selection(&fixture.root(), &[link]).is_err());
+        assert!(persist_selection(&fixture.root(), &fixture.0, &[link]).is_err());
         assert_eq!(fs::read_dir(fixture.root()).unwrap().count(), 0);
         let root_link = fixture.0.join("linked-root");
         symlink(fixture.root(), &root_link).unwrap();
-        assert!(persist_selection(&root_link, &[source]).is_err());
+        assert!(persist_selection(&root_link, &fixture.0, &[source]).is_err());
     }
 }
