@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 import { DEFAULT_LAYER_STYLE, getActiveMeanRadiusMeters, type GeoLibreLayer } from "@geolibre/core";
 import {
   buildLocalNetwork,
+  LocalNetwork,
   localClosestFacilityTool,
   localServiceAreaTool,
   localShortestPathTool,
   turnRulesActive,
   type ProcessingAlgorithm,
+  type NetworkSearchBudget,
 } from "@geolibre/processing";
 import type { Feature, FeatureCollection, LineString, Position } from "geojson";
 
@@ -331,6 +333,20 @@ describe("turn costs", () => {
   it("charges a right turn cost only on right turns", async () => {
     const leg = await route({ turns: "rules", rightTurnCost: 500 });
     assert.ok(Math.abs((leg.properties?.cost as number) - 200) < 0.01);
+    const reversed = {
+      ...stops,
+      geojson: { ...stops.geojson!, features: [...stops.geojson!.features].reverse() },
+    };
+    const { results } = await run(localShortestPathTool, [roads, reversed], {
+      network: "roads",
+      stops: "stops",
+      turns: "rules",
+      rightTurnCost: 100,
+    });
+    assert.ok(Math.abs((results[0].geojson.features[0].properties?.cost as number) - 300) < 0.01);
+    assert.ok(
+      Math.abs((results[0].geojson.features[0].properties?.length_m as number) - 200) < 0.01,
+    );
   });
 
   it("adds a turn table cost and lets it change the route", async () => {
@@ -359,6 +375,100 @@ describe("turn costs", () => {
 });
 
 describe("turn cost edge cases", () => {
+  it("uses one adjacency budget for every search in each local tool run", async () => {
+    const original = LocalNetwork.prototype.search;
+    const budgets: (NetworkSearchBudget | undefined)[] = [];
+    const search = mock.method(
+      LocalNetwork.prototype,
+      "search",
+      function (this: LocalNetwork, ...args: Parameters<typeof original>) {
+        budgets.push(args[1]?.budget);
+        return original.apply(this, args);
+      },
+    );
+    try {
+      const stops = layer("stops", [point(0, 0), point(100, 100), point(200, 0)]);
+      const incidents = layer("incidents", [point(0, 0), point(100, 100)]);
+      const facilities = layer("facilities", [point(200, 0), point(100, 100)]);
+      let previous: NetworkSearchBudget | undefined;
+      for (const tool of [localShortestPathTool, localClosestFacilityTool, localServiceAreaTool]) {
+        budgets.length = 0;
+        const { results, messages } = await run(tool, [STREETS, stops, incidents, facilities], {
+          network: "streets",
+          stops: "stops",
+          incidents: "incidents",
+          facilities: "facilities",
+          breaks: "100",
+          overlap: "separate",
+          polygonWidth: 0,
+          turns: "rules",
+          uturnCost: 1,
+        });
+        assert.ok(results.length > 0, messages.join("\n"));
+        assert.ok(budgets.length >= 2, tool.id);
+        assert.ok(budgets[0]);
+        assert.ok(
+          budgets.every((budget) => budget === budgets[0]),
+          tool.id,
+        );
+        assert.notEqual(budgets[0], previous);
+        previous = budgets[0];
+      }
+    } finally {
+      search.mock.restore();
+    }
+  });
+
+  it("refuses a configured turn table that has been deleted", async () => {
+    const { results, messages } = await run(localShortestPathTool, [STREETS, S_TO_N], {
+      network: "streets",
+      stops: "stops",
+      ...TURN_TABLE,
+    });
+    assert.equal(results.length, 0);
+    assert.ok(
+      messages.some((message) => message.includes("turn table layer is no longer available")),
+    );
+  });
+
+  it("charges settled adjacency entries in forward and reverse turn searches", () => {
+    const net = buildLocalNetwork([
+      line([
+        [0, 0],
+        [100, 0],
+      ]),
+    ]);
+    net.setTurnRules({ uturnCost: 1 });
+    for (const reverse of [false, true]) {
+      assert.throws(
+        () => net.search([0], { reverse, budget: { remainingAdjacencyVisits: 2 } }),
+        /adjacency.*budget/,
+      );
+      const budget = { remainingAdjacencyVisits: 3 };
+      assert.ok(Number.isFinite(net.search([0], { reverse, budget }).dist[1]));
+      assert.equal(budget.remainingAdjacencyVisits, 0);
+    }
+  });
+
+  it("shares adjacency work across repeated searches and shortest-path legs", () => {
+    const net = buildLocalNetwork([
+      line([
+        [0, 0],
+        [100, 0],
+      ]),
+    ]);
+    const budget = { remainingAdjacencyVisits: 3 };
+    net.search([0], { budget });
+    assert.equal(budget.remainingAdjacencyVisits, 1);
+    assert.throws(() => net.search([0], { budget }), /adjacency.*budget/);
+    assert.throws(
+      () => net.shortestPath(0, 1, true, { remainingAdjacencyVisits: 0 }),
+      /adjacency.*budget/,
+    );
+    assert.ok(net.shortestPath(0, 1));
+    assert.ok(net.shortestPath(0, 1));
+  });
+
   it("does not charge a bend in one line where a side line joins", async () => {
     // One line bends left 90 degrees at (100, 0), where a spur also starts.
     const bend = layer("roads", [

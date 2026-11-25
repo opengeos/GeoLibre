@@ -354,6 +354,13 @@ this work limit with fewer points. Use a smaller local extract for those runs.
 It has a separate 50-million edge/point comparison budget,
 including far or antimeridian selections that use a full edge scan.
 
+Network searches also share a 50-million adjacency-visit allowance across all
+legs, incidents, or service-area groups in one run. Visits count even when an
+edge is already settled or its turn is prohibited, bounding high-degree hubs
+under turn-aware searches. Exceeding the allowance stops the run with an error;
+use a smaller network or selection. The existing state/allocation preflights
+remain in place to bound memory separately.
+
 Service-area polygon buffering accepts at most 1,000 reachable line pieces per
 area and 5,000 per run. An excessive selection returns an error; rerun with
 polygons disabled for line-only output. Input points farther than 1 km or ten

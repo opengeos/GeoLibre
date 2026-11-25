@@ -8,7 +8,6 @@ import {
 import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
   NETWORK_TOOLS,
-  canRunVectorToolOnWorker,
   getNetworkTool,
   runAlgorithmInBackground,
   type AlgorithmParameter,
@@ -411,7 +410,7 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
                 )}
                 {t("network.run")}
               </Button>
-              {running && canRunVectorToolOnWorker(tool) && (
+              {running && (
                 <Button
                   variant="outline"
                   className="ms-2"

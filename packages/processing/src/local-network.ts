@@ -155,6 +155,43 @@ interface CompiledTurnRules {
   straightAngle: number;
 }
 
+/** Total adjacency entries a local network run may inspect across its searches. */
+export const MAX_NETWORK_ADJACENCY_VISITS = 50_000_000;
+
+/** Mutable allowance shared by every search in one processing run. */
+export interface NetworkSearchBudget {
+  remainingAdjacencyVisits: number;
+}
+
+/** Search limits and callbacks; an omitted budget starts a fresh allowance. */
+export interface NetworkSearchOptions {
+  target?: number;
+  astar?: boolean;
+  maxCost?: number;
+  reverse?: boolean;
+  onSettle?: (node: number, cost: number) => boolean | void;
+  budget?: NetworkSearchBudget;
+}
+
+/** Create an independent adjacency allowance, optionally smaller for a caller. */
+export function createNetworkSearchBudget(
+  limit = MAX_NETWORK_ADJACENCY_VISITS,
+): NetworkSearchBudget {
+  if (!Number.isSafeInteger(limit) || limit < 0)
+    throw new RangeError("Invalid network adjacency budget");
+  return { remainingAdjacencyVisits: limit };
+}
+
+/** Charge even entries that will be skipped because their state is settled. */
+function chargeAdjacencyVisit(budget: NetworkSearchBudget): void {
+  if (budget.remainingAdjacencyVisits <= 0) {
+    throw new RangeError(
+      "Local network adjacency work budget exceeded; use a smaller network or selection",
+    );
+  }
+  budget.remainingAdjacencyVisits -= 1;
+}
+
 /** Non-negative finite cost, or 0. */
 function turnCostValue(value: number | undefined): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
@@ -876,17 +913,9 @@ export class LocalNetwork {
    * @param options.onSettle - Called per settled node; return true to stop.
    * @returns Distances and predecessor links.
    */
-  search(
-    sources: number[],
-    options: {
-      target?: number;
-      astar?: boolean;
-      maxCost?: number;
-      reverse?: boolean;
-      onSettle?: (node: number, cost: number) => boolean | void;
-    } = {},
-  ): SearchResult {
-    if (this.turnRules) return this.searchTurns(sources, options);
+  search(sources: number[], options: NetworkSearchOptions = {}): SearchResult {
+    const budget = options.budget ?? createNetworkSearchBudget();
+    if (this.turnRules) return this.searchTurns(sources, options, budget);
     const n = this.nodeCount;
     const dist = new Float64Array(n).fill(Infinity);
     const prevEdge = new Int32Array(n).fill(-1);
@@ -918,6 +947,7 @@ export class LocalNetwork {
       if (options.onSettle?.(u, dist[u])) break;
       if (u === target) break;
       for (const e of this.adj[u]) {
+        chargeAdjacencyVisit(budget);
         const [v, cost] = this.step(e, u, options.reverse === true);
         if (!Number.isFinite(cost) || settled[v]) continue;
         const nd = dist[u] + cost;
@@ -942,13 +972,8 @@ export class LocalNetwork {
    */
   private searchTurns(
     sources: number[],
-    options: {
-      target?: number;
-      astar?: boolean;
-      maxCost?: number;
-      reverse?: boolean;
-      onSettle?: (node: number, cost: number) => boolean | void;
-    },
+    options: NetworkSearchOptions,
+    budget: NetworkSearchBudget,
   ): SearchResult {
     const n = this.nodeCount;
     const m = 2 * this.edges.length;
@@ -995,6 +1020,7 @@ export class LocalNetwork {
     }
     for (const s of starts) {
       for (const e of this.adj[s]) {
+        chargeAdjacencyVisit(budget);
         const state = stateAt(e, s);
         const cost = this.stateCost(state);
         if (!Number.isFinite(cost) || entry[state] <= 0) continue;
@@ -1019,6 +1045,7 @@ export class LocalNetwork {
         if (node === target) break;
       }
       for (const e of this.adj[node]) {
+        chargeAdjacencyVisit(budget);
         const next = stateAt(e, node);
         if (settled[next]) continue;
         const nextCost = this.stateCost(next);
@@ -1091,8 +1118,13 @@ export class LocalNetwork {
    * @param astar - Use A* (same optimum as Dijkstra, fewer nodes settled).
    * @returns The path, or null when `to` is unreachable.
    */
-  shortestPath(from: number, to: number, astar = true): NetworkPath | null {
-    return this.pathTo(this.search([from], { target: to, astar }), to);
+  shortestPath(
+    from: number,
+    to: number,
+    astar = true,
+    budget?: NetworkSearchBudget,
+  ): NetworkPath | null {
+    return this.pathTo(this.search([from], { target: to, astar, budget }), to);
   }
 
   /**

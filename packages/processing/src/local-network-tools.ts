@@ -9,9 +9,11 @@ import type { RoutingPoint } from "@geolibre/core";
 import type { Feature, Point, Position, Polygon, MultiPolygon } from "geojson";
 import {
   buildLocalNetwork,
+  createNetworkSearchBudget,
   splitNetworkLine,
   type LocalNetwork,
   type NetworkCostMode,
+  type NetworkSearchBudget,
   type TurnRules,
   type TurnTableEntry,
   type UTurnPolicy,
@@ -307,7 +309,7 @@ function round(value: number, digits = 3): number {
  */
 function buildNetworkFromParams(
   ctx: ProcessingContext,
-): { net: LocalNetwork; mode: NetworkCostMode; unit: string } | null {
+): { net: LocalNetwork; mode: NetworkCostMode; unit: string; budget: NetworkSearchBudget } | null {
   const layer = getLayer(ctx, "network");
   const features = layer?.geojson?.features ?? [];
   if (!features.length) {
@@ -360,7 +362,7 @@ function buildNetworkFromParams(
     net.setTurnRules(turnRules);
     if (!net.hasTurnRules) ctx.log("Turn rules are on but set no restriction or cost.");
   }
-  return { net, mode, unit: costUnit(mode, costField) };
+  return { net, mode, unit: costUnit(mode, costField), budget: createNetworkSearchBudget() };
 }
 
 /** Most turn pairs one turn table may expand to (rows times duplicate ids). */
@@ -399,6 +401,10 @@ export function readTurnRules(
       : "allow";
   const rules: TurnRules = { leftCost, rightCost, uturnCost, uturns };
   const tableLayer = getLayer(ctx, "turnTable");
+  if (ctx.parameters.turnTable && !tableLayer) {
+    ctx.log("Error: the selected turn table layer is no longer available; select it again");
+    return null;
+  }
   if (tableLayer) {
     const text = (id: string) => ((ctx.parameters[id] as string | undefined) ?? "").trim();
     const idField = text("networkIdField");
@@ -556,7 +562,7 @@ export const localShortestPathTool: ProcessingAlgorithm = {
     }
     const built = buildNetworkFromParams(ctx);
     if (!built) return;
-    const { net, unit } = built;
+    const { net, unit, budget } = built;
     const astar = (ctx.parameters.algorithm as string) !== "dijkstra";
     const placed = placePoints(net, stops, ctx);
     if ((placed.length - 1) * net.searchStateCount > 50_000_000) {
@@ -574,7 +580,7 @@ export const localShortestPathTool: ProcessingAlgorithm = {
       if (ctx.signal?.aborted) return;
       const from = placed[i - 1];
       const to = placed[i];
-      const path = net.shortestPath(from.node, to.node, astar);
+      const path = net.shortestPath(from.node, to.node, astar, budget);
       if (!path) {
         unreachable++;
         ctx.log(`No path from stop ${from.id} to stop ${to.id}: they are not connected.`);
@@ -669,7 +675,7 @@ export const localClosestFacilityTool: ProcessingAlgorithm = {
     }
     const built = buildNetworkFromParams(ctx);
     if (!built) return;
-    const { net, unit } = built;
+    const { net, unit, budget } = built;
     const count = Math.max(1, Math.floor(Number(ctx.parameters.count ?? 1)) || 1);
     if (!Number.isFinite(count) || incidents.length * Math.min(count, facilities.length) > 10_000) {
       ctx.log(
@@ -703,6 +709,7 @@ export const localClosestFacilityTool: ProcessingAlgorithm = {
       // Searching against edge direction from the incident gives costs from
       // each facility to it, so one search serves either travel direction.
       const result = net.search([incident.node], {
+        budget,
         maxCost,
         reverse: fromFacility,
         onSettle: (node) => {
@@ -825,7 +832,7 @@ export const localServiceAreaTool: ProcessingAlgorithm = {
     }
     const built = buildNetworkFromParams(ctx);
     if (!built) return;
-    const { net, unit } = built;
+    const { net, unit, budget } = built;
     const separate = (ctx.parameters.overlap as string) === "separate";
     const toward = (ctx.parameters.travelDirection as string) === "to";
     const width = Math.max(0, Number(ctx.parameters.polygonWidth ?? 0) || 0);
@@ -849,7 +856,7 @@ export const localServiceAreaTool: ProcessingAlgorithm = {
     let bufferedPieces = 0;
     for (const group of groups) {
       if (ctx.signal?.aborted) return;
-      const result = net.search(group.nodes, { maxCost: maxBreak, reverse: toward });
+      const result = net.search(group.nodes, { maxCost: maxBreak, reverse: toward, budget });
       // Largest break first, so smaller areas draw on top in the result layer.
       for (const brk of [...breaks].reverse()) {
         await yieldToHost(ctx);
