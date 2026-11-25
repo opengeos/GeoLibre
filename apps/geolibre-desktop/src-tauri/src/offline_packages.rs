@@ -17,6 +17,7 @@ const MAX_MANIFEST_BYTES: u64 = 16 * 1024;
 
 /// Tauri's postMessage transport converts a typed byte array to JSON on some
 /// WebViews. Check the bound before allocating the decoded byte buffer.
+/// Tauri has already parsed the JSON value; this does not bound parse memory.
 pub(crate) fn decode_byte_array(
     value: &serde_json::Value,
     limit: usize,
@@ -193,7 +194,13 @@ impl PackageStore {
                 || name.strip_prefix(".deleting-").is_some_and(valid_id))
                 && entry.file_type().map_err(|e| e.to_string())?.is_dir()
             {
-                fs::remove_dir_all(entry.path()).map_err(|e| e.to_string())?;
+                if let Err(error) = fs::remove_dir_all(entry.path()) {
+                    if name.starts_with(".deleting-") {
+                        eprintln!("Offline package cleanup deferred: {error}");
+                    } else {
+                        return Err(error.to_string());
+                    }
+                }
             }
         }
         sync_directory(&store.root)?;
@@ -363,8 +370,15 @@ impl PackageStore {
         let tombstone = self.root.join(format!(".deleting-{id}"));
         fs::rename(directory, &tombstone).map_err(|e| e.to_string())?;
         sync_directory(&self.root)?;
-        fs::remove_dir_all(tombstone).map_err(|e| e.to_string())?;
-        sync_directory(&self.root)
+        // Once the tombstone is durable the package is logically deleted.
+        // A reader handle may delay physical cleanup (notably on Windows);
+        // recovery retries it on the next storage operation.
+        if let Err(error) = fs::remove_dir_all(tombstone)
+            .and_then(|_| sync_directory(&self.root).map_err(std::io::Error::other))
+        {
+            eprintln!("Offline package cleanup deferred: {error}");
+        }
+        Ok(())
     }
 
     pub fn archive_paths(&self, id: &str) -> Result<[PathBuf; 2], String> {
@@ -532,6 +546,30 @@ mod tests {
         assert!(inventory.problems[0].error.contains("size"));
         root.store().delete(&entry.manifest.id).unwrap();
         assert!(root.store().list().unwrap().problems.is_empty());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn durable_deletion_defers_locked_cleanup_without_blocking_healthy_inventory() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = TestRoot::new();
+        let store = root.store();
+        let entry = store.save(details(), &archive()).unwrap();
+        let healthy = store.save(details(), &archive()).unwrap();
+        let locked = store.directory(&entry.manifest.id).unwrap().join("locked");
+        fs::create_dir(&locked).unwrap();
+        fs::write(locked.join("held"), b"pending cleanup").unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).unwrap();
+        store.delete(&entry.manifest.id).unwrap();
+        let tombstone = store.root.join(format!(".deleting-{}", entry.manifest.id));
+        assert!(tombstone.exists());
+        assert_eq!(
+            root.store().list().unwrap().packages[0].manifest.id,
+            healthy.manifest.id
+        );
+        fs::set_permissions(tombstone.join("locked"), fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(root.store().list().unwrap().packages.len(), 1);
+        assert!(!tombstone.exists());
     }
 
     #[test]

@@ -14,15 +14,16 @@ export class OfflineBasemapRequests {
     const { projectLoadCount, basemapChoiceGeneration } = this.readContext();
     const generation = ++this.generation;
     const isLatest = () => generation === this.generation;
+    const isProjectCurrent = () =>
+      isLatest() && this.readContext().projectLoadCount === projectLoadCount;
     return {
       isLatest,
+      // Catalog errors still belong to this project after our own basemap
+      // application advances its choice generation.
+      isProjectCurrent,
       isCurrent: () => {
         const current = this.readContext();
-        return (
-          isLatest() &&
-          current.projectLoadCount === projectLoadCount &&
-          current.basemapChoiceGeneration === basemapChoiceGeneration
-        );
+        return isProjectCurrent() && current.basemapChoiceGeneration === basemapChoiceGeneration;
       },
     };
   }

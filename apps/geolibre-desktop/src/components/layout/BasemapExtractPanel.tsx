@@ -50,6 +50,7 @@ import {
 } from "../../lib/offline-basemaps";
 import {
   deleteSavedOfflineBasemap,
+  forgetNativeOfflinePackage,
   listSavedOfflineBasemaps,
   nativeOfflineBasemapStyleUrl,
   renameSavedOfflineBasemap,
@@ -316,6 +317,7 @@ export function BasemapExtractPanel({
     const request = ++catalogRequest.current;
     const entries = await listSavedOfflineBasemaps();
     if (request === catalogRequest.current) setSavedBasemaps(entries);
+    return entries;
   }, []);
   useEffect(() => {
     if (!open) return;
@@ -374,6 +376,16 @@ export function BasemapExtractPanel({
         setConfirmDeleteId(null);
       } catch (error) {
         setError(error instanceof Error ? error.message : String(error));
+        // A durable deletion may already have removed the catalog entry even
+        // if cleanup or the following inventory read failed.
+        const entries = await refreshSavedBasemaps().catch(() => null);
+        if (entries && !entries.some((saved) => saved.id === entry.id)) {
+          if (isLiveOfflineBasemap(entry.id)) setBasemapStyleUrl(DEFAULT_BASEMAP);
+          if (entry.managed) forgetNativeOfflinePackage(entry);
+          forgetStyledBasemap(entry.id);
+          evictOfflineBasemapStyle(entry.id);
+          setConfirmDeleteId(null);
+        }
       }
     },
     [isLiveOfflineBasemap, refreshSavedBasemaps, setBasemapStyleUrl, t],
@@ -656,6 +668,7 @@ export function BasemapExtractPanel({
     abortRef.current?.abort();
     const controller = new AbortController();
     const request = applicationRequests.begin();
+    setApplyingId(null);
     const stillOwnsProject = () => !controller.signal.aborted && request.isCurrent();
     abortRef.current = controller;
     setPhase("running");
@@ -716,10 +729,13 @@ export function BasemapExtractPanel({
           })
         : null;
       void refreshSavedBasemaps().catch((error: unknown) => {
-        if (stillOwnsProject()) setError(error instanceof Error ? error.message : String(error));
+        if (!controller.signal.aborted && request.isProjectCurrent())
+          setError(error instanceof Error ? error.message : String(error));
       });
       if (!stillOwnsProject()) return;
-      const layerId = nativePackage?.id ?? `basemap-extract-${crypto.randomUUID()}`;
+      const layerId =
+        nativePackage?.id ??
+        `basemap-extract-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
       const archiveKey = nativePackage
         ? nativeLocalPmtilesProtocolUrl(nativePackage.savedPath)
         : `${layerId}.pmtiles`;
@@ -984,6 +1000,7 @@ export function BasemapExtractPanel({
     setError(null);
     setSuccess(null);
     const request = applicationRequests.begin();
+    setApplyingId(null);
     try {
       const picked = await openLocalDataFileWithFallback({
         filters: [{ name: "PMTiles", extensions: ["pmtiles"] }],
@@ -1021,10 +1038,13 @@ export function BasemapExtractPanel({
         : null;
       if (nativePackage)
         void refreshSavedBasemaps().catch((error: unknown) => {
-          if (request.isCurrent()) setError(error instanceof Error ? error.message : String(error));
+          if (request.isProjectCurrent())
+            setError(error instanceof Error ? error.message : String(error));
         });
       if (!request.isCurrent()) return;
-      const id = nativePackage?.id ?? `basemap-open-${crypto.randomUUID()}`;
+      const id =
+        nativePackage?.id ??
+        `basemap-open-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
       const key = `${id}.pmtiles`;
       if (!nativePackage) registerPMTilesArchive(key, bytes);
       setBasemapStyleUrl(

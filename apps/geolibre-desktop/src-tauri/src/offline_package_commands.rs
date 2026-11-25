@@ -17,9 +17,13 @@ fn open_store(app: &AppHandle) -> Result<PackageStore, String> {
     PackageStore::open(&directory.join("offline-packages"))
 }
 
-fn authorize(app: &AppHandle, entry: &OfflinePackage) -> Result<(), String> {
+fn authorize(app: &AppHandle, entry: &mut OfflinePackage) -> Result<(), String> {
     // Only paths returned by the confined native inventory enter the scope.
     // Re-established from disk on each launch; browser storage is not trusted.
+    if crate::is_unc_resolved_path(&entry.saved_path) {
+        return Err("Offline packages require local storage".into());
+    }
+    entry.saved_path = crate::canonical_local_path_string(std::path::Path::new(&entry.saved_path))?;
     app.fs_scope()
         .allow_file(&entry.saved_path)
         .map_err(|e| e.to_string())?;
@@ -38,8 +42,8 @@ pub(crate) async fn list_native_offline_packages(
         let _guard = lock
             .lock()
             .map_err(|_| "Offline package storage is unavailable")?;
-        let entries = open_store(&app)?.list()?;
-        for entry in &entries.packages {
+        let mut entries = open_store(&app)?.list()?;
+        for entry in &mut entries.packages {
             authorize(&app, entry)?;
         }
         Ok(entries)
@@ -77,8 +81,8 @@ pub(crate) async fn save_native_offline_package(
         let _guard = lock
             .lock()
             .map_err(|_| "Offline package storage is unavailable")?;
-        let entry = open_store(&app)?.save(details, &data)?;
-        authorize(&app, &entry)?;
+        let mut entry = open_store(&app)?.save(details, &data)?;
+        authorize(&app, &mut entry)?;
         Ok(entry)
     })
     .await
@@ -96,8 +100,8 @@ pub(crate) async fn verify_native_offline_package(
         let _guard = lock
             .lock()
             .map_err(|_| "Offline package storage is unavailable")?;
-        let entry = open_store(&app)?.verify(&id)?;
-        authorize(&app, &entry)?;
+        let mut entry = open_store(&app)?.verify(&id)?;
+        authorize(&app, &mut entry)?;
         Ok(entry)
     })
     .await

@@ -14,8 +14,13 @@ const {
   nativeOfflineBasemapStyleUrl,
 } = await import("../apps/geolibre-desktop/src/lib/native-offline-packages");
 const { getOfflineBasemapStyle } = await import("../packages/map/src/protomaps-basemap");
-const { hasPMTilesArchive, getRegisteredPMTilesArchive } =
-  await import("../packages/map/src/pmtiles-archive");
+const {
+  hasPMTilesArchive,
+  getRegisteredPMTilesArchive,
+  getPMTilesArchive,
+  unregisterPMTilesArchive,
+  unregisterPMTilesSource,
+} = await import("../packages/map/src/pmtiles-archive");
 const { nativeLocalPmtilesProtocolUrl } =
   await import("../apps/geolibre-desktop/src/lib/local-media-url");
 const { upsertOfflineBasemap, loadOfflineBasemaps } =
@@ -120,6 +125,34 @@ it("releases a managed range reader on deletion even after its manifest becomes 
   await deleteSavedOfflineBasemap({ ...entry, savedPath: null });
   assert.equal(hasPMTilesArchive(key), false);
   assert.equal(getRegisteredPMTilesArchive(key), undefined);
+});
+
+it("owns and releases range readers for overlay packages without a style resolver", async () => {
+  const overlay = {
+    ...entry,
+    id: "pkg-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    flavor: null,
+    savedPath: "/data/offline-packages/overlay/archive.pmtiles",
+  };
+  mockIPC((command) => {
+    if (command === "list_native_offline_packages") return { packages: [overlay], problems: [] };
+    if (command === "delete_native_offline_package") return;
+    throw new Error(`Unexpected command: ${command}`);
+  });
+  await listSavedOfflineBasemaps();
+  const key = nativeLocalPmtilesProtocolUrl(overlay.savedPath);
+  assert.equal(hasPMTilesArchive(key), true);
+  // Removing one layer can clear the owned registration while another layer
+  // recreates a range reader. Explicit package deletion must release that too.
+  unregisterPMTilesArchive(key);
+  const recreated = getPMTilesArchive(key);
+  assert.ok(recreated);
+  assert.equal(hasPMTilesArchive(key), false);
+  await deleteSavedOfflineBasemap({ ...overlay, savedPath: null });
+  assert.equal(hasPMTilesArchive(key), false);
+  assert.equal(getRegisteredPMTilesArchive(key), undefined);
+  assert.notEqual(getPMTilesArchive(key), recreated);
+  unregisterPMTilesSource(key);
 });
 
 it("keeps legacy catalog deletion from deleting an exported provider document", async () => {

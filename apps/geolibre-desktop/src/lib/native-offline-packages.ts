@@ -3,9 +3,10 @@ import { isTauri } from "./is-tauri";
 import i18next from "i18next";
 import {
   buildProtomapsBasemapStyle,
+  evictOfflineBasemapStyle,
   hasPMTilesArchive,
-  registerPMTilesSource,
-  unregisterPMTilesArchive,
+  registerPMTilesRangeSource,
+  unregisterPMTilesSource,
   PROTOMAPS_FLAVORS,
   registerPersistentOfflineBasemapStyle,
   type ProtomapsFlavor,
@@ -18,7 +19,6 @@ import {
   setOfflineBasemapFlavor,
   type OfflineBasemap,
 } from "./offline-basemaps";
-import { FetchSource } from "pmtiles";
 
 export interface NativeOfflinePackage extends OfflineBasemap {
   managed: true;
@@ -129,17 +129,27 @@ export async function deleteSavedOfflineBasemap(entry: OfflineBasemap): Promise<
   if (entry.managed) {
     await mutatePackage(entry.id, async () => {
       await invoke("delete_native_offline_package", { id: entry.id });
-      const key =
-        packageArchiveKeys.get(entry.id) ??
-        (entry.savedPath ? nativeLocalPmtilesProtocolUrl(entry.savedPath) : undefined);
-      if (key) unregisterPMTilesArchive(key);
-      packageArchiveKeys.delete(entry.id);
+      forgetNativeOfflinePackage(entry);
     });
   } else deleteOfflineBasemap(entry.id);
 }
 
+/** Reconcile a package confirmed absent from the authoritative native catalog. */
+export function forgetNativeOfflinePackage(entry: OfflineBasemap): void {
+  const key =
+    packageArchiveKeys.get(entry.id) ??
+    (entry.savedPath ? nativeLocalPmtilesProtocolUrl(entry.savedPath) : undefined);
+  if (key) unregisterPMTilesSource(key);
+  packageArchiveKeys.delete(entry.id);
+  evictOfflineBasemapStyle(entry.id);
+}
+
 function rememberPackageArchive(entry: NativeOfflinePackage): void {
-  packageArchiveKeys.set(entry.id, nativeLocalPmtilesProtocolUrl(entry.savedPath));
+  const key = nativeLocalPmtilesProtocolUrl(entry.savedPath);
+  packageArchiveKeys.set(entry.id, key);
+  // Range-backed readers are lightweight and make no request until used.
+  // Overlay and raster packages need the same ownership as styled packages.
+  if (entry.archiveFormat === "pmtiles" && !hasPMTilesArchive(key)) registerPMTilesRangeSource(key);
 }
 
 /** Verify on explicit use; inventory loading does not rehash every package. */
@@ -160,7 +170,7 @@ export function registerNativeOfflinePackageStyles(entry: NativeOfflinePackage):
     registerPersistentOfflineBasemapStyle(entry.id, flavor, () => {
       // This source belongs to the managed package, unlike a shared remote URL.
       // Register ownership so deletion can release its reader and cached tiles.
-      if (!hasPMTilesArchive(sourceUrl)) registerPMTilesSource(new FetchSource(sourceUrl));
+      if (!hasPMTilesArchive(sourceUrl)) registerPMTilesRangeSource(sourceUrl);
       return buildProtomapsBasemapStyle({ sourceUrl, flavor, assetsBaseUrl });
     });
   }

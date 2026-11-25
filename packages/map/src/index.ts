@@ -205,8 +205,9 @@ export {
   ensureRemotePMTilesArchive,
   hasPMTilesArchive,
   registerPMTilesArchive,
-  registerPMTilesSource,
+  registerPMTilesRangeSource,
   unregisterPMTilesArchive,
+  unregisterPMTilesSource,
 } from "./pmtiles-archive";
 export { setExternalDeckLayerOrderHandler } from "./layer-sync";
 export {

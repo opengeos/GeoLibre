@@ -88,8 +88,10 @@ export {
 export {
   registerPMTilesArchive,
   registerPMTilesSource,
+  registerPMTilesRangeSource,
   getRegisteredPMTilesArchive,
   unregisterPMTilesArchive,
+  unregisterPMTilesSource,
   ensureRemotePMTilesArchive,
 } from "./pmtiles-archive";
 export { readRemotePMTilesInfo, readPMTilesArchiveInfo } from "./pmtiles-layer";

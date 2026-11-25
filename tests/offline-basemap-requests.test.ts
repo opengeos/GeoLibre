@@ -43,3 +43,14 @@ it("does not apply a package read for a replaced project", () => {
   assert.equal(request.isCurrent(), false);
   assert.equal(requests.begin().isCurrent(), true);
 });
+
+it("keeps catalog notifications owned after applying a basemap but drops them for a new project", () => {
+  const state = { projectLoadCount: 1, basemapChoiceGeneration: 1 };
+  const requests = new OfflineBasemapRequests(() => state);
+  const request = requests.begin();
+  state.basemapChoiceGeneration++;
+  assert.equal(request.isCurrent(), false);
+  assert.equal(request.isProjectCurrent(), true);
+  state.projectLoadCount++;
+  assert.equal(request.isProjectCurrent(), false);
+});
