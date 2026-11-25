@@ -204,7 +204,7 @@ pub(crate) async fn open<R: Runtime>(
 
         #[cfg(mobile)]
         let files = if copied {
-            crate::mobile::pick_data_files(dialog_builder, true)?
+            crate::mobile::pick_data_files(dialog_builder, true).await?
         } else {
             dialog_builder.blocking_pick_files()
         };
@@ -231,7 +231,8 @@ pub(crate) async fn open<R: Runtime>(
         let tauri_scope = window.state::<tauri::scope::Scopes>();
         #[cfg(mobile)]
         let file = if copied {
-            crate::mobile::pick_data_files(dialog_builder, false)?
+            crate::mobile::pick_data_files(dialog_builder, false)
+                .await?
                 .and_then(|files| files.into_iter().next())
         } else {
             dialog_builder.blocking_pick_file()

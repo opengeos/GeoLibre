@@ -60,6 +60,7 @@ import { installDiagnosticsCapture } from "./lib/diagnostics";
 import { notify } from "./lib/notify";
 import { isDesktopRuntime, isWindows } from "./lib/is-mobile";
 import { isTauri } from "./lib/is-tauri";
+import { restoreNativeDocumentCopies } from "./lib/native-document-copies";
 import { installStaleChunkReload } from "./lib/stale-chunk-reload";
 import { isNewBuildDeployed, offerAppUpdate, watchForAppUpdates } from "./lib/app-update";
 import { resolveAuthGate, type AuthGateConfig } from "./lib/auth-gate";
@@ -142,6 +143,9 @@ const nativeShareAuthReady = isDesktopRuntime()
   : Promise.resolve();
 const nativeCoordinateOpenReady = initializeNativeCoordinateOpen();
 const nativeProjectOpenReady = initializeNativeProjectOpen();
+const nativeDocumentCopiesReady = isTauri()
+  ? restoreNativeDocumentCopies(i18nReady)
+  : Promise.resolve();
 const nativeOfflinePackagesReady = isTauri()
   ? import("./lib/native-offline-packages")
       .then(({ initializeNativeOfflinePackages }) => initializeNativeOfflinePackages())
@@ -460,6 +464,7 @@ void Promise.all([
   // whether to restore a configured startup project or the default workspace.
   nativeProjectOpenReady,
   nativeOfflinePackagesReady,
+  nativeDocumentCopiesReady,
   nativeCoordinateOpenReady,
   // Gate the first render on i18next being initialized with the active locale's
   // (lazily loaded) catalog, so the UI never paints raw translation keys.

@@ -79,10 +79,57 @@ to the local paths used by GeoLibre's readers:
 - `src/commands.rs` decodes copy-mode file URLs to local paths, including iOS
   document-picker copies. It leaves scoped project URLs and Android content URIs
   intact. Scope grants still come from the selected file before it is returned.
+- On iOS, explicit data copies use Files even when an image MIME type would
+  otherwise open Photos. `FilePickerPolicy.swift` retains the existing media
+  behavior for ordinary gallery requests. Its standalone Swift tests run before
+  the iOS build with the selected Xcode toolchain.
+- The iOS result-bearing data bridge persists UIKit import files through
+  `src/ios_data_copy.rs` before returning paths. It streams into app-local
+  `picked-documents/.pending-<selection>/data/`, hashes each file, stores a
+  manifest, syncs files and directory entries, then atomically publishes the
+  complete UUID folder. Case-conflicting names, symlinks, and invalid file names
+  are rejected. A selection shares one data folder to retain companion-file
+  references, so duplicate basenames from different provider folders are also
+  rejected; the error names the conflicting file. Select those files in
+  separate picks or rename them before import. On a normalization-insensitive
+  filesystem, distinct Unicode
+  spellings of one name can reach the filesystem collision check; that rejects
+  the selection with an OS error and never overwrites a companion file.
+  Failed selections roll back, and serialized imports recover
+  abandoned stages without touching published copies. Each pick retains its own
+  identity because a UIKit temporary URL is not an original provider identity.
+  Ordinary scoped picks use the existing upstream flow. Physical iOS device
+  verification remains outstanding.
+- Cleanup of an undeletable abandoned stage warns through native diagnostics
+  and continues with a fresh selection; publication still requires successful
+  synchronization before any new file path is returned.
+- The result-bearing mobile bridge and copy transaction run on a blocking worker,
+  including waits for the picker and the import lock, rather than occupying an
+  async runtime worker for the duration of a large import.
+- The iOS startup command inventories published UUID/data folders and restores
+  file and asset grants for their regular files, excluding stages and symlinks.
+  It returns the current trusted root so project and library hydration can rebase
+  saved references after iOS moves the app container. Edited files remain eligible;
+  the source fingerprint records import provenance rather than forbidding edits.
+  Root preparation and root-directory inventory failures reject initialization,
+  so the frontend holds retained-file projects before publication. Per-import
+  failures preserve the healthy inventory. Inventory synchronization warnings
+  remain native diagnostics and do not mark readable imports as unavailable.
+  A failed file entry does not stop scanning later files in the same selection.
+- iOS storage operations receive an existing, platform-resolved sandbox anchor
+  (the Library directory containing local app data). Successful publication syncs
+  every directory through that anchor, including ancestors left by failed earlier
+  attempts. It never tries to sync ancestors outside the app sandbox. Relative
+  storage paths are resolved against the canonical anchor and checked for escape.
 
 `android/src/test/java/DocumentCopyBatchTest.kt` checks streaming, fingerprints,
 companion placement, rollback, unsafe names and collision handling. The Rust
 `geolibre_copy_tests` cover copy-mode file URLs and unchanged source URIs.
+The local `npm run check:rust` gate and its CI job run `tests/native-document-copy`, which imports the
+production iOS copy store and executes its unit tests on Linux without UIKit.
+The PR-time **iOS picker policy** job and the iOS build workflow both compile and
+execute the real picker policy through `scripts/test-ios-picker-policy.sh`.
+Developers with Swift installed can run `npm run test:ios-picker-policy` locally.
 
 Known limitation: every document pick persists, data files as well as
 projects, so after more distinct picks than the cap the least recently picked

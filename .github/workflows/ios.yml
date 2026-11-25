@@ -120,6 +120,9 @@ jobs:
           xcodebuild -version
           xcodebuild -showsdks | grep -i "iOS" || true
 
+      - name: Verify document and media picker policy
+        run: bash scripts/test-ios-picker-policy.sh
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:

@@ -11,6 +11,7 @@ import {
   isAbsoluteLocalPath,
   isGeojsonSourcePath,
   isHttpUrl,
+  isImportedDocumentCopyPath,
   isLoadableFilePath,
   isRasterFileName,
   isRestorableVectorPath,
@@ -21,6 +22,43 @@ import {
 } from "../apps/geolibre-desktop/src/lib/file-io/paths";
 
 describe("file-io path predicates", () => {
+  it("identifies managed Android and iOS copies without labeling provider files as copies", () => {
+    const selection = "3cb9b477-d563-4d3e-8503-263ec23c01c5";
+    const ios =
+      "/private/var/mobile/Containers/Data/Application/container/Library/Application Support/org.geolibre.app";
+    assert.equal(
+      isImportedDocumentCopyPath(
+        `/data/user/0/org.geolibre.app/files/picked-documents/${selection}/data/roads.geojson`,
+      ),
+      true,
+    );
+    assert.equal(
+      isImportedDocumentCopyPath(`${ios}/picked-documents/${selection}/data/Berkeley é.tif`),
+      true,
+    );
+    assert.equal(
+      isImportedDocumentCopyPath(
+        `${ios}/picked-documents/.pending-${selection}/data/roads.geojson`,
+      ),
+      false,
+    );
+    assert.equal(
+      isImportedDocumentCopyPath(`${ios}/picked-documents/${selection}/source.json`),
+      false,
+    );
+    assert.equal(
+      isImportedDocumentCopyPath("/private/var/mobile/Documents/Inbox/roads.geojson"),
+      false,
+    );
+    assert.equal(
+      isImportedDocumentCopyPath(
+        `https://example.com/files/picked-documents/${selection}/data/roads.geojson`,
+      ),
+      false,
+    );
+    assert.equal(isImportedDocumentCopyPath(undefined), false);
+  });
+
   it("reads the lowercased extension, treating .geoparquet as one", () => {
     assert.equal(fileExtension("/data/Roads.GeoJSON"), "geojson");
     assert.equal(fileExtension("C:\\data\\parcels.geoparquet"), "geoparquet");

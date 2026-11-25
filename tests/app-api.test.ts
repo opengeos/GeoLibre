@@ -1475,6 +1475,55 @@ describe("plugin app API layers", () => {
     assert.equal(getExternalNativePaintBridge("ext-painted"), undefined);
   });
 
+  it("holds native registrations before paint-bridge writes and rebases a recovered re-registration", () => {
+    const api = createAppAPI(undefined, fakeHost().host);
+    const bridge = { setOpacity: () => undefined };
+    const oldPath =
+      "/private/var/mobile/Containers/Data/Application/old/Library/Application Support/org.geolibre.app/picked-documents/3cb9b477-d563-4d3e-8503-263ec23c01c5/data/roads.geojson";
+    const root =
+      "/private/var/mobile/Containers/Data/Application/current/Library/Application Support/org.geolibre.app/picked-documents";
+    api.registerExternalNativeLayer({
+      id: "ext-held",
+      name: "Keep",
+      nativeLayerIds: [],
+      paintBridge: bridge,
+    });
+    const before = useAppStore.getState().layers;
+    useAppStore.getState().setNativeDocumentCopyError("Imported-file access is unavailable.");
+    try {
+      for (const id of ["ext-held", "ext-new"]) {
+        assert.throws(
+          () =>
+            api.registerExternalNativeLayer({
+              id,
+              name: "Retained",
+              nativeLayerIds: [],
+              sourcePath: oldPath,
+              paintBridge: { setOpacity: () => undefined },
+            }),
+          /Imported-file access/,
+        );
+      }
+      assert.equal(useAppStore.getState().layers === before, true);
+      assert.equal(getExternalNativePaintBridge("ext-held") === bridge, true);
+      assert.equal(getExternalNativePaintBridge("ext-new"), undefined);
+      useAppStore.getState().setNativeDocumentCopyRoot(root);
+      api.registerExternalNativeLayer({
+        id: "ext-held",
+        name: "Retained",
+        nativeLayerIds: [],
+        sourcePath: oldPath,
+      });
+      assert.equal(
+        useAppStore.getState().layers.find((layer) => layer.id === "ext-held")?.sourcePath,
+        oldPath.replace("/Application/old/", "/Application/current/"),
+      );
+    } finally {
+      useAppStore.getState().setNativeDocumentCopyRoot(null);
+      api.unregisterExternalNativeLayer("ext-held");
+    }
+  });
+
   it("routes the basemap to the Mapbox style while Mapbox is the primary renderer", () => {
     const api = createAppAPI(undefined, fakeHost().host);
     const changes: string[] = [];

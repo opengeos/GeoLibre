@@ -56,18 +56,53 @@ struct SaveFileResponse {
 
 // The callback-only Rust picker interface cannot carry an error. The JS open
 // command uses this result-bearing path for explicit data copies instead.
-pub(crate) fn pick_data_files<R: Runtime>(
+pub(crate) async fn pick_data_files<R: Runtime>(
     dialog: FileDialogBuilder<R>,
     multiple: bool,
 ) -> crate::Result<Option<Vec<FilePath>>> {
-    dialog
+    // Both the synchronous mobile bridge and streaming/fsync must stay off the
+    // async runtime worker, including time waiting for the user or import lock.
+    tauri::async_runtime::spawn_blocking(move || pick_data_files_blocking(dialog, multiple)).await?
+}
+
+fn pick_data_files_blocking<R: Runtime>(
+    dialog: FileDialogBuilder<R>,
+    multiple: bool,
+) -> crate::Result<Option<Vec<FilePath>>> {
+    #[cfg(target_os = "ios")]
+    let app = dialog.dialog.app_handle().clone();
+    let selected = dialog
         .dialog
         .0
         .run_mobile_plugin::<crate::models::DataFilePickerResponse>(
             "showFilePicker",
             dialog.payload(multiple),
         )?
-        .into_result()
+        .into_result()?;
+    #[cfg(target_os = "ios")]
+    {
+        let Some(files) = selected else {
+            return Ok(None);
+        };
+        use tauri::Manager;
+        let sources = files
+            .into_iter()
+            .map(|file| {
+                file.into_path()
+                    .map_err(|error| std::io::Error::other(error.to_string()))
+            })
+            .collect::<std::io::Result<Vec<_>>>()?;
+        let root = app.path().app_local_data_dir()?.join("picked-documents");
+        let local_data = app.path().local_data_dir()?;
+        let anchor = local_data
+            .parent()
+            .ok_or_else(|| std::io::Error::other("Missing local storage ancestor"))?;
+        return crate::ios_data_copy::persist_selection(&root, anchor, &sources)
+            .map(|paths| Some(paths.into_iter().map(FilePath::Path).collect()))
+            .map_err(Into::into);
+    }
+    #[cfg(not(target_os = "ios"))]
+    Ok(selected)
 }
 
 pub fn pick_file<R: Runtime, F: FnOnce(Option<FilePath>) + Send + 'static>(

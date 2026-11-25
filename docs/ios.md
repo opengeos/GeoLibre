@@ -192,7 +192,7 @@ npx tauri ios build --no-sign          # unsigned .ipa + .xcarchive (no Apple ac
 
 > **`npx tauri ios build --export-method app-store-connect` does not work as-is.**
 > The project `tauri ios init` generates bakes `CODE_SIGN_IDENTITY = "iPhone
-Developer"` into _both_ the debug and release configurations, so Xcode resolves
+> Developer"` into _both_ the debug and release configurations, so Xcode resolves
 > **development** signing even when the export method is App Store. Automatic
 > development signing then demands a registered device and fails with:
 >
@@ -264,7 +264,7 @@ Developer"` into _both_ the debug and release configurations, so Xcode resolves
   directory are named from the **Cargo package** (`geolibre-desktop` in
   `src-tauri/Cargo.toml`), not from `productName`. The user-visible app name and
   bundle id still come from `tauri.ios.conf.json` — they land as `PRODUCT_NAME:
-GeoLibre` and `PRODUCT_BUNDLE_IDENTIFIER: org.geolibre.app` in the generated
+  GeoLibre` and `PRODUCT_BUNDLE_IDENTIFIER: org.geolibre.app` in the generated
   `project.yml`.
 
 ## Signing
@@ -337,7 +337,7 @@ add an Apple Distribution certificate and an App Store provisioning profile for
 > `xcodebuild -exportArchive` step using **manual** signing, for the reason given
 > under _Build_: `tauri ios build --export-method` cannot sign this project,
 > because the generated project bakes in `CODE_SIGN_IDENTITY = "iPhone
-Developer"` and automatic signing therefore hunts for a development profile no
+> Developer"` and automatic signing therefore hunts for a development profile no
 > matter what the export method says.
 >
 > This has been verified on a runner — a `workflow_dispatch` run with
@@ -485,13 +485,72 @@ App Store Connect.
    Builds uploaded before this key was added (the first 2.4.0 upload) still
    need the question answered by hand in App Store Connect.
 
+## Local data imports
+
+Data-file imports use the Files document picker, including GeoTIFFs with image
+MIME types. GeoLibre streams each explicit import selection into
+`Library/Application Support/org.geolibre.app/picked-documents/<selection>/data/`
+inside its sandbox before returning decoded filesystem paths to data readers.
+Companion files selected together share a folder. A sibling manifest records
+import paths, byte counts, and SHA-256 fingerprints. Files and directory entries
+are synchronized, then the complete selection is published by an atomic rename.
+Failed selections are removed; the next import recovers abandoned private stages.
+An abandoned stage that cannot be deleted produces a native diagnostic warning
+while new imports continue in separate folders.
+
+These copies are local to this app installation. Collaboration can embed vector
+features, but file-backed layers whose data is not embedded, such as local
+rasters and tile archives, still require an accessible data source on each
+device. Container rebasing restores references within the same installation
+and does not synchronize files between devices.
+
+These are independent copies. The provider document stays unchanged, and saving
+GeoJSON edits writes to the imported copy. Other mobile formats still require
+exporting edited data rather than a desktop sidecar writer. Each new selection
+gets a separate folder because temporary import URLs do not reliably identify
+the original provider document. Published copies remain until the app's stored
+data is removed; closing a project or removing a layer does not delete them.
+Project exports do not bundle these local files.
+
+At startup, GeoLibre resolves the current sandbox location and restores file
+access only for regular files in published import folders. Saved project and
+library references retain their selection identity and filename but are rebased
+to that current location before readers see them, since iOS can change the
+container prefix during an app update. Local edits remain readable; the original
+import fingerprint is a provenance record rather than a read-time integrity gate.
+If startup cannot initialize imported-file access, the workspace still opens,
+but projects and library entries that need retained copies stay unloaded until
+initialization succeeds. This preserves their references instead of treating
+old container paths as missing files and removing their layers.
+Configured startup layers and inline project links are preserved for retry,
+and creating a blank workspace remains available during the outage.
+Restart GeoLibre to retry initialization. Until it succeeds, both existing
+retained imports and newly picked data files are held before layer publication.
+A new pick can still create its managed copy, but it cannot open in the workspace
+until access initialization succeeds. Those copies remain available for a later
+successful launch.
+Failure to prepare or read the import root activates this hold; problems with
+individual import folders are reported while healthy files remain authorized.
+An individual file disappearing during the scan does not hide the later healthy
+files in that same selection.
+Inventory directory synchronization warnings are written to native diagnostics;
+they do not report readable files as unavailable. Import inspection or access
+grant failures still produce the restoration warning.
+Copy publication synchronizes all storage ancestors through the existing app
+Library directory, including directories created by an earlier failed attempt.
+Synchronization stays inside the app sandbox.
+
+The copy store and path handling have automated tests. Real iOS device checks
+for picking, rendering, offline restart, and provider cancellation remain
+outstanding. Open-in-place project URLs use their separate scoped access flow.
+
 ## Known limitations / follow-ups
 
 Most mirror Android:
 
-- Local-file sources (MBTiles, local rasters, project files) assume real
-  filesystem paths; iOS hands apps sandboxed URLs via the document picker, so
-  those flows need adapting before they work natively.
+- Local GeoPackage, MBTiles, and raster imports have a managed-copy adapter.
+  Real-device verification remains outstanding, including scoped project-file
+  access and provider-specific behavior.
 - **Offline basemap** includes shared native PMTiles and MBTiles extraction and package storage rather than
   the PWA's service-worker cache. See [Native offline basemap packages](native-offline-packages.md).
   Real iOS device verification and conflict-aware sync remain future

@@ -1,8 +1,10 @@
 import {
   applyProjectToStore,
+  assertImportedDocumentCopiesAvailable,
   clearHistory,
   DEFAULT_BASEMAP,
   gateRegionalBasemap,
+  rebaseImportedDocumentLayer,
   serializeProject,
   useAppStore,
   type CollaborationMode,
@@ -204,6 +206,9 @@ export function useCollaboration(
       });
     } else {
       const applied = applyProjectToStore(merged);
+      applied.layers = applied.layers.map((layer) =>
+        rebaseImportedDocumentLayer(layer, state.nativeDocumentCopyRoot),
+      );
       const gated = gateRegionalBasemap(
         applied.basemapStyleUrl,
         state.regionalBasemapPolicy,
@@ -509,7 +514,40 @@ export function useCollaboration(
         },
         onMessage: (msg) => {
           if (connRef.current !== conn) return;
-          handleMessage(msg);
+          if (msg.type !== "welcome" && msg.type !== "snapshot") {
+            handleMessage(msg);
+            return;
+          }
+          try {
+            const incoming =
+              msg.type === "welcome"
+                ? msg.snapshot
+                : msg.type === "snapshot" && msg.origin !== selfIdRef.current
+                  ? msg.project
+                  : null;
+            if (incoming) {
+              assertImportedDocumentCopiesAvailable(
+                incoming.layers,
+                useAppStore.getState().nativeDocumentCopyError,
+              );
+            }
+            handleMessage(msg);
+          } catch (error) {
+            // Failed welcome/snapshot application must stop outbound sync.
+            // Preserve the actual error and settle a pending join before the
+            // unchanged local workspace can replace the peer's project.
+            const pending = pendingConnectRef.current;
+            pendingConnectRef.current = null;
+            disconnect();
+            const failure =
+              error instanceof Error ? error : new Error(String(error), { cause: error });
+            const message = failure.message;
+            useAppStore
+              .getState()
+              .setCollaboration({ isActive: false, connecting: false, error: message });
+            pending?.reject(failure);
+            notify.error(message, { error: failure });
+          }
         },
         onClose: (reconnecting) => {
           if (connRef.current && connRef.current !== conn) return;
