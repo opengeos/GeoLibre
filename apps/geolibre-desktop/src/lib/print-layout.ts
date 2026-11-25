@@ -1768,6 +1768,8 @@ function drawInsetMap(
         view,
         boundary,
         centre?.[1],
+        // Antipodal poles cannot both be visible from a finite globe camera.
+        // Ambiguous synthetic metadata takes no polar cap rather than guessing.
         poles === undefined ? undefined : poles.length === 1 ? poles[0] : null,
       ).map((p) => ({
         x: ox + p.x * scale,

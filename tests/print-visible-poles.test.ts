@@ -94,3 +94,21 @@ it("does not invent a polar cap from grid winding when explicit visibility finds
   const latitudeLine = mercatorViewPx(view, 0, 30).y;
   assert.ok(ring.every((point) => Math.abs(point.y - latitudeLine) < 1e-5));
 });
+
+it("includes a verified visible pole even when the sampled boundary has no longitude winding", () => {
+  const capture = {
+    width: 100,
+    height: 100,
+    georef: null,
+    lngLatGrid: {
+      cols: 1,
+      rows: 1,
+      width: 100,
+      height: 100,
+      lngs: [10, 20, 10, 20],
+      lats: [70, 70, 60, 60],
+      poles: [{ x: 50, y: 50, latitude: 90 }],
+    },
+  } as CapturedMap;
+  assert.deepEqual(capturedBounds(capture), [10, 60, 20, 90]);
+});

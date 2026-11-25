@@ -23,7 +23,7 @@ export interface CaptureLngLatGrid {
   /** Latitudes, row-major. */
   lats: number[];
   /** Visible poles located in capture image pixels. An empty array explicitly
-   * means neither pole is enclosed; absent only on older/synthetic grids. */
+   * means neither pole is visible; absent only on older/synthetic grids. */
   poles?: CapturePolePixel[];
 }
 
