@@ -6481,7 +6481,8 @@
     "endpointNotice": "Point coordinates are sent to the routing server ({{endpoint}}). The default is a shared public Valhalla server (FOSSGIS), which is rate-limited. For heavy use, enter your own server's URL in the \"Routing server (Valhalla)\" field above.",
     "localNotice": "This tool runs in your browser over the selected line layer. Nothing is sent to a routing server.",
     "consentRequired": "This tool sends point coordinates to a routing server. Open it from the Processing menu to review and accept the routing notice first.",
-    "styleFailed": "Could not style \"{{name}}\": {{reason}}"
+    "styleFailed": "Could not style \"{{name}}\": {{reason}}",
+    "cancelled": "Cancelled. Nothing was added to the map."
   },
   "statistics": {
     "cancelled": "Cancelled",
@@ -8088,6 +8089,53 @@
               "label": "Snap tolerance (m)",
               "description": "Line ends closer than this to another line are joined to it. Lines that share a vertex are always connected; lines that only cross are not."
             },
+            "turns": {
+              "label": "Turn rules",
+              "description": "Prohibit or charge turns with a turn table, a cost per left or right turn, or a U-turn limit. Costs are in the edge cost unit.",
+              "options": {
+                "none": "None (turns are free)",
+                "rules": "Turn restrictions and costs"
+              }
+            },
+            "turnTable": {
+              "label": "Turn table (optional)",
+              "description": "One row per turn from one network line onto another, matched by the line id field. The row applies wherever the two lines meet."
+            },
+            "networkIdField": {
+              "label": "Network line id field",
+              "description": "The network attribute that the turn table's from and to fields refer to."
+            },
+            "turnFromField": {
+              "label": "Turn from-line field"
+            },
+            "turnToField": {
+              "label": "Turn to-line field"
+            },
+            "turnCostField": {
+              "label": "Turn cost field (optional)",
+              "description": "Cost added for the turn. Without this field every row prohibits its turn; with it, a blank, negative or non-numeric value prohibits the turn."
+            },
+            "leftTurnCost": {
+              "label": "Left turn cost",
+              "description": "Added at junctions of three or more lines when the route bends left by more than 30 degrees."
+            },
+            "rightTurnCost": {
+              "label": "Right turn cost",
+              "description": "Added at junctions of three or more lines when the route bends right by more than 30 degrees."
+            },
+            "uturns": {
+              "label": "U-turns",
+              "options": {
+                "allow": "Allowed anywhere",
+                "junctions": "At junctions and dead ends",
+                "dead-ends": "At dead ends only",
+                "never": "Never"
+              }
+            },
+            "uturnCost": {
+              "label": "U-turn cost",
+              "description": "Added for each U-turn where one is allowed."
+            },
             "stops": {
               "label": "Stops"
             },
@@ -8130,6 +8178,53 @@
             "snapTolerance": {
               "label": "Snap tolerance (m)",
               "description": "Line ends closer than this to another line are joined to it. Lines that share a vertex are always connected; lines that only cross are not."
+            },
+            "turns": {
+              "label": "Turn rules",
+              "description": "Prohibit or charge turns with a turn table, a cost per left or right turn, or a U-turn limit. Costs are in the edge cost unit.",
+              "options": {
+                "none": "None (turns are free)",
+                "rules": "Turn restrictions and costs"
+              }
+            },
+            "turnTable": {
+              "label": "Turn table (optional)",
+              "description": "One row per turn from one network line onto another, matched by the line id field. The row applies wherever the two lines meet."
+            },
+            "networkIdField": {
+              "label": "Network line id field",
+              "description": "The network attribute that the turn table's from and to fields refer to."
+            },
+            "turnFromField": {
+              "label": "Turn from-line field"
+            },
+            "turnToField": {
+              "label": "Turn to-line field"
+            },
+            "turnCostField": {
+              "label": "Turn cost field (optional)",
+              "description": "Cost added for the turn. Without this field every row prohibits its turn; with it, a blank, negative or non-numeric value prohibits the turn."
+            },
+            "leftTurnCost": {
+              "label": "Left turn cost",
+              "description": "Added at junctions of three or more lines when the route bends left by more than 30 degrees."
+            },
+            "rightTurnCost": {
+              "label": "Right turn cost",
+              "description": "Added at junctions of three or more lines when the route bends right by more than 30 degrees."
+            },
+            "uturns": {
+              "label": "U-turns",
+              "options": {
+                "allow": "Allowed anywhere",
+                "junctions": "At junctions and dead ends",
+                "dead-ends": "At dead ends only",
+                "never": "Never"
+              }
+            },
+            "uturnCost": {
+              "label": "U-turn cost",
+              "description": "Added for each U-turn where one is allowed."
             },
             "incidents": {
               "label": "Incidents"
@@ -8178,6 +8273,53 @@
             "snapTolerance": {
               "label": "Snap tolerance (m)",
               "description": "Line ends closer than this to another line are joined to it. Lines that share a vertex are always connected; lines that only cross are not."
+            },
+            "turns": {
+              "label": "Turn rules",
+              "description": "Prohibit or charge turns with a turn table, a cost per left or right turn, or a U-turn limit. Costs are in the edge cost unit.",
+              "options": {
+                "none": "None (turns are free)",
+                "rules": "Turn restrictions and costs"
+              }
+            },
+            "turnTable": {
+              "label": "Turn table (optional)",
+              "description": "One row per turn from one network line onto another, matched by the line id field. The row applies wherever the two lines meet."
+            },
+            "networkIdField": {
+              "label": "Network line id field",
+              "description": "The network attribute that the turn table's from and to fields refer to."
+            },
+            "turnFromField": {
+              "label": "Turn from-line field"
+            },
+            "turnToField": {
+              "label": "Turn to-line field"
+            },
+            "turnCostField": {
+              "label": "Turn cost field (optional)",
+              "description": "Cost added for the turn. Without this field every row prohibits its turn; with it, a blank, negative or non-numeric value prohibits the turn."
+            },
+            "leftTurnCost": {
+              "label": "Left turn cost",
+              "description": "Added at junctions of three or more lines when the route bends left by more than 30 degrees."
+            },
+            "rightTurnCost": {
+              "label": "Right turn cost",
+              "description": "Added at junctions of three or more lines when the route bends right by more than 30 degrees."
+            },
+            "uturns": {
+              "label": "U-turns",
+              "options": {
+                "allow": "Allowed anywhere",
+                "junctions": "At junctions and dead ends",
+                "dead-ends": "At dead ends only",
+                "never": "Never"
+              }
+            },
+            "uturnCost": {
+              "label": "U-turn cost",
+              "description": "Added for each U-turn where one is allowed."
             },
             "facilities": {
               "label": "Facilities"

@@ -24,6 +24,7 @@ export {
   shortestLongitudeExtent,
 } from "./antimeridian";
 export { layerJoinKey } from "./joins";
+export { compareSequenceValues } from "./sequence-order";
 // Project History's compare view parses and diffs projects off the main thread.
 export type { GeoLibreProject } from "./types";
 export { parseProject } from "./project";

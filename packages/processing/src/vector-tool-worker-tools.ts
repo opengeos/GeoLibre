@@ -2,8 +2,8 @@
 // this: vector-tool-runner.ts to decide what to post, and the worker session
 // (vector-tool-protocol.ts) to resolve the posted id. It imports the tools from
 // vector-tools.ts directly rather than through the registry, so the worker
-// bundle carries the supported Turf and spatial-statistics tools, excluding
-// the DGGS and topology modules from the full registry.
+// bundle carries the supported Turf, spatial-statistics and local network
+// tools, excluding the DGGS and topology modules from the full registry.
 import type { ProcessingAlgorithm } from "./types";
 import {
   olsRegressionTool,
@@ -12,6 +12,11 @@ import {
   hdbscanTool,
   krigingDiagnosticsTool,
 } from "./statistics-tools";
+import {
+  localClosestFacilityTool,
+  localServiceAreaTool,
+  localShortestPathTool,
+} from "./local-network-tools";
 import {
   aggregateTool,
   attributeJoinTool,
@@ -48,7 +53,11 @@ import {
 /**
  * The pure FeatureCollection-in/out Turf tools, whose only reach outside their
  * parameters is the layers they read and the viewport (snapshotted into the
- * request).
+ * request). The local network tools qualify too: graph construction, point
+ * placement and the searches are plain computation over the input layers, so
+ * the whole run, not only its searches, leaves the interface thread. The
+ * Valhalla network tools stay on the main thread: they wait on the network,
+ * not the CPU, and their consent check is a main-thread concern.
  *
  * Kept as an explicit list so a new tool runs on the main thread until someone
  * checks it is worker-safe. Left out on purpose: the DGGS and topology tools,
@@ -62,6 +71,9 @@ export const WORKER_VECTOR_TOOLS: ReadonlyMap<string, ProcessingAlgorithm> = new
     dbscanTool,
     hdbscanTool,
     krigingDiagnosticsTool,
+    localShortestPathTool,
+    localClosestFacilityTool,
+    localServiceAreaTool,
     bufferTool,
     centroidsTool,
     convexHullTool,

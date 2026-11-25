@@ -18,6 +18,13 @@ import { getActiveMeanRadiusMeters } from "@geolibre/core/worker-safe";
  * Distances use the haversine formula on the active body's mean radius, so the
  * A* heuristic (straight-line distance times the cheapest cost per metre in the
  * graph) never overestimates and A* returns the same optimum as Dijkstra.
+ *
+ * Turn rules ({@link LocalNetwork.setTurnRules}) switch the searches from
+ * nodes to directed edges: a search state is "has just traversed edge e in
+ * direction d", so the cost of moving from one edge to the next (a turn table
+ * entry, a left or right turn penalty, a U-turn) can depend on the edge the
+ * route arrived by. With no turn rules the original node search runs, so
+ * results without turn rules are unchanged.
  */
 
 /** How the cost of traversing an edge is derived. */
@@ -79,6 +86,96 @@ export interface SearchResult {
   prevEdge: Int32Array;
   /** Previous node on the best path (-1 for sources and unreached nodes). */
   prevNode: Int32Array;
+  /** Directed-edge search state, present when the network has turn rules. */
+  turns?: TurnSearchState;
+}
+
+/**
+ * Directed-edge search state. State `2 * e` traverses edge `e` from `a` to
+ * `b`, and `2 * e + 1` from `b` to `a`.
+ */
+export interface TurnSearchState {
+  /**
+   * Forward search: the cost of starting each traversal (the cost to its
+   * start node plus the turn onto it). Reverse search: the cost still to go
+   * once the traversal ends (the turn off it plus the cost onward).
+   */
+  entry: Float64Array;
+  /** The neighboring state on the best path toward the search sources. */
+  prevState: Int32Array;
+  /** Per node, the state that first reached it (-1 for sources). */
+  bestState: Int32Array;
+  /** Whether the search followed edges against travel (toward the sources). */
+  reverse: boolean;
+}
+
+/** Where U-turns (reversing onto the edge just traversed) are allowed. */
+export type UTurnPolicy = "allow" | "junctions" | "dead-ends" | "never";
+
+/** One turn table entry, between two network features by index. */
+export interface TurnTableEntry {
+  /** Index of the feature the turn leaves. */
+  from: number;
+  /** Index of the feature the turn enters. */
+  to: number;
+  /** Added cost, in the edge cost unit; Infinity prohibits the turn. */
+  cost: number;
+}
+
+/** Turn restrictions and costs for {@link LocalNetwork.setTurnRules}. */
+export interface TurnRules {
+  /**
+   * Turns from one feature to another, applied wherever an edge of `from`
+   * meets an edge of `to`. When several entries name the same pair, the
+   * largest cost wins, so a prohibition overrides a cost.
+   */
+  table?: TurnTableEntry[];
+  /** Cost added for a left turn at a junction (three or more edges). */
+  leftCost?: number;
+  /** Cost added for a right turn at a junction (three or more edges). */
+  rightCost?: number;
+  /** Cost added for a U-turn where one is allowed. */
+  uturnCost?: number;
+  /** Where U-turns are allowed (default `allow`, anywhere). */
+  uturns?: UTurnPolicy;
+  /**
+   * Deflections up to this many degrees either way count as straight on and
+   * pay no left or right turn cost (default 30).
+   */
+  straightAngle?: number;
+}
+
+/** {@link TurnRules} with defaults applied and the table keyed for lookup. */
+interface CompiledTurnRules {
+  table: Map<number, Map<number, number>>;
+  leftCost: number;
+  rightCost: number;
+  uturnCost: number;
+  uturns: UTurnPolicy;
+  straightAngle: number;
+}
+
+/** Non-negative finite cost, or 0. */
+function turnCostValue(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/**
+ * Whether `rules` change any route: a turn table entry, a positive turn cost,
+ * or a U-turn limit. Inactive rules leave the node search in place.
+ *
+ * @param rules - The turn rules to inspect.
+ * @returns True when the rules need the directed-edge search.
+ */
+export function turnRulesActive(rules: TurnRules | null | undefined): boolean {
+  if (!rules) return false;
+  return (
+    (rules.table?.length ?? 0) > 0 ||
+    turnCostValue(rules.leftCost) > 0 ||
+    turnCostValue(rules.rightCost) > 0 ||
+    turnCostValue(rules.uturnCost) > 0 ||
+    (rules.uturns ?? "allow") !== "allow"
+  );
 }
 
 const DEG = Math.PI / 180;
@@ -443,9 +540,131 @@ export class LocalNetwork {
       );
   };
   private extent = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  private turnRules: CompiledTurnRules | null = null;
 
   get nodeCount(): number {
     return this.lon.length;
+  }
+
+  /** Whether searches apply turn rules (directed-edge states). */
+  get hasTurnRules(): boolean {
+    return this.turnRules !== null;
+  }
+
+  /**
+   * Entries one search allocates: nodes, or directed edges with turn rules.
+   * Callers multiply it by their search count to bound a run's work.
+   */
+  get searchStateCount(): number {
+    return this.turnRules ? 2 * this.edges.length : this.nodeCount;
+  }
+
+  /**
+   * Applies turn restrictions and costs to later searches, or removes them
+   * with null. Rules that change nothing ({@link turnRulesActive}) are
+   * dropped, so the faster node search keeps running.
+   *
+   * @param rules - The turn rules, or null for free turns.
+   */
+  setTurnRules(rules: TurnRules | null): void {
+    if (!rules || !turnRulesActive(rules)) {
+      this.turnRules = null;
+      return;
+    }
+    const table = new Map<number, Map<number, number>>();
+    for (const entry of rules.table ?? []) {
+      if (entry.from === entry.to) continue;
+      const cost = Number.isNaN(entry.cost) || entry.cost < 0 ? 0 : entry.cost;
+      let row = table.get(entry.from);
+      if (!row) {
+        row = new Map();
+        table.set(entry.from, row);
+      }
+      row.set(entry.to, Math.max(row.get(entry.to) ?? 0, cost));
+    }
+    const straight = rules.straightAngle;
+    this.turnRules = {
+      table,
+      leftCost: turnCostValue(rules.leftCost),
+      rightCost: turnCostValue(rules.rightCost),
+      uturnCost: turnCostValue(rules.uturnCost),
+      uturns: rules.uturns ?? "allow",
+      straightAngle:
+        typeof straight === "number" && Number.isFinite(straight)
+          ? Math.min(180, Math.max(0, straight))
+          : 30,
+    };
+  }
+
+  /** Start node of a directed-edge state. */
+  private stateFrom(state: number): number {
+    const edge = this.edges[state >> 1];
+    return state & 1 ? edge.b : edge.a;
+  }
+
+  /** End node of a directed-edge state. */
+  private stateTo(state: number): number {
+    const edge = this.edges[state >> 1];
+    return state & 1 ? edge.a : edge.b;
+  }
+
+  /** Travel cost of a directed-edge state (Infinity when not allowed). */
+  private stateCost(state: number): number {
+    const edge = this.edges[state >> 1];
+    return state & 1 ? edge.costBA : edge.costAB;
+  }
+
+  /**
+   * Signed deflection at `node` from arriving along `inState` to leaving along
+   * `outState`, in degrees: positive turns left, negative turns right.
+   */
+  turnAngle(inState: number, node: number, outState: number): number {
+    const from = this.stateFrom(inState);
+    const to = this.stateTo(outState);
+    const k = Math.cos(this.lat[node] * DEG);
+    const x1 = longitudeDelta(this.lon[from], this.lon[node]) * k;
+    const y1 = this.lat[node] - this.lat[from];
+    const x2 = longitudeDelta(this.lon[node], this.lon[to]) * k;
+    const y2 = this.lat[to] - this.lat[node];
+    return Math.atan2(x1 * y2 - y1 * x2, x1 * x2 + y1 * y2) / DEG;
+  }
+
+  /**
+   * Cost of moving at `node` from the traversal `inState` onto `outState`
+   * under the current turn rules: Infinity for a prohibited turn, else the
+   * turn table cost plus any left or right turn cost, or the U-turn cost when
+   * `outState` reverses along the same edge.
+   */
+  turnCost(inState: number, node: number, outState: number): number {
+    const rules = this.turnRules;
+    if (!rules) return 0;
+    const inEdge = inState >> 1;
+    const outEdge = outState >> 1;
+    const degree = this.adj[node].length;
+    if (inEdge === outEdge) {
+      const allowed =
+        rules.uturns === "allow" ||
+        (rules.uturns === "junctions" && degree !== 2) ||
+        (rules.uturns === "dead-ends" && degree <= 1);
+      return allowed ? rules.uturnCost : Infinity;
+    }
+    let cost = 0;
+    const fromFeature = this.edges[inEdge].feature;
+    const toFeature = this.edges[outEdge].feature;
+    if (fromFeature !== toFeature) {
+      const entry = rules.table.get(fromFeature)?.get(toFeature);
+      if (entry !== undefined) {
+        if (!Number.isFinite(entry)) return Infinity;
+        cost += entry;
+      }
+    }
+    // Only a junction offers a choice; a bend in a road is not a turn.
+    if (degree >= 3 && (rules.leftCost > 0 || rules.rightCost > 0)) {
+      const angle = this.turnAngle(inState, node, outState);
+      if (angle > rules.straightAngle) cost += rules.leftCost;
+      else if (angle < -rules.straightAngle) cost += rules.rightCost;
+    }
+    return cost;
   }
 
   /** @internal Adds a node and returns its id. */
@@ -665,6 +884,7 @@ export class LocalNetwork {
       onSettle?: (node: number, cost: number) => boolean | void;
     } = {},
   ): SearchResult {
+    if (this.turnRules) return this.searchTurns(sources, options);
     const n = this.nodeCount;
     const dist = new Float64Array(n).fill(Infinity);
     const prevEdge = new Int32Array(n).fill(-1);
@@ -712,12 +932,116 @@ export class LocalNetwork {
   }
 
   /**
+   * The directed-edge form of {@link search}, used when turn rules are set.
+   * Each state is one traversal of an edge, so a route may pass a node more
+   * than once (around a block to avoid a prohibited turn). `dist`, `prevEdge`
+   * and `prevNode` still report, per node, the cheapest arrival (forward) or
+   * departure (reverse); paths are rebuilt from the states.
+   */
+  private searchTurns(
+    sources: number[],
+    options: {
+      target?: number;
+      astar?: boolean;
+      maxCost?: number;
+      reverse?: boolean;
+      onSettle?: (node: number, cost: number) => boolean | void;
+    },
+  ): SearchResult {
+    const n = this.nodeCount;
+    const m = 2 * this.edges.length;
+    const dist = new Float64Array(n).fill(Infinity);
+    const prevEdge = new Int32Array(n).fill(-1);
+    const prevNode = new Int32Array(n).fill(-1);
+    const entry = new Float64Array(m).fill(Infinity);
+    const prevState = new Int32Array(m).fill(-1);
+    const bestState = new Int32Array(n).fill(-1);
+    const settled = new Uint8Array(m);
+    const heap = new MinHeap();
+    const reverse = options.reverse === true;
+    const maxCost = options.maxCost ?? Infinity;
+    const target = options.target;
+    const result: SearchResult = {
+      dist,
+      prevEdge,
+      prevNode,
+      turns: { entry, prevState, bestState, reverse },
+    };
+    const useHeuristic =
+      options.astar === true &&
+      target !== undefined &&
+      Number.isFinite(this.minCostPerMeter) &&
+      this.minCostPerMeter > 0;
+    const tLon = target !== undefined ? this.lon[target] : 0;
+    const tLat = target !== undefined ? this.lat[target] : 0;
+    const h = (node: number): number =>
+      useHeuristic
+        ? haversineMeters(this.lon[node], this.lat[node], tLon, tLat) * this.minCostPerMeter
+        : 0;
+    // The node a state reaches in search order, and the state leaving (or,
+    // reverse, entering) `node` along edge `e`.
+    const reached = (state: number): number =>
+      reverse ? this.stateFrom(state) : this.stateTo(state);
+    const stateAt = (e: number, node: number): number => {
+      const edge = this.edges[e];
+      return 2 * e + (reverse ? (edge.b === node ? 0 : 1) : edge.a === node ? 0 : 1);
+    };
+    const starts = [...new Set(sources)];
+    for (const s of starts) dist[s] = 0;
+    for (const s of starts) {
+      if (options.onSettle?.(s, 0) || s === target) return result;
+    }
+    for (const s of starts) {
+      for (const e of this.adj[s]) {
+        const state = stateAt(e, s);
+        const cost = this.stateCost(state);
+        if (!Number.isFinite(cost) || entry[state] <= 0) continue;
+        entry[state] = 0;
+        if (cost <= maxCost) heap.push(cost + h(reached(state)), state);
+      }
+    }
+    while (heap.size) {
+      const [, state] = heap.pop() as [number, number];
+      if (settled[state]) continue;
+      settled[state] = 1;
+      const cost = entry[state] + this.stateCost(state);
+      const node = reached(state);
+      // The first state to reach a node is its cheapest: states pop in cost
+      // order, and the heuristic is the same for every state at one node.
+      if (dist[node] === Infinity) {
+        dist[node] = cost;
+        bestState[node] = state;
+        prevEdge[node] = state >> 1;
+        prevNode[node] = reverse ? this.stateTo(state) : this.stateFrom(state);
+        if (options.onSettle?.(node, cost)) break;
+        if (node === target) break;
+      }
+      for (const e of this.adj[node]) {
+        const next = stateAt(e, node);
+        if (settled[next]) continue;
+        const nextCost = this.stateCost(next);
+        if (!Number.isFinite(nextCost)) continue;
+        const turn = reverse ? this.turnCost(next, node, state) : this.turnCost(state, node, next);
+        if (!Number.isFinite(turn)) continue;
+        const start = cost + turn;
+        if (start < entry[next]) {
+          entry[next] = start;
+          prevState[next] = state;
+          if (start + nextCost <= maxCost) heap.push(start + nextCost + h(reached(next)), next);
+        }
+      }
+    }
+    return result;
+  }
+
+  /**
    * Walks predecessor links back from `target`.
    *
    * @returns The path from the search source to `target`, or null if unreached.
    */
   pathTo(result: SearchResult, target: number): NetworkPath | null {
     if (!Number.isFinite(result.dist[target])) return null;
+    if (result.turns) return this.turnPathTo(result, result.turns, target);
     const nodes: number[] = [target];
     let length = 0;
     let cur = target;
@@ -727,6 +1051,28 @@ export class LocalNetwork {
       nodes.push(cur);
     }
     nodes.reverse();
+    return {
+      nodes,
+      coordinates: nodes.map((node) => [this.lon[node], this.lat[node]]),
+      cost: result.dist[target],
+      length,
+    };
+  }
+
+  /** {@link pathTo} over directed-edge states, nodes listed from the source. */
+  private turnPathTo(result: SearchResult, turns: TurnSearchState, target: number): NetworkPath {
+    const states: number[] = [];
+    for (let s = turns.bestState[target]; s >= 0; s = turns.prevState[s]) states.push(s);
+    // Forward chains run target back to source; reverse chains run in travel
+    // order from the target toward the source. Either way, put them in travel
+    // order, then list nodes from the search source as the node search does.
+    const travel = turns.reverse ? states : states.reverse();
+    const nodes = travel.length
+      ? [this.stateFrom(travel[0]), ...travel.map((s) => this.stateTo(s))]
+      : [target];
+    if (turns.reverse) nodes.reverse();
+    let length = 0;
+    for (const s of travel) length += this.edges[s >> 1].length;
     return {
       nodes,
       coordinates: nodes.map((node) => [this.lon[node], this.lat[node]]),
@@ -769,17 +1115,21 @@ export class LocalNetwork {
       if (cost <= 0) return 1;
       return Math.min(1, (maxCost - start) / cost);
     };
-    for (const edge of this.edges) {
-      // Costs of leaving each end: a toward b and b toward a.
-      const fromA = reach(result.dist[edge.a], reverse ? edge.costBA : edge.costAB);
-      const fromB = reach(result.dist[edge.b], reverse ? edge.costAB : edge.costBA);
+    const entry = result.turns?.entry;
+    this.edges.forEach((edge, e) => {
+      // Costs of leaving each end: a toward b and b toward a. With turn rules
+      // the cost at each end is that of the traversal itself, turn included.
+      const startA = entry ? entry[reverse ? 2 * e + 1 : 2 * e] : result.dist[edge.a];
+      const startB = entry ? entry[reverse ? 2 * e : 2 * e + 1] : result.dist[edge.b];
+      const fromA = reach(startA, reverse ? edge.costBA : edge.costAB);
+      const fromB = reach(startB, reverse ? edge.costAB : edge.costBA);
       if (fromA + fromB >= 1) {
         pieces.push([lerp(edge, 0), lerp(edge, 1)]);
-        continue;
+        return;
       }
       if (fromA > 0) pieces.push([lerp(edge, 0), lerp(edge, fromA)]);
       if (fromB > 0) pieces.push([lerp(edge, 1 - fromB), lerp(edge, 1)]);
-    }
+    });
     return pieces.flatMap(splitNetworkLine);
   }
 }
