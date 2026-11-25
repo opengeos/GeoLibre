@@ -58,6 +58,9 @@ const MIN_SEGMENT_DEGREES = 1e-8;
  */
 export const MAX_EDGE_LABELS = 2000;
 
+/** Bound corner detection and ellipsoidal inverses even for a single dense side. */
+export const MAX_EDGE_VERTICES = 50_000;
+
 /** Properties of each side in {@link edgeLengthLines}. */
 export interface EdgeLengthProperties {
   /** The side's length in metres. */
@@ -248,11 +251,12 @@ function pathLength(path: readonly Position[]): number {
 }
 
 /** The rings of a polygon or multipolygon feature, outer and inner alike. */
-function featureRings(feature: Feature): Position[][] {
+function* featureRings(feature: Feature): Generator<Position[]> {
   const geometry = feature.geometry;
-  if (geometry?.type === "Polygon") return geometry.coordinates;
-  if (geometry?.type === "MultiPolygon") return geometry.coordinates.flat();
-  return [];
+  if (geometry?.type === "Polygon") yield* geometry.coordinates;
+  if (geometry?.type === "MultiPolygon") {
+    for (const polygon of geometry.coordinates) yield* polygon;
+  }
 }
 
 /**
@@ -261,7 +265,7 @@ function featureRings(feature: Feature): Position[][] {
  *
  * @param features - The selected features.
  * @param options - Unit, locale, corner threshold, and label cap.
- * @returns The sides to label, or none when there are more than the cap.
+ * @returns The sides to label, or none when a side or input-work cap is exceeded.
  */
 export function edgeLengthLines(
   features: readonly Feature[],
@@ -269,6 +273,16 @@ export function edgeLengthLines(
 ): FeatureCollection<LineString, EdgeLengthProperties> {
   const cornerAngle = options.cornerAngle ?? CORNER_ANGLE_DEGREES;
   const maxLabels = options.maxLabels ?? MAX_EDGE_LABELS;
+  // Preflight by array lengths before scanning coordinates or measuring sides.
+  // A coastline can contain very many vertices yet have only one smooth side.
+  if (features.length > MAX_EDGE_VERTICES) return EMPTY;
+  let vertices = 0;
+  for (const feature of features) {
+    for (const ring of featureRings(feature)) {
+      vertices += Math.max(1, ring.length);
+      if (vertices > MAX_EDGE_VERTICES) return EMPTY;
+    }
+  }
   const sides: Position[][] = [];
   for (const feature of features) {
     for (const ring of featureRings(feature)) {

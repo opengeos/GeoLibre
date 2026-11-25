@@ -16,22 +16,22 @@ memory.
 
 ## The toolbar
 
-| Button | What it does |
-| --- | --- |
-| **Edit** / **Save** | Turn on inline editing, then commit the changes. See [Editing values](#editing-values). |
-| **Add field** | Add a field to the layer. See [Managing fields](#managing-fields). |
-| **Calculate** | Open the [Field calculator](#field-calculator). |
-| **Fields** | Show or hide columns (**Show fields**, **Show all fields**). |
-| **Explore** | Open the [Column explorer](#column-explorer). |
-| **Statistics** | Summary statistics for one field. See [Field statistics](#field-statistics). |
-| **Charts** | Chart one or two fields. See [Charts](#charts). |
-| **Dashboard** | Open the [Dashboard](processing.md#dashboard) with this layer preselected. |
-| **Refresh** | Re-read the features from the source to pick up changes made elsewhere, such as edits by other clients of a service. Shown for layers that can be [refreshed](layers.md#refreshing-live-layers); on desktop, a layer read from a local file is reloaded from disk. Disabled while an ArcGIS layer has unsaved edits. |
-| **Export** | Write the layer to a file. See [Exporting](#exporting). |
-| **Search attributes...** | Show only rows whose values (or id) contain the text, ignoring case. |
-| **Zoom to selection** | Zoom the map to each new selection. |
-| **Show All Features** / **Show Selected (n)** | Show every record, or only the selected ones. |
-| **Clear selection** | Deselect everything. |
+| Button                                        | What it does                                                                                                                                                                                                                                                                                                         |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Edit** / **Save**                           | Turn on inline editing, then commit the changes. See [Editing values](#editing-values).                                                                                                                                                                                                                              |
+| **Add field**                                 | Add a field to the layer. See [Managing fields](#managing-fields).                                                                                                                                                                                                                                                   |
+| **Calculate**                                 | Open the [Field calculator](#field-calculator).                                                                                                                                                                                                                                                                      |
+| **Fields**                                    | Show or hide columns (**Show fields**, **Show all fields**).                                                                                                                                                                                                                                                         |
+| **Explore**                                   | Open the [Column explorer](#column-explorer).                                                                                                                                                                                                                                                                        |
+| **Statistics**                                | Summary statistics for one field. See [Field statistics](#field-statistics).                                                                                                                                                                                                                                         |
+| **Charts**                                    | Chart one or two fields. See [Charts](#charts).                                                                                                                                                                                                                                                                      |
+| **Dashboard**                                 | Open the [Dashboard](processing.md#dashboard) with this layer preselected.                                                                                                                                                                                                                                           |
+| **Refresh**                                   | Re-read the features from the source to pick up changes made elsewhere, such as edits by other clients of a service. Shown for layers that can be [refreshed](layers.md#refreshing-live-layers); on desktop, a layer read from a local file is reloaded from disk. Disabled while an ArcGIS layer has unsaved edits. |
+| **Export**                                    | Write the layer to a file. See [Exporting](#exporting).                                                                                                                                                                                                                                                              |
+| **Search attributes...**                      | Show only rows whose values (or id) contain the text, ignoring case.                                                                                                                                                                                                                                                 |
+| **Zoom to selection**                         | Zoom the map to each new selection.                                                                                                                                                                                                                                                                                  |
+| **Show All Features** / **Show Selected (n)** | Show every record, or only the selected ones.                                                                                                                                                                                                                                                                        |
+| **Clear selection**                           | Deselect everything.                                                                                                                                                                                                                                                                                                 |
 
 **Add field**, **Calculate**, and **Fields** appear for editable GeoJSON layers
 when you are not editing. **Explore**, **Statistics**, **Charts**, and
@@ -63,14 +63,14 @@ The table and the map share one selection:
 For selections by rule rather than by hand, use the **Edit** menu (also on the
 layer's actions menu):
 
-| Command | What it does |
-| --- | --- |
-| **Select by Expression...** | Select features matching an expression, built by hand or with **Expression builder...**. **Modify current selection by** creates a new selection, adds to it, removes from it, or selects within it. The same dialog can instead **Filter layer** to save the expression as the layer's filter. |
-| **Select by Location...** | Select features that intersect, are within, contain, or are disjoint from the features of another layer. |
-| **Invert Selection** / **Clear Selection** | Flip or empty the selection. |
-| **Zoom to Selection** | Fit the map to the selected features. |
-| **Show edge lengths** | Label each side of the selected polygons with its length, in the units of the **Scale bar units** setting. A side runs from corner to corner, so a densified straight side or a curved frontage gets one label. Lengths are measured on the ellipsoid, like the measure tool. Labels too long for their side on screen appear as you zoom in. A selection with more than 2,000 sides gets no labels at all, and zooming in does not bring them back: select fewer polygons to see them. Available on the MapLibre and Mapbox maps. |
-| **Export Selected Features as Layer** | Copy the selection into a new layer. |
+| Command                                    | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Select by Expression...**                | Select features matching an expression, built by hand or with **Expression builder...**. **Modify current selection by** creates a new selection, adds to it, removes from it, or selects within it. The same dialog can instead **Filter layer** to save the expression as the layer's filter.                                                                                                                                                                                                                                                                                                |
+| **Select by Location...**                  | Select features that intersect, are within, contain, or are disjoint from the features of another layer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| **Invert Selection** / **Clear Selection** | Flip or empty the selection.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Zoom to Selection**                      | Fit the map to the selected features.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **Show edge lengths**                      | Label each side of the selected polygons with its length, in the units of the **Scale bar units** setting. A side runs from corner to corner, so a densified straight side or a curved frontage gets one label. Lengths are measured on the ellipsoid, like the measure tool. Labels too long for their side on screen appear as you zoom in. A selection with more than 2,000 sides or 50,000 polygon ring positions gets no labels at all, and zooming in does not bring them back: select fewer polygons or simplify dense geometry to see them. Available on the MapLibre and Mapbox maps. |
+| **Export Selected Features as Layer**      | Copy the selection into a new layer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 The layer's actions menu also has **Select features**, which draws a selection
 on the map by click, rectangle, polygon, freehand, or radius.
@@ -189,16 +189,16 @@ An attribute form controls how each field is edited, like QGIS's attributes
 form. Set it up in the layer's **Style** panel under **Attributes Form**, with
 **Configure field** for each field:
 
-| Setting | Effect |
-| --- | --- |
-| **Edit widget** | **Text**, **Number**, **Range**, **Checkbox**, **Date**, **Value map** (a dropdown), or **Photo** (a picture stored in the field, in Field Collection). |
-| **Alias** | A friendlier label for the field in forms. |
-| **Required** | The field must have a value. |
-| **Value map entries** | One per line, as `value` or `value=Label`. |
-| **Min**, **Max**, **Step** | Bounds for Number and Range widgets (Step for Range). |
-| **Constraint expression** / **Constraint description** | A MapLibre expression the value must satisfy, and the message shown when it does not. |
-| **Visibility expression** | Show the field only when the expression is true. |
-| **Default value** | Fills the field when a new feature is captured in Field Collection. See [Default values](field-collection.md#default-values). |
+| Setting                                                | Effect                                                                                                                                                  |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Edit widget**                                        | **Text**, **Number**, **Range**, **Checkbox**, **Date**, **Value map** (a dropdown), or **Photo** (a picture stored in the field, in Field Collection). |
+| **Alias**                                              | A friendlier label for the field in forms.                                                                                                              |
+| **Required**                                           | The field must have a value.                                                                                                                            |
+| **Value map entries**                                  | One per line, as `value` or `value=Label`.                                                                                                              |
+| **Min**, **Max**, **Step**                             | Bounds for Number and Range widgets (Step for Range).                                                                                                   |
+| **Constraint expression** / **Constraint description** | A MapLibre expression the value must satisfy, and the message shown when it does not.                                                                   |
+| **Visibility expression**                              | Show the field only when the expression is true.                                                                                                        |
+| **Default value**                                      | Fills the field when a new feature is captured in Field Collection. See [Default values](field-collection.md#default-values).                           |
 
 When you edit the table, value-map fields become dropdowns, checkbox fields
 become checkboxes, and number, range, and date fields get typed inputs. A cell
@@ -254,14 +254,14 @@ with their counts. **Copy** puts the whole summary on the clipboard.
 
 **Charts** plots the layer without adding anything to the project:
 
-| Chart | Options |
-| --- | --- |
-| **Histogram** | A number field and **Bins** (1 to 50). |
-| **Scatter** | An **X axis** and **Y axis** field; up to 2,000 points. |
-| **Bar** | A **Category** and an **Aggregate** (Count, Sum, or Average); up to 20 bars. |
-| **Line** | A number field against row order. |
-| **Box plot** | A number field. |
-| **Pie** | A **Category** and an **Aggregate** (Count or Sum); up to 8 slices, the rest grouped as "(other)". |
+| Chart         | Options                                                                                            |
+| ------------- | -------------------------------------------------------------------------------------------------- |
+| **Histogram** | A number field and **Bins** (1 to 50).                                                             |
+| **Scatter**   | An **X axis** and **Y axis** field; up to 2,000 points.                                            |
+| **Bar**       | A **Category** and an **Aggregate** (Count, Sum, or Average); up to 20 bars.                       |
+| **Line**      | A number field against row order.                                                                  |
+| **Box plot**  | A number field.                                                                                    |
+| **Pie**       | A **Category** and an **Aggregate** (Count or Sum); up to 8 slices, the rest grouped as "(other)". |
 
 Charts use all features. **Download** saves the chart as a PNG image or an SVG.
 

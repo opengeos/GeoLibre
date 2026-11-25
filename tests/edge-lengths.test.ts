@@ -298,6 +298,26 @@ describe("edgeLengthLines", () => {
     assert.equal(edgeLengthLines([polygon(SQUARE)], { maxLabels: 4 }).features.length, 4);
     assert.deepEqual(edgeLengthLines([polygon(SQUARE)], { maxLabels: 3 }).features, []);
   });
+
+  it("bounds dense rings even when they produce only one side", () => {
+    const circle = Array.from({ length: 50_000 }, (_, i): Position => {
+      const angle = (i * 2 * Math.PI) / 50_000;
+      return [-9.14 + 0.001 * Math.cos(angle), 38.72 + 0.001 * Math.sin(angle)];
+    });
+    circle.push(circle[0]);
+    assert.equal(edgeLengthLines([polygon(circle)]).features.length, 0);
+  });
+
+  it("counts vertices across all polygon parts before measuring any labels", () => {
+    const ring = Array.from({ length: 25_000 }, (_, i) => SQUARE[i % 4]);
+    const multipart: Feature = {
+      type: "Feature",
+      properties: {},
+      geometry: { type: "MultiPolygon", coordinates: [[ring], [ring], [SQUARE]] },
+    };
+    // Side-cap override does not bypass the independent input-work budget.
+    assert.equal(edgeLengthLines([multipart], { maxLabels: 100_000 }).features.length, 0);
+  });
 });
 
 describe("edgeLengthLayer", () => {

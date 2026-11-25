@@ -2663,6 +2663,74 @@ describe("MapboxEngine edge length labels", () => {
     assert.equal(map.getLayer(EDGE_LENGTH_LAYER_ID), undefined);
   });
 
+  it("retains the latest selection received while sources load", () => {
+    const { engine, map } = makeEngine();
+    const layer = parcel();
+    const triangle = structuredClone(layer.geojson!.features[0]);
+    triangle.id = "triangle";
+    assert.equal(triangle.geometry.type, "Polygon");
+    if (triangle.geometry.type === "Polygon") {
+      triangle.geometry.coordinates[0].splice(2, 1);
+    }
+    layer.geojson!.features.push(triangle);
+    engine.syncLayers([layer]);
+    engine.setEdgeLengthLabels(true);
+    engine.highlightFeature(layer, ["parcel"]);
+    map.setStyleLoaded(false);
+    engine.highlightFeature(layer, ["parcel"]);
+    engine.highlightFeature(layer, ["triangle"]);
+    map.setStyleLoaded(true);
+    map.fire("idle");
+    assert.equal(labelSource(map)?.data.features.length, 3);
+    const highlight = map.sources.get("geolibre-mapbox-highlight") as
+      | { data: { features: { id: string }[] } }
+      | undefined;
+    assert.deepEqual(
+      highlight?.data.features.map((feature) => feature.id),
+      ["triangle"],
+    );
+  });
+
+  it("fits a ready-map selection even when its new highlight source starts loading", () => {
+    const { engine, map } = makeEngine();
+    const layer = parcel();
+    engine.syncLayers([layer]);
+    const addSource = map.addSource;
+    map.addSource = (id: string, spec: Record<string, unknown>) => {
+      addSource(id, spec);
+      map.setStyleLoaded(false);
+    };
+    const before = map.calls.filter((call) => call.startsWith("fitBounds:")).length;
+    engine.highlightFeature(layer, ["parcel"], { fit: true });
+    assert.equal(map.calls.filter((call) => call.startsWith("fitBounds:")).length, before + 1);
+  });
+
+  it("applies a clear that supersedes a selection during source loading", () => {
+    const { engine, map } = makeEngine();
+    const layer = parcel();
+    engine.syncLayers([layer]);
+    engine.setEdgeLengthLabels(true);
+    engine.highlightFeature(layer, ["parcel"]);
+    map.setStyleLoaded(false);
+    engine.highlightFeature(layer, ["parcel"]);
+    engine.clearFeatureHighlight();
+    map.setStyleLoaded(true);
+    map.fire("idle");
+    assert.equal(labelSource(map), undefined);
+    assert.equal(map.sources.get("geolibre-mapbox-highlight"), undefined);
+  });
+
+  it("does not fit the whole layer when a selection is cleared with fit enabled", () => {
+    const { engine, map } = makeEngine();
+    const layer = parcel();
+    layer.metadata.bounds = [-10, 38, -9, 39];
+    engine.syncLayers([layer]);
+    engine.highlightFeature(layer, ["parcel"]);
+    const before = map.calls.filter((call) => call.startsWith("fitBounds:")).length;
+    engine.highlightFeature(layer, null, { fit: true });
+    assert.equal(map.calls.filter((call) => call.startsWith("fitBounds:")).length, before);
+  });
+
   it("labels in the scale bar's unit system", () => {
     const { engine, map } = makeEngine();
     const layer = parcel();

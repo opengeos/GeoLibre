@@ -239,6 +239,7 @@ export class MapboxEngine implements MapEngine {
    * the highlight adds its source), so it is retried when the map is idle.
    */
   private edgeLengthsPending = false;
+  private featureHighlightPending = false;
   private pluginControls = new Map<maplibregl.IControl, mapboxgl.IControl>();
   private controlVisibility: Record<BuiltInMapControl, boolean>;
   /** See the constructor option of the same name. */
@@ -301,6 +302,7 @@ export class MapboxEngine implements MapEngine {
     if (this.terrainSourcePending || this.terrainRestorePending) this.reconcileTerrainSource();
     if (this.syncPending) this.syncLayers(this.layers);
     if (this.basemapPending) this.applyBasemap();
+    if (this.featureHighlightPending) this.syncFeatureHighlight();
     if (this.edgeLengthsPending) this.syncEdgeLengths();
   };
   /**
@@ -498,6 +500,7 @@ export class MapboxEngine implements MapEngine {
     this.releaseRetiredCogDems();
     this.setTerrainEnabled(this.terrain);
     this.syncLayers(this.layers);
+    this.syncFeatureHighlight();
     if (this.layerControlVisible) this.layerControlHost.add();
   };
   // Plugins can add native style layers directly (outside the layer store);
@@ -1623,28 +1626,56 @@ export class MapboxEngine implements MapEngine {
     featureId: string | string[] | null,
     options?: { fit?: boolean },
   ): void {
-    this.clearFeatureHighlight();
-    if (!layer?.geojson || featureId === null || !this.map?.isStyleLoaded()) return;
+    // Adding the highlight source starts asynchronous loading. Preserve the
+    // readiness of this request rather than testing again after the write.
+    const fit = options?.fit && this.map?.isStyleLoaded();
     const ids = new Set(Array.isArray(featureId) ? featureId : [featureId]);
+    this.highlightedFeatures =
+      layer?.geojson && featureId !== null
+        ? layer.geojson.features.filter((f, i) => ids.has(String(f.id ?? i)))
+        : [];
+    this.syncFeatureHighlight();
+    if (fit && layer && this.highlightedFeatures.length > 0) {
+      this.fitLayer({
+        ...layer,
+        geojson: { type: "FeatureCollection", features: this.highlightedFeatures },
+      });
+    }
+  }
+  /** Rebuild the latest selection once source/style loading permits writes. */
+  private syncFeatureHighlight(): void {
+    const map = this.map;
+    if (!map) return;
+    if (!map.isStyleLoaded()) {
+      this.featureHighlightPending = true;
+      return;
+    }
+    this.featureHighlightPending = false;
+    for (const id of HIGHLIGHT_LAYER_IDS) if (map.getLayer(id)) map.removeLayer(id);
+    if (map.getSource(HIGHLIGHT_SOURCE_ID)) map.removeSource(HIGHLIGHT_SOURCE_ID);
+    if (this.highlightedFeatures.length === 0) {
+      this.syncEdgeLengths();
+      return;
+    }
     const data: FeatureCollection = {
       type: "FeatureCollection",
-      features: layer.geojson.features.filter((f, i) => ids.has(String(f.id ?? i))),
+      features: this.highlightedFeatures,
     };
-    this.map.addSource(HIGHLIGHT_SOURCE_ID, { type: "geojson", data });
-    this.map.addLayer({
+    map.addSource(HIGHLIGHT_SOURCE_ID, { type: "geojson", data });
+    map.addLayer({
       id: HIGHLIGHT_LAYER_IDS[0],
       type: "fill",
       source: HIGHLIGHT_SOURCE_ID,
       filter: ["==", ["geometry-type"], "Polygon"],
       paint: { "fill-color": "#facc15", "fill-opacity": 0.25 },
     });
-    this.map.addLayer({
+    map.addLayer({
       id: HIGHLIGHT_LAYER_IDS[1],
       type: "line",
       source: HIGHLIGHT_SOURCE_ID,
       paint: { "line-color": "#facc15", "line-width": 4 },
     });
-    this.map.addLayer({
+    map.addLayer({
       id: HIGHLIGHT_LAYER_IDS[2],
       type: "circle",
       source: HIGHLIGHT_SOURCE_ID,
@@ -1655,15 +1686,11 @@ export class MapboxEngine implements MapEngine {
         "circle-opacity": 0.6,
       },
     });
-    this.highlightedFeatures = data.features;
     this.syncEdgeLengths();
-    if (options?.fit) this.fitLayer({ ...layer, geojson: data });
   }
   clearFeatureHighlight(): void {
-    for (const id of HIGHLIGHT_LAYER_IDS) if (this.map?.getLayer(id)) this.map.removeLayer(id);
-    if (this.map?.getSource(HIGHLIGHT_SOURCE_ID)) this.map.removeSource(HIGHLIGHT_SOURCE_ID);
     this.highlightedFeatures = [];
-    this.syncEdgeLengths();
+    this.syncFeatureHighlight();
   }
   setEdgeLengthLabels(enabled: boolean): void {
     if (enabled === this.edgeLengthsEnabled) return;
