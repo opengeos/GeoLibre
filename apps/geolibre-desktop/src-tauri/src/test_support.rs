@@ -1,6 +1,13 @@
 //! Scaffolding shared by the unit tests of several modules.
 
 use std::path::PathBuf;
+#[cfg(not(feature = "mas"))]
+use std::sync::Mutex;
+
+// `std::env::set_var` is process-global, so the tests that stage an AppImage
+// environment must not run concurrently with each other.
+#[cfg(not(feature = "mas"))]
+pub(crate) static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 // A throwaway directory tree under the system temp dir that removes itself
 // on drop, so scratch dirs are cleaned up even when an assertion panics.
