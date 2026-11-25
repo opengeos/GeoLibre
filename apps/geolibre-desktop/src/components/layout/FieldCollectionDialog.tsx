@@ -372,7 +372,7 @@ interface CaptureStepProps {
   /** Identifies the record being filled in; changes on save and on a new target. */
   captureKey: string;
   /** A photo field started (+1) or finished (-1) reading a picture; Save waits for it. */
-  onAttachmentReading: (delta: 1 | -1, captureKey: string) => void;
+  onAttachmentReading: (delta: 1 | -1, readId: number) => void;
   values: Record<string, string>;
   setValue: (key: string, value: string) => void;
   errors: Record<string, string>;

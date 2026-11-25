@@ -114,6 +114,11 @@ export function useFieldCollectionController({
   const [photos, setPhotos] = useState<CollectionPhoto[]>([]);
   // Count batches: separate file selections can read concurrently.
   const [photoReads, setPhotoReads] = useState(0);
+  // The attachment-widget reads holding that count, by read id. A completion
+  // releases only its own read, so one that started before a target switch
+  // cannot release a newer read's hold, even after switching back to a target
+  // that reuses the same record key.
+  const attachmentReadsRef = useRef(new Set<number>());
   const [picking, setPicking] = useState(false); // point: one-shot map click
   const [drawing, setDrawing] = useState(false); // line/polygon: multi-vertex
   const [vertices, setVertices] = useState<Vertex[]>([]);
@@ -210,8 +215,6 @@ export function useFieldCollectionController({
     noLocationRef.current = { key: recordKey, vertices: [] };
   }
   const capturePending = activeGeometry === "none" ? noLocationRef.current.vertices : pending;
-  const recordKeyRef = useRef(recordKey);
-  recordKeyRef.current = recordKey;
   // Values a child record starts with (its link to the parent just saved),
   // and the record whose children can be added next.
   const prefillRef = useRef<Record<string, string>>({});
@@ -282,6 +285,7 @@ export function useFieldCollectionController({
   const invalidateCapture = useCallback(() => {
     gpsSeqRef.current += 1;
     contextSeqRef.current += 1;
+    attachmentReadsRef.current.clear();
     setPhotoReads(0);
   }, []);
 
@@ -304,9 +308,22 @@ export function useFieldCollectionController({
     setLastGpsFix(null);
     setErrors({});
     setNotice(null);
+    setRecordEdited(false);
     savedCountRef.current = 0;
     clearPreview();
   }, [clearPreview, invalidateCapture]);
+
+  // The related-record workflow: the saved parent whose children can be added
+  // next, and the link a child record starts with. It belongs to one target,
+  // so any change of target ends it, whether the user or a deleted layer made
+  // it. Consecutive saves into the same target keep it.
+  const clearRelatedRecord = useCallback(() => {
+    prefillRef.current = {};
+    setSavedParent(null);
+    // The double-click guard is about one layer's form; a save into another
+    // layer is a different record, however soon it comes.
+    lastSavedAtRef.current = 0;
+  }, []);
 
   // Drop the capture and point the form at `target`, taking the setup step back
   // to a blank new-layer form. A non-empty target becomes the session's own:
@@ -333,17 +350,12 @@ export function useFieldCollectionController({
   const handleTargetChange = useCallback(
     (nextId: string) => {
       clearCapture();
-      prefillRef.current = {};
-      setSavedParent(null);
-      setRecordEdited(false);
-      // The double-click guard is about one layer's form; a save into the
-      // layer just switched to is a different record, however soon it comes.
-      lastSavedAtRef.current = 0;
+      clearRelatedRecord();
       targetChosenRef.current = true;
       setLayerId(nextId);
       if (!nextId && drafts.length === 0) setDrafts([makeDraft()]);
     },
-    [clearCapture, drafts.length, makeDraft],
+    [clearCapture, clearRelatedRecord, drafts.length, makeDraft],
   );
 
   // Reset the capture form when the dialog opens. The capture *target* is not
@@ -381,9 +393,7 @@ export function useFieldCollectionController({
     suppressResetRef.current = false;
     // The saved parent and its pre-filled link name layers of the project
     // being left; another project can reuse the same layer ids.
-    prefillRef.current = {};
-    setSavedParent(null);
-    setRecordEdited(false);
+    clearRelatedRecord();
     resetCapture(
       resolveTargetLayer(
         collectionLayers.map((l) => l.id),
@@ -413,8 +423,9 @@ export function useFieldCollectionController({
     // the user asking for the setup step, so don't record it as a choice.
     if (!fallback) targetChosenRef.current = false;
     suppressResetRef.current = false;
+    clearRelatedRecord();
     resetCapture(fallback);
-  }, [open, picking, drawing, layerId, collectionLayers, resetCapture]);
+  }, [open, picking, drawing, layerId, collectionLayers, clearRelatedRecord, resetCapture]);
 
   // Tear down any preview when the dialog fully closes (not while drawing with
   // it intentionally hidden) and on unmount. A capture being kept across a
@@ -483,14 +494,17 @@ export function useFieldCollectionController({
     onOpenChange(false);
   }, [invalidateCapture, onOpenChange]);
 
-  // Anything a dismissal would be a shame to throw away: a placed geometry, an
-  // attached photo, or a new layer being composed on the setup step. The empty
-  // draft field the setup step starts with doesn't count, only one the user
-  // has actually named.
+  // Anything a dismissal would be a shame to throw away: a placed geometry, a
+  // table record the user has typed into, an attached photo or one still being
+  // read, or a new layer being composed on the setup step. The empty draft
+  // field the setup step starts with doesn't count, only one the user has
+  // actually named.
   const hasWorkInProgress =
     pending !== null ||
     vertices.length > 0 ||
+    (activeGeometry === "none" && recordEdited) ||
     photos.length > 0 ||
+    photoReads > 0 ||
     layerName.trim() !== "" ||
     drafts.some((d) => d.label.trim() !== "");
 
@@ -522,6 +536,9 @@ export function useFieldCollectionController({
           writeControlPreference("field-collection", false);
         } else {
           gpsSeqRef.current += 1;
+          // The superseded fix's callback bails, so it can't clear the spinner;
+          // a preserved capture would reopen with Use GPS still disabled.
+          setLocating(false);
           if (hasWorkInProgress) suppressResetRef.current = true;
         }
       }
@@ -632,6 +649,9 @@ export function useFieldCollectionController({
       setPending(verts);
       setErrors({});
       setNotice(null);
+      // A GPS vertex still in flight belongs to the drawing just finished.
+      gpsSeqRef.current += 1;
+      setLocating(false);
       setDrawing(false);
       suppressResetRef.current = true;
       onOpenChange(true);
@@ -640,6 +660,9 @@ export function useFieldCollectionController({
   );
 
   const handleCancelDrawing = useCallback(() => {
+    // A GPS vertex still in flight must not recreate the cancelled preview.
+    gpsSeqRef.current += 1;
+    setLocating(false);
     setDrawing(false);
     setLastGpsFix(null);
     setVerticesSynced([]);
@@ -666,6 +689,7 @@ export function useFieldCollectionController({
     if (!open && !picking && !drawing) return;
     if (!layerId || collectionLayers.some((l) => l.id === layerId)) return;
     const placing = picking || drawing;
+    clearRelatedRecord();
     resetCapture("");
     targetChosenRef.current = false;
     // After resetCapture, which clears the notice.
@@ -677,7 +701,17 @@ export function useFieldCollectionController({
       suppressResetRef.current = true;
       onOpenChange(true);
     }
-  }, [open, picking, drawing, layerId, collectionLayers, resetCapture, onOpenChange, t]);
+  }, [
+    open,
+    picking,
+    drawing,
+    layerId,
+    collectionLayers,
+    clearRelatedRecord,
+    resetCapture,
+    onOpenChange,
+    t,
+  ]);
 
   useEffect(() => {
     if (!drawing) return;
@@ -1022,10 +1056,15 @@ export function useFieldCollectionController({
           attributeForm,
           pending: capturePending,
           captureKey: recordKey,
-          onAttachmentReading: (delta: number, key: string) => {
-            // A read belongs to the record it began in. Its completion must not
-            // release a newer record's attachment busy state.
-            if (key === recordKeyRef.current) setPhotoReads((count) => Math.max(0, count + delta));
+          onAttachmentReading: (delta: 1 | -1, readId: number) => {
+            // A read belongs to the capture it began in. A completion releases
+            // only a read still being held, never a newer one.
+            if (delta > 0) {
+              attachmentReadsRef.current.add(readId);
+              setPhotoReads((count) => count + 1);
+            } else if (attachmentReadsRef.current.delete(readId)) {
+              setPhotoReads((count) => Math.max(0, count - 1));
+            }
           },
           values,
           setValue,

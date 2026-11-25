@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, i18n, render, screen, useAppStore, waitFor } from "./helpers/dom";
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, it } from "node:test";
+import { afterEach, beforeEach, it, mock } from "node:test";
 import { createElement } from "react";
 import type { MapEngine, MapRenderSurface } from "@geolibre/map";
 import { renderHook } from "@testing-library/react";
@@ -8,6 +8,7 @@ import { geojsonLayer } from "./helpers/layer-fixtures";
 import {
   collectionMetadata,
   type CollectionSchema,
+  type GeometryType,
 } from "../apps/geolibre-desktop/src/lib/field-collection";
 
 const { useFieldCollectionController } =
@@ -20,11 +21,19 @@ const schema: CollectionSchema = {
   fields: [{ key: "condition", label: "Condition", type: "text", required: true }],
 };
 
-function addCollection(id: string) {
+function addCollection(id: string, geometry: GeometryType = "point", fields = schema) {
   useAppStore
     .getState()
-    .addLayer(geojsonLayer({ id, name: id, metadata: collectionMetadata(schema) }));
+    .addLayer(geojsonLayer({ id, name: id, metadata: collectionMetadata(fields, geometry) }));
 }
+
+// A table whose records carry a link to a parent record.
+const linkedSchema: CollectionSchema = {
+  fields: [
+    { key: "parent_id", label: "Parent", type: "text", required: false },
+    { key: "condition", label: "Condition", type: "text", required: false },
+  ],
+};
 
 function hardware() {
   const requests: { resolve: PositionCallback; reject?: PositionErrorCallback | null }[] = [];
@@ -135,6 +144,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  mock.restoreAll();
   cleanup();
   for (const container of containers.splice(0)) container.remove();
   for (const [key, descriptor] of [
@@ -296,4 +306,140 @@ it("saves a point from the rendered collection form", async () => {
     useAppStore.getState().layers[0].geojson?.features[0].properties?.condition,
     "Observed",
   );
+});
+
+it("drops a related-record prefill when its child table is deleted and the target falls back", () => {
+  addCollection("Parent", "none", linkedSchema);
+  addCollection("Child", "none", linkedSchema);
+  // Step past the double-save guard between saves without waiting for it.
+  let now = 10_000;
+  mock.method(Date, "now", () => now);
+  const hook = controller();
+  assert.equal(hook.result.current.target.selected, "Parent");
+  act(() => capture(hook).setValue("condition", "parent"));
+  act(() => capture(hook).onSave());
+  const related = hook.result.current.related;
+  assert.ok(related, "a saved parent offers Add Related");
+  act(() => related.onAdd("Child", { parent_id: "p-1" }));
+  assert.equal(hook.result.current.target.selected, "Child");
+  // Consecutive saves in the same related workflow keep the link.
+  now += 1000;
+  act(() => capture(hook).setValue("condition", "child"));
+  act(() => capture(hook).onSave());
+  assert.equal(capture(hook).values.parent_id, "p-1");
+  act(() => hook.result.current.onDialogOpenChange(false));
+  hook.rerender({ open: false });
+  act(() => useAppStore.getState().removeLayer("Child"));
+  assert.equal(hook.result.current.target.selected, "Parent");
+  hook.rerender({ open: true });
+  now += 1000;
+  act(() => capture(hook).setValue("condition", "another parent"));
+  act(() => capture(hook).onSave());
+  const saved = useAppStore.getState().layers.find((layer) => layer.id === "Parent")?.geojson;
+  assert.equal(saved?.features.length, 2);
+  assert.equal(saved?.features[1].properties?.parent_id ?? "", "");
+  assert.equal(capture(hook).values.parent_id, undefined);
+});
+
+it("keeps an edited table record across dismissal", () => {
+  addCollection("Table", "none");
+  const hook = controller();
+  act(() => capture(hook).setValue("condition", "Typed"));
+  act(() => hook.result.current.onDialogOpenChange(false));
+  hook.rerender({ open: false });
+  hook.rerender({ open: true });
+  assert.equal(capture(hook).values.condition, "Typed");
+});
+
+it("keeps a capture whose photo is still being read across dismissal", async () => {
+  addCollection("A");
+  hardware();
+  Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
+  const hook = controller();
+  const inputView = render(
+    createElement("input", { type: "file", onChange: capture(hook).onPhotos }),
+  );
+  const input = inputView.container.querySelector("input");
+  assert.ok(input);
+  fireEvent.change(input, { target: { files: [new File(["photo"], "photo.jpg")] } });
+  act(() => hook.result.current.onDialogOpenChange(false));
+  hook.rerender({ open: false });
+  hook.rerender({ open: true });
+  assert.equal(capture(hook).readingPhotos, true);
+  await act(async () => PendingReader.pending[0].finish("photo"));
+  assert.equal(capture(hook).readingPhotos, false);
+  assert.deepEqual(
+    capture(hook).photos.map((photo) => photo.name),
+    ["photo.jpg"],
+  );
+});
+
+it("clears the GPS busy state when a dismissal keeps a setup draft", async () => {
+  addCollection("A");
+  const requests = hardware();
+  const hook = controller();
+  act(() => hook.result.current.setup.onLayerName("Half-composed"));
+  act(() => capture(hook).onUseGps());
+  assert.equal(capture(hook).locating, true);
+  act(() => hook.result.current.onDialogOpenChange(false));
+  hook.rerender({ open: false });
+  hook.rerender({ open: true });
+  assert.equal(hook.result.current.setup.layerName, "Half-composed");
+  assert.equal(capture(hook).locating, false);
+  await act(async () => requests[0].resolve(position()));
+  assert.equal(capture(hook).pending, null);
+});
+
+for (const exit of ["finish", "cancel"] as const) {
+  it(`drops a GPS vertex that arrives after drawing is ${exit === "finish" ? "finished" : "cancelled"}`, async () => {
+    addCollection("Line", "line");
+    const requests = hardware();
+    const map = liveMap();
+    const hook = controller(map.ref);
+    act(() => capture(hook).onStartDrawing());
+    hook.rerender({ open: false });
+    for (const [index, lng] of [-84, -83].entries()) {
+      act(() => hook.result.current.draw?.onAddGps());
+      await act(async () => requests[index].resolve(position(lng)));
+    }
+    assert.equal(hook.result.current.draw?.count, 2);
+    act(() => hook.result.current.draw?.onAddGps());
+    assert.equal(hook.result.current.draw?.locating, true);
+    const draw = hook.result.current.draw;
+    assert.ok(draw);
+    act(() => (exit === "finish" ? draw.onFinish() : draw.onCancel()));
+    hook.rerender({ open: true });
+    assert.equal(capture(hook).locating, false);
+    const preview = map.container.querySelector("[data-field-collection-preview]");
+    await act(async () => requests[2].resolve(position(-82)));
+    assert.equal(map.flights.length, 2);
+    if (exit === "finish") {
+      assert.deepEqual(capture(hook).pending, [
+        [-84, 35.95],
+        [-83, 35.95],
+      ]);
+      assert.equal(map.container.querySelector("[data-field-collection-preview]"), preview);
+      assert.equal(preview?.querySelectorAll("circle").length, 2);
+    } else {
+      assert.equal(preview, null);
+      assert.equal(map.container.querySelector("[data-field-collection-preview]"), null);
+    }
+  });
+}
+
+it("releases Save only when the attachment read that held it finishes", () => {
+  addCollection("A");
+  addCollection("B");
+  const hook = controller();
+  // Pick a picture in A, leave for B and come back: the record key is the same.
+  act(() => capture(hook).onAttachmentReading(1, 1));
+  act(() => hook.result.current.target.onChange("B"));
+  act(() => hook.result.current.target.onChange("A"));
+  act(() => capture(hook).onAttachmentReading(1, 2));
+  assert.equal(capture(hook).readingPhotos, true);
+  // The first read's late completion must not release the second's hold.
+  act(() => capture(hook).onAttachmentReading(-1, 1));
+  assert.equal(capture(hook).readingPhotos, true);
+  act(() => capture(hook).onAttachmentReading(-1, 2));
+  assert.equal(capture(hook).readingPhotos, false);
 });

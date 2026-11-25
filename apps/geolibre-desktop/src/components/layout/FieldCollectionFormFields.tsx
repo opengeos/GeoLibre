@@ -22,6 +22,8 @@ import {
 const RASTER_DATA_URL = /^data:image\/(?:png|jpeg|gif|webp|bmp);base64,/i;
 /** Longest data URL of a picture within {@link MAX_PHOTO_BYTES}. */
 const MAX_ATTACHMENT_DATA_URL_LENGTH = Math.ceil((MAX_PHOTO_BYTES * 4) / 3) + 64;
+/** Source of attachment read ids, unique across every input on the page. */
+let lastAttachmentReadId = 0;
 
 interface FieldCollectionFormFieldsProps {
   schema: CollectionSchema;
@@ -35,8 +37,8 @@ interface FieldCollectionFormFieldsProps {
   errorText: (code: string | undefined) => string | null;
   /** Changes with each record, so a picture still loading stays with its own. */
   captureKey: string;
-  /** Told when a picture starts (+1) and finishes (-1) loading, so Save can wait. */
-  onReadingChange: (delta: 1 | -1, captureKey: string) => void;
+  /** Told when a picture read starts (+1) and finishes (-1), so Save can wait. */
+  onReadingChange: (delta: 1 | -1, readId: number) => void;
 }
 
 /**
@@ -107,7 +109,7 @@ interface FormFieldProps {
   onChange: (value: string) => void;
   error: string | null;
   captureKey: string;
-  onReadingChange: (delta: 1 | -1, captureKey: string) => void;
+  onReadingChange: (delta: 1 | -1, readId: number) => void;
 }
 
 function FormField({
@@ -207,7 +209,7 @@ function AttachmentInput({
   value: string;
   onChange: (value: string) => void;
   captureKey: string;
-  onReadingChange: (delta: 1 | -1, captureKey: string) => void;
+  onReadingChange: (delta: 1 | -1, readId: number) => void;
 }) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -240,8 +242,9 @@ function AttachmentInput({
     const reader = new FileReader();
     // Save is held while the picture loads, so a quick save cannot store the
     // record without it. Released exactly once, however the read ends.
-    onReadingChange(1, captureKey);
-    reader.onloadend = () => onReadingChange(-1, captureKey);
+    const readId = (lastAttachmentReadId += 1);
+    onReadingChange(1, readId);
+    reader.onloadend = () => onReadingChange(-1, readId);
     reader.onerror = () => {
       if (readSeq.current === seq) setProblem(t("fieldCollection.photoReadError"));
     };
