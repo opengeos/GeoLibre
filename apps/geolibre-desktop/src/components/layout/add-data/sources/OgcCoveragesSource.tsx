@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { redactUrlCredentials, useAppStore } from "@geolibre/core";
 import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { useEffect, useRef, useState } from "react";
@@ -109,7 +109,7 @@ export function OgcCoveragesSource({ initialUrl = "" }: { initialUrl?: string })
           metadata: {
             ...layer.metadata,
             ogcCoverageSnapshot: true,
-            sourceUrl: url,
+            sourceUrl: redactUrlCredentials(url),
             ogcCoverageCollection: collection.id,
             ogcCoverageParameters: bands,
           },

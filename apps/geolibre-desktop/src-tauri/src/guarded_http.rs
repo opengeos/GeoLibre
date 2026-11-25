@@ -473,9 +473,16 @@ pub(crate) async fn fetch_url_response(
     timeout_secs: Option<u64>,
     max_bytes: Option<u64>,
     accept: Option<String>,
+    discard_error_body: Option<bool>,
 ) -> Result<NativeHttpResponse, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        fetch_url_response_blocking(url, timeout_secs, max_bytes, accept)
+        fetch_url_response_blocking(
+            url,
+            timeout_secs,
+            max_bytes,
+            accept,
+            discard_error_body.unwrap_or(false),
+        )
     })
     .await
     .map_err(|error| format!("Fetch task failed: {error}"))?
@@ -486,6 +493,7 @@ fn fetch_url_response_blocking(
     timeout_secs: Option<u64>,
     max_bytes: Option<u64>,
     accept: Option<String>,
+    discard_error_body: bool,
 ) -> Result<NativeHttpResponse, String> {
     ensure_fetchable_url(&url)?;
 
@@ -506,7 +514,9 @@ fn fetch_url_response_blocking(
         .get(reqwest::header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
         .map(str::to_owned);
-    let body = if let Some(limit) = max_bytes {
+    let body = if discard_error_body && !(200..300).contains(&status) {
+        Vec::new()
+    } else if let Some(limit) = max_bytes {
         let content_length = response.content_length();
         crate::http_body::read_limited_body(response, content_length, limit)?
     } else {
@@ -667,7 +677,7 @@ mod tests {
         let address = listener.local_addr().unwrap();
         listener.set_nonblocking(true).unwrap();
         let server = std::thread::spawn(move || {
-            for path in ["/start", "/resolved/coverage.json"] {
+            for path in ["/start", "/resolved/coverage.json", "/error", "/error"] {
                 let deadline = Instant::now() + Duration::from_secs(10);
                 let mut socket = loop {
                     match listener.accept() {
@@ -699,6 +709,9 @@ mod tests {
                     .contains("accept: application/prs.coverage+json\r\n"));
                 if path == "/start" {
                     socket.write_all(b"HTTP/1.1 302 Found\r\nLocation: /resolved/coverage.json\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+                } else if path == "/error" {
+                    let body = "x".repeat(64);
+                    write!(socket, "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 64\r\nConnection: close\r\n\r\n{body}").unwrap();
                 } else {
                     socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/prs.coverage+json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").unwrap();
                 }
@@ -709,9 +722,9 @@ mod tests {
             Some(10),
             Some(1024),
             Some("application/prs.coverage+json".to_owned()),
+            false,
         )
         .unwrap();
-        server.join().unwrap();
         assert_eq!(response.status, 200);
         assert_eq!(
             response.final_url,
@@ -722,6 +735,25 @@ mod tests {
             Some("application/prs.coverage+json")
         );
         assert_eq!(response.body, b"{}");
+        let error_response = super::fetch_url_response_blocking(
+            format!("http://{address}/error"),
+            Some(10),
+            Some(16),
+            Some("application/prs.coverage+json".to_owned()),
+            true,
+        )
+        .unwrap();
+        assert_eq!(error_response.status, 503);
+        assert!(error_response.body.is_empty());
+        let limited = super::fetch_url_response_blocking(
+            format!("http://{address}/error"),
+            Some(10),
+            Some(16),
+            Some("application/prs.coverage+json".to_owned()),
+            false,
+        );
+        assert!(limited.err().unwrap().contains("download limit"));
+        server.join().unwrap();
     }
 
     // Issue #1220: a client certificate is read as PKCS#12 when its extension is

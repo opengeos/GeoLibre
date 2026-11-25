@@ -212,6 +212,8 @@ export const DEFAULT_ARCGIS_URLS: Record<ArcGISLayerType, string> = {
 };
 // Keep in sync with GPX_PROXY_PATH in vite.config.ts (the dev proxy binds it there).
 export const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";
+// Keep in sync with the dedicated content-negotiating route in vite.config.ts.
+export const OGC_COVERAGE_PROXY_PATH = "/__geolibre_coverage_proxy";
 // Keep in sync with WMS_PROXY_PATH in vite.config.ts (the dev proxy binds it
 // there). Used to fetch a WMS GetCapabilities document without tripping CORS.
 export const WMS_PROXY_PATH = "/__geolibre_wms_proxy";

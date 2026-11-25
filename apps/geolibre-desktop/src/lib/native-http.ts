@@ -50,6 +50,8 @@ interface FetchUrlBytesOptions extends NativeHttpOptions {
 interface FetchUrlResponseOptions extends FetchUrlBytesOptions {
   /** Content negotiation for protocols whose representations share one URL. */
   accept?: string;
+  /** Preserve non-2xx status without reading its body; defaults to false. */
+  discardErrorBody?: boolean;
 }
 
 function diagnosticUrl(url: string): string {
@@ -143,6 +145,9 @@ async function invokeNativeHttp<T>(
       ...(options?.timeoutSecs === undefined ? {} : { timeoutSecs: options.timeoutSecs }),
       ...(options?.maxBytes === undefined ? {} : { maxBytes: options.maxBytes }),
       ...(options?.accept === undefined ? {} : { accept: options.accept }),
+      ...(options?.discardErrorBody === undefined
+        ? {}
+        : { discardErrorBody: options.discardErrorBody }),
     });
     appendDiagnostic(
       nativeHttpSuccessRecord(

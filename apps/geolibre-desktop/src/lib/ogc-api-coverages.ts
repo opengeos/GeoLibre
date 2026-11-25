@@ -1,6 +1,7 @@
 import { shortestLongitudeExtent } from "@geolibre/core";
 import { convertGeoTiffToCog, readGeoTiffInfo } from "@geolibre/processing";
 import { readLimitedBody } from "../components/layout/add-data/helpers";
+import { OGC_COVERAGE_PROXY_PATH } from "../components/layout/add-data/constants";
 import { proxyFeedRequestUrl } from "./feed-request";
 import { isTauri } from "./is-tauri";
 import { parseOgcFeaturesUrl } from "./ogc-api-features";
@@ -116,6 +117,7 @@ async function bytes(
           timeoutSecs: 120,
           maxBytes,
           accept,
+          discardErrorBody: true,
           context: "OGC API Coverages",
         }),
         signal,
@@ -130,15 +132,18 @@ async function bytes(
       if (result.byteLength > maxBytes) throw new CoverageError(limitCode);
       return { data: result, url: value.url };
     }
-    const fetchUrl = proxyFeedRequestUrl(url);
+    const fetchUrl = proxyFeedRequestUrl(url, OGC_COVERAGE_PROXY_PATH);
     const response = await fetch(fetchUrl, {
       signal,
       headers: { Accept: accept },
     });
-    // Read failures with the same cap as successes; an error body is not an
-    // excuse to buffer an unbounded service response.
+    // The protocol does not consume error bodies; cancel them and preserve
+    // the status even when a server sends an oversized error page.
+    if (!response.ok) {
+      void response.body?.cancel().catch(() => {});
+      throw new Error(`OGC API HTTP ${response.status}`);
+    }
     const result = await readLimitedBody(response, maxBytes);
-    if (!response.ok) throw new Error(`OGC API HTTP ${response.status}`);
     signal.throwIfAborted();
     return {
       data: result,

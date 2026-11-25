@@ -69,3 +69,20 @@ test("the native response wrapper remains compatible with older hosts without a 
   assert.equal(response.url, "https://example.org/coverage");
   assert.deepEqual(Array.from(response.body), [1, 2]);
 });
+
+test("native discovery preserves HTTP failure status even when the error body exceeds its cap", async () => {
+  Object.defineProperty(window, "__TAURI_INTERNALS__", {
+    configurable: true,
+    value: {
+      invoke: async (command: string, args: Record<string, unknown>) => {
+        assert.equal(command, "fetch_url_response");
+        assert.equal(args.discardErrorBody, true);
+        return { status: 503, final_url: args.url, content_type: "text/html", body: [] };
+      },
+    },
+  });
+  await assert.rejects(
+    discoverOgcCoverages("https://example.org/collections", new AbortController().signal),
+    /OGC API HTTP 503/,
+  );
+});

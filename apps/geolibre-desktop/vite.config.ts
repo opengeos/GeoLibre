@@ -565,6 +565,7 @@ const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
 const CSW_PROXY_PATH = "/__geolibre_csw_proxy";
 const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";
+const OGC_COVERAGE_PROXY_PATH = "/__geolibre_coverage_proxy";
 const CELESTRAK_PROXY_PATH = "/__geolibre_celestrak";
 const LAUNCH_LIBRARY_PROXY_PATH = "/launch-library/recent";
 const OPEN_SKY_PROXY_PATH = "/opensky/states";
@@ -870,6 +871,17 @@ function wmsProxyPlugin(): Plugin {
           res.statusCode = 502;
           res.setHeader("content-type", "text/plain");
           res.end(message);
+        }
+      });
+      server.middlewares.use(OGC_COVERAGE_PROXY_PATH, async (req, res) => {
+        try {
+          await proxyBinaryRequestGuarded(req, res, OGC_COVERAGE_PROXY_PATH, {
+            forwardAccept: true,
+          });
+        } catch {
+          res.statusCode = 502;
+          res.setHeader("content-type", "text/plain");
+          res.end("Coverage proxy request failed");
         }
       });
       server.middlewares.use(CELESTRAK_PROXY_PATH, async (req, res) => {

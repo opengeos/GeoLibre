@@ -202,3 +202,23 @@ test("normalizes wide and wrapped map views and requires splitting antimeridian 
   assert.throws(() => ogcCoverageViewBounds([0, 10, 0, 20]), { code: "bbox" });
   assert.throws(() => ogcCoverageViewBounds([NaN, 10, 20, 30]), { code: "bbox" });
 });
+
+test("reports HTTP failures without buffering an oversized error body", async () => {
+  let cancelled = false;
+  serve(
+    () =>
+      new Response(
+        new ReadableStream({
+          cancel() {
+            cancelled = true;
+          },
+        }),
+        { status: 503, headers: { "content-length": String(3 * 1024 * 1024) } },
+      ),
+  );
+  await assert.rejects(
+    discoverOgcCoverages("https://example.org/collections", new AbortController().signal),
+    /OGC API HTTP 503/,
+  );
+  assert.ok(cancelled);
+});
