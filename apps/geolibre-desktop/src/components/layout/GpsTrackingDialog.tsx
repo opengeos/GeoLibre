@@ -39,7 +39,6 @@ import {
   capturePointFeature,
   DEFAULT_GPS_SETTINGS,
   accuracyCircle,
-  fixFromPosition,
   fixMeetsAccuracy,
   formatAccuracy,
   formatDistance,
@@ -58,49 +57,29 @@ import {
   trackPreview,
   trackStats,
 } from "../../lib/gps-tracking";
-import { watchPosition } from "../../lib/geolocation";
 import { loadGpsTrackCheckpoint } from "../../lib/gps-wake-lock";
 import { useGpsBackgroundRecording } from "../../hooks/useGpsBackgroundRecording";
 import type { NmeaStreamStats } from "../../lib/nmea";
 import {
   androidBluetoothNmeaSupported,
   bluetoothNmeaSupported,
-  connectAndroidBluetoothNmea,
-  connectBluetoothNmea,
-  connectSerialNmea,
-  DEFAULT_NMEA_BAUD_RATE,
   NMEA_BAUD_RATES,
-  NmeaError,
   serialNmeaSupported,
-  type NmeaConnection,
   type PairedBluetoothDevice,
 } from "../../lib/nmea-source";
 import { saveTextFileWithFallback } from "../../lib/tauri-io";
-import { AndroidBluetoothControls, nmeaErrorText } from "./GpsBluetoothReceiverControls";
-import { NtripControls, useNtripCorrections } from "./GpsNtripControls";
+import { AndroidBluetoothControls } from "./GpsBluetoothReceiverControls";
+import { NtripControls } from "./GpsNtripControls";
 import { createGpsOverlay, type GpsOverlay } from "../../lib/gps-overlay";
 import { engineMarkerMap } from "../../lib/engine-style-map";
 import { createAnnotationMarker } from "@geolibre/plugins/annotation-marker";
 import { type AnnotationMarker } from "@geolibre/plugins";
-import { appendDiagnostic, formatUnknown, type DiagnosticLevel } from "../../lib/diagnostics";
-
-/**
- * Records a GPS failure in the diagnostics log. The dialog only shows the user
- * a short translated message, so the underlying error would otherwise be lost.
- *
- * @param message What failed, in English, for the diagnostics panel.
- * @param error The caught error.
- * @param level Severity; defaults to "error".
- */
-function logGpsFailure(message: string, error: unknown, level: DiagnosticLevel = "error"): void {
-  appendDiagnostic({
-    category: "runtime",
-    level,
-    message,
-    detail: formatUnknown(error),
-    source: "gps-tracking",
-  });
-}
+import { logGpsFailure } from "../../lib/gps-diagnostics";
+import {
+  useGpsPositionSource,
+  type PositionSource,
+  type NmeaTransport,
+} from "../../hooks/useGpsPositionSource";
 
 interface GpsTrackingDialogProps {
   open: boolean;
@@ -120,32 +99,6 @@ const GPS_COLOR = "#2563eb";
 const TRACK_COLOR = "#ef4444";
 
 const GPS_SETTINGS_STORAGE_KEY = "geolibre.gpsTracking.settings";
-/** Remembered baud rate, so reconnecting a receiver doesn't mean re-picking it. */
-const NMEA_BAUD_STORAGE_KEY = "geolibre.gpsTracking.nmeaBaudRate";
-
-/**
- * Where fixes come from: the device's own Geolocation API, or an external NMEA
- * 0183 receiver on a serial port or Bluetooth (issue #1617). Both feed the same
- * {@link GpsFix} pipeline, so tracking, recording, and export are identical.
- */
-type PositionSource = "device" | "nmea";
-
-/**
- * How an NMEA receiver is reached. See lib/nmea-source.ts for why each exists;
- * `android-bluetooth` is the native plugin the Android app uses (issue #3397).
- */
-type NmeaTransport = "serial" | "bluetooth" | "android-bluetooth";
-
-function loadStoredBaudRate(): number {
-  try {
-    const raw = Number(window.localStorage.getItem(NMEA_BAUD_STORAGE_KEY));
-    if ((NMEA_BAUD_RATES as readonly number[]).includes(raw)) return raw;
-  } catch {
-    // Corrupt or unavailable storage falls through to the default.
-  }
-  return DEFAULT_NMEA_BAUD_RATE;
-}
-
 const EMPTY_FC: FeatureCollection = {
   type: "FeatureCollection",
   features: [],
@@ -289,7 +242,6 @@ export function GpsTrackingDialog({
   const updateLayer = useAppStore((s) => s.updateLayer);
   const setGpsStatus = useAppStore((s) => s.setGpsStatus);
 
-  const [tracking, setTracking] = useState(false);
   const [follow, setFollow] = useState(true);
   const [recording, setRecording] = useState<RecordingState>("off");
   const [lastFix, setLastFix] = useState<GpsFix | null>(null);
@@ -298,31 +250,6 @@ export function GpsTrackingDialog({
   const [settings, setSettings] = useState<GpsTrackingSettings>(loadStoredSettings);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const [source, setSource] = useState<PositionSource>("device");
-  const [baudRate, setBaudRate] = useState<number>(loadStoredBaudRate);
-  /** Non-null exactly while an NMEA receiver is connected; holds its label. */
-  const [nmeaLabel, setNmeaLabel] = useState<string | null>(null);
-  const [nmeaStats, setNmeaStats] = useState<NmeaStreamStats | null>(null);
-  const [connecting, setConnecting] = useState<NmeaTransport | null>(null);
-  const nmeaConnRef = useRef<NmeaConnection | null>(null);
-  /**
-   * NTRIP corrections (issue #3400). Held here rather than in the dialog body
-   * because the dialog content unmounts when it closes while the receiver and
-   * its correction stream keep running.
-   */
-  const ntrip = useNtripCorrections(nmeaConnRef);
-  const { reset: resetNtrip, resumeFor: resumeNtripFor } = ntrip;
-  /** Whether the connected receiver's transport can take corrections. */
-  const [nmeaHasCorrections, setNmeaHasCorrections] = useState(false);
-  /**
-   * Bumped whenever an in-flight connect is superseded — by another connect, a
-   * source change, stopping, or unmount. A Bluetooth `gatt.connect()` can stay
-   * pending for seconds, and nothing stops the user abandoning it meanwhile, so
-   * a late success must close itself rather than silently reactivating a
-   * session the user believes is over (or leaking a port opened after unmount).
-   */
-  const connectGenerationRef = useRef(0);
 
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const markerArrowRef = useRef<HTMLDivElement | null>(null);
@@ -535,52 +462,30 @@ export function GpsTrackingDialog({
     [getMap, mapControllerRef, recenterOnFix, scheduleCheckpoint, setGpsStatus],
   );
 
+  const clearNotice = useCallback(() => setNotice(null), []);
+  const {
+    tracking,
+    source,
+    baudRate,
+    nmeaLabel,
+    nmeaStats,
+    connecting,
+    ntrip,
+    nmeaHasCorrections,
+    updateBaudRate,
+    changeSource,
+    canTrack,
+    handleStart,
+    handleStop,
+    connectNmea,
+    disconnectNmea,
+  } = useGpsPositionSource({ onFix: handleFix, onError: setError, onActivity: clearNotice });
+
   // The first fix of every tracking session zooms in, whichever source it came
   // from; later fixes only pan.
   useEffect(() => {
     if (tracking) zoomedRef.current = false;
   }, [tracking]);
-
-  // The watchPosition subscription follows `tracking`, and only runs for the
-  // device source — an NMEA receiver drives handleFix from its own stream
-  // instead. On Tauri mobile this routes through the native geolocation plugin
-  // (which requests the OS location permission first); elsewhere it wraps
-  // navigator.geolocation. Starting a native watch is async, so the effect
-  // tracks cancellation and unsubscribes once the watch resolves. See
-  // lib/geolocation.ts.
-  useEffect(() => {
-    if (!tracking || source !== "device") return;
-    let cancelled = false;
-    let unsubscribe: (() => void) | undefined;
-    watchPosition(
-      (pos) => handleFix(fixFromPosition(pos)),
-      (err) => {
-        if (err.permissionDenied) {
-          setError(t("gps.permissionDenied"));
-          setTracking(false);
-        } else {
-          // Transient (no signal / timeout): keep watching, tell the user.
-          setError(t("gps.waitingForFix"));
-        }
-      },
-      { enableHighAccuracy: true, maximumAge: 0 },
-    )
-      .then((unsub) => {
-        if (cancelled) unsub();
-        else unsubscribe = unsub;
-      })
-      .catch((err) => {
-        // A denied permission is the user's choice; anything else is a real
-        // failure hidden behind the generic "no geolocation" message.
-        if (!err?.permissionDenied) logGpsFailure("GPS: starting the position watch failed", err);
-        setError(t(err?.permissionDenied ? "gps.permissionDenied" : "gps.noGeolocation"));
-        setTracking(false);
-      });
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-    };
-  }, [tracking, source, handleFix, t]);
 
   // Map subscriptions while tracking. Manual panning turns follow mode off,
   // QGIS-style, so the map stays where the user dragged it instead of snapping
@@ -692,12 +597,6 @@ export function GpsTrackingDialog({
     () => () => {
       clearMapArtifacts();
       useAppStore.getState().setGpsStatus(null);
-      // Release the serial port / GATT server so a re-mount can reopen it, and
-      // mark any in-flight connect stale so one that resolves after this closes
-      // itself instead of leaking a device nothing will ever release.
-      connectGenerationRef.current += 1;
-      void nmeaConnRef.current?.close();
-      nmeaConnRef.current = null;
     },
     [clearMapArtifacts],
   );
@@ -709,174 +608,6 @@ export function GpsTrackingDialog({
       return next;
     });
   }, []);
-
-  /**
-   * Release the live connection and clear its readout, leaving the generation
-   * alone. Split from {@link disconnectNmea} so a connect attempt can close a
-   * previous connection without invalidating the generation it just claimed.
-   */
-  const closeNmea = useCallback(async () => {
-    const conn = nmeaConnRef.current;
-    nmeaConnRef.current = null;
-    setNmeaLabel(null);
-    setNmeaStats(null);
-    // Closing the receiver ends its correction session natively.
-    resetNtrip();
-    setNmeaHasCorrections(false);
-    try {
-      await conn?.close();
-    } catch (error) {
-      // A device that will not release cleanly (unplugged mid-close, GATT
-      // already gone) must not surface as an unhandled rejection from the
-      // `void disconnectNmea()` call sites. The readout is cleared regardless;
-      // keep a warning so a receiver that never releases can be diagnosed.
-      logGpsFailure("GPS: the NMEA receiver did not close cleanly", error, "warning");
-    }
-  }, [resetNtrip]);
-
-  /** Abandon any in-flight connect as well as closing the live connection. */
-  const disconnectNmea = useCallback(async () => {
-    connectGenerationRef.current += 1;
-    // Clearing the indicator belongs on the abandon path rather than in
-    // connectNmea's `finally`: an attempt abandoned by a source change or a
-    // stop is stale by the time it resolves, so that `finally` deliberately
-    // skips it, and the buttons would stay disabled showing "Connecting…" for
-    // the rest of the session.
-    setConnecting(null);
-    await closeNmea();
-  }, [closeNmea]);
-
-  /**
-   * Open an NMEA receiver and start tracking from it. Both transports show a
-   * browser device chooser, so this must run from a user gesture; a dismissed
-   * chooser is a deliberate "never mind" and is not surfaced as an error.
-   */
-  const connectNmea = useCallback(
-    async (transport: NmeaTransport, device?: PairedBluetoothDevice) => {
-      setError(null);
-      setNotice(null);
-      // Claim a generation synchronously, before the first await: closing the
-      // previous connection suspends, and two invocations that both captured
-      // afterwards would read the same value and both believe they are current.
-      const generation = ++connectGenerationRef.current;
-      const isStale = () => generation !== connectGenerationRef.current;
-      // Show the indicator before the first await, so there is no window in
-      // which an attempt is in flight but the buttons look idle — closing a
-      // live connection below can take real time. closeNmea deliberately does
-      // not clear it; only the abandon path (disconnectNmea) does.
-      setConnecting(transport);
-      // Closes the previous connection without invalidating the generation
-      // just claimed, and cannot reject (closeNmea swallows close failures).
-      await closeNmea();
-      if (isStale()) return;
-      try {
-        const handlers = {
-          // Both callbacks are generation-guarded: the transport starts reading
-          // before this function commits the connection, so a superseded
-          // attempt could otherwise re-create overlays teardown had cleared, or
-          // tear down a newer connection that replaced it.
-          onFix: (fix: GpsFix) => {
-            if (!isStale()) handleFix(fix);
-          },
-          // A dropped device or a read failure stops the session rather than
-          // leaving a stale position on the map.
-          onError: (err: NmeaError) => {
-            if (isStale()) return;
-            setError(nmeaErrorText(err, t));
-            setTracking(false);
-            void disconnectNmea();
-          },
-        };
-        let conn: NmeaConnection;
-        if (transport === "serial") conn = await connectSerialNmea({ baudRate }, handlers);
-        else if (transport === "android-bluetooth") {
-          // Never fall through to Web Bluetooth here: it does not exist in the
-          // Android WebView, so its error would misdescribe the failure.
-          if (!device) throw new NmeaError(t("gps.nmeaConnectFailed"));
-          conn = await connectAndroidBluetoothNmea(device, handlers);
-        } else conn = await connectBluetoothNmea(handlers);
-        if (isStale()) {
-          // The user moved on while the device was still opening: release it
-          // rather than resurrecting a session they already abandoned.
-          await conn.close();
-          return;
-        }
-        nmeaConnRef.current = conn;
-        setNmeaLabel(conn.label);
-        setNmeaStats(conn.stats());
-        setNmeaHasCorrections(conn.corrections != null);
-        setTracking(true);
-        // Corrections that were running when this receiver was last used
-        // come back on their own, as they do in a dedicated field app.
-        resumeNtripFor(conn);
-      } catch (err) {
-        if (isStale()) return;
-        if (err instanceof NmeaError) {
-          if (!err.cancelled) setError(nmeaErrorText(err, t));
-        } else {
-          setError(err instanceof Error ? err.message : t("gps.nmeaConnectFailed"));
-        }
-      } finally {
-        // A superseded attempt must not clear the newer attempt's indicator;
-        // one abandoned by a source change or a stop already had it reset by
-        // disconnectNmea itself.
-        if (!isStale()) setConnecting(null);
-      }
-    },
-    [baudRate, closeNmea, disconnectNmea, handleFix, resumeNtripFor, t],
-  );
-
-  // Poll the assembler's counters while connected so the readout shows the
-  // stream is alive even before the first usable fix arrives.
-  useEffect(() => {
-    if (!nmeaLabel) return;
-    const id = window.setInterval(() => {
-      setNmeaStats(nmeaConnRef.current?.stats() ?? null);
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [nmeaLabel]);
-
-  const updateBaudRate = useCallback((next: number) => {
-    setBaudRate(next);
-    try {
-      window.localStorage.setItem(NMEA_BAUD_STORAGE_KEY, String(next));
-    } catch {
-      // Best-effort persistence; the session keeps the in-memory value.
-    }
-  }, []);
-
-  /** Switching source ends the current session so no stale fixes linger. */
-  const changeSource = useCallback(
-    (next: PositionSource) => {
-      if (next === source) return;
-      setSource(next);
-      setTracking(false);
-      void disconnectNmea();
-      setError(null);
-      setNotice(null);
-    },
-    [source, disconnectNmea],
-  );
-
-  /**
-   * Whether anything can actually feed {@link handleFix} right now. The device
-   * watch starts on demand, but an NMEA receiver has to be connected first —
-   * otherwise starting a recording produces a session that silently logs
-   * nothing, reports no error, and hides the "connect a receiver" hint.
-   */
-  const canTrack = source === "device" || nmeaLabel != null;
-
-  const handleStart = useCallback(() => {
-    if (!canTrack) return;
-    setError(null);
-    setNotice(null);
-    setTracking(true);
-  }, [canTrack]);
-
-  const handleStop = useCallback(() => {
-    setTracking(false);
-    void disconnectNmea();
-  }, [disconnectNmea]);
 
   const clearTrack = useCallback(() => {
     fixesRef.current = [[]];

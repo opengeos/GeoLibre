@@ -11,7 +11,6 @@
   "apps/geolibre-desktop/src/components/layout/DesktopShell.tsx": 1284,
   "apps/geolibre-desktop/src/components/layout/FieldCollectionDialog.tsx": 1569,
   "apps/geolibre-desktop/src/components/layout/GeoreferencerDialog.tsx": 669,
-  "apps/geolibre-desktop/src/components/layout/GpsTrackingDialog.tsx": 1488,
   "apps/geolibre-desktop/src/components/layout/LoadFeaturesIntoEditorDialog.tsx": 665,
   "apps/geolibre-desktop/src/components/layout/ManagePluginsDialog.tsx": 1116,
   "apps/geolibre-desktop/src/components/layout/NetcdfCubeWindow.tsx": 663,

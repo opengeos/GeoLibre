@@ -1,10 +1,10 @@
 /**
  * The Android app's receiver picker for GPS Tracking (issue #3397), split out
- * of GpsTrackingDialog.tsx, plus the localized NMEA error text both share.
+ * of GpsTrackingDialog.tsx. Receiver errors use the shared NMEA formatter.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
+import { nmeaErrorText } from "../../lib/gps-nmea-errors";
 import { Button, Label, Select } from "@geolibre/ui";
 import { Bluetooth, RefreshCw } from "lucide-react";
 import { appendDiagnostic, formatUnknown } from "../../lib/diagnostics";
@@ -16,35 +16,6 @@ import {
 
 /** Remembered paired receiver in the Android app, preselected on the next visit. */
 const NMEA_BLUETOOTH_DEVICE_STORAGE_KEY = "geolibre.gpsTracking.bluetoothDevice";
-
-/**
- * Localized text for an {@link NmeaError}. Only the cases the UI can describe
- * better than the browser are translated; a `failed` error carries a message
- * relayed from the platform (a `DOMException` string, or a driver error), and
- * showing that is more useful than a generic localized sentence.
- */
-export function nmeaErrorText(err: NmeaError, t: TFunction): string {
-  switch (err.code) {
-    case "unavailable":
-      return t("gps.nmeaUnsupported");
-    case "unsupported-device":
-      return t("gps.nmeaUnsupportedDevice");
-    case "disconnected":
-      return t("gps.nmeaDisconnected");
-    case "bluetooth-off":
-      return t("gps.nmeaBluetoothOff");
-    case "permission-denied":
-      return t("gps.nmeaBluetoothPermissionDenied");
-    case "connect-failed":
-      return t("gps.nmeaBluetoothConnectFailed");
-    case "busy":
-      return t("gps.nmeaBluetoothBusy");
-    case "not-paired":
-      return t("gps.nmeaBluetoothNotPaired");
-    default:
-      return err.message;
-  }
-}
 
 function loadStoredBluetoothAddress(): string | null {
   try {
