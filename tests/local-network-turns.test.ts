@@ -389,6 +389,25 @@ describe("turn cost edge cases", () => {
     assert.ok(Math.abs((results[0].geojson.features[0].properties?.cost as number) - 200) < 0.01);
   });
 
+  it("accepts decimal text costs with leading or trailing decimal points", async () => {
+    for (const [text, penalty] of [
+      [".5", 0.5],
+      ["1.", 1],
+      [".5e2", 50],
+      [" +.5 ", 0.5],
+    ] as const) {
+      const table = layer("turns", [turn("a", "b", { penalty: text })]);
+      const { results } = await run(localShortestPathTool, [STREETS, S_TO_N, table], {
+        network: "streets",
+        stops: "stops",
+        ...TURN_TABLE,
+        turnCostField: "penalty",
+      });
+      const leg = results[0].geojson.features[0];
+      assert.ok(Math.abs((leg.properties?.cost as number) - (200 + penalty)) < 0.01, text);
+    }
+  });
+
   it("prohibits a turn whose cost cell is hexadecimal text", async () => {
     const table = layer("turns", [turn("a", "b", { penalty: "0x1A" })]);
     const { results } = await run(localShortestPathTool, [STREETS, S_TO_N, table], {
