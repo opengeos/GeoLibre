@@ -3591,7 +3591,7 @@ class Map(anywidget.AnyWidget):
             tiled: Use the service's validated public Web Mercator image cache
                 instead of its export endpoint. Cannot be combined with
                 sublayers or a rendering rule; raw LERC caches are refused.
-                Metadata reads are limited to 2 MiB with a 30-second network timeout.
+                Metadata reads are limited to 2 MiB with a 30-second socket inactivity timeout.
             sublayers: MapServer sublayer ids to show.
             rendering_rule: ImageServer rendering rule (dict or JSON string).
             max_features: Feature service cap on features loaded per view.

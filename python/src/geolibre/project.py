@@ -4627,7 +4627,7 @@ def arcgis_layer(
         tiled: Use a validated public map/image cache instead of dynamic export.
             Cannot be combined with sublayers or a rendering rule. Raw LERC
             caches are not supported by this raster authoring path. Metadata
-            reads have a 2 MiB size limit and a 30-second network timeout.
+            reads have a 2 MiB size limit and a 30-second socket inactivity timeout.
         sublayers: MapServer sublayer ids to show (``"0,2"`` or ``[0, 2]``).
         rendering_rule: ImageServer rendering rule, as a dict or JSON string
             (e.g. ``{"rasterFunction": "Hillshade"}``).
