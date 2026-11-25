@@ -168,6 +168,7 @@ kepler.gl, and Google Earth, see the [Comparison](comparison.md).
 
 - Attribute table
     - **Browsing**: filtering, sorting, resize controls, feature highlighting with Ctrl- and Shift-click multi-row selection, optional zoom to selected features, virtualized rows for large layers, a Refresh button that reloads features from a refreshable source so other clients' edits show up, and number columns right-aligned and rounded for display (raw values kept for sorting, editing, and export) with missing values shown as NULL
+    - **Edge lengths**: **Edit → Show edge lengths** labels each side of the selected polygons with its length, measured corner to corner on the ellipsoid, on the MapLibre and Mapbox maps. Labels are omitted when the selection exceeds 2,000 sides or 50,000 polygon ring positions; select fewer polygons or simplify dense geometry to see them
     - **Editing and derived fields**: add-field and field-calculator tools (including geometry length and area calculation), virtual fields (expression-backed computed columns that update with the data), persistent attribute joins configured in layer properties, and automatic editor tracking (created by/at and edited by/at)
     - **Forms**: an attribute form designer with edit widgets, validation constraints, and conditional field visibility
     - **Analysis**: a Charts panel (histogram, scatter, bar, line, box) and a field statistics summary panel, scoped to the whole layer or to just the selected features
@@ -187,6 +188,7 @@ kepler.gl, and Google Earth, see the [Comparison](comparison.md).
     - Add results to the map or export them
     - An in-browser PostGIS SQL engine via PGlite and an Apache Sedona spatial SQL engine
 - Multiple DuckDB SQL query-result layers with identify, selection, and attribute table support
+    - Python (`Map.add_sql_query_layer`) and the MCP server can author a query layer with an embedded result snapshot that **Refresh** re-runs against the project's other layers
 - **SQL Server write-back** in GeoLibre Desktop: save attribute and geometry edits, inserts, and deletions to the loaded table, scoped by its read baseline. Deleting every loaded feature preserves rows added outside that baseline.
     - Geometry type and SRID metadata use a sample of at most 1,000 rows; a failed probe remains
       unknown. Composite-primary-key tables are read-only. Non-null geometry inserts or changes
@@ -469,3 +471,4 @@ See the [Plugin API](plugin-api.md) to build your own.
     - The `NSLocationWhenInUseUsageDescription` string lives in a checked-in `Info.ios.plist` and covers Field Collection, GPS Tracking, and the GeoLocate control, so requesting location does not terminate the app
     - The same tools that need a local desktop process (Raster, Conversion, AI Segmentation, PostgreSQL/Martin) are hidden on iOS as they are on Android, since the iOS sandbox forbids spawning one; the WebAssembly geoprocessing toolbox stays available
 - Installable, offline-capable Progressive Web App (PWA) build, plus a **Download Offline Area** tool that pre-caches the current map view's basemap tiles, and service-worker caching of the CDN-loaded Pyodide and PGlite/PostGIS engines so browser SQL and Python keep working offline after first use
+- Native offline basemap packages: the desktop and mobile apps save extracted or opened PMTiles, and areas extracted from a local MBTiles file, into app-managed storage that survives a restart, with verify, rename, export, and delete. See [Native offline packages](native-offline-packages.md)
