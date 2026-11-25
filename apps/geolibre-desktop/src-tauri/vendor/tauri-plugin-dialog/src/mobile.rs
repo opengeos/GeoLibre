@@ -56,7 +56,16 @@ struct SaveFileResponse {
 
 // The callback-only Rust picker interface cannot carry an error. The JS open
 // command uses this result-bearing path for explicit data copies instead.
-pub(crate) fn pick_data_files<R: Runtime>(
+pub(crate) async fn pick_data_files<R: Runtime>(
+    dialog: FileDialogBuilder<R>,
+    multiple: bool,
+) -> crate::Result<Option<Vec<FilePath>>> {
+    // Both the synchronous mobile bridge and streaming/fsync must stay off the
+    // async runtime worker, including time waiting for the user or import lock.
+    tauri::async_runtime::spawn_blocking(move || pick_data_files_blocking(dialog, multiple)).await?
+}
+
+fn pick_data_files_blocking<R: Runtime>(
     dialog: FileDialogBuilder<R>,
     multiple: bool,
 ) -> crate::Result<Option<Vec<FilePath>>> {
@@ -71,7 +80,10 @@ pub(crate) fn pick_data_files<R: Runtime>(
         )?
         .into_result()?;
     #[cfg(target_os = "ios")]
-    if let Some(files) = selected {
+    {
+        let Some(files) = selected else {
+            return Ok(None);
+        };
         use tauri::Manager;
         let sources = files
             .into_iter()
@@ -84,8 +96,6 @@ pub(crate) fn pick_data_files<R: Runtime>(
         return crate::ios_data_copy::persist_selection(&root, &sources)
             .map(|paths| Some(paths.into_iter().map(FilePath::Path).collect()))
             .map_err(Into::into);
-    } else {
-        return Ok(None);
     }
     #[cfg(not(target_os = "ios"))]
     Ok(selected)

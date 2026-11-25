@@ -93,14 +93,23 @@ to the local paths used by GeoLibre's readers:
   identity because a UIKit temporary URL is not an original provider identity.
   Ordinary scoped picks use the existing upstream flow. Physical iOS device
   verification remains outstanding.
+- The result-bearing mobile bridge and copy transaction run on a blocking worker,
+  including waits for the picker and the import lock, rather than occupying an
+  async runtime worker for the duration of a large import.
+- The iOS startup command inventories published UUID/data folders and restores
+  file and asset grants for their regular files, excluding stages and symlinks.
+  It returns the current trusted root so project and library hydration can rebase
+  saved references after iOS moves the app container. Edited files remain eligible;
+  the source fingerprint records import provenance rather than forbidding edits.
 
 `android/src/test/java/DocumentCopyBatchTest.kt` checks streaming, fingerprints,
 companion placement, rollback, unsafe names and collision handling. The Rust
 `geolibre_copy_tests` cover copy-mode file URLs and unchanged source URIs.
-The Rust check job also runs `tests/native-document-copy`, which imports the
+The local `npm run check:rust` gate and its CI job run `tests/native-document-copy`, which imports the
 production iOS copy store and executes its unit tests on Linux without UIKit.
-The iOS workflow compiles and executes the real picker policy
-against its standalone scenarios before building the app.
+The PR-time **iOS picker policy** job and the iOS build workflow both compile and
+execute the real picker policy through `scripts/test-ios-picker-policy.sh`.
+Developers with Swift installed can run `npm run test:ios-picker-policy` locally.
 
 Known limitation: every document pick persists, data files as well as
 projects, so after more distinct picks than the cap the least recently picked

@@ -7,6 +7,7 @@ mod fs_util;
 mod http_client;
 mod in_flight;
 mod local_media_protocol;
+mod native_document_copies;
 mod offline_extraction_jobs;
 mod offline_mbtiles;
 mod offline_package_commands;
@@ -700,6 +701,7 @@ pub fn run() {
             read_allowed_file,
             read_env_vars,
             take_pending_project_paths,
+            native_document_copies::initialize_native_document_copies,
             allow_raster_asset,
             sandbox_hidden_drop_paths,
             read_local_file,

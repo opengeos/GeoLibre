@@ -142,6 +142,22 @@ const nativeShareAuthReady = isDesktopRuntime()
   : Promise.resolve();
 const nativeCoordinateOpenReady = initializeNativeCoordinateOpen();
 const nativeProjectOpenReady = initializeNativeProjectOpen();
+const nativeDocumentCopiesReady = isTauri()
+  ? import("./lib/native-document-copies")
+      .then(({ initializeNativeDocumentCopies }) => initializeNativeDocumentCopies())
+      .then(async (problems) => {
+        if (problems.length > 0) {
+          console.error("[GeoLibre] Some retained imports are unavailable", problems);
+          await i18nReady;
+          notify.error(i18n.t("notifications.nativeDocumentCopiesFailed"));
+        }
+      })
+      .catch(async (error: unknown) => {
+        console.error("[GeoLibre] Failed to restore retained imports", error);
+        await i18nReady;
+        notify.error(i18n.t("notifications.nativeDocumentCopiesFailed"));
+      })
+  : Promise.resolve();
 const nativeOfflinePackagesReady = isTauri()
   ? import("./lib/native-offline-packages")
       .then(({ initializeNativeOfflinePackages }) => initializeNativeOfflinePackages())
@@ -460,6 +476,7 @@ void Promise.all([
   // whether to restore a configured startup project or the default workspace.
   nativeProjectOpenReady,
   nativeOfflinePackagesReady,
+  nativeDocumentCopiesReady,
   nativeCoordinateOpenReady,
   // Gate the first render on i18next being initialized with the active locale's
   // (lazily loaded) catalog, so the UI never paints raw translation keys.

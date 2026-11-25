@@ -16,6 +16,7 @@ import {
   type PrintLayoutConfig,
 } from "../print-layout-config";
 import { reapplyLayerJoins } from "../joins";
+import { rebaseImportedDocumentLayer } from "../imported-document-paths";
 import { gateRegionalBasemap } from "../regional-basemaps";
 import {
   DEFAULT_BASEMAP,
@@ -59,6 +60,9 @@ function normalizeRecentProjects(projects: RecentProjectEntry[]): RecentProjectE
 }
 
 export interface ProjectSlice {
+  /** Current native copy root, installed before startup loads; never serialized. */
+  nativeDocumentCopyRoot: string | null;
+  setNativeDocumentCopyRoot: (root: string | null) => void;
   projectName: string;
   projectPath: string | null;
   projectGeneration: number;
@@ -123,6 +127,8 @@ export interface ProjectSlice {
 }
 
 export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
+  nativeDocumentCopyRoot: null,
+  setNativeDocumentCopyRoot: (root) => set({ nativeDocumentCopyRoot: root }),
   projectName: DEFAULT_PROJECT_NAME,
   projectPath: null,
   projectGeneration: 0,
@@ -176,6 +182,9 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
       ...(options.layerGroups ? { layerGroups: options.layerGroups } : {}),
     };
     const applied = applyProjectToStore(project);
+    applied.layers = applied.layers.map((layer) =>
+      rebaseImportedDocumentLayer(layer, get().nativeDocumentCopyRoot),
+    );
     // A new project's basemap is the user's own pick in the New Project dialog,
     // so only a deployment block replaces it.
     applied.basemapStyleUrl = gateRegionalBasemap(
@@ -235,6 +244,9 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
 
   loadProject: (project, path = null, options = {}) => {
     const applied = applyProjectToStore(project);
+    applied.layers = applied.layers.map((layer) =>
+      rebaseImportedDocumentLayer(layer, get().nativeDocumentCopyRoot),
+    );
     // Re-resolve persistent attribute joins against the loaded layer set,
     // so joined columns reflect the join tables as saved (and a stale
     // saved copy of the joined output self-heals).

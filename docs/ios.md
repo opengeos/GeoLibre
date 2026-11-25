@@ -504,6 +504,13 @@ the original provider document. Published copies remain until the app's stored
 data is removed; closing a project or removing a layer does not delete them.
 Project exports do not bundle these local files.
 
+At startup, GeoLibre resolves the current sandbox location and restores file
+access only for regular files in published import folders. Saved project and
+library references retain their selection identity and filename but are rebased
+to that current location before readers see them, since iOS can change the
+container prefix during an app update. Local edits remain readable; the original
+import fingerprint is a provenance record rather than a read-time integrity gate.
+
 The copy store and path handling have automated tests. Real iOS device checks
 for picking, rendering, offline restart, and provider cancellation remain
 outstanding. Open-in-place project URLs use their separate scoped access flow.

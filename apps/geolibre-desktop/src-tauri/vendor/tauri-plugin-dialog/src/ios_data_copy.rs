@@ -113,22 +113,12 @@ fn copy_file(source: &Path, destination: &Path) -> io::Result<(u64, String)> {
     Ok((bytes, sha256))
 }
 
-/// Persist a complete UIKit import selection and return only published paths.
-///
-/// Each pick gets a separate identity: UIKit's temporary URLs do not identify
-/// the original provider document reliably enough to deduplicate selections.
-pub(crate) fn persist_selection(root: &Path, sources: &[PathBuf]) -> io::Result<Vec<PathBuf>> {
-    if sources.is_empty() {
-        return Err(io::Error::other("The picker returned no documents"));
-    }
+fn prepare_root(root: &Path) -> io::Result<(PathBuf, Vec<PathBuf>)> {
     if !root.is_absolute() {
         return Err(io::Error::other(
             "Document storage must be an absolute path",
         ));
     }
-    let _lock = COPY_LOCK
-        .lock()
-        .map_err(|_| io::Error::other("Document import lock is unavailable"))?;
     // Synchronize newly created storage ancestors too on the first import.
     let mut storage_parents = Vec::new();
     let mut parent = root.parent();
@@ -146,7 +136,84 @@ pub(crate) fn persist_selection(root: &Path, sources: &[PathBuf]) -> io::Result<
     if !fs::symlink_metadata(root)?.file_type().is_dir() {
         return Err(io::Error::other("Document storage is not a directory"));
     }
-    let root = fs::canonicalize(root)?;
+    Ok((fs::canonicalize(root)?, storage_parents))
+}
+
+/// Inventory only published regular data files for reauthorization at startup.
+/// Stages, symlinks, manifests, and unrelated directories never enter the scope.
+pub fn retained_document_files(root: &Path) -> io::Result<(Vec<PathBuf>, Vec<String>)> {
+    let _lock = COPY_LOCK
+        .lock()
+        .map_err(|_| io::Error::other("Document import lock is unavailable"))?;
+    let (root, parents) = prepare_root(root)?;
+    let mut files = Vec::new();
+    let mut problems = Vec::new();
+    for entry in fs::read_dir(&root)? {
+        let inspect = || -> io::Result<()> {
+            let entry = entry?;
+            if !entry.file_type()?.is_dir()
+                || Uuid::parse_str(&entry.file_name().to_string_lossy()).is_err()
+            {
+                return Ok(());
+            }
+            let directory = entry.path();
+            let manifest = directory.join("source.json");
+            let data = directory.join("data");
+            let ordinary = |path: &Path, directory: bool| -> io::Result<bool> {
+                match fs::symlink_metadata(path) {
+                    Ok(metadata) => Ok(if directory {
+                        metadata.is_dir()
+                    } else {
+                        metadata.is_file()
+                    }),
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+                    Err(error) => Err(error),
+                }
+            };
+            if !ordinary(&manifest, false)? || !ordinary(&data, true)? {
+                return Ok(());
+            }
+            let canonical_data = fs::canonicalize(&data)?;
+            if !canonical_data.starts_with(&root) {
+                return Ok(());
+            }
+            for file in fs::read_dir(&data)? {
+                let file = file?;
+                if !file.file_type()?.is_file() {
+                    continue;
+                }
+                let path = file.path();
+                if !safe_name(&path).is_ok_and(|name| name == file.file_name().to_string_lossy()) {
+                    continue;
+                }
+                let canonical = fs::canonicalize(&path)?;
+                if canonical.parent() == Some(canonical_data.as_path()) {
+                    files.push(canonical);
+                }
+            }
+            Ok(())
+        };
+        if let Err(error) = inspect() {
+            problems.push(error.to_string());
+        }
+    }
+    sync_directory(&root)?;
+    parents.iter().try_for_each(|path| sync_directory(path))?;
+    Ok((files, problems))
+}
+
+/// Persist a complete UIKit import selection and return only published paths.
+///
+/// Each pick gets a separate identity: UIKit's temporary URLs do not identify
+/// the original provider document reliably enough to deduplicate selections.
+pub(crate) fn persist_selection(root: &Path, sources: &[PathBuf]) -> io::Result<Vec<PathBuf>> {
+    if sources.is_empty() {
+        return Err(io::Error::other("The picker returned no documents"));
+    }
+    let _lock = COPY_LOCK
+        .lock()
+        .map_err(|_| io::Error::other("Document import lock is unavailable"))?;
+    let (root, storage_parents) = prepare_root(root)?;
     recover_stages(&root)?;
     let id = Uuid::new_v4().to_string();
     let stage_path = root.join(format!(".pending-{id}"));
@@ -326,6 +393,64 @@ mod tests {
         let fixture = Fixture::new();
         assert!(persist_selection(&fixture.root(), &[]).is_err());
         assert!(!fixture.root().exists());
+    }
+
+    #[test]
+    fn inventories_retained_data_after_the_container_moves() {
+        let fixture = Fixture::new();
+        let old = fixture.0.join("old-container");
+        let root = old.join("Library/Application Support/org.geolibre.app/picked-documents");
+        let source = fixture.source("roads.geojson", b"original");
+        let copies = persist_selection(&root, &[source]).unwrap();
+        fs::write(&copies[0], b"local edits").unwrap();
+        let new = fixture.0.join("new-container");
+        fs::rename(&old, &new).unwrap();
+        let current = new.join("Library/Application Support/org.geolibre.app/picked-documents");
+        let (files, problems) = retained_document_files(&current).unwrap();
+        assert!(problems.is_empty());
+        assert_eq!(files.len(), 1);
+        assert!(files[0].starts_with(&current));
+        assert_eq!(fs::read(&files[0]).unwrap(), b"local edits");
+        assert!(!copies[0].exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_selection_does_not_hide_healthy_imports() {
+        use std::os::unix::fs::PermissionsExt;
+        let fixture = Fixture::new();
+        let source = fixture.source("roads.geojson", b"data");
+        let broken = persist_selection(&fixture.root(), &[source.clone()]).unwrap();
+        let healthy = persist_selection(&fixture.root(), &[source]).unwrap();
+        let directory = broken[0].parent().unwrap();
+        let permissions = fs::metadata(directory).unwrap().permissions();
+        fs::set_permissions(directory, fs::Permissions::from_mode(0)).unwrap();
+        let unreadable = fs::read_dir(directory).is_err();
+        let result = retained_document_files(&fixture.root());
+        fs::set_permissions(directory, permissions).unwrap();
+        let (files, problems) = result.unwrap();
+        assert!(files.contains(&healthy[0]));
+        if unreadable {
+            assert!(!files.contains(&broken[0]));
+            assert_eq!(problems.len(), 1);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn inventory_excludes_stages_and_links_outside_published_data() {
+        use std::os::unix::fs::symlink;
+        let fixture = Fixture::new();
+        let source = fixture.source("roads.geojson", b"data");
+        let copies = persist_selection(&fixture.root(), &[source.clone()]).unwrap();
+        symlink(&source, copies[0].parent().unwrap().join("outside.geojson")).unwrap();
+        let stage = fixture.root().join(format!(".pending-{}", Uuid::new_v4()));
+        fs::create_dir_all(stage.join("data")).unwrap();
+        fs::write(stage.join("data/staged.geojson"), b"partial").unwrap();
+        let (files, problems) = retained_document_files(&fixture.root()).unwrap();
+        assert!(problems.is_empty());
+        assert_eq!(files, copies);
+        assert!(stage.exists());
     }
 
     #[cfg(unix)]
