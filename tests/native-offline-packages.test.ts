@@ -4,6 +4,8 @@ import { afterEach, it } from "node:test";
 import { mockIPC, clearMocks } from "@tauri-apps/api/mocks";
 
 const {
+  assertNativeOfflinePackageSize,
+  MAX_NATIVE_OFFLINE_PACKAGE_BYTES,
   listSavedOfflineBasemaps,
   saveNativeOfflinePackage,
   renameSavedOfflineBasemap,
@@ -219,4 +221,32 @@ it("initializes lightweight package styles while reporting unavailable entries",
   });
   assert.equal(await initializeNativeOfflinePackages(), 1);
   assert.deepEqual(calls, ["list_native_offline_packages"]);
+});
+
+it("rejects oversized native plans and payloads before binary IPC", async () => {
+  assert.doesNotThrow(() => assertNativeOfflinePackageSize(MAX_NATIVE_OFFLINE_PACKAGE_BYTES));
+  assert.throws(
+    () => assertNativeOfflinePackageSize(MAX_NATIVE_OFFLINE_PACKAGE_BYTES + 1),
+    /512 MiB/,
+  );
+  let called = false;
+  mockIPC(() => {
+    called = true;
+    throw new Error("Oversized bytes reached IPC");
+  });
+  // A view over untouched virtual memory needs no download or copied payload.
+  const oversized = new Uint8Array(MAX_NATIVE_OFFLINE_PACKAGE_BYTES + 1);
+  await assert.rejects(
+    saveNativeOfflinePackage(oversized, {
+      name: entry.name,
+      bbox: entry.bbox,
+      minZoom: 0,
+      maxZoom: 8,
+      flavor: "light",
+      tileType: "vector",
+      archiveFormat: "pmtiles",
+    }),
+    /512 MiB/,
+  );
+  assert.equal(called, false);
 });

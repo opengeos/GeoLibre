@@ -1,4 +1,4 @@
-import { DEFAULT_BASEMAP, useAppStore } from "@geolibre/core";
+import { DEFAULT_BASEMAP, reserveLayerSourceRemoval, useAppStore } from "@geolibre/core";
 import {
   buildProtomapsBasemapStyle,
   createPMTilesStoreLayer,
@@ -49,6 +49,7 @@ import {
   upsertOfflineBasemap,
 } from "../../lib/offline-basemaps";
 import {
+  assertNativeOfflinePackageSize,
   deleteSavedOfflineBasemap,
   forgetNativeOfflinePackage,
   listSavedOfflineBasemaps,
@@ -357,19 +358,15 @@ export function BasemapExtractPanel({
 
   const handleDeleteSaved = useCallback(
     async (entry: OfflineBasemap) => {
-      if (entry.managed) {
-        if (
-          useAppStore
-            .getState()
-            .layers.some((layer) => referencesNativeOfflinePackage(layer, entry.id))
-        ) {
-          setError(t("basemapExtract.errorPackageInUse"));
-          return;
-        }
-      }
+      let release: (() => void) | undefined;
       try {
-        await deleteSavedOfflineBasemap(entry);
+        if (entry.managed)
+          release = reserveLayerSourceRemoval(
+            (layer) => referencesNativeOfflinePackage(layer, entry.id),
+            t("basemapExtract.errorPackageInUse"),
+          );
         if (isLiveOfflineBasemap(entry.id)) setBasemapStyleUrl(DEFAULT_BASEMAP);
+        await deleteSavedOfflineBasemap(entry);
         forgetStyledBasemap(entry.id);
         evictOfflineBasemapStyle(entry.id);
         await refreshSavedBasemaps();
@@ -386,6 +383,8 @@ export function BasemapExtractPanel({
           evictOfflineBasemapStyle(entry.id);
           setConfirmDeleteId(null);
         }
+      } finally {
+        release?.();
       }
     },
     [isLiveOfflineBasemap, refreshSavedBasemaps, setBasemapStyleUrl, t],
@@ -688,6 +687,7 @@ export function BasemapExtractPanel({
         signal: controller.signal,
         onProgress: setProgress,
         confirmDownload: (plan) => {
+          if (isTauri()) assertNativeOfflinePackageSize(plan.estimatedOutputBytes);
           if (plan.estimatedOutputBytes < CONFIRM_BYTES) return true;
           return new Promise<boolean>((resolve) => {
             setPendingPlan({ progress: plan, resolve });
@@ -1085,7 +1085,7 @@ export function BasemapExtractPanel({
       });
       setSuccess(t("basemapExtract.successBasemapApplied"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (request.isCurrent()) setError(err instanceof Error ? err.message : String(err));
     } finally {
       setOpening(false);
     }

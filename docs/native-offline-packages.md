@@ -64,3 +64,16 @@ real iOS device verification remains outstanding. Native MBTiles loading is
 available through Add data, but MBTiles extraction and managed package import
 from this panel remain separate follow-up work. Offline edit queues and
 conflict-aware synchronization are also tracked in #3530.
+
+While a managed package is being deleted, project loads, imports, and history
+restores that would add an overlay reference to it fail before changing the
+project. Unrelated project changes remain available. Retry the conflicting
+operation after deletion settles.
+
+Native extraction refuses plans estimated above 512 MiB before fetching tile
+payloads, and the final byte length is checked again before binary IPC. Native
+storage enforces the same limit. Deleting the live package switches to the
+default basemap before file removal; a failed deletion leaves that fallback
+selected and reports the error. A final validation failure after publication
+can leave a package in the catalog even though the operation reports failure;
+reopen the saved list to inspect and verify it before use.

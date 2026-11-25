@@ -39,6 +39,13 @@ type PackageDetails = Pick<
   archiveFormat: "pmtiles" | "mbtiles";
 };
 
+/** Must match the native store's archive limit; check plans before tile fetches. */
+export const MAX_NATIVE_OFFLINE_PACKAGE_BYTES = 512 * 1024 * 1024;
+
+export function assertNativeOfflinePackageSize(bytes: number): void {
+  if (bytes > MAX_NATIVE_OFFLINE_PACKAGE_BYTES) throw new Error("Offline package exceeds 512 MiB");
+}
+
 const packageMutations = new Map<string, Promise<unknown>>();
 const packageArchiveKeys = new Map<string, string>();
 
@@ -91,6 +98,8 @@ export function saveNativeOfflinePackage(
   bytes: Uint8Array,
   details: PackageDetails,
 ): Promise<NativeOfflinePackage> {
+  if (bytes.byteLength > MAX_NATIVE_OFFLINE_PACKAGE_BYTES)
+    return Promise.reject(new Error("Offline package exceeds 512 MiB"));
   return invoke<NativeOfflinePackage>("save_native_offline_package", bytes, {
     // Initial names come from provider paths/URLs. Preserve Unicode code points
     // while staying within the native 512-byte name limit.

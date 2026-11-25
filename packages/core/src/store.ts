@@ -18,6 +18,11 @@ import type { AppPrivilege } from "./types";
 import { createCapabilitiesSlice } from "./store/capabilities-slice";
 import { createCollaborationSlice } from "./store/collaboration-slice";
 import { createLayerGroupsSlice } from "./store/layer-groups-slice";
+import {
+  assertLayerRemovalSafe,
+  guardLayerRemovals,
+  reserveLayerRemoval,
+} from "./store/layer-removal-guard";
 import { createLayersSlice } from "./store/layers-slice";
 import { createLibrariesSlice } from "./store/libraries-slice";
 import { createMapViewSlice } from "./store/map-view-slice";
@@ -61,23 +66,48 @@ export {
 } from "./store/undo-history";
 
 export const useAppStore = create<AppState>()(
-  temporal(
-    (set, get) => ({
-      ...createProjectSlice(set, get),
-      ...createMapViewSlice(set, get),
-      ...createLayersSlice(set, get),
-      ...createLayerGroupsSlice(set, get),
-      ...createProjectContentSlice(set, get),
-      ...createProcessingSlice(set, get),
-      ...createLibrariesSlice(set, get),
-      ...createSessionSlice(set, get),
-      ...createCollaborationSlice(set, get),
-      ...createCapabilitiesSlice(set, get),
-      ...createUiSlice(set, get),
-    }),
-    createHistoryOptions(),
+  guardLayerRemovals(
+    temporal(
+      (set, get) => ({
+        ...createProjectSlice(set, get),
+        ...createMapViewSlice(set, get),
+        ...createLayersSlice(set, get),
+        ...createLayerGroupsSlice(set, get),
+        ...createProjectContentSlice(set, get),
+        ...createProcessingSlice(set, get),
+        ...createLibrariesSlice(set, get),
+        ...createSessionSlice(set, get),
+        ...createCollaborationSlice(set, get),
+        ...createCapabilitiesSlice(set, get),
+        ...createUiSlice(set, get),
+      }),
+      createHistoryOptions(),
+    ),
   ),
 );
+
+/** Reserve an unreferenced layer source until an asynchronous removal settles. */
+export function reserveLayerSourceRemoval(
+  references: Parameters<typeof reserveLayerRemoval>[1],
+  message: string,
+): () => void {
+  return reserveLayerRemoval(useAppStore.getState().layers, references, message);
+}
+
+// zundo consumes its history array before applying a restore. Preflight the
+// target so a rejected restore leaves both the project and history intact.
+for (const action of ["undo", "redo"] as const) {
+  const original = useAppStore.temporal.getState()[action];
+  useAppStore.temporal.setState({
+    [action]: (steps = 1) => {
+      const history = useAppStore.temporal.getState();
+      const states = action === "undo" ? history.pastStates : history.futureStates;
+      const target = states.slice(-steps)[0];
+      if (target?.layers) assertLayerRemovalSafe(target.layers);
+      original(steps);
+    },
+  });
+}
 
 bindHistoryStore(useAppStore);
 
