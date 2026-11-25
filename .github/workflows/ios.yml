@@ -605,8 +605,8 @@ jobs:
           # the SDK the shipped binary was actually built against, the value
           # App Store Connect reads for ITMS-90725 (iOS 27 SDK from April 2027).
           sdk="$(/usr/libexec/PlistBuddy -c 'Print :DTSDKName' "$plist")"
-          sdk_major="$(printf '%s' "$sdk" | sed -E 's/^iphoneos([0-9]+).*/\1/')"
-          if ! printf '%s' "$sdk_major" | grep -qE '^[0-9]+$' || [ "$sdk_major" -lt 27 ]; then
+          if ! [[ "$sdk" =~ ^iphoneos([0-9]+)(\.[0-9]+)*$ ]] ||
+             ! [ "${BASH_REMATCH[1]}" -ge 27 ]; then
             echo "::error::$ipa was built against '$sdk'; App Store Connect requires the iOS 27 SDK or later (ITMS-90725)"
             exit 1
           fi
