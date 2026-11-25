@@ -20,6 +20,7 @@ import uuid
 import warnings
 import zlib
 from decimal import Decimal
+from http.client import HTTPException
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.error import URLError
@@ -4542,11 +4543,15 @@ def _load_arcgis_cached_source(service_url: str) -> dict[str, Any]:
     try:
         with _GEOJSON_OPENER.open(url, timeout=30) as response:  # noqa: S310 - public URL checked
             raw = response.read(limit + 1)
-    except (URLError, TimeoutError) as exc:
+    except (OSError, HTTPException) as exc:
         raise ValueError("Could not load ArcGIS cache metadata") from exc
     if len(raw) > limit:
         raise ValueError("ArcGIS cache metadata exceeds the 2 MiB size limit")
-    return cached_arcgis_source(json.loads(raw.decode("utf-8")), service_url)
+    try:
+        info = json.loads(raw.decode("utf-8"))
+    except RecursionError as exc:
+        raise ValueError("ArcGIS cache metadata is too deeply nested") from exc
+    return cached_arcgis_source(info, service_url)
 
 
 def _arcgis_export_tile_url(
@@ -4716,17 +4721,18 @@ def arcgis_layer(
             raise ValueError("rendering_rule must be a JSON object")
     image = service == "image"
     layer = _layer_base(name, "raster", **style)
-    raster_source: dict[str, Any] = {
-        "type": "raster",
-        "tiles": [
-            _arcgis_export_tile_url(
-                service_url, image=image, sublayers=sublayer_text, rendering_rule=rule_text
-            )
-        ],
-        "tileSize": _ARCGIS_EXPORT_TILE_SIZE,
-    }
     if tiled:
         raster_source = _load_arcgis_cached_source(service_url)
+    else:
+        raster_source = {
+            "type": "raster",
+            "tiles": [
+                _arcgis_export_tile_url(
+                    service_url, image=image, sublayers=sublayer_text, rendering_rule=rule_text
+                )
+            ],
+            "tileSize": _ARCGIS_EXPORT_TILE_SIZE,
+        }
     if resolved_bounds is not None:
         raster_source["bounds"] = resolved_bounds
     if attribution:

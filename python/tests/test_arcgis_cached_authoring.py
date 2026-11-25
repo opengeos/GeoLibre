@@ -4,6 +4,8 @@ import asyncio
 import copy
 import io
 import json
+import ssl
+from http.client import IncompleteRead
 
 import pytest
 
@@ -124,6 +126,7 @@ def test_mcp_cached_service_preserves_project_on_refusal(cache_metadata, tmp_pat
         cache_metadata: The service metadata transport fixture.
         tmp_path: Temporary workspace root for the actual MCP tools.
     """
+    pytest.importorskip("mcp", reason="the mcp SDK is an optional extra")
     from mcp.server.mcpserver.exceptions import ToolError
 
     from geolibre.mcp.server import build_server
@@ -182,7 +185,14 @@ def test_cached_service_uses_the_public_url_guard(cache_metadata, monkeypatch):
     assert cache_metadata[1] == []
 
 
-@pytest.mark.parametrize("body", [b"x" * (2 * 1024 * 1024 + 1), b"not JSON", b'{"error":{}}'])
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"x" * (2 * 1024 * 1024 + 1),
+        b"not JSON",
+        b'{"error":{}}',
+    ],
+)
 def test_bad_metadata_never_creates_a_project_layer(cache_metadata, monkeypatch, body):
     """Bound metadata reads and refuse error or malformed service responses.
 
@@ -196,3 +206,50 @@ def test_bad_metadata_never_creates_a_project_layer(cache_metadata, monkeypatch,
     )
     with pytest.raises(ValueError):
         project_api.arcgis_layer("Invalid", "https://example.org/A/MapServer", tiled=True)
+
+
+@pytest.mark.parametrize(
+    "error", [ConnectionResetError("reset"), ssl.SSLError("TLS"), IncompleteRead(b"partial", 100)]
+)
+def test_interrupted_metadata_read_uses_the_documented_error(cache_metadata, monkeypatch, error):
+    """Normalize failures that arise after a metadata response has opened.
+
+    Args:
+        cache_metadata: The fixture disabling actual network access.
+        monkeypatch: Pytest fixture for replacing the response reader.
+        error: A stream reset, TLS failure or incomplete response.
+    """
+
+    class Response(io.BytesIO):
+        """A response whose stream fails after the connection opens."""
+
+        def read(self, size=-1):
+            """Raise the interrupted-read error for this response.
+
+            Args:
+                size: The requested bounded read length.
+
+            Raises:
+                OSError: For a reset or TLS failure.
+                IncompleteRead: For an incomplete HTTP response.
+            """
+            raise error
+
+    monkeypatch.setattr(project_api._GEOJSON_OPENER, "open", lambda *_args, **_kwargs: Response())
+    with pytest.raises(ValueError, match="Could not load ArcGIS cache metadata"):
+        project_api.arcgis_layer("Interrupted", "https://example.org/A/MapServer", tiled=True)
+
+
+def test_deeply_nested_metadata_uses_the_documented_error(cache_metadata, monkeypatch):
+    """Refuse deep JSON as invalid service metadata within the byte limit.
+
+    Args:
+        cache_metadata: The fixture disabling actual network access.
+        monkeypatch: Pytest fixture for returning the nested JSON response.
+    """
+    body = b"[" * 20000 + b"0" + b"]" * 20000
+    monkeypatch.setattr(
+        project_api._GEOJSON_OPENER, "open", lambda *_args, **_kwargs: io.BytesIO(body)
+    )
+    with pytest.raises(ValueError, match="too deeply nested"):
+        project_api.arcgis_layer("Nested", "https://example.org/A/MapServer", tiled=True)
