@@ -69,7 +69,7 @@ layer's actions menu):
 | **Select by Location...** | Select features that intersect, are within, contain, or are disjoint from the features of another layer. |
 | **Invert Selection** / **Clear Selection** | Flip or empty the selection. |
 | **Zoom to Selection** | Fit the map to the selected features. |
-| **Show edge lengths** | Label each side of the selected polygons with its length, in the units of the **Scale bar units** setting. A side runs from corner to corner, so a densified straight side or a curved frontage gets one label. Lengths are measured on the ellipsoid, like the measure tool. Labels too long for their side on screen appear as you zoom in. Available on the MapLibre and Mapbox maps. |
+| **Show edge lengths** | Label each side of the selected polygons with its length, in the units of the **Scale bar units** setting. A side runs from corner to corner, so a densified straight side or a curved frontage gets one label. Lengths are measured on the ellipsoid, like the measure tool. Labels too long for their side on screen appear as you zoom in. A selection with more than 2,000 sides gets no labels at all, and zooming in does not bring them back: select fewer polygons to see them. Available on the MapLibre and Mapbox maps. |
 | **Export Selected Features as Layer** | Copy the selection into a new layer. |
 
 The layer's actions menu also has **Select features**, which draws a selection

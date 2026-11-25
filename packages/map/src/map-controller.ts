@@ -545,6 +545,7 @@ export class MapController implements MapEngine {
       this.applyBasemapOpacity();
       this.setBlankBackgroundColor(this.blankBackgroundColor);
       this.addLayerControl();
+      this.restoreHighlight();
     };
     this.map.on("style.load", handleStyleReady);
     this.map.once("load", handleStyleReady);
@@ -2323,6 +2324,20 @@ export class MapController implements MapEngine {
     this.syncEdgeLengths();
   }
 
+  /**
+   * Redraw the selection highlight and its side labels after the style was
+   * replaced. A basemap switch replays the selection from the store, but a
+   * custom CRS switch replaces the style too and nothing else redraws them.
+   */
+  private restoreHighlight(): void {
+    if (this.highlightedFeatures.length === 0) return;
+    this.syncHighlight({
+      type: "FeatureCollection",
+      features: this.highlightedFeatures as Feature<Geometry>[],
+    });
+    this.syncEdgeLengths();
+  }
+
   private setHighlightedFeatures(features: Feature[]): void {
     this.highlightedFeatures = features;
     this.syncEdgeLengths();
@@ -2340,13 +2355,18 @@ export class MapController implements MapEngine {
       this.edgeLengthsEnabled && this.highlightedFeatures.length > 0
         ? edgeLengthLines(this.highlightedFeatures, { unit: this.mapPreferences.scaleUnit })
         : EMPTY_HIGHLIGHT;
+    if (data.features.length === 0) {
+      // Off, nothing selected, or over the cap: take the layer out rather
+      // than keep re-adding an empty one on every selection change.
+      if (map.getLayer(EDGE_LENGTH_LAYER_ID)) map.removeLayer(EDGE_LENGTH_LAYER_ID);
+      if (map.getSource(EDGE_LENGTH_SOURCE_ID)) map.removeSource(EDGE_LENGTH_SOURCE_ID);
+      return;
+    }
     const source = map.getSource(EDGE_LENGTH_SOURCE_ID);
     if (source) {
       updateGeoJsonSourceData(source as maplibregl.GeoJSONSource, data);
-    } else if (data.features.length > 0) {
-      map.addSource(EDGE_LENGTH_SOURCE_ID, { type: "geojson", data });
     } else {
-      return;
+      map.addSource(EDGE_LENGTH_SOURCE_ID, { type: "geojson", data });
     }
     this.ensureHighlightLayer(
       edgeLengthLayer(textFontForMapStyle(map)) as maplibregl.AddLayerObject,

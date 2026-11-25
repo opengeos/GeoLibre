@@ -9,9 +9,11 @@
  *
  * A curve that meets a straight side tangentially (a cul-de-sac frontage)
  * barely turns at the joint, so the joint is also a corner when a long
- * segment meets a much shorter one there ({@link TANGENT_LENGTH_RATIO}): the
- * straight side and the arc's short chords are labeled separately, the way a
- * survey lists a line and a curve as two courses.
+ * segment meets a much shorter one there ({@link TANGENT_LENGTH_RATIO}) and
+ * the short one is a chord of a curve, the next vertex turning the same way
+ * onto another short chord: the straight side and the arc are labeled
+ * separately, the way a survey lists a line and a curve as two courses. A
+ * short jog on a straight boundary is not a curve, so it does not split it.
  *
  * Lengths are geodesic, on the active body's ellipsoid, like the measure tool
  * and the Field Calculator. The result is a collection of LineStrings, one per
@@ -30,7 +32,8 @@ export const CORNER_ANGLE_DEGREES = 12;
 /**
  * A vertex that turns at all (more than {@link MIN_TANGENT_TURN_DEGREES}) is
  * also a corner when one of its segments is this many times longer than the
- * other: where a straight side runs into the short chords of a curve.
+ * other and the shorter one continues as a curve: where a straight side runs
+ * into the short chords of an arc.
  */
 export const TANGENT_LENGTH_RATIO = 4;
 
@@ -39,6 +42,14 @@ export const TANGENT_LENGTH_RATIO = 4;
  * lengths, so unevenly spaced vertices along a straight side stay one side.
  */
 export const MIN_TANGENT_TURN_DEGREES = 0.5;
+
+/**
+ * Vertices closer than this to the previous one, in degrees of latitude
+ * (about a millimetre), are dropped before finding corners. Snapped or
+ * float-noisy data repeats a vertex almost exactly, and a segment that short
+ * has an arbitrary direction that would read as a corner.
+ */
+const MIN_SEGMENT_DEGREES = 1e-8;
 
 /**
  * Most sides labeled at once. A large selection is skipped rather than
@@ -76,6 +87,26 @@ const METERS_PER_MILE = 1609.344;
 const METERS_PER_NAUTICAL_MILE = 1852;
 
 /**
+ * The short (one decimal) and long (two decimals) number formats per locale.
+ * Building an `Intl.NumberFormat` is far slower than using one, and a large
+ * selection formats up to {@link MAX_EDGE_LABELS} lengths at once.
+ */
+const numberFormats = new Map<string, [Intl.NumberFormat, Intl.NumberFormat]>();
+
+function formatsFor(locale: string | undefined): [Intl.NumberFormat, Intl.NumberFormat] {
+  const key = locale ?? "";
+  let formats = numberFormats.get(key);
+  if (!formats) {
+    formats = [
+      new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }),
+      new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
+    ];
+    numberFormats.set(key, formats);
+  }
+  return formats;
+}
+
+/**
  * Format a length for a side label in the scale bar's unit system: metres
  * below a kilometre then kilometres, feet below a mile then miles, or metres
  * below a nautical mile then nautical miles.
@@ -85,42 +116,54 @@ export function formatEdgeLength(
   unit: MapScaleUnit = "metric",
   locale?: string,
 ): string {
-  const short = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });
-  const long = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
+  const [short, long] = formatsFor(locale);
   if (unit === "imperial") {
     return meters < METERS_PER_MILE
       ? `${short.format(meters * FEET_PER_METER)} ft`
       : `${long.format(meters / METERS_PER_MILE)} mi`;
   }
-  if (unit === "nautical" && meters >= METERS_PER_NAUTICAL_MILE) {
-    return `${long.format(meters / METERS_PER_NAUTICAL_MILE)} nmi`;
+  if (unit === "nautical") {
+    return meters < METERS_PER_NAUTICAL_MILE
+      ? `${short.format(meters)} m`
+      : `${long.format(meters / METERS_PER_NAUTICAL_MILE)} nmi`;
   }
   return meters < 1000 ? `${short.format(meters)} m` : `${long.format(meters / 1000)} km`;
 }
 
 /**
- * Direction (radians) and relative length of the segment from `a` to `b`, on
- * a local flat approximation (longitude scaled by the cosine of latitude).
- * Only the change in direction and the ratio of lengths between neighboring
- * segments are used, which this measures well at the scale of one feature.
+ * Direction (radians) and relative length (degrees of latitude) of the
+ * segment from `a` to `b`, on a local flat approximation (longitude scaled by
+ * the cosine of latitude). Only the change in direction and the ratio of
+ * lengths between neighboring segments are used, which this measures well at
+ * the scale of one feature. The longitude difference takes the short way
+ * round, so a side crossing the antimeridian keeps its direction.
  */
 function segment(a: Position, b: Position): { heading: number; length: number } {
   const cosLat = Math.cos((((a[1] + b[1]) / 2) * Math.PI) / 180);
-  const dx = (b[0] - a[0]) * cosLat;
+  let dLon = b[0] - a[0];
+  if (dLon > 180) dLon -= 360;
+  else if (dLon < -180) dLon += 360;
+  const dx = dLon * cosLat;
   const dy = b[1] - a[1];
   return { heading: Math.atan2(dy, dx), length: Math.hypot(dx, dy) };
 }
 
-/** Absolute turn between two headings, in degrees, in [0, 180]. */
+/** Signed turn from one heading to the next, in degrees, in (-180, 180]. */
 function turnDegrees(from: number, to: number): number {
-  let delta = Math.abs(to - from) % (2 * Math.PI);
-  if (delta > Math.PI) delta = 2 * Math.PI - delta;
+  let delta = (to - from) % (2 * Math.PI);
+  if (delta > Math.PI) delta -= 2 * Math.PI;
+  else if (delta <= -Math.PI) delta += 2 * Math.PI;
   return (delta * 180) / Math.PI;
 }
 
-/** Whether two positions are the same point. */
+/** Whether `b` is within {@link MIN_SEGMENT_DEGREES} of `a`. */
 function samePosition(a: Position, b: Position): boolean {
-  return a[0] === b[0] && a[1] === b[1];
+  return segment(a, b).length < MIN_SEGMENT_DEGREES;
+}
+
+/** The longer of two lengths over the shorter. */
+function lengthRatio(a: number, b: number): number {
+  return Math.max(a, b) / Math.min(a, b);
 }
 
 /**
@@ -135,7 +178,8 @@ export function ringSides(
   ring: readonly Position[],
   cornerAngle = CORNER_ANGLE_DEGREES,
 ): Position[][] {
-  // Drop the closing position and repeated vertices, which have no direction.
+  // Drop the closing position and repeated (or all but repeated) vertices,
+  // which have no direction of their own.
   const points: Position[] = [];
   for (const position of ring) {
     if (points.length === 0 || !samePosition(points[points.length - 1], position)) {
@@ -146,18 +190,41 @@ export function ringSides(
   const n = points.length;
   if (n < 3) return [];
 
+  const wrap = (k: number) => ((k % n) + n) % n;
   const segments = points.map((point, i) => segment(point, points[(i + 1) % n]));
   // Vertex i joins segment i-1 (arriving) and segment i (leaving).
+  const turns = points.map((_, i) =>
+    turnDegrees(segments[wrap(i - 1)].heading, segments[i].heading),
+  );
+  // Whether the short segment `chord` continues as a curve past `vertex`, its
+  // far end: the vertex turns the same way as `turn`, onto a segment `beyond`
+  // of about the same length.
+  const continuesCurve = (chord: number, vertex: number, beyond: number, turn: number) => {
+    const next = turns[wrap(vertex)];
+    return (
+      Math.abs(next) > MIN_TANGENT_TURN_DEGREES &&
+      Math.sign(next) === Math.sign(turn) &&
+      lengthRatio(segments[wrap(chord)].length, segments[wrap(beyond)].length) <=
+        TANGENT_LENGTH_RATIO
+    );
+  };
   const corners: number[] = [];
   for (let i = 0; i < n; i++) {
-    const arriving = segments[(i - 1 + n) % n];
+    const turn = turns[i];
+    const arriving = segments[wrap(i - 1)];
     const leaving = segments[i];
-    const turn = turnDegrees(arriving.heading, leaving.heading);
-    const ratio =
-      Math.max(arriving.length, leaving.length) / Math.min(arriving.length, leaving.length);
-    if (turn > cornerAngle || (turn > MIN_TANGENT_TURN_DEGREES && ratio > TANGENT_LENGTH_RATIO)) {
-      corners.push(i);
+    let corner = Math.abs(turn) > cornerAngle;
+    if (
+      !corner &&
+      Math.abs(turn) > MIN_TANGENT_TURN_DEGREES &&
+      lengthRatio(arriving.length, leaving.length) > TANGENT_LENGTH_RATIO
+    ) {
+      corner =
+        leaving.length < arriving.length
+          ? continuesCurve(i, i + 1, i + 1, turn)
+          : continuesCurve(i - 1, i - 1, i - 2, turn);
     }
+    if (corner) corners.push(i);
   }
   if (corners.length === 0) return [[...points, points[0]]];
 

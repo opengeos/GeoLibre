@@ -3230,7 +3230,8 @@ describe("MapController edge length labels", () => {
     assert.equal(order.at(-1), EDGE_LENGTH_LAYER_ID);
 
     controller.setEdgeLengthLabels(false);
-    assert.equal(labelCount(fake), 0);
+    assert.equal(fake.layers.has(EDGE_LENGTH_LAYER_ID), false);
+    assert.equal(fake.sources.has(EDGE_LENGTH_SOURCE_ID), false);
   });
 
   it("follows the highlight to the next selection, and clears with it", () => {
@@ -3242,9 +3243,45 @@ describe("MapController edge length labels", () => {
     controller.highlightFeature(layer, ["parcel"]);
     assert.equal(labelCount(fake), 4);
     controller.highlightFeature(layer, null);
-    assert.equal(labelCount(fake), 0);
+    assert.equal(labelCount(fake), undefined);
     controller.highlightFeature(layer, ["parcel"]);
     controller.clearFeatureHighlight();
-    assert.equal(labelCount(fake), 0);
+    assert.equal(labelCount(fake), undefined);
+    assert.equal(fake.layers.has(EDGE_LENGTH_LAYER_ID), false);
+  });
+
+  it("adds no label layer while switched off", () => {
+    const { map, fake } = makeFakeMap();
+    Object.assign(map as object, { isStyleLoaded: () => true });
+    const controller = controllerWith(map);
+    const layer = parcelLayer();
+    controller.setEdgeLengthLabels(true);
+    controller.setEdgeLengthLabels(false);
+    controller.highlightFeature(layer, ["parcel"]);
+    controller.highlightFeature(layer, ["parcel"]);
+    assert.equal(
+      fake.calls.some((c) => c.method === "addLayer" && (c.args[0] as { id: string }).id === EDGE_LENGTH_LAYER_ID),
+      false,
+    );
+  });
+
+  it("redraws the highlight and its labels after the style is replaced", () => {
+    // A custom CRS switch replaces the style without the selection replay a
+    // basemap switch gets.
+    const { map, fake } = makeFakeMap();
+    Object.assign(map as object, { isStyleLoaded: () => true });
+    const controller = controllerWith(map);
+    const layer = parcelLayer();
+    controller.setEdgeLengthLabels(true);
+    controller.highlightFeature(layer, ["parcel"]);
+    const styleMap = map as { removeLayer: (id: string) => void; removeSource: (id: string) => void };
+    for (const id of [...fake.layers.keys()]) styleMap.removeLayer(id);
+    for (const id of [...fake.sources.keys()]) styleMap.removeSource(id);
+
+    (controller as unknown as { restoreHighlight: () => void }).restoreHighlight();
+    assert.equal(labelCount(fake), 4);
+    assert.ok(fake.sources.size > 1, "the highlight source is back too");
+    const order = (map as { getLayersOrder: () => string[] }).getLayersOrder();
+    assert.equal(order.at(-1), EDGE_LENGTH_LAYER_ID);
   });
 });

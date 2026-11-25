@@ -2624,6 +2624,33 @@ describe("MapboxEngine edge length labels", () => {
     assert.equal(labelSource(map), undefined);
   });
 
+  it("retries an update the loading map deferred, once it is idle", () => {
+    const { engine, map } = makeEngine();
+    const layer = parcel();
+    engine.syncLayers([layer]);
+    engine.setEdgeLengthLabels(true);
+    // Adding the highlight's source starts it loading, so the map reports
+    // the style as not loaded until it is idle, as Mapbox GL does.
+    const addSource = map.addSource;
+    map.addSource = (id: string, spec: Record<string, unknown>) => {
+      addSource(id, spec);
+      map.setStyleLoaded(false);
+    };
+    engine.highlightFeature(layer, ["parcel"]);
+    assert.equal(labelSource(map), undefined);
+    map.setStyleLoaded(true);
+    map.fire("idle");
+    assert.equal(labelSource(map)?.data.features.length, 4);
+
+    // Switching off while loading is applied on idle too.
+    map.setStyleLoaded(false);
+    engine.setEdgeLengthLabels(false);
+    assert.ok(map.getLayer(EDGE_LENGTH_LAYER_ID));
+    map.setStyleLoaded(true);
+    map.fire("idle");
+    assert.equal(map.getLayer(EDGE_LENGTH_LAYER_ID), undefined);
+  });
+
   it("follows the highlight, and clears with it", () => {
     const { engine, map } = makeEngine();
     const layer = parcel();

@@ -53,6 +53,11 @@ describe("formatEdgeLength", () => {
 
   it("uses metres, then nautical miles, for the nautical scale bar", () => {
     assert.equal(formatEdgeLength(500, "nautical", "en-US"), "500 m");
+    // Metres all the way to a nautical mile, never kilometres.
+    assert.equal(formatEdgeLength(1000, "nautical", "en-US"), "1,000 m");
+    assert.equal(formatEdgeLength(1500, "nautical", "en-US"), "1,500 m");
+    assert.equal(formatEdgeLength(1851, "nautical", "en-US"), "1,851 m");
+    assert.equal(formatEdgeLength(1852, "nautical", "en-US"), "1 nmi");
     assert.equal(formatEdgeLength(1852 * 2, "nautical", "en-US"), "2 nmi");
   });
 
@@ -129,6 +134,60 @@ describe("ringSides", () => {
       sides.some((side) => side.length === 21),
       "the arc is one side",
     );
+  });
+
+  it("keeps a short jog on a straight side as part of the side", () => {
+    // A 50 m square at the equator whose bottom side has a 0.5 m stub that
+    // turns 1° and back: a digitizing jog, not a curve.
+    const s = 0.00045; // ~50 m
+    const stub = 0.0000045; // ~0.5 m
+    const rise = stub * Math.tan(Math.PI / 180);
+    const ring: Position[] = [
+      [0, 0],
+      [0.0002, 0],
+      [0.0002 + stub, rise],
+      [s, rise],
+      [s, s],
+      [0, s],
+      [0, 0],
+    ];
+    assert.equal(ringSides(ring).length, 4);
+    // The same with the stub ending at the corner.
+    const atCorner: Position[] = [[0, 0], [s - stub, 0], [s, rise], [s, s], [0, s], [0, 0]];
+    assert.equal(ringSides(atCorner).length, 4);
+  });
+
+  it("keeps a side crossing the antimeridian as one side", () => {
+    const ring: Position[] = [
+      [179.998, 0],
+      [179.999, 0],
+      [-180, 0],
+      [-179.999, 0],
+      [-179.999, 0.001],
+      [179.998, 0.001],
+      [179.998, 0],
+    ];
+    const sides = ringSides(ring);
+    assert.equal(sides.length, 4);
+    // The original coordinates are kept.
+    assert.ok(sides.some((side) => side.length === 4 && side[2][0] === -180));
+  });
+
+  it("ignores vertices a hair's breadth from the previous one", () => {
+    const ring: Position[] = [
+      [0, 0],
+      [0.001, 0],
+      // Float noise on a straight side, and at a corner.
+      [0.001 + 1e-10, 1e-10],
+      [0.002, 0],
+      [0.002, 0.001],
+      [0.002 + 1e-10, 0.001 - 1e-10],
+      [0, 0.001],
+      [0, 0],
+    ];
+    assert.equal(ringSides(ring).length, 4);
+    const { features } = edgeLengthLines([polygon(ring)]);
+    assert.ok(features.every((feature) => feature.properties.meters > 1));
   });
 
   it("keeps unevenly spaced vertices on a straight side as one side", () => {

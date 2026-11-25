@@ -234,6 +234,11 @@ export class MapboxEngine implements MapEngine {
   private edgeLengthsEnabled = false;
   /** The features the highlight shows now, so the side labels can be redrawn. */
   private highlightedFeatures: Feature[] = [];
+  /**
+   * A label update arrived while the map was loading (as it is right after
+   * the highlight adds its source), so it is retried when the map is idle.
+   */
+  private edgeLengthsPending = false;
   private pluginControls = new Map<maplibregl.IControl, mapboxgl.IControl>();
   private controlVisibility: Record<BuiltInMapControl, boolean>;
   /** See the constructor option of the same name. */
@@ -296,6 +301,7 @@ export class MapboxEngine implements MapEngine {
     if (this.terrainSourcePending || this.terrainRestorePending) this.reconcileTerrainSource();
     if (this.syncPending) this.syncLayers(this.layers);
     if (this.basemapPending) this.applyBasemap();
+    if (this.edgeLengthsPending) this.syncEdgeLengths();
   };
   /**
    * A clustered layer's authored filters are applied to its data before
@@ -1667,7 +1673,15 @@ export class MapboxEngine implements MapEngine {
   /** Redraw the side labels of the highlighted polygons; see `edge-lengths.ts`. */
   private syncEdgeLengths(): void {
     const map = this.map;
-    if (!map?.isStyleLoaded()) return;
+    if (!map) return;
+    // `isStyleLoaded()` is false while any source is loading, including the
+    // highlight source added just before this call: retry on idle with the
+    // latest selection and setting rather than dropping the update.
+    if (!map.isStyleLoaded()) {
+      this.edgeLengthsPending = true;
+      return;
+    }
+    this.edgeLengthsPending = false;
     if (map.getLayer(EDGE_LENGTH_LAYER_ID)) map.removeLayer(EDGE_LENGTH_LAYER_ID);
     if (map.getSource(EDGE_LENGTH_SOURCE_ID)) map.removeSource(EDGE_LENGTH_SOURCE_ID);
     if (!this.edgeLengthsEnabled || this.highlightedFeatures.length === 0) return;
