@@ -114,7 +114,9 @@ def cached_arcgis_source(info: Any, service_url: str) -> dict[str, Any]:
     credit = info.get("copyrightText")
     if isinstance(credit, str):
         # MapLibre's attribution control renders HTML, so keep only the text of
-        # a remote credit, as arcgis-basemap.ts does for the catalog's copy.
+        # a remote credit. Unlike arcgis-basemap.ts, which strips only complete
+        # tags, an unclosed "<" also drops the rest of the credit, so no partial
+        # tag can survive. A literal "<" in a credit is lost with what follows.
         text = " ".join(re.sub(r"<[^>]*>?", "", credit).replace("<", "").split())
         if text:
             source["attribution"] = text
