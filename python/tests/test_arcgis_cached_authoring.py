@@ -272,6 +272,43 @@ def test_slow_metadata_stream_stops_at_the_total_deadline(cache_metadata, monkey
         project_api.arcgis_layer("Slow", "https://example.org/A/MapServer", tiled=True)
 
 
+def test_metadata_eof_after_deadline_is_refused(cache_metadata, monkeypatch):
+    """Refuse valid metadata when the final EOF read exceeds the deadline.
+
+    Args:
+        cache_metadata: The mutable metadata and public transport fixture.
+        monkeypatch: Pytest fixture for replacing the response and clock.
+    """
+    info, _ = cache_metadata
+    clock = [0.0]
+    monkeypatch.setattr(project_api.time, "monotonic", lambda: clock[0])
+
+    class Response(io.BytesIO):
+        """Return valid metadata, then a delayed end of response."""
+
+        def read1(self, size=-1):
+            """Advance the clock when the server finally closes its response.
+
+            Args:
+                size: Maximum bytes to read.
+
+            Returns:
+                Metadata bytes or an empty end-of-response marker.
+            """
+            chunk = super().read1(size)
+            if not chunk:
+                clock[0] = 31.0
+            return chunk
+
+    monkeypatch.setattr(
+        project_api._GEOJSON_OPENER,
+        "open",
+        lambda *_args, **_kwargs: Response(json.dumps(info).encode()),
+    )
+    with pytest.raises(ValueError, match="longer than 30 seconds"):
+        project_api.arcgis_layer("Late", "https://example.org/A/MapServer", tiled=True)
+
+
 def test_remote_attribution_markup_is_reduced_to_text(cache_metadata):
     """Keep provider credit text but drop markup a remote service supplies.
 

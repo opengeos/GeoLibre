@@ -4552,6 +4552,8 @@ def _load_arcgis_cached_source(service_url: str) -> dict[str, Any]:
                 if time.monotonic() > deadline:
                     raise ValueError("ArcGIS cache metadata took longer than 30 seconds to load")
                 chunk = read(min(65536, limit + 1 - size))
+                if time.monotonic() > deadline:
+                    raise ValueError("ArcGIS cache metadata took longer than 30 seconds to load")
                 if not chunk:
                     break
                 chunks.append(chunk)
@@ -4641,7 +4643,9 @@ def arcgis_layer(
         tiled: Use a validated public map/image cache instead of dynamic export.
             Cannot be combined with sublayers or a rendering rule. Raw LERC
             caches are not supported by this raster authoring path. Metadata
-            reads have a 2 MiB size limit and a 30-second total deadline.
+            reads have a 2 MiB size limit and a 30-second deadline checked
+            before and after each read. An in-flight socket read can delay
+            reporting a deadline error until that read finishes or times out.
         sublayers: MapServer sublayer ids to show (``"0,2"`` or ``[0, 2]``).
         rendering_rule: ImageServer rendering rule, as a dict or JSON string
             (e.g. ``{"rasterFunction": "Hillshade"}``).
