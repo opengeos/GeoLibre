@@ -43,7 +43,11 @@ const COMMAND_ROW_HEIGHT = 32;
 
 const NO_COMMANDS: Command[] = [];
 const NO_RESULTS: RankedCommand[] = [];
-const NO_SCAN: { query: string; results: RankedCommand[] } = { query: "", results: NO_RESULTS };
+const NO_SCAN: { query: string; version: number; results: RankedCommand[] } = {
+  query: "",
+  version: -1,
+  results: NO_RESULTS,
+};
 
 /**
  * Pause in typing before the attribute scan runs. The scan is capped (see
@@ -88,6 +92,16 @@ export function CommandPalette({
   // lands, its rows are carried over to the query as typed now
   // (`refineFeatureResults`): every listed row matches, and the ones that still
   // do stay put instead of flickering away on each keystroke.
+  // Bumped whenever the project data the search reads changes while the
+  // palette is open: a scan from an older version is dropped at once (its rows
+  // may no longer match, or belong to a now-hidden layer or field) and a new
+  // scan is scheduled.
+  const [dataVersion, setDataVersion] = useState(0);
+  useEffect(() => {
+    if (!open || !search) return;
+    return search.subscribe(() => setDataVersion((version) => version + 1));
+  }, [open, search]);
+
   const [scan, setScan] = useState(NO_SCAN);
   useEffect(() => {
     const trimmed = query.trim();
@@ -96,23 +110,24 @@ export function CommandPalette({
       return;
     }
     const handle = setTimeout(
-      () => setScan({ query: trimmed, results: search.deferred(trimmed) }),
+      () => setScan({ query: trimmed, version: dataVersion, results: search.deferred(trimmed) }),
       DEFERRED_SEARCH_MS,
     );
     return () => clearTimeout(handle);
-  }, [search, query]);
+  }, [search, query, dataVersion]);
 
   const filtered = useMemo(() => {
     const trimmed = query.trim();
     if (!trimmed) return commands;
-    const features =
-      scan.query === trimmed ? scan.results : refineFeatureResults(scan.results, trimmed);
+    const scanned = scan.version === dataVersion ? scan.results : NO_RESULTS;
+    const features = scan.query === trimmed ? scanned : refineFeatureResults(scanned, trimmed);
     return mergePaletteResults(
       rankCommands(commands, trimmed),
       search ? [...search.instant(trimmed), ...features] : NO_RESULTS,
       rankCommands(searchOnlyCommands, trimmed),
     );
-  }, [commands, searchOnlyCommands, search, scan, query]);
+    // `dataVersion` also re-reads the layers `search.instant` matches by name.
+  }, [commands, searchOnlyCommands, search, scan, query, dataVersion]);
   const activeCommand = filtered[activeIndex];
   const { rows, rowOfCommand } = useMemo(() => paletteRows(filtered), [filtered]);
 

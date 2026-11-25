@@ -28,6 +28,15 @@ import { flyToGeocodeMatch, selectAndFitLayer, selectFeatureMatch } from "../../
 export interface PaletteSearch {
   instant: (query: string) => RankedCommand[];
   deferred: (query: string) => RankedCommand[];
+  /**
+   * Call `listener` whenever what the search reads changes: a layer's data,
+   * name, visibility or field visibility, or a group's visibility. The palette
+   * subscribes only while it is open, so it can drop stale rows and rescan.
+   *
+   * @param listener - Called after each such change.
+   * @returns A function that stops listening.
+   */
+  subscribe: (listener: () => void) => () => void;
 }
 
 /** The project's layers and groups as of now: the palette reads them per query. */
@@ -58,10 +67,17 @@ export function usePaletteSearch(mapControllerRef: RefObject<MapEngine | null>):
       const engine = mapControllerRef.current;
       if (!engine) return;
       const request = ++latestPlaceRequest.current;
+      const loadCount = useAppStore.getState().projectLoadCount;
+      // A lookup acts only while it is still the latest pick, on the same map
+      // engine and the same open project as when it was sent.
+      const current = () =>
+        request === latestPlaceRequest.current &&
+        mapControllerRef.current === engine &&
+        useAppStore.getState().projectLoadCount === loadCount;
       const config = resolveGeocoderConfig(useAppStore.getState().preferences.geocoding);
       geocodeForward(query, { config, limit: 1 }).then(
         (matches) => {
-          if (request !== latestPlaceRequest.current) return;
+          if (!current()) return;
           const match = matches[0];
           if (!match) {
             notify.info(t("commandPalette.placeNotFound", { query }));
@@ -71,7 +87,7 @@ export function usePaletteSearch(mapControllerRef: RefObject<MapEngine | null>):
           notify.info(t("commandPalette.placeClosestMatch", { name: match.displayName }));
         },
         () => {
-          if (request === latestPlaceRequest.current) notify.error(t("layers.searchPlacesError"));
+          if (current()) notify.error(t("layers.searchPlacesError"));
         },
       );
     };
@@ -117,6 +133,12 @@ export function usePaletteSearch(mapControllerRef: RefObject<MapEngine | null>):
         const { layers, groups } = currentLayers();
         return paletteFeatureResults(layers, query, { ...options, groups });
       },
+      subscribe: (listener) =>
+        useAppStore.subscribe((state, previous) => {
+          if (state.layers !== previous.layers || state.layerGroups !== previous.layerGroups) {
+            listener();
+          }
+        }),
     };
   }, [mapControllerRef, t]);
 }
