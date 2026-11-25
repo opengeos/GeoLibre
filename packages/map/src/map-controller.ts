@@ -57,6 +57,7 @@ import {
   hasPendingExternalNativeFilters,
   hasLineGapLabels,
   hasZoomDependentClusterFilter,
+  invalidateTextFontForMapStyle,
   removeLayerFromMap,
   styleValuesEqual,
   syncLayer,
@@ -2274,8 +2275,6 @@ export class MapController implements MapEngine {
     featureId: string | string[] | null,
     options: { fit?: boolean } = {},
   ): void {
-    if (!this.isStyleReady()) return;
-
     const ids = (Array.isArray(featureId) ? featureId : featureId ? [featureId] : []).filter(
       (id) => id != null,
     );
@@ -2308,7 +2307,7 @@ export class MapController implements MapEngine {
     this.syncHighlight(featureCollection);
     this.setHighlightedFeatures(features);
 
-    if (options.fit) {
+    if (options.fit && this.isStyleReady()) {
       this.fitFeature(featureCollection);
     }
   }
@@ -2330,6 +2329,9 @@ export class MapController implements MapEngine {
    * custom CRS switch replaces the style too and nothing else redraws them.
    */
   private restoreHighlight(): void {
+    // Persistent listeners run before the font cache's one-time listener.
+    // Resolve the incoming style's font before rebuilding helper labels.
+    if (this.map) invalidateTextFontForMapStyle(this.map);
     if (this.highlightedFeatures.length === 0) return;
     this.syncHighlight({
       type: "FeatureCollection",

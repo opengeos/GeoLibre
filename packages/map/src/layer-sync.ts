@@ -3361,6 +3361,11 @@ function removeSourceIfExists(map: maplibregl.Map, id: string): void {
 // invalidate when a new basemap style loads.
 const textFontCache = new WeakMap<maplibregl.Map, string[]>();
 
+/** Invalidate before restoring labels in a persistent style-load listener. */
+export function invalidateTextFontForMapStyle(map: maplibregl.Map): void {
+  textFontCache.delete(map);
+}
+
 /** A label font stack the map's current style serves glyphs for (cached per style). */
 export function textFontForMapStyle(map: maplibregl.Map): string[] {
   const cached = textFontCache.get(map);

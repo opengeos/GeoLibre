@@ -3289,4 +3289,80 @@ describe("MapController edge length labels", () => {
     const order = (map as { getLayersOrder: () => string[] }).getLayersOrder();
     assert.equal(order.at(-1), EDGE_LENGTH_LAYER_ID);
   });
+
+  for (const clear of [false, true]) {
+    it(`restores ${clear ? "a cleared selection" : "the latest selection"} changed during a CRS style load`, () => {
+      const { map, fake } = makeFakeMap();
+      const controller = controllerWith(map);
+      controller.setEdgeLengthLabels(true);
+      controller.highlightFeature(parcelLayer(), ["parcel"]);
+      const styleMap = map as {
+        removeLayer: (id: string) => void;
+        removeSource: (id: string) => void;
+      };
+      for (const id of [...fake.layers.keys()]) styleMap.removeLayer(id);
+      for (const id of [...fake.sources.keys()]) styleMap.removeSource(id);
+      internals(controller).styleReady = false;
+      const replacement = parcelLayer();
+      const geometry = replacement.geojson!.features[0].geometry;
+      assert.equal(geometry.type, "Polygon");
+      if (geometry.type === "Polygon")
+        for (const ring of geometry.coordinates) for (const point of ring) point[0] += 1;
+      controller.highlightFeature(replacement, clear ? null : ["parcel"]);
+      assert.equal(fake.sources.size, 0, "no style writes before readiness");
+      internals(controller).styleReady = true;
+      (controller as unknown as { restoreHighlight: () => void }).restoreHighlight();
+      if (clear) {
+        assert.equal(labelCount(fake), undefined);
+        assert.equal(fake.sources.size, 0);
+      } else {
+        assert.equal(labelCount(fake), 4);
+        const data = fake.sources.get(EDGE_LENGTH_SOURCE_ID)!.data as {
+          features: { geometry: { coordinates: number[][] } }[];
+        };
+        assert.ok(
+          data.features.every((feature) =>
+            feature.geometry.coordinates.every((point) => point[0] > -9),
+          ),
+        );
+      }
+    });
+  }
+
+  it("uses the incoming style font when persistent style listeners restore labels before once listeners", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const styleMap = map as {
+      on: (event: string, listener: () => void) => void;
+      addLayer: (layer: Record<string, unknown>) => void;
+      removeLayer: (id: string) => void;
+      removeSource: (id: string) => void;
+    };
+    styleMap.on("style.load", () =>
+      (controller as unknown as { restoreHighlight: () => void }).restoreHighlight(),
+    );
+    styleMap.addLayer({
+      id: "old-labels",
+      type: "symbol",
+      layout: { "text-field": "{name}", "text-font": ["Outgoing Font"] },
+    });
+    controller.setEdgeLengthLabels(true);
+    controller.highlightFeature(parcelLayer(), ["parcel"]);
+    assert.deepEqual(
+      (fake.layers.get(EDGE_LENGTH_LAYER_ID)!.layout as Record<string, unknown>)["text-font"],
+      ["Outgoing Font"],
+    );
+    for (const id of [...fake.layers.keys()]) styleMap.removeLayer(id);
+    for (const id of [...fake.sources.keys()]) styleMap.removeSource(id);
+    styleMap.addLayer({
+      id: "new-labels",
+      type: "symbol",
+      layout: { "text-field": "{name}", "text-font": ["Incoming Font"] },
+    });
+    fake.emit("style.load");
+    assert.deepEqual(
+      (fake.layers.get(EDGE_LENGTH_LAYER_ID)!.layout as Record<string, unknown>)["text-font"],
+      ["Incoming Font"],
+    );
+  });
 });

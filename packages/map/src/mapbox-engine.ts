@@ -268,7 +268,7 @@ export class MapboxEngine implements MapEngine {
     getLayers: () => this.layers,
     getNativeLayerIds: (layer) => this.nativeLayerIds(layer),
     getSourceIds: (layer) => this.getLayerSourceIds(layer),
-    excludedLayerIds: [BLANK_BACKGROUND_LAYER_ID, ...HIGHLIGHT_LAYER_IDS],
+    excludedLayerIds: [BLANK_BACKGROUND_LAYER_ID, ...HIGHLIGHT_LAYER_IDS, EDGE_LENGTH_LAYER_ID],
     // Never hand the control a URL: `mapbox://` styles are not fetchable, and
     // the engine already holds the loaded style's own layers (see styleLoaded),
     // which is a better basemap answer than a second fetch would give.

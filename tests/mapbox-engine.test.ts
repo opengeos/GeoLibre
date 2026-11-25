@@ -2373,6 +2373,7 @@ describe("MapboxEngine layer control", () => {
       // A style with a root basemap layer, loaded afresh.
       map.layers.push({ id: "background", type: "background" });
       map.fire("style.load");
+      map.layers.push({ id: EDGE_LENGTH_LAYER_ID, type: "symbol", source: EDGE_LENGTH_SOURCE_ID });
       engine.syncLayers([geojsonLayer()]);
       const nativeIds = map.layers.map((l) => l.id as string).filter((id) => id !== "background");
       assert.ok(nativeIds.length > 0);
