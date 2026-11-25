@@ -7571,12 +7571,17 @@ mod tests {
     fn martin_waiter_drains_a_log_larger_than_the_pipe_buffer() {
         use std::process::{Command, Stdio};
 
+        // The last line goes to stdout too: stdout and stderr are separate
+        // pipes drained by separate threads, so a stderr line written after
+        // the stdout flood can land in the buffer before the stdout reader
+        // catches up, and the flood then evicts it from the reported tail.
+        // Only one stream has a defined order to assert on.
         let mut child = Command::new("sh")
             .arg("-c")
             .arg(
                 "i=0; while [ $i -lt 2000 ]; do \
                  echo \"INFO martin: source public.table_$i added, no spatial index\"; \
-                 i=$((i+1)); done; echo 'error: last line' >&2; exit 3",
+                 i=$((i+1)); done; echo 'error: last line'; exit 3",
             )
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
