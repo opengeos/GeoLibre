@@ -76,7 +76,9 @@ export function CommandPalette({
   const listRef = useRef<HTMLDivElement>(null);
   const isMac = useMemo(() => isMacPlatform(), []);
   const listboxId = "command-palette-listbox";
-  const optionId = (command: Command) => `command-option-${command.id}`;
+  // Encoded because search rows carry feature ids from the data, which can hold
+  // whitespace, and an element id (and so `aria-activedescendant`) cannot.
+  const optionId = (command: Command) => `command-option-${encodeURIComponent(command.id)}`;
 
   // The last attribute scan, and the query it ran for. Until the next scan
   // lands, its rows are carried over to the query as typed now
