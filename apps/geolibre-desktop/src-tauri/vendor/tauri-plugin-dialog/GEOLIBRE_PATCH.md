@@ -93,6 +93,9 @@ to the local paths used by GeoLibre's readers:
   identity because a UIKit temporary URL is not an original provider identity.
   Ordinary scoped picks use the existing upstream flow. Physical iOS device
   verification remains outstanding.
+- Cleanup of an undeletable abandoned stage warns through native diagnostics
+  and continues with a fresh selection; publication still requires successful
+  synchronization before any new file path is returned.
 - The result-bearing mobile bridge and copy transaction run on a blocking worker,
   including waits for the picker and the import lock, rather than occupying an
   async runtime worker for the duration of a large import.

@@ -67,8 +67,13 @@ fn recover_stages(root: &Path) -> io::Result<()> {
             continue;
         };
         if Uuid::parse_str(id).is_ok() && entry.file_type()?.is_dir() {
-            fs::remove_dir_all(entry.path())?;
-            removed = true;
+            match fs::remove_dir_all(entry.path()) {
+                Ok(()) => removed = true,
+                Err(error) => eprintln!(
+                    "[GeoLibre] Could not remove abandoned import stage {}: {error}",
+                    entry.path().display()
+                ),
+            }
         }
     }
     if removed {
@@ -219,7 +224,12 @@ pub(crate) fn persist_selection(root: &Path, sources: &[PathBuf]) -> io::Result<
         .lock()
         .map_err(|_| io::Error::other("Document import lock is unavailable"))?;
     let (root, storage_parents) = prepare_root(root)?;
-    recover_stages(&root)?;
+    if let Err(error) = recover_stages(&root) {
+        eprintln!(
+            "[GeoLibre] Could not finish import-stage recovery in {}: {error}",
+            root.display()
+        );
+    }
     let id = Uuid::new_v4().to_string();
     let stage_path = root.join(format!(".pending-{id}"));
     fs::create_dir(&stage_path)?;
@@ -418,6 +428,31 @@ mod tests {
         assert!(files[0].starts_with(&current));
         assert_eq!(fs::read(&files[0]).unwrap(), b"local edits");
         assert!(!copies[0].exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_undeletable_abandoned_stage_does_not_block_new_imports() {
+        use std::os::unix::fs::PermissionsExt;
+        let fixture = Fixture::new();
+        let stage = fixture.root().join(format!(".pending-{}", Uuid::new_v4()));
+        fs::create_dir_all(&stage).unwrap();
+        fs::write(stage.join("partial"), b"unfinished").unwrap();
+        fs::set_permissions(&stage, fs::Permissions::from_mode(0o500)).unwrap();
+        let blocked = fs::remove_dir_all(&stage).is_err();
+        let source = fixture.source("roads.geojson", b"new import");
+        let result = persist_selection(&fixture.root(), &[source]);
+        let retained = stage.exists();
+        if retained {
+            fs::set_permissions(&stage, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        assert!(
+            blocked,
+            "Permission-isolation tests require an unprivileged filesystem user"
+        );
+        assert!(retained);
+        let copies = result.unwrap();
+        assert_eq!(fs::read(&copies[0]).unwrap(), b"new import");
     }
 
     #[cfg(unix)]

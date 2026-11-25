@@ -155,7 +155,7 @@ const nativeDocumentCopiesReady = isTauri()
       .catch(async (error: unknown) => {
         console.error("[GeoLibre] Failed to restore retained imports", error);
         await i18nReady;
-        notify.error(i18n.t("notifications.nativeDocumentCopiesFailed"));
+        notify.error(i18n.t("notifications.nativeDocumentCopiesInitFailed"));
       })
   : Promise.resolve();
 const nativeOfflinePackagesReady = isTauri()

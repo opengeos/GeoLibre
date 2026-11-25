@@ -495,6 +495,8 @@ Companion files selected together share a folder. A sibling manifest records
 import paths, byte counts, and SHA-256 fingerprints. Files and directory entries
 are synchronized, then the complete selection is published by an atomic rename.
 Failed selections are removed; the next import recovers abandoned private stages.
+An abandoned stage that cannot be deleted produces a native diagnostic warning
+while new imports continue in separate folders.
 
 These are independent copies. The provider document stays unchanged, and saving
 GeoJSON edits writes to the imported copy. Other mobile formats still require
