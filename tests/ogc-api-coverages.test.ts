@@ -83,6 +83,28 @@ test("follows landing/data and next links, deduplicates collections and ignores 
   assert.equal(calls.length, 3);
 });
 
+test("keeps discovered coverages when a pagination link is unusable", async () => {
+  for (const href of [
+    "data:application/json,{}",
+    "https://user:password@example.org/next",
+    "http://[",
+  ]) {
+    const calls = serve(() => ({
+      collections: [metadata()],
+      links: [{ rel: "next", type: "application/json", href }],
+    }));
+    const items = await discoverOgcCoverages(
+      "https://example.org/collections",
+      new AbortController().signal,
+    );
+    assert.deepEqual(
+      items.map((item) => item.id),
+      ["gdps-temperature"],
+    );
+    assert.equal(calls.length, 1);
+  }
+});
+
 test("does not copy query credentials to an external coverage host", async () => {
   const item = metadata();
   item.links = [

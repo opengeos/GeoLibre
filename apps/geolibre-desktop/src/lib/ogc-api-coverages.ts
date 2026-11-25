@@ -7,6 +7,7 @@ import { isTauri } from "./is-tauri";
 import { parseOgcFeaturesUrl } from "./ogc-api-features";
 import { normalizeFetchError } from "./ogc-json";
 import { waitForWcsRequest, assertWcsTiff } from "./wcs";
+import { MAX_COVERAGE_DOWNLOAD_BYTES } from "./ogc-coverage-limits";
 import {
   CoverageError,
   coverageObject,
@@ -16,7 +17,6 @@ import {
 } from "./coverage-json";
 
 const MAX_METADATA_BYTES = 2 * 1024 * 1024;
-const MAX_DOWNLOAD_BYTES = 128 * 1024 * 1024;
 const COVERAGE_REL = "http://www.opengis.net/def/rel/ogc/1.0/coverage";
 const OWN_PARAMS = new Set([
   "f",
@@ -253,11 +253,12 @@ export async function discoverOgcCoverages(
       if (result.length > 5000) throw new CoverageError("metadata");
     }
     const next = docLinks.find((l) => l.rel === "next" && (!l.type || /json/.test(l.type)));
-    if (!next) {
+    const nextUrl = next && validLinkUrl(next.href, url);
+    if (!nextUrl) {
       if (!result.length) throw new CoverageError("empty");
       return result;
     }
-    url = linkUrl(next.href, url);
+    url = nextUrl;
   }
   throw new CoverageError("metadata");
 }
@@ -310,7 +311,7 @@ export async function downloadOgcCoverage(
   const abort = AbortSignal.any([signal, AbortSignal.timeout(120_000)]);
   const advertised = coverageLink(collection.links);
   if (!advertised) throw new CoverageError("empty");
-  const loaded = await bytes(url, abort, MAX_DOWNLOAD_BYTES, advertised.type);
+  const loaded = await bytes(url, abort, MAX_COVERAGE_DOWNLOAD_BYTES, advertised.type);
   let data = loaded.data;
   const documentUrl = loaded.url;
   let names: string[] = [];
@@ -321,7 +322,7 @@ export async function downloadOgcCoverage(
     } catch {
       throw new CoverageError("response");
     }
-    let budget = MAX_DOWNLOAD_BYTES - data.byteLength;
+    let budget = MAX_COVERAGE_DOWNLOAD_BYTES - data.byteLength;
     const component = async (href: string): Promise<unknown> => {
       if (budget <= 0) throw new CoverageError("size");
       const part = await bytes(

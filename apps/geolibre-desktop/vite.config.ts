@@ -33,6 +33,7 @@ import {
   proxyNswCctvFrameRequestGuarded,
 } from "./vite-proxy-guard";
 import { fastPathProxyPlugin } from "./vite-fast-path-proxy";
+import { MAX_COVERAGE_DOWNLOAD_BYTES } from "./src/lib/ogc-coverage-limits";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
 import { ARCGIS_SDK_HOST, ARCGIS_SDK_VERSION } from "../../packages/map/src/arcgis-sdk";
@@ -878,6 +879,7 @@ function wmsProxyPlugin(): Plugin {
           await proxyBinaryRequestGuarded(req, res, OGC_COVERAGE_PROXY_PATH, {
             forwardAccept: true,
             discardErrorBody: true,
+            maxBodyBytes: MAX_COVERAGE_DOWNLOAD_BYTES,
           });
         } catch {
           res.statusCode = 502;

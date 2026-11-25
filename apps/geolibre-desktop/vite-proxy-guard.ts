@@ -921,7 +921,7 @@ export async function proxyBinaryRequestGuarded(
   req: IncomingMessage,
   res: ServerResponse,
   proxyPath: string,
-  options: { forwardAccept?: boolean; discardErrorBody?: boolean } = {},
+  options: { forwardAccept?: boolean; discardErrorBody?: boolean; maxBodyBytes?: number } = {},
 ): Promise<void> {
   const requestUrl = new URL(req.url ?? "", `http://localhost${proxyPath}`);
   const target = requestUrl.searchParams.get("url");
@@ -972,7 +972,7 @@ export async function proxyBinaryRequestGuarded(
   }
   let body: Buffer;
   try {
-    body = await readBodyWithLimit(response);
+    body = await readBodyWithLimit(response, options.maxBodyBytes);
   } catch (err) {
     console.warn("[vite-proxy-guard] upstream body rejected:", err);
     res.statusCode = 502;
