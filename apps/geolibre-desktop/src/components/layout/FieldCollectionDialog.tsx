@@ -373,9 +373,9 @@ interface CaptureStepProps {
   captureKey: string;
   /**
    * A photo field started (+1) or finished (-1) reading a picture; Save waits
-   * for it. Returns whether the read still belongs to the current capture.
+   * for it. A completion can report an error after the input unmounts.
    */
-  onAttachmentReading: (delta: 1 | -1, readId: number) => boolean;
+  onAttachmentReading: (delta: 1 | -1, readId: number, error?: string) => void;
   values: Record<string, string>;
   setValue: (key: string, value: string) => void;
   errors: Record<string, string>;

@@ -495,14 +495,14 @@ export function useFieldCollectionController({
   }, [invalidateCapture, onOpenChange]);
 
   // Anything a dismissal would be a shame to throw away: a placed geometry, a
-  // table record the user has typed into, an attached photo or one still being
+  // record the user has typed into, an attached photo or one still being
   // read, or a new layer being composed on the setup step. The empty draft
   // field the setup step starts with doesn't count, only one the user has
   // actually named.
   const hasWorkInProgress =
     pending !== null ||
     vertices.length > 0 ||
-    (activeGeometry === "none" && recordEdited) ||
+    recordEdited ||
     photos.length > 0 ||
     photoReads > 0 ||
     layerName.trim() !== "" ||
@@ -977,10 +977,17 @@ export function useFieldCollectionController({
     clearPreview,
   ]);
 
-  const setValue = useCallback((key: string, value: string) => {
-    setRecordEdited(true);
-    setValues((v) => ({ ...v, [key]: value }));
-  }, []);
+  // An input can unmount while its FileReader is still pending. Bind its
+  // publication to this capture, while retaining valid reads on dismissal.
+  const captureContext = contextSeqRef.current;
+  const setValue = useCallback(
+    (key: string, value: string) => {
+      if (contextSeqRef.current !== captureContext) return;
+      setRecordEdited(true);
+      setValues((v) => ({ ...v, [key]: value }));
+    },
+    [captureContext],
+  );
 
   const errorText = useCallback(
     (code: string | undefined): string | null => {
@@ -1056,18 +1063,20 @@ export function useFieldCollectionController({
           attributeForm,
           pending: capturePending,
           captureKey: recordKey,
-          onAttachmentReading: (delta: 1 | -1, readId: number): boolean => {
+          onAttachmentReading: (delta: 1 | -1, readId: number, error?: string) => {
+            if (contextSeqRef.current !== captureContext) return;
             // A read belongs to the capture it began in. A completion releases
-            // only a read still being held, never a newer one, and reports
-            // whether its result is still wanted.
+            // only a read still being held, never a newer one.
             if (delta > 0) {
               attachmentReadsRef.current.add(readId);
               setPhotoReads((count) => count + 1);
-              return true;
+              return;
             }
             const held = attachmentReadsRef.current.delete(readId);
-            if (held) setPhotoReads((count) => Math.max(0, count - 1));
-            return held;
+            if (held) {
+              setPhotoReads((count) => Math.max(0, count - 1));
+              if (error) setNotice(error);
+            }
           },
           values,
           setValue,
