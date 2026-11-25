@@ -375,6 +375,13 @@ Developer"` and automatic signing therefore hunts for a development profile no
 > `xcode-27` image, and the Xcode step fails before archiving if the selected
 > Xcode is older than 27. Raise that check and the runner label when Apple
 > announces the next floor.
+>
+> Xcode 27 also needs rustup's **`llvm-tools`** component (`rustup component add
+> llvm-tools`, locally too). Its SwiftPM hides the `@_cdecl` exports of the Swift
+> plugin packages, and swift-rs uses rustup's `llvm-objcopy` to make them global
+> again. Without it the build only prints a cargo warning (`swift-rs:
+> llvm-objcopy not found`) and then fails to link with `Undefined symbols:
+> _init_plugin_geolocation`.
 
 The `workflow_dispatch` `export_method` input picks the export path
 (`app-store-connect` for TestFlight/App Store, `release-testing` for ad-hoc

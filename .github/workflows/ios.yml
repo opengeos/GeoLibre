@@ -134,6 +134,12 @@ jobs:
             aarch64-apple-ios,
             aarch64-apple-ios-sim,
             x86_64-apple-ios
+          # Xcode 27's SwiftPM internalizes the @_cdecl exports of the Swift
+          # plugin packages, so the Rust side fails to link with e.g.
+          # `Undefined symbols: _init_plugin_geolocation`. swift-rs promotes
+          # them back to global with rustup's llvm-objcopy, and without this
+          # component it only prints a cargo warning and the link fails later.
+          components: llvm-tools
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
