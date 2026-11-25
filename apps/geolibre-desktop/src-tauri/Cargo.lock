@@ -1805,7 +1805,7 @@ dependencies = [
 
 [[package]]
 name = "geolibre-desktop"
-version = "3.9.0"
+version = "3.10.0"
 dependencies = [
  "base64 0.23.1",
  "bincode",
