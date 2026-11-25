@@ -414,7 +414,7 @@ writes them without an explicit choice.
 
 The desktop app issues some remote fetches (tile/URL resolution, OGC
 GetCapabilities, and similar) from the native Rust process rather than the
-WebView. That path (`guarded_http_client` in `src-tauri/src/lib.rs`) trusts the
+WebView. That path (`guarded_http_client` in `src-tauri/src/guarded_http.rs`) trusts the
 **OS/system certificate store** in addition to the bundled Mozilla roots, so a
 server signed by an enterprise CA installed on the machine is accepted without
 extra configuration.

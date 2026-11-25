@@ -51,7 +51,7 @@ Usage::
 Canonical source: ``backend/geolibre_server/notebook_client.py``. The web build
 copies it into the JupyterLite contents (see ``scripts/build-jupyterlite.mjs``)
 and the desktop launcher copies it onto the kernel's import path
-(``src-tauri/src/lib.rs``); keep those copies in sync with this file.
+(``src-tauri/src/jupyter.rs``); keep those copies in sync with this file.
 """
 
 from __future__ import annotations

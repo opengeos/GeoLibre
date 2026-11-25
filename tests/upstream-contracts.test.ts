@@ -35,7 +35,7 @@ import {
  * (GlobeControl, blend modes, PMTiles ids, basemap DOM, lidar canvas class,
  * point-cloud colours, zarr-cesium, raster picker, deck.gl `_props`,
  * Tileset3D, style-spec). `tauri-plugin-persisted-scope` is a Rust mirror,
- * covered by the Rust tests in `apps/geolibre-desktop/src-tauri/src/lib.rs`.
+ * covered by the Rust tests in `apps/geolibre-desktop/src-tauri/src/image_scope.rs`.
  */
 
 /** Matches `cls` as a whole class token, not as a prefix of a longer one. */

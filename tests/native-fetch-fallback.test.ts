@@ -24,7 +24,7 @@ async function retrySignalFor(nativeError: string): Promise<AbortSignal | undefi
 const NATIVE_404 = "Request failed with status 404 Not Found";
 const NATIVE_TIMEOUT =
   "Request failed: error sending request for url (https://sdi.example.it/wms): operation timed out";
-// `SSRF_BLOCKED_MESSAGE` in `src-tauri/src/lib.rs`.
+// `SSRF_BLOCKED_MESSAGE` in `src-tauri/src/guarded_http.rs`.
 const NATIVE_SSRF = "Refusing to fetch a link-local, unspecified, or multicast address";
 const NATIVE_TLS =
   "Request failed: invalid peer certificate: UnknownIssuer (https://gis.example.org/)";

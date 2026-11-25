@@ -31,7 +31,7 @@ The zip is written to
 The staged folder mirrors what the binary probes at runtime. `resource_dir()`
 resolves to the executable's own directory for an unbundled run, so the sidecar
 must sit at `backend\geolibre_server\` next to the exe, the first location
-`sidecar_project_dir()` checks (`apps/geolibre-desktop/src-tauri/src/lib.rs`).
+`sidecar_project_dir()` checks (`apps/geolibre-desktop/src-tauri/src/sidecar.rs`).
 
 ```text
 geolibre-desktop-<version>-x64/

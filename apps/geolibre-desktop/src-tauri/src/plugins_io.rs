@@ -946,8 +946,7 @@ fn validate_external_plugin_path(field: &str, value: &str) -> Result<(), String>
     Ok(())
 }
 
-// Mac App Store stubs: see the note above the Martin, sidecar and Jupyter
-// stubs in lib.rs.
+// Mac App Store stubs: see the note above the sidecar stubs in sidecar.rs.
 #[cfg(feature = "mas")]
 #[tauri::command]
 pub(crate) async fn install_external_plugin_archive(

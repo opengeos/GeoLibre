@@ -38,7 +38,7 @@ if (-not (Test-Path $binaryPath)) {
 # Stage the app exactly as the binary expects to find it at runtime: the
 # Python sidecar lives in a `backend\geolibre_server` folder next to the exe,
 # which is the first location sidecar_project_dir() probes via resource_dir()
-# (see apps/geolibre-desktop/src-tauri/src/lib.rs). resource_dir() resolves to
+# (see apps/geolibre-desktop/src-tauri/src/sidecar.rs). resource_dir() resolves to
 # the executable's own directory for an unbundled (portable) run, so this
 # layout works without an installer.
 $stagingDir = Join-Path $targetDir "portable-package"
@@ -89,7 +89,7 @@ This portable build does not auto-update; download a newer zip to upgrade.
 "@
 Set-Content -Path (Join-Path $payloadDir "README.txt") -Value $readme -Encoding utf8
 # Tells the app it runs from the portable zip, so it registers the OAuth
-# callback scheme itself (lib.rs, is_portable_windows_build). Installers
+# callback scheme itself (deep_links.rs, exe_has_portable_marker). Installers
 # register it at install time; without the marker nothing would.
 Set-Content -Path (Join-Path $payloadDir "portable.marker") -Value "" -Encoding utf8
 

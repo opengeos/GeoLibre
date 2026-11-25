@@ -217,7 +217,7 @@ precache (see `pwaPlugin` in `apps/geolibre-desktop/vite.config.ts`).
   (`jupyterlab`, `jupyter-server`), synced into its own uv project environment so
   it never disturbs the sidecar's env.
 - Launcher / lifecycle: `start_jupyter_server` / `stop_jupyter_server` Tauri
-  commands in `apps/geolibre-desktop/src-tauri/src/lib.rs` (mirrors the sidecar
+  commands in `apps/geolibre-desktop/src-tauri/src/jupyter.rs` (mirrors the sidecar
   launcher), with the TS wrapper in `apps/geolibre-desktop/src/lib/jupyter.ts`.
 - Framing: `backend/geolibre_server/jupyter_server_config.py` relaxes
   `Content-Security-Policy: frame-ancestors` to the Tauri webview / loopback
