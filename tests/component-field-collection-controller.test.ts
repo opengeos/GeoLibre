@@ -77,6 +77,12 @@ function controller(mapControllerRef: { current: MapEngine | null } = { current:
   return { ...hook, changes };
 }
 
+function capture(hook: ReturnType<typeof controller>) {
+  const model = hook.result.current.capture;
+  assert.ok(model, "capture requires a selected collection schema");
+  return model;
+}
+
 const containers: HTMLElement[] = [];
 
 function liveMap() {
@@ -145,7 +151,7 @@ it("removes a live capture marker and its camera subscription on unmount", async
   const requests = hardware();
   const map = liveMap();
   const hook = controller(map.ref);
-  act(() => hook.result.current.capture.onUseGps());
+  act(() => capture(hook).onUseGps());
   await act(async () => requests[0].resolve(position()));
   assert.equal(map.flights.length, 1);
   assert.equal(map.container.children.length, 2);
@@ -159,7 +165,7 @@ it("does not recreate a marker or move the live map after its owner unmounts", a
   const requests = hardware();
   const map = liveMap();
   const hook = controller(map.ref);
-  act(() => hook.result.current.capture.onUseGps());
+  act(() => capture(hook).onUseGps());
   hook.unmount();
   await act(async () => requests[0].resolve(position()));
   assert.equal(map.flights.length, 0);
@@ -170,6 +176,8 @@ it("does not recreate a marker or move the live map after its owner unmounts", a
 it("creates a collection and validates attributes before saving a GPS point without a map", async () => {
   const requests = hardware();
   const hook = controller();
+  assert.equal(hook.result.current.capture, null);
+  assert.equal(hook.result.current.inSetup, true);
   act(() => {
     const field = hook.result.current.setup.newDraft();
     hook.result.current.setup.onLayerName("Observations");
@@ -178,20 +186,20 @@ it("creates a collection and validates attributes before saving a GPS point with
   act(() => hook.result.current.setup.onCreate());
   const id = hook.result.current.target.selected;
   assert.ok(id);
-  act(() => hook.result.current.capture.onUseGps());
-  assert.equal(hook.result.current.capture.locating, true);
+  act(() => capture(hook).onUseGps());
+  assert.equal(capture(hook).locating, true);
   await act(async () => requests[0].resolve(position()));
-  assert.deepEqual(hook.result.current.capture.pending, [[-83.92, 35.95]]);
-  act(() => hook.result.current.capture.onSave());
-  assert.equal(hook.result.current.capture.errors.condition, "required");
+  assert.deepEqual(capture(hook).pending, [[-83.92, 35.95]]);
+  act(() => capture(hook).onSave());
+  assert.equal(capture(hook).errors.condition, "required");
   assert.equal(useAppStore.getState().layers[0].geojson?.features.length, 0);
-  act(() => hook.result.current.capture.setValue("condition", "Intact"));
-  act(() => hook.result.current.capture.onSave());
+  act(() => capture(hook).setValue("condition", "Intact"));
+  act(() => capture(hook).onSave());
   const saved = useAppStore.getState().layers.find((layer) => layer.id === id)?.geojson?.features;
   assert.equal(saved?.length, 1);
   assert.deepEqual(saved?.[0].geometry, { type: "Point", coordinates: [-83.92, 35.95] });
   assert.equal(saved?.[0].properties?.condition, "Intact");
-  assert.equal(hook.result.current.capture.pending, null);
+  assert.equal(capture(hook).pending, null);
 });
 
 it("drops a pending GPS result when its target changes and accepts the next target's request", async () => {
@@ -199,14 +207,14 @@ it("drops a pending GPS result when its target changes and accepts the next targ
   addCollection("B");
   const requests = hardware();
   const hook = controller();
-  act(() => hook.result.current.capture.onUseGps());
+  act(() => capture(hook).onUseGps());
   act(() => hook.result.current.target.onChange("B"));
-  act(() => hook.result.current.capture.onUseGps());
+  act(() => capture(hook).onUseGps());
   await act(async () => requests[0].resolve(position(-84)));
-  assert.equal(hook.result.current.capture.pending, null);
-  assert.equal(hook.result.current.capture.locating, true);
+  assert.equal(capture(hook).pending, null);
+  assert.equal(capture(hook).locating, true);
   await act(async () => requests[1].resolve(position(-82)));
-  assert.deepEqual(hook.result.current.capture.pending, [[-82, 35.95]]);
+  assert.deepEqual(capture(hook).pending, [[-82, 35.95]]);
   assert.equal(hook.result.current.target.selected, "B");
 });
 
@@ -214,18 +222,31 @@ it("preserves captured work across dismissal but clears it on a project change",
   addCollection("A");
   const requests = hardware();
   const hook = controller();
-  act(() => hook.result.current.capture.onUseGps());
+  act(() => capture(hook).onUseGps());
   await act(async () => requests[0].resolve(position()));
-  act(() => hook.result.current.capture.setValue("condition", "Intact"));
+  act(() => capture(hook).setValue("condition", "Intact"));
   act(() => hook.result.current.onDialogOpenChange(false));
   hook.rerender({ open: false });
   assert.equal(hook.result.current.quickOpen, true);
   hook.rerender({ open: true });
-  assert.deepEqual(hook.result.current.capture.pending, [[-83.92, 35.95]]);
-  assert.equal(hook.result.current.capture.values.condition, "Intact");
+  assert.deepEqual(capture(hook).pending, [[-83.92, 35.95]]);
+  assert.equal(capture(hook).values.condition, "Intact");
   act(() => useAppStore.getState().newProject());
-  assert.equal(hook.result.current.capture.pending, null);
+  assert.equal(hook.result.current.capture, null);
   assert.equal(hook.result.current.inSetup, true);
+});
+
+it("Done ends the session and hides quick-open while preserving collection layers", () => {
+  addCollection("A");
+  const hook = controller();
+  const layers = useAppStore.getState().layers;
+  act(() => hook.result.current.onDialogOpenChange(false));
+  hook.rerender({ open: false });
+  assert.equal(hook.result.current.quickOpen, true);
+  act(() => hook.result.current.onDone());
+  assert.equal(hook.changes.at(-1), false);
+  assert.equal(hook.result.current.quickOpen, false);
+  assert.equal(useAppStore.getState().layers, layers);
 });
 
 it("keeps a new photo read busy when an older target's photo finishes", async () => {
@@ -235,21 +256,21 @@ it("keeps a new photo read busy when an older target's photo finishes", async ()
   Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
   const hook = controller();
   const inputView = render(
-    createElement("input", { type: "file", onChange: hook.result.current.capture.onPhotos }),
+    createElement("input", { type: "file", onChange: capture(hook).onPhotos }),
   );
   const input = inputView.container.querySelector("input");
   assert.ok(input);
   fireEvent.change(input, { target: { files: [new File(["old"], "old.jpg")] } });
-  assert.equal(hook.result.current.capture.readingPhotos, true);
+  assert.equal(capture(hook).readingPhotos, true);
   act(() => hook.result.current.target.onChange("B"));
   fireEvent.change(input, { target: { files: [new File(["new"], "new.jpg")] } });
   await act(async () => PendingReader.pending[0].finish("old"));
-  assert.equal(hook.result.current.capture.readingPhotos, true);
-  assert.equal(hook.result.current.capture.photos.length, 0);
+  assert.equal(capture(hook).readingPhotos, true);
+  assert.equal(capture(hook).photos.length, 0);
   await act(async () => PendingReader.pending[1].finish("new"));
-  assert.equal(hook.result.current.capture.readingPhotos, false);
+  assert.equal(capture(hook).readingPhotos, false);
   assert.deepEqual(
-    hook.result.current.capture.photos.map((photo) => photo.name),
+    capture(hook).photos.map((photo) => photo.name),
     ["new.jpg"],
   );
 });

@@ -55,13 +55,21 @@ function formatLatLng(lng: number, lat: number): string {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 
-/** Render the field-session form and on-map capture controls. */
+/**
+ * Render point, line, and polygon capture against a custom attribute form.
+ * Tagged GeoJSON collection layers persist observations in the project for
+ * attribute tables, export, and offline use.
+ */
 export function FieldCollectionDialog({ open, ...options }: FieldCollectionControllerOptions) {
   const { t } = useTranslation();
   const model = useFieldCollectionController({ open, ...options });
   const targetLayerId = useId();
+  // Use the map surface's portal so these controls follow the visible map
+  // center as shell panels open and close.
   const overlays = (
     <>
+      {/* w-max avoids shrinking the pill into the half-width after left-1/2,
+          which otherwise clips its layer name too early. */}
       {model.quickOpen && (
         <button
           type="button"
@@ -106,7 +114,7 @@ export function FieldCollectionDialog({ open, ...options }: FieldCollectionContr
           </div>
           <ScrollArea className="max-h-[60vh] pe-3">
             <div className="space-y-4 py-1">
-              {model.inSetup ? <SetupStep {...model.setup} /> : <CaptureStep {...model.capture} />}
+              {model.capture ? <CaptureStep {...model.capture} /> : <SetupStep {...model.setup} />}
               {model.related && <FieldCollectionRelated {...model.related} />}
               {model.notice && (
                 <p
@@ -119,6 +127,7 @@ export function FieldCollectionDialog({ open, ...options }: FieldCollectionContr
             </div>
           </ScrollArea>
           <div className="flex justify-end">
+            {/* Done ends the session; dismissing the dialog preserves it. */}
             <Button variant="outline" onClick={model.onDone}>
               {t("common.done")}
             </Button>

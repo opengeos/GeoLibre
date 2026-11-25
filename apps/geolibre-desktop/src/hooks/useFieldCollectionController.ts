@@ -960,7 +960,7 @@ export function useFieldCollectionController({
     [t],
   );
 
-  const inSetup = !activeLayer;
+  const inSetup = !schema;
 
   // Quick-access control on the map: while a session is running and a
   // collection layer exists, surface a floating pill so users can reopen the
@@ -1015,31 +1015,35 @@ export function useFieldCollectionController({
         }
       : null,
     pick: picking ? { onCancel: handleCancelPick } : null,
-    capture: {
-      geometry: activeGeometry,
-      schema: schema!,
-      attributeForm,
-      pending: capturePending,
-      captureKey: recordKey,
-      onAttachmentReading: (delta: number, key: string) => {
-        if (key === recordKeyRef.current) setPhotoReads((count) => Math.max(0, count + delta));
-      },
-      values,
-      setValue,
-      errors,
-      errorText,
-      photos,
-      readingPhotos: photoReads > 0,
-      onPhotos: handlePhotos,
-      onRemovePhoto: (index: number) =>
-        setPhotos((current) => current.filter((_, i) => i !== index)),
-      locating,
-      gpsFix: lastGpsFix,
-      onUseGps: () => handleUseGps(false),
-      onPickOnMap: handlePickOnMap,
-      onStartDrawing: handleStartDrawing,
-      onSave: handleSave,
-    },
+    capture: schema
+      ? {
+          geometry: activeGeometry,
+          schema,
+          attributeForm,
+          pending: capturePending,
+          captureKey: recordKey,
+          onAttachmentReading: (delta: number, key: string) => {
+            // A read belongs to the record it began in. Its completion must not
+            // release a newer record's attachment busy state.
+            if (key === recordKeyRef.current) setPhotoReads((count) => Math.max(0, count + delta));
+          },
+          values,
+          setValue,
+          errors,
+          errorText,
+          photos,
+          readingPhotos: photoReads > 0,
+          onPhotos: handlePhotos,
+          onRemovePhoto: (index: number) =>
+            setPhotos((current) => current.filter((_, i) => i !== index)),
+          locating,
+          gpsFix: lastGpsFix,
+          onUseGps: () => handleUseGps(false),
+          onPickOnMap: handlePickOnMap,
+          onStartDrawing: handleStartDrawing,
+          onSave: handleSave,
+        }
+      : null,
     related:
       savedParent && (activeGeometry === "none" ? !recordEdited : !pending)
         ? {
