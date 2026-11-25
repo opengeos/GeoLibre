@@ -298,7 +298,11 @@ jobs:
   github-pages:
     name: Deploy GitHub Pages preview
     needs: resolve
-    if: needs.resolve.outputs.found == 'true'
+    # Removals run in `github-pages-remove` below, outside this job's
+    # concurrency group -- see the note there.
+    if: >-
+      needs.resolve.outputs.found == 'true' &&
+      needs.resolve.outputs.action == 'deploy'
     runs-on: ubuntu-latest
     # The verifier below polls for up to 10 minutes on top of checkout,
     # artifact download and the push.
@@ -312,6 +316,12 @@ jobs:
     # deploys from the other repositories that share the site (Actions
     # concurrency is per repository), which is why the verify step below still
     # has to tell a superseded build apart from a real failure.
+    #
+    # `cancel-in-progress: false` only protects the RUNNING job. A group holds at
+    # most one pending job, and a newly queued one cancels it. That is fine for
+    # deploys, since the next push redeploys its PR, but it is why removals do
+    # not share this group: a cancelled removal never runs again and leaves its
+    # preview on gh-pages for good.
     concurrency:
       group: pages-preview-deploy
       cancel-in-progress: false
@@ -524,15 +534,6 @@ jobs:
           echo "::error::The preview at $PREVIEW_URL did not publish within 10 minutes."
           exit 1
 
-      # `continue-on-error` on the deploy step also swallows a failed *removal*,
-      # which the verify step does not cover -- there is no URL to poll, since a
-      # removal is meant to take the preview away. Surface that here instead.
-      - name: Fail if the preview removal failed
-        if: needs.resolve.outputs.action == 'remove' && steps.pages.outcome == 'failure'
-        run: |
-          echo "::error::Removing the preview for PR ${{ needs.resolve.outputs.number }} failed."
-          exit 1
-
       - name: Comment GitHub Pages preview status
         if: always() && needs.resolve.outputs.action == 'deploy'
         uses: actions/github-script@v9
@@ -565,3 +566,40 @@ jobs:
             } else {
               await github.rest.issues.createComment({ owner, repo, issue_number, body });
             }
+
+  # Removes a closed PR's preview from opengeos/pages-preview. Deliberately NOT
+  # in the `pages-preview-deploy` concurrency group: a pending job in a group is
+  # cancelled whenever another one queues, and a removal that is cancelled never
+  # runs again. That left hundreds of ~280 MB previews of closed PRs on
+  # gh-pages, until the site passed the 1 GB Pages limit and every deploy
+  # failed. A removal does not wait on a Pages build, so it gains nothing from
+  # the serialization; a push that races a deploy is rebased by the action.
+  github-pages-remove:
+    name: Remove GitHub Pages preview
+    needs: resolve
+    if: >-
+      needs.resolve.outputs.found == 'true' &&
+      needs.resolve.outputs.action == 'remove'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # The action runs `git config` in the workspace, so it needs a git
+      # repository there. DEFAULT BRANCH only -- never the PR head.
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Remove preview from GitHub Pages
+        uses: rossjrw/pr-preview-action@873417d2df72380da1f3978378fb58560bcde976 # v1.8.2
+        with:
+          deploy-repository: opengeos/pages-preview
+          token: ${{ secrets.PREVIEW_DEPLOY_TOKEN }}
+          pages-base-url: opengeos.org/pages-preview
+          preview-branch: gh-pages
+          umbrella-dir: GeoLibre
+          pr-number: ${{ needs.resolve.outputs.number }}
+          action: remove
+          remove-commit-message: Remove preview for PR ${{ needs.resolve.outputs.number }} 🛬
+          wait-for-pages-deployment: false
+          comment: false
