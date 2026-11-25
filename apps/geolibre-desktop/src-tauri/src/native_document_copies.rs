@@ -43,7 +43,7 @@ pub(crate) async fn initialize_native_document_copies(
             // failures propagate above so the frontend holds retained projects.
             let canonical = std::fs::canonicalize(&root).map_err(|error| error.to_string())?;
             Ok(NativeDocumentCopies {
-                root: Some(crate::canonical_local_path_string(&canonical)?),
+                root: Some(crate::local_files::canonical_local_path_string(&canonical)?),
                 problems,
             })
         })

@@ -4,7 +4,7 @@
 //! stub commands with the same names and signatures.
 
 #[cfg(not(feature = "mas"))]
-use crate::{is_safe_absolute_path, is_unc_resolved_path};
+use crate::local_files::{is_safe_absolute_path, is_unc_resolved_path};
 use serde::{Deserialize, Serialize};
 #[cfg(not(feature = "mas"))]
 use std::collections::HashSet;

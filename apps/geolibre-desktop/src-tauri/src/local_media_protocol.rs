@@ -792,7 +792,9 @@ impl LocalMediaPools {
 }
 
 fn canonicalize_allowed_mbtiles(path: &str) -> Result<PathBuf, String> {
-    if !crate::is_safe_absolute_path(path) || !path.to_ascii_lowercase().ends_with(".mbtiles") {
+    if !crate::local_files::is_safe_absolute_path(path)
+        || !path.to_ascii_lowercase().ends_with(".mbtiles")
+    {
         return Err(format!(
             "Refusing to open \"{path}\": not an absolute local MBTiles file path"
         ));
@@ -800,7 +802,7 @@ fn canonicalize_allowed_mbtiles(path: &str) -> Result<PathBuf, String> {
     let canonical = fs::canonicalize(path)
         .map_err(|_| "The selected MBTiles file does not exist".to_string())?;
     let resolved = canonical.to_string_lossy();
-    if crate::is_unc_resolved_path(&resolved) {
+    if crate::local_files::is_unc_resolved_path(&resolved) {
         return Err(format!(
             "Refusing to open \"{path}\": resolves to a network path"
         ));
@@ -823,7 +825,7 @@ fn canonicalize_scoped_media_path(
     path: &str,
     allowed_extensions: &[&str],
 ) -> Result<PathBuf, String> {
-    if !crate::is_safe_absolute_path(path) {
+    if !crate::local_files::is_safe_absolute_path(path) {
         return Err(format!("Refusing to stream \"{path}\": unsafe path"));
     }
     let lower = path.to_ascii_lowercase();
@@ -835,7 +837,7 @@ fn canonicalize_scoped_media_path(
     let canonical = fs::canonicalize(path)
         .map_err(|error| format!("Could not resolve local media file: {error}"))?;
     let resolved = canonical.to_string_lossy().to_ascii_lowercase();
-    if crate::is_unc_resolved_path(&resolved) {
+    if crate::local_files::is_unc_resolved_path(&resolved) {
         return Err(format!(
             "Refusing to stream \"{path}\": resolves to a network path"
         ));

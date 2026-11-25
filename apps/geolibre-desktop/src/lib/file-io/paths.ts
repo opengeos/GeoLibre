@@ -46,7 +46,7 @@ export function ensureGeoLibreProjectExtension(path: string): string {
 }
 
 export const SHAPEFILE_SIDECAR_EXTENSIONS = ["dbf", "shx", "prj", "cpg"];
-// SYNC: RESTORABLE_VECTOR_EXTENSIONS in src-tauri/src/lib.rs must list the same
+// SYNC: RESTORABLE_VECTOR_EXTENSIONS in src-tauri/src/local_files.rs must list the same
 // extensions, or a format added here would be rejected by the Rust restore
 // guard on every project reopen (the bug this PR fixes). Grep "SYNC:" to find
 // the partner list.

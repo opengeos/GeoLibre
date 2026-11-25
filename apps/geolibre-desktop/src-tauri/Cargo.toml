@@ -89,7 +89,7 @@ ring = "0.17"
 hmac = "0.13"
 # Pinned to 1.x on purpose: this must match the bincode version
 # `tauri-plugin-persisted-scope` uses to write its scope file, which
-# `PersistedScopeState` in src/lib.rs reads and rewrites. Dependabot is told to
+# `PersistedScopeState` in src/image_scope.rs reads and rewrites. Dependabot is told to
 # skip major bumps in .github/dependabot.yml; see docs/maintenance.md.
 bincode = "1"
 # OS CSPRNG for the per-launch Jupyter token (already an indirect dep).

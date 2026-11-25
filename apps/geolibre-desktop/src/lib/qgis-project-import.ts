@@ -364,7 +364,7 @@ export async function materializeQgisFormRelations(
 }
 
 // SYNC: VECTOR_FILE_DIALOG_EXTENSIONS in file-io/paths.ts and
-// RESTORABLE_VECTOR_EXTENSIONS in src-tauri/src/lib.rs.
+// RESTORABLE_VECTOR_EXTENSIONS in src-tauri/src/local_files.rs.
 const SUPPORTED_VECTOR_EXTENSIONS = new Set([
   "csv",
   "dxf",

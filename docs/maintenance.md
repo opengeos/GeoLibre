@@ -831,7 +831,7 @@ a bump of `geotiff-geokeys-to-proj4` fixes the code, drop the entry.
 
 ### `tauri-plugin-persisted-scope` — private on-disk format
 
-`PersistedScopeState` (`apps/geolibre-desktop/src-tauri/src/lib.rs`) mirrors the
+`PersistedScopeState` (`apps/geolibre-desktop/src-tauri/src/image_scope.rs`) mirrors the
 plugin's private bincode `Scope` structure so GeoLibre can remove legacy
 per-photo grants before the plugin synchronously replays them at startup. On a
 `tauri-plugin-persisted-scope` bump, compare the upstream struct's field order

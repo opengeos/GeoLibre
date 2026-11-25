@@ -21,27 +21,28 @@ pub(crate) struct NativeOfflinePackages {
 
 fn open_store(app: &AppHandle) -> Result<PackageStore, String> {
     let directory = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    if crate::is_unc_resolved_path(&directory.to_string_lossy()) {
+    if crate::local_files::is_unc_resolved_path(&directory.to_string_lossy()) {
         return Err("Offline packages require local storage".into());
     }
     let root = directory.join("offline-packages");
     let store = PackageStore::open(&root)?;
     let resolved = std::fs::canonicalize(&root).map_err(|e| e.to_string())?;
-    if crate::is_unc_resolved_path(&resolved.to_string_lossy()) {
+    if crate::local_files::is_unc_resolved_path(&resolved.to_string_lossy()) {
         return Err("Offline packages require local storage".into());
     }
     // Validate UTF-8 and Windows normalization before generating an archive.
-    crate::canonical_local_path_string(&resolved)?;
+    crate::local_files::canonical_local_path_string(&resolved)?;
     Ok(store)
 }
 
 fn authorize(app: &AppHandle, entry: &mut OfflinePackage) -> Result<(), String> {
     // Only paths returned by the confined native inventory enter the scope.
     // Re-established from disk on each launch; browser storage is not trusted.
-    if crate::is_unc_resolved_path(&entry.saved_path) {
+    if crate::local_files::is_unc_resolved_path(&entry.saved_path) {
         return Err("Offline packages require local storage".into());
     }
-    entry.saved_path = crate::canonical_local_path_string(std::path::Path::new(&entry.saved_path))?;
+    entry.saved_path =
+        crate::local_files::canonical_local_path_string(std::path::Path::new(&entry.saved_path))?;
     app.fs_scope()
         .allow_file(&entry.saved_path)
         .map_err(|e| e.to_string())?;
