@@ -104,10 +104,10 @@ jobs:
   build:
     name: Build MAS pkg
     # Built with Xcode 27 (macOS 27 SDK), like ios.yml, which had to move for
-    # App Store Connect's iOS 27 SDK floor (ITMS-90725, April 2027). Apple
-    # raises the store SDK floors together, so this keeps the Mac App Store
-    # build ahead of it. macos-latest ships Xcode 26; only the `xcode-27` image
-    # has Xcode 27. The label pins the Xcode major, but its minor version and SDK
+    # App Store Connect's iOS 27 SDK floor (ITMS-90725, April 2027). No macOS
+    # floor has been announced; this keeps the Mac App Store build on the same
+    # current SDK in case one follows. macos-latest ships Xcode 26; only the
+    # `xcode-27` image has Xcode 27. The label pins the Xcode major, but its minor version and SDK
     # still move with image updates, which the "Select the newest available
     # Xcode" step handles. Same runner as ios.yml.
     runs-on: xcode-27
@@ -138,7 +138,7 @@ jobs:
           fi
           sudo xcode-select -s "$newest/Contents/Developer"
           version="$(xcodebuild -version | head -1 | awk '{print $2}')"
-          if [ "${version%%.*}" -lt 27 ]; then
+          if ! [[ "${version%%.*}" =~ ^[0-9]+$ ]] || [ "${version%%.*}" -lt 27 ]; then
             echo "::error::Xcode $version builds against a macOS SDK below App Store Connect's floor; use a runner image that ships Xcode 27"
             exit 1
           fi
@@ -264,12 +264,12 @@ jobs:
             exit 1
           fi
           for sdk in $sdks; do
-            if [ "${sdk%%.*}" -lt 27 ]; then
+            if ! [[ "${sdk%%.*}" =~ ^[0-9]+$ ]] || [ "${sdk%%.*}" -lt 27 ]; then
               echo "::error::$bin has a slice built against the macOS $sdk SDK; expected 27 or later"
               exit 1
             fi
           done
-          echo "::notice::Built against macOS SDK $(echo $sdks | tr ' ' ',')"
+          echo "::notice::Built against macOS SDK $(echo "$sdks" | tr ' ' ',')"
           version="$(node -p "require('./apps/geolibre-desktop/src-tauri/tauri.conf.json').version")"
           pkg="GeoLibre.Desktop_${version}_universal_mas.pkg"
           xcrun productbuild --sign "$APPLE_MAS_INSTALLER_IDENTITY" \
