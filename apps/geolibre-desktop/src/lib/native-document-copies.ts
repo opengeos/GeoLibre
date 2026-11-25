@@ -17,13 +17,9 @@ export async function initializeNativeDocumentCopies(): Promise<string[]> {
 export async function restoreNativeDocumentCopies(
   translationReady: Promise<unknown>,
 ): Promise<void> {
+  let problems: string[];
   try {
-    const problems = await initializeNativeDocumentCopies();
-    if (problems.length > 0) {
-      console.error("[GeoLibre] Some retained imports are unavailable", problems);
-      await translationReady;
-      notify.error(i18next.t("notifications.nativeDocumentCopiesFailed"));
-    }
+    problems = await initializeNativeDocumentCopies();
   } catch (error) {
     const key = "notifications.nativeDocumentCopiesInitFailed";
     // Block publication immediately, before translation readiness or the first render.
@@ -37,5 +33,12 @@ export async function restoreNativeDocumentCopies(
     const message = i18next.t(key);
     useAppStore.getState().setNativeDocumentCopyError(message);
     notify.error(message, { error });
+    return;
+  }
+  if (problems.length > 0) {
+    console.error("[GeoLibre] Some retained imports are unavailable", problems);
+    // Translation failures belong to the startup chain, not native authorization.
+    await translationReady;
+    notify.error(i18next.t("notifications.nativeDocumentCopiesFailed"));
   }
 }

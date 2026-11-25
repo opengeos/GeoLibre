@@ -215,6 +215,49 @@ describe("retained iOS document references", () => {
     }
   });
 
+  it("does not hold healthy retained imports when translation readiness rejects", async () => {
+    clearNotifications();
+    mockIPC(() => ({ root: currentRoot, problems: ["One import is unreadable"] }));
+    const translationError = new Error("Translation initialization failed");
+    try {
+      await assert.rejects(
+        restoreNativeDocumentCopies(Promise.reject(translationError)),
+        (error: unknown) => error === translationError,
+      );
+      assert.equal(useAppStore.getState().nativeDocumentCopyRoot, currentRoot);
+      assert.equal(useAppStore.getState().nativeDocumentCopyError, null);
+      assert.equal(useNotificationStore.getState().notifications.length, 0);
+    } finally {
+      clearMocks();
+      clearNotifications();
+      useAppStore.getState().setNativeDocumentCopyRoot(null);
+    }
+  });
+
+  it("keeps a genuine native initialization hold when translation readiness rejects", async () => {
+    clearNotifications();
+    mockIPC(() => {
+      throw new Error("Storage path unavailable");
+    });
+    const translationError = new Error("Translation initialization failed");
+    try {
+      await assert.rejects(
+        restoreNativeDocumentCopies(Promise.reject(translationError)),
+        (error: unknown) => error === translationError,
+      );
+      assert.equal(useAppStore.getState().nativeDocumentCopyRoot, null);
+      assert.equal(
+        useAppStore.getState().nativeDocumentCopyError,
+        en.notifications.nativeDocumentCopiesInitFailed,
+      );
+      assert.equal(useNotificationStore.getState().notifications.length, 0);
+    } finally {
+      clearMocks();
+      clearNotifications();
+      useAppStore.getState().setNativeDocumentCopyRoot(null);
+    }
+  });
+
   it("settles catastrophic initialization with actionable guidance so the workspace can open", async () => {
     await i18next.init({ lng: "en", resources: { en: { translation: en } } });
     clearNotifications();
