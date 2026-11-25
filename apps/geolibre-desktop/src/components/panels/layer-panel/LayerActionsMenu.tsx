@@ -1,4 +1,5 @@
 import type { RefObject } from "react";
+import { isImportedDocumentCopyPath } from "../../../lib/file-io/paths";
 import { useTranslation } from "react-i18next";
 import {
   activeLayerFilterExpression,
@@ -1046,7 +1047,11 @@ export function LayerActionsMenuItems({
               ? t("layers.saveEditsToMssql")
               : isPostgisEditableLayer(layer)
                 ? t("layers.saveEditsToPostgis")
-                : t("layers.saveEditsToSource")}
+                : t(
+                    isImportedDocumentCopyPath(layer.sourcePath)
+                      ? "layers.saveEditsToImportedCopy"
+                      : "layers.saveEditsToSource",
+                  )}
         </DropdownMenuItem>
       )}
       {canEditRasterStyle && (

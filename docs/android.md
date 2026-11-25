@@ -89,10 +89,10 @@ rustup target add aarch64-linux-android armv7-linux-androideabi \
 NDK **r27 (LTS)** is the supported line for Tauri v2. Add the four `export`s to
 your shell profile so every session has them.
 
-API **36** (Android 16), not 34: the Tauri v2.11 Android template generates
-`compileSdk = 36` / `targetSdk = 36`, so Gradle needs the matching platform
-installed. It is also Google Play's floor — from **2026-08-31** new apps and
-updates must target API 36 to be accepted.
+The build uses API **36** (Android 16). After generating the Android project,
+`scripts/pin-android-sdk.mjs` sets `compileSdk` and `targetSdk` to match the
+installed platform. This keeps local and CI builds consistent when Tauri's
+template defaults change.
 
 ### 16 KB page sizes
 
@@ -132,6 +132,7 @@ regression.
 ```bash
 cd apps/geolibre-desktop
 npx tauri android init                          # generate src-tauri/gen/android (once)
+node ../../scripts/pin-android-sdk.mjs 36        # match the installed SDK, as CI does
 cp -r src-tauri/icons/android/. src-tauri/gen/android/app/src/main/res/
 cp src-tauri/android/MainActivity.kt \
   src-tauri/gen/android/app/src/main/java/org/geolibre/app/MainActivity.kt
@@ -301,9 +302,22 @@ review, so gate them on mobile the way the sidecar tools already are via
 
 ## Known limitations / follow-ups
 
-- Local-file sources (MBTiles, local rasters, project files) assume real
-  filesystem paths; Android scoped storage returns content URIs, so those flows
-  need adapting before they work natively.
+- Data-file pickers import Android documents into durable app storage, retaining
+  filenames and keeping files selected together in one folder for companion
+  reads. A manifest records the source URI, byte count, and SHA-256 checksum.
+  GeoJSON edits can be saved to the imported copy. Formats that need the desktop
+  writer, including GeoPackage, are export-only on mobile. Export edited data to
+  create a new file. The original document is unchanged.
+  Project-file pickers retain their existing scoped-document behavior.
+- Source-document permissions are retained for future synchronization and share
+  Android's finite persisted-permission quota with project documents. After
+  enough distinct picks, the app can release an older project's permission;
+  reopening then uses the stored-project fallback with its stale-copy warning
+  when that fallback is available. Imported data copies remain readable without
+  the original provider permission.
+- Keep the locked Wry dependency at 0.57.1 or later. Earlier versions apply
+  nonzero byte-range offsets twice on Android, breaking local raster reads even
+  when their headers load. See [upstream Wry fix #1865](https://github.com/tauri-apps/wry/pull/1865).
 - The **Download Offline Area** tool relies on a service worker, which the Tauri
   builds (desktop and Android) don't use — it's a PWA feature. Native offline
   basemap caching (bundled/downloaded MBTiles/PMTiles) is a future enhancement.

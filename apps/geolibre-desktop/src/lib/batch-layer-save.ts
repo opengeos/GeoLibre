@@ -42,9 +42,10 @@ import {
 import { participantCanEditLayer } from "./collab-protocol";
 import { databaseBaselineKeys, databaseFeatureKeys } from "./database-tables";
 import { embedEditedGeometry, hasEditedGeometry } from "./edited-geometry-save";
-import { isGeojsonSourcePath, joinLocalPath } from "./file-io/paths";
+import { isGeojsonSourcePath, isImportedDocumentCopyPath, joinLocalPath } from "./file-io/paths";
 import { collectGeojsonLayersForExport, type CollectGeojsonExportDeps } from "./geojson-zip-export";
 import { isTauri } from "./is-tauri";
+import { isDesktopRuntime } from "./is-mobile";
 import { localFileSourceLayer } from "./local-file-source";
 import { MssqlReconnectRequiredError, withMssqlSession } from "./mssql-sessions";
 import {
@@ -398,6 +399,9 @@ export async function writeLayerEditsToSource(
   if (!currentBeforeCommit) {
     return { status: "error", message: t("layers.saveEditsError"), silent: true };
   }
+  if (isTauri() && !isDesktopRuntime() && !canWriteEditsToSource(currentBeforeCommit)) {
+    return { status: "error", message: t("layers.saveEditsError"), silent: true };
+  }
   if (
     isMssqlEditableLayer(currentBeforeCommit) &&
     currentBeforeCommit.mssqlWritebackPending === true
@@ -676,7 +680,12 @@ export async function writeLayerEditsToSource(
       clearGeometryEdited(layer.id, requestProjectGeneration, geojson);
       return {
         status: "success",
-        message: t("layers.saveEditsSuccess", { count: geojson.features.length }),
+        message: t(
+          isImportedDocumentCopyPath(path)
+            ? "layers.saveEditsImportedCopySuccess"
+            : "layers.saveEditsSuccess",
+          { count: geojson.features.length },
+        ),
       };
     }
 
@@ -690,7 +699,12 @@ export async function writeLayerEditsToSource(
     clearGeometryEdited(layer.id, requestProjectGeneration, geojson);
     return {
       status: "success",
-      message: t("layers.saveEditsSuccess", { count: result.feature_count }),
+      message: t(
+        isImportedDocumentCopyPath(path)
+          ? "layers.saveEditsImportedCopySuccess"
+          : "layers.saveEditsSuccess",
+        { count: result.feature_count },
+      ),
     };
   } catch (error) {
     if (isMssql && !isCurrentMssqlRequest()) {

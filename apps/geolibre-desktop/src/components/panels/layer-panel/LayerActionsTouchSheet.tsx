@@ -1,3 +1,4 @@
+import { isImportedDocumentCopyPath } from "../../../lib/file-io/paths";
 import {
   isDuckDBQueryLayer,
   pluginOwnsPaint,
@@ -224,7 +225,11 @@ export function LayerActionsTouchSheet({
           ? t("layers.saveEditsToMssql")
           : isPostgisEditableLayer(layer)
             ? t("layers.saveEditsToPostgis")
-            : t("layers.saveEditsToSource"),
+            : t(
+                isImportedDocumentCopyPath(layer.sourcePath)
+                  ? "layers.saveEditsToImportedCopy"
+                  : "layers.saveEditsToSource",
+              ),
       description: mssqlPending ? t("layers.saveEditsMssqlRefreshRequired") : undefined,
       disabled: geometryEditActive || !layerEditable || mssqlPending,
       icon: <Save className="h-4 w-4" />,

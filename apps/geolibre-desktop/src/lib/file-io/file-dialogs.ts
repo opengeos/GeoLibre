@@ -14,6 +14,7 @@ import { notify } from "../notify";
 import { localFileSizeBytes } from "./local-fs";
 import { browserSafeFileName } from "./paths";
 import { isAbortError, toArrayBuffer } from "./shared";
+import { notifyNativeDataCopies, pickNativeDataFiles } from "./native-data-copy";
 
 interface PickLocalPathOptions {
   accept?: string;
@@ -218,7 +219,7 @@ export async function openLocalDataFileWithFallback(options: LocalDataFileOption
   };
 
   if (isTauri()) {
-    const selected = await open({
+    const selected = await pickNativeDataFiles({
       multiple: false,
       filters: nativeFileDialogFilters(options.filters, options.androidFilters),
     });
@@ -236,6 +237,7 @@ export async function openLocalDataFileWithFallback(options: LocalDataFileOption
       throw new FileTooLargeError(data.byteLength);
     }
     const text = options.readText && !binaryByExtension ? await readTextFile(selected) : undefined;
+    notifyNativeDataCopies([selected]);
     return { data, path: selected, text };
   }
 
@@ -273,17 +275,19 @@ export async function openLocalDataFilesWithFallback(
   options: LocalDataFileOptions,
 ): Promise<Array<{ data: ArrayBuffer; path: string }>> {
   if (isTauri()) {
-    const selected = await open({
+    const selected = await pickNativeDataFiles({
       multiple: true,
       filters: nativeFileDialogFilters(options.filters, options.androidFilters),
     });
     const paths = Array.isArray(selected) ? selected : selected ? [selected] : [];
-    return Promise.all(
+    const files = await Promise.all(
       paths.map(async (path) => ({
         data: toArrayBuffer(await readFile(path)),
         path,
       })),
     );
+    notifyNativeDataCopies(paths);
+    return files;
   }
 
   return new Promise((resolve, reject) => {
