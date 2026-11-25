@@ -68,7 +68,7 @@ jobs:
             backend:
               - "{backend/**,docker/**,schema/**,tests/fixtures/**,package.json,.github/workflows/ci.yml}"
             rust:
-              - "{apps/geolibre-desktop/src-tauri/**,package.json,rust-toolchain.toml,scripts/desktop-launch-smoke.sh,.github/workflows/ci.yml}"
+              - "{apps/geolibre-desktop/src-tauri/**,tests/native-document-copy/**,scripts/test-ios-picker-policy.sh,package.json,rust-toolchain.toml,scripts/desktop-launch-smoke.sh,.github/workflows/ci.yml}"
             identity:
               - "{backend/geolibre_server_api/**,.github/workflows/ci.yml}"
             mssql:
@@ -455,7 +455,7 @@ jobs:
       - name: Stub the web build output
         run: mkdir -p apps/geolibre-desktop/dist
 
-      - name: Cargo check the Tauri shell
+      - name: Check the Tauri shell and test native document copies
         run: npm run check:rust
 
       - name: Run the Tauri shell unit tests
@@ -477,6 +477,21 @@ jobs:
 
       - name: Launch smoke test
         run: xvfb-run -a scripts/desktop-launch-smoke.sh apps/geolibre-desktop/src-tauri/target/debug/geolibre-desktop 20
+
+  ios-picker-policy:
+    name: iOS picker policy
+    runs-on: macos-15
+    timeout-minutes: 10
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true') }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Test document and media picker policy
+        run: bash scripts/test-ios-picker-policy.sh
 
   sidecar-mssql:
     name: Sidecar SQL Server integration
@@ -623,6 +638,7 @@ jobs:
       - checks
       - backend
       - rust
+      - ios-picker-policy
       - sidecar-mssql
       - identity-integration
     steps:

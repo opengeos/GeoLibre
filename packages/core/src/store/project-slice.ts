@@ -16,6 +16,10 @@ import {
   type PrintLayoutConfig,
 } from "../print-layout-config";
 import { reapplyLayerJoins } from "../joins";
+import {
+  assertImportedDocumentCopiesAvailable,
+  rebaseImportedDocumentLayer,
+} from "../imported-document-paths";
 import { gateRegionalBasemap } from "../regional-basemaps";
 import {
   DEFAULT_BASEMAP,
@@ -59,6 +63,12 @@ function normalizeRecentProjects(projects: RecentProjectEntry[]): RecentProjectE
 }
 
 export interface ProjectSlice {
+  /** Current native copy root, installed before startup loads; never serialized. */
+  nativeDocumentCopyRoot: string | null;
+  /** Localized startup failure; blocks retained references without changing their project. */
+  nativeDocumentCopyError: string | null;
+  setNativeDocumentCopyRoot: (root: string | null) => void;
+  setNativeDocumentCopyError: (error: string) => void;
   projectName: string;
   projectPath: string | null;
   projectGeneration: number;
@@ -123,6 +133,12 @@ export interface ProjectSlice {
 }
 
 export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
+  nativeDocumentCopyRoot: null,
+  nativeDocumentCopyError: null,
+  setNativeDocumentCopyRoot: (root) =>
+    set({ nativeDocumentCopyRoot: root, nativeDocumentCopyError: null }),
+  setNativeDocumentCopyError: (error) =>
+    set({ nativeDocumentCopyRoot: null, nativeDocumentCopyError: error }),
   projectName: DEFAULT_PROJECT_NAME,
   projectPath: null,
   projectGeneration: 0,
@@ -170,12 +186,16 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
   markSaved: () => set({ isDirty: false }),
 
   newProject: (options = {}) => {
+    assertImportedDocumentCopiesAvailable(options.layers ?? [], get().nativeDocumentCopyError);
     const project = {
       ...createEmptyProject(options.name, options),
       ...(options.layers ? { layers: options.layers } : {}),
       ...(options.layerGroups ? { layerGroups: options.layerGroups } : {}),
     };
     const applied = applyProjectToStore(project);
+    applied.layers = applied.layers.map((layer) =>
+      rebaseImportedDocumentLayer(layer, get().nativeDocumentCopyRoot),
+    );
     // A new project's basemap is the user's own pick in the New Project dialog,
     // so only a deployment block replaces it.
     applied.basemapStyleUrl = gateRegionalBasemap(
@@ -234,7 +254,11 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
   },
 
   loadProject: (project, path = null, options = {}) => {
+    assertImportedDocumentCopiesAvailable(project.layers, get().nativeDocumentCopyError);
     const applied = applyProjectToStore(project);
+    applied.layers = applied.layers.map((layer) =>
+      rebaseImportedDocumentLayer(layer, get().nativeDocumentCopyRoot),
+    );
     // Re-resolve persistent attribute joins against the loaded layer set,
     // so joined columns reflect the join tables as saved (and a stale
     // saved copy of the joined output self-heals).

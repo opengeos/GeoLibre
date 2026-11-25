@@ -1,5 +1,6 @@
 import {
   createEmptyProject,
+  hasImportedDocumentCopyReference,
   mapCrsPreferencePatch,
   useAppStore,
   type MapProjection,
@@ -19,7 +20,10 @@ import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import { fetchStartupLayerData, startupLayerIds, withStartupLayers } from "../lib/startup-layers";
 import { DEFAULT_STARTUP_SETTINGS, useDesktopSettingsStore } from "./useDesktopSettings";
 import { loadRecentProjects } from "./useRecentProjectsPersistence";
-import { consumeInlineProjectFragment } from "../lib/inline-project-fragment";
+import {
+  consumeInlineProjectFragment,
+  parseInlineProjectFragment,
+} from "../lib/inline-project-fragment";
 import { initialNativeProjectPath } from "../lib/native-project-open";
 import { coordinateTargetFromSearch, type CoordinateTarget } from "../lib/coordinate-url";
 import { mapCrsRequestFromSearch } from "../lib/map-crs-url";
@@ -160,6 +164,14 @@ export function useStartupProject(): {
   // importantly, prevents the default-workspace initializer from replacing it.
   const [inlineProject] = useState(() => {
     try {
+      if (useAppStore.getState().nativeDocumentCopyError !== null) {
+        try {
+          const held = parseInlineProjectFragment(window.location.hash);
+          if (held?.layers.some(hasImportedDocumentCopyReference)) return held;
+        } catch {
+          // The normal consumer below still clears malformed payloads.
+        }
+      }
       return consumeInlineProjectFragment();
     } catch (error) {
       console.error("[GeoLibre] Could not load the direct-file project", error);
@@ -188,7 +200,14 @@ export function useStartupProject(): {
   const seededLayerIds = useRef<Set<string>>(new Set());
   const [restoring, setRestoring] = useState(() => {
     if (inlineProject) {
-      useAppStore.getState().loadProject(inlineProject, null, { rememberRecent: false });
+      const state = useAppStore.getState();
+      // Preserve the launch payload for a reload after native access recovers.
+      if (
+        state.nativeDocumentCopyError === null ||
+        !inlineProject.layers.some(hasImportedDocumentCopyReference)
+      ) {
+        state.loadProject(inlineProject, null, { rememberRecent: false });
+      }
       return false;
     }
     const location =

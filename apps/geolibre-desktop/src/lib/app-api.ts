@@ -13,8 +13,10 @@
  */
 import type * as Proj4 from "proj4";
 import {
+  assertImportedDocumentCopiesAvailable,
   clearExternalNativePaintBridge,
   setExternalNativePaintBridge,
+  rebaseImportedDocumentLayer,
   useAppStore,
   type AppState,
   explainS3ReadError,
@@ -914,7 +916,9 @@ export function createAppAPI(
     registerExternalNativeLayer: (registration: GeoLibreExternalNativeLayerRegistration) => {
       const state = useAppStore.getState();
       const existing = state.layers.find((layer) => layer.id === registration.id);
-      const layer = createExternalNativeStoreLayer(registration, existing);
+      const incoming = createExternalNativeStoreLayer(registration, existing);
+      assertImportedDocumentCopiesAvailable([incoming], state.nativeDocumentCopyError);
+      const layer = rebaseImportedDocumentLayer(incoming, state.nativeDocumentCopyRoot);
       // A re-registration that omits paintBridge drops the previous one, so the
       // plugin owns the bridge the same way it owns `style`/`source`. Set it
       // before the store write so the first sync already sees it.

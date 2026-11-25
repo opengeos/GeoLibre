@@ -22,6 +22,10 @@ import {
 import { matchLayerStyleEntry, type LayerStyleFileEntry } from "../layer-style-file";
 import { applyJoinsToLayer, cascadeLayerJoinRefresh } from "../joins";
 import { normalizeLayerDescriptiveMetadata } from "../layer-descriptive-metadata";
+import {
+  assertImportedDocumentCopiesAvailable,
+  rebaseImportedDocumentLayer,
+} from "../imported-document-paths";
 import { withRasterSourceDefaults } from "../raster-source-defaults";
 import { scrubPrintLayoutForRemovedLayers } from "../print-layout-config";
 import { identifyStateWithoutLayers } from "./session-slice";
@@ -265,7 +269,10 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
 
   addLayer: (inputLayer, beforeLayerId = null, options) =>
     set((s) => {
-      let layer = withRasterSourceDefaults(inputLayer);
+      assertImportedDocumentCopiesAvailable([inputLayer], s.nativeDocumentCopyError);
+      let layer = withRasterSourceDefaults(
+        rebaseImportedDocumentLayer(inputLayer, s.nativeDocumentCopyRoot),
+      );
       const layers = [...s.layers];
       // Plugin source identifiers (for example pmtiles://) are not local files.
       const { sourcePath } = layer;
@@ -345,7 +352,9 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
     set((s) => {
       let layers = s.layers.map((l) => {
         if (l.id !== id) return l;
-        const updated = { ...l, ...patch };
+        const merged = { ...l, ...patch };
+        assertImportedDocumentCopiesAvailable([merged], s.nativeDocumentCopyError);
+        const updated = rebaseImportedDocumentLayer(merged, s.nativeDocumentCopyRoot);
         // If a patch explicitly replaces geojson but does not explicitly supply geoarrow,
         // clear the existing GeoArrow batch to avoid retaining stale geometry.
         if (patch.geojson !== undefined && !("geoarrow" in patch)) {

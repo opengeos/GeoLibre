@@ -90,6 +90,13 @@ version = "2"
 [dependencies.url]
 version = "2"
 
+[dependencies.sha2]
+version = "0.11"
+
+[dependencies.uuid]
+version = "1"
+features = ["v4"]
+
 [dev-dependencies.tauri]
 version = "2.12"
 features = ["wry"]

@@ -11,11 +11,12 @@ export function browserSafeFileName(path: string): string {
   return localFileName(path) || "project.geolibre";
 }
 
-/** Whether the source is one of Android's durable document-picker copies. */
+/** Whether a mobile source uses the managed document-copy layout (display wording only). */
 export function isImportedDocumentCopyPath(path: string | undefined): boolean {
   return (
     typeof path === "string" &&
-    /\/files\/picked-documents\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/data\/[^/]+$/i.test(
+    path.startsWith("/") &&
+    /\/(?:files|Library\/Application Support\/org\.geolibre\.app)\/picked-documents\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/data\/[^/]+$/i.test(
       path,
     )
   );

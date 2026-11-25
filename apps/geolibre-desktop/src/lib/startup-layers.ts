@@ -8,6 +8,7 @@
 import {
   addLayersToProject,
   extractLayersFileContent,
+  hasImportedDocumentCopyReference,
   parseLayersFile,
   projectFromStore,
   redactProjectCredentials,
@@ -137,13 +138,20 @@ export function startupLayersContent(): LayersFileContent | null {
 
 /**
  * A project with the Startup setting's layers added, or the project unchanged
- * when none are set.
+ * when none are set or their retained-file access is unavailable.
  *
  * @param project - The untitled project about to be shown.
  * @returns The project to load.
  */
 export function withStartupLayers(project: GeoLibreProject): GeoLibreProject {
   const content = startupLayersContent();
+  // Keep configured defaults intact while showing a usable empty workspace.
+  if (
+    useAppStore.getState().nativeDocumentCopyError !== null &&
+    content?.layers.some(hasImportedDocumentCopyReference)
+  ) {
+    return project;
+  }
   return content ? addLayersToProject(project, content) : project;
 }
 
