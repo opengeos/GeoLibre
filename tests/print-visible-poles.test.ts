@@ -3,7 +3,7 @@ import { it } from "node:test";
 // Exercise the installed engine's projection, including its occluded-pole behavior.
 import { createGlobeTransform } from "../node_modules/maplibre-gl/src/geo/projection/globe_transform.ts";
 import { LngLat } from "../node_modules/maplibre-gl/src/geo/lng_lat.ts";
-import Point from "@mapbox/point-geometry";
+import Point from "../node_modules/maplibre-gl/node_modules/@mapbox/point-geometry/index.js";
 import {
   captureVisiblePoles,
   capturePolesInRect,
