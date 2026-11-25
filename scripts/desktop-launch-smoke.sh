@@ -16,10 +16,20 @@ binary="${1:?usage: desktop-launch-smoke.sh <binary> [seconds]}"
 seconds="${2:-20}"
 log="$(mktemp)"
 # A throwaway HOME keeps the launch from reading or writing a real profile.
-home="$(mktemp -d)"
-trap 'rm -rf "$log" "$home"' EXIT
+smoke_profile="$(mktemp -d)"
+pid=""
+cleanup() {
+  if [[ -n "$pid" ]]; then
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  fi
+  rm -rf "$log" "$smoke_profile"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share" \
+HOME="$smoke_profile" XDG_CONFIG_HOME="$smoke_profile/.config" XDG_DATA_HOME="$smoke_profile/.local/share" \
   "$binary" >"$log" 2>&1 &
 pid=$!
 
@@ -27,6 +37,7 @@ fail_if_exited() {
   if ! kill -0 "$pid" 2>/dev/null; then
     local status=0
     wait "$pid" || status=$?
+    pid=""
     echo "::error::GeoLibre Desktop exited during startup (status $status)"
     cat "$log"
     exit 1
@@ -40,6 +51,7 @@ done
 
 kill "$pid" 2>/dev/null || true
 wait "$pid" 2>/dev/null || true
+pid=""
 echo "GeoLibre Desktop was still running after ${seconds}s."
 if grep -q "panicked" "$log"; then
   echo "::error::GeoLibre Desktop logged a panic during startup"

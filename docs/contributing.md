@@ -154,8 +154,9 @@ checks, `typecheck:fast`, the
 [test type check](maintenance.md#test-type-check-ratchet), and the frontend
 unit tests. It needs only Node.
 
-`npm run ci` runs the complete gate that mirrors continuous integration, in this
-order:
+`npm run ci` runs the main local checks in this order. The additional Rust
+library tests and desktop launch checks run in CI; commands to run them locally
+are listed below.
 
 | Step               | Command                          | Covers                                                                                                                 |
 | ------------------ | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -183,6 +184,21 @@ to run the script, but no `npm install`). CI runs lint, `ci:frontend`,
 type check" job, so if
 you add a step to `npm run ci`, add it to one of those groups and CI picks it
 up.
+
+The Rust CI job additionally runs `cargo test --lib`, builds the desktop binary
+with `tauri/custom-protocol`, and checks that it stays alive at launch. After
+`npm run build`, reproduce these checks locally with:
+
+```bash
+cargo test --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml --lib
+cargo build --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml --features tauri/custom-protocol
+scripts/desktop-launch-smoke.sh apps/geolibre-desktop/src-tauri/target/debug/geolibre-desktop
+```
+
+On Linux without a display, prefix the smoke command with `xvfb-run -a`.
+The smoke check uses a temporary profile and stops its child on completion or
+interruption. Its debug build checks startup; release-only updater configuration
+checks still run in the guard compiled into the shipped build.
 
 On a pull request, lint and "Build and test" always run. The other jobs (E2E
 core, backend, Rust, containers, and the database and OIDC integration jobs)
