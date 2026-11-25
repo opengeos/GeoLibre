@@ -84,8 +84,27 @@ test("honors latitude-first coverage axes and independent, transposed grid axes"
   const service = parseWcsCapabilities(fixture("usgs-capabilities.xml").toString())[0];
   const xml = fixture("usgs-description.xml")
     .toString()
-    .replace('axisLabels="x y"', 'axisLabels="Lat Long"')
-    .replace("<gml:axisLabels>x y</gml:axisLabels>", "<gml:axisLabels>row col</gml:axisLabels>");
+    .replace(
+      /<gml:Envelope\b[^>]*>[\s\S]*?<\/gml:Envelope>/,
+      `
+      <gml:Envelope srsName="http://www.opengis.net/def/crs/EPSG/0/4326"
+        axisLabels="Lat Long" uomLabels="deg deg" srsDimension="2">
+        <gml:lowerCorner>2 1</gml:lowerCorner><gml:upperCorner>4 3</gml:upperCorner>
+      </gml:Envelope>`,
+    )
+    .replace(
+      /<gml:domainSet>[\s\S]*?<\/gml:domainSet>/,
+      `
+      <gml:domainSet><gml:RectifiedGrid dimension="2" gml:id="latitude_first">
+        <gml:limits><gml:GridEnvelope><gml:low>0 0</gml:low>
+          <gml:high>39 79</gml:high></gml:GridEnvelope></gml:limits>
+        <gml:axisLabels>row col</gml:axisLabels>
+        <gml:origin><gml:Point gml:id="origin" srsName="http://www.opengis.net/def/crs/EPSG/0/4326">
+          <gml:pos>3.975 1.0125</gml:pos></gml:Point></gml:origin>
+        <gml:offsetVector srsName="EPSG:4326">-0.05 0</gml:offsetVector>
+        <gml:offsetVector srsName="EPSG:4326">0 0.025</gml:offsetVector>
+      </gml:RectifiedGrid></gml:domainSet>`,
+    );
   // The original vectors point along envelope axis 0 then axis 1. With a
   // latitude-first envelope, row is north/south and col is east/west.
   const info = parseWcsDescription(xml, "DEP3Elevation", service);

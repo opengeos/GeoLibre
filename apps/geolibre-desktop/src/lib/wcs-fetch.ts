@@ -21,16 +21,20 @@ import {
 // fill memory with a metadata response before parsing even starts.
 const MAX_METADATA_BYTES = 32 * 1024 * 1024;
 
+/** Give native HTTP refusals the same status form as browser fetch failures. */
+function normalizeWcsHttpError(error: unknown): unknown {
+  const message = error instanceof Error ? error.message : String(error);
+  const status = /^Request failed with status\s*:?\s*(\d{3})\b/.exec(message)?.[1];
+  return status ? new Error(`WCS HTTP ${status}`) : error;
+}
+
 async function fetchWcsXml(url: string, signal: AbortSignal): Promise<string> {
   const result = await fetchCapabilitiesText(url, WMS_PROXY_PATH, signal, MAX_METADATA_BYTES).catch(
     (error: unknown) => {
       if (String(error).includes("download limit")) throw new WcsError("metadata");
       // Native non-2xx requests reject with a string, whereas browser fetch
       // supplies a status. Keep the WCS retry policy identical on both hosts.
-      const message = error instanceof Error ? error.message : String(error);
-      const status = /^Request failed with status\s*:?\s*(\d{3})\b/.exec(message)?.[1];
-      if (status) throw new Error(`WCS HTTP ${status}`);
-      throw error;
+      throw normalizeWcsHttpError(error);
     },
   );
   if (!result.ok) throw new Error(`WCS HTTP ${result.status}`);
@@ -103,7 +107,8 @@ export async function downloadWcs(url: string, name: string, signal: AbortSignal
           maxBytes: MAX_BYTES,
         }).catch((error: unknown) => {
           if (String(error).includes("download limit")) throw new WcsError("size");
-          throw error instanceof Error ? error : new Error(String(error));
+          const normalized = normalizeWcsHttpError(error);
+          throw normalized instanceof Error ? normalized : new Error(String(normalized));
         }),
         abort,
       ),

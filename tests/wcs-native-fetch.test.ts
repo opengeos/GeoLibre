@@ -6,7 +6,7 @@ import { DOMParser } from "linkedom";
 const nativeDescriptor = Object.getOwnPropertyDescriptor(window, "__TAURI_INTERNALS__");
 const parserDescriptor = Object.getOwnPropertyDescriptor(globalThis, "DOMParser");
 Object.defineProperty(globalThis, "DOMParser", { configurable: true, value: DOMParser });
-const { discoverWcs } = await import("../apps/geolibre-desktop/src/lib/wcs-fetch");
+const { discoverWcs, downloadWcs } = await import("../apps/geolibre-desktop/src/lib/wcs-fetch");
 const calls: URL[] = [];
 let rejection: unknown = "Request failed with status 400 Bad Request";
 const legacy =
@@ -19,8 +19,11 @@ beforeEach(() => {
     value: {
       invoke: async (command: string, args: { url: string; maxBytes: number }) => {
         assert.equal(command, "fetch_url_bytes");
-        assert.equal(args.maxBytes, 32 * 1024 * 1024);
         const url = new URL(args.url);
+        assert.equal(
+          args.maxBytes,
+          (url.searchParams.get("REQUEST") === "GetCoverage" ? 128 : 32) * 1024 * 1024,
+        );
         calls.push(url);
         if (url.searchParams.get("VERSION") === "2.0.1") throw rejection;
         return Array.from(new TextEncoder().encode(legacy));
@@ -49,6 +52,22 @@ for (const status of [400, 404, 406, 500, 501]) {
     assert.ok(calls.every((url) => url.searchParams.get("token") === "kept"));
   });
 }
+
+it("normalizes native coverage HTTP refusals without retrying", async () => {
+  for (const status of [400, 403, 404]) {
+    rejection = `Request failed with status ${status} Bad Request`;
+    calls.length = 0;
+    await assert.rejects(
+      downloadWcs(
+        "https://example.org/wcs?VERSION=2.0.1&REQUEST=GetCoverage",
+        "coverage",
+        new AbortController().signal,
+      ),
+      new RegExp(`^Error: WCS HTTP ${status}$`),
+    );
+    assert.equal(calls.length, 1);
+  }
+});
 
 it("does not retry native authentication, timeout or metadata-limit failures", async () => {
   for (const error of [
