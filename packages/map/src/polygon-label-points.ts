@@ -268,7 +268,9 @@ function polygonLabelAnchor(
     // A zero-area (collinear) part is degenerate: MapLibre draws nothing
     // there. Tested before projecting, which would bend a straight line.
     if (polygonArea([polygon[0] as Ring]) === 0) continue;
-    const rings = polygon.filter((ring) => ring.length >= 3).map((ring) => ring.map(toMercator));
+    const rings = polygon
+      .filter((ring) => ring.length >= 3)
+      .map((ring) => thinRing(ring).map(toMercator));
     const area = polygonArea(rings);
     if (area > largestArea) {
       largestArea = area;
@@ -277,6 +279,22 @@ function polygonLabelAnchor(
   }
   if (!largest) return null;
   return { point: fromMercator(poleOfInaccessibility(largest)), area: largestArea };
+}
+
+// The search scans every vertex for every cell it scores, so a very detailed
+// outline (a 10m-scale coastline) is thinned to this many vertices first. The
+// anchor only has to sit well inside the shape, and the pole is far from the
+// outline, so dropping fine coastline detail does not move it noticeably.
+const MAX_SEARCH_VERTICES = 2000;
+
+/** Every n-th vertex of a long ring (keeping it closed), else the ring itself. */
+function thinRing(ring: Position[]): Position[] {
+  if (ring.length <= MAX_SEARCH_VERTICES) return ring;
+  const step = Math.ceil(ring.length / MAX_SEARCH_VERTICES);
+  const thinned: Position[] = [];
+  for (let i = 0; i < ring.length - 1; i += step) thinned.push(ring[i]);
+  thinned.push(ring[ring.length - 1]);
+  return thinned;
 }
 
 const labelPointCache = new WeakMap<FeatureCollection, FeatureCollection>();

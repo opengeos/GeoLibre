@@ -192,6 +192,10 @@ def test_mcp_live_tools_for_raster_tiles_labels_filter_and_renderer(tmp_path, mo
     assert calls[-1][1]["labels"] == {"size": 18.0}
     assert restyle["layerId"] == "layer-1"
 
+    # one_per_polygon maps to onePerPolygon (polygon labels placed once)
+    _call(server, "live_set_labels", layer_id="layer-1", options={"one_per_polygon": False})
+    assert calls[-1][1]["labels"] == {"onePerPolygon": False}
+
     # live_set_filter validates and sends expression, and clears on None
     flt = _call(
         server,

@@ -6875,7 +6875,6 @@
               "text-rotate": 0,
               "text-max-width": 10,
               "text-transform": "none",
-              "symbol-sort-key": ["-", ["coalesce", ["get", "__geolibre_label_area"], 0]],
               "visibility": "visible"
             },
             "paint": {

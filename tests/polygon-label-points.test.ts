@@ -89,6 +89,20 @@ describe("polygonLabelPoint", () => {
     assert.ok(insidePolygon(point, u), `${point} should be inside the thin U`);
   });
 
+  it("thins a very detailed outline for the search and still lands inside", () => {
+    // A 40,000-vertex circle.
+    const ring: Position[] = [];
+    for (let i = 0; i < 40_000; i += 1) {
+      const t = (i / 40_000) * 2 * Math.PI;
+      ring.push([Math.cos(t), Math.sin(t)]);
+    }
+    ring.push(ring[0]);
+    const start = Date.now();
+    const point = polygonLabelPoint({ type: "Polygon", coordinates: [ring] })!;
+    assert.ok(Math.hypot(point[0], point[1]) < 0.05, `${point} should be near the center`);
+    assert.ok(Date.now() - start < 1000);
+  });
+
   it("stays fast on a long flat sliver", () => {
     const start = Date.now();
     const point = polygonLabelPoint({
@@ -295,6 +309,20 @@ describe("one label per polygon (layer sync)", () => {
 
     syncLayer(map as never, polygonLayer({ priorityExpression: '["get", "pop"]' }));
     assert.deepEqual(label().layout["symbol-sort-key"], ["get", "pop"]);
+  });
+
+  it("keeps the default label order on a mixed-geometry layer", () => {
+    const { map, layers } = makeMap();
+    const layer = polygonLayer({});
+    layer.geojson!.features.push({
+      type: "Feature",
+      properties: { NAME: "Amsterdam" },
+      geometry: { type: "Point", coordinates: [4.9, 52.37] },
+    });
+    syncLayer(map as never, layer);
+    const label = layers.get(LABEL_ID) as { source: string; layout: Record<string, unknown> };
+    assert.equal(label.source, LABEL_SOURCE_ID, "still one label per polygon");
+    assert.equal(label.layout["symbol-sort-key"], undefined, "no area ranking");
   });
 
   it("keeps MapLibre placement when a filter tests the geometry type", () => {

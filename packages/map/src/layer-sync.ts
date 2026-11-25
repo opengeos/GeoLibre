@@ -3107,11 +3107,13 @@ function ensureAttributeLabelLayer(
         // Lower sort keys place first, so they win when space is tight.
         // Without an explicit priority, one-per-polygon labels place the
         // largest polygons first, so a country is not crowded out by its
-        // smaller neighbours now that it has a single label candidate.
+        // smaller neighbours now that it has a single label candidate. Only
+        // on polygon-only layers: in a mixed layer the polygon labels would
+        // otherwise all jump ahead of the point and line labels.
         // `null` resets a previously applied priority (stripped on first
         // add by ensureLayer).
         "symbol-sort-key": (priorityOverride ??
-          (polygonLabelFc
+          (polygonLabelFc && !ctx.profile.hasPoint && !ctx.profile.hasLine
             ? ["-", ["coalesce", ["get", POLYGON_LABEL_AREA_PROPERTY], 0]]
             : null)) as unknown as PropertyValueSpecification<number>,
         visibility,
