@@ -286,6 +286,7 @@ Give it a directory meant for maps, not your home directory.
 | Tool | For |
 | --- | --- |
 | `add_geojson_layer` | Vector data inlined into the project, from a URL, a workspace file, or literal GeoJSON. Self-contained, and the only kind `classify_layer` can style. |
+| `add_sql_query_layer` | A supplied GeoJSON result snapshot plus its DuckDB SQL definition. Renders on open; Refresh re-executes SQL against the other project layers using SQL Workspace table names. This tool stores results without executing SQL. |
 | `add_vector_layer` | A large remote FlatGeobuf / GeoParquet / GeoJSON read in place. |
 | `add_raster_layer` | A Cloud Optimized GeoTIFF, with band, colormap, and rescale options. |
 | `add_tile_layer` | A raster XYZ tile template. |

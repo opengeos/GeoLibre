@@ -1447,6 +1447,50 @@ def geojson_layer(
     return layer
 
 
+def sql_query_layer(name: str, data: Any, sql: str, **style: Any) -> dict[str, Any]:
+    """Build a DuckDB SQL query layer with an embedded result snapshot.
+
+    The snapshot renders immediately when the project opens. Refresh in the app
+    re-executes SQL against the other project layers, using their table names.
+    This builder stores the supplied result; it does not execute SQL in Python.
+
+    Args:
+        name: Layer display name.
+        data: GeoJSON result, using the inputs accepted by load_featurecollection.
+        sql: DuckDB SQL that produced the result. Source layers must be present
+            in the project to refresh; table names follow the SQL Workspace.
+        **style: Style overrides merged into the default layer style.
+
+    Returns:
+        A GeoJSON layer carrying the snapshot and a refreshable query definition.
+
+    Raises:
+        ValueError: If SQL is blank or is not a string, or GeoJSON is invalid.
+    """
+    if not isinstance(sql, str) or not sql.strip():
+        raise ValueError("sql must be a non-empty DuckDB SQL string")
+    snapshot = copy.deepcopy(load_featurecollection(data))
+    for index, feature in enumerate(snapshot["features"]):
+        if (
+            not isinstance(feature, dict)
+            or feature.get("type") != "Feature"
+            or "geometry" not in feature
+            or "properties" not in feature
+            or (feature["geometry"] is not None and not isinstance(feature["geometry"], dict))
+            or (feature["properties"] is not None and not isinstance(feature["properties"], dict))
+        ):
+            raise ValueError(
+                f"Snapshot entry {index} must be a GeoJSON Feature with geometry and properties"
+            )
+    layer = _layer_base(name, "geojson", **style)
+    layer["source"] = {"type": "geojson"}
+    layer["geojson"] = snapshot
+    # Mirror SQL_QUERY_SOURCE_KIND and sqlQueryLayerMetadata in the app. Keep
+    # the snapshot independent of its input URL: refresh must run the query.
+    layer["metadata"] = {"sourceKind": "sql-query", "sqlQuery": {"engine": "duckdb", "sql": sql}}
+    return layer
+
+
 def tile_layer(
     name: str,
     url: str,
