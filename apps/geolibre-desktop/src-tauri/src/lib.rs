@@ -604,13 +604,28 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init());
 
-    // Signed desktop auto-updater for non-Store desktop builds.
+    let context = tauri::generate_context!();
+
+    // Signed desktop auto-updater for non-Store desktop builds. The plugin
+    // panics during app build when `plugins.updater` is missing from the
+    // Tauri config (its `pubkey` is required), so only register it when the
+    // build actually carries updater settings. Otherwise the update commands
+    // report `configured: false` (issue #3631).
     #[cfg(all(
         any(target_os = "macos", target_os = "windows", target_os = "linux"),
         feature = "desktop-updater",
         not(feature = "mas")
     ))]
-    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    let builder = {
+        let configured =
+            desktop_updater::updater_plugin_configured(context.config().plugins.0.get("updater"));
+        let builder = builder.manage(desktop_updater::DesktopUpdaterEnabled(configured));
+        if configured {
+            builder.plugin(tauri_plugin_updater::Builder::new().build())
+        } else {
+            builder
+        }
+    };
 
     // The Earth Engine OAuth loopback listener is compiled out of the Apple App
     // Store builds (see the module gate at the top of this file); the stub
@@ -770,7 +785,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building GeoLibre Desktop");
 
     app.run(|app, event| {
