@@ -460,6 +460,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "basic",
   },
   {
+    id: "edit.showEdgeLengths",
+    menuId: "edit",
+    labelKey: "toolbar.item.showEdgeLengths",
+    tier: "intermediate",
+  },
+  {
     id: "edit.exportSelection",
     menuId: "edit",
     labelKey: "toolbar.item.exportSelection",

@@ -57,6 +57,12 @@ import { ensureGeneratedImageHandler } from "./generated-images";
 import { installSelectionDragGuard } from "./selection-drag-guard";
 import { hasZoomDependentClusterFilter } from "./cluster-input";
 import { resolveTextFontFromStyleLayers } from "./text-font";
+import {
+  EDGE_LENGTH_LAYER_ID,
+  EDGE_LENGTH_SOURCE_ID,
+  edgeLengthLayer,
+  edgeLengthLines,
+} from "./edge-lengths";
 import { getLayerBounds } from "./geojson-loader";
 import { loadedVectorTileFeatureBounds } from "./loaded-feature-bounds";
 import { captureEngineImage } from "./map-capture";
@@ -98,6 +104,7 @@ export const MAPBOX_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   // The engine is published after the initial style loads.
   deferredEngineReady: true,
   measureTool: true,
+  edgeLengthLabels: true,
   controlLayerPanels: true,
   supportedLayerKinds: MAPBOX_SUPPORTED_LAYER_KINDS,
 });
@@ -118,6 +125,7 @@ const HIGHLIGHT_LAYER_IDS = [
 function isOverlayLayerId(id: string): boolean {
   return (
     HIGHLIGHT_LAYER_IDS.includes(id) ||
+    id === EDGE_LENGTH_LAYER_ID ||
     id.startsWith("geolibre-mapbox-extent-") ||
     id.startsWith("geolibre-search-")
   );
@@ -222,6 +230,16 @@ export class MapboxEngine implements MapEngine {
   }> = [];
   private openCogDem: typeof registerCogDemSource = registerCogDemSource;
   private preferences: MapPreferences | null = null;
+  /** Whether the sides of highlighted polygons are labeled with their lengths. */
+  private edgeLengthsEnabled = false;
+  /** The features the highlight shows now, so the side labels can be redrawn. */
+  private highlightedFeatures: Feature[] = [];
+  /**
+   * A label update arrived while the map was loading (as it is right after
+   * the highlight adds its source), so it is retried when the map is idle.
+   */
+  private edgeLengthsPending = false;
+  private featureHighlightPending = false;
   private pluginControls = new Map<maplibregl.IControl, mapboxgl.IControl>();
   private controlVisibility: Record<BuiltInMapControl, boolean>;
   /** See the constructor option of the same name. */
@@ -251,7 +269,7 @@ export class MapboxEngine implements MapEngine {
     getLayers: () => this.layers,
     getNativeLayerIds: (layer) => this.nativeLayerIds(layer),
     getSourceIds: (layer) => this.getLayerSourceIds(layer),
-    excludedLayerIds: [BLANK_BACKGROUND_LAYER_ID, ...HIGHLIGHT_LAYER_IDS],
+    excludedLayerIds: [BLANK_BACKGROUND_LAYER_ID, ...HIGHLIGHT_LAYER_IDS, EDGE_LENGTH_LAYER_ID],
     // Never hand the control a URL: `mapbox://` styles are not fetchable, and
     // the engine already holds the loaded style's own layers (see styleLoaded),
     // which is a better basemap answer than a second fetch would give.
@@ -284,6 +302,8 @@ export class MapboxEngine implements MapEngine {
     if (this.terrainSourcePending || this.terrainRestorePending) this.reconcileTerrainSource();
     if (this.syncPending) this.syncLayers(this.layers);
     if (this.basemapPending) this.applyBasemap();
+    if (this.featureHighlightPending) this.syncFeatureHighlight();
+    if (this.edgeLengthsPending) this.syncEdgeLengths();
   };
   /**
    * A clustered layer's authored filters are applied to its data before
@@ -480,6 +500,7 @@ export class MapboxEngine implements MapEngine {
     this.releaseRetiredCogDems();
     this.setTerrainEnabled(this.terrain);
     this.syncLayers(this.layers);
+    this.syncFeatureHighlight();
     if (this.layerControlVisible) this.layerControlHost.add();
   };
   // Plugins can add native style layers directly (outside the layer store);
@@ -765,6 +786,8 @@ export class MapboxEngine implements MapEngine {
     this.globeControl?.update();
     this.scaleControl?.setUnit(p.scaleUnit);
     this.setTerrainEnabled(p.terrainEnabled);
+    // The side labels are in the scale bar's unit system.
+    if (this.edgeLengthsEnabled && this.highlightedFeatures.length > 0) this.syncEdgeLengths();
   }
   syncLayers(layers: GeoLibreLayer[]): void {
     this.layers = layers;
@@ -1603,28 +1626,56 @@ export class MapboxEngine implements MapEngine {
     featureId: string | string[] | null,
     options?: { fit?: boolean },
   ): void {
-    this.clearFeatureHighlight();
-    if (!layer?.geojson || featureId === null || !this.map?.isStyleLoaded()) return;
+    // Adding the highlight source starts asynchronous loading. Preserve the
+    // readiness of this request rather than testing again after the write.
+    const fit = options?.fit && this.map?.isStyleLoaded();
     const ids = new Set(Array.isArray(featureId) ? featureId : [featureId]);
+    this.highlightedFeatures =
+      layer?.geojson && featureId !== null
+        ? layer.geojson.features.filter((f, i) => ids.has(String(f.id ?? i)))
+        : [];
+    this.syncFeatureHighlight();
+    if (fit && layer && this.highlightedFeatures.length > 0) {
+      this.fitLayer({
+        ...layer,
+        geojson: { type: "FeatureCollection", features: this.highlightedFeatures },
+      });
+    }
+  }
+  /** Rebuild the latest selection once source/style loading permits writes. */
+  private syncFeatureHighlight(): void {
+    const map = this.map;
+    if (!map) return;
+    if (!map.isStyleLoaded()) {
+      this.featureHighlightPending = true;
+      return;
+    }
+    this.featureHighlightPending = false;
+    for (const id of HIGHLIGHT_LAYER_IDS) if (map.getLayer(id)) map.removeLayer(id);
+    if (map.getSource(HIGHLIGHT_SOURCE_ID)) map.removeSource(HIGHLIGHT_SOURCE_ID);
+    if (this.highlightedFeatures.length === 0) {
+      this.syncEdgeLengths();
+      return;
+    }
     const data: FeatureCollection = {
       type: "FeatureCollection",
-      features: layer.geojson.features.filter((f, i) => ids.has(String(f.id ?? i))),
+      features: this.highlightedFeatures,
     };
-    this.map.addSource(HIGHLIGHT_SOURCE_ID, { type: "geojson", data });
-    this.map.addLayer({
+    map.addSource(HIGHLIGHT_SOURCE_ID, { type: "geojson", data });
+    map.addLayer({
       id: HIGHLIGHT_LAYER_IDS[0],
       type: "fill",
       source: HIGHLIGHT_SOURCE_ID,
       filter: ["==", ["geometry-type"], "Polygon"],
       paint: { "fill-color": "#facc15", "fill-opacity": 0.25 },
     });
-    this.map.addLayer({
+    map.addLayer({
       id: HIGHLIGHT_LAYER_IDS[1],
       type: "line",
       source: HIGHLIGHT_SOURCE_ID,
       paint: { "line-color": "#facc15", "line-width": 4 },
     });
-    this.map.addLayer({
+    map.addLayer({
       id: HIGHLIGHT_LAYER_IDS[2],
       type: "circle",
       source: HIGHLIGHT_SOURCE_ID,
@@ -1635,11 +1686,38 @@ export class MapboxEngine implements MapEngine {
         "circle-opacity": 0.6,
       },
     });
-    if (options?.fit) this.fitLayer({ ...layer, geojson: data });
+    this.syncEdgeLengths();
   }
   clearFeatureHighlight(): void {
-    for (const id of HIGHLIGHT_LAYER_IDS) if (this.map?.getLayer(id)) this.map.removeLayer(id);
-    if (this.map?.getSource(HIGHLIGHT_SOURCE_ID)) this.map.removeSource(HIGHLIGHT_SOURCE_ID);
+    this.highlightedFeatures = [];
+    this.syncFeatureHighlight();
+  }
+  setEdgeLengthLabels(enabled: boolean): void {
+    if (enabled === this.edgeLengthsEnabled) return;
+    this.edgeLengthsEnabled = enabled;
+    this.syncEdgeLengths();
+  }
+  /** Redraw the side labels of the highlighted polygons; see `edge-lengths.ts`. */
+  private syncEdgeLengths(): void {
+    const map = this.map;
+    if (!map) return;
+    // `isStyleLoaded()` is false while any source is loading, including the
+    // highlight source added just before this call: retry on idle with the
+    // latest selection and setting rather than dropping the update.
+    if (!map.isStyleLoaded()) {
+      this.edgeLengthsPending = true;
+      return;
+    }
+    this.edgeLengthsPending = false;
+    if (map.getLayer(EDGE_LENGTH_LAYER_ID)) map.removeLayer(EDGE_LENGTH_LAYER_ID);
+    if (map.getSource(EDGE_LENGTH_SOURCE_ID)) map.removeSource(EDGE_LENGTH_SOURCE_ID);
+    if (!this.edgeLengthsEnabled || this.highlightedFeatures.length === 0) return;
+    const data = edgeLengthLines(this.highlightedFeatures, {
+      unit: this.preferences?.scaleUnit ?? "metric",
+    });
+    if (data.features.length === 0) return;
+    map.addSource(EDGE_LENGTH_SOURCE_ID, { type: "geojson", data });
+    map.addLayer(edgeLengthLayer(this.textFont) as Parameters<typeof map.addLayer>[0]);
   }
   startManualPlacement(lngLat: [number, number], options: ManualPlacementOptions): () => void {
     if (!this.map) return () => {};
