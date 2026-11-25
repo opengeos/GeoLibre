@@ -3,7 +3,9 @@ import { isTauri } from "./is-tauri";
 import i18next from "i18next";
 import {
   buildProtomapsBasemapStyle,
-  ensureRemotePMTilesArchive,
+  hasPMTilesArchive,
+  registerPMTilesSource,
+  unregisterPMTilesArchive,
   PROTOMAPS_FLAVORS,
   registerPersistentOfflineBasemapStyle,
   type ProtomapsFlavor,
@@ -16,6 +18,7 @@ import {
   setOfflineBasemapFlavor,
   type OfflineBasemap,
 } from "./offline-basemaps";
+import { FetchSource } from "pmtiles";
 
 export interface NativeOfflinePackage extends OfflineBasemap {
   managed: true;
@@ -37,6 +40,7 @@ type PackageDetails = Pick<
 };
 
 const packageMutations = new Map<string, Promise<unknown>>();
+const packageArchiveKeys = new Map<string, string>();
 
 /** Keep rapid metadata changes in user order, independently for each package.
  * A failed update does not prevent a later rename, restyle, or deletion. */
@@ -57,6 +61,7 @@ export async function listSavedOfflineBasemaps(): Promise<OfflineBasemap[]> {
   const legacy = loadOfflineBasemaps();
   if (!isTauri()) return legacy;
   const inventory = await invoke<PackageInventory>("list_native_offline_packages");
+  for (const entry of inventory.packages) rememberPackageArchive(entry);
   const entries: OfflineBasemap[] = [
     ...inventory.packages,
     ...inventory.problems.map(
@@ -86,8 +91,11 @@ export function saveNativeOfflinePackage(
   bytes: Uint8Array,
   details: PackageDetails,
 ): Promise<NativeOfflinePackage> {
-  return invoke("save_native_offline_package", bytes, {
+  return invoke<NativeOfflinePackage>("save_native_offline_package", bytes, {
     headers: { "x-package-metadata": encodeURIComponent(JSON.stringify(details)) },
+  }).then((entry) => {
+    rememberPackageArchive(entry);
+    return entry;
   });
 }
 
@@ -118,9 +126,20 @@ export async function setSavedOfflineBasemapFlavor(
 }
 
 export async function deleteSavedOfflineBasemap(entry: OfflineBasemap): Promise<void> {
-  if (entry.managed)
-    await mutatePackage(entry.id, () => invoke("delete_native_offline_package", { id: entry.id }));
-  else deleteOfflineBasemap(entry.id);
+  if (entry.managed) {
+    await mutatePackage(entry.id, async () => {
+      await invoke("delete_native_offline_package", { id: entry.id });
+      const key =
+        packageArchiveKeys.get(entry.id) ??
+        (entry.savedPath ? nativeLocalPmtilesProtocolUrl(entry.savedPath) : undefined);
+      if (key) unregisterPMTilesArchive(key);
+      packageArchiveKeys.delete(entry.id);
+    });
+  } else deleteOfflineBasemap(entry.id);
+}
+
+function rememberPackageArchive(entry: NativeOfflinePackage): void {
+  packageArchiveKeys.set(entry.id, nativeLocalPmtilesProtocolUrl(entry.savedPath));
 }
 
 /** Verify on explicit use; inventory loading does not rehash every package. */
@@ -131,6 +150,7 @@ export function verifyNativeOfflinePackage(id: string): Promise<NativeOfflinePac
 /** Register every flavor without reading whole archives into the WebView.
  * Stable package URLs let an old saved project resolve its own flavor. */
 export function registerNativeOfflinePackageStyles(entry: NativeOfflinePackage): void {
+  rememberPackageArchive(entry);
   if (entry.archiveFormat !== "pmtiles" || entry.tileType !== "vector" || entry.flavor == null)
     return;
   const sourceUrl = nativeLocalPmtilesProtocolUrl(entry.savedPath);
@@ -138,7 +158,9 @@ export function registerNativeOfflinePackageStyles(entry: NativeOfflinePackage):
     .href;
   for (const flavor of PROTOMAPS_FLAVORS) {
     registerPersistentOfflineBasemapStyle(entry.id, flavor, () => {
-      ensureRemotePMTilesArchive(sourceUrl);
+      // This source belongs to the managed package, unlike a shared remote URL.
+      // Register ownership so deletion can release its reader and cached tiles.
+      if (!hasPMTilesArchive(sourceUrl)) registerPMTilesSource(new FetchSource(sourceUrl));
       return buildProtomapsBasemapStyle({ sourceUrl, flavor, assetsBaseUrl });
     });
   }

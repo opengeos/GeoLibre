@@ -11,7 +11,13 @@ const {
   deleteSavedOfflineBasemap,
   verifyNativeOfflinePackage,
   initializeNativeOfflinePackages,
+  nativeOfflineBasemapStyleUrl,
 } = await import("../apps/geolibre-desktop/src/lib/native-offline-packages");
+const { getOfflineBasemapStyle } = await import("../packages/map/src/protomaps-basemap");
+const { hasPMTilesArchive, getRegisteredPMTilesArchive } =
+  await import("../packages/map/src/pmtiles-archive");
+const { nativeLocalPmtilesProtocolUrl } =
+  await import("../apps/geolibre-desktop/src/lib/local-media-url");
 const { upsertOfflineBasemap, loadOfflineBasemaps } =
   await import("../apps/geolibre-desktop/src/lib/offline-basemaps");
 import type { NativeOfflinePackage } from "../apps/geolibre-desktop/src/lib/native-offline-packages";
@@ -102,6 +108,18 @@ it("keeps managed rename, flavor, verify, and deletion out of browser storage", 
     ["delete_native_offline_package", { id: entry.id }],
   ]);
   assert.deepEqual(loadOfflineBasemaps(), []);
+});
+
+it("releases a managed range reader on deletion even after its manifest becomes unavailable", async () => {
+  mockIPC(() => undefined);
+  const key = nativeLocalPmtilesProtocolUrl(entry.savedPath);
+  const styleUrl = nativeOfflineBasemapStyleUrl(entry, "light");
+  assert.ok(getOfflineBasemapStyle(styleUrl));
+  assert.equal(hasPMTilesArchive(key), true);
+  assert.ok(getRegisteredPMTilesArchive(key));
+  await deleteSavedOfflineBasemap({ ...entry, savedPath: null });
+  assert.equal(hasPMTilesArchive(key), false);
+  assert.equal(getRegisteredPMTilesArchive(key), undefined);
 });
 
 it("keeps legacy catalog deletion from deleting an exported provider document", async () => {

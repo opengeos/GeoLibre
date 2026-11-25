@@ -697,9 +697,6 @@ export function BasemapExtractPanel({
         return;
       }
 
-      // Register the archive in the shared pmtiles protocol (used by both the
-      // styled-basemap style and the flat-overlay layer). Done before saving so
-      // a disk-write failure below can't discard a successful extraction.
       // A Protomaps-schema vector archive can render as a proper styled basemap
       // (roads/water/labels) in the chosen flavor; anything else is added as a
       // flat single-symbology overlay layer.
@@ -718,7 +715,9 @@ export function BasemapExtractPanel({
             archiveFormat: "pmtiles",
           })
         : null;
-      await refreshSavedBasemaps();
+      void refreshSavedBasemaps().catch((error: unknown) => {
+        if (stillOwnsProject()) setError(error instanceof Error ? error.message : String(error));
+      });
       if (!stillOwnsProject()) return;
       const layerId = nativePackage?.id ?? `basemap-extract-${crypto.randomUUID()}`;
       const archiveKey = nativePackage
@@ -729,15 +728,17 @@ export function BasemapExtractPanel({
         : registerPMTilesArchive(archiveKey, archive);
 
       if (asStyledBasemap) {
-        const style = buildProtomapsBasemapStyle({
-          sourceUrl: layerUrl,
-          flavor,
-          assetsBaseUrl: BASEMAP_ASSETS_BASE,
-        });
         setBasemapStyleUrl(
           nativePackage
             ? nativeOfflineBasemapStyleUrl(nativePackage, flavor)
-            : registerOfflineBasemapStyle(layerId, style),
+            : registerOfflineBasemapStyle(
+                layerId,
+                buildProtomapsBasemapStyle({
+                  sourceUrl: layerUrl,
+                  flavor,
+                  assetsBaseUrl: BASEMAP_ASSETS_BASE,
+                }),
+              ),
         );
         trackStyledBasemap(layerId, archiveKey, nativePackage != null);
       } else {
@@ -1018,20 +1019,25 @@ export function BasemapExtractPanel({
             archiveFormat: "pmtiles",
           })
         : null;
-      if (nativePackage) await refreshSavedBasemaps();
+      if (nativePackage)
+        void refreshSavedBasemaps().catch((error: unknown) => {
+          if (request.isCurrent()) setError(error instanceof Error ? error.message : String(error));
+        });
       if (!request.isCurrent()) return;
       const id = nativePackage?.id ?? `basemap-open-${crypto.randomUUID()}`;
       const key = `${id}.pmtiles`;
       if (!nativePackage) registerPMTilesArchive(key, bytes);
-      const style = buildProtomapsBasemapStyle({
-        sourceUrl: `pmtiles://${key}`,
-        flavor: useFlavor,
-        assetsBaseUrl: BASEMAP_ASSETS_BASE,
-      });
       setBasemapStyleUrl(
         nativePackage
           ? nativeOfflineBasemapStyleUrl(nativePackage, useFlavor)
-          : registerOfflineBasemapStyle(id, style),
+          : registerOfflineBasemapStyle(
+              id,
+              buildProtomapsBasemapStyle({
+                sourceUrl: `pmtiles://${key}`,
+                flavor: useFlavor,
+                assetsBaseUrl: BASEMAP_ASSETS_BASE,
+              }),
+            ),
       );
       trackStyledBasemap(
         id,

@@ -41,6 +41,16 @@ rather than replacing the native inventory with an empty browser catalog.
 Extraction still assembles the archive in memory. A managed archive is limited
 to 512 MiB per save, and available device memory can impose a smaller practical
 limit. Keep the selected area and zoom range small on mobile devices.
+The raw native IPC transport temporarily holds both the request body and an
+owned copy for the background write. On Android, the JSON transport fallback
+also parses a numeric array before validating its length and decoding bytes;
+the 512 MiB archive bound does not bound that parse's memory. Large archives
+can therefore exhaust memory below the nominal limit.
+
+Native catalog operations are serialized while an archive is written, synced,
+or verified. The interface and map remain responsive, but inventory refreshes,
+renames, and deletions wait for a running storage operation to finish. This
+keeps recovery, manifest updates, verification, and deletion consistent.
 
 The shared native storage implementation covers desktop, Android, and iOS;
 real iOS device verification remains outstanding. Native MBTiles loading is
