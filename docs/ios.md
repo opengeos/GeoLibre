@@ -27,8 +27,10 @@ Distribution_, `get-task-allow=false`, an embedded App Store provisioning
 profile, the merged location usage string, and the web assets embedded in the
 binary:
 
-- **Locally** on a Mac (Xcode 26.6 / iOS SDK 26.5): `tauri ios init` → unsigned
-  archive → `xcodebuild -exportArchive`.
+- **Locally** on a Mac with Xcode 27+ (iOS 27 SDK) and rustup's `llvm-tools`
+  component: `tauri ios init` → unsigned archive → `xcodebuild -exportArchive`.
+  From April 2027 App Store Connect rejects uploads built with an older Xcode,
+  so an Xcode 26 archive is no longer submittable.
 - **In CI**, on the `xcode-27` runner (Xcode 27): it imports the certificate and
   profile from the `APPLE_IOS_*` secrets, archives, exports under manual
   signing, verifies the signature, and publishes the `geolibre-ios-ipa`
@@ -356,9 +358,10 @@ Developer"` and automatic signing therefore hunts for a development profile no
 >   future Xcode project file format (77).
 > ```
 >
-> The job therefore runs on a recent image and explicitly selects the newest Xcode on
-> the image rather than trusting its default, failing early with a clear message
-> if that is older than 16. Note this floor comes from the **Tauri CLI's**
+> The job therefore runs on the `xcode-27` image and explicitly selects the newest
+> Xcode on it rather than trusting its default, failing early with a clear message
+> if that is older than 16 (project format) or 27 (App Store SDK floor, below).
+> Note the Xcode 16 floor comes from the **Tauri CLI's**
 > generated project, not from anything in this repo — re-check it whenever the
 > Tauri CLI is bumped.
 >
@@ -381,7 +384,11 @@ Developer"` and automatic signing therefore hunts for a development profile no
 > plugin packages, and swift-rs uses rustup's `llvm-objcopy` to make them global
 > again. Without it the build only prints a cargo warning (`swift-rs:
 > llvm-objcopy not found`) and then fails to link with `Undefined symbols:
-> _init_plugin_geolocation`.
+> _init_plugin_geolocation`. The logic is `globalize_cdecl_symbols` in swift-rs's
+> `src-rs/build.rs` (1.0.8+). If a build already failed this way, run
+> `cargo clean` (or `cargo clean -p <crate>` for the failing plugin crate) after
+> installing the component: Cargo can reuse the cached build-script output and
+> skip the step, failing the link again.
 
 The `workflow_dispatch` `export_method` input picks the export path
 (`app-store-connect` for TestFlight/App Store, `release-testing` for ad-hoc
