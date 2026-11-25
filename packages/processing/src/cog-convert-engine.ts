@@ -31,7 +31,10 @@ export interface GeoTiffInfo {
   bigtiff: boolean;
 }
 
-/** Default COG tile size. High band counts use smaller tiles to bound padding. */
+/**
+ * Default tile size matches GeoLibre's sample COGs and the upstream reader.
+ * High band counts use smaller supported tile sizes to reduce padded samples.
+ */
 const COG_TILE_SIZE = 512;
 
 /** Keep a padded tile at or below four default single-band tiles when possible. */

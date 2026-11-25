@@ -83,6 +83,7 @@ for (const action of ["project switch", "unmount"] as const) {
     });
     assert.ok(pendingSignal?.aborted);
     assert.equal(useAppStore.getState().layers.length, 0);
+    await waitFor(() => assert.equal(screen.queryByRole("alert") === null, true));
   });
 }
 

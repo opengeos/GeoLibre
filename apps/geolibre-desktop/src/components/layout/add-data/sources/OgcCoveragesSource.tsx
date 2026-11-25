@@ -121,6 +121,7 @@ export function OgcCoveragesSource({ initialUrl = "" }: { initialUrl?: string })
       state.moveLayerToGroup(id, source.shell.targetGroupId, source.beforeLayer);
       if (!request.signal.aborted) source.shell.closeDialog();
     } catch (error) {
+      if (request.signal.aborted) return;
       throw new Error(errorText(error));
     }
   });

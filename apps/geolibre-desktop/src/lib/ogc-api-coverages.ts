@@ -46,8 +46,14 @@ export interface OgcCoverageCollection {
 
 /** HTTP links only; query credentials are inherited only on the same origin. */
 function linkUrl(href: string, base: string): string {
-  const target = new URL(href, base),
+  let target: URL;
+  let source: URL;
+  try {
+    target = new URL(href, base);
     source = new URL(base);
+  } catch {
+    throw new CoverageError("response");
+  }
   if (!/^https?:$/.test(target.protocol) || target.username || target.password)
     throw new CoverageError("response");
   if (source.origin === target.origin)
@@ -65,6 +71,13 @@ function validLinkUrl(href: string, base: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** Optional catalog metadata must not invalidate otherwise usable coverages. */
+function optionalObject(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 function links(document: Record<string, unknown>): Link[] {
@@ -204,16 +217,19 @@ export async function discoverOgcCoverages(
     const doc = loaded.document;
     const docLinks = links(doc);
     if (!Array.isArray(doc.collections) && !coverageLink(docLinks)) {
-      const data =
-        docLinks.find((l) => l.rel === "data" && /json/.test(l.type)) ??
-        docLinks.find((l) => l.rel === "data");
+      const data = docLinks
+        .filter((l) => l.rel === "data")
+        .sort((a, b) => Number(/json/.test(b.type)) - Number(/json/.test(a.type)))
+        .map((l) => validLinkUrl(l.href, url))
+        .find((href) => href !== undefined);
       if (!data) throw new CoverageError("empty");
-      url = linkUrl(data.href, url);
+      url = data;
       continue;
     }
     const collections = Array.isArray(doc.collections) ? doc.collections : [doc];
     for (const raw of collections) {
-      const item = coverageObject(raw);
+      const item = optionalObject(raw);
+      if (!item) continue;
       if (typeof item.id !== "string" || !item.id || ids.has(item.id)) continue;
       const itemLinks = links(item);
       if (!coverageLink(itemLinks)) continue;
@@ -226,12 +242,7 @@ export async function discoverOgcCoverages(
         return href ? [{ ...link, href }] : [];
       });
       if (!coverageLinks.length) continue;
-      const extent: Record<string, unknown> | undefined = item.extent
-        ? coverageObject(item.extent)
-        : undefined;
-      const spatial: Record<string, unknown> | undefined = extent?.spatial
-        ? coverageObject(extent.spatial)
-        : undefined;
+      const spatial = optionalObject(optionalObject(item.extent)?.spatial);
       const bbox = Array.isArray(spatial?.bbox) ? spatial.bbox[0] : null;
       // Collection bboxes default to CRS84. Other advertised CRSes need a
       // transform; do not put latitude-first/projected values in the form.
@@ -365,7 +376,9 @@ export async function downloadOgcCoverage(
   } catch {
     throw new CoverageError("response");
   }
-  const info = await readGeoTiffInfo(data);
+  const info = await readGeoTiffInfo(data).catch(() => {
+    throw new CoverageError("response");
+  });
   if (!info.ok) throw new CoverageError("response");
   if (info.width * info.height * info.bands > MAX_COVERAGE_SAMPLES) throw new CoverageError("size");
   if (!info.tiled)

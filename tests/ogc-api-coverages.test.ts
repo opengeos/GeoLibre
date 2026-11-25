@@ -105,6 +105,42 @@ test("keeps discovered coverages when a pagination link is unusable", async () =
   }
 });
 
+test("ignores malformed optional extents and collection records", async () => {
+  for (const extent of ["invalid", { spatial: "invalid" }, { spatial: [] }, null]) {
+    const item = { ...metadata(), extent };
+    serve(() => ({ collections: [null, "invalid", item] }));
+    const [collection] = await discoverOgcCoverages(
+      "https://example.org/collections",
+      new AbortController().signal,
+    );
+    assert.equal(collection.id, "gdps-temperature");
+    assert.equal(collection.bounds, undefined);
+  }
+});
+
+test("ignores malformed catalog links and reports empty when none survive", async () => {
+  serve(() => ({ links: [{ rel: "data", type: "application/json", href: "http://[" }] }));
+  await assert.rejects(discoverOgcCoverages("https://example.org/", new AbortController().signal), {
+    name: "CoverageError",
+    code: "empty",
+  });
+  serve((url) =>
+    new URL(url).pathname === "/"
+      ? {
+          links: [
+            { rel: "data", type: "application/json", href: "http://[" },
+            { rel: "data", type: "application/json", href: "./valid" },
+          ],
+        }
+      : { collections: [metadata()] },
+  );
+  const [collection] = await discoverOgcCoverages(
+    "https://example.org/",
+    new AbortController().signal,
+  );
+  assert.equal(collection.id, "gdps-temperature");
+});
+
 test("does not copy query credentials to an external coverage host", async () => {
   const item = metadata();
   item.links = [
