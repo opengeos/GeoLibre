@@ -534,7 +534,7 @@
         "description": "Muat KML atau KMZ dengan gaya asli, overlay, dan tautan jaringan pada globe."
       },
       "wcs": {
-        "description": "Muat subset GeoTIFF numerik dari layanan WCS 1.0.0.",
+        "description": "Muat subset GeoTIFF numerik dari layanan WCS 1.0.0 / 2.0.1.",
         "label": "Layer WCS"
       }
     },
@@ -1484,14 +1484,15 @@
       "hint": "Mengunduh GeoTIFF dengan dimensi piksel yang dipilih. Nilai dapat disampel ulang. Simpan raster untuk mempertahankan data yang diunduh.",
       "errors": {
         "xml": "Layanan mengembalikan XML yang tidak valid.",
-        "version": "Sumber ini memerlukan WCS 1.0.0. Layanan mengembalikan respons yang tidak didukung.",
+        "version": "Sumber ini memerlukan WCS 1.0.0 / 2.0.1. Layanan mengembalikan respons yang tidak didukung.",
         "empty": "Tidak ada cakupan yang cocok.",
         "format": "Cakupan tidak menawarkan keluaran GeoTIFF.",
         "size": "Pilih dimensi 1 hingga 4096 piksel. Unduhan dibatasi hingga 128 MB.",
         "metadata": "Layanan mengembalikan metadata lebih banyak daripada yang dapat dimuat GeoLibre. Respons metadata dibatasi hingga 32 MB.",
         "response": "Layanan tidak mengembalikan GeoTIFF yang valid.",
         "bounds": "Masukkan kotak yang valid: barat/timur antara -180 hingga 180, selatan/utara antara -90 hingga 90, dengan barat < timur dan selatan < utara.",
-        "url": "Masukkan URL layanan WCS."
+        "url": "Masukkan URL layanan WCS.",
+        "grid": "Cakupan ini memerlukan kisi teratur dua dimensi yang didukung dan dukungan penskalaan WCS."
       }
     }
   },

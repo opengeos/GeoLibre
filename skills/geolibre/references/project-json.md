@@ -161,6 +161,14 @@ the stroke width, `[]` for solid, e.g. `[4, 2]`), `strokeBlur` (px),
 ArcGIS FeatureServer layers are saved as `geojson`; MapServer and ImageServer as
 `raster`. GeoParquet imported from a local file becomes `geojson`.
 
+The app's **Add data > WCS layer** supports WCS 1.0.0 and 2.0.1 numerical
+GeoTIFF subsets. WCS 2 needs a two-dimensional axis-aligned rectified grid and
+the scaling extension, with the CRS extension for reprojection. Its coverage
+and grid axes are read from metadata, and both direct TIFF and multipart
+GML/TIFF responses are accepted. This imports a fixed file-backed raster;
+export its GeoTIFF to retain the bytes. A saved project alone does not retain
+that downloaded file, and a WCS service endpoint is not a tile-source URL.
+
 ### Other layer fields
 
 A layer may also carry `capabilities` (`query`, `create`, `update`, `delete`,

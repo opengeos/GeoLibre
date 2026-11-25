@@ -606,7 +606,7 @@
       },
       "wcs": {
         "label": "WCS layer",
-        "description": "Load a numerical GeoTIFF subset from a WCS 1.0.0 service."
+        "description": "Load a numerical GeoTIFF subset from a WCS 1.0.0 / 2.0.1 service."
       }
     },
     "shared": {
@@ -1598,13 +1598,14 @@
       "errors": {
         "url": "Enter an HTTP or HTTPS WCS service URL.",
         "xml": "The service returned invalid XML.",
-        "version": "This source requires WCS 1.0.0. The service returned an unsupported response.",
+        "version": "This source requires WCS 1.0.0 / 2.0.1. The service returned an unsupported response.",
         "empty": "No matching coverages are available.",
         "format": "The coverage does not advertise GeoTIFF output.",
         "bounds": "Enter a valid box: west/east within -180 to 180, south/north within -90 to 90, with west < east and south < north.",
         "size": "Choose dimensions from 1 to 4096 pixels. Downloads are limited to 128 MB.",
         "metadata": "The service returned more metadata than GeoLibre can load. Metadata responses are limited to 32 MB.",
-        "response": "The service did not return a valid GeoTIFF."
+        "response": "The service did not return a valid GeoTIFF.",
+        "grid": "This coverage needs a supported two-dimensional rectified grid and WCS scaling support."
       }
     }
   },

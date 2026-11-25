@@ -7,12 +7,13 @@ import { WMS_PROXY_PATH } from "../components/layout/add-data/constants";
 import { convertGeoTiffToCog, readGeoTiffInfo } from "@geolibre/processing";
 import { isTauri } from "./is-tauri";
 import {
-  assertWcsTiff,
+  wcsTiffBytes,
   parseWcsCapabilities,
   parseWcsDescription,
   wcsRequestUrl,
   waitForWcsRequest,
   WcsError,
+  type WcsCoverage,
 } from "./wcs";
 
 // Capabilities and coverage descriptions are XML listings, orders of magnitude
@@ -32,15 +33,50 @@ async function fetchWcsXml(url: string, signal: AbortSignal): Promise<string> {
 }
 
 export async function discoverWcs(endpoint: string, signal: AbortSignal) {
-  return parseWcsCapabilities(
-    await fetchWcsXml(wcsRequestUrl(endpoint, "GetCapabilities"), signal),
-  );
+  try {
+    return parseWcsCapabilities(
+      await fetchWcsXml(
+        wcsRequestUrl(endpoint, "GetCapabilities", {
+          VERSION: "2.0.1",
+          ACCEPTVERSIONS: "2.0.1,1.0.0",
+        }),
+        signal,
+      ),
+    );
+  } catch (error) {
+    signal.throwIfAborted();
+    // Retry legacy discovery only for a protocol/operation refusal, not for
+    // a network, authentication, size or cancellation failure.
+    const refused =
+      error instanceof WcsError
+        ? error.code === "version" || error.code === "response"
+        : error instanceof Error && /^WCS HTTP (400|404|406|500|501)$/.test(error.message);
+    if (!refused) throw error;
+    return parseWcsCapabilities(
+      await fetchWcsXml(wcsRequestUrl(endpoint, "GetCapabilities"), signal),
+    );
+  }
 }
 
-export async function describeWcs(endpoint: string, coverage: string, signal: AbortSignal) {
+export async function describeWcs(
+  endpoint: string,
+  coverage: string,
+  signal: AbortSignal,
+  service?: WcsCoverage,
+) {
   return parseWcsDescription(
-    await fetchWcsXml(wcsRequestUrl(endpoint, "DescribeCoverage", { COVERAGE: coverage }), signal),
+    await fetchWcsXml(
+      wcsRequestUrl(
+        endpoint,
+        "DescribeCoverage",
+        service?.version === "2.0.1"
+          ? { VERSION: "2.0.1", COVERAGEID: coverage }
+          : { COVERAGE: coverage },
+      ),
+      signal,
+    ),
     coverage,
+    service,
   );
 }
 
@@ -76,7 +112,7 @@ export async function downloadWcs(url: string, name: string, signal: AbortSignal
       throw error;
     });
   }
-  assertWcsTiff(bytes);
+  bytes = wcsTiffBytes(bytes);
   // MapServer and GDAL-backed services (e.g. PDOK) answer with a striped
   // GeoTIFF, which the raster panel cannot stream as tiles. The whole subset is
   // already in memory and bounded by MAX_BYTES, so re-encode it as a COG here

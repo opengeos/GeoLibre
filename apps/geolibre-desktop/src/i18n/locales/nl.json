@@ -541,7 +541,7 @@
         "description": "Laad KML of KMZ met oorspronkelijke stijlen, overlays en netwerkkoppelingen op de globe."
       },
       "wcs": {
-        "description": "Laad een numerieke GeoTIFF-uitsnede van een WCS 1.0.0-service.",
+        "description": "Laad een numerieke GeoTIFF-uitsnede van een WCS 1.0.0 / 2.0.1-service.",
         "label": "WCS-laag"
       }
     },
@@ -1517,14 +1517,15 @@
       "hint": "Downloadt een GeoTIFF met de gekozen pixelafmetingen. Waarden kunnen opnieuw worden bemonsterd. Sla het raster op om de gedownloade gegevens te behouden.",
       "errors": {
         "xml": "De service heeft ongeldige XML teruggestuurd.",
-        "version": "Deze bron vereist WCS 1.0.0. De service heeft een niet-ondersteund antwoord teruggestuurd.",
+        "version": "Deze bron vereist WCS 1.0.0 / 2.0.1. De service heeft een niet-ondersteund antwoord teruggestuurd.",
         "empty": "Er zijn geen overeenkomende coverages beschikbaar.",
         "format": "De coverage biedt geen GeoTIFF-uitvoer aan.",
         "size": "Kies afmetingen van 1 tot 4096 pixels. Downloads zijn beperkt tot 128 MB.",
         "metadata": "De service heeft meer metadata teruggestuurd dan GeoLibre kan laden. Metadata-antwoorden zijn beperkt tot 32 MB.",
         "response": "De service heeft geen geldige GeoTIFF teruggestuurd.",
         "bounds": "Voer een geldig kader in: west/oost binnen -180 tot 180, zuid/noord binnen -90 tot 90, met west < oost en zuid < noord.",
-        "url": "Voer een WCS-service-URL in."
+        "url": "Voer een WCS-service-URL in.",
+        "grid": "Deze dekking vereist een ondersteund tweedimensionaal regelmatig raster en WCS-schaalondersteuning."
       }
     }
   },

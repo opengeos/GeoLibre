@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wcs:CoverageDescriptions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xmlns="http://www.opengis.net/gml/3.2"
+ xmlns:wcs="http://www.opengis.net/wcs/2.0"
+ xmlns:ows="http://www.opengis.net/ows/2.0"
+ xmlns:gml="http://www.opengis.net/gml/3.2"
+ xmlns:gmlcov="http://www.opengis.net/gmlcov/1.0"
+ xmlns:swe="http://www.opengis.net/swe/2.0"
+ xmlns:crs="http://www.opengis.net/wcs/service-extension/crs/1.0"
+ xmlns:xlink="http://www.w3.org/1999/xlink"
+ xsi:schemaLocation="http://www.opengis.net/wcs/2.0 http://schemas.opengis.net/wcs/2.0/wcsDescribeCoverage.xsd http://www.opengis.net/swe/2.0 http://schemas.opengis.net/sweCommon/2.0/swe.xsd">
+  <wcs:CoverageDescription>     <gml:boundedBy>
+      <gml:Envelope srsName="http://www.opengis.net/def/crs/EPSG/0/3857" axisLabels="x y" uomLabels="Meter Meter" srsDimension="2">
+        <gml:lowerCorner>-20037507.0672000013 -1689391.82336018607</gml:lowerCorner>
+        <gml:upperCorner>20037507.5325271226 18809001.9719000012</gml:upperCorner>
+      </gml:Envelope>
+   </gml:boundedBy>
+    <wcs:CoverageId>DEP3Elevation</wcs:CoverageId>
+    <gml:domainSet>
+      <gml:RectifiedGrid gml:id="grid_DEP3Elevation" dimension="2">
+        <gml:limits>
+          <gml:GridEnvelope>
+            <gml:low>0 0</gml:low>
+            <gml:high>40075014 20498393</gml:high>
+          </gml:GridEnvelope>
+        </gml:limits>
+        <gml:axisLabels>x y</gml:axisLabels>
+        <gml:origin>
+          <gml:Point gml:id="grid_origin_DEP3Elevation" srsName="http://www.opengis.net/def/crs/EPSG/0/3857">
+            <gml:pos>-20037506.5672000051 18809001.4719000049</gml:pos>
+          </gml:Point>
+        </gml:origin>
+          <gml:offsetVector srsName="EPSG:3857" srsDimension="2">0.999999990011909534 0</gml:offsetVector>
+          <gml:offsetVector srsName="EPSG:3857" srsDimension="2">0 -0.999999990011909534</gml:offsetVector>
+      </gml:RectifiedGrid>
+    </gml:domainSet>
+    <gmlcov:rangeType>
+      <swe:DataRecord>
+        <swe:field name="band_1">
+          <swe:Quantity>
+            <swe:description>Band 1</swe:description>
+            <swe:uom code="unknown"/>
+            <swe:constraint>
+              <swe:AllowedValues>
+                <swe:interval>-60.304333 3922.473389</swe:interval>
+              </swe:AllowedValues>
+            </swe:constraint>
+          </swe:Quantity>
+        </swe:field>
+      </swe:DataRecord>
+    </gmlcov:rangeType>
+    <wcs:ServiceParameters>
+      <wcs:CoverageSubtype>RectifiedGridCoverage</wcs:CoverageSubtype>
+      <wcs:nativeFormat>image/tiff</wcs:nativeFormat>
+    </wcs:ServiceParameters>
+  </wcs:CoverageDescription>
+</wcs:CoverageDescriptions>

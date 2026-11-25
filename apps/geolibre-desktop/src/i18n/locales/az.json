@@ -542,7 +542,7 @@
       },
       "wcs": {
         "label": "WCS layı",
-        "description": "WCS 1.0.0 xidmətindən ədədi GeoTIFF alt dəstini yükləyin."
+        "description": "WCS 1.0.0 / 2.0.1 xidmətindən ədədi GeoTIFF alt dəstini yükləyin."
       }
     },
     "shared": {
@@ -1518,13 +1518,14 @@
       "errors": {
         "url": "HTTP və ya HTTPS WCS xidmətinin URL-sini daxil edin.",
         "xml": "Xidmət etibarsız XML qaytardı.",
-        "version": "Bu mənbə üçün WCS 1.0.0 tələb olunur. Xidmət dəstəklənməyən cavab qaytardı.",
+        "version": "Bu mənbə üçün WCS 1.0.0 / 2.0.1 tələb olunur. Xidmət dəstəklənməyən cavab qaytardı.",
         "empty": "Uyğun örtük yoxdur.",
         "format": "Örtük GeoTIFF çıxış formatını elan etmir.",
         "bounds": "Etibarlı çərçivə daxil edin: qərb/şərq -180 ilə 180, cənub/şimal -90 ilə 90 arasında olmalı, qərb < şərq və cənub < şimal şərtləri ödənməlidir.",
         "size": "1–4096 piksel arası ölçülər seçin. Endirmələr 128 MB ilə məhdudlaşdırılıb.",
         "metadata": "Xidmət GeoLibre-nin yükləyə biləcəyindən artıq metaverilən qaytardı. Metaverilən cavabları 32 MB ilə məhdudlaşdırılıb.",
-        "response": "Xidmət etibarlı GeoTIFF qaytarmadı."
+        "response": "Xidmət etibarlı GeoTIFF qaytarmadı.",
+        "grid": "Bu örtük dəstəklənən ikiölçülü müntəzəm şəbəkə və WCS miqyaslandırma dəstəyi tələb edir."
       }
     }
   },

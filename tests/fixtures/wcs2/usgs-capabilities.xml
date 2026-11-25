@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wcs:Capabilities xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xmlns:ows="http://www.opengis.net/ows/2.0"
+ xmlns:wcs="http://www.opengis.net/wcs/2.0"
+ xmlns:gml="http://www.opengis.net/gml/3.2"
+ xmlns:crs="http://www.opengis.net/wcs/service-extension/crs/1.0"
+ xmlns:int="http://www.opengis.net/WCS_service-extension_interpolation/1.0"
+ xmlns="http://www.opengis.net/ows/2.0"
+ xmlns:xlink="http://www.w3.org/1999/xlink"
+ xsi:schemaLocation="http://www.opengis.net/wcs/2.0 http://schemas.opengis.net/wcs/2.0/wcsAll.xsd" version="2.0.1">
+  <ows:ServiceIdentification>
+    <ows:Title>3DEPElevation</ows:Title>
+  <ows:ServiceType>OGC WCS</ows:ServiceType>
+  <ows:ServiceTypeVersion>2.0.1</ows:ServiceTypeVersion>
+  <ows:ServiceTypeVersion>1.1.2</ows:ServiceTypeVersion>
+  <ows:ServiceTypeVersion>1.1.1</ows:ServiceTypeVersion>
+  <ows:ServiceTypeVersion>1.1.0</ows:ServiceTypeVersion>
+  <ows:ServiceTypeVersion>1.0.0</ows:ServiceTypeVersion>
+  <ows:Profile>http://www.opengis.net/spec/WCS/2.0/conf/core</ows:Profile>
+  <ows:Profile>
+    http://www.opengis.net/spec/WCS_protocol-binding_get-kvp/1.0.1
+  </ows:Profile>
+  <ows:Profile>
+    http://www.opengis.net/spec/WCS_protocol-binding_post-xml/1.0
+  </ows:Profile>
+  <ows:Profile>
+    http://www.opengis.net/spec/WCS_service-extension_crs/1.0/conf/crs-gridded-coverage
+  </ows:Profile>
+  <ows:Profile>
+    http://www.opengis.net/spec/WCS_geotiff-coverages/1.0/conf/geotiff-coverage
+  </ows:Profile>
+  <ows:Profile>
+    http://www.opengis.net/spec/GMLCOV/1.0/conf/gml
+  </ows:Profile>
+  <ows:Profile>
+    http://www.opengis.net/spec/GMLCOV/1.0/conf/special-format
+  </ows:Profile>
+  <ows:Profile>
+    http://www.opengis.net/spec/GMLCOV/1.0/conf/multipart
+  </ows:Profile>
+  <ows:Profile>
+    http://www.opengis.net/spec/WCS_service-extension_scaling/1.0/conf/scaling
+  </ows:Profile>
+  <ows:Profile>
+    http://www.opengis.net/spec/WCS_service-extension_crs/1.0/conf/crs
+  </ows:Profile>
+  <ows:Profile>
+    http://www.opengis.net/spec/WCS_service-extension_interpolation/1.0/conf/interpolation
+  </ows:Profile>
+  <ows:Profile>
+    http://www.opengis.net/spec/WCS_service-extension_interpolation/1.0/conf/nearest-neighbor
+  </ows:Profile>
+  <ows:Profile>
+    http://www.opengis.net/spec/WCS_service-extension_interpolation/1.0/conf/linear
+  </ows:Profile>
+  <ows:Profile>
+    http://www.opengis.net/spec/WCS_service-extension_interpolation/1.0/conf/cubic
+  </ows:Profile>
+  <ows:Profile>
+    http://www.opengis.net/spec/WCS_service-extension_range-subsetting/1.0/conf/record-subsetting
+  </ows:Profile>
+  <ows:Fees>NONE</ows:Fees>
+  <ows:AccessConstraints>NONE</ows:AccessConstraints>
+  </ows:ServiceIdentification>
+  <ows:ServiceProvider>
+    <ows:ProviderName></ows:ProviderName>
+    <ows:ServiceContact>
+      <ows:ContactInfo>
+        <ows:Phone>
+        </ows:Phone>
+        <ows:Address>
+        </ows:Address>
+        <ows:OnlineResource xlink:href="https://elevation.nationalmap.gov:443/arcgis/services/3DEPElevation/ImageServer/WCSServer"/>
+      </ows:ContactInfo>
+    </ows:ServiceContact>
+  </ows:ServiceProvider>
+  <ows:OperationsMetadata>
+    <ows:Operation name="GetCapabilities">
+      <ows:DCP>
+        <ows:HTTP>
+          <ows:Get xlink:href="https://elevation.nationalmap.gov:443/arcgis/services/3DEPElevation/ImageServer/WCSServer"/>
+          <ows:Post xlink:href="https://elevation.nationalmap.gov:443/arcgis/services/3DEPElevation/ImageServer/WCSServer">
+          </ows:Post>
+        </ows:HTTP>
+      </ows:DCP>
+    </ows:Operation>
+    <ows:Operation name="DescribeCoverage">
+      <ows:DCP>
+        <ows:HTTP>
+          <ows:Get xlink:href="https://elevation.nationalmap.gov:443/arcgis/services/3DEPElevation/ImageServer/WCSServer"/>
+          <ows:Post xlink:href="https://elevation.nationalmap.gov:443/arcgis/services/3DEPElevation/ImageServer/WCSServer">
+          </ows:Post>
+        </ows:HTTP>
+      </ows:DCP>
+    </ows:Operation>
+    <ows:Operation name="GetCoverage">
+      <ows:DCP>
+        <ows:HTTP>
+          <ows:Get xlink:href="https://elevation.nationalmap.gov:443/arcgis/services/3DEPElevation/ImageServer/WCSServer"/>
+          <ows:Post xlink:href="https://elevation.nationalmap.gov:443/arcgis/services/3DEPElevation/ImageServer/WCSServer">
+          </ows:Post>
+        </ows:HTTP>
+      </ows:DCP>
+    </ows:Operation>
+    <ows:Constraint name="CountDefault">
+      <ows:NoValues/>
+      <ows:DefaultValue>100</ows:DefaultValue>
+    </ows:Constraint>
+    <ows:Constraint name="PostEncoding">
+      <ows:AllowedValues>
+        <ows:Value>XML</ows:Value>
+      </ows:AllowedValues>
+    </ows:Constraint>
+  </ows:OperationsMetadata>
+  <wcs:ServiceMetadata>
+    <wcs:formatSupported>image/tiff</wcs:formatSupported>
+    <wcs:formatSupported>image/netcdf</wcs:formatSupported>
+    <wcs:Extension>
+      <crs:CrsMetadata>
+			   <crs:crsSupported>http://www.opengis.net/def/crs/EPSG/0/4326</crs:crsSupported>
+        <crs:crsSupported>http://www.opengis.net/def/crs/EPSG/0/3857</crs:crsSupported>
+      </crs:CrsMetadata>
+      <int:InterpolationMetadata>
+        <int:InterpolationSupported>http://www.opengis.net/def/interpolation/OGC/1/nearest-neighbor</int:InterpolationSupported>
+        <int:InterpolationSupported>http://www.opengis.net/def/interpolation/OGC/1/linear</int:InterpolationSupported>
+        <int:InterpolationSupported>http://www.opengis.net/def/interpolation/OGC/1/cubic</int:InterpolationSupported>
+      </int:InterpolationMetadata>
+    </wcs:Extension>
+  </wcs:ServiceMetadata>
+  <wcs:Contents>
+    <wcs:CoverageSummary>
+      <ows:WGS84BoundingBox>
+        <ows:LowerCorner>-179.999988541186866 -15.0016632448225025</ows:LowerCorner>
+        <ows:UpperCorner>179.999992721291534 84.0016785721327182</ows:UpperCorner>
+      </ows:WGS84BoundingBox>
+      <wcs:CoverageId>DEP3Elevation</wcs:CoverageId>
+      <wcs:CoverageSubtype>RectifiedGridCoverage</wcs:CoverageSubtype>
+    </wcs:CoverageSummary>
+    <wcs:CoverageSummary>
+      <ows:WGS84BoundingBox>
+        <ows:LowerCorner>-179.999988541186866 -15.0016632448225025</ows:LowerCorner>
+        <ows:UpperCorner>179.999992721291534 84.0016785721327182</ows:UpperCorner>
+      </ows:WGS84BoundingBox>
+      <wcs:CoverageId>DEP3Elevation_Hillshade_Gray</wcs:CoverageId>
+      <wcs:CoverageSubtype>RectifiedGridCoverage</wcs:CoverageSubtype>
+    </wcs:CoverageSummary>
+    <wcs:CoverageSummary>
+      <ows:WGS84BoundingBox>
+        <ows:LowerCorner>-179.999988541186866 -15.0016632448225025</ows:LowerCorner>
+        <ows:UpperCorner>179.999992721291534 84.0016785721327182</ows:UpperCorner>
+      </ows:WGS84BoundingBox>
+      <wcs:CoverageId>DEP3Elevation_Aspect_Degrees</wcs:CoverageId>
+      <wcs:CoverageSubtype>RectifiedGridCoverage</wcs:CoverageSubtype>
+    </wcs:CoverageSummary>
+    <wcs:CoverageSummary>
+      <ows:WGS84BoundingBox>
+        <ows:LowerCorner>-179.999988541186866 -15.0016632448225025</ows:LowerCorner>
+        <ows:UpperCorner>179.999992721291534 84.0016785721327182</ows:UpperCorner>
+      </ows:WGS84BoundingBox>
+      <wcs:CoverageId>DEP3Elevation_Aspect_Map</wcs:CoverageId>
+      <wcs:CoverageSubtype>RectifiedGridCoverage</wcs:CoverageSubtype>
+    </wcs:CoverageSummary>
+    <wcs:CoverageSummary>
+      <ows:WGS84BoundingBox>
+        <ows:LowerCorner>-179.999988541186866 -15.0016632448225025</ows:LowerCorner>
+        <ows:UpperCorner>179.999992721291534 84.0016785721327182</ows:UpperCorner>
+      </ows:WGS84BoundingBox>
+      <wcs:CoverageId>DEP3Elevation_Contour_25</wcs:CoverageId>
+      <wcs:CoverageSubtype>RectifiedGridCoverage</wcs:CoverageSubtype>
+    </wcs:CoverageSummary>
+    <wcs:CoverageSummary>
+      <ows:WGS84BoundingBox>
+        <ows:LowerCorner>-179.999988541186866 -15.0016632448225025</ows:LowerCorner>
+        <ows:UpperCorner>179.999992721291534 84.0016785721327182</ows:UpperCorner>
+      </ows:WGS84BoundingBox>
+      <wcs:CoverageId>DEP3Elevation_Hillshade_Elevation_Tinted</wcs:CoverageId>
+      <wcs:CoverageSubtype>RectifiedGridCoverage</wcs:CoverageSubtype>
+    </wcs:CoverageSummary>
+    <wcs:CoverageSummary>
+      <ows:WGS84BoundingBox>
+        <ows:LowerCorner>-179.999988541186866 -15.0016632448225025</ows:LowerCorner>
+        <ows:UpperCorner>179.999992721291534 84.0016785721327182</ows:UpperCorner>
+      </ows:WGS84BoundingBox>
+      <wcs:CoverageId>DEP3Elevation_Hillshade_Gray-Stretch</wcs:CoverageId>
+      <wcs:CoverageSubtype>RectifiedGridCoverage</wcs:CoverageSubtype>
+    </wcs:CoverageSummary>
+    <wcs:CoverageSummary>
+      <ows:WGS84BoundingBox>
+        <ows:LowerCorner>-179.999988541186866 -15.0016632448225025</ows:LowerCorner>
+        <ows:UpperCorner>179.999992721291534 84.0016785721327182</ows:UpperCorner>
+      </ows:WGS84BoundingBox>
+      <wcs:CoverageId>DEP3Elevation_Hillshade_Multidirectional</wcs:CoverageId>
+      <wcs:CoverageSubtype>RectifiedGridCoverage</wcs:CoverageSubtype>
+    </wcs:CoverageSummary>
+    <wcs:CoverageSummary>
+      <ows:WGS84BoundingBox>
+        <ows:LowerCorner>-179.999988541186866 -15.0016632448225025</ows:LowerCorner>
+        <ows:UpperCorner>179.999992721291534 84.0016785721327182</ows:UpperCorner>
+      </ows:WGS84BoundingBox>
+      <wcs:CoverageId>DEP3Elevation_Preset_2ft_Contour_Interval</wcs:CoverageId>
+      <wcs:CoverageSubtype>RectifiedGridCoverage</wcs:CoverageSubtype>
+    </wcs:CoverageSummary>
+    <wcs:CoverageSummary>
+      <ows:WGS84BoundingBox>
+        <ows:LowerCorner>-179.999988541186866 -15.0016632448225025</ows:LowerCorner>
+        <ows:UpperCorner>179.999992721291534 84.0016785721327182</ows:UpperCorner>
+      </ows:WGS84BoundingBox>
+      <wcs:CoverageId>DEP3Elevation_Preset_5ft_Contour_Interval</wcs:CoverageId>
+      <wcs:CoverageSubtype>RectifiedGridCoverage</wcs:CoverageSubtype>
+    </wcs:CoverageSummary>
+    <wcs:CoverageSummary>
+      <ows:WGS84BoundingBox>
+        <ows:LowerCorner>-179.999988541186866 -15.0016632448225025</ows:LowerCorner>
+        <ows:UpperCorner>179.999992721291534 84.0016785721327182</ows:UpperCorner>
+      </ows:WGS84BoundingBox>
+      <wcs:CoverageId>DEP3Elevation_Preset_10ft_Contour_Interval</wcs:CoverageId>
+      <wcs:CoverageSubtype>RectifiedGridCoverage</wcs:CoverageSubtype>
+    </wcs:CoverageSummary>
+    <wcs:CoverageSummary>
+      <ows:WGS84BoundingBox>
+        <ows:LowerCorner>-179.999988541186866 -15.0016632448225025</ows:LowerCorner>
+        <ows:UpperCorner>179.999992721291534 84.0016785721327182</ows:UpperCorner>
+      </ows:WGS84BoundingBox>
+      <wcs:CoverageId>DEP3Elevation_Slope_Map</wcs:CoverageId>
+      <wcs:CoverageSubtype>RectifiedGridCoverage</wcs:CoverageSubtype>
+    </wcs:CoverageSummary>
+    <wcs:CoverageSummary>
+      <ows:WGS84BoundingBox>
+        <ows:LowerCorner>-179.999988541186866 -15.0016632448225025</ows:LowerCorner>
+        <ows:UpperCorner>179.999992721291534 84.0016785721327182</ows:UpperCorner>
+      </ows:WGS84BoundingBox>
+      <wcs:CoverageId>DEP3Elevation_Slope_Degrees</wcs:CoverageId>
+      <wcs:CoverageSubtype>RectifiedGridCoverage</wcs:CoverageSubtype>
+    </wcs:CoverageSummary>
+    <wcs:CoverageSummary>
+      <ows:WGS84BoundingBox>
+        <ows:LowerCorner>-179.999988541186866 -15.0016632448225025</ows:LowerCorner>
+        <ows:UpperCorner>179.999992721291534 84.0016785721327182</ows:UpperCorner>
+      </ows:WGS84BoundingBox>
+      <wcs:CoverageId>DEP3Elevation_Contour_Smoothed_25</wcs:CoverageId>
+      <wcs:CoverageSubtype>RectifiedGridCoverage</wcs:CoverageSubtype>
+    </wcs:CoverageSummary>
+  </wcs:Contents>
+</wcs:Capabilities>

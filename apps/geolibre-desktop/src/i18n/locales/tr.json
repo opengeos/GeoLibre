@@ -541,7 +541,7 @@
         "description": "KML veya KMZ dosyalarını özgün stiller, kaplamalar ve ağ bağlantılarıyla küreye yükleyin."
       },
       "wcs": {
-        "description": "WCS 1.0.0 servisinden sayısal bir GeoTIFF alt kümesi yükleyin.",
+        "description": "WCS 1.0.0 / 2.0.1 servisinden sayısal bir GeoTIFF alt kümesi yükleyin.",
         "label": "WCS Katmanı"
       }
     },
@@ -1517,14 +1517,15 @@
       "hint": "Seçilen piksel boyutlarında GeoTIFF indirir. Değerler yeniden örneklenebilir. İndirilen verileri korumak için rasteri kaydedin.",
       "errors": {
         "xml": "Servis geçersiz XML döndürdü.",
-        "version": "Bu kaynak WCS 1.0.0 gerektirir. Servis desteklenmeyen bir yanıt döndürdü.",
+        "version": "Bu kaynak WCS 1.0.0 / 2.0.1 gerektirir. Servis desteklenmeyen bir yanıt döndürdü.",
         "empty": "Eşleşen kapsam bulunmuyor.",
         "format": "Kapsam GeoTIFF çıktısı bildirmiyor.",
         "size": "1 ile 4096 piksel arasında boyutlar seçin. İndirmeler 128 MB ile sınırlıdır.",
         "metadata": "Servis GeoLibre'nin yükleyebileceğinden daha fazla meta veri döndürdü. Meta veri yanıtları 32 MB ile sınırlıdır.",
         "response": "Servis geçerli bir GeoTIFF döndürmedi.",
         "bounds": "Geçerli bir kutu girin: batı/doğu -180 ile 180 arasında, güney/kuzey -90 ile 90 arasında, batı < doğu ve güney < kuzey olacak şekilde.",
-        "url": "Bir WCS servis URL'si girin."
+        "url": "Bir WCS servis URL'si girin.",
+        "grid": "Bu kapsam, desteklenen iki boyutlu düzenli bir ızgara ve WCS ölçeklendirme desteği gerektirir."
       }
     }
   },
