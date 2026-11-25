@@ -107,6 +107,12 @@ not support the custom protocols on the other platforms.
 MBTiles extraction does not generate overview tiles. Newly extracted or
 reapplied packages open at or above their minimum tile zoom; zooming below the
 stored pyramid can show an empty map.
+Sparse extracts retain the requested selection extent separately from their
+copied-tile default view, omitting archive bounds when complete coverage cannot
+be established at every stored zoom. Applying a package above the project
+maximum zoom reports an error before changing the map; the renderer supports
+zoom levels up to 24. Declared roads/places/landcover fields must include `kind`
+for native Protomaps styling; incompatible sources use generic overlays.
 
 For local MBTiles area extraction in the native app, use a non-wrapping extent
 and zooms 0 through 30. The native writer preserves encoded tile bytes,

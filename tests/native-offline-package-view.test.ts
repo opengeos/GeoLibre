@@ -51,3 +51,15 @@ it("uses the engine's geographic fit for a complete pyramid and handles an unmea
   assert.equal(flights[0].zoom, 19);
   frameNativeOfflinePackage(null, { bbox, minZoom: 19 });
 });
+
+it("opens sparse extracts on a copied tile instead of the midpoint of the requested extent", () => {
+  const { engine, flights, fits } = camera();
+  frameNativeOfflinePackage(engine, {
+    bbox: [-123, 37, -121, 39],
+    minZoom: 14,
+    viewCenter: [-122.26, 37.87, 14],
+  });
+  assert.deepEqual(fits, []);
+  assert.deepEqual(flights[0].center, [-122.26, 37.87]);
+  assert.equal(flights[0].zoom, 14);
+});

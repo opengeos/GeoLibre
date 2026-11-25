@@ -5752,6 +5752,7 @@ struct MbtilesMetadata {
     format: String,
     tile_type: String,
     source_layers: Vec<String>,
+    source_layer_fields: std::collections::BTreeMap<String, Vec<String>>,
     min_zoom: Option<i64>,
     max_zoom: Option<i64>,
     bounds: Option<[f64; 4]>,
@@ -5825,6 +5826,9 @@ fn read_mbtiles_metadata_from_rows(
         format,
         tile_type,
         source_layers: read_vector_source_layers(metadata.get("json")),
+        source_layer_fields: offline_mbtiles::vector_source_layer_fields(
+            metadata.get("json").map(String::as_str),
+        ),
         min_zoom: metadata_min_zoom.or(tile_min_zoom),
         max_zoom: metadata_max_zoom.or(tile_max_zoom),
         bounds: metadata.get("bounds").and_then(|value| parse_bounds(value)),

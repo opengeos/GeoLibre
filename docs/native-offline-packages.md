@@ -3,11 +3,11 @@
 **Offline basemap** extracts a bounding box and zoom range from a remote PMTiles
 archive or, in the native app, a selected local MBTiles file. Choose the source,
 draw an area or enter its bounds, and set the zoom range. Local MBTiles selection
-initially fills the file's bounds and zooms. Extraction saves the result in private app storage
-and records its name, extent, zooms, style, size, and SHA-256 checksum beside the
-archive. It does not open an export or share dialog. The selected MBTiles file
-stays unchanged. **Open file…** also keeps a
-managed copy of a compatible Protomaps PMTiles basemap.
+initially fills the file's bounds and zooms. Extraction saves the result in
+private app storage and records its name, extent, zooms, style, size, and SHA-256
+checksum beside the archive. It does not open an export or share dialog. The
+selected MBTiles file stays unchanged. **Open file…** also keeps a managed copy
+of a compatible Protomaps PMTiles basemap.
 
 The **Saved basemaps** list can apply, rename, restyle, export, and delete these
 packages. Export creates a separate document and leaves the managed package
@@ -26,6 +26,12 @@ MBTiles extracts contain only the selected zoom levels. Extraction and saved
 application position the camera at or above the first stored zoom, so a
 detail-only archive opens with visible tiles. Zooming below its available
 pyramid can show an empty map; extraction does not generate overview tiles.
+Sparse extracts open on a copied tile. Their recorded selection extent does
+not promise complete coverage; the archive omits bounds when coverage cannot be
+established at every stored zoom and removes stale per-layer zoom hints.
+Applying a package above the project's maximum zoom reports an error before
+changing the map. Increase that maximum in Map Settings or choose lower-zoom
+data; rendering supports zoom levels up to 24.
 
 The native catalog survives browser-storage eviction. Startup restores native
 file authorization and lightweight style registrations before opening a project.
@@ -60,9 +66,10 @@ Explicit use verifies a package's checksum. A damaged package can be deleted
 from the list and downloaded again. A failed catalog read reports an error
 rather than replacing the native inventory with an empty browser catalog.
 
-Remote PMTiles extraction still assembles the archive in memory. A managed archive is limited
-to 512 MiB per save, and available device memory can impose a smaller practical
-limit. Keep the selected area and zoom range small on mobile devices.
+Remote PMTiles extraction still assembles the archive in memory. A managed
+archive is limited to 512 MiB per save, and available device memory can impose a
+smaller practical limit. Keep the selected area and zoom range small on mobile
+devices.
 Explicit export uses the existing save/share workflow and buffers the archive
 in the WebView; the range-read memory benefit applies to map rendering.
 The raw native IPC transport temporarily holds both the request body and an

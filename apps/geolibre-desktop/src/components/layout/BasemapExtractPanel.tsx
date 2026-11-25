@@ -192,9 +192,19 @@ const PROTOMAPS_SCHEMA_LAYERS = ["earth", "water", "roads", "places", "landcover
  * (plus two schema layers overall) keeps a non-Protomaps archive that merely
  * has a `roads`/`places` layer from being styled with Protomaps-specific
  * expressions and rendering blank. */
-function isProtomapsCompatible(sourceLayers: string[]): boolean {
+function isProtomapsCompatible(
+  sourceLayers: string[],
+  sourceLayerFields?: Record<string, string[]>,
+): boolean {
   const set = new Set(sourceLayers);
   if (!set.has("earth") && !set.has("water")) return false;
+  if (
+    ["roads", "places", "landcover"].some((layer) => {
+      const fields = sourceLayerFields?.[layer];
+      return fields != null && !fields.includes("kind");
+    })
+  )
+    return false;
   return PROTOMAPS_SCHEMA_LAYERS.filter((l) => set.has(l)).length >= 2;
 }
 
@@ -726,7 +736,10 @@ export function BasemapExtractPanel({
     nativeMbtiles.source.metadata.sourceLayers.length === 0;
   const nativeCanStyle =
     nativeMbtiles.source?.metadata.tileType === "vector" &&
-    isProtomapsCompatible(nativeMbtiles.source.metadata.sourceLayers);
+    isProtomapsCompatible(
+      nativeMbtiles.source.metadata.sourceLayers,
+      nativeMbtiles.source.metadata.sourceLayerFields,
+    );
   const canExtract =
     !running &&
     bbox !== null &&
@@ -761,6 +774,8 @@ export function BasemapExtractPanel({
     if (completed.signal.aborted || !completed.request.isCurrent()) return;
     try {
       const { package: entry, sourceLayers, tileFormat } = completed.result;
+      if (entry.minZoom > Math.min(24, useAppStore.getState().preferences.map.maxZoom))
+        throw new Error(t("basemapExtract.errorPackageZoom", { zoom: entry.minZoom }));
       if (entry.tileType === "raster" || entry.flavor != null) {
         setBasemapStyleUrl(
           nativeOfflineBasemapStyleUrl(entry, (entry.flavor as ProtomapsFlavor | null) ?? "light"),
@@ -1024,6 +1039,8 @@ export function BasemapExtractPanel({
         if (entry.managed) {
           const verified = await verifyNativeOfflinePackage(entry.id);
           if (!request.isCurrent()) return;
+          if (verified.minZoom > Math.min(24, useAppStore.getState().preferences.map.maxZoom))
+            throw new Error(t("basemapExtract.errorPackageZoom", { zoom: verified.minZoom }));
           if (
             verified.archiveFormat === "mbtiles" &&
             verified.tileType === "vector" &&
@@ -1036,7 +1053,11 @@ export function BasemapExtractPanel({
             if (!request.isCurrent()) return;
             if (metadata.sourceLayers.length === 0)
               throw new Error(t("basemapExtract.errorNoSourceLayers"));
-            addLayer(managedMbtilesLayer(verified, metadata.sourceLayers, metadata.format));
+            const alreadyOnMap = useAppStore
+              .getState()
+              .layers.some((layer) => referencesNativeOfflinePackage(layer, verified.id));
+            if (!alreadyOnMap)
+              addLayer(managedMbtilesLayer(verified, metadata.sourceLayers, metadata.format));
           } else {
             const useFlavor = (entry.flavor as ProtomapsFlavor | null) ?? "light";
             setBasemapStyleUrl(nativeOfflineBasemapStyleUrl(verified, useFlavor));

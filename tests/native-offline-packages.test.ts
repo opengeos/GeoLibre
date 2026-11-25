@@ -267,6 +267,7 @@ it("restores vector MBTiles flavors through native tile templates without PMTile
       "geolibre-native-mbtiles://tile/{z}/{x}/{y}?path=%2Fdata%2Fvector.mbtiles",
     ]);
     assert.equal(Reflect.get(style.sources.protomaps, "url"), undefined);
+    assert.match(Reflect.get(style.sources.protomaps, "attribution") ?? "", /OpenStreetMap/);
     assert.ok(style.layers.length > 10);
   }
   assert.equal(hasPMTilesArchive(nativeLocalPmtilesProtocolUrl(mbtiles.savedPath)), false);

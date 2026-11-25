@@ -44,6 +44,8 @@ pub(crate) fn decode_byte_array(
 pub(crate) struct PackageDetails {
     pub name: String,
     pub bbox: [f64; 4],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view_center: Option<[f64; 3]>,
     pub min_zoom: u8,
     pub max_zoom: u8,
     pub flavor: Option<String>,
@@ -132,6 +134,19 @@ pub(crate) fn validate_details(details: &PackageDetails) -> Result<(), String> {
         || south > north
         || details.min_zoom > details.max_zoom
         || details.max_zoom > 30
+        || details
+            .view_center
+            .is_some_and(|[longitude, latitude, zoom]| {
+                ![longitude, latitude, zoom]
+                    .iter()
+                    .all(|value| value.is_finite())
+                    || longitude < west
+                    || longitude > east
+                    || latitude < south
+                    || latitude > north
+                    || zoom < details.min_zoom as f64
+                    || zoom > details.max_zoom as f64
+            })
         || !["vector", "raster"].contains(&details.tile_type.as_str())
         || !["pmtiles", "mbtiles"].contains(&details.archive_format.as_str())
         || !flavor_valid
@@ -558,6 +573,7 @@ mod tests {
         PackageDetails {
             name: "Berkeley".into(),
             bbox: [-123.0, 37.0, -122.0, 38.0],
+            view_center: None,
             min_zoom: 0,
             max_zoom: 14,
             flavor: Some("light".into()),

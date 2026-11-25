@@ -63,7 +63,9 @@ async function withExtractionJob<T>(
   } finally {
     signal.removeEventListener("abort", cancel);
     try {
-      unlisten?.();
+      void Promise.resolve(unlisten?.()).catch((error: unknown) => {
+        console.warn("[GeoLibre] Could not release extraction listener", error);
+      });
     } catch (error) {
       console.warn("[GeoLibre] Could not release extraction listener", error);
     }
@@ -96,7 +98,9 @@ export function extractNativeMbtilesPackage(
       invoke<NativeMbtilesExtraction>("extract_native_mbtiles_package", {
         jobId,
         path,
-        name: Array.from(name).slice(0, 128).join(""),
+        name: Array.from(name.replace(/\p{Cc}/gu, " ").trim() || "Offline MBTiles")
+          .slice(0, 128)
+          .join(""),
         options,
         flavor,
       }),

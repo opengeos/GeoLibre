@@ -180,3 +180,57 @@ it("does not reserve a job for an already-aborted signal without modern signal h
   });
   assert.equal(called, false);
 });
+
+it("normalizes control characters and supplies a nonblank name before native validation", async () => {
+  const names: string[] = [];
+  mockIPC((command, args) => {
+    if (command === "prepare_native_offline_extraction") return "extract-name";
+    if (command === "extract_native_mbtiles_package") names.push(Reflect.get(args ?? {}, "name"));
+    return undefined;
+  });
+  for (const name of [" North\nCounty\u0085 ", "\u0000\n\t", "\n" + "🗺".repeat(129)])
+    await extractNativeMbtilesPackage(
+      "/data/source.mbtiles",
+      name,
+      { bbox: [-123, 37, -122, 38], minZoom: 19, maxZoom: 19 },
+      null,
+      new AbortController().signal,
+    );
+  assert.deepEqual(names, ["North County", "Offline MBTiles", "🗺".repeat(128)]);
+});
+
+it("observes rejected async listener cleanup without losing the committed result or cancellation", async (context) => {
+  const commands: string[] = [];
+  const failure = new Error("Unlisten IPC failed");
+  const warnings = context.mock.method(console, "warn", () => {});
+  const result = { package: { id: "pkg-committed" } };
+  mockIPC((command) => {
+    commands.push(command);
+    if (command === "prepare_native_offline_extraction") return "extract-cleanup";
+    if (command === "plugin:event|listen") return 8;
+    if (command === "plugin:event|unlisten") return Promise.reject(failure);
+    if (command === "extract_native_mbtiles_package") return result;
+    return undefined;
+  });
+  Reflect.set(window, "__TAURI_EVENT_PLUGIN_INTERNALS__", { unregisterListener: () => {} });
+  try {
+    assert.deepEqual(
+      await extractNativeMbtilesPackage(
+        "/data/source.mbtiles",
+        "Berkeley",
+        { bbox: [-123, 37, -122, 38], minZoom: 19, maxZoom: 19 },
+        null,
+        new AbortController().signal,
+        () => {},
+      ),
+      result,
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.ok(commands.includes("cancel_native_offline_extraction"));
+    assert.equal(warnings.mock.calls.length, 1);
+    assert.equal(warnings.mock.calls[0].arguments[1], failure);
+  } finally {
+    Reflect.deleteProperty(window, "__TAURI_EVENT_PLUGIN_INTERNALS__");
+    warnings.mock.restore();
+  }
+});

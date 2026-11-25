@@ -22,6 +22,8 @@ import {
 } from "./offline-basemaps";
 
 export interface NativeOfflinePackage extends OfflineBasemap {
+  /** A copied-tile default view when the requested extent has sparse coverage. */
+  viewCenter?: [number, number, number];
   managed: true;
   savedPath: string;
   archiveFormat: "pmtiles" | "mbtiles";
@@ -223,14 +225,17 @@ export function registerNativeOfflinePackageStyles(entry: NativeOfflinePackage):
           ],
         };
       const style = buildProtomapsBasemapStyle({ sourceUrl, flavor, assetsBaseUrl });
-      if (mbtiles)
+      if (mbtiles) {
+        const source = style.sources.protomaps;
         style.sources.protomaps = {
           type: "vector",
+          attribution: source.type === "vector" ? source.attribution : undefined,
           tiles: [sourceUrl],
           bounds: entry.bbox,
           minzoom: entry.minZoom,
           maxzoom: entry.maxZoom,
         };
+      }
       return style;
     });
   }

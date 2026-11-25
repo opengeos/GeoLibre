@@ -17,6 +17,41 @@ const MAX_TILE_BYTES: usize = 32 * 1024 * 1024;
 const MAX_METADATA_BYTES: usize = 1024 * 1024;
 const MAX_MERCATOR_LAT: f64 = 85.051_128_779_806_6;
 
+/// Preserve declared vector fields for the native source-style compatibility
+/// check. Absent declarations remain unknown rather than implying no fields.
+pub(crate) fn vector_source_layer_fields(json: Option<&str>) -> BTreeMap<String, Vec<String>> {
+    let Some(value) = json.and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+    else {
+        return BTreeMap::new();
+    };
+    value
+        .get("vector_layers")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|layer| {
+            let id = layer.get("id")?.as_str()?;
+            let fields = layer.get("fields")?.as_object()?;
+            Some((id.to_string(), fields.keys().cloned().collect()))
+        })
+        .collect()
+}
+
+/// Roads, places, and landcover styles classify features by `kind`. Geometry
+/// layers such as earth and water can render without a classification field.
+pub(crate) fn validate_source_fields(fields: &BTreeMap<String, Vec<String>>) -> Result<(), String> {
+    if ["roads", "places", "landcover"].iter().any(|layer| {
+        fields
+            .get(*layer)
+            .is_some_and(|fields| !fields.iter().any(|field| field == "kind"))
+    }) {
+        return Err(
+            "The selected MBTiles source does not declare Protomaps classification fields".into(),
+        );
+    }
+    Ok(())
+}
+
 /// Recheck the source schema on the extraction snapshot, since a selected
 /// desktop file may have changed after the UI inspected it.
 pub(crate) fn validate_source_style(
@@ -92,6 +127,7 @@ pub(crate) struct MbtilesAreaOptions {
 #[derive(Debug)]
 pub(crate) struct MbtilesAreaResult {
     pub bbox: [f64; 4],
+    pub view_center: Option<[f64; 3]>,
     pub tile_count: usize,
     pub payload_bytes: u64,
     pub min_zoom: u8,
@@ -173,6 +209,7 @@ pub(crate) fn source_metadata(source: &Connection) -> Result<BTreeMap<String, St
 /// directory. No published package is modified. Only one bounded tile buffer
 /// is held at a time; the output payload, tile count, and metadata are bounded.
 /// The caller must also interrupt long-running SQLite queries on cancellation.
+#[cfg(test)]
 pub(crate) fn extract_mbtiles_area(
     source: &Connection,
     destination: &Path,
@@ -225,11 +262,13 @@ pub(crate) fn extract_mbtiles_area_with_progress(
     let transaction = output.transaction().map_err(|error| error.to_string())?;
     let mut result = MbtilesAreaResult {
         bbox: options.bbox,
+        view_center: None,
         tile_count: 0,
         payload_bytes: 0,
         min_zoom: 30,
         max_zoom: 0,
     };
+    let mut copied_by_zoom = BTreeMap::new();
     {
         let mut insert = transaction
             .prepare("INSERT INTO tiles VALUES (?1,?2,?3,?4)")
@@ -289,6 +328,7 @@ pub(crate) fn extract_mbtiles_area_with_progress(
                 insert
                     .execute(params![zoom, column, target_row, bytes])
                     .map_err(|error| error.to_string())?;
+                *copied_by_zoom.entry(zoom).or_insert(0_u64) += 1;
                 result.tile_count += 1;
                 progress(result.tile_count, result.payload_bytes);
                 result.min_zoom = result.min_zoom.min(zoom);
@@ -299,22 +339,82 @@ pub(crate) fn extract_mbtiles_area_with_progress(
     if result.tile_count == 0 {
         return Err("The selected MBTiles area has no tiles".into());
     }
+    if cancelled() {
+        return Err("MBTiles extraction canceled".into());
+    }
+    // Query only our bounded output, never the untrusted source. Prefer an
+    // interior copied tile: edge raster tiles can be almost wholly transparent.
+    // The nearest existing coordinate also handles holes in a sparse extent.
+    let (focus_x, focus_y): (f64, f64) = transaction
+        .query_row(
+            "SELECT (min(tile_column)+max(tile_column))/2.0,
+                (min(tile_row)+max(tile_row))/2.0 FROM tiles WHERE zoom_level=?1",
+            [result.min_zoom],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|error| error.to_string())?;
+    let (column, target_row): (i64, i64) = transaction
+        .query_row(
+            "SELECT tile_column,tile_row FROM tiles WHERE zoom_level=?1
+         ORDER BY (tile_column-?2)*(tile_column-?2)+(tile_row-?3)*(tile_row-?3),
+                  tile_column,tile_row LIMIT 1",
+            params![result.min_zoom, focus_x, focus_y],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|error| error.to_string())?;
+    let n = 1_i64 << result.min_zoom;
+    let xyz_row = n - 1 - target_row;
+    let longitude = |x: i64| x as f64 / n as f64 * 360.0 - 180.0;
+    let latitude = |y: i64| {
+        ((1.0 - 2.0 * y as f64 / n as f64) * std::f64::consts::PI)
+            .sinh()
+            .atan()
+            .to_degrees()
+    };
+    let center = [
+        (longitude(column).max(options.bbox[0]) + longitude(column + 1).min(options.bbox[2])) / 2.0,
+        (latitude(xyz_row + 1).max(options.bbox[1]) + latitude(xyz_row).min(options.bbox[3])) / 2.0,
+        result.min_zoom as f64,
+    ];
     metadata.insert("scheme".into(), "tms".into());
-    metadata.insert(
-        "bounds".into(),
-        options.bbox.map(|value| value.to_string()).join(","),
-    );
+    // Unique output coordinates make a count comparison sufficient to prove
+    // complete coverage of the requested tile rectangle at every stored zoom.
+    let complete = (result.min_zoom..=result.max_zoom).all(|zoom| {
+        let (left, right, top, bottom) = tile_window(options.bbox, zoom);
+        copied_by_zoom.get(&zoom).copied().unwrap_or(0)
+            == ((right - left + 1) * (bottom - top + 1)) as u64
+    });
+    if complete {
+        metadata.insert(
+            "bounds".into(),
+            options.bbox.map(|value| value.to_string()).join(","),
+        );
+    } else {
+        metadata.remove("bounds");
+        result.view_center = Some(center);
+    }
     metadata.insert("minzoom".into(), result.min_zoom.to_string());
     metadata.insert("maxzoom".into(), result.max_zoom.to_string());
     metadata.insert(
         "center".into(),
-        format!(
-            "{},{},{}",
-            (options.bbox[0] + options.bbox[2]) / 2.0,
-            (options.bbox[1] + options.bbox[3]) / 2.0,
-            result.min_zoom
-        ),
+        center.map(|value| value.to_string()).join(","),
     );
+    if let Some(json) = metadata.get_mut("json") {
+        if let Ok(mut value) = serde_json::from_str::<serde_json::Value>(json) {
+            if let Some(layers) = value
+                .get_mut("vector_layers")
+                .and_then(serde_json::Value::as_array_mut)
+            {
+                for layer in layers {
+                    if let Some(layer) = layer.as_object_mut() {
+                        layer.remove("minzoom");
+                        layer.remove("maxzoom");
+                    }
+                }
+                *json = serde_json::to_string(&value).map_err(|error| error.to_string())?;
+            }
+        }
+    }
     {
         let mut insert = transaction
             .prepare("INSERT INTO metadata VALUES (?1,?2)")
@@ -379,14 +479,28 @@ mod tests {
         connection
     }
 
-    fn destination() -> (std::path::PathBuf, std::path::PathBuf) {
+    struct TestDirectory(std::path::PathBuf);
+
+    impl AsRef<Path> for TestDirectory {
+        fn as_ref(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn destination() -> (TestDirectory, std::path::PathBuf) {
         let mut random = [0u8; 8];
         getrandom::fill(&mut random).unwrap();
         let root =
             std::env::temp_dir().join(format!("geolibre-mbtiles-{:x}", u64::from_le_bytes(random)));
         std::fs::create_dir(&root).unwrap();
         let path = root.join("extract.mbtiles");
-        (root, path)
+        (TestDirectory(root), path)
     }
 
     #[test]
@@ -578,5 +692,99 @@ mod tests {
         assert!(validate_source_style("vector", &[], false).is_err());
         assert!(validate_source_style("raster", &[], false).is_ok());
         assert!(validate_source_style("raster", &[], true).is_err());
+    }
+
+    #[test]
+    fn sparse_extraction_uses_copied_tile_center_and_removes_false_bounds_and_layer_zooms() {
+        let source = source("tms");
+        source.execute("INSERT INTO metadata VALUES ('json',?1)", [
+            r#"{"vector_layers":[{"id":"roads","fields":{"kind":"String"},"minzoom":0,"maxzoom":20}]}"#
+        ]).unwrap();
+        let (_root, path) = destination();
+        let result = extract_mbtiles_area(
+            &source,
+            &path,
+            MbtilesAreaOptions {
+                bbox: [-180., -85., 180., 85.],
+                min_zoom: 2,
+                max_zoom: 3,
+            },
+            || false,
+        )
+        .unwrap();
+        let center = result.view_center.unwrap();
+        assert_eq!(center[2], 2.);
+        let (left, right, top, bottom) = tile_window(
+            [
+                center[0] - 1e-8,
+                center[1] - 1e-8,
+                center[0] + 1e-8,
+                center[1] + 1e-8,
+            ],
+            2,
+        );
+        assert_eq!((left, right, top, bottom), (0, 0, 1, 1));
+        let output = Connection::open(&path).unwrap();
+        let metadata = source_metadata(&output).unwrap();
+        assert!(!metadata.contains_key("bounds"));
+        assert_eq!(
+            metadata["center"],
+            center.map(|value| value.to_string()).join(",")
+        );
+        let json: serde_json::Value = serde_json::from_str(&metadata["json"]).unwrap();
+        assert_eq!(
+            json["vector_layers"][0],
+            serde_json::json!({"id":"roads","fields":{"kind":"String"}})
+        );
+    }
+
+    #[test]
+    fn rejects_declared_non_protomaps_classification_but_allows_geometry_only_layers() {
+        let fields = vector_source_layer_fields(Some(
+            r#"{"vector_layers":[{"id":"water","fields":{}},{"id":"roads","fields":{"category":"String"}}]}"#,
+        ));
+        assert!(validate_source_fields(&fields).is_err());
+        let compatible = vector_source_layer_fields(Some(
+            r#"{"vector_layers":[{"id":"water","fields":{}},{"id":"roads","fields":{"kind":"String"}}]}"#,
+        ));
+        assert!(validate_source_fields(&compatible).is_ok());
+        assert!(validate_source_fields(&BTreeMap::new()).is_ok());
+    }
+
+    #[test]
+    fn sparse_default_view_prefers_an_interior_tile_over_the_first_edge_tile() {
+        let source = source("tms");
+        for x in [2, 3] {
+            source
+                .execute(
+                    "INSERT INTO tiles VALUES (3,?1,4,?2)",
+                    params![x, b"interior".to_vec()],
+                )
+                .unwrap();
+        }
+        let (_root, path) = destination();
+        let result = extract_mbtiles_area(
+            &source,
+            &path,
+            MbtilesAreaOptions {
+                bbox: [-180., -85., 180., 85.],
+                min_zoom: 3,
+                max_zoom: 3,
+            },
+            || false,
+        )
+        .unwrap();
+        let [longitude, latitude, zoom] = result.view_center.unwrap();
+        let (left, right, top, bottom) = tile_window(
+            [
+                longitude - 1e-8,
+                latitude - 1e-8,
+                longitude + 1e-8,
+                latitude + 1e-8,
+            ],
+            3,
+        );
+        assert_eq!(zoom, 3.);
+        assert_eq!((left, right, top, bottom), (1, 1, 3, 3));
     }
 }

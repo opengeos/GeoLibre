@@ -6,9 +6,19 @@ import type { NativeOfflinePackage } from "./native-offline-packages";
  * local archive may contain detailed tiles only, with no overview pyramid. */
 export function frameNativeOfflinePackage(
   engine: Pick<MapEngine, "getRenderSurface" | "fitBounds" | "flyTo"> | null,
-  entry: Pick<NativeOfflinePackage, "bbox" | "minZoom">,
+  entry: Pick<NativeOfflinePackage, "bbox" | "minZoom" | "viewCenter">,
 ): void {
   if (!engine) return;
+  if (entry.viewCenter) {
+    engine.flyTo({
+      center: [entry.viewCenter[0], entry.viewCenter[1]],
+      zoom: entry.viewCenter[2],
+      bearing: 0,
+      pitch: 0,
+      duration: 800,
+    });
+    return;
+  }
   if (entry.minZoom === 0) {
     engine.fitBounds(entry.bbox);
     return;

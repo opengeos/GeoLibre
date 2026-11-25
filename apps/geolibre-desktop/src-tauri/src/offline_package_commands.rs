@@ -21,7 +21,18 @@ pub(crate) struct NativeOfflinePackages {
 
 fn open_store(app: &AppHandle) -> Result<PackageStore, String> {
     let directory = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    PackageStore::open(&directory.join("offline-packages"))
+    if crate::is_unc_resolved_path(&directory.to_string_lossy()) {
+        return Err("Offline packages require local storage".into());
+    }
+    let root = directory.join("offline-packages");
+    let store = PackageStore::open(&root)?;
+    let resolved = std::fs::canonicalize(&root).map_err(|e| e.to_string())?;
+    if crate::is_unc_resolved_path(&resolved.to_string_lossy()) {
+        return Err("Offline packages require local storage".into());
+    }
+    // Validate UTF-8 and Windows normalization before generating an archive.
+    crate::canonical_local_path_string(&resolved)?;
+    Ok(store)
 }
 
 fn authorize(app: &AppHandle, entry: &mut OfflinePackage) -> Result<(), String> {
@@ -249,9 +260,13 @@ pub(crate) async fn extract_native_mbtiles_package(
             &info.source_layers,
             flavor.is_some(),
         )?;
+        if flavor.is_some() {
+            offline_mbtiles::validate_source_fields(&info.source_layer_fields)?;
+        }
         let mut details = PackageDetails {
             name,
             bbox: options.bbox,
+            view_center: None,
             min_zoom: options.min_zoom,
             max_zoom: options.max_zoom,
             flavor,
@@ -298,6 +313,7 @@ pub(crate) async fn extract_native_mbtiles_package(
                     },
                 )?;
                 details.bbox = result.bbox;
+                details.view_center = result.view_center;
                 details.min_zoom = result.min_zoom;
                 details.max_zoom = result.max_zoom;
                 stats = Some(result);
@@ -305,7 +321,12 @@ pub(crate) async fn extract_native_mbtiles_package(
             },
             || _job.cancelled.load(Ordering::Relaxed),
         )?;
-        authorize(&app, &mut package)?;
+        if let Err(error) = authorize(&app, &mut package) {
+            return Err(format!(
+                "Offline package {} was saved, but path authorization failed: {error}. The saved package remains in the catalog; do not repeat extraction to recover it.",
+                package.id()
+            ));
+        }
         let stats = stats.ok_or("MBTiles extraction did not produce a result")?;
         let _ = app.emit(
             "native-offline-extraction-progress",

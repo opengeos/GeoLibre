@@ -62,6 +62,29 @@ async function chooseSource() {
   fireEvent.change(screen.getByLabelText("East"), { target: { value: "-122.258" } });
 }
 
+for (const maximum of [18, 24]) {
+  it(`refuses a saved package above the supported maximum zoom ${maximum} before changing the map`, async () => {
+    const minimum = maximum === 24 ? 25 : 19;
+    const saved = { ...entry, minZoom: minimum, maxZoom: minimum };
+    const preferences = useAppStore.getState().preferences;
+    useAppStore.setState({
+      preferences: { ...preferences, map: { ...preferences.map, maxZoom: maximum } },
+    });
+    mockIPC((command) => {
+      if (command === "list_native_offline_packages") return { packages: [saved], problems: [] };
+      if (command === "verify_native_offline_package") return saved;
+      throw new Error(`Unexpected command: ${command}`);
+    });
+    const before = useAppStore.getState().basemapStyleUrl;
+    mountPanel();
+    fireEvent.click(await screen.findByRole("button", { name: "Use as basemap" }));
+    await screen.findByText(new RegExp(`This package needs zoom ${minimum}`));
+    assert.equal(useAppStore.getState().basemapStyleUrl, before);
+    assert.equal(useAppStore.getState().layers.length, 0);
+    assert.equal(screen.queryByText("Using the package saved on this device.") === null, true);
+  });
+}
+
 it("extracts a raster area by native path and reapplies the persisted package as a basemap", async () => {
   let saved = false;
   let verified = false;
@@ -153,10 +176,53 @@ it("adds generic vector packages as owned layers and restores them from the save
   assert.equal(layer.metadata.nativeOfflinePackageId, vector.id);
   assert.equal(layer.sourcePath, vector.savedPath);
   assert.deepEqual(layer.source.sourceLayers, ["counties"]);
+  fireEvent.click(await screen.findByRole("button", { name: "Add package to map" }));
+  await screen.findByText("Using the package saved on this device.");
+  assert.equal(useAppStore.getState().layers.length, 1);
+  assert.equal(useAppStore.getState().layers[0].id, layer.id);
   useAppStore.getState().removeLayer(layer.id);
   fireEvent.click(await screen.findByRole("button", { name: "Add package to map" }));
   await waitFor(() => assert.equal(useAppStore.getState().layers.length, 1));
   assert.equal(useAppStore.getState().layers[0].metadata.nativeOfflinePackageId, vector.id);
+  assert.notEqual(useAppStore.getState().layers[0].id, layer.id);
+});
+
+it("uses an overlay when familiar layer names declare incompatible classification fields", async () => {
+  let extracted = false;
+  mockIPC((command, args) => {
+    if (command === "list_native_offline_packages") return { packages: [], problems: [] };
+    if (command === "plugin:dialog|open") return "/data/source.mbtiles";
+    if (command === "prepare_native_offline_extraction") return "extract-schema";
+    if (command === "inspect_native_mbtiles_source")
+      return {
+        ...rasterMetadata,
+        tileType: "vector",
+        format: "pbf",
+        sourceLayers: ["water", "roads"],
+        sourceLayerFields: { water: ["category"], roads: ["category"] },
+      };
+    if (command === "extract_native_mbtiles_package") {
+      assert.equal(Reflect.get(args ?? {}, "flavor"), null);
+      extracted = true;
+      return {
+        package: { ...entry, tileType: "vector" },
+        tileCount: 1,
+        payloadBytes: 1,
+        tileFormat: "pbf",
+        sourceLayers: ["water", "roads"],
+      };
+    }
+    if (command === "cancel_native_offline_extraction" || command.startsWith("plugin:event|"))
+      return 1;
+    throw new Error(`Unexpected command: ${command}`);
+  });
+  const before = useAppStore.getState().basemapStyleUrl;
+  mountPanel();
+  await chooseSource();
+  fireEvent.click(screen.getByRole("button", { name: "Extract" }));
+  await waitFor(() => assert.equal(useAppStore.getState().layers.length, 1));
+  assert.equal(extracted, true);
+  assert.equal(useAppStore.getState().basemapStyleUrl, before);
 });
 
 for (const canceled of [true, false]) {
