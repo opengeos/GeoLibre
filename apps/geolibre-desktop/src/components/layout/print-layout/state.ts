@@ -61,7 +61,7 @@ export interface PrintLayoutUiState {
   atlasIndex: number;
   /** True while the atlas drives the live map (stepping or exporting). */
   atlasBusy: boolean;
-  atlasProgress: { current: number; total: number } | null;
+  atlasProgress: { current: number; total: number; cancellable?: boolean } | null;
   /** Out-of-range notice from the last fixed-scale atlas capture. */
   atlasScaleNotice: string | null;
   /** The map's visible bounds after the last atlas capture, keyed by page. */
@@ -81,6 +81,8 @@ export interface PrintLayoutUiState {
   controlsWidth: number;
   /** Explicit dialog size once the corner grip is dragged (null = default). */
   dialogSize: { width: number; height: number } | null;
+  /** True while the preview shows drag/resize handles on the page elements. */
+  arranging: boolean;
 }
 
 /** Everything the Print Layout composer holds. */
@@ -138,7 +140,9 @@ export type PrintLayoutAction =
   /** Set the controls column width, clamped to its bounds. */
   | { type: "setControlsWidth"; width: number }
   /** Nudge the controls column width (keyboard splitter), clamped. */
-  | { type: "nudgeControlsWidth"; delta: number };
+  | { type: "nudgeControlsWidth"; delta: number }
+  /** Put every dragged element and frame back in its automatic place. */
+  | { type: "resetArrangement" };
 
 /** Props every per-element editor takes: the persisted layout and the dispatch. */
 export interface LayoutEditorProps {
@@ -191,6 +195,7 @@ export function createPrintLayoutState(layout: PrintLayoutConfig): PrintLayoutSt
     scaleNotice: null,
     controlsWidth: CONTROLS_DEFAULT_WIDTH,
     dialogSize: null,
+    arranging: false,
   };
 }
 
@@ -383,5 +388,10 @@ export function printLayoutReducer(
       return patchUi(state, {
         controlsWidth: clampControlsWidth(state.controlsWidth + action.delta),
       });
+    case "resetArrangement": {
+      const { mapFrameBox, insetBox, elementOffsets } = state.layout;
+      if (!mapFrameBox && !insetBox && Object.keys(elementOffsets).length === 0) return state;
+      return patchLayout(state, { mapFrameBox: null, insetBox: null, elementOffsets: {} });
+    }
   }
 }

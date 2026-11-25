@@ -1,5 +1,12 @@
-import { isCesiumOnlyLayer, useAppStore, type MapRendererKind } from "@geolibre/core";
 import {
+  isCesiumOnlyLayer,
+  normalizeArcgisWkid,
+  useAppStore,
+  useLayersWhen,
+  type MapRendererKind,
+} from "@geolibre/core";
+import {
+  arcgisSceneMode,
   CesiumCanvas,
   isArcgisSupportedLayer,
   isCesiumSupportedLayerType,
@@ -18,12 +25,13 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import { Globe, Layers, Map as MapIcon, X } from "lucide-react";
-import { type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { PrimaryMapboxCanvas } from "./PrimaryMapboxCanvas";
 import { PrimaryArcgisCanvas } from "./PrimaryArcgisCanvas";
 import { CesiumTokenHint } from "./PrimaryCesiumCanvas";
 import { useCesiumIonToken } from "../../hooks/useCesiumIonToken";
+import { ensureCesiumToolbarStylesLoaded } from "../../lib/lazy-plugin-styles";
 
 /**
  * An editable label shown centered at the top of a map pane. Empty by default;
@@ -133,6 +141,9 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
   );
   // eslint-disable-next-line local/no-renderer-kind-checks -- picks which engine's canvas to mount
   const is3d = renderer === "cesium";
+  useEffect(() => {
+    if (is3d) void ensureCesiumToolbarStylesLoaded();
+  }, [is3d]);
   // eslint-disable-next-line local/no-renderer-kind-checks -- picks which engine's canvas to mount
   const mapboxPane = renderer === "mapbox";
   // eslint-disable-next-line local/no-renderer-kind-checks -- picks which engine's canvas to mount
@@ -159,6 +170,7 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
         onChange={(value) => setSecondaryMapLabel(viewId, value)}
         ariaLabel={t("mapGrid.labelLabel", { number: index + 2 })}
       />
+      {/* eslint-disable-next-line local/no-physical-tailwind -- anchored to the map, whose controls sit at physical corners in every locale. */}
       <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5">
         {/* Every renderer draws the shared layers, so the per-pane
             layer-visibility toggle applies to each of them. */}
@@ -231,14 +243,26 @@ function PaneLayerToggle({ viewId, index, renderer }: PaneLayerToggleProps) {
   const { t } = useTranslation();
   // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine layer support table
   const is3d = renderer === "cesium";
-  const layers = useAppStore((s) => s.layers);
+  // The layer list lives in the dropdown, which renders only while open, so
+  // subscribe to the full layers array only then: a closed toggle (one per
+  // pane, always mounted) ignores opacity drags and style edits.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const layers = useLayersWhen(menuOpen);
+  const arcgisScene = useAppStore(
+    (s) =>
+      arcgisSceneMode(
+        s.preferences.map.projection,
+        s.preferences.map.terrainEnabled,
+        normalizeArcgisWkid(s.preferences.map.arcgisWkid) !== undefined,
+      ) !== "2d",
+  );
   const layerVisibility = useAppStore(
     (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.layerVisibility,
   );
   const setSecondaryLayerVisibility = useAppStore((s) => s.setSecondaryLayerVisibility);
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
       <DropdownMenuTrigger asChild>
         <Button
           // ghost rather than outline: outline carries its own bg-background,
@@ -270,8 +294,9 @@ function PaneLayerToggle({ viewId, index, renderer }: PaneLayerToggleProps) {
             const only3d = !is3d && isCesiumOnlyLayer(layer);
             // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine layer support table
             const noMapbox = renderer === "mapbox" && !isMapboxSupportedLayer(layer);
-            // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine layer support table
-            const noArcgis = renderer === "arcgis" && !isArcgisSupportedLayer(layer, false);
+            const noArcgis =
+              // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine layer support table
+              renderer === "arcgis" && !isArcgisSupportedLayer(layer, false, arcgisScene);
             return (
               <DropdownMenuCheckboxItem
                 key={layer.id}

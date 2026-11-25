@@ -489,6 +489,11 @@ describe("parseEmbedRequest: addLayer", () => {
     assert.ok(parsed && "error" in parsed);
     assert.equal(parsed.error, 'addLayer: unsupported URL scheme in "javascript:"');
   });
+
+  it("parses the readiness ping command", () => {
+    const parsed = parseEmbedRequest({ ...message("ping", {}), requestId: "req-1" });
+    assert.deepEqual(parsed, { command: { type: "ping" }, requestId: "req-1" });
+  });
 });
 
 describe("requireEmbedLayer", () => {
@@ -1214,5 +1219,96 @@ describe("createFeaturesChangeTracker", () => {
     tracker.update(replaced);
     mock.timers.tick(EMBED_FEATURES_DEBOUNCE_MS);
     assert.deepEqual(reports, []);
+  });
+});
+
+describe("parseEmbedRequest: addLayer video source.urls scheme validation", () => {
+  it("blocks dangerous URL schemes and leading C0 controls inside source.urls", () => {
+    for (const badUrl of [
+      "javascript:alert(1)",
+      "file:///etc/passwd",
+      "data:text/html,hi",
+      "\u0001data:video/mp4;base64,AAAA",
+    ]) {
+      const result = parseEmbedRequest(
+        message(
+          "addLayer",
+          {
+            spec: {
+              id: "vid",
+              name: "Video",
+              type: "video",
+              source: {
+                type: "video",
+                urls: [badUrl],
+                coordinates: [
+                  [0, 1],
+                  [1, 1],
+                  [1, 0],
+                  [0, 0],
+                ],
+              },
+            },
+          },
+          { requestId: "r-vid" },
+        ),
+      );
+      assert.ok(result && "error" in result, `expected ${JSON.stringify(badUrl)} to be blocked`);
+      assert.match((result as { error: string }).error, /blocked URL scheme|scheme/i);
+      assert.equal((result as { requestId: string | null }).requestId, "r-vid");
+    }
+  });
+
+  it("accepts a video layer with an HTTPS source.urls entry", () => {
+    const result = parseEmbedRequest(
+      message(
+        "addLayer",
+        {
+          spec: {
+            id: "vid-ok",
+            name: "Video",
+            type: "video",
+            source: {
+              type: "video",
+              urls: ["https://cdn.example/clip.mp4"],
+              coordinates: [
+                [0, 1],
+                [1, 1],
+                [1, 0],
+                [0, 0],
+              ],
+            },
+          },
+        },
+        { requestId: "r-vid-ok" },
+      ),
+    );
+    assert.ok(result && "command" in result, "expected HTTPS video layer spec to be accepted");
+    assert.equal(result.command.type, "addLayer");
+    assert.equal(result.requestId, "r-vid-ok");
+
+    const missingCoords = parseEmbedRequest(
+      message(
+        "addLayer",
+        {
+          spec: {
+            id: "vid-no-coords",
+            name: "Video",
+            type: "video",
+            source: {
+              type: "video",
+              url: "https://cdn.example/clip.mp4",
+              urls: ["https://cdn.example/clip.mp4"],
+            },
+          },
+        },
+        { requestId: "r-vid-no-coords" },
+      ),
+    );
+    assert.ok(
+      missingCoords && "error" in missingCoords,
+      "expected video layer without valid corner coordinates to be rejected",
+    );
+    assert.equal(missingCoords.requestId, "r-vid-no-coords");
   });
 });

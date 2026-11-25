@@ -65,9 +65,9 @@ function jsonError(message: string, status: number, headers?: HeadersInit): Resp
   return Response.json({ error: { message, type: "geolibre_proxy_error" } }, { status, headers });
 }
 
-function parseList(value: string): Set<string> {
+function parseList(value: string | undefined): Set<string> {
   return new Set(
-    value
+    (value ?? "")
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean),
@@ -424,6 +424,11 @@ async function proxyChat(request: Request, env: Env, origin: string | null): Pro
   }
   body.model = model;
   clampOutputTokens(body, positiveInteger(env.MAX_OUTPUT_TOKENS, 16_384));
+  // Clamp multi-choice generation count to 1 so callers cannot multiply output
+  // token usage beyond MAX_OUTPUT_TOKENS.
+  if (body.n !== undefined) {
+    body.n = 1;
+  }
 
   const endpoint =
     `https://api.cloudflare.com/client/v4/accounts/` +
@@ -455,9 +460,9 @@ async function proxyChat(request: Request, env: Env, origin: string | null): Pro
     clearTimeout(deadline);
   }
 
-  const headers = new Headers(upstream.headers);
-  for (const [name, value] of responseHeaders(origin)) headers.set(name, value);
-  headers.delete("set-cookie");
+  const headers = responseHeaders(origin);
+  const contentType = upstream.headers.get("content-type");
+  if (contentType) headers.set("Content-Type", contentType);
   headers.set("Cache-Control", "no-store");
 
   console.log(

@@ -48,9 +48,10 @@ const SIMPLE_MARKER = lyrx({
 /**
  * An ArcGIS Pro layer file through the normal style import doors.
  *
- * The CIM reading is unit-tested (`tests/lyrx-import.test.ts`); what needs a browser is that the
- * file picker offers and accepts a `.lyrx`, that the style reaches the map, and that a renderer
- * GeoLibre cannot draw is refused in words the user can act on.
+ * The CIM reading is unit-tested (`tests/arcgis-cim-renderer.test.ts` and
+ * `tests/lyrx-import.test.ts`); what needs a browser is that the file picker offers and accepts a
+ * `.lyrx`, that the style reaches the map, and that a renderer GeoLibre cannot draw is refused in
+ * words the user can act on.
  */
 test("a .lyrx file styles the layer, and an unsupported renderer is refused by name", async ({
   page,

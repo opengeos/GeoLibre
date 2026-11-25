@@ -1,23 +1,22 @@
+import { closeDuckDBLayerPanel, openDuckDBLayerPanel } from "@geolibre/plugins/maplibre-duckdb";
+import { closeEarthEnginePanel } from "@geolibre/plugins/maplibre-earth-engine";
 import {
-  closeDuckDBLayerPanel,
-  closeEarthEnginePanel,
   closeMaplibreComponentControls,
-  closePlanetaryComputerPanel,
-  closeRasterLayerPanel,
-  closeThreeDTilesLayerPanel,
-  closeVectorLayerPanel,
-  openDuckDBLayerPanel,
   openFlatGeobufAddVectorLayerPanel,
   openLidarLayerPanel,
   openPMTilesLayerPanel,
-  openRasterLayerPanel,
-  openRightPanel,
   openSplattingLayerPanel,
-  openThreeDTilesLayerPanel,
-  openVectorLayerPanel,
   openZarrLayerPanel,
-  STAC_PLUGIN_ID,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/component-helpers";
+import { closePlanetaryComputerPanel } from "@geolibre/plugins/maplibre-planetary-computer";
+import { closeRasterLayerPanel, openRasterLayerPanel } from "@geolibre/plugins/maplibre-raster";
+import {
+  closeThreeDTilesLayerPanel,
+  openThreeDTilesLayerPanel,
+} from "@geolibre/plugins/maplibre-3d-tiles";
+import { closeVectorLayerPanel, openVectorLayerPanel } from "@geolibre/plugins/maplibre-vector";
+import { openRightPanel } from "@geolibre/plugins/runtime";
+import { STAC_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import { useAppStore } from "@geolibre/core";
 import { rendererCapabilities, resetPrimaryCesiumBuiltInControlState } from "@geolibre/map";
 import { getPluginManager } from "../../../hooks/usePlugins";

@@ -1,3 +1,19 @@
+import {
+  TIME_SLIDER_SOURCE_KIND as STORE_LAYER_SOURCE_KIND,
+  getLayerTimeBinding,
+  rehydrateTimeSliderSources as rehydrateSources,
+  provideTimeSliderRuntime,
+} from "../time-slider-state";
+export {
+  TIME_SLIDER_SOURCE_KIND,
+  getLayerTimeBinding,
+  isTimeSliderIdle,
+  registerTimeSliderSourceRehydrator,
+  type TimeSliderSourceRehydrator,
+} from "../time-slider-state";
+import { TIME_SLIDER_PLUGIN_ID } from "../plugin-ids";
+export { TIME_SLIDER_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
   resolveUrl,
@@ -25,18 +41,6 @@ import {
   type TemporalLayerAdapter,
 } from "./temporal-layers";
 import { usesMosaicManifest } from "./time-slider-source-url";
-
-/**
- * Marker placed on every GeoLibre store layer that mirrors a time-slider
- * source, used to reconcile and prune the plugin's layers without touching any
- * others (mirrors the Esri Wayback `sourceKind` convention).
- *
- * Exported as {@link TIME_SLIDER_SOURCE_KIND} so the Style panel can recognize
- * these layers and offer the symbology their dock source supports.
- */
-const STORE_LAYER_SOURCE_KIND = "time-slider";
-
-export { STORE_LAYER_SOURCE_KIND as TIME_SLIDER_SOURCE_KIND };
 
 /**
  * Default configuration applied on first activation. No data sources are seeded:
@@ -142,7 +146,6 @@ let savedConfig: TimeSliderConfig | null = null;
 let detachStoreSync: (() => void) | null = null;
 
 /** Stable id of this plugin, exported so the UI can activate/query it. */
-export const TIME_SLIDER_PLUGIN_ID = "maplibre-gl-time-slider";
 
 /**
  * Returns the live {@link TimeSliderControl} instance while the plugin is
@@ -157,21 +160,20 @@ export function getActiveTimeSliderControl(): TimeSliderControl | null {
 }
 
 export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
-  id: "maplibre-gl-time-slider",
-  name: "Time Slider",
-  version: "1.0.3",
+  ...builtInPluginProperties("maplibre-gl-time-slider"),
+
   // The dock only uses the style API both 2D engines share (raster tile and
   // GeoJSON sources, filters, paint), so it mounts on the Mapbox renderer too;
   // its store mirrors are plugin-owned there (`isMapboxPluginLayer`). COG and
   // mosaic sources render through maplibre-gl-raster, whose tile protocol only
   // registers with MapLibre, so those source types stay blank on Mapbox while
   // XYZ, WMS and GeoJSON sources animate as usual.
-  engines: ["maplibre", "mapbox"],
+
   // The dock's `collapsed` flag round-trips through getProjectState /
   // configToOptions, so the restored config decides whether it opens. Without
   // this the host's restore-time collapse sweep hid the dock entirely (its
   // collapsed style is `display: none`) even for a project saved expanded.
-  restoresPanelCollapseState: true,
+
   activate: (app: GeoLibreAppAPI) => {
     if (timeSliderControl) return;
     activeHost = app;
@@ -398,54 +400,6 @@ function normalizeConfig(state: unknown): TimeSliderConfig | null {
     endDate: candidate.endDate ?? undefined,
     sources: rehydrateSources(candidate.sources as SourceSpec[]),
   } as TimeSliderConfig;
-}
-
-/**
- * Rebuilds the parts of a saved source that JSON cannot carry.
- *
- * @param spec - A source read back from a saved project.
- * @returns The source with its runtime parts restored, the source unchanged
- *   when it is not the rehydrator's, or null to drop a source that cannot be
- *   rebuilt.
- */
-export type TimeSliderSourceRehydrator = (spec: SourceSpec) => SourceSpec | null | undefined;
-
-const sourceRehydrators = new Set<TimeSliderSourceRehydrator>();
-
-/**
- * Lets another plugin restore a source whose URL is a resolver function.
- *
- * The library accepts a function for a source's `url`/`tiles` (one URL per
- * date), and a function does not survive the project file. A plugin that adds
- * such a source also stores a serializable description on the spec and
- * registers a rehydrator here to turn that description back into the resolver
- * when the project is reopened (the Planetary Computer panel's dated stacks).
- *
- * @param rehydrator - Recognizes the plugin's sources and restores them.
- * @returns A function that unregisters the rehydrator.
- */
-export function registerTimeSliderSourceRehydrator(
-  rehydrator: TimeSliderSourceRehydrator,
-): () => void {
-  sourceRehydrators.add(rehydrator);
-  return () => sourceRehydrators.delete(rehydrator);
-}
-
-function rehydrateSources(sources: SourceSpec[]): SourceSpec[] {
-  const restored: SourceSpec[] = [];
-  for (const source of sources) {
-    let next: SourceSpec | null = source;
-    for (const rehydrator of sourceRehydrators) {
-      const result: SourceSpec | null | undefined = rehydrator(next);
-      if (result === null) {
-        next = null;
-        break;
-      }
-      if (result) next = result;
-    }
-    if (next) restored.push(next);
-  }
-  return restored;
 }
 
 /**
@@ -1076,56 +1030,6 @@ function temporalSignature(): string {
 }
 
 /**
- * Read the binding stored on a layer's metadata, if any. Used by the Layers
- * panel to decide between the Bind and Unbind actions, and by
- * {@link isTimeSliderIdle}. Returns either kind: a vector-filter
- * {@link TimeBinding} or a data cube's {@link SelectorTimeBinding}.
- *
- * @param layer - A store layer.
- * @returns The binding, or `undefined` when the layer is not time-bound.
- */
-export function getLayerTimeBinding(layer: {
-  metadata?: Record<string, unknown>;
-}): TimeBinding | SelectorTimeBinding | undefined {
-  const binding = layer.metadata?.timeBinding;
-  if (isSelectorTimeBinding(binding)) return binding;
-  const filterBinding = binding as TimeBinding | undefined;
-  return filterBinding && typeof filterBinding.property === "string" ? filterBinding : undefined;
-}
-
-/**
- * Whether the Time Slider has nothing left to drive. The Layers panel calls
- * this after removing a binding so the plugin switches itself off once the last
- * one is gone, rather than leaving the dock over a map it no longer affects.
- *
- * The slider drives three unrelated things, and all three have to be clear
- * before it is safe to switch off:
- *
- * - store layers carrying a binding, of either kind: a vector
- *   {@link TimeBinding} or a data cube's {@link SelectorTimeBinding};
- * - the dock's own sources (COG stacks, mosaics, tile templates added through
- *   its "Add data" form), which are mirrored into the store under
- *   {@link STORE_LAYER_SOURCE_KIND};
- * - KML `<TimeSpan>` / `<TimeStamp>` ground overlays and placemark layers, which
- *   the slider animates by visibility rather than by filter.
- *
- * The last two matter because the dock is the only way to reach them: turning
- * the plugin off while either exists would take the user's own timeline data
- * with it.
- *
- * @returns True when no bindings, dock sources, or timespan overlays remain.
- */
-export function isTimeSliderIdle(): boolean {
-  for (const layer of useAppStore.getState().layers) {
-    if (getLayerTimeBinding(layer)) return false;
-    if (layer.metadata?.sourceKind === STORE_LAYER_SOURCE_KIND) return false;
-    const span = layer.metadata?.timeSpan as { begin?: unknown } | undefined;
-    if (span && typeof span.begin === "number") return false;
-  }
-  return true;
-}
-
-/**
  * Reconciles the GeoLibre layer store with the control's current sources: each
  * source becomes (or updates) an external-native store layer, and store layers
  * whose source no longer exists are pruned. The maplibre layer id equals the
@@ -1422,3 +1326,5 @@ function removeAllTimeSliderStoreLayers(): void {
     forgetSourceBounds(id);
   }
 }
+
+provideTimeSliderRuntime({ getActiveTimeSliderControl, applyTimeSliderConfig });

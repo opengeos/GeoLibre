@@ -30,6 +30,7 @@ import {
   type CaptureGeoref,
   type GeorefProjection,
 } from "./geopdf";
+import { sampleCaptureLngLatGrid, type CaptureLngLatGrid } from "./print-capture-grid";
 import { saveBinaryFileWithFallback } from "./tauri-io";
 
 export {
@@ -56,6 +57,13 @@ export interface CapturedMap {
    * affine view of the map's CRS (pitch, globe, another body). GH #3523.
    */
   georef: CaptureGeoref | null;
+  /**
+   * Longitude/latitude sampled over {@link image} when it has no affine
+   * {@link georef} (globe, pitch), so the overview map can still locate it
+   * (GH #3551). Absent or null when the capture is georeferenced or cannot be
+   * located on Earth.
+   */
+  lngLatGrid?: CaptureLngLatGrid | null;
 }
 
 interface MapLike {
@@ -209,7 +217,7 @@ export async function captureEngineMapImage(
   // them, so a camera move in between would pair this view's pixels with the
   // next view's coordinates. Compare the view on both sides of the capture and
   // drop the georeference (plain PDF) when it moved.
-  const viewBefore = projection ? viewSignature(surface) : null;
+  const viewBefore = viewSignature(surface);
   const bitmap = await createImageBitmap(await engine.captureImage());
   try {
     if (engine.getRenderSurface() !== surface)
@@ -223,8 +231,8 @@ export async function captureEngineMapImage(
     const cssWidth = surface.getCanvas().clientWidth || surface.getContainer().clientWidth;
     decorate?.(context, cssWidth > 0 ? canvas.width / cssWidth : window.devicePixelRatio || 1);
     const capturedMap = captureMapImage(surface, clip, canvas, projection);
-    if (capturedMap.georef && viewSignature(surface) !== viewBefore) {
-      return { ...capturedMap, georef: null };
+    if ((capturedMap.georef || capturedMap.lngLatGrid) && viewSignature(surface) !== viewBefore) {
+      return { ...capturedMap, georef: null, lngLatGrid: null };
     }
     return capturedMap;
   } finally {
@@ -351,20 +359,25 @@ export function captureMapImage(
 
   // Image pixel -> viewport CSS pixel -> lng/lat, for the GeoPDF georeference.
   const scaleToCss = dpr > 0 ? 1 / dpr : 1;
+  const locate = (px: number, py: number) => {
+    try {
+      return map.unproject([(originX + px) * scaleToCss, (originY + py) * scaleToCss]);
+    } catch {
+      return null;
+    }
+  };
   const georef = projection
-    ? solveCaptureGeoref(
-        image.width,
-        image.height,
-        (px, py) => {
-          try {
-            return map.unproject([(originX + px) * scaleToCss, (originY + py) * scaleToCss]);
-          } catch {
-            return null;
-          }
-        },
-        projection,
-      )
+    ? solveCaptureGeoref(image.width, image.height, locate, projection, 1, {
+        allowUnwrappedLongitude: true,
+      })
     : null;
+  // A view that is not affine (globe, pitch) still has a location on Earth:
+  // sample it coarsely so the overview map can show where it is (GH #3551).
+  // Another body's coordinates are not Earth's, so it gets neither.
+  const lngLatGrid =
+    !georef && getActiveEllipsoid().id === "earth"
+      ? sampleCaptureLngLatGrid(image.width, image.height, locate)
+      : null;
 
   return {
     image,
@@ -374,6 +387,7 @@ export function captureMapImage(
     pixelRatio: dpr,
     bearingDeg: map.getBearing(),
     georef,
+    lngLatGrid,
   };
 }
 
@@ -538,7 +552,7 @@ const MM_TO_PT = 72 / 25.4;
  */
 function geoPdfPageEntry(
   opts: LayoutOptions,
-  canvas: HTMLCanvasElement,
+  canvas: Pick<HTMLCanvasElement, "width" | "height">,
   widthMm: number,
   heightMm: number,
 ): string | null {
@@ -559,6 +573,15 @@ function geoPdfPageEntry(
   } catch {
     return null;
   }
+}
+
+/** Whether the visible print viewport can carry a valid GeoPDF georeference. */
+export function canGeoreferencePrint(opts: LayoutOptions): boolean {
+  const size = resolvePageSize(opts);
+  const { widthMm, heightMm } = pageMm(size);
+  return (
+    geoPdfPageEntry(opts, { width: size.width, height: size.height }, widthMm, heightMm) !== null
+  );
 }
 
 /**
@@ -605,6 +628,16 @@ export interface AtlasExportSource {
   optionsForPage: (pageIndex: number) => Promise<LayoutOptions>;
   /** Progress callback fired before each page renders (1-based `current`). */
   onProgress?: (current: number, total: number) => void;
+  /** Optional hook fired once page capture/rendering finishes and saving begins. */
+  onBeforeSave?: () => void;
+  /** Optional signal to cancel a multi-page export between pages. */
+  signal?: AbortSignal;
+}
+
+function throwIfAtlasAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new DOMException("Atlas export cancelled", "AbortError");
+  }
 }
 
 /**
@@ -618,16 +651,20 @@ export async function exportAtlasPdf(
   filename: string,
   dpi = 150,
 ): Promise<string | null> {
-  const { total, optionsForPage, onProgress } = source;
+  const { total, optionsForPage, onProgress, onBeforeSave, signal } = source;
   if (total < 1) throw new Error("Atlas export needs at least one page");
+  throwIfAtlasAborted(signal);
   // Load jsPDF before driving the map through every page, so a failed import
   // (e.g. offline) stops the export up front.
   const JsPdf = await loadJsPdf();
+  throwIfAtlasAborted(signal);
   let pdf: jsPDF | null = null;
   const viewports: (string | null)[] = [];
   for (let i = 0; i < total; i++) {
+    throwIfAtlasAborted(signal);
     onProgress?.(i + 1, total);
     const opts = await optionsForPage(i);
+    throwIfAtlasAborted(signal);
     const size = resolvePageSize(opts);
     const { widthMm, heightMm } = pageMm(size);
     const orientation = widthMm >= heightMm ? "landscape" : "portrait";
@@ -642,8 +679,11 @@ export async function exportAtlasPdf(
     pdf.addImage(canvas, "PNG", 0, 0, widthMm, heightMm, undefined, "FAST");
     viewports.push(geoPdfPageEntry(opts, canvas, widthMm, heightMm));
   }
+  throwIfAtlasAborted(signal);
   writeGeoPdfViewports(pdf as jsPDF, viewports);
   const bytes = new Uint8Array((pdf as jsPDF).output("arraybuffer"));
+  throwIfAtlasAborted(signal);
+  onBeforeSave?.();
   return saveBinaryFileWithFallback(bytes, {
     defaultName: filename,
     filters: [{ name: "PDF Document", extensions: ["pdf"] }],
@@ -666,8 +706,9 @@ export async function exportAtlasPngZip(
   filename: string,
   dpi = 150,
 ): Promise<string | null> {
-  const { total, optionsForPage, onProgress } = source;
+  const { total, optionsForPage, onProgress, onBeforeSave, signal } = source;
   if (total < 1) throw new Error("Atlas export needs at least one page");
+  throwIfAtlasAborted(signal);
   const files: Record<string, Uint8Array> = {};
   const used = new Set<string>();
   // Compare names the way common filesystems do on extraction (Windows/macOS
@@ -679,10 +720,13 @@ export async function exportAtlasPngZip(
       .replace(/[ .]+$/g, "")
       .toLowerCase();
   for (let i = 0; i < total; i++) {
+    throwIfAtlasAborted(signal);
     onProgress?.(i + 1, total);
     const opts = await optionsForPage(i);
+    throwIfAtlasAborted(signal);
     const canvas = renderToCanvas(opts, dpi);
     const bytes = await canvasToPngBytes(canvas);
+    throwIfAtlasAborted(signal);
     const base = entryName(i) || String(i + 1);
     let name = base;
     for (let suffix = 2; used.has(collisionKey(name)); suffix++) {
@@ -691,8 +735,11 @@ export async function exportAtlasPngZip(
     used.add(collisionKey(name));
     files[`${name}.png`] = bytes;
   }
+  throwIfAtlasAborted(signal);
   // PNG payloads are already compressed; store them instead of re-deflating.
   const zipped = zipSync(files, { level: 0 });
+  throwIfAtlasAborted(signal);
+  onBeforeSave?.();
   return saveBinaryFileWithFallback(zipped, {
     defaultName: filename,
     filters: [{ name: "ZIP Archive", extensions: ["zip"] }],

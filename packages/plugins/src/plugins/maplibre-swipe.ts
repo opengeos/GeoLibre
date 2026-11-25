@@ -1,6 +1,10 @@
+import { SWIPE_PLUGIN_ID } from "../plugin-ids";
+export { SWIPE_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { useAppStore } from "@geolibre/core";
 import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, TransformConstrainFunction } from "maplibre-gl";
+import { provideSwipeLoadState } from "../swipe-load-state";
 import {
   SwipeControl,
   type CreateSwipeComparisonMap,
@@ -19,7 +23,7 @@ import {
   getSwipeMaplibreRasters,
   subscribeSwipeCogChanges,
   type SwipeCogRasterSnapshot,
-} from "./maplibre-components";
+} from "./components/cog";
 import { SwipeCogMirror } from "./swipe-cog-mirror";
 import { getRasterMainVisibility, setRasterMainVisibility } from "./maplibre-raster";
 import { setTransientRasterVisibility } from "./raster-layer-sync";
@@ -30,7 +34,6 @@ import { resolveDocumentTheme } from "./components/shared";
  * Plugin id for the Layer Swipe control. Exported so the app can coordinate it
  * with split view (the two comparison modes are mutually exclusive — see #844).
  */
-export const SWIPE_PLUGIN_ID = "maplibre-gl-swipe";
 
 const PANEL_ID = "layer-swipe-panel";
 // The control's own toolbar button is hidden (the dock owns opening and
@@ -402,14 +405,13 @@ function resolveSwipeProjectLayerIds(map: MapLibreMap): void {
 }
 
 export const maplibreSwipePlugin: GeoLibrePlugin = {
-  id: SWIPE_PLUGIN_ID,
-  name: "Layer Swipe",
-  version: "0.10.0",
+  ...builtInPluginProperties("maplibre-gl-swipe"),
+
   // Both 2D engines: the control drives both maps only through the Style Spec
   // surface they share, and the one MapLibre object it built itself — the
   // clipped comparison map — now comes from `createMap`. The deck.gl raster
   // provider stays MapLibre-only (supportsRasterProvider).
-  engines: ["maplibre", "mapbox"],
+
   activate: (app: GeoLibreAppAPI) => {
     if (!app.registerRightPanel || !app.openRightPanel) return false;
     const control = new SwipeControl(getSwipeControlOptions(app, savedSwipeState ?? undefined));
@@ -753,3 +755,5 @@ function areSwipeStatesEqual(
 ): boolean {
   return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 }
+
+provideSwipeLoadState(getSwipeRasterLoadState);

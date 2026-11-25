@@ -1,6 +1,6 @@
 import { createCesiumKmlLayer, useAppStore } from "@geolibre/core";
 import { rendererCapabilities } from "@geolibre/map";
-import { routeKmlFileSelection } from "@geolibre/plugins";
+import { routeKmlFileSelection } from "@geolibre/plugins/maplibre-vector";
 import { Button, Input, Label } from "@geolibre/ui";
 import { useState } from "react";
 import type { TFunction } from "i18next";

@@ -1,3 +1,5 @@
+import { downloadBytes } from "../../lib/download-bytes";
+import { useSidecarJobCancellation } from "../../hooks/useSidecarJobCancellation";
 import {
   shouldZoomToNewLayers,
   useAppStore,
@@ -7,6 +9,7 @@ import {
 import { getLayerBounds, type MapEngine } from "@geolibre/map";
 import {
   clearRemoteWhiteboxCatalogSnapshotCache,
+  cancelWhiteboxJob,
   fetchWhiteboxJob,
   fetchWhiteboxJsonOutput,
   fetchRemoteWhiteboxCatalogSnapshot,
@@ -18,11 +21,9 @@ import {
   runWhiteboxTool,
   runWhiteboxToolWasm,
   outputBaseName,
-  fileOutputTargetExtension,
   isLas,
   lidarBytesExtension,
   type WhiteboxJob,
-  type WhiteboxLayerInput,
   type WhiteboxTool,
   type WhiteboxToolParameter,
 } from "@geolibre/processing";
@@ -69,13 +70,9 @@ import {
 import { buildWhiteboxToolShareUrl, whiteboxToolShareBase } from "../../lib/whitebox-tool-url";
 import { searchWhiteboxTools } from "../../lib/whitebox-tool-search";
 import { useWhiteboxSemanticSearch } from "../../hooks/useWhiteboxSemanticSearch";
-import { fieldSourceInputName } from "../../lib/whitebox-field-params";
 import {
   DISTANCE_UNITS,
-  degreesToUnit,
-  formatDistanceValue,
   parseDistanceInput,
-  unitToDegrees,
   type DistanceUnit,
 } from "../../lib/whitebox-distance-params";
 import {
@@ -84,11 +81,7 @@ import {
   parameterKind,
 } from "../../lib/whitebox-param-kind";
 import { isTiff } from "../../lib/scripting/binary-output";
-import {
-  canUseLayerForParameter,
-  fetchLayerBytes,
-  layerPath,
-} from "../../lib/whitebox-layer-inputs";
+import { canUseLayerForParameter, fetchLayerBytes } from "../../lib/whitebox-layer-inputs";
 import {
   cornerExtentParameters,
   extentFieldValues,
@@ -125,14 +118,11 @@ import {
   acceptForParameter,
   createDefaultValues,
   defaultOutputName,
-  fileOutputExtension,
   humanize,
   isCrsParameter,
   isDataInputParameter,
   isDistanceParameter,
   isFeatureCollection,
-  isFieldParameter,
-  isJsonOutputPath,
   isOutputParameter,
   isPathParameter,
   isSubsetUrlParameter,
@@ -145,6 +135,40 @@ import {
   wgs84ToolLayerIds,
   type ParameterValues,
 } from "../../lib/processing-params";
+import {
+  binaryOutputExtension,
+  buildCategoryOptions,
+  collectLayerFieldNames,
+  combinedMidLatitude,
+  countToolSources,
+  distanceDraftForUnit,
+  distanceDraftToStored,
+  evictOldestEntries,
+  extentKindLabel,
+  fieldOptionsForParameter,
+  geoJsonOutputEntries,
+  isJobRunning,
+  isRunDisabled,
+  keepOrFirstToolId,
+  keywordOnlyTools,
+  latitudeLabelKey,
+  localCatalogLoadError,
+  matchesToolSource,
+  parseBrowsedInput,
+  resetVectorOutputFormats,
+  resolveRunInputs,
+  resolveSelectedTool,
+  runVectorOutputFormat,
+  runtimeStatusText,
+  scopeTools,
+  semanticMatchTools,
+  shareLinkParameters,
+  stepNumberValue,
+  subsetCompanionReset,
+  toolSearchFields,
+  type BrowsedInput,
+  type LayerBounds,
+} from "../../lib/processing-dialog-model";
 
 interface ProcessingDialogProps {
   mapControllerRef: React.RefObject<MapEngine | null>;
@@ -158,30 +182,10 @@ interface ProcessingDialogProps {
   onAddLidar?: (bytes: Uint8Array, name: string, fileName: string) => Promise<boolean>;
 }
 
-/** A layer's `[west, south, east, north]` extent, or null when it has none. */
-type LayerBounds = [number, number, number, number] | null;
-const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
-
 // Smallest the floating panel can be resized to, so the two-column tool browser
 // stays usable (left list + a readable parameter form).
 const PANEL_MIN_W = 560;
 const PANEL_MIN_H = 400;
-
-/** Save bytes to the user's downloads via a transient object URL. */
-function downloadBytes(bytes: Uint8Array, filename: string): void {
-  // Cast required: TS types Uint8Array as Uint8Array<ArrayBufferLike>, which is
-  // not directly assignable to BlobPart under this lib (mirrors DesktopShell).
-  const url = URL.createObjectURL(new Blob([bytes as BlobPart]));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  // Defer revoke so the browser can fetch the blob first (Firefox races and
-  // silently drops the download if the URL is revoked synchronously).
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
 
 export function ProcessingDialog({
   mapControllerRef,
@@ -204,6 +208,7 @@ export function ProcessingDialog({
   const [tools, setTools] = useState<WhiteboxTool[]>([]);
   const [selectedToolId, setSelectedToolId] = useState("");
   const [values, setValues] = useState<ParameterValues>({});
+  const [historyRestoreRevision, setHistoryRestoreRevision] = useState(0);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   // Tool provenance filter: "All" | "geolibre" | "whitebox". Only meaningful in
@@ -453,27 +458,21 @@ export function ProcessingDialog({
   // browser cannot expose a real path). Keyed by parameter name; consumed by
   // the in-browser WASM runner. GeoJSON files are parsed up front so vector
   // tools receive a FeatureCollection, matching the layer-input path.
-  const browsedInputsRef = useRef<
-    Map<string, Array<{ name: string; bytes: Uint8Array; geojson?: FeatureCollection }>>
-  >(new Map());
+  const browsedInputsRef = useRef<Map<string, BrowsedInput[]>>(new Map());
   // Parameters passed to each run, keyed by the resulting job id, so output
   // naming can honor the output path the user actually typed (which the finished
   // job does not carry). Keyed per job (not a single slot) so a rapid re-run
   // cannot overwrite the entry a still-draining previous job is reading; the
   // entry is deleted once its outputs are imported.
   const runParametersByJobRef = useRef<Map<string, Record<string, unknown>>>(new Map());
+  const jobGenerationByJobRef = useRef<Map<string, number>>(new Map());
 
-  const selectedTool = useMemo(() => {
-    const tool = tools.find((item) => item.id === selectedToolId) ?? tools[0] ?? null;
-    // Drop `*args`/`**kwargs` params defensively: some upstream tools expose
-    // Python varargs that render as unusable inputs. The bundled catalog already
-    // strips these, but the live sidecar catalog may not.
-    if (!tool?.params?.some((param) => param.name?.startsWith("*"))) return tool;
-    return {
-      ...tool,
-      params: tool.params.filter((param) => !param.name?.startsWith("*")),
-    };
-  }, [selectedToolId, tools]);
+  // Varargs (`*args`/`**kwargs`) params are dropped defensively; see
+  // resolveSelectedTool.
+  const selectedTool = useMemo(
+    () => resolveSelectedTool(tools, selectedToolId),
+    [selectedToolId, tools],
+  );
 
   // Whether any GeoLibre-authored tools are present (WASM mode), gating the
   // source filter — pointless when every tool is from Whitebox.
@@ -505,20 +504,10 @@ export function ProcessingDialog({
   // being open) so it doesn't recompute on every keystroke. GeoJSON is
   // schemaless, so sample the first FIELD_SCAN_SAMPLE features rather than
   // scanning a whole large layer on the React commit path.
-  const fieldsByLayer = useMemo(() => {
-    const FIELD_SCAN_SAMPLE = 1000;
-    const map = new Map<string, string[]>();
-    if (!open) return map;
-    for (const layer of layers) {
-      if (!layer.geojson) continue;
-      const keys = new Set<string>();
-      for (const feature of layer.geojson.features.slice(0, FIELD_SCAN_SAMPLE)) {
-        for (const key of Object.keys(feature.properties ?? {})) keys.add(key);
-      }
-      if (keys.size) map.set(layer.id, [...keys]);
-    }
-    return map;
-  }, [layers, open]);
+  const fieldsByLayer = useMemo(
+    () => (open ? collectLayerFieldNames(layers) : new Map<string, string[]>()),
+    [layers, open],
+  );
 
   // The layers wired to the selected tool's vector inputs, when the tool's
   // coordinates are known to be WGS84 (GeoLibre#1540). Joined into a string so
@@ -544,28 +533,18 @@ export function ProcessingDialog({
   // never every GeoJSON layer in the project.
   const distanceLatitude = useMemo(() => {
     if (!open || distanceLayerKey === null) return null;
-    let south = Number.POSITIVE_INFINITY;
-    let north = Number.NEGATIVE_INFINITY;
-    for (const id of distanceLayerKey.split("\n")) {
-      const layer = layers.find((item) => item.id === id);
-      // No in-memory GeoJSON is fatal: the layer is passed as a path, in its own
-      // CRS, so the tool's units stop being knowable.
-      if (!layer?.geojson) return null;
+    // A layer with no in-memory GeoJSON is passed as a path, in its own CRS, so
+    // the tool's units stop being knowable; an extentless layer (an attribute
+    // table) is skipped rather than disqualifying inputs that have an extent.
+    return combinedMidLatitude(distanceLayerKey.split("\n"), layers, (layer) => {
       const cache = layerBoundsCache.current;
       let bounds = cache.get(layer.geojson);
       if (bounds === undefined) {
         bounds = getLayerBounds(layer);
         cache.set(layer.geojson, bounds);
       }
-      // A layer with no finite extent (an attribute table, whose features all
-      // carry a null geometry) contributes no coordinates to the operation, so
-      // skip it rather than disqualifying inputs that do have one.
-      if (!bounds) continue;
-      south = Math.min(south, bounds[1]);
-      north = Math.max(north, bounds[3]);
-    }
-    // Every input was extentless, so there is nothing to anchor a conversion to.
-    return Number.isFinite(south) ? (south + north) / 2 : null;
+      return bounds;
+    });
   }, [distanceLayerKey, layers, open]);
 
   // Whether this tool's distance fields carry a unit picker, which decides which
@@ -581,24 +560,8 @@ export function ProcessingDialog({
   // in the list even when the naming doesn't line up. Empty when the input is a
   // file path rather than a loaded layer — the field stays a plain text box.
   const fieldOptions = useCallback(
-    (param: WhiteboxToolParameter): string[] => {
-      if (!vectorInputParams.length || !isFieldParameter(param)) return [];
-      const columnsOf = (input: WhiteboxToolParameter): string[] => {
-        const value = values[input.name];
-        if (typeof value !== "string" || !value.startsWith(LAYER_TOKEN_PREFIX)) return [];
-        return fieldsByLayer.get(value.slice(LAYER_TOKEN_PREFIX.length)) ?? [];
-      };
-      const sourceName =
-        vectorInputParams.length === 1
-          ? vectorInputParams[0].name
-          : fieldSourceInputName(
-              param.name,
-              vectorInputParams.map((input) => input.name),
-            );
-      const source = vectorInputParams.find((input) => input.name === sourceName);
-      if (source) return columnsOf(source);
-      return [...new Set(vectorInputParams.flatMap(columnsOf))];
-    },
+    (param: WhiteboxToolParameter): string[] =>
+      fieldOptionsForParameter(param, vectorInputParams, values, fieldsByLayer),
     [fieldsByLayer, values, vectorInputParams],
   );
 
@@ -610,20 +573,11 @@ export function ProcessingDialog({
   // a non-shareable `tauri://…`, links to the hosted web app.
   const shareUrl = useMemo(() => {
     if (!selectedTool) return "";
-    const defaults = createDefaultValues(selectedTool);
-    const asString = (value: unknown) =>
-      typeof value === "string" ? value : value == null ? "" : String(value);
-    const parameters: Record<string, string> = {};
-    for (const param of selectedTool.params ?? []) {
-      const name = param.name;
-      if (!name) continue;
-      const kind = parameterKind(param);
-      if (kind.endsWith("_in") || kind.endsWith("_out")) continue;
-      const value = asString(values[name]);
-      if (!value.trim() || value === asString(defaults[name])) continue;
-      parameters[name] = value;
-    }
-    return buildWhiteboxToolShareUrl(selectedTool.id, parameters, whiteboxToolShareBase(desktop));
+    return buildWhiteboxToolShareUrl(
+      selectedTool.id,
+      shareLinkParameters(selectedTool, values),
+      whiteboxToolShareBase(desktop),
+    );
   }, [selectedTool, values, desktop]);
 
   const handleCopyLink = useCallback(() => {
@@ -654,72 +608,31 @@ export function ProcessingDialog({
   // Ignore the source filter when no GeoLibre tools are present (e.g. sidecar
   // mode), so a stale "geolibre" selection can't empty the whole list.
   const matchesSource = useCallback(
-    (tool: WhiteboxTool) => {
-      if (source === "All" || !hasGeolibreTools) return true;
-      return (tool.source === "geolibre" ? "geolibre" : "whitebox") === source;
-    },
+    (tool: WhiteboxTool) => matchesToolSource(tool, source, hasGeolibreTools),
     [source, hasGeolibreTools],
   );
 
   // Total tool count per source, for the source-filter labels.
-  const sourceCounts = useMemo(() => {
-    const geolibre = tools.filter((tool) => tool.source === "geolibre").length;
-    return { all: tools.length, geolibre, whitebox: tools.length - geolibre };
-  }, [tools]);
+  const sourceCounts = useMemo(() => countToolSources(tools), [tools]);
 
   // Category options labelled with the number of tools in each (within the
   // active source filter), e.g. "Conversion (37)".
-  const categories = useMemo(() => {
-    const counts = new Map<string, number>();
-    let total = 0;
-    for (const tool of tools) {
-      if (!matchesSource(tool)) continue;
-      total += 1;
-      const value = tool.category ?? "";
-      counts.set(value, (counts.get(value) ?? 0) + 1);
-    }
-    const sorted = [...counts.entries()].sort((a, b) =>
-      translateWhiteboxCategory(t, a[0] || undefined).localeCompare(
-        translateWhiteboxCategory(t, b[0] || undefined),
-        i18n.language,
-      ),
-    );
-    return [
-      { value: "All", label: t("processing.whitebox.categoryAll", { total }) },
-      ...sorted.map(([name, count]) => ({
-        value: name,
-        label: `${translateWhiteboxCategory(t, name || undefined)} (${count})`,
-      })),
-    ];
-  }, [tools, matchesSource, t, i18n.language]);
+  const categories = useMemo(
+    () => buildCategoryOptions(tools, matchesSource, t, i18n.language),
+    [tools, matchesSource, t, i18n.language],
+  );
 
   // Everything the category and source filters allow, before the search text.
   // Memoized apart from the search so the semantic lookup below sees a stable
   // list across keystrokes, and so it searches the same scope the list shows.
   const scopedTools = useMemo(
-    () =>
-      tools.filter(
-        (tool) => (category === "All" || (tool.category ?? "") === category) && matchesSource(tool),
-      ),
+    () => scopeTools(tools, category, matchesSource),
     [category, matchesSource, tools],
   );
 
   const filteredTools = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return searchWhiteboxTools(scopedTools, normalizedQuery, (tool) => ({
-      name: [
-        tool.id,
-        toolLabel(t, tool),
-        tool.category ?? "",
-        translateWhiteboxCategory(t, tool.category),
-      ].join(" "),
-      // The tool's own names, which is what exact/prefix ranking measures. The
-      // categories stay out: they are shared by dozens of tools, so ranking
-      // them would let "terrain" promote everything filed under Terrain ahead
-      // of the tools actually named after it.
-      identifiers: [tool.id, toolLabel(t, tool)],
-      summary: tool.summary || "",
-    }));
+    return searchWhiteboxTools(scopedTools, normalizedQuery, (tool) => toolSearchFields(t, tool));
   }, [query, scopedTools, t]);
 
   // A second, optional search that understands a description of an operation
@@ -730,21 +643,17 @@ export function ProcessingDialog({
   // is already reading keeps its order. #2566
   const semantic = useWhiteboxSemanticSearch(query, scopedTools, filteredTools, !loadingTools);
 
-  const semanticTools = useMemo(() => {
-    if (!semantic.matches?.length) return [];
-    const byId = new Map(scopedTools.map((tool) => [tool.id, tool]));
-    return semantic.matches
-      .map((match) => byId.get(match.id))
-      .filter((tool): tool is WhiteboxTool => tool !== undefined);
-  }, [semantic.matches, scopedTools]);
+  const semanticTools = useMemo(
+    () => semanticMatchTools(scopedTools, semantic.matches),
+    [semantic.matches, scopedTools],
+  );
 
   // The substring hits the ranked group does not already show. Listing a tool
   // twice under two headings reads as two different tools.
-  const keywordTools = useMemo(() => {
-    if (semanticTools.length === 0) return filteredTools;
-    const ranked = new Set(semanticTools.map((tool) => tool.id));
-    return filteredTools.filter((tool) => !ranked.has(tool.id));
-  }, [filteredTools, semanticTools]);
+  const keywordTools = useMemo(
+    () => keywordOnlyTools(filteredTools, semanticTools),
+    [filteredTools, semanticTools],
+  );
 
   const renderToolRow = useCallback(
     (tool: WhiteboxTool) => (
@@ -792,11 +701,7 @@ export function ProcessingDialog({
         setRuntimeMessage(message);
         const availableTools = withGlobalDemTool(snapshotTools);
         setTools(availableTools);
-        setSelectedToolId((current) =>
-          availableTools.some((tool) => tool.id === current)
-            ? current
-            : (availableTools[0]?.id ?? ""),
-        );
+        setSelectedToolId((current) => keepOrFirstToolId(availableTools, current));
       } catch (err) {
         setRuntimeAvailable(available);
         setRuntimeMessage(message);
@@ -847,26 +752,18 @@ export function ProcessingDialog({
       }
       const nextTools = withGlobalDemTool(mergeWasmToolManifests(catalogTools, wasmTools));
       setTools(nextTools);
-      setSelectedToolId((current) =>
-        nextTools.some((tool) => tool.id === current) ? current : (nextTools[0]?.id ?? ""),
-      );
+      setSelectedToolId((current) => keepOrFirstToolId(nextTools, current));
       // In local mode the WASM runner is what actually executes tools, so its
       // failure is the most important to report: without it every tool keeps the
       // catalog's parameter names and would fail on run (exactly #1047). Failing
       // that, surface a catalog-fetch failure even when the WASM manifests still
       // yielded a few GeoLibre-authored tools, so the user is not silently left
       // without the ~700 Whitebox catalog tools.
-      if (wasmError) {
-        setError(t("processing.whitebox.localRunnerError"));
-      } else if (catalogError) {
-        setError(
-          catalogError instanceof Error
-            ? catalogError.message
-            : t("processing.whitebox.catalogSnapshotError"),
-        );
-      } else if (catalogEmpty || nextTools.length === 0) {
-        setError(t("processing.whitebox.catalogSnapshotError"));
-      }
+      const loadError = localCatalogLoadError(
+        { wasmError, catalogError, catalogEmpty, toolCount: nextTools.length },
+        t,
+      );
+      if (loadError) setError(loadError);
       setLoadingTools(false);
       return;
     }
@@ -907,9 +804,7 @@ export function ProcessingDialog({
       // Hide locked ("pro"-tier) tools: they cannot run, so omit them entirely.
       const freeTools = withGlobalDemTool(nextTools.filter((tool) => !tool.locked));
       setTools(freeTools);
-      setSelectedToolId((current) =>
-        freeTools.some((tool) => tool.id === current) ? current : (freeTools[0]?.id ?? ""),
-      );
+      setSelectedToolId((current) => keepOrFirstToolId(freeTools, current));
     } catch (err) {
       setRuntimeAvailable(false);
       await applyRemoteCatalogSnapshot(
@@ -1004,6 +899,9 @@ export function ProcessingDialog({
       ...createDefaultValues(selectedTool),
       ...(rerun.parameters as ParameterValues),
     });
+    // A restore must reset local field drafts even when its stored degrees
+    // equal the last value pushed by a metric field at another latitude.
+    setHistoryRestoreRevision((revision) => revision + 1);
     setProcessingRerun(null);
   }, [open, rerun, selectedTool, loadingTools, tools, setProcessingRerun, t]);
 
@@ -1018,37 +916,44 @@ export function ProcessingDialog({
   }, [open, setProcessingRerun]);
 
   useEffect(() => {
-    if (!job || !RUNNING_JOB_STATUSES.has(job.status)) return;
-    // Schedule the next poll only after the current request resolves so a slow
-    // sidecar cannot accumulate overlapping, out-of-order in-flight requests.
+    if (!job || !isJobRunning(job)) return;
     let cancelled = false;
+    let timer: number | undefined;
+    let failures = 0;
     const poll = async () => {
       if (cancelled) return;
       try {
         const next = await fetchWhiteboxJob(job.id);
         if (cancelled) return;
+        failures = 0;
         setJob(next);
-        if (RUNNING_JOB_STATUSES.has(next.status)) {
-          window.setTimeout(poll, 1000);
-        }
+        if (isJobRunning(next)) timer = window.setTimeout(poll, 1000);
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : t("processing.whitebox.errorPoll"));
+        if (cancelled) return;
+        failures += 1;
+        if (failures < 3) {
+          timer = window.setTimeout(poll, 1000 * failures);
+          return;
         }
+        const message = err instanceof Error ? err.message : t("processing.whitebox.errorPoll");
+        setError(message);
+        setJob((prev) =>
+          prev && prev.id === job.id ? { ...prev, status: "failed", error: message } : prev,
+        );
       }
     };
-    const timer = window.setTimeout(poll, 1000);
+    timer = window.setTimeout(poll, 1000);
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [job]);
+  }, [job, t]);
 
   // Record a History entry once a job reaches a terminal status (#1292). WASM
   // jobs arrive terminal on dispatch; sidecar jobs get here via polling.
   // `finish` is idempotent, so re-renders with the same terminal job are no-ops.
   useEffect(() => {
-    if (!job || RUNNING_JOB_STATUSES.has(job.status)) return;
+    if (!job || isJobRunning(job)) return;
     historyTrackersRef.current
       .get(job.id)
       ?.finish(job.status === "succeeded" ? "success" : "error", job.error ?? undefined);
@@ -1076,14 +981,10 @@ export function ProcessingDialog({
     // `styles`, an XYZ `subdomains`/`tile_size`) don't linger when the new layer
     // omits them and skew the extraction. `fields` is spread after, so the new
     // layer's present values win.
-    const defaults = createDefaultValues(selectedTool);
-    const kind = subsetUrlToolKind(selectedTool.id);
-    const companionReset: ParameterValues =
-      kind === "wms"
-        ? { styles: defaults.styles }
-        : kind === "xyz"
-          ? { tile_size: defaults.tile_size, subdomains: defaults.subdomains }
-          : {};
+    const companionReset = subsetCompanionReset(
+      subsetUrlToolKind(selectedTool.id),
+      createDefaultValues(selectedTool),
+    );
     const hasInput = selectedTool.params?.some((param) => param.name === "input");
     setValues((prev) => ({
       ...prev,
@@ -1254,21 +1155,7 @@ export function ProcessingDialog({
     // Turning WASM mode off would otherwise leave a format like "geoparquet" as
     // the sidecar output path, so reset any such param to its default.
     if (nextRunLocal || !selectedTool) return;
-    const defaults = createDefaultValues(selectedTool);
-    setValues((prev) => {
-      const next = { ...prev };
-      for (const param of selectedTool.params ?? []) {
-        const current = prev[param.name];
-        if (
-          parameterKind(param) === "vector_out" &&
-          typeof current === "string" &&
-          normalizeVectorOutputFormat(current) === current
-        ) {
-          next[param.name] = defaults[param.name];
-        }
-      }
-      return next;
-    });
+    setValues((prev) => resetVectorOutputFormats(selectedTool, prev));
   };
 
   // Stash a browsed input file's bytes and show its name in the field. Used by
@@ -1276,16 +1163,7 @@ export function ProcessingDialog({
   // directly instead of a (non-existent in the browser) filesystem path.
   const handlePickInputFile = useCallback(
     (paramName: string, fileName: string, bytes: Uint8Array) => {
-      let geojson: FeatureCollection | undefined;
-      if (/\.(geojson|json)$/i.test(fileName)) {
-        try {
-          const parsed = JSON.parse(new TextDecoder().decode(bytes));
-          if (isFeatureCollection(parsed)) geojson = parsed;
-        } catch {
-          // not valid JSON; fall back to raw bytes
-        }
-      }
-      browsedInputsRef.current.set(paramName, [{ name: fileName, bytes, geojson }]);
+      browsedInputsRef.current.set(paramName, [parseBrowsedInput(fileName, bytes)]);
       setValues((prev) => ({ ...prev, [paramName]: fileName }));
     },
     [],
@@ -1293,18 +1171,7 @@ export function ProcessingDialog({
 
   const handlePickInputFiles = useCallback(
     (paramName: string, files: Array<{ fileName: string; bytes: Uint8Array }>) => {
-      const inputs = files.map(({ fileName, bytes }) => {
-        let geojson: FeatureCollection | undefined;
-        if (/\.(geojson|json)$/i.test(fileName)) {
-          try {
-            const parsed = JSON.parse(new TextDecoder().decode(bytes));
-            if (isFeatureCollection(parsed)) geojson = parsed;
-          } catch {
-            // Leave non-GeoJSON vector formats as raw bytes.
-          }
-        }
-        return { name: fileName, bytes, geojson };
-      });
+      const inputs = files.map(({ fileName, bytes }) => parseBrowsedInput(fileName, bytes));
       browsedInputsRef.current.set(paramName, inputs);
       setValues((prev) => ({
         ...prev,
@@ -1318,26 +1185,22 @@ export function ProcessingDialog({
     async (nextJob: WhiteboxJob) => {
       if (importedJobIdRef.current === nextJob.id) return;
       importedJobIdRef.current = nextJob.id;
-      // The sidecar returns output paths (fetched over HTTP); the WASM runner
-      // returns the GeoJSON inline. Handle both: keep inline FeatureCollections,
-      // else keep JSON output paths to fetch.
-      const entries = Object.entries(nextJob.outputs).filter(([, value]) => {
-        if (isFeatureCollection(value)) return true;
-        const path = outputPath(value);
-        return Boolean(path && isJsonOutputPath(path));
-      });
-      // Resolve the producing tool from the job itself, not the live
-      // `selectedTool`, so switching tools while a job finishes does not
-      // mislabel the imported layer.
+      const startLoadCount =
+        jobGenerationByJobRef.current.get(nextJob.id) ?? useAppStore.getState().projectLoadCount;
+      jobGenerationByJobRef.current.delete(nextJob.id);
+      if (useAppStore.getState().projectLoadCount !== startLoadCount) {
+        runParametersByJobRef.current.delete(nextJob.id);
+        return;
+      }
+      const entries = geoJsonOutputEntries(nextJob.outputs);
       const jobTool = tools.find((item) => item.id === nextJob.tool_id);
       const jobToolLabel = jobTool ? toolLabel(t, jobTool) : humanize(nextJob.tool_id);
-      // This job's own run parameters (not a shared slot), consumed once here so a
-      // concurrent re-run cannot repoint the output-path lookup below.
       const runParameters = runParametersByJobRef.current.get(nextJob.id) ?? {};
       runParametersByJobRef.current.delete(nextJob.id);
       for (const [name, value] of entries) {
         const path = isFeatureCollection(value) ? "" : (outputPath(value) ?? "");
         const data = isFeatureCollection(value) ? value : await fetchWhiteboxJsonOutput(path);
+        if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
         if (!isFeatureCollection(data)) continue;
         const layerName = uniqueLayerName(
           `${jobToolLabel} ${humanize(name)}`,
@@ -1349,56 +1212,31 @@ export function ProcessingDialog({
         if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
       }
 
-      // Binary outputs come back from the WASM runner inline. Raster (COG) bytes
-      // become a new raster layer; a `file_out` (e.g. write_geoparquet .parquet,
-      // a rendered .png, a .pmtiles) or a CRS-preserving `vector_out`
-      // (GeoParquet/FlatGeobuf/zipped Shapefile, chosen to keep a reprojection's
-      // target CRS) is downloaded instead — unless its bytes turn out to be a
-      // GeoTIFF after all, which several tools declare only as a generic file.
       for (const [name, value] of Object.entries(nextJob.outputs)) {
+        if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
         if (!(value instanceof Uint8Array)) continue;
         const param = jobTool?.params?.find((item) => item.name === name);
         const outKind = param ? parameterKind(param) : "";
-        // A `lidar_out` (a classified/filtered/thinned cloud) goes on the map
-        // as a point cloud layer, named for its own encoding so a COPC output
-        // streams; the download below is only the fallback.
         if (outKind === "lidar_out" && isLas(value) && onAddLidar) {
           const lidarName = `${jobToolLabel} ${humanize(name)}`;
           const fileName = `${outputBaseName(nextJob.tool_id, name)}.${lidarBytesExtension(value)}`;
           if (await onAddLidar(value, lidarName, fileName)) {
+            if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
             historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(lidarName);
             continue;
           }
+          if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
         }
-        // A generic `file_out` can still hold a GeoTIFF — `slope` declares its
-        // output only as "Optional output path" — so sniff the bytes rather
-        // than trust the declared kind, the way the scripting/assistant path
-        // does, and put a raster on the map instead of downloading it.
-        // A `lidar_out` the map could not take is downloaded too; it never
-        // belongs on the raster path.
         const declaredFile =
           outKind === "file_out" || outKind === "vector_out" || outKind === "lidar_out";
         if (declaredFile && (!isTiff(value) || !onAddRaster)) {
           const label = `${jobToolLabel} ${humanize(name)}`.replace(/\s+/g, "_");
-          // Prefer the content signature: a `vector_out` and most binary
-          // `file_out` formats (GeoParquet/FlatGeobuf/zipped Shapefile/PNG/
-          // PMTiles) are identifiable from their magic bytes. Only signature-less
-          // text formats (CSV/JSON/HTML) return `bin`; for those, fall back to
-          // the extension the tool was actually told to write — the user's typed
-          // output path, else the param's declared format (shared with the WASM
-          // runner via `fileOutputTargetExtension`).
-          const sniffed = fileOutputExtension(value);
-          const extension =
-            sniffed !== "bin" || outKind !== "file_out" || !param
-              ? sniffed
-              : fileOutputTargetExtension(param, runParameters[name]);
+          const extension = binaryOutputExtension(value, outKind, param, runParameters[name]);
           downloadBytes(value, `${label}.${extension}`);
         } else if (onAddRaster) {
-          // Display name stays human-readable; the file name matches the actual
-          // WASM output path (e.g. fill_depressions_wang_and_liu_output.tif), so
-          // the layer's sourcePath lines up with the path shown in the panel.
           const rasterName = `${jobToolLabel} ${humanize(name)}`;
           await onAddRaster(value, rasterName, `${outputBaseName(nextJob.tool_id, name)}.tif`);
+          if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
           historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(rasterName);
         }
       }
@@ -1415,6 +1253,7 @@ export function ProcessingDialog({
 
   const runSelectedTool = async () => {
     if (!selectedTool || selectedTool.locked) return;
+    const dispatchLoadCount = useAppStore.getState().projectLoadCount;
     setError(null);
     importedJobIdRef.current = null;
     // Flag "running" before any prep so the Run button shows its busy state
@@ -1454,11 +1293,7 @@ export function ProcessingDialog({
         const now = new Date().toISOString();
         const id = `global-dem-${crypto.randomUUID()}`;
         historyTrackersRef.current.set(id, tracker);
-        while (historyTrackersRef.current.size > MAX_TRACKED_HISTORY_JOBS) {
-          const oldest = historyTrackersRef.current.keys().next().value;
-          if (oldest === undefined) break;
-          historyTrackersRef.current.delete(oldest);
-        }
+        evictOldestEntries(historyTrackersRef.current, MAX_TRACKED_HISTORY_JOBS);
         setJob({
           id,
           status: "succeeded",
@@ -1492,169 +1327,30 @@ export function ProcessingDialog({
       return;
     }
 
-    const parameters: Record<string, unknown> = {};
-    const layerInputs: Record<string, WhiteboxLayerInput | WhiteboxLayerInput[]> = {};
-
-    for (const param of selectedTool.params ?? []) {
-      const parameterLabelText = translateWhiteboxParameterLabel(t, selectedTool.id, param);
-      const value = values[param.name];
-      if (
-        param.required &&
-        !isOutputParameter(param) &&
-        (value === undefined ||
-          value === null ||
-          value === "" ||
-          (Array.isArray(value) && value.length === 0))
-      ) {
-        setError(
-          t("processing.whitebox.missingRequiredParameter", {
-            label: parameterLabelText,
-          }),
-        );
-        setRunningLocal(false);
-        return;
-      }
-
-      // A file browsed from disk in the web build: feed its bytes (or parsed
-      // GeoJSON) straight to the WASM runner instead of an unresolvable path.
-      const browsed = browsedInputsRef.current.get(param.name);
-      if (browsed?.length && isDataInputParameter(param)) {
-        const kind = parameterKind(param);
-        if (!runLocal && browsed.some((input) => !input.geojson)) {
-          setError(
-            t("processing.whitebox.sidecarCannotReadBrowserFiles", {
-              label: parameterLabelText,
-            }),
-          );
-          setRunningLocal(false);
-          return;
-        }
-        const inputs = browsed.map((input) =>
-          input.geojson
-            ? { name: input.name, kind, geojson: input.geojson }
-            : { name: input.name, kind, bytes: input.bytes },
-        );
-        layerInputs[param.name] = inputs.length === 1 ? inputs[0] : inputs;
-        continue;
-      }
-
-      if (isMultipleDatasetParameter(param) && Array.isArray(value)) {
-        const selectedLayers = value
-          .filter(
-            (item): item is string =>
-              typeof item === "string" && item.startsWith(LAYER_TOKEN_PREFIX),
-          )
-          .map((item) => layers.find((layer) => layer.id === item.slice(LAYER_TOKEN_PREFIX.length)))
-          .filter((layer): layer is GeoLibreLayer => Boolean(layer));
-        if (selectedLayers.length !== value.length) {
-          setError(
-            t("processing.whitebox.selectedLayersMissing", {
-              label: parameterLabelText,
-            }),
-          );
-          setRunningLocal(false);
-          return;
-        }
-        const kind = parameterKind(param);
-        if (runLocal && kind === "vector_in") {
-          const missing = selectedLayers.find((layer) => !layer.geojson);
-          if (missing) {
-            setError(
-              t("processing.whitebox.layerMissingGeoJson", {
-                layer: missing.name,
-                label: parameterLabelText,
-              }),
-            );
-            setRunningLocal(false);
-            return;
-          }
-          layerInputs[param.name] = selectedLayers.map((layer) => ({
-            name: layer.name,
-            kind,
-            geojson: layer.geojson,
-          }));
-        } else if (runLocal) {
-          const inputs: WhiteboxLayerInput[] = [];
-          for (const layer of selectedLayers) {
-            const bytes = await fetchLayerBytes(layer);
-            if (!bytes) {
-              setError(
-                t("processing.whitebox.layerNotFetchable", {
-                  layer: layer.name,
-                  label: parameterLabelText,
-                }),
-              );
-              setRunningLocal(false);
-              return;
-            }
-            inputs.push({ name: layer.name, kind, bytes });
-          }
-          layerInputs[param.name] = inputs;
-        } else if (kind === "vector_in" && selectedLayers.every((layer) => layer.geojson)) {
-          layerInputs[param.name] = selectedLayers.map((layer) => ({
-            name: layer.name,
-            kind,
-            geojson: layer.geojson,
-          }));
-        } else {
-          // Whitebox list arguments use comma-delimited paths. The browser
-          // runner builds the same form after staging each selected dataset.
-          const paths = selectedLayers.map(layerPath);
-          const missingIndex = paths.findIndex((path) => !path);
-          if (missingIndex >= 0) {
-            setError(
-              t("processing.whitebox.layerMissingPath", {
-                layer: selectedLayers[missingIndex].name,
-                label: parameterLabelText,
-              }),
-            );
-            setRunningLocal(false);
-            return;
-          }
-          parameters[param.name] = paths.join(",");
-        }
-      } else if (typeof value === "string" && value.startsWith(LAYER_TOKEN_PREFIX)) {
-        const layerId = value.slice(LAYER_TOKEN_PREFIX.length);
-        const layer = layers.find((item) => item.id === layerId);
-        if (!layer) continue;
-        const kind = parameterKind(param);
-        if (layer.geojson && kind === "vector_in") {
-          layerInputs[param.name] = {
-            name: layer.name,
-            kind,
-            geojson: layer.geojson,
-          };
-        } else if (runLocal && (kind === "raster_in" || kind === "lidar_in")) {
-          // WASM runs in-browser: pass the layer's actual bytes (fetched here),
-          // not a path. When the bytes are not fetchable in the browser (e.g. a
-          // desktop file path), fall back to the path: the WASM runner tries to
-          // fetch it as a URL and, failing that, surfaces a clear "data is not
-          // fetchable here; turn off Run locally" error (see wasm-client.ts).
-          const bytes = await fetchLayerBytes(layer);
-          if (bytes) {
-            layerInputs[param.name] = { name: layer.name, kind, bytes };
-          } else {
-            parameters[param.name] = layerPath(layer);
-          }
-        } else {
-          parameters[param.name] = layerPath(layer);
-        }
-      } else {
-        parameters[param.name] = value;
-      }
+    const resolved = await resolveRunInputs({
+      tool: selectedTool,
+      values,
+      layers,
+      browsedInputs: new Map(browsedInputsRef.current),
+      runLocal,
+      t,
+      parameterLabel: (param) => translateWhiteboxParameterLabel(t, selectedTool.id, param),
+      fetchLayerBytes,
+    });
+    if (!resolved.ok) {
+      setError(resolved.error);
+      setRunningLocal(false);
+      return;
     }
+    const { parameters, layerInputs } = resolved;
 
     // In WASM mode a vector_out param carries the chosen output format (its value
     // is otherwise unused by the runner). A CRS-preserving format keeps a
     // reprojection's target CRS and comes back as a downloadable file.
-    const vectorOut = runLocal
-      ? (selectedTool.params ?? []).find((item) => parameterKind(item) === "vector_out")
-      : undefined;
-    const vectorOutValue = vectorOut ? values[vectorOut.name] : undefined;
-    // Validate against the known formats: a stale sidecar-mode output path left
+    // Validated against the known formats: a stale sidecar-mode output path left
     // in the form state (the form only resets on tool change) would otherwise be
     // cast to a bogus format and produce a `..._output.undefined` filename.
-    const vectorOutputFormat = normalizeVectorOutputFormat(vectorOutValue);
+    const vectorOutputFormat = runVectorOutputFormat(selectedTool, values, runLocal);
 
     // Track the run for the Processing History panel (#1292). The raw form
     // values (with `layer:` tokens) are recorded, not the resolved request
@@ -1691,12 +1387,11 @@ export function ProcessingDialog({
       if (runLocal && nextJob.status === "succeeded") {
         runParametersByJobRef.current.set(nextJob.id, parameters);
       }
+      jobGenerationByJobRef.current.set(nextJob.id, dispatchLoadCount);
       historyTrackersRef.current.set(nextJob.id, tracker);
-      while (historyTrackersRef.current.size > MAX_TRACKED_HISTORY_JOBS) {
-        const oldest = historyTrackersRef.current.keys().next().value;
-        if (oldest === undefined) break;
-        historyTrackersRef.current.delete(oldest);
-      }
+      evictOldestEntries(historyTrackersRef.current, MAX_TRACKED_HISTORY_JOBS, (oldest) =>
+        jobGenerationByJobRef.current.delete(oldest),
+      );
       setJob(nextJob);
     } catch (err) {
       const message = err instanceof Error ? err.message : t("processing.whitebox.errorStartTool");
@@ -1735,7 +1430,19 @@ export function ProcessingDialog({
     }
   };
 
-  const running = runningLocal || Boolean(job && RUNNING_JOB_STATUSES.has(job.status));
+  const running = runningLocal || isJobRunning(job);
+  // Only a sidecar job can be pending or running: WASM runs arrive terminal.
+  // Cancelling kills the tool on the sidecar; polling then picks up the
+  // job's `cancelled` state.
+  const sidecarJobRunning = !runningLocal && isJobRunning(job);
+  const { cancellingJob, cancelSidecarJob } = useSidecarJobCancellation(
+    job,
+    sidecarJobRunning,
+    cancelWhiteboxJob,
+    setJob,
+    setError,
+    t("processing.whitebox.errorCancel"),
+  );
   const serverBusy = loadingTools || startingServer || stoppingServer;
 
   if (!open) return null;
@@ -1815,14 +1522,7 @@ export function ProcessingDialog({
               {t("processing.whitebox.toolbox")}
             </h2>
             <p className="mt-1.5 text-sm text-muted-foreground">
-              {runtimeAvailable === null
-                ? t("processing.whitebox.checkingRuntime")
-                : runtimeAvailable
-                  ? runtimeMessage ||
-                    t("processing.whitebox.toolsAvailable", {
-                      count: tools.length,
-                    })
-                  : runtimeMessage || t("processing.whitebox.runtimeUnavailable")}
+              {runtimeStatusText(t, runtimeAvailable, runtimeMessage, tools.length)}
             </p>
           </div>
         </div>
@@ -2081,17 +1781,25 @@ export function ProcessingDialog({
                   ? t("processing.whitebox.copyLinkCopied")
                   : t("processing.whitebox.copyLink")}
               </Button>
+              {sidecarJobRunning ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void cancelSidecarJob()}
+                  disabled={cancellingJob}
+                >
+                  {t("common.cancel")}
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 onClick={runSelectedTool}
-                disabled={
-                  !selectedTool ||
-                  selectedTool.locked ||
-                  running ||
-                  (selectedTool.id !== DOWNLOAD_GLOBAL_DEM_TOOL_ID &&
-                    !runLocal &&
-                    runtimeAvailable !== true)
-                }
+                disabled={isRunDisabled({
+                  tool: selectedTool,
+                  running,
+                  runLocal,
+                  runtimeAvailable,
+                })}
               >
                 {running ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -2185,7 +1893,9 @@ export function ProcessingDialog({
                       // tool id React reuses the field instance across a tool
                       // switch, carrying a distance field's unit and typed draft
                       // over to a parameter that reset to another tool's default.
-                      key={`${selectedTool.id}:${param.name}`}
+                      // History restores also reset those local drafts, while
+                      // ordinary input-layer changes retain their metric units.
+                      key={`${selectedTool.id}:${param.name}:${historyRestoreRevision}`}
                       param={param}
                       layers={layers}
                       toolId={selectedTool.id}
@@ -2260,6 +1970,7 @@ export function ProcessingDialog({
       <div
         role="presentation"
         data-processing-resize-handle=""
+        // eslint-disable-next-line local/no-physical-tailwind -- the resize grip's drag math and cursor are physical (bottom-right).
         className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none"
         onPointerDown={onResizeStart}
         onPointerMove={onResizeMove}
@@ -2288,7 +1999,7 @@ function JobOutputPanel({ job }: { job: WhiteboxJob }) {
       <p className={cn("flex items-center gap-2 text-sm font-medium", jobStatusTone(job))}>
         {job.status === "succeeded" ? (
           <CheckCircle2 className="h-4 w-4" />
-        ) : job.status === "failed" ? (
+        ) : job.status === "cancelled" ? null : job.status === "failed" ? (
           <AlertCircle className="h-4 w-4" />
         ) : (
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -2364,7 +2075,7 @@ function ExtentParameterGroup({
   // than the first field's: a tool that mixed an int boundary with double ones
   // would otherwise have three of them labelled by the wrong kind. (Each field
   // still takes its own stepper behavior from its own kind, below.)
-  const kindLabel = [...new Set(params.map((param) => parameterKind(param)))].sort().join(", ");
+  const kindLabel = extentKindLabel(params);
 
   return (
     // A labelled group rather than one field's label: the four boxes each carry
@@ -2730,13 +2441,7 @@ interface NumberStepperInputProps {
 
 function NumberStepperInput({ id, integer, onChange, value }: NumberStepperInputProps) {
   const { t } = useTranslation();
-  const step = integer ? 1 : 0.1;
-  const updateByStep = (direction: 1 | -1) => {
-    const parsed = Number.parseFloat(value);
-    const base = Number.isFinite(parsed) ? parsed : 0;
-    const next = base + direction * step;
-    onChange(integer ? String(Math.trunc(next)) : Number(next.toFixed(6)).toString());
-  };
+  const updateByStep = (direction: 1 | -1) => onChange(stepNumberValue(value, integer, direction));
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] overflow-hidden rounded-md border border-input bg-background shadow-xs focus-within:border-2 focus-within:border-ring">
@@ -2796,7 +2501,6 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
   // out of the parameter so the stored value stays in the tool's own unit.
   const [draft, setDraft] = useState("");
 
-  const degrees = parseDistanceInput(value);
   // What the metric box currently holds: a number to convert, or null when it is
   // empty or not a complete number (so nothing was converted).
   const draftValue = parseDistanceInput(draft);
@@ -2823,24 +2527,15 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
     // Run still submitted the old text. Formatted to the same digits the stored
     // degrees were written with, so a precisely typed value survives a trip
     // through Degrees and back rather than coming back rounded.
-    setDraft(
-      degrees === null ? value : formatDistanceValue(degreesToUnit(degrees, next, latitude), 8),
-    );
+    setDraft(distanceDraftForUnit(value, next, latitude));
   };
 
   const changeDraft = (text: string) => {
     setDraft(text);
-    const parsed = parseDistanceInput(text);
     // Text that is not a complete number is stored verbatim rather than
     // converted, so a half-typed or malformed value fails at the tool instead of
     // being silently reinterpreted as a different distance.
-    push(
-      parsed === null
-        ? text.trim() === ""
-          ? ""
-          : text
-        : formatDistanceValue(unitToDegrees(parsed, unit, latitude), 8),
-    );
+    push(distanceDraftToStored(text, unit, latitude));
   };
 
   // Reconcile the field against changes it did not make itself. Both cases live
@@ -2869,9 +2564,8 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
     // note would show the new latitude beside a value converted at the old one
     // and Run would send the stale degrees.
     if (!latitudeChanged || unit === "degrees") return;
-    const parsed = parseDistanceInput(draft);
-    if (parsed === null) return;
-    const next = formatDistanceValue(unitToDegrees(parsed, unit, latitude), 8);
+    if (parseDistanceInput(draft) === null) return;
+    const next = distanceDraftToStored(draft, unit, latitude);
     lastPushed.current = next;
     onChange(next);
   }, [draft, latitude, onChange, unit, value]);
@@ -2879,15 +2573,8 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
   // A hemisphere suffix only means something away from the equator, and a
   // worldwide layer's combined extent lands on 0.0 often enough for "0.0°N" to
   // read as a mistake.
-  const rounded = Math.abs(latitude).toFixed(1);
-  const latitudeLabel = t(
-    rounded === "0.0"
-      ? "processing.distance.equator"
-      : latitude > 0
-        ? "processing.distance.north"
-        : "processing.distance.south",
-    { latitude: rounded },
-  );
+  const latitudeKey = latitudeLabelKey(latitude);
+  const latitudeLabel = t(latitudeKey.key, { latitude: latitudeKey.latitude });
 
   // Only claim a conversion when one actually happened. Text the field could not
   // read went through untouched, so saying it was "converted at 44.0°N" would

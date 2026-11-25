@@ -11,6 +11,16 @@ export function browserSafeFileName(path: string): string {
   return localFileName(path) || "project.geolibre";
 }
 
+/** Whether the source is one of Android's durable document-picker copies. */
+export function isImportedDocumentCopyPath(path: string | undefined): boolean {
+  return (
+    typeof path === "string" &&
+    /\/files\/picked-documents\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/data\/[^/]+$/i.test(
+      path,
+    )
+  );
+}
+
 /** Project extension handled as a workspace switch by drag-and-drop. */
 export function isGeoLibreProjectFileName(path: string): boolean {
   const name = browserSafeFileName(path).toLowerCase();
@@ -22,11 +32,14 @@ export function isGeoLibreProjectFileName(path: string): boolean {
  * limited to `.geolibre` / `.geolibre.json`, so a name such as
  * `map.geolibre_bis.json` would save fine and then refuse to reopen. A trailing
  * `.json` is replaced by `.geolibre.json`; any other name gets it appended.
+ * Android document URIs identify provider records, not filenames. Preserve
+ * them verbatim so the save picker's write grant remains valid.
  *
  * @param path - The path chosen in the save dialog.
- * @returns The path, ending in a recognized GeoLibre project extension.
+ * @returns The unchanged document URI or a path with a project extension.
  */
 export function ensureGeoLibreProjectExtension(path: string): string {
+  if (/^content:\/\//i.test(path)) return path;
   if (isGeoLibreProjectFileName(path)) return path;
   return `${path.replace(/\.json$/i, "")}.geolibre.json`;
 }

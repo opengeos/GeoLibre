@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from .db_common import (
     allowlist_from_env,
+    check_optimistic_concurrency,
     db_max_features,
     feature_limit_error,
     host_port_allowed,
@@ -33,8 +34,11 @@ from .db_common import (
     normalize_host,
     plan_feature_diff,
     require_features,
+    row_state_hash,
     scrub_secrets,
+    validate_bbox,
 )
+from .tenant import get_current_tenant
 
 router = APIRouter(prefix="/mssql", tags=["mssql"])
 logger = logging.getLogger(__name__)
@@ -220,6 +224,8 @@ class MssqlReadRequest(BaseModel):
     table: str
     geometry_column: Optional[str] = None
     excluded_fields: list[str] = []
+    # Optional WGS84 bounding box [min_x, min_y, max_x, max_y] for spatial filtering.
+    bbox: Optional[list[float]] = None
 
 
 class MssqlChangedColumns(BaseModel):
@@ -239,6 +245,7 @@ class MssqlWriteRequest(BaseModel):
     capabilities: Optional[dict[str, bool]] = None
     unchanged_geometry_keys: Optional[list] = None
     changed_columns: Optional[list[MssqlChangedColumns]] = None
+    expected_row_hashes: Optional[dict[str, str]] = None
 
 
 def _build_connection_string(
@@ -289,6 +296,7 @@ class _Session:
     host: str = ""
     instance: Optional[str] = None
     port: int = _DEFAULT_PORT
+    tenant_id: Optional[str] = None
 
     def sensitive(self) -> tuple[str, ...]:
         """Session secrets plus the most recently fetched access token."""
@@ -443,13 +451,14 @@ def _connection(session: _Session) -> Iterator[Any]:
 
 def _get_session(session_id: str) -> _Session:
     now = time.monotonic()
+    active_tenant = get_current_tenant()
     with _SESSIONS_LOCK:
         for key in [
             key for key, value in _SESSIONS.items() if now - value.last_used > _SESSION_IDLE_S
         ]:
             del _SESSIONS[key]
         session = _SESSIONS.get(session_id)
-        if session is None:
+        if session is None or session.tenant_id != active_tenant:
             raise HTTPException(410, "Unknown or expired SQL Server session; reconnect.")
         session.last_used = now
         return session
@@ -556,6 +565,7 @@ def mssql_connect(request: MssqlConnectRequest) -> dict[str, str]:
         host=host,
         instance=instance,
         port=request.port,
+        tenant_id=get_current_tenant(),
     )
     # The token is fetched once, inside the probe below: _open_connection signs
     # in and surfaces any credential error with the same scrubbed message.
@@ -579,8 +589,11 @@ def mssql_connect(request: MssqlConnectRequest) -> dict[str, str]:
 
 @router.post("/disconnect")
 def mssql_disconnect(request: MssqlSessionRequest) -> dict[str, bool]:
+    active_tenant = get_current_tenant()
     with _SESSIONS_LOCK:
-        _SESSIONS.pop(request.session_id, None)
+        existing = _SESSIONS.get(request.session_id)
+        if existing is not None and existing.tenant_id == active_tenant:
+            _SESSIONS.pop(request.session_id, None)
     return {"ok": True}
 
 
@@ -892,43 +905,80 @@ def _geojson_to_wkb(geometry: dict, srid: int, column_type: str) -> bytes:
         raise HTTPException(400, f"Could not encode SQL Server geometry: {exc}") from exc
 
 
+def _bbox_envelope_wkt(
+    bbox: tuple[float, float, float, float], srid: int, column_type: str
+) -> tuple[str, int]:
+    """Build a counter-clockwise WKT polygon envelope and SRID for SQL Server."""
+    min_x, min_y, max_x, max_y = bbox
+    ring = [
+        (min_x, min_y),
+        (max_x, min_y),
+        (max_x, max_y),
+        (min_x, max_y),
+        (min_x, min_y),
+    ]
+    target_srid = srid
+    if target_srid not in (0, 4326):
+        transformer = _transformer(4326, target_srid)
+        with _TRANSFORM_LOCK:
+            ring = [transformer.transform(x, y) for x, y in ring]
+    coords = ", ".join(f"{x} {y}" for x, y in ring)
+    return f"POLYGON(({coords}))", target_srid
+
+
 @router.post("/read")
 def mssql_read(request: MssqlReadRequest) -> dict[str, Any]:
     session = _get_session(request.session_id)
     limit = db_max_features()
+    bbox = validate_bbox(request.bbox)
     try:
         with _connection(session) as conn:
             cur = conn.cursor()
             info = _table_info(cur, request.schema_name, request.table, request.geometry_column)
             pk = info["primary_key"]
-            read_columns = [
-                c for c in info["columns"] if c not in request.excluded_fields or c == pk
-            ]
+            # Always fetch all table columns so row_state_hash matches the write
+            # endpoint even when excluded_fields omits columns from the response.
+            read_columns = list(info["columns"])
             selected_columns = (
                 (", " + ", ".join(_q(c) for c in read_columns)) if read_columns else ""
             )
             geom = _q(info["geometry_column"])
+            params: list[Any] = [limit + 1]
+            where_clause = ""
+            if bbox is not None:
+                envelope_wkt, envelope_srid = _bbox_envelope_wkt(
+                    bbox, info["srid"], info["column_type"]
+                )
+                spatial_type = "geography" if info["column_type"] == "geography" else "geometry"
+                where_clause = (
+                    f" WHERE {geom}.STIntersects({spatial_type}::STGeomFromText(?, ?)) = 1"
+                )
+                params.extend((envelope_wkt, envelope_srid))
             sql = (
                 f"SELECT TOP (?) {geom}.STAsBinary(), {geom}.STSrid"
                 f"{selected_columns} FROM {_q(request.schema_name)}.{_q(request.table)}"
+                f"{where_clause}"
             )
-            cur.execute(sql, (limit + 1,))
+            cur.execute(sql, tuple(params))
             rows = cur.fetchall()
         if len(rows) > limit:
             raise feature_limit_error(limit, "editable layers")
         features = []
+        row_hashes: dict[str, str] = {}
         for row in rows:
             raw = {col: json_safe(val) for col, val in zip(read_columns, row[2:], strict=True)}
             props = {k: v for k, v in raw.items() if k not in request.excluded_fields}
+            geometry = _wkb_to_geojson(
+                row[0], int(row[1]) if row[1] is not None else 0, info["column_type"]
+            )
             feature = {
                 "type": "Feature",
-                "geometry": _wkb_to_geojson(
-                    row[0], int(row[1]) if row[1] is not None else 0, info["column_type"]
-                ),
+                "geometry": geometry,
                 "properties": props,
             }
             if pk is not None and raw.get(pk) is not None:
                 feature["id"] = raw[pk]
+                row_hashes[str(raw[pk])] = row_state_hash(geometry, raw)
             features.append(feature)
         return {
             "geojson": {"type": "FeatureCollection", "features": features},
@@ -942,6 +992,7 @@ def mssql_read(request: MssqlReadRequest) -> dict[str, Any]:
             "mixed_geometry": info.get("mixed_geometry", False),
             "mixed_srid": info.get("mixed_srid", False),
             "feature_count": len(features),
+            "row_hashes": row_hashes,
         }
     except HTTPException:
         raise
@@ -986,10 +1037,11 @@ def mssql_write(request: MssqlWriteRequest) -> dict[str, Any]:
             if cur.fetchone()[0] > limit:
                 raise feature_limit_error(limit, "editable write-back")
             cols = info["columns"]
+            lock_hint = " WITH (UPDLOCK, HOLDLOCK)" if request.expected_row_hashes else ""
             query = (
                 f"SELECT {_q(pk)}, {_q(info['geometry_column'])}.STAsBinary(), "
                 f"{_q(info['geometry_column'])}.STSrid, "
-                f"{', '.join(_q(column) for column in cols)} FROM {table_sql}"
+                f"{', '.join(_q(column) for column in cols)} FROM {table_sql}{lock_hint}"
             )
             cur.execute(query)
             existing = {}
@@ -1017,6 +1069,26 @@ def mssql_write(request: MssqlWriteRequest) -> dict[str, Any]:
                     if request.changed_columns is not None
                     else None
                 ),
+            )
+            submitted_missing_expected_keys = []
+            if request.expected_row_hashes:
+                for feature in features:
+                    props = feature.get("properties") or {}
+                    fkey = props.get(pk)
+                    if fkey is None:
+                        fkey = feature.get("id")
+                    if (
+                        fkey is not None
+                        and fkey not in existing
+                        and str(fkey) in request.expected_row_hashes
+                    ):
+                        submitted_missing_expected_keys.append(fkey)
+            check_optimistic_concurrency(
+                existing,
+                request.expected_row_hashes,
+                [change.key for change in diff.updates]
+                + list(diff.deletes)
+                + submitted_missing_expected_keys,
             )
             # Only updates that actually write geometry, and inserts, can store
             # coordinates under an unsafe SRID; the UPDATE below emits the

@@ -119,6 +119,7 @@ export function isAllowedTilesUpstreamUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:") return false;
+    if (parsed.username || parsed.password) return false;
     const candidate = `${parsed.origin}${parsed.pathname}`;
     return TILES_ALLOWED_URL_PREFIXES.some((prefix) =>
       prefix.endsWith("/") ? candidate.startsWith(prefix) : candidate === prefix,
@@ -153,6 +154,7 @@ export async function fetchAllowlistedUpstream(
     if (!location) {
       return response;
     }
+    await response.body?.cancel().catch(() => {});
     const next = new URL(location, target).toString();
     if (!isAllowedTilesUpstreamUrl(next)) {
       throw new Error(`Refused redirect to non-allowlisted upstream: ${next}`);

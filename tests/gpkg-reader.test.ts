@@ -17,7 +17,7 @@ let SQL: SqlJsStatic;
 
 before(async () => {
   const wasmPath = require.resolve("sql.js/dist/sql-wasm.wasm");
-  SQL = await initSqlJs({ locateFile: () => wasmPath });
+  SQL = await initSqlJs({ locateFile: () => wasmPath, useOldExtensionFunctions: true });
 });
 
 /** Wrap WKB in a minimal little-endian GeoPackage geometry blob (no envelope). */

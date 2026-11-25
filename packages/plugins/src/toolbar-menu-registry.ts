@@ -90,6 +90,18 @@ export function unregisterToolbarMenu(id: string): void {
   emit();
 }
 
+/** Remove every toolbar menu owned by `ownerPluginId`. */
+export function unregisterToolbarMenusByOwner(ownerPluginId: string): void {
+  let removed = false;
+  for (const [id, entry] of Array.from(registry.entries())) {
+    if (entry.ownerPluginId === ownerPluginId) {
+      registry.delete(id);
+      removed = true;
+    }
+  }
+  if (removed) emit();
+}
+
 /** All registered toolbar menus, in registration order. */
 export function listToolbarMenus(): GeoLibreToolbarMenu[] {
   return [...registry.values()].map((entry) => entry.menu);

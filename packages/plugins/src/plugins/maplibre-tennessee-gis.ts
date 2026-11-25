@@ -1,3 +1,6 @@
+import { TENNESSEE_GIS_PLUGIN_ID } from "../plugin-ids";
+export { TENNESSEE_GIS_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-metadata";
 import type { GeoLibrePlugin } from "../types";
 import { ARCGIS_HUB_SEARCH_TYPES, fetchArcGisHubSiteGroups } from "./arcgis-hub-api";
 import {
@@ -6,7 +9,6 @@ import {
   type ArcGisHubLabels,
 } from "./maplibre-arcgis-hub";
 
-export const TENNESSEE_GIS_PLUGIN_ID = "geolibre-tennessee-gis";
 /** The State of Tennessee's downloadable GIS data portal, an ArcGIS Hub site. */
 export const TENNESSEE_GIS_PORTAL_URL = "https://geodata.tn.gov";
 /** The portal item behind geodata.tn.gov; its data lists the catalog groups. */
@@ -63,7 +65,7 @@ async function resolveTennesseeGroups(signal: AbortSignal): Promise<readonly str
 
 const tennesseeGis = createArcGisHubPlugin({
   id: TENNESSEE_GIS_PLUGIN_ID,
-  name: "Tennessee GIS",
+  name: builtInPluginMetadata("geolibre-tennessee-gis").name,
   defaultLabels: DEFAULT_TENNESSEE_GIS_LABELS,
   pageUrl: TENNESSEE_GIS_PORTAL_URL,
   types: TENNESSEE_GIS_TYPES,
@@ -75,7 +77,10 @@ const tennesseeGis = createArcGisHubPlugin({
   filenameFallback: "tennessee-gis-data",
 });
 
-export const maplibreTennesseeGisPlugin: GeoLibrePlugin = tennesseeGis.plugin;
+export const maplibreTennesseeGisPlugin: GeoLibrePlugin = defineBuiltInPlugin(
+  "geolibre-tennessee-gis",
+  tennesseeGis.plugin,
+);
 export const setTennesseeGisLabels = tennesseeGis.setLabels;
 
 export default maplibreTennesseeGisPlugin;

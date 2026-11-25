@@ -288,3 +288,16 @@ export function toRfc7946Bbox(box: readonly [number, number, number, number]): L
   if (east > 180 && east - west < 360) return [west, south, east - 360, north];
   return [west, south, east, north];
 }
+
+/**
+ * Wrap a longitude into the geographic range.
+ *
+ * @param lng - A longitude, possibly from a repeated world copy (e.g. 181).
+ * @returns The equivalent longitude in [-180, 180).
+ */
+export function wrapLongitude(lng: number): number {
+  // Leave an in-range value untouched: the arithmetic below would nudge it by
+  // a floating-point ulp, and the popup echoes the coordinate back.
+  if (lng >= -180 && lng < 180) return lng;
+  return ((((lng + 180) % 360) + 360) % 360) - 180;
+}

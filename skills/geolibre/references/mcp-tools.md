@@ -22,6 +22,10 @@ Pick by what the data **is**:
 | Satellite or aerial imagery with no URL in hand (Sentinel-2, Landsat, NAIP, a DEM) | `add_planetary_computer_layer` | Microsoft Planetary Computer by collection id: one STAC `item`, or a `datetime` mosaic. No credentials. MapLibre renderer. |
 | A PMTiles archive, or a vector tile service | `add_tiles_layer` | `kind="pmtiles"` (with `tile_type`) or `kind="vector-tiles"`. |
 | A WMS or WMTS endpoint | `add_ogc_layer` | `service="wms"` or `"wmts"`. |
+| A WFS feature type | `add_wfs_layer` | Fetched by the app each time the project opens; the endpoint must return GeoJSON. |
+| An ArcGIS REST MapServer, ImageServer, or FeatureServer layer | `add_arcgis_layer` | `service="map"`, `"image"`, or `"feature"`. No tokens. A VectorTileServer goes to `add_tiles_layer`. |
+| A Zarr data cube (climate, ocean, imagery stacks) | `add_zarr_layer` | One `variable`, sliced with `selector`. Not Icechunk or local stores. |
+| A georeferenced video | `add_video_layer` | `https://` URLs plus four corner coordinates. |
 | A LAS/LAZ/COPC/EPT point cloud | `add_lidar_layer` | COPC and EPT stream by level of detail; the app's Point Cloud Annotation plugin can label it. |
 | An ICESat-2 (ATL06, ATL08) or GEDI (L2A, L2B, L4A) `.h5` granule | `add_spaceborne_lidar_layer` | Local file in the workspace; needs `geolibre[spaceborne]`. `bbox` for a regional subset of a GEDI orbit. |
 | An OGC 3D Tiles tileset or an ArcGIS I3S scene layer | `add_3d_tiles_layer` | `altitude_offset` to sit it on the ground; `ion_asset_id` instead of `url` for a Cesium Ion tileset; a `.../SceneServer/layers/<n>` URL is added as a scene layer. |
@@ -89,6 +93,15 @@ add_planetary_computer_layer(path, collection, item=None, name=None, datetime=No
 add_ogc_layer(path, name, service, endpoint, layers=None, styles="",
               image_format="image/png", transparent=True, tile_size=256,
               version="1.1.1", crs=None, bounds=None, index=None)
+add_wfs_layer(path, name, endpoint, type_name, version="2.0.0",
+              output_format="application/json", srs_name="EPSG:4326",
+              max_features=1000, index=None)
+add_arcgis_layer(path, name, url, service="map", sublayers=None,
+                 rendering_rule=None, max_features=None, bounds=None,
+                 attribution=None, index=None)
+add_zarr_layer(path, name, url, variable, selector=None, clim=None,
+               colormap=None, bounds=None, crs=None, index=None)
+add_video_layer(path, name, urls, coordinates, index=None)
 add_tiles_layer(path, name, url, kind="pmtiles", tile_type="vector",
                 source_layers=None, style=None, index=None)
 add_lidar_layer(path, name, url, index=None)
@@ -141,17 +154,30 @@ add_cesium_kml_layer(path, name, url=None, data=None, index=None)
   projected `EPSG:<code>` such as `EPSG:25832`: the desktop app redraws or
   warps those tiles into Web Mercator, while the web build and `export_html`
   pages cannot show them.
+- `add_wfs_layer` stores only the GetFeature request; the app downloads the
+  features when the project opens, so nothing is inlined.
+- `add_arcgis_layer`: `map` and `image` draw raster tiles from the service's
+  `/export` or `/exportImage` endpoint (`sublayers` like `"0,2"` for a
+  MapServer, `rendering_rule` such as `{"rasterFunction": "Hillshade"}` for
+  an ImageServer). `feature` takes a layer URL ending in `/<id>` and loads the
+  features in view on the MapLibre renderer. Pass `bounds` so zoom to layer
+  works.
+- `add_zarr_layer`: `selector` fixes the non-spatial dimensions
+  (`{"time": 0}`), `clim` is the `[min, max]` color range. The app re-adds
+  the layer through its Zarr control on open and gives it a new id.
 
 ### Editing
 
 ```text
 update_layer(path, layer, name=None, visible=None, opacity=None, index=None)
 remove_layer(path, layer)
+duplicate_layer(path, layer, name=None, index=None)
 style_layer(path, layer, style)
 set_layer_popup(path, layer, fields=None, click=None, title=None,
                 title_expression=None, body_expression=None,
                 show_feature_id=None, max_width=None, image_height=None,
                 tooltip=None, merge=False)
+clear_popup(path, layer)
 set_layer_metadata(path, layer, title=None, abstract=None, keywords=None,
                    license=None, attribution=None, contact=None, lineage=None,
                    temporal_start=None, temporal_end=None, links=None,
@@ -280,10 +306,35 @@ remove_bookmark(path, bookmark)
   `bookmark` is a bookmark id, name, or 0-based index. `describe_project` lists
   them.
 
+### Layer groups, dashboards, and print layout
+
+```text
+add_layer_group(path, name, layers=None, parent=None, collapsed=False,
+                visible=True, opacity=1.0)
+set_layer_group(path, layers, group=None)
+remove_layer_group(path, group)
+add_dashboard_widget(path, layer, widget_type, title=None, options=None)
+remove_dashboard_widget(path, widget)
+set_dashboard_columns(path, columns)
+set_print_layout(path, settings, reset=False)
+```
+
+- Layer groups are folders in the Layers panel. A group's `visible` and
+  `opacity` apply on top of each member's own. `set_layer_group` with no
+  `group` ungroups; `remove_layer_group` keeps the layers.
+- Dashboard widgets chart a vector layer's attributes: `widget_type` is
+  `histogram`, `scatter`, `bar`, `line`, `box`, `pie`, `indicator`,
+  `selector`, or `list`, and `options` carries `field`, `x_field`/`y_field`,
+  `category`/`aggregation`/`value_field`, and the type-specific settings.
+- `set_print_layout` changes only the `settings` given (`title`,
+  `paper_size`, `orientation`, `show_legend`, `table_layer_id`, ...); the
+  app fills the rest from its defaults.
+
 ### Framing and decoration
 
 ```text
 set_renderer(path, renderer, pane_id=None)
+set_projection(path, projection)
 set_map_layout(path, rows, cols, view_kinds=None, sync_view=True)
 set_view(path, center=None, zoom=None, bearing=None, pitch=None, bbox=None)
 set_basemap(path, basemap)
@@ -324,7 +375,7 @@ Positions are `top-left`, `top-right`, `bottom-left`, `bottom-right`.
 show_map(path)
 get_map_preview(path)
 approve_map_origin(preview_id, origin)
-fetch_map_resource(preview_id, grant, url)
+fetch_map_resource(preview_id, grant, url, offset=None, length=None)
 close_map_preview(preview_id)
 ```
 
@@ -361,7 +412,7 @@ previews at 64; closing one frees a slot, and abandoned sessions expire.
 
 ```text
 export_html(path, out_path, title="GeoLibre Map", width="100%", height="800px",
-            app_url=None, overwrite=False)
+            app_url=None, layout=None, theme=None, overwrite=False)
 ```
 
 Writes a standalone page that embeds the hosted GeoLibre viewer and injects the
@@ -371,9 +422,10 @@ boundary — see the SKILL.
 ## Live desktop map
 
 These tools do not take a `path`. They move the map open in GeoLibre Desktop.
-`live_status()` first: if `connected` is false, the user opens
-Processing → Jupyter Notebook once. A live edit persists only after the user
-saves in the app. Layer ids come from `live_list_layers()`, not from a
+`live_status()` first: if `connected` is false, the user turns on
+Settings → Startup → "Allow AI agents to drive the map" in GeoLibre Desktop
+(or opens Processing → Jupyter Notebook once). A live edit persists only
+after the user saves in the app. Layer ids come from `live_list_layers()`, not from a
 project file.
 
 ```text
@@ -387,6 +439,9 @@ live_fit_bounds(bounds)
 live_zoom_to_layer(layer_id)
 live_set_basemap(basemap)
 live_add_geojson(data, name="GeoJSON", style=None)
+live_add_tile_layer(url, name="Tile layer", options=None)
+live_add_cog(url, name="COG", options=None)
+live_add_raster(source, name=None, options=None)
 live_add_marker(lng, lat, name="Marker", properties=None, style=None)
 live_add_markers(points, name="Markers", style=None)
 live_get_layer_features(layer_id)
@@ -399,12 +454,18 @@ live_set_control_visible(control, visible=True, options=None)
 live_set_visibility(layer_id, visible)
 live_set_opacity(layer_id, opacity)
 live_set_style(layer_id, style)
+live_set_labels(layer_id, field=None, expression=None, enabled=None,
+                placement=None, size=None, color=None, halo_color=None,
+                halo_width=None, min_zoom=None, max_zoom=None,
+                allow_overlap=None, anchor=None, options=None)
+live_set_filter(layer_id, expression=None)
+live_set_renderer(renderer)
 live_remove_layer(layer_id)
 live_list_algorithms(query=None)
-live_run_algorithm(algorithm_id, parameters=None)
+live_run_algorithm(algorithm_id, parameters=None, timeout_seconds=None)
 live_list_whitebox_tools(query=None)
-live_run_whitebox_tool(tool_id, parameters=None)
-live_run_model_builder(graph)
+live_run_whitebox_tool(tool_id, parameters=None, timeout_seconds=None)
+live_run_model_builder(graph, timeout_seconds=None)
 live_to_image(out_path=None, overwrite=False)
 ```
 
@@ -413,10 +474,11 @@ Processing runs in the app, so it is live-only: there is no file tool for it.
 and `parameters`; `live_run_algorithm` and `live_run_whitebox_tool` run one on
 the open map, add its result layers, and return their ids.
 `live_run_model_builder` executes a serialized Model Builder graph (`nodes` and
-`edges`) in one call. Layer parameters take ids from `live_list_layers()`. The
-relay waits about five seconds: a longer run keeps going in the app and the
-call reports that it did not finish, so check `live_list_layers()` before
-running it again.
+`edges`) in one call. Layer parameters take ids from `live_list_layers()`.
+A run waits up to 30 minutes for its result (an hour for Model Builder);
+`timeout_seconds` changes that. A run that outlasts the wait keeps going in
+the app and the call reports that it did not finish, so check
+`live_list_layers()` before running it again.
 
 `live_get_layer_features`, `live_get_selected_features`, and
 `live_get_drawn_features` read GeoJSON features from the live store (including

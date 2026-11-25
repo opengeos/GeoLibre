@@ -1,14 +1,13 @@
 import {
   clearDirectionsWaypoints,
   getDirectionsRouteMetrics,
-  DIRECTIONS_PLUGIN_ID,
   getDirectionsWaypointCount,
   isDirectionsRemovalInFlight,
   isDirectionsRouteLoading,
   removeLastDirectionsWaypoint,
-  REVERSE_GEOCODE_PLUGIN_ID,
   subscribeDirectionsState,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/map-mode-state";
+import { DIRECTIONS_PLUGIN_ID, REVERSE_GEOCODE_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import type { MapEngine } from "@geolibre/map";
 import { Clock, MapPin, Navigation, Route, Trash2, Undo2, X } from "lucide-react";
 import { type RefObject, useSyncExternalStore } from "react";

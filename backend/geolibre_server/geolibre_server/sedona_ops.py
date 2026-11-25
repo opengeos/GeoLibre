@@ -115,6 +115,209 @@ def _is_missing(value: Any) -> bool:
     return value is None or (isinstance(value, float) and math.isnan(value))
 
 
+_FORBIDDEN_FILE_TABLE_FUNCTIONS = re.compile(
+    r"\b(?:read_parquet|read_csv|read_json|read_avro|read_arrow|parquet_scan|csv_scan)\s*\(",
+    re.IGNORECASE,
+)
+_ALLOWED_LEADING_KEYWORDS = frozenset({"SELECT", "WITH", "VALUES", "EXPLAIN"})
+
+
+def _strip_sql_comments_and_strings(sql: str) -> tuple[str, bool]:
+    """Return SQL with comments stripped and string literals blanked, plus multi-stmt flag."""
+    out: list[str] = []
+    i = 0
+    n = len(sql)
+    saw_semicolon = False
+    has_trailing_after_semicolon = False
+    while i < n:
+        ch = sql[i]
+        nxt = sql[i + 1] if i + 1 < n else ""
+        # Single-line comment
+        if ch == "-" and nxt == "-":
+            i += 2
+            while i < n and sql[i] != "\n":
+                i += 1
+            out.append(" ")
+            continue
+        # Block comment
+        if ch == "/" and nxt == "*":
+            i += 2
+            depth = 1
+            while i < n and depth > 0:
+                if sql[i] == "/" and i + 1 < n and sql[i + 1] == "*":
+                    depth += 1
+                    i += 2
+                elif sql[i] == "*" and i + 1 < n and sql[i + 1] == "/":
+                    depth -= 1
+                    i += 2
+                else:
+                    i += 1
+            out.append(" ")
+            continue
+        # Single-quoted string literal
+        if ch == "'":
+            if saw_semicolon:
+                has_trailing_after_semicolon = True
+            i += 1
+            while i < n:
+                if sql[i] == "'" and i + 1 < n and sql[i + 1] == "'":
+                    i += 2
+                elif sql[i] == "'":
+                    i += 1
+                    break
+                else:
+                    i += 1
+            out.append("''")
+            continue
+        # Double-quoted or backtick-quoted identifier
+        if ch in {'"', "`"}:
+            quote = ch
+            if saw_semicolon:
+                has_trailing_after_semicolon = True
+            i += 1
+            start = i
+            while i < n:
+                if sql[i] == quote and i + 1 < n and sql[i + 1] == quote:
+                    i += 2
+                elif sql[i] == quote:
+                    end = i
+                    i += 1
+                    break
+                else:
+                    i += 1
+            else:
+                end = n
+            ident = sql[start:end]
+            # Mark path-like quoted identifiers (containing /, \, or .) so
+            # FROM/JOIN checks reject file table references like "/etc/passwd",
+            # `/tmp/private.parquet`, or "data.parquet" while still allowing
+            # ordinary quoted layer names.
+            if "/" in ident or "\\" in ident or "." in ident:
+                out.append('"/"')
+            else:
+                out.append('""')
+            continue
+        if ch == ";":
+            if saw_semicolon:
+                has_trailing_after_semicolon = True
+            saw_semicolon = True
+            out.append(";")
+            i += 1
+            continue
+        if saw_semicolon and not ch.isspace():
+            has_trailing_after_semicolon = True
+        out.append(ch)
+        i += 1
+    return "".join(out), has_trailing_after_semicolon
+
+
+_CLAUSE_END_KEYWORDS = frozenset(
+    {
+        "WHERE",
+        "GROUP",
+        "HAVING",
+        "ORDER",
+        "LIMIT",
+        "OFFSET",
+        "FETCH",
+        "UNION",
+        "INTERSECT",
+        "EXCEPT",
+        "WINDOW",
+        "QUALIFY",
+        "SET",
+        "VALUES",
+        "SELECT",
+        "WITH",
+    }
+)
+
+
+def _has_string_table_reference(stripped_sql: str) -> bool:
+    """Return True if a quoted file-path literal/identifier appears as a table ref in FROM/JOIN."""
+    # Tokenize words (including `$` allowed by DataFusion identifiers), blanked
+    # single-quoted strings (''), path-like quoted identifiers ("/"), commas,
+    # dots (for qualified names like parquet.`/path`), and parentheses.
+    tokens = re.findall(r"''|\"/\"|[A-Za-z_][A-Za-z0-9_$]*|[(),.]", stripped_sql)
+    depth = 0
+    # Maps paren depth -> state of the FROM/JOIN clause active at that depth:
+    # - "expect": expecting a table reference next
+    # - "after_table": just read a table identifier (a following `.` continues it)
+    # - "rest": inside alias or ON/USING clause until `,` or clause end
+    from_depths: dict[int, str] = {}
+    # Depths that contain a query (top-level depth 0 or a parenthesized SELECT),
+    # so function-argument FROM syntax such as TRIM(' ' FROM ' abc ') or
+    # EXTRACT(YEAR FROM '2020-01-01'::date) is not mistaken for a FROM clause.
+    query_depths: set[int] = {0}
+    for tok in tokens:
+        upper = tok.upper()
+        if tok == "(":
+            was_expecting = from_depths.get(depth) == "expect"
+            if depth in from_depths:
+                from_depths[depth] = "rest"
+            depth += 1
+            if was_expecting:
+                # Could be a parenthesized table/join (e.g. FROM ('/etc/passwd'))
+                # or a derived subquery (FROM (SELECT ...)). If SELECT/WITH/VALUES
+                # follows, _CLAUSE_END_KEYWORDS clears this inner depth while
+                # keeping the outer FROM depth active.
+                from_depths[depth] = "expect"
+            continue
+        if tok == ")":
+            from_depths.pop(depth, None)
+            query_depths.discard(depth)
+            depth = max(0, depth - 1)
+            continue
+        if upper == "SELECT":
+            query_depths.add(depth)
+        if upper == "JOIN" or (upper == "FROM" and depth in query_depths):
+            from_depths[depth] = "expect"
+            continue
+        if depth not in from_depths:
+            continue
+        if tok == ",":
+            from_depths[depth] = "expect"
+            continue
+        if tok == ".":
+            if from_depths[depth] == "after_table":
+                from_depths[depth] = "expect"
+            continue
+        if upper in _CLAUSE_END_KEYWORDS:
+            from_depths.pop(depth, None)
+            continue
+        if tok in {"''", '"/"'} and from_depths[depth] == "expect":
+            return True
+        if upper in {"ONLY", "LATERAL"} and from_depths[depth] == "expect":
+            continue
+        from_depths[depth] = "after_table" if from_depths[depth] == "expect" else "rest"
+    return False
+
+
+def _validate_read_only_sql(sql: str) -> None:
+    """Ensure only a single read-only query statement is executed on SedonaDB."""
+    stripped, has_multiple = _strip_sql_comments_and_strings(sql)
+    if has_multiple:
+        raise ValueError("Only a single SQL statement is allowed.")
+    tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", stripped)
+    if not tokens:
+        raise ValueError("A SQL statement is required.")
+    first = tokens[0].upper()
+    if first not in _ALLOWED_LEADING_KEYWORDS:
+        raise ValueError("Only read-only SELECT, WITH, VALUES, or EXPLAIN queries are supported.")
+    if first == "EXPLAIN":
+        idx = 1
+        while idx < len(tokens) and tokens[idx].upper() in {"ANALYZE", "VERBOSE", "FORMAT"}:
+            idx += 2 if tokens[idx].upper() == "FORMAT" else 1
+        if idx >= len(tokens) or tokens[idx].upper() not in {"SELECT", "WITH", "VALUES"}:
+            raise ValueError(
+                "EXPLAIN is only allowed for read-only SELECT, WITH, or VALUES queries."
+            )
+    if _FORBIDDEN_FILE_TABLE_FUNCTIONS.search(stripped):
+        raise ValueError("Direct filesystem table functions are not allowed in Sedona SQL.")
+    if _has_string_table_reference(stripped):
+        raise ValueError("Direct file paths in FROM/JOIN clauses are not allowed in Sedona SQL.")
+
+
 def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
     """Run a single spatial SQL statement against the registered layers.
 
@@ -139,6 +342,7 @@ def run_sql(sql: str, layers: Optional[list[dict]] = None) -> dict:
         ValueError: Invalid input.
         Exception: Whatever SedonaDB raises for an invalid SQL statement.
     """
+    _validate_read_only_sql(sql)
     sedona_db = _import_sedona()
     import geopandas as gpd  # noqa: PLC0415
 

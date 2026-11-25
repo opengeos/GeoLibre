@@ -234,6 +234,71 @@ describe("computeHistogram", () => {
     assert.equal(computeHistogram([1, 2, 3], 0)?.bins.length, 1);
     assert.equal(computeHistogram([1, 2, 3], 999)?.bins.length, 50);
   });
+
+  describe("clipOutliers (#3455)", () => {
+    const typical = Array.from({ length: 1282 }, (_, i) => Math.round((i / 1281) * 4800));
+    const withOutliers = [...typical, 1e12, -42.5];
+    const binned = (result: ReturnType<typeof computeHistogram>) =>
+      (result?.bins ?? []).reduce((sum, bin) => sum + bin.count, 0) +
+      (result?.underflow?.count ?? 0) +
+      (result?.overflow?.count ?? 0);
+
+    it("spans the bins over the typical range with an overflow bin at each end", () => {
+      const result = computeHistogram(withOutliers, 20, { clipOutliers: true });
+      assert.ok(result?.underflow && result.overflow);
+      assert.equal(result.bins.length, 20);
+      assert.ok(result.min >= 0 && result.max <= 4800);
+      assert.equal(result.bins[0].x0, result.min);
+      assert.equal(result.bins[19].x1, result.max);
+      assert.equal(result.underflow.x0, -42.5);
+      assert.equal(result.underflow.x1, result.min);
+      assert.equal(result.overflow.x0, result.max);
+      assert.equal(result.overflow.x1, 1e12);
+      // No regular bar holds (nearly) every value any more.
+      assert.ok(result.bins.every((bin) => bin.count < 200));
+    });
+
+    it("keeps every value: the bins and overflow bins sum to the total", () => {
+      const result = computeHistogram(withOutliers, 20, { clipOutliers: true });
+      assert.equal(result?.total, 1284);
+      assert.equal(binned(result), 1284);
+      for (const bins of [1, 7, 50]) {
+        const other = computeHistogram(withOutliers, bins, { clipOutliers: true });
+        assert.equal(binned(other), 1284);
+      }
+    });
+
+    it("counts the outliers beyond the typical range in the overflow bin", () => {
+      // Five values at 1e12 are under 1% of 1,287, so the 99th percentile stays
+      // a typical value and the bins clip to the typical range.
+      const sparse = [...typical, ...Array(5).fill(1e12)];
+      const result = computeHistogram(sparse, 20, { clipOutliers: true });
+      // The 8 typical values above the 99th percentile, plus the 5 outliers.
+      assert.equal(result?.overflow?.count, 13);
+      const tallest = Math.max(
+        ...(result?.bins ?? []).map((bin) => bin.count),
+        result?.underflow?.count ?? 0,
+        result?.overflow?.count ?? 0,
+      );
+      assert.equal(result?.maxCount, tallest);
+    });
+
+    it("leaves values without outliers binned over their exact extent", () => {
+      const plain = computeHistogram(typical, 20);
+      const clipped = computeHistogram(typical, 20, { clipOutliers: true });
+      assert.deepEqual(clipped, plain);
+      assert.equal(clipped?.underflow, undefined);
+      assert.equal(clipped?.overflow, undefined);
+    });
+
+    it("does nothing unless asked", () => {
+      const result = computeHistogram(withOutliers, 20);
+      assert.equal(result?.min, -42.5);
+      assert.equal(result?.max, 1e12);
+      assert.equal(result?.bins[0].count, 1283);
+      assert.equal(result?.underflow, undefined);
+    });
+  });
 });
 
 describe("computeScatter", () => {

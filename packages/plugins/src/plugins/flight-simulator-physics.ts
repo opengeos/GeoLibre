@@ -1,3 +1,5 @@
+import { DEFAULT_FLIGHT_MODEL } from "../builtin-plugin-defaults";
+export { DEFAULT_FLIGHT_MODEL } from "../builtin-plugin-defaults";
 /**
  * Flight model for the Flight Simulator plugin.
  *
@@ -102,18 +104,6 @@ export interface FlightModelConfig {
    */
   minAltitudeAglMeters: number;
 }
-
-export const DEFAULT_FLIGHT_MODEL: FlightModelConfig = {
-  minSpeedMps: 30,
-  maxSpeedMps: 250,
-  accelerationMps2: 25,
-  pitchRateDegPerSec: 35,
-  rollRateDegPerSec: 60,
-  maxPitchDeg: 45,
-  maxRollDeg: 70,
-  levelingRateDegPerSec: 40,
-  minAltitudeAglMeters: 25,
-};
 
 /** Neutral stick with the throttle at a cruise setting. */
 export const NEUTRAL_CONTROLS: FlightControls = {

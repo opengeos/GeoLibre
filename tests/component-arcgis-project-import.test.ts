@@ -9,6 +9,7 @@ import type { ProjectFileActions } from "../apps/geolibre-desktop/src/hooks/useP
 const { useProjectFileActions } =
   await import("../apps/geolibre-desktop/src/hooks/useProjectFileActions");
 const { VectorTileLayer } = await import("@esri/maplibre-arcgis");
+const { useNotificationStore } = await import("../apps/geolibre-desktop/src/lib/notify");
 
 /** Render the hook and hand back its latest actions. */
 function renderActions(): () => ProjectFileActions {
@@ -121,7 +122,7 @@ describe("Import ArcGIS Pro project", () => {
     await act(() => importing);
     assert.equal(useAppStore.getState().projectName, "Opened");
     assert.equal(useAppStore.getState().isDirty, false);
-    assert.equal(actions().arcgisImportWarnings, null);
+    assert.equal(actions().arcgisImportReport.warnings, null);
   });
 
   // First of the service tests: the ArcGIS plugin numbers its layers from
@@ -139,7 +140,10 @@ describe("Import ArcGIS Pro project", () => {
       await act(() => actions().handleImportArcgisProject());
       assert.deepEqual(layerNames(), ["Middle", "Top"]);
       assert.deepEqual(
-        actions().arcgisImportWarnings?.map((warning) => [warning.layerName, warning.reason]),
+        actions().arcgisImportReport.warnings?.map((warning) => [
+          warning.layerName,
+          warning.reason,
+        ]),
         [
           ["Imported map", "map-extent"],
           ["arcgis-layer-1", "service"],
@@ -196,7 +200,7 @@ describe("Import ArcGIS Pro project", () => {
       assert.deepEqual(layerNames(), []);
       assert.equal(useAppStore.getState().isDirty, false);
       assert.equal(pastLength(), history);
-      assert.equal(actions().arcgisImportWarnings, null);
+      assert.equal(actions().arcgisImportReport.warnings, null);
     } finally {
       services.restore();
     }
@@ -253,7 +257,7 @@ describe("Import ArcGIS Pro project", () => {
       assert.equal(useAppStore.getState().projectName, "Opened");
       assert.deepEqual(layerNames(), []);
       assert.equal(useAppStore.getState().isDirty, false);
-      assert.equal(actions().arcgisImportWarnings, null);
+      assert.equal(actions().arcgisImportReport.warnings, null);
     } finally {
       loader.mock.restore();
     }
@@ -332,8 +336,13 @@ function desktopImport(
       }
     },
   };
-  mockFetch(async (input) => {
+  mockFetch(async (input, init) => {
     const url = String(input);
+    if (url.endsWith("/relay/access")) {
+      assert.deepEqual(JSON.parse(String(init?.body)), { enabled: false });
+      assert.equal(new Headers(init?.headers).get("X-GeoLibre-Token"), "t");
+      return Response.json({ enabled: false });
+    }
     requests.push(url.replace(/^.*\/conversion\//, ""));
     if (listingNeverFinishes && (url.endsWith("/vector-layers") || url.endsWith("/jobs/list"))) {
       return Response.json({ id: "list", status: "running" });
@@ -392,7 +401,10 @@ describe("Import ArcGIS Pro project with File Geodatabase layers (desktop)", () 
       // The group held only the missing feature class.
       assert.deepEqual(useAppStore.getState().layerGroups, []);
       assert.deepEqual(
-        actions().arcgisImportWarnings?.map((warning) => [warning.layerName, warning.reason]),
+        actions().arcgisImportReport.warnings?.map((warning) => [
+          warning.layerName,
+          warning.reason,
+        ]),
         [
           ["Imported map", "map-extent"],
           ["Gone", "missing-source"],
@@ -418,7 +430,7 @@ describe("Import ArcGIS Pro project with File Geodatabase layers (desktop)", () 
       await act(() => importing);
       assert.equal(useAppStore.getState().projectName, "Opened");
       assert.deepEqual(layerNames(), []);
-      assert.equal(actions().arcgisImportWarnings, null);
+      assert.equal(actions().arcgisImportReport.warnings, null);
       assert.ok(!desktop.requests.includes("vector-to-vector"));
     } finally {
       desktop.restore();
@@ -512,6 +524,53 @@ describe("Import ArcGIS Pro project with File Geodatabase layers (desktop)", () 
     }
   });
 
+  it("asks about unsaved attribute drafts before reading any folder layer", async () => {
+    projectWithDrafts();
+    const desktop = desktopImport({
+      type: "CIMMap",
+      name: "Imported map",
+      layerDefinitions: [
+        {
+          type: "CIMFeatureLayer",
+          name: "Roads",
+          featureTable: {
+            dataConnection: {
+              workspaceConnectionString: "DATABASE=/work/data",
+              dataset: "roads.geojson",
+            },
+          },
+        },
+      ],
+    });
+    const tauri = (window as Window & { __TAURI_INTERNALS__?: { invoke: Function } })
+      .__TAURI_INTERNALS__!;
+    const invoke = tauri.invoke;
+    const reads: string[] = [];
+    tauri.invoke = async (command: string, args: { path?: string }) => {
+      if (command === "plugin:fs|read_file" && args.path !== PROJECT_PATH) {
+        reads.push(String(args.path));
+      }
+      return invoke(command, args);
+    };
+    const originalConfirm = window.confirm;
+    let asked = 0;
+    window.confirm = () => {
+      asked += 1;
+      return false;
+    };
+    try {
+      const actions = renderActions();
+      await act(() => actions().handleImportArcgisProject());
+      assert.equal(asked, 1);
+      // Cancelled before any data file was read, and the project is kept.
+      assert.deepEqual(reads, []);
+      assert.deepEqual(layerNames(), ["Edited layer"]);
+    } finally {
+      window.confirm = originalConfirm;
+      desktop.restore();
+    }
+  });
+
   it("does not ask about the same drafts again once the reads finish", async () => {
     projectWithDrafts();
     const desktop = desktopImport(parcelsOnly);
@@ -563,9 +622,73 @@ describe("Import ArcGIS Pro project with File Geodatabase layers (desktop)", () 
       assert.deepEqual(layerNames(), []);
       assert.equal(useAppStore.getState().isDirty, false);
       assert.equal(pastLength(), history);
-      assert.equal(actions().arcgisImportWarnings, null);
+      assert.equal(actions().arcgisImportReport.warnings, null);
       // The feature class is not read once the import is abandoned.
       assert.deepEqual(desktop.requests, ["vector-layers"]);
+    } finally {
+      desktop.restore();
+    }
+  });
+
+  it("says it is reading local data files while a project's folder layers load", async () => {
+    const desktop = desktopImport({
+      type: "CIMMap",
+      name: "Imported map",
+      layerDefinitions: [
+        {
+          type: "CIMFeatureLayer",
+          name: "Roads",
+          featureTable: {
+            dataConnection: {
+              workspaceConnectionString: "DATABASE=/work/data",
+              dataset: "roads.geojson",
+            },
+          },
+        },
+      ],
+    });
+    // Hold the data file's read until the test has seen the notice.
+    const tauri = (window as Window & { __TAURI_INTERNALS__?: { invoke: Function } })
+      .__TAURI_INTERNALS__!;
+    const invoke = tauri.invoke;
+    let releaseRead = () => {};
+    const held = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    tauri.invoke = async (command: string, args: { path?: string }) => {
+      if (command === "plugin:fs|read_file" && args.path === "/work/data/roads.geojson") {
+        await held;
+      }
+      return invoke(command, args);
+    };
+    const reading = () =>
+      useNotificationStore
+        .getState()
+        .notifications.filter((entry) => entry.message === "Reading 1 local data layer…");
+    try {
+      const actions = renderActions();
+      const importing = actions().handleImportArcgisProject();
+      await waitFor(() => assert.equal(reading().length, 1));
+      releaseRead();
+      await act(() => importing);
+      assert.deepEqual(reading(), []);
+      // The harness cannot parse the file, so the layer is held back and
+      // offered for a Locate folder rather than loaded empty.
+      assert.deepEqual(layerNames(), []);
+      assert.deepEqual(
+        actions().arcgisImportReport.warnings?.map((warning) => [
+          warning.layerName,
+          warning.reason,
+        ]),
+        [
+          ["Imported map", "map-extent"],
+          ["Roads", "data-not-found"],
+        ],
+      );
+      assert.deepEqual(
+        actions().arcgisImportReport.repairGroups.map((group) => [group.label, group.layerNames]),
+        [["/work/data", ["Roads"]]],
+      );
     } finally {
       desktop.restore();
     }

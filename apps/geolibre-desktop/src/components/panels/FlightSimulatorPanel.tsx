@@ -1,12 +1,14 @@
 import {
   FEET_PER_METER,
+  KNOTS_PER_MPS,
+  compassPoint,
+} from "@geolibre/plugins/flight-simulator-physics";
+import {
   FLIGHT_MAX_SPEED_MAX,
   FLIGHT_MAX_SPEED_MIN,
   FLIGHT_MIN_AGL_MAX,
   FLIGHT_MIN_AGL_MIN,
-  KNOTS_PER_MPS,
   closeFlightSimulatorPanel,
-  compassPoint,
   getFlightHudSnapshot,
   getFlightSimulatorSnapshot,
   isFlightSimulatorPanelVisible,
@@ -14,7 +16,7 @@ import {
   subscribeFlightHud,
   subscribeFlightSimulatorPanel,
   toggleFlying,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/flight-simulator";
 import { useAppStore } from "@geolibre/core";
 import { Button, Select, Slider } from "@geolibre/ui";
 import { ChevronDown, ChevronUp, Pause, Plane, Play, TriangleAlert, X } from "lucide-react";

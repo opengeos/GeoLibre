@@ -1,6 +1,7 @@
 import { type RefObject, useEffect, useSyncExternalStore } from "react";
 import type { MapEngine } from "@geolibre/map";
-import { createAnnotationMarker, type AnnotationMarker } from "@geolibre/plugins";
+import { createAnnotationMarker } from "@geolibre/plugins/annotation-marker";
+import { type AnnotationMarker } from "@geolibre/plugins";
 import { engineMarkerMap } from "../../lib/engine-style-map";
 import { netcdfSeriesColor } from "../../lib/netcdf-profile-series";
 import {

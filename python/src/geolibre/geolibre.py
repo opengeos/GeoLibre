@@ -300,9 +300,21 @@ def render_project_html(
     # and a model can pick an argument up from content it is reading. A
     # redacted project still carries inlined features and layer URLs.
     origin = urllib.parse.urlsplit(base_url)
-    if origin.scheme not in ("http", "https") or not origin.netloc:
+    if origin.scheme not in ("http", "https") or not origin.hostname:
         raise ValueError(f"to_html: app_url must be an http(s) URL, got {base_url!r}")
-    app_origin = f"{origin.scheme}://{origin.netloc}"
+    origin_host = f"[{origin.hostname}]" if ":" in origin.hostname else origin.hostname
+    default_port = 80 if origin.scheme == "http" else 443
+    origin_port = (
+        f":{origin.port}" if origin.port is not None and origin.port != default_port else ""
+    )
+    app_origin = f"{origin.scheme}://{origin_host}{origin_port}"
+    # Strip any embedded credentials from base_url before building iframe_src
+    # so userinfo never leaks into the exported HTML document.
+    if origin.username is not None or origin.password is not None:
+        safe_netloc = f"{origin_host}:{origin.port}" if origin.port is not None else origin_host
+        base_url = urllib.parse.urlunsplit(
+            (origin.scheme, safe_netloc, origin.path, origin.query, origin.fragment)
+        )
     # Force the embed bridge on (isEmbedded() honours ?embed=1). Insert the
     # parameter into the query string *before* any URL fragment: a "#..."
     # fragment would otherwise swallow a trailing "?embed=1" (browsers read it
@@ -348,7 +360,9 @@ def render_project_html(
     # Inline the project inside a JSON <script> block and escape "<" so a
     # property value can never break out of the script element; "<" is valid
     # JSON that JSON.parse restores to "<".
-    project_json = json.dumps(_project.redact_credentials(project)).replace("<", "\\u003c")
+    project_json = json.dumps(_project.redact_credentials(project), allow_nan=False).replace(
+        "<", "\\u003c"
+    )
     return _HTML_EXPORT_TEMPLATE.format(
         title=_html_escape(title),
         width=_html_escape(width),
@@ -2034,6 +2048,124 @@ class Map(anywidget.AnyWidget):
         """Remove a bookmark by id, name, or 0-based index."""
         self._update_project(lambda p: _authoring.remove_bookmark(p, bookmark))
 
+    def add_layer_group(
+        self,
+        name: str,
+        *,
+        layers: list[str | Layer] | None = None,
+        parent: str | None = None,
+        collapsed: bool = False,
+        visible: bool = True,
+        opacity: float = 1.0,
+    ) -> dict[str, Any]:
+        """Add a group (folder) to the Layers panel.
+
+        Args:
+            name: Group name.
+            layers: Layers (ids, names, or handles) to move into the group.
+            parent: A group id or name to nest this group in.
+            collapsed: Start collapsed in the panel.
+            visible: Group visibility, ANDed with each member's own.
+            opacity: Group opacity in [0, 1], multiplied into each member's.
+
+        Returns:
+            The new group, including its ``id`` and member ``layerIds``.
+        """
+        refs = [
+            self._resolve_layer(layer).id if isinstance(layer, Layer) else layer
+            for layer in layers or []
+        ]
+        result: dict[str, Any] = {}
+        self._update_project(
+            lambda p: result.update(
+                _authoring.add_layer_group(
+                    p,
+                    name,
+                    parent=parent,
+                    layers=refs,
+                    collapsed=collapsed,
+                    visible=visible,
+                    opacity=opacity,
+                )
+            )
+        )
+        return result
+
+    def set_layer_group(self, layers: list[str | Layer], group: str | None) -> None:
+        """Move layers into a Layers panel group, or out of every group.
+
+        Args:
+            layers: Layers (ids, names, or handles) to move.
+            group: A group id or name, or None to ungroup them.
+        """
+        refs = [
+            self._resolve_layer(layer).id if isinstance(layer, Layer) else layer for layer in layers
+        ]
+        self._update_project(lambda p: _authoring.set_layer_group(p, refs, group))
+
+    def remove_layer_group(self, group: str) -> None:
+        """Remove a Layers panel group, keeping its layers and subgroups.
+
+        Args:
+            group: A group id or name.
+        """
+        self._update_project(lambda p: _authoring.remove_layer_group(p, group))
+
+    def add_dashboard_widget(
+        self, layer: str | Layer, widget_type: str, **options: Any
+    ) -> dict[str, Any]:
+        """Add a widget to the Dashboard panel.
+
+        Args:
+            layer: The layer the widget reads (id, name, or handle).
+            widget_type: ``histogram``, ``scatter``, ``bar``, ``line``, ``box``,
+                ``pie``, ``indicator``, ``selector``, or ``list``.
+            **options: Widget options, e.g. ``title``, ``field``,
+                ``category``, ``aggregation``; see
+                :func:`geolibre.project.dashboard_widget`.
+
+        Returns:
+            The widget that was added, including its ``id``.
+        """
+        if "widget_id" in options or "widgetId" in options:
+            raise ValueError("options cannot set the widget id")
+        if {"project", "layer", "layer_id", "widget_type"} & options.keys():
+            raise ValueError("options cannot override project, layer, layer_id, or widget_type")
+        ref = self._resolve_layer(layer).id if isinstance(layer, Layer) else layer
+        result: dict[str, Any] = {}
+        self._update_project(
+            lambda p: result.update(_authoring.add_dashboard_widget(p, ref, widget_type, **options))
+        )
+        return result
+
+    def remove_dashboard_widget(self, widget: str | int) -> None:
+        """Remove a dashboard widget by id, title, or 0-based index."""
+        self._update_project(lambda p: _authoring.remove_dashboard_widget(p, widget))
+
+    def set_dashboard_columns(self, columns: int) -> None:
+        """Set the Dashboard panel's column count (1-6)."""
+        self._update_project(lambda p: _authoring.set_dashboard_columns(p, columns))
+
+    def set_print_layout(self, *, reset: bool = False, **settings: Any) -> dict[str, Any]:
+        """Change the project's Print Layout composer settings.
+
+        Args:
+            reset: Start from the defaults instead of the stored settings.
+            **settings: Settings in ``snake_case`` or ``camelCase``, e.g.
+                ``title="Flood extent"``, ``paper_size="a3"``,
+                ``orientation="portrait"``, ``table_layer_id="Parcels"``.
+
+        Returns:
+            The stored Print Layout settings.
+        """
+        if "project" in settings:
+            raise ValueError("settings cannot override project or reset")
+        result: dict[str, Any] = {}
+        self._update_project(
+            lambda p: result.update(_authoring.set_print_layout(p, reset=reset, **settings))
+        )
+        return result
+
     def rename_layer(self, layer: str | Layer, name: str) -> None:
         """Rename a layer addressed by id, name, or handle.
 
@@ -2095,13 +2227,15 @@ class Map(anywidget.AnyWidget):
         """
         if name is not None:
             name = self._clean_layer_name(name)
-        source = copy.deepcopy(self._resolve_layer(layer)._layer())
-        source["id"] = str(uuid.uuid4())
-        source["name"] = name if name is not None else f"{source.get('name', 'Layer')} copy"
-        # `_add_layer` appends raw; `authoring.add_layer` is the entry point that
-        # applies the reserved-name check `rename_layer` gets from `update_layer`.
-        self._update_project(lambda p: _authoring.add_layer(p, source))
-        return str(source["id"])
+        handle = self._resolve_layer(layer)
+        created_id: list[str] = []
+
+        def _dup(p: dict[str, Any]) -> None:
+            summary = _authoring.duplicate_layer(p, handle.id, name=name)
+            created_id.append(str(summary["id"]))
+
+        self._update_project(_dup)
+        return created_id[0]
 
     def show_layer(self, layer: str | Layer) -> None:
         """Show a layer."""
@@ -2572,6 +2706,18 @@ class Map(anywidget.AnyWidget):
                     if path.stat().st_size > _MAX_TABULAR_BYTES:
                         raise ValueError(f"CSV file exceeds the 50 MB size limit: {source}")
                     text = path.read_text(encoding="utf-8-sig")
+                elif (
+                    "\n" not in source
+                    and "\r" not in source
+                    and "," not in source
+                    and (
+                        "/" in source
+                        or "\\" in source
+                        or source.startswith(("~", "."))
+                        or path.suffix.lower() in {".csv", ".tsv", ".txt"}
+                    )
+                ):
+                    raise FileNotFoundError(f"CSV file not found: {source}")
                 else:
                     text = source
             reader = csv.DictReader(io.StringIO(text), restkey=_CSV_RESTKEY)
@@ -3376,37 +3522,118 @@ class Map(anywidget.AnyWidget):
         Returns:
             The id of the added layer.
         """
-        url = _project.wfs_getfeature_url(
+        # The builder writes the protocol fields the UI persists, so the Edit
+        # Layer panel can pre-populate the WFS form and isWfsLayer() recognizes
+        # the layer when round-tripped from a Python-produced project.
+        layer = _project.wfs_layer(
+            name,
             endpoint,
             type_name,
             version=version,
             output_format=output_format,
             srs_name=srs_name,
             max_features=max_features,
+            **style,
         )
-        fc = _project.load_featurecollection(url)
-        layer = _project.geojson_layer(name, fc, source_url=url, **style)
-        # Mirror the protocol fields the UI persists on the source so the Edit
-        # Layer panel can pre-populate the WFS form and isWfsLayer() recognizes
-        # the layer when round-tripped from a Python-produced project.
-        layer["source"].update(
-            {
-                "service": "wfs",
-                "typeName": type_name,
-                "version": version,
-                "outputFormat": output_format,
-                **({"srsName": srs_name} if srs_name else {}),
-            }
-        )
-        layer["metadata"].update(
-            {
-                "service": "wfs",
-                "sourceKind": "wfs-getfeature",
-                "typeName": type_name,
-                "featureCount": len(fc.get("features", [])),
-            }
-        )
+        layer["geojson"] = _project.load_featurecollection(layer["sourcePath"])
+        layer["metadata"]["featureCount"] = len(layer["geojson"]["features"])
         return self._add_layer(layer)
+
+    def add_arcgis_layer(
+        self,
+        url: str,
+        name: str = "ArcGIS Layer",
+        *,
+        service: str = "map",
+        sublayers: str | list[int] | None = None,
+        rendering_rule: str | dict[str, Any] | None = None,
+        max_features: int | None = None,
+        bounds: list[float] | None = None,
+        attribution: str | None = None,
+        **style: Any,
+    ) -> str:
+        """Add an ArcGIS REST MapServer, ImageServer, or FeatureServer layer.
+
+        Map and image services draw as raster tiles from the service's export
+        endpoint. A feature layer loads the features in view from the service's
+        query endpoint when the project opens in the app.
+
+        Args:
+            url: The service URL (``.../MapServer``, ``.../ImageServer``, or a
+                layer URL such as ``.../FeatureServer/0``).
+            name: Layer display name.
+            service: ``"map"``, ``"image"``, or ``"feature"``.
+            sublayers: MapServer sublayer ids to show.
+            rendering_rule: ImageServer rendering rule (dict or JSON string).
+            max_features: Feature service cap on features loaded per view.
+            bounds: ``[west, south, east, north]`` extent for "Zoom to layer".
+            attribution: Attribution text.
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        return self._add_layer(
+            _project.arcgis_layer(
+                name,
+                url,
+                service=service,
+                sublayers=sublayers,
+                rendering_rule=rendering_rule,
+                max_features=max_features,
+                bounds=bounds,
+                attribution=attribution,
+                **style,
+            )
+        )
+
+    def add_zarr(
+        self,
+        url: str,
+        variable: str,
+        name: str | None = None,
+        *,
+        selector: dict[str, int | float | str] | None = None,
+        clim: list[float] | None = None,
+        colormap: str | None = None,
+        bounds: list[float] | None = None,
+        crs: str | None = None,
+        spatial_dimensions: dict[str, str] | None = None,
+        **style: Any,
+    ) -> str:
+        """Add a Zarr data-cube layer, drawn by the app's Zarr control.
+
+        Args:
+            url: An ``http(s)://``, ``s3://``, or ``gs://`` Zarr store URL.
+                Icechunk repositories cannot be saved in a project.
+            variable: The array to draw.
+            name: Layer display name; defaults to the variable name.
+            selector: Non-spatial dimension values to slice, e.g. ``{"time": 0}``.
+            clim: ``[min, max]`` color range.
+            colormap: Colormap name.
+            bounds: ``[west, south, east, north]`` when the store lacks coordinates.
+            crs: The store's CRS when it is not EPSG:4326.
+            spatial_dimensions: ``{"lat": ..., "lon": ...}`` dimension names.
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer. The app assigns the live layer a new id
+            when it opens the project.
+        """
+        return self._add_layer(
+            _project.zarr_layer(
+                name or variable,
+                url,
+                variable,
+                selector=selector,
+                clim=clim,
+                colormap=colormap,
+                bounds=bounds,
+                crs=crs,
+                spatial_dimensions=spatial_dimensions,
+                **style,
+            )
+        )
 
     def add_vector(
         self,
@@ -4328,11 +4555,7 @@ class Map(anywidget.AnyWidget):
         if projection not in _VALID_PROJECTIONS:
             raise ValueError(f"projection must be 'globe' or 'mercator', got {projection!r}")
 
-        def _apply(p: dict[str, Any]) -> None:
-            preferences = p.setdefault("preferences", {})
-            preferences.setdefault("map", {})["projection"] = projection
-
-        self._update_project(_apply)
+        self._update_project(lambda p: _authoring.set_projection(p, projection))
 
     @property
     def projection(self) -> str:

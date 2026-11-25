@@ -1,3 +1,6 @@
+import { TILECODE_PLUGIN_ID } from "../plugin-ids";
+export { TILECODE_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-metadata";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import {
   createGridPlugin,
@@ -5,8 +8,6 @@ import {
   type GridLabelsBase,
   type GridSettingsBase,
 } from "./grid-plugin-factory";
-
-export const TILECODE_PLUGIN_ID = "maplibre-tilecode";
 
 /** Prevent a deep zoom level over a large viewport from freezing the browser. */
 export const TILECODE_VIEWPORT_CELL_LIMIT = 20_000;
@@ -271,7 +272,7 @@ export function tilecodeNeighborCells(cell: string): string[] {
 
 const grid = createGridPlugin<TilecodeGridSettings, TilecodeLabels>({
   id: TILECODE_PLUGIN_ID,
-  name: "Tilecode",
+  name: builtInPluginMetadata("maplibre-tilecode").name,
   slug: "tilecode",
   parentKey: "includeParent",
   defaultSettings: DEFAULT_TILECODE_GRID_SETTINGS,
@@ -320,7 +321,7 @@ const grid = createGridPlugin<TilecodeGridSettings, TilecodeLabels>({
   exportBaseName: (zoom) => `tilecode-z${zoom}`,
 });
 
-export const maplibreTilecodePlugin = grid.plugin;
+export const maplibreTilecodePlugin = defineBuiltInPlugin("maplibre-tilecode", grid.plugin);
 export const setTilecodeLabels = grid.setLabels;
 export const getTilecodeGridSettings = grid.getSettings;
 export const setTilecodeGridSettings = grid.setSettings;

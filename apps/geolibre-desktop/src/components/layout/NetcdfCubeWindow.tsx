@@ -1,6 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { gridPixelAt, type LocalNetcdfGrid, type LocalNetcdfWindow } from "@geolibre/plugins";
+import { gridPixelAt } from "@geolibre/plugins/local-netcdf";
+import { type LocalNetcdfGrid, type LocalNetcdfWindow } from "@geolibre/plugins";
 import { Button, ColorRampSelect, Label, Select } from "@geolibre/ui";
 import { Boxes, GripVertical, Settings2, X } from "lucide-react";
 import {
@@ -542,6 +543,7 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
 
       {/* Resize grip (bottom-right); mouse/touch-only, so presentational. */}
       <div
+        // eslint-disable-next-line local/no-physical-tailwind -- the resize grip's drag math and cursor are physical (bottom-right).
         className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none"
         onPointerDown={handleResizeStart}
         role="presentation"

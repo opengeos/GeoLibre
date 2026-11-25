@@ -5,11 +5,11 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 const OAUTH_HOST: &str = "127.0.0.1";
@@ -26,14 +26,19 @@ const STATE_HEX_LEN: usize = 32;
 // `vec![0; content_length]` would abort the whole app) or park threads forever.
 const MAX_REQUEST_BYTES: u64 = 64 * 1024;
 const MAX_BODY_BYTES: usize = 16 * 1024;
-const READ_TIMEOUT: Duration = Duration::from_secs(10);
+// Loopback browser callbacks deliver their request within milliseconds; a short
+// timeout keeps idle local connections from holding permits for long.
+const READ_TIMEOUT: Duration = Duration::from_secs(2);
 // Sign-ins the user started but has not finished. Each start is a user action,
 // so a small bound only ever drops long-abandoned attempts.
 const MAX_PENDING_STATES: usize = 16;
+const MAX_STORED_TOKENS: usize = 32;
+const TOKEN_TTL: Duration = Duration::from_secs(600);
+const MAX_CONCURRENT_CONNECTIONS: usize = 16;
 
 #[derive(Default)]
 pub struct EarthEngineOAuthState {
-    server_started: AtomicBool,
+    server_started: Mutex<bool>,
     shared: Arc<SharedState>,
 }
 
@@ -44,7 +49,29 @@ struct SharedState {
     /// The helper only renders the sign-in page for, and only accepts a token
     /// for, a state in this list, so another page cannot plant a token.
     pending: Mutex<VecDeque<String>>,
-    tokens: Mutex<HashMap<String, EarthEngineOAuthToken>>,
+    tokens: Mutex<HashMap<String, (Instant, EarthEngineOAuthToken)>>,
+}
+
+fn prune_tokens(tokens: &mut HashMap<String, (Instant, EarthEngineOAuthToken)>, now: Instant) {
+    tokens.retain(|_, (stored_at, _)| now.saturating_duration_since(*stored_at) < TOKEN_TTL);
+    while tokens.len() >= MAX_STORED_TOKENS {
+        let Some(oldest_key) = tokens
+            .iter()
+            .min_by_key(|(_, (stored_at, _))| *stored_at)
+            .map(|(k, _)| k.clone())
+        else {
+            break;
+        };
+        tokens.remove(&oldest_key);
+    }
+}
+
+struct ConnectionPermit(Arc<AtomicUsize>);
+
+impl Drop for ConnectionPermit {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
 }
 
 #[derive(Serialize)]
@@ -113,25 +140,23 @@ pub fn poll_earth_engine_oauth(
         .tokens
         .lock()
         .map_err(|error| error.to_string())?;
-    Ok(tokens.remove(&state_id))
+    let now = Instant::now();
+    tokens.retain(|_, (stored_at, _)| now.saturating_duration_since(*stored_at) < TOKEN_TTL);
+    Ok(tokens.remove(&state_id).map(|(_, token)| token))
 }
 
 fn ensure_oauth_server(state: &EarthEngineOAuthState) -> Result<(), String> {
-    if state.server_started.load(Ordering::Acquire) {
-        return Ok(());
-    }
-    if state
+    let mut started = state
         .server_started
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-        .is_err()
-    {
+        .lock()
+        .map_err(|error| error.to_string())?;
+    if *started {
         return Ok(());
     }
 
     let listener = match TcpListener::bind((OAUTH_HOST, OAUTH_PORT)) {
         Ok(listener) => listener,
         Err(error) => {
-            state.server_started.store(false, Ordering::Release);
             if error.kind() == ErrorKind::AddrInUse {
                 return Err(format!(
                     "Could not start Earth Engine OAuth helper on http://localhost:{OAUTH_PORT} because the port is already in use. Close any running GeoLibre dev server or other app using port {OAUTH_PORT}, then try again.",
@@ -142,12 +167,26 @@ fn ensure_oauth_server(state: &EarthEngineOAuthState) -> Result<(), String> {
             ));
         }
     };
+    *started = true;
+    drop(started);
+
     let shared = Arc::clone(&state.shared);
+    let active_connections = Arc::new(AtomicUsize::new(0));
 
     thread::spawn(move || {
-        for stream in listener.incoming().flatten() {
+        for mut stream in listener.incoming().flatten() {
+            let prev = active_connections.fetch_add(1, Ordering::AcqRel);
+            if prev >= MAX_CONCURRENT_CONNECTIONS {
+                active_connections.fetch_sub(1, Ordering::AcqRel);
+                let _ = write_response(&mut stream, 503, "text/plain", "Too many requests", &[]);
+                continue;
+            }
+            let permit = ConnectionPermit(Arc::clone(&active_connections));
             let shared = Arc::clone(&shared);
-            thread::spawn(move || handle_connection(stream, &shared));
+            thread::spawn(move || {
+                let _permit = permit;
+                handle_connection(stream, &shared);
+            });
         }
     });
 
@@ -235,7 +274,9 @@ fn handle_connection(mut stream: TcpStream, shared: &SharedState) {
                         && take_pending_state(shared, &token.state) =>
                 {
                     if let Ok(mut token_store) = shared.tokens.lock() {
-                        token_store.insert(token.state.clone(), token);
+                        let now = Instant::now();
+                        prune_tokens(&mut token_store, now);
+                        token_store.insert(token.state.clone(), (now, token));
                     }
                     let _ = write_response(&mut stream, 204, "text/plain", "", &[]);
                 }
@@ -250,9 +291,32 @@ fn handle_connection(mut stream: TcpStream, shared: &SharedState) {
     }
 }
 
+struct DeadlineStream {
+    stream: TcpStream,
+    deadline: Instant,
+}
+
+impl Read for DeadlineStream {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let remaining = self.deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(std::io::Error::new(
+                ErrorKind::TimedOut,
+                "Request timed out",
+            ));
+        }
+        let _ = self.stream.set_read_timeout(Some(remaining));
+        self.stream.read(buf)
+    }
+}
+
 fn read_request(stream: &TcpStream) -> Result<Request, String> {
     let stream = stream.try_clone().map_err(|error| error.to_string())?;
-    let mut reader = BufReader::new(stream.take(MAX_REQUEST_BYTES));
+    let deadline_stream = DeadlineStream {
+        stream,
+        deadline: Instant::now() + READ_TIMEOUT,
+    };
+    let mut reader = BufReader::new(deadline_stream.take(MAX_REQUEST_BYTES));
     let mut request_line = String::new();
     reader
         .read_line(&mut request_line)
@@ -575,43 +639,11 @@ fn auth_page(client_id: &str, state: &str, nonce: &str) -> String {
 }
 
 fn url_encode(value: &str) -> String {
-    let mut encoded = String::new();
-    for byte in value.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
-                encoded.push(byte as char);
-            }
-            _ => encoded.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    encoded
+    crate::http_client::percent_encode_rfc3986(value)
 }
 
 fn url_decode(value: &str) -> String {
-    let mut decoded = Vec::new();
-    let bytes = value.as_bytes();
-    let mut index = 0;
-    while index < bytes.len() {
-        if bytes[index] == b'%' && index + 2 < bytes.len() {
-            // Parse the hex digits from bytes: slicing the &str here would
-            // panic when a multi-byte UTF-8 character follows the `%`.
-            let hex = std::str::from_utf8(&bytes[index + 1..index + 3])
-                .ok()
-                .and_then(|digits| u8::from_str_radix(digits, 16).ok());
-            if let Some(hex) = hex {
-                decoded.push(hex);
-                index += 3;
-                continue;
-            }
-        }
-        decoded.push(if bytes[index] == b'+' {
-            b' '
-        } else {
-            bytes[index]
-        });
-        index += 1;
-    }
-    String::from_utf8_lossy(&decoded).into_owned()
+    crate::http_client::form_url_decode_lossy(value)
 }
 
 #[cfg(test)]
@@ -752,6 +784,7 @@ mod tests {
         assert!(accepted.starts_with("HTTP/1.1 204"));
         assert_eq!(
             shared.tokens.lock().unwrap()[&state]
+                .1
                 .access_token
                 .as_deref(),
             Some("tok")
@@ -770,17 +803,58 @@ mod tests {
         let error_result = post_token(&shared, OAUTH_ORIGIN, "application/json", &error_body);
         assert!(error_result.starts_with("HTTP/1.1 204"));
         assert!(!is_pending_state(&shared, &state));
-        let stored_error = shared
-            .tokens
-            .lock()
-            .ok()
-            .and_then(|tokens| tokens.get(&state).and_then(|token| token.error.clone()));
+        let stored_error = shared.tokens.lock().ok().and_then(|tokens| {
+            tokens
+                .get(&state)
+                .and_then(|(_, token)| token.error.clone())
+        });
         assert_eq!(stored_error.as_deref(), Some("access_denied"));
 
         // The app stops polling at the error, so a later token has no taker.
         let late_token = format!(r#"{{"state":"{state}","accessToken":"tok"}}"#);
         let late = post_token(&shared, OAUTH_ORIGIN, "application/json", &late_token);
         assert!(late.starts_with("HTTP/1.1 400"));
+    }
+
+    #[test]
+    fn prune_tokens_expires_stale_and_enforces_cap() {
+        // Construct timestamps forward from `base` so this never underflows
+        // `Instant` on a freshly booted system.
+        let base = Instant::now();
+        let now = base + TOKEN_TTL + Duration::from_secs(MAX_STORED_TOKENS as u64 + 10);
+        let mut tokens = HashMap::new();
+        tokens.insert(
+            "expired".to_string(),
+            (
+                base,
+                EarthEngineOAuthToken {
+                    state: "expired".to_string(),
+                    access_token: Some("old".to_string()),
+                    token_type: Some("Bearer".to_string()),
+                    expires_in: None,
+                    error: None,
+                },
+            ),
+        );
+        for i in 0..(MAX_STORED_TOKENS + 5) {
+            tokens.insert(
+                format!("fresh-{i}"),
+                (
+                    base + TOKEN_TTL + Duration::from_secs((MAX_STORED_TOKENS + 10 - i) as u64),
+                    EarthEngineOAuthToken {
+                        state: format!("fresh-{i}"),
+                        access_token: Some(format!("tok-{i}")),
+                        token_type: Some("Bearer".to_string()),
+                        expires_in: None,
+                        error: None,
+                    },
+                ),
+            );
+        }
+        prune_tokens(&mut tokens, now);
+        assert!(!tokens.contains_key("expired"));
+        assert_eq!(tokens.len(), MAX_STORED_TOKENS - 1);
+        assert!(tokens.contains_key("fresh-0"));
     }
 
     #[test]

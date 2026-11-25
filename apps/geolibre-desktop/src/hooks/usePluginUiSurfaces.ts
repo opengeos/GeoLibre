@@ -5,6 +5,8 @@ import {
   subscribeFloatingPanels,
   subscribeMenuContributions,
   subscribeToolbarMenus,
+} from "@geolibre/plugins/runtime";
+import {
   type FloatingPanelsSnapshot,
   type MenuContributionsSnapshot,
   type ToolbarMenusSnapshot,

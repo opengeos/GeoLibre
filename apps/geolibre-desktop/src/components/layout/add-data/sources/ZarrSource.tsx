@@ -1,16 +1,17 @@
 import { Input, Label, Select } from "@geolibre/ui";
 import { useAppStore, VECTOR_COLOR_RAMPS } from "@geolibre/core";
-import { addZarrRasterLayer } from "@geolibre/plugins";
+import { addZarrRasterLayer } from "@geolibre/plugins/component-helpers";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../../../hooks/usePlugins";
 import { ZARR_GLOBE_SAMPLES, type ZarrSample } from "../constants";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
-export function ZarrSource() {
+/** Renders the Add Zarr form, prefilled with a store URL from a `?add=zarr` deep link. */
+export function ZarrSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("toolbar.item.zarrLayer"));
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(initialUrl);
   const [variable, setVariable] = useState("");
   const [crs, setCrs] = useState("");
   const [min, setMin] = useState("0"),

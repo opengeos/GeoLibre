@@ -64,7 +64,7 @@ pub enum PickerMode {
     Video,
 }
 
-/// The file access mode of the dialog, used to control how a picked file is exposed to the app on iOS.
+/// How a picked file is exposed on iOS, and for explicit copy-mode Android data picks.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum FileAccessMode {
@@ -516,8 +516,8 @@ impl<R: Runtime> FileDialogBuilder<R> {
     }
 
     /// Set the file access mode of the dialog.
-    /// This is only used on iOS.
-    /// On desktop and Android, this option is ignored.
+    /// Used on iOS and for explicit Android data-file copies.
+    /// Desktop dialogs ignore this option.
     pub fn set_file_access_mode(mut self, mode: FileAccessMode) -> Self {
         self.file_access_mode.replace(mode);
         self

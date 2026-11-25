@@ -1,3 +1,10 @@
+import { routeAnimationPanelStore } from "../builtin-plugin-panels";
+import { ROUTE_ANIMATION_PLUGIN_ID } from "../plugin-ids";
+export { ROUTE_ANIMATION_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
+import { DEFAULT_ROUTE_ANIMATION_SETTINGS } from "../builtin-plugin-defaults";
+export { DEFAULT_ROUTE_ANIMATION_SETTINGS } from "../builtin-plugin-defaults";
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { Feature, LineString, Point } from "geojson";
 import type { Layer } from "@deck.gl/core";
@@ -58,8 +65,6 @@ const ROUTE_ANIM_DECK_SOURCE = "route-anim";
  * without embedding geometry.
  */
 
-export const ROUTE_ANIMATION_PLUGIN_ID = "geolibre-route-animation";
-
 const MARKER_SOURCE_ID = "geolibre-route-anim-marker-source";
 const MARKER_LAYER_ID = "geolibre-route-anim-marker-layer";
 const POINT_LAYER_ID = "geolibre-route-anim-point-layer";
@@ -112,7 +117,6 @@ export interface RouteAnimationSettings {
   color: string;
 }
 
-const DEFAULT_COLOR = "#2563eb";
 const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 export const ROUTE_ANIM_SPEED_MIN = 1;
@@ -124,21 +128,6 @@ export const ROUTE_FOLLOW_PITCH_MIN = 0;
 export const ROUTE_FOLLOW_PITCH_MAX = 85;
 export const ROUTE_FOLLOW_ZOOM_MIN = 1;
 export const ROUTE_FOLLOW_ZOOM_MAX = 22;
-
-export const DEFAULT_ROUTE_ANIMATION_SETTINGS: RouteAnimationSettings = {
-  layerId: null,
-  playing: false,
-  speedMps: 60,
-  loop: true,
-  progress: 0,
-  followCamera: false,
-  followPitch: 60,
-  followZoom: 15,
-  followRotate: true,
-  markerStyle: "arrow",
-  showTrail: true,
-  color: DEFAULT_COLOR,
-};
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
@@ -527,8 +516,8 @@ class RouteAnimationEngine {
     // placeholder feature (e.g. the initial [0, 0] point) never lingers on the
     // map before a layer is picked or after the selected layer is removed.
     if (this.totalMeters <= 0) {
-      markerSource?.setData({ type: "FeatureCollection", features: [] });
-      trailSource?.setData(emptyLine());
+      updateGeoJsonSourceData(markerSource, { type: "FeatureCollection", features: [] });
+      updateGeoJsonSourceData(trailSource, emptyLine());
       this.clearDeck();
       return;
     }
@@ -542,17 +531,18 @@ class RouteAnimationEngine {
     // they ride the visualized 3D line rather than its flat ground projection
     // (#1210). The 2D MapLibre marker/trail are cleared so nothing double-draws.
     if (this.render3d(distance, point)) {
-      markerSource?.setData({ type: "FeatureCollection", features: [] });
-      trailSource?.setData(emptyLine());
+      updateGeoJsonSourceData(markerSource, { type: "FeatureCollection", features: [] });
+      updateGeoJsonSourceData(trailSource, emptyLine());
     } else {
       this.clearDeck();
-      if (markerSource) markerSource.setData(markerFeature(coord, bearing));
+      if (markerSource) updateGeoJsonSourceData(markerSource, markerFeature(coord, bearing));
       if (this.settings.showTrail) {
-        trailSource?.setData(
+        updateGeoJsonSourceData(
+          trailSource,
           lineFeature(sliceLineAtDistance(this.coords, this.cumulative, distance)),
         );
       } else {
-        trailSource?.setData(emptyLine());
+        updateGeoJsonSourceData(trailSource, emptyLine());
       }
     }
 
@@ -744,6 +734,7 @@ const panelListeners = new Set<() => void>();
 const stateListeners = new Set<() => void>();
 
 function notifyPanel(): void {
+  routeAnimationPanelStore.setVisible(panelVisible);
   for (const listener of panelListeners) listener();
 }
 function notifyState(): void {
@@ -1312,15 +1303,13 @@ export async function recordRouteAnimation({
 }
 
 export const maplibreRouteAnimationPlugin: GeoLibrePlugin = {
-  id: ROUTE_ANIMATION_PLUGIN_ID,
-  name: "Route Animation",
-  version: "1.0.0",
+  ...builtInPluginProperties("geolibre-route-animation"),
+
   // The marker, trail and follow camera use `addImage`/`updateImage`,
   // GeoJSON sources, `jumpTo` and `triggerRepaint`, which mapbox-gl shares, and
   // the 3D marker rides the shared deck.gl overlay that already binds to the
   // Mapbox map; the video export captures whichever canvas hosts the map.
-  engines: ["maplibre", "mapbox"],
-  activeByDefault: false,
+
   activate: (app: GeoLibreAppAPI) => openRouteAnimationPanel(app),
   deactivate: (app: GeoLibreAppAPI) => closeRouteAnimationPanel(app),
   // Persist the panel-open flag plus settings so a saved project reopens on the
@@ -1332,3 +1321,7 @@ export const maplibreRouteAnimationPlugin: GeoLibrePlugin = {
   },
   applyProjectState: (app: GeoLibreAppAPI, state: unknown) => restoreRouteAnimation(app, state),
 };
+
+routeAnimationPanelStore.runtime.reattach = reattachRouteAnimation;
+routeAnimationPanelStore.runtime.open = openRouteAnimationPanel;
+routeAnimationPanelStore.runtime.close = closeRouteAnimationPanel;

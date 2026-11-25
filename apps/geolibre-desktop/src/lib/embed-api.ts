@@ -173,7 +173,8 @@ export type EmbedCommand =
     }
   | { type: "exportImage" }
   | { type: "getLayerFeatures"; layerId: string }
-  | { type: "getDrawnFeatures" };
+  | { type: "getDrawnFeatures" }
+  | { type: "ping" };
 
 /** A parsed inbound message: the command plus the host's correlation id. */
 export interface EmbedRequest {
@@ -421,9 +422,37 @@ function checkFilterExpression(
 const INLINE_FEATURE_LAYER_TYPES = ["geojson", "deckgl-viz"];
 
 /**
+ * Validate overlay corners (video/image): four [lng, lat] pairs matching
+ * `isCornerCoordinates` in `@geolibre/map`.
+ */
+function isCornerCoordinates(value: unknown): boolean {
+  if (
+    !Array.isArray(value) ||
+    value.length !== 4 ||
+    !value.every(
+      (corner) =>
+        Array.isArray(corner) &&
+        corner.length === 2 &&
+        Number.isFinite(corner[0]) &&
+        Number.isFinite(corner[1]) &&
+        corner[0] >= -360 &&
+        corner[0] <= 360 &&
+        corner[1] >= -90 &&
+        corner[1] <= 90,
+    )
+  ) {
+    return false;
+  }
+  const lngs = (value as [number, number][]).map((corner) => corner[0]);
+  const centre = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+  return centre >= -180 && centre <= 180 && Math.max(...lngs) - Math.min(...lngs) <= 360;
+}
+
+/**
  * Whether an `addLayer` spec carries anything the map could actually render: a
  * re-fetchable source (`url`, `data`, `tiles[]`, `metadata.originalUrl` — the
- * same predicate the Layer Library uses), or, for an
+ * same predicate the Layer Library uses), a `video` layer with `source.urls`
+ * and valid corner `source.coordinates`, or, for an
  * {@link INLINE_FEATURE_LAYER_TYPES} type, inline features on the spec or as a
  * `data` object on the source.
  *
@@ -435,6 +464,16 @@ const INLINE_FEATURE_LAYER_TYPES = ["geojson", "deckgl-viz"];
  */
 function hasRenderableEmbedSource(spec: Record<string, unknown>): boolean {
   const source = isRecord(spec.source) ? spec.source : {};
+  // `syncVideoLayer` renders only when both `source.urls` and valid corner
+  // `source.coordinates` are present, so check video specs before the generic
+  // `hasRestorableLayerSource` fallback.
+  if (spec.type === "video") {
+    return (
+      Array.isArray(source.urls) &&
+      source.urls.some((url) => typeof url === "string" && url.trim() !== "") &&
+      isCornerCoordinates(source.coordinates)
+    );
+  }
   if (
     hasRestorableLayerSource({ source, metadata: isRecord(spec.metadata) ? spec.metadata : {} })
   ) {
@@ -467,7 +506,9 @@ const BLOCKED_SOURCE_URL_SCHEME = /^\s*(?:javascript|vbscript|data|file|blob):/i
  * check should not depend on which sink reads the field later.
  */
 function normalizedUrl(value: string): string {
-  return value.replace(/[\t\n\r]/g, "");
+  // Strip ASCII tab/CR/LF anywhere and leading C0 controls/spaces, matching
+  // WHATWG URL parsing before checking the scheme.
+  return value.replace(/[\t\n\r]/g, "").replace(/^[\u0000-\u0020]+/, "");
 }
 
 /**
@@ -485,6 +526,7 @@ function blockedSpecUrl(spec: Record<string, unknown>): string | null {
     source.data,
     metadata.originalUrl,
     ...(Array.isArray(source.tiles) ? source.tiles : []),
+    ...(Array.isArray(source.urls) ? source.urls : []),
   ];
   for (const candidate of candidates) {
     if (typeof candidate !== "string") continue;
@@ -678,6 +720,8 @@ export function parseEmbedRequest(
       return { command: { type: "getLayerFeatures", layerId: payload.layerId }, requestId };
     case "getDrawnFeatures":
       return { command: { type: "getDrawnFeatures" }, requestId };
+    case "ping":
+      return { command: { type: "ping" }, requestId };
     default:
       return null;
   }

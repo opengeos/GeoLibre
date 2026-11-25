@@ -60,7 +60,7 @@ def test_invalid_pat_policy_is_rejected(client):
     for extra in (
         {"scopes": []},
         {"scopes": ["unknown:scope"]},
-        {"scopes": ["admin:org"]},
+        {"scopes": ["manage:sessions"]},
     ):
         response = client.post(
             "/api/auth/token",
@@ -99,7 +99,7 @@ def test_invalid_bootstrap_policy_does_not_reserve_account(client):
         json={
             "username": "charlie",
             "password": "correct horse",
-            "scopes": ["admin:org"],
+            "scopes": ["manage:sessions"],
         },
     )
     assert rejected.status_code == 400

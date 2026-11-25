@@ -1,10 +1,5 @@
-import {
-  setBookmarkLabels,
-  setImageLabels,
-  setTerrainMeasureBodyNames,
-  setTerrainMeasureLabels,
-  setViewStateLabels,
-} from "@geolibre/plugins";
+import { configureHostPluginModule as configureBuiltInPluginModule } from "../../lib/configure-plugin-module";
+
 import type { TFunction } from "i18next";
 import { useEffect } from "react";
 import { PLANET_SWITCHER_LABEL_KEYS } from "../../lib/planet-labels";
@@ -20,40 +15,55 @@ export function useTranslatedPluginLabels(t: TFunction): void {
   // so it still applies when the toolbar is hidden (e.g. `?maponly`), where the
   // BookmarkControl overlay is still present.
   useEffect(() => {
-    setBookmarkLabels({
-      captureStateLabel: t("bookmark.captureStateLabel"),
-      captureStateTooltip: t("bookmark.captureStateTooltip"),
-      exportLabel: t("bookmark.export"),
-      exportSelectedLabel: t("bookmark.exportSelected"),
-      exportAllLabel: t("bookmark.exportAll"),
-      newFolderLabel: t("bookmark.newFolder"),
-      defaultFolderName: t("bookmark.defaultFolderName"),
+    configureBuiltInPluginModule("components", {
+      "labels:setBookmarkLabels": ({ setBookmarkLabels }) =>
+        setBookmarkLabels({
+          captureStateLabel: t("bookmark.captureStateLabel"),
+          captureStateTooltip: t("bookmark.captureStateTooltip"),
+          exportLabel: t("bookmark.export"),
+          exportSelectedLabel: t("bookmark.exportSelected"),
+          exportAllLabel: t("bookmark.exportAll"),
+          newFolderLabel: t("bookmark.newFolder"),
+          defaultFolderName: t("bookmark.defaultFolderName"),
+        }),
     });
-    setViewStateLabels({ title: t("viewState.panelTitle") });
-    setImageLabels({
-      fallbackTitle: t("imageControl.defaultTitle"),
-      expand: t("imageControl.expand"),
-      collapse: t("imageControl.collapse"),
+    configureBuiltInPluginModule("components", {
+      "labels:setViewStateLabels": ({ setViewStateLabels }) =>
+        setViewStateLabels({ title: t("viewState.panelTitle") }),
     });
-    setTerrainMeasureLabels({
-      title: t("terrainMeasure.title"),
-      surfaceDistance: t("terrainMeasure.surfaceDistance"),
-      surfaceArea: t("terrainMeasure.surfaceArea"),
-      elevationGainLoss: t("terrainMeasure.elevationGainLoss"),
-      elevationRange: t("terrainMeasure.elevationRange"),
-      meanSlope: t("terrainMeasure.meanSlope"),
-      computing: t("terrainMeasure.computing"),
-      partialData: t("terrainMeasure.partialData"),
-      heading: t("terrainMeasure.heading"),
-      finalHeading: t("terrainMeasure.finalHeading"),
-      bodyNote: t("terrainMeasure.bodyNote"),
+    configureBuiltInPluginModule("components", {
+      "labels:setImageLabels": ({ setImageLabels }) =>
+        setImageLabels({
+          fallbackTitle: t("imageControl.defaultTitle"),
+          expand: t("imageControl.expand"),
+          collapse: t("imageControl.collapse"),
+        }),
+    });
+    configureBuiltInPluginModule("components", {
+      "labels:setTerrainMeasureLabels": ({ setTerrainMeasureLabels }) =>
+        setTerrainMeasureLabels({
+          title: t("terrainMeasure.title"),
+          surfaceDistance: t("terrainMeasure.surfaceDistance"),
+          surfaceArea: t("terrainMeasure.surfaceArea"),
+          elevationGainLoss: t("terrainMeasure.elevationGainLoss"),
+          elevationRange: t("terrainMeasure.elevationRange"),
+          meanSlope: t("terrainMeasure.meanSlope"),
+          computing: t("terrainMeasure.computing"),
+          partialData: t("terrainMeasure.partialData"),
+          heading: t("terrainMeasure.heading"),
+          finalHeading: t("terrainMeasure.finalHeading"),
+          bodyNote: t("terrainMeasure.bodyNote"),
+        }),
     });
     // The note names the body, so it uses the planet switcher's names rather
     // than the ellipsoid records' datum-qualified ones.
-    setTerrainMeasureBodyNames(
-      Object.fromEntries(
-        Object.entries(PLANET_SWITCHER_LABEL_KEYS).map(([id, key]) => [id, t(key)]),
-      ),
-    );
+    configureBuiltInPluginModule("components", {
+      "labels:setTerrainMeasureBodyNames": ({ setTerrainMeasureBodyNames }) =>
+        setTerrainMeasureBodyNames(
+          Object.fromEntries(
+            Object.entries(PLANET_SWITCHER_LABEL_KEYS).map(([id, key]) => [id, t(key)]),
+          ),
+        ),
+    });
   }, [t]);
 }

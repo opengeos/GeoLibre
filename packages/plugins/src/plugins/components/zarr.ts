@@ -16,6 +16,7 @@ import {
   interpolateRampColors,
   setExternalNativePaintBridge,
   useAppStore,
+  wrapLongitude,
 } from "@geolibre/core";
 import {
   readNativeZarrDimensions,
@@ -52,11 +53,13 @@ import {
 } from "../zarr-directory-store";
 import {
   pickTimeDimension,
+  pointSeriesFromQueryResult,
   readCoordinateTimeAttributes,
   resolveZarrSelectorDates,
   resolveZarrTimeAxis,
   type ZarrTimeAttributes,
   type ZarrTimeAxis,
+  zarrIndexSeriesSelector,
 } from "../zarr-time-axis";
 import { getComponentsConstructors, type ZarrLayerControlConstructor } from "./constructors";
 import { layerNameFromUrl } from "./shared";
@@ -306,6 +309,7 @@ export async function addCloudNetcdfLayer(
 
   // The untiled Zarr renderer draws in Web Mercator; switch off globe first
   // (matching the COG raster flow) so the layer paints, on either 2D engine.
+  // engine-audit-allow: arcgis-null-map: only 2D maps need this projection guard; null is a no-op.
   ensureMercatorProjection(app.getMap?.() ?? app.getMapboxMap?.());
 
   const refs =
@@ -772,6 +776,18 @@ export async function setZarrLayerSelector(
 }
 
 /**
+ * The variable a store Zarr layer renders, e.g. `"sst"`.
+ *
+ * @param layerId - The layer id.
+ * @returns The variable name, or undefined when the layer is gone.
+ */
+function zarrLayerVariable(layerId: string): string | undefined {
+  const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
+  const variable = layer?.source.variable;
+  return typeof variable === "string" ? variable : undefined;
+}
+
+/**
  * Read the data values of a live Zarr layer under a GeoJSON geometry: a `Point`
  * for click-to-value, a `Polygon`/`MultiPolygon` for region statistics.
  *
@@ -1097,6 +1113,32 @@ function registerZarrTemporalAdapter(
           ...((current?.source.selector as Record<string, number | string>) ?? {}),
           [axis.dimension]: index,
         });
+      },
+      valueName: zarrLayerVariable(layerId),
+      // Lets the Time Slider's pixel time-series chart plot this cube: one query
+      // reads every requested slice at the click, without moving the map off
+      // the slice on screen. A getter, read when the chart looks for layers:
+      // on a native renderer (ArcGIS, Cesium) the layer is not in zarrControl,
+      // so queryZarrLayer has nothing to ask and the chart is not offered.
+      get readPointSeries() {
+        if (isNativeZarrRenderer(useAppStore.getState().primaryRenderer)) return undefined;
+        return async (
+          lngLat: [number, number],
+          indices: readonly number[],
+          signal?: AbortSignal,
+        ): Promise<Map<number, number | null>> => {
+          const result = await queryZarrLayer(
+            layerId,
+            { type: "Point", coordinates: [wrapLongitude(lngLat[0]), lngLat[1]] },
+            zarrIndexSeriesSelector(axis.dimension, indices),
+            { signal, includeSpatialCoordinates: false },
+          );
+          return pointSeriesFromQueryResult(
+            result as Record<string, unknown> | null,
+            zarrLayerVariable(layerId),
+            indices,
+          );
+        };
       },
     });
     if (isNativeZarrRenderer(useAppStore.getState().primaryRenderer)) {

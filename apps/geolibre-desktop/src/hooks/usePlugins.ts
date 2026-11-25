@@ -1,116 +1,17 @@
+import { BUILT_IN_PLUGINS } from "@geolibre/plugins/builtin-plugins";
+import { builtInPluginMetadata } from "@geolibre/plugins/builtin-plugin-metadata";
+import { configureHostPluginModule as configureBuiltInPluginModule } from "../lib/configure-plugin-module";
+import { setOverpassEndpoint } from "@geolibre/plugins/osm-downloader-api";
 import { useAppStore } from "@geolibre/core";
 import { buildProjectEgressSnapshot } from "../lib/build-project-snapshot";
 import { reserveBuiltInPluginIds } from "../lib/plugin-registry";
 import { ensurePluginBlocklistLoaded, hasPluginBlocklistEntries } from "../lib/plugin-blocklist";
 import {
   addRasterToMap,
-  openControlPanel,
-  closeControlPanel,
-  isControlPanelVisible,
   readRasterWindow,
   setRasterRenderEngine,
-  addZarrRasterLayer,
-  buildSelectorTimeBinding,
-  queryZarrLayer,
-  registerTemporalLayer,
-  unregisterTemporalLayer,
-  isTimeSliderIdle,
-  TIME_SLIDER_PLUGIN_ID,
-  type TemporalLayerAdapter,
-  setZarrLayerSelector,
-  setZarrLocalStoreProvider,
-  maplibreAnnotationsPlugin,
-  maplibreDimensionsPlugin,
-  maplibreBasemapControlPlugin,
-  maplibreComponentsPlugin,
-  maplibreDeckGlVizPlugin,
-  maplibreDirectionsPlugin,
-  maplibreElevationProfilePlugin,
-  maplibreEffectsPlugin,
-  getEffectsSettings,
-  setEffectsSettings,
-  type EffectsSettings,
-  maplibreEarthdataGisPlugin,
-  setEarthdataCogSaver,
-  setSatelliteEmbeddingsFileSaver,
-  setFieldsOfTheWorldFileSaver,
-  setOceanDataPlatformFileSaver,
-  maplibreEnviroAtlasPlugin,
-  maplibreEsriWaybackPlugin,
-  maplibreFemaWmsPlugin,
-  maplibreGeoAgentPlugin,
-  maplibreGeoEditorPlugin,
-  maplibreLayerControlPlugin,
-  maplibreNasaEarthdataPlugin,
-  maplibreNationalMapPlugin,
-  maplibreUsgsDemPlugin,
-  maplibreEarthaccessPlugin,
-  maplibreOpenAerialMapPlugin,
-  maplibreOsmDownloaderPlugin,
-  maplibreIgnLidarHdPlugin,
-  maplibreArcGisPortalPlugin,
-  maplibreArcGisHubPlugin,
-  maplibreTennesseeGisPlugin,
-  maplibreUsFederalGisPlugin,
-  maplibreUsStateGisPlugin,
-  maplibreUsLocalGisPlugin,
-  maplibreIndiaGisPlugin,
-  maplibreCkanPlugin,
-  maplibreSocrataPlugin,
-  maplibreStacCatalogsPlugin,
-  maplibreSourceCoopPlugin,
-  maplibreS3BrowserPlugin,
-  maplibreNaturalEarthPlugin,
-  maplibreHuggingFacePlugin,
-  maplibreSatelliteEmbeddingsPlugin,
-  maplibreFieldsOfTheWorldPlugin,
-  maplibreSentinel2ExplorerPlugin,
-  registerSentinel2CompositeProtocol,
-  registerStacRenderProtocol,
-  maplibreOceanDataPlatformPlugin,
-  maplibreDynamicalPlugin,
-  maplibreJaxaEarthPlugin,
-  registerJaxaEarthProtocol,
-  maplibreGeoLensPlugin,
-  setGeoLensDefaultServerUrl,
-  setOverpassEndpoint,
-  maplibreVantorPlugin,
-  maplibrePlanetOpenDataPlugin,
-  maplibrePortolanPlugin,
-  maplibreOvertureMapsPlugin,
-  queryOvertureFeatures,
-  maplibreGraticulePlugin,
-  maplibreH3Plugin,
-  maplibreS2Plugin,
-  maplibreA5Plugin,
-  maplibreDggridPlugin,
-  maplibreDggalPlugin,
-  maplibreOlcPlugin,
-  maplibreGeohashPlugin,
-  maplibreTilecodePlugin,
-  maplibreCloudsPlugin,
-  maplibrePrecipitationPlugin,
-  maplibreMapillaryPlugin,
-  maplibreReverseGeocodePlugin,
-  maplibreStreetViewPlugin,
-  maplibreSamGeoPlugin,
-  maplibreSunPlugin,
-  maplibreRouteAnimationPlugin,
-  flightSimulatorPlugin,
-  godsEyeViewPlugin,
-  maplibreSwipePlugin,
-  SWIPE_PLUGIN_ID,
-  DIRECTIONS_PLUGIN_ID,
-  REVERSE_GEOCODE_PLUGIN_ID,
-  maplibreTimelapsePlugin,
-  maplibreTimeSliderPlugin,
-  setTimelapseVideoSaver,
-  setPointCloudAnnotationFileSaver,
-  setPointCloudPrelabelRunner,
-  setPointCloudLabelWriter,
-  maplibreUsgsLidarPlugin,
-  pointCloudAnnotationPlugin,
-  maplibreUsgsNldiPlugin,
+} from "@geolibre/plugins/maplibre-raster";
+import {
   PluginManager,
   registerRightPanel,
   unregisterRightPanel,
@@ -134,16 +35,52 @@ import {
   openFloatingPanel,
   closeFloatingPanel,
   getOpenFloatingPanels,
+  isPluginEngineSupported,
+  setLocalizedErrorTranslator,
+} from "@geolibre/plugins/runtime";
+import {
+  openControlPanel,
+  closeControlPanel,
+  isControlPanelVisible,
+} from "@geolibre/plugins/control-panels";
+import {
+  addZarrRasterLayer,
+  queryZarrLayer,
+  setZarrLayerSelector,
+  setZarrLocalStoreProvider,
+  addLidarLayerFromUrl,
+  addLidarLayerFromBytes,
+} from "@geolibre/plugins/component-helpers";
+import {
+  buildSelectorTimeBinding,
+  registerTemporalLayer,
+  unregisterTemporalLayer,
+} from "@geolibre/plugins/temporal-layers";
+import { isTimeSliderIdle } from "@geolibre/plugins/time-slider-state";
+import {
+  TIME_SLIDER_PLUGIN_ID,
+  SWIPE_PLUGIN_ID,
+  DIRECTIONS_PLUGIN_ID,
+  REVERSE_GEOCODE_PLUGIN_ID,
+  EFFECTS_PLUGIN_ID,
+  GEO_EDITOR_PLUGIN_ID,
+} from "@geolibre/plugins/plugin-ids";
+import { type TemporalLayerAdapter, type EffectsSettings } from "@geolibre/plugins";
+import {
+  DEFAULT_EFFECTS_SETTINGS,
+  normalizeEffectsSettings,
+  effectsSettingsEqual,
+} from "@geolibre/plugins/effects-settings";
+import { registerSentinel2CompositeProtocol } from "@geolibre/plugins/sentinel2-composite";
+import { registerStacRenderProtocol } from "@geolibre/plugins/stac-render";
+import { registerJaxaEarthProtocol } from "@geolibre/plugins/jaxa-earth-api";
+import { queryOvertureFeatures } from "@geolibre/plugins/overture-query";
+import {
   getGeometryEditTargetLayerId,
   getLastGeometryEditEnd,
   subscribeGeometryEdit,
-  isPluginEngineSupported,
   startLayerGeometryEdit,
-  addLidarLayerFromUrl,
-  addLidarLayerFromBytes,
-  setArcGisPortalAuth,
-  setLocalizedErrorTranslator,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/geo-editor-state";
 import { getDeploymentPolicy, readDeploymentEnvValue } from "../lib/deployment-env";
 import type { DeploymentPolicy } from "../lib/deployment-policy";
 import { evaluatePlugin, type PluginPolicyDenial } from "../lib/plugin-policy";
@@ -154,14 +91,17 @@ import type { GeoLibrePlugin, GeoLibreMapControlPosition } from "@geolibre/plugi
 import { invoke } from "@tauri-apps/api/core";
 import { readFile } from "@tauri-apps/plugin-fs";
 import type { RefObject } from "react";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { bundledPluginManifestPaths } from "virtual:bundled-plugins";
 import {
   assertBundleNotBlocklisted,
   installWebPluginArchive,
+  isFilesystemPluginLoaded,
+  listInstalledDesktopPlugins,
   listInstalledWebPlugins,
   loadExternalPlugins,
   reloadExternalUrlPlugin,
+  uninstallDesktopPluginArchive,
   uninstallWebPlugin,
   unloadFilesystemPlugin,
   unloadRemovedUrlPlugins,
@@ -192,9 +132,10 @@ import { useDesktopSettingsStore } from "./useDesktopSettings";
 import { isPluginVisible } from "../lib/ui-profile";
 import type { ActivatablePlugin } from "../lib/assistant/plugin-activation";
 import { createSettleGate } from "../lib/settle-gate";
+import { ensurePluginStylesLoaded } from "../lib/lazy-plugin-styles";
 
 /** Records a plugin failure in the diagnostics panel without crashing the app. */
-function reportPluginError(pluginId: string, action: string, error: unknown): void {
+export function reportPluginError(pluginId: string, action: string, error: unknown): void {
   const normalized = error instanceof Error ? error : new Error(String(error));
   appendDiagnostic({
     category: "runtime",
@@ -206,6 +147,9 @@ function reportPluginError(pluginId: string, action: string, error: unknown): vo
 }
 
 const manager = new PluginManager();
+manager.onBeforeActivate((pluginId) => {
+  void ensurePluginStylesLoaded(pluginId);
+});
 
 /**
  * Seeds the GeoLens plugin's default server URL from the deployment settings.
@@ -213,7 +157,11 @@ const manager = new PluginManager();
  * time, because the policy is fetched while this module loads.
  */
 export function initGeoLensDefaultUrl(): void {
-  setGeoLensDefaultServerUrl(readDeploymentEnvValue("VITE_GEOLENS_DEFAULT_URL"));
+  const configuredUrl = readDeploymentEnvValue("VITE_GEOLENS_DEFAULT_URL");
+  configureBuiltInPluginModule("geolens", {
+    "host:setGeoLensDefaultServerUrl": ({ setGeoLensDefaultServerUrl }) =>
+      setGeoLensDefaultServerUrl(configuredUrl),
+  });
 }
 
 /**
@@ -225,89 +173,8 @@ export function initOverpassEndpoint(): void {
   setOverpassEndpoint(readDeploymentEnvValue("VITE_GEOLIBRE_OVERPASS_URL"));
 }
 
-const BUILT_IN_PLUGINS: GeoLibrePlugin[] = [
-  maplibreLayerControlPlugin,
-  maplibreGeoEditorPlugin,
-  maplibreAnnotationsPlugin,
-  maplibreDimensionsPlugin,
-  // The web service plugins (WEB_SERVICE_PLUGIN_IDS) are grouped into the
-  // "Web Services" submenu, rendered where the first of them appears in this
-  // order.
-  maplibreFemaWmsPlugin,
-  maplibreNasaEarthdataPlugin,
-  maplibreEnviroAtlasPlugin,
-  maplibreNationalMapPlugin,
-  maplibreUsgsNldiPlugin,
-  maplibreUsgsDemPlugin,
-  maplibreUsgsLidarPlugin,
-  maplibreVantorPlugin,
-  maplibrePlanetOpenDataPlugin,
-  maplibrePortolanPlugin,
-  maplibreEarthdataGisPlugin,
-  maplibreEarthaccessPlugin,
-  maplibreOpenAerialMapPlugin,
-  maplibreOsmDownloaderPlugin,
-  maplibreIgnLidarHdPlugin,
-  maplibreArcGisPortalPlugin,
-  maplibreArcGisHubPlugin,
-  maplibreTennesseeGisPlugin,
-  maplibreUsFederalGisPlugin,
-  maplibreUsStateGisPlugin,
-  maplibreUsLocalGisPlugin,
-  maplibreIndiaGisPlugin,
-  maplibreSocrataPlugin,
-  maplibreCkanPlugin,
-  maplibreStacCatalogsPlugin,
-  maplibreSourceCoopPlugin,
-  maplibreS3BrowserPlugin,
-  maplibreNaturalEarthPlugin,
-  maplibreHuggingFacePlugin,
-  maplibreSatelliteEmbeddingsPlugin,
-  maplibreFieldsOfTheWorldPlugin,
-  maplibreSentinel2ExplorerPlugin,
-  maplibreOceanDataPlatformPlugin,
-  maplibreDynamicalPlugin,
-  maplibreJaxaEarthPlugin,
-  maplibreGeoLensPlugin,
-  maplibreStreetViewPlugin,
-  maplibreMapillaryPlugin,
-  // The DGGS grid plugins (grouped into the Plugins menu's "DGGS" submenu,
-  // rendered where the first of them appears in this order).
-  maplibreH3Plugin,
-  maplibreS2Plugin,
-  maplibreA5Plugin,
-  maplibreDggridPlugin,
-  maplibreDggalPlugin,
-  maplibreOlcPlugin,
-  maplibreGeohashPlugin,
-  maplibreTilecodePlugin,
-  maplibreBasemapControlPlugin,
-  maplibreEsriWaybackPlugin,
-  maplibreTimeSliderPlugin,
-  maplibreTimelapsePlugin,
-  maplibreOvertureMapsPlugin,
-  maplibreGeoAgentPlugin,
-  maplibreElevationProfilePlugin,
-  maplibreSwipePlugin,
-  maplibreGraticulePlugin,
-  maplibreCloudsPlugin,
-  maplibrePrecipitationPlugin,
-  maplibreEffectsPlugin,
-  maplibreSunPlugin,
-  maplibreRouteAnimationPlugin,
-  flightSimulatorPlugin,
-  godsEyeViewPlugin,
-  maplibreSamGeoPlugin,
-  pointCloudAnnotationPlugin,
-  // Last visible entry of the Plugins menu is above; the ids below are
-  // skipped by PluginsMenu and surface elsewhere.
-  maplibreDirectionsPlugin,
-  maplibreReverseGeocodePlugin,
-  maplibreDeckGlVizPlugin,
-  maplibreComponentsPlugin,
-];
-manager.registerAll(BUILT_IN_PLUGINS);
-reserveBuiltInPluginIds(BUILT_IN_PLUGINS.map((plugin) => plugin.id));
+for (const registration of BUILT_IN_PLUGINS) manager.registerLazy(registration);
+reserveBuiltInPluginIds(BUILT_IN_PLUGINS.map(({ metadata }) => metadata.id));
 
 /**
  * Built-in plugins a `?plugin=` deep link may not activate: they send what the
@@ -321,128 +188,146 @@ const CONSENT_GATED_PLUGIN_IDS: ReadonlySet<string> = new Set([
 
 /** Ids of the built-in plugins a `?plugin=` deep link may activate. */
 export const DEEP_LINKABLE_PLUGIN_IDS: readonly string[] = BUILT_IN_PLUGINS.map(
-  (plugin) => plugin.id,
+  ({ metadata }) => metadata.id,
 ).filter((id) => !CONSENT_GATED_PLUGIN_IDS.has(id));
 
 // The Timelapse plugin records the map to a video blob but cannot depend on
 // the app's Tauri I/O helpers, so the save step (native dialog under Tauri,
 // download in the browser) is injected here once at startup.
-setTimelapseVideoSaver((blob, { defaultName, extension, mimeType }) =>
-  saveBinaryFileWithFallback(blob, {
-    defaultName,
-    filters: [{ name: "Video", extensions: [extension] }],
-    browserTypes: [
-      {
-        description: "Video",
-        accept: { [mimeType.split(";")[0]]: [`.${extension}`] },
-      },
-    ],
-    mimeType,
-  }),
-);
+configureBuiltInPluginModule("timelapse", {
+  "host:setTimelapseVideoSaver": ({ setTimelapseVideoSaver }) =>
+    setTimelapseVideoSaver((blob, { defaultName, extension, mimeType }) =>
+      saveBinaryFileWithFallback(blob, {
+        defaultName,
+        filters: [{ name: "Video", extensions: [extension] }],
+        browserTypes: [
+          {
+            description: "Video",
+            accept: { [mimeType.split(";")[0]]: [`.${extension}`] },
+          },
+        ],
+        mimeType,
+      }),
+    ),
+});
 
 // The point cloud annotator exports LAS files but cannot depend on the app's
 // Tauri I/O helpers, so the binary save is injected here like the timelapse's.
-setPointCloudAnnotationFileSaver((bytes, { defaultName, extension, mimeType, description }) =>
-  saveBinaryFileWithFallback(bytes, {
-    defaultName,
-    filters: [{ name: description, extensions: [extension] }],
-    browserTypes: [{ description, accept: { [mimeType]: [`.${extension}`] } }],
-    mimeType,
-  }),
-);
+configureBuiltInPluginModule("point-cloud-annotation", {
+  "host:setPointCloudAnnotationFileSaver": ({ setPointCloudAnnotationFileSaver }) =>
+    setPointCloudAnnotationFileSaver((bytes, { defaultName, extension, mimeType, description }) =>
+      saveBinaryFileWithFallback(bytes, {
+        defaultName,
+        filters: [{ name: description, extensions: [extension] }],
+        browserTypes: [{ description, accept: { [mimeType]: [`.${extension}`] } }],
+        mimeType,
+      }),
+    ),
+});
 
 // The point cloud annotator pre-labels with Whitebox LiDAR classifiers run by
 // the in-browser WASM runner, which lives in the processing package the
 // plugins package cannot import; loaded on first use to stay off startup.
-setPointCloudPrelabelRunner(async (toolId, parameters, las) => {
-  const { runWhiteboxToolWasm } = await import("@geolibre/processing");
-  const job = await runWhiteboxToolWasm({
-    tool_id: toolId,
-    parameters,
-    layer_inputs: { input: { name: "input.las", kind: "lidar_in", bytes: las } },
-    tool: {
-      id: toolId,
-      params: [
-        { name: "input", kind: "lidar_in", required: true },
-        { name: "output", kind: "lidar_out", required: true },
-        ...Object.keys(parameters).map((name) => ({ name, kind: "string" })),
-      ],
-    },
-  });
-  const output = job.outputs.output;
-  if (job.status !== "succeeded" || !(output instanceof Uint8Array)) {
-    throw new Error(job.error || job.messages.slice(-1)[0] || `${toolId} failed`);
-  }
-  return output;
+configureBuiltInPluginModule("point-cloud-annotation", {
+  "host:setPointCloudPrelabelRunner": ({ setPointCloudPrelabelRunner }) =>
+    setPointCloudPrelabelRunner(async (toolId, parameters, las) => {
+      const { runWhiteboxToolWasm } = await import("@geolibre/processing");
+      const job = await runWhiteboxToolWasm({
+        tool_id: toolId,
+        parameters,
+        layer_inputs: {
+          input: { name: "input.las", kind: "lidar_in", bytes: las },
+        },
+        tool: {
+          id: toolId,
+          params: [
+            { name: "input", kind: "lidar_in", required: true },
+            { name: "output", kind: "lidar_out", required: true },
+            ...Object.keys(parameters).map((name) => ({ name, kind: "string" })),
+          ],
+        },
+      });
+      const output = job.outputs.output;
+      if (job.status !== "succeeded" || !(output instanceof Uint8Array)) {
+        throw new Error(job.error || job.messages.slice(-1)[0] || `${toolId} failed`);
+      }
+      return output;
+    }),
 });
 
 // The point cloud annotator writes a whole local file with its saved labels
 // through the sidecar's /pointcloud job; the client lives in the processing
 // package, loaded on first use.
-setPointCloudLabelWriter({
-  available: async () => {
-    const { fetchPointCloudStatus } = await import("@geolibre/processing");
-    try {
-      return (await fetchPointCloudStatus()).available;
-    } catch {
-      return false;
-    }
-  },
-  write: async ({ inputPath, outputPath, labels, instances }) => {
-    const { fetchConversionJob, runPointCloudApplyLabels } = await import("@geolibre/processing");
-    let job = await runPointCloudApplyLabels({
-      input_path: inputPath,
-      output_path: outputPath,
-      labels,
-      instances,
-    });
-    // A long rewrite outlives a brief sidecar hiccup: retry a failed poll a
-    // few times before giving up (the job keeps running on the server).
-    let failures = 0;
-    while (job.status === "pending" || job.status === "running") {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      try {
-        job = await fetchConversionJob(job.id);
-        failures = 0;
-      } catch (error) {
-        if (++failures >= 5) throw error;
-      }
-    }
-    if (job.status !== "succeeded") {
-      throw new Error(job.error || job.messages.slice(-1)[0] || "The point cloud job failed");
-    }
-    const result = (job.result ?? {}) as {
-      points?: number;
-      relabelled?: number;
-      instanced?: number;
-    };
-    return {
-      points: result.points ?? 0,
-      relabelled: result.relabelled ?? 0,
-      instanced: result.instanced ?? 0,
-    };
-  },
+configureBuiltInPluginModule("point-cloud-annotation", {
+  "host:setPointCloudLabelWriter": ({ setPointCloudLabelWriter }) =>
+    setPointCloudLabelWriter({
+      available: async () => {
+        const { fetchPointCloudStatus } = await import("@geolibre/processing");
+        try {
+          return (await fetchPointCloudStatus()).available;
+        } catch {
+          return false;
+        }
+      },
+      write: async ({ inputPath, outputPath, labels, instances }) => {
+        const { fetchConversionJob, runPointCloudApplyLabels } =
+          await import("@geolibre/processing");
+        let job = await runPointCloudApplyLabels({
+          input_path: inputPath,
+          output_path: outputPath,
+          labels,
+          instances,
+        });
+        // A long rewrite outlives a brief sidecar hiccup: retry a failed poll a
+        // few times before giving up (the job keeps running on the server).
+        let failures = 0;
+        while (job.status === "pending" || job.status === "running") {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          try {
+            job = await fetchConversionJob(job.id);
+            failures = 0;
+          } catch (error) {
+            if (++failures >= 5) throw error;
+          }
+        }
+        if (job.status !== "succeeded") {
+          throw new Error(job.error || job.messages.slice(-1)[0] || "The point cloud job failed");
+        }
+        const result = (job.result ?? {}) as {
+          points?: number;
+          relabelled?: number;
+          instanced?: number;
+        };
+        return {
+          points: result.points ?? 0,
+          relabelled: result.relabelled ?? 0,
+          instanced: result.instanced ?? 0,
+        };
+      },
+    }),
 });
 
 // The ArcGIS Portal plugin browses a signed-in portal. Sign-in lives in the
 // app (lib/arcgis-oauth.ts), so the plugin shares the session Add Data uses.
-setArcGisPortalAuth({
-  connections: () => Object.values(useArcGISAuthStore.getState().connections),
-  subscribe: (listener) =>
-    useArcGISAuthStore.subscribe((state, previous) => {
-      if (state.connections !== previous.connections) listener();
+configureBuiltInPluginModule("arcgis-portal", {
+  "host:setArcGisPortalAuth": ({ setArcGisPortalAuth }) =>
+    setArcGisPortalAuth({
+      connections: () => Object.values(useArcGISAuthStore.getState().connections),
+      subscribe: (listener) =>
+        useArcGISAuthStore.subscribe((state, previous) => {
+          if (state.connections !== previous.connections) listener();
+        }),
+      normalizePortalUrl: normalizeArcGISPortalUrl,
+      clientId: loadArcGISClientId,
+      signIn: (portalUrl, clientId) => signInToArcGIS({ portalUrl, clientId }),
+      signOut: (portal) => signOutOfArcGIS(portal),
+      getToken: getArcGISAccessToken,
+      tokenProvider: (portal) => arcgisLayerTokenProvider(portal, (key) => i18n.t(key)),
+      errorMessage: (error) => {
+        const key = arcgisAuthErrorKey(error);
+        return key ? i18n.t(key) : error instanceof Error ? error.message : String(error);
+      },
     }),
-  normalizePortalUrl: normalizeArcGISPortalUrl,
-  clientId: loadArcGISClientId,
-  signIn: (portalUrl, clientId) => signInToArcGIS({ portalUrl, clientId }),
-  signOut: (portal) => signOutOfArcGIS(portal),
-  getToken: getArcGISAccessToken,
-  tokenProvider: (portal) => arcgisLayerTokenProvider(portal, (key) => i18n.t(key)),
-  errorMessage: (error) => {
-    const key = arcgisAuthErrorKey(error);
-    return key ? i18n.t(key) : error instanceof Error ? error.message : String(error);
-  },
 });
 
 // Errors that plugin library code throws for the UI (LocalizedError) translate
@@ -459,35 +344,41 @@ setLocalizedErrorTranslator((key, defaultValue, params) =>
 // PNG, and `format=tiff` returns a tiled file with no overviews), and the
 // plugins package owns neither the COG encoder nor the app's file dialogs. Both
 // are injected here once at startup, mirroring setTimelapseVideoSaver.
-setEarthdataCogSaver(async (geoTiffBytes, defaultName) => {
-  // Imported on demand so the COG encoder's WASM is only fetched when a user
-  // actually downloads one.
-  const { convertGeoTiffToCog } = await import("@geolibre/processing");
-  const cogBytes = await convertGeoTiffToCog(geoTiffBytes);
-  const saved = await saveBinaryFileWithFallback(cogBytes, {
-    defaultName,
-    filters: [{ name: "Cloud Optimized GeoTIFF", extensions: ["tif"] }],
-    browserTypes: [
-      {
-        description: "Cloud Optimized GeoTIFF",
-        accept: { "image/tiff": [".tif"] },
-      },
-    ],
-    mimeType: "image/tiff",
-  });
-  return saved !== null;
+configureBuiltInPluginModule("earthdata-gis", {
+  "host:setEarthdataCogSaver": ({ setEarthdataCogSaver }) =>
+    setEarthdataCogSaver(async (geoTiffBytes, defaultName) => {
+      // Imported on demand so the COG encoder's WASM is only fetched when a user
+      // actually downloads one.
+      const { convertGeoTiffToCog } = await import("@geolibre/processing");
+      const cogBytes = await convertGeoTiffToCog(geoTiffBytes);
+      const saved = await saveBinaryFileWithFallback(cogBytes, {
+        defaultName,
+        filters: [{ name: "Cloud Optimized GeoTIFF", extensions: ["tif"] }],
+        browserTypes: [
+          {
+            description: "Cloud Optimized GeoTIFF",
+            accept: { "image/tiff": [".tif"] },
+          },
+        ],
+        mimeType: "image/tiff",
+      });
+      return saved !== null;
+    }),
 });
 
 // The Satellite Embeddings plugin builds clipped GeoTIFFs in memory; saving
 // them needs the app's file dialogs, injected the same way.
-setSatelliteEmbeddingsFileSaver((blob, { defaultName, extension, mimeType, description }) =>
-  saveBinaryFileWithFallback(blob, {
-    defaultName,
-    filters: [{ name: description, extensions: [extension] }],
-    browserTypes: [{ description, accept: { [mimeType]: [`.${extension}`] } }],
-    mimeType,
-  }),
-);
+configureBuiltInPluginModule("satellite-embeddings", {
+  "host:setSatelliteEmbeddingsFileSaver": ({ setSatelliteEmbeddingsFileSaver }) =>
+    setSatelliteEmbeddingsFileSaver((blob, { defaultName, extension, mimeType, description }) =>
+      saveBinaryFileWithFallback(blob, {
+        defaultName,
+        filters: [{ name: description, extensions: [extension] }],
+        browserTypes: [{ description, accept: { [mimeType]: [`.${extension}`] } }],
+        mimeType,
+      }),
+    ),
+});
 
 // Sentinel-2 Explorer composites are tiles of a MapLibre protocol; register it
 // up front so a saved project's composite layers draw before the plugin opens.
@@ -500,24 +391,30 @@ registerJaxaEarthProtocol();
 
 // The Fields of the World plugin saves tile GeoParquet and GeoJSON files the
 // same way.
-setFieldsOfTheWorldFileSaver((blob, { defaultName, extension, mimeType, description }) =>
-  saveBinaryFileWithFallback(blob, {
-    defaultName,
-    filters: [{ name: description, extensions: [extension] }],
-    browserTypes: [{ description, accept: { [mimeType]: [`.${extension}`] } }],
-    mimeType,
-  }),
-);
+configureBuiltInPluginModule("fields-of-the-world", {
+  "host:setFieldsOfTheWorldFileSaver": ({ setFieldsOfTheWorldFileSaver }) =>
+    setFieldsOfTheWorldFileSaver((blob, { defaultName, extension, mimeType, description }) =>
+      saveBinaryFileWithFallback(blob, {
+        defaultName,
+        filters: [{ name: description, extensions: [extension] }],
+        browserTypes: [{ description, accept: { [mimeType]: [`.${extension}`] } }],
+        mimeType,
+      }),
+    ),
+});
 
 // The Ocean Data Platform plugin saves GeoJSON files the same way.
-setOceanDataPlatformFileSaver((blob, { defaultName, extension, mimeType, description }) =>
-  saveBinaryFileWithFallback(blob, {
-    defaultName,
-    filters: [{ name: description, extensions: [extension] }],
-    browserTypes: [{ description, accept: { [mimeType]: [`.${extension}`] } }],
-    mimeType,
-  }),
-);
+configureBuiltInPluginModule("ocean-data-platform", {
+  "host:setOceanDataPlatformFileSaver": ({ setOceanDataPlatformFileSaver }) =>
+    setOceanDataPlatformFileSaver((blob, { defaultName, extension, mimeType, description }) =>
+      saveBinaryFileWithFallback(blob, {
+        defaultName,
+        filters: [{ name: description, extensions: [extension] }],
+        browserTypes: [{ description, accept: { [mimeType]: [`.${extension}`] } }],
+        mimeType,
+      }),
+    ),
+});
 
 // The Zarr panel can open a store from a folder on disk, but reading a folder
 // needs a filesystem API the plugins package does not have, so the picker is
@@ -679,6 +576,7 @@ export async function installPluginArchive(
     sourcePath,
   });
   const app = createAppAPI(mapControllerRef);
+  const wasActive = manager.isActive(pluginId);
   // The archive was overwritten in place for a reinstall; drop the loaded copy
   // so the forced re-scan re-registers the updated version under the same id.
   unloadFilesystemPlugin(manager, pluginId, app);
@@ -686,6 +584,13 @@ export async function installPluginArchive(
   await ensureExternalPluginsLoadedWithSettings(desktopSettings, app, {
     force: true,
   });
+  if (wasActive && !manager.isActive(pluginId)) {
+    try {
+      await manager.activate(pluginId, app);
+    } catch (error) {
+      reportPluginError(pluginId, "activate", error);
+    }
+  }
   return pluginId;
 }
 
@@ -714,21 +619,82 @@ export async function installPluginArchiveFromFile(
   return pluginId;
 }
 
-// Uninstall a plugin that was installed from a file in the browser.
+// Uninstall a plugin that was installed from a `.zip` file (desktop or browser).
 export async function uninstallPluginArchiveFromFile(
   pluginId: string,
   mapControllerRef: RefObject<MapEngine | null>,
 ): Promise<void> {
-  await uninstallWebPlugin(manager, pluginId, createAppAPI(mapControllerRef));
+  const app = createAppAPI(mapControllerRef);
+  if (isTauriRuntime()) {
+    await uninstallDesktopPluginArchive(manager, pluginId, app);
+    return;
+  }
+  await uninstallWebPlugin(manager, pluginId, app);
 }
 
-// List plugins installed from a file (browser IndexedDB), for the Manage
-// Plugins UI. Returns an empty list on desktop and where IndexedDB is absent.
+const archiveReloadInFlight = new Map<string, Promise<void>>();
+
+// Hot-reload a plugin installed from a `.zip` file (desktop disk or browser IndexedDB)
+// without restarting the app, preserving its active state.
+export function reloadPluginArchiveFromFile(
+  pluginId: string,
+  mapControllerRef: RefObject<MapEngine | null>,
+): Promise<void> {
+  const previous = archiveReloadInFlight.get(pluginId) ?? Promise.resolve();
+  const run = previous
+    .catch(() => {})
+    .then(async () => {
+      const app = createAppAPI(mapControllerRef);
+      let wasActive = manager.isActive(pluginId);
+      const desktopSettings = useDesktopSettingsStore.getState().desktopSettings;
+      // Run the unload inside the serialized scan queue so any in-flight scan
+      // settles before we drop the previous registration and re-read the archive.
+      await ensureExternalPluginsLoadedWithSettings(desktopSettings, app, {
+        force: true,
+        beforeScan: () => {
+          wasActive = manager.isActive(pluginId);
+          unloadFilesystemPlugin(manager, pluginId, app);
+        },
+      });
+      if (!isFilesystemPluginLoaded(pluginId)) {
+        const shadowedByOther = manager.list().some((plugin) => plugin.id === pluginId);
+        throw new Error(
+          i18n.t(
+            shadowedByOther ? "managePlugins.reloadConflict" : "managePlugins.reloadNotFound",
+            {
+              pluginId,
+            },
+          ),
+        );
+      }
+      if (wasActive && !manager.isActive(pluginId)) {
+        try {
+          const activated = await manager.activate(pluginId, app);
+          if (!activated) {
+            throw new Error(i18n.t("managePlugins.reloadReactivateFailed", { pluginId }));
+          }
+        } catch (error) {
+          reportPluginError(pluginId, "activate", error);
+          throw error;
+        }
+      }
+    });
+  const tracked = run.finally(() => {
+    if (archiveReloadInFlight.get(pluginId) === tracked) {
+      archiveReloadInFlight.delete(pluginId);
+    }
+  });
+  archiveReloadInFlight.set(pluginId, tracked);
+  return tracked;
+}
+
+// List plugins installed from a `.zip` file (desktop app-data dir or browser IndexedDB).
 export function listPluginArchivesFromFile(): Promise<InstalledWebPlugin[]> {
-  return listInstalledWebPlugins();
+  return isTauriRuntime() ? listInstalledDesktopPlugins() : listInstalledWebPlugins();
 }
 
 export function usePluginRegistry() {
+  const effectsPreviewApp = useRef<ReturnType<typeof createAppAPI> | null>(null);
   useSyncExternalStore(
     (listener) => manager.subscribe(listener),
     () => manager.getVersion(),
@@ -747,12 +713,30 @@ export function usePluginRegistry() {
       // workspace (#844). The reverse direction (entering split view turns
       // swipe off) is handled by useSwipeSplitViewExclusivity.
       const collapseGridForSwipe = id === SWIPE_PLUGIN_ID && !manager.isActive(id);
+      const persistSettledToggle = () => {
+        if (collapseGridForSwipe && manager.isActive(id)) {
+          const { mapLayout, setMapGrid } = useAppStore.getState();
+          if (mapLayout.rows * mapLayout.cols > 1) setMapGrid(1, 1);
+        }
+        persistProjectPluginState(before);
+      };
       // Plugin controls are imperative MapLibre code, so a throw here escapes
       // React's error boundaries. Contain it so one bad plugin can't break the
       // toggle handler — surface it in diagnostics instead. Return without
       // persisting so a half-applied failure is not written to the project.
       try {
         manager.toggle(id, appApi);
+        const pending = manager.pendingActivation(id);
+        if (pending) {
+          // Wait for the actual mount before changing the layout or saving its
+          // settings. A failed or cancelled lazy import leaves the grid intact.
+          void pending
+            .then((activated) => {
+              if (activated) persistSettledToggle();
+            })
+            .catch((error: unknown) => reportPluginError(id, "toggle", error));
+          return;
+        }
       } catch (error) {
         // Known limitation: if toggle throws after a partial mutation (e.g. the
         // control attached but a later step failed), the in-memory PluginManager
@@ -761,21 +745,7 @@ export function usePluginRegistry() {
         reportPluginError(id, "toggle", error);
         return;
       }
-      // Collapse the grid only once swipe actually activated, so a failed
-      // activation (a throw above, or addMapControl returning false) leaves the
-      // user's split-view layout intact. Done synchronously before React flushes
-      // effects so useSwipeSplitViewExclusivity sees the single-pane grid and
-      // doesn't undo the activation it just allowed.
-      // Relies on maplibre-swipe activating synchronously (activate returns
-      // false/undefined, never a Promise). PluginManager.activate marks a plugin
-      // active optimistically and only rolls back async failures via
-      // watchAsyncActivation, so isActive() would read true here before an async
-      // mount confirms — revisit this guard if swipe ever gains a dynamic import.
-      if (collapseGridForSwipe && manager.isActive(id)) {
-        const { mapLayout, setMapGrid } = useAppStore.getState();
-        if (mapLayout.rows * mapLayout.cols > 1) setMapGrid(1, 1);
-      }
-      persistProjectPluginState(before);
+      persistSettledToggle();
     },
     setMapControlPosition: (
       id: string,
@@ -791,19 +761,36 @@ export function usePluginRegistry() {
       }
       persistProjectPluginState(before);
     },
-    getEffectsSettings,
+    getEffectsSettings: () =>
+      normalizeEffectsSettings(
+        manager
+          .list()
+          .find(({ id }) => id === EFFECTS_PLUGIN_ID)
+          ?.getProjectState?.(),
+      ),
     // Live preview: push the appearance change straight to the engine for an
     // instant redraw, but do NOT persist. A color-picker drag or slider scrub
-    // fires this every frame, so keeping persistence out avoids marking the
+    // fires this every frame. Reuse its app API until commit, and keep
+    // persistence out to avoid marking the
     // project dirty and sweeping Zustand subscribers on every pixel of movement.
     previewEffectsSettings: (next: Partial<EffectsSettings>) => {
       // Contained like toggle/reposition: setEffectsSettings drives imperative
       // canvas code (engine.applySettings) that can throw and escape React's
       // error boundaries; surface it in diagnostics instead of crashing.
       try {
-        setEffectsSettings(next);
+        const plugin = manager.list().find(({ id }) => id === EFFECTS_PLUGIN_ID);
+        if (!plugin?.applyProjectState)
+          throw new Error("The effects settings provider is unavailable.");
+        const settings = normalizeEffectsSettings({
+          ...normalizeEffectsSettings(plugin.getProjectState?.()),
+          ...next,
+        });
+        plugin.applyProjectState(
+          (effectsPreviewApp.current ??= createAppAPI()),
+          effectsSettingsEqual(settings, DEFAULT_EFFECTS_SETTINGS) ? undefined : settings,
+        );
       } catch (error) {
-        reportPluginError(maplibreEffectsPlugin.id, "preview-effects", error);
+        reportPluginError(EFFECTS_PLUGIN_ID, "preview-effects", error);
       }
     },
     // Commit: called once when an edit gesture ends (slider release, color
@@ -812,15 +799,19 @@ export function usePluginRegistry() {
     // no-op gesture does not flag the project dirty.
     commitEffectsSettings: () => {
       try {
-        const storedSettings =
-          useAppStore.getState().projectPlugins?.settings?.[maplibreEffectsPlugin.id];
-        const currentSettings = maplibreEffectsPlugin.getProjectState?.();
+        const storedSettings = useAppStore.getState().projectPlugins?.settings?.[EFFECTS_PLUGIN_ID];
+        const currentSettings = manager
+          .list()
+          .find(({ id }) => id === EFFECTS_PLUGIN_ID)
+          ?.getProjectState?.();
         if (JSON.stringify(storedSettings ?? null) === JSON.stringify(currentSettings ?? null)) {
           return;
         }
         useAppStore.getState().setProjectPlugins(projectPluginStateSnapshot());
       } catch (error) {
-        reportPluginError(maplibreEffectsPlugin.id, "commit-effects", error);
+        reportPluginError(EFFECTS_PLUGIN_ID, "commit-effects", error);
+      } finally {
+        effectsPreviewApp.current = null;
       }
     },
   };
@@ -830,7 +821,14 @@ export function usePluginRegistry() {
 // plugin menu items on the first pass. This hook additionally kicks off the
 // external plugin scan and reports whether it has finished.
 export function useExternalPluginsReady(mapControllerRef: RefObject<MapEngine | null>): boolean {
-  const desktopSettings = useDesktopSettingsStore((state) => state.desktopSettings);
+  // Narrow subscription: only re-scan when plugin manifest URLs or plugin
+  // directories change, not on unrelated desktop setting edits.
+  const pluginManifestUrls = useDesktopSettingsStore(
+    (state) => state.desktopSettings.pluginManifestUrls,
+  );
+  const additionalPluginDirectories = useDesktopSettingsStore(
+    (state) => state.desktopSettings.additionalPluginDirectories,
+  );
 
   useEffect(() => {
     // mapControllerRef is a stable ref object, so it is intentionally not a
@@ -841,8 +839,9 @@ export function useExternalPluginsReady(mapControllerRef: RefObject<MapEngine | 
     // the bundled drop-ins. Untrusted project URLs are surfaced by
     // useProjectPluginTrust and only reach this scan after the user trusts them
     // (which adds them to desktopSettings and re-runs this effect). See #1062.
+    const desktopSettings = useDesktopSettingsStore.getState().desktopSettings;
     void ensureExternalPluginsLoadedWithSettings(desktopSettings, createAppAPI(mapControllerRef));
-  }, [desktopSettings]);
+  }, [pluginManifestUrls, additionalPluginDirectories]);
 
   return useSyncExternalStore(
     (listener) => {
@@ -1002,11 +1001,29 @@ async function registryManifestUrlsForPolicy(
   }
 }
 
-async function ensureExternalPluginsLoadedWithSettings(
+// Serializes every invocation of `ensureExternalPluginsLoadedWithSettings`
+// BEFORE any async blocklist or registry fetches so concurrent calls cannot
+// resolve out of order and overwrite each other's loadKey / loaded state.
+let externalPluginsCallQueue: Promise<void> = Promise.resolve();
+
+function ensureExternalPluginsLoadedWithSettings(
   desktopSettings: ReturnType<typeof useDesktopSettingsStore.getState>["desktopSettings"],
   app: ReturnType<typeof createAppAPI>,
-  options?: { force?: boolean },
+  options?: { force?: boolean; beforeScan?: () => void },
 ): Promise<void> {
+  const run = externalPluginsCallQueue.then(() =>
+    runEnsureExternalPluginsLoadedWithSettings(desktopSettings, app, options),
+  );
+  externalPluginsCallQueue = run.catch(() => {});
+  return run;
+}
+
+async function runEnsureExternalPluginsLoadedWithSettings(
+  desktopSettings: ReturnType<typeof useDesktopSettingsStore.getState>["desktopSettings"],
+  app: ReturnType<typeof createAppAPI>,
+  options?: { force?: boolean; beforeScan?: () => void },
+): Promise<void> {
+  options?.beforeScan?.();
   // Only the user's installed URLs (desktop settings) and the bundled drop-ins
   // are auto-loaded. Project-supplied URLs are deliberately excluded here so
   // opening a project never fetches or imports third-party plugin code; they
@@ -1302,7 +1319,7 @@ const appApiHost: AppApiHost = {
   getLastGeometryEditEnd,
   subscribeGeometryEdit,
   isPluginEngineSupported,
-  maplibreGeoEditorPlugin,
+  maplibreGeoEditorPlugin: builtInPluginMetadata(GEO_EDITOR_PLUGIN_ID),
   startLayerGeometryEdit,
   addLidarLayerFromUrl,
   addLidarLayerFromBytes,
@@ -1373,16 +1390,20 @@ export async function activateDeepLinkedPlugin(
 export function listAssistantActivatablePlugins(): ActivatablePlugin[] {
   const renderer = useAppStore.getState().primaryRenderer;
   const { uiProfile } = useDesktopSettingsStore.getState().desktopSettings;
-  return manager
-    .list()
-    .flatMap((plugin) =>
-      plugin.assistant &&
-      !manager.isActive(plugin.id) &&
-      isPluginEngineSupported(plugin, renderer) &&
-      isPluginVisible(uiProfile, plugin.id)
-        ? [{ id: plugin.id, name: plugin.name, description: plugin.assistant.description.trim() }]
-        : [],
-    );
+  return manager.list().flatMap((plugin) =>
+    plugin.assistant &&
+    !manager.isActive(plugin.id) &&
+    isPluginEngineSupported(plugin, renderer) &&
+    isPluginVisible(uiProfile, plugin.id)
+      ? [
+          {
+            id: plugin.id,
+            name: plugin.name,
+            description: plugin.assistant.description.trim(),
+          },
+        ]
+      : [],
+  );
 }
 
 /**

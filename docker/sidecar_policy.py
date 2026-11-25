@@ -25,12 +25,14 @@ ROUTE_CAPABILITIES = {
 UNGUARDED_PREFIXES = frozenset(
     {
         "health",
-        "algorithms",
+        "token-check",
         "shutdown",
-        "run",
         "docs",
         "redoc",
         "openapi.json",
+        # The Live MCP relay answers 404 unless the desktop shell enables it
+        # with GEOLIBRE_LIVE_RELAY_PORT, which no container sets.
+        "relay",
     }
 )
 

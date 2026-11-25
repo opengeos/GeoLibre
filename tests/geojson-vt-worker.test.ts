@@ -7,6 +7,7 @@ import {
   GEOJSONVT_PROTOCOL,
   registerGeoJsonVtSource,
   setGeoJsonVtWorkerFactory,
+  unregisterAllGeoJsonVtSourcesForOwner,
   unregisterGeoJsonVtSource,
 } from "../packages/map/src/geojson-vt-protocol";
 import {
@@ -321,6 +322,93 @@ describe("geojson-vt tiling worker", () => {
       new AbortController(),
     );
     assert.equal(data.byteLength, 0);
+  });
+
+  it("does not fall back to main-thread indexing when unregistered while a tile is pending", async () => {
+    installFakeWorker();
+    register("L", points(100), PLAIN);
+    const pending = tile("L", [0, 0, 0]);
+    // Unregistering the last layer terminates the worker while the tile is in flight.
+    unregisterGeoJsonVtSource("L");
+    assert.equal(terminated, 1);
+    const data = await pending;
+    assert.equal(data.byteLength, 0);
+  });
+
+  it("refcounts shared layers across split-pane map owners", async () => {
+    installFakeWorker();
+    const primaryMap = {};
+    const secondaryMap = {};
+    const data = points(200);
+    registerGeoJsonVtSource("L", data, PLAIN, primaryMap);
+    // Secondary pane reuses the existing index without rebuilding.
+    assert.equal(registerGeoJsonVtSource("L", data, PLAIN, secondaryMap), false);
+    // Closing the secondary pane leaves the index live for the primary map.
+    unregisterGeoJsonVtSource("L", secondaryMap);
+    assert.equal(terminated, 0);
+    assert.ok((await tile("L", [0, 0, 0])).byteLength > 0);
+    // Removing from the primary map drops the layer and terminates the idle worker.
+    unregisterGeoJsonVtSource("L", primaryMap);
+    assert.equal(terminated, 1);
+  });
+
+  it("releases every layer owned by a destroyed map via unregisterAllGeoJsonVtSourcesForOwner", async () => {
+    installFakeWorker();
+    const primaryMap = {};
+    const secondaryMap = {};
+    registerGeoJsonVtSource("L", points(100), PLAIN, primaryMap);
+    registerGeoJsonVtSource("L", points(100), PLAIN, secondaryMap);
+    registerGeoJsonVtSource("M", points(100, 9), PLAIN, secondaryMap);
+    // Destroying the secondary pane releases its ownership on L and drops M.
+    unregisterAllGeoJsonVtSourcesForOwner(secondaryMap);
+    assert.equal(terminated, 0);
+    assert.ok((await tile("L", [0, 0, 0])).byteLength > 0);
+    assert.equal((await tile("M", [0, 0, 0])).byteLength, 0);
+    // Removing L from the primary map now tears down the worker cleanly.
+    unregisterAllGeoJsonVtSourcesForOwner(primaryMap);
+    assert.equal(terminated, 1);
+  });
+
+  it("discards stale worker bytes when a layer entry is replaced while a tile request is in flight", async () => {
+    // A custom worker that holds the first tile reply until released, so we can
+    // replace the registry entry after requestTile is posted and still reply
+    // with non-empty bytes for the old request.
+    let releaseReply: (() => void) | null = null;
+    class DeferredTileWorker {
+      private listeners = new Set<(event: MessageEvent) => void>();
+      addEventListener(type: string, listener: (event: MessageEvent) => void) {
+        if (type === "message") this.listeners.add(listener);
+      }
+      removeEventListener(type: string, listener: (event: MessageEvent) => void) {
+        if (type === "message") this.listeners.delete(listener);
+      }
+      postMessage(request: TileWorkerRequest) {
+        if (request.type === "tile") {
+          const reply = {
+            type: "tile",
+            requestId: request.requestId,
+            data: new Uint8Array([1, 2, 3, 4]).buffer,
+          };
+          releaseReply = () => {
+            for (const listener of this.listeners) listener({ data: reply } as MessageEvent);
+          };
+        }
+      }
+      terminate() {
+        terminated += 1;
+      }
+    }
+    setGeoJsonVtWorkerFactory(() => new DeferredTileWorker() as unknown as Worker);
+    register("L", points(50, 1), PLAIN);
+    const pending = tile("L", [0, 0, 0]);
+    // Yield so entry.posted resolves and worker.requestTile posts the tile message.
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(releaseReply, "expected tile request to be posted");
+    // Replace the registry entry before the worker responds.
+    register("L", points(50, 2), PLAIN);
+    (releaseReply as () => void)();
+    const stale = await pending;
+    assert.equal(stale.byteLength, 0);
   });
 });
 

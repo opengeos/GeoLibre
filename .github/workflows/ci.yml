@@ -144,11 +144,6 @@ jobs:
       # lower the limit when warnings are fixed.
       - name: Lint
         run: npm run lint
-        # Type-aware linting of the whole repo peaks just over Node's default
-        # ~4 GB heap (typescript-eslint 8.72.1 tipped it over); the runner has
-        # 16 GB.
-        env:
-          NODE_OPTIONS: --max-old-space-size=8192
 
       # A dependency declared by both the app and packages/plugins must carry
       # the same range, or npm nests a second copy. See "Shared dependency
@@ -345,9 +340,9 @@ jobs:
           retention-days: 30
 
   backend:
-    # The Python half of `npm run ci` (`npm run ci:backend`: sidecar tests with
-    # their coverage floor, plus docker/tests), and the projects-and-identity
-    # server suite. Needs no Node dependencies: `npm run` only reads the root
+    # The Python half of `npm run ci` (`npm run ci:backend`: the sidecar and
+    # the projects-and-identity server suites, each with its coverage floor,
+    # plus docker/tests). Needs no Node dependencies: `npm run` only reads the root
     # package.json scripts, so this job deliberately skips setup-node and uses
     # the runner image's bundled npm. Add setup-node if `ci:backend` ever gains
     # a step that needs Node itself.
@@ -410,11 +405,11 @@ jobs:
             --progress-spinner off \
             --requirement /tmp/backend-freeze.txt
 
-      - name: Run backend CI gate (sidecar coverage, docker/tests)
+      # Runs the sidecar and the projects-and-identity server suites, each
+      # gated on its coverage floor (see "Coverage floors" in
+      # docs/maintenance.md), plus docker/tests.
+      - name: Run backend CI gate (sidecar + identity server coverage, docker/tests)
         run: npm run ci:backend
-
-      - name: Test projects and identity server
-        run: python -m pytest backend/geolibre_server_api/tests
 
   rust:
     # The Rust half of `npm run ci` (`npm run check:rust`).

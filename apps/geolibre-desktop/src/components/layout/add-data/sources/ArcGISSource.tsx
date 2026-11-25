@@ -2,8 +2,11 @@ import {
   addArcGISLayer,
   fetchArcGISImageServiceRasterFunctions,
   fetchArcGISMapServiceSublayers,
-  type ArcGISImageServiceRasterFunction,
+  arcgisLayerTypeFromUrl,
   parseArcGISLayerType,
+} from "@geolibre/plugins/arcgis-layer";
+import {
+  type ArcGISImageServiceRasterFunction,
   type ArcGISLayerType,
   type ArcGISMapServiceSublayer,
   type ArcGISSourceType,
@@ -75,7 +78,9 @@ function simpleRenderingRuleFunctionName(renderingRule: string): string | null {
 export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.arcgis.defaultName"));
-  const [arcgisLayerType, setArcgisLayerType] = useState<ArcGISLayerType>("feature");
+  const [arcgisLayerType, setArcgisLayerType] = useState<ArcGISLayerType>(
+    () => arcgisLayerTypeFromUrl(initialUrl) ?? "feature",
+  );
   const [arcgisSourceType, setArcgisSourceType] = useState<ArcGISSourceType>("url");
   const [arcgisUrl, setArcgisUrl] = useState(initialUrl);
   const [arcgisItemId, setArcgisItemId] = useState("");

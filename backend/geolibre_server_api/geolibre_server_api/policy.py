@@ -19,7 +19,7 @@ from geolibre_server_api.enterprise_models import (
     OrganizationSecurityPolicy,
 )
 from geolibre_server_api.org_models import Organization, OrganizationMember
-from geolibre_server_api.proxy_identity import client_ip
+from geolibre_server_api.proxy_identity import client_ip, normalize_ip_network
 
 if TYPE_CHECKING:
     from geolibre_server_api.auth import AuthPrincipal
@@ -95,7 +95,8 @@ def require_organization_admin(
     if allowlist:
         address = client_ip(request)
         if address is None or not any(
-            address in ipaddress.ip_network(entry, strict=False) for entry in allowlist
+            address in normalize_ip_network(ipaddress.ip_network(entry, strict=False))
+            for entry in allowlist
         ):
             raise HTTPException(403, "administrative access is not allowed from this network")
     max_age = org_policy.admin_reauth_seconds
@@ -171,14 +172,17 @@ def record_failed_login(
     session.commit()
 
 
-def record_successful_login(session: Session, account_id: str, now_ts: int) -> None:
+def record_successful_login(
+    session: Session, account_id: str, now_ts: int, *, commit: bool = True
+) -> None:
     """Reset lockout counters; start the rotation clock the first time it is seen."""
     security = ensure_account_security(session, account_id)
     security.failed_login_count = 0
     security.locked_until = None
     if security.password_changed_at is None:
         security.password_changed_at = now_ts
-    session.commit()
+    if commit:
+        session.commit()
 
 
 def credential_expired(
@@ -252,10 +256,23 @@ def is_last_active_admin(session: Session, organization_id: str, account_id: str
     Demoting, removing, or deactivating it would leave the organization without
     an administrator who can sign in.
     """
+    # Lock the organization row on transactional backends (PostgreSQL) with
+    # FOR NO KEY UPDATE so concurrent demotions/removals serialize without
+    # deadlocking against foreign-key FOR KEY SHARE locks (e.g. SCIM inserts).
+    session.execute(
+        select(Organization.id)
+        .where(Organization.id == organization_id)
+        .with_for_update(key_share=True)
+    )
     return (
         organization_role(session, organization_id, account_id) == "administrator"
         and active_admin_count(session, organization_id, excluding=account_id) == 0
     )
+
+
+def revoke_account_credentials(session: Session, account_id: str, now_ts: int) -> None:
+    """Public wrapper revoking every live OAuth session and personal token of an account."""
+    _revoke_credentials(session, account_id, now_ts)
 
 
 def _revoke_credentials(session: Session, account_id: str, now_ts: int) -> None:

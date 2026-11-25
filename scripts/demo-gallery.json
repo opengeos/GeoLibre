@@ -1005,6 +1005,15 @@
       "topic": "Rivers",
       "caption": "30 m surface water along the Amazon and its tributaries in 2024",
       "source": "NASA OPERA DSWx-HLS"
+    },
+    {
+      "number": 106,
+      "slug": "sea-surface-temperature-1981-2023",
+      "title": "Monthly sea surface temperature, 1981–2023",
+      "theme": "oceans-water",
+      "topic": "Oceans",
+      "caption": "494 months of global SST streamed from a cloud-native Zarr store; press Play",
+      "source": "NOAA PSL OISST V2 via Source Cooperative"
     }
   ]
 }

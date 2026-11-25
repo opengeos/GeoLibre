@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { describe, it } from "node:test";
+import ts from "typescript";
+import { BUILT_IN_PLUGIN_METADATA } from "../packages/plugins/src/builtin-plugin-metadata";
 
 // Cesium-capable plugins must not read the map through MapLibre-only doors
 // (issue #2262). `app.getMap()` answers null on the globe, so a plugin that
@@ -14,6 +16,19 @@ import { describe, it } from "node:test";
 // is a property of the whole directory, not of any one module.
 
 const PLUGIN_DIR = resolve(import.meta.dirname, "..", "packages", "plugins", "src", "plugins");
+
+/** Engine declarations in generic factories or canonical built-in metadata. */
+function declaredEngines(source: string): string[] {
+  const lists = [...source.matchAll(/engines:\s*\[[^\]]*\]/g)].map((match) => match[0]);
+  for (const match of source.matchAll(
+    /(?:builtInPluginProperties|defineBuiltInPlugin)\(\s*["']([^"']+)["']/g,
+  )) {
+    const metadata = BUILT_IN_PLUGIN_METADATA.find(({ id }) => id === match[1]);
+    assert.ok(metadata, `unknown built-in metadata: ${match[1]}`);
+    if ("engines" in metadata) lists.push(`engines: ${JSON.stringify(metadata.engines)}`);
+  }
+  return lists;
+}
 
 /** Declares Cesium in its `engines` list, whatever the order, spacing, or quotes. */
 const DECLARES_CESIUM = /engines:\s*\[[^\]]*["']cesium["'][^\]]*\]/;
@@ -148,6 +163,8 @@ function resolveImport(fromFile: string, specifier: string): string | null {
  * shaped that way): the manifest with the `engines` declaration is in one
  * file, and the map access is in a helper next to it.
  */
+const runtimeImportsByFile = new Map<string, string[]>();
+
 function importClosure(entry: string): string[] {
   const seen = new Set<string>();
   const pending = [resolve(entry)];
@@ -155,15 +172,63 @@ function importClosure(entry: string): string[] {
     const file = pending.pop()!;
     if (seen.has(file)) continue;
     seen.add(file);
-    const source = blankComments(readFileSync(file, "utf8"));
-    // `from "./x"`, the side-effect form `import "./x"`, and the dynamic
-    // `import("./x")` a plugin uses to defer a heavy helper — all three reach
-    // code that would otherwise sit outside the audit. Either quote style, so
-    // a file that escapes the formatter is still followed.
-    for (const match of source.matchAll(/(?:\bfrom|\bimport)\s*\(?\s*["'](\.[^"']*)["']/g)) {
-      const resolved = resolveImport(file, match[1]);
-      if (resolved) pending.push(resolved);
+    const cached = runtimeImportsByFile.get(file);
+    if (cached) {
+      pending.push(...cached);
+      continue;
     }
+    const targets: string[] = [];
+    const source = ts.createSourceFile(
+      file,
+      readFileSync(file, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const follow = (specifier: string): void => {
+      if (!specifier.startsWith(".")) return;
+      const resolved = resolveImport(file, specifier);
+      if (resolved) targets.push(resolved);
+    };
+    // Type queries in lightweight runtime facades do not evaluate providers.
+    // Follow actual static imports/re-exports and dynamic import calls instead.
+    const visit = (node: ts.Node): void => {
+      if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+        const clause = node.importClause;
+        const bindings = clause?.namedBindings;
+        const typeOnly =
+          clause?.isTypeOnly ||
+          (!clause?.name &&
+            bindings &&
+            ts.isNamedImports(bindings) &&
+            bindings.elements.length > 0 &&
+            bindings.elements.every((entry) => entry.isTypeOnly));
+        if (!typeOnly) follow(node.moduleSpecifier.text);
+      } else if (
+        ts.isExportDeclaration(node) &&
+        node.moduleSpecifier &&
+        ts.isStringLiteral(node.moduleSpecifier)
+      ) {
+        const clause = node.exportClause;
+        const typeOnly =
+          node.isTypeOnly ||
+          (clause &&
+            ts.isNamedExports(clause) &&
+            clause.elements.length > 0 &&
+            clause.elements.every((entry) => entry.isTypeOnly));
+        if (!typeOnly) follow(node.moduleSpecifier.text);
+      } else if (
+        ts.isCallExpression(node) &&
+        node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+        node.arguments[0] &&
+        ts.isStringLiteral(node.arguments[0])
+      ) {
+        follow(node.arguments[0].text);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    runtimeImportsByFile.set(file, targets);
+    pending.push(...targets);
   }
   return [...seen];
 }
@@ -194,7 +259,11 @@ function pluginClosures(declares: RegExp): { plugin: string; files: string[] }[]
       }
       return entry.name.endsWith(".ts") ? [join(PLUGIN_DIR, entry.name)] : [];
     })
-    .filter((file) => declares.test(blankComments(readFileSync(file, "utf8"))))
+    .filter((file) =>
+      declaredEngines(blankComments(readFileSync(file, "utf8"))).some((list) =>
+        declares.test(list),
+      ),
+    )
     .map((file) => ({ plugin: relative(PLUGIN_DIR, file), files: importClosure(file) }));
 }
 
@@ -227,8 +296,8 @@ function styleMapReads(file: string): number[] {
   const raw = readFileSync(file, "utf8");
   const rawLines = raw.split("\n");
   const source = blankComments(raw);
-  const ownEngines = /engines:\s*\[[^\]]*\]/.exec(source);
-  if (ownEngines && !DECLARES_ARCGIS.test(ownEngines[0])) return [];
+  const ownEngines = declaredEngines(source);
+  if (ownEngines.length && !ownEngines.some((list) => DECLARES_ARCGIS.test(list))) return [];
   const lines = new Set<number>();
   for (const pattern of [STYLE_MAP_READ, GETMAP_INDIRECT])
     for (const match of source.matchAll(pattern)) {
@@ -291,6 +360,15 @@ function maplibreOnlyCalls(file: string): string[] {
 }
 
 describe("plugin engine audit", () => {
+  it("includes plugins whose engine declarations live in the catalog", () => {
+    const entries = mapboxPluginClosures().map(({ plugin }) => plugin);
+    assert.ok(entries.includes("maplibre-geo-editor.ts"));
+    assert.ok(entries.includes(join("elevation-profile", "index.ts")));
+    const arcgisEntries = arcgisPluginClosures().map(({ plugin }) => plugin);
+    assert.ok(arcgisEntries.includes("maplibre-fema-wms.ts"));
+    assert.ok(!arcgisEntries.includes("maplibre-geo-editor.ts"));
+  });
+
   it("finds the Cesium-capable plugins to audit", () => {
     // A regex that stops matching would make every assertion below vacuous.
     assert.ok(cesiumPluginClosures().length > 0, "no plugin declares Cesium support");
@@ -309,6 +387,12 @@ describe("plugin engine audit", () => {
       files.includes(join("vantor", "control.ts")),
       `expected the vantor plugin's own modules in its closure, got: ${files.join(", ")}`,
     );
+  });
+
+  it("does not evaluate Directions through Reverse Geocode's shared type-only runtime facade", () => {
+    const files = importClosure(join(PLUGIN_DIR, "maplibre-reverse-geocode.ts"));
+    assert.ok(files.includes(resolve(PLUGIN_DIR, "../map-mode-state.ts")));
+    assert.ok(!files.includes(join(PLUGIN_DIR, "maplibre-directions.ts")));
   });
 
   it("finds the Mapbox-capable plugins to audit", () => {

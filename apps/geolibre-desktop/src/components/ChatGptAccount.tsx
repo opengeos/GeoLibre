@@ -63,7 +63,6 @@ export function ChatGptAccount(): ReactElement {
       void follow((signal) => waitForChatGptSignIn(signal));
     }
     // `follow` only reads refs and setters.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status.signingIn]);
 
   if (!isChatGptSignInAvailable()) {

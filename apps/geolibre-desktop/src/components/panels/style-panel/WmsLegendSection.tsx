@@ -1,5 +1,5 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import { openHtmlPanelWithEntry } from "@geolibre/plugins";
+import { openHtmlPanelWithEntry } from "@geolibre/plugins/component-helpers";
 import type { MapEngine } from "@geolibre/map";
 import { Button, Input } from "@geolibre/ui";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";

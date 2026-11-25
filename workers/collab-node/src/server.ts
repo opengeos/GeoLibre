@@ -2,43 +2,39 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import { randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import {
-  CHAT_HISTORY_LIMIT,
-  MAX_CHAT_STORAGE_BYTES,
-  MAX_CHAT_TEXT_LENGTH,
   MAX_COMMENTS_PER_SESSION,
   MAX_REPLIES_PER_COMMENT,
   MAX_SNAPSHOT_BYTES,
   MIN_COMMENT_INTERVAL_MS,
-  MIN_CHAT_INTERVAL_MS,
+  appendBoundedChatHistory,
   authorizeHostAction,
   authorizeSnapshot,
   RELAY_SNAPSHOT_ORIGIN,
+  resolveJoin,
   shouldResyncRejectedSnapshot,
   clearParticipantOverrides,
   diffLockedLayers,
   getParticipantKey,
+  isAllowedOrigin,
   isIdentityConfigured,
   normalizeMode,
   participantCanEdit,
+  prepareChatMessage,
   preserveStoredComments,
   sanitizeCursor,
-  sanitizeDisplayName,
-  sanitizeColor,
   sanitizeView,
   setParticipantOverride,
+  timingSafeEqual,
   toWireParticipant,
   validateComment,
   validateReply,
-  verifyIdentityToken,
   isBoundedId,
   type ClientMessage,
-  type CollabChatMessage,
   type CollabInvite,
   type CollaborationMode,
-  type CollaborationRole,
-  type ParticipantIdentity,
   type PresenceEntry,
   type ServerMessage,
+  type SessionLogEntry,
   type SessionParticipant,
 } from "@geolibre/collab-core";
 import { WebSocket, WebSocketServer } from "ws";
@@ -55,56 +51,7 @@ const ENCODER = new TextEncoder();
 const MAX_RATE_LIMIT_KEYS = 10_000;
 const SWEEP_INTERVAL_MS = 60_000;
 
-function isAllowedOrigin(
-  originHeader: string | undefined,
-  envAllowed = process.env.ALLOWED_ORIGINS,
-): boolean {
-  if (!originHeader) return true;
-  const allowedList = envAllowed
-    ? envAllowed
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [
-        "https://geolibre.app",
-        "https://web.geolibre.app",
-        "https://viewer.geolibre.app",
-        "https://studio.geolibre.app",
-        "https://collab.geolibre.app",
-        "http://localhost",
-        "http://127.0.0.1",
-        "tauri://localhost",
-      ];
-
-  try {
-    const originUrl = new URL(originHeader);
-    const host = originUrl.hostname;
-    if (!envAllowed) {
-      if (host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost")) return true;
-      const previewSuffix = ".geolibre-preview.pages.dev";
-      const previewLabel = host.endsWith(previewSuffix) ? host.slice(0, -previewSuffix.length) : "";
-      if (
-        originUrl.protocol === "https:" &&
-        !originUrl.port &&
-        previewLabel &&
-        !previewLabel.includes(".")
-      ) {
-        return true;
-      }
-    }
-    return allowedList.some((allowed) => {
-      if (allowed === "*") return true;
-      try {
-        const allowedUrl = new URL(allowed);
-        return originUrl.origin === allowedUrl.origin;
-      } catch {
-        return originHeader === allowed || host === allowed;
-      }
-    });
-  } catch {
-    return false;
-  }
-}
+const MAX_PENDING_FRAMES = 64;
 
 interface Peer {
   socket: WebSocket;
@@ -117,6 +64,12 @@ interface Peer {
    * overtake it and be rejected with "Send a join message first".
    */
   queue?: Promise<void>;
+  /** Number of frames currently queued or running for this peer. */
+  pendingFrames: number;
+  /** Set when a `join` frame is currently awaiting async verification on this socket. */
+  joining?: boolean;
+  /** Set when the relay closes this peer due to frame-queue overflow. */
+  overflowClosed?: boolean;
 }
 
 interface LiveSession {
@@ -132,6 +85,12 @@ export interface RelayOptions {
   maxSnapshotBytes?: number;
   idleTtlMs?: number;
   trustProxy?: boolean;
+  /**
+   * Number of trusted reverse-proxy hops in front of the relay when
+   * `trustProxy` is enabled (defaults to `1`, or `TRUST_PROXY_HOPS`).
+   * The client IP is read that many entries from the right of `X-Forwarded-For`.
+   */
+  trustProxyHops?: number;
   /**
    * HMAC-SHA256 secret shared with this deployment's identity issuer, normally
    * from `COLLAB_IDENTITY_SECRET`. Unset disables identity: `identityToken` is
@@ -155,18 +114,45 @@ function randomToken(): string {
   return randomBytes(24).toString("hex");
 }
 
-function send(peer: Peer, message: ServerMessage): void {
-  if (peer.socket.readyState === WebSocket.OPEN) peer.socket.send(JSON.stringify(message));
+function sendRaw(peer: Peer, payload: string): void {
+  if (peer.socket.readyState === WebSocket.OPEN) peer.socket.send(payload);
 }
 
-function json(response: import("node:http").ServerResponse, status: number, body: unknown): void {
+function send(peer: Peer, message: ServerMessage): void {
+  sendRaw(peer, JSON.stringify(message));
+}
+
+/** CORS headers for every HTTP response; matches the Worker's `CORS_HEADERS`. */
+const CORS_HEADERS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+  "access-control-allow-headers": "Content-Type, Authorization",
+  "access-control-max-age": "86400",
+} as const;
+
+function json(
+  response: import("node:http").ServerResponse,
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = {},
+): void {
   response.writeHead(status, {
     "content-type": "application/json",
-    "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET, POST, OPTIONS",
-    "access-control-allow-headers": "Content-Type",
+    ...CORS_HEADERS,
+    ...headers,
   });
   response.end(JSON.stringify(body));
+}
+
+/**
+ * Read the bearer token from an `Authorization` header.
+ *
+ * @param header - The raw header value, if any.
+ * @returns The trimmed token, or `""` when the header is missing or not a
+ *   bearer credential.
+ */
+function bearerToken(header: string | undefined): string {
+  return header?.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";
 }
 
 export function createRelay(options: RelayOptions = {}): {
@@ -181,6 +167,10 @@ export function createRelay(options: RelayOptions = {}): {
     options.idleTtlMs ?? positive(process.env.COLLAB_IDLE_TTL_MS, DEFAULT_IDLE_TTL_MS);
   const trustProxy =
     options.trustProxy ?? (process.env.TRUST_PROXY === "true" || process.env.TRUST_PROXY === "1");
+  const trustProxyHops = Math.max(
+    1,
+    Math.floor(options.trustProxyHops ?? positive(process.env.TRUST_PROXY_HOPS, 1)),
+  );
   const identitySecret = options.identitySecret ?? process.env.COLLAB_IDENTITY_SECRET;
   const identitySupported = isIdentityConfigured(identitySecret);
   const store = new SessionStore(dbPath);
@@ -252,7 +242,10 @@ export function createRelay(options: RelayOptions = {}): {
   }
 
   function broadcast(session: LiveSession, message: ServerMessage, except?: Peer): void {
-    for (const peer of session.peers) if (peer !== except) send(peer, message);
+    const payload = JSON.stringify(message);
+    for (const peer of session.peers) {
+      if (peer !== except) sendRaw(peer, payload);
+    }
   }
 
   function broadcastParticipants(session: LiveSession, except?: Peer): void {
@@ -266,9 +259,29 @@ export function createRelay(options: RelayOptions = {}): {
     );
   }
 
+  /**
+   * Record an event in the host-only session log, as the Worker does.
+   *
+   * Best-effort: a persistence failure must not abort the caller, which still
+   * has to broadcast or tear down the peer after logging.
+   *
+   * @param id - The session code.
+   * @param entry - The event to record.
+   */
+  function appendLog(id: string, entry: SessionLogEntry): void {
+    try {
+      store.appendSessionLog(id, entry);
+    } catch {
+      // The state change the entry describes has already been applied.
+    }
+  }
+
   function closePeer(id: string, session: LiveSession, peer: Peer): void {
     if (!session.peers.delete(peer)) return;
-    if (peer.participant) session.presence.delete(peer.participant.clientId);
+    if (peer.participant) {
+      session.presence.delete(peer.participant.clientId);
+      appendLog(id, { type: "leave", ts: Date.now(), clientId: peer.participant.clientId });
+    }
     broadcastParticipants(session);
     if (session.peers.size === 0) {
       session.cleanup = setTimeout(() => {
@@ -300,6 +313,7 @@ export function createRelay(options: RelayOptions = {}): {
     }
 
     if (message.type === "presence" && peer.participant) {
+      if (!session.peers.has(peer) || peer.overflowClosed) return;
       const cursor = sanitizeCursor(message.cursor);
       const view = sanitizeView(message.view);
       const clientId = peer.participant.clientId;
@@ -315,90 +329,46 @@ export function createRelay(options: RelayOptions = {}): {
     }
 
     if (message.type === "join") {
-      if (peer.participant) return;
-      let role: CollaborationRole =
-        message.hostToken && persisted.hostToken && message.hostToken === persisted.hostToken
-          ? "host"
-          : "guest";
-
-      let inviteToken: string | undefined = undefined;
-      let matchedInvite: CollabInvite | undefined = undefined;
-      if (role === "guest" && message.inviteToken && typeof message.inviteToken === "string") {
-        const invites = store.getInvites(id);
-        const inv = invites.find((i) => i.token === message.inviteToken && !i.revoked);
-        if (inv && (!inv.maxUses || inv.useCount < inv.maxUses)) {
-          inviteToken = inv.token;
-          matchedInvite = inv;
-        }
+      if (peer.participant || peer.joining) return;
+      peer.joining = true;
+      let joined;
+      try {
+        joined = await resolveJoin({
+          message,
+          storedHostToken: persisted.hostToken,
+          requireIdentity: persisted.requireIdentity,
+          identitySecret,
+          generateClientId: () => randomUUID(),
+          getInvites: () => store.getInvites(id),
+          isBlockedKey: (key) => store.isBlockedKey(id, key),
+          claimInvite: (token) => {
+            if (!store.atomicClaimInvite(id, token)) return null;
+            return store.getInvites(id).find((i) => i.token === token) ?? null;
+          },
+          getDurableOverride: (key) => store.getDurableOverride(id, key),
+          isStillConnected: () => session.peers.has(peer) && !peer.overflowClosed,
+        });
+      } finally {
+        peer.joining = false;
       }
-
-      // Signature-checked against the configured issuer secret, so `identity`
-      // is only ever non-null for a credential this deployment actually minted.
-      // With no secret configured it is null for every token, making every
-      // joiner anonymous rather than trusting self-reported claims.
-      const identity: ParticipantIdentity | null = await verifyIdentityToken(
-        message.identityToken,
-        identitySecret,
-      );
-
-      if (persisted.requireIdentity && !identity && role !== "host") {
+      if (joined.status === "aborted") return;
+      if (joined.status === "error") {
         send(peer, {
           type: "error",
-          code: "identity-required",
-          message: "Sign-in required to join this session.",
+          code: joined.code,
+          message: joined.message,
         });
         return;
       }
 
-      const socketClientId = randomUUID();
-      const joiningParticipant: SessionParticipant = {
-        clientId: socketClientId,
-        displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
-        color: sanitizeColor(message.color),
-        role,
-        identity,
-        inviteToken,
-      };
-      const participantKey = getParticipantKey(joiningParticipant);
-
-      if (store.isBlockedKey(id, participantKey)) {
-        send(peer, {
-          type: "error",
-          code: "forbidden",
-          message: "You have been blocked from this session by the host.",
-        });
-        return;
-      }
-
-      const durableOverride = store.getDurableOverride(id, participantKey);
-      let initialOverride: boolean | undefined = undefined;
-      if (durableOverride !== undefined) {
-        initialOverride = durableOverride;
-      } else if (matchedInvite) {
-        initialOverride = matchedInvite.role === "co-edit";
-      }
-
-      if (matchedInvite) {
-        // Use an atomic SQL UPDATE to close the TOCTOU window: the initial
-        // maxUses check (line 312) happened before `await verifyIdentityToken`,
-        // and another join could have consumed the invite in the meantime.
-        if (!store.atomicClaimInvite(id, matchedInvite.token)) {
-          // Invite was consumed or revoked between the initial check and now.
-          matchedInvite = undefined;
-          inviteToken = undefined;
-        }
-      }
-
-      peer.participant = {
-        clientId: socketClientId,
-        displayName: identity ? identity.username : sanitizeDisplayName(message.displayName),
-        color: sanitizeColor(message.color),
-        role,
-        ...(initialOverride !== undefined ? { editOverride: initialOverride } : {}),
-        identity,
-        inviteToken,
-      };
-
+      peer.participant = joined.participant;
+      const { role } = joined;
+      appendLog(id, {
+        type: "join",
+        ts: Date.now(),
+        clientId: peer.participant.clientId,
+        identity: joined.identity,
+      });
       const welcomeInvites = role === "host" ? store.getInvites(id) : undefined;
 
       send(peer, {
@@ -460,6 +430,12 @@ export function createRelay(options: RelayOptions = {}): {
       const nextRev = (persisted.rev ?? 0) + 1;
       store.saveSnapshot(id, project, nextRev);
       persisted.rev = nextRev;
+      appendLog(id, {
+        type: "snapshot",
+        ts: Date.now(),
+        rev: nextRev,
+        origin: participant.clientId,
+      });
       broadcast(
         session,
         { type: "snapshot", project, origin: participant.clientId, rev: nextRev },
@@ -478,6 +454,7 @@ export function createRelay(options: RelayOptions = {}): {
       }
       const mode = normalizeMode(message.mode);
       store.saveMode(id, mode);
+      appendLog(id, { type: "set-mode", ts: Date.now(), mode });
       const list = participants(session);
       if (clearParticipantOverrides(list)) broadcastParticipants(session);
       // Also clear persisted durable overrides so disconnected participants
@@ -508,6 +485,13 @@ export function createRelay(options: RelayOptions = {}): {
         if (targetPeer?.participant) {
           const targetKey = getParticipantKey(targetPeer.participant);
           store.saveDurableOverride(id, targetKey, targetPeer.participant.editOverride);
+          appendLog(id, {
+            type: "set-participant-mode",
+            ts: Date.now(),
+            clientId: message.clientId,
+            // The normalized value actually applied, not the raw client input.
+            canEdit: targetPeer.participant.editOverride === true,
+          });
         }
         broadcastParticipants(session);
       }
@@ -643,32 +627,17 @@ export function createRelay(options: RelayOptions = {}): {
     }
 
     if (message.type === "chat") {
-      const chatText =
-        typeof message.text === "string" ? message.text.trim().slice(0, MAX_CHAT_TEXT_LENGTH) : "";
-      if (!chatText) return;
-      const now = Date.now();
-      if (
-        participant.lastChatTs !== undefined &&
-        now - participant.lastChatTs < MIN_CHAT_INTERVAL_MS
-      )
-        return;
-      participant.lastChatTs = now;
-      const chatMessage: CollabChatMessage = {
-        id: randomUUID(),
-        clientId: participant.clientId,
-        displayName: participant.displayName,
-        color: participant.color,
-        text: chatText,
-        coordinate: sanitizeCursor(message.coordinate),
-        ts: now,
-      };
-      let chat = [...persisted.chat, chatMessage].slice(-CHAT_HISTORY_LIMIT);
-      while (
-        chat.length > 1 &&
-        ENCODER.encode(JSON.stringify(chat)).length > MAX_CHAT_STORAGE_BYTES
-      )
-        chat = chat.slice(1);
-      store.saveChat(id, chat);
+      const prepared = prepareChatMessage({
+        participant,
+        message,
+        now: Date.now(),
+        generateId: () => randomUUID(),
+      });
+      if (!prepared) return;
+      participant.lastChatTs = prepared.nextLastChatTs;
+      const { chatMessage } = prepared;
+      const { history } = appendBoundedChatHistory(persisted.chat, chatMessage);
+      store.saveChat(id, history);
       broadcast(session, { type: "chat", message: chatMessage });
       return;
     }
@@ -832,14 +801,26 @@ export function createRelay(options: RelayOptions = {}): {
       return json(response, 200, { ok: true, service: "geolibre-collab", identitySupported });
     if (url.pathname === "/sessions" && request.method === "POST") {
       const origin = request.headers["origin"] ?? request.headers["referer"];
-      if (!isAllowedOrigin(origin)) {
+      if (!isAllowedOrigin(origin, process.env.ALLOWED_ORIGINS)) {
         return json(response, 403, { error: "Forbidden origin" });
       }
 
       const rawXff = trustProxy
         ? (request.headers["x-forwarded-for"] as string | undefined)
         : undefined;
-      const clientIp = rawXff?.split(",")[0].trim() || request.socket.remoteAddress || "unknown";
+      // Read the entry `trustProxyHops` from the right: the one appended by the
+      // nearest trusted proxy. When fewer entries are present, fall back to the
+      // socket address rather than trusting a leftmost, client-spoofable value.
+      const xffParts = rawXff
+        ?.split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      const clientIp =
+        (xffParts && xffParts.length >= trustProxyHops
+          ? xffParts[xffParts.length - trustProxyHops]
+          : undefined) ||
+        request.socket.remoteAddress ||
+        "unknown";
       if (!checkRateLimit(clientIp, 10, 60_000)) {
         return json(response, 429, { error: "Too many session creation requests" });
       }
@@ -915,6 +896,27 @@ export function createRelay(options: RelayOptions = {}): {
       });
       return;
     }
+    // Host-only session log: GET downloads it, DELETE clears it (the session
+    // and its snapshot are untouched). The host token is a bearer credential, so
+    // it travels in the Authorization header rather than the query string. An
+    // unknown session answers 403 like a wrong token, as on the Worker, so the
+    // endpoint does not reveal which session codes exist.
+    const logMatch = url.pathname.match(/^\/sessions\/([^/]+)\/log$/);
+    if (logMatch && (request.method === "GET" || request.method === "DELETE")) {
+      const sessionId = logMatch[1];
+      const hostToken = store.getHostToken(sessionId) ?? "";
+      const clientToken = bearerToken(request.headers.authorization);
+      if (!hostToken || !clientToken || !timingSafeEqual(hostToken, clientToken)) {
+        return json(response, 403, { error: "Forbidden" });
+      }
+      if (request.method === "DELETE") {
+        store.clearSessionLog(sessionId);
+        response.writeHead(204, CORS_HEADERS);
+        response.end();
+        return;
+      }
+      return json(response, 200, store.getSessionLog(sessionId), { "cache-control": "no-store" });
+    }
     json(response, 404, { error: "Not found" });
   });
 
@@ -934,7 +936,7 @@ export function createRelay(options: RelayOptions = {}): {
     const id = match[1];
     wss.handleUpgrade(request, socket, head, (websocket: WebSocket) => {
       const session = live(id);
-      const peer: Peer = { socket: websocket };
+      const peer: Peer = { socket: websocket, pendingFrames: 0 };
       session.peers.add(peer);
       alive.add(websocket);
       websocket.on("pong", () => alive.add(websocket));
@@ -947,17 +949,34 @@ export function createRelay(options: RelayOptions = {}): {
           });
           return;
         }
+        if (peer.pendingFrames >= MAX_PENDING_FRAMES) {
+          peer.overflowClosed = true;
+          send(peer, {
+            type: "error",
+            code: "bad-message",
+            message: "Too many queued messages; reconnecting.",
+          });
+          peer.socket.close(1008, "Too many queued messages");
+          return;
+        }
+        peer.pendingFrames += 1;
         // Defence in depth: a throw (or rejection) here would otherwise be an
         // uncaught exception that stops the whole relay. No single session's
         // frame should be able to do that to the others.
         peer.queue = (peer.queue ?? Promise.resolve())
-          .then(() => handleMessage(id, session, peer, raw))
+          .then(() => {
+            if (peer.overflowClosed) return;
+            return handleMessage(id, session, peer, raw);
+          })
           .catch(() => {
             send(peer, {
               type: "error",
               code: "bad-message",
               message: "Could not handle message.",
             });
+          })
+          .finally(() => {
+            peer.pendingFrames = Math.max(0, peer.pendingFrames - 1);
           });
       });
       websocket.on("close", () => closePeer(id, session, peer));

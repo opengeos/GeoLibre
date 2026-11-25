@@ -1094,36 +1094,58 @@ export interface FetchTransfersOptions {
 
 interface RawTransferList {
   transfers?: unknown;
+  total?: unknown;
+  limit?: unknown;
+  offset?: unknown;
+}
+
+const MAX_TRANSFER_PAGES = 100;
+
+async function fetchAllTransfers(
+  endpoint: string,
+  options: FetchTransfersOptions,
+): Promise<ProjectTransfer[]> {
+  const base = requireShareBase(options.baseUrl);
+  const collected: ProjectTransfer[] = [];
+  let offset = 0;
+  let limit = 100;
+
+  for (let page = 0; page < MAX_TRANSFER_PAGES; page += 1) {
+    const path = offset === 0 ? endpoint : `${endpoint}?limit=${limit}&offset=${offset}`;
+    const payload = (await shareAuthorizedJsonRequest(path, options.token, base, {
+      signal: options.signal,
+      fetchImpl: options.fetchImpl,
+    })) as RawTransferList | null;
+    const raw = Array.isArray(payload?.transfers) ? payload.transfers : [];
+    for (const entry of raw) {
+      const normalized = normalizeTransfer(entry);
+      if (normalized) collected.push(normalized);
+    }
+    const total = typeof payload?.total === "number" ? payload.total : null;
+    if (typeof payload?.limit === "number" && payload.limit > 0) {
+      limit = payload.limit;
+    }
+    offset += raw.length;
+    if (total === null || raw.length === 0 || offset >= total) {
+      break;
+    }
+  }
+
+  return collected;
 }
 
 /** List the pending transfers offered to the signed-in user. */
 export async function fetchIncomingTransfers(
   options: FetchTransfersOptions,
 ): Promise<ProjectTransfer[]> {
-  const base = requireShareBase(options.baseUrl);
-  const payload = (await shareAuthorizedJsonRequest(
-    "/api/transfers/incoming",
-    options.token,
-    base,
-    { signal: options.signal, fetchImpl: options.fetchImpl },
-  )) as RawTransferList | null;
-  const raw = Array.isArray(payload?.transfers) ? payload.transfers : [];
-  return raw.map(normalizeTransfer).filter((item): item is ProjectTransfer => item !== null);
+  return fetchAllTransfers("/api/transfers/incoming", options);
 }
 
 /** List the signed-in user's transfers still awaiting acceptance. */
 export async function fetchOutgoingTransfers(
   options: FetchTransfersOptions,
 ): Promise<ProjectTransfer[]> {
-  const base = requireShareBase(options.baseUrl);
-  const payload = (await shareAuthorizedJsonRequest(
-    "/api/transfers/outgoing",
-    options.token,
-    base,
-    { signal: options.signal, fetchImpl: options.fetchImpl },
-  )) as RawTransferList | null;
-  const raw = Array.isArray(payload?.transfers) ? payload.transfers : [];
-  return raw.map(normalizeTransfer).filter((item): item is ProjectTransfer => item !== null);
+  return fetchAllTransfers("/api/transfers/outgoing", options);
 }
 
 export interface AcceptProjectTransferOptions {

@@ -5,6 +5,7 @@
 // list pulls in.
 import type { ProcessingAlgorithm } from "./types";
 import { createDggsGridTool, dggsBinPointsTool, dggsCompactTool } from "./dggs-tools";
+import { LINEAR_REFERENCING_TOOLS } from "./linear-referencing-tools";
 import { TOPOLOGY_TOOLS } from "./topology-tools";
 import {
   aggregateTool,
@@ -77,6 +78,7 @@ export const VECTOR_TOOLS: ProcessingAlgorithm[] = [
   detectStopsTool,
   spaceTimeProximityTool,
   mergeLayersTool,
+  ...LINEAR_REFERENCING_TOOLS,
   // Data-quality tools (validity + topology rules) last, matching the menu.
   ...TOPOLOGY_TOOLS,
 ];

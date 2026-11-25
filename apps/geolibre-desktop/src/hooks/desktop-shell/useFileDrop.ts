@@ -1,6 +1,8 @@
 import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { addVectorFileToMap, listFileHandlers, prepareRasterControl } from "@geolibre/plugins";
+import { addVectorFileToMap } from "@geolibre/plugins/maplibre-vector";
+import { listFileHandlers } from "@geolibre/plugins/runtime";
+import { prepareRasterControl } from "@geolibre/plugins/maplibre-raster";
 import type { TFunction } from "i18next";
 import {
   type Dispatch,

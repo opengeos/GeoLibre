@@ -1,32 +1,32 @@
+import { builtInPluginMetadata } from "@geolibre/plugins/builtin-plugin-metadata";
+import {
+  EFFECTS_PLUGIN_ID,
+  LAYER_CONTROL_PLUGIN_ID,
+  DIRECTIONS_PLUGIN_ID,
+  GRATICULE_PLUGIN_ID,
+  REVERSE_GEOCODE_PLUGIN_ID,
+  ROUTE_ANIMATION_PLUGIN_ID,
+  SUN_PLUGIN_ID,
+  FLIGHT_SIMULATOR_PLUGIN_ID,
+} from "@geolibre/plugins/plugin-ids";
 import { useAppStore } from "@geolibre/core";
 import { rendererCapabilities, TERRAIN_SETTINGS_EVENT } from "@geolibre/map";
 import {
   DEFAULT_EFFECTS_SETTINGS,
-  type EffectsSettings,
-  getCloudsAnimationState,
-  getPrecipitationAnimationState,
   HALO_EXTENT_MAX,
   HALO_EXTENT_MIN,
   HALO_OPACITY_MAX,
   HALO_OPACITY_MIN,
-  flightSimulatorPlugin,
-  isPluginEngineSupported,
-  maplibreDirectionsPlugin,
-  maplibreLayerControlPlugin,
-  maplibreEffectsPlugin,
-  maplibreGraticulePlugin,
-  maplibreReverseGeocodePlugin,
-  maplibreRouteAnimationPlugin,
-  maplibreSunPlugin,
-  setCloudsFrame,
-  setPrecipitationFrame,
-  subscribeClouds,
-  subscribePrecipitation,
-  toggleCloudsPlaying,
-  togglePrecipitationPlaying,
+} from "@geolibre/plugins/effects-settings";
+import {
+  type EffectsSettings,
   type WeatherAnimationState,
   type WeatherLayerController,
 } from "@geolibre/plugins";
+import { cloudsAnimation, precipitationAnimation } from "@geolibre/plugins/weather-animation";
+
+import { isPluginEngineSupported } from "@geolibre/plugins/runtime";
+
 import {
   Button,
   ColorField,
@@ -143,9 +143,12 @@ export function ControlsMenu({
   const { t } = useTranslation();
   const capabilities = useMapCapabilities();
   const primaryRenderer = useAppStore((s) => s.primaryRenderer);
-  const directionsSupported = isPluginEngineSupported(maplibreDirectionsPlugin, primaryRenderer);
+  const directionsSupported = isPluginEngineSupported(
+    builtInPluginMetadata(DIRECTIONS_PLUGIN_ID),
+    primaryRenderer,
+  );
   const reverseGeocodeSupported = isPluginEngineSupported(
-    maplibreReverseGeocodePlugin,
+    builtInPluginMetadata(REVERSE_GEOCODE_PLUGIN_ID),
     primaryRenderer,
   );
   const directionsDisabled = !directionsSupported && !directionsActive;
@@ -156,21 +159,30 @@ export function ControlsMenu({
   // that stays empty). One already on stays reachable so it can be turned off.
   const unsupported = (plugin: Parameters<typeof isPluginEngineSupported>[0], active: boolean) =>
     !isPluginEngineSupported(plugin, primaryRenderer) && !active;
-  const layerControlDisabled = unsupported(maplibreLayerControlPlugin, layerControlActive);
-  const sunDisabled = unsupported(maplibreSunPlugin, panels.sun.visible);
+  const layerControlDisabled = unsupported(
+    builtInPluginMetadata(LAYER_CONTROL_PLUGIN_ID),
+    layerControlActive,
+  );
+  const sunDisabled = unsupported(builtInPluginMetadata(SUN_PLUGIN_ID), panels.sun.visible);
   const routeAnimationDisabled = unsupported(
-    maplibreRouteAnimationPlugin,
+    builtInPluginMetadata(ROUTE_ANIMATION_PLUGIN_ID),
     panels.routeAnimation.visible,
   );
   const flightSimulatorDisabled = unsupported(
-    flightSimulatorPlugin,
+    builtInPluginMetadata(FLIGHT_SIMULATOR_PLUGIN_ID),
     panels.flightSimulator.visible,
   );
-  const graticuleDisabled = unsupported(maplibreGraticulePlugin, graticuleActive);
+  const graticuleDisabled = unsupported(
+    builtInPluginMetadata(GRATICULE_PLUGIN_ID),
+    graticuleActive,
+  );
   // The measure control draws its sketch through the MapLibre/Mapbox style
   // API, which the ArcGIS view has no equivalent of.
   const measureDisabled = !capabilities.measureTool && !panels.measure.visible;
-  const effectsSupported = isPluginEngineSupported(maplibreEffectsPlugin, primaryRenderer);
+  const effectsSupported = isPluginEngineSupported(
+    builtInPluginMetadata(EFFECTS_PLUGIN_ID),
+    primaryRenderer,
+  );
   const reverseGeocodeDisabled = !reverseGeocodeSupported && !reverseGeocodeActive;
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const show = (id: string) =>
@@ -852,18 +864,8 @@ type WeatherControllerHandle = Pick<
 >;
 
 // Stable module-level controllers so each submenu's subscribe effect runs once.
-const CLOUDS_CONTROLLER: WeatherControllerHandle = {
-  getState: getCloudsAnimationState,
-  setFrame: setCloudsFrame,
-  togglePlaying: toggleCloudsPlaying,
-  subscribe: subscribeClouds,
-};
-const PRECIPITATION_CONTROLLER: WeatherControllerHandle = {
-  getState: getPrecipitationAnimationState,
-  setFrame: setPrecipitationFrame,
-  togglePlaying: togglePrecipitationPlaying,
-  subscribe: subscribePrecipitation,
-};
+const CLOUDS_CONTROLLER: WeatherControllerHandle = cloudsAnimation;
+const PRECIPITATION_CONTROLLER: WeatherControllerHandle = precipitationAnimation;
 
 interface WeatherLayerSubmenuProps {
   label: string;

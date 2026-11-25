@@ -50,7 +50,7 @@ const REPLACED_CHECKS: Array<{
   {
     flag: "measureTool",
     read: (c) => c.measureTool,
-    old: (r) => r !== "arcgis",
+    old: () => true,
   },
   {
     flag: "controlLayerPanels",

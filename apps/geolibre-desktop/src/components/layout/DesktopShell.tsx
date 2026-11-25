@@ -3,13 +3,12 @@ import { useAppStore } from "@geolibre/core";
 import type { MapDiagnosticEvent, MapEngine } from "@geolibre/map";
 import { MapCanvas, rendererCapabilities } from "@geolibre/map";
 import { useTranslation } from "react-i18next";
+import { addRasterToMap, openRasterLayerPanel } from "@geolibre/plugins/maplibre-raster";
 import {
-  addRasterToMap,
   getGeometryEditTargetLayerId,
-  openRasterLayerPanel,
-  openRightPanel,
   subscribeGeometryEdit,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/geo-editor-state";
+import { openRightPanel } from "@geolibre/plugins/runtime";
 import {
   Suspense,
   useCallback,
@@ -56,6 +55,7 @@ import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
 import { useGlobalRasterIdentify } from "../../hooks/useGlobalRasterIdentify";
 import { useNetcdfIdentify } from "../../hooks/useNetcdfIdentify";
+import { useZarrIdentify } from "../../hooks/useZarrIdentify";
 import { useTerrainRestore } from "../../hooks/useTerrainRestore";
 import { useScriptControlRestore } from "../../hooks/useScriptControlRestore";
 import { useProjectInteractionRestore } from "../../hooks/useProjectInteractionRestore";
@@ -85,6 +85,7 @@ import { RasterSubsetPanel } from "./RasterSubsetPanel";
 import { BasemapExtractPanel } from "./BasemapExtractPanel";
 import { TerrainSettingsDialog } from "./TerrainSettingsDialog";
 import { LineOfSightPanel } from "./LineOfSightPanel";
+import { CogoTracePanel } from "./CogoTracePanel";
 import { NavigationPanel } from "../navigation/NavigationPanel";
 import { MapContextMenu } from "./MapContextMenu";
 import { KnowledgeCardPanel } from "./KnowledgeCardPanel";
@@ -98,6 +99,7 @@ import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
 import { useCommandBridge } from "../../hooks/useCommandBridge";
 import { useEmbedApi } from "../../hooks/useEmbedApi";
 import { useJupyterRelay } from "../../hooks/useJupyterRelay";
+import { useLiveMcpStartup } from "../../hooks/useLiveMcpStartup";
 import {
   appendDiagnostic,
   observeNetworkResponses,
@@ -111,9 +113,7 @@ import { LayerPanel } from "../panels/LayerPanel";
 import { useLayerRefresh } from "../panels/layer-panel/useLayerRefresh";
 import { ViewerLayerPanel } from "../panels/ViewerLayerPanel";
 import { FloatingPanels } from "../panels/FloatingPanels";
-import { SunPanel } from "../panels/SunPanel";
-import { RouteAnimationPanel } from "../panels/RouteAnimationPanel";
-import { FlightSimulatorPanel } from "../panels/FlightSimulatorPanel";
+import { DeferredPluginPanels } from "../panels/DeferredPluginPanels";
 import { PluginRightPanel } from "../panels/PluginRightPanel";
 import { StylePanel } from "../panels/StylePanel";
 import { SharedSidebar } from "../panels/SharedSidebar";
@@ -264,7 +264,7 @@ export function DesktopShell({
   // the Raster Subset panel and opened from the Add Data menu in the toolbar.
   const [basemapExtractOpen, setBasemapExtractOpen] = useState(false);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
-  const layers = useAppStore((s) => s.layers);
+  const layerCount = useAppStore((s) => s.layers.length);
   // Register the Browser as a movable/dockable right panel; its body is portaled
   // into a dedicated content host (below) that the dock slots adopt.
   useRegisterBrowserPanel();
@@ -291,7 +291,6 @@ export function DesktopShell({
   const replaceStylePanelId = useReplaceStylePanelId();
   const replaceLayersPanelId = useReplaceLayersPanelId();
   const layerRefresh = useLayerRefresh({
-    layers,
     isCollapsed:
       layoutOptions.panelsHidden ||
       layoutOptions.viewer ||
@@ -367,14 +366,18 @@ export function DesktopShell({
   // (fly to a record, highlight it, open a tool; selection/view/tool events back
   // out). Off unless the deployment configured GEOLIBRE_EMBED_ORIGINS.
   useEmbedApi(mapControllerRef, mapAppAPI, mapReadyGeneration);
-  // Same scripting surface, reached over the desktop Jupyter server's relay, so
-  // a kernel driven from an EXTERNAL client (VS Code's Jupyter extension) can
-  // control the map too. Inert until that server is running.
+  // Same scripting surface, reached over the desktop Jupyter server's relay and
+  // the sidecar's Live MCP relay, so a kernel driven from an EXTERNAL client
+  // (VS Code's Jupyter extension) or an MCP client can control the map too.
+  // Inert until one of those servers is running.
   useJupyterRelay(mapControllerRef);
+  // Starts the sidecar at launch when the user allowed Live MCP in Settings.
+  useLiveMcpStartup();
   // Routes the Layers-panel Identify action to the raster pixel inspector for
   // COG layers (read band values on click). Inert until a COG is identified.
   useRasterIdentify();
   useNetcdfIdentify(mapControllerRef, mapReadyGeneration);
+  useZarrIdentify(mapControllerRef, mapReadyGeneration);
   useCogSpectralIdentify(mapControllerRef, mapReadyGeneration);
   // The sampled pixels (markers + profile) those two hooks record live outside
   // the project, so New/Open and removing the inspected layer clear them here.
@@ -931,6 +934,10 @@ export function DesktopShell({
                     mapControllerRef={mapControllerRef}
                     mapReadyGeneration={mapReadyGeneration}
                   />
+                  <CogoTracePanel
+                    mapControllerRef={mapControllerRef}
+                    mapReadyGeneration={mapReadyGeneration}
+                  />
                   <NavigationPanel
                     mapControllerRef={mapControllerRef}
                     mapReadyGeneration={mapReadyGeneration}
@@ -1021,24 +1028,7 @@ export function DesktopShell({
                 </Suspense>
               </MountWhenOpened>
             </SectionErrorBoundary>
-            <SectionErrorBoundary
-              label="Sun simulation panel"
-              displayName={t("shell.section.sunSimulationPanel")}
-            >
-              <SunPanel />
-            </SectionErrorBoundary>
-            <SectionErrorBoundary
-              label="Route animation panel"
-              displayName={t("shell.section.routeAnimationPanel")}
-            >
-              <RouteAnimationPanel mapControllerRef={mapControllerRef} />
-            </SectionErrorBoundary>
-            <SectionErrorBoundary
-              label="Flight simulator panel"
-              displayName={t("shell.section.flightSimulatorPanel")}
-            >
-              <FlightSimulatorPanel />
-            </SectionErrorBoundary>
+            <DeferredPluginPanels mapControllerRef={mapControllerRef} />
             <KnowledgeCardConsentDialog
               open={knowledgeNoticeOpen}
               onOpenChange={(open) => {
@@ -1212,7 +1202,7 @@ export function DesktopShell({
         <MobileBottomNav
           activeTab={mobile.activeMobileTab}
           onSelectTab={mobile.handleSelectMobileTab}
-          layerCount={layers.length}
+          layerCount={layerCount}
           showLayers={layoutOptions.layerPanelVisible}
           showStyle={layoutOptions.stylePanelVisible}
           showAdd={layoutOptions.toolbarVisible && mobileCanAddData}

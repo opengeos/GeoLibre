@@ -65,7 +65,16 @@ const RASTER_TILE_LAYER_TYPES: ReadonlySet<string> = new Set<
 export interface LayersSlice {
   layers: GeoLibreLayer[];
 
-  addLayer: (layer: GeoLibreLayer, beforeLayerId?: string | null) => void;
+  /**
+   * Add a layer, before `beforeLayerId` or on top. A name taken from the
+   * layer's local file name is numbered when another layer already has it,
+   * unless `options.keepName` says the name is the one a project saved.
+   */
+  addLayer: (
+    layer: GeoLibreLayer,
+    beforeLayerId?: string | null,
+    options?: { keepName?: boolean },
+  ) => void;
   removeLayer: (id: string) => void;
   updateLayer: (id: string, patch: Partial<GeoLibreLayer>) => void;
   setLayerVisibility: (id: string, visible: boolean) => void;
@@ -254,7 +263,7 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
   layers: [],
   copiedLayerStyle: null,
 
-  addLayer: (inputLayer, beforeLayerId = null) =>
+  addLayer: (inputLayer, beforeLayerId = null, options) =>
     set((s) => {
       let layer = withRasterSourceDefaults(inputLayer);
       const layers = [...s.layers];
@@ -266,7 +275,7 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
       // Only filename-derived names are deduplicated; an explicit name (an
       // embedded document title, a tool output label, a user-typed name)
       // is kept as supplied.
-      if (localSource && isSourceDerivedLayerName(layer.name, sourcePath)) {
+      if (localSource && !options?.keepName && isSourceDerivedLayerName(layer.name, sourcePath)) {
         layer = {
           ...layer,
           name: uniqueImportedLayerName(
@@ -286,7 +295,7 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
         layers.push(layerWithBeforeId);
       }
       return {
-        layers,
+        layers: normalizeGroupContiguity(layers),
         selectedLayerId: layer.id,
         isDirty: true,
       };
@@ -492,12 +501,32 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
     set((s) => {
       const idx = s.layers.findIndex((l) => l.id === id);
       if (idx < 0) return s;
-      const target = direction === "up" ? idx + 1 : idx - 1;
-      if (target < 0 || target >= s.layers.length) return s;
+      const step = direction === "up" ? 1 : -1;
+      const adjIdx = idx + step;
+      if (adjIdx < 0 || adjIdx >= s.layers.length) return s;
+      const moving = s.layers[idx];
+      const adjacent = s.layers[adjIdx];
+      // When moving toward a different group, skip past the entire contiguous
+      // block of that group instead of stepping inside it (which normalization
+      // would undo). Moves within the same group remain single-step.
+      let target = adjIdx;
+      if (adjacent.groupId && adjacent.groupId !== moving.groupId) {
+        while (
+          target + step >= 0 &&
+          target + step < s.layers.length &&
+          s.layers[target + step].groupId === adjacent.groupId
+        ) {
+          target += step;
+        }
+      }
       const next = [...s.layers];
       const [item] = next.splice(idx, 1);
       next.splice(target, 0, item);
-      return { layers: next, isDirty: true };
+      const normalized = normalizeGroupContiguity(next);
+      if (normalized.every((layer, index) => layer.id === s.layers[index]?.id)) {
+        return s;
+      }
+      return { layers: normalized, isDirty: true };
     }),
 
   moveLayer: (id, targetIndex) =>

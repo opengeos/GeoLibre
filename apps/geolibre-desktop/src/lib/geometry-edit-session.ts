@@ -34,10 +34,9 @@ export interface GeometryEditStartContext {
    * The GeoEditor functions, passed in so callers that keep `@geolibre/plugins`
    * lazily loaded (the plugin app API) don't import it.
    */
-  geoEditor: Pick<
-    typeof GeoLibrePlugins,
-    "isPluginEngineSupported" | "maplibreGeoEditorPlugin" | "startLayerGeometryEdit"
-  >;
+  geoEditor: Pick<typeof GeoLibrePlugins, "isPluginEngineSupported" | "startLayerGeometryEdit"> & {
+    maplibreGeoEditorPlugin: Parameters<typeof GeoLibrePlugins.isPluginEngineSupported>[0];
+  };
 }
 
 // Starts run one at a time: a second start would end the first session while

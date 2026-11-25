@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "./geojson-source-data";
 import { showGlSearchResult } from "./gl-search-result";
 import { resolveMapPixelRatio, watchMapPixelRatio } from "./mobile-pixel-ratio";
 import {
@@ -61,6 +62,7 @@ import {
   syncLayer,
   vectorTileStyleLayerIds,
 } from "./layer-sync";
+import { unregisterAllGeoJsonVtSourcesForOwner } from "./geojson-vt-protocol";
 import { globeSafeMaxZoom } from "./globe-fit-bounds";
 import { drawExtentOnCanvas } from "./extent-drawing";
 import { captureEngineImage } from "./map-capture";
@@ -71,6 +73,7 @@ import {
   syncLayerBlendModes,
 } from "./layer-blend-modes";
 import { ensureGeneratedImageHandler } from "./generated-images";
+import { pmtilesLineDecorationLayerIds } from "./pmtiles-layer";
 import { installSelectionDragGuard } from "./selection-drag-guard";
 import { installGlobePopupOcclusion } from "./globe-popup-occlusion";
 import { isMapboxStyleUrl, loadMapboxStyle, redactMapboxStyleUrl } from "./mapbox-style";
@@ -786,6 +789,14 @@ export class MapController implements MapEngine {
    */
   private getStoryStyleLayerIds(layer: GeoLibreLayer): string[] {
     const ids = this.getNativeLayerIds(layer);
+    if (layer.type === "pmtiles") {
+      // Vector archives draw their own line decorations, one per source layer.
+      const seen = new Set(ids);
+      for (const id of pmtilesLineDecorationLayerIds(layer)) {
+        if (!seen.has(id) && this.map?.getLayer(id)) ids.push(id);
+      }
+      return ids;
+    }
     if (layer.type !== "geojson") return ids;
     const seen = new Set(ids);
     for (const id of [
@@ -1063,6 +1074,7 @@ export class MapController implements MapEngine {
     this.selectionDragGuardDispose = null;
     this.pixelRatioWatchDispose?.();
     this.pixelRatioWatchDispose = null;
+    if (this.map) unregisterAllGeoJsonVtSourcesForOwner(this.map);
     this.map?.remove();
     this.map = null;
     this.styleReady = false;
@@ -2470,7 +2482,7 @@ export class MapController implements MapEngine {
 
     const source = map.getSource(highlightSourceId());
     if (source) {
-      (source as maplibregl.GeoJSONSource).setData(featureCollection);
+      updateGeoJsonSourceData(source as maplibregl.GeoJSONSource, featureCollection);
     } else {
       map.addSource(highlightSourceId(), {
         type: "geojson",
@@ -2548,7 +2560,10 @@ export class MapController implements MapEngine {
 
   private addLayerControl(): boolean {
     if (!this.map || !this.controlVisibility["layer-control"]) return false;
-    return this.layerControlHost.add(this.controlPositions["layer-control"]);
+    return (
+      this.layerControlHost.add(this.controlPositions["layer-control"]) ||
+      this.layerControlHost.isMounted()
+    );
   }
 
   private removeLayerControl(): void {

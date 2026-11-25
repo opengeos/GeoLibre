@@ -1,3 +1,5 @@
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { Feature, FeatureCollection, Position } from "geojson";
 // A value (not type-only) namespace import: main added runtime use of
@@ -85,14 +87,13 @@ let finishTextInput: ((save: boolean) => void) | null = null;
 export { ANNOTATIONS_PLUGIN_ID };
 
 export const maplibreAnnotationsPlugin: GeoLibrePlugin = {
-  id: ANNOTATIONS_PLUGIN_ID,
-  name: "Annotations",
-  version: "0.1.0",
+  ...builtInPluginProperties("maplibre-gl-annotations"),
+
   // Elements live in a store GeoJSON layer both 2D engines draw; the draw
   // preview and the pin/sticky/image markers go through the style API and
   // `project`, which mapbox-gl shares (see annotation-marker.ts for the one
   // MapLibre-specific class this avoids).
-  engines: ["maplibre", "mapbox"],
+
   activate: (app: GeoLibreAppAPI) => {
     appApi = app;
     pluginActive = true;
@@ -1927,7 +1928,7 @@ function setPreview(map: maplibregl.Map, data: FeatureCollection): void {
     // The preview paint is data-driven (below), so the regenerated features —
     // which carry the current color/width — update the appearance on their own;
     // no per-property repaint is needed when color/width changes mid-draw.
-    existing.setData(data);
+    updateGeoJsonSourceData(existing, data);
     return;
   }
   map.addSource(PREVIEW_SOURCE_ID, { type: "geojson", data });

@@ -33,6 +33,16 @@ function project(layers: GeoLibreLayer[]) {
 }
 
 describe("MCP preview omitted content", () => {
+  it("keeps URL-only remote PMTiles available for consent-backed discovery", () => {
+    const saved = project([
+      layer("pmtiles", {
+        source: { type: "vector", url: "pmtiles://https://tiles.example.com/data.pmtiles" },
+        metadata: { sourceKind: "pmtiles-url", externalNativeLayer: true },
+      }),
+    ]);
+    assert.deepEqual(unsupportedContent(saved), []);
+    assert.ok(previewOrigins(saved).includes("https://tiles.example.com"));
+  });
   it("keeps WMS sources while rejecting plugin archives, video, and desktop sources", () => {
     const saved = project([
       layer("wms", { sourcePath: "https://maps.example.com/wms" }),
@@ -161,4 +171,11 @@ describe("MCP preview omitted content", () => {
       false,
     );
   });
+});
+
+it("reports a missing COG URL before a desktop-only restriction", () => {
+  const saved = project([layer("cog", { source: { type: "raster" }, sourcePath: undefined })]);
+  const notice = unsupportedContent(saved).join("\n");
+  assert.match(notice, /missing a raster URL/);
+  assert.ok(!notice.includes("desktop-local"));
 });

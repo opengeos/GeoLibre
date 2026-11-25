@@ -1,3 +1,7 @@
+import { SATELLITE_EMBEDDINGS_PLUGIN_ID } from "../plugin-ids";
+export { SATELLITE_EMBEDDINGS_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import type {
@@ -7,6 +11,7 @@ import type {
   MapLayerMouseEvent,
   MapMouseEvent,
 } from "maplibre-gl";
+import { saveBinaryFileWithHost } from "../panel-dom";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
   AEF_BAND_COUNT,
@@ -65,7 +70,6 @@ import { addRasterToMap, getRasterRenderEngine } from "./maplibre-raster";
 import { getControlMap } from "./style-map";
 import { createPluginTranslator } from "../plugin-i18n";
 
-export const SATELLITE_EMBEDDINGS_PLUGIN_ID = "geolibre-satellite-embeddings";
 const PANEL_ID = SATELLITE_EMBEDDINGS_PLUGIN_ID;
 
 /** Longest side, in pixels, of a rendered AlphaEarth composite. */
@@ -337,24 +341,24 @@ function getReader(url: string): Promise<AefTileReader> {
   return reader;
 }
 
-/** Saves a generated blob through the host saver, or an anchor download. */
+/**
+ * Saves a generated blob through the host saver, or an anchor download.
+ *
+ * @returns False when the user cancelled the save dialog (the host saver
+ *   resolves to null then).
+ */
 async function saveBlob(
   blob: Blob,
   options: { defaultName: string; extension: string; mimeType: string; description: string },
-): Promise<void> {
+): Promise<boolean> {
   if (fileSaver) {
-    await fileSaver(blob, options);
-    return;
+    return (await fileSaver(blob, options)) !== null;
   }
-  const url = URL.createObjectURL(blob);
-  try {
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = options.defaultName;
-    anchor.click();
-  } finally {
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
+  return saveBinaryFileWithHost(appRef, options.defaultName, blob, {
+    extensions: [options.extension],
+    mimeType: options.mimeType,
+    description: options.description,
+  });
 }
 
 /** Opens a remote file for download without leaving the app. */
@@ -465,7 +469,7 @@ function setFootprints(map: MapLibreMap, rows: ResultRow[]): void {
     map.on("mouseenter", FOOTPRINT_FILL_LAYER_ID, handleFootprintEnter);
     map.on("mouseleave", FOOTPRINT_FILL_LAYER_ID, handleFootprintLeave);
   }
-  (map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource).setData({
+  updateGeoJsonSourceData(map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource, {
     type: "FeatureCollection",
     features,
   });
@@ -534,7 +538,7 @@ function setOutline(map: MapLibreMap, rings: [number, number][][]): void {
   // Layers added since (an AlphaEarth COG covering the whole footprint) would
   // otherwise hide the outline, so keep it on top.
   map.moveLayer(HOVER_LINE_LAYER_ID);
-  (map.getSource(HOVER_SOURCE_ID) as GeoJSONSource).setData({
+  updateGeoJsonSourceData(map.getSource(HOVER_SOURCE_ID) as GeoJSONSource, {
     type: "FeatureCollection",
     features: rings.map((ring) => polygonFeature(ring, {})),
   });
@@ -564,7 +568,10 @@ function setDrawBox(map: MapLibreMap, bbox: LonLatBbox | null): void {
     });
   }
   const features: Feature<Polygon>[] = bbox ? [polygonFeature(bboxRing(bbox), {})] : [];
-  (map.getSource(DRAW_SOURCE_ID) as GeoJSONSource).setData({ type: "FeatureCollection", features });
+  updateGeoJsonSourceData(map.getSource(DRAW_SOURCE_ID) as GeoJSONSource, {
+    type: "FeatureCollection",
+    features,
+  });
 }
 
 /** Removes the plugin-private overlays (hover outline, drawn box). */
@@ -977,12 +984,16 @@ async function downloadAlphaEarthClip(
   const stem = row.subtitle.replace(/[^\w.-]+/g, "_");
   const defaultName = `alphaearth_${tile.year}_${tile.utmZone}_${stem}_clip.tif`;
   signal.throwIfAborted();
-  await saveBlob(new Blob(parts, { type: "image/tiff" }), {
+  const saved = await saveBlob(new Blob(parts, { type: "image/tiff" }), {
     defaultName,
     extension: "tif",
     mimeType: "image/tiff",
     description: "GeoTIFF",
   });
+  if (!saved) {
+    setStatus(tr("saveCancelled", "Save cancelled."));
+    return;
+  }
   setStatus(
     tr("downloaded", "Saved {{name}} ({{size}}).", { name: defaultName, size: formatBytes(bytes) }),
   );
@@ -1607,13 +1618,12 @@ function clearOverlays(app: GeoLibreAppAPI): void {
  * PCA), and downloads (clipped GeoTIFFs, source tiles and files).
  */
 export const maplibreSatelliteEmbeddingsPlugin: GeoLibrePlugin = {
-  id: SATELLITE_EMBEDDINGS_PLUGIN_ID,
-  name: "Satellite Embeddings",
-  version: "0.1.0",
+  ...builtInPluginProperties("geolibre-satellite-embeddings"),
+
   // Footprints, the image composites and the point layers are Style Spec
   // sources and layers, so both 2D engines host them, and the host's control
   // map draws them on ArcGIS.
-  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
+
   activate: (app) => {
     appRef = app;
     unregisterPanel =

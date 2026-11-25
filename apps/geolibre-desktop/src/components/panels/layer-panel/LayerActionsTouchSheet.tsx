@@ -1,3 +1,4 @@
+import { isImportedDocumentCopyPath } from "../../../lib/file-io/paths";
 import {
   isDuckDBQueryLayer,
   pluginOwnsPaint,
@@ -7,7 +8,8 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
-import { canEditLayerGeometry, isArcGISWritableLayer } from "@geolibre/plugins";
+import { canEditLayerGeometry } from "@geolibre/plugins/geo-editor-state";
+import { isArcGISWritableLayer } from "@geolibre/plugins/arcgis-layer";
 import {
   ArrowDown,
   ArrowUp,
@@ -223,7 +225,11 @@ export function LayerActionsTouchSheet({
           ? t("layers.saveEditsToMssql")
           : isPostgisEditableLayer(layer)
             ? t("layers.saveEditsToPostgis")
-            : t("layers.saveEditsToSource"),
+            : t(
+                isImportedDocumentCopyPath(layer.sourcePath)
+                  ? "layers.saveEditsToImportedCopy"
+                  : "layers.saveEditsToSource",
+              ),
       description: mssqlPending ? t("layers.saveEditsMssqlRefreshRequired") : undefined,
       disabled: geometryEditActive || !layerEditable || mssqlPending,
       icon: <Save className="h-4 w-4" />,

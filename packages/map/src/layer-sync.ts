@@ -1,3 +1,4 @@
+import { updateGeoJsonSourceData } from "./geojson-source-data";
 import { arcgisOpacity, arcgisVectorStyle } from "./vector-style";
 import {
   compileLayerFilters,
@@ -25,6 +26,8 @@ import {
   pmtilesControlLayerId,
   pmtilesIdNamesSourceLayer,
   pmtilesLayerKinds,
+  pmtilesLayerDrawsLineDecorations,
+  pmtilesLineDecorationLayerId,
   pmtilesVectorLayerId,
 } from "./pmtiles-layer";
 import { encodeVectorTileLayerPart } from "./vector-tile-layer-ids";
@@ -450,11 +453,18 @@ function applyExternalNativeFeatureFilters(
   }
 }
 
-// Native layer ids whose zoom range GeoLibre has taken over. A pristine external
-// layer keeps its source-declared range, but once the user sets a non-default
-// range we keep applying the style range on every sync, including a later reset
-// back to the full [0, 24] window.
-const managedZoomRangeLayerIds = new Set<string>();
+// Native layer ids whose zoom range GeoLibre has taken over, scoped per map so
+// split-pane maps and project reloads never leak or cross-contaminate ids.
+const managedZoomRangeLayerIds = new WeakMap<maplibregl.Map, Set<string>>();
+
+function managedZoomRangeLayerIdsFor(map: maplibregl.Map): Set<string> {
+  let ids = managedZoomRangeLayerIds.get(map);
+  if (!ids) {
+    ids = new Set<string>();
+    managedZoomRangeLayerIds.set(map, ids);
+  }
+  return ids;
+}
 const geoJsonSourceData = new WeakMap<maplibregl.GeoJSONSource, GeoJSON>();
 
 function rememberGeoJsonData(map: maplibregl.Map, sourceId: string, data: GeoJSON): void {
@@ -464,7 +474,7 @@ function rememberGeoJsonData(map: maplibregl.Map, sourceId: string, data: GeoJSO
 
 function setGeoJsonData(source: maplibregl.GeoJSONSource, data: GeoJSON): void {
   if (geoJsonSourceData.get(source) === data) return;
-  source.setData(data);
+  updateGeoJsonSourceData(source, data);
   geoJsonSourceData.set(source, data);
 }
 
@@ -473,7 +483,7 @@ function clampLayerZoom(value: number, fallback: number): number {
   return Math.min(MAX_LAYER_ZOOM, Math.max(MIN_LAYER_ZOOM, value));
 }
 
-function styleLayerZoomRange(style: LayerStyle): {
+export function styleLayerZoomRange(style: LayerStyle): {
   maxzoom: number;
   minzoom: number;
 } {
@@ -486,21 +496,21 @@ function styleLayerZoomRange(style: LayerStyle): {
 }
 
 // Intersect a native layer's source-declared zoom range with the user-configured
-// style range, taking the tighter bound on each end. This keeps a tile
-// service's zoom floor/ceiling intact while still letting the user narrow the
-// window from the Style panel. When the two ranges do not overlap the bounds
-// are swapped so MapLibre never receives an inverted (minzoom > maxzoom) range.
-function intersectZoomRange(
+// style range, taking the tighter bound on each end. When the two ranges do not
+// overlap (minzoom > maxzoom), collapse to an empty half-open interval
+// `[minzoom, minzoom)` rather than swapping bounds into the excluded gap.
+export function intersectZoomRange(
   nativeSpec: { minzoom?: number; maxzoom?: number },
   style: LayerStyle,
 ): { minzoom: number; maxzoom: number } {
   const styleRange = styleLayerZoomRange(style);
   const minzoom = Math.max(nativeSpec.minzoom ?? MIN_LAYER_ZOOM, styleRange.minzoom);
   const maxzoom = Math.min(nativeSpec.maxzoom ?? MAX_LAYER_ZOOM, styleRange.maxzoom);
-  return {
-    minzoom: Math.min(minzoom, maxzoom),
-    maxzoom: Math.max(minzoom, maxzoom),
-  };
+  if (minzoom > maxzoom) {
+    const emptyZoom = Math.min(MAX_LAYER_ZOOM, minzoom);
+    return { minzoom: emptyZoom, maxzoom: emptyZoom };
+  }
+  return { minzoom, maxzoom };
 }
 
 export function syncLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: string): void {
@@ -692,6 +702,8 @@ function syncExternalNativeLayer(
     !controlOwnsPaint(layer) &&
     syncExternalNativeExtrusion(map, layer, nativeLayerIds, beforeId)
   ) {
+    // Extruded archives carry no line decorations; drop any left from 2D.
+    syncPMTilesLineDecorations(map, layer, nativeLayerIds, beforeId);
     return;
   }
 
@@ -722,15 +734,20 @@ function syncExternalNativeLayer(
     const zoomRange = styleLayerZoomRange(layer.style);
     const isDefaultRange =
       zoomRange.minzoom === MIN_LAYER_ZOOM && zoomRange.maxzoom === MAX_LAYER_ZOOM;
+    const managedIds = managedZoomRangeLayerIdsFor(map);
     if (!isDefaultRange) {
-      managedZoomRangeLayerIds.add(nativeLayerId);
+      managedIds.add(nativeLayerId);
     }
-    if (managedZoomRangeLayerIds.has(nativeLayerId)) {
+    if (managedIds.has(nativeLayerId)) {
       setLayerZoomRange(map, nativeLayerId, zoomRange);
     }
 
     moveLayer(map, nativeLayerId, beforeId);
   }
+
+  // After the native layers have been moved, so the decorations land above
+  // the archive's own lines.
+  syncPMTilesLineDecorations(map, layer, nativeLayerIds, beforeId);
 }
 
 /**
@@ -1100,6 +1117,116 @@ function ensurePMTilesExternalLayer(
       beforeId,
     );
   }
+}
+
+// Bound cleanup to the decorations this map instance has actually created.
+const pmtilesDecorationOwners = new WeakMap<maplibregl.Map, Map<string, Set<string>>>();
+
+/**
+ * Line decorations (flow-direction arrows and other repeated symbols) for a
+ * vector PMTiles archive: one GeoLibre-owned symbol layer per rendered source
+ * layer, reading the archive's own source, mirroring
+ * {@link applyLineDecorationLayer} on the GeoJSON path. With line placement
+ * MapLibre rotates each icon to follow its line, so an arrow points along the
+ * direction the feature was digitized in. Decoration layers for source layers
+ * no longer rendered (or every one, when decorations are off, the layer is
+ * extruded, or the archive is raster) are removed.
+ *
+ * @param map - The MapLibre map to reconcile against.
+ * @param layer - The store layer.
+ * @param nativeLayerIds - Native layer ids registered for the archive.
+ * @param beforeId - The style layer the decorations are placed below.
+ */
+function syncPMTilesLineDecorations(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  nativeLayerIds: string[],
+  beforeId?: string,
+): void {
+  if (!isPMTilesExternalLayer(layer)) return;
+  const sourceId = getPMTilesSourceId(layer);
+  const imageId =
+    sourceId &&
+    map.getSource(sourceId) &&
+    pmtilesLayerDrawsLineDecorations(layer) &&
+    !layer.style.extrusionEnabled
+      ? prepareLineDecoration(layer.style)
+      : null;
+  const rendered = new Set(
+    imageId && sourceId ? getPMTilesRenderableSourceLayers(layer, sourceId, nativeLayerIds) : [],
+  );
+  removeStalePMTilesLineDecorations(
+    map,
+    layer.id,
+    new Set([...rendered].map((name) => pmtilesLineDecorationLayerId(layer.id, name))),
+  );
+  if (rendered.size > 0) ensureGeneratedImageHandler(map);
+  for (const sourceLayer of new Set([...getPMTilesSourceLayers(layer), ...rendered])) {
+    const decorationId = pmtilesLineDecorationLayerId(layer.id, sourceLayer);
+    if (!imageId || !sourceId || !rendered.has(sourceLayer)) {
+      removeIfExists(map, decorationId);
+      continue;
+    }
+    ensureLayer(
+      map,
+      decorationId,
+      {
+        id: decorationId,
+        type: "symbol",
+        source: sourceId,
+        "source-layer": sourceLayer,
+        ...styleLayerZoomRange(layer.style),
+        metadata: { "geolibre:internal": true, "geolibre:line-decoration-owner": layer.id },
+        filter: withFeatureFilters(layer, [
+          "match",
+          ["geometry-type"],
+          ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
+          true,
+          false,
+        ]),
+        layout: {
+          "icon-image": imageId,
+          "icon-size": 1,
+          "symbol-placement": "line",
+          "symbol-spacing": Math.max(1, styleValue(layer.style, "lineDecorationSpacing")),
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+          "icon-rotation-alignment": "map",
+          visibility: layer.visible ? "visible" : "none",
+        },
+        paint: { "icon-opacity": layer.opacity },
+      },
+      beforeId,
+    );
+    let owners = pmtilesDecorationOwners.get(map);
+    if (!owners) pmtilesDecorationOwners.set(map, (owners = new Map()));
+    let ids = owners.get(layer.id);
+    if (!ids) owners.set(layer.id, (ids = new Set()));
+    ids.add(decorationId);
+  }
+}
+
+/** Remove owned decorations absent from the desired set, including source layers no longer in metadata. */
+function removeStalePMTilesLineDecorations(
+  map: maplibregl.Map,
+  layerId: string,
+  keep: ReadonlySet<string> = new Set(),
+): void {
+  const owners = pmtilesDecorationOwners.get(map);
+  const ids = owners?.get(layerId);
+  if (!ids) return;
+  for (const id of ids) {
+    if (keep.has(id)) continue;
+    const metadata = map.getLayer(id)?.metadata as Record<string, unknown> | undefined;
+    if (
+      metadata?.["geolibre:internal"] === true &&
+      metadata["geolibre:line-decoration-owner"] === layerId
+    )
+      removeIfExists(map, id);
+    ids.delete(id);
+  }
+  if (ids.size === 0) owners?.delete(layerId);
+  if (owners?.size === 0) pmtilesDecorationOwners.delete(map);
 }
 
 function getPMTilesSourceId(layer: GeoLibreLayer): string | undefined {
@@ -1477,7 +1604,24 @@ function getStyleLayerSpec(
   map: maplibregl.Map,
   layerId: string,
 ): maplibregl.LayerSpecification | null {
-  return map.getStyle().layers?.find((layer) => layer.id === layerId) ?? null;
+  const live = map.getLayer(layerId) as
+    | (maplibregl.StyleLayer & {
+        serialize?: () => maplibregl.LayerSpecification;
+        source?: string;
+      })
+    | undefined;
+  if (live) {
+    if (typeof live.serialize === "function") {
+      return live.serialize();
+    }
+    if (
+      typeof live.type === "string" &&
+      (typeof live.source === "string" || live.type === "background")
+    ) {
+      return live as unknown as maplibregl.LayerSpecification;
+    }
+  }
+  return map.getStyle?.()?.layers?.find((layer) => layer.id === layerId) ?? null;
 }
 
 function isFillStyleLayerSpec(
@@ -1804,7 +1948,8 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
   if (existingSource && existingSource.type !== "geojson") {
     removeGeoJsonRenderLayers(map, layer.id);
     map.removeSource(src);
-    if (hasGeoJsonVtSource(layer.id)) unregisterGeoJsonVtSource(layer.id);
+    forgetGeoJsonSourceClusterState(map, src);
+    if (hasGeoJsonVtSource(layer.id)) unregisterGeoJsonVtSource(layer.id, map);
   }
 
   // Clustering is a source-level option, so toggling it (or changing its params)
@@ -1819,6 +1964,7 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
   if (needsSourceRecreate) {
     removeGeoJsonRenderLayers(map, layer.id);
     map.removeSource(src);
+    forgetGeoJsonSourceClusterState(map, src);
   }
 
   if (!map.getSource(src)) {
@@ -1842,6 +1988,11 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
             ...(attribution ? { attribution } : {}),
           },
     );
+    rememberGeoJsonSourceClusterState(map, src, {
+      cluster: wantCluster,
+      radius: wantCluster ? clusterRadius : DEFAULT_LAYER_STYLE.clusterRadius,
+      maxZoom: wantCluster ? clusterMaxZoom : DEFAULT_LAYER_STYLE.clusterMaxZoom,
+    });
     rememberGeoJsonData(map, src, sourceGeoJson);
   } else {
     setGeoJsonData(map.getSource(src) as maplibregl.GeoJSONSource, sourceGeoJson);
@@ -1872,11 +2023,16 @@ function syncGeoJsonVtLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?
   // (Re)build the tile index when the data or clustering config changed. A
   // rebuild also means cached tiles are stale, so drop the source to force
   // MapLibre to refetch them.
-  const rebuilt = registerGeoJsonVtSource(layer.id, sourceData, {
-    cluster: wantCluster,
-    clusterRadius,
-    clusterMaxZoom,
-  });
+  const rebuilt = registerGeoJsonVtSource(
+    layer.id,
+    sourceData,
+    {
+      cluster: wantCluster,
+      clusterRadius,
+      clusterMaxZoom,
+    },
+    map,
+  );
 
   const existing = map.getSource(src) as maplibregl.Source | undefined;
   // The source must be recreated when switching in from the inline geojson path
@@ -1884,6 +2040,7 @@ function syncGeoJsonVtLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?
   if (existing && (existing.type !== "vector" || rebuilt)) {
     removeGeoJsonRenderLayers(map, layer.id);
     map.removeSource(src);
+    forgetGeoJsonSourceClusterState(map, src);
   }
 
   if (!map.getSource(src)) {
@@ -2138,9 +2295,10 @@ function applyFlatPolygonFillLayers(
     removeIfExists(map, fillLayerId(layer.id));
     const maskSrc = invertedSourceId(layer.id);
     if (map.getSource(maskSrc)) {
-      (map.getSource(maskSrc) as maplibregl.GeoJSONSource).setData(invertedMask);
+      setGeoJsonData(map.getSource(maskSrc) as maplibregl.GeoJSONSource, invertedMask);
     } else {
       map.addSource(maskSrc, { type: "geojson", data: invertedMask });
+      rememberGeoJsonData(map, maskSrc, invertedMask);
     }
     ensureLayer(
       map,
@@ -2846,12 +3004,13 @@ function ensureAttributeLabelLayer(
   // other render layers draw.
   if (dedupedLabelFc) {
     if (map.getSource(dedupSourceId)) {
-      (map.getSource(dedupSourceId) as maplibregl.GeoJSONSource).setData(dedupedLabelFc);
+      setGeoJsonData(map.getSource(dedupSourceId) as maplibregl.GeoJSONSource, dedupedLabelFc);
     } else {
       map.addSource(dedupSourceId, {
         type: "geojson",
         data: dedupedLabelFc,
       });
+      rememberGeoJsonData(map, dedupSourceId, dedupedLabelFc);
     }
   }
   // A layer's source is immutable, so when the label source switches between
@@ -3004,9 +3163,10 @@ function applyGeometryGeneratorLayers(
 
   const genSrc = generatorSourceId(layer.id);
   if (map.getSource(genSrc)) {
-    (map.getSource(genSrc) as maplibregl.GeoJSONSource).setData(generated);
+    setGeoJsonData(map.getSource(genSrc) as maplibregl.GeoJSONSource, generated);
   } else {
     map.addSource(genSrc, { type: "geojson", data: generated });
+    rememberGeoJsonData(map, genSrc, generated);
   }
 
   const kinds = generatedGeometryKinds(generated);
@@ -3087,7 +3247,10 @@ function applyGeometryGeneratorLayers(
 }
 
 function removeSourceIfExists(map: maplibregl.Map, id: string): void {
-  if (map.getSource(id)) map.removeSource(id);
+  if (map.getSource(id)) {
+    map.removeSource(id);
+    forgetGeoJsonSourceClusterState(map, id);
+  }
 }
 
 // getStyle() deep-clones the whole style, and syncs can fire rapidly (e.g.
@@ -3881,23 +4044,58 @@ function removeIfExists(map: maplibregl.Map, id: string): void {
   if (map.getLayer(id)) map.removeLayer(id);
 }
 
-/**
- * Read a GeoJSON source's clustering config from the current style, or null if
- * the source doesn't exist yet (or isn't a GeoJSON source). Used to decide
- * whether a cluster toggle requires recreating the source.
- */
-function geojsonSourceClusterState(
+type GeoJsonClusterState = { cluster: boolean; radius: number; maxZoom: number };
+
+const geojsonSourceClusterStates = new WeakMap<maplibregl.Map, Map<string, GeoJsonClusterState>>();
+
+function rememberGeoJsonSourceClusterState(
   map: maplibregl.Map,
   src: string,
-): { cluster: boolean; radius: number; maxZoom: number } | null {
-  const spec = map.getStyle()?.sources?.[src];
+  state: GeoJsonClusterState,
+): void {
+  let bySource = geojsonSourceClusterStates.get(map);
+  if (!bySource) {
+    bySource = new Map();
+    geojsonSourceClusterStates.set(map, bySource);
+  }
+  bySource.set(src, state);
+}
+
+function forgetGeoJsonSourceClusterState(map: maplibregl.Map, src: string): void {
+  geojsonSourceClusterStates.get(map)?.delete(src);
+}
+
+/**
+ * Read a GeoJSON source's clustering config without cloning the whole style on
+ * every sync. Uses the tracked per-map cluster state (falling back to
+ * `source.serialize()` or `map.getStyle()` only on cache miss).
+ */
+function geojsonSourceClusterState(map: maplibregl.Map, src: string): GeoJsonClusterState | null {
+  const liveSource = map.getSource(src) as
+    | (maplibregl.Source & { serialize?: () => maplibregl.SourceSpecification })
+    | undefined;
+  if (!liveSource) {
+    forgetGeoJsonSourceClusterState(map, src);
+    return null;
+  }
+  if (liveSource.type !== "geojson") {
+    forgetGeoJsonSourceClusterState(map, src);
+    return null;
+  }
+  const cached = geojsonSourceClusterStates.get(map)?.get(src);
+  if (cached) return cached;
+
+  const spec =
+    typeof liveSource.serialize === "function"
+      ? liveSource.serialize()
+      : map.getStyle?.()?.sources?.[src];
   if (!spec || spec.type !== "geojson") return null;
   const clusterSpec = spec as {
     cluster?: boolean;
     clusterRadius?: number;
     clusterMaxZoom?: number;
   };
-  return {
+  const state: GeoJsonClusterState = {
     cluster: Boolean(clusterSpec.cluster),
     radius:
       typeof clusterSpec.clusterRadius === "number"
@@ -3908,6 +4106,8 @@ function geojsonSourceClusterState(
         ? clusterSpec.clusterMaxZoom
         : DEFAULT_LAYER_STYLE.clusterMaxZoom,
   };
+  rememberGeoJsonSourceClusterState(map, src, state);
+  return state;
 }
 
 /** Remove every style layer a GeoJSON layer can own (all renderer variants). */
@@ -3916,6 +4116,7 @@ function removeGeoJsonRenderLayers(map: maplibregl.Map, layerId: string): void {
     fillLayerId(layerId),
     fillExtrusionLayerId(layerId),
     lineLayerId(layerId),
+    lineDecorationLayerId(layerId),
     circleLayerId(layerId),
     heatmapLayerId(layerId),
     clusterLayerId(layerId),
@@ -3956,10 +4157,17 @@ export function removeLayerFromMap(
   // Drop cached paint-bridge state so a later layer reusing this id never
   // skips a fresh opacity/visibility apply against a new bridge.
   appliedBridgeState.delete(layerId);
+  // Ownership is recorded per map, so this is safe (and needed) even when the caller has no layer.
+  removeStalePMTilesLineDecorations(map, layerId);
   for (const id of [
     ...getExternalNativeLayerIds(layer),
     ...getExternalNativeLayerIds(layer).map(externalExtrusionLayerId),
     ...(layer ? mbtilesAllStyleLayerIds(layer) : []),
+    ...(layer?.type === "pmtiles"
+      ? getPMTilesSourceLayers(layer).map((sourceLayer) =>
+          pmtilesLineDecorationLayerId(layerId, sourceLayer),
+        )
+      : []),
     fillLayerId(layerId),
     fillExtrusionLayerId(layerId),
     lineLayerId(layerId),
@@ -4015,6 +4223,7 @@ export function removeLayerFromMap(
     if (!src || stillInUse.has(src) || !map.getSource(src)) continue;
     if (shareable.has(src) && stillDrawn(src)) continue;
     map.removeSource(src);
+    forgetGeoJsonSourceClusterState(map, src);
   }
   // Drop radius-override tracking for the removed layer's native ids so a
   // later layer reusing an id never inherits a stale restore.
@@ -4024,8 +4233,14 @@ export function removeLayerFromMap(
       overriddenRadiusIds.delete(id);
     }
   }
+  const managedIds = managedZoomRangeLayerIds.get(map);
+  if (managedIds) {
+    for (const id of getExternalNativeLayerIds(layer)) {
+      managedIds.delete(id);
+    }
+  }
   // Free any client-side tile index built for this layer's tiled render path.
-  unregisterGeoJsonVtSource(layerId);
+  unregisterGeoJsonVtSource(layerId, map);
   // Free an in-memory PMTiles archive (an offline basemap extract) this layer
   // referenced; a no-op for remote pmtiles:// URLs.
   //

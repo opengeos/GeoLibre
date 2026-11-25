@@ -38,6 +38,8 @@ export interface SessionParticipant {
   editOverride?: boolean;
   identity?: ParticipantIdentity | null;
   inviteToken?: string | null;
+  /** True when the invite allows more than one use (unlimited or maxUses > 1). */
+  inviteShared?: boolean;
   lastChatTs?: number;
   lastCommentTs?: number;
 }
@@ -66,21 +68,23 @@ export function participantCanEditLayer(
  * Stable-ish key a host's block and persisted edit override are recorded
  * against.
  *
- * Only the identity and invite forms are durable. The `anon:` fallback keys on
- * a `clientId` the relay mints fresh on every join, so for an anonymous guest
- * both a block and an override are forgotten the moment they reconnect. That is
- * a known limit, not an oversight: without an identity or an invite there is
- * nothing about an anonymous joiner to remember, and any client-supplied handle
- * is trivially reset. Blocking is a moderation convenience, not a security
- * boundary — see the *Moderation* section of `docs/collaboration.md`.
+ * Only the signed-in identity (`user:`) form is durable across reconnects.
+ * Single-use invites (`maxUses: 1`) key on `invite:<token>` only while unclaimed
+ * (exhausted invites are ignored on reconnect), and anonymous guests including
+ * those joining via shared multi-use invite links (`inviteShared: true`) fall
+ * back to `anon:<clientId>` so blocking or setting an edit override on one guest
+ * does not affect other guests sharing the same link. Blocking is a moderation
+ * convenience, not a security boundary; enforceable per-user bans require
+ * `requireIdentity` with a configured identity provider (see *Moderation* in
+ * `docs/collaboration.md`).
  */
 export function getParticipantKey(
-  participant: Pick<SessionParticipant, "clientId" | "identity" | "inviteToken">,
+  participant: Pick<SessionParticipant, "clientId" | "identity" | "inviteToken" | "inviteShared">,
 ): string {
   if (participant.identity?.userId) {
     return `user:${participant.identity.userId}`;
   }
-  if (participant.inviteToken) {
+  if (participant.inviteToken && !participant.inviteShared) {
     return `invite:${participant.inviteToken}`;
   }
   return `anon:${participant.clientId}`;

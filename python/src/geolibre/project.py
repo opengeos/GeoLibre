@@ -28,6 +28,11 @@ from urllib.request import HTTPRedirectHandler, build_opener
 
 from .basemaps import DEFAULT_BASEMAP
 
+# Shared TS/Python constants synced from packages/core/src/project-constants.json.
+_PROJECT_CONSTANTS: dict[str, Any] = json.loads(
+    Path(__file__).with_name("project-constants.json").read_text(encoding="utf-8")
+)
+
 
 def _normalize_credential_name(name: str) -> str:
     """Fold the spellings of one credential name together.
@@ -118,6 +123,20 @@ def _redact_url(value: str) -> str:
         + (f"?{kept_query}" if kept_query else "")
         + (f"#{kept_fragment}" if kept_fragment else "")
     )
+
+
+def _assert_no_url_userinfo(url: str) -> None:
+    """Reject embedded username/password URLs without echoing their credentials.
+
+    Args:
+        url: A source URL to persist in a layer.
+
+    Raises:
+        ValueError: If the URL embeds credentials unsupported by browser fetch.
+    """
+    parsed = urlsplit(url)
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("URL must not carry username/password credentials")
 
 
 def _redact_config(value: Any, depth: int = 0) -> Any:
@@ -224,8 +243,19 @@ def redact_layer(layer: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
-def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
-    """Return a detached project safe to publish, export, or hand to others."""
+def redact_credentials(
+    project: dict[str, Any], *, strip_non_exportable: bool = True
+) -> dict[str, Any]:
+    """Return a detached project safe to publish, export, or hand to others.
+
+    Redacts credentials across layers, basemap/map style URLs (including
+    ``mapboxStyleUrl`` and ``terrainSource``), geocoder settings, plugin
+    manifest URLs, and secret environment variables. When
+    ``strip_non_exportable`` is ``True`` (the default), inline GeoJSON data on
+    layers with ``capabilities.export == False`` is also removed; pass
+    ``strip_non_exportable=False`` for read-only in-session previews that still
+    need inline geometry.
+    """
     safe = copy.deepcopy(project)
     if isinstance(safe.get("basemapStyleUrl"), str):
         safe["basemapStyleUrl"] = _redact_url(safe["basemapStyleUrl"])
@@ -245,12 +275,30 @@ def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
             for field in ("forwardEndpoint", "reverseEndpoint"):
                 if isinstance(geocoding.get(field), str):
                     geocoding[field] = _redact_url(geocoding[field])
+        map_prefs = preferences.get("map")
+        if isinstance(map_prefs, dict):
+            for field in ("mapboxStyleUrl", "terrainSource"):
+                if isinstance(map_prefs.get(field), str):
+                    map_prefs[field] = _redact_url(map_prefs[field])
     layers = safe.get("layers")
     if isinstance(layers, list):
         for layer in layers:
             if not isinstance(layer, dict):
                 continue
             _sweep_layer_credentials(layer)
+            # Mirror packages/core/src/credentials.ts: strip carried feature
+            # data when the layer marks export as disallowed (skipped for
+            # in-session read-only previews that need inline geometry).
+            capabilities = layer.get("capabilities")
+            if (
+                strip_non_exportable
+                and isinstance(capabilities, dict)
+                and capabilities.get("export") is False
+            ):
+                layer.pop("geojson", None)
+                layer_metadata = layer.get("metadata")
+                if isinstance(layer_metadata, dict):
+                    layer_metadata.pop("embeddedGeoJSON", None)
     plugins = safe.get("plugins")
     if isinstance(plugins, dict):
         manifest_urls = plugins.get("manifestUrls")
@@ -270,7 +318,7 @@ def redact_credentials(project: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
-PROJECT_VERSION = "0.1.0"
+PROJECT_VERSION: str = _PROJECT_CONSTANTS["PROJECT_VERSION"]
 
 # Characters JavaScript's encodeURIComponent leaves unescaped on top of the
 # always-unreserved set (alphanumerics and ``-_.~``), so _append_query produces
@@ -282,8 +330,32 @@ _ENCODE_URI_SAFE = "!*'()"
 _MAX_GEOJSON_BYTES = 50 * 1024 * 1024  # 50 MB
 
 
+_NAT64_WELL_KNOWN = ipaddress.IPv6Network("64:ff9b::/96")
+_NAT64_LOCAL = ipaddress.IPv6Network("64:ff9b:1::/48")
+
+
+def _is_public_ip(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Return True only for globally routable unicast IP addresses."""
+    if isinstance(address, ipaddress.IPv6Address):
+        if address.ipv4_mapped is not None:
+            return _is_public_ip(address.ipv4_mapped)
+        if address in _NAT64_WELL_KNOWN:
+            return _is_public_ip(ipaddress.IPv4Address(int(address) & 0xFFFFFFFF))
+        if (
+            address in _NAT64_LOCAL
+            or address.sixtofour is not None
+            or address.teredo is not None
+            or address.is_site_local
+        ):
+            return False
+        # ISATAP embeds an IPv4 address in the interface identifier.
+        if int(address) & 0xFFFFFFFF00000000 in {0x00005EFE00000000, 0x02005EFE00000000}:
+            return False
+    return address.is_global and not address.is_multicast and not address.is_reserved
+
+
 def _assert_public_url(url: str) -> None:
-    """Reject a URL whose host resolves to a non-public address.
+    """Reject a URL with a non-HTTP(S) scheme or a host resolving to a non-public address.
 
     Guards the kernel-side fetch against SSRF: without this a redirect (or a
     crafted URL) could reach a private/loopback/link-local address such as a
@@ -294,20 +366,24 @@ def _assert_public_url(url: str) -> None:
         url: The URL about to be fetched (or a redirect target).
 
     Raises:
-        ValueError: If the host is missing, unresolvable, or maps to any
-            non-public address.
+        ValueError: If the scheme is not HTTP(S), or the host is missing,
+            unresolvable, or maps to any non-public address.
     """
-    host = urlsplit(url).hostname
+    safe_url = _redact_url(url)
+    parsed = urlsplit(url)
+    if parsed.scheme.lower() not in {"http", "https"}:
+        raise ValueError(f"Refusing to fetch non-HTTP(S) URL: {safe_url}")
+    host = parsed.hostname
     if not host:
-        raise ValueError(f"URL has no host: {url}")
+        raise ValueError(f"URL has no host: {safe_url}")
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror as exc:
-        raise ValueError(f"Could not resolve host for URL: {url}") from exc
+        raise ValueError(f"Could not resolve host for URL: {safe_url}") from exc
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
-        if not ip.is_global:
-            raise ValueError(f"Refusing to fetch from a non-public address ({ip}): {url}")
+        if not _is_public_ip(ip):
+            raise ValueError(f"Refusing to fetch from a non-public address ({ip}): {safe_url}")
 
 
 class _PublicOnlyRedirectHandler(HTTPRedirectHandler):
@@ -322,77 +398,18 @@ class _PublicOnlyRedirectHandler(HTTPRedirectHandler):
 # hop that points at a non-public address (SSRF defence).
 _GEOJSON_OPENER = build_opener(_PublicOnlyRedirectHandler)
 
-# Mirror of DEFAULT_LAYER_STYLE in packages/core/src/types.ts. The app fills in
-# any missing fields on load, so layers only need to override what differs, but
-# carrying the full default keeps round-tripped projects stable.
-DEFAULT_LAYER_STYLE: dict[str, Any] = {
-    "minZoom": 0,
-    "maxZoom": 24,
-    "fillColor": "#3b82f6",
-    "strokeColor": "#1e40af",
-    "strokeWidth": 2,
-    "strokeOpacity": 1,
-    "strokeDash": [],
-    "strokeBlur": 0,
-    "fillOpacity": 0.6,
-    "circleRadius": 6,
-    "textColor": "#111827",
-    "textHaloColor": "#ffffff",
-    "textHaloWidth": 2,
-    "textSize": 16,
-    "extrusionEnabled": False,
-    "extrusionColor": "#3b82f6",
-    "extrusionOpacity": 0.8,
-    "extrusionHeightProperty": "height",
-    "extrusionHeightScale": 1,
-    "extrusionBase": 0,
-    "extrusionBaseProperty": "",
-    "extrusionBaseScale": 1,
-    "extrusionFloorHeight": 0,
-    "extrusionAdvancedStyleEnabled": False,
-    "extrusionColorExpression": "",
-    "extrusionHeightExpression": "",
-    "extrusionBaseExpression": "",
-    "vectorStyleMode": "single",
-    "vectorStyleProperty": "",
-    "vectorStyleClassCount": 5,
-    "vectorStyleColorRamp": "viridis",
-    "vectorStyleClassificationScheme": "equal-interval",
-    "vectorStyleStops": [
-        {"value": 0, "color": "#dbeafe"},
-        {"value": 1, "color": "#2563eb"},
-    ],
-    "vectorStyleExpression": "",
-    "pointRenderer": "single",
-    "heatmapRadius": 30,
-    "heatmapIntensity": 1,
-    "heatmapColorRamp": "turbo",
-    "heatmapWeightProperty": "",
-    "clusterRadius": 50,
-    "clusterMaxZoom": 14,
-    "rasterBrightnessMin": 0,
-    "rasterBrightnessMax": 1,
-    "rasterSaturation": 0,
-    "rasterContrast": 0,
-    "rasterHueRotate": 0,
-    # How the layer composites onto the map beneath it. "normal" is ordinary
-    # alpha compositing; see BLEND_MODES in packages/core/src/types.ts for the
-    # full set the app accepts.
-    "blendMode": "normal",
-}
+# Loaded from project-constants.json (synced with packages/core/src/project-constants.json).
+DEFAULT_LAYER_STYLE: dict[str, Any] = copy.deepcopy(_PROJECT_CONSTANTS["DEFAULT_LAYER_STYLE"])
 
-# Mirror of DEFAULT_PROJECT_PREFERENCES in packages/core/src/types.ts.
-DEFAULT_PROJECT_PREFERENCES: dict[str, Any] = {
-    "map": {
-        "restrictBounds": False,
-        "bounds": [-180, -85, 180, 85],
-        "minZoom": 0,
-        "maxZoom": 24,
-        "maxPitch": 85,
-        "renderWorldCopies": True,
-    },
-    "environmentVariables": [],
-}
+# Loaded from project-constants.json (synced with packages/core/src/project-constants.json).
+DEFAULT_PROJECT_PREFERENCES: dict[str, Any] = copy.deepcopy(
+    _PROJECT_CONSTANTS["DEFAULT_PROJECT_PREFERENCES"]
+)
+
+# Built-in vector/raster color ramps shared with @geolibre/core.
+VECTOR_COLOR_RAMPS: tuple[dict[str, Any], ...] = tuple(
+    copy.deepcopy(_PROJECT_CONSTANTS["VECTOR_COLOR_RAMPS"])
+)
 
 
 def default_map_view() -> dict[str, Any]:
@@ -3107,7 +3124,7 @@ def video_layer(
     Raises:
         ValueError: If ``urls`` is empty, any URL is not ``https://`` (the
             browser's ``media-src`` CSP blocks ``http://``), or ``coordinates``
-            is not four ``[lng, lat]`` pairs.
+            is not four ``[lng, lat]`` pairs. Embedded URL credentials are refused.
     """
     if not urls:
         raise ValueError("video_layer requires at least one non-empty URL")
@@ -3117,6 +3134,8 @@ def video_layer(
     if invalid:
         raise ValueError(f"video_layer: every URL must be a non-empty string; got {invalid!r}")
     clean_urls = list(urls)
+    for url in clean_urls:
+        _assert_no_url_userinfo(url)
     if any(not u.lower().startswith("https://") for u in clean_urls):
         raise ValueError("Video URLs must start with https:// (the browser CSP blocks http://)")
     if len(coordinates) != 4 or any(len(corner) != 2 for corner in coordinates):
@@ -3136,6 +3155,9 @@ def video_layer(
     # works — a video source exposes no bounds for fitLayer to fall back on.
     layer["metadata"] = {
         "sourceKind": "video-url",
+        # The Add Data video form reads these back when the layer is edited.
+        "sourceUrl": clean_urls[0],
+        **({"fallbackSourceUrl": clean_urls[1]} if len(clean_urls) > 1 else {}),
         "bounds": [min(lngs), min(lats), max(lngs), max(lats)],
     }
     layer["sourcePath"] = clean_urls[0]
@@ -3242,29 +3264,10 @@ COMPONENTS_PLUGIN_ID = "maplibre-gl-components"
 #: The components plugin's ``html`` sub-key is deliberately absent: it holds a
 #: custom HTML panel the user authored by hand, so it can carry anything,
 #: including a URL with a token in it. It is dropped like any unknown blob.
-#: Mirrored by ``PUBLISHABLE_PLUGIN_SETTINGS`` in
-#: ``packages/core/src/credentials.ts``; the two must agree.
+#: Loaded from ``project-constants.json`` (shared with ``@geolibre/core``).
 PUBLISHABLE_PLUGIN_SETTINGS: dict[str, tuple[str, ...] | None] = {
-    SWIPE_PLUGIN_ID: None,
-    COMPONENTS_PLUGIN_ID: ("legend", "colorbar"),
-    # The timeline config owns its temporal source definitions. Its mirrored
-    # store layers only carry internal source ids, so dropping this state makes
-    # shared Time Slider layers impossible to reconstruct. The retained value
-    # is still recursively credential-scrubbed by the caller.
-    "maplibre-gl-time-slider": None,
-    # Feed toggles (one boolean per feed) plus a numeric clock speed — no URLs,
-    # no keys, nothing user-authored. Listed as a whole blob rather than by key
-    # because the feed set grows with every new feed; an enumerated list would
-    # silently start counting each new toggle as a credential. The retained
-    # value is still recursively credential-scrubbed by the caller.
-    "gods-eye-view": None,
-    # Point class edits keyed by (node key, index): compressed numbers, no user
-    # text. Source URLs are values, so the caller's scrub still covers them.
-    "geolibre-point-cloud-annotation": None,
-    # The server URL, the map's publish key and a layer-id-to-dataset-key map.
-    # The sub-keys are listed rather than the blob, so a key a later change
-    # stores here is dropped instead of published.
-    "maplibre-gl-geolens": ("serverUrl", "mapKey", "layerKeys"),
+    plugin_id: tuple(keys) if isinstance(keys, list) else None
+    for plugin_id, keys in _PROJECT_CONSTANTS["PUBLISHABLE_PLUGIN_SETTINGS"].items()
 }
 
 # Plugins the app activates by default (``activeByDefault: true`` in
@@ -3809,40 +3812,12 @@ def level_filter(
 
 # -- labels --------------------------------------------------------------------
 
-#: Mirror of ``DEFAULT_LAYER_STYLE.labels`` in ``packages/core/src/types.ts``.
+#: Loaded from ``project-constants.json`` ``DEFAULT_LAYER_STYLE["labels"]``.
 #: The app merges a stored ``labels`` object over these field by field when it
 #: renders, so a written object carries every key to stay stable on round trip.
-DEFAULT_LABEL_STYLE: dict[str, Any] = {
-    "enabled": False,
-    "field": "",
-    "expression": "",
-    "placement": "point",
-    "lineGap": False,
-    "lineGapPadding": 3,
-    "lineSpacing": 250,
-    "size": 13,
-    "color": "#111827",
-    "haloColor": "#ffffff",
-    "haloWidth": 1.5,
-    "minZoom": 0,
-    "maxZoom": 24,
-    "allowOverlap": False,
-    "anchor": "center",
-    "offsetX": 0,
-    "offsetY": 0,
-    "rotation": 0,
-    "maxWidth": 10,
-    "transform": "none",
-    "numberFormatEnabled": False,
-    "numberDecimals": 0,
-    "numberLocale": "",
-    "dedupe": "off",
-    "sizeExpression": "",
-    "colorExpression": "",
-    "opacityExpression": "",
-    "visibilityExpression": "",
-    "priorityExpression": "",
-}
+DEFAULT_LABEL_STYLE: dict[str, Any] = copy.deepcopy(
+    _PROJECT_CONSTANTS["DEFAULT_LAYER_STYLE"]["labels"]
+)
 
 LABEL_PLACEMENTS = frozenset({"point", "line"})
 LABEL_ANCHORS = frozenset(
@@ -4040,32 +4015,7 @@ def label_style(
 #: with that id is loaded from a manifest URL, so callers refuse unknown ids
 #: unless asked not to. A repo test checks every id here still appears in the
 #: plugin sources.
-PLUGIN_STATE_IDS = frozenset(
-    {
-        "geolibre-elevation-profile",
-        "geolibre-flight-simulator",
-        "geolibre-point-cloud-annotation",
-        "geolibre-route-animation",
-        "geolibre-sun",
-        "geolibre-timelapse",
-        "gods-eye-view",
-        "maplibre-a5-grid",
-        "maplibre-atmosphere-effects",
-        "maplibre-dggal",
-        "maplibre-dggrid",
-        "maplibre-geohash",
-        "maplibre-gl-components",
-        "maplibre-gl-graticule",
-        "maplibre-gl-overture-maps",
-        "maplibre-gl-swipe",
-        "maplibre-gl-time-slider",
-        "maplibre-h3-grid",
-        "maplibre-olc",
-        "maplibre-s2-grid",
-        "maplibre-samgeo",
-        "maplibre-tilecode",
-    }
-)
+PLUGIN_STATE_IDS: frozenset[str] = frozenset(_PROJECT_CONSTANTS["PLUGIN_STATE_IDS"])
 
 
 def json_compatible(value: Any, what: str) -> Any:
@@ -4094,22 +4044,8 @@ def json_compatible(value: Any, what: str) -> Any:
 
 # -- story maps ----------------------------------------------------------------
 
-#: Mirror of ``DEFAULT_STORY_MAP`` in packages/core/src/types.ts.
-DEFAULT_STORY_MAP: dict[str, Any] = {
-    "title": "",
-    "subtitle": "",
-    "byline": "",
-    "footer": "",
-    "theme": "dark",
-    "showMarkers": False,
-    "markerColor": "#3fb1ce",
-    "inset": False,
-    "insetPosition": "bottom-left",
-    "hideChapterNav": False,
-    "startSlide": "none",
-    "endSlide": "none",
-    "chapters": [],
-}
+#: Loaded from ``project-constants.json`` (shared with ``@geolibre/core``).
+DEFAULT_STORY_MAP: dict[str, Any] = copy.deepcopy(_PROJECT_CONSTANTS["DEFAULT_STORY_MAP"])
 
 STORY_THEMES = frozenset({"light", "dark"})
 STORY_ALIGNMENTS = frozenset({"left", "center", "right", "full"})
@@ -4447,3 +4383,934 @@ def bookmark(
             raise ValueError("visible_layer_ids must be a list of layer id strings")
         entry["extra"] = {"visibleLayerIds": list(visible_layer_ids)}
     return entry
+
+
+# -- WFS, ArcGIS services, Zarr ------------------------------------------------
+
+
+def wfs_layer(
+    name: str,
+    endpoint: str,
+    type_name: str,
+    *,
+    version: str = "2.0.0",
+    output_format: str = "application/json",
+    srs_name: str | None = "EPSG:4326",
+    max_features: int | None = 1000,
+    data: dict[str, Any] | None = None,
+    **style: Any,
+) -> dict[str, Any]:
+    """Build a WFS layer, mirroring ``buildWfsGeoJsonLayer`` in the Add Data dialog.
+
+    Without ``data`` the layer is a reference only: the app fetches the
+    GetFeature URL when the project opens (``useLayerRefresh``'s bootstrap for a
+    ``wfs-getfeature`` layer with no inlined features), which is also how it
+    saves an unedited WFS layer. Pass ``data`` to inline a response you already
+    fetched.
+
+    Args:
+        name: Layer display name.
+        endpoint: WFS service endpoint.
+        type_name: WFS feature type name (e.g. ``"topp:states"``).
+        version: WFS protocol version (e.g. ``"2.0.0"`` or ``"1.1.0"``).
+        output_format: Requested output format; it must yield GeoJSON.
+        srs_name: Spatial reference of the response, or None to omit it.
+        max_features: Cap on the number of returned features, or None for all.
+        data: Optional GeoJSON FeatureCollection to inline.
+        **style: Style overrides merged into the default layer style.
+
+    Returns:
+        A layer dict for the project's ``layers`` array.
+
+    Raises:
+        ValueError: If ``endpoint`` or ``type_name`` is blank, or the endpoint
+            embeds username/password credentials.
+    """
+    if not isinstance(endpoint, str) or not endpoint.strip():
+        raise ValueError("wfs_layer: endpoint must be a non-empty URL")
+    if not isinstance(type_name, str) or not type_name.strip():
+        raise ValueError("wfs_layer: type_name must be a non-empty string")
+    _assert_no_url_userinfo(endpoint.strip())
+    url = wfs_getfeature_url(
+        endpoint.strip(),
+        type_name.strip(),
+        version=version,
+        output_format=output_format,
+        srs_name=srs_name or "",
+        max_features=max_features,
+    )
+    layer = _layer_base(name, "geojson", **style)
+    source: dict[str, Any] = {
+        "type": "geojson",
+        "url": url,
+        "service": "wfs",
+        "typeName": type_name.strip(),
+        "version": version,
+        "outputFormat": output_format,
+    }
+    if srs_name:
+        source["srsName"] = srs_name
+    layer["source"] = source
+    layer["sourcePath"] = url
+    layer["metadata"] = {
+        "service": "wfs",
+        "sourceKind": "wfs-getfeature",
+        "typeName": type_name.strip(),
+    }
+    if data is not None:
+        layer["geojson"] = data
+        features = data.get("features") if isinstance(data, dict) else None
+        layer["metadata"]["featureCount"] = len(features) if isinstance(features, list) else 0
+    return layer
+
+
+#: ArcGIS service kinds :func:`arcgis_layer` builds, keyed by the ``service``
+#: argument, with the app's ``arcgisLayerType`` and ``sourceKind`` for each
+#: (``ArcGISLayerType`` and the source-kind constants in arcgis-layer.ts).
+ARCGIS_SERVICES: dict[str, tuple[str, str]] = {
+    "map": ("map-service", "arcgis-map-service"),
+    "image": ("image-service", "arcgis-image-service"),
+    "feature": ("feature", "arcgis-feature-query"),
+}
+
+_ARCGIS_EXPORT_TILE_SIZE = 256
+
+
+def _arcgis_export_tile_url(
+    service_url: str, *, image: bool, sublayers: str | None, rendering_rule: str | None
+) -> str:
+    """Build the ``/export`` or ``/exportImage`` tile template, as ``arcgisExportTileUrl``.
+
+    Args:
+        service_url: The MapServer or ImageServer URL.
+        image: True for an ImageServer.
+        sublayers: Comma-separated MapServer sublayer ids to show, or None.
+        rendering_rule: ImageServer rendering rule JSON, or None.
+
+    Returns:
+        The tile template, with ``{bbox-epsg-3857}`` left literal for MapLibre.
+    """
+    size = f"{_ARCGIS_EXPORT_TILE_SIZE},{_ARCGIS_EXPORT_TILE_SIZE}"
+    params: list[tuple[str, str]] = [
+        ("bbox", "{bbox-epsg-3857}"),
+        ("bboxSR", "3857"),
+        ("imageSR", "3857"),
+        ("size", size),
+        ("format", "png32"),
+        ("transparent", "true"),
+    ]
+    if not image:
+        params.append(("dpi", "96"))
+        if sublayers:
+            params.append(("layers", f"show:{sublayers}"))
+    elif rendering_rule:
+        params.append(("renderingRule", rendering_rule))
+    params.append(("f", "image"))
+    query = "&".join(
+        f"{key}={value if value == '{bbox-epsg-3857}' else quote(value, safe=_ENCODE_URI_SAFE)}"
+        for key, value in params
+    )
+    return f"{service_url}/{'exportImage' if image else 'export'}?{query}"
+
+
+def arcgis_layer(
+    name: str,
+    url: str,
+    *,
+    service: str = "map",
+    sublayers: str | list[int] | None = None,
+    rendering_rule: str | dict[str, Any] | None = None,
+    max_features: int | None = None,
+    bounds: list[float] | None = None,
+    attribution: str | None = None,
+    **style: Any,
+) -> dict[str, Any]:
+    """Build an ArcGIS REST service layer the way the ArcGIS plugin saves one.
+
+    - ``service="map"`` (MapServer) and ``service="image"`` (ImageServer) build a
+      ``raster`` layer drawing the service's ``/export`` or ``/exportImage``
+      endpoint per tile, which the core raster sync renders on every engine.
+    - ``service="feature"`` (a FeatureServer or MapServer *layer* URL ending in
+      ``/<id>``) builds a ``geojson`` layer that the app's viewport loader fills
+      from the service's ``/query`` endpoint when the project opens on the
+      MapLibre map. Other renderers show it empty until it is refreshed.
+
+    Credentials are not supported: a token would be written into the project.
+
+    Args:
+        name: Layer display name.
+        url: The service URL, e.g. ``.../MapServer``, ``.../ImageServer``, or
+            ``.../FeatureServer/0``.
+        service: ``"map"``, ``"image"``, or ``"feature"``.
+        sublayers: MapServer sublayer ids to show (``"0,2"`` or ``[0, 2]``).
+        rendering_rule: ImageServer rendering rule, as a dict or JSON string
+            (e.g. ``{"rasterFunction": "Hillshade"}``).
+        max_features: Feature service cap on features loaded per view.
+        bounds: Optional ``[west, south, east, north]`` extent in WGS84, so
+            "Zoom to layer" can reach a service layer.
+        attribution: Optional attribution text (the service's copyright).
+        **style: Style overrides merged into the default layer style.
+
+    Returns:
+        A layer dict for the project's ``layers`` array.
+
+    Raises:
+        ValueError: If ``service`` is unknown, ``url`` is not an http(s) URL,
+            carries credentials or a ``token``, or an option does not apply to ``service``.
+    """
+    if service not in ARCGIS_SERVICES:
+        raise ValueError(f"service must be one of {sorted(ARCGIS_SERVICES)}, got {service!r}")
+    if not isinstance(url, str) or not url.strip().lower().startswith(("https://", "http://")):
+        raise ValueError("url must be an http(s) ArcGIS REST service URL")
+    service_url = url.strip().split("?", 1)[0].split("#", 1)[0].rstrip("/")
+    _assert_no_url_userinfo(service_url)
+    if "token=" in url.lower():
+        raise ValueError("url must not carry a token: it would be saved into the project")
+    layer_type, source_kind = ARCGIS_SERVICES[service]
+    if sublayers is not None and service != "map":
+        raise ValueError("sublayers applies only to service='map'")
+    if rendering_rule is not None and service != "image":
+        raise ValueError("rendering_rule applies only to service='image'")
+    if max_features is not None and service != "feature":
+        raise ValueError("max_features applies only to service='feature'")
+    resolved_bounds = _resolve_bounds(bounds)
+
+    if service == "feature":
+        if max_features is not None and (
+            not isinstance(max_features, int) or isinstance(max_features, bool) or max_features < 1
+        ):
+            raise ValueError(f"max_features must be a positive integer, got {max_features!r}")
+        query_url = f"{service_url}/query"
+        refresh_url = _append_query(
+            query_url,
+            [("f", "geojson"), ("outFields", "*"), ("returnGeometry", "true"), ("where", "1=1")],
+        )
+        layer = _layer_base(name, "geojson", **style)
+        source: dict[str, Any] = {"type": "geojson", "arcgisQueryUrl": query_url}
+        if max_features is not None:
+            source["maxFeatures"] = max_features
+        if attribution:
+            source["attribution"] = attribution
+        layer["source"] = source
+        # Filled by the viewport loader on open; empty until then.
+        layer["geojson"] = {"type": "FeatureCollection", "features": []}
+        layer["sourcePath"] = refresh_url
+        metadata: dict[str, Any] = {"sourceKind": source_kind, "viewportLoading": True}
+        if resolved_bounds is not None:
+            metadata["bounds"] = resolved_bounds
+        layer["metadata"] = metadata
+        return layer
+
+    if sublayers is not None:
+        if isinstance(sublayers, (list, tuple)):
+            if any(
+                not isinstance(value, int) or isinstance(value, bool) or value < 0
+                for value in sublayers
+            ):
+                raise ValueError("sublayers must contain nonnegative integer layer ids")
+            sublayer_text = ",".join(str(value) for value in sublayers)
+        else:
+            sublayer_text = str(sublayers).strip()
+        if not re.fullmatch(r"\d+(,\d+)*", sublayer_text):
+            raise ValueError(f"sublayers must be layer ids such as '0,2', got {sublayers!r}")
+    else:
+        sublayer_text = None
+    rule_text: str | None = None
+    if rendering_rule is not None:
+        rule_text = (
+            json.dumps(rendering_rule, separators=(",", ":"))
+            if isinstance(rendering_rule, dict)
+            else str(rendering_rule).strip()
+        )
+        try:
+            parsed_rule = json.loads(rule_text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"rendering_rule must be JSON, got {rendering_rule!r}") from exc
+        if not isinstance(parsed_rule, dict):
+            raise ValueError("rendering_rule must be a JSON object")
+    image = service == "image"
+    layer = _layer_base(name, "raster", **style)
+    raster_source: dict[str, Any] = {
+        "type": "raster",
+        "tiles": [
+            _arcgis_export_tile_url(
+                service_url, image=image, sublayers=sublayer_text, rendering_rule=rule_text
+            )
+        ],
+        "tileSize": _ARCGIS_EXPORT_TILE_SIZE,
+    }
+    if resolved_bounds is not None:
+        raster_source["bounds"] = resolved_bounds
+    if attribution:
+        raster_source["attribution"] = attribution
+    layer["source"] = raster_source
+    raster_metadata: dict[str, Any] = {
+        "arcgisLayerType": layer_type,
+        "arcgisSourceType": "url",
+        "arcgisTiled": False,
+        "hasAccessToken": False,
+        "sourceKind": source_kind,
+    }
+    if resolved_bounds is not None:
+        raster_metadata["bounds"] = resolved_bounds
+    if rule_text is not None:
+        raster_metadata["arcgisRenderingRule"] = rule_text
+    if sublayer_text is not None:
+        raster_metadata["arcgisSublayers"] = sublayer_text
+    layer["metadata"] = raster_metadata
+    layer["sourcePath"] = service_url
+    return layer
+
+
+def zarr_layer(
+    name: str,
+    url: str,
+    variable: str,
+    *,
+    selector: dict[str, int | float | str] | None = None,
+    clim: list[float] | None = None,
+    colormap: str | None = None,
+    bounds: list[float] | None = None,
+    crs: str | None = None,
+    spatial_dimensions: dict[str, str] | None = None,
+    **style: Any,
+) -> dict[str, Any]:
+    """Build a Zarr data-cube layer the way ``createZarrStoreLayer`` saves one.
+
+    The app re-adds it through the Zarr control when the project opens
+    (``restoreZarrLayers``), which assigns the live layer a new id.
+
+    Icechunk repositories (``#icechunk=`` URLs) and local stores cannot be
+    reopened from a project, so they are refused.
+
+    Args:
+        name: Layer display name.
+        url: An ``http(s)://``, ``s3://``, or ``gs://`` Zarr store URL.
+            Google Storage URLs are saved as public HTTPS endpoints, preserving
+            their query parameters so the app can reopen them.
+        variable: The array to draw (e.g. ``"tas"``).
+        selector: Non-spatial dimension values to slice, e.g.
+            ``{"time": 0}`` or ``{"band": "B04"}``.
+        clim: ``[min, max]`` color range.
+        colormap: Colormap name (e.g. ``"viridis"``).
+        bounds: ``[west, south, east, north]`` when the store lacks coordinates.
+        crs: The store's CRS when it is not EPSG:4326 (e.g. ``"EPSG:3857"``).
+        spatial_dimensions: Names of the spatial dimensions when they are not
+            discoverable, e.g. ``{"lat": "y", "lon": "x"}``.
+        **style: Style overrides merged into the default layer style.
+
+    Returns:
+        A layer dict for the project's ``layers`` array.
+
+    Raises:
+        ValueError: If ``url`` or ``variable`` is blank, the URL is an Icechunk
+            or local store, embeds credentials, or an option is malformed.
+    """
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError("zarr_layer: url must be a non-empty string")
+    store_url = url.strip()
+    if "#icechunk=" in store_url or re.match(r"^local(-zarr)?:", store_url):
+        raise ValueError(
+            "zarr_layer: Icechunk and local stores cannot be reopened from a project; "
+            "use a plain Zarr store URL"
+        )
+    if not re.match(r"^(https?|s3|gs)://", store_url, re.IGNORECASE):
+        raise ValueError("zarr_layer: url must be http(s)://, s3://, or gs://")
+    _assert_no_url_userinfo(store_url)
+    if store_url.lower().startswith("gs://"):
+        parts = urlsplit(store_url)
+        if not parts.hostname:
+            raise ValueError("zarr_layer: a gs:// URL must name a bucket")
+        store_url = parts._replace(
+            scheme="https", netloc="storage.googleapis.com", path=f"/{parts.netloc}{parts.path}"
+        ).geturl()
+    if not isinstance(variable, str) or not variable.strip():
+        raise ValueError("zarr_layer: variable must be a non-empty string")
+    if selector is not None and (
+        not isinstance(selector, dict)
+        or not all(
+            isinstance(key, str)
+            and isinstance(value, (int, float, str))
+            and (not isinstance(value, float) or math.isfinite(value))
+            for key, value in selector.items()
+        )
+    ):
+        raise ValueError("zarr_layer: selector must map dimension names to numbers or strings")
+    if clim is not None:
+        try:
+            clim = [float(clim[0]), float(clim[1])] if len(clim) == 2 else None
+        except (TypeError, ValueError, LookupError):
+            clim = None
+        if clim is None or not all(math.isfinite(value) for value in clim) or clim[0] >= clim[1]:
+            raise ValueError("zarr_layer: clim must be [min, max] with min < max")
+    if spatial_dimensions is not None and (
+        not isinstance(spatial_dimensions, dict)
+        or not set(spatial_dimensions) <= {"lat", "lon"}
+        or not all(isinstance(value, str) and value for value in spatial_dimensions.values())
+    ):
+        raise ValueError('zarr_layer: spatial_dimensions takes "lat" and/or "lon" names')
+    resolved_bounds = _resolve_bounds(bounds)
+    style.setdefault("fillOpacity", 1)
+    layer = _layer_base(name, "zarr", **style)
+    source: dict[str, Any] = {
+        "type": "raster",
+        "url": store_url,
+        "variable": variable.strip(),
+        "selector": dict(selector or {}),
+    }
+    metadata: dict[str, Any] = {
+        "externalNativeLayer": True,
+        "identifiable": False,
+        "nativeLayerIds": [layer["id"]],
+        "paintMode": "plugin",
+        "selector": dict(selector or {}),
+        "sourceKind": "zarr-url",
+        "tileType": "raster",
+        "variable": variable.strip(),
+    }
+    if clim is not None:
+        source["clim"] = clim
+        metadata["clim"] = clim
+    if colormap:
+        source["colormap"] = colormap
+        metadata["colormap"] = colormap
+    if resolved_bounds is not None:
+        source["bounds"] = resolved_bounds
+    if crs:
+        source["crs"] = crs
+        metadata["crs"] = crs
+    if spatial_dimensions:
+        source["spatialDimensions"] = dict(spatial_dimensions)
+    layer["source"] = source
+    layer["metadata"] = metadata
+    layer["sourcePath"] = store_url
+    return layer
+
+
+# -- layer groups --------------------------------------------------------------
+
+
+def layer_group(
+    name: str,
+    *,
+    parent_id: str | None = None,
+    collapsed: bool = False,
+    visible: bool = True,
+    opacity: float = 1.0,
+    group_id: str | None = None,
+) -> dict[str, Any]:
+    """Build one Layers panel group (``LayerGroup`` in packages/core types.ts).
+
+    A layer joins a group through its own ``groupId``; see
+    :func:`geolibre.authoring.set_layer_group`.
+
+    Args:
+        name: Group name shown in the Layers panel.
+        parent_id: Id of the group this one nests in, or None for the root.
+        collapsed: Start with the group collapsed in the panel.
+        visible: Group visibility, ANDed with each member layer's own.
+        opacity: Group opacity in [0, 1], multiplied into each member's.
+        group_id: Explicit group id; a UUID by default.
+
+    Returns:
+        A group dict for the project's ``layerGroups`` array.
+
+    Raises:
+        ValueError: If a value is blank, not a bool, or out of range.
+    """
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError(f"group name must be a non-empty string, got {name!r}")
+    for label, flag in (("collapsed", collapsed), ("visible", visible)):
+        if not isinstance(flag, bool):
+            raise ValueError(f"{label} must be true or false")
+    if (
+        isinstance(opacity, bool)
+        or not isinstance(opacity, (int, float))
+        or not math.isfinite(opacity)
+        or not 0 <= opacity <= 1
+    ):
+        raise ValueError(f"opacity must be between 0 and 1, got {opacity!r}")
+    group_id = str(group_id).strip() if group_id is not None else str(uuid.uuid4())
+    if not group_id:
+        raise ValueError("group_id must not be empty")
+    group: dict[str, Any] = {
+        "id": group_id,
+        "name": name.strip(),
+        "collapsed": collapsed,
+        "visible": visible,
+        "opacity": float(opacity),
+    }
+    if parent_id is not None:
+        parent = str(parent_id).strip()
+        if not parent or parent == group_id:
+            raise ValueError("parent_id must name another group")
+        group["parentId"] = parent
+    return group
+
+
+# -- dashboards and print layouts -----------------------------------------------
+
+#: Dashboard widget types (``DashboardWidgetType`` in packages/core types.ts).
+DASHBOARD_WIDGET_TYPES = frozenset(
+    {"histogram", "scatter", "bar", "line", "box", "pie", "indicator", "selector", "list"}
+)
+#: Dashboard grid width bounds and default (``dashboardColumns``).
+MIN_DASHBOARD_COLUMNS = 1
+MAX_DASHBOARD_COLUMNS = 6
+DEFAULT_DASHBOARD_COLUMNS = 2
+
+_WIDGET_AGGREGATIONS = frozenset({"count", "sum", "mean"})
+_INDICATOR_AGGREGATIONS = frozenset({"count", "sum", "mean", "min", "max", "median"})
+_WIDGET_STRING_FIELDS = ("title", "field", "xField", "yField", "category", "valueField")
+_WIDGET_OPTION_KEYS = frozenset(
+    {
+        *_WIDGET_STRING_FIELDS,
+        "color",
+        "bins",
+        "aggregation",
+        "indicatorAggregation",
+        "prefix",
+        "suffix",
+        "multiple",
+        "listFields",
+        "sortBy",
+        "sortDir",
+        "limit",
+    }
+)
+#: Options only one widget type reads; ``normalizeWidgets`` drops them elsewhere.
+_WIDGET_TYPE_ONLY_OPTIONS = {
+    "indicatorAggregation": "indicator",
+    "prefix": "indicator",
+    "suffix": "indicator",
+    "multiple": "selector",
+    "listFields": "list",
+    "sortBy": "list",
+    "sortDir": "list",
+    "limit": "list",
+}
+_SNAKE_TO_CAMEL = re.compile(r"_([a-z])")
+
+
+def _camel(key: str) -> str:
+    """Convert a ``snake_case`` option name to the project's ``camelCase``."""
+    return _SNAKE_TO_CAMEL.sub(lambda match: match.group(1).upper(), key)
+
+
+def dashboard_widget(
+    layer_id: str,
+    widget_type: str,
+    *,
+    widget_id: str | None = None,
+    **options: Any,
+) -> dict[str, Any]:
+    """Build one Dashboard widget (``DashboardWidget`` in packages/core types.ts).
+
+    Options are validated the way ``normalizeWidgets`` reads them, so nothing
+    written here is dropped when the project opens. They may be given in
+    ``snake_case`` or ``camelCase``.
+
+    Args:
+        layer_id: Id of the (GeoJSON) layer the widget charts.
+        widget_type: One of :data:`DASHBOARD_WIDGET_TYPES`.
+        widget_id: Explicit widget id; a UUID by default.
+        **options: ``title``, ``color`` (``#rgb``/``#rrggbb``), ``field``
+            (histogram/box/indicator/selector), ``x_field``/``y_field``
+            (scatter/line), ``bins`` (1-50), ``category``, ``aggregation``
+            (``count``/``sum``/``mean``; no ``mean`` for pie), ``value_field``;
+            indicator only: ``indicator_aggregation``, ``prefix``, ``suffix``;
+            selector only: ``multiple``; list only: ``list_fields``,
+            ``sort_by``, ``sort_dir`` (``asc``/``desc``), ``limit`` (1-500).
+
+    Returns:
+        A widget dict for the project's ``widgets`` array.
+
+    Raises:
+        ValueError: If the type, an option name, or an option value is invalid.
+    """
+    if widget_type not in DASHBOARD_WIDGET_TYPES:
+        raise ValueError(
+            f"widget_type must be one of {sorted(DASHBOARD_WIDGET_TYPES)}, got {widget_type!r}"
+        )
+    if not isinstance(layer_id, str) or not layer_id.strip():
+        raise ValueError("layer_id must be a non-empty string")
+    widget_id = str(widget_id).strip() if widget_id is not None else str(uuid.uuid4())
+    if not widget_id:
+        raise ValueError("widget_id must not be empty")
+    widget: dict[str, Any] = {"id": widget_id, "layerId": layer_id.strip(), "type": widget_type}
+    for raw_key, value in options.items():
+        if value is None:
+            continue
+        key = _camel(raw_key)
+        if key not in _WIDGET_OPTION_KEYS:
+            raise ValueError(f"unknown dashboard widget option {raw_key!r}")
+        only = _WIDGET_TYPE_ONLY_OPTIONS.get(key)
+        if only is not None and only != widget_type:
+            raise ValueError(f"{raw_key!r} applies only to {only} widgets")
+        if key in _WIDGET_STRING_FIELDS or key == "sortBy":
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{raw_key!r} must be a non-empty string")
+            widget[key] = value.strip()
+        elif key in ("prefix", "suffix"):
+            if not isinstance(value, str):
+                raise ValueError(f"{raw_key!r} must be a string")
+            if value:
+                widget[key] = value
+        elif key == "color":
+            short = isinstance(value, str) and re.fullmatch(r"#[0-9a-fA-F]{3}", value.strip())
+            color = value.strip().lower() if short else _hex_color(value)
+            if color is None:
+                raise ValueError(f"color must be #rgb or #rrggbb, got {value!r}")
+            widget[key] = color
+        elif key in ("bins", "limit"):
+            high = 50 if key == "bins" else 500
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= high:
+                raise ValueError(f"{raw_key!r} must be an integer from 1 to {high}")
+            widget[key] = value
+        elif key == "aggregation":
+            if (
+                not isinstance(value, str)
+                or value not in _WIDGET_AGGREGATIONS
+                or (widget_type == "pie" and value == "mean")
+            ):
+                raise ValueError(
+                    f"aggregation must be count, sum, or mean (no mean for pie), got {value!r}"
+                )
+            widget[key] = value
+        elif key == "indicatorAggregation":
+            if not isinstance(value, str) or value not in _INDICATOR_AGGREGATIONS:
+                raise ValueError(
+                    f"indicator_aggregation must be one of {sorted(_INDICATOR_AGGREGATIONS)}"
+                )
+            widget[key] = value
+        elif key == "multiple":
+            if not isinstance(value, bool):
+                raise ValueError("multiple must be true or false")
+            if value:
+                widget[key] = True
+        elif key == "listFields":
+            if (
+                not isinstance(value, (list, tuple))
+                or not value
+                or not all(isinstance(item, str) and item.strip() for item in value)
+            ):
+                raise ValueError("list_fields must be a non-empty list of field names")
+            widget[key] = [item.strip() for item in value]
+        elif key == "sortDir":
+            if value not in ("asc", "desc"):
+                raise ValueError(f"sort_dir must be 'asc' or 'desc', got {value!r}")
+            widget[key] = value
+    return widget
+
+
+#: The Print Layout settings a project stores, with their defaults
+#: (``DEFAULT_PRINT_LAYOUT`` in packages/core/src/print-layout-config.ts).
+PRINT_LAYOUT_DEFAULTS: dict[str, Any] = {
+    "title": "",
+    "subtitle": "",
+    "titlePlacement": "outside",
+    "titleAlign": "center",
+    "paperSize": "a4",
+    "orientation": "landscape",
+    "customWidth": 1280,
+    "customHeight": 720,
+    "customUnit": "px",
+    "pageMargin": "normal",
+    "pageBackground": "#ffffff",
+    "panelTheme": "light",
+    "showPageBorder": False,
+    "pageBorderColor": "#111827",
+    "pageBorderWidth": 2,
+    "exportDpi": 150,
+    "mapBorderColor": "#9ca3af",
+    "mapBorderWidth": 1,
+    "mapBackground": "#e5e7eb",
+    "showTitle": True,
+    "showSubtitle": True,
+    "showLegend": True,
+    "showScaleBar": True,
+    "showNorthArrow": True,
+    "navigationGrouped": True,
+    "showFooter": False,
+    "footerText": "",
+    "showDate": True,
+    "dateText": "",
+    "showAttribution": True,
+    "showColorbar": False,
+    "colorbarRamp": "viridis",
+    "colorbarMin": "0",
+    "colorbarMax": "100",
+    "colorbarLabel": "",
+    "colorbarOrientation": "vertical",
+    "colorbarLength": 34,
+    "colorbarPosition": "top-right",
+    "showCustomLegend": False,
+    "customLegendTitle": "Legend",
+    "customLegendEntries": [
+        {"id": "cl-1", "label": "Class 1", "color": "#2563eb"},
+        {"id": "cl-2", "label": "Class 2", "color": "#16a34a"},
+    ],
+    "customLegendPosition": "top-left",
+    "showDataTable": False,
+    "tableLayerId": "",
+    "tableTitle": "",
+    "tableColumns": [],
+    "tableSortField": "",
+    "tableSortDesc": False,
+    "tableMaxRows": 10,
+    "tableFitRows": False,
+    "tablePosition": "bottom-left",
+    "tablePageFilter": "contained",
+    "tableFilterToAtlasFeature": False,
+    "showDataChart": False,
+    "chartLayerId": "",
+    "chartTitle": "",
+    "chartType": "bar",
+    "chartCategoryField": "",
+    "chartAggregation": "count",
+    "chartValueField": "",
+    "chartPosition": "top-right",
+    "chartPageFilter": "contained",
+    "showInfoBlock": False,
+    "author": "",
+    "projectNumber": "",
+    "crs": "",
+    "revision": "",
+    "showInset": False,
+    "insetBasemap": "positron",
+    "insetZoomOffset": -4,
+    "insetExtentColor": "#dc2626",
+    "insetBox": None,
+    "showGrid": False,
+    "gridType": "dms",
+    "gridInterval": 0,
+    "gridFontSize": 7,
+    "gridLines": False,
+    "mapFrameBox": None,
+    "elementOffsets": {},
+    "captureMode": "viewport",
+    "extentBbox": None,
+    "atlasEnabled": False,
+    "atlasLayerId": "",
+    "atlasCoverage": "features",
+    "atlasSegmentKm": "20",
+    "atlasNameField": "",
+    "atlasExtentMode": "margin",
+    "atlasMarginPct": 10,
+    "atlasMaskEnabled": False,
+    "atlasScale": "50000",
+    "atlasSortField": "",
+    "atlasSortDescending": False,
+    "atlasFilter": "",
+    "atlasFilenamePattern": "{atlas.pagenumber}-{atlas.name}",
+}
+
+_CORNERS = ("top-left", "top-right", "bottom-left", "bottom-right")
+_PAGE_FILTERS = ("all", "contained", "intersecting")
+#: Enumerated Print Layout settings and the values ``normalizePrintLayoutConfig`` keeps.
+PRINT_LAYOUT_CHOICES: dict[str, tuple[Any, ...]] = {
+    "insetBasemap": ("positron", "liberty", "bright", "dark", "fiord", "osm"),
+    "gridType": ("dms", "decimal", "utm", "mgrs"),
+    "titlePlacement": ("outside", "inside"),
+    "titleAlign": ("left", "center", "right"),
+    "paperSize": (
+        "a4",
+        "a3",
+        "letter",
+        "legal",
+        "tabloid",
+        "fullhd",
+        "hd",
+        "uhd4k",
+        "square",
+        "custom",
+    ),
+    "orientation": ("portrait", "landscape"),
+    "customUnit": ("mm", "px"),
+    "pageMargin": ("normal", "narrow", "none"),
+    "panelTheme": ("light", "dark"),
+    "exportDpi": (72, 150, 300),
+    "colorbarOrientation": ("vertical", "horizontal"),
+    "colorbarPosition": _CORNERS,
+    "customLegendPosition": _CORNERS,
+    "tablePosition": _CORNERS,
+    "tablePageFilter": _PAGE_FILTERS,
+    "chartType": ("bar", "pie", "line"),
+    "chartAggregation": ("count", "sum", "mean"),
+    "chartPosition": _CORNERS,
+    "chartPageFilter": _PAGE_FILTERS,
+    "captureMode": ("viewport", "extent"),
+    "atlasCoverage": ("features", "line"),
+    "atlasExtentMode": ("margin", "scale"),
+}
+#: Numeric Print Layout settings and the range ``normalizePrintLayoutConfig`` clamps to.
+PRINT_LAYOUT_RANGES: dict[str, tuple[float, float]] = {
+    "insetZoomOffset": (-12, 0),
+    "gridInterval": (0, 10000000),
+    "gridFontSize": (3, 36),
+    "customWidth": (1, 100000),
+    "customHeight": (1, 100000),
+    "pageBorderWidth": (1, 20),
+    "mapBorderWidth": (0, 10),
+    "colorbarLength": (1, 100),
+    "tableMaxRows": (1, 10000),
+    "atlasMarginPct": (0, 100),
+}
+#: Print Layout settings that hold a layer id.
+PRINT_LAYOUT_LAYER_FIELDS = ("tableLayerId", "chartLayerId", "atlasLayerId")
+
+
+def _print_layout_number(value: Any, low: float, high: float) -> bool:
+    """Check a bounded finite layout number without overflowing large integers.
+
+    Args:
+        value: The supplied setting.
+        low: Inclusive lower bound.
+        high: Inclusive upper bound.
+
+    Returns:
+        Whether the value is a finite number within the bounds.
+    """
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and (not isinstance(value, float) or math.isfinite(value))
+        and low <= value <= high
+    )
+
+
+def _print_layout_frame(value: Any, setting: str) -> dict[str, float] | None:
+    """Validate and copy a frame that fits within the page.
+
+    Args:
+        value: A page-fraction box or None for automatic placement.
+        setting: The setting name used in validation errors.
+
+    Returns:
+        A copied frame, or None.
+
+    Raises:
+        ValueError: If the app would discard or clamp the frame.
+    """
+    if value is None:
+        return None
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"x", "y", "w", "h"}
+        or not all(_print_layout_number(value[key], 0, 1) for key in ("x", "y"))
+        or not all(_print_layout_number(value[key], 0.01, 1) for key in ("w", "h"))
+        or value["x"] + value["w"] > 1 + 1e-12
+        or value["y"] + value["h"] > 1 + 1e-12
+    ):
+        raise ValueError(f"{setting} must be a page-fraction box with x, y, w, h inside the page")
+    return dict(value)
+
+
+def print_layout_settings(**settings: Any) -> dict[str, Any]:
+    """Validate a partial Print Layout config (``PrintLayoutConfig`` in core).
+
+    Each value is checked the way ``normalizePrintLayoutConfig`` reads it, so
+    the app keeps everything written here. Layer-id settings are taken as
+    given; :func:`geolibre.authoring.set_print_layout` resolves layer names.
+
+    Args:
+        **settings: Settings in ``snake_case`` or ``camelCase``, e.g.
+            ``title="Flood extent"``, ``paper_size="a3"``,
+            ``orientation="portrait"``, ``show_legend=False``,
+            ``extent_bbox=[w, s, e, n]``.
+
+    Returns:
+        The settings, keyed in ``camelCase``.
+
+    Raises:
+        ValueError: If a setting is unknown or its value would be discarded.
+    """
+    result: dict[str, Any] = {}
+    for raw_key, value in settings.items():
+        key = _camel(raw_key)
+        if key not in PRINT_LAYOUT_DEFAULTS:
+            raise ValueError(f"unknown print layout setting {raw_key!r}")
+        default = PRINT_LAYOUT_DEFAULTS[key]
+        if key in PRINT_LAYOUT_CHOICES:
+            choices = PRINT_LAYOUT_CHOICES[key]
+            if isinstance(value, bool) or value not in choices:
+                raise ValueError(f"{raw_key} must be one of {list(choices)}, got {value!r}")
+        elif key in ("mapFrameBox", "insetBox"):
+            value = _print_layout_frame(value, raw_key)
+        elif key == "elementOffsets":
+            allowed = {"title", "legend", "scaleBar", "northArrow", "footer"}
+            if not isinstance(value, dict) or set(value) - allowed:
+                raise ValueError(
+                    "element_offsets must map title, legend, scaleBar, northArrow, "
+                    "or footer to offsets"
+                )
+            copied = {}
+            for name, entry in value.items():
+                if (
+                    not isinstance(entry, dict)
+                    or set(entry) != {"dx", "dy", "scale"}
+                    or not all(_print_layout_number(entry[key], -1, 1) for key in ("dx", "dy"))
+                    or not _print_layout_number(entry["scale"], 0.25, 4)
+                ):
+                    raise ValueError(
+                        f"element_offsets[{name!r}] needs dx/dy in [-1, 1] and scale in [0.25, 4]"
+                    )
+                copied[name] = dict(entry)
+            value = copied
+        elif key == "extentBbox":
+            if value is not None:
+                box = _resolve_bounds(value)
+                if box is None or box[0] >= box[2] or box[1] >= box[3]:
+                    raise ValueError("extent_bbox must be [west, south, east, north] with area")
+                value = box
+        elif key == "customLegendEntries":
+            if not isinstance(value, list) or not all(
+                isinstance(entry, dict)
+                and isinstance(entry.get("label", ""), str)
+                and isinstance(entry.get("color", ""), str)
+                for entry in value
+            ):
+                raise ValueError("custom_legend_entries must be a list of {label, color} dicts")
+            reserved = [str(entry["id"]) for entry in value if entry.get("id")]
+            if len(reserved) != len(set(reserved)):
+                raise ValueError("custom_legend_entries must have unique ids")
+            used = set(reserved)
+            normalized = []
+            for index, entry in enumerate(value):
+                entry_id = str(entry.get("id") or "")
+                if not entry_id:
+                    suffix = index + 1
+                    while f"cl-{suffix}" in used:
+                        suffix += 1
+                    entry_id = f"cl-{suffix}"
+                    used.add(entry_id)
+                normalized.append(
+                    {
+                        "id": entry_id,
+                        "label": entry.get("label", ""),
+                        "color": entry.get("color", "#2563eb"),
+                    }
+                )
+            value = normalized
+        elif key == "tableColumns":
+            if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+                raise ValueError("table_columns must be a list of field names")
+            value = list(value)
+        elif isinstance(default, bool):
+            if not isinstance(value, bool):
+                raise ValueError(f"{raw_key} must be true or false")
+        elif isinstance(default, (int, float)):
+            low, high = PRINT_LAYOUT_RANGES[key]
+            if not _print_layout_number(value, low, high):
+                raise ValueError(f"{raw_key} must be a number from {low:g} to {high:g}")
+        elif isinstance(default, str):
+            if not isinstance(value, str):
+                raise ValueError(f"{raw_key} must be a string")
+            if key in ("pageBackground", "insetExtentColor") and not re.fullmatch(
+                r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})", value.strip()
+            ):
+                raise ValueError(f"{raw_key} must be #rgb or #rrggbb")
+        result[key] = value
+    if result.get("gridType") == "mgrs" and result.get("gridInterval", 0) > 0:
+        result["gridInterval"] = math.ceil(result["gridInterval"] / 1000) * 1000
+    return result

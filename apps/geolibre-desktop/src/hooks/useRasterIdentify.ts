@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useAppStore } from "@geolibre/core";
-import { setRasterPixelInspect } from "@geolibre/plugins";
+import { setRasterPixelInspect } from "@geolibre/plugins/maplibre-raster";
 
 /**
  * Bridges the store's `identifyLayerId` to the raster control's pixel inspector.

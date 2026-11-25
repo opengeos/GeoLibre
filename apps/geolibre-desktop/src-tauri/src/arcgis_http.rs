@@ -1,16 +1,15 @@
 //! ArcGIS REST transport, separate from the host-scoped HTTP plugin.
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::time::{Duration, Instant};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use reqwest::{redirect::Policy, Url};
 use serde::Serialize;
 
-use super::{guarded_async_client_builder, url_is_fetchable, MAX_HTTP_REDIRECTS};
+use super::{
+    guarded_async_client_builder, plugin_http::redirect_target_allowed, url_is_fetchable,
+    MAX_HTTP_REDIRECTS,
+};
 
 const MAX_ARCGIS_BODY_BYTES: usize = 64 * 1024 * 1024;
 const BODY_TOO_LARGE: &str =
@@ -94,7 +93,12 @@ fn validate_redirect(previous: &[Url], target: &Url) -> Result<(), String> {
             );
         }
     }
-    validate_url(target)
+    if has_token(target) && target.scheme() != "https" {
+        return Err("ArcGIS access tokens require HTTPS.".into());
+    }
+    // Check scheme and literal IPs without blocking DNS on the Tokio worker;
+    // hostname SSRF enforcement runs asynchronously in `GuardedDnsResolver`.
+    redirect_target_allowed(target)
 }
 
 fn client() -> Result<reqwest::Client, String> {
@@ -103,49 +107,23 @@ fn client() -> Result<reqwest::Client, String> {
     CLIENT
         .get_or_init(|| {
             // The shared builder carries the SSRF guard and the native download
-            // client's enterprise CA and mTLS settings.
-            guarded_async_client_builder(Policy::custom(|attempt| {
-                if attempt
-                    .previous()
-                    .iter()
-                    .any(|url| write_kind(url).is_some())
-                {
-                    return attempt.error("ArcGIS write redirects are not allowed.");
-                }
-                if attempt.previous().len() >= MAX_HTTP_REDIRECTS {
-                    return attempt.error("Too many ArcGIS redirects.");
-                }
-                match validate_redirect(attempt.previous(), attempt.url()) {
-                    Ok(()) => attempt.follow(),
-                    Err(error) => attempt.error(error),
-                }
-            }))?
-            .build()
-            .map_err(|error| format!("Could not create ArcGIS HTTP client: {error}"))
+            // client's enterprise CA and mTLS settings. Redirects are followed
+            // asynchronously in `request()` so every hop's hostname is checked
+            // via `spawn_blocking(validate_url)` even when an HTTP proxy is
+            // configured, without ever blocking a Tokio worker thread.
+            guarded_async_client_builder(Policy::none())?
+                .build()
+                .map_err(|error| format!("Could not create ArcGIS HTTP client: {error}"))
         })
         .clone()
 }
 
-type CancelRequest = Box<dyn Fn() + Send + Sync>;
-
 #[derive(Default, Clone)]
-pub(crate) struct ArcGISRequests(Arc<Mutex<HashMap<String, CancelRequest>>>);
+pub(crate) struct ArcGISRequests(crate::in_flight::CancelRegistry);
 
 impl ArcGISRequests {
     fn cancel(&self, id: &str) {
-        if let Some(cancel) = self.0.lock().unwrap().remove(id) {
-            cancel();
-        }
-    }
-}
-
-struct RequestGuard {
-    requests: ArcGISRequests,
-    id: String,
-}
-impl Drop for RequestGuard {
-    fn drop(&mut self) {
-        self.requests.cancel(&self.id);
+        self.0.cancel(id);
     }
 }
 
@@ -238,35 +216,102 @@ fn check_write(url: &Url, body: &ArcGISBody) -> Result<(), String> {
 }
 
 async fn request(url: String, body: Option<ArcGISBody>) -> Result<ArcGISResponse, String> {
-    let url = Url::parse(&url).map_err(|_| "Invalid ArcGIS URL.".to_string())?;
+    let mut current_url = Url::parse(&url).map_err(|_| "Invalid ArcGIS URL.".to_string())?;
     if let Some(body) = &body {
-        check_write(&url, body)?;
+        check_write(&current_url, body)?;
     }
-    let binary = body.is_none() && is_attachment_download(&url);
-    let checked = url.clone();
+    // `check_write` already rejects any body sent to a non-write endpoint, so
+    // `write_kind` is the exact condition for write requests.
+    let is_write = write_kind(&current_url).is_some();
+    let binary = body.is_none() && is_attachment_download(&current_url);
+    let checked = current_url.clone();
     tauri::async_runtime::spawn_blocking(move || validate_url(&checked))
         .await
         .map_err(|error| format!("ArcGIS validation failed: {error}"))??;
+    let deadline = Instant::now() + Duration::from_secs(120);
+    let mut active_auth = (!current_url.username().is_empty() || current_url.password().is_some())
+        .then(|| {
+            (
+                current_url.origin(),
+                current_url.username().to_string(),
+                current_url.password().map(str::to_string),
+            )
+        });
     let client = client()?;
-    let request = match body {
+    let initial_request = match body {
         Some(ArcGISBody::Form(body)) => client
-            .post(url)
+            .post(current_url.clone())
             .header("Content-Type", "application/x-www-form-urlencoded")
             .body(body),
         Some(ArcGISBody::Multipart {
             bytes,
             content_type,
         }) => client
-            .post(url)
+            .post(current_url.clone())
             .header("Content-Type", content_type)
             .body(bytes),
-        None => client.get(url),
+        None => client.get(current_url.clone()),
     };
-    let response = request
-        .timeout(Duration::from_secs(120))
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        return Err("ArcGIS request timed out.".into());
+    }
+    let mut response = initial_request
+        .timeout(remaining)
         .send()
         .await
         .map_err(|error| format!("ArcGIS request failed: {}", error.without_url()))?;
+    let mut history: Vec<Url> = Vec::new();
+    while response.status().is_redirection() {
+        let Some(location) = response.headers().get(reqwest::header::LOCATION) else {
+            break;
+        };
+        if is_write || write_kind(&current_url).is_some() {
+            return Err("ArcGIS write redirects are not allowed.".into());
+        }
+        if history.len() >= MAX_HTTP_REDIRECTS {
+            return Err("Too many ArcGIS redirects.".into());
+        }
+        let location = location
+            .to_str()
+            .map_err(|_| "Invalid ArcGIS redirect location.".to_string())?;
+        let mut next_url = current_url
+            .join(location)
+            .map_err(|_| "Invalid ArcGIS redirect URL.".to_string())?;
+        // Carry URL Basic auth across same-HTTPS-origin hops (matching reqwest's
+        // built-in redirect behavior) and drop it on any origin change.
+        if let Some((auth_origin, user, pass)) = &active_auth {
+            if next_url.scheme() == "https" && &next_url.origin() == auth_origin {
+                if next_url.username().is_empty() && next_url.password().is_none() {
+                    let _ = next_url.set_username(user);
+                    let _ = next_url.set_password(pass.as_deref());
+                }
+            } else {
+                active_auth = None;
+            }
+        }
+        history.push(current_url);
+        validate_redirect(&history, &next_url)?;
+        // Pre-check redirect hostnames via DNS on a blocking worker before
+        // sending through any configured HTTP proxy (where `GuardedDnsResolver`
+        // only resolves the proxy host; a residual DNS-rebinding TOCTOU remains
+        // when an external proxy performs its own final resolution).
+        let checked_next = next_url.clone();
+        tauri::async_runtime::spawn_blocking(move || validate_url(&checked_next))
+            .await
+            .map_err(|error| format!("ArcGIS redirect validation failed: {error}"))??;
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err("ArcGIS request timed out.".into());
+        }
+        current_url = next_url;
+        response = client
+            .get(current_url.clone())
+            .timeout(remaining)
+            .send()
+            .await
+            .map_err(|error| format!("ArcGIS request failed: {}", error.without_url()))?;
+    }
     read_response(response, MAX_ARCGIS_BODY_BYTES, binary).await
 }
 
@@ -284,29 +329,33 @@ pub(crate) async fn fetch_arcgis_response(
 ) -> Result<ArcGISResponse, String> {
     let body = match (body, body_base64, content_type) {
         (Some(text), None, None) => Some(ArcGISBody::Form(text)),
-        (None, Some(encoded), Some(content_type)) => Some(ArcGISBody::Multipart {
-            bytes: STANDARD
+        (None, Some(encoded), Some(content_type)) => {
+            const MAX_BASE64_LEN: usize = MAX_ARCGIS_BODY_BYTES.div_ceil(3) * 4;
+            if encoded.len() > MAX_BASE64_LEN {
+                return Err("ArcGIS request body exceeds the 64 MiB limit.".into());
+            }
+            let bytes = STANDARD
                 .decode(encoded)
-                .map_err(|_| "Invalid ArcGIS request body.".to_string())?,
-            content_type,
-        }),
+                .map_err(|_| "Invalid ArcGIS request body.".to_string())?;
+            if bytes.len() > MAX_ARCGIS_BODY_BYTES {
+                return Err("ArcGIS request body exceeds the 64 MiB limit.".into());
+            }
+            Some(ArcGISBody::Multipart {
+                bytes,
+                content_type,
+            })
+        }
         (None, None, None) => None,
         _ => return Err("Invalid ArcGIS request body.".into()),
     };
-    let task = {
-        let mut active = requests.0.lock().unwrap();
-        if active.contains_key(&request_id) {
-            return Err("Duplicate ArcGIS request ID.".into());
-        }
-        let task = tauri::async_runtime::spawn(request(url, body));
-        let abort = task.inner().abort_handle();
-        active.insert(request_id.clone(), Box::new(move || abort.abort()));
-        task
-    };
-    let _guard = RequestGuard {
-        requests: requests.inner().clone(),
-        id: request_id,
-    };
+    let (task, _guard) = requests
+        .0
+        .try_register_with(request_id, || {
+            let task = tauri::async_runtime::spawn(request(url, body));
+            let abort = task.inner().abort_handle();
+            (task, Box::new(move || abort.abort()))
+        })
+        .map_err(|()| "Duplicate ArcGIS request ID.".to_string())?;
     ready
         .send(())
         .map_err(|_| "ArcGIS caller disconnected.".to_string())?;
@@ -505,16 +554,15 @@ mod tests {
         let task = tauri::async_runtime::spawn(request(url, None));
         let abort = task.inner().abort_handle();
         let requests = ArcGISRequests::default();
-        requests
+        let _guard = requests
             .0
-            .lock()
-            .unwrap()
-            .insert("test".into(), Box::new(move || abort.abort()));
+            .try_register("test".into(), Box::new(move || abort.abort()))
+            .unwrap();
         started_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         requests.cancel("test");
         assert!(tauri::async_runtime::block_on(task).is_err());
         assert!(closed_rx.recv_timeout(Duration::from_secs(5)).unwrap());
-        assert!(requests.0.lock().unwrap().is_empty());
+        assert!(requests.0.is_empty());
         server.join().unwrap();
     }
 }

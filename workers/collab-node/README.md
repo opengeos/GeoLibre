@@ -15,11 +15,15 @@ Configuration:
 - `HOST` — listen address (default `0.0.0.0`)
 - `COLLAB_DB_PATH` — SQLite file (default `./data/collab.sqlite`)
 - `COLLAB_MAX_SNAPSHOT_BYTES` — maximum UTF-8 snapshot frame size (default
-  `1000000`, matching the hosted Worker)
+  `10000000`, `MAX_SNAPSHOT_BYTES` from `@geolibre/collab-core`, matching the
+  hosted Worker and the root `docker-compose.yml`)
 - `COLLAB_IDLE_TTL_MS` — time after the last participant disconnects before the
   session and its persisted data are deleted (default two hours)
 
-Endpoints are `POST /sessions`, `GET /sessions/:id/ws`, and `GET /health`.
+Endpoints are `POST /sessions`, `GET /sessions/:id/ws`, `GET /health`, and the
+host-only `GET`/`DELETE /sessions/:id/log` (download or clear the bounded
+session log; send `Authorization: Bearer <hostToken>`), the same set the
+Worker serves.
 Persist the directory containing `COLLAB_DB_PATH`, and terminate TLS at the
 ingress so browsers can connect with `wss://`.
 

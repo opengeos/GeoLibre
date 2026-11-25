@@ -1,3 +1,7 @@
+import { DIRECTIONS_PLUGIN_ID } from "../plugin-ids";
+import { provideDirectionsRuntime } from "../map-mode-state";
+export { DIRECTIONS_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import type MapLibreGlDirections from "@maplibre/maplibre-gl-directions";
 import type { MapLibreGlDirectionsRoutingData } from "@maplibre/maplibre-gl-directions";
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
@@ -19,7 +23,6 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
  * The heavy routing library is lazy-imported on activate so it stays out of the
  * main bundle.
  */
-export const DIRECTIONS_PLUGIN_ID = "maplibre-gl-directions";
 
 let directions: MapLibreGlDirections | null = null;
 // The map the current instance is bound to, so restoreDirections can detect a
@@ -373,10 +376,19 @@ export function restoreDirections(app: GeoLibreAppAPI, active: boolean): void {
 }
 
 export const maplibreDirectionsPlugin: GeoLibrePlugin = {
-  id: DIRECTIONS_PLUGIN_ID,
-  name: "Directions",
-  version: "1.0.0",
-  engines: ["maplibre"],
+  ...builtInPluginProperties("maplibre-gl-directions"),
+
   activate: (app: GeoLibreAppAPI) => attach(app),
   deactivate: (app: GeoLibreAppAPI) => teardown(app),
 };
+
+provideDirectionsRuntime({
+  getDirectionsWaypointCount,
+  getDirectionsRouteMetrics,
+  isDirectionsRouteLoading,
+  isDirectionsRemovalInFlight,
+  removeLastDirectionsWaypoint,
+  clearDirectionsWaypoints,
+  subscribeDirectionsState,
+  restoreDirections,
+});

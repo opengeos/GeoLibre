@@ -1,12 +1,11 @@
 import type { GeoLibreLayer } from "@geolibre/core";
+import { colormapColors, warmColormapColors } from "@geolibre/plugins/colormap-colors";
 import {
-  colormapColors,
   getTimeSliderSymbology,
   parseBandList,
   setTimeSliderSymbology,
-  type TimeSliderSymbology,
-  warmColormapColors,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/time-slider-symbology";
+import { type TimeSliderSymbology } from "@geolibre/plugins";
 import {
   type ColorRampOption,
   ColorRampSelect,

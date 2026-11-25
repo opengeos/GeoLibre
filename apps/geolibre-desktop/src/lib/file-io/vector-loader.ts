@@ -6,7 +6,6 @@
 
 import { hasPathTraversal } from "@geolibre/core";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import type { FeatureCollection } from "geojson";
 import i18next from "i18next";
@@ -56,6 +55,7 @@ import {
 import { loadShapefileZip } from "./shapefile-zip";
 import { notifyFileReadFailed } from "./notify-read-failure";
 import { toArrayBuffer } from "./shared";
+import { notifyNativeDataCopies, pickNativeDataFiles } from "./native-data-copy";
 import {
   isDelimitedTextFileName,
   parseDelimitedTextFile,
@@ -128,6 +128,7 @@ async function readLocalFileTextOrEmpty(path: string): Promise<string> {
 interface NativeDuckDbVectorInvokeOptions {
   layer?: string;
   overrideSourceCrs?: string;
+  bbox?: [number, number, number, number];
 }
 
 interface NativeDuckDbVectorAttempt {
@@ -136,14 +137,38 @@ interface NativeDuckDbVectorAttempt {
 }
 
 function nativeDuckDbInvokeOptions(
-  options?: DuckDbVectorLoadOptions,
+  options?: DuckDbVectorLoadOptions & { bbox?: [number, number, number, number] },
 ): NativeDuckDbVectorInvokeOptions {
   return {
     ...(options?.layer?.trim() ? { layer: options.layer.trim() } : {}),
     ...(options?.overrideSourceCrs?.trim()
       ? { overrideSourceCrs: options.overrideSourceCrs.trim() }
       : {}),
+    ...(options?.bbox ? { bbox: options.bbox } : {}),
   };
+}
+
+/**
+ * Stream a native DuckDB vector query as raw binary IPC bytes (`flatgeobuf` or
+ * UTF-8 `geojson`) with optional WGS84 spatial bounding-box pushdown.
+ */
+export async function loadNativeVectorFileBinary(
+  path: string,
+  options?: {
+    layer?: string;
+    overrideSourceCrs?: string;
+    bbox?: [number, number, number, number];
+    format?: "flatgeobuf" | "geojson";
+  },
+): Promise<ArrayBuffer> {
+  if (!isTauri()) {
+    throw new Error("Binary native DuckDB streaming requires GeoLibre Desktop.");
+  }
+  return invoke<ArrayBuffer>("load_native_vector_file_binary", {
+    path,
+    ...nativeDuckDbInvokeOptions(options),
+    ...(options?.format ? { format: options.format } : {}),
+  });
 }
 
 async function tryLoadNativeDuckDbVectorPath(
@@ -348,7 +373,7 @@ export interface PickedVectorFile {
  * @returns The picked vector files, each with its shapefile sidecars.
  */
 export async function pickVectorFilesWithSidecars(): Promise<PickedVectorFile[]> {
-  const selected = await open({
+  const selected = await pickNativeDataFiles({
     filters: vectorFileDialogFilters(),
     multiple: true,
   });
@@ -378,6 +403,7 @@ export async function pickVectorFilesWithSidecars(): Promise<PickedVectorFile[]>
       notifyFileReadFailed(path, error);
     }
   }
+  notifyNativeDataCopies(picked.map(({ sourcePath }) => sourcePath));
   return picked;
 }
 

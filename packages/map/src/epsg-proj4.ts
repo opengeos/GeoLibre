@@ -4,7 +4,7 @@
 // The EPSG tables come from geotiff-geokeys-to-proj4; both it and proj4 are
 // loaded on first use, so a session that never needs them never pays for them.
 
-import { withDatumShift } from "@geolibre/core";
+import { normalizeProj4Definition } from "@geolibre/core";
 import type proj4Type from "proj4";
 
 /** A resolved EPSG CRS. */
@@ -15,6 +15,13 @@ export interface EpsgProjection {
   northFirst: boolean;
   /** Whether the CRS is geographic (`+proj=longlat`), in degrees. */
   geographic: boolean;
+  /**
+   * Native-unit to proj4-unit coordinate scale factors (e.g. `0.9` for grads
+   * to degrees in EPSG:4807, or `1` for degree/metre CRSes). Multiply native
+   * coordinates before passing to proj4, and divide proj4 outputs to return
+   * to native units.
+   */
+  conversionFactors: { x: number; y: number };
   /** The proj4 library, already loaded, for building converters. */
   proj4: typeof proj4Type;
 }
@@ -48,7 +55,7 @@ export function resolveEpsgProjection(code: number): Promise<EpsgProjection | nu
       // The tables leave some datums' shifts out (the British National Grid,
       // DHDN, Amersfoort...): add them, or data lands up to a few hundred
       // metres off.
-      const definition = withDatumShift(raw.replace(/\+axis=\w+\s*/g, "").trim(), code);
+      const definition = normalizeProj4Definition(raw, code);
       // The tables also name projections proj4js does not implement
       // (EPSG:6244 is +proj=col_urban), so build a converter once here. A WMS
       // can advertise dozens of them, so this is unsupported, not a warning.
@@ -57,10 +64,20 @@ export function resolveEpsgProjection(code: number): Promise<EpsgProjection | nu
       } catch {
         return null;
       }
+      const rawConv = resolved.conversionParameters;
+      const xFactor =
+        typeof rawConv?.x === "number" && Number.isFinite(rawConv.x) && rawConv.x !== 0
+          ? rawConv.x
+          : 1;
+      const yFactor =
+        typeof rawConv?.y === "number" && Number.isFinite(rawConv.y) && rawConv.y !== 0
+          ? rawConv.y
+          : 1;
       return {
         definition,
         northFirst: /\+axis=ne/.test(raw),
         geographic: /\+proj=longlat\b/.test(raw),
+        conversionFactors: { x: xFactor, y: yFactor },
         proj4,
       };
     })().catch((error) => {

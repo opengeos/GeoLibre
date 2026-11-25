@@ -208,6 +208,16 @@ describe("computeViewshedAsync", () => {
     const unlimited = await computeViewshedAsync(dem, CENTRE);
     assert.ok(limited.visibleCells < unlimited.visibleCells);
   });
+
+  it("rejects with AbortError when the AbortSignal is already aborted", async () => {
+    const dem = demOf(11, 11, () => 0);
+    const controller = new AbortController();
+    controller.abort();
+    await assert.rejects(
+      computeViewshedAsync(dem, CENTRE, 0, controller.signal),
+      (err: Error) => err.name === "AbortError",
+    );
+  });
 });
 
 describe("viewshedToRgba", () => {

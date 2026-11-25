@@ -2,9 +2,8 @@ import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
   setI3sBuildingNodeVisible,
   visibleI3sBuildingSublayers,
-  type I3sBuildingNode,
-  type I3sBuildingState,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/i3s-building";
+import { type I3sBuildingNode, type I3sBuildingState } from "@geolibre/plugins";
 import { useTranslation } from "react-i18next";
 
 /**

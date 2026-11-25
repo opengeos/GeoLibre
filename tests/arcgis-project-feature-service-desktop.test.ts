@@ -211,7 +211,7 @@ describe("ArcGIS Pro feature service import on desktop", () => {
 
     // The down service is reported; the rest of the project loaded.
     assert.deepEqual(
-      actions().arcgisImportWarnings?.map((warning) => [warning.layerName, warning.reason]),
+      actions().arcgisImportReport.warnings?.map((warning) => [warning.layerName, warning.reason]),
       [["Hydrants", "service-unavailable"]],
     );
     const state = useAppStore.getState();
@@ -430,7 +430,7 @@ describe("ArcGIS Pro feature service import on desktop", () => {
       );
       assert.equal(state.isDirty, false);
       assert.equal(useAppStore.temporal.getState().pastStates.length, historyAtSwitch);
-      assert.equal(actions().arcgisImportWarnings, null);
+      assert.equal(actions().arcgisImportReport.warnings, null);
       requests(nativeRequests);
       if (reads) assert.deepEqual(rasterReads, reads);
     });

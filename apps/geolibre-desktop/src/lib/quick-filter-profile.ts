@@ -1,4 +1,5 @@
 import type { QuickFilterDateKind, QuickFilterKind } from "@geolibre/core";
+import { typicalRange } from "./typical-range";
 
 /**
  * Field profiling for quick filters (issue #2114): decide which control a
@@ -47,6 +48,16 @@ export interface QuickFilterFieldProfile {
   /** Numeric extent, present for a field that supports a range control. */
   min?: number;
   max?: number;
+  /**
+   * Set when a few outliers stretch the numeric extent far past where the
+   * values typically fall (#3455): the 1st–99th percentile the range slider
+   * scales to, and how many values lie below and above it. Absent for a field
+   * without outliers, whose slider spans `min`–`max` exactly. Like `min`,
+   * `max` and {@link blankCount}, it covers the inspected features only (see
+   * {@link sampled}), so on a layer past the profile limit the below/above
+   * counts are counts within that sample.
+   */
+  typical?: { min: number; max: number; below: number; above: number };
   /** How a date field stores its values, and its `YYYY-MM-DD` extent. */
   dateKind?: QuickFilterDateKind;
   minDate?: string;
@@ -65,7 +76,10 @@ export interface ProfileQuickFilterOptions<T = Record<string, unknown> | null | 
    * Profile only these fields instead of every field. A quick filter needs the
    * profile of the one field it is on, so asking for that field alone costs a
    * property read per feature rather than a tally of the whole attribute table.
-   * A requested field that no inspected record carries gets no profile.
+   * A requested field that no inspected record carries is profiled as all
+   * blank (`present: 0`, `blankCount` = every inspected record), the same as
+   * a field that is null everywhere. With no records to inspect, no field
+   * gets a profile.
    */
   fields?: readonly string[];
   /**
@@ -190,6 +204,12 @@ interface FieldTally {
   maxEpochMagnitude: number;
   counts: Map<string | number | boolean, number>;
   distinctOverflow: boolean;
+  /**
+   * Every numeric value, for the percentiles a range control scales to. Dropped
+   * (set to `null`) at the first value that is not numeric, since only an
+   * all-numeric field offers a range.
+   */
+  numericValues: number[] | null;
 }
 
 function newTally(): FieldTally {
@@ -210,6 +230,7 @@ function newTally(): FieldTally {
     maxEpochMagnitude: 0,
     counts: new Map(),
     distinctOverflow: false,
+    numericValues: [],
   };
 }
 
@@ -223,6 +244,7 @@ function tallyValue(tally: FieldTally, value: unknown): void {
     else tally.strings += 1;
     tally.min = Math.min(tally.min, numeric);
     tally.max = Math.max(tally.max, numeric);
+    tally.numericValues?.push(numeric);
     const magnitude = Math.abs(numeric);
     if (magnitude >= EPOCH_SECONDS_MIN) {
       // Only a clearly epoch-scale number is a timestamp candidate. A bare
@@ -235,6 +257,7 @@ function tallyValue(tally: FieldTally, value: unknown): void {
       tally.maxEpochMs = Math.max(tally.maxEpochMs, ms);
     }
   } else if (typeof value === "string") {
+    tally.numericValues = null;
     tally.strings += 1;
     const trimmed = value.trim();
     const isDateOnly = ISO_DATE_ONLY.test(trimmed);
@@ -248,8 +271,10 @@ function tallyValue(tally: FieldTally, value: unknown): void {
       }
     }
   } else if (typeof value === "boolean") {
+    tally.numericValues = null;
     tally.booleans += 1;
   } else {
+    tally.numericValues = null;
     // Nested objects and arrays cannot be compared by any of the controls.
     tally.others += 1;
     return;
@@ -344,6 +369,15 @@ function profileFromTally(
   if (availableKinds.includes("range")) {
     profile.min = tally.min;
     profile.max = tally.max;
+    const range = tally.numericValues ? typicalRange(tally.numericValues) : null;
+    if (range?.clipped) {
+      profile.typical = {
+        min: range.low,
+        max: range.high,
+        below: range.below,
+        above: range.above,
+      };
+    }
   }
   if (isDate) {
     profile.dateKind = isIsoDate
@@ -393,6 +427,12 @@ export function createQuickFilterScan<T = Record<string, unknown> | null | undef
   const names = options.names ? new Set<string>() : null;
   const tallies = new Map<string, FieldTally>();
   const inspected = Math.min(records.length, limit);
+  // Every requested field gets a tally up front, so a field that no inspected
+  // record carries is profiled as all blank (its features match "(blank)")
+  // instead of dropped. A saved filter on a field the current sample lacks
+  // still offers the "(blank)" option, like a field that is null everywhere.
+  // With no records there is nothing to count, and no profile.
+  if (wanted && inspected > 0) for (const field of wanted) tallies.set(field, newTally());
   let index = 0;
 
   const tallyField = (field: string, value: unknown): void => {

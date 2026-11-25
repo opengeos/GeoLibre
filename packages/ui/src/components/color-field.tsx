@@ -277,6 +277,7 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
         const result = await new window.EyeDropper().open({
           signal: controller.signal,
         });
+        if (controller.signal.aborted) return;
         if (result?.sRGBHex) {
           discardDrag();
           onChange(result.sRGBHex);
@@ -299,6 +300,12 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
       },
       [discardDrag, onChange, onCommit],
     );
+
+    const transparentDescriptionId = React.useId();
+    const callerDescribedBy = props["aria-describedby"];
+    const describedBy = transparent
+      ? [callerDescribedBy, transparentDescriptionId].filter(Boolean).join(" ")
+      : callerDescribedBy;
 
     return (
       <div className={cn("flex items-center gap-2", !fill && "inline-flex")}>
@@ -333,7 +340,13 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
               value={TRANSPARENT_COLOR}
             />
           ) : null}
+          {transparent ? (
+            <span id={transparentDescriptionId} className="sr-only">
+              {transparentSwatchLabel}
+            </span>
+          ) : null}
           <Input
+            {...props}
             ref={ref}
             type="color"
             name={transparent ? undefined : name}
@@ -341,10 +354,11 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
             value={draft ?? (transparent ? lastOpaqueRef.current : value)}
             disabled={disabled}
             title={transparent ? transparentSwatchLabel : title}
-            // The swatch shows the remembered opaque color while transparent, so
-            // give assistive tech an accessible name that conveys the "no color"
-            // state instead of letting it announce that opaque value.
-            aria-label={transparent ? transparentSwatchLabel : undefined}
+            // Keep caller-supplied `aria-label` (e.g. "Fill color" vs "Stroke color")
+            // so fields remain distinguishable while transparent; the "no color"
+            // state is conveyed via `aria-describedby` above.
+            aria-label={props["aria-label"] ?? (transparent ? transparentSwatchLabel : undefined)}
+            aria-describedby={describedBy}
             onChange={handleSwatchChange}
             onBlur={(event) => {
               endDrag();
@@ -353,7 +367,6 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
             // `peer` so the overlay (which covers the input's own
             // focus-visible border) can re-expose the focus ring below.
             className={cn("peer", fill && "w-full", className)}
-            {...props}
           />
           {transparent ? (
             <span

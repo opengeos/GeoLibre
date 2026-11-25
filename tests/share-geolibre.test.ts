@@ -605,6 +605,52 @@ describe("fetchProjectShares", () => {
       "https://share.geolibre.app/viewer?url=https%3A%2F%2Fexample.com%2Fp%3Fa%3D1%26b%3D2%23frag",
     );
   });
+
+  it("paginates across multiple pages when total exceeds the page limit", async () => {
+    const urls: string[] = [];
+    const fn: typeof fetch = async (input) => {
+      const url = typeof input === "string" ? input : input.toString();
+      urls.push(url);
+      if (urls.length === 1) {
+        return new Response(
+          JSON.stringify({
+            shares: [
+              { id: "s1", slug: "alpha", title: "Alpha" },
+              { id: "s2", slug: "beta", title: "Beta" },
+            ],
+            total: 3,
+            limit: 2,
+            offset: 0,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          shares: [{ id: "s3", slug: "gamma", title: "Gamma" }],
+          total: 3,
+          limit: 2,
+          offset: 2,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+
+    const shares = await fetchProjectShares({
+      token: "glb_secrettoken",
+      baseUrl: "https://share.geolibre.app",
+      fetchImpl: fn,
+    });
+
+    assert.deepEqual(urls, [
+      "https://share.geolibre.app/api/shares",
+      "https://share.geolibre.app/api/shares?limit=2&offset=2",
+    ]);
+    assert.deepEqual(
+      shares.map((s) => s.id),
+      ["s1", "s2", "s3"],
+    );
+  });
 });
 
 describe("normalizeShareRole", () => {

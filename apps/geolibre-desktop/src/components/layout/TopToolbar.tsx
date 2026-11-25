@@ -6,10 +6,10 @@ import {
   EFFECTS_PLUGIN_ID,
   GRATICULE_PLUGIN_ID,
   LAYER_CONTROL_PLUGIN_ID,
-  openPlanetaryComputerPanel,
   PRECIPITATION_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/plugin-ids";
+import { openPlanetaryComputerPanel } from "@geolibre/plugins/maplibre-planetary-computer";
 import { Button, cn } from "@geolibre/ui";
 import { Map, Moon, Sun } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -39,7 +39,6 @@ import { isMobile } from "../../lib/is-mobile";
 import { resolveShareHost } from "../../lib/share-geolibre";
 import { isTauri } from "../../lib/tauri-io";
 import { MENU_MANAGED_PLUGIN_IDS, isMenuVisible, isPluginVisible } from "../../lib/ui-profile";
-import { GcsExportDialog } from "./GcsExportDialog";
 import { SettingsDialog } from "./SettingsDialog";
 import type { MobileNavTabId } from "./mobile/MobileBottomNav";
 import { MobileToolbarChrome } from "./mobile/MobileToolbarChrome";
@@ -118,7 +117,6 @@ export function TopToolbar({
   mobileSheetHostEl = null,
 }: TopToolbarProps) {
   const { t } = useTranslation();
-  const [gcsExportOpen, setGcsExportOpen] = useState(false);
   const deploymentCapabilities = useAppStore((state) => state.deploymentCapabilities);
   usePluginLabelSync();
 
@@ -310,7 +308,6 @@ export function TopToolbar({
       onProjectCreated={handleNewProjectCreated}
     />
   );
-  const gcsExportDialog = <GcsExportDialog open={gcsExportOpen} onOpenChange={setGcsExportOpen} />;
 
   if (mobileShell) {
     return (
@@ -491,7 +488,6 @@ export function TopToolbar({
             }}
             onOpenOsmPbfDialog={() => osmPbf.setDialogOpen(true)}
             onOpenTilePackageDialog={() => tilePackage.setDialogOpen(true)}
-            onOpenGcsHarvest={() => setGcsExportOpen(true)}
           />
         )}
         {!viewer &&
@@ -639,7 +635,6 @@ export function TopToolbar({
         </div>
       </header>
       {sharedDialogs}
-      {gcsExportDialog}
     </>
   );
 }

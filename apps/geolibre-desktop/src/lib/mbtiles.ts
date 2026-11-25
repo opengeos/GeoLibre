@@ -168,7 +168,10 @@ export function registerMbtilesProtocol(): void {
       throw new Error("This MBTiles file is no longer loaded. Add it again to view its tiles.");
     }
 
-    const bytes = await invoke<number[] | Uint8Array>("read_mbtiles_tile", params);
+    const bytes = await invoke<ArrayBuffer | number[] | Uint8Array>("read_mbtiles_tile", params);
+    if (bytes instanceof ArrayBuffer) {
+      return { data: bytes };
+    }
     const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
     return {
       data: array.buffer.slice(array.byteOffset, array.byteOffset + array.byteLength),
@@ -183,12 +186,21 @@ function parseMbtilesTileRequest(request: RequestParameters): {
   x: number;
   y: number;
 } {
-  const url = new URL(request.url);
-  const parts = url.pathname.split("/").filter(Boolean);
+  // Older Android WebViews treat non-special schemes as opaque paths with
+  // an empty host. Parse the protocol's own template, as PostGIS tiles do.
+  const prefix = `${MBTILES_PROTOCOL}://tile/`;
+  if (request.url.slice(0, prefix.length).toLowerCase() !== prefix) {
+    throw new Error("Invalid MBTiles tile URL.");
+  }
+  const rest = request.url.slice(prefix.length).split("#")[0];
+  const queryStart = rest.indexOf("?");
+  const tilePath = queryStart === -1 ? rest : rest.slice(0, queryStart);
+  const params = new URLSearchParams(queryStart === -1 ? "" : rest.slice(queryStart + 1));
+  const parts = tilePath.split("/").filter(Boolean);
   if (parts.length !== 3) {
     throw new Error("Invalid MBTiles tile URL.");
   }
-  const path = url.searchParams.get("path");
+  const path = params.get("path");
   if (!path) {
     throw new Error("Invalid MBTiles tile path.");
   }

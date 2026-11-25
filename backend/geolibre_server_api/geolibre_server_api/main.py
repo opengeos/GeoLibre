@@ -7,13 +7,15 @@ import os
 import re
 import secrets
 import shutil
+import stat
+import tempfile
 import threading
 import time
 import uuid
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Callable, Literal
+from typing import Annotated, Any, Callable, Literal
 from urllib.parse import quote, urlparse
 
 import httpx
@@ -33,9 +35,17 @@ from sqlalchemy import (
     text,
     update,
 )
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session, selectinload, sessionmaker
+from starlette.concurrency import run_in_threadpool
 
+from geolibre_server_api.account_lifecycle import (
+    ProjectVersionUsage,
+    build_lifecycle_router,
+    enforce_storage_quota,
+    record_audit_event,
+)
 from geolibre_server_api.auth import (
     AuthPrincipal,
     InsufficientScopeError,
@@ -55,7 +65,17 @@ from geolibre_server_api.auth import (
 )
 from geolibre_server_api.auth_models import OAUTH_INDEXES, Account, Base
 from geolibre_server_api.enterprise_admin import build_enterprise_admin_router
-from geolibre_server_api.enterprise_models import FEDERATED_IDENTITY_INDEXES
+from geolibre_server_api.enterprise_models import (
+    FEDERATED_IDENTITY_INDEXES,
+    OrganizationIdentityProvider,
+)
+from geolibre_server_api.limits import (
+    DEFAULT_API_RATE,
+    DEFAULT_AUTH_RATE,
+    BodySizeLimitMiddleware,
+    RateLimitMiddleware,
+    parse_rate,
+)
 from geolibre_server_api.oidc import build_http_client, build_transport
 from geolibre_server_api.org_models import (
     Group,
@@ -85,6 +105,15 @@ from geolibre_server_api.project_models import (
 from geolibre_server_api.projects import demote_disallowed_public_projects, log_project_activity
 from geolibre_server_api.proxy_identity import client_ip, load_trusted_proxy_config
 from geolibre_server_api.scim import SCIM_MEDIA_TYPE, ScimError, build_scim_router
+from geolibre_server_api.secret_crypto import (
+    SECRET_KEYS_ENV,
+    SecretKeyError,
+    is_production_url,
+    plaintext_secrets_enabled,
+    reencrypt_stored_secrets,
+    secret_ciphers,
+    secret_storage_policy,
+)
 
 Visibility = Literal["public", "unlisted", "private", "organization"]
 PublicSharingPolicy = Literal["yes", "publishers", "no"]
@@ -116,6 +145,41 @@ LISTING_EAGER_LOADS = (
     selectinload(Project.versions),
     selectinload(Project.group_shares).selectinload(ProjectGroup.group),
 )
+
+# transfer_json reads project, from_account, to_account, and to_organization.
+TRANSFER_EAGER_LOADS = (
+    selectinload(ProjectTransfer.project),
+    selectinload(ProjectTransfer.from_account),
+    selectinload(ProjectTransfer.to_account),
+    selectinload(ProjectTransfer.to_organization),
+)
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        parsed = int(raw)
+        if parsed > 0:
+            return parsed
+    except ValueError:
+        pass
+    logger.warning("Ignoring invalid %s=%r; using default %d", name, raw, default)
+    return default
+
+
+def _build_engine_kwargs(database_url: str) -> dict[str, Any]:
+    """Return SQLAlchemy ``create_engine`` options tuned for SQLite vs. server DBs."""
+    is_sqlite = database_url.startswith("sqlite")
+    connect_args = {"check_same_thread": False} if is_sqlite else {}
+    engine_kwargs: dict[str, Any] = {"connect_args": connect_args}
+    if not is_sqlite:
+        engine_kwargs["pool_pre_ping"] = True
+        engine_kwargs["pool_size"] = _positive_int_env("GEOLIBRE_DB_POOL_SIZE", 10)
+        engine_kwargs["max_overflow"] = _positive_int_env("GEOLIBRE_DB_MAX_OVERFLOW", 20)
+        engine_kwargs["pool_recycle"] = _positive_int_env("GEOLIBRE_DB_POOL_RECYCLE", 1800)
+    return engine_kwargs
 
 
 class ProjectCreate(BaseModel):
@@ -266,7 +330,24 @@ class FileStorage:
     def put(self, key: str, data: bytes, content_type: str) -> None:
         path = self.root / key
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
+        with tempfile.NamedTemporaryFile(
+            mode="wb", dir=path.parent, prefix=f".{path.name}.", delete=False
+        ) as handle:
+            tmp_path = Path(handle.name)
+            try:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+            except BaseException:
+                tmp_path.unlink(missing_ok=True)
+                raise
+        try:
+            if path.exists():
+                os.chmod(tmp_path, stat.S_IMODE(path.stat().st_mode))
+            os.replace(tmp_path, path)
+        except BaseException:
+            tmp_path.unlink(missing_ok=True)
+            raise
 
     def get(self, key: str) -> bytes:
         try:
@@ -455,20 +536,26 @@ def postgresql_upgrade_statements() -> list[str]:
     ]
 
 
-def upgrade_postgresql_schema(engine) -> None:
-    with engine.begin() as connection:
+def upgrade_postgresql_schema(bind) -> None:
+    if isinstance(bind, Connection):
+        for statement in postgresql_upgrade_statements():
+            bind.execute(text(statement))
+        return
+    with bind.begin() as connection:
         for statement in postgresql_upgrade_statements():
             connection.execute(text(statement))
 
 
-def upgrade_sqlite_schema(engine) -> None:
+def upgrade_sqlite_schema(bind) -> None:
     """Add nullable columns introduced after the initial SQLite release.
 
     SQLAlchemy's create_all creates new tables but deliberately does not alter
     existing ones. These additive changes keep old installations bootable; a
     fresh database still receives the complete constraints from the models.
+    Accepts either a SQLAlchemy ``Engine`` or an active ``Connection`` (for
+    Alembic migrations running inside an existing transaction).
     """
-    inspector = inspect(engine)
+    inspector = inspect(bind)
     tables = set(inspector.get_table_names())
     additions = {
         "accounts": [("email", "VARCHAR(320)")],
@@ -487,7 +574,8 @@ def upgrade_sqlite_schema(engine) -> None:
             ("share_password_hash", "VARCHAR(200)"),
         ],
     }
-    with engine.begin() as connection:
+
+    def _apply_additive(connection: Connection) -> None:
         for table_name, columns in additions.items():
             if table_name not in tables:
                 continue
@@ -548,7 +636,13 @@ def upgrade_sqlite_schema(engine) -> None:
                 )
             )
 
-    inspector = inspect(engine)
+    if isinstance(bind, Connection):
+        _apply_additive(bind)
+    else:
+        with bind.begin() as connection:
+            _apply_additive(connection)
+
+    inspector = inspect(bind)
     if "projects" not in tables:
         return
     owner_column = next(
@@ -572,14 +666,9 @@ def upgrade_sqlite_schema(engine) -> None:
     # SQLite cannot alter nullability or an FK action. Keep child tables in
     # place and rebuild only projects with legacy rename behavior enabled so
     # versions/project_groups continue to reference the new `projects` table.
-    raw = engine.raw_connection()
-    try:
-        cursor = raw.cursor()
-        cursor.execute("PRAGMA foreign_keys=OFF")
-        cursor.execute("PRAGMA legacy_alter_table=ON")
-        cursor.execute("BEGIN")
-        cursor.execute("ALTER TABLE projects RENAME TO projects_legacy")
-        cursor.execute("""
+    rebuild_statements = [
+        "ALTER TABLE projects RENAME TO projects_legacy",
+        """
             CREATE TABLE projects (
                 id VARCHAR(36) NOT NULL PRIMARY KEY,
                 owner_id VARCHAR(36) REFERENCES accounts(id) ON DELETE SET NULL,
@@ -603,8 +692,8 @@ def upgrade_sqlite_schema(engine) -> None:
                 CONSTRAINT uq_project_owner_slug UNIQUE (owner_id, slug),
                 CONSTRAINT uq_project_org_slug UNIQUE (organization_id, slug)
             )
-        """)
-        cursor.execute("""
+        """,
+        """
             INSERT INTO projects (
                 id, owner_id, created_by_id, organization_id, slug, title,
                 description, visibility, tags_json, thumbnail_type, views,
@@ -616,12 +705,53 @@ def upgrade_sqlite_schema(engine) -> None:
                 views, fork_count, featured, delete_protected, share_role, share_expires_at,
                 share_password_hash, created_at, updated_at
             FROM projects_legacy
-        """)
-        cursor.execute("DROP TABLE projects_legacy")
-        cursor.execute("CREATE INDEX ix_projects_owner_id ON projects (owner_id)")
-        cursor.execute("CREATE INDEX ix_projects_created_by_id ON projects (created_by_id)")
-        cursor.execute("CREATE INDEX ix_projects_organization_id ON projects (organization_id)")
-        cursor.execute("CREATE INDEX ix_projects_updated_at ON projects (updated_at)")
+        """,
+        "DROP TABLE projects_legacy",
+        "CREATE INDEX ix_projects_owner_id ON projects (owner_id)",
+        "CREATE INDEX ix_projects_created_by_id ON projects (created_by_id)",
+        "CREATE INDEX ix_projects_organization_id ON projects (organization_id)",
+        "CREATE INDEX ix_projects_updated_at ON projects (updated_at)",
+    ]
+    if isinstance(bind, Connection):
+        # SQLite ignores PRAGMA foreign_keys inside an active transaction, and
+        # renaming `projects` while FK enforcement is ON rewrites child FKs to
+        # `projects_legacy` so the subsequent DROP fires ON DELETE CASCADE.
+        if bind.execute(text("PRAGMA foreign_keys")).scalar():
+            raise RuntimeError(
+                "upgrade_sqlite_schema cannot rebuild legacy 'projects' on a "
+                "Connection with PRAGMA foreign_keys=ON; disable foreign keys "
+                "before starting the migration transaction or pass an Engine."
+            )
+        # Alembic's SQLite dialect sets transactional_ddl = False and Python's
+        # sqlite3 driver does not implicitly open a transaction for DDL, so
+        # start an explicit transaction when the DBAPI connection is idle.
+        bind.execute(text("PRAGMA legacy_alter_table=ON"))
+        driver_conn = bind.connection.driver_connection
+        started_tx = False
+        try:
+            if not getattr(driver_conn, "in_transaction", False):
+                bind.exec_driver_sql("BEGIN")
+                started_tx = True
+            for statement in rebuild_statements:
+                bind.execute(text(statement))
+            if started_tx:
+                bind.exec_driver_sql("COMMIT")
+        except Exception:
+            if started_tx:
+                bind.exec_driver_sql("ROLLBACK")
+            raise
+        finally:
+            bind.execute(text("PRAGMA legacy_alter_table=OFF"))
+        return
+
+    raw = bind.raw_connection()
+    try:
+        cursor = raw.cursor()
+        cursor.execute("PRAGMA foreign_keys=OFF")
+        cursor.execute("PRAGMA legacy_alter_table=ON")
+        cursor.execute("BEGIN")
+        for statement in rebuild_statements:
+            cursor.execute(statement)
         raw.commit()
         cursor.execute("PRAGMA foreign_keys=ON")
     except Exception:
@@ -673,6 +803,102 @@ class PathCORSMiddleware:
             await self.api(scope, receive, send)
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _env_optional_int(name: str) -> int | None:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return None
+    value = int(raw.strip())
+    return value if value > 0 else None
+
+
+def _prepare_stored_secrets(engine, base_url: str) -> bool:
+    """Validate the secret key configuration and encrypt stored secrets.
+
+    Encrypts legacy plaintext identity-provider secrets and re-keys secrets
+    written under an older key, so a database upgraded without Alembic is
+    protected too. Row locks serialize rotation with provider updates.
+
+    Args:
+        engine: The SQLAlchemy engine.
+        base_url: The public API URL, used to restrict the development opt-out.
+
+    Returns:
+        True when secret writes must be refused until a key is configured.
+
+    Raises:
+        RuntimeError: If the key is malformed, cannot decrypt a stored secret,
+            or is required while identity-provider secrets exist.
+    """
+    production = is_production_url(base_url)
+    plaintext_allowed = not production and plaintext_secrets_enabled()
+    try:
+        ciphers = secret_ciphers()
+        table = OrganizationIdentityProvider.__table__
+        if inspect(engine).has_table(table.name):
+            with engine.begin() as connection:
+                if ciphers is None and not plaintext_allowed:
+                    stored = connection.scalar(
+                        select(func.count())
+                        .select_from(table)
+                        .where(table.c.client_secret.is_not(None))
+                    )
+                    if stored:
+                        raise SecretKeyError(
+                            f"{SECRET_KEYS_ENV} is required: {stored} organization identity "
+                            "provider secret(s) are stored. Only loopback development may "
+                            "opt out with GEOLIBRE_ALLOW_PLAINTEXT_SECRETS=1"
+                        )
+                reencrypt_stored_secrets(connection, table, table.c.client_secret)
+    except SecretKeyError as exc:
+        engine.dispose()
+        raise RuntimeError(str(exc)) from exc
+    if ciphers is None:
+        if plaintext_allowed:
+            logger.warning(
+                "%s is not set; GEOLIBRE_ALLOW_PLAINTEXT_SECRETS explicitly enables "
+                "unencrypted identity-provider secrets for loopback development",
+                SECRET_KEYS_ENV,
+            )
+        else:
+            logger.warning(
+                "%s is not set; storing identity-provider client secrets is disabled",
+                SECRET_KEYS_ENV,
+            )
+    return ciphers is None and not plaintext_allowed
+
+
+class SecretStoragePolicyMiddleware:
+    """Apply the app's storage URL without wrapping streamed receive errors."""
+
+    def __init__(self, app, public_url: str) -> None:
+        """Retain the application and its effective public URL.
+
+        Args:
+            app: The downstream ASGI application.
+            public_url: The URL selected by the application factory.
+        """
+        self.app = app
+        self.public_url = public_url
+
+    async def __call__(self, scope, receive, send) -> None:
+        """Scope route handlers and their worker threads to this app's policy.
+
+        Args:
+            scope: The ASGI connection scope.
+            receive: The incoming ASGI message callback.
+            send: The outgoing ASGI message callback.
+        """
+        with secret_storage_policy(self.public_url):
+            await self.app(scope, receive, send)
+
+
 def create_app(
     database_url: str | None = None,
     storage=None,
@@ -680,6 +906,10 @@ def create_app(
     clock: Callable[[], int] | None = None,
     *,
     oidc_transport: httpx.BaseTransport | None = None,
+    allow_self_registration: bool | None = None,
+    user_storage_quota_bytes: int | None = None,
+    org_storage_quota_bytes: int | None = None,
+    lifecycle_delivery: Callable[[dict], None] | None = None,
 ) -> FastAPI:
     """Build the FastAPI app, wiring the engine, sessions, storage, and routes.
 
@@ -689,36 +919,64 @@ def create_app(
     database_url = database_url or os.getenv(
         "GEOLIBRE_DATABASE_URL", "sqlite:///./geolibre-server-api.db"
     )
-    connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
-    engine = create_engine(database_url, connect_args=connect_args)
-    if database_url.startswith("sqlite"):
+    is_sqlite = database_url.startswith("sqlite")
+    is_sqlite_memory = is_sqlite and (
+        database_url == "sqlite:///:memory:" or ":memory:" in database_url
+    )
+    engine = create_engine(database_url, **_build_engine_kwargs(database_url))
+    if is_sqlite:
         # SQLite disables foreign keys per connection, which makes every
         # ondelete="CASCADE" inert. The ORM cascade covers projects and versions,
         # but tokens have no relationship, so deleting an account would otherwise
-        # strand its tokens.
+        # strand its tokens. Also enable busy_timeout (and WAL for file DBs) so
+        # concurrent readers and writers do not fail immediately with database locked.
         @event.listens_for(engine, "connect")
-        def _enable_foreign_keys(dbapi_connection, _record):  # pragma: no cover - driver hook
+        def _configure_sqlite(dbapi_connection, _record):  # pragma: no cover - driver hook
             dbapi_connection.execute("PRAGMA foreign_keys=ON")
+            dbapi_connection.execute("PRAGMA busy_timeout=5000")
+            if not is_sqlite_memory:
+                dbapi_connection.execute("PRAGMA journal_mode=WAL")
 
-    Base.metadata.create_all(engine)
-    if database_url.startswith("sqlite"):
-        upgrade_sqlite_schema(engine)
-    elif engine.dialect.name == "postgresql":
-        upgrade_postgresql_schema(engine)
-    legacy_project_owner_required = database_url.startswith("sqlite") and not next(
-        column["nullable"]
-        for column in inspect(engine).get_columns("projects")
-        if column["name"] == "owner_id"
+    skip_ddl = os.getenv("GEOLIBRE_SKIP_DDL_CREATE_ALL", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    if not skip_ddl:
+        Base.metadata.create_all(engine)
+        if database_url.startswith("sqlite"):
+            upgrade_sqlite_schema(engine)
+        elif engine.dialect.name == "postgresql":
+            upgrade_postgresql_schema(engine)
+        # create_all leaves pre-existing tables untouched, including their indexes.
+        # Add the OAuth indexes idempotently when upgrading a persisted database.
+        for index in OAUTH_INDEXES:
+            index.create(engine, checkfirst=True)
+        # create_all does not add an index to an already-existing transfer table.
+        PENDING_TRANSFER_INDEX.create(engine, checkfirst=True)
+        # Nor the federated identity indexes to a table from an earlier release.
+        for index in FEDERATED_IDENTITY_INDEXES:
+            index.create(engine, checkfirst=True)
+    db_inspector = inspect(engine)
+    if skip_ddl and not db_inspector.has_table("projects"):
+        engine.dispose()
+        raise RuntimeError(
+            "Database schema is not initialized (missing 'projects' table). "
+            "Run 'alembic upgrade head' before starting with GEOLIBRE_SKIP_DDL_CREATE_ALL."
+        )
+    owner_col = (
+        next(
+            (
+                column
+                for column in db_inspector.get_columns("projects")
+                if column["name"] == "owner_id"
+            ),
+            None,
+        )
+        if database_url.startswith("sqlite")
+        else None
     )
-    # create_all leaves pre-existing tables untouched, including their indexes.
-    # Add the OAuth indexes idempotently when upgrading a persisted database.
-    for index in OAUTH_INDEXES:
-        index.create(engine, checkfirst=True)
-    # create_all does not add an index to an already-existing transfer table.
-    PENDING_TRANSFER_INDEX.create(engine, checkfirst=True)
-    # Nor the federated identity indexes to a table from an earlier release.
-    for index in FEDERATED_IDENTITY_INDEXES:
-        index.create(engine, checkfirst=True)
+    legacy_project_owner_required = owner_col is not None and not owner_col["nullable"]
     sessions = sessionmaker(engine, expire_on_commit=False)
     oauth_config = make_oauth_config(public_url)
     clock_fn = clock or (lambda: int(datetime.now(UTC).timestamp()))
@@ -754,10 +1012,33 @@ def create_app(
             idp_transport.close()
 
     object_storage = storage or make_storage()
+    if inspect(engine).has_table("project_version_usage") and inspect(engine).has_table("versions"):
+        from geolibre_server_api.account_lifecycle import backfill_project_version_usage
+
+        with sessions() as backfill_session:
+            backfill_project_version_usage(backfill_session, object_storage)
     base_url = (public_url or os.getenv("GEOLIBRE_PUBLIC_URL", "http://localhost:8000")).rstrip("/")
+    with secret_storage_policy(base_url):
+        secrets_unprotected = _prepare_stored_secrets(engine, base_url)
     viewer_url = os.getenv("GEOLIBRE_VIEWER_URL", "https://app.geolibre.org/").rstrip("/") + "/"
     max_project_bytes = int(os.getenv("GEOLIBRE_MAX_PROJECT_BYTES", str(50 * 1024 * 1024)))
     max_thumbnail_bytes = int(os.getenv("GEOLIBRE_MAX_THUMBNAIL_BYTES", str(5 * 1024 * 1024)))
+    sso_only = _env_bool("GEOLIBRE_SSO_ONLY", False)
+    self_reg_enabled = (
+        allow_self_registration
+        if allow_self_registration is not None
+        else (False if sso_only else _env_bool("GEOLIBRE_ALLOW_SELF_REGISTRATION", True))
+    )
+    resolved_user_quota = (
+        user_storage_quota_bytes
+        if user_storage_quota_bytes is not None
+        else _env_optional_int("GEOLIBRE_USER_STORAGE_QUOTA_BYTES")
+    )
+    resolved_org_quota = (
+        org_storage_quota_bytes
+        if org_storage_quota_bytes is not None
+        else _env_optional_int("GEOLIBRE_ORG_STORAGE_QUOTA_BYTES")
+    )
 
     app = FastAPI(
         title="GeoLibre projects and identity API",
@@ -770,7 +1051,15 @@ def create_app(
     app.state.clock = clock_fn
     app.state.oauth_config = oauth_config
     app.state.base_url = base_url
+    app.state.allow_self_registration = self_reg_enabled
+    app.state.lifecycle_delivery = lifecycle_delivery
     app.state.trusted_proxy = load_trusted_proxy_config()
+
+    app.add_middleware(SecretStoragePolicyMiddleware, public_url=base_url)
+
+    # True when a key is required but missing: the admin API then
+    # refuses to store a new identity-provider secret.
+    app.state.secrets_unprotected = secrets_unprotected
     # Outbound identity-provider HTTP; lives for the process.
     idp_transport = oidc_transport or build_transport()
     app.state.oidc_http = build_http_client(idp_transport)
@@ -785,18 +1074,28 @@ def create_app(
     # a legitimate document at max_project_bytes can be six times that on the
     # wire. A tighter bound would 413 valid uploads.
     body_ceiling = max(max_project_bytes * 6, max_thumbnail_bytes) + 1024
-
-    # Known limit: this reads the declared length only, so a chunked or HTTP/2
-    # request without Content-Length skips it and is still parsed in full. The
-    # per-route checks bound what gets *stored* either way; closing the parsing
-    # cost for those requests needs a streaming body reader, which is why the
-    # deployment notes put a request-size limit at the proxy.
-    @app.middleware("http")
-    async def limit_body(request: Request, call_next):
-        declared = request.headers.get("content-length")
-        if declared and declared.isdigit() and int(declared) > body_ceiling:
-            return JSONResponse({"error": "request body too large"}, status_code=413)
-        return await call_next(request)
+    # GEOLIBRE_MAX_REQUEST_BYTES overrides the derived ceiling. A body without
+    # Content-Length (chunked, HTTP/2) is counted as it streams and refused once
+    # it crosses the ceiling, so no request is buffered past it.
+    app.add_middleware(
+        BodySizeLimitMiddleware,
+        max_bytes=_positive_int_env("GEOLIBRE_MAX_REQUEST_BYTES", body_ceiling),
+    )
+    # Added after the body limit so it wraps it: a throttled client is refused
+    # before any body is read.
+    auth_rate = parse_rate("GEOLIBRE_RATE_LIMIT_AUTH", DEFAULT_AUTH_RATE)
+    api_rate = parse_rate("GEOLIBRE_RATE_LIMIT_API", DEFAULT_API_RATE)
+    if (
+        is_production_url(base_url)
+        and not app.state.trusted_proxy.networks
+        and (auth_rate or api_rate)
+    ):
+        logger.warning(
+            "Client rate limiting uses direct peer addresses. If this API is behind a "
+            "reverse proxy, configure GEOLIBRE_TRUSTED_PROXIES to avoid sharing "
+            "one rate budget across its users."
+        )
+    app.add_middleware(RateLimitMiddleware, auth_rate=auth_rate, api_rate=api_rate)
 
     origins = [x.strip() for x in os.getenv("GEOLIBRE_CORS_ORIGINS", "*").split(",") if x.strip()]
     # CORSMiddleware treats a "*" anywhere in the list as allow-all, so a value
@@ -822,7 +1121,7 @@ def create_app(
             ):
                 oauth_origins.add(origin)
     # Registered last so it is the outermost layer: Starlette wraps in reverse
-    # order of registration, and with limit_body outermost its 413 returned
+    # order of registration, and with the body limit outermost its 413 returned
     # without CORS headers, leaving a browser unable to read the documented
     # error body.
     if oauth_config is not None:
@@ -890,6 +1189,7 @@ def create_app(
 
     # Identity routes must precede the username/slug catch-alls below.
     app.include_router(build_identity_router())
+    app.include_router(build_lifecycle_router())
     app.include_router(build_enterprise_admin_router())
     app.include_router(build_scim_router())
     if oauth_config is not None:
@@ -1259,19 +1559,79 @@ def create_app(
             ProjectGroup(project_id=project.id, group_id=group_id) for group_id in group_ids
         )
 
-    def can_edit_project(session: Session, project: Project, account: Account | None) -> bool:
+    def preload_project_access(
+        session: Session,
+        account: Account | None,
+        projects: list[Project],
+    ) -> tuple[dict[str, str], set[str]] | None:
+        """Batch-load the caller's org roles and accepted shared-update groups for a page.
+
+        Avoids 1-3 per-project queries inside ``can_edit_project`` when serializing
+        ``list_projects``, ``list_shares``, and org/group/user listings.
+        """
+        if account is None or not projects:
+            return None
+        org_ids = {
+            project.organization_id for project in projects if project.organization_id is not None
+        }
+        org_roles: dict[str, str] = {}
+        if org_ids:
+            rows = session.execute(
+                select(OrganizationMember.organization_id, OrganizationMember.role).where(
+                    OrganizationMember.account_id == account.id,
+                    OrganizationMember.organization_id.in_(org_ids),
+                )
+            ).all()
+            org_roles = {org_id: role for org_id, role in rows}
+        shared_group_ids = {
+            share.group_id
+            for project in projects
+            for share in project.group_shares
+            if share.group and share.group.shared_update
+        }
+        member_groups: set[str] = set()
+        if shared_group_ids:
+            member_groups = set(
+                session.scalars(
+                    select(GroupMember.group_id).where(
+                        GroupMember.account_id == account.id,
+                        GroupMember.status == "accepted",
+                        GroupMember.group_id.in_(shared_group_ids),
+                    )
+                ).all()
+            )
+        return org_roles, member_groups
+
+    def can_edit_project(
+        session: Session,
+        project: Project,
+        account: Account | None,
+        *,
+        access_cache: tuple[dict[str, str], set[str]] | None = None,
+    ) -> bool:
         if account is None:
             return False
         if project.organization_id is None and project.owner_id == account.id:
             return True
         if project.organization_id:
-            role = organization_role(session, project.organization_id, account.id)
+            role = (
+                access_cache[0].get(project.organization_id)
+                if access_cache is not None
+                else organization_role(session, project.organization_id, account.id)
+            )
             if role == "administrator" or (
                 project.created_by_id == account.id and role in {"publisher", "member"}
             ):
                 return True
         for share in project.group_shares:
-            if share.group.shared_update and group_membership(session, share.group_id, account.id):
+            if not share.group.shared_update:
+                continue
+            is_member = (
+                share.group_id in access_cache[1]
+                if access_cache is not None
+                else group_membership(session, share.group_id, account.id) is not None
+            )
+            if is_member:
                 return True
         return False
 
@@ -1317,6 +1677,8 @@ def create_app(
         project: Project,
         session: Session | None = None,
         account: Account | None = None,
+        *,
+        access_cache: tuple[dict[str, str], set[str]] | None = None,
     ) -> dict:
         raw, page = canonical_urls(project)
         value = {
@@ -1360,7 +1722,9 @@ def create_app(
         }
         if account is not None:
             assert session is not None
-            value["canEdit"] = can_edit_project(session, project, account)
+            value["canEdit"] = can_edit_project(
+                session, project, account, access_cache=access_cache
+            )
         return value
 
     def visible(
@@ -1617,6 +1981,7 @@ def create_app(
         group_ids = group_ids or []
         validate_access_targets(session, account, visibility, organization_id, group_ids)
         document = parse_content(content, max_project_bytes)
+        content_bytes = content.encode()
         title = title_from(document, filename)
         timestamp = now()
 
@@ -1627,8 +1992,17 @@ def create_app(
         # the same title from one account can pick the same slug and the loser
         # hits uq_project_owner_slug or uq_project_org_slug. Retry the allocation
         # instead of surfacing that as a 500, matching how version numbers are
-        # allocated below.
+        # allocated below. Quota enforcement runs inside each attempt so a
+        # rollback releasing the owner lock re-acquires it before committing.
         for _ in range(5):
+            enforce_storage_quota(
+                session,
+                account_id=account.id,
+                organization_id=organization_id,
+                incoming_bytes=len(content_bytes),
+                user_quota_bytes=resolved_user_quota,
+                org_quota_bytes=resolved_org_quota,
+            )
             project = Project(
                 id=str(uuid.uuid4()),
                 owner_id=(
@@ -1662,8 +2036,11 @@ def create_app(
         else:
             raise HTTPException(409, "could not allocate a project slug; retry")
         key = f"projects/{project.id}/versions/1.json"
-        object_storage.put(key, content.encode(), "application/json")
+        object_storage.put(key, content_bytes, "application/json")
         session.add(Version(project_id=project.id, number=1, object_key=key, created_at=timestamp))
+        session.add(
+            ProjectVersionUsage(project_id=project.id, number=1, size_bytes=len(content_bytes))
+        )
         session.add_all(
             ProjectGroup(project_id=project.id, group_id=group_id) for group_id in group_ids
         )
@@ -2081,8 +2458,14 @@ def create_app(
             .offset(offset)
             .limit(limit)
         ).all()
+        access_cache = preload_project_access(session, account, list(projects))
         response.headers["Cache-Control"] = "private, no-store"
-        return {"projects": [project_json(project, session, account) for project in projects]}
+        return {
+            "projects": [
+                project_json(project, session, account, access_cache=access_cache)
+                for project in projects
+            ]
+        }
 
     @app.post("/api/groups", status_code=201)
     def create_group(
@@ -2144,8 +2527,21 @@ def create_app(
     ):
         account = principal.account
         group = require_group(session, group_id)
+        member = group_membership(session, group_id, account.id)
+        if member is None:
+            org_role = (
+                organization_role(session, group.organization_id, account.id)
+                if group.organization_id is not None
+                else None
+            )
+            allowed = org_role == "administrator" or (
+                group.join_policy in {"open", "request"}
+                and (group.organization_id is None or org_role is not None)
+            )
+            if not allowed:
+                raise HTTPException(404, "group not found")
         response.headers["Cache-Control"] = "private, no-store"
-        return {"group": group_json(group, group_membership(session, group_id, account.id))}
+        return {"group": group_json(group, member)}
 
     @app.patch("/api/groups/{group_id}")
     def patch_group(
@@ -2504,8 +2900,14 @@ def create_app(
             .limit(limit)
             .offset(offset)
         ).all()
+        access_cache = preload_project_access(session, account, list(projects))
         response.headers["Cache-Control"] = "private, no-store"
-        return {"projects": [project_json(project, session, account) for project in projects]}
+        return {
+            "projects": [
+                project_json(project, session, account, access_cache=access_cache)
+                for project in projects
+            ]
+        }
 
     @app.delete("/api/groups/{group_id}/projects/{project_id}", status_code=204)
     def moderate_group_project(
@@ -2539,9 +2941,22 @@ def create_app(
             data.extend(chunk)
             if len(data) > max_thumbnail_bytes:
                 raise HTTPException(413, f"thumbnail exceeds the {max_thumbnail_bytes} byte limit")
-        object_storage.put(f"groups/{group.id}/thumbnail", bytes(data), content_type)
-        group.thumbnail_type = content_type
-        session.commit()
+        payload = bytes(data)
+
+        def _store_and_commit() -> None:
+            # Lock the group row, write the object, and issue an explicit UPDATE
+            # inside the threadpool so the event loop never blocks and concurrent
+            # uploads always persist matching bytes and thumbnail_type.
+            session.execute(
+                select(Group.id).where(Group.id == group.id).with_for_update(key_share=True)
+            )
+            object_storage.put(f"groups/{group.id}/thumbnail", payload, content_type)
+            session.execute(
+                update(Group).where(Group.id == group.id).values(thumbnail_type=content_type)
+            )
+            session.commit()
+
+        await run_in_threadpool(_store_and_commit)
 
     @app.get("/api/groups/{group_id}/thumbnail", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def get_group_thumbnail(
@@ -2568,7 +2983,11 @@ def create_app(
         except KeyError:
             raise HTTPException(404, "thumbnail not found")
         cache = "private, no-store" if confined else "public, max-age=3600"
-        return Response(data, media_type=group.thumbnail_type, headers={"Cache-Control": cache})
+        return Response(
+            data,
+            media_type=group.thumbnail_type,
+            headers={"Cache-Control": cache, "X-Content-Type-Options": "nosniff"},
+        )
 
     @app.delete("/api/groups/{group_id}/thumbnail", status_code=204)
     def delete_group_thumbnail(
@@ -2613,9 +3032,15 @@ def create_app(
             .offset(offset)
             .limit(limit)
         ).all()
+        access_cache = preload_project_access(session, account, list(projects))
         if account is not None:
             response.headers["Cache-Control"] = "private, no-store"
-        return {"projects": [project_json(project, session, account) for project in projects]}
+        return {
+            "projects": [
+                project_json(project, session, account, access_cache=access_cache)
+                for project in projects
+            ]
+        }
 
     @app.post("/api/projects", status_code=201)
     def post_project(
@@ -2670,6 +3095,8 @@ def create_app(
 
     @app.get("/api/shares")
     def list_shares(
+        limit: Annotated[int, Query(ge=1, le=100)] = 100,
+        offset: Annotated[int, Query(ge=0)] = 0,
         principal: AuthPrincipal = Depends(require_scope("read:projects")),
         session: Session = Depends(get_session),
     ):
@@ -2679,28 +3106,43 @@ def create_app(
         see and revoke them.
         """
         account = principal.account
-        candidates = session.scalars(
-            select(Project)
-            .options(*LISTING_EAGER_LOADS)
-            .where(
-                (Project.owner_id == account.id)
-                | (Project.created_by_id == account.id)
-                | Project.organization_id.in_(
-                    select(OrganizationMember.organization_id).where(
-                        OrganizationMember.account_id == account.id,
-                        OrganizationMember.role == "administrator",
-                    )
-                ),
-                Project.visibility.in_(("public", "unlisted")),
-            )
-            .order_by(Project.updated_at.desc())
-        ).all()
+        admin_org_ids = select(OrganizationMember.organization_id).where(
+            OrganizationMember.account_id == account.id,
+            OrganizationMember.role == "administrator",
+        )
+        creator_org_ids = select(OrganizationMember.organization_id).where(
+            OrganizationMember.account_id == account.id,
+            OrganizationMember.role.in_(("publisher", "member")),
+        )
+        # Push can_manage_project into SQL so pagination and total are exact
+        # without per-row authorization queries.
+        manageable = or_(
+            Project.organization_id.is_(None) & (Project.owner_id == account.id),
+            Project.organization_id.in_(admin_org_ids),
+            (Project.created_by_id == account.id) & Project.organization_id.in_(creator_org_ids),
+        )
+        where_clauses = (manageable, Project.visibility.in_(("public", "unlisted")))
+        total = session.scalar(select(func.count()).select_from(Project).where(*where_clauses)) or 0
+        projects = list(
+            session.scalars(
+                select(Project)
+                .options(*LISTING_EAGER_LOADS)
+                .where(*where_clauses)
+                .order_by(Project.created_at.desc(), Project.id.desc())
+                .offset(offset)
+                .limit(limit)
+            ).all()
+        )
+        access_cache = preload_project_access(session, account, projects)
         return {
             "shares": [
-                project_json(project, session, account) | {"projectSlug": project.slug}
-                for project in candidates
-                if can_manage_project(session, project, account)
-            ]
+                project_json(project, session, account, access_cache=access_cache)
+                | {"projectSlug": project.slug}
+                for project in projects
+            ],
+            "limit": limit,
+            "offset": offset,
+            "total": total,
         }
 
     @app.delete("/api/shares/{share_id}", status_code=204)
@@ -2723,6 +3165,15 @@ def create_app(
         project.share_expires_at = None
         project.share_password_hash = None
         project.updated_at = now()
+        record_audit_event(
+            session,
+            timestamp=clock_fn(),
+            actor_account_id=principal.account.id,
+            organization_id=project.organization_id,
+            action="share.revoke",
+            resource_type="project",
+            resource_id=project.id,
+        )
         session.commit()
 
     @app.get("/api/projects", openapi_extra=OPTIONAL_AUTH_OPENAPI)
@@ -2734,6 +3185,10 @@ def create_app(
         mine: bool = False,
         shared_with_me: bool = False,
         shared_source: Literal["organizations", "groups"] | None = None,
+        q: Annotated[str | None, Query(max_length=200)] = None,
+        visibility: Visibility | None = None,
+        owner: Annotated[str | None, Query(max_length=39)] = None,
+        sort: Literal["updated", "created", "name"] = "updated",
         principal: AuthPrincipal | None = Depends(optional_principal),
         session: Session = Depends(get_session),
     ):
@@ -2811,16 +3266,44 @@ def create_app(
                 query.where(Project.featured.is_(True)),
                 count.where(Project.featured.is_(True)),
             )
-        projects = session.scalars(
-            query.options(*LISTING_EAGER_LOADS)
-            .order_by(Project.updated_at.desc())
-            .offset(offset)
-            .limit(limit)
-        ).all()
+        if visibility is not None:
+            query, count = (
+                query.where(Project.visibility == visibility),
+                count.where(Project.visibility == visibility),
+            )
+        if owner and owner.strip():
+            owner_ids = select(Account.id).where(Account.username == owner.strip().lower())
+            query, count = (
+                query.where(Project.owner_id.in_(owner_ids)),
+                count.where(Project.owner_id.in_(owner_ids)),
+            )
+        if q and q.strip():
+            escaped = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped}%"
+            search_cond = or_(
+                Project.title.ilike(pattern, escape="\\"),
+                Project.description.ilike(pattern, escape="\\"),
+                Project.slug.ilike(pattern, escape="\\"),
+            )
+            query, count = query.where(search_cond), count.where(search_cond)
+        if sort == "created":
+            order_by = (Project.created_at.desc(), Project.id.desc())
+        elif sort == "name":
+            order_by = (func.lower(Project.title).asc(), Project.id.asc())
+        else:
+            order_by = (Project.updated_at.desc(), Project.id.desc())
+        projects = list(
+            session.scalars(
+                query.options(*LISTING_EAGER_LOADS).order_by(*order_by).offset(offset).limit(limit)
+            ).all()
+        )
+        access_cache = preload_project_access(session, account, projects)
         if account is not None:
             response.headers["Cache-Control"] = "private, no-store"
         return {
-            "projects": [project_json(p, session, account) for p in projects],
+            "projects": [
+                project_json(p, session, account, access_cache=access_cache) for p in projects
+            ],
             "limit": limit,
             "offset": offset,
             "total": session.scalar(count),
@@ -2982,13 +3465,24 @@ def create_app(
         """Write a new version of a project the caller owns or may shared-update."""
         project = editable(session.get(Project, project_id), principal, session)
         parse_content(body.content, max_project_bytes)
+        content_bytes = body.content.encode()
         # Allocated from max(number) and committed *before* the object is
         # written. Deriving it from len(project.versions) let two concurrent
         # updates pick the same number: both wrote the same storage key, the
         # second lost the primary-key race with a 500, and the winner's content
         # had already been overwritten. Reserving the row first means a loser
         # fails before touching storage, and can retry on the next free number.
+        # Quota enforcement runs inside each attempt so a rollback releasing the
+        # owner row lock re-acquires the lock and re-checks usage on retry.
         for _ in range(5):
+            enforce_storage_quota(
+                session,
+                account_id=project.owner_id or principal.account.id,
+                organization_id=project.organization_id,
+                incoming_bytes=len(content_bytes),
+                user_quota_bytes=resolved_user_quota,
+                org_quota_bytes=resolved_org_quota,
+            )
             number = (
                 session.scalar(
                     select(func.max(Version.number)).where(Version.project_id == project.id)
@@ -3015,7 +3509,10 @@ def create_app(
             raise HTTPException(409, "could not allocate a version number; retry")
         current_number = number - 1
         conflict = body.expected_version is not None and body.expected_version != current_number
-        object_storage.put(key, body.content.encode(), "application/json")
+        object_storage.put(key, content_bytes, "application/json")
+        session.add(
+            ProjectVersionUsage(project_id=project.id, number=number, size_bytes=len(content_bytes))
+        )
         project.updated_at = now()
         log_project_activity(
             session, project.id, principal.account.id, "version_save", {"version": number}
@@ -3208,38 +3705,68 @@ def create_app(
     @app.get("/api/transfers/incoming")
     def list_incoming_transfers(
         response: Response,
+        limit: Annotated[int, Query(ge=1, le=100)] = 100,
+        offset: Annotated[int, Query(ge=0)] = 0,
         principal: AuthPrincipal = Depends(require_scope("read:projects")),
         session: Session = Depends(get_session),
     ):
         """List transfers offered to the caller that are still pending."""
+        where_clauses = (
+            ProjectTransfer.to_account_id == principal.account.id,
+            ProjectTransfer.status == "pending",
+        )
+        total = (
+            session.scalar(select(func.count()).select_from(ProjectTransfer).where(*where_clauses))
+            or 0
+        )
         transfers = session.scalars(
             select(ProjectTransfer)
-            .where(
-                ProjectTransfer.to_account_id == principal.account.id,
-                ProjectTransfer.status == "pending",
-            )
-            .order_by(ProjectTransfer.created_at.desc())
+            .options(*TRANSFER_EAGER_LOADS)
+            .where(*where_clauses)
+            .order_by(ProjectTransfer.created_at.desc(), ProjectTransfer.id.desc())
+            .offset(offset)
+            .limit(limit)
         ).all()
         response.headers["Cache-Control"] = "private, no-store"
-        return {"transfers": [transfer_json(item) for item in transfers]}
+        return {
+            "transfers": [transfer_json(item) for item in transfers],
+            "limit": limit,
+            "offset": offset,
+            "total": total,
+        }
 
     @app.get("/api/transfers/outgoing")
     def list_outgoing_transfers(
         response: Response,
+        limit: Annotated[int, Query(ge=1, le=100)] = 100,
+        offset: Annotated[int, Query(ge=0)] = 0,
         principal: AuthPrincipal = Depends(require_scope("read:projects")),
         session: Session = Depends(get_session),
     ):
         """List the caller's transfers that are still pending acceptance."""
+        where_clauses = (
+            ProjectTransfer.from_account_id == principal.account.id,
+            ProjectTransfer.status == "pending",
+        )
+        total = (
+            session.scalar(select(func.count()).select_from(ProjectTransfer).where(*where_clauses))
+            or 0
+        )
         transfers = session.scalars(
             select(ProjectTransfer)
-            .where(
-                ProjectTransfer.from_account_id == principal.account.id,
-                ProjectTransfer.status == "pending",
-            )
-            .order_by(ProjectTransfer.created_at.desc())
+            .options(*TRANSFER_EAGER_LOADS)
+            .where(*where_clauses)
+            .order_by(ProjectTransfer.created_at.desc(), ProjectTransfer.id.desc())
+            .offset(offset)
+            .limit(limit)
         ).all()
         response.headers["Cache-Control"] = "private, no-store"
-        return {"transfers": [transfer_json(item) for item in transfers]}
+        return {
+            "transfers": [transfer_json(item) for item in transfers],
+            "limit": limit,
+            "offset": offset,
+            "total": total,
+        }
 
     @app.post("/api/transfers/{transfer_id}/accept")
     def accept_project_transfer(
@@ -3453,10 +3980,23 @@ def create_app(
                 raise HTTPException(413, f"thumbnail exceeds the {max_thumbnail_bytes} byte limit")
             chunks.append(chunk)
         data = b"".join(chunks)
-        object_storage.put(f"projects/{project.id}/thumbnail", data, content_type)
-        project.thumbnail_type = content_type
-        project.updated_at = now()
-        session.commit()
+
+        def _store_and_commit() -> None:
+            # Lock the project row, write the object, and issue an explicit UPDATE
+            # inside the threadpool so the event loop never blocks and concurrent
+            # uploads always persist matching bytes and thumbnail_type.
+            session.execute(
+                select(Project.id).where(Project.id == project.id).with_for_update(key_share=True)
+            )
+            object_storage.put(f"projects/{project.id}/thumbnail", data, content_type)
+            session.execute(
+                update(Project)
+                .where(Project.id == project.id)
+                .values(thumbnail_type=content_type, updated_at=now())
+            )
+            session.commit()
+
+        await run_in_threadpool(_store_and_commit)
 
     @app.get("/api/projects/{project_id}/thumbnail", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def get_thumbnail(
@@ -3473,7 +4013,11 @@ def create_app(
         except KeyError:
             raise HTTPException(404, "thumbnail not found")
         cache = "private, no-store" if protected(project) else "public, max-age=3600"
-        return Response(data, media_type=project.thumbnail_type, headers={"Cache-Control": cache})
+        return Response(
+            data,
+            media_type=project.thumbnail_type,
+            headers={"Cache-Control": cache, "X-Content-Type-Options": "nosniff"},
+        )
 
     @app.delete("/api/projects/{project_id}/thumbnail", status_code=204)
     def delete_thumbnail(

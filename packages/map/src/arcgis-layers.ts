@@ -335,6 +335,9 @@ export type ArcgisLayerPlan = ArcgisPlanBase &
     | { kind: "tile-service"; url: string }
     | { kind: "map-image"; url: string }
     | { kind: "imagery"; url: string }
+    | { kind: "scene-layer"; url: string }
+    | { kind: "integrated-mesh-3d-tiles"; url: string }
+    | { kind: "point-cloud-layer"; url: string }
     /** A tiled imagery layer whose cache holds raw (LERC) pixel values. */
     | {
         kind: "imagery-tile";
@@ -1957,27 +1960,39 @@ function isArcgisExternalDeckLayer(layer: GeoLibreLayer): boolean {
   }
 }
 
-/** Store layers are immutable records, so the answer is memoized per object. */
-const supportedLayerCache = new WeakMap<GeoLibreLayer, boolean>();
+/** Store layers are immutable records, so the answer is memoized per `(deckOverlay, scene)` pair. */
+const supportedLayerCaches = [
+  new WeakMap<GeoLibreLayer, boolean>(),
+  new WeakMap<GeoLibreLayer, boolean>(),
+  new WeakMap<GeoLibreLayer, boolean>(),
+  new WeakMap<GeoLibreLayer, boolean>(),
+] as const;
 
 /**
  * Whether the ArcGIS engine can draw a layer. The layer panels badge the rest
  * before the engine's error banner would report them.
  */
-export function isArcgisSupportedLayer(layer: GeoLibreLayer, deckOverlay = true): boolean {
-  if (isArcgisExternalDeckLayer(layer)) return deckOverlay;
-  const cached = supportedLayerCache.get(layer);
+export function isArcgisSupportedLayer(
+  layer: GeoLibreLayer,
+  deckOverlay = true,
+  scene = false,
+): boolean {
+  const cache = supportedLayerCaches[(scene ? 2 : 0) | (deckOverlay ? 1 : 0)];
+  const cached = cache.get(layer);
   if (cached !== undefined) return cached;
   let supported = true;
-  if (isArcgisPluginLayer(layer)) supported = false;
-  else {
+  if (!scene && isArcgisExternalDeckLayer(layer)) {
+    supported = deckOverlay;
+  } else if (!scene && isArcgisPluginLayer(layer)) {
+    supported = false;
+  } else {
     try {
-      compileArcgisLayer(layer, { probe: true });
+      compileArcgisLayer(layer, { probe: true, deckOverlay, scene });
     } catch {
       supported = false;
     }
   }
-  supportedLayerCache.set(layer, supported);
+  cache.set(layer, supported);
   return supported;
 }
 
@@ -2028,7 +2043,9 @@ function tileTemplateToken(template: string | undefined): string | undefined {
   }
 }
 
-const ARCGIS_SERVICE = /\/(FeatureServer|MapServer|ImageServer)(?:\/\d+)?\/?(?:\?|$)/i;
+const ARCGIS_SERVICE =
+  /\/(FeatureServer|MapServer|ImageServer|SceneServer)(?:\/(?:layers\/)?\d+)?\/?(?:\?|$)/i;
+const ARCGIS_SCENE_SERVER = /\/SceneServer(?:\/(?:layers\/)?\d+)?\/?(?:\?|$)/i;
 
 const zarrSignatures = new WeakMap<GeoLibreLayer["source"], string>();
 const zarrManifestIds = new WeakMap<object, number>();
@@ -2081,6 +2098,30 @@ export function compileArcgisLayer(
     effect: arcgisRasterEffect(style),
     blendMode: arcgisBlendMode(style),
   };
+  // Native 3D SceneView layers (I3S SceneLayer, OGC 3D Tiles IntegratedMesh3DTilesLayer,
+  // and PointCloudLayer) render directly inside SceneView without needing deck.gl.
+  if (options.scene === true) {
+    const rawUrl =
+      typeof layer.source.url === "string"
+        ? layer.source.url
+        : typeof layer.sourcePath === "string"
+          ? layer.sourcePath
+          : undefined;
+    if (layer.type === "3d-tiles" && rawUrl) {
+      if (layer.metadata.sourceKind === "arcgis-i3s" || ARCGIS_SCENE_SERVER.test(rawUrl)) {
+        const isPointCloud = /point\s*cloud/i.test(String(layer.metadata.arcgisLayerType ?? ""));
+        return { ...base, kind: isPointCloud ? "point-cloud-layer" : "scene-layer", url: rawUrl };
+      }
+      return { ...base, kind: "integrated-mesh-3d-tiles", url: rawUrl };
+    }
+    if (layer.type === "lidar" && rawUrl && ARCGIS_SCENE_SERVER.test(rawUrl)) {
+      return { ...base, kind: "point-cloud-layer", url: rawUrl };
+    }
+    if (layer.type === "arcgis" && rawUrl && ARCGIS_SCENE_SERVER.test(rawUrl)) {
+      const isPointCloud = /point\s*cloud/i.test(String(layer.metadata.arcgisLayerType ?? ""));
+      return { ...base, kind: isPointCloud ? "point-cloud-layer" : "scene-layer", url: rawUrl };
+    }
+  }
   if (isArcgisExternalDeckLayer(layer)) {
     if (options.deckOverlay === false)
       throw new Error("deck.gl layers require a flat ArcGIS map or local scene");
@@ -2147,6 +2188,8 @@ export function compileArcgisLayer(
     const serviceUrl = url ?? (typeof layer.sourcePath === "string" ? layer.sourcePath : undefined);
     if (!serviceUrl || !ARCGIS_SERVICE.test(serviceUrl))
       throw new Error("ArcGIS layer has no service URL the ArcGIS renderer can load");
+    if (ARCGIS_SCENE_SERVER.test(serviceUrl))
+      throw new Error("ArcGIS SceneServer layers require a 3D SceneView");
     // A FeatureServer, or one MapServer sublayer (`MapServer/2`): a feature
     // layer the SDK's FeatureLayer loads and queries directly. A MapImageLayer
     // pointed at a sublayer would request `/export` from it and fail.

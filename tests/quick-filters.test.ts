@@ -494,6 +494,47 @@ describe("profileQuickFilterFields", () => {
     assert.equal(pop?.max, 750_000);
   });
 
+  it("leaves a field without outliers on its exact extent", () => {
+    const pop = byField(profileQuickFilterFields(CITIES)).get("pop");
+    assert.equal(pop?.typical, undefined);
+  });
+
+  it("reports the typical range of a field a few outliers stretch (#3455)", () => {
+    const records = Array.from({ length: 1282 }, (_, i) => ({
+      area: Math.round((i / 1281) * 4800),
+    }));
+    records.push({ area: 1e12 }, { area: -42.5 });
+    const area = byField(profileQuickFilterFields(records)).get("area");
+    assert.equal(area?.min, -42.5);
+    assert.equal(area?.max, 1e12);
+    assert.ok(area?.typical);
+    assert.ok(area.typical.min >= 0 && area.typical.max <= 4800);
+    assert.ok(area.typical.below >= 1 && area.typical.above >= 1);
+  });
+
+  it("profiles the typical range from numeric text too", () => {
+    const records = Array.from({ length: 200 }, (_, i) => ({ area: String(i + 1) }));
+    records.push({ area: "1000000000" });
+    const area = byField(profileQuickFilterFields(records)).get("area");
+    assert.ok(area?.typical);
+    assert.ok(area.typical.max <= 200);
+    assert.equal(area.max, 1e9);
+  });
+
+  it("keeps the typical range of a field that also has blank values", () => {
+    const records: Array<{ area: number | null | string }> = Array.from(
+      { length: 1282 },
+      (_, i) => ({ area: Math.round((i / 1281) * 4800) }),
+    );
+    records.push({ area: 1e12 }, { area: -42.5 }, { area: null }, { area: "" }, { area: null });
+    const area = byField(profileQuickFilterFields(records)).get("area");
+    assert.equal(area?.blankCount, 3);
+    assert.equal(area?.present, 1284);
+    assert.ok(area?.typical);
+    // The blanks are neither below nor above the typical range.
+    assert.ok(area.typical.below + area.typical.above < 1284 * 0.03);
+  });
+
   it("suggests a range for a numeric code column but still offers checkboxes", () => {
     const code = byField(profileQuickFilterFields(CITIES)).get("code");
     assert.equal(code?.kind, "range");
@@ -669,8 +710,37 @@ describe("createQuickFilterScan (issue #3426)", () => {
     assert.deepEqual(only[0], full.get("pop"));
   });
 
-  it("gives no profile to a requested field the records do not carry", () => {
-    assert.deepEqual(profileQuickFilterFields(rows, { fields: ["missing"] }), []);
+  it("profiles a requested field the records do not carry as all blank", () => {
+    // A saved filter on a field the sample lacks still offers "(blank)",
+    // matching a field that is null on every record.
+    const [missing] = profileQuickFilterFields(rows, { fields: ["missing"] });
+    const nullEverywhere = profileQuickFilterFields(
+      rows.map((row) => ({ ...row, missing: null })),
+      { fields: ["missing"] },
+    )[0];
+    assert.equal(missing?.present, 0);
+    assert.equal(missing?.blankCount, rows.length);
+    assert.equal(missing?.sampled, rows.length);
+    assert.deepEqual(missing?.values, []);
+    assert.deepEqual(missing, nullEverywhere);
+  });
+
+  it("counts records without a requested field as blank alongside those with a value", () => {
+    // `late` is on one record of 2,000: the other 1,999 lack it.
+    const [late] = profileQuickFilterFields(rows, { fields: ["late"] });
+    assert.equal(late?.present, 1);
+    assert.equal(late?.blankCount, rows.length - 1);
+  });
+
+  it("gives no profile when there are no records to inspect", () => {
+    assert.deepEqual(profileQuickFilterFields([], { fields: ["missing"] }), []);
+  });
+
+  it("does not read an inherited property as a value", () => {
+    const inherited = Object.create({ missing: "from the prototype" }) as Record<string, unknown>;
+    const [missing] = profileQuickFilterFields([inherited], { fields: ["missing"] });
+    assert.equal(missing?.present, 0);
+    assert.equal(missing?.blankCount, 1);
   });
 
   it("lists field names without tallying any values", () => {
@@ -756,8 +826,17 @@ describe("ensureQuickFilterProfiles (issue #3426)", () => {
     assert.equal(done, 1);
   });
 
-  it("remembers a field no record carries instead of rescanning for it", () => {
+  it("caches a field no record carries as all blank instead of rescanning for it", () => {
     const rows = makeRows(10);
+    ensureQuickFilterProfiles(rows, { fields: ["missing"] });
+    const cached = readQuickFilterProfileCache(rows)?.profiles.get("missing");
+    assert.equal(cached?.blankCount, rows.length);
+    assert.equal(cached?.present, 0);
+    assert.equal(hasQuickFilterProfiles(rows, { fields: ["missing"] }), true);
+  });
+
+  it("remembers that an empty layer has nothing to profile", () => {
+    const rows: Record<string, unknown>[] = [];
     ensureQuickFilterProfiles(rows, { fields: ["missing"] });
     assert.equal(readQuickFilterProfileCache(rows)?.profiles.get("missing"), null);
     assert.equal(hasQuickFilterProfiles(rows, { fields: ["missing"] }), true);

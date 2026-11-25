@@ -54,6 +54,22 @@ struct SaveFileResponse {
     file: FilePath,
 }
 
+// The callback-only Rust picker interface cannot carry an error. The JS open
+// command uses this result-bearing path for explicit data copies instead.
+pub(crate) fn pick_data_files<R: Runtime>(
+    dialog: FileDialogBuilder<R>,
+    multiple: bool,
+) -> crate::Result<Option<Vec<FilePath>>> {
+    dialog
+        .dialog
+        .0
+        .run_mobile_plugin::<crate::models::DataFilePickerResponse>(
+            "showFilePicker",
+            dialog.payload(multiple),
+        )?
+        .into_result()
+}
+
 pub fn pick_file<R: Runtime, F: FnOnce(Option<FilePath>) + Send + 'static>(
     dialog: FileDialogBuilder<R>,
     f: F,

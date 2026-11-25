@@ -1,5 +1,5 @@
 import { unionLonLatExtents, useAppStore } from "@geolibre/core";
-import { type RefObject, useEffect } from "react";
+import { type RefObject, useEffect, useRef } from "react";
 import { getLayerBounds, type MapEngine } from "@geolibre/map";
 import { imageBlobToDataUrl } from "@geolibre/map";
 import {
@@ -68,6 +68,14 @@ export function useEmbedApi(
    */
   mapReadyGeneration: number,
 ): void {
+  // Persisted across `mapReadyGeneration` renderer swaps so a renderer hand-off
+  // never forgets the host's pinned origin/version.
+  const hostOriginRef = useRef<string | null>(null);
+  const hostVersionRef = useRef<1 | 2 | null>(null);
+  const emitRef = useRef<
+    ((type: EmbedEventType, payload: Record<string, unknown>, version?: 1 | 2) => void) | null
+  >(null);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     // `ready` promises that every command is usable. Plugin-backed data loaders
@@ -80,17 +88,12 @@ export function useEmbedApi(
     // Not framed: there is no host to talk to (the app is the top-level page).
     if (!host || host === window) return;
 
-    // Both learned from the host's first allowed message, and both pinned for
-    // the rest of the session; see `embedEventTargets` / `embedEventVersions`
-    // for what each is null until then.
-    let hostOrigin: string | null = null;
-    let hostVersion: 1 | 2 | null = null;
     let disposed = false;
 
     const emit = (type: EmbedEventType, payload: Record<string, unknown>, version?: 1 | 2) => {
       if (disposed) return;
-      const targets = embedEventTargets(hostOrigin, allowedOrigins);
-      const versions = embedEventVersions(version, hostVersion);
+      const targets = embedEventTargets(hostOriginRef.current, allowedOrigins);
+      const versions = embedEventVersions(version, hostVersionRef.current);
       for (const eventVersion of versions) {
         const message = buildEmbedEvent(type, payload, eventVersion);
         for (const target of targets) {
@@ -102,6 +105,7 @@ export function useEmbedApi(
         }
       }
     };
+    emitRef.current = emit;
 
     const ack = (
       requestId: string | null,
@@ -303,6 +307,12 @@ export function useEmbedApi(
         case "getDrawnFeatures":
           assertEmbedCapability(useAppStore.getState().deploymentCapabilities, "export:data");
           return readDrawnFeatures(useAppStore.getState().layers);
+        case "ping": {
+          const engine = controller();
+          const ready = Boolean(engine && engine.kind === useAppStore.getState().primaryRenderer);
+          if (ready) emit("ready", { version: __GEOLIBRE_VERSION__ });
+          return { ready, version: __GEOLIBRE_VERSION__ };
+        }
       }
     };
 
@@ -314,9 +324,11 @@ export function useEmbedApi(
       // A valid, allowed message identifies the host: scope every later event to
       // exactly this origin. ("null" is an opaque origin, only reachable under
       // the wildcard, and cannot be used as a postMessage target.)
-      if (!hostOrigin && event.origin && event.origin !== "null") hostOrigin = event.origin;
+      if (!hostOriginRef.current && event.origin && event.origin !== "null") {
+        hostOriginRef.current = event.origin;
+      }
       const requestVersion = embedRequestVersion(event.data);
-      hostVersion ??= requestVersion;
+      hostVersionRef.current ??= requestVersion;
       if ("error" in request) {
         ack(request.requestId, requestVersion, false, request.error);
         return;
@@ -409,17 +421,35 @@ export function useEmbedApi(
       }
     });
 
-    // Camera events. The engine appears asynchronously after its canvas mounts,
-    // so poll only until the renderer-neutral event surface is published.
+    return () => {
+      disposed = true;
+      if (emitRef.current === emit) emitRef.current = null;
+      window.removeEventListener("message", handleMessage);
+      unsubscribe();
+      featuresTracker.reset();
+      loadAbort?.abort();
+      for (const abort of dataLoadAborts) abort.abort();
+      dataLoadAborts.clear();
+    };
+  }, [mapControllerRef, mapAppAPI]);
+
+  // Camera events and `ready` emission re-arm whenever a renderer hand-off
+  // bumps `mapReadyGeneration`, without tearing down the message bridge or
+  // dropping in-flight command acknowledgements.
+  useEffect(() => {
+    if (typeof window === "undefined" || !mapAppAPI) return;
+    const emit = emitRef.current;
+    if (!emit) return;
+
     let unsubscribeMove: (() => void) | null = null;
     let unsubscribeIdle: (() => void) | null = null;
     let lastViewAt = 0;
     let trailingTimer: number | null = null;
     const postView = () => {
-      const view = controller()?.readView();
+      const view = mapControllerRef.current?.readView();
       if (!view) return;
       lastViewAt = Date.now();
-      emit("viewChanged", {
+      emitRef.current?.("viewChanged", {
         bbox: view.bbox ?? null,
         center: view.center,
         zoom: view.zoom,
@@ -437,8 +467,6 @@ export function useEmbedApi(
         postView();
         return;
       }
-      // Within the throttle window: schedule the trailing edge so the host still
-      // gets the final position of a drag.
       if (trailingTimer !== null) return;
       trailingTimer = window.setTimeout(() => {
         trailingTimer = null;
@@ -447,7 +475,7 @@ export function useEmbedApi(
     };
     let rafId: number | null = null;
     const attach = () => {
-      const engine = controller();
+      const engine = mapControllerRef.current;
       if (!engine) {
         rafId = requestAnimationFrame(attach);
         return;
@@ -457,24 +485,12 @@ export function useEmbedApi(
     };
     rafId = requestAnimationFrame(attach);
 
-    // A renderer hand-off bumps the generation before the destination engine
-    // has published, so this effect re-runs while the ref is still empty (or
-    // aimed at the outgoing engine). `ready` promises every command is usable:
-    // hold it until the engine for the current renderer is live, and the
-    // publish bump re-runs this effect to emit it then.
-    const engine = controller();
+    const engine = mapControllerRef.current;
     if (engine && engine.kind === useAppStore.getState().primaryRenderer) {
       emit("ready", { version: __GEOLIBRE_VERSION__ });
     }
 
     return () => {
-      disposed = true;
-      window.removeEventListener("message", handleMessage);
-      unsubscribe();
-      featuresTracker.reset();
-      loadAbort?.abort();
-      for (const abort of dataLoadAborts) abort.abort();
-      dataLoadAborts.clear();
       if (rafId !== null) cancelAnimationFrame(rafId);
       if (trailingTimer !== null) window.clearTimeout(trailingTimer);
       unsubscribeMove?.();

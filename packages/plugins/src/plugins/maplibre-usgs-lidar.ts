@@ -1,4 +1,5 @@
 /// <reference path="../maplibre-gl-usgs-lidar.d.ts" />
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import {
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
@@ -127,13 +128,12 @@ let pluginActive = false;
  * panel in GeoLibre's dockable side panel (listed under Plugins > Web Services).
  */
 export const maplibreUsgsLidarPlugin: GeoLibrePlugin = {
-  id: "maplibre-gl-usgs-lidar",
-  name: "USGS LiDAR",
-  version: "0.12.0",
+  ...builtInPluginProperties("maplibre-gl-usgs-lidar"),
+
   // The point clouds stream through a deck.gl overlay (`lidar-url` layers are
   // plugin-owned on Mapbox) and the 3DEP coverage index is a raster tile
   // layer the engine adopts under its native ids.
-  engines: ["maplibre", "mapbox"],
+
   activate: (app: GeoLibreAppAPI) => {
     if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     pluginActive = true;

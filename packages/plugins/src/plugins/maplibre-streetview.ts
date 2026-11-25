@@ -1,3 +1,4 @@
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { getGoogleMapsApiKey } from "@geolibre/core";
 import {
   StreetViewControl,
@@ -190,16 +191,15 @@ export function streetViewMarkerFactory(
 }
 
 export const maplibreStreetViewPlugin: GeoLibrePlugin = {
-  id: "maplibre-gl-streetview",
-  name: "Street View",
-  version: "0.5.0",
+  ...builtInPluginProperties("maplibre-gl-streetview"),
+
   // Both 2D engines and the globe: the control stays on the Style Spec surface
   // they share (the globe's control facade included), and the one MapLibre
   // class it built itself — the location `Marker` — now comes from
   // `createMarker` (see streetViewMarkerFactory). A renderer swap
   // tears every active plugin down and re-activates it, so the rebuilt control
   // picks up the new engine's factory.
-  engines: ["maplibre", "mapbox", "cesium"],
+
   activate: (app: GeoLibreAppAPI) => {
     activeApp = app;
     addRuntimeEnvListener();

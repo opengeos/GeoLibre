@@ -1,3 +1,6 @@
+import { S2_PLUGIN_ID } from "../plugin-ids";
+export { S2_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-metadata";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import { geojson as s2geojson, s1, s2 } from "s2js";
 import {
@@ -7,8 +10,6 @@ import {
   type GridLabelsBase,
   type GridSettingsBase,
 } from "./grid-plugin-factory";
-
-export const S2_PLUGIN_ID = "maplibre-s2-grid";
 
 /** S2's finest subdivision (leaf cells). */
 export const MAX_S2_LEVEL = 30;
@@ -249,7 +250,7 @@ function parentCells(cell: string): string[] {
 
 const grid = createGridPlugin<S2GridSettings, S2Labels>({
   id: S2_PLUGIN_ID,
-  name: "S2 Grid",
+  name: builtInPluginMetadata("maplibre-s2-grid").name,
   slug: "s2",
   parentKey: "includeParents",
   defaultSettings: DEFAULT_S2_GRID_SETTINGS,
@@ -283,7 +284,7 @@ const grid = createGridPlugin<S2GridSettings, S2Labels>({
   exportBaseName: (level) => `s2-grid-r${level}`,
 });
 
-export const maplibreS2Plugin = grid.plugin;
+export const maplibreS2Plugin = defineBuiltInPlugin("maplibre-s2-grid", grid.plugin);
 export const setS2Labels = grid.setLabels;
 export const getS2GridSettings = grid.getSettings;
 export const setS2GridSettings = grid.setSettings;

@@ -37,6 +37,8 @@ export interface RunViewshedOptions {
   observerHeightMeters?: number;
   /** Layer name; callers pass a translated string. */
   layerName: string;
+  /** Optional abort signal to cancel terrain fetching and viewshed computation. */
+  signal?: AbortSignal;
 }
 
 export interface ViewshedRunResult {
@@ -93,6 +95,7 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
     lng: options.lng,
     lat: options.lat,
     radiusMeters,
+    signal: options.signal,
   });
   if (!dem) return null;
 
@@ -104,12 +107,14 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
       heightMeters: options.observerHeightMeters ?? DEFAULT_OBSERVER_HEIGHT_METERS,
     },
     radiusMeters,
+    options.signal,
   );
+  if (options.signal?.aborted) return null;
   // Not checked for zero: computeViewshed always marks the observer's own cell,
   // so visibleCells is at least 1 by construction.
 
   const url = await rgbaToPngDataUrl(viewshedToRgba(result), result.width, result.height);
-  if (!url) return null;
+  if (!url || options.signal?.aborted) return null;
 
   const [west, south, east, north] = result.bbox;
   // The store's own image-overlay action rather than a hand-rolled layer: it

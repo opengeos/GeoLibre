@@ -223,10 +223,16 @@ describe("ArcGIS SDK loader", () => {
     const scene = await loadArcgisSceneSdk(importer);
     assert.equal(typeof scene.SceneView, "function");
     assert.equal(typeof scene.BaseElevationLayer, "function");
-    assert.deepEqual(requested.slice(-3), [
+    assert.equal(typeof scene.SceneLayer, "function");
+    assert.equal(typeof scene.IntegratedMesh3DTilesLayer, "function");
+    assert.equal(typeof scene.PointCloudLayer, "function");
+    assert.deepEqual(requested.slice(-6), [
       "views/SceneView.js",
       "layers/ElevationLayer.js",
       "layers/BaseElevationLayer.js",
+      "layers/SceneLayer.js",
+      "layers/IntegratedMesh3DTilesLayer.js",
+      "layers/PointCloudLayer.js",
     ]);
     assert.equal(await loadArcgisSceneSdk(importer), scene);
     resetArcgisSdkForTests();

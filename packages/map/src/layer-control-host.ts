@@ -295,6 +295,11 @@ export class LayerControlHost {
     return this.position;
   }
 
+  /** Whether the host currently owns a mounted control. */
+  isMounted(): boolean {
+    return this.control !== null;
+  }
+
   /** Remember `position`, moving the control there if it is mounted. */
   setPosition(position: maplibregl.ControlPosition): void {
     this.position = position;

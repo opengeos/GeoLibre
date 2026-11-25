@@ -1,4 +1,5 @@
 import type { RefObject } from "react";
+import { isImportedDocumentCopyPath } from "../../../lib/file-io/paths";
 import { useTranslation } from "react-i18next";
 import {
   activeLayerFilterExpression,
@@ -19,16 +20,13 @@ import type {
   GeoLibreLayer,
   LayerGroup,
 } from "@geolibre/core";
-import {
-  canEditLayerGeometry,
-  getLayerTimeBinding,
-  getTemporalLayerAdapter,
-  isArcGISWritableLayer,
-  isEmbeddableLocalVectorLayer,
-  isTileVectorLayer,
-  RASTER_SOURCE_KIND,
-  SKETCHES_SOURCE_KIND,
-} from "@geolibre/plugins";
+import { canEditLayerGeometry, SKETCHES_SOURCE_KIND } from "@geolibre/plugins/geo-editor-state";
+import { getLayerTimeBinding } from "@geolibre/plugins/time-slider-state";
+import { getTemporalLayerAdapter } from "@geolibre/plugins/temporal-layers";
+import { isArcGISWritableLayer } from "@geolibre/plugins/arcgis-layer";
+import { isEmbeddableLocalVectorLayer } from "@geolibre/plugins/vector-layer-sync";
+import { isTileVectorLayer } from "@geolibre/plugins/time-slider-tile-sample";
+import { RASTER_SOURCE_KIND } from "@geolibre/plugins/raster-symbology-texture";
 import { startFeatureSelection, type MapEngine } from "@geolibre/map";
 import {
   DropdownMenuCheckboxItem,
@@ -1049,7 +1047,11 @@ export function LayerActionsMenuItems({
               ? t("layers.saveEditsToMssql")
               : isPostgisEditableLayer(layer)
                 ? t("layers.saveEditsToPostgis")
-                : t("layers.saveEditsToSource")}
+                : t(
+                    isImportedDocumentCopyPath(layer.sourcePath)
+                      ? "layers.saveEditsToImportedCopy"
+                      : "layers.saveEditsToSource",
+                  )}
         </DropdownMenuItem>
       )}
       {canEditRasterStyle && (

@@ -1,15 +1,11 @@
 import { useAppStore } from "@geolibre/core";
 import { applyMapboxStyleImport, parseMapboxStyle } from "@geolibre/map";
-import {
-  addLidarLayerFromUrl,
-  addPMTilesLayerFromUrl,
-  addRasterToMap,
-  addVectorLayerFromUrl,
-  findFileHandlerByDataType,
-  isRecoverableNonTiledRasterError,
-  listFileHandlers,
-  routeKmlFileSelection,
-} from "@geolibre/plugins";
+import { addLidarLayerFromUrl, addPMTilesLayerFromUrl } from "@geolibre/plugins/component-helpers";
+import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
+import { addThreeDTilesLayerFromUrl } from "@geolibre/plugins/maplibre-3d-tiles";
+import { addVectorLayerFromUrl, routeKmlFileSelection } from "@geolibre/plugins/maplibre-vector";
+import { findFileHandlerByDataType, listFileHandlers } from "@geolibre/plugins/runtime";
+import { isRecoverableNonTiledRasterError } from "@geolibre/plugins/non-tiled-raster-error";
 import i18next from "i18next";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -21,6 +17,7 @@ import {
   loadDataUrlBatch,
   mapboxStyleForDataLayer,
   parseRasterUrlStyle,
+  REMOTE_VECTOR_FORMAT_LABELS,
 } from "../lib/data-url";
 import { deepLinkCogDefaults } from "../lib/cog-render-engine";
 import { queueDataLoad } from "../lib/data-load-queue";
@@ -171,6 +168,22 @@ export async function loadDataUrl(
       throw new DOMException("The operation was aborted", "AbortError");
     }
     layerIds.push(id);
+  } else if (remote.kind === "3d-tiles") {
+    if (rawStyle !== null) {
+      throw new Error(i18next.t("map.dataUrl3dTilesStyleUnsupported"));
+    }
+    // Batch loads read the root manifest's bounding volume before returning,
+    // so the shell can combine the tileset extent with the other datasets.
+    const id = await addThreeDTilesLayerFromUrl(mapAppAPI, remote.url, {
+      name: remote.name,
+      flyTo: fit,
+      signal: options.signal,
+    });
+    if (options.signal?.aborted) {
+      store.removeLayer(id);
+      throw new DOMException("The operation was aborted", "AbortError");
+    }
+    layerIds.push(id);
   } else if (remote.kind === "kml") {
     if (rawStyle !== null) throw new Error(i18next.t("kml.dataUrlStyleUnsupported"));
     const previousIds = new Set(store.layers.map((layer) => layer.id));
@@ -212,7 +225,7 @@ export async function loadDataUrl(
       .layers.filter((layer) => !previousIds.has(layer.id) && layerPointsAt(layer, remote.url));
     if (!addedLayers.length) {
       throw new Error(
-        `The ${remote.kind === "pmtiles" ? "PMTiles" : "GeoParquet"} loader did not create a layer for ${remote.url}.`,
+        `The ${remote.kind === "pmtiles" ? "PMTiles" : REMOTE_VECTOR_FORMAT_LABELS[remote.format]} loader did not create a layer for ${remote.url}.`,
       );
     }
     if (options.signal?.aborted) {

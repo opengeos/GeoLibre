@@ -6,7 +6,7 @@ import {
   type MapViewState,
 } from "@geolibre/core";
 import { requestInitialMapCrsFrame } from "@geolibre/map";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dataUrlParameters, serviceUrlParameter, stacUrlParameter } from "../lib/data-url";
 import { isTauri } from "../lib/is-tauri";
@@ -16,7 +16,7 @@ import { projectUrlFromLocation } from "../lib/project-url";
 import { planStartup, startupDefaultWorkspace, type StartupPlan } from "../lib/startup-project";
 import { openRecentProjectFile, RecentProjectGoneError } from "../lib/tauri-io";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
-import { withStartupLayers } from "../lib/startup-layers";
+import { fetchStartupLayerData, startupLayerIds, withStartupLayers } from "../lib/startup-layers";
 import { DEFAULT_STARTUP_SETTINGS, useDesktopSettingsStore } from "./useDesktopSettings";
 import { loadRecentProjects } from "./useRecentProjectsPersistence";
 import { consumeInlineProjectFragment } from "../lib/inline-project-fragment";
@@ -110,9 +110,9 @@ function applyDefaultWorkspace(
  * re-read from disk, plugin-painted layers replayed) and leaves the workspace
  * clean.
  *
- * @returns Nothing; URL features are hydrated by the layer refresh pipeline.
+ * @returns The ids of the layers added, empty when none are set.
  */
-function seedStartupLayers(): void {
+function seedStartupLayers(): Set<string> {
   const state = useAppStore.getState();
   const project = withStartupLayers(
     createEmptyProject(state.projectName, {
@@ -120,7 +120,7 @@ function seedStartupLayers(): void {
       mapView: state.mapView,
     }),
   );
-  if (project.layers.length === 0) return;
+  if (project.layers.length === 0) return new Set();
   state.newProject({
     name: project.name,
     basemapStyleUrl: project.basemapStyleUrl,
@@ -128,6 +128,7 @@ function seedStartupLayers(): void {
     layers: project.layers,
     layerGroups: project.layerGroups,
   });
+  return startupLayerIds(project);
 }
 
 /**
@@ -182,6 +183,9 @@ export function useStartupProject(): {
   // default mode) mount straight away with no spinner. Writing to the store
   // during render is safe here: it happens once, before any subscriber has
   // rendered, and re-running the initializer would set the same value.
+  // The layers the Startup setting added to the untitled workspace, set by the
+  // initializer below and read by the effect that fetches their features.
+  const seededLayerIds = useRef<Set<string>>(new Set());
   const [restoring, setRestoring] = useState(() => {
     if (inlineProject) {
       useAppStore.getState().loadProject(inlineProject, null, { rememberRecent: false });
@@ -190,7 +194,7 @@ export function useStartupProject(): {
     const location =
       initialNativeCoordinateTarget() ?? coordinateTargetFromSearch(window.location.search);
     if (location && !hasExplicitLaunchPayload() && !openedProjectPath) {
-      seedStartupLayers();
+      seededLayerIds.current = seedStartupLayers();
       applyDefaultWorkspace({
         ...startupDefaultWorkspace(useDesktopSettingsStore.getState().desktopSettings.startup),
         ...location,
@@ -200,7 +204,7 @@ export function useStartupProject(): {
     }
     const plan = currentStartupPlan(openedProjectPath);
     if (plan.kind === "default") {
-      seedStartupLayers();
+      seededLayerIds.current = seedStartupLayers();
       applyDefaultWorkspace(plan);
     }
     if (plan.kind === "restore") return true;
@@ -208,6 +212,13 @@ export function useStartupProject(): {
     return false;
   });
   const [settled, setSettled] = useState(!restoring);
+
+  // Fetch the features of the URL layers the seeding above added, and only
+  // those. In an effect, not the initializer, so a render that is thrown away
+  // fetches nothing.
+  useEffect(() => {
+    if (seededLayerIds.current.size > 0) void fetchStartupLayerData(seededLayerIds.current);
+  }, []);
 
   // End native startup in the same synchronous render that reads its target.
   // Waiting for the passive effect would drop intents received after render.
@@ -230,7 +241,8 @@ export function useStartupProject(): {
       // Only once the restore has given up: seeding bumps the project
       // generation, which would make a restore still in flight stand down.
       if (options.seedLayers) {
-        seedStartupLayers();
+        const ids = seedStartupLayers();
+        if (ids.size > 0) void fetchStartupLayerData(ids);
       }
       applyDefaultWorkspace(startupDefaultWorkspace(settings));
       setRestoring(false);

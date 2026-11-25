@@ -1,4 +1,5 @@
 import { useAppStore } from "@geolibre/core";
+import { PluginOperationSupersededError } from "@geolibre/plugins/runtime";
 import {
   closeBookmarkPanel,
   closeColorbarPanel,
@@ -7,23 +8,16 @@ import {
   closeMinimapPanel,
   closePrintPanel,
   closeSearchPlacesPanel,
-  closeFlightSimulatorPanel,
-  closeRouteAnimationPanel,
   closeSpinGlobePanel,
-  closeSunPanel,
   closeViewStatePanel,
   isBookmarkPanelVisible,
   isColorbarPanelVisible,
-  isEarthEnginePanelVisible,
   isHtmlPanelVisible,
   isMeasurePanelVisible,
   isMinimapPanelVisible,
   isPrintPanelVisible,
   isSearchPlacesPanelVisible,
-  isFlightSimulatorPanelVisible,
-  isRouteAnimationPanelVisible,
   isSpinGlobePanelVisible,
-  isSunPanelVisible,
   isViewStatePanelVisible,
   openBookmarkPanel,
   openColorbarPanel,
@@ -32,34 +26,39 @@ import {
   openMinimapPanel,
   openPrintPanel,
   openSearchPlacesPanel,
-  openFlightSimulatorPanel,
-  openRouteAnimationPanel,
   openSpinGlobePanel,
-  openSunPanel,
   openViewStatePanel,
   subscribeBookmarkPanel,
   subscribeColorbarPanel,
-  subscribeEarthEnginePanel,
   getImageControlStates,
   removeImageControl,
   setImageControl,
   subscribeHtmlPanel,
   subscribeImagePanel,
-  type ComponentImageState,
   subscribeMeasurePanel,
   subscribeMinimapPanel,
   subscribePrintPanel,
   subscribeSearchPlacesPanel,
-  subscribeFlightSimulatorPanel,
-  subscribeRouteAnimationPanel,
   subscribeSpinGlobePanel,
-  subscribeSunPanel,
   subscribeViewStatePanel,
+} from "@geolibre/plugins/component-helpers";
+import {
+  isEarthEnginePanelVisible,
+  subscribeEarthEnginePanel,
   toggleEarthEnginePanel,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/maplibre-earth-engine";
+import { type ComponentImageState } from "@geolibre/plugins";
 import { useSyncExternalStore } from "react";
 import type { AppApi } from "../components/layout/toolbar/constants";
 import { setImageControlDialogOpen } from "../lib/image-control-dialog-store";
+import {
+  sunPanelStore,
+  routeAnimationPanelStore,
+  flightSimulatorPanelStore,
+} from "../lib/plugin-panel-stores";
+import { getPluginManager, reportPluginError } from "./usePlugins";
+import type { BuiltInPluginId } from "@geolibre/plugins/builtin-plugin-metadata";
+import type { GeoLibreAppAPI } from "@geolibre/plugins";
 
 /** Visibility flag plus a toggle handler for a single toolbar panel. */
 export interface ToolbarPanel {
@@ -106,6 +105,14 @@ export interface ToolbarPanels {
  * @returns Visibility flags and toggle handlers for each toolbar panel.
  */
 export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
+  const runPanelAction = (id: BuiltInPluginId, action: (app: GeoLibreAppAPI) => void) => {
+    void getPluginManager()
+      .runPluginHelper(id, appApi, (_implementation, preparedApp) => action(preparedApp))
+      .catch((error: unknown) => {
+        if (error instanceof PluginOperationSupersededError) return;
+        reportPluginError(id, "update-panel", error);
+      });
+  };
   const searchPlacesVisible = useSyncExternalStore(
     subscribeSearchPlacesPanel,
     isSearchPlacesPanelVisible,
@@ -116,16 +123,20 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
     isSpinGlobePanelVisible,
     isSpinGlobePanelVisible,
   );
-  const sunVisible = useSyncExternalStore(subscribeSunPanel, isSunPanelVisible, isSunPanelVisible);
+  const sunVisible = useSyncExternalStore(
+    sunPanelStore.subscribe,
+    sunPanelStore.getSnapshot,
+    sunPanelStore.getSnapshot,
+  );
   const routeAnimationVisible = useSyncExternalStore(
-    subscribeRouteAnimationPanel,
-    isRouteAnimationPanelVisible,
-    isRouteAnimationPanelVisible,
+    routeAnimationPanelStore.subscribe,
+    routeAnimationPanelStore.getSnapshot,
+    routeAnimationPanelStore.getSnapshot,
   );
   const flightSimulatorVisible = useSyncExternalStore(
-    subscribeFlightSimulatorPanel,
-    isFlightSimulatorPanelVisible,
-    isFlightSimulatorPanelVisible,
+    flightSimulatorPanelStore.subscribe,
+    flightSimulatorPanelStore.getSnapshot,
+    flightSimulatorPanelStore.getSnapshot,
   );
   const printVisible = useSyncExternalStore(
     subscribePrintPanel,
@@ -181,73 +192,80 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
   return {
     searchPlaces: {
       visible: searchPlacesVisible,
-      toggle: () => {
-        if (searchPlacesVisible) {
-          closeSearchPlacesPanel();
-          return;
-        }
-        openSearchPlacesPanel(appApi);
-      },
+      toggle: () =>
+        runPanelAction("maplibre-gl-components", (preparedApp) => {
+          if (isSearchPlacesPanelVisible()) {
+            closeSearchPlacesPanel();
+            return;
+          }
+          openSearchPlacesPanel(preparedApp);
+        }),
     },
     spinGlobe: {
       visible: spinGlobeVisible,
-      toggle: () => {
-        if (spinGlobeVisible) {
-          closeSpinGlobePanel(appApi);
-          return;
-        }
-        openSpinGlobePanel(appApi);
-      },
+      toggle: () =>
+        runPanelAction("maplibre-gl-components", (preparedApp) => {
+          if (isSpinGlobePanelVisible()) {
+            closeSpinGlobePanel(preparedApp);
+            return;
+          }
+          openSpinGlobePanel(preparedApp);
+        }),
     },
     sun: {
       visible: sunVisible,
-      toggle: () => {
-        if (sunVisible) {
-          closeSunPanel(appApi);
-          return;
-        }
-        openSunPanel(appApi);
-      },
+      toggle: () =>
+        runPanelAction("geolibre-sun", (preparedApp) => {
+          if (sunPanelStore.getSnapshot()) {
+            sunPanelStore.runtime.close(preparedApp);
+            return;
+          }
+          sunPanelStore.runtime.open(preparedApp);
+        }),
     },
     routeAnimation: {
       visible: routeAnimationVisible,
-      toggle: () => {
-        if (routeAnimationVisible) {
-          closeRouteAnimationPanel(appApi);
-          return;
-        }
-        openRouteAnimationPanel(appApi);
-      },
+      toggle: () =>
+        runPanelAction("geolibre-route-animation", (preparedApp) => {
+          if (routeAnimationPanelStore.getSnapshot()) {
+            routeAnimationPanelStore.runtime.close(preparedApp);
+            return;
+          }
+          routeAnimationPanelStore.runtime.open(preparedApp);
+        }),
     },
     flightSimulator: {
       visible: flightSimulatorVisible,
-      toggle: () => {
-        if (flightSimulatorVisible) {
-          closeFlightSimulatorPanel(appApi);
-          return;
-        }
-        openFlightSimulatorPanel(appApi);
-      },
+      toggle: () =>
+        runPanelAction("geolibre-flight-simulator", (preparedApp) => {
+          if (flightSimulatorPanelStore.getSnapshot()) {
+            flightSimulatorPanelStore.runtime.close(preparedApp);
+            return;
+          }
+          flightSimulatorPanelStore.runtime.open(preparedApp);
+        }),
     },
     print: {
       visible: printVisible,
-      toggle: () => {
-        if (printVisible) {
-          closePrintPanel();
-          return;
-        }
-        openPrintPanel(appApi);
-      },
+      toggle: () =>
+        runPanelAction("maplibre-gl-components", (preparedApp) => {
+          if (isPrintPanelVisible()) {
+            closePrintPanel();
+            return;
+          }
+          openPrintPanel(preparedApp);
+        }),
     },
     colorbar: {
       visible: colorbarVisible,
-      toggle: () => {
-        if (colorbarVisible) {
-          closeColorbarPanel(appApi);
-          return;
-        }
-        openColorbarPanel(appApi);
-      },
+      toggle: () =>
+        runPanelAction("maplibre-gl-components", (preparedApp) => {
+          if (isColorbarPanelVisible()) {
+            closeColorbarPanel(preparedApp);
+            return;
+          }
+          openColorbarPanel(preparedApp);
+        }),
     },
     legend: {
       visible: legendVisible,
@@ -255,60 +273,68 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
     },
     html: {
       visible: htmlVisible,
-      toggle: () => {
-        if (htmlVisible) {
-          closeHtmlPanel(appApi);
-          return;
-        }
-        openHtmlPanel(appApi);
-      },
+      toggle: () =>
+        runPanelAction("maplibre-gl-components", (preparedApp) => {
+          if (isHtmlPanelVisible()) {
+            closeHtmlPanel(preparedApp);
+            return;
+          }
+          openHtmlPanel(preparedApp);
+        }),
     },
     image: {
       visible: images.length > 0,
-      toggle: () => setImageControlDialogOpen(true),
+      toggle: () => runPanelAction("maplibre-gl-components", () => setImageControlDialogOpen(true)),
       images,
       apply: (state) => setImageControl(appApi, state),
-      remove: (id) => removeImageControl(appApi, id),
+      remove: (id) =>
+        runPanelAction("maplibre-gl-components", (preparedApp) =>
+          removeImageControl(preparedApp, id),
+        ),
     },
     measure: {
       visible: measureVisible,
-      toggle: () => {
-        if (measureVisible) {
-          closeMeasurePanel(appApi);
-          return;
-        }
-        openMeasurePanel(appApi);
-      },
+      toggle: () =>
+        runPanelAction("maplibre-gl-components", (preparedApp) => {
+          if (isMeasurePanelVisible()) {
+            closeMeasurePanel(preparedApp);
+            return;
+          }
+          openMeasurePanel(preparedApp);
+        }),
     },
     bookmark: {
       visible: bookmarkVisible,
-      toggle: () => {
-        if (bookmarkVisible) {
-          closeBookmarkPanel(appApi);
-          return;
-        }
-        openBookmarkPanel(appApi);
-      },
+      toggle: () =>
+        runPanelAction("maplibre-gl-components", (preparedApp) => {
+          if (isBookmarkPanelVisible()) {
+            closeBookmarkPanel(preparedApp);
+            return;
+          }
+          openBookmarkPanel(preparedApp);
+        }),
     },
     minimap: {
       visible: minimapVisible,
-      toggle: () => {
-        if (minimapVisible) {
-          closeMinimapPanel(appApi);
-          return;
-        }
-        openMinimapPanel(appApi);
-      },
+      toggle: () =>
+        runPanelAction("maplibre-gl-components", (preparedApp) => {
+          if (isMinimapPanelVisible()) {
+            closeMinimapPanel(preparedApp);
+            return;
+          }
+          openMinimapPanel(preparedApp);
+        }),
     },
     viewState: {
       visible: viewStateVisible,
-      toggle: () => {
-        if (viewStateVisible) {
-          closeViewStatePanel(appApi);
-          return;
-        }
-        openViewStatePanel(appApi);
-      },
+      toggle: () =>
+        runPanelAction("maplibre-gl-components", (preparedApp) => {
+          if (isViewStatePanelVisible()) {
+            closeViewStatePanel(preparedApp);
+            return;
+          }
+          openViewStatePanel(preparedApp);
+        }),
     },
     earthEngine: {
       visible: earthEngineVisible,

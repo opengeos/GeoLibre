@@ -105,7 +105,7 @@ export function loadOsmPbf(
     }
     const worker = new Worker(new URL("./osm-pbf.worker.ts", import.meta.url), { type: "module" });
     const timeout = setTimeout(() => {
-      worker.terminate();
+      finish();
       reject(new OsmPbfTooLargeError("OSM PBF parsing timed out."));
     }, OSM_PBF_PARSE_TIMEOUT_MS);
     const onAbort = () => {

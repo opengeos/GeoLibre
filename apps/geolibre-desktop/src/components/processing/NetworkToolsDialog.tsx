@@ -1,3 +1,4 @@
+import { isProcessingParameterVisible } from "../../lib/processing-parameter-visibility";
 import {
   shouldZoomToNewLayers,
   getRoutingConfig,
@@ -11,6 +12,7 @@ import {
   type AlgorithmParameter,
   type GeometryFamily,
   type ProcessingContext,
+  type ResultLayerOptions,
 } from "@geolibre/processing";
 import {
   Button,
@@ -26,7 +28,9 @@ import type { FeatureCollection } from "geojson";
 import { Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
+import { buildSymbologyStyle } from "../../lib/assistant/symbology";
 import { beginProcessingRun, type ProcessingRunTracker } from "../../lib/processing-history";
+import { hasRoutingConsent } from "../../lib/routing-consent";
 import { uniqueLayerName } from "../../lib/unique-layer-name";
 import {
   translateParameter,
@@ -41,8 +45,9 @@ interface NetworkToolsDialogProps {
 
 /**
  * Processing → Network analysis dialog: isochrones / service areas and OD cost
- * matrices. Runs client-side against a configurable Valhalla routing server and
- * adds the result as a GeoJSON layer. A slimmer sibling of VectorToolsDialog
+ * matrices against a configurable Valhalla routing server, plus shortest path,
+ * closest facility and service area over a user line layer computed in the
+ * browser. Each result is added as a GeoJSON layer. A slimmer sibling of VectorToolsDialog
  * (no sidecar/engine selector); the parameter form is shared via ParameterField.
  *
  * @param props.mapControllerRef - Map controller, used to zoom to result layers.
@@ -55,6 +60,7 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
   // keep its form, log and in-flight run) without re-rendering on layer edits.
   const layers = useLayersWhen(openTool !== null);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+  const setLayerStyle = useAppStore((s) => s.setLayerStyle);
   const rerun = useAppStore((s) => s.ui.processingRerun);
   const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);
 
@@ -173,7 +179,7 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
   );
 
   const addResultLayer = useCallback(
-    (name: string, fc: FeatureCollection) => {
+    (name: string, fc: FeatureCollection, options?: ResultLayerOptions) => {
       if (!fc.features.length) {
         appendLog(`No features produced for "${name}"`);
         return;
@@ -182,9 +188,34 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
       const layerId = addGeoJsonLayer(layerName, fc);
       runTrackerRef.current?.addOutputLayer(layerName);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
+      // Service areas ask for a graduated renderer on their cost break, so the
+      // nested areas read apart instead of as one flat color.
+      const distinctBreaks = options?.graduatedField
+        ? new Set(
+            fc.features
+              .map((feature) => feature.properties?.[options.graduatedField!])
+              .filter((value) => typeof value === "number" && Number.isFinite(value)),
+          )
+        : null;
+      if (layer && options?.graduatedField && distinctBreaks && distinctBreaks.size > 1) {
+        try {
+          setLayerStyle(
+            layerId,
+            buildSymbologyStyle(layer, {
+              mode: "graduated",
+              property: options.graduatedField,
+              colorRamp: options.colorRamp ?? "viridis",
+              classCount: options.classCount ?? 5,
+              scheme: "quantile",
+            }),
+          );
+        } catch (error) {
+          appendLog(t("network.styleFailed", { name, reason: (error as Error).message }));
+        }
+      }
       if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
     },
-    [addGeoJsonLayer, appendLog, mapControllerRef],
+    [addGeoJsonLayer, appendLog, mapControllerRef, setLayerStyle, t],
   );
 
   // Update a parameter. When a layer parameter changes, also clear any
@@ -205,11 +236,23 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
     [tool],
   );
 
+  // Hide a parameter whose `visibleWhen` condition is not met (e.g. the cost
+  // field while the local-network tools cost edges by length).
+  const isParamVisible = useCallback(
+    (param: AlgorithmParameter) => isProcessingParameterVisible(param, params),
+    [params],
+  );
   const handleRun = useCallback(async () => {
     setLog([]);
     softErrorRef.current = null;
+    // A local-network tool opens without the routing notice; switching to a
+    // server tool inside the dialog must not skip that consent.
+    if (tool.parameters.some((param) => param.id === "endpoint") && !hasRoutingConsent()) {
+      appendLog(`Error: ${t("network.consentRequired")}`);
+      return;
+    }
     for (const param of tool.parameters) {
-      if (!param.required) continue;
+      if (!param.required || !isParamVisible(param)) continue;
       const value = params[param.id];
       if (
         value === undefined ||
@@ -259,7 +302,7 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
       if (abortRef.current === controller) abortRef.current = null;
       setRunning(false);
     }
-  }, [tool, params, layers, appendLog, addResultLayer, mapControllerRef]);
+  }, [tool, params, layers, appendLog, addResultLayer, mapControllerRef, isParamVisible, t]);
 
   // Auto-run for a History "Re-run": kick off handleRun on the render after the
   // pre-fill effect committed the recorded parameters. The ref always points at
@@ -275,6 +318,9 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
   }, [autoRunPending]);
 
   const endpoint = (params.endpoint as string) || getRoutingConfig().endpoint;
+  // Only the Valhalla tools take an endpoint; the local-network tools never
+  // send coordinates anywhere.
+  const usesRoutingServer = tool.parameters.some((param) => param.id === "endpoint");
 
   return (
     <Dialog
@@ -323,7 +369,7 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
             </p>
 
             <div className="flex flex-col gap-3">
-              {tool.parameters.map((param) => (
+              {tool.parameters.filter(isParamVisible).map((param) => (
                 <ParameterField
                   key={param.id}
                   param={translateParameter(t, "network", tool.id, param)}
@@ -336,7 +382,9 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
             </div>
 
             <p className="text-xs text-muted-foreground">
-              {t("network.endpointNotice", { endpoint })}
+              {usesRoutingServer
+                ? t("network.endpointNotice", { endpoint })
+                : t("network.localNotice")}
             </p>
 
             <div>

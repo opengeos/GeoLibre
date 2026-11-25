@@ -288,3 +288,105 @@ def test_ensure_raster_outputs_converts_real_striped_geotiff(monkeypatch, tmp_pa
     assert raster.stat().st_mode == original_mode
     assert messages == ["Converted striped.tif to a Cloud Optimized GeoTIFF."]
     assert all(not path.exists() for path in temp_paths)
+
+
+def _sleeping_runner(tmp_path):
+    """Write a stand-in Whitebox runner that just sleeps, and return its path."""
+    script = tmp_path / "sleeping_runner.py"
+    script.write_text("import time\ntime.sleep(30)\n", encoding="utf-8")
+    return script
+
+
+def test_run_tool_json_stream_kills_a_process_cancelled_before_start(monkeypatch, tmp_path):
+    """``on_process`` returning True kills the runner instead of waiting on it."""
+    import time
+
+    monkeypatch.setattr(whitebox, "worker_path", lambda _name: _sleeping_runner(tmp_path))
+    session = whitebox.ExternalRuntimeSession(sys.executable, include_pro=False, tier="open")
+    seen = []
+
+    def _on_process(process):
+        seen.append(process)
+        return True
+
+    started = time.monotonic()
+    with pytest.raises(whitebox.RuntimeBootstrapError):
+        session.run_tool_json_stream("noop", "{}", on_process=_on_process)
+    assert time.monotonic() - started < 15
+    assert len(seen) == 1 and seen[0].poll() is not None
+
+
+def test_whitebox_cancel_endpoint_stops_a_running_job(monkeypatch, tmp_path):
+    """``POST /whitebox/jobs/{id}/cancel`` kills the runner and reports cancelled."""
+    import time
+
+    monkeypatch.setattr(whitebox, "worker_path", lambda _name: _sleeping_runner(tmp_path))
+    monkeypatch.setattr(
+        whitebox,
+        "create_runtime_session",
+        lambda include_pro=False, tier="open": whitebox.ExternalRuntimeSession(
+            sys.executable, include_pro=include_pro, tier=tier
+        ),
+    )
+    job = whitebox.whitebox_run(whitebox.WhiteboxRunRequest(tool_id="noop"))
+    try:
+        for _ in range(100):
+            if whitebox._JOB_MANAGER.processes.get(job.id) is not None:
+                break
+            time.sleep(0.05)
+        assert whitebox._JOB_MANAGER.processes.get(job.id) is not None
+        whitebox.whitebox_cancel(job.id)
+        for _ in range(200):
+            state = whitebox._JOB_MANAGER.get(job.id)
+            if (
+                state.status not in {"pending", "running"}
+                and job.id not in whitebox._JOB_MANAGER.processes
+                and job.id not in whitebox._JOB_MANAGER.cancelled
+            ):
+                break
+            time.sleep(0.05)
+        assert state.status == "cancelled"
+        assert state.error == "Cancelled."
+        assert job.id not in whitebox._JOB_MANAGER.processes
+        assert job.id not in whitebox._JOB_MANAGER.cancelled
+        # Cancelling a finished job is a no-op that returns its final state.
+        assert whitebox.whitebox_cancel(job.id).status == "cancelled"
+    finally:
+        with whitebox._JOBS_LOCK:
+            whitebox._JOBS.pop(job.id, None)
+
+
+def test_whitebox_job_cancelled_before_it_runs_never_starts_the_tool(monkeypatch):
+    """A cancel that lands before the runner starts skips the tool entirely."""
+    job_id = "test-cancel-before-start"
+    now = whitebox._utc_now()
+    with whitebox._JOBS_LOCK:
+        whitebox._JOBS[job_id] = whitebox.JobState(
+            id=job_id,
+            status="pending",
+            tool_id="noop",
+            created_at=now,
+            updated_at=now,
+        )
+    whitebox._cancel_job(job_id)
+
+    def _unexpected(*args, **kwargs):
+        raise AssertionError("the tool must not start after cancellation")
+
+    monkeypatch.setattr(whitebox, "create_runtime_session", _unexpected)
+    try:
+        whitebox._run_job(job_id, whitebox.WhiteboxRunRequest(tool_id="noop"))
+        job = whitebox._JOBS[job_id]
+        assert job.status == "cancelled"
+        assert job.error == "Cancelled."
+        assert job_id not in whitebox._JOB_MANAGER.cancelled
+    finally:
+        with whitebox._JOBS_LOCK:
+            whitebox._JOBS.pop(job_id, None)
+
+
+def test_whitebox_cancel_endpoint_rejects_unknown_job():
+    """An unknown job id is a 404, like ``GET /whitebox/jobs/{id}``."""
+    with pytest.raises(HTTPException) as excinfo:
+        whitebox.whitebox_cancel("not-a-job")
+    assert excinfo.value.status_code == 404

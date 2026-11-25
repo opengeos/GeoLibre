@@ -266,7 +266,6 @@ export function compileExpression(expression: string, fieldNames: string[]): Com
     // globals (fetch, window, …) stay reachable — see the file-level note. Safe
     // here only because calculations run immediately and the expression itself
     // is never persisted or re-evaluated from a project file.
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
     fn = new Function(...argNames, `"use strict"; return (${trimmed});`) as (
       ...args: unknown[]
     ) => unknown;

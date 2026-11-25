@@ -240,16 +240,25 @@ are in place for a deployment that fronts the relay with its own issuer.
 
 `kick-participant` disconnects a participant. `block-participant` also records
 their **participant key** so the relay refuses the next join. That key is
-`user:<userId>` for a verified identity, `invite:<token>` for an invite-based
-join, and otherwise `anon:<clientId>` — where `clientId` is minted fresh on
-every join.
+`user:<userId>` for a verified identity, `invite:<token>` for a single-use
+invite join (`maxUses: 1`), and otherwise `anon:<clientId>` (including anonymous
+guests who join via a shared multi-use invite link), where `clientId` is minted
+fresh on every join.
 
 The same key backs a persisted per-participant override, so both carry the same
-caveat: a block is durable only for identity- and invite-based joins. **An anonymous
-guest can rejoin simply by reconnecting**, since they arrive with a new
-`clientId` and therefore a new key. Blocking is a moderation convenience, not a
-security boundary; a session that needs an enforceable ban has to require an
-invite or a signed-in identity.
+caveat: a block or override is durable across reconnects only for signed-in
+identities (`user:<userId>`). A `maxUses: 1` invite is exhausted on its first
+join, so reconnecting with that exhausted token does not match the invite and
+receives a fresh `anon:<clientId>` key. For a shared multi-use invite link,
+keying on `anon:<clientId>` keeps a host's override or kick/block on one guest
+from affecting every other guest sharing the link; revoking the invite with
+`revoke-invite` stops the token from granting its invite role, while anonymous
+joins remain open whenever `requireIdentity` is off. **An anonymous guest
+(including one on an unrevoked or revoked invite link) can rejoin by
+reconnecting**, since they receive a fresh `clientId`. Blocking is a moderation
+convenience, not a security boundary; for an enforceable per-user ban, enable
+`requireIdentity` with a configured identity provider so anonymous joins are
+rejected and `user:<userId>` blocks apply to every rejoin.
 
 ## Chat (#754)
 
@@ -277,7 +286,9 @@ ephemeral and never written to a project file.
 > and look-alike domains are rejected; the shared `opengeos.org` GitHub Pages
 > preview origin is deliberately not trusted) as browser-origin filtering
 > and defense-in-depth (not authentication or a general server-side access gate)
-> and enforces a per-IP `checkRateLimit` (10 requests / 60 s). `Access-Control-Allow-Origin: *` is
+> and enforces a per-IP creation limit (10 requests / 60 s), using the
+> required `COLLAB_RATE_LIMITER` binding on the Worker and `checkRateLimit`
+> on the Node relay. `Access-Control-Allow-Origin: *` is
 > still sent on responses so non-browser clients (e.g. Tauri) are not blocked by
 > CORS; non-browser clients may omit these headers and remain supported, unless a
 > verifiable credential requirement is added. Configure `ALLOWED_ORIGINS`
@@ -317,11 +328,31 @@ Two hosts implement the same protocol and import the same permission/validation
 core:
 
 - `workers/collab` is the Cloudflare Durable Object used by the hosted service.
+  New session creation requires the `COLLAB_RATE_LIMITER` binding configured
+  in `workers/collab/wrangler.toml`. A missing or failed binding returns `503`;
+  there is no isolate-local fallback that can reset the budget. A platform
+  limiter outage therefore pauses new session creation until it recovers.
+  Structured warnings distinguish `binding_missing` from `binding_error`;
+  raw exception messages are omitted to avoid logging credentials or keys.
+  Health checks
+  and existing session routes remain available. The [Cloudflare Rate Limiting
+  API](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
+  applies approximate limits per Cloudflare location, rather than a strict
+  global quota.
 - `workers/collab-node` is the self-hostable Node/SQLite relay. It is included
   as `geolibre-collab` in the root `docker-compose.yml`; its persistent database
-  is mounted at `/data/collab.sqlite`. Configure `COLLAB_MAX_SNAPSHOT_BYTES`
-  (relay default 10,000,000; the compose file defaults it to 1,000,000) and
-  `COLLAB_IDLE_TTL_MS` (default two hours) when needed.
+  is mounted at `/data/collab.sqlite`. It serves the same HTTP endpoints as
+  the Worker, including the host-only session log, which it keeps in SQLite
+  under the same entry-count and byte bounds. Configure `COLLAB_MAX_SNAPSHOT_BYTES`
+  (default 10,000,000 bytes everywhere: both relays and the compose file share
+  `MAX_SNAPSHOT_BYTES` from `@geolibre/collab-core`) and `COLLAB_IDLE_TTL_MS`
+  (default two hours) when needed.
+
+The Node relay currently stores the audit log as capped JSON and synchronously
+rewrites it on each recorded event, including snapshots. Per-frame session
+reads skip that log. This format suits smaller self-hosted deployments; measure
+event throughput before using a busy shared relay. Per-entry SQLite rows and
+byte counters are the next storage improvement for sustained high event rates.
 
 Both relay implementations accept `COLLAB_MAX_SNAPSHOT_BYTES` as a positive
 integer number of bytes. For the Cloudflare relay, set it as a Worker variable,
@@ -334,6 +365,10 @@ COLLAB_MAX_SNAPSHOT_BYTES = "10000000"
 
 The configured value must remain below the deployment platform's WebSocket
 message-size limit.
+
+**Upgrade note:** the Compose default increases from 1,000,000 to 10,000,000
+bytes (1 MB to 10 MB, a tenfold increase) to match both relay implementations.
+Set `COLLAB_MAX_SNAPSHOT_BYTES=1000000` to retain the earlier, lower limit.
 
 The hosted relay deploys to Cloudflare Workers the same way as `workers/viewer`:
 
@@ -361,8 +396,8 @@ environment. Until that env var is set, the feature stays dark.
 - **Payload size**: layers can embed `FeatureCollection`s. `projectFromStore`
   already strips redundant `geojson` for URL-backed layers, but a large
   in-memory/local-file layer can exceed the snapshot cap
-  (`COLLAB_MAX_SNAPSHOT_BYTES`: 10 MB by default for the relay, 1 MB in the
-  Docker Compose setup) and is rejected with
+  (`COLLAB_MAX_SNAPSHOT_BYTES`: 10 MB by default for the hosted relay, the
+  Node relay, and the Docker Compose setup) and is rejected with
   `error: too-large` (share via URL instead). v2: diff / chunked layer sync.
 - **Undo**: a remote apply clears local undo (see above).
 - v2 directions: per-action mutation or CRDT transport, coalesced remote-apply

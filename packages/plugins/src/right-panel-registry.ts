@@ -86,6 +86,7 @@ export interface RightPanelSnapshot {
 }
 
 const registry = new Map<string, GeoLibreRightPanelRegistration>();
+const owners = new Map<string, string>();
 // Title resolution (string/getter normalization, throw/empty fallback, and the
 // per-id warning dedup the accessors rely on because they are called unmemoized
 // on every render) is shared with the floating-panel registry via
@@ -144,7 +145,10 @@ function runHook(
  * closes the panel (if active) and removes it from the registry; a plugin
  * should call it from its `deactivate` hook.
  */
-export function registerRightPanel(panel: GeoLibreRightPanelRegistration): () => void {
+export function registerRightPanel(
+  panel: GeoLibreRightPanelRegistration,
+  ownerPluginId?: string,
+): () => void {
   if (!panel || typeof panel.id !== "string" || panel.id.length === 0) {
     throw new Error("registerRightPanel requires a panel with a non-empty id.");
   }
@@ -166,6 +170,8 @@ export function registerRightPanel(panel: GeoLibreRightPanelRegistration): () =>
   // still the current one, so a stale disposer cannot evict a newer panel that
   // reused the id.
   registry.set(panel.id, panel);
+  if (ownerPluginId !== undefined) owners.set(panel.id, ownerPluginId);
+  else owners.delete(panel.id);
   emit();
   return () => {
     if (registry.get(panel.id) === panel) {
@@ -192,9 +198,25 @@ export function unregisterRightPanel(id: string): void {
   visibleIds.delete(id);
   panelDocks.delete(id);
   registry.delete(id);
+  owners.delete(id);
   titleResolver.delete(id);
   emit();
   if (wasActive) runHook(id, "onClose", panel.onClose);
+}
+
+/** Remove every right panel owned by `ownerPluginId`. */
+export function unregisterRightPanelsByOwner(ownerPluginId: string): void {
+  const ownedIds: string[] = [];
+  for (const [id, owner] of owners) {
+    if (owner === ownerPluginId) ownedIds.push(id);
+  }
+  for (const id of ownedIds) {
+    // Recheck ownership in case an earlier panel's `onClose` replaced `id`
+    // under a different owner.
+    if (owners.get(id) === ownerPluginId) {
+      unregisterRightPanel(id);
+    }
+  }
 }
 
 /**
@@ -363,6 +385,7 @@ export function subscribeRightPanels(listener: () => void): () => void {
  */
 export function __resetRightPanelRegistryForTests(): void {
   registry.clear();
+  owners.clear();
   titleResolver.clear();
   listeners.clear();
   activeId = null;

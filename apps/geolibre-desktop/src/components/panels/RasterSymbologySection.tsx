@@ -9,20 +9,21 @@ import {
   RASTER_MAX_STORED_CLASSES,
   RASTER_MIN_CLASSES,
   RASTER_MIN_CUSTOM_COLORS,
+  computeRasterBreaks,
+  customColorsForRasterClassEdit,
+  normalizeRasterClassOpacities,
+  savedRasterSymbology,
+} from "@geolibre/plugins/raster-symbology";
+import {
   type RasterBandStats,
   type RasterClassificationMethod,
   type RasterSymbology,
-  colormapColors,
-  computeRasterBreaks,
-  customColorsForRasterClassEdit,
-  getPaletteLegend,
-  getRasterBandStats,
-  normalizeRasterClassOpacities,
   type PaletteLegendEntry,
-  savedRasterSymbology,
-  warmColormapColors,
-  readRasterWindow,
 } from "@geolibre/plugins";
+import { colormapColors, warmColormapColors } from "@geolibre/plugins/colormap-colors";
+import { getPaletteLegend } from "@geolibre/plugins/raster-palette";
+import { getRasterBandStats } from "@geolibre/plugins/raster-symbology-texture";
+import { readRasterWindow } from "@geolibre/plugins/maplibre-raster";
 import type { MapEngine, MapExtent } from "@geolibre/map";
 import {
   Button,

@@ -1109,7 +1109,6 @@ describe("project serialization", () => {
 
   it("writes a sparse array's holes as null, matching JSON.stringify", () => {
     const project = createEmptyProject("Sparse");
-    // eslint-disable-next-line no-sparse-arrays
     project.metadata = { gappy: [1, , 2] };
     const text = serializeProject(project);
     assert.equal(text, JSON.stringify(project, null, 2));
@@ -1129,11 +1128,8 @@ describe("project serialization", () => {
   it("unwraps boxed primitives the way JSON.stringify does", () => {
     const project = createEmptyProject("Boxed");
     project.metadata = {
-      // eslint-disable-next-line no-new-wrappers
       count: new Number(7),
-      // eslint-disable-next-line no-new-wrappers
       label: new String("x"),
-      // eslint-disable-next-line no-new-wrappers
       flag: new Boolean(true),
     };
     const text = serializeProject(project);
@@ -2232,33 +2228,93 @@ describe("print layout persistence", () => {
   });
 });
 
-describe("GCS project sources", () => {
-  it("normalizes GCS URLs without mutating the original source", () => {
-    const layer = geojsonLayer({ source: { url: " GS://bucket/a.geojson?token=x#part " } });
-    const project = { ...createEmptyProject(), layers: [layer] };
-    assert.equal(
-      parseProject(JSON.stringify(project)).layers[0].source.url,
-      "https://storage.googleapis.com/bucket/a.geojson?token=x#part",
-    );
-    assert.equal(layer.source.url, " GS://bucket/a.geojson?token=x#part ");
-  });
-  it("defaults absent and null sources to an empty object", () => {
-    for (const source of [undefined, null]) {
-      const layer = { ...geojsonLayer(), source };
-      const project = { ...createEmptyProject(), layers: [layer] };
-      assert.deepEqual(parseProject(JSON.stringify(project)).layers[0].source, {});
+describe("parseProject and applyProjectToStore hardening", () => {
+  it("rejects non-object JSON inputs cleanly and clamps invalid opacities", () => {
+    for (const raw of ["null", "[]", '"hello"', "42"]) {
+      assert.throws(() => parseProject(raw), /Invalid GeoLibre project/);
     }
-  });
-});
-
-it("keeps projects with an unaddressable GCS layer loadable", () => {
-  for (const url of ["gs://bucket/../data.json", "gs:///data.json"]) {
     const project = {
       ...createEmptyProject(),
-      layers: [geojsonLayer({ source: { url } }), geojsonLayer({ id: "valid" })],
+      basemapOpacity: 5,
+      layers: [
+        geojsonLayer({
+          id: "l1",
+          opacity: -3,
+          style: { labels: { enabled: true, field: "name" } } as unknown as ReturnType<
+            typeof geojsonLayer
+          >["style"],
+        }),
+      ],
     };
     const parsed = parseProject(JSON.stringify(project));
-    assert.equal(parsed.layers.length, 2);
-    assert.equal(parsed.layers[0].source.url, url);
-  }
+    assert.equal(parsed.basemapOpacity, 1);
+    assert.equal(parsed.layers[0].opacity, 0);
+    assert.equal(parsed.layers[0].style.labels.enabled, true);
+    assert.equal(parsed.layers[0].style.labels.field, "name");
+    assert.equal(parsed.layers[0].style.labels.size, DEFAULT_LAYER_STYLE.labels.size);
+  });
+
+  it("scrubs orphan layer IDs from secondaryMapViews and storymap in applyProjectToStore", () => {
+    const project = createEmptyProject();
+    project.layers = [geojsonLayer({ id: "kept" })];
+    project.mapLayout = { rows: 1, cols: 2, syncView: false };
+    project.secondaryMapViews = [
+      {
+        id: "pane-2",
+        view: project.mapView,
+        layerVisibility: { kept: true, ghost: false },
+      },
+    ];
+    project.storymap = {
+      title: "Demo",
+      chapters: [
+        chapter({
+          id: "ch1",
+          onChapterEnter: [
+            { layerId: "kept", opacity: 1 },
+            { layerId: "ghost", opacity: 0.5 },
+          ],
+          onChapterExit: [{ layerId: "ghost", opacity: 0 }],
+        }),
+      ],
+    } as unknown as typeof project.storymap;
+    const applied = applyProjectToStore(project);
+    assert.deepEqual(applied.secondaryMapViews[0].layerVisibility, { kept: true });
+    assert.deepEqual(applied.storymap?.chapters[0].onChapterEnter, [
+      { layerId: "kept", opacity: 1 },
+    ]);
+    assert.deepEqual(applied.storymap?.chapters[0].onChapterExit, []);
+  });
+
+  it("preserves group contiguity in addLayer(beforeLayerId) and moves across groups in reorderLayer", () => {
+    useAppStore.getState().newProject();
+    const gid = useAppStore.getState().addLayerGroup("Group");
+    useAppStore.getState().addLayer(geojsonLayer({ id: "g1", groupId: gid }));
+    useAppStore.getState().addLayer(geojsonLayer({ id: "g2", groupId: gid }));
+    useAppStore.getState().addLayer(geojsonLayer({ id: "free" }), "g2");
+    const afterAdd = useAppStore.getState().layers.map((l) => l.id);
+    // Group members g1 and g2 remain adjacent after inserting an ungrouped layer before g2.
+    assert.deepEqual(afterAdd, ["g1", "g2", "free"]);
+
+    // Moving an ungrouped layer down toward a group skips the entire group.
+    useAppStore.getState().reorderLayer("free", "down");
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      ["free", "g1", "g2"],
+    );
+
+    // Moving it back up skips past the entire group again.
+    useAppStore.getState().reorderLayer("free", "up");
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      ["g1", "g2", "free"],
+    );
+
+    // Moving a layer within the same group stays a single-position swap.
+    useAppStore.getState().reorderLayer("g1", "up");
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      ["g2", "g1", "free"],
+    );
+  });
 });

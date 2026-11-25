@@ -3,6 +3,18 @@ import {
   isReadOnlyAttributeLayer,
   isVectorControlAttributeSource,
 } from "../../lib/attribute-table-source";
+import {
+  computeBulkFillDrafts,
+  computeFindReplaceDrafts,
+  filterAttributeRowsByColumns,
+  hasActiveColumnFilter,
+  matchesColumnFilter,
+  sortAttributeRows,
+  toggleMultiSort,
+  type ColumnFilterSpec,
+  type SortSpec,
+} from "../../lib/attribute-table-ops";
+import { AttributeBulkEditDialog, ColumnFilterBar } from "./AttributeBulkEditDialog";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
@@ -29,23 +41,29 @@ import {
 } from "@geolibre/core";
 import {
   SKETCHES_SOURCE_KIND,
-  stripEditorProperties,
-  isInternalEditorProperty,
-  arcGISAttachmentObjectId,
-  arcGISAttachmentSupport,
-  arcGISAttributeConstraints,
-  blocksArcGISEdit,
-  type ArcGISContingencyCheck,
-  arcGISLayerHasPendingEdits,
-  arcGISRelatedParentObjectId,
-  arcGISRelationships,
-  getDuckDBLayerRows,
-  getVectorLayerGeoJSON,
   getGeometryEditTargetLayerId,
   subscribeGeometryEdit,
-  updateDuckDBLayerRows,
-  type DuckDBAttributeRow,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/geo-editor-state";
+import {
+  stripEditorProperties,
+  isInternalEditorProperty,
+} from "@geolibre/plugins/geo-editor-view-import";
+import {
+  arcGISAttachmentObjectId,
+  arcGISAttachmentSupport,
+} from "@geolibre/plugins/arcgis-attachments";
+import {
+  arcGISAttributeConstraints,
+  arcGISLayerHasPendingEdits,
+} from "@geolibre/plugins/arcgis-layer";
+import { blocksArcGISEdit } from "@geolibre/plugins/arcgis-contingent-values";
+import { type ArcGISContingencyCheck, type DuckDBAttributeRow } from "@geolibre/plugins";
+import {
+  arcGISRelatedParentObjectId,
+  arcGISRelationships,
+} from "@geolibre/plugins/arcgis-related-records";
+import { getDuckDBLayerRows, updateDuckDBLayerRows } from "@geolibre/plugins/maplibre-duckdb";
+import { getVectorLayerGeoJSON } from "@geolibre/plugins/maplibre-vector";
 import type { MapEngine } from "@geolibre/map";
 import type { GeoJSONSource } from "maplibre-gl";
 import {
@@ -61,6 +79,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   Input,
   Label,
@@ -85,6 +106,7 @@ import {
   Columns3,
   Download,
   EyeOff,
+  Filter,
   LayoutDashboard,
   LayoutList,
   MoreHorizontal,
@@ -95,6 +117,7 @@ import {
   PanelBottomClose,
   PanelBottomOpen,
   Plus,
+  Replace,
   RefreshCw,
   RotateCcw,
   Save,
@@ -136,6 +159,7 @@ import {
   type ColumnMoveDirection,
   type NewColumnType,
   inferColumnTypes,
+  attributeValuesMatchQuery,
   formatAttributeCellText,
   numericColumnSet,
 } from "../../lib/attribute-columns";
@@ -198,42 +222,26 @@ const MAX_FEATURE_ID_COLUMN_WIDTH = 180;
 const MIN_ATTRIBUTE_COLUMN_WIDTH = 72;
 const MAX_ATTRIBUTE_COLUMN_WIDTH = 520;
 // Estimated row height used to size the virtualizer before real rows are
-// measured. View-mode rows are ~37px; edit-mode rows (with an Input) are taller
-// and are corrected by measureElement once rendered.
-const ESTIMATED_ROW_HEIGHT = 37;
-/** Sticky header plus horizontal scrollbar: the table's non-row height, in px. */
-const ATTRIBUTE_TABLE_CHROME_HEIGHT = 58;
+// measured. View-mode rows are ~27px (3px block padding around a 20px line);
+// edit-mode rows (with an Input) are taller and are corrected by
+// measureElement once rendered.
+const ESTIMATED_ROW_HEIGHT = 27;
+/** Sticky header (30px) plus horizontal scrollbar (14px): the table's non-row height, in px. */
+const ATTRIBUTE_TABLE_CHROME_HEIGHT = 44;
 // The vertical scrollbar (w-3.5) overlays the viewport's inline-end edge, so
 // the last column is widened by this much and padded past it; otherwise the
 // scrollbar covers the end of right-aligned numbers.
 // Both are rem so they track the scrollbar (w-3.5) and cell padding (p-2 /
 // px-2) at any root font size. CELL_PADDING mirrors TableCell/TableHead in
-// packages/ui/src/components/table.tsx and must change with them.
+// packages/ui/src/components/table.tsx and must change with them. (The compact
+// rows below override only block padding, so the inline padding is still p-2.)
 const VERTICAL_SCROLLBAR_GUTTER = "0.875rem";
 const CELL_PADDING = "0.5rem";
-// Tall enough to keep a few rows visible when the toolbar wraps on laptop widths.
+// With the one-line toolbar and compact rows, this shows four to five rows at
+// laptop widths.
 const DEFAULT_TABLE_HEIGHT = 240;
 const MIN_TABLE_HEIGHT = 96;
 const MAX_TABLE_HEIGHT = 520;
-
-function compareAttributeValues(a: unknown, b: unknown): number {
-  if (a == null && b == null) return 0;
-  if (a == null) return -1;
-  if (b == null) return 1;
-
-  if (typeof a === "number" && typeof b === "number") return a - b;
-
-  const aNumber = Number(a);
-  const bNumber = Number(b);
-  if (Number.isFinite(aNumber) && Number.isFinite(bNumber)) {
-    return aNumber - bNumber;
-  }
-
-  return String(a).localeCompare(String(b), undefined, {
-    numeric: true,
-    sensitivity: "base",
-  });
-}
 
 function parseAttributeDraft(draft: string, previousValue: unknown, columnType?: string): unknown {
   if (draft.trim() === "") return null;
@@ -502,7 +510,10 @@ function computeFormDraftErrors(
     for (const check of contingencies?.checks(candidate, properties) ?? [])
       if (blocksArcGISEdit(check))
         for (const field of check.fields)
-          groupErrors[field] ??= { code: "constraint", message: contingencies!.message(check) };
+          groupErrors[field] ??= {
+            code: "constraint",
+            message: contingencies!.message(check),
+          };
     if (Object.keys(groupErrors).length) result[featureId] = groupErrors;
     const validation = validateAttributeFormValues(rowForm.form, candidate, {
       feature,
@@ -643,13 +654,16 @@ export function AttributeTable({
   const updateLayer = useAppStore((s) => s.updateLayer);
   const zoomToSelectedFeature = useAppStore((s) => s.ui.zoomToSelectedFeature);
   const setZoomToSelectedFeature = useAppStore((s) => s.setZoomToSelectedFeature);
-  const [sort, setSort] = useState<{
-    key: SortKey;
-    direction: SortDirection;
-  }>({
-    key: "__featureId",
-    direction: "asc",
-  });
+  const [sortSpecs, setSortSpecs] = useState<SortSpec[]>([
+    { key: "__featureId", direction: "asc" },
+  ]);
+  const sort = sortSpecs[0] ?? {
+    key: "__featureId" as SortKey,
+    direction: "asc" as SortDirection,
+  };
+  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilterSpec>>({});
+  const [columnFilterBarOpen, setColumnFilterBarOpen] = useState(false);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>({});
   // "all" shows every feature; "selected" restricts the table to the current
   // multi-selection (the Show All / Show Selected dropdown).
@@ -775,9 +789,10 @@ export function AttributeTable({
       })),
     [features, layer?.metadata.sourceKind],
   );
-  const attributeRows: AttributeTableRow[] = isDuckDBLayer
-    ? duckDBRowsToAttributeRows(duckdbRows)
-    : geojsonRows;
+  const attributeRows: AttributeTableRow[] = useMemo(
+    () => (isDuckDBLayer ? duckDBRowsToAttributeRows(duckdbRows) : geojsonRows),
+    [duckdbRows, geojsonRows, isDuckDBLayer],
+  );
   const layerCaps = resolveLayerCapabilities(layer);
   // ArcGIS service attachments of the one selected record, keyed by its object
   // ID; a feature not yet saved to the service has none to show.
@@ -940,10 +955,16 @@ export function AttributeTable({
   const domainNotice = serviceConstraints?.diagnostics
     .map((diagnostic) =>
       diagnostic.code === "unresolvedDomain"
-        ? t("attributeTable.serviceDomains.unresolvedDomain", { field: diagnostic.field })
+        ? t("attributeTable.serviceDomains.unresolvedDomain", {
+            field: diagnostic.field,
+          })
         : diagnostic.code === "subtypeFieldMissing"
-          ? t("attributeTable.serviceDomains.subtypeFieldMissing", { field: diagnostic.field })
-          : t("attributeTable.serviceDomains.subtypeConflict", { field: diagnostic.field }),
+          ? t("attributeTable.serviceDomains.subtypeFieldMissing", {
+              field: diagnostic.field,
+            })
+          : t("attributeTable.serviceDomains.subtypeConflict", {
+              field: diagnostic.field,
+            }),
     )
     .join(" ");
   const hasRowForms = Boolean(attributeForm?.fields.length || serviceConstraints);
@@ -998,7 +1019,11 @@ export function AttributeTable({
               : check.status === "retired"
                 ? "contingentValues.existingRetired"
                 : "contingentValues.existing",
-            { row: featureId, fields: check.fields.join(", "), group: check.group },
+            {
+              row: featureId,
+              fields: check.fields.join(", "),
+              group: check.group,
+            },
           ),
         );
     return lines.join(" ");
@@ -1026,6 +1051,8 @@ export function AttributeTable({
     setCalcExpression("");
     setCalcError(null);
     setCalcSelectedOnly(false);
+    setColumnFilters({});
+    setBulkEditOpen(false);
   }, [selectedLayerId, hasLayer, isGeometryEditing]);
 
   // If the selected feature is cleared while the calculator is open, drop the
@@ -1053,14 +1080,15 @@ export function AttributeTable({
 
   const filtered = useMemo(() => {
     const filterLower = attributeFilter.toLowerCase();
-    return attributeRows.filter(({ properties, featureId }) => {
+    const base = attributeRows.filter(({ properties, featureId }) => {
       // "Show Selected Features" restricts the table to the current selection.
       if (featureView === "selected" && !selectedIdSet.has(featureId)) return false;
       if (!filterLower) return true;
-      const props = JSON.stringify(properties).toLowerCase();
-      return featureId.includes(filterLower) || props.includes(filterLower);
+      if (featureId.toLowerCase().includes(filterLower)) return true;
+      return attributeValuesMatchQuery(properties, filterLower);
     });
-  }, [attributeFilter, attributeRows, featureView, selectedIdSet]);
+    return filterAttributeRowsByColumns(base, columnFilters);
+  }, [attributeFilter, attributeRows, columnFilters, featureView, selectedIdSet]);
 
   // Identify's Edit attributes action asks for edit mode on its layer (#2932).
   // Declared after the layer-change reset above so, when the request arrives
@@ -1110,14 +1138,31 @@ export function AttributeTable({
   useEffect(() => {
     if (attributeTableEditLayerId === null) return;
     if (layer?.id === attributeTableEditLayerId && canEnterEditMode) {
-      // Clear the search only when it hides the requested row; a filter that
-      // already shows it is the user's to keep.
+      // Clear only filters that hide the requested row; filters that already
+      // admit it are the user's to keep.
       if (
-        attributeFilter &&
         selectedFeatureId !== null &&
         !filtered.some((row) => row.featureId === selectedFeatureId)
       ) {
-        setAttributeFilter("");
+        const targetRow = attributeRows.find((row) => row.featureId === selectedFeatureId);
+        if (attributeFilter) {
+          const filterLower = attributeFilter.toLowerCase();
+          const admittedBySearch =
+            targetRow !== undefined &&
+            (targetRow.featureId.toLowerCase().includes(filterLower) ||
+              attributeValuesMatchQuery(targetRow.properties, filterLower));
+          if (!admittedBySearch) setAttributeFilter("");
+        }
+        if (targetRow && Object.keys(columnFilters).length > 0) {
+          setColumnFilters((prev) => {
+            const next: Record<string, ColumnFilterSpec> = {};
+            for (const [col, spec] of Object.entries(prev)) {
+              const val = col === "__featureId" ? targetRow.featureId : targetRow.properties[col];
+              if (matchesColumnFilter(val, spec)) next[col] = spec;
+            }
+            return next;
+          });
+        }
       }
       // A collapsed table would enter edit mode with the row out of sight.
       setCollapsed(false);
@@ -1146,12 +1191,7 @@ export function AttributeTable({
     if (!adaptAnalysisRows || selectedIdSet.size === 0) return [];
     return pickAnalysisRows(analysisRows, attributeRows, selectedIdSet);
   }, [adaptAnalysisRows, analysisRows, attributeRows, selectedIdSet]);
-  const sorted = [...filtered].sort((a, b) => {
-    const aValue = sort.key === "__featureId" ? a.featureId : a.properties[sort.key];
-    const bValue = sort.key === "__featureId" ? b.featureId : b.properties[sort.key];
-    const result = compareAttributeValues(aValue, bValue);
-    return sort.direction === "asc" ? result : -result;
-  });
+  const sorted = useMemo(() => sortAttributeRows(filtered, sortSpecs), [filtered, sortSpecs]);
 
   // Row selection with keyboard modifiers (plain / Ctrl-toggle / Shift-range /
   // Shift+Ctrl merge). The branching lives in the pure `computeRowSelection`
@@ -1196,8 +1236,8 @@ export function AttributeTable({
     // mounted.
     overscan: 8,
     // Row offsets are measured from the top of the scroll area, but the sticky
-    // header (2.75rem) sits above the first row and the horizontal scrollbar
-    // (0.875rem) overlays the bottom; the vertical scrollbar's 3.625rem inset
+    // header (1.875rem) sits above the first row and the horizontal scrollbar
+    // (0.875rem) overlays the bottom; the vertical scrollbar's 2.75rem inset
     // below is the same sum. Without this, scrolling the selected row into view
     // from below parked it under the horizontal scrollbar.
     scrollPaddingEnd: ATTRIBUTE_TABLE_CHROME_HEIGHT,
@@ -1237,27 +1277,30 @@ export function AttributeTable({
     selectedFeatureId,
     selectedLayerId,
     attributeTableOpen,
-    sort,
+    sortSpecs,
     sorted.length,
     attributeFilter,
+    columnFilters,
     isEditing,
     collapsed,
     isCardViewActive,
   ]);
 
-  const propKeys = new Set<string>();
-  for (const row of attributeRows) {
-    for (const k of Object.keys(row.properties)) {
-      // The inline photo/full-resolution image keys are multi-KB-to-MB data
-      // URLs (the map popup and Identify render them as thumbnails instead); a
-      // table cell would dump the raw base64 as text and jank on large photos.
-      if (!RESERVED_IMAGE_KEYS.has(k)) propKeys.add(k);
+  const discoveredColumns = useMemo(() => {
+    const propKeys = new Set<string>();
+    for (const row of attributeRows) {
+      for (const k of Object.keys(row.properties)) {
+        // The inline photo/full-resolution image keys are multi-KB-to-MB data
+        // URLs (the map popup and Identify render them as thumbnails instead); a
+        // table cell would dump the raw base64 as text and jank on large photos.
+        if (!RESERVED_IMAGE_KEYS.has(k)) propKeys.add(k);
+      }
     }
-  }
-  // Tracking columns are listed even before any feature carries one, so a layer
-  // that just turned tracking on shows what it is about to maintain (and the
-  // Field Calculator's "new field" name check sees them as taken).
-  const discoveredColumns = ensureEditorTrackingFields(Array.from(propKeys), layer?.editorTracking);
+    // Tracking columns are listed even before any feature carries one, so a layer
+    // that just turned tracking on shows what it is about to maintain (and the
+    // Field Calculator's "new field" name check sees them as taken).
+    return ensureEditorTrackingFields(Array.from(propKeys), layer?.editorTracking);
+  }, [attributeRows, layer?.editorTracking]);
   // Displayed columns omit engine metadata and large inline photos; mutation
   // validation still needs every stored key to avoid overwriting hidden data.
   const mutationColumns = useMemo(
@@ -1307,9 +1350,18 @@ export function AttributeTable({
           min: MIN_ATTRIBUTE_COLUMN_WIDTH,
         };
 
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    return () => {
+      resizeCleanupRef.current?.();
+      resizeCleanupRef.current = null;
+    };
+  }, []);
+
   const startColumnResize = (key: SortKey, event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
+    resizeCleanupRef.current?.();
 
     const startX = event.clientX;
     const startWidth = columnWidth(key);
@@ -1319,20 +1371,46 @@ export function AttributeTable({
     // both, so invert the delta under RTL: dragging the (left-side) RTL handle
     // outward lowers clientX but should widen the column.
     const directionSign = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
+    let pendingWidth = startWidth;
+    let resizeFrame: number | null = null;
+
+    const flushWidth = () => {
+      resizeFrame = null;
+      const width = pendingWidth;
+      setColumnWidths((current) =>
+        current[key] === width ? current : { ...current, [key]: width },
+      );
+    };
 
     const onMouseMove = (moveEvent: MouseEvent) => {
-      const nextWidth = Math.min(
+      pendingWidth = Math.min(
         max,
         Math.max(min, startWidth + directionSign * (moveEvent.clientX - startX)),
       );
-      setColumnWidths((current) => ({ ...current, [key]: nextWidth }));
+      if (resizeFrame === null) {
+        resizeFrame = window.requestAnimationFrame(flushWidth);
+      }
+    };
+
+    const cleanup = () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame);
+        resizeFrame = null;
+      }
+      if (resizeCleanupRef.current === cleanup) resizeCleanupRef.current = null;
     };
 
     const onMouseUp = () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame);
+        flushWidth();
+      }
+      cleanup();
     };
 
+    resizeCleanupRef.current = cleanup;
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
   };
@@ -1340,6 +1418,7 @@ export function AttributeTable({
   const startTableResize = (event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
+    resizeCleanupRef.current?.();
 
     const startY = event.clientY;
     const startHeight = tableHeight;
@@ -1374,41 +1453,136 @@ export function AttributeTable({
       });
     };
 
-    const onMouseUp = () => {
+    const teardown = () => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
       if (resizeFrame !== null) {
         window.cancelAnimationFrame(resizeFrame);
         resizeFrame = null;
       }
-      if (tableSectionRef.current) {
-        tableSectionRef.current.style.height = `${nextHeight}px`;
-      }
       tableResizeGuideRef.current?.classList.add("hidden");
-      setTableHeight(nextHeight);
       window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
       document.body.style.cursor = previousCursor;
       document.body.style.userSelect = previousUserSelect;
+      if (resizeCleanupRef.current === teardown) resizeCleanupRef.current = null;
     };
 
+    const onMouseUp = () => {
+      teardown();
+      if (tableSectionRef.current) {
+        tableSectionRef.current.style.height = `${nextHeight}px`;
+      }
+      setTableHeight(nextHeight);
+    };
+
+    resizeCleanupRef.current = teardown;
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
   };
 
-  const toggleSort = (key: SortKey) => {
-    setSort((current) => ({
-      key,
-      direction: current.key === key && current.direction === "asc" ? "desc" : "asc",
-    }));
+  const toggleSort = (key: SortKey, additive = false) => {
+    setSortSpecs((current) => toggleMultiSort(current, key, additive));
   };
 
   const renderSortIcon = (key: SortKey) => {
-    if (sort.key !== key) return null;
-    return sort.direction === "asc" ? (
-      <ArrowUp className="h-3.5 w-3.5" />
-    ) : (
-      <ArrowDown className="h-3.5 w-3.5" />
+    const idx = sortSpecs.findIndex((spec) => spec.key === key);
+    if (idx === -1) return null;
+    const spec = sortSpecs[idx];
+    return (
+      <span className="inline-flex items-center gap-0.5">
+        {spec.direction === "asc" ? (
+          <ArrowUp className="h-3.5 w-3.5" />
+        ) : (
+          <ArrowDown className="h-3.5 w-3.5" />
+        )}
+        {sortSpecs.length > 1 ? (
+          <span className="text-[10px] font-semibold tabular-nums text-primary">{idx + 1}</span>
+        ) : null}
+      </span>
     );
+  };
+
+  const handleColumnFilterChange = (column: string, spec: ColumnFilterSpec | null) => {
+    setColumnFilters((current) => {
+      const next = { ...current };
+      if (!spec || !hasActiveColumnFilter(spec)) {
+        delete next[column];
+      } else {
+        next[column] = spec;
+      }
+      return next;
+    });
+  };
+
+  const activeColumnFilterCount = Object.keys(columnFilters).length;
+  const editableBulkColumns = useMemo(
+    () => columns.filter((col) => !readOnlyColumns.has(col)),
+    [columns, readOnlyColumns],
+  );
+
+  const handleBulkFill = ({
+    column,
+    value,
+    scope,
+  }: {
+    column: string;
+    value: string;
+    scope: "selected" | "filtered";
+  }): number => {
+    if (!canEnterEditMode || readOnlyColumns.has(column)) return 0;
+    const targetRowIds =
+      scope === "selected" && selectedIdSet.size > 0
+        ? selectedIdSet
+        : new Set(filtered.map((row) => row.featureId));
+    const result = computeBulkFillDrafts({
+      rows: attributeRows,
+      targetRowIds,
+      column,
+      value,
+      currentDrafts: drafts,
+    });
+    if (result.updatedCount > 0) {
+      setIsEditing(true);
+      setDrafts(result.drafts);
+    }
+    return result.updatedCount;
+  };
+
+  const handleFindReplace = ({
+    column,
+    find,
+    replace,
+    matchCase,
+    wholeCell,
+    scope,
+  }: {
+    column: string;
+    find: string;
+    replace: string;
+    matchCase: boolean;
+    wholeCell: boolean;
+    scope: "selected" | "filtered";
+  }): number => {
+    if (!canEnterEditMode || readOnlyColumns.has(column)) return 0;
+    const targetRowIds =
+      scope === "selected" && selectedIdSet.size > 0
+        ? selectedIdSet
+        : new Set(filtered.map((row) => row.featureId));
+    const result = computeFindReplaceDrafts({
+      rows: attributeRows,
+      targetRowIds,
+      column,
+      find,
+      replace,
+      matchCase,
+      wholeCell,
+      currentDrafts: drafts,
+    });
+    if (result.updatedCount > 0) {
+      setIsEditing(true);
+      setDrafts(result.drafts);
+    }
+    return result.updatedCount;
   };
 
   // Localize an Attribute Form validation error for a cell tooltip.
@@ -1598,7 +1772,14 @@ export function AttributeTable({
         const { [oldKey]: width, ...rest } = current;
         return { ...rest, [newKey]: width };
       });
-      setSort((current) => (current.key === oldKey ? { ...current, key: newKey } : current));
+      setSortSpecs((current) =>
+        current.map((spec) => (spec.key === oldKey ? { ...spec, key: newKey } : spec)),
+      );
+      setColumnFilters((current) => {
+        if (!(oldKey in current)) return current;
+        const { [oldKey]: spec, ...rest } = current;
+        return { ...rest, [newKey]: spec };
+      });
     }
     // Always close the editor when committing, even on a no-op (empty,
     // unchanged, or a name that collides with an existing — possibly hidden —
@@ -1643,9 +1824,15 @@ export function AttributeTable({
     if (patch) updateLayer(layer.id, markAttributeEdit(layer, patch));
     // Drop a sort that pointed at the deleted column, which would otherwise
     // leave sort.key referencing an absent field (every row compares equal).
-    setSort((current) =>
-      current.key === columnPendingDelete ? { key: "__featureId", direction: "asc" } : current,
-    );
+    setSortSpecs((current) => {
+      const remaining = current.filter((spec) => spec.key !== columnPendingDelete);
+      return remaining.length > 0 ? remaining : [{ key: "__featureId", direction: "asc" }];
+    });
+    setColumnFilters((current) => {
+      if (!(columnPendingDelete in current)) return current;
+      const { [columnPendingDelete]: _removed, ...rest } = current;
+      return rest;
+    });
     // Drop the deleted column's width so columnWidths doesn't accumulate stale
     // entries across a session (mirrors the migration in commitColumnRename).
     setColumnWidths((current) => {
@@ -1878,8 +2065,12 @@ export function AttributeTable({
     updateLayer(layer.id, markAttributeEdit(layer, result.patch));
     if (result.errors > 0) {
       // The calculation was applied, but some rows threw and were written as
-      // null. Keep the dialog open and report it rather than showing a silent
-      // success over a column of nulls.
+      // null. If we just created the column, switch to update mode targeting it
+      // so the user can refine the expression without hitting a name collision.
+      if (calcMode === "create") {
+        setCalcMode("update");
+        setCalcTargetField(targetName);
+      }
       setCalcError(
         t("attributeTable.calcAppliedWithErrors", {
           errors: result.errors,
@@ -1893,13 +2084,14 @@ export function AttributeTable({
   };
 
   const sortableHeader = (key: SortKey, label: string, numeric = false) => (
-    <div className="relative flex h-full min-h-10 items-center">
+    <div className="relative flex h-full min-h-7 items-center">
       <button
         type="button"
         className={`flex h-full min-w-0 flex-1 items-center gap-1 pe-3 font-medium ${
           numeric ? "justify-end text-end" : "text-start"
         }`}
-        onClick={() => toggleSort(key)}
+        title={t("attributeTable.multiSortHint")}
+        onClick={(event) => toggleSort(key, event.shiftKey)}
       >
         <span className="truncate">{label}</span>
         {renderSortIcon(key)}
@@ -1917,7 +2109,7 @@ export function AttributeTable({
   const attributeColumnHeader = (col: string, index: number) => {
     if (editingColumn === col) {
       return (
-        <div className="relative flex h-full min-h-10 items-center">
+        <div className="relative flex h-full min-h-7 items-center">
           <Input
             autoFocus
             className="h-7 min-w-0 flex-1 px-2 text-xs"
@@ -1955,14 +2147,18 @@ export function AttributeTable({
     if (!canManageColumns || isEditing) return sortableHeader(col, col, numeric);
 
     return (
-      <div className="relative flex h-full min-h-10 items-center">
+      <div className="relative flex h-full min-h-7 items-center">
         <button
           type="button"
           className={`flex h-full min-w-0 flex-1 items-center gap-1 pe-1 font-medium ${
             numeric ? "justify-end text-end" : "text-start"
           }`}
-          onClick={() => toggleSort(col)}
-          title={virtualFieldColumns.has(col) ? t("attributeTable.virtualColumnTitle") : undefined}
+          onClick={(event) => toggleSort(col, event.shiftKey)}
+          title={
+            virtualFieldColumns.has(col)
+              ? t("attributeTable.virtualColumnTitle")
+              : t("attributeTable.multiSortHint")
+          }
         >
           {/* Virtual (expression-computed) columns get a function glyph and
               italics so their read-only, derived nature is visible at a
@@ -2077,11 +2273,11 @@ export function AttributeTable({
         <TableProperties className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-semibold">{t("attributeTable.title")}</span>
         {layer ? (
-          <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground md:max-w-56">
+          <span className="min-w-0 max-w-56 flex-[1_1_6rem] truncate text-xs text-muted-foreground">
             {t("attributeTable.selectedLayerName", { name: layer.name })}
           </span>
         ) : (
-          <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground md:max-w-56">
+          <span className="min-w-0 max-w-56 flex-[1_1_6rem] truncate text-xs text-muted-foreground">
             {t("attributeTable.noLayerSelected")}
           </span>
         )}
@@ -2124,10 +2320,16 @@ export function AttributeTable({
             {contingencyNotice}
           </span>
         ) : null}
+        {/* One line at laptop widths: the table's own actions (edit, save,
+            the feature view, selection, search and, in the phone shell, the
+            card-view toggle) stay in the bar, and the field tools, analysis
+            dialogs, refresh, export and the zoom toggle sit in the overflow
+            menu, so the toolbar no longer wraps over the rows. Narrower
+            panels still wrap rather than clip Close. */}
         <Button
           variant={isEditing ? "secondary" : "outline"}
           size="sm"
-          className="ms-auto h-7 px-2"
+          className="h-7 px-2"
           title={
             !layerCaps.update
               ? t("attributeTable.editTitleCapabilityDisabled")
@@ -2183,215 +2385,6 @@ export function AttributeTable({
           <Save className="h-3.5 w-3.5" />
           <span className="hidden @[112rem]:inline">{t("common.save")}</span>
         </Button>
-        {canManageColumns && !isEditing ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 px-2"
-            title={t("attributeTable.addFieldTitle")}
-            aria-label={t("attributeTable.addField")}
-            onClick={openAddColumn}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span className="hidden @[112rem]:inline">{t("attributeTable.addField")}</span>
-          </Button>
-        ) : null}
-        {canManageColumns && !isEditing ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 px-2"
-            title={t("attributeTable.fieldCalculatorTitle")}
-            aria-label={t("attributeTable.fieldCalculatorTitle")}
-            onClick={openCalculator}
-          >
-            <Calculator className="h-3.5 w-3.5" />
-            <span className="hidden @[112rem]:inline">{t("attributeTable.buttons.calculate")}</span>
-          </Button>
-        ) : null}
-        {canManageColumns && !isEditing ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 px-2"
-                title={t("attributeTable.manageFieldsTitle")}
-                aria-label={t("attributeTable.manageFields")}
-              >
-                <Columns3 className="h-3.5 w-3.5" />
-                <span className="hidden @[112rem]:inline">
-                  {t("attributeTable.buttons.fields")}
-                </span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto">
-              <DropdownMenuLabel>{t("attributeTable.showFields")}</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {discoveredColumns.length === 0 ? (
-                <DropdownMenuItem disabled>{t("attributeTable.noFields")}</DropdownMenuItem>
-              ) : (
-                discoveredColumns.map((col) => (
-                  <DropdownMenuCheckboxItem
-                    key={col}
-                    checked={!hiddenColSet.has(col)}
-                    // Keep the menu open so several fields can be toggled at once.
-                    onSelect={(event: Event) => event.preventDefault()}
-                    onCheckedChange={() => handleToggleHidden(col)}
-                  >
-                    <span className="truncate">{col}</span>
-                  </DropdownMenuCheckboxItem>
-                ))
-              )}
-              {hiddenCols.length > 0 ? (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={handleShowAllColumns}>
-                    {t("attributeTable.showAllFields")}
-                  </DropdownMenuItem>
-                </>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
-        {!isEditing ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 px-2"
-            title={
-              hasAttributeSource
-                ? t("attributeTable.columnExplorerTitle")
-                : t("attributeTable.columnExplorerTitleDisabled")
-            }
-            aria-label={t("attributeTable.columnExplorerTitle")}
-            disabled={!hasAttributeSource}
-            onClick={() => setExplorerOpen(true)}
-          >
-            <Telescope className="h-3.5 w-3.5" />
-            <span className="hidden @[112rem]:inline">{t("attributeTable.buttons.explore")}</span>
-          </Button>
-        ) : null}
-        {!isEditing ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 px-2"
-            title={
-              hasAttributeSource
-                ? t("attributeTable.statisticsTitle")
-                : t("attributeTable.statisticsTitleDisabled")
-            }
-            aria-label={t("attributeTable.statistics")}
-            disabled={!hasAttributeSource}
-            onClick={() => setStatsOpen(true)}
-          >
-            <Sigma className="h-3.5 w-3.5" />
-            <span className="hidden @[112rem]:inline">
-              {t("attributeTable.buttons.statistics")}
-            </span>
-          </Button>
-        ) : null}
-        {!isEditing ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 px-2"
-            title={
-              hasAttributeSource
-                ? t("attributeTable.chartsTitle")
-                : t("attributeTable.chartsTitleDisabled")
-            }
-            aria-label={t("attributeTable.charts")}
-            disabled={!hasAttributeSource}
-            onClick={() => setChartOpen(true)}
-          >
-            <ChartColumn className="h-3.5 w-3.5" />
-            <span className="hidden @[112rem]:inline">{t("attributeTable.charts")}</span>
-          </Button>
-        ) : null}
-        {!isEditing ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 px-2"
-            title={t("attributeTable.dashboardTitle")}
-            aria-label={t("attributeTable.dashboard")}
-            onClick={() => setDashboardOpen(true)}
-          >
-            <LayoutDashboard className="h-3.5 w-3.5" />
-            <span className="hidden @[112rem]:inline">{t("attributeTable.dashboard")}</span>
-          </Button>
-        ) : null}
-        {!isEditing && canRefreshLayer && layer ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 px-2"
-            title={
-              refreshBlockedByEdits
-                ? t("attributeTable.refreshTitlePendingEdits")
-                : isLocalFileRefresh
-                  ? t("attributeTable.refreshTitleLocalFile")
-                  : t("attributeTable.refreshTitle")
-            }
-            aria-label={t("attributeTable.refresh")}
-            aria-busy={isRefreshingLayer}
-            disabled={isRefreshingLayer || refreshBlockedByEdits}
-            onClick={() => void refreshLayerRows(layer)}
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingLayer ? "animate-spin" : ""}`} />
-            <span className="hidden @[112rem]:inline">{t("attributeTable.buttons.refresh")}</span>
-          </Button>
-        ) : null}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2"
-              title={
-                !layerCaps.export
-                  ? t("attributeTable.exportTitleCapabilityDisabled")
-                  : layer?.geojson
-                    ? t("attributeTable.exportSelectedLayer")
-                    : t("attributeTable.exportTitleDisabled")
-              }
-              aria-label={t("attributeTable.exportSelectedLayer")}
-              disabled={!layer?.geojson || !layerCaps.export}
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span className="hidden @[112rem]:inline">{t("attributeTable.buttons.export")}</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => void exportLayer("geojson")}>
-              GeoJSON
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void exportLayer("geoparquet")}>
-              GeoParquet
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void exportLayer("geopackage")}>
-              GeoPackage
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void exportLayer("kml")}>KML</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void exportLayer("kmz")}>KMZ</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void exportLayer("shapefile")}>
-              Shapefile (zipped)
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void exportLayer("csv")}>CSV</DropdownMenuItem>
-            {layer && layerSupportsPolylineExport(layer) && (
-              <>
-                <DropdownMenuItem onSelect={() => void exportLayer("polyline", 5)}>
-                  {t("layers.exportPolyline", { precision: 5 })}
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void exportLayer("polyline", 6)}>
-                  {t("layers.exportPolyline", { precision: 6 })}
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
         {isEditing ? (
           <Button
             variant="ghost"
@@ -2404,21 +2397,6 @@ export function AttributeTable({
             <RotateCcw className="h-4 w-4" />
           </Button>
         ) : null}
-        <Input
-          className="h-7 min-w-36 flex-1 text-xs md:max-w-xs"
-          placeholder={t("attributeTable.searchPlaceholder")}
-          aria-label={t("attributeTable.searchAria")}
-          value={attributeFilter}
-          onChange={(e) => setAttributeFilter(e.target.value)}
-        />
-        <label className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={zoomToSelectedFeature}
-            onChange={(event) => setZoomToSelectedFeature(event.target.checked)}
-          />
-          {t("attributeTable.zoomToSelection")}
-        </label>
         {/* Compact so it matches the h-7 toolbar. As a flex item the wrapper
             sizes to the longest label rather than clipping it. */}
         <Select
@@ -2508,6 +2486,238 @@ export function AttributeTable({
             )}
           </Button>
         ) : null}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              title={t("attributeTable.moreActions")}
+              aria-label={t("attributeTable.moreActions")}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-52">
+            {canManageColumns && !isEditing ? (
+              <>
+                <DropdownMenuItem
+                  className="gap-2"
+                  title={t("attributeTable.addFieldTitle")}
+                  onSelect={openAddColumn}
+                >
+                  <Plus className="h-4 w-4" />
+                  {t("attributeTable.addField")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2"
+                  title={t("attributeTable.fieldCalculatorTitle")}
+                  onSelect={openCalculator}
+                >
+                  <Calculator className="h-4 w-4" />
+                  {t("attributeTable.fieldCalculator")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2"
+                  disabled={!canEnterEditMode || editableBulkColumns.length === 0}
+                  onSelect={() => setBulkEditOpen(true)}
+                >
+                  <Replace className="h-4 w-4" />
+                  {t("attributeTable.bulkEdit.title")}
+                </DropdownMenuItem>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger title={t("attributeTable.manageFieldsTitle")}>
+                    <Columns3 className="h-4 w-4" />
+                    {t("attributeTable.manageFields")}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="max-h-72 overflow-y-auto">
+                    <DropdownMenuLabel>{t("attributeTable.showFields")}</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {discoveredColumns.length === 0 ? (
+                      <DropdownMenuItem disabled>{t("attributeTable.noFields")}</DropdownMenuItem>
+                    ) : (
+                      discoveredColumns.map((col) => (
+                        <DropdownMenuCheckboxItem
+                          key={col}
+                          checked={!hiddenColSet.has(col)}
+                          // Keep the menu open so several fields can be toggled at once.
+                          onSelect={(event: Event) => event.preventDefault()}
+                          onCheckedChange={() => handleToggleHidden(col)}
+                        >
+                          <span className="truncate">{col}</span>
+                        </DropdownMenuCheckboxItem>
+                      ))
+                    )}
+                    {hiddenCols.length > 0 ? (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={handleShowAllColumns}>
+                          {t("attributeTable.showAllFields")}
+                        </DropdownMenuItem>
+                      </>
+                    ) : null}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSeparator />
+              </>
+            ) : null}
+            {!isEditing ? (
+              <>
+                <DropdownMenuItem
+                  className="gap-2"
+                  title={
+                    hasAttributeSource
+                      ? t("attributeTable.columnExplorerTitle")
+                      : t("attributeTable.columnExplorerTitleDisabled")
+                  }
+                  disabled={!hasAttributeSource}
+                  onSelect={() => setExplorerOpen(true)}
+                >
+                  <Telescope className="h-4 w-4" />
+                  {t("attributeTable.columnExplorer")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2"
+                  title={
+                    hasAttributeSource
+                      ? t("attributeTable.statisticsTitle")
+                      : t("attributeTable.statisticsTitleDisabled")
+                  }
+                  disabled={!hasAttributeSource}
+                  onSelect={() => setStatsOpen(true)}
+                >
+                  <Sigma className="h-4 w-4" />
+                  {t("attributeTable.statistics")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2"
+                  title={
+                    hasAttributeSource
+                      ? t("attributeTable.chartsTitle")
+                      : t("attributeTable.chartsTitleDisabled")
+                  }
+                  disabled={!hasAttributeSource}
+                  onSelect={() => setChartOpen(true)}
+                >
+                  <ChartColumn className="h-4 w-4" />
+                  {t("attributeTable.charts")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2"
+                  title={t("attributeTable.dashboardTitle")}
+                  onSelect={() => setDashboardOpen(true)}
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  {t("attributeTable.dashboard")}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            ) : null}
+            {!isEditing && canRefreshLayer && layer ? (
+              <DropdownMenuItem
+                className="gap-2"
+                title={
+                  refreshBlockedByEdits
+                    ? t("attributeTable.refreshTitlePendingEdits")
+                    : isLocalFileRefresh
+                      ? t("attributeTable.refreshTitleLocalFile")
+                      : t("attributeTable.refreshTitle")
+                }
+                aria-busy={isRefreshingLayer}
+                disabled={isRefreshingLayer || refreshBlockedByEdits}
+                onSelect={() => void refreshLayerRows(layer)}
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshingLayer ? "animate-spin" : ""}`} />
+                {t("attributeTable.refresh")}
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger
+                title={
+                  !layerCaps.export
+                    ? t("attributeTable.exportTitleCapabilityDisabled")
+                    : layer?.geojson
+                      ? t("attributeTable.exportSelectedLayer")
+                      : t("attributeTable.exportTitleDisabled")
+                }
+                disabled={!layer?.geojson || !layerCaps.export}
+              >
+                <Download className="h-4 w-4" />
+                {t("attributeTable.buttons.export")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuItem onSelect={() => void exportLayer("geojson")}>
+                  GeoJSON
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void exportLayer("geoparquet")}>
+                  GeoParquet
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void exportLayer("geopackage")}>
+                  GeoPackage
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void exportLayer("kml")}>KML</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void exportLayer("kmz")}>KMZ</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void exportLayer("shapefile")}>
+                  Shapefile (zipped)
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void exportLayer("csv")}>CSV</DropdownMenuItem>
+                {layer && layerSupportsPolylineExport(layer) && (
+                  <>
+                    <DropdownMenuItem onSelect={() => void exportLayer("polyline", 5)}>
+                      {t("layers.exportPolyline", { precision: 5 })}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => void exportLayer("polyline", 6)}>
+                      {t("layers.exportPolyline", { precision: 6 })}
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem
+              checked={zoomToSelectedFeature}
+              onCheckedChange={(checked) => setZoomToSelectedFeature(checked === true)}
+            >
+              {t("attributeTable.zoomToSelection")}
+            </DropdownMenuCheckboxItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button
+          variant={columnFilterBarOpen || activeColumnFilterCount > 0 ? "secondary" : "outline"}
+          size="sm"
+          className="ms-auto h-7 gap-1 px-2"
+          title={t("attributeTable.columnFilter.toggle")}
+          aria-label={t("attributeTable.columnFilter.toggle")}
+          aria-pressed={columnFilterBarOpen}
+          disabled={!hasAttributeSource || columns.length === 0}
+          onClick={() => setColumnFilterBarOpen((open) => !open)}
+        >
+          <Filter className="h-3.5 w-3.5" />
+          {activeColumnFilterCount > 0 ? (
+            <span className="text-[11px] font-semibold tabular-nums">
+              {activeColumnFilterCount}
+            </span>
+          ) : null}
+        </Button>
+        {canEnterEditMode && editableBulkColumns.length > 0 ? (
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-7 w-7"
+            title={t("attributeTable.bulkEdit.title")}
+            aria-label={t("attributeTable.bulkEdit.title")}
+            onClick={() => setBulkEditOpen(true)}
+          >
+            <Replace className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
+        <Input
+          className="h-7 w-[180px] min-w-28 shrink text-xs"
+          placeholder={t("attributeTable.searchPlaceholder")}
+          aria-label={t("attributeTable.searchAria")}
+          value={attributeFilter}
+          onChange={(e) => setAttributeFilter(e.target.value)}
+        />
         <Button
           variant="ghost"
           size="icon"
@@ -2534,15 +2744,24 @@ export function AttributeTable({
         </Button>
       </div>
       {/*
-        Vertical scrollbar height reserves 3.625rem: 2.75rem for the sticky
-        header (top-11) plus 0.875rem for the horizontal scrollbar (h-3.5),
-        so the two scrollbars do not overlap.
+        Vertical scrollbar height reserves 2.75rem: 1.875rem for the sticky
+        header row (30px) plus 0.875rem for the
+        horizontal scrollbar (h-3.5), so the two scrollbars do not overlap.
       */}
+      {!collapsed && columnFilterBarOpen && hasAttributeSource ? (
+        <ColumnFilterBar
+          columns={columns}
+          numericColumns={numericColumns}
+          filters={columnFilters}
+          onChangeFilter={handleColumnFilterChange}
+          onClearAll={() => setColumnFilters({})}
+        />
+      ) : null}
       {!collapsed ? (
         <ScrollArea
           type="always"
           viewportRef={scrollViewportRef}
-          className="flex-1 [&_[data-orientation=vertical]]:!top-11 [&_[data-orientation=vertical]]:!h-[calc(100%-3.625rem)]"
+          className="flex-1 [&_[data-orientation=vertical]]:!top-[1.875rem] [&_[data-orientation=vertical]]:!h-[calc(100%-2.75rem)]"
         >
           {!hasAttributeSource ? (
             <p className="p-4 text-xs text-muted-foreground">
@@ -2559,12 +2778,21 @@ export function AttributeTable({
               scrollElementRef={scrollViewportRef}
               sortKey={sort.key}
               sortDirection={sort.direction}
-              onChangeSortKey={(key) => setSort({ key, direction: "asc" })}
+              onChangeSortKey={(key) => setSortSpecs([{ key, direction: "asc" }])}
               onToggleSortDirection={() =>
-                setSort((current) => ({
-                  ...current,
-                  direction: current.direction === "asc" ? "desc" : "asc",
-                }))
+                setSortSpecs((current) => {
+                  const primary = current[0] ?? {
+                    key: "__featureId" as SortKey,
+                    direction: "asc" as SortDirection,
+                  };
+                  return [
+                    {
+                      ...primary,
+                      direction: primary.direction === "asc" ? "desc" : "asc",
+                    },
+                    ...current.slice(1),
+                  ];
+                })
               }
               onSelectRow={handleRowClick}
               onZoomRow={(featureId) => {
@@ -2606,9 +2834,11 @@ export function AttributeTable({
               </colgroup>
               <TableHeader className="sticky top-0 z-10 bg-card shadow-xs">
                 <TableRow>
-                  <TableHead className="bg-card">{sortableHeader("__featureId", "#")}</TableHead>
+                  <TableHead className="h-[30px] bg-card">
+                    {sortableHeader("__featureId", "#")}
+                  </TableHead>
                   {columns.map((col, index) => (
-                    <TableHead key={col} className="bg-card">
+                    <TableHead key={col} className="h-[30px] bg-card">
                       {attributeColumnHeader(col, index)}
                     </TableHead>
                   ))}
@@ -2650,7 +2880,7 @@ export function AttributeTable({
                         handleRowClick(featureId, event);
                       }}
                     >
-                      <TableCell>
+                      <TableCell className="py-[3px]">
                         <span className="block max-w-full truncate" title={featureId}>
                           {featureId}
                         </span>
@@ -2714,7 +2944,7 @@ export function AttributeTable({
                           <TableCell
                             key={col}
                             data-state={changed ? "edited" : undefined}
-                            className="data-[state=edited]:bg-primary/10 data-[state=edited]:shadow-[inset_3px_0_0_hsl(var(--primary))]"
+                            className="py-[3px] data-[state=edited]:bg-primary/10 data-[state=edited]:shadow-[inset_3px_0_0_hsl(var(--primary))]"
                             title={columnHint}
                           >
                             {isEditableCell ? (
@@ -2853,11 +3083,19 @@ export function AttributeTable({
           data-testid="attribute-table-status"
           className="flex shrink-0 items-center gap-3 border-t bg-card px-3 py-1 text-[11px] text-muted-foreground"
         >
-          <span>{t("attributeTable.statusFeatures", { count: attributeRows.length })}</span>
+          <span>
+            {t("attributeTable.statusFeatures", {
+              count: attributeRows.length,
+            })}
+          </span>
           {filtered.length !== attributeRows.length ? (
             <span>{t("attributeTable.statusShown", { count: filtered.length })}</span>
           ) : null}
-          <span>{t("attributeTable.statusSelected", { count: selectedFeatureIds.length })}</span>
+          <span>
+            {t("attributeTable.statusSelected", {
+              count: selectedFeatureIds.length,
+            })}
+          </span>
         </div>
       ) : null}
       <Dialog
@@ -3233,6 +3471,16 @@ export function AttributeTable({
         filteredRows={analysisFilteredRows}
         columns={discoveredColumns}
         layerName={layer?.name ?? ""}
+      />
+      <AttributeBulkEditDialog
+        open={bulkEditOpen && canEnterEditMode}
+        onOpenChange={setBulkEditOpen}
+        canEdit={canEnterEditMode}
+        editableColumns={editableBulkColumns}
+        selectedCount={selectedIdSet.size}
+        filteredCount={filtered.length}
+        onBulkFill={handleBulkFill}
+        onFindReplace={handleFindReplace}
       />
     </section>
   );

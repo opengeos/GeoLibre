@@ -1,4 +1,3 @@
-import { gcsUriToHttps } from "./gcs";
 import { normalizeGeoEditorSettings } from "./geo-editor-settings";
 import { normalizeArcgisWkid } from "./arcgis-projection";
 import { normalizeMapCrs } from "./map-crs";
@@ -83,6 +82,7 @@ import {
   type PrintLayoutConfig,
 } from "./print-layout-config";
 import { getEllipsoid } from "./ellipsoids";
+import { scrubSecondaryPaneLayerVisibility, scrubStorymapLayerRefs } from "./store/layer-removal";
 import { normalizeGeocodingLocator } from "./geocoding";
 import {
   scrubWidgetsForRemovedLayers,
@@ -412,14 +412,38 @@ function* serializeProjectWithLayerCacheSteps(
   return serializeProjectValue({ ...project, layers }, 0, "", new Set(), presets) ?? "null";
 }
 
+function clampOpacity(value: unknown, fallback = 1): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(1, Math.max(0, value))
+    : fallback;
+}
+
 export function parseProject(json: string): GeoLibreProject {
-  const data = JSON.parse(json) as Partial<GeoLibreProject>;
-  if (!data.version || !data.name || !data.mapView) {
+  const parsed: unknown = JSON.parse(json);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Invalid GeoLibre project: expected a JSON object");
+  }
+  const data = parsed as Partial<GeoLibreProject>;
+  if (
+    typeof data.version !== "string" ||
+    !data.version ||
+    typeof data.name !== "string" ||
+    !data.name ||
+    !data.mapView ||
+    typeof data.mapView !== "object" ||
+    Array.isArray(data.mapView)
+  ) {
     throw new Error("Invalid GeoLibre project: missing required fields");
   }
   const layerGroups = normalizeLayerGroups(data.layerGroups);
   const validGroupIds = new Set(layerGroups.map((g) => g.id));
-  const layers = (data.layers ?? [])
+  const rawLayers = Array.isArray(data.layers)
+    ? data.layers.filter(
+        (item): item is GeoLibreLayer =>
+          Boolean(item) && typeof item === "object" && !Array.isArray(item),
+      )
+    : [];
+  const layers = rawLayers
     .map(normalizeLayer)
     .map((layer) =>
       layer.groupId && !validGroupIds.has(layer.groupId) ? { ...layer, groupId: undefined } : layer,
@@ -433,7 +457,7 @@ export function parseProject(json: string): GeoLibreProject {
         : undefined;
   const basemapStyleUrl = data.basemapStyleUrl ?? DEFAULT_BASEMAP;
   const basemapVisible = data.basemapVisible ?? true;
-  const basemapOpacity = data.basemapOpacity ?? 1;
+  const basemapOpacity = clampOpacity(data.basemapOpacity, 1);
   const blankBackgroundColor = normalizeBlankBackgroundColor(data.blankBackgroundColor);
   // Secondary panes already go through normalizeMapViewState; the primary
   // camera must too so a hand-edited project cannot store an out-of-range
@@ -2049,27 +2073,29 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
     validateMapExpression(JSON.stringify(rawFilterExpression), { expectedType: "boolean" }).ok
       ? rawFilterExpression
       : undefined;
-  // Convert Google Cloud Storage URLs (gs://) in layer sources to their
-  // public HTTPS equivalents so layers hosted on GCS can be loaded.
-  const source = rest.source && typeof rest.source === "object" ? { ...rest.source } : rest.source;
-  if (source && typeof source === "object") {
-    const url = source.url;
-    if (typeof url === "string") {
-      try {
-        source.url = gcsUriToHttps(url);
-      } catch {
-        // Keep the original URL so the refresh pipeline can report its error.
-      }
-    }
-  }
+  const rawStyle: Partial<LayerStyle> =
+    layer.style && typeof layer.style === "object" && !Array.isArray(layer.style)
+      ? layer.style
+      : {};
+  const rawLabels =
+    rawStyle.labels && typeof rawStyle.labels === "object" && !Array.isArray(rawStyle.labels)
+      ? rawStyle.labels
+      : undefined;
 
+  // Batches are runtime caches. A hydrated batch cannot be verified against
+  // the saved GeoJSON, so the `geoarrow` batch split off above is always
+  // discarded to avoid rendering stale data.
   return {
     ...rest,
-    source: source ?? {},
-    style: { ...DEFAULT_LAYER_STYLE, ...layer.style },
+    style: {
+      ...DEFAULT_LAYER_STYLE,
+      ...rawStyle,
+      labels: { ...DEFAULT_LAYER_STYLE.labels, ...rawLabels },
+    },
     visible: layer.visible ?? true,
-    opacity: layer.opacity ?? 1,
+    opacity: clampOpacity(layer.opacity, 1),
     metadata: layer.metadata ?? {},
+    source: layer.source ?? {},
     ...(capabilities ? { capabilities } : {}),
     ...(filterExpression ? { filterExpression } : {}),
     ...(descriptiveMetadata ? { descriptiveMetadata } : {}),
@@ -2646,12 +2672,12 @@ export function applyProjectToStore(project: GeoLibreProject): {
   );
   const basemapStyleUrl = project.basemapStyleUrl;
   const basemapVisible = project.basemapVisible ?? true;
-  const basemapOpacity = project.basemapOpacity ?? 1;
+  const basemapOpacity = clampOpacity(project.basemapOpacity, 1);
   const blankBackgroundColor = normalizeBlankBackgroundColor(project.blankBackgroundColor);
   // Reconcile the (possibly hand-edited or programmatic) grid so the store's
   // invariant `secondaryMapViews.length === rows * cols - 1` always holds.
   const mapView = normalizeMapViewState(project.mapView);
-  const { mapLayout, secondaryMapViews } = resolveMapGrid(
+  const { mapLayout, secondaryMapViews: rawSecondaryMapViews } = resolveMapGrid(
     normalizeMapLayout(project.mapLayout),
     normalizeSecondaryMapViews(project.secondaryMapViews),
     { mapView },
@@ -2665,6 +2691,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   const legend = normalizeLegendConfig(project.legend) ?? {
     ...DEFAULT_LEGEND_CONFIG,
   };
+  const rawStorymap = normalizeStoryMap(project.storymap);
 
   const allReferencedIds = new Set<string>();
   for (const w of widgets) allReferencedIds.add(w.layerId);
@@ -2681,6 +2708,17 @@ export function applyProjectToStore(project: GeoLibreProject): {
       if (!key.startsWith("custom:")) allReferencedIds.add(key);
     }
   }
+  for (const pane of rawSecondaryMapViews) {
+    for (const id of Object.keys(pane.layerVisibility)) {
+      allReferencedIds.add(id);
+    }
+  }
+  if (rawStorymap) {
+    for (const chapter of rawStorymap.chapters) {
+      for (const change of chapter.onChapterEnter) allReferencedIds.add(change.layerId);
+      for (const change of chapter.onChapterExit) allReferencedIds.add(change.layerId);
+    }
+  }
 
   const orphanIds = new Set([...allReferencedIds].filter((id) => !existingLayerIds.has(id)));
 
@@ -2690,6 +2728,12 @@ export function applyProjectToStore(project: GeoLibreProject): {
     orphanIds.size > 0 ? scrubCommentsForRemovedLayers(comments, orphanIds) : comments;
   const scrubbedLegend =
     orphanIds.size > 0 ? scrubLegendForRemovedLayers(legend, orphanIds) : legend;
+  const secondaryMapViews =
+    orphanIds.size > 0
+      ? scrubSecondaryPaneLayerVisibility(rawSecondaryMapViews, orphanIds)
+      : rawSecondaryMapViews;
+  const storymap =
+    orphanIds.size > 0 ? scrubStorymapLayerRefs(rawStorymap, orphanIds) : rawStorymap;
   const bookmarkGroups = normalizeBookmarkGroups(project.bookmarkGroups);
   // The composer's data/atlas blocks name a layer directly rather than through
   // `allReferencedIds`, so they are scrubbed against the surviving layer set.
@@ -2711,7 +2755,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
     projectPlugins: normalizeProjectPlugins(project.plugins),
     legend: scrubbedLegend,
     printLayout,
-    storymap: normalizeStoryMap(project.storymap),
+    storymap,
     models: normalizeModels(project.models) ?? [],
     processingHistory: normalizeProcessingHistory(project.processingHistory) ?? [],
     obiaWorkbench: normalizeObiaWorkbench(project.obia),

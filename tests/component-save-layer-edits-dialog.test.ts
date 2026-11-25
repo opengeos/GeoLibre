@@ -46,6 +46,28 @@ function makeCandidate(
 }
 
 describe("SaveLayerEditsDialog", () => {
+  it("identifies a managed document as a GeoLibre copy", () => {
+    const layer = makeLayer("roads", "Roads");
+    layer.sourcePath =
+      "/data/user/0/org.geolibre.app/files/picked-documents/3cb9b477-d563-4d3e-8503-263ec23c01c5/data/roads.geojson";
+    const candidate = makeCandidate("roads", "Roads", {
+      layer,
+      destinationLabel: layer.sourcePath,
+    });
+    useAppStore.setState({ layers: [layer] });
+    render(
+      createElement(SaveLayerEditsDialog, {
+        open: true,
+        onOpenChange: () => {},
+        candidatesOverride: [candidate],
+        onSaveSelected: async () => ({ hasIssues: false, aborted: false }),
+        onExportGeojsonZip: async () => true,
+      }),
+    );
+    assert.ok(screen.getByText("GeoLibre copy: roads.geojson"));
+    assert.equal(screen.queryByText(layer.sourcePath), null);
+  });
+
   it("pre-selects edited layers, supports Select all, and invokes onSaveSelected", async () => {
     const edited = makeCandidate("roads", "Roads", { hasPendingEdits: true });
     const clean = makeCandidate("rivers", "Rivers", { hasPendingEdits: false });

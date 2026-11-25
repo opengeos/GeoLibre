@@ -4,7 +4,7 @@
  * HTTPS URLs DuckDB-WASM's HTTP reader fetches. Split from `sql-workspace.ts`
  * so the node test runner can load them.
  */
-import { gcsUriToHttps, isCredentialedS3Url, resolveReadableUrl } from "@geolibre/core";
+import { isCredentialedS3Url, resolveReadableUrl } from "@geolibre/core";
 
 /**
  * Return a copy of `sql` in which every character inside a string literal,
@@ -103,7 +103,7 @@ function cloudUrlToHttps(scheme: string, path: string): string {
   }
   if (lower === "gs") {
     // gs://bucket/key → https://storage.googleapis.com/bucket/key
-    return gcsUriToHttps(`gs://${path}`);
+    return `https://storage.googleapis.com/${path}`;
   }
   // az://account/container/key → https://account.blob.core.windows.net/container/key
   const account = slashIndex >= 0 ? path.slice(0, slashIndex) : path;

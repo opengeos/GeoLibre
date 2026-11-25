@@ -752,7 +752,12 @@ export interface GeoLibreAppAPI {
    * Apply a style written in another format to a layer, like the Layers
    * panel's "Import style": an OGC SLD, a QGIS QML, an ArcGIS Pro layer file
    * (`.lyrx`) or a Mapbox GL style JSON, detected from the content. The style
-   * is merged over the layer's current one and saved with the project. Only
+   * is merged over the layer's current one and saved with the project; a
+   * `.lyrx` symbol is a whole symbol, so it also switches off the layer's
+   * dash, blur, line decorations, fill pattern, inverted fill, icon marker,
+   * heat map or cluster renderer and proportional sizing, and resets outline
+   * transparency, widths and circle radius to GeoLibre's defaults where the
+   * file does not set them (see `docs/plugin-api.md`). Only
    * GeoJSON and vector-tile layers take a style, as in the Layers panel; any
    * other layer is left untouched with `reason: "unsupported-layer"`. Accepts
    * any such layer id, not only the plugin's own; throws for an unknown id.
@@ -1404,6 +1409,21 @@ export interface GeoLibreAppAPI {
    * GeoJSON).
    */
   exportTextFile?: (filename: string, content: string, options?: GeoLibreFileDialogOptions) => void;
+  /**
+   * Save binary content (`Blob` or `Uint8Array`) to a file chosen by the user.
+   * The host handles platform specifics (a native save dialog under Tauri, a
+   * File System Access picker or browser download on the web). Resolves to the
+   * saved file path/name, or `null` when the user cancels on desktop or in
+   * browsers with `showSaveFilePicker`. On download-fallback browsers, a
+   * cancelled `options.promptName` dialog resolves to `null`; otherwise the
+   * fallback cannot detect browser download cancellation and resolves to the
+   * file name.
+   */
+  saveBinaryFile?: (
+    filename: string,
+    data: Blob | Uint8Array,
+    options?: GeoLibreFileDialogOptions,
+  ) => Promise<string | null>;
   /**
    * Convert WGS84 GeoJSON features to GeoParquet and save them through the
    * host's native or browser file dialog. `filename` is the base name without
@@ -2097,6 +2117,12 @@ export interface GeoLibrePlugin {
   sessionScoped?: boolean;
 }
 
+/**
+ * Optional capabilities an external plugin may declare in `plugin.json` so
+ * Manage Plugins can disclose what surfaces the plugin accesses.
+ */
+export type GeoLibrePluginCapability = "network" | "filesystem" | "sidecar" | "mapWrite" | "ui";
+
 export interface GeoLibreExternalPluginManifest {
   id: string;
   name: string;
@@ -2108,6 +2134,12 @@ export interface GeoLibreExternalPluginManifest {
    * Renderers this plugin supports. Defaults to `["maplibre"]`.
    */
   engines?: MapRendererKind[];
+  /**
+   * Optional self-declared capability labels (`network`, `filesystem`,
+   * `sidecar`, `mapWrite`, `ui`). Displayed as advisory badges for installed
+   * archive plugins in Manage Plugins; not enforced at runtime.
+   */
+  capabilities?: GeoLibrePluginCapability[];
   /**
    * Activate the plugin on startup when no saved plugin state overrides it.
    * Honored only for bundled drop-ins (public/plugins/<id>/), which are baked
@@ -2129,7 +2161,7 @@ export interface GeoLibreExternalPluginManifest {
  * Defaults to `["maplibre"]` when `engines` is omitted or empty.
  */
 export function isPluginEngineSupported(
-  plugin: Pick<GeoLibrePlugin, "engines"> | null | undefined,
+  plugin: { readonly engines?: readonly MapRendererKind[] } | null | undefined,
   engine: MapRendererKind,
 ): boolean {
   const supported: readonly MapRendererKind[] =

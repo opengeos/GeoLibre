@@ -1,3 +1,6 @@
+import { EARTHDATA_GIS_PLUGIN_ID } from "../plugin-ids";
+export { EARTHDATA_GIS_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 /**
  * Earthdata GIS browser (Plugins > Web Services).
  *
@@ -48,7 +51,6 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { getStyleMap } from "./style-map";
 import { withSelectChevron } from "../panel-dom";
 
-export const EARTHDATA_GIS_PLUGIN_ID = "maplibre-gl-earthdata-gis";
 const PANEL_ID = EARTHDATA_GIS_PLUGIN_ID;
 
 /**
@@ -1863,13 +1865,12 @@ export function setEarthdataGisLabels(next: Partial<EarthdataGisLabels>): void {
  * ArcGIS imagery, map, and feature services to the map.
  */
 export const maplibreEarthdataGisPlugin: GeoLibrePlugin = {
-  id: EARTHDATA_GIS_PLUGIN_ID,
-  name: "Earthdata GIS",
-  version: "0.1.0",
+  ...builtInPluginProperties("maplibre-gl-earthdata-gis"),
+
   // Store-only adds (tile layers and ArcGIS feature layers) plus camera reads
   // through the shared map surface, or the host's control map on ArcGIS and
   // the Cesium globe.
-  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
+
   activate: (app: GeoLibreAppAPI) => {
     appRef = app;
     unregisterPanel =

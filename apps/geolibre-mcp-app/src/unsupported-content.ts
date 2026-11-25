@@ -11,6 +11,11 @@ import {
   isMapboxStyleUrl,
   resolveMapStyle,
 } from "@geolibre/map/headless";
+import { cogLayerUrl, isPreviewCogLayer } from "./cog-preview";
+import { isPreviewPMTilesLayer, pmtilesArchiveUrl } from "./pmtiles-preview";
+import { previewI18n } from "./preview-i18n";
+
+const t = previewI18n.getFixedT(null, "translation", "mcpPreview.content");
 
 const LAYER_KIND_NAMES: Record<string, string> = {
   arcgis: "ArcGIS service",
@@ -53,13 +58,21 @@ function missingData(layer: GeoLibreLayer): string | undefined {
       return typeof source?.url === "string" && Array.isArray(source.coordinates)
         ? undefined
         : "missing image URL or coordinates";
+    case "cog":
+      return (typeof source?.url === "string" && source.url.length > 0) ||
+        (typeof layer.sourcePath === "string" && layer.sourcePath.length > 0)
+        ? undefined
+        : "missing a raster URL";
     default:
       return undefined;
   }
 }
 
 function isDesktopOnly(layer: GeoLibreLayer): boolean {
-  if (layer.type === "mbtiles" || layer.type === "pmtiles") return true;
+  if (layer.type === "cog") return cogLayerUrl(layer) === null;
+  if (layer.type === "mbtiles") return true;
+  // An in-memory extract or local archive has no URL the preview can reach.
+  if (layer.type === "pmtiles" && pmtilesArchiveUrl(layer) === null) return true;
   if (layer.type === "geojson" && layer.geojson) return false;
   const source = layer.source as Record<string, unknown> | undefined;
   const urls = [
@@ -99,7 +112,9 @@ export function previewableLayers(project: GeoLibreProject): GeoLibreLayer[] {
     if (
       layer.type === "video" ||
       layer.type === "mbtiles" ||
+      // Drawn through the preview's own consent-gated loaders, see previewRenderLayers.
       layer.type === "pmtiles" ||
+      layer.type === "cog" ||
       missingData(layer) ||
       isDesktopOnly(layer) ||
       isDeckOnlyGeoJson(layer)
@@ -107,6 +122,35 @@ export function previewableLayers(project: GeoLibreProject): GeoLibreLayer[] {
       return false;
     return true;
   });
+}
+
+/** How the preview draws one saved layer. */
+export type PreviewRenderKind = "native" | "pmtiles" | "cog";
+
+/**
+ * Every layer the preview draws, bottom to top, with the path that draws it:
+ * MapLibre-native layers through layer sync, remote PMTiles archives through a
+ * consent-gated byte source, and COGs as one decoded, downsampled image.
+ */
+export function previewRenderLayers(
+  project: GeoLibreProject,
+): Array<{ layer: GeoLibreLayer; kind: PreviewRenderKind }> {
+  const native = new Set(previewableLayers(project));
+  const layers: Array<{ layer: GeoLibreLayer; kind: PreviewRenderKind }> = [];
+  for (const layer of project.layers) {
+    if (!layer.visible) continue;
+    if (native.has(layer)) layers.push({ layer, kind: "native" });
+    else if (isPreviewPMTilesLayer(layer)) {
+      // Use the same validated address for native layer sync and consent's
+      // archive registration, including a sourcePath fallback.
+      layers.push({
+        layer: { ...layer, source: { ...layer.source, url: pmtilesArchiveUrl(layer)! } },
+        kind: "pmtiles",
+      });
+    } else if (isPreviewCogLayer(layer) && !isDesktopOnly(layer))
+      layers.push({ layer, kind: "cog" });
+  }
+  return layers;
 }
 
 /** Origins known before loading the map; never inspect feature properties or fetch styles. */
@@ -147,7 +191,11 @@ export function previewOrigins(project: GeoLibreProject): string[] {
     }
   }
   const layers = applyGroupEffects(project.layers, project.layerGroups ?? []);
-  for (const layer of previewableLayers({ ...project, layers })) addSource(layer.source);
+  for (const { layer, kind } of previewRenderLayers({ ...project, layers })) {
+    if (kind === "pmtiles") addUrl(pmtilesArchiveUrl(layer));
+    else if (kind === "cog") addUrl(cogLayerUrl(layer));
+    else addSource(layer.source);
+  }
   return [...origins];
 }
 
@@ -157,21 +205,24 @@ export function unsupportedContent(project: GeoLibreProject): string[] {
   for (const layer of applyGroupEffects(project.layers, project.layerGroups ?? [])) {
     if (!layer.visible) continue;
     const missing = missingData(layer);
+    const previewDrawn =
+      isPreviewPMTilesLayer(layer) || (isPreviewCogLayer(layer) && !isDesktopOnly(layer));
     const pluginOwned =
       layer.metadata?.externalNativeLayer === true ||
       layer.metadata?.sourceKind === "maplibre-gl-vector";
     const desktopOnly = isDesktopOnly(layer);
     const kind = classifyLayer(layer);
     const pluginKind = layerKindSupport(MAPLIBRE_SUPPORTED_LAYER_KINDS, kind) === "plugin";
-    const reason =
-      layer.type === "video"
+    const reason = previewDrawn
+      ? undefined
+      : layer.type === "video"
         ? "video loading bypasses the consent-gated request path"
-        : layer.type === "pmtiles"
-          ? "requires the PMTiles plugin, whose loader is not available in this preview"
-          : desktopOnly
-            ? "requires a desktop-local source"
-            : missing
-              ? missing
+        : layer.type === "pmtiles" && !desktopOnly
+          ? t("pmtilesUnreadable")
+          : missing
+            ? missing
+            : desktopOnly
+              ? "requires a desktop-local source"
               : isDeckOnlyGeoJson(layer)
                 ? "requires the deck.gl elevation renderer"
                 : pluginOwned
@@ -181,7 +232,10 @@ export function unsupportedContent(project: GeoLibreProject): string[] {
                     : layerKindSupport(MAPLIBRE_SUPPORTED_LAYER_KINDS, kind) === "unsupported"
                       ? "not supported by this preview renderer"
                       : undefined;
-    if (reason) notices.push(`Layer “${layer.name}” (${layerKindName(layer)}): ${reason}.`);
+    if (reason) notices.push(t("layer", { name: layer.name, kind: layerKindName(layer), reason }));
+    if (previewDrawn && layer.type === "cog") {
+      notices.push(t("cogPreview", { name: layer.name, kind: layerKindName(layer) }));
+    }
     if (hasImagePopupFields(layer)) {
       notices.push(
         `Layer “${layer.name}”: configured popup image fields are shown as text because popup images bypass preview network consent.`,

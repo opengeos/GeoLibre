@@ -20,6 +20,7 @@ import booleanIntersects from "@turf/boolean-intersects";
 import booleanContains from "@turf/boolean-contains";
 import booleanWithin from "@turf/boolean-within";
 import { featureCollection } from "@turf/helpers";
+import { reprojectFeatureCollectionToWgs84 } from "./crs-proj4";
 import type {
   BBox,
   Feature,
@@ -158,12 +159,36 @@ function collectDissolveParts(
 function mergePolygons(fc: FeatureCollection): Feature<Polygon | MultiPolygon> | null {
   const polys = polygonFeatures(fc);
   if (!polys.length) return null;
-  let merged: Feature<Polygon | MultiPolygon> = polys[0];
-  for (let i = 1; i < polys.length; i += 1) {
-    const next = union(featureCollection([merged, polys[i]]));
-    // Turf can return null for degenerate/self-intersecting geometry; keep the
-    // last good accumulation rather than aborting the whole merge.
-    if (next) merged = next as Feature<Polygon | MultiPolygon>;
+  if (polys.length === 1) return polys[0];
+  try {
+    const batched = union(featureCollection(polys));
+    if (batched) return batched as Feature<Polygon | MultiPolygon>;
+  } catch {
+    // Fall back to pairwise union if a degenerate polygon throws during batching.
+  }
+  let merged: Feature<Polygon | MultiPolygon> | null = null;
+  for (let i = 0; i < polys.length; i += 1) {
+    const candidate = polys[i];
+    if (!merged) {
+      // Probe whether this candidate is valid for Turf before seeding `merged`
+      // so an invalid first polygon (e.g. `[[]]`) is skipped instead of being
+      // returned as the merged output while dropping later valid polygons.
+      try {
+        const seeded = union(featureCollection([candidate, candidate]));
+        if (seeded) merged = seeded as Feature<Polygon | MultiPolygon>;
+      } catch {
+        // Skip malformed candidate and try the next polygon as seed.
+      }
+      continue;
+    }
+    try {
+      const next = union(featureCollection([merged, candidate]));
+      // Turf can return null for degenerate/self-intersecting geometry; keep the
+      // last good accumulation rather than aborting the whole merge.
+      if (next) merged = next as Feature<Polygon | MultiPolygon>;
+    } catch {
+      // Keep the last good accumulation rather than aborting the whole merge.
+    }
   }
   return merged;
 }
@@ -817,18 +842,41 @@ export const intersectionTool: ProcessingAlgorithm = {
     // Unlike Clip (which keeps only input attributes), Intersection carries
     // merged attributes from both layers, so pair each input feature with each
     // overlay feature rather than a dissolved overlay geometry. This mirrors
-    // the sidecar's gpd.overlay(how="intersection").
+    // the sidecar's gpd.overlay(how="intersection"). Pre-filter pairs by bbox
+    // and rename case-insensitively colliding overlay columns so input fields
+    // are not clobbered or duplicated.
+    const inputBoxes = inputPolys.map((f) => horizontalBbox(bbox(f, { recompute: true })));
+    const overlayBoxes = overlayPolys.map((f) => horizontalBbox(bbox(f, { recompute: true })));
+    const overlayOutputNames = overlayFieldOutputNames(
+      propertyKeys(inputPolys),
+      propertyKeys(overlayPolys),
+    );
     const results: Feature[] = [];
-    for (const a of inputPolys) {
-      for (const b of overlayPolys) {
-        const piece = intersect(featureCollection([a, b])) as Feature<
-          Polygon | MultiPolygon
-        > | null;
+    for (let i = 0; i < inputPolys.length; i += 1) {
+      const a = inputPolys[i];
+      const boxA = inputBoxes[i];
+      for (let j = 0; j < overlayPolys.length; j += 1) {
+        if (!bboxesOverlap(boxA, overlayBoxes[j])) continue;
+        const b = overlayPolys[j];
+        let piece: Feature<Polygon | MultiPolygon> | null = null;
+        try {
+          piece = intersect(featureCollection([a, b])) as Feature<Polygon | MultiPolygon> | null;
+        } catch {
+          continue;
+        }
         if (piece?.geometry) {
-          piece.properties = {
-            ...(a.properties ?? {}),
-            ...(b.properties ?? {}),
-          };
+          const mergedProps: Record<string, unknown> = Object.create(null);
+          if (a.properties) {
+            for (const [key, value] of Object.entries(a.properties)) {
+              mergedProps[key] = value;
+            }
+          }
+          if (b.properties) {
+            for (const [key, value] of Object.entries(b.properties)) {
+              mergedProps[overlayOutputNames.get(key) ?? key] = value;
+            }
+          }
+          piece.properties = { ...mergedProps };
           results.push(piece);
         }
       }
@@ -980,6 +1028,31 @@ export function joinFieldOutputNames(
       names.set(key, key);
       continue;
     }
+    let name = key;
+    if (taken.has(name.toLowerCase())) {
+      name = `${key}${JOIN_FIELD_SUFFIX}`;
+      for (let n = 2; taken.has(name.toLowerCase()); n += 1) {
+        name = `${key}${JOIN_FIELD_SUFFIX}_${n}`;
+      }
+    }
+    taken.add(name.toLowerCase());
+    names.set(key, name);
+  }
+  return names;
+}
+
+/**
+ * Map overlay property names for intersection results so neither exact-name nor
+ * case-insensitive collisions overwrite input properties.
+ */
+function overlayFieldOutputNames(
+  inputKeys: Iterable<string>,
+  overlayKeys: Iterable<string>,
+): Map<string, string> {
+  const taken = new Set([...inputKeys].map((key) => key.toLowerCase()));
+  const names = new Map<string, string>();
+  for (const key of overlayKeys) {
+    if (names.has(key)) continue;
     let name = key;
     if (taken.has(name.toLowerCase())) {
       name = `${key}${JOIN_FIELD_SUFFIX}`;
@@ -1560,9 +1633,11 @@ export const attributeJoinTool: ProcessingAlgorithm = {
     // First-match lookup: when several join rows share a key, the first wins.
     const lookup = new Map<string, GeoJsonProperties>();
     for (const jf of joinFeatures) {
-      const key = attributeJoinKey(jf.properties?.[joinField]);
+      const jfProps = jf.properties;
+      const key =
+        jfProps && Object.hasOwn(jfProps, joinField) ? attributeJoinKey(jfProps[joinField]) : null;
       if (key === null) continue;
-      if (!lookup.has(key)) lookup.set(key, jf.properties ?? {});
+      if (!lookup.has(key)) lookup.set(key, jfProps);
     }
 
     // Null-fill the brought-over columns for unmatched left-join rows so the
@@ -1577,7 +1652,9 @@ export const attributeJoinTool: ProcessingAlgorithm = {
     let matched = 0;
     const results: Feature[] = [];
     for (const feature of input.features) {
-      const key = attributeJoinKey(feature.properties?.[targetField]);
+      const fProps = feature.properties;
+      const key =
+        fProps && Object.hasOwn(fProps, targetField) ? attributeJoinKey(fProps[targetField]) : null;
       const joinProps = key === null ? undefined : lookup.get(key);
       if (!joinProps) {
         if (how === "left") {
@@ -2016,10 +2093,9 @@ export const reprojectTool: ProcessingAlgorithm = {
   id: "reproject",
   name: "Reproject",
   description:
-    "Reinterpret a layer's coordinates as a source CRS and transform them to WGS84 so they display in the correct location. Requires the Sidecar or Python engine.",
+    "Reinterpret a layer's coordinates as a source CRS and transform them to WGS84 so they display in the correct location.",
   group: "Geometry",
   supportsSidecar: true,
-  requiresSidecar: true,
   parameters: [
     { id: "layer", label: "Input layer", type: "layer", required: true },
     {
@@ -2029,17 +2105,26 @@ export const reprojectTool: ProcessingAlgorithm = {
       required: true,
       default: "EPSG:3857",
       description:
-        "The CRS the layer's coordinates are really in (e.g. EPSG:3857). The result is transformed to WGS84 (EPSG:4326).",
+        "The CRS the layer's coordinates are really in (e.g. EPSG:3857, EPSG:32617). The result is transformed to WGS84 (EPSG:4326).",
     },
   ],
-  run: (ctx) => {
-    // GeoLibre layers are WGS84 GeoJSON, and real CRS math needs pyproj, so the
-    // client (Turf.js) engine cannot reproject. Point the user at the engines
-    // that share the backend's _reproject (Sidecar/GeoPandas or Pyodide).
-    ctx.log(
-      'Reproject runs on the Python engine. Choose "Sidecar (GeoPandas)" or ' +
-        '"Python (Pyodide)" in the Engine selector above, then run again.',
-    );
+  run: async (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const sourceCrs = String(ctx.parameters.source_crs ?? "").trim();
+    if (!sourceCrs) {
+      ctx.log("Reproject requires a source CRS (e.g. EPSG:3857).");
+      return;
+    }
+    try {
+      const reprojected = await reprojectFeatureCollectionToWgs84(fc, sourceCrs);
+      ctx.log(
+        `Reprojected ${reprojected.features.length} feature(s) from ${sourceCrs} to EPSG:4326.`,
+      );
+      ctx.addResultLayer?.("Reproject", reprojected);
+    } catch (error) {
+      ctx.log(error instanceof Error ? error.message : String(error));
+    }
   },
 };
 

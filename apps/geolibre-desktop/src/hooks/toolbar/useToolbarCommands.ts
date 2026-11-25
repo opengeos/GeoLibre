@@ -5,11 +5,10 @@ import {
   DIRECTIONS_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
   GRATICULE_PLUGIN_ID,
-  isPluginEngineSupported,
-  openRightPanel,
   PRECIPITATION_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/plugin-ids";
+import { isPluginEngineSupported, openRightPanel } from "@geolibre/plugins/runtime";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { openSettingsSection } from "../../components/layout/SettingsDialog";
 import { EARTH_ENGINE_AVAILABLE } from "../../components/layout/toolbar/ProcessingMenu";

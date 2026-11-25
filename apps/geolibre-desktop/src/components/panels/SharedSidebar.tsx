@@ -1,4 +1,4 @@
-import { collapseRightPanel, getRightPanel, openRightPanel } from "@geolibre/plugins";
+import { collapseRightPanel, getRightPanel, openRightPanel } from "@geolibre/plugins/runtime";
 import { cn } from "@geolibre/ui";
 import { PanelRight } from "lucide-react";
 import { type ReactNode, useState } from "react";

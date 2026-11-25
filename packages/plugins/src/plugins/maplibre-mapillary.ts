@@ -1,3 +1,7 @@
+import { MAPILLARY_PLUGIN_ID } from "../plugin-ids";
+export { MAPILLARY_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type {
   GeoJSONSource,
   MapGeoJSONFeature,
@@ -17,7 +21,6 @@ import { getStyleMap } from "./style-map";
 type MapillaryViewer = import("mapillary-js").Viewer;
 type MapillaryImage = import("mapillary-js").Image;
 
-export const MAPILLARY_PLUGIN_ID = "maplibre-gl-mapillary";
 const PANEL_ID = "geolibre-mapillary-viewer";
 
 const SOURCE_ID = "geolibre-mapillary-coverage";
@@ -345,7 +348,8 @@ function setSelectedMarker(lngLat: { lng: number; lat: number } | null): void {
   if (!map) return;
   const source = map.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
   if (!source) return;
-  source.setData(
+  updateGeoJsonSourceData(
+    source,
     lngLat
       ? {
           type: "FeatureCollection",
@@ -708,6 +712,32 @@ function destroyViewer(): void {
   }
 }
 
+let pendingIdleMap: MapLibreMap | null = null;
+let pendingIdleHandler: (() => void) | null = null;
+
+function clearPendingIdleCoverage(): void {
+  if (pendingIdleMap && pendingIdleHandler) {
+    pendingIdleMap.off("idle", pendingIdleHandler);
+  }
+  pendingIdleMap = null;
+  pendingIdleHandler = null;
+}
+
+function scheduleCoverageOnIdle(activeMap: MapLibreMap): void {
+  clearPendingIdleCoverage();
+  const handler = () => {
+    if (pendingIdleHandler === handler) {
+      pendingIdleMap = null;
+      pendingIdleHandler = null;
+    }
+    if (map !== activeMap) return;
+    addCoverage(activeMap);
+  };
+  pendingIdleMap = activeMap;
+  pendingIdleHandler = handler;
+  activeMap.once("idle", handler);
+}
+
 /**
  * Add the coverage layers, deferring to the next idle if the style is still
  * loading. Calling addSource/addLayer before the style is ready throws
@@ -716,7 +746,7 @@ function destroyViewer(): void {
  */
 function ensureCoverageWhenReady(activeMap: MapLibreMap): void {
   if (activeMap.isStyleLoaded()) addCoverage(activeMap);
-  else activeMap.once("idle", () => addCoverage(activeMap));
+  else scheduleCoverageOnIdle(activeMap);
 }
 
 // A single registration object reused across re-registrations, so changing the
@@ -746,12 +776,11 @@ const floatingPanelRegistration: GeoLibreFloatingPanelRegistration = {
 // ---------------------------------------------------------------------------
 
 export const maplibreMapillaryPlugin: GeoLibrePlugin = {
-  id: MAPILLARY_PLUGIN_ID,
-  name: "Mapillary",
-  version: "0.1.0",
+  ...builtInPluginProperties("maplibre-gl-mapillary"),
+
   // Coverage is a vector-tile source with style layers and the viewer is a
   // floating panel: nothing MapLibre-specific.
-  engines: ["maplibre", "mapbox"],
+
   activate: (app: GeoLibreAppAPI) => {
     const activeMap = getStyleMap(app);
     if (!activeMap) return false;
@@ -765,10 +794,7 @@ export const maplibreMapillaryPlugin: GeoLibrePlugin = {
     // them once the new style settles.
     unsubscribeBasemap = app.onBasemapChange(() => {
       if (!map) return;
-      map.once("idle", () => {
-        if (!map) return;
-        addCoverage(map);
-      });
+      scheduleCoverageOnIdle(map);
     });
 
     floatingPanelRegistration.position = panelPosition;
@@ -787,6 +813,7 @@ export const maplibreMapillaryPlugin: GeoLibrePlugin = {
     }
   },
   deactivate: (app: GeoLibreAppAPI) => {
+    clearPendingIdleCoverage();
     unsubscribeBasemap?.();
     unsubscribeBasemap = null;
     destroyViewer();

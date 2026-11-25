@@ -33,7 +33,7 @@ def test_no_token_env_leaves_endpoints_open(monkeypatch: pytest.MonkeyPatch) -> 
     main = _reload_app(monkeypatch, None)
     client = TestClient(main.app)
     assert client.get("/health").status_code == 200
-    assert client.get("/algorithms").status_code == 200
+    assert client.get("/token-check").status_code == 200
 
 
 def test_token_required_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -44,17 +44,18 @@ def test_token_required_when_configured(monkeypatch: pytest.MonkeyPatch) -> None
         # Health is exempt so the readiness probe keeps working.
         assert client.get("/health").status_code == 200
         # Missing / wrong token is rejected.
-        assert client.get("/algorithms").status_code == 401
-        assert client.get("/algorithms", headers={"X-GeoLibre-Token": "nope"}).status_code == 401
+        assert client.get("/token-check").status_code == 401
+        assert client.get("/token-check", headers={"X-GeoLibre-Token": "nope"}).status_code == 401
         # Correct token via either accepted header passes.
-        assert client.get("/algorithms", headers={"X-GeoLibre-Token": "s3cr3t"}).status_code == 200
+        assert client.get("/token-check", headers={"X-GeoLibre-Token": "s3cr3t"}).status_code == 200
         assert (
-            client.get("/algorithms", headers={"Authorization": "Bearer s3cr3t"}).status_code == 200
+            client.get("/token-check", headers={"Authorization": "Bearer s3cr3t"}).status_code
+            == 200
         )
         # A non-ASCII token header (raw latin-1 bytes on the wire) must fail auth
         # (401), not crash the byte comparison with a TypeError (500).
         assert (
-            client.get("/algorithms", headers={"X-GeoLibre-Token": b"t\xe9k\xe9n"}).status_code
+            client.get("/token-check", headers={"X-GeoLibre-Token": b"t\xe9k\xe9n"}).status_code
             == 401
         )
     finally:
@@ -68,14 +69,14 @@ def test_untrusted_host_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
         client = TestClient(main.app)
         assert (
             client.get(
-                "/algorithms",
+                "/token-check",
                 headers={"Host": "evil.example.com", "X-GeoLibre-Token": "s3cr3t"},
             ).status_code
             == 400
         )
         assert (
             client.get(
-                "/algorithms",
+                "/token-check",
                 headers={"Host": "127.0.0.1:8765", "X-GeoLibre-Token": "s3cr3t"},
             ).status_code
             == 200
@@ -401,3 +402,145 @@ def test_whitebox_paths_unconfined_without_roots(
     )
     args, _ = _prepare_arguments(request, [])
     assert args["input"] == "/anywhere/on/disk.tif"
+
+
+def test_whitebox_tilde_and_relative_output_stay_confined(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """Tilde paths are treated as escape-shaped and relative outputs resolve under workdir."""
+    from geolibre_server.app import conversion, whitebox
+
+    root = tmp_path / "data"
+    root.mkdir()
+    outside = tmp_path / "outside.json"
+    outside.write_text('{"secret": true}', encoding="utf-8")
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(root.resolve())])
+
+    tool = {
+        "id": "t",
+        "params": [{"name": "output", "kind": "vector_out"}],
+    }
+    tilde_req = whitebox.WhiteboxRunRequest(
+        tool_id="t",
+        parameters={"output": "~/secret.json"},
+        tool=tool,
+    )
+    with pytest.raises(HTTPException) as excinfo:
+        whitebox._prepare_arguments(tilde_req, [])
+    assert excinfo.value.status_code == 403
+
+    # Relative output resolves against the pinned working directory, not process cwd,
+    # preserving significant whitespace in the filename.
+    outputs = whitebox._extract_outputs(
+        {}, {"output": " nested/ result.geojson"}, tool, working_directory=str(root.resolve())
+    )
+    assert outputs["output"]["path"] == str((root / " nested" / " result.geojson").resolve())
+
+    # Tilde-prefixed absolute outputs expand to the user's home directory rather than staying raw.
+    tilde_out = whitebox._resolve_output_value("~/result.geojson", str(root.resolve()))
+    assert not tilde_out.startswith("~")
+    assert tilde_out.endswith("result.geojson")
+
+    # Scalar result keys for tools with no declared _out params pass through untouched.
+    scalar_outputs = whitebox._extract_outputs(
+        {"message": "done", "count": "42"},
+        {},
+        {"params": []},
+        working_directory=str(root.resolve()),
+    )
+    assert scalar_outputs == {"message": "done", "count": "42"}
+
+    # Even if a recorded job somehow held an outside path, /output still enforces roots.
+    job_id = "test-outside-output"
+    now = whitebox._utc_now()
+    with whitebox._JOBS_LOCK:
+        whitebox._JOBS[job_id] = whitebox.JobState(
+            id=job_id,
+            status="succeeded",
+            tool_id="t",
+            created_at=now,
+            updated_at=now,
+            outputs={"output": {"path": str(outside)}},
+        )
+    try:
+        with pytest.raises(HTTPException) as excinfo:
+            whitebox.whitebox_output(str(outside))
+        assert excinfo.value.status_code == 403
+    finally:
+        with whitebox._JOBS_LOCK:
+            whitebox._JOBS.pop(job_id, None)
+
+
+def test_shutdown_endpoint_disabled_in_container_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GEOLIBRE_DISABLE_SHUTDOWN=1 blocks remote /shutdown requests with 403."""
+    monkeypatch.setenv("GEOLIBRE_DISABLE_SHUTDOWN", "1")
+    main = _reload_app(monkeypatch, None)
+    client = TestClient(main.app)
+    assert client.post("/shutdown").status_code == 403
+
+
+def test_postgis_rejects_local_file_libpq_parameters(monkeypatch: pytest.MonkeyPatch) -> None:
+    """File-reading libpq keywords are rejected when GEOLIBRE_POSTGIS_HOSTS is active."""
+    from geolibre_server.app.postgis import _validate_postgis_target
+
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "db.example")
+    for key in (
+        "passfile",
+        "servicefile",
+        "sslcert",
+        "sslkey",
+        "sslkeylogfile",
+        "sslrootcert",
+        "sslcrl",
+        "sslcrldir",
+    ):
+        with pytest.raises(HTTPException) as excinfo:
+            _validate_postgis_target({"host": "db.example", key: "/etc/passwd"})
+        assert excinfo.value.status_code == 400
+
+
+def test_raster_and_vector_confine_before_existence_probe(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """Missing paths outside GEOLIBRE_CONVERSION_ROOTS return 403, not 400."""
+    from geolibre_server.app import conversion
+    from geolibre_server.app.raster import _validate_extra_input
+    from geolibre_server.app.vector import _validate_write_path
+
+    root = tmp_path / "data"
+    root.mkdir()
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(root.resolve())])
+    missing_outside = str(tmp_path / "does-not-exist.geojson")
+
+    with pytest.raises(HTTPException) as raster_exc:
+        _validate_extra_input(missing_outside, "Mask")
+    assert raster_exc.value.status_code == 403
+
+    with pytest.raises(HTTPException) as vector_exc:
+        _validate_write_path(missing_outside)
+    assert vector_exc.value.status_code == 403
+
+
+def test_legacy_placeholder_routes_are_gone(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The v0.5 ``GET /algorithms`` and 501 ``POST /run`` stubs were removed."""
+    main = _reload_app(monkeypatch, None)
+    client = TestClient(main.app)
+    assert client.get("/algorithms").status_code == 404
+    assert client.post("/run", json={"algorithm_id": "buffer"}).status_code in {404, 405}
+
+
+def test_app_version_comes_from_the_package_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The OpenAPI version is the package version, which matches pyproject.toml."""
+    import re
+    from pathlib import Path
+
+    import geolibre_server
+
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    # A regex rather than tomllib, which needs Python 3.11 (the sidecar supports 3.10).
+    match = re.search(r'^version = "([^"]+)"', pyproject.read_text(encoding="utf-8"), re.M)
+    assert match is not None
+    declared = match.group(1)
+    assert geolibre_server.__version__ == declared
+    main = _reload_app(monkeypatch, None)
+    assert main.app.version == declared

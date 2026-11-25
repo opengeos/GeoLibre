@@ -447,16 +447,17 @@ describe("GeoLibre Chrome extension URL builder", () => {
     assert.throws(() => buildGeoLibreUrl([{ url: "file:///tmp/roads.geojson" }]), /HTTP or HTTPS/);
   });
 
-  it("tells a mixed selection apart from two services", () => {
+  it("keeps the single-link compatibility helper on the multiple-launch path", () => {
     const service = { url: "https://maps.example.com/wms", format: "WMS" };
-    assert.throws(
-      () => buildGeoLibreUrl([service, { url: "https://maps.example.com/wfs", format: "WFS" }]),
-      /one map service at a time/,
+    const twoServices = new URL(
+      buildGeoLibreUrl([service, { url: "https://maps.example.com/wfs", format: "WFS" }]),
     );
-    assert.throws(
-      () => buildGeoLibreUrl([service, { url: "https://data.example.com/roads.geojson" }]),
-      /cannot be opened together with other data/,
+    assert.equal(twoServices.searchParams.get("serviceUrl"), service.url);
+    const mixed = new URL(
+      buildGeoLibreUrl([service, { url: "https://data.example.com/roads.geojson" }]),
     );
+    assert.equal(mixed.searchParams.get("serviceUrl"), service.url);
+    assert.equal(mixed.searchParams.get("data"), "https://data.example.com/roads.geojson");
   });
 
   it("routes detected services to the matching prefilled Add Data dialog", () => {
@@ -896,5 +897,50 @@ describe("GeoLibre Chrome extension request history", () => {
         `https://maps.example.com/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=l${index}`,
     );
     assert.equal(collectServiceCandidates(urls).length, 100);
+  });
+
+  it("rejects non-http(s) baseUrl and bounds recursive ?data= unpacking", () => {
+    assert.throws(
+      () =>
+        buildGeoLibreUrl(
+          [{ url: "https://example.com/a.geojson", format: "GeoJSON" }],
+          "javascript:alert(1)",
+        ),
+      /http:\/\/ or https:\/\//,
+    );
+    const built = buildGeoLibreUrl(
+      [{ url: "https://example.com/a.geojson", format: "GeoJSON" }],
+      "https://web.geolibre.app/#old-hash",
+    );
+    assert.ok(!built.includes("#old-hash"));
+
+    // Beyond-limit nested GeoLibre deep link must stop without throwing and return no datasets.
+    let tooDeep = "https://example.com/leaf.geojson";
+    for (let i = 0; i < 12; i += 1) {
+      tooDeep = `https://web.geolibre.app/?data=${encodeURIComponent(tooDeep)}`;
+    }
+    assert.deepEqual(scan(`<a href="${tooDeep}">nested</a>`, "https://example.com/"), []);
+
+    // Within-limit nesting still unpacks to its leaf dataset.
+    const withinLimit = `https://web.geolibre.app/?data=${encodeURIComponent(
+      `https://web.geolibre.app/?data=${encodeURIComponent("https://example.com/leaf.geojson")}`,
+    )}`;
+    assert.deepEqual(
+      scan(`<a href="${withinLimit}">ok</a>`, "https://example.com/").map((d) => d.url),
+      ["https://example.com/leaf.geojson"],
+    );
+
+    // Deep-first then shallow-second occurrence of the same deep link still expands the shallow one.
+    const t = `https://web.geolibre.app/?data=${encodeURIComponent("https://example.com/shallow-leaf.geojson")}`;
+    const s = `https://web.geolibre.app/?data=${encodeURIComponent(t)}`;
+    const b = `https://web.geolibre.app/?data=${encodeURIComponent(s)}`;
+    const a = `https://web.geolibre.app/?data=${encodeURIComponent(b)}`;
+    const rootDeep = `https://web.geolibre.app/?data=${encodeURIComponent(a)}`;
+    assert.deepEqual(
+      scan(`<a href="${rootDeep}">deep</a><a href="${s}">shallow</a>`, "https://example.com/").map(
+        (d) => d.url,
+      ),
+      ["https://example.com/shallow-leaf.geojson"],
+    );
   });
 });

@@ -1,9 +1,7 @@
 import type { GeoLibreLayer } from "@geolibre/core";
-import {
-  DEFAULT_DECK_VIZ_STYLE,
-  createDeckVizStoreLayer,
-  type DeckVizConfig,
-} from "@geolibre/plugins";
+import { DEFAULT_DECK_VIZ_STYLE } from "@geolibre/plugins/deckgl-viz/registry";
+import { createDeckVizStoreLayer } from "@geolibre/plugins/deckgl-viz/store-layer";
+import { type DeckVizConfig } from "@geolibre/plugins";
 import { kmlModelBounds, kmlModelDisplayName, kmlModelRow, kmlModelTranslation } from "./kml-model";
 import type { LoadedModel } from "./tauri-io";
 

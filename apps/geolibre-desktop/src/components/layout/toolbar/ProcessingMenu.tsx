@@ -1,5 +1,5 @@
 import { type NetworkToolKind, useAppCapability, useAppStore } from "@geolibre/core";
-import { isEarthEngineAvailable } from "@geolibre/plugins";
+import { isEarthEngineAvailable } from "@geolibre/plugins/earth-engine-auth";
 import {
   Button,
   DropdownMenu,
@@ -26,7 +26,12 @@ import { WHITEBOX_MENU_CATALOG } from "../../../lib/whitebox-menu-catalog";
 import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "../../../lib/global-dem";
 import { openObiaWorkbench } from "../../../lib/obia/obia-panel";
 import { CapabilityNotice, capabilityNoticeId, useCapabilityReason } from "./CapabilityNotice";
-import { VECTOR_JOIN_TOOL_COMMANDS, type ToolbarChrome } from "./constants";
+import {
+  RASTER_CHANGE_TOOLS,
+  RASTER_SAR_TOOLS,
+  VECTOR_JOIN_TOOL_COMMANDS,
+  type ToolbarChrome,
+} from "./constants";
 import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
 import { PlanetaryComputerMenuItem } from "./PlanetaryComputerMenuItem";
 import { PluginMenuContributions } from "./PluginMenuContributions";
@@ -464,6 +469,21 @@ export function ProcessingMenu({
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupLinearReferencing")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("create-routes")}>
+                      {t("toolbar.vectorTool.createRoutes")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => setVectorToolOpen("locate-features-along-routes")}
+                    >
+                      {t("toolbar.vectorTool.locateFeaturesAlongRoutes")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("dynamic-segmentation")}>
+                      {t("toolbar.vectorTool.dynamicSegmentation")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
                       {t("toolbar.item.subGroupDataQuality")}
                     </DropdownMenuLabel>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("check-validity")}>
@@ -477,6 +497,12 @@ export function ProcessingMenu({
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("fix-topology")}>
                       {t("toolbar.vectorTool.fixTopology")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("fix-polygon-overlaps")}>
+                      {t("toolbar.vectorTool.fixPolygonOverlaps")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("fill-polygon-gaps")}>
+                      {t("toolbar.vectorTool.fillPolygonGaps")}
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
@@ -493,6 +519,16 @@ export function ProcessingMenu({
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => onOpenNetworkTool("sequential-route")}>
                       {t("toolbar.networkTool.sequentialRoute")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => onOpenNetworkTool("local-shortest-path")}>
+                      {t("toolbar.networkTool.localShortestPath")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onOpenNetworkTool("local-closest-facility")}>
+                      {t("toolbar.networkTool.localClosestFacility")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onOpenNetworkTool("local-service-area")}>
+                      {t("toolbar.networkTool.localServiceArea")}
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
@@ -523,6 +559,22 @@ export function ProcessingMenu({
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setStatisticsToolOpen("composite-score")}>
                       {t("toolbar.statisticsTool.compositeScore")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("ols-regression")}>
+                      {t("toolbar.statisticsTool.olsRegression")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("gwr")}>
+                      {t("toolbar.statisticsTool.gwr")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("dbscan")}>
+                      {t("toolbar.statisticsTool.dbscan")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("hdbscan")}>
+                      {t("toolbar.statisticsTool.hdbscan")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setStatisticsToolOpen("kriging-diagnostics")}>
+                      {t("toolbar.statisticsTool.krigingDiagnostics")}
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
@@ -698,6 +750,26 @@ export function ProcessingMenu({
                         </DropdownMenuItem>
                       </>
                     )}
+                    <DropdownMenuSeparator />
+                    {/* Browser-only tools: no sidecar gate, the submenu
+                            trigger already carries the processing gate. */}
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupChangeDetection")}
+                    </DropdownMenuLabel>
+                    {RASTER_CHANGE_TOOLS.map(({ kind, titleKey }) => (
+                      <DropdownMenuItem key={kind} onSelect={() => setRasterToolOpen(kind)}>
+                        {t(titleKey)}
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroupSar")}
+                    </DropdownMenuLabel>
+                    {RASTER_SAR_TOOLS.map(({ kind, titleKey }) => (
+                      <DropdownMenuItem key={kind} onSelect={() => setRasterToolOpen(kind)}>
+                        {t(titleKey)}
+                      </DropdownMenuItem>
+                    ))}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
               )}

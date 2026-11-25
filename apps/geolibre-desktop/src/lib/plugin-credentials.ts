@@ -43,12 +43,33 @@ const LEGACY_PLUGIN_CREDENTIAL_KEYS: Readonly<Record<string, string>> = {
   "plugin.gods-eye-view.aisstream": "geolibre.godsEyeView.apiKey.aisstream",
 };
 
-function readLegacyPluginCredentials(): Record<string, { key: string; value: string }> {
-  const found: Record<string, { key: string; value: string }> = {};
+function readLegacyPluginCredentials(): Record<string, { keys: string[]; value: string }> {
+  const found: Record<string, { keys: string[]; value: string }> = {};
+  // First collect browser/mobile-prefixed plugin credentials so mobile upgrades
+  // from localStorage to the native secure store preserve every plugin secret.
+  try {
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (!key || !key.startsWith(PLUGIN_CREDENTIAL_BROWSER_KEY_PREFIX)) continue;
+      const suffix = key.slice(PLUGIN_CREDENTIAL_BROWSER_KEY_PREFIX.length);
+      const account = `plugin.${suffix}`;
+      if (!isStorableCredentialAccount(account)) continue;
+      const value = window.localStorage.getItem(key)?.trim();
+      if (value) found[account] = { keys: [key], value };
+    }
+  } catch {
+    // Unreadable: skip browser-prefix scan.
+  }
+  // Pre-#2729 built-in plugin keys take precedence when both exist; retain any
+  // superseded browser-prefix keys ahead of the selected key so cleanup removes
+  // superseded keys first and never lets an older key overwrite the winner.
   for (const [account, key] of Object.entries(LEGACY_PLUGIN_CREDENTIAL_KEYS)) {
     try {
       const value = window.localStorage.getItem(key)?.trim();
-      if (value) found[account] = { key, value };
+      if (value) {
+        const priorKeys = found[account]?.keys.filter((candidate) => candidate !== key) ?? [];
+        found[account] = { keys: [...priorKeys, key], value };
+      }
     } catch {
       // Unreadable: nothing to migrate for this entry.
     }
@@ -128,9 +149,11 @@ export async function hydratePluginCredentials(
         JSON.stringify(nextIndex),
       );
     }
-    for (const [account, { key, value }] of Object.entries(legacy)) {
+    for (const [account, { keys, value }] of Object.entries(legacy)) {
       if (stored[account] !== value) await writeSecureCredential(account, value);
-      window.localStorage.removeItem(key);
+      for (const key of keys) {
+        window.localStorage.removeItem(key);
+      }
     }
   } catch (error) {
     reportCredentialStorageError(error);

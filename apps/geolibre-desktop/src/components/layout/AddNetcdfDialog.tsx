@@ -1,12 +1,16 @@
 import { useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { addCloudNetcdfLayer } from "@geolibre/plugins/component-helpers";
 import {
-  addCloudNetcdfLayer,
   composeRgbImage,
   crossesAntimeridian,
+  openLocalNetcdf,
+} from "@geolibre/plugins/local-netcdf";
+import {
   listKerchunkVariables,
   loadKerchunkReference,
-  openLocalNetcdf,
+} from "@geolibre/plugins/kerchunk-reference-store";
+import {
   type GeoLibreAppAPI,
   type KerchunkRefs,
   type KerchunkVariable,

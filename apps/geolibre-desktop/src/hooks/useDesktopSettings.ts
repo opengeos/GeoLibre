@@ -169,6 +169,11 @@ export interface StartupSettings {
   layers: StartupLayers | null;
   /** Open the S3 Browser panel when the app starts (not in the read-only viewer). */
   openS3Browser: boolean;
+  /**
+   * Start the processing sidecar at launch so its Live MCP relay lets AI agents
+   * (the `live_*` MCP tools) drive the open map. Desktop only.
+   */
+  allowLiveMcp: boolean;
 }
 
 /**
@@ -354,6 +359,7 @@ export const DEFAULT_STARTUP_SETTINGS: StartupSettings = {
   layerStyles: null,
   layers: null,
   openS3Browser: false,
+  allowLiveMcp: false,
 };
 
 export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
@@ -456,6 +462,7 @@ function normalizeStartupSettings(startup: unknown): StartupSettings {
     layerStyles: normalizeStartupLayerStyles(candidate.layerStyles),
     layers: normalizeStartupLayers(candidate.layers),
     openS3Browser: candidate.openS3Browser === true,
+    allowLiveMcp: candidate.allowLiveMcp === true,
   };
 }
 

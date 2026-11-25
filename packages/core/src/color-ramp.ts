@@ -8,6 +8,8 @@
  * path.
  */
 
+import projectConstants from "./project-constants.json";
+
 export type ColorRamp = {
   value: string;
   label: string;
@@ -15,108 +17,7 @@ export type ColorRamp = {
 };
 
 /** The built-in color ramps offered by the style panels. */
-export const VECTOR_COLOR_RAMPS: readonly ColorRamp[] = [
-  {
-    value: "viridis",
-    label: "Viridis",
-    colors: ["#440154", "#31688e", "#35b779", "#fde725"],
-  },
-  {
-    value: "plasma",
-    label: "Plasma",
-    colors: ["#0d0887", "#9c179e", "#ed7953", "#f0f921"],
-  },
-  {
-    value: "inferno",
-    label: "Inferno",
-    colors: ["#000004", "#781c6d", "#ed6925", "#fcffa4"],
-  },
-  {
-    value: "magma",
-    label: "Magma",
-    colors: ["#000004", "#721f81", "#f1605d", "#fcfdbf"],
-  },
-  {
-    value: "cividis",
-    label: "Cividis",
-    colors: ["#00204d", "#575d6d", "#a59c74", "#ffea46"],
-  },
-  {
-    value: "turbo",
-    label: "Turbo",
-    colors: ["#30123b", "#4777ef", "#1ccfd0", "#b9e642", "#fb8022", "#7a0403"],
-  },
-  {
-    value: "spectral",
-    label: "Spectral",
-    colors: ["#9e0142", "#f46d43", "#ffffbf", "#66c2a5", "#5e4fa2"],
-  },
-  {
-    value: "blues",
-    label: "Blues",
-    colors: ["#eff6ff", "#93c5fd", "#2563eb", "#1e3a8a"],
-  },
-  {
-    value: "greens",
-    label: "Greens",
-    colors: ["#f0fdf4", "#86efac", "#16a34a", "#14532d"],
-  },
-  {
-    value: "oranges",
-    label: "Oranges",
-    colors: ["#fff7ed", "#fdba74", "#f97316", "#7c2d12"],
-  },
-  {
-    value: "reds",
-    label: "Reds",
-    colors: ["#fff5f0", "#fcae91", "#fb6a4a", "#cb181d", "#67000d"],
-  },
-  {
-    value: "purples",
-    label: "Purples",
-    colors: ["#fcfbfd", "#bcbddc", "#807dba", "#54278f", "#3f007d"],
-  },
-  {
-    value: "terrain",
-    label: "Terrain",
-    colors: ["#333399", "#21bcb3", "#79d05a", "#e8e85a", "#a87b54", "#ffffff"],
-  },
-  {
-    value: "rdylgn",
-    label: "Red-Yellow-Green",
-    colors: ["#a50026", "#f46d43", "#ffffbf", "#66bd63", "#006837"],
-  },
-  {
-    value: "rdylbu",
-    label: "Red-Yellow-Blue",
-    colors: ["#a50026", "#f46d43", "#ffffbf", "#74add1", "#313695"],
-  },
-  {
-    value: "rdbu",
-    label: "Red-Blue",
-    colors: ["#b2182b", "#ef8a62", "#f7f7f7", "#67a9cf", "#2166ac"],
-  },
-  {
-    value: "coolwarm",
-    label: "Cool-Warm",
-    colors: ["#3b4cc0", "#7b9ff9", "#dddcdc", "#f49a7b", "#b40426"],
-  },
-  {
-    value: "jet",
-    label: "Jet",
-    colors: ["#000080", "#0000ff", "#00ffff", "#ffff00", "#ff0000", "#800000"],
-  },
-  {
-    value: "greys",
-    label: "Greys",
-    colors: ["#ffffff", "#bdbdbd", "#636363", "#000000"],
-  },
-  {
-    value: "gray",
-    label: "Grayscale",
-    colors: ["#000000", "#ffffff"],
-  },
-] as const;
+export const VECTOR_COLOR_RAMPS: readonly ColorRamp[] = projectConstants.VECTOR_COLOR_RAMPS;
 
 /**
  * Resolves a ramp definition by name, falling back to the first ramp when the

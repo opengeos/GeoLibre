@@ -1,3 +1,7 @@
+import { FIELDS_OF_THE_WORLD_PLUGIN_ID } from "../plugin-ids";
+export { FIELDS_OF_THE_WORLD_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { createPMTilesStoreLayer } from "@geolibre/map/pmtiles-layer";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
@@ -8,6 +12,7 @@ import type {
   MapLayerMouseEvent,
   MapMouseEvent,
 } from "maplibre-gl";
+import { saveBinaryFileWithHost } from "../panel-dom";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
   FTW_COVERAGE_BINS,
@@ -40,7 +45,6 @@ import { type LonLatBbox, bboxRing, polygonFeature } from "./satellite-embedding
 import { getControlMap } from "./style-map";
 import { createPluginTranslator } from "../plugin-i18n";
 
-export const FIELDS_OF_THE_WORLD_PLUGIN_ID = "geolibre-fields-of-the-world";
 const PANEL_ID = FIELDS_OF_THE_WORLD_PLUGIN_ID;
 
 /** Most fields added to the map as one GeoJSON layer. */
@@ -377,16 +381,11 @@ async function saveBlob(
   if (fileSaver) {
     return (await fileSaver(blob, options)) !== null;
   }
-  const url = URL.createObjectURL(blob);
-  try {
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = options.defaultName;
-    anchor.click();
-  } finally {
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-  return true;
+  return saveBinaryFileWithHost(appRef, options.defaultName, blob, {
+    extensions: [options.extension],
+    mimeType: options.mimeType,
+    description: options.description,
+  });
 }
 
 /** Fetches a file into memory, reporting progress as bytes arrive. */
@@ -609,7 +608,7 @@ function setFootprints(map: MapLibreMap, results: ZoneResult[]): void {
     map.on("mouseenter", FOOTPRINT_FILL_LAYER_ID, handleFootprintEnter);
     map.on("mouseleave", FOOTPRINT_FILL_LAYER_ID, handleFootprintLeave);
   }
-  (map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource).setData({
+  updateGeoJsonSourceData(map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource, {
     type: "FeatureCollection",
     features,
   });
@@ -677,7 +676,7 @@ function setOutline(map: MapLibreMap, boxes: LonLatBbox[]): void {
   }
   // Field layers added since would otherwise hide the outline.
   map.moveLayer(HOVER_LINE_LAYER_ID);
-  (map.getSource(HOVER_SOURCE_ID) as GeoJSONSource).setData({
+  updateGeoJsonSourceData(map.getSource(HOVER_SOURCE_ID) as GeoJSONSource, {
     type: "FeatureCollection",
     features: boxes.map((box) => polygonFeature(bboxRing(box), {})),
   });
@@ -707,7 +706,10 @@ function setDrawBox(map: MapLibreMap, bbox: LonLatBbox | null): void {
     });
   }
   const features: Feature<Polygon>[] = bbox ? [polygonFeature(bboxRing(bbox), {})] : [];
-  (map.getSource(DRAW_SOURCE_ID) as GeoJSONSource).setData({ type: "FeatureCollection", features });
+  updateGeoJsonSourceData(map.getSource(DRAW_SOURCE_ID) as GeoJSONSource, {
+    type: "FeatureCollection",
+    features,
+  });
 }
 
 /** Removes the plugin-private overlays (hover outline, drawn box). */
@@ -1523,13 +1525,12 @@ function clearOverlays(app: GeoLibreAppAPI): void {
  * overlap it.
  */
 export const maplibreFieldsOfTheWorldPlugin: GeoLibrePlugin = {
-  id: FIELDS_OF_THE_WORLD_PLUGIN_ID,
-  name: "Fields of the World",
-  version: "0.2.0",
+  ...builtInPluginProperties("geolibre-fields-of-the-world"),
+
   // The field layers are PMTiles and GeoJSON store layers and the footprints
   // are Style Spec sources and layers, so both 2D engines host them, and the
   // host's control map draws them on ArcGIS.
-  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
+
   activate: (app) => {
     appRef = app;
     unregisterPanel =

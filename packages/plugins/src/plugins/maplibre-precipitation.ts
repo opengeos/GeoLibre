@@ -1,3 +1,7 @@
+import { PRECIPITATION_PLUGIN_ID } from "../plugin-ids";
+import { precipitationAnimation } from "../weather-animation";
+export { PRECIPITATION_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { createWeatherLayer, type WeatherAnimationState, type WeatherFrame } from "./weather-layer";
 
@@ -10,8 +14,6 @@ import { createWeatherLayer, type WeatherAnimationState, type WeatherFrame } fro
  * overlays (with Clouds) and shares the store-layer + time-scrub engine in
  * {@link createWeatherLayer}, so scrubbing/playing animates the radar loop.
  */
-
-export const PRECIPITATION_PLUGIN_ID = "maplibre-gl-precipitation";
 
 /** Marks the store layer as the one this plugin owns (for adopt-on-restore). */
 const PRECIPITATION_LAYER_FLAG = "precipitationLayer";
@@ -171,14 +173,15 @@ export function subscribePrecipitation(listener: () => void): () => void {
 }
 
 export const maplibrePrecipitationPlugin: GeoLibrePlugin = {
-  id: PRECIPITATION_PLUGIN_ID,
-  name: "Precipitation",
-  version: "0.1.0",
+  ...builtInPluginProperties("maplibre-gl-precipitation"),
+
   // The overlay is a store tile layer (`addTileLayer`), which every renderer
   // draws; the 2D style map is only used for an instant frame swap and tile
   // error watching, and the controller does without it on the globe and on
   // ArcGIS.
-  engines: ["maplibre", "cesium", "mapbox", "arcgis"],
+
   activate: (app: GeoLibreAppAPI) => controller.activate(app),
   deactivate: () => controller.deactivate(),
 };
+
+precipitationAnimation.provide(controller);

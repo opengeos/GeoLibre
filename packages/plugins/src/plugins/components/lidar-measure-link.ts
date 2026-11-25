@@ -32,6 +32,7 @@ export function refreshLidarMeasureMirror(app: GeoLibreAppAPI): void {
   syncLidarMeasureMirror({
     // The LiDAR panel runs on both 2D engines, and the mirror only needs the
     // source and event surface both maps share.
+    // engine-audit-allow: arcgis-null-map: null disconnects the optional 2D measure mirror.
     map: app.getMap?.() ?? app.getMapboxMap?.() ?? null,
     overlay: readLidarControl()?.getDeckOverlay() ?? null,
     control: readMeasureControl(),

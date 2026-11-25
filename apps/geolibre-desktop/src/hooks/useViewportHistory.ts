@@ -1,6 +1,6 @@
 import { useAppStore, type MapViewState } from "@geolibre/core";
 import type { CameraIdleEvent, MapEngine } from "@geolibre/map";
-import { isFlying } from "@geolibre/plugins";
+import { flightSimulatorPanelStore } from "../lib/plugin-panel-stores";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
@@ -9,6 +9,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * leaves comfortable headroom.
  */
 const MAX_HISTORY = 50;
+
+function isFlying(): boolean {
+  return flightSimulatorPanelStore.runtime.isFlying();
+}
 
 /** True when two viewports are identical (exact equality on all camera fields). */
 function viewsEqual(a: MapViewState, b: MapViewState): boolean {

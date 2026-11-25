@@ -1,4 +1,4 @@
-import { isArcGISWritableLayer } from "@geolibre/plugins";
+import { isArcGISWritableLayer } from "@geolibre/plugins/arcgis-layer";
 import type { ParseKeys, TFunction } from "i18next";
 import { NETCDF_IMAGE_SOURCE_KIND, redactConfigurationCredentials } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
@@ -7,6 +7,8 @@ import { rasterExportUrl } from "../../../lib/raster-export";
 import type { RasterInfo } from "../../../lib/raster-info";
 import { IS_MAS_BUILD } from "../../../lib/build-flags";
 import { isTauri } from "../../../lib/is-tauri";
+import { isDesktopRuntime } from "../../../lib/is-mobile";
+import { isGeojsonSourcePath } from "../../../lib/file-io/paths";
 import { getNetcdfLayerState } from "../../../lib/netcdf-image-symbology";
 import { DATA_SOURCE_CATALOG, type DataSourceCatalogEntry } from "../../../lib/ui-profile";
 import type { AddDataKind } from "../../layout/add-data/types";
@@ -84,7 +86,7 @@ function sourceUrlsFromLayer(layer: GeoLibreLayer): string[] {
 
 // Source formats whose in-place write-back the sidecar supports today. Kept in
 // sync with the backend gate in `app/vector.py` (_WRITABLE_EXTENSIONS).
-const WRITEBACK_EXTENSIONS = ["gpkg", "geojson", "json"];
+const WRITEBACK_EXTENSIONS = ["gpkg", "geojson", "json", "shp", "fgb", "parquet", "geoparquet"];
 
 /**
  * Whether the layer is an editable SQL Server table with a usable primary key
@@ -117,10 +119,9 @@ export function isPostgisEditableLayer(layer: GeoLibreLayer): boolean {
 
 /**
  * Whether the layer's edits can be committed back to its source: a
- * desktop-only, geojson-backed layer loaded either from a local file in a
- * supported format or from a PostGIS or SQL Server table with a primary key.
- * The sidecar needs real filesystem/database access, so this is false on the
- * web build.
+ * native GeoJSON file, a desktop-sidecar source, or an ArcGIS feature service.
+ * GeoJSON writes use Rust and work in the native mobile apps too. Other local
+ * formats and database tables need the desktop Python sidecar.
  * This answers only "is there a writable source": the layer's capabilities are
  * applied by the caller (`canWriteBack`), so a layer that allows creates or
  * deletes but not updates still offers the save.
@@ -128,15 +129,14 @@ export function isPostgisEditableLayer(layer: GeoLibreLayer): boolean {
 export function canWriteEditsToSource(layer: GeoLibreLayer): boolean {
   if (isArcGISWritableLayer(layer)) return true;
   if (!isTauri() || layer.type !== "geojson") return false;
-  // All write-back paths (PostGIS/SQL Server tables and local files) run through the
-  // Python sidecar, which the Mac App Store build compiles out, so edits are
-  // export-only there, as on the web build.
+  // Retain the Mac App Store build's existing export-only local-source policy.
   if (IS_MAS_BUILD) return false;
-  if (isPostgisEditableLayer(layer) || isMssqlEditableLayer(layer)) return true;
+  if (isPostgisEditableLayer(layer) || isMssqlEditableLayer(layer)) return isDesktopRuntime();
   const path = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
   if (!path) return false;
   const ext = path.split(".").pop()?.toLowerCase();
-  return ext ? WRITEBACK_EXTENSIONS.includes(ext) : false;
+  if (ext === "geojson" || ext === "json") return isGeojsonSourcePath(path);
+  return isDesktopRuntime() && Boolean(ext && WRITEBACK_EXTENSIONS.includes(ext));
 }
 
 /**

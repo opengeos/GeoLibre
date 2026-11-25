@@ -1,3 +1,13 @@
+import { consumeStacCatalogRequest, provideStacCatalogRuntime } from "../stac-catalog-request";
+export { cancelStacCatalogRequest, requestStacCatalogUrl } from "../stac-catalog-request";
+import { STAC_PLUGIN_ID } from "../plugin-ids";
+export { STAC_PLUGIN_ID } from "../plugin-ids";
+import { PORTOLAN_PLUGIN_ID } from "../plugin-ids";
+export { PORTOLAN_PLUGIN_ID } from "../plugin-ids";
+import { PLANET_OPEN_DATA_PLUGIN_ID } from "../plugin-ids";
+export { PLANET_OPEN_DATA_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-metadata";
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { DEFAULT_LAYER_STYLE, useAppStore } from "@geolibre/core";
 import {
   fillLayerId,
@@ -84,7 +94,8 @@ import {
 } from "./stac-render";
 import { el, setDisabled } from "../panel-dom";
 import { addVectorLayersFromUrl } from "./maplibre-vector";
-import { addLidarLayerFromUrl, addZarrRasterLayer } from "./maplibre-components";
+import { addLidarLayerFromUrl } from "./components/lidar";
+import { addZarrRasterLayer } from "./components/zarr";
 import {
   icechunkLayerUrl,
   icechunkTimeAttributesReader,
@@ -99,9 +110,6 @@ import {
   type StacAssetAccess,
 } from "./stac-signing";
 
-export const STAC_PLUGIN_ID = "geolibre-stac-catalogs";
-export const PLANET_OPEN_DATA_PLUGIN_ID = "geolibre-planet-open-data";
-export const PORTOLAN_PLUGIN_ID = "geolibre-portolan";
 export const PLANET_DISASTER_DATA_CATALOG_URL =
   "https://data.source.coop/planet/disasterdata/catalog.json";
 // The footprints layer is a normal store layer, so it is saved into the project
@@ -491,9 +499,6 @@ let unregisterPanel: (() => void) | null = null;
 let disposePanel: (() => void) | null = null;
 let panelContainer: HTMLElement | null = null;
 let initialCatalogUrl = "";
-// A catalog asked for from outside the panel (the `?stac=` deep link), taking the place of the
-// plugin's own preset on its next activation.
-let requestedCatalogUrl = "";
 // Which createStacPlugin() instance owns the shared state above, since they all share it.
 let activePluginId: string | null = null;
 interface CatalogBrowserOptions {
@@ -672,7 +677,7 @@ function showDrawGeometry(map: StacMap, geometry: Geometry): void {
   };
   const source = map.getSource(DRAW_SOURCE) as GeoJSONSource | undefined;
   if (source) {
-    source.setData(data);
+    updateGeoJsonSourceData(source, data);
     return;
   }
   map.addSource(DRAW_SOURCE, { type: "geojson", data });
@@ -956,7 +961,7 @@ function showSelectionHighlight(geometry: Geometry | null): void {
   };
   const source = map.getSource(SELECT_SOURCE) as GeoJSONSource | undefined;
   if (source) {
-    source.setData(data);
+    updateGeoJsonSourceData(source, data);
     return;
   }
   map.addSource(SELECT_SOURCE, { type: "geojson", data });
@@ -2417,31 +2422,14 @@ function mountPanel(container: HTMLElement): void {
   disposePanel = buildPanel(container);
 }
 
-/** Drop a {@link requestStacCatalogUrl} request no activation took up. */
-export function cancelStacCatalogRequest(): void {
-  requestedCatalogUrl = "";
-}
-
-/**
- * Open the STAC Catalogs browser on a catalog, API, or API collection URL and connect to it.
- *
- * Takes effect on the STAC Catalogs plugin's next activation, or at once when it is already active.
- *
- * Args:
- *   url: The STAC URL to connect to.
- */
-export function requestStacCatalogUrl(url: string): void {
-  // Only the STAC Catalogs browser takes the request in place. A sibling's (Planet, Portolan) state
-  // is left for the activation that replaces it, which reads the request.
-  if (activePluginId !== STAC_PLUGIN_ID) {
-    requestedCatalogUrl = url;
-    return;
-  }
+// The lightweight request queue also accepts links before this module loads.
+provideStacCatalogRuntime((url) => {
+  if (activePluginId !== STAC_PLUGIN_ID) return false;
   initialCatalogUrl = url;
   if (panelContainer) mountPanel(panelContainer);
-  // Active with its panel closed: opening the panel mounts it on the requested catalog.
   else appRef?.openRightPanel?.(STAC_PLUGIN_ID);
-}
+  return true;
+});
 
 /**
  * Factory creating a STAC catalog browser plugin instance with optional preset catalog URL.
@@ -2467,8 +2455,8 @@ function createStacPlugin(
     exclusiveGroup: "stac-catalog-browser",
     activate(app) {
       // The `?stac=` request is for the STAC Catalogs browser, never a sibling preset.
-      initialCatalogUrl = (id === STAC_PLUGIN_ID && requestedCatalogUrl) || presetCatalogUrl;
-      if (id === STAC_PLUGIN_ID) requestedCatalogUrl = "";
+      initialCatalogUrl =
+        (id === STAC_PLUGIN_ID && consumeStacCatalogRequest()) || presetCatalogUrl;
       activePluginId = id;
       browserOptions = options;
       appRef = app;
@@ -2512,42 +2500,53 @@ function createStacPlugin(
   };
 }
 
-export const maplibreStacCatalogsPlugin = createStacPlugin(STAC_PLUGIN_ID, "STAC Catalogs");
+export const maplibreStacCatalogsPlugin = defineBuiltInPlugin(
+  "geolibre-stac-catalogs",
+  createStacPlugin(STAC_PLUGIN_ID, builtInPluginMetadata("geolibre-stac-catalogs").name),
+);
 
 /** STAC Catalogs browser pinned to Planet's continuously updated disaster releases. */
-export const maplibrePlanetOpenDataPlugin = createStacPlugin(
-  PLANET_OPEN_DATA_PLUGIN_ID,
-  "Planet Open Data",
-  PLANET_DISASTER_DATA_CATALOG_URL,
+export const maplibrePlanetOpenDataPlugin = defineBuiltInPlugin(
+  "geolibre-planet-open-data",
+  createStacPlugin(
+    PLANET_OPEN_DATA_PLUGIN_ID,
+    builtInPluginMetadata("geolibre-planet-open-data").name,
+    PLANET_DISASTER_DATA_CATALOG_URL,
+  ),
 );
 
 /** Browse registered Portolan catalogs or connect directly to a publisher's URL. */
-export const maplibrePortolanPlugin = createStacPlugin(
-  PORTOLAN_PLUGIN_ID,
-  "Portolan",
-  PORTOLAN_REGISTRY_URL,
-  {
-    loadIndex: loadPortolanIndex,
-    indexFromConnection: (connection) => portolanIndexFromDocument(connection.root),
-    indexLabels: (app) => ({
-      indexLoading:
-        app.translate?.("stacPlugin.portolanIndexLoading", "Loading Portolan Registry…") ??
-        "Loading Portolan Registry…",
-      indexUnavailable:
+export const maplibrePortolanPlugin = defineBuiltInPlugin(
+  "geolibre-portolan",
+  createStacPlugin(
+    PORTOLAN_PLUGIN_ID,
+    builtInPluginMetadata("geolibre-portolan").name,
+    PORTOLAN_REGISTRY_URL,
+    {
+      loadIndex: loadPortolanIndex,
+      indexFromConnection: (connection) => portolanIndexFromDocument(connection.root),
+      indexLabels: (app) => ({
+        indexLoading:
+          app.translate?.("stacPlugin.portolanIndexLoading", "Loading Portolan Registry…") ??
+          "Loading Portolan Registry…",
+        indexUnavailable:
+          app.translate?.(
+            "stacPlugin.portolanIndexUnavailable",
+            "Portolan Registry unavailable: enter a URL",
+          ) ?? "Portolan Registry unavailable: enter a URL",
+        indexLoadFailed:
+          app.translate?.(
+            "stacPlugin.portolanIndexLoadFailed",
+            "Could not load Portolan Registry",
+          ) ?? "Could not load Portolan Registry",
+      }),
+      catalogSearchLabel: (app) =>
         app.translate?.(
-          "stacPlugin.portolanIndexUnavailable",
-          "Portolan Registry unavailable: enter a URL",
-        ) ?? "Portolan Registry unavailable: enter a URL",
-      indexLoadFailed:
-        app.translate?.("stacPlugin.portolanIndexLoadFailed", "Could not load Portolan Registry") ??
-        "Could not load Portolan Registry",
-    }),
-    catalogSearchLabel: (app) =>
-      app.translate?.(
-        "stacPlugin.portolanCatalogSearch",
-        "Find a public catalog from Portolan Registry",
-      ) ?? "Find a public catalog from Portolan Registry",
-  },
+          "stacPlugin.portolanCatalogSearch",
+          "Find a public catalog from Portolan Registry",
+        ) ?? "Find a public catalog from Portolan Registry",
+    },
+  ),
 );
 
 export default maplibreStacCatalogsPlugin;

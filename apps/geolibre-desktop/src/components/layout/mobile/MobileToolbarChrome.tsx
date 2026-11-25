@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import { BASEMAP_CONTROL_PLUGIN_ID, GEO_EDITOR_PLUGIN_ID } from "@geolibre/plugins";
+import { BASEMAP_CONTROL_PLUGIN_ID, GEO_EDITOR_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import { BottomSheet } from "@geolibre/ui";
 import { useMemo } from "react";
 import { createPortal } from "react-dom";

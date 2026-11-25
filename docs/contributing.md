@@ -159,7 +159,7 @@ order:
 
 | Step               | Command                          | Covers                                                                                                                 |
 | ------------------ | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Lint               | `npm run lint`                   | ESLint over `apps/`, `packages/`, `workers/` and `tests/`                                                              |
+| Lint               | `npm run lint`                   | ESLint syntax + typed Oxlint (see [lint ratchet](maintenance.md#lint-warning-ratchet))                                 |
 | Shared deps check  | `npm run check:shared-deps`      | Dependencies declared by both the app and `packages/plugins` carry the same range (see [Shared dependency ranges](maintenance.md#shared-dependency-ranges)) |
 | i18n catalog check | `npm run i18n:tools:check`       | The processing-tool strings in `en.json` match the tool registries (regenerate with `npm run i18n:tools`)              |
 | Gallery check      | `npm run gallery:check`          | `docs/gallery.md` and the `docs/demos.md` teaser match `scripts/demo-gallery.json` (regenerate with `npm run gallery`) |

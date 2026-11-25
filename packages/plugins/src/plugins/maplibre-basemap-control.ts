@@ -1,3 +1,6 @@
+import { BASEMAP_CONTROL_PLUGIN_ID } from "../plugin-ids";
+export { BASEMAP_CONTROL_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import {
   getGoogleMapsApiKey,
   getMapboxAccessToken,
@@ -214,8 +217,6 @@ const registeredRasterLayers = new Map<string, string>();
 // opengeos/GeoLibre#913.
 let styleChangeFallback: { attemptedUrl: string; previousUrl: string } | null = null;
 
-export const BASEMAP_CONTROL_PLUGIN_ID = "maplibre-gl-basemap-control";
-
 /**
  * The live BasemapControl instance while the plugin is active, or null when it
  * is deactivated. Mirrors getActiveTimeSliderControl; used by tests to assert
@@ -226,10 +227,8 @@ export function getActiveBasemapControl(): BasemapControl | null {
 }
 
 export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
-  id: BASEMAP_CONTROL_PLUGIN_ID,
-  name: "Basemaps",
-  version: "0.3.0",
-  engines: ["maplibre", "mapbox"],
+  ...builtInPluginProperties("maplibre-gl-basemap-control"),
+
   activate: (app: GeoLibreAppAPI) => {
     if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     unregisterPanel = app.registerRightPanel({

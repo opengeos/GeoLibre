@@ -61,7 +61,6 @@ class FakeMap {
 
 /** Run a snippet the way run_maplibre_js does: a function body with `map` in scope. */
 function runSnippet(map: unknown, code: string): unknown {
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
   return new Function("map", code)(map);
 }
 

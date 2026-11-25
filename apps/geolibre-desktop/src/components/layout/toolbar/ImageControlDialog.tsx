@@ -1,17 +1,16 @@
+import { type ComponentImageState, type ImageSizeMode } from "@geolibre/plugins";
 import {
-  type ComponentImageState,
   DEFAULT_IMAGE_STATE,
   IMAGE_RATIO_MAX,
   IMAGE_RATIO_MIN,
   IMAGE_SIZE_MAX,
   IMAGE_SIZE_MIN,
-  type ImageSizeMode,
   MAX_IMAGE_CONTROLS,
   formatAspectRatio,
   normalizeImageUrl,
   isRatioHeightInRange,
   parseAspectRatio,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/component-helpers";
 import {
   Button,
   Dialog,

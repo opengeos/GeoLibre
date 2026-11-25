@@ -1,0 +1,84 @@
+/* Street View has no upstream theme API. Theme the interface, not the imagery
+   letterbox, provider branding or the location/direction marker. */
+html .streetview-control,
+html .streetview-panel {
+  background: hsl(var(--popover));
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  color: hsl(var(--popover-foreground));
+  font-family: var(--font-sans);
+}
+
+html .streetview-control-toggle,
+html .streetview-panel-title {
+  color: hsl(var(--popover-foreground));
+}
+
+html .streetview-control-toggle:is(:hover, :active),
+html .streetview-panel-close:hover,
+html .streetview-provider-tab:not(:disabled):hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+html .streetview-control.active .streetview-control-toggle,
+html .streetview-provider-tab.active {
+  background: hsl(var(--accent));
+  border-color: hsl(var(--ring));
+  color: hsl(var(--accent-foreground));
+}
+
+html .streetview-panel-header,
+html .streetview-provider-tabs,
+html .streetview-viewer-initial,
+html .streetview-no-data {
+  background: hsl(var(--muted));
+  border-color: hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+}
+
+html .streetview-api-keys {
+  background: hsl(var(--popover));
+}
+
+html .streetview-panel-close,
+html .streetview-provider-tab,
+html .streetview-api-key-label,
+html .streetview-viewer-initial-hint {
+  color: hsl(var(--muted-foreground));
+}
+
+html .streetview-no-data-title {
+  color: hsl(var(--popover-foreground));
+}
+
+html .streetview-panel-resize::before {
+  border-color: hsl(var(--muted-foreground));
+}
+
+.streetview-panel .streetview-api-key-input {
+  background: hsl(var(--background));
+  border-color: hsl(var(--input));
+  color: hsl(var(--foreground)) !important;
+}
+
+.streetview-panel .streetview-api-key-input::placeholder {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+html .streetview-api-key-input:focus,
+html .streetview-control-toggle:focus-visible {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.25);
+}
+
+html .streetview-api-key-apply,
+html .streetview-no-data-button {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+html .streetview-api-key-apply:is(:hover, :active),
+html .streetview-no-data-button:hover {
+  background: hsl(var(--primary) / 0.9);
+}

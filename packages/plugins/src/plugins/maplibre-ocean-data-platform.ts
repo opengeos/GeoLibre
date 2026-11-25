@@ -1,6 +1,10 @@
+import { OCEAN_DATA_PLATFORM_PLUGIN_ID } from "../plugin-ids";
+export { OCEAN_DATA_PLATFORM_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { Feature, FeatureCollection } from "geojson";
 import { createLayerId } from "../layer-ids";
+import { saveBinaryFileWithHost } from "../panel-dom";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { isTauriRuntime } from "./earth-engine-auth";
 import {
@@ -23,7 +27,6 @@ import {
 import { getControlMap } from "./style-map";
 import { createPluginTranslator } from "../plugin-i18n";
 
-export const OCEAN_DATA_PLATFORM_PLUGIN_ID = "geolibre-ocean-data-platform";
 const PANEL_ID = OCEAN_DATA_PLATFORM_PLUGIN_ID;
 
 /** `metadata.sourceKind` of the vector tile layers this plugin adds. */
@@ -230,16 +233,11 @@ async function saveBlob(
   if (fileSaver) {
     return (await fileSaver(blob, options)) !== null;
   }
-  const url = URL.createObjectURL(blob);
-  try {
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = options.defaultName;
-    anchor.click();
-  } finally {
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-  return true;
+  return saveBinaryFileWithHost(appRef, options.defaultName, blob, {
+    extensions: [options.extension],
+    mimeType: options.mimeType,
+    description: options.description,
+  });
 }
 
 /** A filesystem-safe file name stem for a dataset. */
@@ -831,12 +829,11 @@ function mountPanel(container: HTMLElement): void {
  * file through OGC API Features.
  */
 export const maplibreOceanDataPlatformPlugin: GeoLibrePlugin = {
-  id: OCEAN_DATA_PLATFORM_PLUGIN_ID,
-  name: "Ocean Data Platform",
-  version: "0.1.0",
+  ...builtInPluginProperties("geolibre-ocean-data-platform"),
+
   // Everything it adds is a vector-tiles or GeoJSON store layer, which every
   // engine hosts (the globe drapes vector tiles).
-  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
+
   activate: (app) => {
     appRef = app;
     unregisterPanel =

@@ -1,4 +1,4 @@
-import { getActiveTimeSliderControl } from "./maplibre-time-slider";
+import { getActiveTimeSliderControl } from "../time-slider-state";
 import { getTimeSliderPixelSources } from "./time-slider-pixel-series";
 
 /**

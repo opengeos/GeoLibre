@@ -81,6 +81,7 @@ function makeSdk() {
       }
       minScale: number;
       maxScale: number;
+      renderer: unknown;
       loaded = true;
       loadStatus = "loaded" as const;
       loadError = null;
@@ -94,6 +95,7 @@ function makeSdk() {
         this.visible = (props.visible as boolean) ?? true;
         this.minScale = (props.minScale as number) ?? 0;
         this.maxScale = (props.maxScale as number) ?? 0;
+        this.renderer = props.renderer;
         if (Array.isArray(props.graphics)) this.graphics.addMany(props.graphics);
         created.push(this as unknown as FakeLayer);
       }
@@ -1115,18 +1117,34 @@ describe("ArcgisEngine layer sync", () => {
     );
     assert.equal(created.length, 3);
   });
-  it("applies visibility and opacity in place, rebuilds on a style change, removes on drop", () => {
+  it("applies visibility, opacity and simple style changes in place, rebuilds on structural changes, removes on drop", () => {
     const { engine, layers, created } = makeEngine();
     engine.syncLayers([SQUARE]);
     const before = [...layers.items];
     engine.syncLayers([{ ...SQUARE, visible: false, opacity: 0.4 }]);
     assert.equal(created.length, 2);
     assert.ok(before.every((l) => l.visible === false && l.opacity === 0.4));
+    // Simple single-symbol style edits update the native renderer in place without rebuilding.
     engine.syncLayers([{ ...SQUARE, style: { ...DEFAULT_LAYER_STYLE, fillColor: "#ff0000" } }]);
+    assert.equal(created.length, 2);
+    assert.ok(before.every((l) => !l.destroyed));
+    const updatedSymbol = (before[0].renderer as { symbol: { color: number[] } }).symbol;
+    assert.deepEqual(updatedSymbol.color.slice(0, 3), [255, 0, 0]);
+    // Adding labels requires rebuilding the native GeoJSONLayer.
+    engine.syncLayers([
+      {
+        ...SQUARE,
+        style: {
+          ...DEFAULT_LAYER_STYLE,
+          fillColor: "#ff0000",
+          labels: { ...DEFAULT_LAYER_STYLE.labels, enabled: true, field: "name" },
+        },
+      },
+    ]);
     assert.equal(created.length, 4);
     assert.ok(before.every((l) => l.destroyed));
     const rebuilt = layers.items[0];
-    const symbol = (rebuilt.props.renderer as { symbol: { color: number[] } }).symbol;
+    const symbol = (rebuilt.renderer as { symbol: { color: number[] } }).symbol;
     assert.deepEqual(symbol.color.slice(0, 3), [255, 0, 0]);
     engine.syncLayers([]);
     assert.equal(layers.length, 0);
@@ -1330,7 +1348,7 @@ describe("ArcgisEngine layer sync", () => {
       Object.assign(globalThis, previous);
     }
   });
-  it("reuses a GeoJSON plan across opacity, visibility and name changes", () => {
+  it("reuses a GeoJSON plan across opacity, visibility, name and simple style changes", () => {
     const { engine, created } = makeEngine();
     engine.syncLayers([SQUARE]);
     const count = created.length;
@@ -1340,8 +1358,22 @@ describe("ArcgisEngine layer sync", () => {
     assert.equal(native.opacity, 0.4);
     assert.equal(native.visible, false);
     assert.equal(native.title, "Renamed");
-    // A re-style still rebuilds.
+    // Simple fill color updates the renderer in place without rebuilding.
     engine.syncLayers([{ ...SQUARE, style: { ...DEFAULT_LAYER_STYLE, fillColor: "#00ff00" } }]);
+    assert.equal(created.length, count);
+    const updatedSymbol = (native.renderer as { symbol: { color: number[] } }).symbol;
+    assert.deepEqual(updatedSymbol.color.slice(0, 3), [0, 255, 0]);
+    // Structural changes (such as enabling labels) still rebuild.
+    engine.syncLayers([
+      {
+        ...SQUARE,
+        style: {
+          ...DEFAULT_LAYER_STYLE,
+          fillColor: "#00ff00",
+          labels: { ...DEFAULT_LAYER_STYLE.labels, enabled: true, field: "name" },
+        },
+      },
+    ]);
     assert.ok(created.length > count);
   });
   it("recompiles zoom-dependent layers when the integer zoom changes", () => {
@@ -1350,11 +1382,121 @@ describe("ArcgisEngine layer sync", () => {
       { ...SQUARE, style: { ...DEFAULT_LAYER_STYLE, strokeWidthUnit: "meters", strokeWidth: 100 } },
     ]);
     const count = created.length;
+    const polygonLayer = created[0];
+    const widthAtZoom5 = (polygonLayer.renderer as { symbol: { outline?: { width?: unknown } } })
+      .symbol.outline?.width;
     fireWatchers();
     assert.equal(created.length, count);
+    assert.equal(
+      (polygonLayer.renderer as { symbol: { outline?: { width?: unknown } } }).symbol.outline
+        ?.width,
+      widthAtZoom5,
+    );
     rawView.zoom = 9;
     fireWatchers();
-    assert.ok(created.length > count);
+    // Zoom-dependent stroke width updates the renderer in place without recreating the layer.
+    assert.equal(created.length, count);
+    const widthAtZoom9 = (polygonLayer.renderer as { symbol: { outline?: { width?: unknown } } })
+      .symbol.outline?.width;
+    assert.notEqual(widthAtZoom9, widthAtZoom5);
+  });
+  it("rebuilds when a rule-based filter switches to a different equal-count feature subset", () => {
+    const { engine, created } = makeEngine();
+    const twoPolygons = geojsonLayer({
+      id: "rule-polys",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "a",
+            properties: { kind: "A" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+          {
+            type: "Feature",
+            id: "b",
+            properties: { kind: "B" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [2, 2],
+                  [3, 2],
+                  [3, 3],
+                  [2, 3],
+                  [2, 2],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        vectorStyleMode: "rule-based",
+        vectorRules: [
+          {
+            id: "r1",
+            label: "Only A",
+            enabled: true,
+            isElse: false,
+            filter: JSON.stringify(["==", ["get", "kind"], "A"]),
+            color: "#ff0000",
+          },
+          {
+            id: "else",
+            label: "Else",
+            enabled: false,
+            isElse: true,
+            filter: "",
+            color: "#cccccc",
+          },
+        ],
+      },
+    });
+    engine.syncLayers([twoPolygons]);
+    const count = created.length;
+    const firstNative = created[count - 1];
+    engine.syncLayers([
+      {
+        ...twoPolygons,
+        style: {
+          ...twoPolygons.style,
+          vectorRules: [
+            {
+              id: "r1",
+              label: "Only B",
+              enabled: true,
+              isElse: false,
+              filter: JSON.stringify(["==", ["get", "kind"], "B"]),
+              color: "#0000ff",
+            },
+            {
+              id: "else",
+              label: "Else",
+              enabled: false,
+              isElse: true,
+              filter: "",
+              color: "#cccccc",
+            },
+          ],
+        },
+      },
+    ]);
+    assert.ok(created.length > count, "expected equal-count rule change to rebuild native layer");
+    assert.equal(firstNative.destroyed, true);
   });
 });
 

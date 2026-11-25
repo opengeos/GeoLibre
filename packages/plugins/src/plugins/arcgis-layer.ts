@@ -42,7 +42,7 @@ import {
   isArcGISQuantizedFeatureSet,
   type ArcGISRecordIdentity,
 } from "./arcgis-quantized";
-import { getGeometryEditTargetLayerId } from "./maplibre-geo-editor";
+import { getGeometryEditTargetLayerId } from "../geo-editor-state";
 import { LocalizedError, localizedMessage } from "../localized-error";
 
 let arcGISFetchOverride: typeof globalThis.fetch | null = null;
@@ -86,6 +86,36 @@ export function parseArcGISLayerType(
   fallback: ArcGISLayerType = "feature",
 ): ArcGISLayerType {
   return ARCGIS_LAYER_TYPES.find((layerType) => layerType === value) ?? fallback;
+}
+
+/**
+ * The layer type an ArcGIS REST URL names by its service segment, so a deep
+ * link to a `…/MapServer` or `…/ImageServer` opens the form on the matching
+ * type instead of the Feature Service default, which would refuse it.
+ *
+ * @param url - An ArcGIS REST service or layer URL.
+ * @returns The layer type, or null when the URL names no known service type.
+ */
+export function arcgisLayerTypeFromUrl(url: string): ArcGISLayerType | null {
+  let path: string;
+  try {
+    path = new URL(url).pathname;
+  } catch {
+    return null;
+  }
+  const service = path.match(/\/(FeatureServer|MapServer|ImageServer|VectorTileServer)(?:\/|$)/i);
+  switch (service?.[1].toLowerCase()) {
+    case "featureserver":
+      return "feature";
+    case "mapserver":
+      return "map-service";
+    case "imageserver":
+      return "image-service";
+    case "vectortileserver":
+      return "vector-tile";
+    default:
+      return null;
+  }
 }
 
 /**

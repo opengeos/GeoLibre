@@ -1,3 +1,7 @@
+import { OPENAERIALMAP_PLUGIN_ID } from "../plugin-ids";
+export { OPENAERIALMAP_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { useAppStore } from "@geolibre/core";
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import type {
@@ -21,7 +25,6 @@ import {
   searchOpenAerialMap,
 } from "./openaerialmap-api";
 
-export const OPENAERIALMAP_PLUGIN_ID = "maplibre-gl-openaerialmap";
 const PANEL_ID = OPENAERIALMAP_PLUGIN_ID;
 const PAGE_SIZE = 20;
 // The OpenAerialMap metadata API is CORS-locked to the OAM web app origin, so a
@@ -531,7 +534,7 @@ function setFootprints(map: MapLibreMap, images: OamImage[]): void {
       footprintById.set(image.id, feature);
     }
   }
-  source.setData({ type: "FeatureCollection", features });
+  updateGeoJsonSourceData(source, { type: "FeatureCollection", features });
   if (features.length > 0) syncFootprintStoreLayer(features);
   else unregisterFootprintLayer();
 }
@@ -541,7 +544,10 @@ function setSelectedFootprint(map: MapLibreMap, id: string | null): void {
   const source = map.getSource(SELECT_SOURCE_ID) as GeoJSONSource | undefined;
   if (!source) return;
   const feature = id ? footprintById.get(id) : undefined;
-  source.setData(feature ? { type: "FeatureCollection", features: [feature] } : emptyCollection());
+  updateGeoJsonSourceData(
+    source,
+    feature ? { type: "FeatureCollection", features: [feature] } : emptyCollection(),
+  );
 }
 
 /**
@@ -627,7 +633,7 @@ function ensureDrawLayers(map: MapLibreMap): void {
 function setDrawBox(map: MapLibreMap, bbox: [number, number, number, number] | null): void {
   ensureDrawLayers(map);
   const source = map.getSource(DRAW_SOURCE_ID) as GeoJSONSource | undefined;
-  source?.setData(boxCollection(bbox));
+  updateGeoJsonSourceData(source, boxCollection(bbox));
 }
 
 /** Removes the drawn-box overlay. */
@@ -1331,14 +1337,13 @@ export function setOpenAerialMapLabels(next: Partial<OpenAerialMapLabels>): void
  * GeoTIFF.
  */
 export const maplibreOpenAerialMapPlugin: GeoLibrePlugin = {
-  id: OPENAERIALMAP_PLUGIN_ID,
-  name: "OpenAerialMap",
-  version: "0.1.0",
+  ...builtInPluginProperties("maplibre-gl-openaerialmap"),
+
   // Footprints, the bbox preview and the imagery tile layers are all Style
   // Spec sources and layers, so both 2D engines host them. On ArcGIS the
   // host's control map draws the footprint overlays and the imagery is a store
   // tile layer.
-  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
+
   activate: (app: GeoLibreAppAPI) => {
     appRef = app;
     unregisterPanel =

@@ -610,3 +610,135 @@ def test_start_job_rolls_back_when_thread_start_fails(monkeypatch) -> None:
     with pytest.raises(RuntimeError, match="thread start failed"):
         conversion._start_job("vector-to-geoparquet", "pass", {}, "output")
     assert conversion._JOBS == {}
+
+
+def test_failed_conversion_preserves_preexisting_output(monkeypatch, tmp_path: Path) -> None:
+    """Cleanup must not unlink a pre-existing output_path when a tool fails before writing."""
+    existing = tmp_path / "out.parquet"
+    existing.write_bytes(b"original-data")
+    job_id = "test-preserve-existing-output"
+    try:
+        job = _run_script_job(
+            monkeypatch,
+            tmp_path,
+            job_id,
+            'raise SystemExit("simulated conversion failure")\n',
+        )
+        assert job.status == "failed"
+        assert existing.exists()
+        assert existing.read_bytes() == b"original-data"
+    finally:
+        with conversion._JOBS_LOCK:
+            conversion._JOBS.pop(job_id, None)
+
+
+def _wait_for_conversion_job(job_id: str, *, while_status: set[str]):
+    """Wait for a terminal job and its process tracking cleanup.
+
+    Args:
+        job_id: The conversion job to observe.
+        while_status: States that indicate the job is still in flight.
+
+    Returns:
+        The finished job state.
+
+    Raises:
+        AssertionError: If the job or its cleanup exceeds the bounded wait.
+    """
+    import time
+
+    for _ in range(200):
+        state = conversion._job_state(job_id)
+        if (
+            state is not None
+            and state.status not in while_status
+            and job_id not in conversion._PROCESSES
+            and job_id not in conversion._CANCELLED
+        ):
+            return state
+        time.sleep(0.05)
+    raise AssertionError(f"job {job_id} stayed in {while_status}")
+
+
+def test_conversion_cancel_endpoint_stops_a_running_job(monkeypatch) -> None:
+    """``POST /conversion/jobs/{id}/cancel`` kills the subprocess and reports cancelled."""
+    import time
+
+    monkeypatch.setattr(conversion, "_runtime_python", lambda: sys.executable)
+    job = conversion._start_job("convert-test", "import time\ntime.sleep(30)\n", {}, "out")
+    for _ in range(100):
+        if conversion._PROCESSES.get(job.id) is not None:
+            break
+        time.sleep(0.05)
+    conversion.conversion_cancel(job.id)
+    state = _wait_for_conversion_job(job.id, while_status={"pending", "running"})
+    assert state.status == "cancelled"
+    assert state.error == "Cancelled."
+    assert job.id not in conversion._PROCESSES
+    # Cancelling a finished job is a no-op that returns its final state.
+    assert conversion.conversion_cancel(job.id).status == "cancelled"
+
+
+def test_conversion_cancel_endpoint_rejects_unknown_job() -> None:
+    """An unknown job id is a 404, like ``GET /conversion/jobs/{id}``."""
+    with pytest.raises(HTTPException) as excinfo:
+        conversion.conversion_cancel("not-a-job")
+    assert excinfo.value.status_code == 404
+
+
+def test_conversion_cancel_route_is_registered() -> None:
+    """The cancel route is reachable over HTTP on the sidecar app."""
+    from fastapi.testclient import TestClient
+
+    from geolibre_server.app.main import app
+
+    response = TestClient(app).post("/conversion/jobs/not-a-job/cancel")
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize("outcome", ["succeeded", "failed", "cancelled"])
+def test_pmtiles_parent_cleans_scratch_after_worker_exit(monkeypatch, tmp_path, outcome):
+    """Parent cleanup removes PMTiles intermediates even after a hard kill.
+
+    Args:
+        monkeypatch: The pytest patch fixture.
+        tmp_path: An isolated temporary directory.
+        outcome: The worker's terminal state to exercise.
+    """
+    import time
+
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    script = (
+        "import json, pathlib, sys, time\n"
+        "params = json.loads(sys.argv[1])\n"
+        "scratch = pathlib.Path(params['scratch_dir'])\n"
+        "(scratch / 'intermediate.parquet').write_bytes(b'partial dataset')\n"
+        "print('ready', flush=True)\n"
+    )
+    if outcome == "cancelled":
+        script += "time.sleep(30)\n"
+    elif outcome == "failed":
+        script += "raise RuntimeError('tiling failed')\n"
+    monkeypatch.setattr(conversion, "_PMTILES_SCRIPT", script)
+    monkeypatch.setattr(conversion, "_runtime_python", lambda: sys.executable)
+    monkeypatch.setattr(conversion.tempfile, "mkdtemp", lambda **kwargs: str(scratch))
+    job = conversion._start_job("vector-to-pmtiles", script, {}, "pmtiles")
+    try:
+        if outcome == "cancelled":
+            for _ in range(200):
+                if (scratch / "intermediate.parquet").exists():
+                    break
+                time.sleep(0.05)
+            assert (scratch / "intermediate.parquet").exists()
+            conversion.conversion_cancel(job.id)
+        for _ in range(200):
+            state = conversion._job_state(job.id)
+            if state.status not in {"pending", "running"} and not scratch.exists():
+                break
+            time.sleep(0.05)
+        assert state.status == outcome
+        assert not scratch.exists()
+        assert job.id not in conversion._PROCESSES
+    finally:
+        conversion.conversion_cancel(job.id)

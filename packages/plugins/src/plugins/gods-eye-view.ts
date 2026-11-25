@@ -1,3 +1,7 @@
+import { godsEyeViewRuntime } from "../builtin-plugin-panels";
+import { GODS_EYE_VIEW_PLUGIN_ID } from "../plugin-ids";
+export { GODS_EYE_VIEW_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { createCzmlLayer, useAppStore } from "@geolibre/core";
 import type { CesiumSceneHandle } from "@geolibre/map";
 import type { GeoLibreAppAPI, GeoLibrePlugin, GeoLibrePluginCredentials } from "../types";
@@ -59,7 +63,6 @@ import {
 } from "./gods-eye-view-vessel-feeds";
 import { withSelectChevron } from "../panel-dom";
 
-export const GODS_EYE_VIEW_PLUGIN_ID = "gods-eye-view";
 export const GODS_EYE_VIEW_EARTHQUAKES_FLAG = "godsEyeViewEarthquakes";
 export const GODS_EYE_VIEW_SATELLITES_FLAG = "godsEyeViewSatellites";
 export const GODS_EYE_VIEW_DENSE_SATELLITES_FLAG = "godsEyeViewDenseSatellites";
@@ -1599,17 +1602,15 @@ function deactivate(): void {
 }
 
 export const godsEyeViewPlugin: GeoLibrePlugin = {
-  id: GODS_EYE_VIEW_PLUGIN_ID,
-  name: "God's Eye View",
-  version: "0.2.0",
-  activeByDefault: false,
+  ...builtInPluginProperties("gods-eye-view"),
+
   // Every 2D engine, not just MapLibre: `engines` decides whether the Plugins
   // menu entry can be toggled at all, so leaving Mapbox and ArcGIS out greyed
   // the panel out on those renderers and put the "switch to the 3D globe" note
   // behind the very door it was written to open. The feeds still render only on
   // the globe — `activate` handles having no primary Cesium scene — which is
   // the same split `flight-simulator.ts` declares.
-  engines: ["cesium", "maplibre", "mapbox", "arcgis"],
+
   activate,
   deactivate,
   // The host drops plugin settings that are not strictly JSON-compatible, so
@@ -1639,3 +1640,5 @@ export const godsEyeViewPlugin: GeoLibrePlugin = {
     return true;
   },
 };
+
+godsEyeViewRuntime.reattach = reattachGodsEyeView;

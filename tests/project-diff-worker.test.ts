@@ -224,4 +224,23 @@ describe("createProjectDiffClient", () => {
     const next = await client.compare(source("a", []), source("b", ["y"]));
     assert.ok(next.ok);
   });
+
+  it("rejects in-flight promises when dispose() is called", async () => {
+    class HangingWorker {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onerror: ((event: ErrorEvent) => void) | null = null;
+      terminated = false;
+      postMessage(): void {}
+      terminate(): void {
+        this.terminated = true;
+      }
+    }
+    const worker = new HangingWorker();
+    const client = createProjectDiffClient(() => worker as unknown as Worker);
+    const pending = client.compare(source("a", []), source("b", ["x"]));
+    client.dispose();
+    assert.equal(worker.terminated, true);
+    await assert.rejects(pending, /disposed/i);
+    await assert.rejects(client.compare(source("a", []), source("b", ["y"])), /disposed/i);
+  });
 });

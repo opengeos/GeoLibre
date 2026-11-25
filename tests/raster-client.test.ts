@@ -43,8 +43,10 @@ describe("raster-client compute", () => {
   it("reports which tools have a client implementation", () => {
     assert.equal(supportsClientRaster("hillshade"), true);
     assert.equal(supportsClientRaster("focal"), true);
-    assert.equal(supportsClientRaster("polygonize"), false);
-    assert.equal(supportsClientRaster("reproject"), false);
+    assert.equal(supportsClientRaster("polygonize"), true);
+    assert.equal(supportsClientRaster("reproject"), true);
+    assert.equal(supportsClientRaster("flood-map"), true);
+    assert.equal(supportsClientRaster("not-a-tool"), false);
   });
 
   it("parses reclassify rule tables with min/max bounds", () => {
@@ -59,7 +61,10 @@ describe("raster-client compute", () => {
 
   it("reclassifies values into half-open ranges", () => {
     const raster = makeRaster([[5, 10, 15, 25]], 4, 1);
-    const out = reclassify(raster, { table: "0:10:1, 10:20:2", unmatched: "nodata" });
+    const out = reclassify(raster, {
+      table: "0:10:1, 10:20:2",
+      unmatched: "nodata",
+    });
     // 5 -> 1, 10 -> 2 (half-open [10,20)), 15 -> 2, 25 -> unmatched (nodata)
     assert.equal(out.bands[0][0], 1);
     assert.equal(out.bands[0][1], 2);
@@ -289,9 +294,176 @@ describe("raster-client compute", () => {
     assert.deepEqual([...out.bands[0]], [0, 0, 1, 1]);
   });
 
-  it("rejects multi-raster references in client band math", () => {
+  it("rejects unprovided secondary raster references in client band math", () => {
     const raster = makeRaster([[1, 2]], 2, 1);
-    assert.throws(() => rasterCalc(raster, { expression: "A + B" }), /single input/);
+    assert.throws(() => rasterCalc(raster, { expression: "A + B" }), /Raster B is referenced/);
+  });
+
+  it("evaluates multi-raster expressions across A, B, and C without eval or new Function", () => {
+    const a = makeRaster(
+      [
+        [10, 20, 30, -9999],
+        [2, 4, 6, 8],
+      ],
+      4,
+      1,
+      { nodata: -9999 },
+    );
+    const b = makeRaster([[1, 2, -9999, 4]], 4, 1, { nodata: -9999 });
+    const c = makeRaster([[5, 5, 5, 5]], 4, 1, { nodata: -9999 });
+    const out = rasterCalc(a, {
+      expression: "where(A1 > 15, (A2 ** 2 + B) * C, A1 + B1)",
+      additionalInputs: { B: b, C: c },
+    });
+    assert.equal(out.bands[0][0], 11); // A1=10 <= 15 -> 10 + 1
+    assert.equal(out.bands[0][1], (16 + 2) * 5); // A1=20 > 15 -> (4**2 + 2) * 5 = 90
+    assert.equal(out.bands[0][2], -9999); // B is nodata
+    assert.equal(out.bands[0][3], -9999); // A1 is nodata
+
+    // Dimension mismatch between A and B must be rejected cleanly.
+    const wrongSize = makeRaster([[1, 2]], 2, 1);
+    assert.throws(
+      () =>
+        rasterCalc(a, {
+          expression: "A + B",
+          additionalInputs: { B: wrongSize },
+        }),
+      /do not match/,
+    );
+
+    // Georeferencing mismatch (same size, different origin/resolution/registration/CRS/rotation) must be rejected.
+    const shifted = { ...b, originX: b.originX + 10 };
+    assert.throws(
+      () =>
+        rasterCalc(a, {
+          expression: "A + B",
+          additionalInputs: { B: shifted },
+        }),
+      /origin does not match/,
+    );
+    // Pixel-scaled origin tolerance: 25 cm pixels at 600,000 m shifted by 0.5 m (2 pixels) must reject.
+    const fineA = { ...a, originX: 600_000, resX: 0.25, resY: 0.25 };
+    const fineB = { ...b, originX: 600_000.5, resX: 0.25, resY: 0.25 };
+    assert.throws(
+      () =>
+        rasterCalc(fineA, {
+          expression: "A + B",
+          additionalInputs: { B: fineB },
+        }),
+      /origin does not match/,
+    );
+    // Accumulated far-edge resolution drift across width must reject.
+    const resDriftA = { ...a, resX: 0.00001, resY: 0.00001 };
+    const resDriftB = { ...b, resX: 0.000015, resY: 0.00001 };
+    assert.throws(
+      () =>
+        rasterCalc(resDriftA, {
+          expression: "A + B",
+          additionalInputs: { B: resDriftB },
+        }),
+      /pixel resolution does not match/,
+    );
+    const flipped = { ...b, flipY: true };
+    assert.throws(
+      () =>
+        rasterCalc(a, {
+          expression: "A + B",
+          additionalInputs: { B: flipped },
+        }),
+      /axis orientation does not match/,
+    );
+    const rotatedB = { ...b, rotated: true };
+    assert.throws(
+      () =>
+        rasterCalc(a, {
+          expression: "A + B",
+          additionalInputs: { B: rotatedB },
+        }),
+      /rotated or sheared/,
+    );
+    const pointRegB = { ...b, geoKeys: { GTRasterTypeGeoKey: 2 } };
+    assert.throws(
+      () =>
+        rasterCalc(a, {
+          expression: "A + B",
+          additionalInputs: { B: pointRegB },
+        }),
+      /pixel registration/,
+    );
+    const userDefinedA = { ...a, geoKeys: { ProjectedCSTypeGeoKey: 32767 } };
+    const userDefinedB = { ...b, geoKeys: { ProjectedCSTypeGeoKey: 32767 } };
+    assert.throws(
+      () =>
+        rasterCalc(userDefinedA, {
+          expression: "A + B",
+          additionalInputs: { B: userDefinedB },
+        }),
+      /user-defined CRS/,
+    );
+    const otherCrs = { ...b, geoKeys: { ProjectedCSTypeGeoKey: 32617 } };
+    const aWithCrs = { ...a, geoKeys: { ProjectedCSTypeGeoKey: 3857 } };
+    assert.throws(
+      () =>
+        rasterCalc(aWithCrs, {
+          expression: "A + B",
+          additionalInputs: { B: otherCrs },
+        }),
+      /CRS .* does not match/,
+    );
+
+    // Duplicate normalized secondary raster keys must be rejected.
+    assert.throws(
+      () =>
+        rasterCalc(a, {
+          expression: "A + B",
+          additionalInputs: { B: b, " b ": b },
+        }),
+      /Duplicate secondary raster key/,
+    );
+  });
+
+  it("ignores NoData in unreferenced bands and propagates distinct NoData sentinels from B", () => {
+    const a = makeRaster(
+      [
+        [10, 20, 30],
+        [-9999, 5, 6], // A2 is NoData at pixel 0, but expression only reads A1 and B
+      ],
+      3,
+      1,
+      { nodata: -9999 },
+    );
+    const b = makeRaster([[1, -32768, 3]], 3, 1, { nodata: -32768 });
+    const out = rasterCalc(a, {
+      expression: "A + B",
+      additionalInputs: { B: b },
+    });
+    assert.equal(out.bands[0][0], 11); // A2 NoData ignored
+    assert.equal(out.bands[0][1], -9999); // B's -32768 NoData propagated to A's sentinel
+    assert.equal(out.bands[0][2], 33);
+  });
+
+  it("preserves unary-power precedence, bitwise/logical JS semantics, and handles long flat sums", () => {
+    const r = makeRaster([[0, 2, 3, 4]], 4, 1);
+    // NumPy/Python precedence: -A ** 2 == -(A ** 2)
+    assert.deepEqual(
+      [...rasterCalc(r, { expression: "-A ** 2" }).bands[0]].map((v) => v + 0),
+      [0, -4, -9, -16],
+    );
+    assert.deepEqual([...rasterCalc(r, { expression: "2 ** -1" }).bands[0]], [0.5, 0.5, 0.5, 0.5]);
+    // JS-compatible logical && / || and bitwise & / |
+    assert.deepEqual([...rasterCalc(r, { expression: "A && 5" }).bands[0]], [0, 5, 5, 5]);
+    assert.deepEqual([...rasterCalc(r, { expression: "A || 5" }).bands[0]], [5, 2, 3, 4]);
+    assert.deepEqual([...rasterCalc(r, { expression: "A | 2" }).bands[0]], [2, 2, 3, 6]);
+    assert.deepEqual([...rasterCalc(r, { expression: "A & 4" }).bands[0]], [0, 0, 0, 4]);
+    // Long flat sum (200 terms) must evaluate iteratively without stack overflow
+    const longExpr = Array.from({ length: 200 }, () => "A").join(" + ");
+    assert.deepEqual([...rasterCalc(r, { expression: longExpr }).bands[0]], [0, 400, 600, 800]);
+    // Balanced binary tree of 2,047 function calls must hit MAX_NODES complexity budget
+    let balanced = "A";
+    for (let level = 0; level < 11; level += 1) {
+      balanced = `minimum(${balanced}, ${balanced})`;
+    }
+    assert.throws(() => rasterCalc(r, { expression: balanced }), /too complex/);
   });
 
   it("rejects expressions that reach browser globals", () => {
@@ -306,13 +478,31 @@ describe("raster-client compute", () => {
     );
     // Letter-free "JSFuck"-style payloads must be blocked by the char allowlist.
     assert.throws(() => rasterCalc(raster, { expression: "[]+[]" }), /unsupported characters/);
+    // Prototype properties must be rejected as unsupported identifiers, not treated as functions.
+    assert.throws(
+      () => rasterCalc(raster, { expression: "constructor(A)" }),
+      /unsupported identifiers/,
+    );
+    assert.throws(
+      () => rasterCalc(raster, { expression: "toString()" }),
+      /unsupported identifiers/,
+    );
+    // where(NaN, a, b) must evaluate falsy (matching JS truthiness and &&/||/!).
+    const neg = makeRaster([[-1, 4]], 2, 1);
+    assert.deepEqual([...rasterCalc(neg, { expression: "where(sqrt(A), 1, 0)" }).bands[0]], [0, 1]);
   });
 
-  it("allows numeric literals including scientific notation", () => {
+  it("allows numeric literals including leading-dot decimals and scientific notation", () => {
     const raster = makeRaster([[1, 2]], 2, 1);
-    const out = rasterCalc(raster, { expression: "A * 1e3 + 0.5" });
+    const out = rasterCalc(raster, { expression: "A * 1e3 + .5" });
     assert.equal(out.bands[0][0], 1 * 1e3 + 0.5);
     assert.equal(out.bands[0][1], 2 * 1e3 + 0.5);
+  });
+
+  it("rejects out-of-range band references before evaluating pixels", () => {
+    const raster = makeRaster([[1, 2]], 2, 1);
+    assert.throws(() => rasterCalc(raster, { expression: "A10 + 1" }), /out of range/);
+    assert.throws(() => rasterCalc(raster, { expression: "A0 + 1" }), /out of range/);
   });
 
   it("computes a focal mean over a neighbourhood", () => {
@@ -426,5 +616,167 @@ describe("readRasterData with a short SampleFormat tag", () => {
         [2, 5, 8, 11],
       ],
     );
+  });
+});
+
+describe("client-raster-inputs path parameters", () => {
+  it("classifies raster and GeoJSON path parameters for the client engine", async () => {
+    const { clientInputForParam, parseGeoJsonBytes } =
+      await import("../apps/geolibre-desktop/src/lib/client-raster-inputs");
+    const tif = [{ extensions: ["tif", "tiff"] }];
+    const geojson = [{ extensions: ["geojson", "json"] }];
+    assert.deepEqual(clientInputForParam({ id: "b_path", type: "path", fileFilters: tif }), {
+      kind: "raster",
+      key: "B",
+    });
+    assert.deepEqual(clientInputForParam({ id: "raster_2", type: "path", fileFilters: tif }), {
+      kind: "raster",
+      key: "raster_2",
+    });
+    assert.deepEqual(
+      clientInputForParam({
+        id: "mask_path",
+        type: "path",
+        fileFilters: geojson,
+      }),
+      {
+        kind: "vector",
+        key: "mask_path",
+      },
+    );
+    assert.equal(clientInputForParam({ id: "band", type: "number" }), null);
+    assert.equal(
+      clientInputForParam({
+        id: "x",
+        type: "path",
+        fileFilters: [{ extensions: ["csv"] }],
+      }),
+      null,
+    );
+
+    const enc = (s: string) => new TextEncoder().encode(s).buffer as ArrayBuffer;
+    assert.deepEqual(parseGeoJsonBytes(enc('{"type":"FeatureCollection","features":[]}')), {
+      type: "FeatureCollection",
+      features: [],
+    });
+    assert.equal(parseGeoJsonBytes(enc("not json")), null);
+    assert.equal(parseGeoJsonBytes(enc("42")), null);
+  });
+});
+
+describe("client-raster-inputs helper", () => {
+  it("rejects oversized GeoJSON before decoding text", async () => {
+    const { parseGeoJsonBytes, MAX_CLIENT_VECTOR_BYTES } =
+      await import("../apps/geolibre-desktop/src/lib/client-raster-inputs");
+    assert.throws(
+      () => parseGeoJsonBytes(new ArrayBuffer(MAX_CLIENT_VECTOR_BYTES + 1)),
+      /VECTOR_TOO_LARGE/,
+    );
+  });
+  it("reserves all RGB and preserved output bands even without secondary files", async () => {
+    const { loadClientAdditionalRasters, clientRasterOutputBands } =
+      await import("../apps/geolibre-desktop/src/lib/client-raster-inputs");
+    const primary = { width: 4096, height: 8192, bands: [new Float32Array(0)] };
+    let reads = 0;
+    const deps = {
+      outputBands: 3,
+      estimateBytes: async () => 4096 * 8192 * 4,
+      readRaster: async () => {
+        reads += 1;
+        return makeRaster([[1]], 1, 1);
+      },
+    };
+    await assert.rejects(
+      loadClientAdditionalRasters(
+        primary,
+        { vh_path: { name: "vh.tif", bytes: new ArrayBuffer(0) } },
+        deps,
+      ),
+      /COMBINED_TOO_LARGE/,
+    );
+    await assert.rejects(
+      loadClientAdditionalRasters(
+        { ...primary, bands: [...primary.bands, ...primary.bands] },
+        {},
+        deps,
+      ),
+      /COMBINED_TOO_LARGE/,
+    );
+    assert.equal(reads, 0);
+    assert.equal(clientRasterOutputBands("sar-rgb", 2), 3);
+    assert.equal(clientRasterOutputBands("speckle-filter", 4), 4);
+    assert.equal(clientRasterOutputBands("raster-calc", 4), 1);
+  });
+  it("maps secondary parameter ids, omits cleared inputs, and enforces combined memory budget", async () => {
+    const {
+      ClientRasterInputError,
+      loadClientAdditionalRasters,
+      omitClientSecondaryInput,
+      secondaryRasterLetterForParam,
+    } = await import("../apps/geolibre-desktop/src/lib/client-raster-inputs");
+
+    assert.equal(secondaryRasterLetterForParam("b_path"), "B");
+    assert.equal(secondaryRasterLetterForParam("c_path"), "C");
+    assert.equal(secondaryRasterLetterForParam("expression"), null);
+
+    const dummyBuf = new ArrayBuffer(8);
+    const inputs = {
+      B: { name: "b.tif", bytes: dummyBuf },
+      C: { name: "c.tif", bytes: dummyBuf },
+    };
+    const withoutB = omitClientSecondaryInput(inputs, "B");
+    assert.deepEqual(Object.keys(withoutB), ["C"]);
+    assert.equal(omitClientSecondaryInput(withoutB, "B"), withoutB);
+
+    const primary = makeRaster([[1, 2, 3, 4]], 2, 2);
+    let readCalls = 0;
+    await assert.rejects(
+      () =>
+        loadClientAdditionalRasters(primary, inputs, {
+          maxBytes: 100,
+          estimateBytes: async () => 80,
+          readRaster: async () => {
+            readCalls += 1;
+            return primary;
+          },
+        }),
+      (err: unknown) => err instanceof ClientRasterInputError && err.code === "COMBINED_TOO_LARGE",
+    );
+    assert.equal(readCalls, 0, "must reject oversized combined inputs before decoding bytes");
+
+    const decoded = await loadClientAdditionalRasters(
+      primary,
+      { B: inputs.B },
+      {
+        maxBytes: 1024,
+        estimateBytes: async () => 16,
+        readRaster: async () => primary,
+      },
+    );
+    assert.deepEqual(Object.keys(decoded ?? {}), ["B"]);
+
+    // Unused secondary inputs (not referenced by the expression) must be skipped
+    // without estimating or decoding them.
+    let skippedEstimateCalls = 0;
+    const skipped = await loadClientAdditionalRasters(primary, inputs, {
+      expression: "A * 2",
+      maxBytes: 100,
+      estimateBytes: async () => {
+        skippedEstimateCalls += 1;
+        return 10_000;
+      },
+      readRaster: async () => primary,
+    });
+    assert.equal(skipped, undefined);
+    assert.equal(skippedEstimateCalls, 0);
+  });
+
+  it("compiles standalone raster expressions via raster-expr module", async () => {
+    const { compileRasterExpression } = await import("../packages/processing/src/raster-expr");
+    const compiled = compileRasterExpression("where(A, A + 1, 0)", {
+      A: [new Float32Array([2, Number.NaN])],
+    });
+    assert.equal(compiled.evaluate(0), 3);
+    assert.equal(compiled.evaluate(1), 0);
   });
 });

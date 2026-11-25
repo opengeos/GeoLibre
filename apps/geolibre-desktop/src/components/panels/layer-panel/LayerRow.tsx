@@ -27,7 +27,8 @@ import {
   isPlaceholderLayer,
   placeholderMessage,
 } from "@geolibre/map";
-import { arcGISLayerHasPendingEdits, isArcGISWritableLayer } from "@geolibre/plugins";
+import { arcGISLayerHasPendingEdits, isArcGISWritableLayer } from "@geolibre/plugins/arcgis-layer";
+import { isNativeZarrRenderer } from "@geolibre/plugins/component-helpers";
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@geolibre/ui";
 import {
   ChevronDown,
@@ -99,6 +100,8 @@ interface LayerRowProps {
   cesiumPrimary: boolean;
   mapboxPrimary: boolean;
   arcgisPrimary: boolean;
+  /** Whether the ArcGIS engine is currently running in a 3D SceneView. */
+  arcgisScene: boolean;
   /** Whether the ArcGIS engine can host deck.gl overlays. */
   deckOverlay: boolean;
   canEditLayer: (layerId: string) => boolean;
@@ -137,6 +140,7 @@ export function LayerRow({
   cesiumPrimary,
   mapboxPrimary,
   arcgisPrimary,
+  arcgisScene,
   deckOverlay,
   canEditLayer,
   onOpenMetadata,
@@ -191,6 +195,12 @@ export function LayerRow({
       layer.type === "cog" ||
       // An ArcGIS ImageServer reports its pixel values through `/identify`.
       isArcGISImageServiceLayer(layer) ||
+      // A Zarr cube reads its value through the renderer (useZarrIdentify);
+      // the ArcGIS and Cesium renderers draw it natively, with no query path.
+      // Its `metadata.identifiable` stays false on purpose: that flag gates the
+      // generic native-layer feature query (hasNativeIdentifyLayers), which
+      // has no features to return for a cube.
+      (layer.type === "zarr" && !isNativeZarrRenderer(primaryRenderer)) ||
       hasNativeIdentifyLayers(layer));
   const identifyActive = identifyLayerId === layer.id;
   // A gesture that takes over map clicks has to turn Identify off, or
@@ -479,7 +489,7 @@ export function LayerRow({
         )}
         {arcgisPrimary &&
           !isCesiumOnlyLayer(layer) &&
-          !isArcgisSupportedLayer(layer, deckOverlay) && (
+          !isArcgisSupportedLayer(layer, deckOverlay, arcgisScene) && (
             <span
               title={t("renderer.layerArcgisUnsupported")}
               className="shrink-0 rounded-sm bg-muted px-1 text-[10px] uppercase text-muted-foreground"
@@ -496,7 +506,7 @@ export function LayerRow({
           kinds Cesium actually draws — a kind it cannot draw (e.g.
           duckdb-query) keeps its message while the globe is primary. */}
       {(!cesiumPrimary || !isCesiumSupportedLayerType(layer)) &&
-        (!arcgisPrimary || !isArcgisSupportedLayer(layer, deckOverlay)) &&
+        (!arcgisPrimary || !isArcgisSupportedLayer(layer, deckOverlay, arcgisScene)) &&
         isPlaceholderLayer(layer) && (
           <p className="mt-1 text-[10px] text-amber-600">{placeholderMessage(layer)}</p>
         )}

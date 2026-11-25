@@ -29,6 +29,7 @@
     "**/jupyterlite/**",
     "apps/geolibre-desktop/public/**",
     "apps/geolibre-desktop/src/lib/whitebox-menu-catalog.ts",
-    "e2e/fixtures/malformed.geojson"
+    "e2e/fixtures/malformed.geojson",
+    "tests/fixtures/raster-client-parity.json"
   ]
 }

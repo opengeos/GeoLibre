@@ -17,6 +17,7 @@ import {
   getPlanetaryBasemapById,
   getPlanetaryBasemapByStyleUrl,
   PLANET_SWITCHER_OPTIONS,
+  normalizeArcgisWkid,
   useAppStore,
   layerGroupDepth,
   layerGroupMoveability,
@@ -24,12 +25,12 @@ import {
   layerPanelGroupHeaders,
 } from "@geolibre/core";
 import type { EllipsoidId, GeoLibreLayer, LayerGroup } from "@geolibre/core";
+import { BASEMAP_CONTROL_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import {
-  BASEMAP_CONTROL_PLUGIN_ID,
   getTemporalLayersVersion,
   subscribeTemporalLayers,
-} from "@geolibre/plugins";
-import { rendererCapabilities, type MapEngine } from "@geolibre/map";
+} from "@geolibre/plugins/temporal-layers";
+import { arcgisSceneMode, rendererCapabilities, type MapEngine } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { useSideSheet } from "../../hooks/useSideSheet";
 import type { ThemeMode } from "../../hooks/useThemeMode";
@@ -208,6 +209,14 @@ export function LayerPanel({
   // rather than only reported by the map's error banner once it is visible.
   // eslint-disable-next-line local/no-renderer-kind-checks -- selects the engine's layer support table
   const mapboxPrimary = useAppStore((s) => s.primaryRenderer === "mapbox");
+  const arcgisScene = useAppStore(
+    (s) =>
+      arcgisSceneMode(
+        s.preferences.map.projection,
+        s.preferences.map.terrainEnabled,
+        normalizeArcgisWkid(s.preferences.map.arcgisWkid) !== undefined,
+      ) !== "2d",
+  );
   // Same for the ArcGIS view's support table.
   // eslint-disable-next-line local/no-renderer-kind-checks -- selects the engine's layer support table
   const arcgisPrimary = useAppStore((s) => s.primaryRenderer === "arcgis");
@@ -657,6 +666,7 @@ export function LayerPanel({
                     cesiumPrimary={cesiumPrimary}
                     mapboxPrimary={mapboxPrimary}
                     arcgisPrimary={arcgisPrimary}
+                    arcgisScene={arcgisScene}
                     deckOverlay={capabilities.deckOverlay}
                     canEditLayer={canEditLayer}
                     onOpenMetadata={metadata.openMetadata}

@@ -89,6 +89,12 @@ fail again with "Unsupported data format/bitsPerSample";
 
 ### `maplibre-gl`
 
+MapLibre is pinned to 6.18.0 and its style spec to 26.7.0. Before upgrading,
+adapt `map-transform-compat.ts` and the deck.gl integrations to the camera API
+that replaces `_camera.transform` in 6.19, and verify blend composites against
+the renderer as well as the style spec. The 26.9 spec adds a fill-extrusion
+composite that the current renderer integration does not elect.
+
 - **`GLOBE_CONTROL_TOGGLE_SELECTOR`** (`packages/map/src/globe-control-toggle.ts`)
   mirrors the class names MapLibre's own `GlobeControl` puts on its toggle button
   — `maplibregl-ctrl-globe` and `maplibregl-ctrl-globe-enabled`, swapped on every
@@ -152,6 +158,10 @@ fail again with "Unsupported data format/bitsPerSample";
   on the Arctic view and Zoom to layer must explain why it cannot move.
 
 ### `mapbox-gl`
+
+Mapbox is pinned to 3.35.0 pending a provider-style smoke test with a valid
+access token. Keep the npm version, CDN version, and integrity hashes together
+when that check permits an upgrade.
 
 Mapbox GL JS v2+ is proprietary, so it must never enter a build: the app loads
 it from Mapbox's CDN (`packages/map/src/mapbox-gl-loader.ts`) and the npm package
@@ -321,6 +331,25 @@ black — it declines the stack.
   real archive, through the real `layeradd` handler into the store, and fails if
   the id scheme moves or the selection stops reaching the handler.
 
+- **The PMTiles control's private `_removeLayer(id?)`** is wrapped by
+  `guardPMTilesSourceRemoval` (`packages/plugins/src/plugins/components/pmtiles.ts`).
+  Line decorations (flow arrows) on a vector archive are a GeoLibre-owned symbol
+  layer on the control's source, and every way the control drops an archive (its
+  `removeLayer`, the panel's remove button, `onRemove`) runs through
+  `_removeLayer`, which removes the source right after the control's own layers.
+  MapLibre refuses to remove a source a style layer still reads (an error event,
+  not a throw), so without the wrap the decoration strands the source and logs a
+  Diagnostics error. If the method is renamed the guard wraps nothing;
+  `tests/pmtiles-control-contract.test.ts` drives the real control and fails.
+  The guard removes those layers from the map directly, not through
+  store-driven sync, because the control drops the source before sync runs
+  (synchronously from the store subscription, or with no store write at all
+  from the panel's remove button). The same file also asserts that the
+  unguarded control strands the source: if an upstream bump makes that case
+  fail (the control drops its source safely on its own), the guard is no
+  longer needed, so delete it and that test rather than inverting the
+  assertion.
+
 - **The AddVectorControl's layer id rule** (`upstreamUrlLayerId` /
   `flatGeobufLayerName`, `packages/plugins/src/plugins/components/flatgeobuf.ts`)
   mirrors how the FlatGeobuf panel's `AddVectorControl` names a layer: the
@@ -378,6 +407,16 @@ black — it declines the stack.
   with lazily imported chunks), so a same-specificity override loses. Overrides
   of single-class vendor rules are prefixed with `html` to win regardless of
   order; keep that when adding new ones.
+- **The Zarr layer popup table class** (`maplibre-gl-zarr-layer-popup-table`)
+  is re-themed in `index.css`: upstream hardcodes `#555`/`#333` cell text and
+  `#eee` row rules for a white popup, which is near-invisible on the dark
+  popover. `tests/upstream-contracts.test.ts` checks the class still ships;
+  after a bump, click a Zarr layer in dark mode and confirm the popup reads.
+- **The PMTiles feature-picking popup classes** (`maplibre-gl-pmtiles-popup*`)
+  are re-themed in `index.css` the same way: upstream hardcodes a white table
+  with a `#f0f0f0` header. `tests/upstream-contracts.test.ts` checks the
+  classes still ship; after a bump, enable feature picking on a PMTiles layer,
+  click a feature in dark mode and confirm the table follows the theme.
 
 ### `maplibre-gl-basemap-control` (`packages/plugins/package.json`)
 
@@ -1077,6 +1116,23 @@ run `python -m pytest backend/geolibre_server_api/tests/test_egress.py`
 (`test_identity_provider_client_refuses_loopback` makes a real connection
 through the transport).
 
+### Managed `uv` pin (sidecar runtimes and desktop sidecar bootstrap)
+
+When uv is neither configured (`GEOLIBRE_UV`) nor on `PATH`, both the sidecar
+(`backend/geolibre_server/geolibre_server/app/runtime.py`) and the desktop app
+(`apps/geolibre-desktop/src-tauri/src/uv_bootstrap.rs`) download a pinned uv
+release archive and verify its SHA-256 before extracting it. `UV_VERSION` and
+`UV_RELEASE_SHA256` in `runtime.py` are the source of truth; the Rust constants
+mirror them and `backend/geolibre_server/tests/test_runtime_uv_bootstrap.py`
+fails when they differ. To bump uv, take each digest from the release's official
+`<archive>.sha256` asset
+(`https://github.com/astral-sh/uv/releases/download/<version>/<archive>.sha256`),
+never from a local download, and update both files in the same PR.
+
+For a sidecar archive mirror, set `GEOLIBRE_UV_DOWNLOAD_BASE_URL` with the layout
+`<base>/<version>/<archive>`. The former `GEOLIBRE_UV_INSTALL_BASE_URL` setting
+is ignored with a warning because remote installer scripts are no longer used.
+
 ## Shared dependency ranges
 
 `apps/geolibre-desktop` and `packages/plugins` declare many of the same
@@ -1164,14 +1220,46 @@ would silently do nothing. Keep `docs/user-guide/layers.md` and
 for") in step with that gate; build the test's mocks the way the real controls
 build their metadata, or they pass on shapes that never occur.
 
+## CDN cache browser tests
+
+`e2e/pyodide-cache.spec.ts` runs against the production service worker and
+requires HTTPS access to `cdn.jsdelivr.net`. It loads the pinned Pyodide
+runtime script and its npm CDN copy used to create a real opaque response.
+Run it with `npm exec playwright -- test e2e/pyodide-cache.spec.ts --project=features`.
+The dev server has no service worker, and offline-only runners cannot execute
+this network-bound regression. Keep real browser CORS and Cache Storage
+semantics in the test rather than replacing responses with route mocks.
+
 ## Coverage floors
 
 The `:coverage` test variants run the same suites and print a coverage summary;
 CI runs them so every build reports coverage. They are **gated on a floor**:
-`test:frontend:coverage` fails below 78% lines / 78% branches / 63% functions, and
-`test:backend:coverage` fails below 55% (`--cov-fail-under`). The floors sit a few
-points under the current numbers as a **ratchet** — regressions fail CI, and when
-coverage rises comfortably above a floor, raise the floor to lock in the gain.
+`test:frontend:coverage` fails below 78% lines / 78% branches / 63% functions.
+The three Python suites are gated with pytest-cov:
+
+| Suite | Command | Floor | Where the floor lives | CI |
+| --- | --- | --- | --- | --- |
+| Sidecar (`backend/geolibre_server`) | `npm run test:backend:coverage` | 76% | `--cov-fail-under` in the root `package.json` | `ci.yml` "Backend tests" (`ci:backend`) |
+| Projects and identity server (`backend/geolibre_server_api`) | `npm run test:server-api:coverage` | 87% | `--cov-fail-under` in the root `package.json` | `ci.yml` "Backend tests" (`ci:backend`) |
+| Python package (`python/`) | `npm run test:python:coverage` | 88% | `fail_under` in `python/pyproject.toml` | `publish-python.yml` "Test Python package" |
+
+The Python package's floor sits in its own `pyproject.toml` rather than in
+`package.json` because `publish-python.yml` only runs for changes under
+`python/` (and the app sources it bundles), so a floor kept in `package.json`
+could change without that workflow running.
+
+The floors sit a few points under the current numbers as a **ratchet**:
+regressions fail CI, and when coverage rises comfortably above a floor, raise
+the floor to lock in the gain. Measure in the environment CI installs (the
+backend `test` extras, or the package list in `publish-python.yml`), since a
+suite whose optional dependencies are missing skips tests and reports less.
+
+Most of the sidecar's raster, conversion, OBIA and point cloud workers run as
+subprocesses in production, where coverage cannot see them. Their tests call
+each worker's `main()` in-process instead (`_run_worker` in
+`tests/test_workers_and_job_manager.py`, and `test_raster_workers_in_process.py`
+/ `test_workers_in_process.py`), which is what lets the floor count them; test a
+new worker the same way.
 
 The frontend report only counts files a test actually imports, so a module with no
 test does not appear at all rather than as 0%. That is the part that bites:
@@ -1198,8 +1286,9 @@ exported and covered by `tests/coverage-check.test.ts` — change the retry poli
 there, not by loosening a floor. If the retry starts firing regularly, fix the
 measurement instead of widening the mitigation.
 
-The backend coverage run (and `npm run ci`, which calls the `:coverage` variants)
-needs `pytest-cov` from the backend `dev` extra. Install the **`test`** extra to
+The backend coverage runs (and `npm run ci`, which calls the `:coverage` variants)
+need `pytest-cov`, from the sidecar's `dev` extra and the identity server's
+`test` extra. Install the **`test`** extra to
 run the _full_ backend suite — without the optional engines
 (geopandas/rasterio/sedona/httpx) the vector/raster/SQL/ML tests skip themselves
 and CI is green but hollow: `pip install -e "backend/geolibre_server[test]"`.
@@ -1244,16 +1333,42 @@ not a count of untested code.
 
 ## Lint warning ratchet
 
-`npm run lint` passes `--max-warnings` (in the root `package.json`) set to the
-current warning count, so lint warnings work like the coverage floors: the
-count can only go down. The warnings come from `react-hooks/exhaustive-deps`,
+`npm run lint` runs two sequential passes, each with its own warning ratchet
+in the root `package.json`: `lint:syntax` allows 79 ESLint warnings and
+`lint:typed` allows 35 floating-promise warnings. Their combined budget remains
+114; fixing one kind cannot make room for a new warning of the other kind.
+The warnings come from `react-hooks/exhaustive-deps`,
 `@typescript-eslint/no-explicit-any`, the type-aware
-`@typescript-eslint/no-floating-promises` (app, package and worker `src/`
+`typescript/no-floating-promises` (desktop app, package and worker `src/`
 only, checked against each file's nearest `tsconfig.json`), and
 `local/no-physical-tailwind` (`eslint-rules/no-physical-tailwind.mjs`, the
 right-to-left rule from [Internationalization](i18n.md#right-to-left-languages)),
 and two `eslint-plugin-jsx-a11y` rules (`control-has-associated-label`,
 `no-static-element-interactions`) on app and package `.tsx`.
+
+ESLint retains the syntax, accessibility, React, and local architecture rules.
+The semantic pass uses pinned Oxlint and `oxlint-tsgolint` versions through
+`scripts/lint-typed.mjs` and `.oxlintrc.json`. It does not load every workspace's
+TypeScript program into ESLint's process. Native compiler/configuration errors
+fail the command. Source roots deliberately exclude vendored Tauri projects;
+the MCP App is outside the existing typed-rule scope. Full type checking still
+runs separately in CI.
+
+A local comparison on 2026-11-24 used the original ESLint configuration and
+the new complete command sequentially on the same source snapshot (Linux,
+16 available CPUs, Node 26.10.0, one run each):
+
+| Lint command | Wall time | Largest child peak RSS |
+| --- | ---: | ---: |
+| Original type-aware ESLint | 95.79 s | 9.58 GiB |
+| Syntax ESLint + typed Oxlint | 52.28 s | 2.12 GiB |
+
+All 114 diagnostic locations and rules matched. The baseline used a 16 GiB
+Node heap limit; the new command used the default heap. RSS was measured with
+`resource.getrusage`/`wait4` and describes the largest child process, not
+aggregate process-tree memory. These are single local measurements, not CI
+performance guarantees. Pinned native backend upgrades still need semantic
+fixtures and comparison against the existing diagnostics.
 
 `eslint-plugin-jsx-a11y` 6.10 declares ESLint up to 9 as a peer. It runs under
 ESLint 10, and the `overrides` entry for it in the root `package.json` points its
@@ -1267,8 +1382,21 @@ loudly; pin ESLint or disable the two rules rather than reaching for
   rejection. For a class that must stay physical (a map-anchored overlay, say),
   add `// eslint-disable-next-line local/no-physical-tailwind -- <why>`. Do
   not raise the limit.
-- **A PR fixes warnings:** lower the limit to the new total that ESLint prints,
-  in the same PR, so the gain is kept.
+- **A PR fixes warnings:** lower the corresponding syntax or typed limit to
+  its new count in the same PR, so the gain is kept.
+- **A disable directive goes stale:** ESLint reports an `eslint-disable`
+  comment that no longer suppresses anything as an **error**
+  (`reportUnusedDisableDirectives`), so the ratchet cannot be dodged by a
+  leftover directive hiding a future warning on that line. Delete it
+  (`eslint --fix` removes it, but leaves a blank line and any `--` reason that
+  wrapped onto the next line, so tidy those up). In JSX children a directive
+  has to be a `{/* eslint-disable-next-line ... */}` expression comment.
+  Typed exceptions use `// oxlint-disable-next-line typescript/no-floating-promises -- <why>`.
+  The typed runner reports stale Oxlint directives as errors even below its
+  warning budget. It leaves unused `eslint-disable` diagnostics to ESLint,
+  because the typed pass does not run the rules those comments suppress.
+  Do not use an ESLint directive for the migrated promise rule: ESLint's
+  unused-directive check rejects it.
 - **A PR turns on a new rule:** the one time the limit goes up. Raise it by
   exactly the new rule's count on the code as it is, say so in the PR, and fix
   those warnings over time like the rest.
@@ -1571,8 +1699,8 @@ output when a build actually runs. Rebuild, or delete the stale directory.
   [`user-guide/plugins.md`](user-guide/plugins.md) (between the
   `<!-- plugin-reference:start/end -->` markers) is generated by
   `scripts/gen-plugin-reference.mjs`. It reads the plugin list and order from
-  `BUILT_IN_PLUGINS` in `usePlugins.ts`, each plugin's `id` and `name` from its
-  definition in `packages/plugins/src`, the display name from `en.json`'s
+  `BUILT_IN_PLUGIN_METADATA` in `packages/plugins/src/builtin-plugin-metadata.ts`,
+  including each plugin's `id` and `name`, the display name from `en.json`'s
   `toolbar.plugin`, the menu location from `PluginsMenu.tsx` and the
   `WEB_SERVICE_PLUGIN_IDS`/`DGGS_PLUGIN_IDS` groups, and the `?plugin=` link
   name from the `plugin-deep-link.ts` rules. Only the one-line description (and

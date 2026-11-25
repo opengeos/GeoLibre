@@ -162,8 +162,7 @@ are not retained for features that are saved.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Health check |
-| GET | `/algorithms` | List algorithms |
-| POST | `/run` | Run algorithm (501 placeholder) |
+| GET | `/token-check` | Confirms the sidecar token (no-op, authenticated) |
 | GET | `/conversion/status` | Conversion runtime availability |
 | POST | `/conversion/vector-to-geoparquet` | Vector → Hilbert-sorted GeoParquet |
 | POST | `/conversion/vector-to-flatgeobuf` | Vector → Hilbert-sorted FlatGeobuf |
@@ -171,12 +170,20 @@ are not retained for features that are saved.
 | POST | `/conversion/vector-to-pmtiles` | Vector → PMTiles (freestiler) |
 | POST | `/conversion/raster-to-cog` | Raster → Cloud Optimized GeoTIFF |
 | GET | `/conversion/jobs/{id}` | Conversion job status |
+| POST | `/conversion/jobs/{id}/cancel` | Request cancellation of a conversion job |
+| GET | `/whitebox/jobs/{id}` | Whitebox job status |
+| POST | `/whitebox/jobs/{id}/cancel` | Request cancellation of a Whitebox job |
 | GET | `/sql/status` | Spatial SQL (SedonaDB) availability |
 | POST | `/sql/run` | Run Sedona spatial SQL over registered layers |
 | GET | `/ml/status` | Segmentation backend availability + models |
 | POST | `/ml/segment/text` | Text-prompt segmentation (SAM 3) |
 | POST | `/ml/segment/automatic` | Automatic mask generation |
 | POST | `/ml/segment/predict` | Box/point prompt segmentation |
+
+Cancellation of conversion and Whitebox jobs is best-effort: work already
+completing may still report success, and completed outputs are not rolled back.
+The cancel endpoint returns the current job state, which may still be running.
+Continue polling the corresponding job-status endpoint until it is terminal.
 
 ## AI segmentation runtime (SamGeo / SAM 3)
 

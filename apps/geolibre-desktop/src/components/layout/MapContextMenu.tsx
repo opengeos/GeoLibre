@@ -1,6 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import { rendererCapabilities, type MapEngine } from "@geolibre/map";
-import { isGeoEditorUsingRightClick } from "@geolibre/plugins";
+import { isGeoEditorUsingRightClick } from "@geolibre/plugins/geo-editor-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +16,7 @@ import {
   BookOpen,
   Braces,
   Circle,
+  Compass,
   Crosshair,
   Earth,
   Eye,
@@ -53,6 +54,7 @@ import {
   beginQuickAnalysisRun,
   type QuickBufferPreset,
 } from "../../lib/quick-analysis";
+import { useCogoTool } from "../../lib/cogo-store";
 import { useLineOfSightTool } from "../../lib/line-of-sight-store";
 import { useNavigationTool } from "../../lib/navigation/store";
 import { hasRoutingConsent, recordRoutingConsent } from "../../lib/routing-consent";
@@ -257,42 +259,52 @@ export function MapContextMenu({
   );
 
   const [viewshedBusy, setViewshedBusy] = useState(false);
+  const viewshedAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => viewshedAbortRef.current?.abort(), []);
   const viewshedHere = useCallback(
     (radiusMeters: number) => {
       if (!menu || viewshedBusy) return;
       const { lng, lat } = menu;
+      const controller = new AbortController();
+      viewshedAbortRef.current = controller;
       setViewshedBusy(true);
       const toolName = t("quickAnalysis.viewshedToolName");
-      // Reported through the Quick Analysis banner like every other action in
-      // this menu rather than failing silently: the terrain fetch takes seconds
-      // and can fail, and a click with no feedback either way reads as a broken
-      // menu item. The returned setter is bound to this run, so a slow viewshed
-      // cannot overwrite the status of a faster action started after it.
       const reportStatus = beginQuickAnalysisRun(toolName);
       void runViewshed({
         lng,
         lat,
         radiusMeters,
         mapControllerRef,
+        signal: controller.signal,
         layerName: t("quickAnalysis.viewshedLayerName", {
           radius: formatViewshedRadius(radiusMeters),
         }),
       })
         .then((result) => {
           reportStatus(
-            result
+            controller.signal.aborted || result
               ? { phase: "idle" }
               : { phase: "error", toolName, message: t("quickAnalysis.viewshedNoResult") },
           );
         })
         .catch((error: unknown) => {
-          reportStatus({
-            phase: "error",
-            toolName,
-            message: error instanceof Error ? error.message : t("quickAnalysis.viewshedNoResult"),
-          });
+          const aborted =
+            controller.signal.aborted || (error instanceof Error && error.name === "AbortError");
+          reportStatus(
+            aborted
+              ? { phase: "idle" }
+              : {
+                  phase: "error",
+                  toolName,
+                  message:
+                    error instanceof Error ? error.message : t("quickAnalysis.viewshedNoResult"),
+                },
+          );
         })
-        .finally(() => setViewshedBusy(false));
+        .finally(() => {
+          if (viewshedAbortRef.current === controller) viewshedAbortRef.current = null;
+          setViewshedBusy(false);
+        });
     },
     [menu, viewshedBusy, t, formatViewshedRadius, mapControllerRef],
   );
@@ -306,6 +318,12 @@ export function MapContextMenu({
     if (!menu) return;
     openLineOfSight({ lng: menu.lng, lat: menu.lat });
   }, [menu, openLineOfSight]);
+  // COGO and trace draws a transient MapLibre preview, so it shares the gate.
+  const openCogo = useCogoTool((s) => s.openCogo);
+  const cogoHere = useCallback(() => {
+    if (!menu) return;
+    openCogo({ lng: menu.lng, lat: menu.lat });
+  }, [menu, openCogo]);
   // Navigation draws MapLibre style layers too, so it shares the same gate.
   const openNavigation = useNavigationTool((s) => s.openNavigation);
   const directionsHere = useCallback(
@@ -543,6 +561,12 @@ export function MapContextMenu({
                 <DropdownMenuItem onSelect={lineOfSightHere} className="gap-2">
                   <Spline className="h-4 w-4 shrink-0 text-muted-foreground" />
                   {t("quickAnalysis.lineOfSightHere")}
+                </DropdownMenuItem>
+              ) : null}
+              {lineOfSightAvailable ? (
+                <DropdownMenuItem onSelect={cogoHere} className="gap-2">
+                  <Compass className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  {t("quickAnalysis.cogoHere")}
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuSeparator />

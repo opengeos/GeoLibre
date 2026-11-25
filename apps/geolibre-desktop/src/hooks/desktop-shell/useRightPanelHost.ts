@@ -1,4 +1,4 @@
-import { getRightPanel } from "@geolibre/plugins";
+import { getRightPanel } from "@geolibre/plugins/runtime";
 import { notifyPanelRenderFailed } from "../../lib/panel-render-failure";
 import { useEffect, useState } from "react";
 import {
@@ -106,7 +106,6 @@ export function useRightPanelHost(layoutOptions: LayoutOptions) {
     const panel = activePanelId ? getRightPanel(activePanelId) : undefined;
     if (!panel) return;
     setPluginPanelWidth(clampPluginPanelWidth(panel.defaultWidth ?? PLUGIN_PANEL_DEFAULT_WIDTH));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePanelId]);
   return {
     activePanelId,

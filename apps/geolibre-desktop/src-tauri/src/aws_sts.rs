@@ -49,16 +49,7 @@ fn hmac(key: &[u8], data: &str) -> Vec<u8> {
 
 /// RFC 3986 encoding, as SigV4 canonicalizes query strings and form bodies.
 pub fn uri_encode(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(byte as char)
-            }
-            _ => out.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    out
+    crate::http_client::percent_encode_rfc3986(value)
 }
 
 /// One request to sign. Header names must be lower-case.
@@ -176,11 +167,7 @@ fn parse_sts_response(status: u16, body: &str) -> Result<RoleCredentials, String
 }
 
 fn http_client(timeout: Duration) -> Result<reqwest::blocking::Client, String> {
-    reqwest::blocking::Client::builder()
-        .timeout(timeout)
-        .user_agent("GeoLibre Desktop")
-        .build()
-        .map_err(|error| error.to_string())
+    crate::http_client::blocking_client(timeout).map_err(String::from)
 }
 
 /// AWS regions are lower-case letters, digits, and dashes. Checked before a

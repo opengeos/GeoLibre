@@ -18,7 +18,8 @@ import {
   type WhiteboxLayerInput,
   type WhiteboxTool,
 } from "@geolibre/processing";
-import { SKETCHES_SOURCE_KIND, addRasterToMap } from "@geolibre/plugins";
+import { SKETCHES_SOURCE_KIND } from "@geolibre/plugins/geo-editor-state";
+import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
 import type { Feature, FeatureCollection } from "geojson";
 import type { RefObject } from "react";
 import type { MapEngine } from "@geolibre/map";
@@ -102,7 +103,9 @@ function addWhiteboxRasterOutput(
   fileName: string,
 ): Promise<string> {
   const file = new File([bytes as BlobPart], fileName, { type: "image/tiff" });
-  return addRasterToMap(createAppAPI(controllerRefFrom(getController)), file, { name });
+  return addRasterToMap(createAppAPI(controllerRefFrom(getController)), file, {
+    name,
+  });
 }
 
 function whiteboxToolName(tool: WhiteboxTool): string {
@@ -303,6 +306,83 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         .getState()
         .setLayerStyle(requireLayerId(params), params.style as Record<string, unknown>);
       return null;
+    },
+    setLabels: (params) => {
+      const layerId = requireLayerId(params);
+      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
+      if (!layer) throw new Error(`No layer with id "${layerId}"`);
+      const patch = params.labels;
+      if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+        throw new Error("setLabels: labels must be an object");
+      }
+      const merged = {
+        ...layer.style.labels,
+        ...(patch as Partial<typeof layer.style.labels>),
+      };
+      if (
+        typeof merged.minZoom === "number" &&
+        typeof merged.maxZoom === "number" &&
+        merged.minZoom > merged.maxZoom
+      ) {
+        throw new Error(
+          `setLabels: merged minZoom (${merged.minZoom}) must be <= maxZoom (${merged.maxZoom})`,
+        );
+      }
+      useAppStore.getState().setLayerStyle(layerId, { labels: merged });
+      return merged;
+    },
+    setFilter: (params) => {
+      const layerId = requireLayerId(params);
+      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
+      if (!layer) throw new Error(`No layer with id "${layerId}"`);
+      let expression = params.expression;
+      if (typeof expression === "string") {
+        const trimmed = expression.trim();
+        if (!trimmed) {
+          expression = null;
+        } else {
+          try {
+            expression = JSON.parse(trimmed);
+          } catch {
+            throw new Error("setFilter: expression string is not valid JSON");
+          }
+        }
+      }
+      if (expression === undefined || expression === null) {
+        useAppStore.getState().setLayerFilterExpression(layerId, null);
+        return null;
+      }
+      if (!Array.isArray(expression)) {
+        throw new Error("setFilter: expression must be a MapLibre expression array or null");
+      }
+      if (expression.length === 0) {
+        useAppStore.getState().setLayerFilterExpression(layerId, null);
+        return null;
+      }
+      if (typeof expression[0] !== "string" || !expression[0].trim()) {
+        throw new Error("setFilter: expression must start with an operator string");
+      }
+      useAppStore.getState().setLayerFilterExpression(layerId, expression);
+      return expression;
+    },
+    setRenderer: (params) => {
+      const renderer = params.renderer;
+      /* eslint-disable local/no-renderer-kind-checks -- validating the setRenderer command argument itself */
+      if (
+        renderer !== "maplibre" &&
+        renderer !== "cesium" &&
+        renderer !== "mapbox" &&
+        renderer !== "arcgis"
+      ) {
+        /* eslint-enable local/no-renderer-kind-checks */
+        throw new Error(
+          `setRenderer: renderer must be "maplibre", "cesium", "mapbox", or "arcgis", got ${JSON.stringify(
+            renderer,
+          )}`,
+        );
+      }
+      useAppStore.getState().setPrimaryRenderer(renderer);
+      return renderer;
     },
     setBasemap: (params) => {
       // Validate the scheme: reject undefined/non-string (would store the literal
@@ -745,7 +825,9 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         if (!descriptor || !node.provider || !node.toolId) {
           throw new Error(`Unknown Model Builder tool "${node.toolId ?? ""}"`);
         }
-        const toolParams: Record<string, unknown> = { ...(node.parameters ?? {}) };
+        const toolParams: Record<string, unknown> = {
+          ...(node.parameters ?? {}),
+        };
         for (const edge of incoming.get(node.id) ?? []) {
           const layerId = produced.get(edge.from)?.get(edge.fromPort);
           if (!layerId) throw new Error(`No result reached "${descriptor.name}"`);
@@ -753,7 +835,10 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         }
         const handler =
           node.provider === "whitebox" ? handlers.runWhiteboxTool : handlers.runAlgorithm;
-        const result = (await handler({ id: node.toolId, params: toolParams })) as {
+        const result = (await handler({
+          id: node.toolId,
+          params: toolParams,
+        })) as {
           resultLayerIds?: unknown;
         };
         const resultLayerIds = result?.resultLayerIds;

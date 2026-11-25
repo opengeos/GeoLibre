@@ -1,9 +1,8 @@
+export { canEditLayerGeometry, SKETCHES_SOURCE_KIND } from "../geo-editor-state";
 import { jsonEqual } from "./geo-editor-sketch-attributes";
 import { isInternalEditorProperty } from "./geo-editor-view-import";
 import {
   editorTrackingFieldNames,
-  isDuckDBQueryLayer,
-  SQL_QUERY_SOURCE_KIND,
   stampFeaturePropertiesEditorTracking,
   type EditorTrackingConfig,
   type GeoLibreLayer,
@@ -15,9 +14,6 @@ import type { Feature, FeatureCollection, Geometry, MultiLineString, Position } 
  * Geoman/MapLibre runtime imports in `maplibre-geo-editor.ts` so they can be
  * unit-tested under Node without a browser environment.
  */
-
-/** Metadata `sourceKind` marking the GeoEditor's own "Sketches" layer. */
-export const SKETCHES_SOURCE_KIND = "geoeditor-sketches";
 
 /**
  * Transient feature-key tag written into a feature's `properties` while it is
@@ -31,47 +27,6 @@ export const SKETCHES_SOURCE_KIND = "geoeditor-sketches";
  * this name must stay unusual enough that real data never uses it.
  */
 export const GEOMETRY_EDIT_FID_PROPERTY = "__geolibre_fid";
-
-/**
- * Whether a layer's geometry can be edited in place. Only geojson-mode vector
- * layers qualify ("vector-tiles" / DuckDB-tiles layers do not). DuckDB query
- * layers are excluded and must be materialized to an editable GeoJSON copy
- * first. Add-Vector-Layer geojson-mode layers ARE included: their features live
- * in a MapLibre GeoJSON source and are read back (via the caller's
- * `ensureLayerGeojsonFromSource`) before editing begins.
- *
- * @param layer The candidate layer, or undefined.
- * @returns True when the layer's geometry can be edited in place.
- */
-export function canEditLayerGeometry(layer: GeoLibreLayer | undefined): boolean {
-  if (!layer) return false;
-  if (layer.capabilities?.update === false) return false;
-  // Only geojson-mode vector layers; "vector-tiles" (DuckDB tiles) are excluded.
-  if (layer.type !== "geojson") return false;
-  if (isDuckDBQueryLayer(layer)) return false;
-  if (layer.metadata.sourceKind === SKETCHES_SOURCE_KIND) return false;
-  // A query result is derived, not writable: refresh re-runs the stored SQL
-  // and would overwrite any in-place edits. Load a copy into the editor (or
-  // export) to edit the features.
-  if (layer.metadata.sourceKind === SQL_QUERY_SOURCE_KIND) return false;
-
-  if (layer.metadata.externalNativeLayer === true) {
-    // Externally-rendered layers are only editable when they are Add-Vector-Layer
-    // geojson-mode layers, whose features live in a MapLibre GeoJSON source that
-    // can be read and written back. Require a usable source id (a non-empty
-    // string), otherwise there is nothing to hydrate from or write back to.
-    const sourceIds = layer.metadata.sourceIds;
-    return (
-      layer.metadata.sourceKind === "maplibre-gl-vector" &&
-      Array.isArray(sourceIds) &&
-      typeof sourceIds[0] === "string" &&
-      sourceIds[0].length > 0
-    );
-  }
-
-  // Plain in-memory geojson layers carry their features in `layer.geojson`.
-  return Array.isArray(layer.geojson?.features);
-}
 
 /** Allocator that hands out unique string ids, skipping ones already taken. */
 function makeIdAllocator(): { take: (preferred?: unknown) => string } {

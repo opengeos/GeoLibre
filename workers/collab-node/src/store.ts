@@ -1,8 +1,35 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { normalizeMode, parseStoredChat } from "@geolibre/collab-core";
-import type { CollabChatMessage, CollabInvite, CollaborationMode } from "@geolibre/collab-core";
+import {
+  MAX_SESSION_LOG_STORAGE_BYTES,
+  normalizeMode,
+  parseStoredChat,
+  SESSION_LOG_LIMIT,
+} from "@geolibre/collab-core";
+import type {
+  CollabChatMessage,
+  CollabInvite,
+  CollaborationMode,
+  SessionLogEntry,
+} from "@geolibre/collab-core";
+
+const ENCODER = new TextEncoder();
+
+/**
+ * Parse a stored session log defensively: a corrupt or non-array value yields
+ * an empty log rather than throwing, matching the Worker's
+ * `parseStoredSessionLog`.
+ */
+function parseStoredSessionLog(raw: string | null | undefined): SessionLogEntry[] {
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as SessionLogEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 export interface StoredSession {
   id: string;
@@ -79,7 +106,13 @@ export class SessionStore {
         blocked_at INTEGER NOT NULL,
         PRIMARY KEY (session_id, participant_key)
       );
+      CREATE TABLE IF NOT EXISTS collab_session_logs (
+        session_id TEXT PRIMARY KEY,
+        log TEXT NOT NULL DEFAULT '[]'
+      );
     `);
+    // The host-only session log has its own table so the per-frame session
+    // read (`get`) does not also load up to 100 KB of log text.
 
     // Schema migrations for existing databases created before these columns existed
     const columns = (
@@ -109,6 +142,14 @@ export class SessionStore {
       )
       .run(id, hostToken, mode, requireIdentity ? 1 : 0, Date.now());
     return result.changes === 1;
+  }
+
+  /** Read the host credential without loading or parsing the project snapshot. */
+  getHostToken(id: string): string | null {
+    const row = this.db.prepare("SELECT host_token FROM collab_sessions WHERE id = ?").get(id) as
+      | { host_token: string }
+      | undefined;
+    return row?.host_token ?? null;
   }
 
   get(id: string): StoredSession | null {
@@ -287,6 +328,57 @@ export class SessionStore {
       .run(sessionId, participantKey, Date.now());
   }
 
+  /**
+   * Read a session's host-only log, oldest entry first.
+   *
+   * @param sessionId - The session code.
+   * @returns The stored entries, or an empty list when none are stored.
+   */
+  getSessionLog(sessionId: string): SessionLogEntry[] {
+    const row = this.db
+      .prepare("SELECT log FROM collab_session_logs WHERE session_id = ?")
+      .get(sessionId) as { log: string } | undefined;
+    return parseStoredSessionLog(row?.log);
+  }
+
+  /**
+   * Append one entry to a session's log, bounded the way the Worker bounds it:
+   * at most `SESSION_LOG_LIMIT` entries and `MAX_SESSION_LOG_STORAGE_BYTES` of
+   * serialized JSON, dropping the oldest entries first. A single entry larger
+   * than the byte budget is still kept, as on the Worker.
+   *
+   * @param sessionId - The session code.
+   * @param entry - The event to record.
+   */
+  appendSessionLog(sessionId: string, entry: SessionLogEntry): void {
+    // Intentionally mirror the Worker's capped JSON format for small self-hosted
+    // relays. Only appends and host log requests load it; per-frame session reads
+    // stay separate. Higher-throughput relays should use per-entry rows and byte
+    // counters to avoid rewriting the log.
+    const log = this.getSessionLog(sessionId);
+    log.push(entry);
+    // Bound by count AND serialized bytes: `join` entries carry an identity of
+    // unbounded size, so the count cap alone cannot bound the stored value.
+    let trimmed = log.slice(-SESSION_LOG_LIMIT);
+    let byteLen = ENCODER.encode(JSON.stringify(trimmed)).length;
+    while (trimmed.length > 1 && byteLen > MAX_SESSION_LOG_STORAGE_BYTES) {
+      byteLen -= ENCODER.encode(JSON.stringify(trimmed[0])).length + 1;
+      trimmed = trimmed.slice(1);
+    }
+    this.db
+      .prepare("INSERT OR REPLACE INTO collab_session_logs (session_id, log) VALUES (?, ?)")
+      .run(sessionId, JSON.stringify(trimmed));
+  }
+
+  /**
+   * Delete a session's log; the session itself and its snapshot are kept.
+   *
+   * @param sessionId - The session code.
+   */
+  clearSessionLog(sessionId: string): void {
+    this.db.prepare("DELETE FROM collab_session_logs WHERE session_id = ?").run(sessionId);
+  }
+
   delete(id: string): void {
     this.db.exec("BEGIN TRANSACTION");
     try {
@@ -294,6 +386,7 @@ export class SessionStore {
       this.db.prepare("DELETE FROM collab_invites WHERE session_id = ?").run(id);
       this.db.prepare("DELETE FROM collab_durable_overrides WHERE session_id = ?").run(id);
       this.db.prepare("DELETE FROM collab_blocked_keys WHERE session_id = ?").run(id);
+      this.db.prepare("DELETE FROM collab_session_logs WHERE session_id = ?").run(id);
       this.db.exec("COMMIT");
     } catch (err) {
       this.db.exec("ROLLBACK");
@@ -314,6 +407,7 @@ export class SessionStore {
           this.db.prepare("DELETE FROM collab_invites WHERE session_id = ?").run(row.id);
           this.db.prepare("DELETE FROM collab_durable_overrides WHERE session_id = ?").run(row.id);
           this.db.prepare("DELETE FROM collab_blocked_keys WHERE session_id = ?").run(row.id);
+          this.db.prepare("DELETE FROM collab_session_logs WHERE session_id = ?").run(row.id);
         }
       }
       this.db.exec("COMMIT");

@@ -1,10 +1,12 @@
+import { DGGAL_PLUGIN_ID } from "../plugin-ids";
+export { DGGAL_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { getControlMap } from "./style-map";
 import { withSelectChevron } from "../panel-dom";
-
-export const DGGAL_PLUGIN_ID = "maplibre-dggal";
 
 const PANEL_ID = "geolibre-dggal-panel";
 const SOURCE_ID = "geolibre-dggal-grid-source";
@@ -684,7 +686,7 @@ function refresh(): void {
       error instanceof RangeError ? labels.tooManyCells(DGGAL_VIEWPORT_CELL_LIMIT) : String(error);
   }
   applyStyle();
-  (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(currentGrid);
+  updateGeoJsonSourceData(map.getSource(SOURCE_ID) as GeoJSONSource | undefined, currentGrid);
   updateSelectedSource();
   // Pan/zoom only updates the status line (and auto-resolution readout) —
   // rebuilding the whole panel would destroy open color pickers / focused inputs.
@@ -777,12 +779,12 @@ function updateSelectedSource(): void {
   const engine = activeDggrs();
   if (!engine) return;
   const source = map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
-  source?.setData({
+  updateGeoJsonSourceData(source, {
     type: "FeatureCollection",
     features: selectedCell ? [dggalZoneFeature(engine, selectedCell)] : [],
   });
   const neighborsSource = map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined;
-  neighborsSource?.setData({
+  updateGeoJsonSourceData(neighborsSource, {
     type: "FeatureCollection",
     features:
       settings.includeNeighbors && selectedCell
@@ -790,7 +792,7 @@ function updateSelectedSource(): void {
         : [],
   });
   const parentsSource = map?.getSource(PARENTS_SOURCE_ID) as GeoJSONSource | undefined;
-  parentsSource?.setData({
+  updateGeoJsonSourceData(parentsSource, {
     type: "FeatureCollection",
     features:
       settings.includeParents && selectedCell
@@ -1087,14 +1089,13 @@ function settingsEqual(a: DggalGridSettings, b: DggalGridSettings): boolean {
 }
 
 export const maplibreDggalPlugin: GeoLibrePlugin = {
-  id: DGGAL_PLUGIN_ID,
-  name: "DGGAL",
-  version: "1.0.0",
+  ...builtInPluginProperties("maplibre-dggal"),
+
   // Draws the grid through the Style Spec surface both 2D engines share
   // (GeoJSON sources, fill/line/symbol layers, camera and pointer events), read
   // through getControlMap so the Mapbox renderer hosts it as well. On ArcGIS
   // and the Cesium globe the host draws the same GeoJSON layers natively.
-  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
+
   activate: async (app) => {
     const activeMap = getControlMap(app);
     if (!activeMap) return false;

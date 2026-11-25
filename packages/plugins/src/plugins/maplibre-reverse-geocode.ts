@@ -1,3 +1,7 @@
+import { REVERSE_GEOCODE_PLUGIN_ID } from "../plugin-ids";
+import { reverseGeocodeRuntime } from "../map-mode-state";
+export { REVERSE_GEOCODE_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { GeocoderServiceError, GeocoderUnsupportedError, geocodeReverse } from "@geolibre/core";
 import type { Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
@@ -17,7 +21,6 @@ import { getControlMap } from "./style-map";
  * Directions plugin, this rebinds to the live map after a MapCanvas remount via
  * {@link restoreReverseGeocode}; it carries no project state of its own.
  */
-export const REVERSE_GEOCODE_PLUGIN_ID = "maplibre-reverse-geocode";
 
 let popup: MapPopup | null = null;
 // The map the click handler is bound to, so restoreReverseGeocode can detect a
@@ -207,12 +210,13 @@ export function restoreReverseGeocode(app: GeoLibreAppAPI, active: boolean): voi
 }
 
 export const maplibreReverseGeocodePlugin: GeoLibrePlugin = {
-  id: REVERSE_GEOCODE_PLUGIN_ID,
-  name: "Reverse Geocode",
-  version: "1.0.0",
+  ...builtInPluginProperties("maplibre-reverse-geocode"),
+
   // A click handler and a popup, both of which every engine's map hosts (the
   // popup through `createMapPopup`).
-  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
+
   activate: (app: GeoLibreAppAPI) => attach(app),
   deactivate: (app: GeoLibreAppAPI) => teardown(app),
 };
+
+reverseGeocodeRuntime.restore = restoreReverseGeocode;

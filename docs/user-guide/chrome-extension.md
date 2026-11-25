@@ -29,15 +29,19 @@ Prefer not to install from the Store, or want to run a build that is newer than 
 
 A manually installed copy does not update itself. To update it, download and extract the newer release asset, then select the extension's **Reload** button on `chrome://extensions`. If you extract it to a different folder, remove the old copy and load the new folder instead.
 
+### Firefox
+
+The same extension runs in Firefox 140 or later. Until it is listed on addons.mozilla.org, build it from a source checkout: run `npm ci`, then `npm run build:firefox-extension`. Open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and pick `dist/geolibre-firefox/manifest.json`. A temporary add-on is removed when Firefox restarts. See the [extension README](https://github.com/opengeos/GeoLibre/tree/main/extensions/geolibre-chrome#firefox) for details.
+
 ## Open datasets from a webpage
 
 1. Visit a webpage or data catalog containing geospatial file links.
 2. Select the GeoLibre icon in the Chrome toolbar.
-3. Use **All**, **Vector**, **Raster**, or **LiDAR** to filter the discovered datasets.
+3. Use **All**, **Vector**, **Raster**, **LiDAR**, or **Other** (3D Tiles and STAC catalogs) to filter the discovered datasets.
 4. Check one or more datasets. Nothing is selected by default.
-5. Select **Open in GeoLibre** to load the selected datasets on the same map.
+5. Select **Open in GeoLibre** to load the selected datasets on the same map. Files all share one map, which also opens the first selected service and STAC catalog; each further service or catalog opens in its own tab, since each one needs its own Add Data dialog or catalog browser.
 
-The extension recognizes GeoJSON and spatial JSON, GeoParquet and Parquet, PMTiles, GeoTIFF and Cloud-Optimized GeoTIFF, LiDAR point clouds (LAS, LAZ, COPC, and EPT `ept.json`), ZIP archives containing GeoJSON, JSON-LD download metadata, and existing GeoLibre data links. A neighboring `name.style.json` or `name.geolibre.style.json` link is paired with the matching dataset. It also offers the map services the page's own maps requested: WMS, WMTS, WFS, OGC API - Features, ArcGIS feature services, XYZ/TMS image tiles, and vector tiles. On Source Cooperative repository pages, it also reads the embedded inventory so datasets outside the currently visible list can be selected.
+The extension recognizes GeoJSON and spatial JSON, GeoParquet and Parquet, PMTiles, GeoTIFF and Cloud-Optimized GeoTIFF, FlatGeobuf, GPX, KML and KMZ, Zarr stores, 3D Tiles (`tileset.json`), STAC catalogs and collections, LiDAR point clouds (LAS, LAZ, COPC, and EPT `ept.json`), ZIP archives containing GeoJSON, JSON-LD download metadata, and existing GeoLibre data links. A neighboring `name.style.json` or `name.geolibre.style.json` link is paired with the matching dataset. It also offers the map services the page's own maps requested: WMS, WMTS, WFS, WCS, OGC API - Features, STAC APIs, ArcGIS feature, map, and image services, XYZ/TMS image tiles, and vector tiles. On Source Cooperative repository pages, it also reads the embedded inventory so datasets outside the currently visible list can be selected.
 
 ## Use a different GeoLibre instance
 

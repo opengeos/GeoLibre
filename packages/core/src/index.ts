@@ -1,5 +1,8 @@
 export {
   DEFAULT_GEO_EDITOR_SETTINGS,
+  DEFAULT_GEO_EDITOR_SNAP_TOLERANCE_PX,
+  GEO_EDITOR_SNAP_TOLERANCE_RANGE,
+  geoEditorSnapTolerancePx,
   normalizeGeoEditorSettings,
   isGeoEditorFieldName,
   type GeoEditorSettings,
@@ -113,12 +116,14 @@ export {
 } from "./store";
 export {
   NO_LAYERS,
+  createLayerSliceSelector,
   selectLayerById,
   selectLayerIds,
   selectLayerSummaries,
   selectLayersWhen,
   useLayer,
   useLayerIds,
+  useLayerSlices,
   useLayerSummaries,
   useLayersWhen,
   type LayerSummary,
@@ -297,6 +302,7 @@ export {
   datumShiftFor,
   installCogTilerDatumShift,
   withDatumShift,
+  normalizeProj4Definition,
   withGeoKeysDatumShift,
   withWktDatumShift,
 } from "./datum-shift";
@@ -309,5 +315,3 @@ export {
 } from "./cog-jpeg-tables";
 
 export * from "./geoarrow";
-
-export * from "./gcs";

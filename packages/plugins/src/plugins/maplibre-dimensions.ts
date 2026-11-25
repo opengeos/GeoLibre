@@ -1,3 +1,5 @@
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
+import { updateGeoJsonSourceData } from "@geolibre/map/geojson-source-data";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { Feature, FeatureCollection, Position } from "geojson";
 // A value (not type-only) namespace import: v6 has no default export (see the
@@ -586,14 +588,13 @@ function nextDimensionId(): string {
 }
 
 export const maplibreDimensionsPlugin: GeoLibrePlugin = {
-  id: DIMENSIONS_PLUGIN_ID,
-  name: "Dimensions",
-  version: "0.1.0",
+  ...builtInPluginProperties("maplibre-gl-dimensions"),
+
   // Draws its dimension lines and labels through the style API both 2D
   // engines share (`addSource`/`addLayer`, `project`/`unproject`, pointer
   // events) and keeps the measurements in a store GeoJSON layer, so it binds
   // to the Mapbox map through getStyleMap as well.
-  engines: ["maplibre", "mapbox"],
+
   activate: (app: GeoLibreAppAPI) => {
     appApi = app;
     pluginActive = true;
@@ -1164,7 +1165,7 @@ function handleMouseMove(event: maplibregl.MapMouseEvent): void {
 function setPreview(map: maplibregl.Map, data: FeatureCollection): void {
   const existing = map.getSource(PREVIEW_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
   if (existing) {
-    existing.setData(data);
+    updateGeoJsonSourceData(existing, data);
     return;
   }
   map.addSource(PREVIEW_SOURCE_ID, { type: "geojson", data });

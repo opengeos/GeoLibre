@@ -33,6 +33,31 @@ flowchart LR
 | `@geolibre/collab-core` | Transport-neutral collaboration relay core (wire protocol, permissions, payload validators) shared by the `workers/collab` and `workers/collab-node` relays |
 | `geolibre-desktop`     | Shell layout, Tauri I/O, composition                                                           |
 
+## Plugin host boundaries
+
+`@geolibre/plugins/builtin-plugin-metadata` supplies built-in names, versions,
+capabilities, menu groups, and lifecycle flags without evaluating implementations.
+Stable plugin IDs live in `plugin-ids.ts`. Implementations use the same metadata
+through `builtInPluginProperties` or `defineBuiltInPlugin`.
+
+`@geolibre/plugins/builtin-plugins` owns the dynamic imports and shared module
+cache. Configure translated labels and host I/O with separate named channels via
+`configureBuiltInPluginModule`; updating a label channel preserves file savers and
+other setup on the same module. Failed imports or setup can be retried.
+`@geolibre/plugins/runtime` exposes registries and plugin contracts. App imports
+use that entry point or a specific helper entry point; the root SDK barrel
+retains its existing exports for consumers.
+
+`PluginManager.registerLazy` registers metadata immediately. Its adapter retains
+pending project settings and control positions for synchronous snapshots until
+the implementation can apply them. Restore generations and registration identity
+reject stale completions. Host panel actions use `runPluginHelper` to prepare
+saved settings and receive an app scope owned by the current project before
+calling implementation helpers. Host helpers use the engine's control adapter
+capabilities; plugin activation still follows the metadata engine list. The import guard in
+`tests/builtin-plugin-loader.test.ts` checks that registries, metadata, and label
+hooks remain importable without implementations.
+
 ## State flow
 
 1. User adds data through the Add Data menu, the Tauri dialog, browser file picker, drag and drop, or a built-in plugin control.
@@ -43,7 +68,7 @@ flowchart LR
 6. Attribute table selections update the highlighted feature source and can zoom the map to the selected feature.
 7. Desktop save uses `projectFromStore` and writes `.geolibre` to disk. The earlier `.geolibre.json` name remains readable.
 
-Every layer action replaces the `layers` array, so `useAppStore((s) => s.layers)` re-renders a component on any edit of any layer. Only subscribers that genuinely need every field of every layer (the map canvases' sync, the Layers panel) should do that. Everything else uses the narrow hooks in `packages/core/src/layer-selectors.ts`: `useLayer(id)` for one record, `useLayerIds()` for the id list, `useLayerSummaries()` for `{ id, name, type, visible, groupId }` rows, and `useLayersWhen(open)` for always-mounted dialogs and panels that need the full array only while open.
+Every layer action replaces the `layers` array, so `useAppStore((s) => s.layers)` re-renders a component on any edit of any layer. Only subscribers that genuinely need every field of every layer (the map canvases' sync, the Layers panel) should do that. Everything else uses the narrow hooks in `packages/core/src/layer-selectors.ts`: `useLayer(id)` for one record, `useLayerIds()` for the id list, `useLayerSummaries()` for `{ id, name, type, visible, groupId }` rows, `useLayersWhen(open)` for always-mounted dialogs and panels that need the full array only while open, and `useLayerSlices(selector)` with a `createLayerSliceSelector(pick)` memoized per component mount for a list that needs a few more fields than a summary (a layer's features, its refresh cadence): each slice keeps its identity until one of its own picked fields changes. A handler that needs full layer records only when it runs reads `useAppStore.getState().layers` instead of subscribing.
 
 `useAppStore` is one Zustand store, but its code is split into slices under `packages/core/src/store/` (project, map view, layers, layer groups, project content, processing, libraries, session, collaboration, capabilities, and the `ui` dialog flags), composed in `packages/core/src/store.ts`. Add a new field or action to the slice that owns its data; an action that must also update another slice's fields (as `removeLayer` scrubs references everywhere) reads and writes the whole state through `set`/`get`. Undo history (`store/undo-history.ts`) tracks only the fields `partializeHistory` lists (layers, layer groups, basemap, story map, comments, dashboard widgets, legend). Everything else, including the whole `ui` sub-state, the selection and the camera, never records an undo step and is never reverted by undo or redo. Secondary panes and the Print Layout also reference layers but stay untracked (panes carry their own camera and must match the untracked grid layout; the composer writes back a local copy), so each undo/redo step scrubs their references to layers the step removed.
 
@@ -144,6 +169,14 @@ Caching is split to keep the first visit light:
 - **Basemaps.** Tiles and styles from the CORS-friendly default hosts (OpenFreeMap, CARTO) are runtime-cached. Other remote tiles, services, and ArcGIS/WMS/WFS sources stay network-only by design and are unavailable offline.
 
 So each of these CDN engines needs the network on **first** use, then works offline. To remove even the first-use dependency, build with `GEOLIBRE_PGLITE_CDN=0` and `GEOLIBRE_CEREUS_CDN=0`, which vendor PGlite/PostGIS and the CereusDB wasm back into the build under `/assets/`, where the same-origin rule covers them (PGlite alone re-adds ~22 MB to the Tauri binary).
+
+The CDN engine cache requires CORS-readable status-200 responses, including
+requests from classic workers. Opaque entries stored by older service workers
+are bypassed and replaced on the next online fetch (issue #3607). Until that
+fetch, an affected asset cannot satisfy a console module import. If the network
+is unavailable, classic workers may still use an existing opaque response;
+CORS and module requests never receive that fallback. Readable cached engine
+assets are retained for offline use.
 
 To strip **all GeoLibre-controlled** external CDN references from the build output — for deployments that cannot load any resource from untrusted CDNs — use `GEOLIBRE_NO_EXTERNAL_CDN=1`. This implies `GEOLIBRE_PGLITE_CDN=0`, `GEOLIBRE_CEREUS_CDN=0`, `GEOLIBRE_GDAL_CDN=0`, and `GEOLIBRE_DUCKDB_WASM_CDN=0`, and additionally disables features whose code references external CDNs: storymap HTML export (which injects `<script>` tags from `unpkg.com`), built-in object detection models (YOLO ONNX weights from `cdn.jsdelivr.net`), Segment Everything, 3D Tiles Draco/KTX2 decoders, GDAL export, and the Mapbox renderer (Mapbox GL JS loads from Mapbox's CDN). Pyodide remains available when `VITE_PYODIDE_INDEX_URL` points to an approved mirror. Runtime `deployment.json` configures client policy; it does not change this build-time CDN packaging.
 

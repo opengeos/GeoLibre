@@ -10,17 +10,63 @@ import {
   createLayerSync,
   identifyStyleLayerIds,
   isMapboxStyleUrl,
+  registerPMTilesSource,
+  getRegisteredPMTilesArchive,
   resolveMapStyle,
   sourceId,
+  styleLayerZoomRange,
+  unregisterPMTilesArchive,
 } from "@geolibre/map/headless";
 import type { RequestTransformFunction } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
-import { previewableLayers } from "./unsupported-content";
+import { SharedPromiseCache } from "pmtiles";
+import { loadCogPreview } from "./cog-preview";
+import type { NetworkConsent } from "./network-consent";
+import {
+  ConsentPMTilesSource,
+  decompressPreviewPMTiles,
+  decompressPreviewPMTilesDirectory,
+  discoverPreviewPMTilesLayer,
+  needsPMTilesDiscovery,
+  isRegisteredPMTilesRequest,
+  pmtilesArchiveKey,
+  pmtilesArchiveUrl,
+  previewPMTilesStyleLayerIds,
+} from "./pmtiles-preview";
+import { previewRenderLayers } from "./unsupported-content";
+import { previewI18n } from "./preview-i18n";
+
+const t = previewI18n.getFixedT(null, "translation", "mcpPreview.render");
 
 export interface PreviewRenderOptions {
   transformRequest: RequestTransformFunction;
+  /** Consent-gated range reads, for PMTiles archives and COGs. */
+  fetchRange: NetworkConsent["fetchRange"];
   onReady(): void;
   onError(source: string, message: string): void;
+  /** A note about a layer that rendered with a caveat (e.g. an unknown colormap). */
+  onNotice?(message: string): void;
+}
+
+/** Decoded COG previews served to MapLibre's image source, by request URL. */
+const COG_PROTOCOL = "geolibre-cog";
+const cogImages = new Map<string, ArrayBuffer>();
+let cogImageSequence = 0;
+
+async function encodePng(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+): Promise<ArrayBuffer> {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error(t("canvasFailed"));
+  context.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!blob) throw new Error(t("encodeFailed"));
+  return blob.arrayBuffer();
 }
 
 type PreviewMapError = maplibregl.ErrorEvent & {
@@ -85,6 +131,44 @@ export function renderProject(
 ): maplibregl.Map {
   const useBlankStyle =
     project.basemapVisible === false || isMapboxStyleUrl(project.basemapStyleUrl);
+  const layers = applyGroupEffects(project.layers, project.layerGroups ?? []);
+  const plan = previewRenderLayers({ ...project, layers });
+  const renderable = plan.map(({ layer }) => layer);
+  const lifecycle = new AbortController();
+  const discoveredLayers = new Map<string, GeoLibreLayer>();
+
+  // Each remote archive reads through consent before layer sync can open a
+  // direct FetchSource for it under the same key.
+  const pmtilesKeys = new Set<string>();
+  for (const { layer, kind } of plan) {
+    if (kind !== "pmtiles") continue;
+    const key = pmtilesArchiveKey(layer);
+    const url = pmtilesArchiveUrl(layer);
+    if (!key || !url || pmtilesKeys.has(key)) continue;
+    registerPMTilesSource(
+      new ConsentPMTilesSource(key, url, options.fetchRange, lifecycle.signal),
+      {
+        decompress: (buffer, compression) =>
+          decompressPreviewPMTiles(buffer, compression, lifecycle.signal),
+        cache: new SharedPromiseCache(16, undefined, (buffer, compression) =>
+          decompressPreviewPMTilesDirectory(buffer, compression, lifecycle.signal),
+        ),
+      },
+    );
+    pmtilesKeys.add(key);
+  }
+  const ownCogUrls = new Set<string>();
+  const transformRequest: RequestTransformFunction = (url, resourceType) => {
+    if (isRegisteredPMTilesRequest(url, pmtilesKeys)) return { url };
+    if (ownCogUrls.has(url)) return { url };
+    return options.transformRequest(url, resourceType);
+  };
+  maplibregl.addProtocol(COG_PROTOCOL, async (request) => {
+    const data = cogImages.get(request.url);
+    if (!data) throw new Error(t("imageUnavailable"));
+    return { data };
+  });
+
   const map = new maplibregl.Map({
     container,
     style: useBlankStyle ? createBlankMapStyle() : resolveMapStyle(project.basemapStyleUrl),
@@ -94,26 +178,106 @@ export function renderProject(
     pitch: project.mapView.pitch,
     attributionControl: { compact: true },
     maplibreLogo: false,
-    transformRequest: options.transformRequest,
+    transformRequest,
+  });
+  map.once("remove", () => {
+    lifecycle.abort();
+    for (const key of pmtilesKeys) unregisterPMTilesArchive(key);
+    for (const url of ownCogUrls) cogImages.delete(url);
+    maplibregl.removeProtocol(COG_PROTOCOL);
   });
   map.addControl(new maplibregl.NavigationControl(), "top-right");
-  const layers = applyGroupEffects(project.layers, project.layerGroups ?? []);
-  const renderable = previewableLayers({ ...project, layers });
   let styleReady = false;
   let usedBlankFallback = useBlankStyle;
   let notifiedReady = false;
 
+  const addCogLayer = async (layer: GeoLibreLayer, anchorId: string): Promise<void> => {
+    try {
+      const image = await loadCogPreview(layer, options.fetchRange, lifecycle.signal);
+      if (image.unknownColormap) {
+        options.onNotice?.(
+          t("unknownColormap", { name: layer.name, colormap: image.unknownColormap }),
+        );
+      }
+      const png = await encodePng(image.rgba, image.width, image.height);
+      if (lifecycle.signal.aborted) return;
+      const url = `${COG_PROTOCOL}://${(cogImageSequence += 1)}`;
+      cogImages.set(url, png);
+      ownCogUrls.add(url);
+      const id = `${layer.id}-cog-preview`;
+      map.addSource(id, { type: "image", url, coordinates: image.corners });
+      map.addLayer(
+        {
+          id,
+          type: "raster",
+          source: id,
+          ...styleLayerZoomRange(layer.style),
+          paint: { "raster-opacity": layer.opacity, "raster-fade-duration": 0 },
+        },
+        map.getLayer(anchorId) ? anchorId : undefined,
+      );
+    } catch (error) {
+      if (lifecycle.signal.aborted) return;
+      options.onError(
+        layer.name,
+        safeErrorMessage(error instanceof Error ? error.message : String(error)),
+      );
+    }
+  };
+
+  const addDiscoveredPMTilesLayer = async (
+    layer: GeoLibreLayer,
+    anchorId: string,
+  ): Promise<void> => {
+    try {
+      lifecycle.signal.throwIfAborted();
+      const key = pmtilesArchiveKey(layer);
+      const archive = key ? getRegisteredPMTilesArchive(key) : undefined;
+      if (!archive) throw new Error(previewI18n.t("mcpPreview.pmtiles.archiveUnavailable"));
+      const resolved = await discoverPreviewPMTilesLayer(layer, archive, lifecycle.signal);
+      lifecycle.signal.throwIfAborted();
+      createLayerSync(map).sync([resolved]);
+      // Metadata may arrive after layers above this one. Keep its generated
+      // fill/line/circle layers immediately below its reserved position.
+      for (const id of previewPMTilesStyleLayerIds(resolved)) {
+        if (map.getLayer(id) && map.getLayer(anchorId)) map.moveLayer(id, anchorId);
+      }
+      discoveredLayers.set(layer.id, resolved);
+    } catch (error) {
+      if (lifecycle.signal.aborted) return;
+      options.onError(
+        layer.name,
+        safeErrorMessage(error instanceof Error ? error.message : String(error)),
+      );
+    }
+  };
+
   const registerLayers = (): void => {
-    for (const layer of renderable) {
+    for (const { layer, kind } of plan) {
       try {
+        if (kind === "cog") {
+          // Holds the COG's place in the stack while it decodes, so it lands
+          // under the layers above it rather than on top of everything.
+          const anchorId = `${layer.id}-cog-anchor`;
+          map.addLayer({
+            id: anchorId,
+            type: "background",
+            layout: { visibility: "none" },
+          });
+          void addCogLayer(layer, anchorId);
+          continue;
+        }
+        if (kind === "pmtiles" && needsPMTilesDiscovery(layer)) {
+          const anchorId = `${layer.id}-pmtiles-anchor`;
+          map.addLayer({ id: anchorId, type: "background", layout: { visibility: "none" } });
+          void addDiscoveredPMTilesLayer(layer, anchorId);
+          continue;
+        }
         // One sync owner per layer isolates failures while preserving the project’s
         // bottom-to-top order: each successful MapLibre layer is added above the last.
         createLayerSync(map).sync([layer]);
       } catch {
-        options.onError(
-          layer.id,
-          `Could not register layer “${layer.name}”; other layers will still be shown.`,
-        );
+        options.onError(layer.id, t("registrationFailed", { name: layer.name }));
       }
     }
     if (!notifiedReady) {
@@ -142,9 +306,11 @@ export function renderProject(
   const popup = new maplibregl.Popup({ closeButton: true, maxWidth: "340px" });
   map.on("click", (event) => {
     for (let index = layers.length - 1; index >= 0; index -= 1) {
-      const layer = layers[index];
+      const layer = discoveredLayers.get(layers[index].id) ?? layers[index];
       if (!layer.visible || !isPopupClickEnabled(layer.popup)) continue;
-      const ids = identifyStyleLayerIds(layer).filter((id) => map.getLayer(id));
+      const ids = [
+        ...new Set([...identifyStyleLayerIds(layer), ...previewPMTilesStyleLayerIds(layer)]),
+      ].filter((id) => map.getLayer(id));
       if (ids.length === 0) continue;
       const [feature] = map.queryRenderedFeatures(event.point, { layers: ids });
       if (!feature) continue;

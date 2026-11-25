@@ -1,3 +1,6 @@
+import { EARTHACCESS_PLUGIN_ID } from "../plugin-ids";
+export { EARTHACCESS_PLUGIN_ID } from "../plugin-ids";
+import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { useAppStore } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap, MapLayerMouseEvent } from "maplibre-gl";
@@ -27,7 +30,6 @@ import {
 } from "./earthaccess-api";
 import { getControlMap } from "./style-map";
 
-export const EARTHACCESS_PLUGIN_ID = "geolibre-earthaccess";
 const PLUGIN_NAME = "NASA Earthaccess";
 const PANEL_ID = EARTHACCESS_PLUGIN_ID;
 /** `app.credentials` name of the Earthdata Login bearer token. */
@@ -1313,10 +1315,8 @@ function mountPanel(container: HTMLElement): void {
  * granules open straight into the Add Data → ICESat-2 / GEDI reader.
  */
 export const maplibreEarthaccessPlugin: GeoLibrePlugin = {
-  id: EARTHACCESS_PLUGIN_ID,
-  name: PLUGIN_NAME,
-  version: "0.1.0",
-  engines: ["maplibre", "mapbox", "cesium"],
+  ...builtInPluginProperties("geolibre-earthaccess"),
+
   activate: (app) => {
     appRef = app;
     unregisterPanel =

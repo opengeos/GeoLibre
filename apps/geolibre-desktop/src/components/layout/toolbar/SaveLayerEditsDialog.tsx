@@ -7,8 +7,11 @@
  * (Save copies to folder on desktop, or Export layers as GeoJSON ZIP).
  */
 
-import { useAppCapability, useAppStore } from "@geolibre/core";
-import { getGeometryEditTargetLayerId, subscribeGeometryEdit } from "@geolibre/plugins";
+import { useAppCapability, useAppStore, useLayersWhen } from "@geolibre/core";
+import {
+  getGeometryEditTargetLayerId,
+  subscribeGeometryEdit,
+} from "@geolibre/plugins/geo-editor-state";
 import {
   Button,
   Dialog,
@@ -20,6 +23,7 @@ import {
 import { AlertTriangle, Archive, CheckCircle2, FolderOutput, Loader2, XCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
+import { browserSafeFileName, isImportedDocumentCopyPath } from "../../../lib/file-io/paths";
 import {
   defaultSelectedWritableLayerIds,
   listWritableLayerCandidates,
@@ -82,7 +86,9 @@ export function SaveLayerEditsDialog({
   candidatesOverride,
 }: SaveLayerEditsDialogProps) {
   const { t } = useTranslation();
-  const layers = useAppStore((s) => s.layers);
+  // The candidate rows are listed only while the dialog is open; closed, it
+  // ignores layer edits.
+  const layers = useLayersWhen(open);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const collaboration = useAppStore((s) => s.collaboration);
   const attributeTableDrafts = useAppStore((s) => s.ui.attributeTableDrafts);
@@ -347,7 +353,11 @@ export function SaveLayerEditsDialog({
                           className="block truncate text-xs text-muted-foreground"
                           title={destinationLabel}
                         >
-                          {destinationLabel}
+                          {isImportedDocumentCopyPath(layer.sourcePath)
+                            ? t("layers.importedCopyDestination", {
+                                name: browserSafeFileName(layer.sourcePath ?? ""),
+                              })
+                            : destinationLabel}
                         </span>
                         {disabledReason && (
                           <span className="mt-0.5 block text-xs text-muted-foreground">

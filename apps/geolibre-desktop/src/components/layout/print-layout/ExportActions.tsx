@@ -9,6 +9,8 @@ import type { useExportActions } from "./useExportActions";
 interface ExportActionsProps {
   ui: Pick<PrintLayoutUiState, "atlasProgress" | "atlasBusy" | "exporting" | "copied">;
   hasCapture: boolean;
+  insetReady: boolean;
+  insetNeedsGeoref: boolean;
   /** Whether the capture carries a georeference, so the PDF is a GeoPDF. */
   georeferenced: boolean;
   /** The atlas setting, AND-ed with the renderer being able to drive it. */
@@ -21,6 +23,8 @@ interface ExportActionsProps {
 export function ExportActions({
   ui,
   hasCapture,
+  insetReady,
+  insetNeedsGeoref,
   georeferenced,
   atlasEnabled,
   atlas,
@@ -29,17 +33,35 @@ export function ExportActions({
   const { t } = useTranslation();
   const { atlasProgress, atlasBusy, exporting, copied } = ui;
   const { atlasActive, atlasConfigBlocked, atlasPageCount } = atlas;
-  const { handleCopy, handleExport, handleAtlasExport, handleDialogOpenChange } = actions;
+  const {
+    handleCopy,
+    handleExport,
+    handleAtlasExport,
+    handleCancelAtlasExport,
+    handleDialogOpenChange,
+  } = actions;
   return (
     <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
-      {/* Atlas export progress, kept visible next to the buttons. */}
-      {atlasProgress && (
-        <span className="me-auto text-sm text-muted-foreground">
-          {t("printLayout.atlas.exporting", {
-            current: atlasProgress.current,
-            total: atlasProgress.total,
-          })}
+      {hasCapture && !insetReady && insetNeedsGeoref && (
+        <span role="status" className="me-auto text-sm text-muted-foreground">
+          {t("printLayout.inset.needsGeoref")}
         </span>
+      )}
+      {/* Atlas export progress and cancel button, kept visible next to the export buttons. */}
+      {atlasProgress && (
+        <div className="me-auto flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">
+            {t("printLayout.atlas.exporting", {
+              current: atlasProgress.current,
+              total: atlasProgress.total,
+            })}
+          </span>
+          {atlasProgress.cancellable !== false && (
+            <Button type="button" variant="outline" size="sm" onClick={handleCancelAtlasExport}>
+              {t("common.cancel")}
+            </Button>
+          )}
+        </div>
       )}
       <Button
         variant="ghost"
@@ -51,7 +73,7 @@ export function ExportActions({
       {/* Copy the composed layout straight to the clipboard (GH #773). */}
       <Button
         variant="outline"
-        disabled={exporting || atlasBusy || !hasCapture}
+        disabled={exporting || atlasBusy || !hasCapture || !insetReady}
         onClick={() => void handleCopy()}
       >
         {copied ? <Check className="me-2 h-4 w-4" /> : <ClipboardCopy className="me-2 h-4 w-4" />}
@@ -60,7 +82,7 @@ export function ExportActions({
       {!atlasEnabled && (
         <Button
           variant="outline"
-          disabled={exporting || atlasBusy || !hasCapture}
+          disabled={exporting || atlasBusy || !hasCapture || !insetReady}
           onClick={() => void handleExport("svg")}
         >
           <FileImage className="me-2 h-4 w-4" />
@@ -76,6 +98,7 @@ export function ExportActions({
           exporting ||
           atlasBusy ||
           atlasConfigBlocked ||
+          !insetReady ||
           (atlasEnabled ? !atlasActive : !hasCapture)
         }
         onClick={() => void (atlasActive ? handleAtlasExport("zip") : handleExport("png"))}
@@ -89,6 +112,7 @@ export function ExportActions({
           exporting ||
           atlasBusy ||
           atlasConfigBlocked ||
+          !insetReady ||
           (atlasEnabled ? !atlasActive : !hasCapture)
         }
         // Say whether the PDF carries map coordinates (GeoPDF, GH #3523): a

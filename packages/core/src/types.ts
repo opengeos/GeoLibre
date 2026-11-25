@@ -3,6 +3,7 @@ import type { FeatureCollection } from "geojson";
 import type { GeoArrowBatch } from "./geoarrow";
 export type { GeoArrowBatch };
 import type { PrintLayoutConfig } from "./print-layout-config";
+import projectConstants from "./project-constants.json";
 
 export const OPENFREEMAP_BASEMAPS = [
   {
@@ -56,7 +57,10 @@ export const DEFAULT_BASEMAP = "https://tiles.openfreemap.org/styles/liberty";
 
 export const BLANK_BASEMAP = "";
 
-export const PROJECT_VERSION = "0.2.0";
+export const PROJECT_VERSION: string = projectConstants.PROJECT_VERSION;
+
+/** Built-in plugin IDs that support project-state persistence (`getProjectState` / `applyProjectState`). */
+export const PLUGIN_STATE_IDS: readonly string[] = projectConstants.PLUGIN_STATE_IDS;
 
 /**
  * Every layer type, as a runtime list so untrusted input (an imported Layer
@@ -713,134 +717,7 @@ export interface LayerStyle {
   blendMode?: BlendMode;
 }
 
-export const DEFAULT_LAYER_STYLE: LayerStyle = {
-  minZoom: 0,
-  maxZoom: 24,
-  fillColor: "#3b82f6",
-  strokeColor: "#1e40af",
-  strokeWidth: 2,
-  strokeWidthUnit: "pixels",
-  strokeOpacity: 1,
-  strokeDash: [],
-  strokeBlur: 0,
-  fillOpacity: 0.6,
-  circleRadius: 6,
-  textColor: "#111827",
-  textHaloColor: "#ffffff",
-  textHaloWidth: 2,
-  textSize: 16,
-  labels: {
-    enabled: false,
-    field: "",
-    expression: "",
-    placement: "point",
-    lineGap: false,
-    lineGapPadding: 3,
-    lineSpacing: 250,
-    size: 13,
-    color: "#111827",
-    haloColor: "#ffffff",
-    haloWidth: 1.5,
-    minZoom: 0,
-    maxZoom: 24,
-    allowOverlap: false,
-    anchor: "center",
-    offsetX: 0,
-    offsetY: 0,
-    rotation: 0,
-    maxWidth: 10,
-    transform: "none",
-    numberFormatEnabled: false,
-    numberDecimals: 0,
-    numberLocale: "",
-    dedupe: "off",
-    sizeExpression: "",
-    colorExpression: "",
-    opacityExpression: "",
-    visibilityExpression: "",
-    priorityExpression: "",
-  },
-  extrusionEnabled: false,
-  extrusionColor: "#3b82f6",
-  extrusionOpacity: 0.8,
-  extrusionHeightProperty: "height",
-  extrusionHeightScale: 1,
-  extrusionBase: 0,
-  extrusionBaseProperty: "",
-  extrusionBaseScale: 1,
-  extrusionFloorHeight: 0,
-  extrusionAdvancedStyleEnabled: false,
-  extrusionColorExpression: "",
-  extrusionHeightExpression: "",
-  extrusionBaseExpression: "",
-  elevation3dEnabled: false,
-  elevation3dVerticalScale: 1,
-  elevation3dOffset: 0,
-  vectorStyleMode: "single",
-  vectorStyleProperty: "",
-  vectorStyleClassCount: 5,
-  vectorStyleColorRamp: "viridis",
-  vectorStyleClassificationScheme: "equal-interval",
-  vectorStyleStops: [
-    { value: 0, color: "#dbeafe" },
-    { value: 1, color: "#2563eb" },
-  ],
-  vectorStyleExpression: "",
-  vectorRules: [],
-  proportionalSizeEnabled: false,
-  proportionalSizeProperty: "",
-  proportionalSizeMinValue: 0,
-  proportionalSizeMaxValue: 100,
-  proportionalSizeMinRadius: 4,
-  proportionalSizeMaxRadius: 24,
-  fillPattern: "none",
-  fillPatternColor: "#1e40af",
-  fillPatternSvg: "",
-  markerEnabled: false,
-  markerShape: "circle",
-  markerColor: "#3b82f6",
-  markerSize: 18,
-  markerSvg: "",
-  simpleStyleEnabled: false,
-  diagramType: "none",
-  diagramFields: [],
-  diagramSizeMode: "fixed",
-  diagramSize: 30,
-  diagramSizeProperty: "",
-  diagramMinZoom: 0,
-  diagramDeclutter: false,
-  pointRenderer: "single",
-  heatmapRadius: 30,
-  heatmapIntensity: 1,
-  heatmapColorRamp: "turbo",
-  heatmapWeightProperty: "",
-  clusterRadius: 50,
-  clusterMaxZoom: 14,
-  invertedFillEnabled: false,
-  lineDecoration: "none",
-  lineDecorationColor: "",
-  lineDecorationSize: 12,
-  lineDecorationSpacing: 80,
-  geometryGenerator: "none",
-  geometryGeneratorBufferDistance: 1000,
-  geometryGeneratorBufferProperty: "",
-  geometryGeneratorFillColor: "#f59e0b",
-  geometryGeneratorStrokeColor: "#b45309",
-  geometryGeneratorStrokeWidth: 2,
-  geometryGeneratorOpacity: 0.4,
-  geometryGeneratorCircleRadius: 5,
-  geometryGeneratorSizeProperty: "",
-  geometryGeneratorSizeMinValue: 0,
-  geometryGeneratorSizeMaxValue: 100,
-  geometryGeneratorSizeMinRadius: 4,
-  geometryGeneratorSizeMaxRadius: 24,
-  rasterBrightnessMin: 0,
-  rasterBrightnessMax: 1,
-  rasterSaturation: 0,
-  rasterContrast: 0,
-  rasterHueRotate: 0,
-  blendMode: DEFAULT_BLEND_MODE,
-};
+export const DEFAULT_LAYER_STYLE: LayerStyle = projectConstants.DEFAULT_LAYER_STYLE as LayerStyle;
 
 /**
  * Read a layer style property, falling back to the shared default when the
@@ -2111,36 +1988,8 @@ export interface ProjectPluginState {
   settings: Record<string, unknown>;
 }
 
-export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
-  map: {
-    restrictBounds: false,
-    bounds: [-180, -85, 180, 85],
-    minZoom: 0,
-    maxZoom: 24,
-    maxPitch: 85,
-    renderWorldCopies: true,
-    projection: "globe",
-    ellipsoidId: "earth",
-    scaleUnit: "metric",
-    // Off by default: turning it on can send pointer coordinates to a public
-    // elevation service, which should be an explicit choice.
-    showPointerElevation: false,
-    terrainEnabled: false,
-    coordinateFormat: "dd",
-    zoomToNewLayers: true,
-    mapboxStyleUrl: "mapbox://styles/mapbox/standard",
-    arcgisBasemap: "arcgis/streets",
-    // With an Ion token this is the globe's photographic default. The
-    // availability gate transparently falls back to the project basemap when
-    // no token is configured.
-    cesiumBasemap: "bing-aerial",
-  },
-  environmentVariables: [],
-  geocoding: {
-    providerId: "nominatim",
-    apiKeys: {},
-  },
-};
+export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences =
+  projectConstants.DEFAULT_PROJECT_PREFERENCES as unknown as ProjectPreferences;
 
 /**
  * A single user override for one legend item, keyed in {@link LegendConfig.overrides}
@@ -2335,21 +2184,7 @@ export interface StoryMap {
   chapters: StoryChapter[];
 }
 
-export const DEFAULT_STORY_MAP: StoryMap = {
-  title: "",
-  subtitle: "",
-  byline: "",
-  footer: "",
-  theme: "dark",
-  showMarkers: false,
-  markerColor: "#3fb1ce",
-  inset: false,
-  insetPosition: "bottom-left",
-  hideChapterNav: false,
-  startSlide: "none",
-  endSlide: "none",
-  chapters: [],
-};
+export const DEFAULT_STORY_MAP: StoryMap = projectConstants.DEFAULT_STORY_MAP as StoryMap;
 
 /**
  * One step in a {@link ProcessingModel}: a processing tool invoked with a fixed

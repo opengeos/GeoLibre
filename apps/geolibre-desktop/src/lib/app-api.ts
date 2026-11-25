@@ -105,6 +105,7 @@ import {
   openLocalDataFileWithFallback,
   pickVectorFilesWithSidecars,
   readVectorFileWithSidecars,
+  saveBinaryFileWithFallback,
   saveTextFileWithFallback,
 } from "./tauri-io";
 import {
@@ -163,11 +164,12 @@ export interface AppApiHost extends Pick<
   | "getLastGeometryEditEnd"
   | "subscribeGeometryEdit"
   | "isPluginEngineSupported"
-  | "maplibreGeoEditorPlugin"
   | "startLayerGeometryEdit"
   | "addLidarLayerFromUrl"
   | "addLidarLayerFromBytes"
 > {
+  /** Metadata needed to decide whether the edit session supports the engine. */
+  maplibreGeoEditorPlugin: Parameters<PluginsModule["isPluginEngineSupported"]>[0];
   /** The shared plugin manager, for `activatePlugin`/`deactivatePlugin`. */
   plugins: Pick<
     PluginManager,
@@ -866,6 +868,35 @@ export function createAppAPI(
         });
       })().catch((error) => {
         console.error(`Could not export ${filename}.`, error);
+      });
+    },
+    saveBinaryFile: async (
+      filename: string,
+      data: Blob | Uint8Array,
+      options?: GeoLibreFileDialogOptions,
+    ) => {
+      const extensions = options?.extensions?.length ? options.extensions : ["bin"];
+      const description = options?.description ?? (extensions[0]?.toUpperCase() || "BIN");
+      const mimeType = options?.mimeType ?? "application/octet-stream";
+      const acceptMime = mimeType.split(";")[0].trim() || "application/octet-stream";
+      let defaultName = filename;
+      if (options?.promptName && browserSaveFallsBackToDownload()) {
+        const chosen = await useFileNamePrompt.getState().prompt({
+          defaultName: filename,
+        });
+        if (chosen === null) return null;
+        defaultName = ensureFileExtension(chosen, extensions);
+      }
+      return saveBinaryFileWithFallback(data, {
+        defaultName,
+        filters: [{ name: description, extensions }],
+        browserTypes: [
+          {
+            description,
+            accept: { [acceptMime]: extensions.map((ext) => `.${ext}`) },
+          },
+        ],
+        mimeType,
       });
     },
     exportGeoParquetFile: async (filename: string, data: FeatureCollection) => {

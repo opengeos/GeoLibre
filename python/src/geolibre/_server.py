@@ -164,6 +164,7 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         file_path, bands, colormap, rescale, z, x, y = matched
         try:
             from rio_tiler.colormap import cmap
+            from rio_tiler.errors import TileOutsideBounds
             from rio_tiler.io import Reader
 
             with Reader(file_path) as source:
@@ -174,6 +175,12 @@ class _QuietHandler(SimpleHTTPRequestHandler):
             payload = image.render(img_format="PNG", colormap=color_map)
         except ImportError:
             self.send_error(500, "rio-tiler is required for Colab raster tiles")
+            return
+        except TileOutsideBounds:
+            self.send_response(204)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
             return
         except Exception as exc:  # pragma: no cover - rio-tiler error text varies
             self.send_error(500, f"Could not render raster tile: {exc}")

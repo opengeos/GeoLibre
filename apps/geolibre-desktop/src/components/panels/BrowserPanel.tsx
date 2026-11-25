@@ -8,7 +8,7 @@ import {
   type GeoLibreLayer,
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { fetchArcGISMapServiceSublayers } from "@geolibre/plugins";
+import { fetchArcGISMapServiceSublayers } from "@geolibre/plugins/arcgis-layer";
 import { Input, ScrollArea } from "@geolibre/ui";
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";

@@ -7,11 +7,7 @@
 //! way a browser tab on the service's own site would. Set-Cookie headers are
 //! never handed back to JavaScript, matching a browser's HttpOnly handling.
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::time::Duration;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use reqwest::{
@@ -176,17 +172,22 @@ async fn send(request: PluginHttpRequest) -> Result<PluginHttpResponse, String> 
     let url = Url::parse(&request.url).map_err(|_| "Invalid request URL.".to_string())?;
     let method = method(&request.method)?;
     let headers = request_headers(request.headers)?;
-    let body = request
-        .body
-        .map(|body| STANDARD.decode(body))
-        .transpose()
-        .map_err(|_| "Invalid request body encoding.".to_string())?;
-    if body
-        .as_ref()
-        .is_some_and(|body| body.len() > MAX_BODY_BYTES)
-    {
-        return Err("Request body exceeds the 64 MiB limit.".into());
-    }
+    const MAX_BASE64_LEN: usize = MAX_BODY_BYTES.div_ceil(3) * 4;
+    let body = match request.body {
+        Some(encoded) => {
+            if encoded.len() > MAX_BASE64_LEN {
+                return Err("Request body exceeds the 64 MiB limit.".into());
+            }
+            let decoded = STANDARD
+                .decode(encoded)
+                .map_err(|_| "Invalid request body encoding.".to_string())?;
+            if decoded.len() > MAX_BODY_BYTES {
+                return Err("Request body exceeds the 64 MiB limit.".into());
+            }
+            Some(decoded)
+        }
+        None => None,
+    };
     let checked = url.clone();
     tauri::async_runtime::spawn_blocking(move || url_is_fetchable(&checked))
         .await
@@ -205,27 +206,12 @@ async fn send(request: PluginHttpRequest) -> Result<PluginHttpResponse, String> 
     read_response(response).await
 }
 
-type CancelRequest = Box<dyn Fn() + Send + Sync>;
-
 #[derive(Default, Clone)]
-pub(crate) struct PluginHttpRequests(Arc<Mutex<HashMap<String, CancelRequest>>>);
+pub(crate) struct PluginHttpRequests(crate::in_flight::CancelRegistry);
 
 impl PluginHttpRequests {
     fn cancel(&self, id: &str) {
-        if let Some(cancel) = self.0.lock().unwrap().remove(id) {
-            cancel();
-        }
-    }
-}
-
-struct RequestGuard {
-    requests: PluginHttpRequests,
-    id: String,
-}
-
-impl Drop for RequestGuard {
-    fn drop(&mut self) {
-        self.requests.cancel(&self.id);
+        self.0.cancel(id);
     }
 }
 
@@ -247,20 +233,14 @@ pub(crate) async fn plugin_http_request(
     ready: tauri::ipc::Channel<()>,
     requests: tauri::State<'_, PluginHttpRequests>,
 ) -> Result<PluginHttpResponse, String> {
-    let task = {
-        let mut active = requests.0.lock().unwrap();
-        if active.contains_key(&request_id) {
-            return Err("Duplicate request ID.".into());
-        }
-        let task = tauri::async_runtime::spawn(send(request));
-        let abort = task.inner().abort_handle();
-        active.insert(request_id.clone(), Box::new(move || abort.abort()));
-        task
-    };
-    let _guard = RequestGuard {
-        requests: requests.inner().clone(),
-        id: request_id,
-    };
+    let (task, _guard) = requests
+        .0
+        .try_register_with(request_id, || {
+            let task = tauri::async_runtime::spawn(send(request));
+            let abort = task.inner().abort_handle();
+            (task, Box::new(move || abort.abort()))
+        })
+        .map_err(|()| "Duplicate request ID.".to_string())?;
     ready
         .send(())
         .map_err(|_| "Request caller disconnected.".to_string())?;

@@ -59,13 +59,24 @@ export type VectorToolKind =
   | "decode-polyline"
   | "encode-polyline"
   | "merge-layers"
+  | "create-routes"
+  | "locate-features-along-routes"
+  | "dynamic-segmentation"
   | "check-validity"
   | "fix-geometries"
   | "check-topology-rules"
-  | "fix-topology";
+  | "fix-topology"
+  | "fix-polygon-overlaps"
+  | "fill-polygon-gaps";
 
 /** Identifiers of the network-analysis tools (`NETWORK_TOOLS` ids). */
-export type NetworkToolKind = "isochrone" | "od-matrix" | "sequential-route";
+export type NetworkToolKind =
+  | "isochrone"
+  | "od-matrix"
+  | "sequential-route"
+  | "local-shortest-path"
+  | "local-closest-facility"
+  | "local-service-area";
 
 /** Identifiers of the spatial-statistics tools (`STATISTICS_TOOLS` ids). */
 export type StatisticsToolKind =
@@ -75,7 +86,12 @@ export type StatisticsToolKind =
   | "average-nearest-neighbor"
   | "kernel-density"
   | "emerging-hot-spot"
-  | "composite-score";
+  | "composite-score"
+  | "ols-regression"
+  | "gwr"
+  | "dbscan"
+  | "hdbscan"
+  | "kriging-diagnostics";
 
 /**
  * Identifiers of the raster processing tools. Kept in sync by hand with the
@@ -98,7 +114,14 @@ export type RasterToolKind =
   | "spectral-index"
   | "reclassify"
   | "mosaic"
-  | "focal";
+  | "focal"
+  | "change-difference"
+  | "ndvi-change"
+  | "transition-matrix"
+  | "sar-db"
+  | "speckle-filter"
+  | "sar-rgb"
+  | "flood-map";
 
 /** Unsaved cell text, keyed by feature id and field name. Kept only for this project session. */
 export type AttributeTableDrafts = Record<string, Record<string, string>>;

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { openSpaceborneLidar } from "@geolibre/plugins/spaceborne-lidar";
 import {
-  openSpaceborneLidar,
   type GeoLibreAppAPI,
   type SpaceborneLidarField,
   type SpaceborneLidarFile,

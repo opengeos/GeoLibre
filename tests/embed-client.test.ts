@@ -195,4 +195,15 @@ describe("@geolibre/embed client", () => {
     await assert.rejects(client.listLayers(), /response to "listLayers"/i);
     client.disconnect();
   });
+
+  it("sends a readiness ping on connect so already-loaded iframes resolve immediately", async () => {
+    const { iframe, sent, receive } = harness();
+    const pending = connect(iframe, { origin: "https://app.test", timeoutMs: 50 });
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].message.type, "ping");
+    assert.equal(sent[0].origin, "https://app.test");
+    receive("ready", { version: "3.9.0" });
+    const client = await pending;
+    client.disconnect();
+  });
 });

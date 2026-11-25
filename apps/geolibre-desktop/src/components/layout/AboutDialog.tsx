@@ -11,11 +11,16 @@ import {
 import { CheckCircle2, ExternalLink, Info, Map, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useAppStore } from "@geolibre/core";
 import { openExternalLink } from "../../lib/open-external";
 import {
   APP_VERSION,
+  checkDesktopSignedUpdate,
   compareVersions,
   fetchLatestRelease,
+  formatVersion,
+  installDesktopSignedUpdate,
+  isDesktopSignedUpdateInstalling,
   IS_STORE_BUILD,
   UPDATE_URL,
   UpdateCheckError,
@@ -68,6 +73,10 @@ export function AboutDialog({
   const [latestNotes, setLatestNotes] = useState<string>("");
   const [latestUrl, setLatestUrl] = useState<string>(UPDATE_URL);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [signedUpdateAvailable, setSignedUpdateAvailable] = useState(false);
+  const [installingSignedUpdate, setInstallingSignedUpdate] = useState(() =>
+    isDesktopSignedUpdateInstalling(),
+  );
   const abortRef = useRef<AbortController | null>(null);
   const handledCheckForUpdatesRequestRef = useRef(0);
   const wasOpenRef = useRef(false);
@@ -81,6 +90,8 @@ export function AboutDialog({
     setLatestNotes("");
     setLatestUrl(UPDATE_URL);
     setUpdateError(null);
+    setSignedUpdateAvailable(false);
+    setInstallingSignedUpdate(isDesktopSignedUpdateInstalling());
   }, []);
 
   const describeUpdateError = useCallback(
@@ -119,17 +130,73 @@ export function AboutDialog({
     setLatestUrl(UPDATE_URL);
     setUpdateError(null);
 
+    const [releaseResult, signedResult] = await Promise.allSettled([
+      fetchLatestRelease(controller.signal),
+      checkDesktopSignedUpdate(),
+    ]);
+    if (controller.signal.aborted) return;
+
+    const signed = signedResult.status === "fulfilled" ? signedResult.value : null;
+    const hasSignedUpdate = Boolean(signed?.configured && signed.available);
+
+    if (releaseResult.status === "fulfilled") {
+      const release = releaseResult.value;
+      const useSignedMetadata = Boolean(hasSignedUpdate && signed?.version);
+      const displayVersion = useSignedMetadata ? formatVersion(signed!.version!) : release.version;
+      const versionsMatch =
+        !useSignedMetadata || compareVersions(displayVersion, release.version) === 0;
+      const displayNotes = useSignedMetadata
+        ? signed!.notes || (versionsMatch ? release.notes : "")
+        : release.notes;
+      setLatestVersion(displayVersion);
+      setLatestNotes(displayNotes);
+      setLatestUrl(versionsMatch ? release.url : UPDATE_URL);
+      setSignedUpdateAvailable(hasSignedUpdate);
+      setUpdateStatus(
+        compareVersions(APP_VERSION, displayVersion) < 0 || hasSignedUpdate
+          ? "available"
+          : "current",
+      );
+      return;
+    }
+
+    const error = releaseResult.reason;
+    if (error instanceof Error && error.name === "AbortError") return;
+
+    if (hasSignedUpdate && signed?.version) {
+      setLatestVersion(formatVersion(signed.version));
+      setLatestNotes(signed.notes ?? "");
+      setLatestUrl(UPDATE_URL);
+      setSignedUpdateAvailable(true);
+      setUpdateStatus("available");
+      return;
+    }
+
+    console.error("Failed to check for updates", error);
+    setUpdateStatus("error");
+    setUpdateError(describeUpdateError(error));
+  };
+
+  const handleInstallSignedUpdate = async () => {
+    if (IS_STORE_BUILD || installingSignedUpdate || isDesktopSignedUpdateInstalling()) return;
+    const isDirty = useAppStore.getState().isDirty;
+    const confirmKey = isDirty ? "updates.confirmInstallDirty" : "updates.confirmInstall";
+    if (typeof window !== "undefined" && !window.confirm(t(confirmKey))) {
+      return;
+    }
+    setInstallingSignedUpdate(true);
+    setUpdateError(null);
     try {
-      const release = await fetchLatestRelease(controller.signal);
-      setLatestVersion(release.version);
-      setLatestNotes(release.notes);
-      setLatestUrl(release.url);
-      setUpdateStatus(compareVersions(APP_VERSION, release.version) < 0 ? "available" : "current");
+      const installed = await installDesktopSignedUpdate();
+      if (!installed) {
+        setInstallingSignedUpdate(false);
+        setSignedUpdateAvailable(false);
+        setUpdateError(t("updates.noSignedUpdateAvailable"));
+      }
     } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") return;
-      console.error("Failed to check for updates", error);
-      setUpdateStatus("error");
-      setUpdateError(describeUpdateError(error));
+      console.error("Failed to install signed desktop update", error);
+      setUpdateError(t("updates.installSignedError"));
+      setInstallingSignedUpdate(false);
     }
   };
 
@@ -249,11 +316,32 @@ export function AboutDialog({
                         </div>
                         <UpdateInstructions />
                       </div>
+                      {signedUpdateAvailable ? (
+                        <Button
+                          className="w-full justify-between"
+                          disabled={installingSignedUpdate}
+                          onClick={() => void handleInstallSignedUpdate()}
+                          type="button"
+                          variant="default"
+                        >
+                          <span>
+                            {installingSignedUpdate
+                              ? t("updates.installingSigned")
+                              : t("updates.installSigned")}
+                          </span>
+                          <RefreshCw
+                            className={`h-3.5 w-3.5 ${installingSignedUpdate ? "animate-spin" : ""}`}
+                          />
+                        </Button>
+                      ) : null}
+                      {updateError ? (
+                        <div className="text-xs text-destructive">{updateError}</div>
+                      ) : null}
                       <Button
                         className="w-full justify-between"
                         onClick={() => void openExternalLink(latestUrl)}
                         type="button"
-                        variant="default"
+                        variant={signedUpdateAvailable ? "outline" : "default"}
                       >
                         <span>{t("updates.download")}</span>
                         <ExternalLink className="h-3.5 w-3.5" />

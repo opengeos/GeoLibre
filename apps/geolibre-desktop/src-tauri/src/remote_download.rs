@@ -21,20 +21,18 @@ use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, Mutex, OnceLock,
-    },
+    sync::{atomic::Ordering, Arc, Mutex, OnceLock},
     time::Duration,
 };
 
+use percent_encoding::percent_decode_str;
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
     redirect::Policy,
     Url,
 };
-use percent_encoding::percent_decode_str;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 
@@ -111,13 +109,11 @@ pub(crate) struct WriteFileResult {
     size: u64,
 }
 
-type CancelDownload = Box<dyn Fn() + Send + Sync>;
-
 /// In-flight downloads (for cancellation) and finished cache downloads waiting
 /// to be read, both keyed by the caller's request id.
 #[derive(Default, Clone)]
 pub(crate) struct RemoteDownloads {
-    active: Arc<Mutex<HashMap<String, CancelDownload>>>,
+    active: crate::in_flight::CancelRegistry,
     cached: Arc<Mutex<HashMap<String, PathBuf>>>,
     /// Folders the user picked for multi-file downloads, by id.
     folders: Arc<Mutex<HashMap<String, PathBuf>>>,
@@ -125,20 +121,7 @@ pub(crate) struct RemoteDownloads {
 
 impl RemoteDownloads {
     fn cancel(&self, id: &str) {
-        if let Some(cancel) = self.active.lock().unwrap().remove(id) {
-            cancel();
-        }
-    }
-}
-
-struct ActiveGuard {
-    downloads: RemoteDownloads,
-    id: String,
-}
-
-impl Drop for ActiveGuard {
-    fn drop(&mut self) {
-        self.downloads.cancel(&self.id);
+        self.active.cancel(id);
     }
 }
 
@@ -305,7 +288,8 @@ async fn transfer(
     headers: HeaderMap,
     destination: PathBuf,
     part_tag: String,
-    mut placeholder: Option<PartFile>,
+    is_cached: bool,
+    placeholder: Option<PartFile>,
     progress: tauri::ipc::Channel<RemoteDownloadProgress>,
 ) -> Result<u64, String> {
     let response = client(!headers.is_empty())?
@@ -329,42 +313,174 @@ async fn transfer(
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default()
     );
-    let mut part = PartFile {
-        path: destination.with_file_name(part_name),
+    let part_path = destination.with_file_name(part_name);
+    let part = PartFile {
+        path: part_path,
         done: false,
     };
-    let mut file = fs::File::create(&part.path)
-        .map_err(|error| format!("Could not create the download file: {error}"))?;
+    // Stream chunks directly as `Bytes` (no per-chunk copy) into a blocking
+    // writer task that owns `PartFile`, so creating/writing/syncing/renaming
+    // never stalls a Tokio worker AND cancelling/aborting drops the file handle
+    // before `PartFile::drop` unlinks `.part` (avoiding orphan files and
+    // Windows sharing violations).
+    enum WriteCommand<B> {
+        Chunk(B),
+        Finish,
+    }
+    struct AbortFlagGuard {
+        aborted: Arc<std::sync::atomic::AtomicBool>,
+        done: bool,
+    }
+    impl Drop for AbortFlagGuard {
+        fn drop(&mut self) {
+            if !self.done {
+                self.aborted.store(true, Ordering::Release);
+            }
+        }
+    }
+    fn spawn_part_writer<B: AsRef<[u8]> + Send + 'static>(
+        part: PartFile,
+        mut placeholder: Option<PartFile>,
+        destination: PathBuf,
+        is_cached: bool,
+        aborted: Arc<std::sync::atomic::AtomicBool>,
+    ) -> (
+        tokio::sync::mpsc::Sender<WriteCommand<B>>,
+        tauri::async_runtime::JoinHandle<Result<(), String>>,
+    ) {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<WriteCommand<B>>(16);
+        let handle = tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+            let mut part = part;
+            if aborted.load(Ordering::Acquire) {
+                return Ok(());
+            }
+            let mut file = fs::File::create(&part.path)
+                .map_err(|error| format!("Could not create the download file: {error}"))?;
+            let mut finish = false;
+            while let Some(command) = rx.blocking_recv() {
+                match command {
+                    WriteCommand::Chunk(chunk) => {
+                        file.write_all(chunk.as_ref())
+                            .map_err(|error| format!("Could not write the download: {error}"))?;
+                    }
+                    WriteCommand::Finish => {
+                        finish = true;
+                        break;
+                    }
+                }
+            }
+            if !finish || aborted.load(Ordering::Acquire) {
+                // Close the handle before `part` drops so Windows can unlink `.part`.
+                drop(file);
+                return Ok(());
+            }
+            file.flush()
+                .and_then(|()| file.sync_all())
+                .map_err(|error| format!("Could not write the download: {error}"))?;
+            drop(file);
+            if aborted.load(Ordering::Acquire) {
+                return Ok(());
+            }
+            fs::rename(&part.path, &destination)
+                .map_err(|error| format!("Could not finish the download: {error}"))?;
+            part.done = true;
+            if let Some(reserved) = placeholder.as_mut() {
+                reserved.done = true;
+            }
+            if is_cached && aborted.load(Ordering::Acquire) {
+                // Cached paths are uniquely keyed by request_id, so unlinking on
+                // post-rename cancellation cannot collide with another save path.
+                let _ = fs::remove_file(&destination);
+            }
+            Ok(())
+        });
+        (tx, handle)
+    }
+    let aborted = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut abort_guard = AbortFlagGuard {
+        aborted: Arc::clone(&aborted),
+        done: false,
+    };
+    let (tx, writer_handle) =
+        spawn_part_writer(part, placeholder, destination.clone(), is_cached, aborted);
     let mut response = response;
     let mut received: u64 = 0;
     let mut reported: u64 = 0;
     let _ = progress.send(RemoteDownloadProgress { received, total });
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|error| format!("Download interrupted: {}", error.without_url()))?
-    {
-        file.write_all(&chunk)
-            .map_err(|error| format!("Could not write the download: {error}"))?;
-        received += chunk.len() as u64;
+    let mut read_error: Option<String> = None;
+    let mut writer_closed = false;
+    loop {
+        let next_chunk = {
+            use std::future::Future as _;
+            let mut chunk_fut = std::pin::pin!(response.chunk());
+            let mut closed_fut = std::pin::pin!(tx.closed());
+            std::future::poll_fn(|cx| {
+                if closed_fut.as_mut().poll(cx).is_ready() {
+                    return std::task::Poll::Ready(None);
+                }
+                chunk_fut.as_mut().poll(cx).map(Some)
+            })
+            .await
+        };
+        let Some(chunk_res) = next_chunk else {
+            writer_closed = true;
+            break;
+        };
+        let chunk = match chunk_res {
+            Ok(Some(chunk)) => chunk,
+            Ok(None) => break,
+            Err(error) => {
+                read_error = Some(format!("Download interrupted: {}", error.without_url()));
+                break;
+            }
+        };
+        let len = chunk.len() as u64;
+        if tx.send(WriteCommand::Chunk(chunk)).await.is_err() {
+            writer_closed = true;
+            break;
+        }
+        received += len;
         if received - reported >= PROGRESS_STEP_BYTES {
             reported = received;
             let _ = progress.send(RemoteDownloadProgress { received, total });
         }
     }
+    if writer_closed {
+        drop(tx);
+        let writer_result = writer_handle
+            .await
+            .map_err(|error| format!("Download writer failed: {error}"))?;
+        writer_result?;
+        return Err("Download writer stopped unexpectedly.".into());
+    }
+    if let Some(error) = read_error {
+        drop(tx);
+        if let Ok(Err(write_err)) = writer_handle.await {
+            return Err(write_err);
+        }
+        return Err(error);
+    }
     if total.is_some_and(|total| total != received) {
+        drop(tx);
+        if let Ok(Err(write_err)) = writer_handle.await {
+            return Err(write_err);
+        }
         return Err("The download ended early.".into());
     }
-    file.flush()
-        .and_then(|()| file.sync_all())
-        .map_err(|error| format!("Could not write the download: {error}"))?;
-    drop(file);
-    fs::rename(&part.path, &destination)
-        .map_err(|error| format!("Could not finish the download: {error}"))?;
-    part.done = true;
-    if let Some(placeholder) = placeholder.as_mut() {
-        placeholder.done = true;
+    if tx.send(WriteCommand::Finish).await.is_err() {
+        drop(tx);
+        let writer_result = writer_handle
+            .await
+            .map_err(|error| format!("Download writer failed: {error}"))?;
+        writer_result?;
+        return Err("Download writer stopped unexpectedly.".into());
     }
+    drop(tx);
+    let writer_result = writer_handle
+        .await
+        .map_err(|error| format!("Download writer failed: {error}"))?;
+    writer_result?;
+    abort_guard.done = true;
     let _ = progress.send(RemoteDownloadProgress { received, total });
     Ok(received)
 }
@@ -412,7 +528,7 @@ pub(crate) async fn download_remote_file(
         .map_err(|error| format!("URL validation failed: {error}"))??;
     // Reject a reused ID before the save dialog opens, and never let a new
     // cache entry orphan an earlier one's file.
-    if downloads.active.lock().unwrap().contains_key(&request_id)
+    if downloads.active.contains_key(&request_id)
         || downloads.cached.lock().unwrap().contains_key(&request_id)
     {
         return Err("Duplicate request ID.".into());
@@ -433,6 +549,7 @@ pub(crate) async fn download_remote_file(
     let is_folder = folder.is_some();
     let saves_to_disk = request.save || is_folder;
     let mut placeholder = None;
+    let request_tag = request_id_tag(&request_id);
     let destination = if let Some(folder) = folder {
         let reserved = reserve_unique_path(&folder, &file_name)?;
         placeholder = Some(PartFile {
@@ -446,29 +563,28 @@ pub(crate) async fn download_remote_file(
             None => return Ok(None),
         }
     } else {
-        cache_dir(&app)?.join(format!("{}-{file_name}", sanitize_file_name(&request_id)))
+        cache_dir(&app)?.join(format!("{request_tag}-{file_name}"))
     };
 
-    let task = {
-        let mut active = downloads.active.lock().unwrap();
-        if active.contains_key(&request_id) {
-            return Err("Duplicate request ID.".into());
-        }
-        let task = tauri::async_runtime::spawn(transfer(
-            url,
-            headers,
-            destination.clone(),
-            sanitize_file_name(&request_id),
-            placeholder,
-            progress,
-        ));
-        let abort = task.inner().abort_handle();
-        active.insert(request_id.clone(), Box::new(move || abort.abort()));
-        task
-    };
-    let _guard = ActiveGuard {
-        downloads: downloads.inner().clone(),
-        id: request_id.clone(),
+    let (task, _guard) = downloads
+        .active
+        .try_register_with(request_id.clone(), || {
+            let task = tauri::async_runtime::spawn(transfer(
+                url,
+                headers,
+                destination.clone(),
+                request_tag,
+                !saves_to_disk,
+                placeholder,
+                progress,
+            ));
+            let abort = task.inner().abort_handle();
+            (task, Box::new(move || abort.abort()))
+        })
+        .map_err(|()| "Duplicate request ID.".to_string())?;
+    let mut cache_guard = PartFile {
+        path: destination.clone(),
+        done: saves_to_disk,
     };
     let size = task.await.map_err(|error| match error {
         tauri::Error::JoinError(join) if join.is_cancelled() => "Download cancelled.".to_string(),
@@ -485,6 +601,7 @@ pub(crate) async fn download_remote_file(
             .lock()
             .unwrap()
             .insert(request_id, destination);
+        cache_guard.done = true;
         Ok(Some(RemoteDownloadResult { path: None, size }))
     }
 }
@@ -521,12 +638,32 @@ pub(crate) async fn pick_download_folder(
     Ok(Some(PickedDownloadFolder { id, path: shown }))
 }
 
-/// Mobile stand-in for [`pick_download_folder`]: the dialog plugin has no
-/// folder picker on Android or iOS.
+/// Mobile export staging folder for [`pick_download_folder`]: iOS and Android
+/// lack an arbitrary desktop folder picker, so we stage exports inside the
+/// app-private `exports` cache directory so callers can immediately hand them
+/// to the OS Share Sheet.
 #[cfg(mobile)]
 #[tauri::command]
-pub(crate) async fn pick_download_folder() -> Result<Option<PickedDownloadFolder>, String> {
-    Err("Choosing a download folder is not supported on this platform.".into())
+pub(crate) async fn pick_download_folder(
+    app: tauri::AppHandle,
+    downloads: tauri::State<'_, RemoteDownloads>,
+) -> Result<Option<PickedDownloadFolder>, String> {
+    let dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| format!("Could not resolve mobile export folder: {error}"))?
+        .join("exports");
+    fs::create_dir_all(&dir)
+        .map_err(|error| format!("Could not prepare mobile export folder: {error}"))?;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT_MOBILE_FOLDER_ID: AtomicU64 = AtomicU64::new(1);
+    let id = format!(
+        "mobile-export-{}",
+        NEXT_MOBILE_FOLDER_ID.fetch_add(1, Ordering::Relaxed)
+    );
+    let shown = dir.to_string_lossy().into_owned();
+    downloads.folders.lock().unwrap().insert(id.clone(), dir);
+    Ok(Some(PickedDownloadFolder { id, path: shown }))
 }
 
 fn encode_reserved_filename_chars(name: &str) -> String {
@@ -546,8 +683,6 @@ fn encode_reserved_filename_chars(name: &str) -> String {
     }
     encoded
 }
-
-static WRITE_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// A file or folder name that is safe to create inside a picked folder.
 fn checked_name(file_name: &str) -> Result<String, String> {
@@ -623,7 +758,9 @@ fn subfolder_in(folder: &Path, name: &str) -> Result<PathBuf, String> {
     if let Err(error) = fs::create_dir(&dir) {
         let is_real_folder = dir.symlink_metadata().is_ok_and(|meta| meta.is_dir());
         if error.kind() != std::io::ErrorKind::AlreadyExists || !is_real_folder {
-            return Err(format!("Refusing to write: could not use the subfolder: {error}"));
+            return Err(format!(
+                "Refusing to write: could not use the subfolder: {error}"
+            ));
         }
     }
     Ok(dir)
@@ -658,57 +795,17 @@ fn write_file_to_folder_in_dir(
         }
     }
     let size = data.len() as u64;
-
-    let mut temp = None;
-    let mut file = None;
-
-    for _ in 0..10 {
-        let mut rand_bytes = [0u8; 8];
-        let rand_suffix = if getrandom::fill(&mut rand_bytes).is_ok() {
-            rand_bytes
-                .iter()
-                .map(|b| format!("{b:02x}"))
-                .collect::<String>()
-        } else {
-            format!(
-                "{}-{}",
-                std::process::id(),
-                WRITE_FILE_COUNTER.fetch_add(1, Ordering::Relaxed)
-            )
-        };
-        let candidate = folder.join(format!(".geolibre-write-tmp-{rand_suffix}"));
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-
-        match options.open(&candidate) {
-            Ok(f) => {
-                temp = Some(candidate);
-                file = Some(f);
-                break;
-            }
-            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(err) => return Err(format!("Could not create temporary file in folder: {err}")),
-        }
-    }
-
-    let (temp_path, mut temp_file) = match (temp, file) {
-        (Some(p), Some(f)) => (p, f),
-        _ => return Err("Could not allocate a unique temporary file in the chosen folder.".into()),
-    };
-
-    let write_result = (|| -> Result<(), std::io::Error> {
-        temp_file.write_all(data)?;
-        temp_file.sync_all()?;
-        fs::rename(&temp_path, &destination)?;
-        Ok(())
-    })();
-
-    if let Err(error) = write_result {
-        let _ = fs::remove_file(&temp_path);
-        return Err(format!("Could not write file to folder: {error}"));
-    }
+    crate::fs_util::write_file_atomic(
+        &destination,
+        data,
+        crate::fs_util::AtomicWriteOptions {
+            create_parents: false,
+            owner_only_unix: true,
+            sync: true,
+            preserve_permissions: None,
+        },
+    )
+    .map_err(|error| format!("Could not write file to folder: {error}"))?;
 
     Ok(WriteFileResult {
         path: destination.to_string_lossy().into_owned(),
@@ -737,10 +834,9 @@ fn write_file_to_folder_core(
 ) -> Result<WriteFileResult, String> {
     let folder = {
         let folders = downloads.folders.lock().unwrap();
-        folders
-            .get(folder_id)
-            .cloned()
-            .ok_or_else(|| "Unknown download folder id; call pick_download_folder first.".to_string())?
+        folders.get(folder_id).cloned().ok_or_else(|| {
+            "Unknown download folder id; call pick_download_folder first.".to_string()
+        })?
     };
     write_file_to_folder_in_dir(&folder, file_name, data)
 }
@@ -774,10 +870,9 @@ pub(crate) async fn write_file_to_folder(
     let data = body_bytes(request.body())?;
     let folder = {
         let folders = downloads.folders.lock().unwrap();
-        folders
-            .get(&folder_id)
-            .cloned()
-            .ok_or_else(|| "Unknown download folder id; call pick_download_folder first.".to_string())?
+        folders.get(&folder_id).cloned().ok_or_else(|| {
+            "Unknown download folder id; call pick_download_folder first.".to_string()
+        })?
     };
     tauri::async_runtime::spawn_blocking(move || -> Result<WriteFileResult, String> {
         checked_name(&file_name)?; // first, so a refused name leaves no empty subfolder behind
@@ -808,9 +903,20 @@ pub(crate) fn cancel_remote_download(
     downloads.cancel(&request_id);
 }
 
+/// Collision-free filesystem tag derived from a caller-supplied request ID.
+fn request_id_tag(request_id: &str) -> String {
+    let digest = Sha256::digest(request_id.as_bytes());
+    let mut hex = String::with_capacity(32);
+    for byte in &digest[..16] {
+        use std::fmt::Write as _;
+        let _ = write!(&mut hex, "{byte:02x}");
+    }
+    hex
+}
+
 /// Read a cached download's bytes once, then delete the file.
 #[tauri::command]
-pub(crate) fn take_cached_download(
+pub(crate) async fn take_cached_download(
     request_id: String,
     downloads: tauri::State<'_, RemoteDownloads>,
 ) -> Result<tauri::ipc::Response, String> {
@@ -820,8 +926,10 @@ pub(crate) fn take_cached_download(
         .unwrap()
         .remove(&request_id)
         .ok_or_else(|| "No cached download with that ID.".to_string())?;
-    let bytes = read_and_remove(&path);
-    bytes.map(tauri::ipc::Response::new)
+    let bytes = tauri::async_runtime::spawn_blocking(move || read_and_remove(&path))
+        .await
+        .map_err(|error| format!("Could not read the download: {error}"))??;
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
 fn read_and_remove(path: &Path) -> Result<Vec<u8>, String> {
@@ -837,15 +945,24 @@ mod tests {
     #[test]
     fn decoded_header_undoes_encode_uri_component() {
         let mut headers = HeaderMap::new();
-        headers.insert("x-file-name", HeaderValue::from_static("%E6%98%A5%20map.geojson"));
-        assert_eq!(decoded_header(&headers, "x-file-name").unwrap(), "\u{6625} map.geojson");
+        headers.insert(
+            "x-file-name",
+            HeaderValue::from_static("%E6%98%A5%20map.geojson"),
+        );
+        assert_eq!(
+            decoded_header(&headers, "x-file-name").unwrap(),
+            "\u{6625} map.geojson"
+        );
         assert!(decoded_header(&headers, "x-folder-id").is_err());
     }
 
     #[test]
     fn body_bytes_takes_raw_bytes_and_the_postmessage_list() {
         use tauri::ipc::InvokeBody;
-        assert_eq!(body_bytes(&InvokeBody::Raw(vec![1, 2])).unwrap(), vec![1, 2]);
+        assert_eq!(
+            body_bytes(&InvokeBody::Raw(vec![1, 2])).unwrap(),
+            vec![1, 2]
+        );
         let list = InvokeBody::Json(serde_json::json!([1, 255]));
         assert_eq!(body_bytes(&list).unwrap(), vec![1, 255]);
         assert!(body_bytes(&InvokeBody::Json(serde_json::json!([256]))).is_err());
@@ -1091,13 +1208,9 @@ mod tests {
             .unwrap()
             .insert("folder-1".into(), dir.clone());
 
-        let res = write_file_to_folder_core(
-            "folder-1",
-            "checkpoint:12.json",
-            b"content",
-            &downloads,
-        )
-        .unwrap();
+        let res =
+            write_file_to_folder_core("folder-1", "checkpoint:12.json", b"content", &downloads)
+                .unwrap();
 
         assert_eq!(res.size, 7);
         assert!(res.path.ends_with("checkpoint%3A12.json"));
@@ -1196,8 +1309,8 @@ mod tests {
     #[test]
     fn write_file_rejects_unknown_folder() {
         let downloads = RemoteDownloads::default();
-        let err = write_file_to_folder_core("folder-missing", "a.txt", b"data", &downloads)
-            .unwrap_err();
+        let err =
+            write_file_to_folder_core("folder-missing", "a.txt", b"data", &downloads).unwrap_err();
         assert!(err.contains("Unknown download folder id"));
     }
 
@@ -1219,17 +1332,22 @@ mod tests {
             .unwrap()
             .insert("folder-1".into(), dir.clone());
 
-        let res = write_file_to_folder_core(
-            "folder-1",
-            "../../nested/escape.txt",
-            b"safe",
-            &downloads,
-        )
-        .unwrap();
+        let res =
+            write_file_to_folder_core("folder-1", "../../nested/escape.txt", b"safe", &downloads)
+                .unwrap();
 
         assert_eq!(res.path, dir.join("escape.txt").to_string_lossy());
         assert_eq!(fs::read(dir.join("escape.txt")).unwrap(), b"safe");
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn request_id_tag_avoids_sanitization_collisions() {
+        let a = request_id_tag("req/1");
+        let b = request_id_tag("req_1");
+        assert_ne!(a, b);
+        assert_eq!(a.len(), 32);
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
     }
 }

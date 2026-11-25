@@ -5,9 +5,9 @@ import {
   listRightPanels,
   moveActiveRightPanelDock,
   openRightPanel,
-  type RightPanelDock,
   setActiveRightPanelDock,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/runtime";
+import { type RightPanelDock } from "@geolibre/plugins";
 import { Button } from "@geolibre/ui";
 import {
   ArrowLeftToLine,

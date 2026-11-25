@@ -14,6 +14,7 @@ import {
   registerProjectRestoreHistory,
   undo,
   useAppStore,
+  withoutHistory,
 } from "../packages/core/src/store";
 import { createEmptyProject } from "../packages/core/src/project";
 
@@ -454,6 +455,68 @@ describe("undo/redo behavior", () => {
     useAppStore.getState().loadProject(createEmptyProject("loaded"));
     assert.equal(pastLen(), 0);
     assert.equal(futureLen(), 0);
+  });
+
+  it("tracks nesting depth in withoutHistory and cancels active coalesce bursts on outermost entry", () => {
+    setHistoryCoalesceMs(50);
+    try {
+      const id = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+      assert.equal(pastLen(), 1);
+      withoutHistory(() => {
+        withoutHistory(() => {
+          useAppStore.getState().setLayerOpacity(id, 0.7);
+        });
+        // Inner withoutHistory must not prematurely resume recording.
+        useAppStore.getState().setLayerOpacity(id, 0.5);
+      });
+      assert.equal(pastLen(), 1);
+      // Outermost withoutHistory cancelled the prior coalesce window so the
+      // next user edit records its own step instead of rolling back the
+      // unrecorded change on undo.
+      useAppStore.getState().setLayerOpacity(id, 0.4);
+      assert.equal(pastLen(), 2);
+      undo();
+      assert.equal(useAppStore.getState().layers[0].opacity, 0.5);
+    } finally {
+      setHistoryCoalesceMs(0);
+    }
+  });
+
+  it("prunes dangling selectedFeatureIds on a surviving layer after undo", () => {
+    const id = useAppStore.getState().addGeoJsonLayer("Pts", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: "f1",
+          properties: {},
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+      ],
+    });
+    useAppStore.getState().updateLayer(id, {
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "f1",
+            properties: {},
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+          {
+            type: "Feature",
+            id: "f2",
+            properties: {},
+            geometry: { type: "Point", coordinates: [1, 1] },
+          },
+        ],
+      },
+    });
+    useAppStore.getState().selectFeatures(["f1", "f2"], "f2");
+    undo();
+    assert.deepEqual(useAppStore.getState().selectedFeatureIds, ["f1"]);
+    assert.equal(useAppStore.getState().selectedFeatureId, "f1");
   });
 });
 

@@ -1,17 +1,20 @@
+import { builtInPluginMetadata } from "@geolibre/plugins/builtin-plugin-metadata";
+import { GEO_EDITOR_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import { resolveLayerCapabilities, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { MapCanvasIdentifyEditActions } from "@geolibre/map";
 import {
   canEditLayerGeometry,
   getGeometryEditTargetLayerId,
-  isPluginEngineSupported,
-  maplibreGeoEditorPlugin,
-} from "@geolibre/plugins";
+} from "@geolibre/plugins/geo-editor-state";
+import { isPluginEngineSupported } from "@geolibre/plugins/runtime";
 import { useMemo } from "react";
 import { identifyEditActionsForLayout } from "../../lib/identify-edit-actions-layout";
 import {
   canEditAttributeValues,
   canOpenLayerAttributeTable,
 } from "../../lib/attribute-table-source";
+
+const maplibreGeoEditorPlugin = builtInPluginMetadata(GEO_EDITOR_PLUGIN_ID);
 
 interface IdentifyEditActionsOptions {
   /** Collaboration's per-layer edit permission (always true when solo). */

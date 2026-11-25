@@ -1,4 +1,4 @@
-import { collapseRightPanel, getRightPanel } from "@geolibre/plugins";
+import { collapseRightPanel, getRightPanel } from "@geolibre/plugins/runtime";
 import { BottomSheet } from "@geolibre/ui";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";

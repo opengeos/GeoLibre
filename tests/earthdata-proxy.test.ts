@@ -6,6 +6,7 @@ import {
   isEarthdataDataUrl,
   isEarthdataRedirectUrl,
 } from "../workers/tiles/src/earthdata";
+import { isAllowedTilesUpstreamUrl } from "../workers/tiles/src/allowlisted-fetch";
 import { tilesWorker } from "../workers/tiles/src/index";
 
 const FILE =
@@ -89,7 +90,7 @@ describe("Earthdata download proxy", () => {
     assert.equal(hops[3].url, FILE);
   });
 
-  it("does not cache a first hop to another Earthdata host", async () => {
+  it("caches the final presigned URL across a multi-hop Earthdata redirect without caching the intermediate hop", async () => {
     const MIDDLE = "https://data.ornldaac.earthdata.nasa.gov/protected/next.h5";
     const hops: string[] = [];
     const upstream = async (input: RequestInfo | URL) => {
@@ -103,7 +104,7 @@ describe("Earthdata download proxy", () => {
     const auth = { authorization: "Bearer hop" };
     await handleEarthdataDownload(request(FILE, auth), upstream);
     await handleEarthdataDownload(request(FILE, auth), upstream);
-    assert.deepEqual(hops, [FILE, MIDDLE, PRESIGNED, FILE, MIDDLE, PRESIGNED]);
+    assert.deepEqual(hops, [FILE, MIDDLE, PRESIGNED, PRESIGNED]);
   });
 
   it("falls back to the DAAC when a cached presigned URL stops working", async () => {
@@ -233,6 +234,19 @@ describe("Earthdata download proxy", () => {
     assert.equal(isEarthdataRedirectUrl(PRESIGNED), true);
     assert.equal(isEarthdataRedirectUrl("https://bucket.s3.us-west-2.amazonaws.com/x"), true);
     assert.equal(isEarthdataRedirectUrl("https://s3.us-west-2.amazonaws.com/bucket/x"), true);
+    assert.equal(isEarthdataRedirectUrl("https://s3.evilamazonaws.com/x"), false);
+    assert.equal(isEarthdataRedirectUrl("https://s3-attackeramazonaws.com/x"), false);
+    assert.equal(isAllowedTilesUpstreamUrl("https://z.overpass-api.de/api/interpreter"), true);
+    assert.equal(
+      isAllowedTilesUpstreamUrl("https://" + "alice" + "@z.overpass-api.de/api/interpreter"),
+      false,
+    );
+    assert.equal(
+      isAllowedTilesUpstreamUrl(
+        "https://" + "alice" + ":" + "token" + "@z.overpass-api.de/api/interpreter",
+      ),
+      false,
+    );
     assert.equal(isEarthdataRedirectUrl("https://lambda-url.us-east-1.on.aws/x"), false);
     assert.equal(
       isEarthdataRedirectUrl("https://abc.execute-api.us-east-1.amazonaws.com/x"),

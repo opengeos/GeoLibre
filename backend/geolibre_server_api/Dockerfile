@@ -1,9 +1,10 @@
 FROM python:3.13-slim
 
 WORKDIR /app
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md alembic.ini ./
+COPY alembic ./alembic
 COPY geolibre_server_api ./geolibre_server_api
-RUN pip install --no-cache-dir ".[postgres,s3]"
+RUN pip install --no-cache-dir ".[postgres,s3,migrations]"
 
 # Create the storage directory in the image, not just /data. A named volume
 # mounted at /data/objects inherits the image's ownership only when that exact

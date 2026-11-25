@@ -32,6 +32,7 @@ from pydantic import BaseModel
 
 from .db_common import (
     allowlist_from_env,
+    check_optimistic_concurrency,
     db_max_features,
     feature_limit_error,
     host_port_allowed,
@@ -39,7 +40,9 @@ from .db_common import (
     normalize_host,
     plan_feature_diff,
     require_features,
+    row_state_hash,
     scrub_secrets,
+    validate_bbox,
 )
 
 router = APIRouter(prefix="/postgis", tags=["postgis"])
@@ -106,6 +109,21 @@ def _validate_postgis_target(conninfo: dict[str, str]) -> Optional[tuple[str, st
         raise HTTPException(
             status_code=400, detail="PostgreSQL hostaddr connection strings are not supported"
         )
+    for forbidden in (
+        "passfile",
+        "servicefile",
+        "sslcert",
+        "sslkey",
+        "sslkeylogfile",
+        "sslrootcert",
+        "sslcrl",
+        "sslcrldir",
+    ):
+        if conninfo.get(forbidden):
+            raise HTTPException(
+                status_code=400,
+                detail=f"PostgreSQL {forbidden} connection parameter is not supported",
+            )
     # Strip each host before rejoining overrides; libpq treats whitespace in
     # a quoted multi-host value as part of the hostname.
     hosts = [host.strip() for host in conninfo.get("host", "").split(",")]
@@ -153,6 +171,8 @@ class PostgisReadRequest(BaseModel):
     table: str
     geometry_column: Optional[str] = None
     excluded_fields: list[str] = []
+    # Optional WGS84 bounding box [min_x, min_y, max_x, max_y] for spatial filtering.
+    bbox: Optional[list[float]] = None
 
 
 class PostgisWriteRequest(BaseModel):
@@ -175,6 +195,9 @@ class PostgisWriteRequest(BaseModel):
     # caller that omits the field (or sends its own) is trusted. Anything that
     # must hold against an untrusted caller belongs in database grants.
     capabilities: Optional[dict[str, bool]] = None
+    # Optional map of stringified primary key -> SHA-256 state hash returned by
+    # /postgis/read for optimistic concurrency checks (HTTP 409 on conflict).
+    expected_row_hashes: Optional[dict[str, str]] = None
 
 
 def _connect(connection: str) -> Any:
@@ -418,6 +441,7 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
     psycopg = _import_psycopg()
     sql = psycopg.sql
     limit = db_max_features()
+    bbox = validate_bbox(request.bbox)
 
     try:
         with _connect(request.connection) as conn:
@@ -432,21 +456,39 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
                 else sql.SQL("ST_AsGeoJSON({geom})").format(geom=geom)
             )
             pk = info["primary_key"]
-            read_columns = [
-                col for col in info["columns"] if col not in request.excluded_fields or col == pk
-            ]
+            # Always fetch all table columns so row_state_hash matches the write
+            # endpoint even when excluded_fields omits columns from the response.
+            read_columns = list(info["columns"])
             column_list = sql.SQL(", ").join(
                 [geom_expr] + [sql.Identifier(col) for col in read_columns]
             )
-            query = sql.SQL("SELECT {columns} FROM {schema}.{table} LIMIT %s").format(
+            params: list[Any] = []
+            where_clause = sql.SQL("")
+            if bbox is not None:
+                envelope = (
+                    sql.SQL("ST_Transform(ST_MakeEnvelope(%s, %s, %s, %s, 4326), {srid})").format(
+                        srid=sql.Literal(info["srid"])
+                    )
+                    if info["srid"] not in (0, 4326)
+                    else sql.SQL(
+                        "ST_SetSRID(ST_MakeEnvelope(%s, %s, %s, %s, 4326), {srid})"
+                    ).format(srid=sql.Literal(info["srid"]))
+                )
+                where_clause = sql.SQL(" WHERE ST_Intersects({geom}, {env})").format(
+                    geom=geom, env=envelope
+                )
+                params.extend(bbox)
+            query = sql.SQL("SELECT {columns} FROM {schema}.{table}{where} LIMIT %s").format(
                 columns=column_list,
                 schema=sql.Identifier(request.schema_name),
                 table=sql.Identifier(request.table),
+                where=where_clause,
             )
+            params.append(limit + 1)
             with conn.cursor() as cur:
                 # Over-fetch by one row to distinguish "exactly at the cap"
                 # from "the table is larger than the cap".
-                cur.execute(query, (limit + 1,))
+                cur.execute(query, tuple(params))
                 rows = cur.fetchall()
     except HTTPException:
         raise
@@ -467,19 +509,22 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
 
     pk = info["primary_key"]
     features = []
+    row_hashes: dict[str, str] = {}
     for row in rows:
         properties_raw = {
             column: json_safe(value) for column, value in zip(read_columns, row[1:], strict=True)
         }
+        geometry = json.loads(row[0]) if row[0] else None
         feature: dict[str, Any] = {
             "type": "Feature",
-            "geometry": json.loads(row[0]) if row[0] else None,
+            "geometry": geometry,
             "properties": {
                 k: v for k, v in properties_raw.items() if k not in request.excluded_fields
             },
         }
         if pk is not None and properties_raw.get(pk) is not None:
             feature["id"] = properties_raw[pk]
+            row_hashes[str(properties_raw[pk])] = row_state_hash(geometry, properties_raw)
         features.append(feature)
 
     return {
@@ -490,6 +535,7 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
         "srid": info["srid"],
         "primary_key": pk,
         "feature_count": len(features),
+        "row_hashes": row_hashes,
     }
 
 
@@ -582,19 +628,46 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                     if info["srid"] not in (0, 4326)
                     else sql.SQL("ST_AsGeoJSON({geom})").format(geom=geom_ident)
                 )
-                cur.execute(
-                    sql.SQL("SELECT {pk}, {geom_expr}, {columns} FROM {schema}.{table}").format(
-                        pk=sql.Identifier(pk),
-                        geom_expr=geom_expr,
-                        columns=sql.SQL(", ").join(
-                            sql.Identifier(column) for column in info["columns"]
-                        ),
-                        schema=schema_ident,
-                        table=table_ident,
-                    )
+                base_select = sql.SQL(
+                    "SELECT {pk}, {geom_expr}, {columns} FROM {schema}.{table}"
+                ).format(
+                    pk=sql.Identifier(pk),
+                    geom_expr=geom_expr,
+                    columns=sql.SQL(", ").join(
+                        sql.Identifier(column) for column in info["columns"]
+                    ),
+                    schema=schema_ident,
+                    table=table_ident,
                 )
+                if request.expected_row_hashes:
+                    # Lock candidate rows when the DB role holds UPDATE privilege
+                    # (serializing concurrent optimistic-concurrency saves); fall
+                    # back cleanly via a savepoint for delete-only roles whose
+                    # PostgreSQL grants do not permit SELECT ... FOR UPDATE.
+                    cur.execute("SAVEPOINT geolibre_occ_lock")
+                    try:
+                        cur.execute(
+                            base_select
+                            + sql.SQL(" ORDER BY {pk} FOR UPDATE").format(pk=sql.Identifier(pk))
+                        )
+                        selected_rows = cur.fetchall()
+                        cur.execute("RELEASE SAVEPOINT geolibre_occ_lock")
+                    except Exception as lock_exc:
+                        if (
+                            getattr(lock_exc, "sqlstate", None) == "42501"
+                            or getattr(lock_exc, "pgcode", None) == "42501"
+                        ):
+                            cur.execute("ROLLBACK TO SAVEPOINT geolibre_occ_lock")
+                            cur.execute("RELEASE SAVEPOINT geolibre_occ_lock")
+                            cur.execute(base_select)
+                            selected_rows = cur.fetchall()
+                        else:
+                            raise
+                else:
+                    cur.execute(base_select)
+                    selected_rows = cur.fetchall()
                 existing_rows: dict[Any, tuple[Any, dict[str, Any]]] = {}
-                for row in cur.fetchall():
+                for row in selected_rows:
                     existing_rows[json_safe(row[0])] = (
                         json.loads(row[1]) if row[1] else None,
                         {
@@ -613,6 +686,26 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                     baseline_keys=request.baseline_keys,
                     capabilities=request.capabilities,
                     table_label=f"{request.schema_name}.{request.table}",
+                )
+                submitted_missing_expected_keys = []
+                if request.expected_row_hashes:
+                    for feature in features:
+                        props = feature.get("properties") or {}
+                        fkey = props.get(pk)
+                        if fkey is None:
+                            fkey = feature.get("id")
+                        if (
+                            fkey is not None
+                            and fkey not in existing_rows
+                            and str(fkey) in request.expected_row_hashes
+                        ):
+                            submitted_missing_expected_keys.append(fkey)
+                check_optimistic_concurrency(
+                    existing_rows,
+                    request.expected_row_hashes,
+                    [change.key for change in diff.updates]
+                    + list(diff.deletes)
+                    + submitted_missing_expected_keys,
                 )
                 skipped = set(diff.skipped_fields)
                 inserted = len(diff.inserts)

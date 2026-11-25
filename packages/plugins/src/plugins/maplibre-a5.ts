@@ -1,3 +1,6 @@
+import { A5_PLUGIN_ID } from "../plugin-ids";
+export { A5_PLUGIN_ID } from "../plugin-ids";
+import { defineBuiltInPlugin, builtInPluginMetadata } from "../builtin-plugin-metadata";
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import {
   MAX_RESOLUTION,
@@ -23,8 +26,6 @@ import {
   type GridLabelsBase,
   type GridSettingsBase,
 } from "./grid-plugin-factory";
-
-export const A5_PLUGIN_ID = "maplibre-a5-grid";
 
 /** Prevent a fine resolution over a large viewport from freezing the browser. */
 export const A5_VIEWPORT_CELL_LIMIT = 20_000;
@@ -238,7 +239,7 @@ function parentCells(cell: string): string[] {
 
 const grid = createGridPlugin<A5GridSettings, A5Labels>({
   id: A5_PLUGIN_ID,
-  name: "A5 Grid",
+  name: builtInPluginMetadata("maplibre-a5-grid").name,
   slug: "a5",
   parentKey: "includeParents",
   defaultSettings: DEFAULT_A5_GRID_SETTINGS,
@@ -282,7 +283,7 @@ const grid = createGridPlugin<A5GridSettings, A5Labels>({
   exportBaseName: (resolution) => `a5-grid-r${resolution}`,
 });
 
-export const maplibreA5Plugin = grid.plugin;
+export const maplibreA5Plugin = defineBuiltInPlugin("maplibre-a5-grid", grid.plugin);
 export const setA5Labels = grid.setLabels;
 export const getA5GridSettings = grid.getSettings;
 export const setA5GridSettings = grid.setSettings;

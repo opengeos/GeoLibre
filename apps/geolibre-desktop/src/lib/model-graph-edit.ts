@@ -598,3 +598,156 @@ export function portFeedsOutput(
     (edge) => edge.from === nodeId && edge.fromPort === portId && outputs.has(edge.to),
   );
 }
+
+/** Maximum number of undo snapshots retained for the Model Builder canvas. */
+export const MAX_MODEL_HISTORY = 50;
+
+export interface ModelHistoryState {
+  past: ProcessingModelGraph[];
+  future: ProcessingModelGraph[];
+}
+
+export function createModelHistory(): ModelHistoryState {
+  return { past: [], future: [] };
+}
+
+/** Record a graph snapshot before an edit, clearing the redo stack and capping depth. */
+export function pushModelHistory(
+  history: ModelHistoryState,
+  snapshot: ProcessingModelGraph,
+  maxDepth = MAX_MODEL_HISTORY,
+): ModelHistoryState {
+  const nextPast = [...history.past, snapshot];
+  if (nextPast.length > maxDepth) {
+    nextPast.splice(0, nextPast.length - maxDepth);
+  }
+  return { past: nextPast, future: [] };
+}
+
+/** Step back one snapshot in the undo stack, returning the restored graph or null. */
+export function undoModelHistory(
+  history: ModelHistoryState,
+  current: ProcessingModelGraph,
+): { graph: ProcessingModelGraph; history: ModelHistoryState } | null {
+  if (history.past.length === 0) return null;
+  const previous = history.past[history.past.length - 1];
+  return {
+    graph: previous,
+    history: {
+      past: history.past.slice(0, -1),
+      future: [current, ...history.future].slice(0, MAX_MODEL_HISTORY),
+    },
+  };
+}
+
+/** Step forward one snapshot in the redo stack, returning the restored graph or null. */
+export function redoModelHistory(
+  history: ModelHistoryState,
+  current: ProcessingModelGraph,
+): { graph: ProcessingModelGraph; history: ModelHistoryState } | null {
+  if (history.future.length === 0) return null;
+  const next = history.future[0];
+  return {
+    graph: next,
+    history: {
+      past: [...history.past, current].slice(-MAX_MODEL_HISTORY),
+      future: history.future.slice(1),
+    },
+  };
+}
+
+/** Clamp Model Builder canvas zoom scale to `[0.4, 2.0]`. */
+export function clampCanvasZoom(scale: number): number {
+  if (!Number.isFinite(scale)) return 1;
+  return Math.min(2, Math.max(0.4, Math.round(scale * 100) / 100));
+}
+
+/** Remove multiple nodes together with every edge touching any of them. */
+export function removeNodes(
+  graph: ProcessingModelGraph,
+  nodeIds: Iterable<string>,
+): ProcessingModelGraph {
+  const toRemove = new Set(nodeIds);
+  if (toRemove.size === 0) return graph;
+  const remainingNodes = graph.nodes.filter((node) => !toRemove.has(node.id));
+  if (remainingNodes.length === graph.nodes.length) return graph;
+  return {
+    nodes: remainingNodes,
+    edges: graph.edges.filter((edge) => !toRemove.has(edge.from) && !toRemove.has(edge.to)),
+  };
+}
+
+/** Apply absolute positions to multiple nodes simultaneously (multi-node drag). */
+export function moveNodes(
+  graph: ProcessingModelGraph,
+  positions: ReadonlyMap<string, { x: number; y: number }>,
+): ProcessingModelGraph {
+  if (positions.size === 0) return graph;
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) => {
+      const next = positions.get(node.id);
+      return next ? { ...node, x: next.x, y: next.y } : node;
+    }),
+  };
+}
+
+/**
+ * Duplicate a selection of nodes (plus every internal edge connecting two
+ * selected nodes) with fresh IDs and a slight canvas offset.
+ */
+export function duplicateNodes(
+  graph: ProcessingModelGraph,
+  selectedIds: Iterable<string>,
+  createId: () => string,
+  offset: { x: number; y: number } = { x: 40, y: 40 },
+): { graph: ProcessingModelGraph; nodeIds: string[] } {
+  const selected = new Set(selectedIds);
+  if (selected.size === 0) return { graph, nodeIds: [] };
+
+  const idMap = new Map<string, string>();
+  const clonedNodes: ModelGraphNode[] = [];
+  for (const node of graph.nodes) {
+    if (!selected.has(node.id)) continue;
+    const newId = createId();
+    idMap.set(node.id, newId);
+    clonedNodes.push({
+      ...node,
+      id: newId,
+      x: Math.max(0, node.x + offset.x),
+      y: Math.max(0, node.y + offset.y),
+      ...(node.parameters ? { parameters: structuredClone(node.parameters) } : {}),
+      ...(node.kind === "output" && node.name?.trim()
+        ? {
+            name: uniqueOutputName(
+              { ...graph, nodes: [...graph.nodes, ...clonedNodes] },
+              node.name.trim(),
+            ),
+          }
+        : {}),
+    });
+  }
+  if (clonedNodes.length === 0) return { graph, nodeIds: [] };
+
+  const clonedEdges: ModelGraphEdge[] = [];
+  for (const edge of graph.edges) {
+    const from = idMap.get(edge.from);
+    const to = idMap.get(edge.to);
+    if (from && to) {
+      clonedEdges.push({
+        ...edge,
+        id: createId(),
+        from,
+        to,
+      });
+    }
+  }
+
+  return {
+    graph: {
+      nodes: [...graph.nodes, ...clonedNodes],
+      edges: [...graph.edges, ...clonedEdges],
+    },
+    nodeIds: clonedNodes.map((n) => n.id),
+  };
+}

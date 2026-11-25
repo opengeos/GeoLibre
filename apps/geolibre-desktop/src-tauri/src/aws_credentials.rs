@@ -304,11 +304,8 @@ impl ReadJson for reqwest::blocking::Response {
 }
 
 fn http_client() -> Result<reqwest::blocking::Client, String> {
-    reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
-        .user_agent("GeoLibre Desktop")
-        .build()
-        .map_err(|error| error.to_string())
+    crate::http_client::blocking_client(Duration::from_secs(HTTP_TIMEOUT_SECS))
+        .map_err(String::from)
 }
 
 // ---------------------------------------------------------------------------
@@ -392,27 +389,18 @@ struct SsoTokenCache {
 }
 
 fn write_sso_cache(path: &Path, token: &SsoTokenCache) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
     let body = serde_json::to_vec_pretty(token).map_err(|error| error.to_string())?;
-    // Written through a uniquely named temp file, created owner-only (the
-    // token is a credential), so a concurrent CLI read never sees half a token
-    // and two writers never share a temp file.
-    let temp = path.with_extension(format!("json.{}.tmp", random_id()?));
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    let result = options
-        .open(&temp)
-        .and_then(|mut file| std::io::Write::write_all(&mut file, &body))
-        .and_then(|()| std::fs::rename(&temp, path));
-    if let Err(error) = result {
-        let _ = std::fs::remove_file(&temp);
-        return Err(error.to_string());
-    }
-    Ok(())
+    crate::fs_util::write_file_atomic(
+        path,
+        &body,
+        crate::fs_util::AtomicWriteOptions {
+            create_parents: true,
+            owner_only_unix: true,
+            sync: false,
+            preserve_permissions: None,
+        },
+    )
+    .map_err(String::from)
 }
 
 fn sso_login_hint(profile: &str) -> String {

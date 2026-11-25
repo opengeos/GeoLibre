@@ -20,8 +20,10 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from geolibre_server.vector_ops import MAX_FEATURES as MAX_LAYER_FEATURES
+from geolibre_server.workers import load_worker_source, worker_path
 
 from . import conversion
+from .job_manager import JobManager
 from .runtime import (
     RUNTIME_CATALOG_TIMEOUT_SECS,
     RUNTIME_DISCOVERY_TIMEOUT_SECS,
@@ -32,9 +34,11 @@ from .runtime import (
     _runtime_cache_root,
     _runtime_setup_env,
     _subprocess_startup_kwargs,
-    _utc_now,
     _uv_executable,
     _venv_python,
+)
+from .runtime import (
+    _utc_now as _utc_now,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,35 +50,7 @@ WHITEBOX_RUNTIME_PACKAGE = os.environ.get(
 )
 WHITEBOX_PYTHON_VERSION = os.environ.get("GEOLIBRE_WHITEBOX_PYTHON_VERSION", "3.12")
 
-_ENSURE_COG_SCRIPT = """
-import json, os, stat, sys
-
-from rio_cogeo.cogeo import cog_translate, cog_validate
-from rio_cogeo.profiles import cog_profiles
-
-path = sys.argv[1]
-temporary = sys.argv[2]
-original_mode = stat.S_IMODE(os.stat(path).st_mode)
-valid, _, _ = cog_validate(path, quiet=True)
-if valid:
-    print("{marker}" + json.dumps({"converted": False}))
-    raise SystemExit(0)
-
-cog_translate(
-    path,
-    temporary,
-    cog_profiles.get("deflate"),
-    in_memory=False,
-    quiet=True,
-    use_cog_driver=False,
-)
-valid, errors, _ = cog_validate(temporary, quiet=True)
-if not valid:
-    raise RuntimeError("COG validation failed: " + "; ".join(errors))
-os.chmod(temporary, original_mode)
-os.replace(temporary, path)
-print("{marker}" + json.dumps({"converted": True}))
-""".replace("{marker}", conversion._RESULT_MARKER)
+_ENSURE_COG_SCRIPT = load_worker_source("whitebox_ensure_cog")
 
 
 def _whitebox_run_timeout_secs() -> int:
@@ -116,14 +92,25 @@ class WhiteboxRunRequest(BaseModel):
     tier: str = "open"
 
 
-_JOBS: dict[str, JobState] = {}
-_JOBS_LOCK = threading.Lock()
-_RUNTIME_SETUP_LOCK = threading.Lock()
 MAX_RETAINED_JOBS = 100
 # Concurrent pending/running Whitebox jobs. Finished jobs are retained up to
 # MAX_RETAINED_JOBS; in-flight work is refused with HTTP 429 once this cap is
 # hit so a burst of /run calls cannot spawn unbounded tool sessions.
 MAX_IN_FLIGHT_JOBS = 8
+MAX_JOB_MESSAGES = 500
+
+_JOB_MANAGER = JobManager(
+    busy_detail="Too many Whitebox jobs in progress; try again shortly.",
+    max_retained=MAX_RETAINED_JOBS,
+    max_in_flight=MAX_IN_FLIGHT_JOBS,
+    max_messages=MAX_JOB_MESSAGES,
+    get_jobs=lambda: _JOBS,
+    get_max_retained=lambda: MAX_RETAINED_JOBS,
+    get_max_in_flight=lambda: MAX_IN_FLIGHT_JOBS,
+)
+_JOBS: dict[str, JobState] = _JOB_MANAGER.jobs
+_JOBS_LOCK = _JOB_MANAGER.lock
+_RUNTIME_SETUP_LOCK = threading.Lock()
 
 
 def _check_python_import(python_executable: str) -> None:
@@ -244,23 +231,6 @@ def _runtime_import_status() -> tuple[str, str]:
     return python, "Configured Whitebox runtime is available."
 
 
-def _runtime_session_factory_script() -> str:
-    """Return Python source that constructs a Whitebox runtime session."""
-    return (
-        "import os\n"
-        "def _env_first(*names):\n"
-        "    for name in names:\n"
-        "        value=os.environ.get(name)\n"
-        "        if value not in (None, ''):\n"
-        "            return str(value)\n"
-        "    return ''\n"
-        "def _make_session(wbw, include_pro, tier):\n"
-        "    if hasattr(wbw, 'RuntimeSession'):\n"
-        "        return wbw.RuntimeSession(include_pro=include_pro, tier=tier)\n"
-        "    return None\n"
-    )
-
-
 class ExternalRuntimeSession:
     """Whitebox runtime accessed through a Python subprocess."""
 
@@ -289,35 +259,10 @@ class ExternalRuntimeSession:
             "tier": self.tier,
             **kwargs,
         }
-        runner = (
-            "import json, sys\n"
-            "try:\n"
-            "    sys.stdout.reconfigure(encoding='utf-8')\n"
-            "except Exception:\n"
-            "    pass\n"
-        )
-        runner += _runtime_session_factory_script()
-        runner += (
-            "import whitebox_workflows as wbw\n"
-            "p=json.loads(sys.argv[1])\n"
-            "include_pro=bool(p.get('include_pro', False)); tier=str(p.get('tier','open'))\n"
-            "m=p.get('method')\n"
-            "if hasattr(wbw, 'RuntimeSession'):\n"
-            "    s=_make_session(wbw, include_pro, tier)\n"
-            "    if m=='capabilities': out=s.get_runtime_capabilities_json()\n"
-            "    elif m=='catalog': out=s.list_tool_catalog_json()\n"
-            "    elif m=='metadata': out=s.get_tool_metadata_json(str(p.get('tool_id','')))\n"
-            "    else: raise RuntimeError('unknown method')\n"
-            "else:\n"
-            "    if m=='capabilities': out=wbw.get_runtime_capabilities_json_with_options(include_pro, tier)\n"
-            "    elif m=='catalog': out=wbw.list_tool_catalog_json_with_options(include_pro, tier)\n"
-            "    elif m=='metadata': out=wbw.get_tool_metadata_json_with_options(str(p.get('tool_id','')), include_pro, tier)\n"
-            "    else: raise RuntimeError('unknown method')\n"
-            "sys.stdout.write(out if isinstance(out, str) else json.dumps(out))\n"
-        )
+        runner_script = str(worker_path("whitebox_runner"))
         try:
             completed = subprocess.run(
-                [self.python_executable, "-c", runner, json.dumps(payload)],
+                [self.python_executable, runner_script, "invoke", json.dumps(payload)],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -355,51 +300,39 @@ class ExternalRuntimeSession:
         args_json: str,
         callback: Callable[[Any], None] | None = None,
         working_directory: str | None = None,
+        on_process: Callable[[subprocess.Popen[str]], bool] | None = None,
     ) -> str:
-        """Run a Whitebox tool and stream progress events to a callback."""
+        """Run a Whitebox tool and stream progress events to a callback.
+
+        Args:
+            tool_id: Whitebox tool identifier.
+            args_json: JSON-encoded tool arguments.
+            callback: Receives each progress event the runner emits.
+            working_directory: Working directory for the runner subprocess.
+            on_process: Called with the runner subprocess as soon as it starts,
+                so a job can register it for cancellation. Returning True kills
+                the subprocess immediately (the job was cancelled before it
+                started).
+
+        Returns:
+            The runner's JSON result text.
+
+        Raises:
+            RuntimeBootstrapError: If the tool fails, times out or is killed.
+        """
         payload = {
             "include_pro": self.include_pro,
             "tier": self.tier,
             "tool_id": tool_id,
             "args_json": args_json,
         }
-        runner = (
-            "import base64, json, sys, traceback\n"
-            "try:\n"
-            "    sys.stdout.reconfigure(encoding='utf-8')\n"
-            "except Exception:\n"
-            "    pass\n"
-        )
-        runner += _runtime_session_factory_script()
-        runner += (
-            "import whitebox_workflows as wbw\n"
-            "p=json.loads(sys.argv[1])\n"
-            "def emit(evt):\n"
-            "    txt=evt if isinstance(evt,str) else json.dumps(evt)\n"
-            "    sys.stdout.write('__WBW_EVENT__'+base64.b64encode(txt.encode()).decode()+'\\n'); sys.stdout.flush()\n"
-            "include_pro=bool(p.get('include_pro', False)); tier=str(p.get('tier','open'))\n"
-            "tool_id=str(p.get('tool_id','')); args_json=str(p.get('args_json','{}'))\n"
-            "try:\n"
-            "    if hasattr(wbw, 'RuntimeSession'):\n"
-            "        s=_make_session(wbw, include_pro, tier)\n"
-            "        method=getattr(s, 'run_tool_json_stream', None)\n"
-            "        if callable(method): out=method(tool_id, args_json, emit)\n"
-            "        else: out=s.run_tool_json_with_progress(tool_id, args_json)\n"
-            "    elif hasattr(wbw, 'run_tool_json_stream_options'):\n"
-            "        out=wbw.run_tool_json_stream_options(tool_id, args_json, emit, include_pro, tier)\n"
-            "    else:\n"
-            "        out=wbw.run_tool_json_with_progress_options(tool_id, args_json, include_pro, tier)\n"
-            "    txt=out if isinstance(out,str) else json.dumps(out)\n"
-            "    sys.stdout.write('__WBW_RESULT__'+base64.b64encode(txt.encode()).decode()+'\\n')\n"
-            "except Exception:\n"
-            "    sys.stdout.write('__WBW_ERROR__'+base64.b64encode(traceback.format_exc().encode()).decode()+'\\n')\n"
-        )
         completed_result = ""
         errors: list[str] = []
         timeout = _whitebox_run_timeout_secs()
         timed_out = threading.Event()
+        runner_script = str(worker_path("whitebox_runner"))
         process = subprocess.Popen(
-            [self.python_executable, "-c", runner, json.dumps(payload)],
+            [self.python_executable, runner_script, "stream", json.dumps(payload)],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -435,6 +368,8 @@ class ExternalRuntimeSession:
                 process.stderr.read()
 
         try:
+            if on_process is not None and on_process(process):
+                _try_kill(process)
             if process.stdout is None:
                 raise RuntimeBootstrapError("Whitebox subprocess stdout is unexpectedly None")
             stderr_thread = threading.Thread(target=_drain_stderr, daemon=True)
@@ -811,7 +746,7 @@ def _looks_like_fs_path(value: str) -> bool:
     text = value.strip()
     if not text:
         return False
-    if text.startswith(("/", "\\")):
+    if text.startswith(("/", "\\", "~")):
         return True
     if len(text) >= 2 and text[1] == ":" and text[0].isascii() and text[0].isalpha():
         return True
@@ -958,8 +893,32 @@ def _prepare_arguments(
     return args, working_directory
 
 
+def _resolve_output_value(value: Any, working_directory: str | None) -> Any:
+    """Resolve an output path, expanding ``~`` and joining relative paths to ``working_directory``."""
+    if isinstance(value, str) and value.strip():
+        expanded = os.path.expanduser(value)
+        if os.path.isabs(expanded):
+            return os.path.normpath(expanded)
+        if working_directory:
+            return os.path.normpath(os.path.join(working_directory, expanded))
+        return value
+    if isinstance(value, dict) and isinstance(value.get("path"), str) and value["path"].strip():
+        expanded = os.path.expanduser(value["path"])
+        if os.path.isabs(expanded):
+            return {**value, "path": os.path.normpath(expanded)}
+        if working_directory:
+            return {
+                **value,
+                "path": os.path.normpath(os.path.join(working_directory, expanded)),
+            }
+    return value
+
+
 def _extract_outputs(
-    result: Any, args: dict[str, Any], tool: dict[str, Any] | None
+    result: Any,
+    args: dict[str, Any],
+    tool: dict[str, Any] | None,
+    working_directory: str | None = None,
 ) -> dict[str, Any]:
     """Extract output paths from runtime result JSON and output parameters."""
     outputs: dict[str, Any] = {}
@@ -976,7 +935,7 @@ def _extract_outputs(
         if isinstance(raw_outputs, dict):
             for name, value in raw_outputs.items():
                 if not output_param_names or name in output_param_names:
-                    outputs[str(name)] = value
+                    outputs[str(name)] = _resolve_output_value(value, working_directory)
         elif not output_param_names:
             outputs.update(result)
 
@@ -985,7 +944,7 @@ def _extract_outputs(
             continue
         name = str(param.get("name") or "")
         if str(param.get("kind") or "").endswith("_out") and name in args:
-            outputs.setdefault(name, {"path": args[name]})
+            outputs.setdefault(name, _resolve_output_value({"path": args[name]}, working_directory))
     return outputs
 
 
@@ -1052,12 +1011,7 @@ def _ensure_raster_outputs_are_cogs(
 
 def _job_update(job_id: str, **patch: Any) -> None:
     """Update an in-memory Whitebox job."""
-    with _JOBS_LOCK:
-        job = _JOBS[job_id]
-        data = job.model_dump()
-        data.update(patch)
-        data["updated_at"] = _utc_now()
-        _JOBS[job_id] = JobState(**data)
+    _JOB_MANAGER.update(job_id, **patch)
 
 
 def _append_job_message(job_id: str, event: Any) -> None:
@@ -1067,10 +1021,45 @@ def _append_job_message(job_id: str, event: Any) -> None:
         message = parsed.get("message") or parsed.get("type") or json.dumps(parsed)
     else:
         message = str(parsed)
-    with _JOBS_LOCK:
-        job = _JOBS[job_id]
-        messages = [*job.messages, message]
-        _JOBS[job_id] = job.model_copy(update={"messages": messages, "updated_at": _utc_now()})
+    _JOB_MANAGER.append_message(job_id, message)
+
+
+def _is_cancelled(job_id: str) -> bool:
+    """Return True if *job_id* has been marked for cancellation.
+
+    Args:
+        job_id: The Whitebox job id.
+
+    Returns:
+        Whether a client asked to cancel the job.
+    """
+    return _JOB_MANAGER.is_cancelled(job_id)
+
+
+def _cancel_job(job_id: str) -> None:
+    """Stop a pending or running Whitebox job; it then reports ``cancelled``.
+
+    Args:
+        job_id: The Whitebox job id.
+    """
+    _JOB_MANAGER.cancel(job_id)
+
+
+class _JobCancelled(Exception):
+    """Raised inside a job runner once the job has been cancelled."""
+
+
+def _raise_if_cancelled(job_id: str) -> None:
+    """Abort the job runner when the job has been cancelled.
+
+    Args:
+        job_id: The Whitebox job id.
+
+    Raises:
+        _JobCancelled: If a client cancelled the job.
+    """
+    if _is_cancelled(job_id):
+        raise _JobCancelled
 
 
 def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
@@ -1079,6 +1068,7 @@ def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
     try:
         _job_update(job_id, status="running")
         args, working_directory = _prepare_arguments(request, temp_paths)
+        _raise_if_cancelled(job_id)
         session = create_runtime_session(
             include_pro=request.include_pro,
             tier=request.tier or "open",
@@ -1088,7 +1078,9 @@ def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
             json.dumps(args),
             lambda event: _append_job_message(job_id, event),
             working_directory=working_directory,
+            on_process=lambda process: _JOB_MANAGER.register_process(job_id, process),
         )
+        _raise_if_cancelled(job_id)
         result = _parse_json_maybe(raw_result)
         _ensure_raster_outputs_are_cogs(
             args,
@@ -1096,13 +1088,21 @@ def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
             lambda message: _append_job_message(job_id, message),
             temp_paths,
         )
+        _raise_if_cancelled(job_id)
         _job_update(
             job_id,
             status="succeeded",
             result=result,
-            outputs=_extract_outputs(result, args, request.tool),
+            outputs=_extract_outputs(
+                result, args, request.tool, working_directory=working_directory
+            ),
         )
-    except Exception:
+    except Exception as exc:
+        # A cancelled run is killed mid-stream, so the runner reports a failure;
+        # the cancellation, not that failure, is what the client asked for.
+        if isinstance(exc, _JobCancelled) or _is_cancelled(job_id):
+            _job_update(job_id, status="cancelled", error="Cancelled.")
+            return
         # The exception (a RuntimeBootstrapError) carries the subprocess's full
         # traceback and interpreter path; log it server-side and surface only a
         # generic message so /run and /jobs/{id} don't leak internals to clients
@@ -1115,6 +1115,7 @@ def _run_job(job_id: str, request: WhiteboxRunRequest) -> None:
             error="Tool execution failed. See the sidecar logs for details.",
         )
     finally:
+        _JOB_MANAGER.clear_process(job_id)
         for path in temp_paths:
             if path.is_dir():
                 shutil.rmtree(path, ignore_errors=True)
@@ -1169,22 +1170,13 @@ def whitebox_tool(tool_id: str, include_pro: bool = False, tier: str = "open"):
 
 
 def _evict_finished_jobs_locked() -> None:
-    """Drop the oldest finished jobs once the retention cap is exceeded.
-
-    The caller must hold ``_JOBS_LOCK``. Running and pending jobs are never
-    evicted; only ``succeeded``/``failed`` jobs are removed, oldest first.
-    """
-    excess = len(_JOBS) - MAX_RETAINED_JOBS
-    if excess <= 0:
-        return
-    finished = [job_id for job_id, job in _JOBS.items() if job.status in {"succeeded", "failed"}]
-    for job_id in finished[:excess]:
-        _JOBS.pop(job_id, None)
+    """Drop the oldest finished jobs once the retention cap is exceeded."""
+    _JOB_MANAGER.evict_finished_locked()
 
 
 def _count_in_flight_jobs_locked() -> int:
     """Return how many jobs are pending or running. Caller must hold ``_JOBS_LOCK``."""
-    return sum(1 for job in _JOBS.values() if job.status in {"pending", "running"})
+    return _JOB_MANAGER.count_in_flight_locked()
 
 
 @router.post("/run")
@@ -1210,43 +1202,41 @@ def whitebox_run(request: WhiteboxRunRequest):
                         f"Layer input for {name} exceeds the {MAX_LAYER_FEATURES}-feature limit"
                     ),
                 )
-    job_id = str(uuid.uuid4())
-    now = _utc_now()
-    with _JOBS_LOCK:
-        if _count_in_flight_jobs_locked() >= MAX_IN_FLIGHT_JOBS:
-            raise HTTPException(
-                status_code=429,
-                detail="Too many Whitebox jobs in progress; try again shortly.",
-            )
-        _JOBS[job_id] = JobState(
-            id=job_id,
-            status="pending",
-            tool_id=tool_id,
-            created_at=now,
-            updated_at=now,
-        )
-        _evict_finished_jobs_locked()
-    thread = threading.Thread(target=_run_job, args=(job_id, request), daemon=True)
-    try:
-        thread.start()
-    except RuntimeError:
-        # Drop the reserved pending slot so a failed Thread.start does not
-        # permanently consume an in-flight capacity slot (and force 429s).
-        with _JOBS_LOCK:
-            _JOBS.pop(job_id, None)
-        raise
-    with _JOBS_LOCK:
-        return _JOBS[job_id]
+    return _JOB_MANAGER.start_thread_job(tool_id, _run_job, (request,))
 
 
 @router.get("/jobs/{job_id}")
 def whitebox_job(job_id: str):
     """Return state for a Whitebox background job."""
-    with _JOBS_LOCK:
-        job = _JOBS.get(job_id)
+    job = _JOB_MANAGER.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@router.post("/jobs/{job_id}/cancel")
+def whitebox_cancel(job_id: str):
+    """Request cancellation of a pending or running Whitebox job.
+
+    Cancelling a job that has already finished is a no-op that returns its final
+    state, so a client racing completion never sees an error. Cancellation is
+    best-effort: work already completing may still report success, and completed
+    output is not rolled back. The response is the current state; clients should
+    keep polling until a terminal state.
+
+    Args:
+        job_id: The Whitebox job id.
+
+    Returns:
+        The job's current state.
+
+    Raises:
+        HTTPException: 404 if the job is unknown (or owned by another tenant).
+    """
+    if _JOB_MANAGER.get(job_id) is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _cancel_job(job_id)
+    return _JOB_MANAGER.get(job_id)
 
 
 def _normalize_output_path(path: str) -> str:
@@ -1299,6 +1289,19 @@ def whitebox_output(path: str):
         raise HTTPException(status_code=400, detail="Only JSON outputs can be read")
     if output_path not in _known_output_paths():
         raise HTTPException(status_code=403, detail="Path is not a known Whitebox output")
+    if conversion._CONVERSION_ROOTS:
+        # Allow server-generated default outputs under the Whitebox temp dir as
+        # well as paths confined within GEOLIBRE_CONVERSION_ROOTS.
+        default_temp_dir = Path(tempfile.gettempdir()) / "geolibre-whitebox"
+        resolved_output = Path(output_path).resolve()
+        in_default_tmp = (
+            resolved_output == default_temp_dir.resolve()
+            or resolved_output.is_relative_to(default_temp_dir.resolve())
+        )
+        if not in_default_tmp and not conversion._is_within_roots(resolved_output):
+            raise HTTPException(
+                status_code=403, detail="Output path is outside the allowed directories"
+            )
     # Reject a symlinked final component before reading. Combined with the
     # O_NOFOLLOW open this closes the symlink-swap TOCTOU on POSIX; on Windows
     # it is the sole mitigation. A swapped intermediate directory is out of
