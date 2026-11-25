@@ -90,10 +90,11 @@ pub(crate) fn is_disallowed_ip(ip: std::net::IpAddr) -> bool {
     }
 }
 
-/// Reject a parsed URL that is non-HTTP(S) or whose host resolves to a
-/// private/loopback/link-local address. Hostname hosts are resolved and rejected
-/// if *any* resolved address is disallowed, so a name that points at an internal
-/// IP cannot slip through.
+/// Reject a parsed URL that is non-HTTP(S) or whose host resolves to an address
+/// [`is_disallowed_ip`] blocks (link-local, cloud metadata, unspecified or
+/// multicast; loopback and LAN hosts stay allowed for local data servers).
+/// Hostname hosts are resolved and rejected if *any* resolved address is
+/// disallowed, so a name that points at a blocked IP cannot slip through.
 pub(crate) fn url_is_fetchable(url: &reqwest::Url) -> Result<(), String> {
     use std::net::ToSocketAddrs;
     match url.scheme() {
