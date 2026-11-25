@@ -72,6 +72,19 @@ Every layer action replaces the `layers` array, so `useAppStore((s) => s.layers)
 
 `useAppStore` is one Zustand store, but its code is split into slices under `packages/core/src/store/` (project, map view, layers, layer groups, project content, processing, libraries, session, collaboration, capabilities, and the `ui` dialog flags), composed in `packages/core/src/store.ts`. Add a new field or action to the slice that owns its data; an action that must also update another slice's fields (as `removeLayer` scrubs references everywhere) reads and writes the whole state through `set`/`get`. Undo history (`store/undo-history.ts`) tracks only the fields `partializeHistory` lists (layers, layer groups, basemap, story map, comments, dashboard widgets, legend). Everything else, including the whole `ui` sub-state, the selection and the camera, never records an undo step and is never reverted by undo or redo. Secondary panes and the Print Layout also reference layers but stay untracked (panes carry their own camera and must match the untracked grid layout; the composer writes back a local copy), so each undo/redo step scrubs their references to layers the step removed.
 
+### Field Collection session ownership
+
+`useFieldCollectionController` owns capture targets, placement, GPS requests,
+photo reads, form values, validation, and saving. The dialog renders its grouped
+view props and on-map controls. Placement and capture-context generations stay
+inside the controller: changing a target or project invalidates its pending
+work, while dismissing a captured draft preserves it for reopening. Photo reads
+belong to the capture context rather than one GPS placement, and an old read
+cannot release the next capture's busy state. Unmount invalidates pending work
+before removing previews, preventing late GPS replies from moving the map or
+recreating a marker. Saved observations enter the core
+store, independent of whether a map is available.
+
 ### GPS session ownership
 
 `useGpsPositionSource` owns the device location watch, external NMEA receiver,
