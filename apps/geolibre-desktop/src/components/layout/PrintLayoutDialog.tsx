@@ -414,7 +414,7 @@ export function PrintLayoutDialog({
             {layout.showInset && (
               <InsetMapEditor
                 {...editorProps}
-                hasLocation={!insetState.unavailable}
+                hasLocation={Boolean(captured?.georef || captured?.lngLatGrid)}
                 status={insetState}
               />
             )}
