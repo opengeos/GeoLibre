@@ -16,6 +16,7 @@ Pick by what the data **is**:
 | You have | Tool | Notes |
 | --- | --- | --- |
 | A GeoJSON URL, file, or literal | `add_geojson_layer` | Inlined into the project. Self-contained. **The only kind `classify_layer` can style.** Cap: 50 MB. |
+| A supplied GeoJSON query result and its DuckDB SQL | `add_sql_query_layer` | Saves the snapshot. Refresh in the app re-executes SQL against the other project layers using SQL Workspace table names. |
 | A big remote FlatGeobuf / GeoParquet / GeoJSON | `add_vector_layer` | Read in place, not copied. No attribute table in the file. |
 | A Cloud Optimized GeoTIFF / COG | `add_raster_layer` | `bands`, `colormap`, `rescale`. |
 | An XYZ raster tile template (`{z}/{x}/{y}.png`) | `add_tile_layer` | Basemaps like OSM go here, not `set_basemap`. |
@@ -81,6 +82,7 @@ active workspace roots. Call it before guessing any of those names.
 
 ```text
 add_geojson_layer(path, name, data, style=None, index=None)
+add_sql_query_layer(path, name, data, sql, style=None, index=None)
 add_vector_layer(path, name, url, render_mode="geojson", data_format=None,
                  source_layer=None, style=None, index=None)
 add_raster_layer(path, name, url, bands=None, colormap=None, rescale=None,

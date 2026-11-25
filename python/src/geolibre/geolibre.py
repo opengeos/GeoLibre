@@ -2300,6 +2300,30 @@ class Map(anywidget.AnyWidget):
         fc = _project.load_featurecollection(data)
         return self._add_layer(_project.geojson_layer(name, fc, source_url=source_url, **style))
 
+    def add_sql_query_layer(
+        self, data: Any, sql: str, name: str = "SQL query", **style: Any
+    ) -> str:
+        """Add a saved DuckDB query result that can refresh in the app.
+
+        Python stores the supplied result without executing SQL. The embedded
+        GeoJSON renders on load, including offline. Refresh re-runs the stored
+        query against the other layers in the project using SQL Workspace table
+        names; those source layers must be available at refresh time.
+
+        Args:
+            data: Result GeoJSON, with the same input forms as add_geojson.
+            sql: Non-empty DuckDB SQL statement that produced the result.
+            name: Layer display name.
+            **style: Style overrides, such as fillColor or circleRadius.
+
+        Returns:
+            The id of the added query layer.
+
+        Raises:
+            ValueError: If SQL or the result GeoJSON is invalid.
+        """
+        return self._add_layer(_project.sql_query_layer(name, data, sql, **style))
+
     def add_gdf(
         self,
         gdf: Any,

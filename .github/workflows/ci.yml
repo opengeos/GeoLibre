@@ -68,7 +68,7 @@ jobs:
             backend:
               - "{backend/**,docker/**,schema/**,tests/fixtures/**,package.json,.github/workflows/ci.yml}"
             rust:
-              - "{apps/geolibre-desktop/src-tauri/**,tests/native-document-copy/**,scripts/test-ios-picker-policy.sh,package.json,rust-toolchain.toml,.github/workflows/ci.yml}"
+              - "{apps/geolibre-desktop/src-tauri/**,tests/native-document-copy/**,scripts/test-ios-picker-policy.sh,package.json,rust-toolchain.toml,scripts/desktop-launch-smoke.sh,.github/workflows/ci.yml}"
             identity:
               - "{backend/geolibre_server_api/**,.github/workflows/ci.yml}"
             mssql:
@@ -415,7 +415,7 @@ jobs:
     # The Rust half of `npm run ci` (`npm run check:rust`).
     name: Rust check
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     needs: changes
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true') }}
     steps:
@@ -446,7 +446,8 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libxdo-dev \
             patchelf \
-            wget
+            wget \
+            xvfb
 
       # tauri.conf.json points `frontendDist` at ../dist, which the web build
       # produces. This job does not build the web app (the "Build and test" job
@@ -456,6 +457,26 @@ jobs:
 
       - name: Check the Tauri shell and test native document copies
         run: npm run check:rust
+
+      - name: Run the Tauri shell unit tests
+        run: cargo test --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml --lib
+
+      # `cargo check` and unit tests never run `tauri::Builder::build`, so a
+      # plugin whose config fails to deserialize only crashes at launch.
+      # v3.10.0 shipped that way (#3631, #3632). Build the shell with the same
+      # features as a release build (custom-protocol, default features), in the
+      # faster debug profile, and make sure it stays up. Plugin config is
+      # deserialized at the same point in either profile, so a block that fails
+      # to parse crashes both; the few checks that are release-only (such as
+      # tauri-plugin-updater rejecting plain-HTTP endpoints) are covered by the
+      # runtime guard, which runs the same deserializer in the shipped profile.
+      # The stubbed dist above is enough: the crash happens before any page
+      # loads.
+      - name: Build the Tauri shell for a launch smoke test
+        run: cargo build --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml --features tauri/custom-protocol
+
+      - name: Launch smoke test
+        run: xvfb-run -a scripts/desktop-launch-smoke.sh apps/geolibre-desktop/src-tauri/target/debug/geolibre-desktop 20
 
   ios-picker-policy:
     name: iOS picker policy

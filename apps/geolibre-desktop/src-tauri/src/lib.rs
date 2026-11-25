@@ -605,13 +605,28 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init());
 
-    // Signed desktop auto-updater for non-Store desktop builds.
+    let context = tauri::generate_context!();
+
+    // Signed desktop auto-updater for non-Store desktop builds. The plugin
+    // panics during app build when `plugins.updater` is missing or invalid
+    // (its `pubkey` is required), so only register it when its own config
+    // deserializer accepts the block. Otherwise the update commands report
+    // `configured: false` (issue #3631).
     #[cfg(all(
         any(target_os = "macos", target_os = "windows", target_os = "linux"),
         feature = "desktop-updater",
         not(feature = "mas")
     ))]
-    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    let builder = {
+        let configured =
+            desktop_updater::updater_plugin_configured(context.config().plugins.0.get("updater"));
+        let builder = builder.manage(desktop_updater::DesktopUpdaterEnabled(configured));
+        if configured {
+            builder.plugin(tauri_plugin_updater::Builder::new().build())
+        } else {
+            builder
+        }
+    };
 
     // The Earth Engine OAuth loopback listener is compiled out of the Apple App
     // Store builds (see the module gate at the top of this file); the stub
@@ -772,7 +787,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building GeoLibre Desktop");
 
     app.run(|app, event| {
@@ -7558,12 +7573,17 @@ mod tests {
     fn martin_waiter_drains_a_log_larger_than_the_pipe_buffer() {
         use std::process::{Command, Stdio};
 
+        // The last line goes to stdout too: stdout and stderr are separate
+        // pipes drained by separate threads, so a stderr line written after
+        // the stdout flood can land in the buffer before the stdout reader
+        // catches up, and the flood then evicts it from the reported tail.
+        // Only one stream has a defined order to assert on.
         let mut child = Command::new("sh")
             .arg("-c")
             .arg(
                 "i=0; while [ $i -lt 2000 ]; do \
                  echo \"INFO martin: source public.table_$i added, no spatial index\"; \
-                 i=$((i+1)); done; echo 'error: last line' >&2; exit 3",
+                 i=$((i+1)); done; echo 'error: last line'; exit 3",
             )
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -7579,6 +7599,31 @@ mod tests {
         let _ = child.wait();
         assert!(error.contains("exited before it was ready"), "got: {error}");
         assert!(error.contains("error: last line"), "got: {error}");
+    }
+
+    // The stderr half of the test above: a child that reports its failure on
+    // stderr (with stdout quiet, so there is no cross-pipe ordering to race)
+    // must have that line quoted in the waiter's error.
+    #[cfg(all(unix, not(feature = "mas")))]
+    #[test]
+    fn martin_waiter_quotes_the_stderr_tail() {
+        use std::process::{Command, Stdio};
+
+        let mut child = Command::new("sh")
+            .arg("-c")
+            .arg("echo 'error: bind failed' >&2; exit 3")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn a failing child");
+        let output = CapturedOutput::attach(&mut child);
+        let error = wait_for_martin_health("http://127.0.0.1:9", &mut child, &output)
+            .expect_err("the child exits without becoming healthy");
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(error.contains("exited before it was ready"), "got: {error}");
+        assert!(error.contains("error: bind failed"), "got: {error}");
     }
 
     // The sidecar probes must reach 127.0.0.1 directly. A corporate proxy picked
