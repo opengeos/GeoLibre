@@ -215,13 +215,13 @@ fn inventory_selections(
     let mut problems = Vec::new();
     for entry in entries {
         let entry = entry?;
+        let directory = entry.path();
         let mut inspect = || -> io::Result<()> {
             if !entry.file_type()?.is_dir()
                 || Uuid::parse_str(&entry.file_name().to_string_lossy()).is_err()
             {
                 return Ok(());
             }
-            let directory = entry.path();
             let manifest = directory.join("source.json");
             let data = directory.join("data");
             let ordinary = |path: &Path, directory: bool| -> io::Result<bool> {
@@ -235,12 +235,24 @@ fn inventory_selections(
                     Err(error) => Err(error),
                 }
             };
-            if !ordinary(&manifest, false)? || !ordinary(&data, true)? {
-                return Ok(());
+            if !ordinary(&manifest, false)? {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "missing or unsafe import manifest",
+                ));
+            }
+            if !ordinary(&data, true)? {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "missing or unsafe import data directory",
+                ));
             }
             let canonical_data = fs::canonicalize(&data)?;
             if !canonical_data.starts_with(canonical_root) {
-                return Ok(());
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "import data directory resolves outside retained storage",
+                ));
             }
             let (retained, warnings) = retained_data_files(&canonical_data, fs::read_dir(&data)?);
             files.extend(retained);
@@ -248,7 +260,7 @@ fn inventory_selections(
             Ok(())
         };
         if let Err(error) = inspect() {
-            problems.push(error.to_string());
+            problems.push(format!("{}: {error}", directory.display()));
         }
     }
     Ok((files, problems))
@@ -318,9 +330,9 @@ pub(crate) fn persist_selection(
     for source in sources {
         let name = safe_name(source)?;
         if !names.insert(name.to_lowercase()) {
-            return Err(io::Error::other(
-                "Selected documents have conflicting file names",
-            ));
+            return Err(io::Error::other(format!(
+                "Selected documents have conflicting file names: {name}"
+            )));
         }
         let (bytes, sha256) = copy_file(source, &data.join(&name))?;
         documents.push(serde_json::json!({
@@ -386,6 +398,150 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn invalid_published_layouts_report_the_selection_and_preserve_healthy_files() {
+        for damaged in [
+            "missing manifest",
+            "directory manifest",
+            "missing data",
+            "file data",
+        ] {
+            let fixture = Fixture::new();
+            let sources = ["roads.geojson", "map.mbtiles", "raster.tif", "data.gpkg"]
+                .map(|name| fixture.source(name, name.as_bytes()));
+            let mut healthy = persist_selection(&fixture.root(), &fixture.0, &sources).unwrap();
+            let source = fixture.source("broken.geojson", b"broken selection");
+            let broken = persist_selection(&fixture.root(), &fixture.0, &[source]).unwrap();
+            let data = broken[0].parent().unwrap();
+            let directory = data.parent().unwrap();
+            let manifest = directory.join("source.json");
+            match damaged {
+                "missing manifest" => fs::remove_file(&manifest).unwrap(),
+                "directory manifest" => {
+                    fs::remove_file(&manifest).unwrap();
+                    fs::create_dir(&manifest).unwrap();
+                }
+                _ => {
+                    fs::remove_file(&broken[0]).unwrap();
+                    fs::remove_dir(data).unwrap();
+                    if damaged == "file data" {
+                        fs::write(data, b"not a directory").unwrap();
+                    }
+                }
+            }
+            let (mut files, problems) =
+                retained_document_files(&fixture.root(), &fixture.0).unwrap();
+            files.sort();
+            healthy.sort();
+            assert_eq!(files, healthy, "{damaged}");
+            assert_eq!(problems.len(), 1, "{damaged}");
+            assert!(
+                problems[0].contains(&directory.display().to_string()),
+                "{damaged}"
+            );
+            assert!(problems[0].contains(if damaged.ends_with("manifest") {
+                "manifest"
+            } else {
+                "data directory"
+            }));
+            for file in healthy {
+                assert_eq!(
+                    fs::read(&file).unwrap(),
+                    file.file_name().unwrap().as_encoded_bytes()
+                );
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unsafe_published_links_report_the_selection_without_authorizing_their_targets() {
+        use std::os::unix::fs::symlink;
+        for damaged in ["manifest", "data"] {
+            let fixture = Fixture::new();
+            let source = fixture.source("roads.geojson", b"healthy");
+            let healthy =
+                persist_selection(&fixture.root(), &fixture.0, &[source.clone()]).unwrap();
+            let broken = persist_selection(&fixture.root(), &fixture.0, &[source.clone()]).unwrap();
+            let data = broken[0].parent().unwrap();
+            let directory = data.parent().unwrap();
+            if damaged == "manifest" {
+                let manifest = directory.join("source.json");
+                fs::remove_file(&manifest).unwrap();
+                symlink(&source, manifest).unwrap();
+            } else {
+                let outside = fixture.0.join("outside-data");
+                fs::rename(data, &outside).unwrap();
+                symlink(outside, data).unwrap();
+            }
+            let (files, problems) = retained_document_files(&fixture.root(), &fixture.0).unwrap();
+            assert_eq!(files, healthy);
+            assert_eq!(problems.len(), 1);
+            assert!(problems[0].contains(&directory.display().to_string()));
+            assert!(problems[0].contains(damaged));
+            assert_eq!(fs::read(&healthy[0]).unwrap(), b"healthy");
+            assert_eq!(fs::read(source).unwrap(), b"healthy");
+        }
+    }
+
+    #[test]
+    fn outside_selection_entries_report_their_path_without_hiding_healthy_entries() {
+        let fixture = Fixture::new();
+        let outside = Fixture::new();
+        let healthy = persist_selection(
+            &fixture.root(),
+            &fixture.0,
+            &[fixture.source("roads.geojson", b"healthy")],
+        )
+        .unwrap();
+        let foreign = persist_selection(
+            &outside.root(),
+            &outside.0,
+            &[outside.source("roads.geojson", b"outside")],
+        )
+        .unwrap();
+        let root = fs::canonicalize(fixture.root()).unwrap();
+        let outside_root = fs::canonicalize(outside.root()).unwrap();
+        let entries = fs::read_dir(&root)
+            .unwrap()
+            .chain(fs::read_dir(&outside_root).unwrap());
+        let (files, problems) = inventory_selections(&root, entries).unwrap();
+        assert_eq!(files, healthy);
+        assert_eq!(problems.len(), 1);
+        assert!(
+            problems[0].contains(
+                &foreign[0]
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .display()
+                    .to_string()
+            )
+        );
+        assert!(problems[0].contains("outside retained storage"));
+        assert_eq!(fs::read(&foreign[0]).unwrap(), b"outside");
+    }
+
+    #[test]
+    fn duplicate_provider_basenames_name_the_conflicting_file_and_roll_back() {
+        let fixture = Fixture::new();
+        fs::create_dir(fixture.0.join("first-provider")).unwrap();
+        fs::create_dir(fixture.0.join("second-provider")).unwrap();
+        let first = fixture.source("first-provider/roads.geojson", b"first");
+        let second = fixture.source("second-provider/roads.geojson", b"second");
+        let error = persist_selection(
+            &fixture.root(),
+            &fixture.0,
+            &[first.clone(), second.clone()],
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("roads.geojson"));
+        assert_eq!(fs::read_dir(fixture.root()).unwrap().count(), 0);
+        assert_eq!(fs::read(first).unwrap(), b"first");
+        assert_eq!(fs::read(second).unwrap(), b"second");
     }
 
     #[test]

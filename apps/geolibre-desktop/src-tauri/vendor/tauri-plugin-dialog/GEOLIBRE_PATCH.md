@@ -88,7 +88,11 @@ to the local paths used by GeoLibre's readers:
   `picked-documents/.pending-<selection>/data/`, hashes each file, stores a
   manifest, syncs files and directory entries, then atomically publishes the
   complete UUID folder. Case-conflicting names, symlinks, and invalid file names
-  are rejected. On a normalization-insensitive filesystem, distinct Unicode
+  are rejected. A selection shares one data folder to retain companion-file
+  references, so duplicate basenames from different provider folders are also
+  rejected; the error names the conflicting file. Select those files in
+  separate picks or rename them before import. On a normalization-insensitive
+  filesystem, distinct Unicode
   spellings of one name can reach the filesystem collision check; that rejects
   the selection with an OS error and never overwrites a companion file.
   Failed selections roll back, and serialized imports recover
