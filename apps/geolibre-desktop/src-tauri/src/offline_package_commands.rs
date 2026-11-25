@@ -256,8 +256,11 @@ pub(crate) async fn extract_native_mbtiles_package(
         // Keep inspection and the copy on the same read snapshot.
         source.execute_batch("BEGIN").map_err(|e| e.to_string())?;
         let metadata = offline_mbtiles::source_metadata(&source)?;
-        let info =
-            crate::mbtiles::read_mbtiles_metadata_from_rows(&path.to_string_lossy(), &source, &metadata)?;
+        let info = crate::mbtiles::read_mbtiles_metadata_from_rows(
+            &path.to_string_lossy(),
+            &source,
+            &metadata,
+        )?;
         offline_mbtiles::validate_source_style(
             &info.tile_type,
             &info.source_layers,
