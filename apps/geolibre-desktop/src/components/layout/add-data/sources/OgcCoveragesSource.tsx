@@ -10,6 +10,7 @@ import {
   downloadOgcCoverage,
   ogcCoverageUrl,
   ogcCoverageViewBounds,
+  ogcCoverageSupportsFieldSelection,
   type OgcCoverageCollection,
 } from "../../../../lib/ogc-api-coverages";
 import { serviceRequestErrorMessage } from "../helpers";
@@ -38,7 +39,11 @@ export function OgcCoveragesSource({ initialUrl = "" }: { initialUrl?: string })
   const active = useRef<AbortController | null>(null);
   useEffect(() => {
     const unsubscribe = useAppStore.subscribe((state, previous) => {
-      if (state.projectLoadCount !== previous.projectLoadCount) active.current?.abort();
+      if (state.projectLoadCount !== previous.projectLoadCount) {
+        active.current?.abort();
+        active.current = null;
+        setRetrieving(false);
+      }
     });
     return () => {
       unsubscribe();
@@ -78,7 +83,7 @@ export function OgcCoveragesSource({ initialUrl = "" }: { initialUrl?: string })
     } catch (error) {
       if (!request.signal.aborted) source.setError(errorText(error));
     } finally {
-      if (!request.signal.aborted) setRetrieving(false);
+      if (active.current === request) setRetrieving(false);
     }
   }
   const submit = source.runSubmit(async () => {
@@ -238,6 +243,7 @@ export function OgcCoveragesSource({ initialUrl = "" }: { initialUrl?: string })
           <Label htmlFor="ogcc-parameter">{t("addData.ogcCoverages.parameter")}</Label>
           <Input
             id="ogcc-parameter"
+            disabled={!ogcCoverageSupportsFieldSelection(collection)}
             value={parameter}
             onChange={(e) => setParameter(e.target.value)}
             placeholder="TMP"

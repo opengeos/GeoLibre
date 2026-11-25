@@ -1,5 +1,3 @@
-import { writeArrayBuffer } from "geotiff";
-
 /** Bound decoded allocation across every band, independently of download size. */
 export const MAX_COVERAGE_SAMPLES = 8_000_000;
 export type CoverageErrorCode = "response" | "grid" | "empty" | "size" | "metadata" | "bbox";
@@ -146,7 +144,11 @@ function horizontalReference(domain: JsonObject): {
 export function parseCoverageJson(document: unknown): CoverageGrid {
   const coverage = coverageObject(document),
     domain = coverageObject(coverage.domain);
-  if (coverage.type !== "Coverage" || domain.type !== "Domain" || domain.domainType !== "Grid")
+  if (
+    coverage.type !== "Coverage" ||
+    domain.type !== "Domain" ||
+    (domain.domainType !== undefined && domain.domainType !== "Grid")
+  )
     throw new CoverageError("grid");
   const axes = coverageObject(domain.axes),
     ref = horizontalReference(domain);
@@ -233,21 +235,104 @@ export function parseCoverageJson(document: unknown): CoverageGrid {
   };
 }
 
-/** Encode cell-center coordinates as pixel-area GeoTIFF with half-cell edges. */
+/**
+ * Encode a Float64, pixel-interleaved strip with a dynamically sized TIFF IFD.
+ * The generic geotiff.js writer reserves only 1000 directory bytes, which is
+ * insufficient for many numeric bands. This layout includes only the tags
+ * needed for an affine numerical raster; the COG encoder tiles it afterward.
+ */
 export function coverageGridTiff(grid: CoverageGrid): ArrayBuffer {
-  const pixels = grid.width * grid.height;
-  const values = new Float64Array(pixels * grid.bands.length);
-  for (let p = 0; p < pixels; p++)
-    for (let b = 0; b < grid.bands.length; b++)
-      values[p * grid.bands.length + b] = grid.bands[b][p];
-  return writeArrayBuffer(values, {
-    width: grid.width,
-    height: grid.height,
-    ModelPixelScale: [grid.dx, grid.dy, 0],
-    ModelTiepoint: [0, 0, 0, grid.west - grid.dx / 2, grid.north + grid.dy / 2, 0],
-    GTModelTypeGeoKey: grid.epsg === 4326 ? 2 : 1,
-    GTRasterTypeGeoKey: 1,
-    ...(grid.epsg === 4326 ? { GeographicTypeGeoKey: 4326 } : { ProjectedCSTypeGeoKey: grid.epsg }),
-    GDAL_NODATA: "nan",
+  if (![grid.width, grid.height].every((value) => Number.isSafeInteger(value) && value > 0))
+    throw new CoverageError("grid");
+  const pixels = grid.width * grid.height,
+    bands = grid.bands.length;
+  if (
+    !Number.isSafeInteger(pixels) ||
+    pixels < 1 ||
+    !bands ||
+    bands > 65535 ||
+    grid.bands.some((band) => band.length !== pixels)
+  )
+    throw new CoverageError("grid");
+  const samples = pixels * bands;
+  if (samples > MAX_COVERAGE_SAMPLES) throw new CoverageError("size");
+  const field = (tag: number, type: 3 | 4 | 12, values: number[]) => {
+    const width = type === 3 ? 2 : type === 4 ? 4 : 8;
+    const bytes = new Uint8Array(values.length * width),
+      view = new DataView(bytes.buffer);
+    values.forEach((value, index) => {
+      if (type === 3) view.setUint16(index * width, value, true);
+      else if (type === 4) view.setUint32(index * width, value, true);
+      else view.setFloat64(index * width, value, true);
+    });
+    return { tag, type: Number(type), count: values.length, bytes, offset: 0 };
+  };
+  const stripOffset = field(273, 4, [0]);
+  const entries = [
+    field(256, 4, [grid.width]),
+    field(257, 4, [grid.height]),
+    field(258, 3, Array(bands).fill(64)),
+    field(259, 3, [1]),
+    field(262, 3, [1]),
+    stripOffset,
+    field(277, 3, [bands]),
+    field(278, 4, [grid.height]),
+    field(279, 4, [samples * 8]),
+    field(284, 3, [1]),
+    field(339, 3, Array(bands).fill(3)),
+    field(33550, 12, [grid.dx, grid.dy, 0]),
+    field(33922, 12, [0, 0, 0, grid.west - grid.dx / 2, grid.north + grid.dy / 2, 0]),
+    field(34735, 3, [
+      1,
+      1,
+      0,
+      3,
+      1024,
+      0,
+      1,
+      grid.epsg === 4326 ? 2 : 1,
+      1025,
+      0,
+      1,
+      1,
+      grid.epsg === 4326 ? 2048 : 3072,
+      0,
+      1,
+      grid.epsg,
+    ]),
+    { tag: 42113, type: 2, count: 4, bytes: new TextEncoder().encode("nan\0"), offset: 0 },
+  ];
+  // Extra numeric bands have unspecified interpretation, never alpha.
+  if (bands > 1) entries.push(field(338, 3, Array(bands - 1).fill(0)));
+  entries.sort((a, b) => a.tag - b.tag);
+  const align = (value: number) => Math.ceil(value / 8) * 8;
+  let cursor = align(8 + 2 + entries.length * 12 + 4);
+  for (const entry of entries)
+    if (entry.bytes.length > 4) {
+      entry.offset = cursor;
+      cursor = align(cursor + entry.bytes.length);
+    }
+  new DataView(stripOffset.bytes.buffer).setUint32(0, cursor, true);
+  const output = new ArrayBuffer(cursor + samples * 8),
+    bytes = new Uint8Array(output),
+    view = new DataView(output);
+  bytes.set([0x49, 0x49]);
+  view.setUint16(2, 42, true);
+  view.setUint32(4, 8, true);
+  view.setUint16(8, entries.length, true);
+  entries.forEach((entry, index) => {
+    const position = 10 + index * 12;
+    view.setUint16(position, entry.tag, true);
+    view.setUint16(position + 2, entry.type, true);
+    view.setUint32(position + 4, entry.count, true);
+    if (entry.bytes.length <= 4) bytes.set(entry.bytes, position + 8);
+    else {
+      view.setUint32(position + 8, entry.offset, true);
+      bytes.set(entry.bytes, entry.offset);
+    }
   });
+  for (let pixel = 0; pixel < pixels; pixel++)
+    for (let band = 0; band < bands; band++)
+      view.setFloat64(cursor + (pixel * bands + band) * 8, grid.bands[band][pixel], true);
+  return output;
 }

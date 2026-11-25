@@ -85,3 +85,46 @@ for (const action of ["project switch", "unmount"] as const) {
     assert.equal(useAppStore.getState().layers.length, 0);
   });
 }
+
+test("project changes release discovery and an old completion cannot clear a newer request", async () => {
+  const metadata = readFileSync(
+    new URL("./fixtures/ogc-coverages/gdps-collection.json", import.meta.url),
+    "utf8",
+  );
+  const resolve: Array<(value: Response) => void> = [];
+  globalThis.fetch = async () => new Promise<Response>((done) => resolve.push(done));
+  coverageForm();
+  const retrieve = () => screen.getByRole("button", { name: /Retriev/ });
+  fireEvent.click(retrieve());
+  await waitFor(() => assert.equal(resolve.length, 1));
+  assert.ok(retrieve().hasAttribute("disabled"));
+  act(() => useAppStore.setState((state) => ({ projectLoadCount: state.projectLoadCount + 1 })));
+  assert.equal(retrieve().hasAttribute("disabled"), false);
+  fireEvent.click(retrieve());
+  await waitFor(() => assert.equal(resolve.length, 2));
+  await act(async () => resolve[0](new Response(metadata)));
+  assert.ok(retrieve().hasAttribute("disabled"));
+  await act(async () => resolve[1](new Response(metadata)));
+  await waitFor(() =>
+    assert.equal(screen.getByLabelText("Coverage").hasAttribute("disabled"), false),
+  );
+  assert.equal(retrieve().hasAttribute("disabled"), false);
+});
+
+test("CoverageJSON field selection is disabled when the preferred representation is GeoTIFF", async () => {
+  const metadata = JSON.parse(
+    readFileSync(new URL("./fixtures/ogc-coverages/gdps-collection.json", import.meta.url), "utf8"),
+  );
+  metadata.links.push({
+    rel: "http://www.opengis.net/def/rel/ogc/1.0/coverage",
+    type: "image/tiff",
+    href: "https://example.org/coverage.tif",
+  });
+  globalThis.fetch = async () => new Response(JSON.stringify(metadata));
+  coverageForm();
+  fireEvent.click(screen.getByRole("button", { name: "Retrieve collections" }));
+  await waitFor(() =>
+    assert.equal(screen.getByLabelText("Coverage").hasAttribute("disabled"), false),
+  );
+  assert.ok(screen.getByLabelText("CoverageJSON fields (optional)").hasAttribute("disabled"));
+});

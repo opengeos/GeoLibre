@@ -31,9 +31,15 @@ export interface GeoTiffInfo {
   bigtiff: boolean;
 }
 
-/** Tile size (px) for the encoded COG. 512 matches the COGs GeoLibre's sample
- * data ships with and the upstream reader's expectations. */
+/** Default COG tile size. High band counts use smaller tiles to bound padding. */
 const COG_TILE_SIZE = 512;
+
+/** Keep a padded tile at or below four default single-band tiles when possible. */
+function tileSizeForBands(bands: number): number {
+  let size = COG_TILE_SIZE;
+  while (size > 16 && size * size * bands > COG_TILE_SIZE * COG_TILE_SIZE * 4) size /= 2;
+  return size;
+}
 
 /**
  * Compressions {@link CogBuilder} can encode for *any* pixel type, and so the
@@ -191,7 +197,7 @@ export async function convertGeoTiffToCog(
       ) {
         builder.set_nodata(nodata);
       }
-      builder.set_tile_size(COG_TILE_SIZE);
+      builder.set_tile_size(tileSizeForBands(bands));
       builder.set_compression(options.compression ?? "deflate");
       // An explicit empty list writes no overviews (unset would auto-compute them).
       builder.set_overview_levels(
@@ -287,7 +293,7 @@ export async function convertRasterDataToCog(
     } else if (nodata != null && Number.isFinite(nodata)) {
       builder.set_nodata(nodata);
     }
-    builder.set_tile_size(COG_TILE_SIZE);
+    builder.set_tile_size(tileSizeForBands(raster.bands.length));
     builder.set_compression("deflate");
     builder.set_overview_levels(overviewLevels(raster.width, raster.height));
 

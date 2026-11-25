@@ -92,6 +92,14 @@ function coverageLink(items: Link[]): Link | undefined {
   );
 }
 
+/** Field selection applies to the preferred CoverageJSON representation only. */
+export function ogcCoverageSupportsFieldSelection(
+  collection: OgcCoverageCollection | undefined,
+): boolean {
+  const link = collection && coverageLink(collection.links);
+  return Boolean(link && isCoverageJson(link.type));
+}
+
 async function bytes(
   url: string,
   signal: AbortSignal,

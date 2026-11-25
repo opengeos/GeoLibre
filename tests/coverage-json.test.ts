@@ -192,3 +192,59 @@ test("accepts omitted singleton dimensions in one-column, one-row and scalar gri
     CoverageError,
   );
 });
+
+test("preserves 256 numeric bands without overflowing the TIFF directory", async () => {
+  const doc = grid();
+  const ranges = Object.fromEntries(
+    Array.from({ length: 256 }, (_, index) => [
+      String(index),
+      { ...doc.ranges.t, values: [index + 0.125, index + 0.25, null, index + 0.5] },
+    ]),
+  );
+  const parsed = parseCoverageJson({ ...doc, ranges });
+  const bytes = coverageGridTiff(parsed);
+  const image = await (await fromArrayBuffer(bytes)).getImage();
+  assert.equal(image.getSamplesPerPixel(), 256);
+  const bands = await image.readRasters();
+  assert.equal(bands.length, 256);
+  for (let band = 0; band < 256; band++)
+    assert.deepEqual(Array.from(bands[band]), [band + 0.125, band + 0.25, NaN, band + 0.5]);
+});
+
+test("accepts an unlabelled regular domain but rejects explicit unsupported domain types", () => {
+  const doc = grid();
+  const { domainType: _type, ...domain } = doc.domain;
+  assert.deepEqual(Array.from(parseCoverageJson({ ...doc, domain }).bands[0]), [1, 2, 3, NaN]);
+  assert.throws(
+    () => parseCoverageJson({ ...doc, domain: { ...domain, domainType: "Point" } }),
+    CoverageError,
+  );
+});
+
+test("round-trips 256 Float64 bands through COG conversion with bounded tile padding", async () => {
+  await initCogWasm(
+    new Uint8Array(
+      readFileSync(new URL("../node_modules/geolibre-wasm/geolibre_wasm_bg.wasm", import.meta.url)),
+    ),
+  );
+  const doc = grid();
+  const ranges = Object.fromEntries(
+    Array.from({ length: 256 }, (_, index) => [
+      String(index),
+      { ...doc.ranges.t, values: [index + 0.125, index + 0.25, null, index + 0.5] },
+    ]),
+  );
+  const cog = await convertGeoTiffToCog(
+    new Uint8Array(coverageGridTiff(parseCoverageJson({ ...doc, ranges }))),
+    { float64: true, overviews: false },
+  );
+  const image = await (await fromArrayBuffer(new Uint8Array(cog).buffer)).getImage();
+  assert.ok(image.isTiled);
+  assert.ok(
+    image.getTileWidth() * image.getTileHeight() * image.getSamplesPerPixel() <= 1024 * 1024,
+  );
+  const bands = await image.readRasters();
+  assert.equal(bands.length, 256);
+  for (let band = 0; band < 256; band++)
+    assert.deepEqual(Array.from(bands[band]), [band + 0.125, band + 0.25, NaN, band + 0.5]);
+});
