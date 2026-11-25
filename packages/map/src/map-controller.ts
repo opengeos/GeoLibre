@@ -60,8 +60,15 @@ import {
   removeLayerFromMap,
   styleValuesEqual,
   syncLayer,
+  textFontForMapStyle,
   vectorTileStyleLayerIds,
 } from "./layer-sync";
+import {
+  EDGE_LENGTH_LAYER_ID,
+  EDGE_LENGTH_SOURCE_ID,
+  edgeLengthLayer,
+  edgeLengthLines,
+} from "./edge-lengths";
 import { unregisterAllGeoJsonVtSourcesForOwner } from "./geojson-vt-protocol";
 import { globeSafeMaxZoom } from "./globe-fit-bounds";
 import { drawExtentOnCanvas } from "./extent-drawing";
@@ -154,11 +161,13 @@ const LAYER_CONTROL_EXCLUDED_LAYERS = [
   highlightFillLayerId(),
   highlightLineLayerId(),
   highlightCircleLayerId(),
+  EDGE_LENGTH_LAYER_ID,
 ];
 const NON_BASEMAP_STYLE_LAYER_IDS = [
   highlightFillLayerId(),
   highlightLineLayerId(),
   highlightCircleLayerId(),
+  EDGE_LENGTH_LAYER_ID,
 ];
 const OPACITY_PAINT_PROPERTIES = STORY_OPACITY_PAINT_PROPERTIES;
 
@@ -386,6 +395,10 @@ export class MapController implements MapEngine {
   private basemapOpacity = 1;
   private blankBackgroundColor: string | null = null;
   private mapPreferences: MapPreferences = DEFAULT_PROJECT_PREFERENCES.map;
+  /** Whether the sides of highlighted polygons are labeled with their lengths. */
+  private edgeLengthsEnabled = false;
+  /** The features the highlight shows now, so the side labels can be redrawn. */
+  private highlightedFeatures: Feature[] = [];
   /** The custom CRS the map is drawn in (map-crs.ts); null on the default map. */
   private activeCrs: ResolvedMapCrs | null = null;
   /** The page-side converter for `activeCrs`, used to frame extents in it. */
@@ -1302,6 +1315,9 @@ export class MapController implements MapEngine {
     // or both).
     this.scaleControl?.setUnit(preferences.scaleUnit);
     this.scaleControl?.refresh();
+    // The side labels are in the scale bar's unit system, and the ellipsoid
+    // they are measured on may have changed too.
+    if (this.edgeLengthsEnabled && this.highlightedFeatures.length > 0) this.syncEdgeLengths();
   }
 
   /**
@@ -2265,6 +2281,7 @@ export class MapController implements MapEngine {
 
     if (!layer?.geojson || ids.length === 0) {
       this.syncHighlight(EMPTY_HIGHLIGHT);
+      this.setHighlightedFeatures([]);
       return;
     }
 
@@ -2279,6 +2296,7 @@ export class MapController implements MapEngine {
       .filter((feature): feature is Feature => feature?.geometry != null);
     if (features.length === 0) {
       this.syncHighlight(EMPTY_HIGHLIGHT);
+      this.setHighlightedFeatures([]);
       return;
     }
 
@@ -2287,6 +2305,7 @@ export class MapController implements MapEngine {
       features: features as Feature<Geometry>[],
     };
     this.syncHighlight(featureCollection);
+    this.setHighlightedFeatures(features);
 
     if (options.fit) {
       this.fitFeature(featureCollection);
@@ -2295,6 +2314,43 @@ export class MapController implements MapEngine {
 
   clearFeatureHighlight(): void {
     this.syncHighlight(EMPTY_HIGHLIGHT);
+    this.setHighlightedFeatures([]);
+  }
+
+  setEdgeLengthLabels(enabled: boolean): void {
+    if (enabled === this.edgeLengthsEnabled) return;
+    this.edgeLengthsEnabled = enabled;
+    this.syncEdgeLengths();
+  }
+
+  private setHighlightedFeatures(features: Feature[]): void {
+    this.highlightedFeatures = features;
+    this.syncEdgeLengths();
+  }
+
+  /**
+   * Draw the side labels of the highlighted polygons, or clear them when the
+   * labels are off or nothing is highlighted. Called after the highlight
+   * itself, so the label layer lands above the highlight outline.
+   */
+  private syncEdgeLengths(): void {
+    if (!this.isStyleReady() || !this.map) return;
+    const map = this.map;
+    const data =
+      this.edgeLengthsEnabled && this.highlightedFeatures.length > 0
+        ? edgeLengthLines(this.highlightedFeatures, { unit: this.mapPreferences.scaleUnit })
+        : EMPTY_HIGHLIGHT;
+    const source = map.getSource(EDGE_LENGTH_SOURCE_ID);
+    if (source) {
+      updateGeoJsonSourceData(source as maplibregl.GeoJSONSource, data);
+    } else if (data.features.length > 0) {
+      map.addSource(EDGE_LENGTH_SOURCE_ID, { type: "geojson", data });
+    } else {
+      return;
+    }
+    this.ensureHighlightLayer(
+      edgeLengthLayer(textFontForMapStyle(map)) as maplibregl.AddLayerObject,
+    );
   }
 
   /** Current map projection, normalized to the two values we persist. */

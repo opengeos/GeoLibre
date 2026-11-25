@@ -74,6 +74,7 @@ function uiSetterCalls(layerId: string): Array<[string, () => void]> {
     ["setSelectByLocationOpen", () => store().setSelectByLocationOpen(true, layerId)],
     ["setProcessingRerun", () => store().setProcessingRerun(rerun)],
     ["setZoomToSelectedFeature", () => store().setZoomToSelectedFeature(true)],
+    ["setShowEdgeLengths", () => store().setShowEdgeLengths(true)],
     ["setCollaborateDialogOpen", () => store().setCollaborateDialogOpen(true)],
   ];
 }

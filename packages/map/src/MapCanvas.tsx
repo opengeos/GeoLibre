@@ -255,6 +255,7 @@ export const MapCanvas = memo(function MapCanvas({
   const selectedFeatureIds = useAppStore((s) => s.selectedFeatureIds);
   const identifyLayerId = useAppStore((s) => s.identifyLayerId);
   const zoomToSelectedFeature = useAppStore((s) => s.ui.zoomToSelectedFeature);
+  const showEdgeLengths = useAppStore((s) => s.ui.showEdgeLengths);
   const selectFeature = useAppStore((s) => s.selectFeature);
   const selectLayer = useAppStore((s) => s.selectLayer);
   const setMapView = useAppStore((s) => s.setMapView);
@@ -583,6 +584,12 @@ export const MapCanvas = memo(function MapCanvas({
       previousDuckDBSelectionLayerId.current = null;
     }
   }, [layers, selectedLayerId, selectedFeatureId, selectedFeatureIds, zoomToSelectedFeature]);
+
+  // Side lengths of the selected polygons. The controller keeps the highlighted
+  // features, so switching this on labels the current selection immediately.
+  useEffect(() => {
+    controller.current?.setEdgeLengthLabels(showEdgeLengths);
+  }, [showEdgeLengths]);
 
   useEffect(() => {
     const map = controller.current?.getMap();

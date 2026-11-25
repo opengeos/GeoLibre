@@ -57,6 +57,12 @@ import { ensureGeneratedImageHandler } from "./generated-images";
 import { installSelectionDragGuard } from "./selection-drag-guard";
 import { hasZoomDependentClusterFilter } from "./cluster-input";
 import { resolveTextFontFromStyleLayers } from "./text-font";
+import {
+  EDGE_LENGTH_LAYER_ID,
+  EDGE_LENGTH_SOURCE_ID,
+  edgeLengthLayer,
+  edgeLengthLines,
+} from "./edge-lengths";
 import { getLayerBounds } from "./geojson-loader";
 import { loadedVectorTileFeatureBounds } from "./loaded-feature-bounds";
 import { captureEngineImage } from "./map-capture";
@@ -98,6 +104,7 @@ export const MAPBOX_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   // The engine is published after the initial style loads.
   deferredEngineReady: true,
   measureTool: true,
+  edgeLengthLabels: true,
   controlLayerPanels: true,
   supportedLayerKinds: MAPBOX_SUPPORTED_LAYER_KINDS,
 });
@@ -118,6 +125,7 @@ const HIGHLIGHT_LAYER_IDS = [
 function isOverlayLayerId(id: string): boolean {
   return (
     HIGHLIGHT_LAYER_IDS.includes(id) ||
+    id === EDGE_LENGTH_LAYER_ID ||
     id.startsWith("geolibre-mapbox-extent-") ||
     id.startsWith("geolibre-search-")
   );
@@ -222,6 +230,10 @@ export class MapboxEngine implements MapEngine {
   }> = [];
   private openCogDem: typeof registerCogDemSource = registerCogDemSource;
   private preferences: MapPreferences | null = null;
+  /** Whether the sides of highlighted polygons are labeled with their lengths. */
+  private edgeLengthsEnabled = false;
+  /** The features the highlight shows now, so the side labels can be redrawn. */
+  private highlightedFeatures: Feature[] = [];
   private pluginControls = new Map<maplibregl.IControl, mapboxgl.IControl>();
   private controlVisibility: Record<BuiltInMapControl, boolean>;
   /** See the constructor option of the same name. */
@@ -765,6 +777,8 @@ export class MapboxEngine implements MapEngine {
     this.globeControl?.update();
     this.scaleControl?.setUnit(p.scaleUnit);
     this.setTerrainEnabled(p.terrainEnabled);
+    // The side labels are in the scale bar's unit system.
+    if (this.edgeLengthsEnabled && this.highlightedFeatures.length > 0) this.syncEdgeLengths();
   }
   syncLayers(layers: GeoLibreLayer[]): void {
     this.layers = layers;
@@ -1635,11 +1649,34 @@ export class MapboxEngine implements MapEngine {
         "circle-opacity": 0.6,
       },
     });
+    this.highlightedFeatures = data.features;
+    this.syncEdgeLengths();
     if (options?.fit) this.fitLayer({ ...layer, geojson: data });
   }
   clearFeatureHighlight(): void {
     for (const id of HIGHLIGHT_LAYER_IDS) if (this.map?.getLayer(id)) this.map.removeLayer(id);
     if (this.map?.getSource(HIGHLIGHT_SOURCE_ID)) this.map.removeSource(HIGHLIGHT_SOURCE_ID);
+    this.highlightedFeatures = [];
+    this.syncEdgeLengths();
+  }
+  setEdgeLengthLabels(enabled: boolean): void {
+    if (enabled === this.edgeLengthsEnabled) return;
+    this.edgeLengthsEnabled = enabled;
+    this.syncEdgeLengths();
+  }
+  /** Redraw the side labels of the highlighted polygons; see `edge-lengths.ts`. */
+  private syncEdgeLengths(): void {
+    const map = this.map;
+    if (!map?.isStyleLoaded()) return;
+    if (map.getLayer(EDGE_LENGTH_LAYER_ID)) map.removeLayer(EDGE_LENGTH_LAYER_ID);
+    if (map.getSource(EDGE_LENGTH_SOURCE_ID)) map.removeSource(EDGE_LENGTH_SOURCE_ID);
+    if (!this.edgeLengthsEnabled || this.highlightedFeatures.length === 0) return;
+    const data = edgeLengthLines(this.highlightedFeatures, {
+      unit: this.preferences?.scaleUnit ?? "metric",
+    });
+    if (data.features.length === 0) return;
+    map.addSource(EDGE_LENGTH_SOURCE_ID, { type: "geojson", data });
+    map.addLayer(edgeLengthLayer(this.textFont) as Parameters<typeof map.addLayer>[0]);
   }
   startManualPlacement(lngLat: [number, number], options: ManualPlacementOptions): () => void {
     if (!this.map) return () => {};

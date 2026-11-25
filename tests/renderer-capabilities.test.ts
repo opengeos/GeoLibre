@@ -144,3 +144,17 @@ describe("rendererCapabilities", () => {
     }
   });
 });
+
+describe("edgeLengthLabels", () => {
+  it("is offered on the 2D engines, which draw the labels as a symbol layer", () => {
+    for (const renderer of RENDERERS) {
+      for (const capabilities of variants(renderer)) {
+        assert.equal(
+          capabilities.edgeLengthLabels,
+          renderer === "maplibre" || renderer === "mapbox",
+          renderer,
+        );
+      }
+    }
+  });
+});
