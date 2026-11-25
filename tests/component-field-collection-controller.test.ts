@@ -652,3 +652,106 @@ it("drops a picture whose read the capture abandoned while its input was unmount
   assert.equal(saveRecord().disabled, false);
   assert.equal(screen.queryByRole("img", { name: i18n.t("fieldCollection.photo") }), null);
 });
+
+for (const removeNewer of [false, true]) {
+  it(`keeps ${removeNewer ? "a removal" : "the newer attachment"} when an old read finishes after same-draft remount`, async () => {
+    addCollection("A", "none", {
+      fields: [{ key: "image", label: "Image", type: "text", required: false }],
+    });
+    useAppStore
+      .getState()
+      .updateLayer("A", { attributeForm: { fields: [{ field: "image", widget: "attachment" }] } });
+    Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
+    const hook = controller();
+    let view = render(fieldsFor(hook));
+    const pick = (name: string) => {
+      const input = view.container.querySelector('input[type="file"]');
+      assert.ok(input);
+      fireEvent.change(input, { target: { files: [new File([name], `${name}.jpg`)] } });
+    };
+    pick("old");
+    act(() => hook.result.current.onDialogOpenChange(false));
+    hook.rerender({ open: false });
+    view.unmount();
+    hook.rerender({ open: true });
+    view = render(fieldsFor(hook));
+    pick("new");
+    await act(async () => PendingReader.pending[1].finish("new"));
+    view.rerender(fieldsFor(hook));
+    if (removeNewer)
+      fireEvent.click(view.getByRole("button", { name: i18n.t("fieldCollection.removePhoto") }));
+    await act(async () => PendingReader.pending[0].finish("old"));
+    assert.equal(
+      capture(hook).values.image,
+      removeNewer ? "" : `data:image/jpeg;base64,${btoa("new")}`,
+    );
+    assert.equal(capture(hook).readingPhotos, false);
+    act(() => capture(hook).onSave());
+    const features = useAppStore.getState().layers.find((layer) => layer.id === "A")
+      ?.geojson?.features;
+    assert.equal(features?.length, 1);
+    assert.equal(
+      features?.[0].properties?.image,
+      removeNewer ? undefined : `data:image/jpeg;base64,${btoa("new")}`,
+    );
+  });
+}
+
+it("keeps remounted attachment reads for different fields independent", async () => {
+  addCollection("A", "none", {
+    fields: ["first", "second"].map((key) => ({ key, label: key, type: "text", required: false })),
+  });
+  useAppStore.getState().updateLayer("A", {
+    attributeForm: {
+      fields: ["first", "second"].map((field) => ({ field, widget: "attachment" })),
+    },
+  });
+  Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
+  const hook = controller();
+  let view = render(fieldsFor(hook));
+  const first = view.container.querySelectorAll('input[type="file"]')[0];
+  assert.ok(first);
+  fireEvent.change(first, { target: { files: [new File(["first"], "first.jpg")] } });
+  act(() => hook.result.current.onDialogOpenChange(false));
+  hook.rerender({ open: false });
+  view.unmount();
+  hook.rerender({ open: true });
+  view = render(fieldsFor(hook));
+  const second = view.container.querySelectorAll('input[type="file"]')[1];
+  assert.ok(second);
+  fireEvent.change(second, { target: { files: [new File(["second"], "second.jpg")] } });
+  await act(async () => PendingReader.pending[1].finish("second"));
+  await act(async () => PendingReader.pending[0].finish("first"));
+  assert.equal(capture(hook).values.first, `data:image/jpeg;base64,${btoa("first")}`);
+  assert.equal(capture(hook).values.second, `data:image/jpeg;base64,${btoa("second")}`);
+  assert.equal(capture(hook).readingPhotos, false);
+});
+
+it("ignores an older remounted read failure after the newer photo completes", async () => {
+  addCollection("A", "none", {
+    fields: [{ key: "image", label: "Image", type: "text", required: false }],
+  });
+  useAppStore
+    .getState()
+    .updateLayer("A", { attributeForm: { fields: [{ field: "image", widget: "attachment" }] } });
+  Object.defineProperty(globalThis, "FileReader", { configurable: true, value: PendingReader });
+  const hook = controller();
+  let view = render(fieldsFor(hook));
+  const pick = () => {
+    const input = view.container.querySelector('input[type="file"]');
+    assert.ok(input);
+    fireEvent.change(input, { target: { files: [new File(["photo"], "photo.jpg")] } });
+  };
+  pick();
+  act(() => hook.result.current.onDialogOpenChange(false));
+  hook.rerender({ open: false });
+  view.unmount();
+  hook.rerender({ open: true });
+  view = render(fieldsFor(hook));
+  pick();
+  await act(async () => PendingReader.pending[1].finish("new"));
+  await act(async () => PendingReader.pending[0].fail());
+  assert.equal(capture(hook).values.image, `data:image/jpeg;base64,${btoa("new")}`);
+  assert.equal(hook.result.current.notice, null);
+  assert.equal(capture(hook).readingPhotos, false);
+});

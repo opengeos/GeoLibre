@@ -24,7 +24,12 @@ const RASTER_DATA_URL = /^data:image\/(?:png|jpeg|gif|webp|bmp);base64,/i;
 const MAX_ATTACHMENT_DATA_URL_LENGTH = Math.ceil((MAX_PHOTO_BYTES * 4) / 3) + 64;
 /** Source of attachment read ids, unique across every input on the page. */
 let lastAttachmentReadId = 0;
-type AttachmentReadingChange = (delta: 1 | -1, readId: number, error?: string) => void;
+type AttachmentReadingChange = (
+  delta: 1 | -1,
+  readId: number,
+  error?: string,
+  fieldKey?: string,
+) => void;
 
 interface FieldCollectionFormFieldsProps {
   schema: CollectionSchema;
@@ -33,7 +38,7 @@ interface FieldCollectionFormFieldsProps {
   /** Candidate properties for visibility expressions; null without a form. */
   candidateProps: Record<string, unknown> | null;
   values: Record<string, string>;
-  setValue: (key: string, value: string) => void;
+  setValue: (key: string, value: string, readId?: number) => void;
   errors: Record<string, string>;
   errorText: (code: string | undefined) => string | null;
   /** Changes with each record, so a picture still loading stays with its own. */
@@ -78,10 +83,12 @@ export function FieldCollectionFormFields({
               field={field}
               config={config}
               value={values[field.key] ?? ""}
-              onChange={(value) => setValue(field.key, value)}
+              onChange={(value, readId) => setValue(field.key, value, readId)}
               error={errorText(errors[field.key])}
               captureKey={captureKey}
-              onReadingChange={onReadingChange}
+              onReadingChange={(delta, readId, error) =>
+                onReadingChange(delta, readId, error, field.key)
+              }
             />,
           ];
         });
@@ -107,7 +114,7 @@ interface FormFieldProps {
   field: CollectionField;
   config: AttributeFormFieldConfig | undefined;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, readId?: number) => void;
   error: string | null;
   captureKey: string;
   onReadingChange: AttachmentReadingChange;
@@ -208,7 +215,7 @@ function AttachmentInput({
 }: {
   id: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, readId?: number) => void;
   captureKey: string;
   onReadingChange: AttachmentReadingChange;
 }) {
@@ -264,7 +271,7 @@ function AttachmentInput({
       else if (src.length > MAX_ATTACHMENT_DATA_URL_LENGTH) readError = tooLarge();
       else {
         setProblem(null);
-        onChange(src);
+        onChange(src, readId);
       }
     };
     reader.readAsDataURL(file);

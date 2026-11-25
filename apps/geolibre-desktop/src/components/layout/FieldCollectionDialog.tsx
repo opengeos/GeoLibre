@@ -375,9 +375,9 @@ interface CaptureStepProps {
    * A photo field started (+1) or finished (-1) reading a picture; Save waits
    * for it. A completion can report an error after the input unmounts.
    */
-  onAttachmentReading: (delta: 1 | -1, readId: number, error?: string) => void;
+  onAttachmentReading: (delta: 1 | -1, readId: number, error?: string, fieldKey?: string) => void;
   values: Record<string, string>;
-  setValue: (key: string, value: string) => void;
+  setValue: (key: string, value: string, readId?: number) => void;
   errors: Record<string, string>;
   errorText: (code: string | undefined) => string | null;
   photos: CollectionPhoto[];

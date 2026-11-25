@@ -119,6 +119,9 @@ export function useFieldCollectionController({
   // cannot release a newer read's hold, even after switching back to a target
   // that reuses the same record key.
   const attachmentReadsRef = useRef(new Set<number>());
+  // Ownership survives input remounts within the same preserved draft. Keep
+  // the latest token after completion so an older read can never overwrite it.
+  const latestAttachmentReadRef = useRef(new Map<string, number>());
   const [picking, setPicking] = useState(false); // point: one-shot map click
   const [drawing, setDrawing] = useState(false); // line/polygon: multi-vertex
   const [vertices, setVertices] = useState<Vertex[]>([]);
@@ -286,6 +289,7 @@ export function useFieldCollectionController({
     gpsSeqRef.current += 1;
     contextSeqRef.current += 1;
     attachmentReadsRef.current.clear();
+    latestAttachmentReadRef.current.clear();
     setPhotoReads(0);
   }, []);
 
@@ -983,8 +987,10 @@ export function useFieldCollectionController({
   // publication to this capture, while retaining valid reads on dismissal.
   const captureContext = contextSeqRef.current;
   const setValue = useCallback(
-    (key: string, value: string) => {
+    (key: string, value: string, readId?: number) => {
       if (contextSeqRef.current !== captureContext) return;
+      if (readId !== undefined && latestAttachmentReadRef.current.get(key) !== readId) return;
+      if (readId === undefined) latestAttachmentReadRef.current.delete(key);
       setRecordEdited(true);
       setValues((v) => ({ ...v, [key]: value }));
     },
@@ -1065,20 +1071,30 @@ export function useFieldCollectionController({
           attributeForm,
           pending: capturePending,
           captureKey: recordKey,
-          onAttachmentReading: (delta: 1 | -1, readId: number, error?: string) => {
+          onAttachmentReading: (
+            delta: 1 | -1,
+            readId: number,
+            error?: string,
+            fieldKey?: string,
+          ) => {
             if (contextSeqRef.current !== captureContext) return;
             // A read belongs to the capture it began in. A completion releases
             // only a read still being held, never a newer one.
             if (delta > 0) {
               setNotice(null);
               attachmentReadsRef.current.add(readId);
+              if (fieldKey !== undefined) latestAttachmentReadRef.current.set(fieldKey, readId);
               setPhotoReads((count) => count + 1);
               return;
             }
             const held = attachmentReadsRef.current.delete(readId);
             if (held) {
               setPhotoReads((count) => Math.max(0, count - 1));
-              if (error) setNotice(error);
+              if (
+                error &&
+                (fieldKey === undefined || latestAttachmentReadRef.current.get(fieldKey) === readId)
+              )
+                setNotice(error);
             }
           },
           values,
