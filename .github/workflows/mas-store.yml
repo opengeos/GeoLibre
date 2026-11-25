@@ -103,7 +103,14 @@ jobs:
 
   build:
     name: Build MAS pkg
-    runs-on: macos-latest
+    # Built with Xcode 27 (macOS 27 SDK), like ios.yml, which had to move for
+    # App Store Connect's iOS 27 SDK floor (ITMS-90725, April 2027). Apple
+    # raises the store SDK floors together, so this keeps the Mac App Store
+    # build ahead of it. macos-latest ships Xcode 26; only the `xcode-27` image
+    # has Xcode 27. The label pins the Xcode major, but its minor version and SDK
+    # still move with image updates, which the "Select the newest available
+    # Xcode" step handles. Same runner as ios.yml.
+    runs-on: xcode-27
     timeout-minutes: 60
     needs: secrets-gate
     # success() is explicit because a custom job `if:` REPLACES the default
@@ -117,6 +124,28 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Select the newest available Xcode
+        # The image default moves under us on image updates, and an SDK below
+        # App Store Connect's floor only surfaces as a warning email (or a
+        # rejection) after the upload. Pick the newest Xcode present, fail
+        # before the build if it is older than 27, and log the SDKs.
+        run: |
+          set -euo pipefail
+          newest="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$newest" ]; then
+            echo "::error::No Xcode found on the runner"
+            exit 1
+          fi
+          sudo xcode-select -s "$newest/Contents/Developer"
+          version="$(xcodebuild -version | head -1 | awk '{print $2}')"
+          if [ "${version%%.*}" -lt 27 ]; then
+            echo "::error::Xcode $version builds against a macOS SDK below App Store Connect's floor; use a runner image that ships Xcode 27"
+            exit 1
+          fi
+          echo "::notice::Using Xcode $version at $newest"
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i "macOS" || true
+
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
@@ -153,7 +182,14 @@ jobs:
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
 
       - name: Install universal-build Rust targets
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+        # llvm-tools: Xcode 27's SwiftPM internalizes the @_cdecl exports of
+        # Swift plugin packages, and swift-rs promotes them back to global with
+        # rustup's llvm-objcopy. Without it swift-rs only prints a cargo warning
+        # and the link fails later with undefined `_init_plugin_*` symbols.
+        # See ios.yml and docs/ios.md.
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          rustup component add llvm-tools
 
       - name: Install frontend dependencies
         run: npm ci
@@ -217,6 +253,15 @@ jobs:
             echo "::error::App bundle carries com.apple.security.network.server; App Review rejects it without an inbound-connection feature (see mas/Entitlements.mas.plist.template)"
             exit 1
           fi
+          # DTSDKName is the SDK the shipped binary was actually built against,
+          # the value App Store Connect checks against its SDK floor.
+          sdk="$(/usr/libexec/PlistBuddy -c 'Print :DTSDKName' "$app/Contents/Info.plist")"
+          sdk_major="$(printf '%s' "$sdk" | sed -E 's/^macosx([0-9]+).*/\1/')"
+          if ! printf '%s' "$sdk_major" | grep -qE '^[0-9]+$' || [ "$sdk_major" -lt 27 ]; then
+            echo "::error::App bundle was built against '$sdk'; expected the macOS 27 SDK or later"
+            exit 1
+          fi
+          echo "::notice::Built against $sdk"
           version="$(node -p "require('./apps/geolibre-desktop/src-tauri/tauri.conf.json').version")"
           pkg="GeoLibre.Desktop_${version}_universal_mas.pkg"
           xcrun productbuild --sign "$APPLE_MAS_INSTALLER_IDENTITY" \
