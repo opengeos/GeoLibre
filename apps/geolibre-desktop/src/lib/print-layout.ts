@@ -18,8 +18,8 @@ import {
   type MarkerShape,
 } from "@geolibre/core";
 import { prefersLightForeground } from "./theme-schemes";
-import { georefLngLat, type CaptureGeoref, type MapImagePlacement } from "./geopdf";
-import { gridLngLat, type CaptureLngLatGrid } from "./print-capture-grid";
+import { type CaptureGeoref, type MapImagePlacement } from "./geopdf";
+import { captureLocator, type CaptureLngLatGrid } from "./print-capture-grid";
 import {
   clampElementScale,
   computeMapGrid,
@@ -1521,11 +1521,7 @@ function pageGeoref(
 ): { frame: Rect; toLngLat: (x: number, y: number) => [number, number] | null } | null {
   const georef = opts.mapGeoref;
   const grid = approximate ? opts.mapLngLatGrid : null;
-  const locate = georef
-    ? (px: number, py: number) => georefLngLat(georef, px, py)
-    : grid
-      ? (px: number, py: number) => gridLngLat(grid, px, py)
-      : null;
+  const locate = captureLocator(georef, grid);
   if (!locate) return null;
   const placement = mapImagePlacement(opts, W, H);
   if (!placement || !(placement.scale > 0)) return null;
@@ -1755,7 +1751,9 @@ function drawInsetMap(
           boundary.push(ll);
         }
       }
-      const ring = insetFootprint(view, boundary).map((p) => ({
+      // The frame centre's latitude picks the pole a polar footprint encloses.
+      const centre = geo.toLngLat(frame.x + frame.w / 2, frame.y + frame.h / 2);
+      const ring = insetFootprint(view, boundary, centre?.[1]).map((p) => ({
         x: ox + p.x * scale,
         y: oy + p.y * scale,
       }));

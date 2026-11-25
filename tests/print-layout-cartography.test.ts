@@ -345,6 +345,16 @@ describe("inset view", () => {
       close(footprint.at(-2)!.y, top, 1e-6);
     }
   });
+  it("closes at the pole in the frame centre's hemisphere", () => {
+    const view = insetViewForBounds([-180, -85, 180, 85], 480, 360, 0);
+    // Mostly northern edge latitudes, yet the frame centre sits south.
+    const boundary: [number, number][] = [];
+    for (let k = 0; k < 12; k++) boundary.push([-180 + 30 * k, k < 8 ? 20 : -40]);
+    const south = mercatorViewPx(view, 0, -85.0511287798066, false).y;
+    const north = mercatorViewPx(view, 0, 85.0511287798066, false).y;
+    close(insetFootprint(view, boundary, -10).at(-1)!.y, south, 1e-6);
+    close(insetFootprint(view, boundary).at(-1)!.y, north, 1e-6);
+  });
   it("centres on the extent and zooms out by the offset", () => {
     const bounds: [number, number, number, number] = [-1, -1, 1, 1];
     const fitted = insetViewForBounds(bounds, 400, 400, 0);
@@ -626,7 +636,7 @@ describe("captured lng/lat grid without a georeference (GH #3551)", () => {
     assert.deepEqual(gridLngLat(grid, 1000, 500), [locate(1000, 500).lng, locate(1000, 500).lat]);
   });
   it("includes a pole the frame circles in the inset bounds", () => {
-    // Looking straight down on the north pole: the frame edge stays at 60N.
+    // Looking straight down on the north pole: the frame corners sit near 67.6N.
     const polar = (px: number, py: number) => {
       const dx = px - 500;
       const dy = py - 250;

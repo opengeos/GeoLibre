@@ -6,6 +6,8 @@
  * on the overview / inset map and to trace its footprint there (GH #3551).
  */
 
+import { georefLngLat, type CaptureGeoref } from "./geopdf";
+
 /** Longitude/latitude sampled at `(cols + 1) x (rows + 1)` capture pixels. */
 export interface CaptureLngLatGrid {
   /** Cells across; samples per row is `cols + 1`. */
@@ -20,6 +22,23 @@ export interface CaptureLngLatGrid {
   lngs: number[];
   /** Latitudes, row-major. */
   lats: number[];
+}
+
+/**
+ * Longitude/latitude at a capture pixel: through the affine georeference when
+ * there is one, else through the sampled grid.
+ *
+ * @param georef - The capture's affine georeference, if any.
+ * @param grid - The capture's sampled grid, if any.
+ * @returns The locator, or null when the capture has neither.
+ */
+export function captureLocator(
+  georef: CaptureGeoref | null | undefined,
+  grid: CaptureLngLatGrid | null | undefined,
+): ((px: number, py: number) => [number, number]) | null {
+  if (georef) return (px, py) => georefLngLat(georef, px, py);
+  if (grid) return (px, py) => gridLngLat(grid, px, py);
+  return null;
 }
 
 /** Grid cells along each axis; 16 x 16 keeps a globe's horizon smooth. */

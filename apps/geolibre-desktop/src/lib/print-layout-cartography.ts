@@ -618,15 +618,20 @@ export function mercatorViewPx(view: MercatorView, lng: number, lat: number, wra
  * @param view - The inset view.
  * @param boundary - The ring, in order, without its closing vertex.
  * @param dir - 1 when the ring travels east, -1 when it travels west.
+ * @param centreLat - Latitude of the frame centre, whose hemisphere holds the
+ *   enclosed pole; the boundary's mean latitude stands in when absent.
  * @returns The footprint in view pixels.
  */
 function polarFootprint(
   view: MercatorView,
   boundary: readonly [number, number][],
   dir: 1 | -1,
+  centreLat?: number,
 ): Point[] {
-  const pole =
-    boundary.reduce((sum, point) => sum + point[1], 0) >= 0 ? MAX_MERCATOR_LAT : -MAX_MERCATOR_LAT;
+  const hemisphere = Number.isFinite(centreLat)
+    ? centreLat!
+    : boundary.reduce((sum, point) => sum + point[1], 0);
+  const pole = hemisphere >= 0 ? MAX_MERCATOR_LAT : -MAX_MERCATOR_LAT;
   const seam = view.center[0] - 180;
   const offset = (lng: number) => (((lng - seam) % 360) + 360) % 360;
   // Eastward rings start just east of the seam, westward ones just west of it.
@@ -661,8 +666,20 @@ function polarFootprint(
   ].map(([lng, lat]) => mercatorViewPx(view, lng, lat, false));
 }
 
-/** Project an ordered, densified boundary without folding it at the dateline. */
-export function insetFootprint(view: MercatorView, boundary: readonly [number, number][]): Point[] {
+/**
+ * Project an ordered, densified boundary without folding it at the dateline.
+ *
+ * @param view - The inset view.
+ * @param boundary - The main frame's boundary, in order.
+ * @param centreLat - Latitude of the main frame's centre, which picks the pole
+ *   a boundary circling one encloses.
+ * @returns The footprint in view pixels.
+ */
+export function insetFootprint(
+  view: MercatorView,
+  boundary: readonly [number, number][],
+  centreLat?: number,
+): Point[] {
   const unwrapped: [number, number][] = [];
   for (const [lng, lat] of boundary) {
     const previous = unwrapped.at(-1)?.[0];
@@ -676,7 +693,7 @@ export function insetFootprint(view: MercatorView, boundary: readonly [number, n
   // whole turns between its ends mean it circles a pole: a globe seen from
   // above it (GH #3551). An open curve is not expected here.
   const turns = Math.round((unwrapped[unwrapped.length - 1][0] - unwrapped[0][0]) / 360);
-  if (turns !== 0) return polarFootprint(view, boundary, turns > 0 ? 1 : -1);
+  if (turns !== 0) return polarFootprint(view, boundary, turns > 0 ? 1 : -1, centreLat);
   const west = Math.min(...unwrapped.map((point) => point[0]));
   const east = Math.max(...unwrapped.map((point) => point[0]));
   if (east - west >= 360 - 1e-7) {
