@@ -25,9 +25,10 @@ pub struct DesktopUpdaterEnabled(pub bool);
 /// `tauri-plugin-updater` deserializes `plugins.updater` while the app is
 /// built and aborts startup when that fails, for example on a missing block
 /// ("invalid type: null, expected struct Config", issue #3631), a missing
-/// `pubkey`, a malformed endpoint, or (in release builds) a non-HTTPS one. Running the plugin's own deserializer
-/// here catches every one of those, so the plugin is registered only when it
-/// will initialize. An empty `pubkey` deserializes but cannot verify any
+/// `pubkey`, a malformed endpoint, or (in release builds) a non-HTTPS one.
+/// Running the plugin's own deserializer here, in the same build profile,
+/// catches every one of those, so the plugin is registered only when it will
+/// initialize. An empty `pubkey` deserializes but cannot verify any
 /// update, so it counts as unconfigured too.
 ///
 /// Args:
@@ -55,7 +56,9 @@ pub fn updater_plugin_configured(updater: Option<&serde_json::Value>) -> bool {
             false
         }
         Err(error) => {
-            eprintln!("[GeoLibre] Signed desktop updater disabled: invalid plugins.updater config: {error}");
+            eprintln!(
+                "[GeoLibre] Signed desktop updater disabled: invalid plugins.updater config: {error}"
+            );
             false
         }
     }
@@ -286,7 +289,10 @@ mod tests {
         assert!(!updater_plugin_configured(Some(
             &json!({ "endpoints": ["https://example.com/latest.json"] })
         )));
-        assert!(!updater_plugin_configured(Some(&json!({ "pubkey": "  " }))));
+        assert!(!updater_plugin_configured(Some(&json!({
+            "pubkey": "  ",
+            "endpoints": ["https://example.com/latest.json"]
+        }))));
     }
 
     #[test]

@@ -7599,6 +7599,31 @@ mod tests {
         assert!(error.contains("error: last line"), "got: {error}");
     }
 
+    // The stderr half of the test above: a child that reports its failure on
+    // stderr (with stdout quiet, so there is no cross-pipe ordering to race)
+    // must have that line quoted in the waiter's error.
+    #[cfg(all(unix, not(feature = "mas")))]
+    #[test]
+    fn martin_waiter_quotes_the_stderr_tail() {
+        use std::process::{Command, Stdio};
+
+        let mut child = Command::new("sh")
+            .arg("-c")
+            .arg("echo 'error: bind failed' >&2; exit 3")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn a failing child");
+        let output = CapturedOutput::attach(&mut child);
+        let error = wait_for_martin_health("http://127.0.0.1:9", &mut child, &output)
+            .expect_err("the child exits without becoming healthy");
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(error.contains("exited before it was ready"), "got: {error}");
+        assert!(error.contains("error: bind failed"), "got: {error}");
+    }
+
     // The sidecar probes must reach 127.0.0.1 directly. A corporate proxy picked
     // up from the environment or the Windows system settings would otherwise
     // answer them itself, so a healthy sidecar never reads as ready (#3003).

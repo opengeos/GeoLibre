@@ -465,9 +465,13 @@ jobs:
       # plugin whose config fails to deserialize only crashes at launch.
       # v3.10.0 shipped that way (#3631, #3632). Build the shell with the same
       # features as a release build (custom-protocol, default features), in the
-      # faster debug profile, and make sure it stays up. Plugin config is read
-      # the same way in either profile, and the stubbed dist above is enough:
-      # the crash happens before any page loads.
+      # faster debug profile, and make sure it stays up. Plugin config is
+      # deserialized at the same point in either profile, so a block that fails
+      # to parse crashes both; the few checks that are release-only (such as
+      # tauri-plugin-updater rejecting plain-HTTP endpoints) are covered by the
+      # runtime guard, which runs the same deserializer in the shipped profile.
+      # The stubbed dist above is enough: the crash happens before any page
+      # loads.
       - name: Build the Tauri shell for a launch smoke test
         run: cargo build --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml --features tauri/custom-protocol
 
