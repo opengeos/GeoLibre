@@ -102,6 +102,20 @@ it("keeps mobile GeoJSON copy saves available without offering sidecar-backed so
     const refused = await writeLayerEditsToSource(gpkg, { map: undefined, t, deps });
     assert.equal(refused.status, "error");
     assert.equal(commits, 0, "unsupported saves must not commit pending drafts");
+    for (const sourcePath of [
+      "content://documents/roads.geojson",
+      "https://example.com/roads.geojson",
+      "roads.geojson",
+      `${root}/project.geolibre.json`,
+    ]) {
+      const unsupported = makeLayer("legacy-mobile-json", "Legacy source", { sourcePath });
+      assert.equal(canWriteEditsToSource(unsupported), false, sourcePath);
+      useAppStore.setState({ layers: [unsupported] });
+      const result = await writeLayerEditsToSource(unsupported, { map: undefined, t, deps });
+      assert.equal(result.status, "error", sourcePath);
+      assert.equal(commits, 0, "unsupported paths must not commit pending drafts");
+    }
+    useAppStore.setState({ layers: [geojson, gpkg] });
     const saved = await writeLayerEditsToSource(geojson, { map: undefined, t, deps });
     assert.equal(saved.status, "success");
     assert.equal(writes, 1);

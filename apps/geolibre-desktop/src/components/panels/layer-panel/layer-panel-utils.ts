@@ -8,6 +8,7 @@ import type { RasterInfo } from "../../../lib/raster-info";
 import { IS_MAS_BUILD } from "../../../lib/build-flags";
 import { isTauri } from "../../../lib/is-tauri";
 import { isDesktopRuntime } from "../../../lib/is-mobile";
+import { isGeojsonSourcePath } from "../../../lib/file-io/paths";
 import { getNetcdfLayerState } from "../../../lib/netcdf-image-symbology";
 import { DATA_SOURCE_CATALOG, type DataSourceCatalogEntry } from "../../../lib/ui-profile";
 import type { AddDataKind } from "../../layout/add-data/types";
@@ -134,7 +135,7 @@ export function canWriteEditsToSource(layer: GeoLibreLayer): boolean {
   const path = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
   if (!path) return false;
   const ext = path.split(".").pop()?.toLowerCase();
-  if (ext === "geojson" || ext === "json") return true;
+  if (ext === "geojson" || ext === "json") return isGeojsonSourcePath(path);
   return isDesktopRuntime() && Boolean(ext && WRITEBACK_EXTENSIONS.includes(ext));
 }
 
