@@ -314,7 +314,8 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
       tracker.finish("error", (error as Error).message);
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
-      setRunning(false);
+      // An older run can settle after a close/reopen starts another run.
+      if (!abortRef.current) setRunning(false);
     }
   }, [tool, params, layers, appendLog, addResultLayer, mapControllerRef, isParamVisible, t]);
 
