@@ -574,7 +574,8 @@ export class LocalNetwork {
     const table = new Map<number, Map<number, number>>();
     for (const entry of rules.table ?? []) {
       if (entry.from === entry.to) continue;
-      const cost = Number.isNaN(entry.cost) || entry.cost < 0 ? 0 : entry.cost;
+      // An invalid cost prohibits the turn, as a blank cost cell does.
+      const cost = Number.isNaN(entry.cost) || entry.cost < 0 ? Infinity : entry.cost;
       let row = table.get(entry.from);
       if (!row) {
         row = new Map();
@@ -658,8 +659,9 @@ export class LocalNetwork {
         cost += entry;
       }
     }
-    // Only a junction offers a choice; a bend in a road is not a turn.
-    if (degree >= 3 && (rules.leftCost > 0 || rules.rightCost > 0)) {
+    // Only a junction offers a choice, and only leaving the line is a turn:
+    // a bend in one road is free even where a side road joins at the bend.
+    if (fromFeature !== toFeature && degree >= 3 && (rules.leftCost > 0 || rules.rightCost > 0)) {
       const angle = this.turnAngle(inState, node, outState);
       if (angle > rules.straightAngle) cost += rules.leftCost;
       else if (angle < -rules.straightAngle) cost += rules.rightCost;

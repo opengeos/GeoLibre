@@ -6,10 +6,10 @@ import {
   localClosestFacilityTool,
   localServiceAreaTool,
   localShortestPathTool,
+  turnRulesActive,
   type ProcessingAlgorithm,
 } from "@geolibre/processing";
 import type { Feature, FeatureCollection, LineString, Position } from "geojson";
-import { turnRulesActive } from "../packages/processing/src/local-network";
 
 /** Degrees of latitude (or longitude at the equator) spanning `m` metres. */
 function deg(m: number): number {
@@ -355,6 +355,61 @@ describe("turn costs", () => {
     const table = layer("turns", [turn("a", "b", { penalty: "" })]);
     const leg = await route({ ...TURN_TABLE, turnCostField: "penalty" }, [table]);
     assert.ok(Math.abs((leg.properties?.cost as number) - around) < 0.01);
+  });
+});
+
+describe("turn cost edge cases", () => {
+  it("does not charge a bend in one line where a side line joins", async () => {
+    // One line bends left 90 degrees at (100, 0), where a spur also starts.
+    const bend = layer("roads", [
+      line(
+        [
+          [0, 0],
+          [100, 0],
+          [100, 100],
+        ],
+        { id: "main" },
+      ),
+      line(
+        [
+          [100, 0],
+          [200, 0],
+        ],
+        { id: "spur" },
+      ),
+    ]);
+    const stops = layer("stops", [point(0, 0), point(100, 100)]);
+    const { results } = await run(localShortestPathTool, [bend, stops], {
+      network: "roads",
+      stops: "stops",
+      turns: "rules",
+      leftTurnCost: 500,
+      rightTurnCost: 500,
+    });
+    assert.ok(Math.abs((results[0].geojson.features[0].properties?.cost as number) - 200) < 0.01);
+  });
+
+  it("prohibits a turn whose cost cell is hexadecimal text", async () => {
+    const table = layer("turns", [turn("a", "b", { penalty: "0x1A" })]);
+    const { results } = await run(localShortestPathTool, [STREETS, S_TO_N, table], {
+      network: "streets",
+      stops: "stops",
+      ...TURN_TABLE,
+      turnCostField: "penalty",
+    });
+    const cost = results[0].geojson.features[0].properties?.cost as number;
+    assert.ok(Math.abs(cost - DETOUR) < 0.01);
+  });
+
+  it("treats a negative or NaN table cost passed to setTurnRules as a prohibition", () => {
+    for (const bad of [-1, Number.NaN]) {
+      const net = buildLocalNetwork(STREETS.geojson!.features);
+      const s = net.insertPoint(0, 0)!.node;
+      const n = net.insertPoint(deg(100), deg(100))!.node;
+      net.setTurnRules({ table: [{ from: 0, to: 1, cost: bad }] });
+      const path = net.shortestPath(s, n);
+      assert.ok(path && Math.abs(path.cost - DETOUR) < 0.01, String(bad));
+    }
   });
 });
 

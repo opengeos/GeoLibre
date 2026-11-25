@@ -76,11 +76,15 @@ export {
   LocalNetwork,
   buildLocalNetwork,
   parseDirection,
+  turnRulesActive,
   type LocalNetworkOptions,
   type NetworkCostMode,
   type NetworkDirection,
   type NetworkEdge,
   type NetworkPath,
+  type TurnRules,
+  type TurnTableEntry,
+  type UTurnPolicy,
 } from "./local-network";
 export {
   STATISTICS_TOOLS,

@@ -99,11 +99,16 @@ export function layerToSequencedPoints(
   return entries.map((entry) => entry.point);
 }
 
+/**
+ * A finite number, or a plain decimal or scientific-notation string. Other
+ * `Number()` forms (`0x1A`, `0b1`) are rejected, so a turn cost cell reading
+ * them prohibits the turn like any other non-numeric value.
+ */
 function numericValue(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value === "string" && value.trim() !== "") {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (/^[+-]?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(trimmed)) return Number(trimmed);
   }
   return null;
 }
@@ -826,7 +831,10 @@ export const localServiceAreaTool: ProcessingAlgorithm = {
     const width = Math.max(0, Number(ctx.parameters.polygonWidth ?? 0) || 0);
     const placed = placePoints(net, facilities, ctx);
     const passes = (separate ? facilities.length : 1) * breaks.length;
-    if (passes * net.edges.length > 5_000_000 || (width > 0 && passes > 100)) {
+    if (
+      passes * Math.max(net.edges.length, net.searchStateCount) > 5_000_000 ||
+      (width > 0 && passes > 100)
+    ) {
       ctx.log(
         "Error: service area selection is too large; reduce facilities or breaks, merge areas, or disable polygons",
       );
