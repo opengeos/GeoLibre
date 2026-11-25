@@ -5,6 +5,7 @@ import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LabelStyle } from "@geoli
 import { syncLayer } from "../packages/map/src/layer-sync";
 import {
   MAX_POLYGON_LABEL_FEATURES,
+  MAX_POLYGON_LABEL_VERTICES,
   POLYGON_LABEL_AREA_PROPERTY,
   polygonLabelPoint,
   polygonLabelPoints,
@@ -210,6 +211,28 @@ describe("polygonLabelPoints", () => {
 
   it("memoizes by collection reference", () => {
     assert.equal(polygonLabelPoints(collection), polygonLabelPoints(collection));
+  });
+
+  it("skips layers past the vertex budget", () => {
+    // A few very detailed outlines: under the polygon budget, over the vertex one.
+    const perRing = Math.ceil(MAX_POLYGON_LABEL_VERTICES / 4) + 1;
+    const circle: Position[] = [];
+    for (let k = 0; k < perRing - 1; k += 1) {
+      const t = (k / (perRing - 1)) * 2 * Math.PI;
+      circle.push([Math.cos(t), Math.sin(t)]);
+    }
+    circle.push(circle[0]);
+    const detailed: FeatureCollection = {
+      type: "FeatureCollection",
+      features: Array.from({ length: 4 }, (_, i) => ({
+        type: "Feature" as const,
+        properties: { i },
+        geometry: { type: "Polygon" as const, coordinates: [circle] },
+      })),
+    };
+    const start = Date.now();
+    assert.equal(polygonLabelPoints(detailed), null);
+    assert.ok(Date.now() - start < 1000, "the budget is checked before any search");
   });
 
   it("skips layers past the polygon budget", () => {

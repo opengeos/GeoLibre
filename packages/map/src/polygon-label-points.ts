@@ -333,6 +333,14 @@ function thinRing(ring: Position[]): Position[] {
  */
 export const MAX_POLYGON_LABEL_FEATURES = 10_000;
 
+/**
+ * Most polygon vertices one layer derives label points for. Each search scans
+ * its outline for every cell it scores, so detailed outlines cost far more
+ * than parcels: Natural Earth 10m countries (about 550k vertices) takes about
+ * half a second. Past this budget the layer keeps MapLibre's placement too.
+ */
+export const MAX_POLYGON_LABEL_VERTICES = 1_000_000;
+
 const labelPointCache = new WeakMap<FeatureCollection, FeatureCollection | null>();
 
 /**
@@ -343,16 +351,26 @@ const labelPointCache = new WeakMap<FeatureCollection, FeatureCollection | null>
  *
  * @param collection - The layer's features.
  * @returns A collection safe to feed a point-placed symbol layer, or null when
- *   the layer has more than {@link MAX_POLYGON_LABEL_FEATURES} polygons.
+ *   the layer has more than {@link MAX_POLYGON_LABEL_FEATURES} polygons or
+ *   {@link MAX_POLYGON_LABEL_VERTICES} polygon vertices.
  */
 export function polygonLabelPoints(collection: FeatureCollection): FeatureCollection | null {
   if (labelPointCache.has(collection)) return labelPointCache.get(collection)!;
   let polygonCount = 0;
+  let vertexCount = 0;
   for (const feature of collection.features) {
-    const type = feature.geometry?.type;
-    if (type === "Polygon" || type === "MultiPolygon") polygonCount += 1;
+    const geometry = feature.geometry;
+    if (geometry?.type === "Polygon") {
+      polygonCount += 1;
+      for (const ring of geometry.coordinates) vertexCount += ring.length;
+    } else if (geometry?.type === "MultiPolygon") {
+      polygonCount += 1;
+      for (const polygon of geometry.coordinates) {
+        for (const ring of polygon) vertexCount += ring.length;
+      }
+    }
   }
-  if (polygonCount > MAX_POLYGON_LABEL_FEATURES) {
+  if (polygonCount > MAX_POLYGON_LABEL_FEATURES || vertexCount > MAX_POLYGON_LABEL_VERTICES) {
     labelPointCache.set(collection, null);
     return null;
   }
