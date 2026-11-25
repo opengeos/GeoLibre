@@ -203,6 +203,16 @@ run it also attaches that `.pkg` to the release, so the exact submitted bytes fo
 a tag remain available after the CI artifact's retention window. It never uploads
 to App Store Connect — that step stays manual (see *Submitting* below).
 
+The job runs on GitHub's `xcode-27` runner, the same as `ios.yml`, and selects
+the newest Xcode on it. It fails before building if that Xcode is older than 27,
+and again before packaging if any slice of the app binary was linked against a
+macOS SDK below 27 (read with `vtool -show-build`; the Tauri bundler writes no
+`DTSDKName`). App Store Connect requires the iOS 27 SDK for iOS uploads from
+April 2027 (ITMS-90725). No macOS floor has been announced, but this keeps the
+store build on the current SDK in case one follows. Xcode 27 also needs rustup's
+`llvm-tools` component, locally too; see the Xcode 27 notes in
+[`ios.md`](ios.md#continuous-integration).
+
 > A MAS-signed `.pkg` can only be installed through the App Store; downloading it
 > from the releases page gets you a package that will not install. It is attached
 > as a submission archive, not as a macOS download. Point users at the App Store
