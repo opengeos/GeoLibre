@@ -294,7 +294,7 @@ Give it a directory meant for maps, not your home directory.
 | `add_tiles_layer` | PMTiles archives and vector tile services. |
 | `add_ogc_layer` | WMS and WMTS endpoints. |
 | `add_wfs_layer` | A WFS feature type, fetched by the app when the project opens. |
-| `add_arcgis_layer` | ArcGIS REST MapServer and ImageServer (raster tiles from the export endpoint, with sublayers or a rendering rule) and FeatureServer layers (features in view loaded on open). |
+| `add_arcgis_layer` | ArcGIS REST MapServer and ImageServer (dynamic export, or a validated public image cache with `tiled=true`) and FeatureServer layers (features in view loaded on open). Cached mode refuses sublayers, rendering rules, incompatible grids and raw LERC caches before changing the project. |
 | `add_zarr_layer` | One variable of a Zarr data cube, sliced with a dimension selector, drawn by the app's Zarr control. |
 | `add_video_layer` | A georeferenced video overlay from `https://` URLs and four corners. |
 | `add_lidar_layer` | LAS/LAZ/COPC/EPT point clouds by URL. |

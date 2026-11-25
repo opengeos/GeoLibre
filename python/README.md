@@ -114,6 +114,7 @@ The click payload has the form `{"lngLat": {"lng": ..., "lat": ...},
 | `add_wms(endpoint, layers, name=, styles=, image_format=, transparent=, tile_size=, **style)` | Add a WMS (GetMap) tiled raster layer. |
 | `add_wmts(url, name=, tile_size=, **style)` | Add a WMTS tile URL template. |
 | `add_wfs(endpoint, type_name, name=, version=, output_format=, srs_name=, max_features=, **style)` | Add a WFS layer (GeoJSON, fetched and inlined). |
+| `add_arcgis_layer(url, name=, service="map", tiled=False, **style)` | Add an ArcGIS map/image export or feature service. `tiled=True` reads public map/image metadata and uses a validated Web Mercator image cache. |
 | `add_cog(url, name=, bands=, colormap=, rescale=)` | Add a Cloud Optimized GeoTIFF. |
 | `add_raster(source, name=, bands=, colormap=, rescale=, array_args=)` | Add a COG/GeoTIFF or an xarray DataArray/Dataset (xarray needs `geolibre[raster]`). |
 | `add_3d_tiles(url, name=, altitude_offset=, request_headers=, **style)` | Add a 3D Tiles `tileset.json`. |

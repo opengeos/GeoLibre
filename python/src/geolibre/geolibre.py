@@ -3569,6 +3569,7 @@ class Map(anywidget.AnyWidget):
         name: str = "ArcGIS Layer",
         *,
         service: str = "map",
+        tiled: bool = False,
         sublayers: str | list[int] | None = None,
         rendering_rule: str | dict[str, Any] | None = None,
         max_features: int | None = None,
@@ -3578,15 +3579,19 @@ class Map(anywidget.AnyWidget):
     ) -> str:
         """Add an ArcGIS REST MapServer, ImageServer, or FeatureServer layer.
 
-        Map and image services draw as raster tiles from the service's export
-        endpoint. A feature layer loads the features in view from the service's
-        query endpoint when the project opens in the app.
+        Map and image services draw raster tiles from the export endpoint, or
+        their validated image cache with ``tiled=True``. A feature layer loads
+        the features in view from the query endpoint when the project opens.
 
         Args:
             url: The service URL (``.../MapServer``, ``.../ImageServer``, or a
                 layer URL such as ``.../FeatureServer/0``).
             name: Layer display name.
             service: ``"map"``, ``"image"``, or ``"feature"``.
+            tiled: Use the service's validated public Web Mercator image cache
+                instead of its export endpoint. Cannot be combined with
+                sublayers or a rendering rule; raw LERC caches are refused.
+                Metadata reads are limited to 2 MiB with a 30-second network timeout.
             sublayers: MapServer sublayer ids to show.
             rendering_rule: ImageServer rendering rule (dict or JSON string).
             max_features: Feature service cap on features loaded per view.
@@ -3602,6 +3607,7 @@ class Map(anywidget.AnyWidget):
                 name,
                 url,
                 service=service,
+                tiled=tiled,
                 sublayers=sublayers,
                 rendering_rule=rendering_rule,
                 max_features=max_features,

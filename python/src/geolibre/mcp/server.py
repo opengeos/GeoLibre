@@ -811,6 +811,7 @@ def build_server(workspace: Workspace) -> MCPServer:
         name: str,
         url: str,
         service: str = "map",
+        tiled: bool = False,
         sublayers: str | None = None,
         rendering_rule: dict[str, Any] | str | None = None,
         max_features: int | None = None,
@@ -825,6 +826,8 @@ def build_server(workspace: Workspace) -> MCPServer:
         endpoint when the project opens (MapLibre renderer). Token-protected
         services are not supported. For a VectorTileServer use
         `add_tiles_layer` with its tile URL.
+        With `tiled=True`, public map/image cache metadata is fetched and its
+        Web Mercator XYZ grid is validated before the project is changed.
 
         Args:
             path: Path to the `.geolibre.json` file.
@@ -832,6 +835,10 @@ def build_server(workspace: Workspace) -> MCPServer:
             url: `.../MapServer`, `.../ImageServer`, or a feature layer URL
                 such as `.../FeatureServer/0`.
             service: `map`, `image`, or `feature`.
+            tiled: Use a validated map/image cache rather than dynamic export.
+                Incompatible grids and raw LERC caches are refused. Cannot be
+                combined with sublayers or a rendering rule. Public metadata
+                reads are limited to 2 MiB with a 30-second network timeout.
             sublayers: MapServer sublayer ids to show, e.g. `0,2`.
             rendering_rule: ImageServer rendering rule, e.g.
                 `{"rasterFunction": "Hillshade"}`.
@@ -848,6 +855,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             name,
             url,
             service=service,
+            tiled=tiled,
             sublayers=sublayers,
             rendering_rule=rendering_rule,
             max_features=max_features,
