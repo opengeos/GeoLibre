@@ -27,6 +27,40 @@ const oldPath = `${oldRoot}/${selection}/data/map % # é.geojson`;
 const currentPath = `${currentRoot}/${selection}/data/map % # é.geojson`;
 
 describe("retained iOS document references", () => {
+  it("rebases an encoded path query name without rewriting tile templates or other parameters", () => {
+    for (const base of [
+      "geolibre-mbtiles://tile/{z}/{x}/{y}",
+      "pmtiles://local-pmtiles://localhost/file",
+    ]) {
+      const url = `${base}?p%61th=${encodeURIComponent(oldPath)}&scale={ratio}&token=a%2Bb#keep`;
+      const layer = geojsonLayer({ source: { type: "raster", tiles: [url] } });
+      const rebased = rebaseImportedDocumentLayer(layer, currentRoot);
+      assert.deepEqual(rebased.source.tiles, [
+        url.replace(encodeURIComponent(oldPath), encodeURIComponent(currentPath)),
+      ]);
+      assert.deepEqual(layer.source.tiles, [url]);
+    }
+  });
+
+  it("rewrites the first decoded path parameter when a later literal path parameter is present", () => {
+    const url = `local-cog://localhost/file?%70ath=${encodeURIComponent(oldPath)}&path=leave%2Fthis&z={z}#path=unchanged`;
+    const layer = geojsonLayer({ source: { type: "raster", url } });
+    const rebased = rebaseImportedDocumentLayer(layer, currentRoot);
+    assert.equal(
+      rebased.source.url,
+      url.replace(encodeURIComponent(oldPath), encodeURIComponent(currentPath)),
+    );
+  });
+
+  it("does not mistake a later question-mark-prefixed query key for path", () => {
+    const url = `local-cog://localhost/file?x=1&?path=decoy&path=${encodeURIComponent(oldPath)}&ratio={ratio}#keep`;
+    const layer = geojsonLayer({ source: { type: "raster", url } });
+    assert.equal(
+      rebaseImportedDocumentLayer(layer, currentRoot).source.url,
+      url.replace(encodeURIComponent(oldPath), encodeURIComponent(currentPath)),
+    );
+  });
+
   it("keeps healthy references available and waits for translations before reporting a problem", async () => {
     await i18next.init({ lng: "en", resources: { en: { translation: en } } });
     clearNotifications();

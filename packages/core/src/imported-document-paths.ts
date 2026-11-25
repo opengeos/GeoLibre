@@ -2,6 +2,8 @@
 import type { GeoLibreLayer } from "./types";
 import { hasPathTraversal, isAbsoluteFilesystemPath } from "./paths";
 
+// Keep the shipped identifier/layout aligned with desktop file-io/paths.ts and
+// tauri.ios.conf.json. The configuration regression pins this contract.
 const COPY_PATH =
   /^\/.*\/Library\/Application Support\/org\.geolibre\.app\/picked-documents\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\/data\/([^/]+)$/i;
 
@@ -55,10 +57,21 @@ function mapMediaUrl(value: string, mapPath: (path: string) => string): string {
       const path = url.searchParams.get("path");
       if (!path) return value;
       const current = mapPath(path);
-      return current === path
-        ? value
-        : prefix +
-            raw.replace(/([?&]path=)[^&#]*/, (_, key: string) => key + encodeURIComponent(current));
+      if (current === path) return value;
+      // Match the same decoded key as URLSearchParams.get, including encoded
+      // key names. Preserve every other raw parameter and tile placeholder.
+      const start = raw.indexOf("?") + 1;
+      const hash = raw.indexOf("#", start);
+      const end = hash === -1 ? raw.length : hash;
+      const parameters = raw.slice(start, end).split("&");
+      // An empty leading pair keeps a later '?' inside the parameter name.
+      const index = parameters.findIndex((parameter) =>
+        new URLSearchParams(`&${parameter}`).has("path"),
+      );
+      if (index === -1) return value;
+      const key = parameters[index].split("=", 1)[0];
+      parameters[index] = `${key}=${encodeURIComponent(current)}`;
+      return prefix + raw.slice(0, start) + parameters.join("&") + raw.slice(end);
     }
     if (
       (url.protocol === "asset:" && url.host === "localhost") ||

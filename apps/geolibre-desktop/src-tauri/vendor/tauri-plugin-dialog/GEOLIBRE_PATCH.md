@@ -88,7 +88,10 @@ to the local paths used by GeoLibre's readers:
   `picked-documents/.pending-<selection>/data/`, hashes each file, stores a
   manifest, syncs files and directory entries, then atomically publishes the
   complete UUID folder. Case-conflicting names, symlinks, and invalid file names
-  are rejected. Failed selections roll back, and serialized imports recover
+  are rejected. On a normalization-insensitive filesystem, distinct Unicode
+  spellings of one name can reach the filesystem collision check; that rejects
+  the selection with an OS error and never overwrites a companion file.
+  Failed selections roll back, and serialized imports recover
   abandoned stages without touching published copies. Each pick retains its own
   identity because a UIKit temporary URL is not an original provider identity.
   Ordinary scoped picks use the existing upstream flow. Physical iOS device
