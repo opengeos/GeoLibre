@@ -41,7 +41,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tauri::Manager;
 
-use super::{guarded_async_client_builder, secure_store};
+use super::{guarded_http::guarded_async_client_builder, secure_store};
 
 /// The OpenAI sign-in service (the id token's issuer).
 const ISSUER: &str = "https://auth.openai.com";
