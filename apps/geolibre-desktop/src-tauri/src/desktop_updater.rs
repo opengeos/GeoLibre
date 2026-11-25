@@ -11,6 +11,59 @@
 
 use serde::Serialize;
 
+/// Whether `tauri-plugin-updater` was registered for this run.
+///
+/// Managed only on builds that compile the updater in. The plugin is skipped
+/// when the Tauri config has no `plugins.updater` block, and its
+/// `UpdaterExt` accessors panic when the plugin state is absent, so the
+/// commands below consult this flag first.
+#[allow(dead_code)]
+pub struct DesktopUpdaterEnabled(pub bool);
+
+/// Returns whether the Tauri config carries usable updater settings.
+///
+/// `tauri-plugin-updater` deserializes `plugins.updater` while the app is
+/// built and aborts startup when that fails, for example on a missing block
+/// ("invalid type: null, expected struct Config", issue #3631), a missing
+/// `pubkey`, a malformed endpoint, or (in release builds) a non-HTTPS one.
+/// Running the plugin's own deserializer here, in the same build profile,
+/// catches every one of those, so the plugin is registered only when it will
+/// initialize. An empty `pubkey` deserializes but cannot verify any
+/// update, so it counts as unconfigured too.
+///
+/// Args:
+///     updater: The raw `plugins.updater` value from the Tauri config, if any.
+///
+/// Returns:
+///     `true` when the plugin's config accepts the value and it has a
+///     non-empty `pubkey`.
+#[cfg(all(
+    any(target_os = "macos", target_os = "windows", target_os = "linux"),
+    feature = "desktop-updater",
+    not(feature = "mas")
+))]
+pub fn updater_plugin_configured(updater: Option<&serde_json::Value>) -> bool {
+    let Some(value) = updater.filter(|value| !value.is_null()) else {
+        eprintln!("[GeoLibre] Signed desktop updater disabled: no plugins.updater config.");
+        return false;
+    };
+    match serde_json::from_value::<tauri_plugin_updater::Config>(value.clone()) {
+        Ok(config) if !config.pubkey.trim().is_empty() => true,
+        Ok(_) => {
+            eprintln!(
+                "[GeoLibre] Signed desktop updater disabled: plugins.updater.pubkey is empty."
+            );
+            false
+        }
+        Err(error) => {
+            eprintln!(
+                "[GeoLibre] Signed desktop updater disabled: invalid plugins.updater config: {error}"
+            );
+            false
+        }
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopUpdateCheckResult {
@@ -71,6 +124,13 @@ mod active {
         false
     }
 
+    /// Whether the updater plugin was registered at startup (see `lib.rs`).
+    fn plugin_registered(app: &tauri::AppHandle) -> bool {
+        use tauri::Manager;
+        app.try_state::<super::DesktopUpdaterEnabled>()
+            .is_some_and(|enabled| enabled.0)
+    }
+
     fn build_updater(
         app: &tauri::AppHandle,
     ) -> Result<tauri_plugin_updater::Updater, tauri_plugin_updater::Error> {
@@ -79,7 +139,7 @@ mod active {
 
     pub(super) async fn check(app: tauri::AppHandle) -> Result<DesktopUpdateCheckResult, String> {
         let current_version = app.package_info().version.to_string();
-        if store_managed_build() {
+        if store_managed_build() || !plugin_registered(&app) {
             return Ok(DesktopUpdateCheckResult {
                 configured: false,
                 available: false,
@@ -132,6 +192,9 @@ mod active {
     pub(super) async fn install(app: tauri::AppHandle) -> Result<bool, String> {
         if store_managed_build() {
             return Err("In-app updates are managed by the Microsoft Store.".to_string());
+        }
+        if !plugin_registered(&app) {
+            return Err("Signed auto-updater is not configured for this build.".to_string());
         }
         let _guard = InstallInFlightGuard::try_acquire().ok_or_else(|| {
             "A signed desktop update installation is already in progress.".to_string()
@@ -203,5 +266,71 @@ pub async fn install_desktop_update(app: tauri::AppHandle) -> Result<bool, Strin
     {
         let _ = app;
         Err("Signed auto-updates are not available in this build of GeoLibre.".to_string())
+    }
+}
+
+#[cfg(all(
+    test,
+    any(target_os = "macos", target_os = "windows", target_os = "linux"),
+    feature = "desktop-updater",
+    not(feature = "mas")
+))]
+mod tests {
+    use super::updater_plugin_configured;
+    use serde_json::json;
+
+    const PUBKEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWdu";
+
+    #[test]
+    fn missing_or_incomplete_updater_config_is_not_configured() {
+        assert!(!updater_plugin_configured(None));
+        assert!(!updater_plugin_configured(Some(&json!(null))));
+        assert!(!updater_plugin_configured(Some(&json!({}))));
+        assert!(!updater_plugin_configured(Some(
+            &json!({ "endpoints": ["https://example.com/latest.json"] })
+        )));
+        assert!(!updater_plugin_configured(Some(&json!({
+            "pubkey": "  ",
+            "endpoints": ["https://example.com/latest.json"]
+        }))));
+    }
+
+    #[test]
+    fn updater_config_the_plugin_rejects_is_not_configured() {
+        // A pubkey alone is not enough: the plugin also deserializes the rest
+        // of the block, and a malformed endpoint aborts startup just the same.
+        assert!(!updater_plugin_configured(Some(&json!({
+            "pubkey": PUBKEY,
+            "endpoints": ["not a url"]
+        }))));
+        assert!(!updater_plugin_configured(Some(&json!({
+            "pubkey": PUBKEY,
+            "endpoints": "https://example.com/latest.json"
+        }))));
+    }
+
+    #[test]
+    fn valid_updater_config_is_configured() {
+        assert!(updater_plugin_configured(Some(&json!({
+            "pubkey": PUBKEY,
+            "endpoints": ["https://example.com/latest.json"]
+        }))));
+    }
+
+    #[test]
+    fn shipped_tauri_config_matches_updater_registration() {
+        // Guards issue #3631: a plugins.updater block that ships must be one
+        // the plugin accepts, or the updater is silently disabled.
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let updater = config
+            .get("plugins")
+            .and_then(|plugins| plugins.get("updater"));
+        if updater.is_some() {
+            assert!(
+                updater_plugin_configured(updater),
+                "plugins.updater must be a valid tauri-plugin-updater config with a pubkey"
+            );
+        }
     }
 }
