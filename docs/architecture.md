@@ -22,16 +22,16 @@ flowchart LR
 
 ## Packages
 
-| Package                | Responsibility                                                                                 |
-| ---------------------- | ---------------------------------------------------------------------------------------------- |
-| `@geolibre/core`       | Domain types, project JSON schema, global store                                                |
-| `@geolibre/map`        | Rendering-engine lifecycles and adapters, layer sync, GeoJSON, raster, tile, MBTiles, controls, and selection styling |
-| `@geolibre/ui`         | Shared UI primitives (shadcn-style)                                                            |
-| `@geolibre/processing` | Client-side algorithm registry                                                                 |
-| `@geolibre/plugins`    | Plugin interface and built-in plugins                                                          |
-| `@geolibre/embed`      | Typed, dependency-free client for the iframe embed API, published to npm                       |
+| Package                 | Responsibility                                                                                                                                              |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@geolibre/core`        | Domain types, project JSON schema, global store                                                                                                             |
+| `@geolibre/map`         | Rendering-engine lifecycles and adapters, layer sync, GeoJSON, raster, tile, MBTiles, controls, and selection styling                                       |
+| `@geolibre/ui`          | Shared UI primitives (shadcn-style)                                                                                                                         |
+| `@geolibre/processing`  | Client-side algorithm registry                                                                                                                              |
+| `@geolibre/plugins`     | Plugin interface and built-in plugins                                                                                                                       |
+| `@geolibre/embed`       | Typed, dependency-free client for the iframe embed API, published to npm                                                                                    |
 | `@geolibre/collab-core` | Transport-neutral collaboration relay core (wire protocol, permissions, payload validators) shared by the `workers/collab` and `workers/collab-node` relays |
-| `geolibre-desktop`     | Shell layout, Tauri I/O, composition                                                           |
+| `geolibre-desktop`      | Shell layout, Tauri I/O, composition                                                                                                                        |
 
 ## Plugin host boundaries
 
@@ -76,10 +76,13 @@ Every layer action replaces the `layers` array, so `useAppStore((s) => s.layers)
 
 `useGpsPositionSource` owns the device location watch, external NMEA receiver,
 connection generations, receiver statistics, and NTRIP correction session. The
-always-mounted GPS dialog uses its state and actions; closing the dialog body
-does not stop tracking. A source change, stop, or unmount invalidates pending
+GPS dialog uses its state and actions once mounted on first open; closing the
+dialog body does not stop tracking. Viewer mode unmounts the owner. A source
+change, stop, or unmount invalidates pending
 receiver connections and releases late arrivals. Device callbacks from a stopped
 watch are ignored before they can recreate a position overlay or change errors.
+Connection choices are hidden while a receiver is connected. Disconnecting
+pauses an active recording; reconnecting leaves it paused until the user resumes.
 
 `GpsTrackingDialog` owns track recording, capture, and transient map overlays.
 Fixes enter the recording before map availability is checked, so recording works
@@ -216,11 +219,11 @@ GeoLibre executes client-side geospatial analysis and Whitebox tools via WebAsse
 
 ### Three Execution Modes
 
-| Execution Mode | Requirements | Concurrent runs | Best Used For |
-|---|---|---|---|
-| `threaded-simd` | Browser SIMD128 + `crossOriginIsolated` (COOP/COEP) + `SharedArrayBuffer` + WebAssembly Shared Memory | One worker per concurrent run; bounded to 1–16 (from `hardwareConcurrency` or `maxThreads`) only when explicitly requested | Multi-tile batch processing via `runParallelWasmTools` |
-| `simd-single-thread` | Browser SIMD128 supported | One worker per concurrent run, one kept warm | Standard non-isolated environments, public web deployments without COOP/COEP |
-| `portable-single-thread` | Baseline WebAssembly support | One worker per concurrent run, one kept warm | Universal fallback for legacy embeds, constrained WebViews, and sandbox iframes |
+| Execution Mode           | Requirements                                                                                          | Concurrent runs                                                                                                            | Best Used For                                                                   |
+| ------------------------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `threaded-simd`          | Browser SIMD128 + `crossOriginIsolated` (COOP/COEP) + `SharedArrayBuffer` + WebAssembly Shared Memory | One worker per concurrent run; bounded to 1–16 (from `hardwareConcurrency` or `maxThreads`) only when explicitly requested | Multi-tile batch processing via `runParallelWasmTools`                          |
+| `simd-single-thread`     | Browser SIMD128 supported                                                                             | One worker per concurrent run, one kept warm                                                                               | Standard non-isolated environments, public web deployments without COOP/COEP    |
+| `portable-single-thread` | Baseline WebAssembly support                                                                          | One worker per concurrent run, one kept warm                                                                               | Universal fallback for legacy embeds, constrained WebViews, and sandbox iframes |
 
 ### Capability Detection & Mode Selection
 

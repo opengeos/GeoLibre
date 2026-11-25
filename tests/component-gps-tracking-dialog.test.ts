@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { afterEach, it } from "node:test";
 import { createElement } from "react";
 import { GPS_CAPTURE_FLAG, GPS_TRACK_FLAG } from "../apps/geolibre-desktop/src/lib/gps-tracking";
+import { nmeaChecksum } from "../apps/geolibre-desktop/src/lib/nmea";
 
 const { GpsTrackingDialog } =
   await import("../apps/geolibre-desktop/src/components/layout/GpsTrackingDialog");
@@ -51,6 +52,74 @@ function installDevice() {
 }
 
 const mapControllerRef = { current: null };
+
+function serialReceiver() {
+  let input!: ReadableStreamDefaultController<Uint8Array>;
+  const port = {
+    readable: new ReadableStream<Uint8Array>({ start: (controller) => (input = controller) }),
+    async open() {},
+    async close() {},
+  };
+  return {
+    port,
+    fixes(first: number) {
+      const sentence = (text: string) => `$${text}*${nmeaChecksum(text)}\r\n`;
+      const epochs = [first, first + 1, first + 2].map((index) => {
+        const time = `1745${String(index).padStart(2, "0")}.00`;
+        const longitude = `08355.${String(index * 100).padStart(4, "0")}`;
+        return (
+          sentence(`GNGGA,${time},3557.5432,N,${longitude},W,1,09,0.92,268.4,M,-33.2,M,,`) +
+          sentence(`GNRMC,${time},A,3557.5432,N,${longitude},W,4.5,187.3,010826,,,A`)
+        );
+      });
+      input.enqueue(new TextEncoder().encode(epochs.join("")));
+    },
+  };
+}
+
+it("requires disconnect before selecting another receiver and keeps recording paused until resume", async () => {
+  useAppStore.getState().newProject();
+  const first = serialReceiver();
+  const second = serialReceiver();
+  let requests = 0;
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      userAgent: "GPS reconnect test",
+      serial: { requestPort: async () => (++requests === 1 ? first.port : second.port) },
+    },
+  });
+  render(dialog());
+  fireEvent.change(screen.getByLabelText(i18n.t("gps.source")), { target: { value: "nmea" } });
+  const connect = () =>
+    fireEvent.click(screen.getByRole("button", { name: i18n.t("gps.nmeaConnectSerial") }));
+  const disconnected = () => screen.getByRole("button", { name: i18n.t("gps.nmeaDisconnect") });
+  connect();
+  await waitFor(() => assert.ok(disconnected()));
+  act(() => click("record"));
+  await act(async () => first.fixes(10));
+  assert.equal(screen.queryByRole("button", { name: i18n.t("gps.nmeaConnectSerial") }), null);
+  assert.equal(screen.queryByRole("button", { name: i18n.t("gps.nmeaConnectBluetooth") }), null);
+  fireEvent.click(disconnected());
+  await waitFor(() => assert.ok(screen.getByRole("button", { name: i18n.t("gps.resume") })));
+  connect();
+  await waitFor(() => assert.ok(disconnected()));
+  assert.ok(screen.getByRole("button", { name: i18n.t("gps.resume") }));
+  await act(async () => second.fixes(20));
+  act(() => click("resume"));
+  await act(async () => second.fixes(30));
+  act(() => click("saveTrack"));
+  const saved = useAppStore.getState().layers.find((layer) => layer.metadata[GPS_TRACK_FLAG]);
+  assert.ok(saved);
+  const geometry = saved.geojson?.features[0].geometry;
+  assert.equal(geometry?.type, "MultiLineString");
+  if (geometry?.type !== "MultiLineString") throw new Error("Expected a segmented track");
+  assert.deepEqual(
+    geometry.coordinates.map((segment) => segment.length),
+    [2, 3],
+  );
+  assert.equal(requests, 2);
+});
 
 function dialog(open = true) {
   return createElement(GpsTrackingDialog, { open, onOpenChange: () => {}, mapControllerRef });

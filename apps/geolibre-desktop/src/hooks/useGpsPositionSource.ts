@@ -54,10 +54,11 @@ function loadStoredBaudRate(): number {
 interface GpsPositionSourceOptions {
   onFix: (fix: GpsFix) => void;
   onError: (message: string | null) => void;
+  /** Clear a prior action notice when the user changes or starts a session. */
   onActivity: () => void;
 }
 
-/** Own the device watch, receiver connection, and correction session independently of dialog visibility. */
+/** Own positioning and corrections independently of dialog visibility. */
 export function useGpsPositionSource({
   onFix: handleFix,
   onError: reportError,
@@ -136,8 +137,8 @@ export function useGpsPositionSource({
   }, [tracking, source, handleFix, reportError, t]);
 
   /**
-   * Release the live connection and clear its readout, leaving the generation
-   * alone. Split from {@link disconnectNmea} so a connect attempt can close a
+   * Stop tracking, release the live connection, and clear its readout, leaving
+   * the generation alone. Split from {@link disconnectNmea} so a connect attempt can close a
    * previous connection without invalidating the generation it just claimed.
    */
   const closeNmea = useCallback(async () => {
