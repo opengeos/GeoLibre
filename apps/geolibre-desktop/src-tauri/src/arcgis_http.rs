@@ -6,10 +6,8 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use reqwest::{redirect::Policy, Url};
 use serde::Serialize;
 
-use super::{
-    guarded_async_client_builder, plugin_http::redirect_target_allowed, url_is_fetchable,
-    MAX_HTTP_REDIRECTS,
-};
+use super::guarded_http::{guarded_async_client_builder, url_is_fetchable, MAX_HTTP_REDIRECTS};
+use super::plugin_http::redirect_target_allowed;
 
 const MAX_ARCGIS_BODY_BYTES: usize = 64 * 1024 * 1024;
 const BODY_TOO_LARGE: &str =

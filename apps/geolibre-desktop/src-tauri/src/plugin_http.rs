@@ -17,7 +17,7 @@ use reqwest::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::{
+use super::guarded_http::{
     guarded_async_client_builder, is_disallowed_ip, url_is_fetchable, MAX_HTTP_REDIRECTS,
     SSRF_BLOCKED_MESSAGE,
 };

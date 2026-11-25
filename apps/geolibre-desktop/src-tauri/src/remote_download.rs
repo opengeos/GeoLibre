@@ -36,10 +36,8 @@ use sha2::{Digest, Sha256};
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 
-use super::{
-    guarded_async_client_builder, plugin_http::redirect_target_allowed, url_is_fetchable,
-    MAX_HTTP_REDIRECTS,
-};
+use super::guarded_http::{guarded_async_client_builder, url_is_fetchable, MAX_HTTP_REDIRECTS};
+use super::plugin_http::redirect_target_allowed;
 
 /// A stalled transfer fails after this long without a byte, however large the
 /// file. There is no overall deadline: a multi-gigabyte granule can take hours.
