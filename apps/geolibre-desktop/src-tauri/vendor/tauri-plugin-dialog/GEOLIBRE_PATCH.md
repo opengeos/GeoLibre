@@ -79,10 +79,28 @@ to the local paths used by GeoLibre's readers:
 - `src/commands.rs` decodes copy-mode file URLs to local paths, including iOS
   document-picker copies. It leaves scoped project URLs and Android content URIs
   intact. Scope grants still come from the selected file before it is returned.
+- On iOS, explicit data copies use Files even when an image MIME type would
+  otherwise open Photos. `FilePickerPolicy.swift` retains the existing media
+  behavior for ordinary gallery requests. Its standalone Swift tests run before
+  the iOS build with the selected Xcode toolchain.
+- The iOS result-bearing data bridge persists UIKit import files through
+  `src/ios_data_copy.rs` before returning paths. It streams into app-local
+  `picked-documents/.pending-<selection>/data/`, hashes each file, stores a
+  manifest, syncs files and directory entries, then atomically publishes the
+  complete UUID folder. Case-conflicting names, symlinks, and invalid file names
+  are rejected. Failed selections roll back, and serialized imports recover
+  abandoned stages without touching published copies. Each pick retains its own
+  identity because a UIKit temporary URL is not an original provider identity.
+  Ordinary scoped picks use the existing upstream flow. Physical iOS device
+  verification remains outstanding.
 
 `android/src/test/java/DocumentCopyBatchTest.kt` checks streaming, fingerprints,
 companion placement, rollback, unsafe names and collision handling. The Rust
 `geolibre_copy_tests` cover copy-mode file URLs and unchanged source URIs.
+The Rust check job also runs `tests/native-document-copy`, which imports the
+production iOS copy store and executes its unit tests on Linux without UIKit.
+The iOS workflow compiles and executes the real picker policy
+against its standalone scenarios before building the app.
 
 Known limitation: every document pick persists, data files as well as
 projects, so after more distinct picks than the cap the least recently picked

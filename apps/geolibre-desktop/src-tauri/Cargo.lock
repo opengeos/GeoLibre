@@ -5326,11 +5326,13 @@ dependencies = [
  "rfd",
  "serde",
  "serde_json",
+ "sha2 0.11.1",
  "tauri",
  "tauri-plugin",
  "tauri-plugin-fs",
  "thiserror 2.0.18",
  "url",
+ "uuid",
 ]
 
 [[package]]

@@ -60,14 +60,35 @@ pub(crate) fn pick_data_files<R: Runtime>(
     dialog: FileDialogBuilder<R>,
     multiple: bool,
 ) -> crate::Result<Option<Vec<FilePath>>> {
-    dialog
+    #[cfg(target_os = "ios")]
+    let app = dialog.dialog.app_handle().clone();
+    let selected = dialog
         .dialog
         .0
         .run_mobile_plugin::<crate::models::DataFilePickerResponse>(
             "showFilePicker",
             dialog.payload(multiple),
         )?
-        .into_result()
+        .into_result()?;
+    #[cfg(target_os = "ios")]
+    if let Some(files) = selected {
+        use tauri::Manager;
+        let sources = files
+            .into_iter()
+            .map(|file| {
+                file.into_path()
+                    .map_err(|error| std::io::Error::other(error.to_string()))
+            })
+            .collect::<std::io::Result<Vec<_>>>()?;
+        let root = app.path().app_local_data_dir()?.join("picked-documents");
+        return crate::ios_data_copy::persist_selection(&root, &sources)
+            .map(|paths| Some(paths.into_iter().map(FilePath::Path).collect()))
+            .map_err(Into::into);
+    } else {
+        return Ok(None);
+    }
+    #[cfg(not(target_os = "ios"))]
+    Ok(selected)
 }
 
 pub fn pick_file<R: Runtime, F: FnOnce(Option<FilePath>) + Send + 'static>(

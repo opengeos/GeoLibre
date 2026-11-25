@@ -49,6 +49,13 @@ provider document. The browser build retains its download/file-picker workflow.
 
 ## Storage and limits
 
+On iOS, choosing a local source first retains an independent document-picker
+copy under the app's `picked-documents/` directory. That source copy is separate
+from an extracted package in the catalog and remains available after the picker
+closes. Repeated picks create separate copies; deleting a catalog package does
+not delete its source import. See [Local data imports](ios.md#local-data-imports)
+for lifetime and verification limits.
+
 Packages live under the native app-data directory in `offline-packages/`.
 Each published package has an immutable archive and a versioned manifest.
 Writes use private staging directories, synced files, atomic directory rename,

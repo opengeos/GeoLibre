@@ -42,18 +42,6 @@ struct SaveFileDialogOptions: Decodable {
   var defaultPath: String?
 }
 
-enum FileAccessMode: String, Decodable {
-  case copy
-  case scoped
-}
-
-enum PickerMode: String, Decodable {
-  case document
-  case media
-  case image
-  case video
-}
-
 class DialogPlugin: Plugin {
 
   var filePickerController: FilePickerController!
@@ -86,15 +74,9 @@ class DialogPlugin: Plugin {
         parsedTypes.compactMap { $0.preferredMIMEType?.components(separatedBy: "/")[0] })
       let filtersIncludeImage = mimeKinds.contains("image")
       let filtersIncludeVideo = mimeKinds.contains("video")
-      let filtersIncludeNonMedia = mimeKinds.contains(where: { $0 != "image" && $0 != "video" })
-
-      // If the picker mode is media, images, or videos, we always want to show the media picker regardless of what's in the filters.
-      // Otherwise, if the filters A) do not include non-media types and B) include either image or video, we want to show the media picker.
-      if args.pickerMode == .media
-        || args.pickerMode == .image
-        || args.pickerMode == .video
-        || (!filtersIncludeNonMedia && (filtersIncludeImage || filtersIncludeVideo))
-      {
+      if usesMediaPicker(
+        fileAccessMode: args.fileAccessMode, pickerMode: args.pickerMode, mimeKinds: mimeKinds
+      ) {
         DispatchQueue.main.async {
           var configuration = PHPickerConfiguration(photoLibrary: PHPhotoLibrary.shared())
           configuration.selectionLimit = (args.multiple ?? false) ? 0 : 1

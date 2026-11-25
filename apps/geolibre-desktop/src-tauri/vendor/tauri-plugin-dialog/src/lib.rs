@@ -37,6 +37,9 @@ mod commands;
 mod error;
 mod models;
 
+#[cfg(any(target_os = "ios", all(test, unix)))]
+mod ios_data_copy;
+
 pub use error::{Error, Result};
 
 #[cfg(desktop)]

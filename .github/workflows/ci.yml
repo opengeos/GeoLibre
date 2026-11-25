@@ -68,7 +68,7 @@ jobs:
             backend:
               - "{backend/**,docker/**,schema/**,tests/fixtures/**,package.json,.github/workflows/ci.yml}"
             rust:
-              - "{apps/geolibre-desktop/src-tauri/**,package.json,rust-toolchain.toml,.github/workflows/ci.yml}"
+              - "{apps/geolibre-desktop/src-tauri/**,tests/native-document-copy/**,package.json,rust-toolchain.toml,.github/workflows/ci.yml}"
             identity:
               - "{backend/geolibre_server_api/**,.github/workflows/ci.yml}"
             mssql:
@@ -456,6 +456,9 @@ jobs:
 
       - name: Cargo check the Tauri shell
         run: npm run check:rust
+
+      - name: Test native document-copy adapters
+        run: cargo test --locked --manifest-path tests/native-document-copy/Cargo.toml
 
   sidecar-mssql:
     name: Sidecar SQL Server integration

@@ -116,6 +116,15 @@ jobs:
           xcodebuild -version
           xcodebuild -showsdks | grep -i "iOS" || true
 
+      - name: Verify document and media picker policy
+        run: |
+          set -euo pipefail
+          dialog_ios="apps/geolibre-desktop/src-tauri/vendor/tauri-plugin-dialog/ios"
+          swiftc "$dialog_ios/Sources/FilePickerPolicy.swift" \
+            "$dialog_ios/Tests/FilePickerPolicyTests.swift" \
+            -o "$RUNNER_TEMP/geolibre-picker-policy-tests"
+          "$RUNNER_TEMP/geolibre-picker-policy-tests"
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:

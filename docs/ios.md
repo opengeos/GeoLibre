@@ -192,7 +192,7 @@ npx tauri ios build --no-sign          # unsigned .ipa + .xcarchive (no Apple ac
 
 > **`npx tauri ios build --export-method app-store-connect` does not work as-is.**
 > The project `tauri ios init` generates bakes `CODE_SIGN_IDENTITY = "iPhone
-Developer"` into _both_ the debug and release configurations, so Xcode resolves
+> Developer"` into _both_ the debug and release configurations, so Xcode resolves
 > **development** signing even when the export method is App Store. Automatic
 > development signing then demands a registered device and fails with:
 >
@@ -264,7 +264,7 @@ Developer"` into _both_ the debug and release configurations, so Xcode resolves
   directory are named from the **Cargo package** (`geolibre-desktop` in
   `src-tauri/Cargo.toml`), not from `productName`. The user-visible app name and
   bundle id still come from `tauri.ios.conf.json` — they land as `PRODUCT_NAME:
-GeoLibre` and `PRODUCT_BUNDLE_IDENTIFIER: org.geolibre.app` in the generated
+  GeoLibre` and `PRODUCT_BUNDLE_IDENTIFIER: org.geolibre.app` in the generated
   `project.yml`.
 
 ## Signing
@@ -337,7 +337,7 @@ add an Apple Distribution certificate and an App Store provisioning profile for
 > `xcodebuild -exportArchive` step using **manual** signing, for the reason given
 > under _Build_: `tauri ios build --export-method` cannot sign this project,
 > because the generated project bakes in `CODE_SIGN_IDENTITY = "iPhone
-Developer"` and automatic signing therefore hunts for a development profile no
+> Developer"` and automatic signing therefore hunts for a development profile no
 > matter what the export method says.
 >
 > This has been verified on a runner — a `workflow_dispatch` run with
@@ -485,13 +485,36 @@ App Store Connect.
    Builds uploaded before this key was added (the first 2.4.0 upload) still
    need the question answered by hand in App Store Connect.
 
+## Local data imports
+
+Data-file imports use the Files document picker, including GeoTIFFs with image
+MIME types. GeoLibre streams each explicit import selection into
+`Library/Application Support/org.geolibre.app/picked-documents/<selection>/data/`
+inside its sandbox before returning decoded filesystem paths to data readers.
+Companion files selected together share a folder. A sibling manifest records
+import paths, byte counts, and SHA-256 fingerprints. Files and directory entries
+are synchronized, then the complete selection is published by an atomic rename.
+Failed selections are removed; the next import recovers abandoned private stages.
+
+These are independent copies. The provider document stays unchanged, and saving
+GeoJSON edits writes to the imported copy. Other mobile formats still require
+exporting edited data rather than a desktop sidecar writer. Each new selection
+gets a separate folder because temporary import URLs do not reliably identify
+the original provider document. Published copies remain until the app's stored
+data is removed; closing a project or removing a layer does not delete them.
+Project exports do not bundle these local files.
+
+The copy store and path handling have automated tests. Real iOS device checks
+for picking, rendering, offline restart, and provider cancellation remain
+outstanding. Open-in-place project URLs use their separate scoped access flow.
+
 ## Known limitations / follow-ups
 
 Most mirror Android:
 
-- Local-file sources (MBTiles, local rasters, project files) assume real
-  filesystem paths; iOS hands apps sandboxed URLs via the document picker, so
-  those flows need adapting before they work natively.
+- Local GeoPackage, MBTiles, and raster imports have a managed-copy adapter.
+  Real-device verification remains outstanding, including scoped project-file
+  access and provider-specific behavior.
 - **Offline basemap** includes shared native PMTiles and MBTiles extraction and package storage rather than
   the PWA's service-worker cache. See [Native offline basemap packages](native-offline-packages.md).
   Real iOS device verification and conflict-aware sync remain future
