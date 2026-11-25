@@ -39,6 +39,7 @@ sharing.
 
 ```python
 m.add_geojson(data, name="GeoJSON", **style)          # URL, path, or a dict
+m.add_sql_query_layer(data, sql, name="SQL query", **style)  # result snapshot; SQL runs on app Refresh
 m.add_gdf(gdf, name="GeoDataFrame", column=None)      # GeoPandas
 m.add_data(data, column=None, name="Data")            # dispatches on the format
 m.add_vector(data, name="Vector", render_mode="geojson", data_format=None)

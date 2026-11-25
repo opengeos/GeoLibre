@@ -469,6 +469,42 @@ def build_server(workspace: Workspace) -> MCPServer:
         return _summarize(file, project, layerId=layer_id, layerName=layer.get("name"))
 
     @tool()
+    def add_sql_query_layer(
+        path: str,
+        name: str,
+        data: str,
+        sql: str,
+        style: dict[str, Any] | None = None,
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        """Add a DuckDB query definition and an embedded GeoJSON result.
+
+        This tool stores a supplied result without executing SQL. The result
+        renders immediately on open. Refresh in the app executes the query
+        against the other project layers using SQL Workspace table names.
+
+        Args:
+            path: Destination .geolibre.json file in the workspace.
+            name: Layer display name.
+            data: Result GeoJSON text, public URL, or workspace file, capped at
+                50 MB. Source layers for refresh must also be in the project.
+            sql: Non-empty DuckDB SQL statement that produced the result.
+            style: Layer style overrides, such as fillColor or circleRadius.
+            index: Draw-order position; appended on top when omitted.
+
+        Returns:
+            The new layer id and the updated project summary.
+
+        Raises:
+            ValueError: If the result, SQL, or style options are invalid.
+        """
+        with edit(path) as (file, project):
+            collection, _source_url = load_geojson(data)
+            layer = _build_layer(_project.sql_query_layer, name, collection, sql, style=style)
+            layer_id = authoring.add_layer(project, layer, index=index)
+        return _summarize(file, project, layerId=layer_id, layerName=layer.get("name"))
+
+    @tool()
     def add_vector_layer(
         path: str,
         name: str,

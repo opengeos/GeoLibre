@@ -101,6 +101,7 @@ The click payload has the form `{"lngLat": {"lng": ..., "lat": ...},
 | --- | --- |
 | `Map(center, zoom, basemap=, height=, app_layout=, layout=, theme=)` | Create a map. `app_layout` is `"embed"`, `"full"`, or `"maponly"`. `layout` takes an `ipywidgets.Layout`, as on any widget. |
 | `add_geojson(data, name=, **style)` | Add GeoJSON (dict, path, URL, JSON, or GeoDataFrame). |
+| `add_sql_query_layer(data, sql, name=, **style)` | Store a GeoJSON result and its DuckDB SQL definition. The snapshot renders on open; Refresh in the app re-executes SQL against the other project layers using SQL Workspace table names. Python does not execute the query. |
 | `add_gdf(gdf, name=, column=None, **style)` | Add a GeoDataFrame, optionally as a choropleth. |
 | `add_csv` / `add_xy_data` `(data, x=, y=, name=, **style)` | Add points from CSV, a DataFrame, or row mappings. |
 | `add_heatmap(points, name=, radius=, intensity=, color_ramp=, weight_field=, **style)` | Add a point density heatmap, optionally weighted by a numeric field. |
