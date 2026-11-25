@@ -53,7 +53,7 @@ uv.lock
 # denied" and exits 2, surfacing as "Jupyter server exited before it was ready
 # (exit code: 2)". Committing it also stops released builds from re-resolving
 # against live PyPI on every user's machine. The launcher passes `--frozen`
-# (src-tauri/src/sidecar.rs) so it is read, never rewritten.
+# (src-tauri/src/sidecar.rs and jupyter.rs) so it is read, never rewritten.
 !backend/geolibre_server/uv.lock
 
 # Playwright E2E artifacts

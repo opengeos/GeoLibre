@@ -13,8 +13,8 @@ use crate::port_reclaim::terminate_jupyter_listeners_on_port;
 use crate::process_lifetime;
 #[cfg(not(feature = "mas"))]
 use crate::sidecar::{
-    add_sidecar_python_pin, app_runtime_dir, ensure_managed_uv, loopback_http_client,
-    prepend_pythonpath, sidecar_project_dir, wait_for_port_free,
+    add_sidecar_python_pin, app_runtime_dir, ensure_managed_uv, generate_jupyter_token,
+    loopback_http_client, prepend_pythonpath, sidecar_project_dir, wait_for_port_free,
 };
 use serde::Serialize;
 #[cfg(not(feature = "mas"))]
@@ -413,20 +413,4 @@ fn wait_for_jupyter_health(
         "Jupyter server did not become ready in time.",
         output,
     ))
-}
-
-// A loopback-bound, per-launch token for the desktop Jupyter server. It is the
-// only barrier once the XSRF check is disabled for the embedded iframe (see
-// jupyter_server_config.py), so use the OS CSPRNG (128 random bits) rather than
-// anything derived from the clock/pid.
-#[cfg(not(feature = "mas"))]
-pub(crate) fn generate_jupyter_token() -> String {
-    let mut bytes = [0u8; 16];
-    getrandom::fill(&mut bytes).expect("OS CSPRNG (getrandom) unavailable");
-    let mut token = String::with_capacity(32);
-    for byte in bytes {
-        use std::fmt::Write;
-        let _ = write!(token, "{byte:02x}");
-    }
-    token
 }

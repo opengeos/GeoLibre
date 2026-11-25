@@ -10,8 +10,6 @@ use crate::child_process::{
     terminate_sidecar_child, CapturedOutput,
 };
 #[cfg(not(feature = "mas"))]
-use crate::jupyter::generate_jupyter_token;
-#[cfg(not(feature = "mas"))]
 use crate::port_reclaim::terminate_sidecar_listeners_on_port;
 #[cfg(not(feature = "mas"))]
 use crate::{process_lifetime, uv_bootstrap};
@@ -411,6 +409,22 @@ pub(crate) fn prepend_pythonpath(dir: &Path) -> String {
         }
         _ => dir,
     }
+}
+
+// A loopback-bound, per-launch token for the desktop servers: the Jupyter server
+// (its only barrier once the XSRF check is disabled for the embedded iframe, see
+// jupyter_server_config.py) and the GeoLibre sidecar's bearer token. Use the OS
+// CSPRNG (128 random bits), not anything derived from the clock or pid.
+#[cfg(not(feature = "mas"))]
+pub(crate) fn generate_jupyter_token() -> String {
+    let mut bytes = [0u8; 16];
+    getrandom::fill(&mut bytes).expect("OS CSPRNG (getrandom) unavailable");
+    let mut token = String::with_capacity(32);
+    for byte in bytes {
+        use std::fmt::Write;
+        let _ = write!(token, "{byte:02x}");
+    }
+    token
 }
 
 #[cfg(not(feature = "mas"))]
