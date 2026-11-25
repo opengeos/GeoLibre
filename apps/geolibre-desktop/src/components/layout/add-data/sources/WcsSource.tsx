@@ -104,7 +104,12 @@ export function WcsSource({ initialUrl = "" }: { initialUrl?: string }) {
         crs: "EPSG:4326",
         format: "GeoTIFF",
       });
-      const described = await describeWcs(endpoint, coverage, request.signal);
+      const described = await describeWcs(
+        endpoint,
+        coverage,
+        request.signal,
+        coverages.find((item) => item.name === coverage),
+      );
       const description = crs === "auto" ? described : { ...described, crs };
       const url = wcsCoverageUrl(
         endpoint,

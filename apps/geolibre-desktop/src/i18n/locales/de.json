@@ -1517,14 +1517,16 @@
       "hint": "Lädt ein GeoTIFF mit den gewählten Pixelmaßen herunter. Werte können neu abgetastet werden. Speichern Sie das Raster, um die Daten zu behalten.",
       "errors": {
         "xml": "Der Dienst hat ungültiges XML zurückgegeben.",
-        "version": "Diese Quelle benötigt WCS 1.0.0. Der Dienst hat eine nicht unterstützte Antwort zurückgegeben.",
+        "version": "Diese Quelle benötigt WCS 1.0.0 / 2.0.1. Der Dienst hat eine nicht unterstützte Antwort zurückgegeben.",
         "empty": "Keine passenden Coverages verfügbar.",
         "format": "Die Coverage bietet keine GeoTIFF-Ausgabe an.",
         "size": "Wählen Sie Abmessungen von 1 bis 4096 Pixeln. Downloads sind auf 128 MB begrenzt.",
         "metadata": "Der Dienst hat mehr Metadaten zurückgegeben, als GeoLibre laden kann. Metadaten-Antworten sind auf 32 MB begrenzt.",
         "response": "Der Dienst hat kein gültiges GeoTIFF zurückgegeben.",
         "bounds": "Geben Sie einen gültigen Rahmen ein: West/Ost zwischen -180 und 180, Süd/Nord zwischen -90 und 90, mit West < Ost und Süd < Nord.",
-        "url": "Geben Sie eine WCS-Dienst-URL ein."
+        "url": "Geben Sie eine WCS-Dienst-URL ein.",
+        "grid": "Diese Abdeckung benötigt ein unterstütztes zweidimensionales regelmäßiges Gitter und WCS-Skalierung.",
+        "crs": "Dieses Anfrage-KBS ist nicht verfügbar. Ohne WCS-CRS-Erweiterung wird nur ein natives EPSG:4326 oder EPSG:3857 unterstützt."
       }
     }
   },

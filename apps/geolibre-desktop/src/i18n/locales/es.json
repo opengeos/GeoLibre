@@ -541,7 +541,7 @@
         "description": "Carga KML o KMZ con estilos nativos, superposiciones y enlaces de red en el globo."
       },
       "wcs": {
-        "description": "Cargar un subconjunto GeoTIFF numérico de un servicio WCS 1.0.0.",
+        "description": "Cargar un subconjunto GeoTIFF numérico de un servicio WCS 1.0.0 / 2.0.1.",
         "label": "Capa WCS"
       }
     },
@@ -1517,14 +1517,16 @@
       "hint": "Descarga un GeoTIFF con las dimensiones seleccionadas. Los valores pueden remuestrearse. Guarde el ráster para conservar los datos descargados.",
       "errors": {
         "xml": "El servicio devolvió XML no válido.",
-        "version": "Esta fuente requiere WCS 1.0.0. El servicio devolvió una respuesta no compatible.",
+        "version": "Esta fuente requiere WCS 1.0.0 / 2.0.1. El servicio devolvió una respuesta no compatible.",
         "empty": "No hay coberturas coincidentes disponibles.",
         "format": "La cobertura no anuncia salida GeoTIFF.",
         "size": "Elija dimensiones de 1 a 4096 píxeles. Las descargas se limitan a 128 MB.",
         "metadata": "El servicio devolvió más metadatos de los que GeoLibre puede cargar. Las respuestas de metadatos se limitan a 32 MB.",
         "response": "El servicio no devolvió un GeoTIFF válido.",
         "bounds": "Introduzca un cuadro válido: oeste/este entre -180 y 180, sur/norte entre -90 y 90, con oeste < este y sur < norte.",
-        "url": "Introduzca una URL de servicio WCS."
+        "url": "Introduzca una URL de servicio WCS.",
+        "grid": "Esta cobertura requiere una cuadrícula regular bidimensional compatible y soporte de escalado WCS.",
+        "crs": "Este CRS de solicitud no está disponible. Sin la extensión CRS de WCS, solo se admite EPSG:4326 o EPSG:3857 como CRS nativo."
       }
     }
   },

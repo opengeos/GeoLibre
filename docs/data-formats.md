@@ -52,7 +52,7 @@ see [vector import details](user-guide/adding-data.md#files).
 | --- | --- | --- |
 | XYZ tiles | XYZ Layer | Raster or vector tiles from a `{z}/{x}/{y}` URL template. |
 | WMS | WMS Layer | Rendered map images; discover layers and query GetFeatureInfo where supported. |
-| [WCS 1.0.0](#wcs-raster-subsets) | WCS Layer | Numerical GeoTIFF subsets with chosen extent, pixel dimensions, and an EPSG:4326 or EPSG:3857 request CRS. |
+| [WCS 1.0.0 / 2.0.1](#wcs-raster-subsets) | WCS Layer | Numerical GeoTIFF subsets with chosen extent, pixel dimensions, and an EPSG:4326 or EPSG:3857 request CRS. |
 | WFS | WFS Layer | Vector features with feature-type discovery and optional refresh. Loads GeoJSON, or GML (2, 3.1, 3.2) from servers that offer no GeoJSON output; GML in other EPSG coordinate systems is reprojected. |
 | WMTS | WMTS Layer | Map tiles from a Web Map Tile Service. |
 | OGC API - Features | OGC API - Features | Browse collections and load their features. |
@@ -127,10 +127,19 @@ This is a convenience; GeoServer and other WCS endpoints use the same protocol.
 
 ### Supported requests
 
-The initial implementation supports **WCS 1.0.0** KVP `GetCapabilities`,
-`DescribeCoverage`, and `GetCoverage`. Services must advertise GeoTIFF output;
-unsupported versions and formats produce an error before the coverage download.
-WCS 1.1 and 2.x requests are not yet implemented.
+GeoLibre supports **WCS 1.0.0 and 2.0.1** KVP `GetCapabilities`,
+`DescribeCoverage`, and `GetCoverage`. Discovery prefers 2.0.1 and retries
+1.0.0 when a service refuses the newer protocol. Services must advertise
+GeoTIFF output. WCS 1.1 and 2.1 are not implemented.
+
+WCS 2.0.1 requests use the coverage and grid axis names from
+`DescribeCoverage`, repeated `SUBSET` parameters, and `SCALESIZE` to honor the
+chosen width and height. Two-dimensional, axis-aligned rectified grids and
+the WCS scaling extension are required; unsupported dimensions or rotated
+grids are refused before downloading. Requesting a different CRS also needs
+the service's CRS extension. Multipart responses such as USGS 3DEP's GML plus
+TIFF are unpacked without decoding or changing the numerical TIFF bytes;
+ambiguous, encoded, or truncated raster parts are refused.
 
 The coverage is requested in **EPSG:4326** or **EPSG:3857** (Web Mercator).
 The box is always entered in longitude/latitude and projected to the chosen
