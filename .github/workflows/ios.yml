@@ -92,7 +92,7 @@ jobs:
         # from the run rather than guessed at.
         run: |
           set -euo pipefail
-          newest="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)"
+          newest="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1 || true)"
           if [ -z "$newest" ]; then
             echo "::error::No Xcode found on the runner"
             exit 1
@@ -101,6 +101,10 @@ jobs:
 
           version="$(xcodebuild -version | head -1 | awk '{print $2}')"
           major="${version%%.*}"
+          if ! [[ "$major" =~ ^[0-9]+$ ]]; then
+            echo "::error::Could not parse an Xcode version from: $(xcodebuild -version | head -1)"
+            exit 1
+          fi
           if [ "$major" -lt 16 ]; then
             echo "::error::Xcode $version is too old — the generated project uses object format 77, which requires Xcode 16+. Use a newer runner image."
             exit 1
