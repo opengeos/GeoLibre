@@ -13,10 +13,10 @@ import {
 } from "../lib/ntrip";
 
 /**
- * NTRIP session state for the receiver in `connRef` (issue #3400). Lives in
- * the always-mounted GPS component, so closing the dialog neither stops nor
- * restarts a session. `status` is null when no session runs for the current
- * receiver.
+ * NTRIP session state for the receiver in `connRef` (issue #3400), owned by
+ * useGpsPositionSource in GpsTrackingDialog. MountWhenOpened mounts that owner
+ * on first open and keeps it mounted across dialog closes; viewer mode unmounts
+ * it. `status` is null when no session runs for the current receiver.
  */
 export function useNtripCorrections(connRef: RefObject<NmeaConnection | null>) {
   const [settings, setSettingsState] = useState<StoredNtripSettings>(loadNtripSettings);

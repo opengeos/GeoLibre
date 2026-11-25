@@ -243,6 +243,39 @@ it("treats device chooser cancellation as cancellation and clears its indicator"
   assert.equal(hook.errors.filter(Boolean).length, 0);
 });
 
+for (const failure of ["cancelled", "failed"] as const) {
+  it(`stops tracking when a connected receiver's replacement is ${failure}`, async () => {
+    const live = receiver();
+    const replacement = deferred<ReturnType<typeof receiver>["port"]>();
+    let requests = 0;
+    installHardware({ requestPort: () => (++requests === 1 ? live.port : replacement.promise) });
+    const hook = renderSource();
+    act(() => hook.result.current.changeSource("nmea"));
+    await act(async () => hook.result.current.connectNmea("serial"));
+    assert.equal(hook.result.current.tracking, true);
+    let connecting!: Promise<void>;
+    await act(async () => {
+      connecting = hook.result.current.connectNmea("serial");
+    });
+    assert.equal(live.closeCount(), 1);
+    assert.equal(hook.result.current.nmeaLabel, null);
+    assert.equal(hook.result.current.tracking, false);
+    await act(async () => {
+      replacement.reject(
+        failure === "cancelled"
+          ? new DOMException("No selection", "NotFoundError")
+          : new Error("Replacement receiver unavailable"),
+      );
+      await connecting;
+    });
+    assert.equal(hook.result.current.tracking, false);
+    assert.equal(hook.result.current.canTrack, false);
+    assert.equal(hook.result.current.connecting, null);
+    assert.equal(hook.errors.filter(Boolean).length, failure === "cancelled" ? 0 : 1);
+    assert.equal(hook.fixes.length, 0);
+  });
+}
+
 it("ends tracking and releases its receiver when the stream disconnects", async () => {
   const live = receiver();
   installHardware({ requestPort: async () => live.port });

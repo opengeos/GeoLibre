@@ -143,6 +143,7 @@ export function useGpsPositionSource({
   const closeNmea = useCallback(async () => {
     const conn = nmeaConnRef.current;
     nmeaConnRef.current = null;
+    setTracking(false);
     setNmeaLabel(null);
     setNmeaStats(null);
     // Closing the receiver ends its correction session natively.
@@ -295,6 +296,8 @@ export function useGpsPositionSource({
     void disconnectNmea();
   }, [disconnectNmea]);
 
+  // Release the serial port / GATT server so a remount can reopen it, and mark
+  // in-flight connects stale so a receiver arriving after unmount closes itself.
   useEffect(
     () => () => {
       connectGenerationRef.current += 1;
