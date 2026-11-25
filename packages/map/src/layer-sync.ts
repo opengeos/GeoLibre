@@ -2792,7 +2792,32 @@ function readsFeatureGeometry(layer: GeoLibreLayer, labels: LabelStyle): boolean
     labels.visibilityExpression,
     labels.priorityExpression,
   ];
-  return sources.some((text) => /"(?:geometry-type|\$type|within|distance)"/.test(text || ""));
+  return sources.some((text) => {
+    if (!text) return false;
+    let expression: unknown;
+    try {
+      expression = JSON.parse(text);
+    } catch {
+      return false;
+    }
+    const pending = [expression];
+    while (pending.length) {
+      const current = pending.pop();
+      if (!Array.isArray(current) || current[0] === "literal") continue;
+      const operator = current[0];
+      if (operator === "geometry-type" || operator === "within" || operator === "distance")
+        return true;
+      if (
+        current[1] === "$type" &&
+        ["==", "!=", ">", ">=", "<", "<=", "in", "!in", "has", "!has"].includes(operator)
+      )
+        return true;
+      for (let i = 1; i < current.length; i++) {
+        if (Array.isArray(current[i])) pending.push(current[i]);
+      }
+    }
+    return false;
+  });
 }
 
 /**

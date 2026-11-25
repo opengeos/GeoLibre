@@ -441,6 +441,22 @@ describe("one label per polygon (layer sync)", () => {
     }
   });
 
+  it("does not confuse attribute names or literal arrays with geometry operators", () => {
+    for (const expression of [
+      '["get", "distance"]',
+      '["get", "within"]',
+      '["get", "geometry-type"]',
+      '["get", "$type"]',
+      '["to-string", ["literal", ["within", "distance"]]]',
+    ]) {
+      const { map, layers } = makeMap();
+      const layer = polygonLayer({ expression });
+      layer.filterExpression = ["==", ["get", "distance"], 5];
+      syncLayer(map as never, layer);
+      assert.equal((layers.get(LABEL_ID) as { source: string }).source, LABEL_SOURCE_ID);
+    }
+  });
+
   it("falls back to MapLibre placement when turned off, and drops the label source", () => {
     const { map, layers, sources } = makeMap();
     syncLayer(map as never, polygonLayer({}));
