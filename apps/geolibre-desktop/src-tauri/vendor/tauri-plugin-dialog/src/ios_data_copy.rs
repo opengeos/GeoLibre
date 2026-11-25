@@ -170,23 +170,52 @@ fn prepare_root(root: &Path, anchor: &Path) -> io::Result<(PathBuf, Vec<PathBuf>
     Ok((root, storage_parents))
 }
 
-/// Inventory only published regular data files for reauthorization at startup.
-/// Stages, symlinks, manifests, and unrelated directories never enter the scope.
-/// The trusted, existing sandbox `anchor` contains the storage root. Root-level
-/// failures are fatal; individual imports and sync warnings enter `problems`.
-pub fn retained_document_files(
-    root: &Path,
-    anchor: &Path,
-) -> io::Result<(Vec<PathBuf>, Vec<String>)> {
-    let _lock = COPY_LOCK
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let (root, parents) = prepare_root(root, anchor)?;
+// A directory entry can outlive its file. Keep that failure local so later
+// healthy companions from the same published selection remain available.
+fn retained_data_files(
+    canonical_data: &Path,
+    entries: impl Iterator<Item = io::Result<fs::DirEntry>>,
+) -> (Vec<PathBuf>, Vec<String>) {
     let mut files = Vec::new();
     let mut problems = Vec::new();
-    for entry in fs::read_dir(&root)? {
-        let inspect = || -> io::Result<()> {
-            let entry = entry?;
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                problems.push(format!("{}: {error}", canonical_data.display()));
+                continue;
+            }
+        };
+        let path = entry.path();
+        let inspect = || -> io::Result<Option<PathBuf>> {
+            if !entry.file_type()?.is_file()
+                || !safe_name(&path).is_ok_and(|name| name == entry.file_name().to_string_lossy())
+            {
+                return Ok(None);
+            }
+            let canonical = fs::canonicalize(&path)?;
+            Ok((canonical.parent() == Some(canonical_data)).then_some(canonical))
+        };
+        match inspect() {
+            Ok(Some(path)) => files.push(path),
+            Ok(None) => {}
+            Err(error) => problems.push(format!("{}: {error}", path.display())),
+        }
+    }
+    (files, problems)
+}
+
+// A root enumeration error makes the inventory unavailable. Inspection errors
+// for a selection that was obtained remain local to that selection.
+fn inventory_selections(
+    canonical_root: &Path,
+    entries: impl Iterator<Item = io::Result<fs::DirEntry>>,
+) -> io::Result<(Vec<PathBuf>, Vec<String>)> {
+    let mut files = Vec::new();
+    let mut problems = Vec::new();
+    for entry in entries {
+        let entry = entry?;
+        let mut inspect = || -> io::Result<()> {
             if !entry.file_type()?.is_dir()
                 || Uuid::parse_str(&entry.file_name().to_string_lossy()).is_err()
             {
@@ -210,29 +239,34 @@ pub fn retained_document_files(
                 return Ok(());
             }
             let canonical_data = fs::canonicalize(&data)?;
-            if !canonical_data.starts_with(&root) {
+            if !canonical_data.starts_with(canonical_root) {
                 return Ok(());
             }
-            for file in fs::read_dir(&data)? {
-                let file = file?;
-                if !file.file_type()?.is_file() {
-                    continue;
-                }
-                let path = file.path();
-                if !safe_name(&path).is_ok_and(|name| name == file.file_name().to_string_lossy()) {
-                    continue;
-                }
-                let canonical = fs::canonicalize(&path)?;
-                if canonical.parent() == Some(canonical_data.as_path()) {
-                    files.push(canonical);
-                }
-            }
+            let (retained, warnings) = retained_data_files(&canonical_data, fs::read_dir(&data)?);
+            files.extend(retained);
+            problems.extend(warnings);
             Ok(())
         };
         if let Err(error) = inspect() {
             problems.push(error.to_string());
         }
     }
+    Ok((files, problems))
+}
+
+/// Inventory only published regular data files for reauthorization at startup.
+/// Stages, symlinks, manifests, and unrelated directories never enter the scope.
+/// The trusted, existing sandbox `anchor` contains the storage root. Root-level
+/// failures are fatal; individual imports and sync warnings enter `problems`.
+pub fn retained_document_files(
+    root: &Path,
+    anchor: &Path,
+) -> io::Result<(Vec<PathBuf>, Vec<String>)> {
+    let _lock = COPY_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let (root, parents) = prepare_root(root, anchor)?;
+    let (files, mut problems) = inventory_selections(&root, fs::read_dir(&root)?)?;
     // Inventory is read recovery, not publication: a durability warning must
     // not discard grants for healthy files that were already published.
     for path in std::iter::once(&root).chain(parents.iter()) {
@@ -348,6 +382,63 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn root_iteration_errors_are_fatal_even_after_a_healthy_selection() {
+        let fixture = Fixture::new();
+        let source = fixture.source("roads.geojson", b"original");
+        let copies = persist_selection(&fixture.root(), &fixture.0, &[source]).unwrap();
+        let root = fs::canonicalize(fixture.root()).unwrap();
+        let (files, problems) = inventory_selections(&root, fs::read_dir(&root).unwrap()).unwrap();
+        assert_eq!(files, copies);
+        assert!(problems.is_empty());
+        for fail_first in [true, false] {
+            let mut entries = fs::read_dir(&root)
+                .unwrap()
+                .collect::<io::Result<Vec<_>>>()
+                .unwrap()
+                .into_iter()
+                .map(Ok)
+                .collect::<Vec<_>>();
+            let index = if fail_first { 0 } else { entries.len() };
+            entries.insert(index, Err(io::Error::other("root iteration failed")));
+            let error = inventory_selections(&root, entries.into_iter()).unwrap_err();
+            assert_eq!(error.to_string(), "root iteration failed");
+        }
+        assert_eq!(fs::read(&copies[0]).unwrap(), b"original");
+    }
+
+    #[test]
+    fn one_disappearing_file_does_not_hide_later_files_from_the_same_selection() {
+        let fixture = Fixture::new();
+        let a = fixture.source("a.geojson", b"first");
+        let b = fixture.source("b.geojson", b"second");
+        let c = fixture.source("c.geojson", b"third");
+        let copies = persist_selection(&fixture.root(), &fixture.0, &[a.clone(), b, c]).unwrap();
+        let data = copies[0].parent().unwrap();
+        let mut entries = fs::read_dir(data)
+            .unwrap()
+            .collect::<io::Result<Vec<_>>>()
+            .unwrap();
+        entries.sort_by_key(|entry| entry.file_name());
+        // Retain the real directory entry, then remove its file before the
+        // metadata/canonicalization step, as a concurrent deletion would.
+        fs::remove_file(&copies[0]).unwrap();
+        let (files, problems) = retained_data_files(data, entries.into_iter().map(Ok));
+        assert_eq!(files, copies[1..]);
+        assert_eq!(problems.len(), 1);
+        assert!(problems[0].contains("a.geojson"));
+        assert_eq!(fs::read(&files[0]).unwrap(), b"second");
+        assert_eq!(fs::read(&files[1]).unwrap(), b"third");
+        assert_eq!(fs::read(a).unwrap(), b"first");
+        let entries = std::iter::once(Err(io::Error::other("directory entry unavailable")))
+            .chain(fs::read_dir(data).unwrap());
+        let (mut files, problems) = retained_data_files(data, entries);
+        files.sort();
+        assert_eq!(files, copies[1..]);
+        assert_eq!(problems.len(), 1);
+        assert!(problems[0].contains("directory entry unavailable"));
     }
 
     #[test]

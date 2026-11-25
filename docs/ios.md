@@ -525,6 +525,8 @@ until access initialization succeeds. Those copies remain available for a later
 successful launch.
 Failure to prepare or read the import root activates this hold; problems with
 individual import folders are reported while healthy files remain authorized.
+An individual file disappearing during the scan does not hide the later healthy
+files in that same selection.
 Copy publication synchronizes all storage ancestors through the existing app
 Library directory, including directories created by an earlier failed attempt.
 Synchronization stays inside the app sandbox.
