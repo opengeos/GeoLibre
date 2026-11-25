@@ -7,7 +7,6 @@
   "apps/geolibre-desktop/src/components/layout/add-data/sources/PostgresSource.tsx": 624,
   "apps/geolibre-desktop/src/components/layout/add-data/sources/WmsSource.tsx": 565,
   "apps/geolibre-desktop/src/components/layout/AddNetcdfDialog.tsx": 896,
-  "apps/geolibre-desktop/src/components/layout/BasemapExtractPanel.tsx": 1397,
   "apps/geolibre-desktop/src/components/layout/CollaborateDialog.tsx": 549,
   "apps/geolibre-desktop/src/components/layout/DesktopShell.tsx": 1284,
   "apps/geolibre-desktop/src/components/layout/FieldCollectionDialog.tsx": 1569,

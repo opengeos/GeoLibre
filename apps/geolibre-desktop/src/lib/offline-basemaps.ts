@@ -31,6 +31,12 @@ export interface OfflineBasemap {
   savedPath: string | null;
   /** Epoch ms when extracted. */
   createdAt: number;
+  /** Native app-owned package. Deletion removes its archive, unlike a legacy
+   * exported file whose catalog entry does not own the selected document. */
+  managed?: boolean;
+  archiveFormat?: "pmtiles" | "mbtiles";
+  sha256?: string;
+  unavailableReason?: string;
 }
 
 function storageOrNull(storage?: Storage): Storage | null {

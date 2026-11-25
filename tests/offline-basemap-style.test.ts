@@ -6,6 +6,7 @@ import {
   getOfflineBasemapStyle,
   isOfflineBasemapSentinel,
   registerOfflineBasemapStyle,
+  registerPersistentOfflineBasemapStyle,
 } from "../packages/map/src/protomaps-basemap";
 
 describe("buildProtomapsBasemapStyle", () => {
@@ -36,6 +37,32 @@ describe("buildProtomapsBasemapStyle", () => {
 });
 
 describe("offline-basemap style registry", () => {
+  it("restores stable package addresses lazily and retains each saved flavor", () => {
+    let builds = 0;
+    const create = (flavor: "light" | "dark") => () => {
+      builds++;
+      return buildProtomapsBasemapStyle({
+        sourceUrl: "https://local-pmtiles.localhost/archive",
+        flavor,
+      });
+    };
+    const light = registerPersistentOfflineBasemapStyle("native-package", "light", create("light"));
+    const dark = registerPersistentOfflineBasemapStyle("native-package", "dark", create("dark"));
+    assert.equal(builds, 0, "catalog registration does not build every style");
+    assert.match(String(getOfflineBasemapStyle(dark)?.sprite), /dark$/);
+    assert.match(String(getOfflineBasemapStyle(light)?.sprite), /light$/);
+    assert.equal(builds, 2);
+    evictOfflineBasemapStyle("native-package");
+    assert.equal(getOfflineBasemapStyle(light), null);
+    const reopened = registerPersistentOfflineBasemapStyle(
+      "native-package",
+      "light",
+      create("light"),
+    );
+    assert.equal(reopened, light, "saved project URLs survive a fresh registry");
+    assert.match(String(getOfflineBasemapStyle(reopened)?.sprite), /light$/);
+    evictOfflineBasemapStyle("native-package");
+  });
   it("registers a unique sentinel per call and resolves it back", () => {
     const style = buildProtomapsBasemapStyle({
       sourceUrl: "pmtiles://x.pmtiles",

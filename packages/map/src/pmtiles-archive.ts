@@ -1,6 +1,7 @@
 import { addProtocol, config } from "maplibre-gl";
 import {
   FileSource,
+  FetchSource,
   PMTiles,
   Protocol,
   SharedPromiseCache,
@@ -106,6 +107,11 @@ export function registerPMTilesSource(
   return `${PMTILES_PROTOCOL}://${name}`;
 }
 
+/** Register a range-backed archive whose lifetime the caller explicitly owns. */
+export function registerPMTilesRangeSource(url: string): string {
+  return registerPMTilesSource(new FetchSource(stripPMTilesProtocol(url)));
+}
+
 /**
  * Frees an in-memory archive registered by {@link registerPMTilesArchive}.
  *
@@ -117,7 +123,18 @@ export function unregisterPMTilesArchive(key: string): boolean {
   const name = stripPMTilesProtocol(key);
   const registered = getRegisteredPMTilesArchiveKeys();
   if (!registered.has(name)) return false;
-  registered.delete(name);
+  return unregisterPMTilesSource(name);
+}
+
+/**
+ * Release an explicitly owned source, including a range-backed native archive.
+ * The owner must first remove its live layer references. Unlike the guarded
+ * in-memory cleanup above, this also drops a FetchSource recreated by another
+ * layer after an earlier layer removal cleared the registration key.
+ */
+export function unregisterPMTilesSource(key: string): boolean {
+  const name = stripPMTilesProtocol(key);
+  getRegisteredPMTilesArchiveKeys().delete(name);
   return getSharedPMTilesProtocol().tiles.delete(name);
 }
 

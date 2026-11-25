@@ -142,6 +142,21 @@ const nativeShareAuthReady = isDesktopRuntime()
   : Promise.resolve();
 const nativeCoordinateOpenReady = initializeNativeCoordinateOpen();
 const nativeProjectOpenReady = initializeNativeProjectOpen();
+const nativeOfflinePackagesReady = isTauri()
+  ? import("./lib/native-offline-packages")
+      .then(({ initializeNativeOfflinePackages }) => initializeNativeOfflinePackages())
+      .then(async (unavailable) => {
+        if (unavailable > 0) {
+          await i18nReady;
+          notify.error(i18n.t("basemapExtract.unavailablePackages", { count: unavailable }));
+        }
+      })
+      .catch(async (error: unknown) => {
+        console.error("[GeoLibre] Failed to restore native offline packages", error);
+        await i18nReady;
+        notify.error(i18n.t("basemapExtract.errorNativePackages"));
+      })
+  : Promise.resolve();
 let nativeShareFetchReady: Promise<void> = Promise.resolve();
 let nativeArcGISFetchReady: Promise<void> = Promise.resolve();
 let nativeSidecarFetchReady: Promise<void> = Promise.resolve();
@@ -444,6 +459,7 @@ void Promise.all([
   // Capture a file-association or command-line project path before App decides
   // whether to restore a configured startup project or the default workspace.
   nativeProjectOpenReady,
+  nativeOfflinePackagesReady,
   nativeCoordinateOpenReady,
   // Gate the first render on i18next being initialized with the active locale's
   // (lazily loaded) catalog, so the UI never paints raw translation keys.

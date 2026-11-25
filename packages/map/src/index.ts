@@ -184,6 +184,7 @@ export { isPlaceholderLayer, placeholderMessage } from "./placeholders";
 export {
   buildProtomapsBasemapStyle,
   registerOfflineBasemapStyle,
+  registerPersistentOfflineBasemapStyle,
   evictOfflineBasemapStyle,
   isOfflineBasemapSentinel,
   OFFLINE_BASEMAP_SENTINEL_PREFIX,
@@ -204,7 +205,9 @@ export {
   ensureRemotePMTilesArchive,
   hasPMTilesArchive,
   registerPMTilesArchive,
+  registerPMTilesRangeSource,
   unregisterPMTilesArchive,
+  unregisterPMTilesSource,
 } from "./pmtiles-archive";
 export { setExternalDeckLayerOrderHandler } from "./layer-sync";
 export {

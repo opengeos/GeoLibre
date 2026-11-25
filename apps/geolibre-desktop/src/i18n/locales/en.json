@@ -2771,7 +2771,17 @@
     "successAddedSaveFailed": "Added to the map, but saving to disk failed: {{error}}",
     "successBasemapSaved": "Saved to {{path}} and set as the basemap.",
     "successBasemapApplied": "Set as the basemap (the file was not saved).",
-    "successBasemapSaveFailed": "Set as the basemap, but saving to disk failed: {{error}}"
+    "successBasemapSaveFailed": "Set as the basemap, but saving to disk failed: {{error}}",
+    "errorNativePackages": "Could not load the saved offline packages. Open Offline basemap to retry.",
+    "errorPackageInUse": "Remove layers using this package before deleting it.",
+    "successCached": "Saved on this device for offline use and added to the map.",
+    "successCachedApplied": "Using the package saved on this device.",
+    "confirmDeletePackage": "Delete the package from this device? Saved projects using it will lose their offline map.",
+    "exportPackage": "Export package…",
+    "unavailablePackage": "Unavailable offline package",
+    "errorUnavailablePackage": "The archive or its metadata is damaged or missing.",
+    "unavailablePackages_one": "One offline package is unavailable. Open Offline basemap to review it.",
+    "unavailablePackages_other": "{{count}} offline packages are unavailable. Open Offline basemap to review them."
   },
   "rasterSubset": {
     "title": "Extract subset",

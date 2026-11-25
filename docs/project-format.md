@@ -58,6 +58,12 @@ file contents do not change.
 | `interaction`     | object  | Optional startup Identify target and control visibility (see below); omitted by default                      |
 | `metadata`        | object  | Free-form project metadata                                                                                   |
 
+Native offline basemaps can use `geolibre://offline-basemap/pkg-<id>/<flavor>`
+instead of a remote style URL. The native package catalog restores these
+addresses before rendering the project. They identify a package on this device;
+exporting a project does not bundle the archive or make that identity portable.
+See [Native offline basemap packages](native-offline-packages.md).
+
 The map's 3D look is part of the project. `mapView.pitch` and `mapView.bearing`
 hold the camera tilt and rotation, and `preferences.map` holds the terrain:
 `terrainEnabled` (3D terrain on or off), `terrainExaggeration` (vertical

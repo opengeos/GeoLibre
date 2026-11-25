@@ -70,6 +70,15 @@ export function buildProtomapsBasemapStyle(
 // backing style (and its in-memory PMTiles source) is gone on reload, so
 // resolveMapStyle falls back to the default basemap then.
 const REGISTRY_KEY = "__geolibreOfflineBasemapStyles";
+const PERSISTENT_REGISTRY_KEY = "__geolibrePersistentOfflineBasemapStyles";
+
+function persistentRegistry(): Map<string, () => maplibregl.StyleSpecification> {
+  const scope = globalThis as typeof globalThis & {
+    [PERSISTENT_REGISTRY_KEY]?: Map<string, () => maplibregl.StyleSpecification>;
+  };
+  if (!scope[PERSISTENT_REGISTRY_KEY]) scope[PERSISTENT_REGISTRY_KEY] = new Map();
+  return scope[PERSISTENT_REGISTRY_KEY];
+}
 
 function registry(): Map<string, maplibregl.StyleSpecification> {
   const scope = globalThis as typeof globalThis & {
@@ -103,6 +112,19 @@ export function registerOfflineBasemapStyle(
   return sentinel;
 }
 
+/** Register an immutable device package style at a restart-stable URL. The
+ * flavor is part of the address, so saved projects retain their own styling.
+ * The host re-registers available package styles before restoring projects. */
+export function registerPersistentOfflineBasemapStyle(
+  id: string,
+  flavor: ProtomapsFlavor,
+  buildStyle: () => maplibregl.StyleSpecification,
+): string {
+  const sentinel = `${OFFLINE_BASEMAP_SENTINEL_PREFIX}${id}/${flavor}`;
+  persistentRegistry().set(sentinel, buildStyle);
+  return sentinel;
+}
+
 // A monotonic counter on globalThis so sentinels stay unique across module
 // reloads (HMR), giving each apply a URL the map treats as a real change.
 const SEQ_KEY = "__geolibreOfflineBasemapSeq";
@@ -125,6 +147,9 @@ export function evictOfflineBasemapStyle(id: string): void {
   for (const key of reg.keys()) {
     if (key.startsWith(prefix)) reg.delete(key);
   }
+  for (const key of persistentRegistry().keys()) {
+    if (key.startsWith(prefix)) persistentRegistry().delete(key);
+  }
 }
 
 /** The registered style for an offline-basemap sentinel, or null. */
@@ -132,7 +157,7 @@ export function getOfflineBasemapStyle(
   styleUrl: string | undefined,
 ): maplibregl.StyleSpecification | null {
   if (!styleUrl) return null;
-  return registry().get(styleUrl) ?? null;
+  return registry().get(styleUrl) ?? persistentRegistry().get(styleUrl)?.() ?? null;
 }
 
 export function isOfflineBasemapSentinel(styleUrl: string | undefined): boolean {

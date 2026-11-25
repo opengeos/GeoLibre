@@ -98,6 +98,7 @@ export {
   resolveIdentifyTarget,
   projectPathLabel,
   registerProjectRestoreHistory,
+  reserveLayerSourceRemoval,
   subscribeProjectRestoreHistory,
   redo,
   undo,

@@ -1,4 +1,4 @@
-import { DEFAULT_BASEMAP, useAppStore } from "@geolibre/core";
+import { DEFAULT_BASEMAP, reserveLayerSourceRemoval, useAppStore } from "@geolibre/core";
 import {
   buildProtomapsBasemapStyle,
   createPMTilesStoreLayer,
@@ -43,14 +43,25 @@ import { useTranslation } from "react-i18next";
 import { screenOverlayCovers, useExtentScreenOverlay } from "../../hooks/useExtentScreenOverlay";
 import { clamp } from "../../lib/clamp";
 import {
-  deleteOfflineBasemap,
   loadOfflineBasemaps,
   type OfflineBasemap,
-  renameOfflineBasemap,
-  setOfflineBasemapFlavor,
   subscribeOfflineBasemaps,
   upsertOfflineBasemap,
 } from "../../lib/offline-basemaps";
+import {
+  assertNativeOfflinePackageSize,
+  deleteSavedOfflineBasemap,
+  forgetNativeOfflinePackage,
+  listSavedOfflineBasemaps,
+  nativeOfflineBasemapStyleUrl,
+  renameSavedOfflineBasemap,
+  saveNativeOfflinePackage,
+  setSavedOfflineBasemapFlavor,
+  verifyNativeOfflinePackage,
+} from "../../lib/native-offline-packages";
+import { nativeLocalPmtilesProtocolUrl } from "../../lib/local-media-url";
+import { referencesNativeOfflinePackage } from "../../lib/offline-package-references";
+import { OfflineBasemapRequests } from "../../lib/offline-basemap-requests";
 import { formatBytes } from "../../lib/offline-regions";
 import { layerNameFromPath } from "./add-data/helpers";
 import {
@@ -198,7 +209,7 @@ const BASEMAP_ASSETS_BASE = new URL(`${import.meta.env.BASE_URL}basemaps-assets`
 // adds) so it survives a Vite HMR reload of this module — a plain module `let`
 // would reset to null on reload and then fail to free the archive the live
 // PMTiles protocol still holds.
-type ActiveStyledBasemap = { archiveKey: string; id: string } | null;
+type ActiveStyledBasemap = { archiveKey: string; id: string; persistent?: boolean } | null;
 const ACTIVE_STYLED_BASEMAP_KEY = "__geolibreActiveStyledBasemap";
 
 function activeStyledBasemap(): ActiveStyledBasemap {
@@ -218,13 +229,13 @@ function setActiveStyledBasemap(value: ActiveStyledBasemap): void {
 
 /** Records the archive/id now backing the styled basemap, freeing the one it
  * replaces (a different id) so archives don't accumulate for the session. */
-function trackStyledBasemap(id: string, archiveKey: string): void {
+function trackStyledBasemap(id: string, archiveKey: string, persistent = false): void {
   const active = activeStyledBasemap();
-  if (active && active.id !== id) {
+  if (active && active.id !== id && !active.persistent) {
     unregisterPMTilesArchive(active.archiveKey);
     evictOfflineBasemapStyle(active.id);
   }
-  setActiveStyledBasemap({ id, archiveKey });
+  setActiveStyledBasemap({ id, archiveKey, persistent });
 }
 
 /** Frees a styled basemap's archive/style if it is the active one (e.g. on
@@ -272,11 +283,12 @@ export function BasemapExtractPanel({
   // applies made from this panel, so it goes stale once the user switches the
   // basemap via the picker/New Project dialogs; comparing the store's sentinel
   // avoids acting on a basemap this entry no longer controls.
-  const basemapStyleUrl = useAppStore((state) => state.basemapStyleUrl);
   const isLiveOfflineBasemap = useCallback(
     (id: string) =>
-      basemapStyleUrl?.startsWith(`${OFFLINE_BASEMAP_SENTINEL_PREFIX}${id}/`) ?? false,
-    [basemapStyleUrl],
+      useAppStore
+        .getState()
+        .basemapStyleUrl?.startsWith(`${OFFLINE_BASEMAP_SENTINEL_PREFIX}${id}/`) ?? false,
+    [],
   );
 
   const [coords, setCoords] = useState<CoordFields>(EMPTY_COORDS);
@@ -301,11 +313,118 @@ export function BasemapExtractPanel({
   // The device-local catalogue of extracted basemaps, kept in sync so a new
   // extract (or a rename/delete elsewhere) refreshes the "Saved basemaps" list.
   const [savedBasemaps, setSavedBasemaps] = useState<OfflineBasemap[]>(() => loadOfflineBasemaps());
-  useEffect(() => subscribeOfflineBasemaps(() => setSavedBasemaps(loadOfflineBasemaps())), []);
+  const catalogRequest = useRef(0);
+  const refreshSavedBasemaps = useCallback(async () => {
+    const request = ++catalogRequest.current;
+    const entries = await listSavedOfflineBasemaps();
+    if (request === catalogRequest.current) setSavedBasemaps(entries);
+    return entries;
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    const refresh = () => {
+      void refreshSavedBasemaps().catch((error: unknown) => {
+        if (!active) return;
+        setError(t("basemapExtract.errorNativePackages"));
+        console.error("[GeoLibre] Could not load saved basemaps", error);
+      });
+    };
+    refresh();
+    const unsubscribe = subscribeOfflineBasemaps(refresh);
+    return () => {
+      active = false;
+      catalogRequest.current++;
+      unsubscribe();
+    };
+  }, [open, refreshSavedBasemaps, t]);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  const renamingIdRef = useRef<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const deletingPackageIds = useRef(new Set<string>());
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [applicationRequests] = useState(
+    () => new OfflineBasemapRequests(() => useAppStore.getState()),
+  );
+  useEffect(() => {
+    if (!open) {
+      applicationRequests.invalidate();
+      setApplyingId(null);
+      renamingIdRef.current = null;
+      setRenamingId(null);
+    }
+    return () => applicationRequests.invalidate();
+  }, [open, applicationRequests]);
+
+  const handleDeleteSaved = useCallback(
+    async (entry: OfflineBasemap) => {
+      if (deletingPackageIds.current.has(entry.id)) return;
+      let release: (() => void) | undefined;
+      try {
+        if (entry.managed)
+          release = reserveLayerSourceRemoval(
+            (layer) => referencesNativeOfflinePackage(layer, entry.id),
+            t("basemapExtract.errorPackageInUse"),
+          );
+        deletingPackageIds.current.add(entry.id);
+        if (applicationRequests.invalidatePackage(entry.id)) setApplyingId(null);
+        if (isLiveOfflineBasemap(entry.id))
+          applicationRequests.preservePendingDuringFallback(() =>
+            setBasemapStyleUrl(DEFAULT_BASEMAP),
+          );
+        await deleteSavedOfflineBasemap(entry);
+        if (isLiveOfflineBasemap(entry.id))
+          applicationRequests.preservePendingDuringFallback(() =>
+            setBasemapStyleUrl(DEFAULT_BASEMAP),
+          );
+        forgetStyledBasemap(entry.id);
+        evictOfflineBasemapStyle(entry.id);
+        await refreshSavedBasemaps();
+        setConfirmDeleteId(null);
+      } catch (error) {
+        setError(error instanceof Error ? error.message : String(error));
+        // A durable deletion may already have removed the catalog entry even
+        // if cleanup or the following inventory read failed.
+        const entries = await refreshSavedBasemaps().catch(() => null);
+        if (entries && !entries.some((saved) => saved.id === entry.id)) {
+          if (isLiveOfflineBasemap(entry.id))
+            applicationRequests.preservePendingDuringFallback(() =>
+              setBasemapStyleUrl(DEFAULT_BASEMAP),
+            );
+          if (entry.managed) forgetNativeOfflinePackage(entry);
+          forgetStyledBasemap(entry.id);
+          evictOfflineBasemapStyle(entry.id);
+          setConfirmDeleteId(null);
+        }
+      } finally {
+        deletingPackageIds.current.delete(entry.id);
+        release?.();
+      }
+    },
+    [applicationRequests, isLiveOfflineBasemap, refreshSavedBasemaps, setBasemapStyleUrl, t],
+  );
+
+  const handleExportSaved = useCallback(async (entry: OfflineBasemap) => {
+    if (!entry.savedPath) return;
+    try {
+      const bytes = await readLocalFileBytes(entry.savedPath);
+      const extension = entry.archiveFormat ?? "pmtiles";
+      await saveBinaryFileWithFallback(bytes, {
+        defaultName: `${sanitizeExportFileName(entry.name)}.${extension}`,
+        filters: [{ name: extension.toUpperCase(), extensions: [extension] }],
+        browserTypes: [
+          {
+            description: extension.toUpperCase(),
+            accept: { "application/octet-stream": [`.${extension}`] },
+          },
+        ],
+        mimeType: "application/octet-stream",
+      });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    }
+  }, []);
 
   const bbox = useMemo(() => parseBbox(coords), [coords]);
   const bboxInvalid =
@@ -562,6 +681,9 @@ export function BasemapExtractPanel({
     if (!bbox || zoomInvalid || urlValue === "") return;
     abortRef.current?.abort();
     const controller = new AbortController();
+    const request = applicationRequests.begin();
+    setApplyingId(null);
+    const stillOwnsProject = () => !controller.signal.aborted && request.isCurrent();
     abortRef.current = controller;
     setPhase("running");
     setProgress(null);
@@ -580,13 +702,14 @@ export function BasemapExtractPanel({
         signal: controller.signal,
         onProgress: setProgress,
         confirmDownload: (plan) => {
+          if (isTauri()) assertNativeOfflinePackageSize(plan.estimatedOutputBytes);
           if (plan.estimatedOutputBytes < CONFIRM_BYTES) return true;
           return new Promise<boolean>((resolve) => {
             setPendingPlan({ progress: plan, resolve });
           });
         },
       });
-      if (controller.signal.aborted) return;
+      if (!stillOwnsProject()) return;
 
       const base = sanitizeExportFileName(baseNameFromUrl(urlValue));
       const info = await readPMTilesArchiveInfo(archive);
@@ -602,45 +725,76 @@ export function BasemapExtractPanel({
         return;
       }
 
-      // Register the archive in the shared pmtiles protocol (used by both the
-      // styled-basemap style and the flat-overlay layer). Done before saving so
-      // a disk-write failure below can't discard a successful extraction.
-      const layerId = `basemap-extract-${Date.now().toString(36)}`;
-      const layerUrl = registerPMTilesArchive(`${layerId}.pmtiles`, archive);
-
       // A Protomaps-schema vector archive can render as a proper styled basemap
       // (roads/water/labels) in the chosen flavor; anything else is added as a
       // flat single-symbology overlay layer.
       const asStyledBasemap =
         flavor !== "" && info.tileType === "vector" && isProtomapsCompatible(info.sourceLayers);
+      if (!stillOwnsProject()) return;
+
+      const nativePackage = isTauri()
+        ? await saveNativeOfflinePackage(archive, {
+            name: fileName,
+            bbox,
+            minZoom: Math.max(minZoomValue, info.minZoom),
+            maxZoom: effectiveMax,
+            flavor: asStyledBasemap ? flavor : null,
+            tileType: info.tileType,
+            archiveFormat: "pmtiles",
+          })
+        : null;
+      void refreshSavedBasemaps().catch((error: unknown) => {
+        if (!controller.signal.aborted && request.isProjectCurrent())
+          setError(error instanceof Error ? error.message : String(error));
+      });
+      if (!stillOwnsProject()) return;
+      const layerId =
+        nativePackage?.id ??
+        `basemap-extract-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+      const archiveKey = nativePackage
+        ? nativeLocalPmtilesProtocolUrl(nativePackage.savedPath)
+        : `${layerId}.pmtiles`;
+      const layerUrl = nativePackage
+        ? `pmtiles://${archiveKey}`
+        : registerPMTilesArchive(archiveKey, archive);
 
       if (asStyledBasemap) {
-        const style = buildProtomapsBasemapStyle({
-          sourceUrl: layerUrl,
-          flavor,
-          assetsBaseUrl: BASEMAP_ASSETS_BASE,
-        });
-        setBasemapStyleUrl(registerOfflineBasemapStyle(layerId, style));
-        trackStyledBasemap(layerId, `${layerId}.pmtiles`);
+        setBasemapStyleUrl(
+          nativePackage
+            ? nativeOfflineBasemapStyleUrl(nativePackage, flavor)
+            : registerOfflineBasemapStyle(
+                layerId,
+                buildProtomapsBasemapStyle({
+                  sourceUrl: layerUrl,
+                  flavor,
+                  assetsBaseUrl: BASEMAP_ASSETS_BASE,
+                }),
+              ),
+        );
+        trackStyledBasemap(layerId, archiveKey, nativePackage != null);
       } else {
         // One layer, deliberately: an extract is a backdrop to draw over, not the thing being
         // inspected, so it stays a single row rather than being split per source layer the way an
         // archive added from the PMTiles control or a STAC asset is.
-        addLayer(
-          createPMTilesStoreLayer({
-            id: layerId,
-            name: fileName,
-            url: layerUrl,
-            tileType: info.tileType,
-            ...(info.encoding ? { encoding: info.encoding } : {}),
-            sourceLayers: info.sourceLayers,
-            // Raster basemaps render dimmed (raster-opacity reads the layer-level
-            // `opacity`, not style.fillOpacity); vector renders fully opaque.
-            opacity: info.tileType === "raster" ? 0.6 : 1,
-          }),
-        );
+        const layer = createPMTilesStoreLayer({
+          id: layerId,
+          name: fileName,
+          url: layerUrl,
+          tileType: info.tileType,
+          ...(info.encoding ? { encoding: info.encoding } : {}),
+          sourceLayers: info.sourceLayers,
+          // Raster basemaps render dimmed (raster-opacity reads the layer-level
+          // `opacity`, not style.fillOpacity); vector renders fully opaque.
+          opacity: info.tileType === "raster" ? 0.6 : 1,
+        });
+        if (nativePackage) layer.metadata.nativeOfflinePackageId = nativePackage.id;
+        addLayer(layer);
       }
       setPhase("done");
+      if (nativePackage) {
+        setSuccess(t("basemapExtract.successCached"));
+        return;
+      }
 
       // Persisting to disk is best-effort and independent of the layer that is
       // now on the map: a cancel returns null, a write error is reported but
@@ -704,7 +858,7 @@ export function BasemapExtractPanel({
         createdAt: Date.now(),
       });
     } catch (err) {
-      if (controller.signal.aborted) return;
+      if (!stillOwnsProject()) return;
       if (err instanceof DOMException && err.name === "AbortError") {
         setPhase("idle");
         setProgress(null);
@@ -728,6 +882,8 @@ export function BasemapExtractPanel({
     flavor,
     addLayer,
     setBasemapStyleUrl,
+    refreshSavedBasemaps,
+    applicationRequests,
     t,
   ]);
 
@@ -752,11 +908,26 @@ export function BasemapExtractPanel({
       // as overlays (user picked "None", or the archive failed the Protomaps
       // schema check) have `flavor === null` — forcing them through
       // buildProtomapsBasemapStyle would render a blank/broken basemap.
-      if (entry.tileType !== "vector" || entry.flavor == null) return;
+      if (
+        entry.tileType !== "vector" ||
+        entry.flavor == null ||
+        deletingPackageIds.current.has(entry.id)
+      )
+        return;
       setApplyingId(entry.id);
       setError(null);
       setSuccess(null);
+      const request = applicationRequests.begin(entry.id);
       try {
+        if (entry.managed) {
+          const verified = await verifyNativeOfflinePackage(entry.id);
+          if (!request.isCurrent()) return;
+          const useFlavor = entry.flavor as ProtomapsFlavor;
+          setBasemapStyleUrl(nativeOfflineBasemapStyleUrl(verified, useFlavor));
+          trackStyledBasemap(entry.id, nativeLocalPmtilesProtocolUrl(verified.savedPath), true);
+          setSuccess(t("basemapExtract.successCachedApplied"));
+          return;
+        }
         const key = `${entry.id}.pmtiles`;
         if (!hasPMTilesArchive(key)) {
           let bytes: Uint8Array | null = null;
@@ -774,6 +945,7 @@ export function BasemapExtractPanel({
           }
           registerPMTilesArchive(key, bytes);
         }
+        if (!request.isCurrent()) return;
         const style = buildProtomapsBasemapStyle({
           sourceUrl: `pmtiles://${key}`,
           flavor: (entry.flavor as ProtomapsFlavor) || "light",
@@ -783,12 +955,12 @@ export function BasemapExtractPanel({
         trackStyledBasemap(entry.id, key);
         setSuccess(t("basemapExtract.successBasemapApplied"));
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        if (request.isCurrent()) setError(err instanceof Error ? err.message : String(err));
       } finally {
-        setApplyingId(null);
+        if (request.isLatest()) setApplyingId(null);
       }
     },
-    [setBasemapStyleUrl, t],
+    [applicationRequests, setBasemapStyleUrl, t],
   );
 
   // Change a saved basemap's flavor. Persists it, and re-styles live if the
@@ -800,29 +972,44 @@ export function BasemapExtractPanel({
       // (flavor === null) can't be re-styled, so leave them untouched — forcing
       // a flavor here would push an incompatible archive through applySaved.
       if (entry.flavor == null) return;
-      setOfflineBasemapFlavor(entry.id, next);
+      void setSavedOfflineBasemapFlavor(entry, next)
+        .then(() => refreshSavedBasemaps())
+        .catch((error: unknown) =>
+          setError(error instanceof Error ? error.message : String(error)),
+        );
       // Re-style live only when this entry is the basemap currently on the map;
       // otherwise just persist the flavor (it applies next "Use as basemap").
       // Without the live check, tweaking a non-displayed entry's flavor would
       // silently swap it in as the active basemap.
-      if (isLiveOfflineBasemap(entry.id) && hasPMTilesArchive(`${entry.id}.pmtiles`)) {
+      if (
+        isLiveOfflineBasemap(entry.id) &&
+        (entry.managed || hasPMTilesArchive(`${entry.id}.pmtiles`))
+      ) {
         void applySaved({ ...entry, flavor: next });
       }
     },
-    [applySaved, isLiveOfflineBasemap],
+    [applySaved, isLiveOfflineBasemap, refreshSavedBasemaps],
   );
 
   const startRename = useCallback((entry: OfflineBasemap) => {
+    renamingIdRef.current = entry.id;
     setRenamingId(entry.id);
     setRenameValue(entry.name);
   }, []);
 
   const commitRename = useCallback(() => {
-    setRenamingId((id) => {
-      if (id) renameOfflineBasemap(id, renameValue);
-      return null;
-    });
-  }, [renameValue]);
+    const id = renamingIdRef.current;
+    renamingIdRef.current = null;
+    setRenamingId(null);
+    const entry = savedBasemaps.find((entry) => entry.id === id);
+    if (entry && renameValue.trim()) {
+      void renameSavedOfflineBasemap(entry, renameValue)
+        .then(() => refreshSavedBasemaps())
+        .catch((error: unknown) =>
+          setError(error instanceof Error ? error.message : String(error)),
+        );
+    }
+  }, [renameValue, savedBasemaps, refreshSavedBasemaps]);
 
   // Open a local .pmtiles file directly as a styled basemap — no download/
   // extract needed. Applies it in the current flavor and records it under
@@ -832,6 +1019,8 @@ export function BasemapExtractPanel({
     setOpening(true);
     setError(null);
     setSuccess(null);
+    const request = applicationRequests.begin();
+    setApplyingId(null);
     try {
       const picked = await openLocalDataFileWithFallback({
         filters: [{ name: "PMTiles", extensions: ["pmtiles"] }],
@@ -853,22 +1042,57 @@ export function BasemapExtractPanel({
         setError(t("basemapExtract.errorNotBasemap"));
         return;
       }
-      const id = `basemap-open-${Date.now().toString(36)}`;
-      const key = `${id}.pmtiles`;
-      registerPMTilesArchive(key, bytes);
       const useFlavor: ProtomapsFlavor = flavor !== "" ? flavor : "light";
-      const style = buildProtomapsBasemapStyle({
-        sourceUrl: `pmtiles://${key}`,
-        flavor: useFlavor,
-        assetsBaseUrl: BASEMAP_ASSETS_BASE,
-      });
-      setBasemapStyleUrl(registerOfflineBasemapStyle(id, style));
-      trackStyledBasemap(id, key);
+      const name = layerNameFromPath(picked.path || "", "basemap");
+      if (!request.isCurrent()) return;
+      const nativePackage = isTauri()
+        ? await saveNativeOfflinePackage(bytes, {
+            name,
+            bbox: info.bounds,
+            minZoom: info.minZoom,
+            maxZoom: info.maxZoom,
+            flavor: useFlavor,
+            tileType: "vector",
+            archiveFormat: "pmtiles",
+          })
+        : null;
+      if (nativePackage)
+        void refreshSavedBasemaps().catch((error: unknown) => {
+          if (request.isProjectCurrent())
+            setError(error instanceof Error ? error.message : String(error));
+        });
+      if (!request.isCurrent()) return;
+      const id =
+        nativePackage?.id ??
+        `basemap-open-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+      const key = `${id}.pmtiles`;
+      if (!nativePackage) registerPMTilesArchive(key, bytes);
+      setBasemapStyleUrl(
+        nativePackage
+          ? nativeOfflineBasemapStyleUrl(nativePackage, useFlavor)
+          : registerOfflineBasemapStyle(
+              id,
+              buildProtomapsBasemapStyle({
+                sourceUrl: `pmtiles://${key}`,
+                flavor: useFlavor,
+                assetsBaseUrl: BASEMAP_ASSETS_BASE,
+              }),
+            ),
+      );
+      trackStyledBasemap(
+        id,
+        nativePackage ? nativeLocalPmtilesProtocolUrl(nativePackage.savedPath) : key,
+        nativePackage != null,
+      );
+      if (nativePackage) {
+        setSuccess(t("basemapExtract.successCachedApplied"));
+        return;
+      }
       upsertOfflineBasemap({
         id,
         // `picked.path` is a full absolute path on desktop; take just the file's
         // base name so the saved entry reads "tuscany", not "home-alice-…".
-        name: layerNameFromPath(picked.path || "", "basemap"),
+        name,
         bbox: info.bounds,
         minZoom: info.minZoom,
         maxZoom: info.maxZoom,
@@ -881,11 +1105,11 @@ export function BasemapExtractPanel({
       });
       setSuccess(t("basemapExtract.successBasemapApplied"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (request.isCurrent()) setError(err instanceof Error ? err.message : String(err));
     } finally {
       setOpening(false);
     }
-  }, [flavor, setBasemapStyleUrl, t]);
+  }, [applicationRequests, flavor, refreshSavedBasemaps, setBasemapStyleUrl, t]);
 
   const percent =
     progress && progress.dataBytesTotal > 0
@@ -939,7 +1163,10 @@ export function BasemapExtractPanel({
           <button
             type="button"
             className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
-            onClick={onClose}
+            onClick={() => {
+              applicationRequests.invalidate();
+              onClose();
+            }}
             aria-label={t("common.close")}
           >
             <X className="h-4 w-4" />
@@ -1251,7 +1478,10 @@ export function BasemapExtractPanel({
                           onChange={(e) => setRenameValue(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") commitRename();
-                            if (e.key === "Escape") setRenamingId(null);
+                            if (e.key === "Escape") {
+                              renamingIdRef.current = null;
+                              setRenamingId(null);
+                            }
                           }}
                           onBlur={commitRename}
                         />
@@ -1288,36 +1518,25 @@ export function BasemapExtractPanel({
                               </Select>
                             ) : null}
                             <span className="truncate text-[11px] text-muted-foreground">
-                              {formatBytes(entry.bytes)} · z{entry.minZoom}–{entry.maxZoom}
+                              {entry.unavailableReason
+                                ? t("basemapExtract.errorUnavailablePackage")
+                                : `${formatBytes(entry.bytes)} · z${entry.minZoom}–${entry.maxZoom}`}
                             </span>
                           </div>
                         </div>
                         {confirmDeleteId === entry.id ? (
                           <>
                             <span className="text-[11px] text-muted-foreground">
-                              {t("basemapExtract.confirmDelete")}
+                              {t(
+                                entry.managed
+                                  ? "basemapExtract.confirmDeletePackage"
+                                  : "basemapExtract.confirmDelete",
+                              )}
                             </span>
                             <button
                               type="button"
                               className="rounded p-1 text-destructive hover:bg-destructive/10"
-                              onClick={() => {
-                                deleteOfflineBasemap(entry.id);
-                                // If this entry is the live basemap, switch back
-                                // to the default first — otherwise the applied
-                                // MapLibre style is left pointing at a pmtiles://
-                                // source whose archive we're about to free, and
-                                // pans into unfetched tiles would silently 404.
-                                // Check the store (not the panel-local tracker,
-                                // which can be stale) so we never clobber a
-                                // basemap the user switched to elsewhere.
-                                if (isLiveOfflineBasemap(entry.id)) {
-                                  setBasemapStyleUrl(DEFAULT_BASEMAP);
-                                }
-                                // Free its in-memory archive/style if it's the
-                                // one currently applied, so nothing lingers.
-                                forgetStyledBasemap(entry.id);
-                                setConfirmDeleteId(null);
-                              }}
+                              onClick={() => void handleDeleteSaved(entry)}
                               title={t("basemapExtract.delete")}
                               aria-label={t("basemapExtract.delete")}
                             >
@@ -1335,6 +1554,17 @@ export function BasemapExtractPanel({
                           </>
                         ) : (
                           <>
+                            {entry.managed && !entry.unavailableReason ? (
+                              <button
+                                type="button"
+                                className="rounded p-1 text-muted-foreground hover:text-foreground"
+                                onClick={() => void handleExportSaved(entry)}
+                                title={t("basemapExtract.exportPackage")}
+                                aria-label={t("basemapExtract.exportPackage")}
+                              >
+                                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
@@ -1357,6 +1587,7 @@ export function BasemapExtractPanel({
                               type="button"
                               className="rounded p-1 text-muted-foreground hover:text-foreground"
                               onClick={() => startRename(entry)}
+                              disabled={Boolean(entry.unavailableReason)}
                               title={t("basemapExtract.rename")}
                               aria-label={t("basemapExtract.rename")}
                             >

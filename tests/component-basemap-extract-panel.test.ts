@@ -1,0 +1,425 @@
+import { render, screen, fireEvent, waitFor, useAppStore } from "./helpers/dom";
+import { createElement } from "react";
+import { afterEach, it } from "node:test";
+import assert from "node:assert/strict";
+import { mockIPC, clearMocks } from "@tauri-apps/api/mocks";
+import type { NativeOfflinePackage } from "../apps/geolibre-desktop/src/lib/native-offline-packages";
+
+const { BasemapExtractPanel } =
+  await import("../apps/geolibre-desktop/src/components/layout/BasemapExtractPanel");
+const { nativeOfflineBasemapStyleUrl } =
+  await import("../apps/geolibre-desktop/src/lib/native-offline-packages");
+const { getOfflineBasemapStyle } = await import("../packages/map/src/protomaps-basemap");
+const { hasPMTilesArchive } = await import("../packages/map/src/pmtiles-archive");
+const { nativeLocalPmtilesProtocolUrl } =
+  await import("../apps/geolibre-desktop/src/lib/local-media-url");
+
+/** Minimal PMTiles v3 metadata archive; this flow reads no tile payload. */
+function vectorArchive(): Uint8Array {
+  const metadata = new TextEncoder().encode(
+    JSON.stringify({
+      vector_layers: [{ id: "earth" }, { id: "water" }],
+    }),
+  );
+  const bytes = new Uint8Array(128 + metadata.length);
+  bytes.set(new TextEncoder().encode("PMTiles"));
+  bytes[7] = 3;
+  const header = new DataView(bytes.buffer);
+  header.setBigUint64(8, 127n, true);
+  header.setBigUint64(16, 1n, true); // one-byte empty root directory
+  header.setBigUint64(24, 128n, true);
+  header.setBigUint64(32, BigInt(metadata.length), true);
+  bytes[97] = 1; // uncompressed metadata
+  bytes[98] = 1;
+  bytes[99] = 1; // MVT
+  bytes[101] = 8;
+  header.setInt32(102, -1230000000, true);
+  header.setInt32(106, 370000000, true);
+  header.setInt32(110, -1220000000, true);
+  header.setInt32(114, 380000000, true);
+  bytes.set(metadata, 128);
+  return bytes;
+}
+
+afterEach(() => {
+  clearMocks();
+  Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+});
+
+it("refreshes the inventory after a deletion reports a post-rename failure", async () => {
+  const entry: NativeOfflinePackage = {
+    id: "pkg-ffffffffffffffffffffffffffffffff",
+    name: "Pending deletion",
+    bbox: [-123, 37, -122, 38],
+    minZoom: 0,
+    maxZoom: 8,
+    flavor: "light",
+    tileType: "vector",
+    bytes: 200,
+    savedPath: "/data/pending.pmtiles",
+    createdAt: 1,
+    managed: true,
+    archiveFormat: "pmtiles",
+    sha256: "a".repeat(64),
+  };
+  let removed = false;
+  mockIPC((command) => {
+    if (command === "list_native_offline_packages")
+      return { packages: removed ? [] : [entry], problems: [] };
+    if (command === "delete_native_offline_package") {
+      removed = true;
+      throw new Error("Deletion durability could not be confirmed");
+    }
+    throw new Error(`Unexpected native command: ${command}`);
+  });
+  const defaultBasemap = useAppStore.getState().basemapStyleUrl;
+  const styleUrl = nativeOfflineBasemapStyleUrl(entry, "light");
+  useAppStore.getState().setBasemapStyleUrl(styleUrl);
+  render(
+    createElement(BasemapExtractPanel, {
+      open: true,
+      onClose: () => {},
+      mapControllerRef: { current: null },
+      mapReadyGeneration: 0,
+    }),
+  );
+  await screen.findByText("Pending deletion");
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  await waitFor(() => assert.equal(screen.queryByText("Pending deletion") === null, true));
+  assert.ok(screen.getByText("Deletion durability could not be confirmed"));
+  assert.equal(useAppStore.getState().basemapStyleUrl, defaultBasemap);
+  assert.equal(getOfflineBasemapStyle(styleUrl), null);
+  assert.equal(hasPMTilesArchive(nativeLocalPmtilesProtocolUrl(entry.savedPath)), false);
+});
+
+it("applies a successfully saved native basemap when the catalog refresh fails", async () => {
+  const bytes = vectorArchive();
+  const id = "pkg-cccccccccccccccccccccccccccccccc";
+  let saved = false;
+  let catalogFailures = 0;
+  mockIPC((command) => {
+    if (command === "list_native_offline_packages") {
+      if (saved) {
+        catalogFailures++;
+        throw new Error("Catalog refresh unavailable");
+      }
+      return { packages: [], problems: [] };
+    }
+    if (command === "plugin:dialog|open") return "/data/picked.pmtiles";
+    if (command === "plugin:fs|read_file") return bytes.buffer;
+    if (command === "save_native_offline_package") {
+      saved = true;
+      return {
+        id,
+        name: "picked",
+        bbox: [-123, 37, -122, 38],
+        minZoom: 0,
+        maxZoom: 8,
+        flavor: "light",
+        tileType: "vector",
+        bytes: bytes.length,
+        savedPath: `/data/offline-packages/${id}/archive.pmtiles`,
+        createdAt: 1,
+        managed: true,
+        archiveFormat: "pmtiles",
+        sha256: "a".repeat(64),
+      };
+    }
+    throw new Error(`Unexpected native command: ${command}`);
+  });
+  render(
+    createElement(BasemapExtractPanel, {
+      open: true,
+      onClose: () => {},
+      mapControllerRef: { current: null },
+      mapReadyGeneration: 0,
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Open file…" }));
+  await waitFor(
+    () =>
+      assert.equal(
+        useAppStore.getState().basemapStyleUrl,
+        `geolibre://offline-basemap/${id}/light`,
+      ),
+    { timeout: 5000, onTimeout: (error) => error },
+  ).catch((error: unknown) => {
+    throw new Error(`${String(error)}\nPanel: ${document.body.textContent}`);
+  });
+  assert.equal(saved, true);
+  assert.equal(catalogFailures, 1);
+  assert.ok(await screen.findByText("Catalog refresh unavailable"));
+  await waitFor(
+    () => assert.match(document.body.textContent ?? "", /Using the package saved on this device/),
+    { onTimeout: (error) => new Error(`${error.message}\nPanel: ${document.body.textContent}`) },
+  );
+});
+
+it("clears a superseded verification indicator when Open is canceled", async () => {
+  const entry = {
+    id: "pkg-dddddddddddddddddddddddddddddddd",
+    name: "Saved map",
+    bbox: [-123, 37, -122, 38],
+    minZoom: 0,
+    maxZoom: 8,
+    flavor: "light",
+    tileType: "vector",
+    bytes: 200,
+    savedPath: "/data/saved.pmtiles",
+    createdAt: 1,
+    managed: true,
+    archiveFormat: "pmtiles",
+    sha256: "a".repeat(64),
+  };
+  let completeVerification!: (value: typeof entry) => void;
+  const verification = new Promise<typeof entry>((resolve) => {
+    completeVerification = resolve;
+  });
+  mockIPC((command) => {
+    if (command === "list_native_offline_packages") return { packages: [entry], problems: [] };
+    if (command === "verify_native_offline_package") return verification;
+    if (command === "plugin:dialog|open") return null;
+    throw new Error(`Unexpected native command: ${command}`);
+  });
+  render(
+    createElement(BasemapExtractPanel, {
+      open: true,
+      onClose: () => {},
+      mapControllerRef: { current: null },
+      mapReadyGeneration: 0,
+    }),
+  );
+  const apply = await screen.findByRole("button", { name: "Use as basemap" });
+  fireEvent.click(apply);
+  await waitFor(() => assert.equal(apply.hasAttribute("disabled"), true));
+  fireEvent.click(screen.getByRole("button", { name: "Open file…" }));
+  await waitFor(() => assert.equal(apply.hasAttribute("disabled"), false));
+  completeVerification(entry);
+  await verification;
+  assert.notEqual(
+    useAppStore.getState().basemapStyleUrl,
+    `geolibre://offline-basemap/${entry.id}/light`,
+  );
+});
+
+for (const superseded of [false, true]) {
+  it(`reports a native Open save rejection only while current (superseded=${superseded})`, async () => {
+    let rejectSave!: (error: Error) => void;
+    let saving = false;
+    const pending = new Promise<never>((_resolve, reject) => {
+      rejectSave = reject;
+    });
+    mockIPC((command) => {
+      if (command === "list_native_offline_packages") return { packages: [], problems: [] };
+      if (command === "plugin:dialog|open") return "/data/picked.pmtiles";
+      if (command === "plugin:fs|read_file") return vectorArchive().buffer;
+      if (command === "save_native_offline_package") {
+        saving = true;
+        return pending;
+      }
+      throw new Error(`Unexpected native command: ${command}`);
+    });
+    render(
+      createElement(BasemapExtractPanel, {
+        open: true,
+        onClose: () => {},
+        mapControllerRef: { current: null },
+        mapReadyGeneration: 0,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open file…" }));
+    await waitFor(() => assert.equal(saving, true));
+    if (superseded) useAppStore.getState().newProject({ name: "Replacement" });
+    rejectSave(new Error("Old native save failed"));
+    await waitFor(() =>
+      assert.equal(
+        screen.getByRole("button", { name: "Open file…" }).hasAttribute("disabled"),
+        false,
+      ),
+    );
+    assert.equal(screen.queryByText("Old native save failed") !== null, !superseded);
+  });
+}
+
+for (const deletionFails of [false, true]) {
+  it(`guards concurrent project references until native deletion settles (fails=${deletionFails})`, async () => {
+    const { projectFromStore } = await import("../packages/core/src/project");
+    const entry: NativeOfflinePackage = {
+      id: "pkg-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      name: "Reserved package",
+      bbox: [-123, 37, -122, 38],
+      minZoom: 0,
+      maxZoom: 8,
+      flavor: "light",
+      tileType: "vector",
+      bytes: 200,
+      savedPath: "/data/reserved.pmtiles",
+      createdAt: 1,
+      managed: true,
+      archiveFormat: "pmtiles",
+      sha256: "a".repeat(64),
+    };
+    const id = useAppStore
+      .getState()
+      .addGeoJsonLayer("Reserved overlay", { type: "FeatureCollection", features: [] });
+    useAppStore.getState().updateLayer(id, { metadata: { nativeOfflinePackageId: entry.id } });
+    const project = projectFromStore(useAppStore.getState());
+    useAppStore.getState().newProject({ name: "Current" });
+    const defaultBasemap = useAppStore.getState().basemapStyleUrl;
+    useAppStore.getState().setBasemapStyleUrl(nativeOfflineBasemapStyleUrl(entry, "light"));
+    let deleting = false;
+    let deleted = false;
+    let finish!: () => void;
+    let fail!: (error: Error) => void;
+    const pending = new Promise<void>((resolve, reject) => {
+      finish = resolve;
+      fail = reject;
+    });
+    mockIPC((command) => {
+      if (command === "list_native_offline_packages")
+        return { packages: deleted ? [] : [entry], problems: [] };
+      if (command === "delete_native_offline_package") {
+        deleting = true;
+        return pending;
+      }
+      throw new Error(`Unexpected native command: ${command}`);
+    });
+    render(
+      createElement(BasemapExtractPanel, {
+        open: true,
+        onClose: () => {},
+        mapControllerRef: { current: null },
+        mapReadyGeneration: 0,
+      }),
+    );
+    await screen.findByText(entry.name);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => assert.equal(deleting, true));
+    assert.throws(
+      () => useAppStore.getState().loadProject(project),
+      /Remove layers using this package/,
+    );
+    assert.equal(useAppStore.getState().projectName, "Current");
+    assert.equal(useAppStore.getState().basemapStyleUrl, defaultBasemap);
+    assert.equal(useAppStore.getState().layers.length, 0);
+    if (deletionFails) fail(new Error("Native deletion failed"));
+    else {
+      deleted = true;
+      finish();
+    }
+    if (deletionFails) await screen.findByText("Native deletion failed");
+    else await waitFor(() => assert.equal(screen.queryByText(entry.name) === null, true));
+    // Once the operation settles, project operations are released on both paths.
+    await waitFor(() => {
+      useAppStore.getState().loadProject(project);
+      assert.equal(useAppStore.getState().layers.length, 1);
+    });
+  });
+}
+
+for (const scenario of [
+  { samePackage: true, deletionFails: false, activeDeleted: false },
+  { samePackage: false, deletionFails: false, activeDeleted: false },
+  { samePackage: false, deletionFails: false, activeDeleted: true },
+  { samePackage: true, deletionFails: true, activeDeleted: false },
+]) {
+  it(`coordinates pending apply with deletion (${JSON.stringify(scenario)})`, async () => {
+    const entry: NativeOfflinePackage = {
+      id: "pkg-11111111111111111111111111111111",
+      name: "Package A",
+      bbox: [-123, 37, -122, 38],
+      minZoom: 0,
+      maxZoom: 8,
+      flavor: "light",
+      tileType: "vector",
+      bytes: 200,
+      savedPath: "/data/a.pmtiles",
+      createdAt: 1,
+      managed: true,
+      archiveFormat: "pmtiles",
+      sha256: "a".repeat(64),
+    };
+    const other: NativeOfflinePackage = {
+      ...entry,
+      id: "pkg-22222222222222222222222222222222",
+      name: "Package B",
+      savedPath: "/data/b.pmtiles",
+    };
+    const applying = scenario.samePackage ? entry : other;
+    let resolveVerification!: (value: NativeOfflinePackage) => void;
+    const verification = new Promise<NativeOfflinePackage>((resolve) => {
+      resolveVerification = resolve;
+    });
+    let finishDeletion!: () => void;
+    let rejectDeletion!: (error: Error) => void;
+    const deletion = new Promise<void>((resolve, reject) => {
+      finishDeletion = resolve;
+      rejectDeletion = reject;
+    });
+    let deleting = false;
+    let deleted = false;
+    let verifyCalls = 0;
+    mockIPC((command) => {
+      if (command === "list_native_offline_packages")
+        return { packages: deleted ? [other] : [entry, other], problems: [] };
+      if (command === "verify_native_offline_package") {
+        verifyCalls++;
+        return verifyCalls === 1 ? verification : entry;
+      }
+      if (command === "delete_native_offline_package") {
+        deleting = true;
+        return deletion;
+      }
+      throw new Error(`Unexpected native command: ${command}`);
+    });
+    const before = useAppStore.getState().basemapStyleUrl;
+    if (scenario.activeDeleted)
+      useAppStore.getState().setBasemapStyleUrl(nativeOfflineBasemapStyleUrl(entry, "light"));
+    render(
+      createElement(BasemapExtractPanel, {
+        open: true,
+        onClose: () => {},
+        mapControllerRef: { current: null },
+        mapReadyGeneration: 0,
+      }),
+    );
+    await screen.findByText(entry.name);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Use as basemap" })[scenario.samePackage ? 0 : 1],
+    );
+    await waitFor(() => assert.equal(verifyCalls, 1));
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    await waitFor(() => assert.equal(deleting, true));
+    resolveVerification(applying);
+    await verification;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const expected = scenario.samePackage ? before : `geolibre://offline-basemap/${other.id}/light`;
+    assert.equal(useAppStore.getState().basemapStyleUrl, expected);
+    // Cancel only the confirmation UI, then try to apply A while deletion is still pending.
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Use as basemap" })[0]);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(verifyCalls, 1);
+    assert.equal(useAppStore.getState().basemapStyleUrl, expected);
+    if (scenario.deletionFails) {
+      rejectDeletion(new Error("Deletion refused"));
+      await screen.findByText("Deletion refused");
+      fireEvent.click(screen.getAllByRole("button", { name: "Use as basemap" })[0]);
+      await waitFor(() =>
+        assert.equal(
+          useAppStore.getState().basemapStyleUrl,
+          `geolibre://offline-basemap/${entry.id}/light`,
+        ),
+      );
+      assert.equal(verifyCalls, 2);
+    } else {
+      deleted = true;
+      finishDeletion();
+      await waitFor(() => assert.equal(screen.queryByText(entry.name) === null, true));
+      assert.equal(useAppStore.getState().basemapStyleUrl, expected);
+    }
+  });
+}
