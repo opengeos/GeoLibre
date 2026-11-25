@@ -10,6 +10,7 @@ import {
   labelFieldTextField,
   pluginOwnsPaint,
   proportionalRadiusExpression,
+  removeTrailingJsonCommas,
   ruleBasedVisibilityFilter,
   shouldUseTiledRendering,
   styleValue,
@@ -2796,7 +2797,7 @@ function readsFeatureGeometry(layer: GeoLibreLayer, labels: LabelStyle): boolean
     if (!text) return false;
     let expression: unknown;
     try {
-      expression = JSON.parse(text);
+      expression = JSON.parse(removeTrailingJsonCommas(text));
     } catch {
       return false;
     }

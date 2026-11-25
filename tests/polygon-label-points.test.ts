@@ -457,6 +457,19 @@ describe("one label per polygon (layer sync)", () => {
     }
   });
 
+  it("recognizes geometry operators in overrides with accepted trailing commas", () => {
+    const { map, layers, sources } = makeMap();
+    syncLayer(
+      map as never,
+      polygonLayer({
+        visibilityExpression:
+          '["within", {"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,0]]]},]',
+      }),
+    );
+    assert.equal((layers.get(LABEL_ID) as { source: string }).source, "source-lyr");
+    assert.ok(!sources.has(LABEL_SOURCE_ID));
+  });
+
   it("falls back to MapLibre placement when turned off, and drops the label source", () => {
     const { map, layers, sources } = makeMap();
     syncLayer(map as never, polygonLayer({}));
