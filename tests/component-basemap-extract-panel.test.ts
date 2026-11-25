@@ -318,3 +318,108 @@ for (const deletionFails of [false, true]) {
     });
   });
 }
+
+for (const scenario of [
+  { samePackage: true, deletionFails: false, activeDeleted: false },
+  { samePackage: false, deletionFails: false, activeDeleted: false },
+  { samePackage: false, deletionFails: false, activeDeleted: true },
+  { samePackage: true, deletionFails: true, activeDeleted: false },
+]) {
+  it(`coordinates pending apply with deletion (${JSON.stringify(scenario)})`, async () => {
+    const entry: NativeOfflinePackage = {
+      id: "pkg-11111111111111111111111111111111",
+      name: "Package A",
+      bbox: [-123, 37, -122, 38],
+      minZoom: 0,
+      maxZoom: 8,
+      flavor: "light",
+      tileType: "vector",
+      bytes: 200,
+      savedPath: "/data/a.pmtiles",
+      createdAt: 1,
+      managed: true,
+      archiveFormat: "pmtiles",
+      sha256: "a".repeat(64),
+    };
+    const other: NativeOfflinePackage = {
+      ...entry,
+      id: "pkg-22222222222222222222222222222222",
+      name: "Package B",
+      savedPath: "/data/b.pmtiles",
+    };
+    const applying = scenario.samePackage ? entry : other;
+    let resolveVerification!: (value: NativeOfflinePackage) => void;
+    const verification = new Promise<NativeOfflinePackage>((resolve) => {
+      resolveVerification = resolve;
+    });
+    let finishDeletion!: () => void;
+    let rejectDeletion!: (error: Error) => void;
+    const deletion = new Promise<void>((resolve, reject) => {
+      finishDeletion = resolve;
+      rejectDeletion = reject;
+    });
+    let deleting = false;
+    let deleted = false;
+    let verifyCalls = 0;
+    mockIPC((command) => {
+      if (command === "list_native_offline_packages")
+        return { packages: deleted ? [other] : [entry, other], problems: [] };
+      if (command === "verify_native_offline_package") {
+        verifyCalls++;
+        return verifyCalls === 1 ? verification : entry;
+      }
+      if (command === "delete_native_offline_package") {
+        deleting = true;
+        return deletion;
+      }
+      throw new Error(`Unexpected native command: ${command}`);
+    });
+    const before = useAppStore.getState().basemapStyleUrl;
+    if (scenario.activeDeleted)
+      useAppStore.getState().setBasemapStyleUrl(nativeOfflineBasemapStyleUrl(entry, "light"));
+    render(
+      createElement(BasemapExtractPanel, {
+        open: true,
+        onClose: () => {},
+        mapControllerRef: { current: null },
+        mapReadyGeneration: 0,
+      }),
+    );
+    await screen.findByText(entry.name);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Use as basemap" })[scenario.samePackage ? 0 : 1],
+    );
+    await waitFor(() => assert.equal(verifyCalls, 1));
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    await waitFor(() => assert.equal(deleting, true));
+    resolveVerification(applying);
+    await verification;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const expected = scenario.samePackage ? before : `geolibre://offline-basemap/${other.id}/light`;
+    assert.equal(useAppStore.getState().basemapStyleUrl, expected);
+    // Cancel only the confirmation UI, then try to apply A while deletion is still pending.
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Use as basemap" })[0]);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(verifyCalls, 1);
+    assert.equal(useAppStore.getState().basemapStyleUrl, expected);
+    if (scenario.deletionFails) {
+      rejectDeletion(new Error("Deletion refused"));
+      await screen.findByText("Deletion refused");
+      fireEvent.click(screen.getAllByRole("button", { name: "Use as basemap" })[0]);
+      await waitFor(() =>
+        assert.equal(
+          useAppStore.getState().basemapStyleUrl,
+          `geolibre://offline-basemap/${entry.id}/light`,
+        ),
+      );
+      assert.equal(verifyCalls, 2);
+    } else {
+      deleted = true;
+      finishDeletion();
+      await waitFor(() => assert.equal(screen.queryByText(entry.name) === null, true));
+      assert.equal(useAppStore.getState().basemapStyleUrl, expected);
+    }
+  });
+}

@@ -77,3 +77,6 @@ default basemap before file removal; a failed deletion leaves that fallback
 selected and reports the error. A final validation failure after publication
 can leave a package in the catalog even though the operation reports failure;
 reopen the saved list to inspect and verify it before use.
+Deleting a package also cancels its pending basemap application and prevents
+reapplying it until deletion settles. An unrelated pending package application
+keeps its request; a failed deletion allows a fresh apply attempt.

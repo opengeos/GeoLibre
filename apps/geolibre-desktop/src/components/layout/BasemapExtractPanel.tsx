@@ -342,6 +342,7 @@ export function BasemapExtractPanel({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const renamingIdRef = useRef<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const deletingPackageIds = useRef(new Set<string>());
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [applicationRequests] = useState(
     () => new OfflineBasemapRequests(() => useAppStore.getState()),
@@ -358,6 +359,7 @@ export function BasemapExtractPanel({
 
   const handleDeleteSaved = useCallback(
     async (entry: OfflineBasemap) => {
+      if (deletingPackageIds.current.has(entry.id)) return;
       let release: (() => void) | undefined;
       try {
         if (entry.managed)
@@ -365,8 +367,17 @@ export function BasemapExtractPanel({
             (layer) => referencesNativeOfflinePackage(layer, entry.id),
             t("basemapExtract.errorPackageInUse"),
           );
-        if (isLiveOfflineBasemap(entry.id)) setBasemapStyleUrl(DEFAULT_BASEMAP);
+        deletingPackageIds.current.add(entry.id);
+        if (applicationRequests.invalidatePackage(entry.id)) setApplyingId(null);
+        if (isLiveOfflineBasemap(entry.id))
+          applicationRequests.preservePendingDuringFallback(() =>
+            setBasemapStyleUrl(DEFAULT_BASEMAP),
+          );
         await deleteSavedOfflineBasemap(entry);
+        if (isLiveOfflineBasemap(entry.id))
+          applicationRequests.preservePendingDuringFallback(() =>
+            setBasemapStyleUrl(DEFAULT_BASEMAP),
+          );
         forgetStyledBasemap(entry.id);
         evictOfflineBasemapStyle(entry.id);
         await refreshSavedBasemaps();
@@ -377,17 +388,21 @@ export function BasemapExtractPanel({
         // if cleanup or the following inventory read failed.
         const entries = await refreshSavedBasemaps().catch(() => null);
         if (entries && !entries.some((saved) => saved.id === entry.id)) {
-          if (isLiveOfflineBasemap(entry.id)) setBasemapStyleUrl(DEFAULT_BASEMAP);
+          if (isLiveOfflineBasemap(entry.id))
+            applicationRequests.preservePendingDuringFallback(() =>
+              setBasemapStyleUrl(DEFAULT_BASEMAP),
+            );
           if (entry.managed) forgetNativeOfflinePackage(entry);
           forgetStyledBasemap(entry.id);
           evictOfflineBasemapStyle(entry.id);
           setConfirmDeleteId(null);
         }
       } finally {
+        deletingPackageIds.current.delete(entry.id);
         release?.();
       }
     },
-    [isLiveOfflineBasemap, refreshSavedBasemaps, setBasemapStyleUrl, t],
+    [applicationRequests, isLiveOfflineBasemap, refreshSavedBasemaps, setBasemapStyleUrl, t],
   );
 
   const handleExportSaved = useCallback(async (entry: OfflineBasemap) => {
@@ -893,11 +908,16 @@ export function BasemapExtractPanel({
       // as overlays (user picked "None", or the archive failed the Protomaps
       // schema check) have `flavor === null` — forcing them through
       // buildProtomapsBasemapStyle would render a blank/broken basemap.
-      if (entry.tileType !== "vector" || entry.flavor == null) return;
+      if (
+        entry.tileType !== "vector" ||
+        entry.flavor == null ||
+        deletingPackageIds.current.has(entry.id)
+      )
+        return;
       setApplyingId(entry.id);
       setError(null);
       setSuccess(null);
-      const request = applicationRequests.begin();
+      const request = applicationRequests.begin(entry.id);
       try {
         if (entry.managed) {
           const verified = await verifyNativeOfflinePackage(entry.id);
