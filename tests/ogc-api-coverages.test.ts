@@ -5,6 +5,7 @@ import { afterEach, test } from "node:test";
 import {
   discoverOgcCoverages,
   ogcCoverageUrl,
+  ogcCoverageViewBounds,
   downloadOgcCoverage,
 } from "../apps/geolibre-desktop/src/lib/ogc-api-coverages";
 import { CoverageError } from "../apps/geolibre-desktop/src/lib/coverage-json";
@@ -161,4 +162,43 @@ test("resolves linked domains/ranges after redirect and produces a Float64 numer
     Array.from(await image.readRasters({ interleave: true })),
     doc.ranges.TMP.values,
   );
+});
+
+test("keeps valid collections and representations when advertised links are unusable", async () => {
+  const good = metadata();
+  const rel = "http://www.opengis.net/def/rel/ogc/1.0/coverage";
+  good.links = [
+    null,
+    { rel: "self", href: "https://user:password@example.org/private", type: "application/json" },
+    { rel, href: "data:image/tiff;base64,AAAA", type: "image/tiff" },
+    { rel, href: "./valid", type: "application/prs.coverage+json" },
+  ];
+  const bad = {
+    ...good,
+    id: "bad",
+    links: [{ rel, href: "https://user:secret@example.org/private", type: "image/tiff" }],
+  };
+  serve(() => ({ collections: [bad, good] }));
+  const [collection] = await discoverOgcCoverages(
+    "https://example.org/collections?token=kept",
+    new AbortController().signal,
+  );
+  assert.equal(collection.id, good.id);
+  assert.equal(collection.links.length, 1);
+  assert.equal(collection.links[0].href, "https://example.org/valid?token=kept");
+  assert.equal(new URL(ogcCoverageUrl(collection, [-80, 43, -79, 44])).pathname, "/valid");
+  serve(() => ({ collections: [bad] }));
+  await assert.rejects(
+    discoverOgcCoverages("https://example.org/collections", new AbortController().signal),
+    { code: "empty" },
+  );
+});
+
+test("normalizes wide and wrapped map views and requires splitting antimeridian views", () => {
+  assert.deepEqual(ogcCoverageViewBounds([-300, -95, 300, 95]), [-180, -90, 180, 90]);
+  assert.deepEqual(ogcCoverageViewBounds([200, 10, 210, 20]), [-160, 10, -150, 20]);
+  assert.deepEqual(ogcCoverageViewBounds([-160, 10, -150, 20]), [-160, 10, -150, 20]);
+  assert.throws(() => ogcCoverageViewBounds([170, 10, 190, 20]), { code: "bbox" });
+  assert.throws(() => ogcCoverageViewBounds([0, 10, 0, 20]), { code: "bbox" });
+  assert.throws(() => ogcCoverageViewBounds([NaN, 10, 20, 30]), { code: "bbox" });
 });

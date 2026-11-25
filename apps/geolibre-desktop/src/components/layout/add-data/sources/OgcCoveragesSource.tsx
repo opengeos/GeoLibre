@@ -9,6 +9,7 @@ import {
   discoverOgcCoverages,
   downloadOgcCoverage,
   ogcCoverageUrl,
+  ogcCoverageViewBounds,
   type OgcCoverageCollection,
 } from "../../../../lib/ogc-api-coverages";
 import { serviceRequestErrorMessage } from "../helpers";
@@ -176,7 +177,13 @@ export function OgcCoveragesSource({ initialUrl = "" }: { initialUrl?: string })
             variant="outline"
             onClick={() => {
               const extent = source.shell.mapControllerRef.current?.getViewBounds();
-              if (extent) setBounds(extent.map(String));
+              if (!extent) return;
+              try {
+                setBounds(ogcCoverageViewBounds(extent).map(String));
+                source.setError(null);
+              } catch (error) {
+                source.setError(errorText(error));
+              }
             }}
           >
             {t("rasterSubset.useView")}

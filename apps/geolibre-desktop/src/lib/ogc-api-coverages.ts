@@ -1,3 +1,4 @@
+import { shortestLongitudeExtent } from "@geolibre/core";
 import { convertGeoTiffToCog, readGeoTiffInfo } from "@geolibre/processing";
 import { readLimitedBody } from "../components/layout/add-data/helpers";
 import { proxyFeedRequestUrl } from "./feed-request";
@@ -56,9 +57,19 @@ function linkUrl(href: string, base: string): string {
   return target.href;
 }
 
+/** Ignore unusable advertised links without discarding other collections. */
+function validLinkUrl(href: string, base: string): string | undefined {
+  try {
+    return linkUrl(href, base);
+  } catch {
+    return undefined;
+  }
+}
+
 function links(document: Record<string, unknown>): Link[] {
   if (!Array.isArray(document.links)) return [];
   return document.links.flatMap((raw) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
     const l = coverageObject(raw);
     return typeof l.href === "string" && typeof l.rel === "string"
       ? [
@@ -104,7 +115,10 @@ async function bytes(
       signal.throwIfAborted();
       if (value.status < 200 || value.status >= 300)
         throw new Error(`OGC API HTTP ${value.status}`);
-      const result = new Uint8Array(value.body);
+      const result =
+        value.body.buffer instanceof ArrayBuffer
+          ? new Uint8Array(value.body.buffer, value.body.byteOffset, value.body.byteLength)
+          : new Uint8Array(value.body);
       if (result.byteLength > maxBytes) throw new CoverageError(limitCode);
       return { data: result, url: value.url };
     }
@@ -119,7 +133,7 @@ async function bytes(
     if (!response.ok) throw new Error(`OGC API HTTP ${response.status}`);
     signal.throwIfAborted();
     return {
-      data: new Uint8Array(result),
+      data: result,
       url:
         fetchUrl !== url
           ? response.headers.get("x-geolibre-final-url") || url
@@ -191,7 +205,14 @@ export async function discoverOgcCoverages(
       const itemLinks = links(item);
       if (!coverageLink(itemLinks)) continue;
       const self = itemLinks.find((l) => l.rel === "self" && /json/.test(l.type));
-      const itemUrl = self ? linkUrl(self.href, url) : url;
+      const itemUrl = self ? (validLinkUrl(self.href, url) ?? url) : url;
+      const coverageLinks = itemLinks.flatMap((link) => {
+        if (link.rel !== COVERAGE_REL || (!isTiff(link.type) && !isCoverageJson(link.type)))
+          return [];
+        const href = validLinkUrl(link.href, url);
+        return href ? [{ ...link, href }] : [];
+      });
+      if (!coverageLinks.length) continue;
       const extent: Record<string, unknown> | undefined = item.extent
         ? coverageObject(item.extent)
         : undefined;
@@ -212,9 +233,7 @@ export async function discoverOgcCoverages(
         id: item.id,
         title: typeof item.title === "string" ? item.title : item.id,
         url: itemUrl,
-        links: itemLinks
-          .filter((l) => l.rel === COVERAGE_REL && (isTiff(l.type) || isCoverageJson(l.type)))
-          .map((l) => ({ ...l, href: linkUrl(l.href, url) })),
+        links: coverageLinks,
         ...(bounds ? { bounds } : {}),
       });
       ids.add(item.id);
@@ -230,10 +249,21 @@ export async function discoverOgcCoverages(
   throw new CoverageError("metadata");
 }
 
+/** Normalize a wrapped map view to one CRS84 box; crossing views need splitting. */
+export function ogcCoverageViewBounds(bounds: readonly number[]): [number, number, number, number] {
+  if (bounds.length !== 4 || !bounds.every(Number.isFinite)) throw new CoverageError("bbox");
+  const longitude = shortestLongitudeExtent([[bounds[0], bounds[2]]]);
+  const south = Math.max(-90, Math.min(90, bounds[1]));
+  const north = Math.max(-90, Math.min(90, bounds[3]));
+  if (!longitude || longitude[0] >= longitude[1] || longitude[1] > 180 || south >= north)
+    throw new CoverageError("bbox");
+  return [longitude[0], south, longitude[1], north];
+}
+
 export function ogcCoverageUrl(
   collection: OgcCoverageCollection,
   bounds: number[],
-  options: { datetime?: string; subset?: string; parameter?: string } = {},
+  options: { datetime?: string; subset?: string } = {},
 ): string {
   if (
     bounds.length !== 4 ||
@@ -254,7 +284,6 @@ export function ogcCoverageUrl(
   url.searchParams.set("bbox", bounds.join(","));
   if (options.datetime?.trim()) url.searchParams.set("datetime", options.datetime.trim());
   if (options.subset?.trim()) url.searchParams.set("subset", options.subset.trim());
-  if (options.parameter?.trim()) url.searchParams.set("properties", options.parameter.trim());
   return url.href;
 }
 

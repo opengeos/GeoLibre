@@ -1623,7 +1623,7 @@
         "empty": "No GeoTIFF or CoverageJSON coverage collections were advertised.",
         "size": "The coverage exceeds the 128 MiB download limit or 8 million decoded samples.",
         "metadata": "The service catalog is too large to retrieve safely.",
-        "bbox": "Enter valid west, south, east and north coordinates in CRS84."
+        "bbox": "Enter valid west, south, east and north coordinates in CRS84. Split areas crossing the antimeridian into separate requests."
       }
     }
   },
@@ -4153,7 +4153,7 @@
       "mssql": "SQL Server layer",
       "iceberg": "Apache Iceberg layer",
       "wcs": "WCS layer",
-      "ogcCoverages": "OGC API - Coverages…"
+      "ogcCoverages": "OGC API - Coverages"
     },
     "conversion": {
       "vectorToVector": "Vector to vector",
