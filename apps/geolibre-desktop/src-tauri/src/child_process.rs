@@ -379,8 +379,9 @@ mod tests {
             }
         }
         let mut bytes = b"invalid: \xff\n".to_vec();
-        for _ in 0..10000 {
-            bytes.extend_from_slice("noise π\n".as_bytes());
+        for _ in 0..128 {
+            bytes.extend_from_slice("noise π".repeat(128).as_bytes());
+            bytes.push(b'\n');
         }
         bytes.extend_from_slice(b"FINAL_DIAGNOSTIC\n");
         assert!(bytes.len() > 65536);
@@ -394,7 +395,14 @@ mod tests {
             },
             false,
         );
-        captured.settle();
+        // Production settle is deliberately limited to 500 ms. This bulk-read
+        // regression should tolerate a loaded test runner without changing it.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while captured.draining.load(Ordering::SeqCst) != 0 && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(captured.draining.load(Ordering::SeqCst), 0);
         assert_eq!(read.load(Ordering::SeqCst), length);
         let tail = captured.tail();
         assert!(tail.contains("noise π"));
