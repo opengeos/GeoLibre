@@ -7,6 +7,8 @@ mod fs_util;
 mod http_client;
 mod in_flight;
 mod local_media_protocol;
+mod offline_package_commands;
+mod offline_packages;
 mod plugin_http;
 #[cfg(not(feature = "mas"))]
 mod process_lifetime;
@@ -544,6 +546,7 @@ pub fn run() {
         .manage(plugin_http::PluginHttpRequests::default())
         .manage(remote_download::RemoteDownloads::default())
         .manage(local_media_protocol::LocalMediaPools::default())
+        .manage(offline_package_commands::NativeOfflinePackages::default())
         .register_asynchronous_uri_scheme_protocol("mbtiles", |ctx, request, responder| {
             local_media_protocol::handle_mbtiles_protocol(
                 ctx.app_handle().clone(),
@@ -651,6 +654,11 @@ pub fn run() {
 
     let app = builder
         .invoke_handler(tauri::generate_handler![
+            offline_package_commands::list_native_offline_packages,
+            offline_package_commands::save_native_offline_package,
+            offline_package_commands::verify_native_offline_package,
+            offline_package_commands::update_native_offline_package,
+            offline_package_commands::delete_native_offline_package,
             close_oauth_popups,
             native_duckdb::count_native_vector_file_features,
             ensure_martin_binary,

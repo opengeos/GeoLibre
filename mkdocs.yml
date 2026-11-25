@@ -54,6 +54,7 @@ nav:
       - Projects: user-guide/projects.md
       - Adding Data: user-guide/adding-data.md
       - Supported Data Formats: data-formats.md
+      - Native Offline Packages: native-offline-packages.md
       - Chrome Extension: user-guide/chrome-extension.md
       - Managing Layers: user-guide/layers.md
       - Styling Layers: user-guide/styling.md

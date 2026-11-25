@@ -85,6 +85,13 @@ reprojected.
 | `styleLibrary` | array | Project-scoped Style Manager entries |
 | `metadata` | object | Free-form |
 
+Native offline basemaps may use `geolibre://offline-basemap/pkg-<id>/<flavor>`.
+These refer to an app-managed package on the same device, with a stable flavor
+such as `light` or `dark`. They are restored from the native package catalog
+before a project renders. They are not portable archive URLs: another device
+must import the archive and select its own package. Do not invent these ids
+when authoring a project or replace the address with an export/share result.
+
 ## The layer object
 
 ```json

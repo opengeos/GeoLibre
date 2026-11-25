@@ -773,6 +773,24 @@ pub(crate) struct LocalMediaPools {
     pub(crate) files: LocalFilePool,
 }
 
+impl LocalMediaPools {
+    /// Release cached readers before explicitly deleting an owned archive.
+    /// In-flight readers retain their handles until their current read ends.
+    pub(crate) fn release_path(&self, path: &Path) -> Result<(), String> {
+        self.files
+            .entries
+            .lock()
+            .map_err(|_| "Local file pool is unavailable")?
+            .remove(path);
+        self.mbtiles
+            .entries
+            .lock()
+            .map_err(|_| "MBTiles pool is unavailable")?
+            .remove(path);
+        Ok(())
+    }
+}
+
 fn canonicalize_allowed_mbtiles(path: &str) -> Result<PathBuf, String> {
     if !crate::is_safe_absolute_path(path) || !path.to_ascii_lowercase().ends_with(".mbtiles") {
         return Err(format!(

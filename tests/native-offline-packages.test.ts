@@ -1,0 +1,163 @@
+import "./helpers/dom";
+import assert from "node:assert/strict";
+import { afterEach, it } from "node:test";
+import { mockIPC, clearMocks } from "@tauri-apps/api/mocks";
+
+const {
+  listSavedOfflineBasemaps,
+  saveNativeOfflinePackage,
+  renameSavedOfflineBasemap,
+  setSavedOfflineBasemapFlavor,
+  deleteSavedOfflineBasemap,
+  verifyNativeOfflinePackage,
+  initializeNativeOfflinePackages,
+} = await import("../apps/geolibre-desktop/src/lib/native-offline-packages");
+const { upsertOfflineBasemap, loadOfflineBasemaps } =
+  await import("../apps/geolibre-desktop/src/lib/offline-basemaps");
+import type { NativeOfflinePackage } from "../apps/geolibre-desktop/src/lib/native-offline-packages";
+
+const entry: NativeOfflinePackage = {
+  id: "pkg-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  name: "Berkeley",
+  bbox: [-123, 37, -122, 38],
+  minZoom: 0,
+  maxZoom: 8,
+  flavor: "light",
+  tileType: "vector",
+  bytes: 673299,
+  savedPath: "/data/org.geolibre.app/offline-packages/package/archive.pmtiles",
+  createdAt: 10,
+  managed: true,
+  archiveFormat: "pmtiles",
+  sha256: "a".repeat(64),
+};
+
+afterEach(() => {
+  clearMocks();
+  Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+});
+
+it("loads native inventory without reading archive bytes and preserves legacy exports", async () => {
+  const legacy = { ...entry, id: "legacy", managed: false, savedPath: "content://documents/1" };
+  upsertOfflineBasemap(legacy);
+  const calls: string[] = [];
+  mockIPC((command) => {
+    calls.push(command);
+    assert.equal(command, "list_native_offline_packages");
+    return {
+      packages: [entry],
+      problems: [{ id: "pkg-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", error: "missing archive" }],
+    };
+  });
+  const entries = await listSavedOfflineBasemaps();
+  assert.deepEqual(
+    entries.map((item) => item.id),
+    [entry.id, "pkg-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", legacy.id],
+  );
+  assert.equal(entries[1].unavailableReason, "missing archive");
+  assert.equal(entries[1].flavor, null, "damaged entries cannot be applied");
+  assert.deepEqual(calls, ["list_native_offline_packages"]);
+});
+
+it("sends archive bytes through binary IPC and metadata through an encoded header", async () => {
+  const bytes = Uint8Array.of(0, 255, 1);
+  const details = {
+    name: "São Paulo",
+    bbox: entry.bbox,
+    minZoom: 0,
+    maxZoom: 8,
+    flavor: "light",
+    tileType: "vector" as const,
+    archiveFormat: "pmtiles" as const,
+  };
+  mockIPC(() => entry);
+  Reflect.set(
+    Reflect.get(window, "__TAURI_INTERNALS__"),
+    "invoke",
+    (command: string, payload: unknown, options?: { headers?: Record<string, string> }) => {
+      assert.equal(command, "save_native_offline_package");
+      assert.deepEqual(payload, bytes);
+      const headers = options?.headers as Record<string, string>;
+      assert.deepEqual(JSON.parse(decodeURIComponent(headers["x-package-metadata"])), details);
+      return Promise.resolve(entry);
+    },
+  );
+  assert.deepEqual(await saveNativeOfflinePackage(bytes, details), entry);
+});
+
+it("keeps managed rename, flavor, verify, and deletion out of browser storage", async () => {
+  const calls: [string, unknown][] = [];
+  mockIPC((command, payload) => {
+    calls.push([command, payload]);
+    return entry;
+  });
+  await renameSavedOfflineBasemap(entry, "New name");
+  await setSavedOfflineBasemapFlavor(entry, "dark");
+  await verifyNativeOfflinePackage(entry.id);
+  await deleteSavedOfflineBasemap(entry);
+  assert.deepEqual(calls, [
+    ["update_native_offline_package", { id: entry.id, name: "New name" }],
+    ["update_native_offline_package", { id: entry.id, flavor: "dark" }],
+    ["verify_native_offline_package", { id: entry.id }],
+    ["delete_native_offline_package", { id: entry.id }],
+  ]);
+  assert.deepEqual(loadOfflineBasemaps(), []);
+});
+
+it("keeps legacy catalog deletion from deleting an exported provider document", async () => {
+  const legacy = { ...entry, managed: false };
+  upsertOfflineBasemap(legacy);
+  mockIPC(() => {
+    throw new Error("Legacy exports must not call native deletion");
+  });
+  await renameSavedOfflineBasemap(legacy, "Renamed");
+  await setSavedOfflineBasemapFlavor(legacy, "dark");
+  assert.equal(loadOfflineBasemaps()[0].name, "Renamed");
+  await deleteSavedOfflineBasemap(legacy);
+  assert.deepEqual(loadOfflineBasemaps(), []);
+});
+
+it("serializes rapid updates for one package without resending stale fields", async () => {
+  let finish!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const calls: unknown[] = [];
+  mockIPC(async (command, payload) => {
+    calls.push([command, payload]);
+    if (calls.length === 1) await wait;
+    return entry;
+  });
+  const flavor = setSavedOfflineBasemapFlavor(entry, "dark");
+  const rename = renameSavedOfflineBasemap(entry, "Renamed");
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(calls.length, 1, "a later update waits for the first native write");
+  finish();
+  await Promise.all([flavor, rename]);
+  assert.deepEqual(calls, [
+    ["update_native_offline_package", { id: entry.id, flavor: "dark" }],
+    ["update_native_offline_package", { id: entry.id, name: "Renamed" }],
+  ]);
+});
+
+it("propagates catalog failures and does not substitute an empty native inventory", async () => {
+  mockIPC(() => {
+    throw new Error("storage unavailable");
+  });
+  await assert.rejects(listSavedOfflineBasemaps(), /storage unavailable/);
+  await assert.rejects(initializeNativeOfflinePackages(), /storage unavailable/);
+});
+
+it("initializes lightweight package styles while reporting unavailable entries", async () => {
+  const calls: string[] = [];
+  mockIPC((command) => {
+    calls.push(command);
+    return {
+      packages: [entry],
+      problems: [{ id: "pkg-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", error: "missing manifest" }],
+    };
+  });
+  assert.equal(await initializeNativeOfflinePackages(), 1);
+  assert.deepEqual(calls, ["list_native_offline_packages"]);
+});
