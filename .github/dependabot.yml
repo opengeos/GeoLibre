@@ -37,9 +37,9 @@ updates:
         update-types:
           - minor
           - patch
-        # Held renderer versions (docs/maintenance.md, `maplibre-gl` and
-        # `mapbox-gl`) get their own PRs, so a hold does not block the
-        # routine bumps batched with them.
+        # Held renderer versions (docs/maintenance.md: `maplibre-gl`, its
+        # style spec and `mapbox-gl`) get their own PRs, so a hold does not
+        # block the routine bumps batched with them.
         exclude-patterns:
           - "maplibre-gl"
           - "@maplibre/maplibre-gl-style-spec"
