@@ -186,6 +186,7 @@ export function useLayoutOptions({
       mapImageHeight: captured?.height ?? 0,
       mapFit,
       mapGeoref: captured?.georef ?? null,
+      mapLngLatGrid: captured?.lngLatGrid ?? null,
       mapFrameBox,
       elementOffsets,
       grid: showGrid

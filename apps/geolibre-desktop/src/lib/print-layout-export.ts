@@ -30,6 +30,7 @@ import {
   type CaptureGeoref,
   type GeorefProjection,
 } from "./geopdf";
+import { sampleCaptureLngLatGrid, type CaptureLngLatGrid } from "./print-capture-grid";
 import { saveBinaryFileWithFallback } from "./tauri-io";
 
 export {
@@ -56,6 +57,13 @@ export interface CapturedMap {
    * affine view of the map's CRS (pitch, globe, another body). GH #3523.
    */
   georef: CaptureGeoref | null;
+  /**
+   * Longitude/latitude sampled over {@link image} when it has no affine
+   * {@link georef} (globe, pitch), so the overview map can still locate it
+   * (GH #3551). Absent or null when the capture is georeferenced or cannot be
+   * located on Earth.
+   */
+  lngLatGrid?: CaptureLngLatGrid | null;
 }
 
 interface MapLike {
@@ -209,7 +217,7 @@ export async function captureEngineMapImage(
   // them, so a camera move in between would pair this view's pixels with the
   // next view's coordinates. Compare the view on both sides of the capture and
   // drop the georeference (plain PDF) when it moved.
-  const viewBefore = projection ? viewSignature(surface) : null;
+  const viewBefore = viewSignature(surface);
   const bitmap = await createImageBitmap(await engine.captureImage());
   try {
     if (engine.getRenderSurface() !== surface)
@@ -223,8 +231,8 @@ export async function captureEngineMapImage(
     const cssWidth = surface.getCanvas().clientWidth || surface.getContainer().clientWidth;
     decorate?.(context, cssWidth > 0 ? canvas.width / cssWidth : window.devicePixelRatio || 1);
     const capturedMap = captureMapImage(surface, clip, canvas, projection);
-    if (capturedMap.georef && viewSignature(surface) !== viewBefore) {
-      return { ...capturedMap, georef: null };
+    if ((capturedMap.georef || capturedMap.lngLatGrid) && viewSignature(surface) !== viewBefore) {
+      return { ...capturedMap, georef: null, lngLatGrid: null };
     }
     return capturedMap;
   } finally {
@@ -351,22 +359,25 @@ export function captureMapImage(
 
   // Image pixel -> viewport CSS pixel -> lng/lat, for the GeoPDF georeference.
   const scaleToCss = dpr > 0 ? 1 / dpr : 1;
+  const locate = (px: number, py: number) => {
+    try {
+      return map.unproject([(originX + px) * scaleToCss, (originY + py) * scaleToCss]);
+    } catch {
+      return null;
+    }
+  };
   const georef = projection
-    ? solveCaptureGeoref(
-        image.width,
-        image.height,
-        (px, py) => {
-          try {
-            return map.unproject([(originX + px) * scaleToCss, (originY + py) * scaleToCss]);
-          } catch {
-            return null;
-          }
-        },
-        projection,
-        1,
-        { allowUnwrappedLongitude: true },
-      )
+    ? solveCaptureGeoref(image.width, image.height, locate, projection, 1, {
+        allowUnwrappedLongitude: true,
+      })
     : null;
+  // A view that is not affine (globe, pitch) still has a location on Earth:
+  // sample it coarsely so the overview map can show where it is (GH #3551).
+  // Another body's coordinates are not Earth's, so it gets neither.
+  const lngLatGrid =
+    !georef && getActiveEllipsoid().id === "earth"
+      ? sampleCaptureLngLatGrid(image.width, image.height, locate)
+      : null;
 
   return {
     image,
@@ -376,6 +387,7 @@ export function captureMapImage(
     pixelRatio: dpr,
     bearingDeg: map.getBearing(),
     georef,
+    lngLatGrid,
   };
 }
 

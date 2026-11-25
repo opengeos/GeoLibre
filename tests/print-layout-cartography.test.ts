@@ -33,6 +33,10 @@ import {
 import type { CaptureGeoref } from "../apps/geolibre-desktop/src/lib/geopdf";
 import type { CapturedMap } from "../apps/geolibre-desktop/src/lib/print-layout-export";
 import { capturedBounds } from "../apps/geolibre-desktop/src/lib/print-capture-bounds";
+import {
+  gridLngLat,
+  sampleCaptureLngLatGrid,
+} from "../apps/geolibre-desktop/src/lib/print-capture-grid";
 
 const close = (actual: number, expected: number, tol: number, msg?: string) =>
   assert.ok(Math.abs(actual - expected) <= tol, msg ?? `${actual} != ${expected} (±${tol})`);
@@ -314,6 +318,43 @@ describe("inset view", () => {
     assert.equal(new Set(ring.map((point) => point.x)).size, 2);
     assert.equal(new Set(ring.map((point) => point.y)).size, 2);
   });
+  it("closes a boundary that circles a pole along the view's world (GH #3551)", () => {
+    const view = insetViewForBounds([-180, 20, 180, 85], 480, 360, 0);
+    const worldPx = 512 * 2 ** view.zoom;
+    const top = mercatorViewPx(view, 0, 85.0511287798066, false).y;
+    const left = mercatorViewPx(view, -180, 0, false).x;
+    const ring = (startLng: number, dir: 1 | -1) => {
+      const boundary: [number, number][] = [];
+      for (let k = 0; k < 12; k++) {
+        const lng = startLng + dir * 30 * k;
+        boundary.push([((lng + 540) % 360) - 180, 30 + (k % 2) * 5]);
+      }
+      return insetFootprint(view, boundary);
+    };
+    for (const [startLng, dir] of [
+      [-180, 1],
+      [-90, 1],
+      [45, -1],
+    ] as const) {
+      const footprint = ring(startLng, dir);
+      const xs = footprint.map((p) => p.x);
+      // The cap covers exactly the rendered world, wherever the ring started.
+      close(Math.min(...xs), left, 1e-6);
+      close(Math.max(...xs) - Math.min(...xs), worldPx, 1e-6);
+      close(footprint.at(-1)!.y, top, 1e-6);
+      close(footprint.at(-2)!.y, top, 1e-6);
+    }
+  });
+  it("closes at the pole in the frame centre's hemisphere", () => {
+    const view = insetViewForBounds([-180, -85, 180, 85], 480, 360, 0);
+    // Mostly northern edge latitudes, yet the frame centre sits south.
+    const boundary: [number, number][] = [];
+    for (let k = 0; k < 12; k++) boundary.push([-180 + 30 * k, k < 8 ? 20 : -40]);
+    const south = mercatorViewPx(view, 0, -85.0511287798066, false).y;
+    const north = mercatorViewPx(view, 0, 85.0511287798066, false).y;
+    close(insetFootprint(view, boundary, -10).at(-1)!.y, south, 1e-6);
+    close(insetFootprint(view, boundary).at(-1)!.y, north, 1e-6);
+  });
   it("centres on the extent and zooms out by the offset", () => {
     const bounds: [number, number, number, number] = [-1, -1, 1, 1];
     const fitted = insetViewForBounds(bounds, 400, 400, 0);
@@ -566,6 +607,99 @@ describe("captured inset bounds", () => {
     assert.ok(cropped && cropped[2] - cropped[0] < 5);
     assert.equal(cropped[1], 40);
     assert.equal(cropped[3], 50);
+  });
+});
+
+describe("captured lng/lat grid without a georeference (GH #3551)", () => {
+  // A globe-like view: longitude bends with latitude, so no affine fit exists.
+  const locate = (px: number, py: number) => ({
+    lng: 170 + px / 50 + (py / 500) ** 2 * 10,
+    lat: 60 - py / 25,
+  });
+  it("unwraps across the antimeridian and interpolates between samples", () => {
+    const grid = sampleCaptureLngLatGrid(1000, 500, (px, py) => {
+      const ll = locate(px, py);
+      return { lng: wrapLongitude(ll.lng), lat: ll.lat };
+    });
+    assert.ok(grid);
+    const [lng, lat] = gridLngLat(grid, 500, 250);
+    assert.ok(Math.abs(lng - locate(500, 250).lng) < 0.2, `lng ${lng}`);
+    assert.ok(Math.abs(lat - 50) < 1e-9);
+  });
+  it("fills samples off the ground from their located neighbours", () => {
+    // The top-left quarter is sky (as on a Cesium or ArcGIS globe surface).
+    const grid = sampleCaptureLngLatGrid(1000, 500, (px, py) =>
+      px < 500 && py < 250 ? null : locate(px, py),
+    );
+    assert.ok(grid);
+    assert.ok(grid.lngs.every(Number.isFinite) && grid.lats.every(Number.isFinite));
+    assert.deepEqual(gridLngLat(grid, 1000, 500), [locate(1000, 500).lng, locate(1000, 500).lat]);
+  });
+  it("includes a pole the frame circles in the inset bounds", () => {
+    // Looking straight down on the north pole: the frame corners sit near 67.6N.
+    const polar = (px: number, py: number) => {
+      const dx = px - 500;
+      const dy = py - 250;
+      return {
+        lng: (Math.atan2(dx, -dy) * 180) / Math.PI,
+        lat: 90 - Math.hypot(dx, dy) / 25,
+      };
+    };
+    const bounds = capturedBounds({
+      image: {} as HTMLCanvasElement,
+      width: 1000,
+      height: 500,
+      metersPerPixel: 100,
+      pixelRatio: 1,
+      bearingDeg: 0,
+      georef: null,
+      lngLatGrid: sampleCaptureLngLatGrid(1000, 500, polar),
+    });
+    assert.ok(bounds);
+    assert.equal(bounds[0], -180);
+    assert.equal(bounds[2], 180);
+    assert.equal(bounds[3], 90);
+  });
+  it("is refused when no sample can be located", () => {
+    assert.equal(
+      sampleCaptureLngLatGrid(100, 100, () => null),
+      null,
+    );
+  });
+  it("locates the inset extent and footprint of a capture without a georeference", () => {
+    const lngLatGrid = sampleCaptureLngLatGrid(1000, 500, locate);
+    const bounds = capturedBounds({
+      image: {} as HTMLCanvasElement,
+      width: 1000,
+      height: 500,
+      metersPerPixel: 100,
+      pixelRatio: 1,
+      bearingDeg: 0,
+      georef: null,
+      lngLatGrid,
+    });
+    assert.ok(bounds);
+    assert.ok(Math.abs(bounds[0] - 170) < 1e-9 && Math.abs(bounds[2] - 200) < 0.5);
+    assert.ok(Math.abs(bounds[1] - 40) < 1e-9 && Math.abs(bounds[3] - 60) < 1e-9);
+
+    const strokes = (grid: typeof lngLatGrid) => {
+      const { canvas, paint } = recordingCanvas();
+      drawLayout(
+        canvas,
+        options({
+          mapGeoref: null,
+          mapLngLatGrid: grid,
+          inset: {
+            box: null,
+            image: {} as CanvasImageSource,
+            view: { center: [-175, 50], zoom: 2, width: 480, height: 360 },
+            extentColor: "#ff0000",
+          },
+        }),
+      );
+      return paint.filter((item) => item === "stroke").length;
+    };
+    assert.ok(strokes(lngLatGrid) > strokes(null), "the footprint is traced from the grid");
   });
 });
 
