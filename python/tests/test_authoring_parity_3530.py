@@ -339,8 +339,7 @@ def test_zarr_layer_matches_the_restorable_record():
 @pytest.mark.parametrize(
     ("url", "kwargs", "match"),
     [
-        ("https://example.com/repo#icechunk=main", {}, "Icechunk"),
-        ("local-zarr:abc", {}, "Icechunk"),
+        ("local-zarr:abc", {}, "local"),
         ("ftp://example.com/x.zarr", {}, "url"),
         ("https://example.com/x.zarr", {"clim": [5, 1]}, "clim"),
         ("https://example.com/x.zarr", {"selector": {"time": [1]}}, "selector"),
@@ -350,6 +349,120 @@ def test_zarr_layer_matches_the_restorable_record():
 def test_zarr_layer_rejects_what_the_app_cannot_reopen(url, kwargs, match):
     with pytest.raises(ValueError, match=match):
         _project.zarr_layer("x", url, "v", **kwargs)
+
+
+@pytest.mark.parametrize("branch", ["main", "release/2026 #1+literal%"])
+def test_icechunk_layer_retains_its_branch_and_zarr_options(branch):
+    """Retain a public repository branch in the existing project URL contract.
+
+    Args:
+        branch: A branch name including characters requiring URL encoding.
+    """
+    from urllib.parse import quote
+
+    layer = _project.zarr_layer(
+        "Repository",
+        "https://example.com/repo",
+        "temperature",
+        icechunk_branch=branch,
+        selector={"time": 2},
+        clim=[-10, 30],
+        spatial_dimensions={"lat": "latitude", "lon": "longitude"},
+        fillOpacity=0.4,
+    )
+    expected = "https://example.com/repo#icechunk=" + quote(branch, safe="")
+    assert layer["source"]["url"] == expected
+    assert layer["sourcePath"] == expected
+    assert layer["source"]["selector"] == {"time": 2}
+    assert layer["source"]["spatialDimensions"] == {"lat": "latitude", "lon": "longitude"}
+    assert layer["style"]["fillOpacity"] == 0.4
+    restored = _project.zarr_layer("Reopened", expected, "temperature")
+    assert restored["source"]["url"] == expected
+
+
+@pytest.mark.parametrize(
+    "url,branch",
+    [
+        ("https://example.com/repo", ""),
+        ("https://example.com/repo", "  "),
+        ("https://example.com/repo", 3),
+        ("https://example.com/repo#icechunk=", None),
+        ("https://example.com/repo#icechunk=%FF", None),
+        ("https://example.com/repo#icechunk=%ZZ", None),
+        ("https://example.com/repo#icechunk=main", "different"),
+        ("s3://bucket/repo", "main"),
+    ],
+)
+def test_icechunk_layer_rejects_invalid_branch_definitions(url, branch):
+    """Reject saved definitions the repository reader cannot reopen.
+
+    Args:
+        url: Repository URL or encoded saved definition.
+        branch: Explicit branch override.
+    """
+    with pytest.raises(ValueError, match="[Ii]cechunk"):
+        _project.zarr_layer("Repository", url, "temperature", icechunk_branch=branch)
+
+
+def test_map_icechunk_layer_saves_and_reloads_its_definition(monkeypatch, tmp_path):
+    """Save the Map-authored repository with the same branch and selector.
+
+    Args:
+        monkeypatch: Test fixture replacing only the bundled app server.
+        tmp_path: Directory for the saved project.
+    """
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    m = Map()
+    layer_id = m.add_zarr(
+        "https://example.com/repo",
+        "temperature",
+        icechunk_branch="release/v1",
+        selector={"time": 2},
+    )
+    path = tmp_path / "icechunk.geolibre.json"
+    m.save_project(str(path))
+    saved = json.loads(path.read_text())
+    layer = next(layer for layer in saved["layers"] if layer["id"] == layer_id)
+    assert layer["source"]["url"] == "https://example.com/repo#icechunk=release%2Fv1"
+    assert layer["source"]["selector"] == {"time": 2}
+
+
+def test_mcp_icechunk_layer_authors_and_rejects_atomically(server, tmp_path):
+    """Use the same builder and preserve the project after invalid authoring.
+
+    Args:
+        server: Real MCP server using the confined test workspace.
+        tmp_path: Directory holding the saved project.
+    """
+    path = tmp_path / "icechunk.geolibre.json"
+    _call(server, "create_project", path=str(path), name="Icechunk")
+    _call(
+        server,
+        "add_zarr_layer",
+        path=str(path),
+        name="Repository",
+        url="https://example.com/repo",
+        variable="temperature",
+        icechunk_branch="main",
+        selector={"time": 1},
+    )
+    before = path.read_bytes()
+    saved = json.loads(path.read_text())
+    assert saved["layers"][0]["source"]["url"] == "https://example.com/repo#icechunk=main"
+    assert saved["layers"][0]["source"]["selector"] == {"time": 1}
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    with pytest.raises(ToolError, match="icechunk_branch"):
+        _call(
+            server,
+            "add_zarr_layer",
+            path=str(path),
+            name="Invalid",
+            url="https://example.com/repo",
+            variable="temperature",
+            icechunk_branch="",
+        )
+    assert path.read_bytes() == before
 
 
 def test_video_layer_records_the_form_urls():

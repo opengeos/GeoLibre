@@ -1,6 +1,6 @@
 {
   "name": "@geolibre/map",
-  "version": "3.10.0",
+  "version": "3.10.1",
   "description": "Headless MapLibre layer synchronization and style engine from GeoLibre",
   "keywords": [
     "geolibre",
@@ -145,6 +145,7 @@
     "fast-xml-parser": "^5.12.1",
     "geotiff": "^3.0.5",
     "geotiff-geokeys-to-proj4": "^2026.11.15",
+    "icechunk-js": "^0.7.1",
     "laz-perf": "^0.0.7",
     "mapbox-gl": "3.35.0",
     "maplibre-gl": "6.18.0",

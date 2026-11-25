@@ -3624,6 +3624,7 @@ class Map(anywidget.AnyWidget):
         variable: str,
         name: str | None = None,
         *,
+        icechunk_branch: str | None = None,
         selector: dict[str, int | float | str] | None = None,
         clim: list[float] | None = None,
         colormap: str | None = None,
@@ -3636,9 +3637,9 @@ class Map(anywidget.AnyWidget):
 
         Args:
             url: An ``http(s)://``, ``s3://``, or ``gs://`` Zarr store URL.
-                Icechunk repositories cannot be saved in a project.
             variable: The array to draw.
             name: Layer display name; defaults to the variable name.
+            icechunk_branch: Branch of a public HTTP(S) Icechunk repository.
             selector: Non-spatial dimension values to slice, e.g. ``{"time": 0}``.
             clim: ``[min, max]`` color range.
             colormap: Colormap name.
@@ -3656,6 +3657,7 @@ class Map(anywidget.AnyWidget):
                 name or variable,
                 url,
                 variable,
+                icechunk_branch=icechunk_branch,
                 selector=selector,
                 clim=clim,
                 colormap=colormap,

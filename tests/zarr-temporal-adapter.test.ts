@@ -12,7 +12,47 @@ import {
   getTemporalLayerAdapter,
 } from "../packages/plugins/src/plugins/temporal-layers.ts";
 import { __resetZarrTimeAttributeCacheForTests } from "../packages/plugins/src/plugins/zarr-time-axis.ts";
+import { restoreArcgisZarrLayers } from "../packages/plugins/src/plugins/components/zarr";
+import { geojsonLayer } from "./helpers/layer-fixtures";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
+import {
+  getZarrStore,
+  resolveZarrStore,
+  shareRepositoryOpen,
+  repositoryKey,
+  __resetIcechunkRepositoriesForTests,
+} from "../packages/map/src/zarr-source";
+
+/** Small CF grid whose time axis is read through the real Zarrita path. */
+function nativeTimeReader() {
+  const bytes = new Map<string, Uint8Array>();
+  for (const [name, shape, dimensions] of [
+    ["air", [2, 2, 2], ["time", "lat", "lon"]],
+    ["time", [2], ["time"]],
+  ] as const) {
+    bytes.set(
+      `/${name}/.zarray`,
+      new TextEncoder().encode(
+        JSON.stringify({
+          zarr_format: 2,
+          shape,
+          chunks: shape,
+          dtype: "<f8",
+          fill_value: null,
+          order: "C",
+          filters: null,
+          compressor: null,
+        }),
+      ),
+    );
+    bytes.set(
+      `/${name}/.zattrs`,
+      new TextEncoder().encode(JSON.stringify({ _ARRAY_DIMENSIONS: dimensions })),
+    );
+  }
+  bytes.set("/time/0", new Uint8Array(new Float64Array([0, 1]).buffer));
+  return { get: async (key: string) => bytes.get(key) };
+}
 
 // A Zarr cube's time is an internal dimension, so `addZarrLayer` registers a
 // temporal adapter that the Time Slider drives through `setSelector`
@@ -188,6 +228,150 @@ afterEach(() => {
   useAppStore.setState({ layers: [] });
   __resetTemporalLayersForTests();
   __resetZarrTimeAttributeCacheForTests();
+  __resetIcechunkRepositoriesForTests();
+});
+
+it("does not apply an old time axis to a replacement project reusing its layer id", async () => {
+  const previousRenderer = useAppStore.getState().primaryRenderer;
+  useAppStore.setState({ primaryRenderer: "arcgis" });
+  let reportRequested!: () => void;
+  const requested = new Promise<void>((resolve) => {
+    reportRequested = resolve;
+  });
+  let finish!: (attributes: { units: string }) => void;
+  const attributes = new Promise<{ units: string }>((resolve) => {
+    finish = resolve;
+  });
+  try {
+    const id = await addZarrRasterLayer(
+      { ...app, getMapRenderer: () => "arcgis" },
+      {
+        url: "https://example.org/native-a#icechunk=main",
+        variable: "air",
+        store: nativeTimeReader(),
+        readTimeAttributes: () => {
+          reportRequested();
+          return attributes;
+        },
+      },
+    );
+    await requested;
+    const layer = useAppStore.getState().layers.find((item) => item.id === id)!;
+    useAppStore.getState().newProject({
+      layers: [
+        {
+          ...layer,
+          source: {
+            ...layer.source,
+            url: "https://example.org/native-b#icechunk=main",
+            selector: { time: "2020-01-02" },
+          },
+        },
+      ],
+    });
+    useAppStore.setState({ primaryRenderer: "arcgis" });
+    finish({ units: "days since 2020-01-01" });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(useAppStore.getState().layers[0].source.selector, { time: "2020-01-02" });
+    assert.equal(getTemporalLayerAdapter(id), undefined);
+  } finally {
+    useAppStore.setState({ primaryRenderer: previousRenderer });
+  }
+});
+
+for (const variable of ["air", "non_temporal"]) {
+  it(`removes a completed native time adapter on same-ID project replacement (${variable})`, async () => {
+    const previousRenderer = useAppStore.getState().primaryRenderer;
+    useAppStore.setState({ primaryRenderer: "arcgis" });
+    try {
+      const id = await addZarrRasterLayer(
+        { ...app, getMapRenderer: () => "arcgis" },
+        {
+          url: "https://example.org/completed#icechunk=main",
+          variable: "air",
+          store: nativeTimeReader(),
+          readTimeAttributes: async () => ({ units: "days since 2020-01-01" }),
+        },
+      );
+      const adapter = await waitForAdapter(id);
+      assert.ok(adapter);
+      useAppStore.getState().updateLayer(id, { name: "Renamed cube" });
+      assert.equal(getTemporalLayerAdapter(id), adapter, "renaming preserves the current adapter");
+      const layer = useAppStore.getState().layers.find((item) => item.id === id)!;
+      useAppStore.getState().newProject({
+        layers: [{ ...layer, source: { ...layer.source, variable } }],
+      });
+      assert.equal(
+        getTemporalLayerAdapter(id),
+        undefined,
+        "the old time axis cannot bind to the replacement",
+      );
+    } finally {
+      useAppStore.setState({ primaryRenderer: previousRenderer });
+    }
+  });
+}
+
+it("drops a session reader before reopening a different source with the same layer id", async () => {
+  const previousRenderer = useAppStore.getState().primaryRenderer;
+  useAppStore.setState({ primaryRenderer: "arcgis" });
+  const originalReader = nativeTimeReader();
+  const replacementReader = nativeTimeReader();
+  try {
+    const id = await addZarrRasterLayer(
+      { ...app, getMapRenderer: () => "arcgis" },
+      {
+        url: "https://example.org/native-a#icechunk=main",
+        variable: "air",
+        store: originalReader,
+        readTimeAttributes: async () => ({ units: "days since 2020-01-01" }),
+      },
+    );
+    assert.equal(getZarrStore(id), originalReader);
+    const layer = useAppStore.getState().layers.find((item) => item.id === id)!;
+    const replacement = {
+      ...layer,
+      source: { ...layer.source, url: "https://example.org/native-b#icechunk=main" },
+    };
+    await shareRepositoryOpen(
+      repositoryKey("https://example.org/native-b", "main"),
+      async () => replacementReader,
+    );
+    useAppStore.getState().newProject({ layers: [replacement] });
+    assert.equal(getZarrStore(id), undefined);
+    assert.equal(await resolveZarrStore(replacement), replacementReader);
+  } finally {
+    useAppStore.setState({ primaryRenderer: previousRenderer });
+  }
+});
+
+it("restores a native time axis from a saved repository URL with surrounding whitespace", async () => {
+  const previousRenderer = useAppStore.getState().primaryRenderer;
+  const url = "https://example.org/whitespace";
+  const backing = nativeTimeReader();
+  const reader = {
+    get: async (key: string) =>
+      key === "/time/.zattrs"
+        ? new TextEncoder().encode(
+            JSON.stringify({ _ARRAY_DIMENSIONS: ["time"], units: "days since 2020-01-01" }),
+          )
+        : backing.get(key),
+  };
+  await shareRepositoryOpen(repositoryKey(url, "main"), async () => reader);
+  const layer = geojsonLayer({
+    id: "whitespace-time",
+    type: "zarr",
+    source: { url: " https://example.org/whitespace#icechunk=main ", variable: "air" },
+  });
+  useAppStore.setState({ primaryRenderer: "arcgis", layers: [layer] });
+  try {
+    restoreArcgisZarrLayers();
+    const adapter = await waitForAdapter(layer.id);
+    assert.ok(adapter, "native rendering and temporal metadata use the same normalized repository");
+    assert.deepEqual(adapter.getTimeValues(), [Date.UTC(2020, 0, 1), Date.UTC(2020, 0, 2)]);
+  } finally {
+    useAppStore.setState({ primaryRenderer: previousRenderer });
+  }
 });
 
 // Run before a MapLibre control can install its own removal subscription.

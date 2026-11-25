@@ -1,4 +1,5 @@
 import {
+  assertImportedDocumentCopiesAvailable,
   cascadeLayerJoinRefresh,
   hydrateProjectLayer,
   normalizeGroupContiguity,
@@ -8,6 +9,7 @@ import {
   normalizeSecondaryMapViews,
   normalizeStoryMap,
   normalizeWidgets,
+  rebaseImportedDocumentLayer,
   type DashboardWidget,
   type GeoLibreLayer,
   type GeoLibreProject,
@@ -310,9 +312,16 @@ export function applySnapshotLayerRestore(
     layerId,
   );
   if (!restoredLayers) throw new Error(`Snapshot has no layer ${layerId}.`);
+  assertImportedDocumentCopiesAvailable(
+    restoredLayers.filter((layer) => layer.id === layerId),
+    state.nativeDocumentCopyError,
+  );
+  const recoveredLayers = restoredLayers.map((layer) =>
+    layer.id === layerId ? rebaseImportedDocumentLayer(layer, state.nativeDocumentCopyRoot) : layer,
+  );
   // Layers that join on the restored one re-derive their columns from it,
   // as they do after any change to a join source.
-  const layers = cascadeLayerJoinRefresh(restoredLayers, layerId);
+  const layers = cascadeLayerJoinRefresh(recoveredLayers, layerId);
   const restored = layers.find((layer) => layer.id === layerId);
   if (!restored) throw new Error(`Snapshot has no layer ${layerId}.`);
   // Deleting a layer scrubbed every reference to it, so a re-inserted

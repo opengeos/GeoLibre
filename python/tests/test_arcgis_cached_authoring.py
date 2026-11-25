@@ -7,6 +7,9 @@ import json
 import math
 import ssl
 from http.client import IncompleteRead
+from itertools import count
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -250,8 +253,8 @@ def test_slow_metadata_stream_stops_at_the_total_deadline(cache_metadata, monkey
         cache_metadata: The fixture disabling actual network access.
         monkeypatch: Pytest fixture for the response and the clock.
     """
-    clock = iter(range(0, 1000, 10))
-    monkeypatch.setattr(project_api.time, "monotonic", lambda: next(clock))
+    clock = count(0, 10)
+    monkeypatch.setattr(project_api, "time", SimpleNamespace(monotonic=lambda: next(clock)))
 
     class Response(io.BytesIO):
         """A response that returns one byte per read, forever."""
@@ -281,7 +284,7 @@ def test_metadata_eof_after_deadline_is_refused(cache_metadata, monkeypatch):
     """
     info, _ = cache_metadata
     clock = [0.0]
-    monkeypatch.setattr(project_api.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(project_api, "time", SimpleNamespace(monotonic=lambda: clock[0]))
 
     class Response(io.BytesIO):
         """Return valid metadata, then a delayed end of response."""
@@ -337,8 +340,24 @@ def test_deeply_nested_metadata_uses_the_documented_error(cache_metadata, monkey
     monkeypatch.setattr(
         project_api._GEOJSON_OPENER, "open", lambda *_args, **_kwargs: io.BytesIO(body)
     )
+    # Decoder recursion limits differ by Python version. Both a decoder refusal
+    # and a successfully decoded non-object must use the public ValueError contract.
+    with pytest.raises(ValueError):
+        project_api.arcgis_layer("Nested", "https://example.org/A/MapServer", tiled=True)
+
+
+def test_decoder_recursion_error_uses_the_documented_error(cache_metadata, monkeypatch):
+    """Normalize decoder recursion failures independently of its depth limit.
+
+    Args:
+        cache_metadata: The fixture disabling actual network access.
+        monkeypatch: Pytest fixture for replacing only this module's decoder.
+    """
+    decoder = Mock(side_effect=RecursionError("decoder recursion limit"))
+    monkeypatch.setattr(project_api, "json", SimpleNamespace(loads=decoder))
     with pytest.raises(ValueError, match="too deeply nested"):
         project_api.arcgis_layer("Nested", "https://example.org/A/MapServer", tiled=True)
+    decoder.assert_called_once()
 
 
 @pytest.mark.parametrize("change", ["origin", "resolution"])

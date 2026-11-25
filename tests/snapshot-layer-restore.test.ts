@@ -395,6 +395,67 @@ describe("applySnapshotLayerRestore", () => {
       metadata: { sourceKind: "maplibre-gl-vector-adopted" },
     });
 
+  it("rebases a deleted retained layer before snapshot redraw", () => {
+    const selection = "12345678-1234-1234-1234-123456789abc";
+    const directory = "/Library/Application Support/org.geolibre.app/picked-documents";
+    const oldPath = `/private/var/mobile/Containers/Data/Application/old${directory}/${selection}/data/sites.geojson`;
+    const root = `/private/var/mobile/Containers/Data/Application/current${directory}`;
+    const expected = `${root}/${selection}/data/sites.geojson`;
+    const snapshot = snapshotOf([layer("retained", { sourcePath: oldPath })]);
+    const previousRoot = useAppStore.getState().nativeDocumentCopyRoot;
+    useAppStore.setState({ nativeDocumentCopyRoot: root });
+    try {
+      const restored = applySnapshotLayerRestore(snapshot, "retained", (record) => {
+        assert.equal(record.sourcePath, expected, "redraw receives the current container path");
+      });
+      assert.equal(restored.sourcePath, expected);
+      assert.equal(useAppStore.getState().layers[0].sourcePath, expected);
+      assert.equal(snapshot.layers[0].sourcePath, oldPath, "the snapshot remains unchanged");
+      undo();
+      assert.deepEqual(
+        useAppStore.getState().layers,
+        [],
+        "restoration is still one undoable write",
+      );
+    } finally {
+      useAppStore.setState({ nativeDocumentCopyRoot: previousRoot });
+    }
+  });
+
+  it("refuses a held retained snapshot before changing layers or history", () => {
+    const path =
+      "/private/var/mobile/Containers/Data/Application/old/Library/Application Support/org.geolibre.app/picked-documents/12345678-1234-1234-1234-123456789abc/data/sites.geojson";
+    const snapshot = snapshotOf([layer("retained", { sourcePath: path })]);
+    useAppStore.getState().addLayer(layer("unrelated"));
+    const previousError = useAppStore.getState().nativeDocumentCopyError;
+    useAppStore.setState({ nativeDocumentCopyError: "Retained copies are unavailable" });
+    const before = useAppStore.getState();
+    const past = useAppStore.temporal.getState().pastStates;
+    let redrawn = false;
+    try {
+      assert.throws(
+        () =>
+          applySnapshotLayerRestore(snapshot, "retained", () => {
+            redrawn = true;
+          }),
+        /Retained copies are unavailable/,
+      );
+      assert.equal(useAppStore.getState().layers, before.layers);
+      assert.equal(useAppStore.temporal.getState().pastStates, past);
+      assert.equal(redrawn, false);
+      const remote = snapshotOf([
+        layer("remote", { source: { url: "https://example.org/sites.geojson" } }),
+      ]);
+      assert.equal(
+        applySnapshotLayerRestore(remote, "remote", () => {}).id,
+        "remote",
+        "the hold permits unrelated layers",
+      );
+    } finally {
+      useAppStore.setState({ nativeDocumentCopyError: previousError });
+    }
+  });
+
   it("hands a deleted layer to redraw after the store holds it", () => {
     useAppStore.getState().addLayer(layer("a"));
     useAppStore.getState().addLayer(adoptedUrlLayer("sites"));

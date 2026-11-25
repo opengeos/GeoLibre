@@ -877,11 +877,12 @@ def build_server(workspace: Workspace) -> MCPServer:
         bounds: list[float] | None = None,
         crs: str | None = None,
         index: int | None = None,
+        icechunk_branch: str | None = None,
     ) -> dict[str, Any]:
         """Add one variable of a Zarr data cube (climate, ocean, imagery stacks).
 
-        The app's Zarr control draws it when the project opens. Icechunk
-        repositories and local stores cannot be saved in a project.
+        The app draws it when the project opens. Public Icechunk repositories
+        reopen on the saved branch; local stores require a session-only reader.
 
         Args:
             path: Path to the `.geolibre.json` file.
@@ -896,6 +897,7 @@ def build_server(workspace: Workspace) -> MCPServer:
                 coordinate arrays.
             crs: The store's CRS when it is not EPSG:4326.
             index: Draw-order position; appended on top when omitted.
+            icechunk_branch: Branch of a public HTTP(S) Icechunk repository.
 
         Returns:
             The new layer's id and the project's updated layer count.
@@ -904,6 +906,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             name,
             url,
             variable,
+            icechunk_branch=icechunk_branch,
             selector=selector,
             clim=clim,
             colormap=colormap,
