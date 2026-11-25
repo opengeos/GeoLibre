@@ -112,8 +112,23 @@ impl CapturedOutput {
         // exit. `settle` waits on the counter rather than a JoinHandle so the
         // wait can be bounded (see CAPTURED_LOG_SETTLE).
         thread::spawn(move || {
-            for line in BufReader::new(stream).lines() {
-                let Ok(line) = line else { break };
+            let mut reader = BufReader::new(stream);
+            loop {
+                let mut bytes = Vec::new();
+                match reader.read_until(b'\n', &mut bytes) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {}
+                }
+                // Match BufRead::lines' newline handling, but a child's
+                // locale-specific bytes must never stop draining its pipe.
+                if bytes.last() == Some(&b'\n') {
+                    bytes.pop();
+                    if bytes.last() == Some(&b'\r') {
+                        bytes.pop();
+                    }
+                }
+                let line = String::from_utf8(bytes)
+                    .unwrap_or_else(|error| String::from_utf8_lossy(error.as_bytes()).into_owned());
                 // Tee to the parent's stdio. In a dev terminal this preserves
                 // the old inherit-style live log; in a bundled GUI build (no
                 // console on Windows) it is simply discarded.
@@ -332,6 +347,86 @@ mod tests {
     use std::process::Command;
     use std::time::Duration;
 
+    #[test]
+    fn captured_output_keeps_draining_after_non_utf8_lines() {
+        for is_stderr in [false, true] {
+            let captured = CapturedOutput::new();
+            captured.drain(
+                std::io::Cursor::new(b"start\r\nbad: \xff\r\nlast diagnostic".to_vec()),
+                is_stderr,
+            );
+            captured.settle();
+            assert_eq!(captured.tail(), "start\nbad: \u{fffd}\nlast diagnostic");
+        }
+    }
+
+    #[test]
+    fn captured_output_drains_past_a_pipe_buffer_after_invalid_bytes() {
+        use std::io::{Cursor, Read};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        struct Chunked {
+            stream: Cursor<Vec<u8>>,
+            read: Arc<AtomicUsize>,
+        }
+        impl Read for Chunked {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                let size = buffer.len().min(7);
+                let count = self.stream.read(&mut buffer[..size])?;
+                self.read.fetch_add(count, Ordering::SeqCst);
+                Ok(count)
+            }
+        }
+        let mut bytes = b"invalid: \xff\n".to_vec();
+        for _ in 0..128 {
+            bytes.extend_from_slice("noise π".repeat(128).as_bytes());
+            bytes.push(b'\n');
+        }
+        bytes.extend_from_slice(b"FINAL_DIAGNOSTIC\n");
+        assert!(bytes.len() > 65536);
+        let length = bytes.len();
+        let read = Arc::new(AtomicUsize::new(0));
+        let captured = CapturedOutput::new();
+        captured.drain(
+            Chunked {
+                stream: Cursor::new(bytes),
+                read: read.clone(),
+            },
+            false,
+        );
+        // Production settle is deliberately limited to 500 ms. This bulk-read
+        // regression should tolerate a loaded test runner without changing it.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while captured.draining.load(Ordering::SeqCst) != 0 && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(captured.draining.load(Ordering::SeqCst), 0);
+        assert_eq!(read.load(Ordering::SeqCst), length);
+        let tail = captured.tail();
+        assert!(tail.contains("noise π"));
+        assert!(tail.ends_with("FINAL_DIAGNOSTIC"));
+    }
+
+    #[test]
+    fn captured_output_releases_its_reader_after_an_io_error() {
+        struct Failed;
+        impl std::io::Read for Failed {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("pipe read failed"))
+            }
+        }
+        let captured = CapturedOutput::new();
+        captured.drain(Failed, false);
+        captured.settle();
+        assert_eq!(
+            captured.draining.load(std::sync::atomic::Ordering::SeqCst),
+            0
+        );
+        assert!(captured.tail().is_empty());
+    }
+
     #[cfg(not(feature = "mas"))]
     #[test]
     fn captured_output_keeps_only_the_trailing_lines() {
@@ -460,11 +555,15 @@ mod tests {
         env::set_var("PYTHONHOME", format!("{appdir}/usr/"));
         env::set_var(
             "PYTHONPATH",
-            format!("{appdir}/usr/share/pyshared/:/home/me/lib"),
+            env::join_paths([
+                format!("{appdir}/usr/share/pyshared/"),
+                "/home/me/lib".into(),
+            ])
+            .unwrap(),
         );
         env::set_var(
             "LD_LIBRARY_PATH",
-            format!("{appdir}/usr/lib/:{appdir}/lib/"),
+            env::join_paths([format!("{appdir}/usr/lib/"), format!("{appdir}/lib/")]).unwrap(),
         );
 
         let mut command = Command::new("true");
