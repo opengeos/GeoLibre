@@ -348,6 +348,9 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
       isDirty: true,
     })),
 
+  // Imported-copy paths are rebased and held at entry (addLayer, newProject,
+  // loadProject). A patch edits a layer already in the store, so it is applied
+  // as given, not rebased again.
   updateLayer: (id, patch) =>
     set((s) => {
       let layers = s.layers.map((l) => {
