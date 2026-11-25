@@ -13,7 +13,7 @@ import { useDesktopSettingsStore } from "../apps/geolibre-desktop/src/hooks/useD
 // Tauri rejects a failed `Result<_, String>` command with the bare string. The
 // stale-sidecar case must become a StaleSidecarError so best-effort callers
 // surface it instead of hitting the old sidecar without a token (GeoLibre#2959).
-// The message is STALE_SIDECAR_ERROR in src-tauri/src/lib.rs, whose own test
+// The message is STALE_SIDECAR_ERROR in src-tauri/src/sidecar.rs, whose own test
 // keeps the matched phrase in place.
 const STALE =
   "A GeoLibre processing server from a previous session is still running on port 8765 " +

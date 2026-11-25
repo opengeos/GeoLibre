@@ -40,7 +40,7 @@ const declaredTypes = (): string[] =>
 describe("linux desktop entry", () => {
   it("passes the launch argument through to the app", () => {
     // Only %u carries both a file and a URL, and the spec passes neither
-    // without a field code. See launch_argument_path in src-tauri/src/lib.rs.
+    // without a field code. See launch_argument_path in src-tauri/src/project_launch.rs.
     assert.match(line("Exec"), /\s%u$/);
   });
 

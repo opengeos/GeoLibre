@@ -12,7 +12,7 @@ The server is bound to ``127.0.0.1`` and protected by a per-launch token
 (passed on the command line by the Rust launcher), so widening the framing
 ancestors does not expose it beyond the local machine.
 
-Pointed at by ``--config`` from ``src-tauri/src/lib.rs``; not used by the web
+Pointed at by ``--config`` from ``src-tauri/src/jupyter.rs``; not used by the web
 build, which embeds the in-browser JupyterLite site instead.
 """
 
