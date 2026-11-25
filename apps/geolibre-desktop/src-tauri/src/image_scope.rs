@@ -68,6 +68,7 @@ pub(crate) fn prune_persisted_image_scopes(app: &tauri::AppHandle) {
         }
     }
 }
+
 /// Pick images without adding them to Tauri's filesystem or asset scopes. The
 /// returned paths enter a short-lived native allowlist and can only be consumed
 /// by `read_selected_image`.
