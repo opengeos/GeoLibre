@@ -838,7 +838,8 @@ def build_server(workspace: Workspace) -> MCPServer:
             tiled: Use a validated map/image cache rather than dynamic export.
                 Incompatible grids and raw LERC caches are refused. Cannot be
                 combined with sublayers or a rendering rule. Public metadata
-                reads are limited to 2 MiB within a 30-second deadline.
+                reads are limited to 2 MiB with a 30-second socket inactivity
+                timeout and an elapsed-time check between reads.
             sublayers: MapServer sublayer ids to show, e.g. `0,2`.
             rendering_rule: ImageServer rendering rule, e.g.
                 `{"rasterFunction": "Hillshade"}`.
