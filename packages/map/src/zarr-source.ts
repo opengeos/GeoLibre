@@ -32,14 +32,15 @@ export async function resolveZarrStore(
   const registered = getZarrStore(layer.id);
   if (registered) return registered;
   const source = layer.source;
+  const url = String(source.url).trim();
   if (source.kerchunkRefs) {
     const { KerchunkReferenceStore } = await import("./kerchunk-reference-store");
     return new KerchunkReferenceStore(
       source.kerchunkRefs as import("./kerchunk-reference-store").KerchunkRefs,
-      { headers: zarrRequestHeaders(layer), sourceUrl: String(source.url) },
+      { headers: zarrRequestHeaders(layer), sourceUrl: url },
     );
   }
-  const icechunk = parseIcechunkLayerUrl(String(source.url));
+  const icechunk = parseIcechunkLayerUrl(url);
   return icechunk ? openIcechunkStore(icechunk.url, icechunk.branch) : undefined;
 }
 

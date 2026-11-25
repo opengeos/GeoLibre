@@ -59,6 +59,7 @@ const RESOLVED_SPATIAL_REFERENCE = {
 };
 
 const addCalls: { url?: string; variable?: string; options?: StubAddOptions }[] = [];
+const metadataMinimumZooms: (number | undefined)[] = [];
 const opacityCalls: { layerId: string; opacity: number }[] = [];
 const visibilityCalls: { layerId: string; visible: boolean; opacity?: number }[] = [];
 const selectorCalls: Record<string, number | string>[] = [];
@@ -101,6 +102,7 @@ class ZarrLayerControlStub {
   private instances = new Map<
     string,
     {
+      minZoom?: number;
       setSelector: (s: never) => Promise<void>;
       queryData: (
         geometry: unknown,
@@ -158,6 +160,7 @@ class ZarrLayerControlStub {
       },
     });
     this.emit("layeradd", { url, layerId: id, state: { layers: this.layers } });
+    metadataMinimumZooms.push(this.instances.get(id)?.minZoom);
   }
 
   getLayersMap() {
@@ -203,6 +206,31 @@ afterEach(() => {
 });
 
 describe("addZarrRasterLayer", () => {
+  it("retains a regional minimum zoom before the first restored metadata fetch", async () => {
+    installStubModule();
+    metadataMinimumZooms.length = 0;
+    const id = await addZarrRasterLayer(app, {
+      url: "https://example.org/regional.zarr",
+      variable: "air",
+      minZoom: 4.95,
+    });
+    assert.equal(metadataMinimumZooms.at(-1), 4.95, "the first add is guarded");
+    const saved = parseProject(serializeProject(projectFromStore(useAppStore.getState())));
+    const layer = saved.layers.find((entry) => entry.id === id)!;
+    assert.equal(
+      layer.source.minZoom,
+      4.95,
+      "the applied threshold survives project serialization",
+    );
+    useAppStore.setState({ layers: [] });
+    useAppStore.setState({ layers: saved.layers });
+    const addsBeforeRestore = addCalls.length;
+    await restoreZarrLayers(app);
+    assert.equal(addCalls.length, addsBeforeRestore + 1, "the project layer was reopened");
+    assert.equal(metadataMinimumZooms.at(-1), 4.95, "restore guards the first metadata fetch too");
+    assert.equal(useAppStore.getState().layers[0].source.minZoom, 4.95);
+  });
+
   it("forwards CRS, colormap, and selector to the renderer and mirrors the layer", async () => {
     installStubModule();
     addCalls.length = 0;

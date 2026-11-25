@@ -35,8 +35,8 @@ export function __resetIcechunkRepositoriesForTests(): void {
  * `repo` object and falls back to v1's `refs/`. Pinning either fails on the other. The cost is one
  * 404 on `<url>/repo` for a v1 archive, the probe missing, the only request expected to fail here.
  *
- * The branch is catalog-controlled and reaches a request path unencoded (`refs/branch.<name>/`),
- * but grants nothing: the same catalog supplies `url`.
+ * Catalogs and saved projects supply both URL and branch for public, unauthenticated reads.
+ * The reader handles version-specific branch lookup: v1 refs paths or v2 repository entries.
  *
  * @param signal Drops this caller out whenever it fires; the shared open runs on for the others.
  * @returns A reader over the branch's current snapshot.
@@ -119,7 +119,12 @@ export function parseIcechunkLayerUrl(url: string): { url: string; branch: strin
   const index = url.indexOf(marker);
   if (index < 0) return null;
   const repository = url.slice(0, index);
-  const branch = decodeURIComponent(url.slice(index + marker.length));
+  let branch: string;
+  try {
+    branch = decodeURIComponent(url.slice(index + marker.length));
+  } catch {
+    throw new Error("An Icechunk branch must use valid percent-encoded UTF-8");
+  }
   if (!branch.trim()) throw new Error("An Icechunk branch is required");
   if (!/^https?:\/\//i.test(repository)) {
     throw new Error("An Icechunk repository requires an HTTP(S) URL");

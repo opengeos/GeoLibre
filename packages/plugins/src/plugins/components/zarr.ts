@@ -586,6 +586,7 @@ async function addNativeArcgisZarrLayer(
     // session store so saving a project cannot embed megabytes of base64 data.
     ...(refs && !options.url.startsWith("local:") ? { kerchunkRefs: refs } : {}),
     spatialDimensions: options.spatialDimensions,
+    ...(options.minZoom !== undefined ? { minZoom: options.minZoom } : {}),
   };
   // Headers are credentials: keep them in the session map the renderer reads,
   // never on `layer.source`, which is saved and shared with the project.
@@ -760,6 +761,10 @@ async function addZarrLayerExclusively(
   const name = options.name?.trim();
   if (name) patch.name = name;
   if (options.beforeLayerId) patch.beforeId = options.beforeLayerId;
+  if (options.minZoom !== undefined) {
+    const layer = store.layers.find((entry) => entry.id === addedLayerId);
+    if (layer) patch.source = { ...layer.source, minZoom: options.minZoom };
+  }
   if (Object.keys(patch).length > 0) {
     store.updateLayer(addedLayerId, patch);
   }
@@ -777,8 +782,8 @@ async function addZarrLayerExclusively(
  *
  * @param layerId A layer id returned by {@link addZarrRasterLayer}.
  * @param selector The dimension selector, e.g. `{ time: 3 }`.
- * @returns True when the layer accepted the selector, false when there is no
- *   live Zarr layer with that id.
+ * @returns True when the current project layer accepted and saved the selector,
+ *   false when that layer is absent or was replaced while the renderer updated.
  */
 export async function setZarrLayerSelector(
   layerId: string,
@@ -1091,17 +1096,18 @@ function registerZarrTemporalAdapter(
   context: ZarrTemporalContext = {},
 ): Promise<boolean> {
   const { headers, refs } = context;
+  const storeUrl = url?.trim();
   // A folder the panel opened is not something the caller could have passed
   // context for, so fall back to the reader filed under this layer's own url.
   let readAttributes =
-    context.readAttributes ?? localZarrTimeAttributesReader(url ?? "") ?? undefined;
+    context.readAttributes ?? localZarrTimeAttributesReader(storeUrl ?? "") ?? undefined;
   // A removal decided after another project opened would act on a record this
   // add did not create, so it is dropped once the project changes.
   const target = useAppStore.getState().layers.find((layer) => layer.id === layerId);
   const ownsLayer = zarrLayerOwnership(target);
   return (async () => {
-    if (!ownsLayer() || target?.source.url !== url) return true;
-    const repository = parseIcechunkLayerUrl(url ?? "");
+    if (!ownsLayer() || String(target?.source.url).trim() !== storeUrl) return true;
+    const repository = parseIcechunkLayerUrl(storeUrl ?? "");
     if (!readAttributes && repository) {
       const reader = await openIcechunkStore(repository.url, repository.branch);
       readAttributes = icechunkTimeAttributesReader(reader);
@@ -1118,7 +1124,7 @@ function registerZarrTemporalAdapter(
       : readAttributes
         ? await readAttributes(dimension).catch(() => null)
         : undefined;
-    const axis = await resolveZarrTimeAxis(url ?? "", dimensionValues, {
+    const axis = await resolveZarrTimeAxis(storeUrl ?? "", dimensionValues, {
       ...(headers ? { headers } : {}),
       ...(attributes !== undefined ? { attributes } : {}),
     });
@@ -1190,8 +1196,12 @@ function registerZarrTemporalAdapter(
       // Native layers have no Zarr control to own their temporal cleanup.
       arcgisZarrTemporalUnsubscribes.get(layerId)?.();
       const unsubscribe = useAppStore.subscribe((state, previous) => {
-        if (state.layers === previous.layers) return;
-        if (state.layers.some((layer) => layer.id === layerId)) return;
+        if (
+          state.layers === previous.layers &&
+          state.projectGeneration === previous.projectGeneration
+        )
+          return;
+        if (ownsLayer()) return;
         unregisterTemporalLayer(layerId);
         unsubscribe();
         arcgisZarrTemporalUnsubscribes.delete(layerId);
@@ -1385,7 +1395,15 @@ async function restoreZarrLayerExclusively(
   let addedLayerId: string | null = null;
   let failure: string | null = null;
   const handleLayerAdd: ZarrLayerEventHandler = (event) => {
-    if (event.layerId) addedLayerId = event.layerId;
+    if (!event.layerId) return;
+    addedLayerId = event.layerId;
+    // Set the saved regional guard before metadata can trigger its first fetch.
+    if (typeof source.minZoom === "number" && Number.isFinite(source.minZoom)) {
+      const renderer = control.getLayersMap().get(event.layerId) as
+        | { minZoom?: unknown }
+        | undefined;
+      if (renderer) renderer.minZoom = source.minZoom;
+    }
   };
   const handleError: ZarrLayerEventHandler = (event) => {
     failure = event.error ?? null;
