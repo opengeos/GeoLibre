@@ -331,6 +331,30 @@ it("saves a point from the rendered collection form", async () => {
   );
 });
 
+it("keeps a related-record link across dismissal after a child save", () => {
+  addCollection("Parent", "none", linkedSchema);
+  addCollection("Child", "none", linkedSchema);
+  let now = 10_000;
+  mock.method(Date, "now", () => now);
+  const hook = controller();
+  act(() => capture(hook).setValue("condition", "parent"));
+  act(() => capture(hook).onSave());
+  act(() => hook.result.current.related?.onAdd("Child", { parent_id: "p-1" }));
+  now += 1000;
+  act(() => capture(hook).setValue("condition", "first child"));
+  act(() => capture(hook).onSave());
+  act(() => hook.result.current.onDialogOpenChange(false));
+  hook.rerender({ open: false });
+  hook.rerender({ open: true });
+  assert.equal(capture(hook).values.parent_id, "p-1");
+  now += 1000;
+  act(() => capture(hook).setValue("condition", "second child"));
+  act(() => capture(hook).onSave());
+  const saved = useAppStore.getState().layers.find((layer) => layer.id === "Child")?.geojson;
+  assert.equal(saved?.features.length, 2);
+  assert.equal(saved?.features[1].properties?.parent_id, "p-1");
+});
+
 it("drops a related-record prefill when its child table is deleted and the target falls back", () => {
   addCollection("Parent", "none", linkedSchema);
   addCollection("Child", "none", linkedSchema);

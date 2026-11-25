@@ -499,7 +499,7 @@ function CaptureStep({
           </Button>
 
           <div className="space-y-1.5">
-            <Label htmlFor="fc-photo">{t("fieldCollection.photoOptional")}</Label>
+            <Label htmlFor="fc-optional-photo">{t("fieldCollection.photoOptional")}</Label>
             {photos.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {photos.map((photo, index) => (
@@ -527,7 +527,7 @@ function CaptureStep({
                 a new one (capture="environment" forces the camera on iOS). */}
             <input
               ref={photoInputRef}
-              id="fc-photo"
+              id="fc-optional-photo"
               type="file"
               accept="image/*"
               multiple

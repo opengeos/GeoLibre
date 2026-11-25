@@ -370,12 +370,14 @@ export function useFieldCollectionController({
       suppressResetRef.current = false;
       return;
     }
-    resetCapture(
-      resolveTargetLayer(
-        collectionLayers.map((l) => l.id),
-        targetChosenRef.current ? layerId : null,
-      ),
+    const target = resolveTargetLayer(
+      collectionLayers.map((l) => l.id),
+      targetChosenRef.current ? layerId : null,
     );
+    resetCapture(target);
+    // An empty child draft still belongs to its related-record workflow.
+    // Reopening the same target must retain its foreign-key prefill.
+    if (target === layerId) setValues(prefillRef.current);
     // collectionLayers and layerId are snapshotted on open, by design.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
