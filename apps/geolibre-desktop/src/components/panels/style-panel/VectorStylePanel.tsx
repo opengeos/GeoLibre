@@ -271,6 +271,7 @@ export function VectorStylePanel({
       layer={layer}
       labels={labels}
       updateLabels={updateLabels}
+      hasPolygons={geometryFlags.hasPolygon}
       vectorStylePropertyOptions={vectorStylePropertyOptions}
       setExpressionBuilderTarget={setExpressionBuilderTarget}
     />

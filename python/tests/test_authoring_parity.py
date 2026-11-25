@@ -142,6 +142,15 @@ def test_set_labels_writes_a_complete_labels_object(proj):
     assert authoring.find_layer(proj, "Cities")["style"]["labels"] == labels
 
 
+def test_set_labels_one_per_polygon(proj):
+    """Polygons are labeled once by default; one_per_polygon=False opts out."""
+    assert authoring.set_labels(proj, "Cities", "name")["onePerPolygon"] is True
+    labels = authoring.set_labels(proj, "Cities", one_per_polygon=False)
+    assert labels["onePerPolygon"] is False
+    with pytest.raises(ValueError):
+        authoring.set_labels(proj, "Cities", one_per_polygon="no")
+
+
 def test_set_labels_keeps_unspecified_settings(proj):
     """A second call restyles without restating the field."""
     authoring.set_labels(proj, "Cities", "name", size=20)

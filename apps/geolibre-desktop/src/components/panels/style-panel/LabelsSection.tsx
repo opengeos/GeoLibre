@@ -16,6 +16,8 @@ interface LabelsSectionProps {
   layer: GeoLibreLayer;
   labels: LabelStyle;
   updateLabels: (patch: Partial<LabelStyle>) => void;
+  /** Whether the layer has polygons, which the one-label-per-polygon option needs. */
+  hasPolygons: boolean;
   vectorStylePropertyOptions: string[];
   setExpressionBuilderTarget: (target: ExpressionBuilderTarget | null) => void;
 }
@@ -32,6 +34,7 @@ export function LabelsSection({
   layer,
   labels,
   updateLabels,
+  hasPolygons,
   vectorStylePropertyOptions,
   setExpressionBuilderTarget,
 }: LabelsSectionProps) {
@@ -173,6 +176,23 @@ export function LabelsSection({
               <option value="line">{t("style.labels.placementLine")}</option>
             </Select>
           </div>
+          {labels.placement === "point" && !controlPainted && hasPolygons && layer.geojson ? (
+            <div className="space-y-2">
+              <label
+                htmlFor="labelOnePerPolygon"
+                className="flex items-center gap-2 text-sm font-medium"
+              >
+                <input
+                  id="labelOnePerPolygon"
+                  type="checkbox"
+                  checked={labels.onePerPolygon}
+                  onChange={(event) => updateLabels({ onePerPolygon: event.target.checked })}
+                />
+                {t("style.labels.onePerPolygon")}
+              </label>
+              <p className="text-xs text-muted-foreground">{t("style.labels.onePerPolygonHint")}</p>
+            </div>
+          ) : null}
           {labels.placement === "line" && !controlPainted ? (
             <div className="space-y-2">
               <label htmlFor="labelLineGap" className="flex items-center gap-2 text-sm font-medium">
