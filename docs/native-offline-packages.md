@@ -44,6 +44,8 @@ rather than replacing the native inventory with an empty browser catalog.
 Extraction still assembles the archive in memory. A managed archive is limited
 to 512 MiB per save, and available device memory can impose a smaller practical
 limit. Keep the selected area and zoom range small on mobile devices.
+Explicit export uses the existing save/share workflow and buffers the archive
+in the WebView; the range-read memory benefit applies to map rendering.
 The raw native IPC transport temporarily holds both the request body and an
 owned copy for the background write. On Android, the JSON transport fallback
 also parses a numeric array before validating its length and decoding bytes;

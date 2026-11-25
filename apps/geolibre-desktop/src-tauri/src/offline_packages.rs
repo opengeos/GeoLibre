@@ -72,6 +72,12 @@ pub(crate) struct OfflinePackage {
     pub managed: bool,
 }
 
+impl OfflinePackage {
+    pub fn id(&self) -> &str {
+        &self.manifest.id
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub(crate) struct PackageProblem {
     pub id: String,

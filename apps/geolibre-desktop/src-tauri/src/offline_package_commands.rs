@@ -5,8 +5,8 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_fs::FsExt;
 
 use crate::offline_packages::{
-    decode_byte_array, OfflinePackage, PackageDetails, PackageInventory, PackageStore,
-    MAX_PACKAGE_BYTES,
+    decode_byte_array, OfflinePackage, PackageDetails, PackageInventory, PackageProblem,
+    PackageStore, MAX_PACKAGE_BYTES,
 };
 
 #[derive(Default)]
@@ -43,9 +43,17 @@ pub(crate) async fn list_native_offline_packages(
             .lock()
             .map_err(|_| "Offline package storage is unavailable")?;
         let mut entries = open_store(&app)?.list()?;
-        for entry in &mut entries.packages {
-            authorize(&app, entry)?;
+        let mut authorized = Vec::with_capacity(entries.packages.len());
+        for mut entry in entries.packages.drain(..) {
+            match authorize(&app, &mut entry) {
+                Ok(()) => authorized.push(entry),
+                Err(error) => entries.problems.push(PackageProblem {
+                    id: entry.id().to_string(),
+                    error,
+                }),
+            }
         }
+        entries.packages = authorized;
         Ok(entries)
     })
     .await
