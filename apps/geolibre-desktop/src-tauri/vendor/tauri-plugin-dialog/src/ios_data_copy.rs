@@ -337,7 +337,7 @@ pub(crate) fn persist_selection(
         let (bytes, sha256) = copy_file(source, &data.join(&name))?;
         documents.push(serde_json::json!({
             "name": name,
-            "importPath": source,
+            "importPath": source.to_string_lossy(),
             "bytes": bytes,
             "sha256": sha256,
         }));
@@ -398,6 +398,45 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn non_utf8_source_ancestors_do_not_panic_or_break_retained_copies() {
+        use std::os::unix::ffi::OsStringExt;
+        let fixture = Fixture::new();
+        let directory = fixture
+            .0
+            .join(std::ffi::OsString::from_vec(b"provider-\xff".to_vec()));
+        fs::create_dir(&directory).unwrap();
+        let source = directory.join("roads.geojson");
+        fs::write(&source, b"original geometry").unwrap();
+        let copies = persist_selection(&fixture.root(), &fixture.0, &[source.clone()]).unwrap();
+        assert_eq!(fs::read(&copies[0]).unwrap(), fs::read(&source).unwrap());
+        let manifest: serde_json::Value = serde_json::from_slice(
+            &fs::read(
+                copies[0]
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .join("source.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            manifest["documents"][0]["importPath"],
+            source.to_string_lossy().as_ref()
+        );
+        assert_eq!(
+            retained_document_files(&fixture.root(), &fixture.0)
+                .unwrap()
+                .0,
+            copies
+        );
+        let next = fixture.source("next.geojson", b"next geometry");
+        assert!(persist_selection(&fixture.root(), &fixture.0, &[next]).is_ok());
     }
 
     #[test]
@@ -510,17 +549,15 @@ mod tests {
         let (files, problems) = inventory_selections(&root, entries).unwrap();
         assert_eq!(files, healthy);
         assert_eq!(problems.len(), 1);
-        assert!(
-            problems[0].contains(
-                &foreign[0]
-                    .parent()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .display()
-                    .to_string()
-            )
-        );
+        assert!(problems[0].contains(
+            &foreign[0]
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .display()
+                .to_string()
+        ));
         assert!(problems[0].contains("outside retained storage"));
         assert_eq!(fs::read(&foreign[0]).unwrap(), b"outside");
     }
