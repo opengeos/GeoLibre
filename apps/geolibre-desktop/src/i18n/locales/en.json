@@ -1605,7 +1605,8 @@
         "size": "Choose dimensions from 1 to 4096 pixels. Downloads are limited to 128 MB.",
         "metadata": "The service returned more metadata than GeoLibre can load. Metadata responses are limited to 32 MB.",
         "response": "The service did not return a valid GeoTIFF.",
-        "grid": "This coverage needs a supported two-dimensional rectified grid and WCS scaling support."
+        "grid": "This coverage needs a supported two-dimensional rectified grid and WCS scaling support.",
+        "crs": "This request CRS is unavailable. Without the WCS CRS extension, only a native EPSG:4326 or EPSG:3857 CRS is supported."
       }
     }
   },

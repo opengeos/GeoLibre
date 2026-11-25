@@ -214,6 +214,73 @@ test("accepts CRS84 and lets the CRS extension transform other declared native C
         ...service,
         profiles: service.profiles?.filter((profile) => !profile.includes("extension_crs/")),
       }),
-    /grid/,
+    /crs/,
   );
 });
+
+test("keeps the advertised CRS84 URI when the CRS extension is used", () => {
+  const service = parseWcsCapabilities(fixture("usgs-capabilities.xml").toString())[0];
+  const uri = "http://www.opengis.net/def/crs/OGC/1.3/CRS84";
+  const info = parseWcsDescription(fixture("usgs-description.xml").toString(), "DEP3Elevation", {
+    ...service,
+    crses: [uri],
+  });
+  const url = new URL(
+    wcsCoverageUrl("https://example.org/wcs", "DEP3Elevation", [1, 2, 3, 4], 64, 32, info),
+  );
+  assert.equal(info.crs, "EPSG:4326");
+  assert.equal(url.searchParams.get("SUBSETTINGCRS"), uri);
+  assert.equal(url.searchParams.get("OUTPUTCRS"), uri);
+});
+
+test("prefers an advertised EPSG URI over its CRS84 projection alias", () => {
+  const service = parseWcsCapabilities(fixture("usgs-capabilities.xml").toString())[0];
+  const uri = "urn:ogc:def:crs:EPSG::4326";
+  const info = parseWcsDescription(fixture("usgs-description.xml").toString(), "DEP3Elevation", {
+    ...service,
+    crses: ["http://www.opengis.net/def/crs/OGC/1.3/CRS84", uri],
+  });
+  const url = new URL(
+    wcsCoverageUrl("https://example.org/wcs", "DEP3Elevation", [1, 2, 3, 4], 64, 32, info),
+  );
+  assert.equal(url.searchParams.get("SUBSETTINGCRS"), uri);
+  assert.equal(url.searchParams.get("OUTPUTCRS"), uri);
+});
+
+test("uses the GeoTIFF MIME type for a native format label", () => {
+  const service = parseWcsCapabilities(fixture("usgs-capabilities.xml").toString())[0];
+  const xml = fixture("usgs-description.xml").toString().replace("image/tiff", "GeoTIFF");
+  const info = parseWcsDescription(xml, "DEP3Elevation", { ...service, formats: [] });
+  const url = new URL(
+    wcsCoverageUrl("https://example.org/wcs", "DEP3Elevation", [1, 2, 3, 4], 64, 32, info),
+  );
+  assert.equal(url.searchParams.get("FORMAT"), "image/tiff");
+});
+
+test("reports a CRS mismatch separately from an unsupported grid", () => {
+  const service = parseWcsCapabilities(fixture("usgs-capabilities.xml").toString())[0];
+  const info = parseWcsDescription(fixture("usgs-description.xml").toString(), "DEP3Elevation", {
+    ...service,
+    profiles: service.profiles?.filter((profile) => !profile.includes("extension_crs/")),
+  });
+  assert.throws(
+    () =>
+      wcsCoverageUrl("https://example.org/wcs", "DEP3Elevation", [1, 2, 3, 4], 64, 32, {
+        ...info,
+        crs: "EPSG:4326",
+      }),
+    (error) => error instanceof WcsError && error.code === "crs",
+  );
+});
+
+for (const newline of ["\n", "\r\n"]) {
+  test(`preserves a TIFF ending in CR with ${newline.length === 1 ? "LF" : "CRLF"} multipart framing`, () => {
+    const raster = Buffer.concat([fixture("mapserver-getcoverage.tif.b64"), Buffer.from([13])]);
+    const message = Buffer.concat([
+      Buffer.from(`--test${newline}Content-Type: image/tiff${newline}${newline}`),
+      raster,
+      Buffer.from(`${newline}--test--${newline}`),
+    ]);
+    assert.deepEqual(wcsTiffBytes(message), raster);
+  });
+}

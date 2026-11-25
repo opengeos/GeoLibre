@@ -25,6 +25,11 @@ async function fetchWcsXml(url: string, signal: AbortSignal): Promise<string> {
   const result = await fetchCapabilitiesText(url, WMS_PROXY_PATH, signal, MAX_METADATA_BYTES).catch(
     (error: unknown) => {
       if (String(error).includes("download limit")) throw new WcsError("metadata");
+      // Native non-2xx requests reject with a string, whereas browser fetch
+      // supplies a status. Keep the WCS retry policy identical on both hosts.
+      const message = error instanceof Error ? error.message : String(error);
+      const status = /^Request failed with status\s*:?\s*(\d{3})\b/.exec(message)?.[1];
+      if (status) throw new Error(`WCS HTTP ${status}`);
       throw error;
     },
   );
@@ -46,7 +51,8 @@ export async function discoverWcs(endpoint: string, signal: AbortSignal) {
   } catch (error) {
     signal.throwIfAborted();
     // Retry legacy discovery only for a protocol/operation refusal, not for
-    // a network, authentication, size or cancellation failure.
+    // a network, authentication, size or cancellation failure. Some legacy
+    // services use 500/501 for an unsupported version; retry those once too.
     const refused =
       error instanceof WcsError
         ? error.code === "version" || error.code === "response"

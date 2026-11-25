@@ -1525,7 +1525,8 @@
         "response": "Le service n’a pas renvoyé de GeoTIFF valide.",
         "bounds": "Entrez une zone valide : ouest/est entre -180 et 180, sud/nord entre -90 et 90, avec ouest < est et sud < nord.",
         "url": "Entrez une URL de service WCS.",
-        "grid": "Cette couverture nécessite une grille régulière bidimensionnelle prise en charge et la mise à l’échelle WCS."
+        "grid": "Cette couverture nécessite une grille régulière bidimensionnelle prise en charge et la mise à l’échelle WCS.",
+        "crs": "Ce SCR de requête est indisponible. Sans l’extension CRS de WCS, seul un SCR natif EPSG:4326 ou EPSG:3857 est pris en charge."
       }
     }
   },

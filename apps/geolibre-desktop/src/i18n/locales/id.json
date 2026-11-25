@@ -1492,7 +1492,8 @@
         "response": "Layanan tidak mengembalikan GeoTIFF yang valid.",
         "bounds": "Masukkan kotak yang valid: barat/timur antara -180 hingga 180, selatan/utara antara -90 hingga 90, dengan barat < timur dan selatan < utara.",
         "url": "Masukkan URL layanan WCS.",
-        "grid": "Cakupan ini memerlukan kisi teratur dua dimensi yang didukung dan dukungan penskalaan WCS."
+        "grid": "Cakupan ini memerlukan kisi teratur dua dimensi yang didukung dan dukungan penskalaan WCS.",
+        "crs": "CRS permintaan ini tidak tersedia. Tanpa ekstensi WCS CRS, hanya CRS asli EPSG:4326 atau EPSG:3857 yang didukung."
       }
     }
   },

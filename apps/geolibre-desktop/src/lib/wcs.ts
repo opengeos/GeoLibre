@@ -24,6 +24,8 @@ export interface WcsDescription {
   gridAxes?: { x: string; y: string };
   nativeCrs?: string;
   crsExtension?: boolean;
+  /** Keep advertised wire identifiers distinct from local projection aliases. */
+  crsUris?: Partial<Record<WcsCrs, string>>;
 }
 
 /** Stop waiting for a native request promptly; still observe its settlement. */
@@ -57,6 +59,7 @@ export class WcsError extends Error {
       | "size"
       | "metadata"
       | "grid"
+      | "crs"
       | "response",
     message?: string,
   ) {
@@ -336,14 +339,22 @@ function parseWcs2Description(xml: string, coverage: string, service: WcsCoverag
   const crses = [
     ...new Set((service.crses ?? []).map(epsgCrs).filter((value): value is string => !!value)),
   ];
-  if (!crsExtension && !WCS_CRSES.includes(nativeCrs as WcsCrs)) throw new WcsError("grid");
+  if (!crsExtension && !WCS_CRSES.includes(nativeCrs as WcsCrs)) throw new WcsError("crs");
+  const crsUris: Partial<Record<WcsCrs, string>> = {};
+  for (const uri of service.crses ?? []) {
+    const key = epsgCrs(uri);
+    if (key !== "EPSG:4326" && key !== "EPSG:3857") continue;
+    // Prefer an explicit EPSG identifier over its CRS84 projection alias.
+    if (!crsUris[key] || /(?:^EPSG:|\/EPSG\/|:EPSG:)/i.test(uri)) crsUris[key] = uri;
+  }
   return {
     version: "2.0.1",
-    format,
+    format: /^(?:GeoTIFF|GTiff)$/i.test(format) ? "image/tiff" : format,
     crs: crsExtension ? defaultWcsCrs(crses) : (nativeCrs as WcsCrs),
     crses: crsExtension ? crses : [nativeCrs],
     nativeCrs,
     crsExtension,
+    crsUris,
     axes: { x: axes[x], y: axes[y] },
     gridAxes: { x: gridAxes[gridX], y: gridAxes[gridY] },
   };
@@ -392,8 +403,11 @@ export function wcsCoverageUrl(
   if (!(bbox[0] < bbox[2] && bbox[1] < bbox[3])) throw new WcsError("bounds");
   if (description.version === "2.0.1") {
     const { axes, gridAxes, nativeCrs, crsExtension } = description;
-    if (!axes || !gridAxes || (!crsExtension && nativeCrs !== description.crs))
-      throw new WcsError("grid");
+    if (!axes || !gridAxes) throw new WcsError("grid");
+    if (!crsExtension && nativeCrs !== description.crs) throw new WcsError("crs");
+    const crsUri =
+      description.crsUris?.[description.crs] ??
+      `http://www.opengis.net/def/crs/EPSG/0/${description.crs.split(":")[1]}`;
     const url = new URL(
       wcsRequestUrl(endpoint, "GetCoverage", {
         VERSION: "2.0.1",
@@ -402,8 +416,8 @@ export function wcsCoverageUrl(
         SCALESIZE: `${gridAxes.x}(${width}),${gridAxes.y}(${height})`,
         ...(crsExtension
           ? {
-              SUBSETTINGCRS: `http://www.opengis.net/def/crs/EPSG/0/${description.crs.split(":")[1]}`,
-              OUTPUTCRS: `http://www.opengis.net/def/crs/EPSG/0/${description.crs.split(":")[1]}`,
+              SUBSETTINGCRS: crsUri,
+              OUTPUTCRS: crsUri,
             }
           : {}),
       }),
@@ -430,8 +444,13 @@ function byteIndex(
   start: number,
   end = bytes.length,
 ): number {
-  outer: for (let i = start; i <= end - needle.length; i++) {
-    for (let j = 0; j < needle.length; j++) if (bytes[i + j] !== needle[j]) continue outer;
+  const bounded = end === bytes.length ? bytes : bytes.subarray(0, end);
+  outer: for (
+    let i = bounded.indexOf(needle[0], start);
+    i >= 0 && i <= end - needle.length;
+    i = bounded.indexOf(needle[0], i + 1)
+  ) {
+    for (let j = 1; j < needle.length; j++) if (bytes[i + j] !== needle[j]) continue outer;
     return i;
   }
   return -1;
@@ -444,10 +463,10 @@ export function wcsTiffBytes<T extends ArrayBufferLike>(bytes: Uint8Array<T>): U
     return bytes;
   }
   const firstLine = new TextDecoder().decode(bytes.subarray(0, 80));
-  const boundary = /^--([0-9A-Za-z'()+_,\-./:=? ]{1,70})\r?\n/.exec(firstLine);
+  const boundary = /^--([0-9A-Za-z'()+_,\-./:=? ]{1,70})(\r?\n)/.exec(firstLine);
   if (!boundary) throw new WcsError("response");
   const encoder = new TextEncoder();
-  const delimiter = encoder.encode(`\n--${boundary[1]}`);
+  const delimiter = encoder.encode(`${boundary[2]}--${boundary[1]}`);
   let position = boundary[0].length;
   let raster: Uint8Array<T> | undefined;
   for (let part = 0; part < 32; part++) {
@@ -483,7 +502,7 @@ export function wcsTiffBytes<T extends ArrayBufferLike>(bytes: Uint8Array<T>): U
         .toLowerCase();
       if (raster || (encoding && !["binary", "8bit"].includes(encoding)))
         throw new WcsError("response");
-      raster = bytes.subarray(bodyStart, bytes[next - 1] === 13 ? next - 1 : next);
+      raster = bytes.subarray(bodyStart, next);
       assertWcsTiff(raster);
     }
     position = next + delimiter.length;

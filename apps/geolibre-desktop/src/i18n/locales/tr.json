@@ -1525,7 +1525,8 @@
         "response": "Servis geçerli bir GeoTIFF döndürmedi.",
         "bounds": "Geçerli bir kutu girin: batı/doğu -180 ile 180 arasında, güney/kuzey -90 ile 90 arasında, batı < doğu ve güney < kuzey olacak şekilde.",
         "url": "Bir WCS servis URL'si girin.",
-        "grid": "Bu kapsam, desteklenen iki boyutlu düzenli bir ızgara ve WCS ölçeklendirme desteği gerektirir."
+        "grid": "Bu kapsam, desteklenen iki boyutlu düzenli bir ızgara ve WCS ölçeklendirme desteği gerektirir.",
+        "crs": "Bu istek CRS’si kullanılamıyor. WCS CRS uzantısı olmadan yalnızca yerel EPSG:4326 veya EPSG:3857 CRS’si desteklenir."
       }
     }
   },

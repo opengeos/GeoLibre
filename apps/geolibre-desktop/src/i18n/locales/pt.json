@@ -1525,7 +1525,8 @@
         "response": "O serviço não retornou um GeoTIFF válido.",
         "bounds": "Digite uma caixa válida: oeste/leste entre -180 e 180, sul/norte entre -90 e 90, com oeste < leste e sul < norte.",
         "url": "Digite uma URL de serviço WCS.",
-        "grid": "Esta cobertura requer uma grade regular bidimensional compatível e suporte ao dimensionamento WCS."
+        "grid": "Esta cobertura requer uma grade regular bidimensional compatível e suporte ao dimensionamento WCS.",
+        "crs": "Este CRS de solicitação não está disponível. Sem a extensão CRS do WCS, apenas um CRS nativo EPSG:4326 ou EPSG:3857 é suportado."
       }
     }
   },

@@ -1492,7 +1492,8 @@
         "response": "Dịch vụ không trả về GeoTIFF hợp lệ.",
         "bounds": "Nhập một ô hợp lệ: tây/đông trong khoảng -180 đến 180, nam/bắc trong khoảng -90 đến 90, với tây < đông và nam < bắc.",
         "url": "Nhập URL dịch vụ WCS.",
-        "grid": "Lớp phủ này cần lưới đều hai chiều được hỗ trợ và khả năng thay đổi kích thước WCS."
+        "grid": "Lớp phủ này cần lưới đều hai chiều được hỗ trợ và khả năng thay đổi kích thước WCS.",
+        "crs": "CRS yêu cầu này không khả dụng. Nếu không có phần mở rộng WCS CRS, chỉ hỗ trợ CRS gốc EPSG:4326 hoặc EPSG:3857."
       }
     }
   },

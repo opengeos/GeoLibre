@@ -1525,7 +1525,8 @@
         "response": "De service heeft geen geldige GeoTIFF teruggestuurd.",
         "bounds": "Voer een geldig kader in: west/oost binnen -180 tot 180, zuid/noord binnen -90 tot 90, met west < oost en zuid < noord.",
         "url": "Voer een WCS-service-URL in.",
-        "grid": "Deze dekking vereist een ondersteund tweedimensionaal regelmatig raster en WCS-schaalondersteuning."
+        "grid": "Deze dekking vereist een ondersteund tweedimensionaal regelmatig raster en WCS-schaalondersteuning.",
+        "crs": "Dit aanvraag-CRS is niet beschikbaar. Zonder de WCS-CRS-extensie wordt alleen een oorspronkelijk EPSG:4326- of EPSG:3857-CRS ondersteund."
       }
     }
   },

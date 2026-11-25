@@ -1525,7 +1525,8 @@
         "size": "1–4096 piksel arası ölçülər seçin. Endirmələr 128 MB ilə məhdudlaşdırılıb.",
         "metadata": "Xidmət GeoLibre-nin yükləyə biləcəyindən artıq metaverilən qaytardı. Metaverilən cavabları 32 MB ilə məhdudlaşdırılıb.",
         "response": "Xidmət etibarlı GeoTIFF qaytarmadı.",
-        "grid": "Bu örtük dəstəklənən ikiölçülü müntəzəm şəbəkə və WCS miqyaslandırma dəstəyi tələb edir."
+        "grid": "Bu örtük dəstəklənən ikiölçülü müntəzəm şəbəkə və WCS miqyaslandırma dəstəyi tələb edir.",
+        "crs": "Bu sorğu CRS-i əlçatan deyil. WCS CRS genişlənməsi olmadan yalnız yerli EPSG:4326 və ya EPSG:3857 dəstəklənir."
       }
     }
   },
