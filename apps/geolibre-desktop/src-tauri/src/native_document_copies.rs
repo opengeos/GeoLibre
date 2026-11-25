@@ -41,7 +41,7 @@ pub(crate) async fn initialize_native_document_copies(
             }
             // Per-import failures retain the root and healthy grants. Root-level
             // failures propagate above so the frontend holds retained projects.
-            let canonical = std::fs::canonicalize(&root).unwrap_or(root);
+            let canonical = std::fs::canonicalize(&root).map_err(|error| error.to_string())?;
             Ok(NativeDocumentCopies {
                 root: Some(crate::canonical_local_path_string(&canonical)?),
                 problems,

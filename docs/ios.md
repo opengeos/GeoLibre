@@ -498,6 +498,12 @@ Failed selections are removed; the next import recovers abandoned private stages
 An abandoned stage that cannot be deleted produces a native diagnostic warning
 while new imports continue in separate folders.
 
+These copies are local to this app installation. Collaboration can embed vector
+features, but file-backed layers whose data is not embedded, such as local
+rasters and tile archives, still require an accessible data source on each
+device. Container rebasing restores references within the same installation
+and does not synchronize files between devices.
+
 These are independent copies. The provider document stays unchanged, and saving
 GeoJSON edits writes to the imported copy. Other mobile formats still require
 exporting edited data rather than a desktop sidecar writer. Each new selection
