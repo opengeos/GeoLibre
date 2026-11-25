@@ -55,8 +55,8 @@ env:
 jobs:
   build:
     name: Build iOS app
-    # Apple Silicon macOS image; ships a recent Xcode + CocoaPods. Pin the major
-    # image so a runner update can't silently change the Xcode/SDK under us.
+    # Apple Silicon image for the Xcode 27 family, with CocoaPods. Minor Xcode
+    # and SDK versions may advance; select and verify the newest one below.
     #
     # macos-14 does NOT work: `tauri ios init` generates an Xcode project in
     # object format 77, which only Xcode 16+ can open. That image's Xcode is
@@ -65,7 +65,14 @@ jobs:
     #   future Xcode project file format (77).
     # The floor is therefore set by the Tauri CLI's generated project format,
     # not by our own code — re-check it when the Tauri CLI is bumped.
-    runs-on: macos-15
+    #
+    # App Store Connect sets a second, higher floor: from April 2027 it only
+    # accepts iOS apps built with the iOS 27 SDK (Xcode 27+), and it warned on
+    # the v3.10.0 upload (ITMS-90725), which macos-15's Xcode 26.3 built against
+    # the iOS 26.2 SDK. No macos-* image ships Xcode 27 yet; the `xcode-27`
+    # image is the only one that does. Move back to a `macos-*` label once one
+    # carries Xcode 27, or to `xcode-28` when the next floor arrives.
+    runs-on: xcode-27
     timeout-minutes: 45
     permissions:
       contents: write
@@ -98,6 +105,13 @@ jobs:
             echo "::error::Xcode $version is too old — the generated project uses object format 77, which requires Xcode 16+. Use a newer runner image."
             exit 1
           fi
+          # App Store Connect's SDK floor (ITMS-90725): uploads must be built
+          # with Xcode 27 / the iOS 27 SDK from April 2027. Fail here rather
+          # than after a full archive, or with a warning email after upload.
+          if [ "$major" -lt 27 ]; then
+            echo "::error::Xcode $version builds against an iOS SDK App Store Connect no longer accepts (ITMS-90725 requires Xcode 27+ / iOS 27 SDK). Use a runner image that ships Xcode 27."
+            exit 1
+          fi
           echo "::notice::Using Xcode $version at $newest"
           xcodebuild -version
           xcodebuild -showsdks | grep -i "iOS" || true
@@ -120,6 +134,15 @@ jobs:
             aarch64-apple-ios,
             aarch64-apple-ios-sim,
             x86_64-apple-ios
+          # Xcode 27's SwiftPM internalizes the @_cdecl exports of the Swift
+          # plugin packages, so the Rust side fails to link with e.g.
+          # `Undefined symbols: _init_plugin_geolocation`. swift-rs promotes
+          # them back to global with rustup's llvm-objcopy, and without this
+          # component it only prints a cargo warning and the link fails later.
+          # See `globalize_cdecl_symbols` in swift-rs's src-rs/build.rs.
+          # Drop this once SwiftPM stops hiding
+          # @_cdecl exports or swift-rs no longer needs objcopy.
+          components: llvm-tools
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -577,6 +600,17 @@ jobs:
             echo "::error::CFBundleShortVersionString is '$short', expected '$IOS_SHORT_VERSION'"
             exit 1
           fi
+
+          # The Xcode step only proves which Xcode was selected; DTSDKName is
+          # the SDK the shipped binary was actually built against, the value
+          # App Store Connect reads for ITMS-90725 (iOS 27 SDK from April 2027).
+          sdk="$(/usr/libexec/PlistBuddy -c 'Print :DTSDKName' "$plist")"
+          if ! [[ "$sdk" =~ ^iphoneos([0-9]+)(\.[0-9]+)*$ ]] ||
+             ! [ "${BASH_REMATCH[1]}" -ge 27 ]; then
+            echo "::error::$ipa was built against '$sdk'; App Store Connect requires the iOS 27 SDK or later (ITMS-90725)"
+            exit 1
+          fi
+          echo "::notice::Built against $sdk"
 
           # The deployment target was checked against the generated project.yml
           # before the archive; this asserts it survived into the shipped bytes,
