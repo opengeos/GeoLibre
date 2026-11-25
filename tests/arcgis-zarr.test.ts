@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { it } from "node:test";
 import { createArcgisZarrLayer, openArcgisZarrGrid } from "../packages/map/src/arcgis-zarr";
 import { compileArcgisLayer } from "../packages/map/src/arcgis-layers";
-import { registerZarrStore, readNativeZarrDimensions } from "../packages/map/src/zarr-source";
+import {
+  registerZarrStore,
+  readNativeZarrDimensions,
+  repositoryKey,
+  shareRepositoryOpen,
+  __resetIcechunkRepositoriesForTests,
+} from "../packages/map/src/zarr-source";
 import type { ArcgisSdk } from "../packages/map/src/arcgis-sdk";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
@@ -33,7 +39,7 @@ it("compares kerchunk manifests by identity without serializing their contents",
   );
 });
 
-it("renders the selected CF slice with north-up orientation, packing and fill masking", async () => {
+async function verifyCFSlice(backing: "session" | "saved-icechunk") {
   const bytes = new Map<string, Uint8Array>();
   const json = (path: string, value: unknown) =>
     bytes.set(path, new TextEncoder().encode(JSON.stringify(value)));
@@ -80,13 +86,25 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
   });
   const reads: string[] = [];
   let failReads = false;
-  const dispose = registerZarrStore(layer.id, {
-    get: async (key) => {
+  const reader = {
+    get: async (key: string) => {
       if (failReads) throw new Error("Temporary store failure");
       reads.push(key);
       return bytes.get(key);
     },
-  });
+  };
+  let dispose: () => void;
+  if (backing === "session") {
+    dispose = registerZarrStore(layer.id, reader);
+  } else {
+    __resetIcechunkRepositoriesForTests();
+    layer.source.url = "https://example.org/native-grid#icechunk=release%2Fv1";
+    await shareRepositoryOpen(
+      repositoryKey("https://example.org/native-grid", "release/v1"),
+      async () => reader,
+    );
+    dispose = __resetIcechunkRepositoriesForTests;
+  }
   const abort = new AbortController();
   try {
     const grid = await openArcgisZarrGrid(layer, abort.signal);
@@ -274,7 +292,12 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
   } finally {
     dispose();
   }
-});
+}
+
+it("renders the selected CF slice with north-up orientation, packing and fill masking", () =>
+  verifyCFSlice("session"));
+it("reopens a saved Icechunk grid and time axis without a session-registered store", () =>
+  verifyCFSlice("saved-icechunk"));
 
 it("reads an int64 CF time axis for the Time Slider", async () => {
   // NOAA OISST's `time` is `<i8` days since 1900, which zarrita reads as

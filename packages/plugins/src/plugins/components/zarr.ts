@@ -20,10 +20,13 @@ import {
 } from "@geolibre/core";
 import {
   readNativeZarrDimensions,
+  openIcechunkStore,
+  parseIcechunkLayerUrl,
   registerZarrHeaders,
   registerZarrStore,
   zarrRequestHeaders,
 } from "@geolibre/map/zarr-source";
+import { icechunkTimeAttributesReader } from "../stac-icechunk";
 import type {
   ZarrLayerControl,
   ZarrLayerControlOptions,
@@ -485,6 +488,27 @@ export interface ZarrReadableStore {
   get(key: string): Promise<Uint8Array | undefined>;
 }
 
+/** Capture the source and project that asynchronous Zarr work may update. */
+function zarrLayerOwnership(layer: GeoLibreLayer | undefined): () => boolean {
+  const generation = useAppStore.getState().projectGeneration;
+  const id = layer?.id;
+  const url = layer?.source.url;
+  const variable = layer?.source.variable;
+  return () => {
+    const state = useAppStore.getState();
+    return (
+      state.projectGeneration === generation &&
+      state.layers.some(
+        (current) =>
+          current.id === id &&
+          current.type === "zarr" &&
+          current.source.url === url &&
+          current.source.variable === variable,
+      )
+    );
+  };
+}
+
 /**
  * Reads one coordinate's CF time attributes out of a store's own metadata.
  *
@@ -568,9 +592,14 @@ async function addNativeArcgisZarrLayer(
   registerZarrHeaders(id, options.headers);
   if (options.store) {
     const dispose = registerZarrStore(id, options.store);
+    const ownsLayer = zarrLayerOwnership(layer);
     const unsubscribe = useAppStore.subscribe((state, previous) => {
-      if (state.layers === previous.layers) return;
-      if (!state.layers.some((layer) => layer.id === id)) {
+      if (
+        state.layers === previous.layers &&
+        state.projectGeneration === previous.projectGeneration
+      )
+        return;
+      if (!ownsLayer()) {
         dispose();
         unsubscribe();
       }
@@ -593,6 +622,7 @@ function trackRestoredArcgisZarrLayer(layerId: string): void {
   if (restoredArcgisZarrStoreUnsubscribe) return;
   restoredArcgisZarrStoreUnsubscribe = useAppStore.subscribe((state, previous) => {
     if (state.layers === previous.layers) return;
+    if (state.projectGeneration !== previous.projectGeneration) restoredArcgisZarrLayerIds.clear();
     const currentIds = new Set(state.layers.map((layer) => layer.id));
     for (const id of restoredArcgisZarrLayerIds) {
       if (!currentIds.has(id)) restoredArcgisZarrLayerIds.delete(id);
@@ -754,6 +784,9 @@ export async function setZarrLayerSelector(
   layerId: string,
   selector: Record<string, number | string>,
 ): Promise<boolean> {
+  const ownsLayer = zarrLayerOwnership(
+    useAppStore.getState().layers.find((layer) => layer.id === layerId),
+  );
   const instance = zarrControl?.getLayersMap().get(layerId) as
     | { setSelector?: (selector: Record<string, number | string>) => Promise<void> | void }
     | undefined;
@@ -763,6 +796,7 @@ export async function setZarrLayerSelector(
   if (!native && (!instance || typeof instance.setSelector !== "function")) return false;
 
   await instance?.setSelector?.(selector);
+  if (!ownsLayer()) return false;
 
   const store = useAppStore.getState();
   const layer = store.layers.find((item) => item.id === layerId);
@@ -1059,13 +1093,22 @@ function registerZarrTemporalAdapter(
   const { headers, refs } = context;
   // A folder the panel opened is not something the caller could have passed
   // context for, so fall back to the reader filed under this layer's own url.
-  const readAttributes =
+  let readAttributes =
     context.readAttributes ?? localZarrTimeAttributesReader(url ?? "") ?? undefined;
   // A removal decided after another project opened would act on a record this
   // add did not create, so it is dropped once the project changes.
-  const generation = useAppStore.getState().projectGeneration;
+  const target = useAppStore.getState().layers.find((layer) => layer.id === layerId);
+  const ownsLayer = zarrLayerOwnership(target);
   return (async () => {
+    if (!ownsLayer() || target?.source.url !== url) return true;
+    const repository = parseIcechunkLayerUrl(url ?? "");
+    if (!readAttributes && repository) {
+      const reader = await openIcechunkStore(repository.url, repository.branch);
+      readAttributes = icechunkTimeAttributesReader(reader);
+    }
+    if (!ownsLayer()) return true;
     const dimensionValues = await readZarrDimensionValues(layerId);
+    if (!ownsLayer()) return true;
     if (!dimensionValues) return true;
     const dimension = pickTimeDimension(dimensionValues) ?? "time";
     // Either source of attributes replaces the HTTP metadata walk, which for
@@ -1079,6 +1122,7 @@ function registerZarrTemporalAdapter(
       ...(headers ? { headers } : {}),
       ...(attributes !== undefined ? { attributes } : {}),
     });
+    if (!ownsLayer()) return true;
     // Non-fatal: a rejected setSelector must not stop the Time Slider binding below.
     try {
       if (
@@ -1086,15 +1130,14 @@ function registerZarrTemporalAdapter(
           layerId,
           dimensionValues,
           axis,
-          context.removeIfUnmatched === true &&
-            useAppStore.getState().projectGeneration === generation,
+          context.removeIfUnmatched === true,
         )
       )
         return true;
     } catch (error) {
       console.warn("[zarr] Could not apply date selector values", error);
     }
-    if (!axis) return true;
+    if (!ownsLayer() || !axis) return true;
     // The layer may have been removed while the axis was being resolved.
     if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) return true;
     if (
@@ -1106,6 +1149,7 @@ function registerZarrTemporalAdapter(
       dimension: axis.dimension,
       getTimeValues: () => axis.values,
       setTime: async (date) => {
+        if (!ownsLayer()) return;
         const index = nearestTimeIndex(axis.values, date.getTime());
         if (index < 0) return;
         const current = useAppStore.getState().layers.find((layer) => layer.id === layerId);
@@ -1121,6 +1165,7 @@ function registerZarrTemporalAdapter(
       // on a native renderer (ArcGIS, Cesium) the layer is not in zarrControl,
       // so queryZarrLayer has nothing to ask and the chart is not offered.
       get readPointSeries() {
+        if (!ownsLayer()) return undefined;
         if (isNativeZarrRenderer(useAppStore.getState().primaryRenderer)) return undefined;
         return async (
           lngLat: [number, number],
@@ -1181,6 +1226,7 @@ interface PendingZarrRestore {
   /** The record as saved, whose name, visibility, opacity and style are kept. */
   layer: GeoLibreLayer;
   url: string;
+  generation: number;
   /** The live layer's id, once the swap has taken over the record. */
   restoredId?: string;
 }
@@ -1192,6 +1238,7 @@ interface PendingZarrRestore {
  * same id; matching the store URL and variable keeps the stale restore off it.
  */
 function zarrRestoreTarget(entry: PendingZarrRestore): GeoLibreLayer | undefined {
+  if (useAppStore.getState().projectGeneration !== entry.generation) return undefined;
   const record = useAppStore.getState().layers.find((layer) => layer.id === entry.placeholderId);
   if (!record || record.type !== "zarr") return undefined;
   const url = typeof record.source.url === "string" ? record.source.url.trim() : "";
@@ -1228,8 +1275,8 @@ const pendingZarrRestores = new Set<PendingZarrRestore>();
  *
  * A plain store URL (or a kerchunk reference, inline or by URL) carries
  * everything the renderer needs. A local folder or file (`local-zarr:`,
- * `local:`) and an Icechunk repository (`#icechunk=`) were read through a store
- * object that lived only in the session, so their URL alone opens nothing.
+ * `local:`) uses a session-only reader. An Icechunk repository retains its
+ * branch in `#icechunk=` and can reconstruct its reader after reopening.
  *
  * @param layer - A store layer.
  * @returns True for a Zarr record the restore can re-add.
@@ -1241,7 +1288,7 @@ function isRestorableZarrLayer(layer: GeoLibreLayer): boolean {
   if (typeof rawUrl !== "string" || typeof variable !== "string") return false;
   const url = rawUrl.trim();
   if (!url || !variable.trim()) return false;
-  if (/^local(-zarr)?:/.test(url) || url.includes("#icechunk=")) return false;
+  if (/^local(-zarr)?:/.test(url)) return false;
   return true;
 }
 
@@ -1268,7 +1315,9 @@ function isRestorableZarrLayer(layer: GeoLibreLayer): boolean {
 export async function restoreZarrLayers(app: GeoLibreAppAPI): Promise<void> {
   if (isNativeZarrRenderer(app.getMapRenderer?.())) return;
   const live = zarrControl?.getLayersMap();
-  const queued = new Set([...pendingZarrRestores].map((entry) => entry.placeholderId));
+  const queued = new Set(
+    [...pendingZarrRestores].filter(zarrRestoreTarget).map((entry) => entry.placeholderId),
+  );
   const restores = useAppStore
     .getState()
     .layers.filter(
@@ -1279,6 +1328,7 @@ export async function restoreZarrLayers(app: GeoLibreAppAPI): Promise<void> {
         placeholderId: layer.id,
         layer,
         url: String(layer.source.url).trim(),
+        generation: useAppStore.getState().projectGeneration,
       }),
     );
   for (const entry of restores) pendingZarrRestores.add(entry);
@@ -1321,9 +1371,14 @@ async function restoreZarrLayerExclusively(
   // `?url=` link can open one), so never send credentials over plain HTTP.
   assertSecureRequestHeaders(url, headers);
   let refs = source.kerchunkRefs as KerchunkRefs | undefined;
-  if (!refs && isKerchunkReferenceRecord(source, url)) {
+  const repository = refs ? null : parseIcechunkLayerUrl(url);
+  if (!repository && !refs && isKerchunkReferenceRecord(source, url)) {
     refs = await loadKerchunkReference(url, { headers });
   }
+  const icechunk = repository
+    ? await openIcechunkStore(repository.url, repository.branch)
+    : undefined;
+  if (!zarrRestoreTarget(entry)) return;
   const control = zarrControl;
   if (!control) throw new Error("The Zarr control was removed while loading the reference.");
 
@@ -1347,6 +1402,7 @@ async function restoreZarrLayerExclusively(
       clim: source.clim as [number, number] | undefined,
       colormap: resolveZarrColormap(source.colormap as string | string[] | undefined),
       opacity: layer.opacity,
+      ...(icechunk ? { store: icechunk } : {}),
       ...(refs
         ? {
             store: new KerchunkReferenceStore(refs, { headers, sourceUrl: url }),
@@ -1382,7 +1438,11 @@ async function restoreZarrLayerExclusively(
   }
 
   registerZarrHeaders(addedLayerId, headers);
-  void registerZarrTemporalAdapter(addedLayerId, url, { headers, refs });
+  void registerZarrTemporalAdapter(addedLayerId, url, {
+    headers,
+    refs,
+    ...(icechunk ? { readAttributes: icechunkTimeAttributesReader(icechunk) } : {}),
+  });
   // Read back, so a visibility change made while the store loaded is kept.
   const restored = useAppStore.getState().layers.find((item) => item.id === addedLayerId);
   if (restored && !restored.visible) {
@@ -1577,9 +1637,6 @@ function createZarrLayerAddHandler(): ZarrLayerEventHandler {
     // Only for the Zarr panel's own adds: a programmatic add knows both its
     // layer id and its own headers/references, which this event cannot be
     // attributed to (see `programmaticZarrAdds`), so it registers its own.
-    if (!programmaticZarrAdds.has(layerInfo.url ?? "")) {
-      registerZarrTemporalAdapter(layer.id, layerInfo.url, { removeIfUnmatched: true });
-    }
     if (store.layers.some((item) => item.id === layer.id)) {
       store.updateLayer(layer.id, {
         metadata: layer.metadata,
@@ -1588,9 +1645,12 @@ function createZarrLayerAddHandler(): ZarrLayerEventHandler {
         style: layer.style,
         visible: layer.visible,
       });
-      return;
+    } else {
+      store.addLayer(layer);
     }
-    store.addLayer(layer);
+    if (!programmaticZarrAdds.has(layerInfo.url ?? "")) {
+      registerZarrTemporalAdapter(layer.id, layerInfo.url, { removeIfUnmatched: true });
+    }
   };
 }
 

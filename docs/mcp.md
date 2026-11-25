@@ -295,7 +295,7 @@ Give it a directory meant for maps, not your home directory.
 | `add_ogc_layer` | WMS and WMTS endpoints. |
 | `add_wfs_layer` | A WFS feature type, fetched by the app when the project opens. |
 | `add_arcgis_layer` | ArcGIS REST MapServer and ImageServer (raster tiles from the export endpoint, with sublayers or a rendering rule) and FeatureServer layers (features in view loaded on open). |
-| `add_zarr_layer` | One variable of a Zarr data cube, sliced with a dimension selector, drawn by the app's Zarr control. |
+| `add_zarr_layer` | One variable of a Zarr data cube, sliced with a dimension selector. Set `icechunk_branch="main"` for a public HTTP(S) Icechunk repository; its branch and settings survive reopening. |
 | `add_video_layer` | A georeferenced video overlay from `https://` URLs and four corners. |
 | `add_lidar_layer` | LAS/LAZ/COPC/EPT point clouds by URL. |
 | `add_spaceborne_lidar_layer` | ICESat-2 (ATL06, ATL08) or GEDI (L2A, L2B, L4A) footprints from a local HDF5 granule (needs `geolibre[spaceborne]`). |
