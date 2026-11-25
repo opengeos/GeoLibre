@@ -29,7 +29,7 @@ binary:
 
 - **Locally** on a Mac (Xcode 26.6 / iOS SDK 26.5): `tauri ios init` → unsigned
   archive → `xcodebuild -exportArchive`.
-- **In CI**, on a `macos-15` runner (Xcode 26.3): it imports the certificate and
+- **In CI**, on the `xcode-27` runner (Xcode 27): it imports the certificate and
   profile from the `APPLE_IOS_*` secrets, archives, exports under manual
   signing, verifies the signature, and publishes the `geolibre-ios-ipa`
   artifact.
@@ -295,7 +295,7 @@ identity is imported from secrets (below).
 
 ## Continuous integration
 
-`.github/workflows/ios.yml` runs on `macos-15` on each published GitHub release
+`.github/workflows/ios.yml` runs on `xcode-27` on each published GitHub release
 (and on demand via "Run workflow"). Because iOS can't be cross-compiled from
 Linux, this is the only mobile workflow that needs a macOS runner. The image is
 not free to choose — see the Xcode floor below.
@@ -356,7 +356,7 @@ Developer"` and automatic signing therefore hunts for a development profile no
 >   future Xcode project file format (77).
 > ```
 >
-> The job therefore runs on `macos-15` and explicitly selects the newest Xcode on
+> The job therefore runs on a recent image and explicitly selects the newest Xcode on
 > the image rather than trusting its default, failing early with a clear message
 > if that is older than 16. Note this floor comes from the **Tauri CLI's**
 > generated project, not from anything in this repo — re-check it whenever the
@@ -367,6 +367,14 @@ Developer"` and automatic signing therefore hunts for a development profile no
 > Xcode still produces an `.ipa` and only fails at upload. The Xcode version and
 > iOS SDK list are printed into the run log so a rejected upload can be diagnosed
 > from the run instead of guessed at.
+>
+> That floor is now **Xcode 27 / the iOS 27 SDK**: from April 2027 App Store
+> Connect refuses iOS uploads built with anything older. The v3.10.0 build
+> (`macos-15`, Xcode 26.3, iOS 26.2 SDK) was accepted with an ITMS-90725
+> warning. No `macos-*` image ships Xcode 27 yet, so the job runs on GitHub's
+> `xcode-27` image, and the Xcode step fails before archiving if the selected
+> Xcode is older than 27. Raise that check and the runner label when Apple
+> announces the next floor.
 
 The `workflow_dispatch` `export_method` input picks the export path
 (`app-store-connect` for TestFlight/App Store, `release-testing` for ad-hoc
