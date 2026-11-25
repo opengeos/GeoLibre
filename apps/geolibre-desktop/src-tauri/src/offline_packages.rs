@@ -124,8 +124,9 @@ fn validate_details(details: &PackageDetails) -> Result<(), String> {
         || details.name.chars().any(char::is_control)
         || !details.bbox.iter().all(|v| v.is_finite())
         || west < -180.0
+        || west > 180.0
+        || east < -180.0
         || east > 180.0
-        || west > east
         || south < -90.0
         || north > 90.0
         || south > north
@@ -201,11 +202,7 @@ impl PackageStore {
                 && entry.file_type().map_err(|e| e.to_string())?.is_dir()
             {
                 if let Err(error) = fs::remove_dir_all(entry.path()) {
-                    if name.starts_with(".deleting-") {
-                        eprintln!("Offline package cleanup deferred: {error}");
-                    } else {
-                        return Err(error.to_string());
-                    }
+                    eprintln!("Offline package cleanup deferred: {error}");
                 }
             }
         }
@@ -538,6 +535,45 @@ mod tests {
             .verify(&entry.manifest.id)
             .unwrap_err()
             .contains("checksum"));
+    }
+
+    #[test]
+    fn keeps_antimeridian_bounds_and_rejects_out_of_range_longitudes() {
+        let root = TestRoot::new();
+        let mut cross = details();
+        cross.bbox = [170.0, -10.0, -170.0, 10.0];
+        let entry = root.store().save(cross.clone(), &archive()).unwrap();
+        assert_eq!(
+            root.store()
+                .verify(entry.id())
+                .unwrap()
+                .manifest
+                .details
+                .bbox,
+            cross.bbox
+        );
+        cross.bbox[0] = 181.0;
+        assert!(root.store().save(cross, &archive()).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn locked_abandoned_stage_does_not_hide_healthy_packages() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = TestRoot::new();
+        let store = root.store();
+        let healthy = store.save(details(), &archive()).unwrap();
+        let stage = store
+            .root
+            .join(format!(".pending-{}", random_id().unwrap()));
+        let locked = stage.join("locked");
+        fs::create_dir_all(&locked).unwrap();
+        fs::write(locked.join("held"), b"pending cleanup").unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).unwrap();
+        assert_eq!(root.store().list().unwrap().packages[0].id(), healthy.id());
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(root.store().list().unwrap().packages.len(), 1);
+        assert!(!stage.exists());
     }
 
     #[test]

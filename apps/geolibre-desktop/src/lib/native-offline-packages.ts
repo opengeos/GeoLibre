@@ -92,7 +92,16 @@ export function saveNativeOfflinePackage(
   details: PackageDetails,
 ): Promise<NativeOfflinePackage> {
   return invoke<NativeOfflinePackage>("save_native_offline_package", bytes, {
-    headers: { "x-package-metadata": encodeURIComponent(JSON.stringify(details)) },
+    // Initial names come from provider paths/URLs. Preserve Unicode code points
+    // while staying within the native 512-byte name limit.
+    headers: {
+      "x-package-metadata": encodeURIComponent(
+        JSON.stringify({
+          ...details,
+          name: Array.from(details.name).slice(0, 128).join(""),
+        }),
+      ),
+    },
   }).then((entry) => {
     rememberPackageArchive(entry);
     return entry;

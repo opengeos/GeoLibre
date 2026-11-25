@@ -81,6 +81,7 @@ it("sends archive bytes through binary IPC and metadata through an encoded heade
     tileType: "vector" as const,
     archiveFormat: "pmtiles" as const,
   };
+  let expected = details;
   mockIPC(() => entry);
   Reflect.set(
     Reflect.get(window, "__TAURI_INTERNALS__"),
@@ -89,11 +90,18 @@ it("sends archive bytes through binary IPC and metadata through an encoded heade
       assert.equal(command, "save_native_offline_package");
       assert.deepEqual(payload, bytes);
       const headers = options?.headers as Record<string, string>;
-      assert.deepEqual(JSON.parse(decodeURIComponent(headers["x-package-metadata"])), details);
+      const metadata = JSON.parse(decodeURIComponent(headers["x-package-metadata"]));
+      assert.deepEqual(metadata, expected);
+      assert.ok(new TextEncoder().encode(metadata.name).length <= 512);
       return Promise.resolve(entry);
     },
   );
   assert.deepEqual(await saveNativeOfflinePackage(bytes, details), entry);
+  expected = { ...details, name: "🗺".repeat(128) };
+  assert.deepEqual(
+    await saveNativeOfflinePackage(bytes, { ...details, name: "🗺".repeat(300) }),
+    entry,
+  );
 });
 
 it("keeps managed rename, flavor, verify, and deletion out of browser storage", async () => {

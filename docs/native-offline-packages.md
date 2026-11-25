@@ -32,6 +32,8 @@ Writes use private staging directories, synced files, atomic directory rename,
 and directory synchronization on Unix platforms. Windows syncs file contents;
 directory flushing is not provided by the standard Rust filesystem interface.
 The next storage operation recovers interrupted stages and deletions.
+Locked staging files and deletion tombstones are retried on later operations
+without hiding healthy packages from the inventory.
 Once a deletion is durably recorded, a reader holding the file open may defer
 physical cleanup. The next storage operation retries that cleanup while keeping
 healthy packages available.
