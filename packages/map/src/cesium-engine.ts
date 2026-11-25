@@ -92,6 +92,8 @@ export const CESIUM_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   nativeDataSources: true,
   deferredEngineReady: false,
   measureTool: true,
+  // Side labels are a MapLibre/Mapbox symbol layer; the globe has no analogue yet.
+  edgeLengthLabels: false,
   controlLayerPanels: true,
   supportedLayerKinds: CESIUM_SUPPORTED_LAYER_KINDS,
 });

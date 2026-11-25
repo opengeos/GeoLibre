@@ -9,8 +9,14 @@ import {
 } from "../packages/core/src/imported-document-paths";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
-import { initializeNativeDocumentCopies } from "../apps/geolibre-desktop/src/lib/native-document-copies";
+import {
+  initializeNativeDocumentCopies,
+  restoreNativeDocumentCopies,
+} from "../apps/geolibre-desktop/src/lib/native-document-copies";
 import { isImportedDocumentCopyPath } from "../apps/geolibre-desktop/src/lib/file-io/paths";
+import i18next from "i18next";
+import en from "../apps/geolibre-desktop/src/i18n/locales/en.json";
+import { clearNotifications, useNotificationStore } from "../apps/geolibre-desktop/src/lib/notify";
 
 const selection = "3cb9b477-d563-4d3e-8503-263ec23c01c5";
 const oldRoot =
@@ -21,6 +27,61 @@ const oldPath = `${oldRoot}/${selection}/data/map % # é.geojson`;
 const currentPath = `${currentRoot}/${selection}/data/map % # é.geojson`;
 
 describe("retained iOS document references", () => {
+  it("keeps healthy references available and waits for translations before reporting a problem", async () => {
+    await i18next.init({ lng: "en", resources: { en: { translation: en } } });
+    clearNotifications();
+    mockIPC(() => ({ root: currentRoot, problems: ["One import is unreadable"] }));
+    let translate!: () => void;
+    const translationReady = new Promise<void>((resolve) => {
+      translate = resolve;
+    });
+    let installed!: () => void;
+    const rootReady = new Promise<void>((resolve) => {
+      installed = resolve;
+    });
+    const unsubscribe = useAppStore.subscribe((state) => {
+      if (state.nativeDocumentCopyRoot === currentRoot) installed();
+    });
+    let ready: Promise<void> | undefined;
+    try {
+      ready = restoreNativeDocumentCopies(translationReady);
+      await rootReady;
+      assert.equal(useAppStore.getState().nativeDocumentCopyRoot, currentRoot);
+      assert.equal(useNotificationStore.getState().notifications.length, 0);
+      translate();
+      await ready;
+      const notices = useNotificationStore.getState().notifications;
+      assert.equal(notices.length, 1);
+      assert.equal(notices[0].message, en.notifications.nativeDocumentCopiesFailed);
+    } finally {
+      translate();
+      await ready;
+      unsubscribe();
+      clearMocks();
+      clearNotifications();
+      useAppStore.getState().setNativeDocumentCopyRoot(null);
+    }
+  });
+
+  it("settles catastrophic initialization with actionable guidance so the workspace can open", async () => {
+    await i18next.init({ lng: "en", resources: { en: { translation: en } } });
+    clearNotifications();
+    mockIPC(() => {
+      throw new Error("Storage path unavailable");
+    });
+    try {
+      await restoreNativeDocumentCopies(Promise.resolve());
+      assert.equal(useAppStore.getState().nativeDocumentCopyRoot, null);
+      const notices = useNotificationStore.getState().notifications;
+      assert.equal(notices.length, 1);
+      assert.equal(notices[0].message, en.notifications.nativeDocumentCopiesInitFailed);
+      assert.ok(notices[0].diagnostic);
+    } finally {
+      clearMocks();
+      clearNotifications();
+    }
+  });
+
   it("recognizes and rebases the copy layout for the shipped iOS identifier", () => {
     const config = JSON.parse(
       readFileSync(

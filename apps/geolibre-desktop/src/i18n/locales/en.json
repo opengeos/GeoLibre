@@ -4404,6 +4404,8 @@
       "selectByExpressionEllipsis": "Select by expression…",
       "selectByLocationEllipsis": "Select by location…",
       "zoomToSelection": "Zoom to selection",
+      "showEdgeLengths": "Show edge lengths",
+      "showEdgeLengthsUnsupported": "Edge lengths are shown on the MapLibre and Mapbox maps only.",
       "invertSelection": "Invert selection",
       "clearSelection": "Clear selection",
       "exportSelection": "Export selected features as layer",

@@ -169,6 +169,12 @@ export interface MapEngine {
     options?: { fit?: boolean },
   ): void;
   clearFeatureHighlight(): void;
+  /**
+   * Label each side of the highlighted polygons with its length (or stop), on
+   * engines with {@link MapEngineCapabilities.edgeLengthLabels}. The labels
+   * follow every later {@link highlightFeature} until switched off.
+   */
+  setEdgeLengthLabels?(enabled: boolean): void;
   /** Draw a temporary search marker or cell outline; dispose clears only this result. */
   showSearchResult(geometry: Point | Polygon): () => void;
   /**
@@ -387,6 +393,11 @@ export interface MapEngineCapabilities {
   /** The built-in measure control can draw its sketch on this engine. */
   readonly measureTool: boolean;
   /**
+   * {@link MapEngine.setEdgeLengthLabels} labels the sides of the selected
+   * polygons, so the "Show edge lengths" toggle is offered.
+   */
+  readonly edgeLengthLabels: boolean;
+  /**
    * The raster and PMTiles add-layer panels (`IControl`s the plugins mount on
    * the map) work here. Without it those formats, and Zarr, are added through
    * the Add Data dialog's forms instead.
@@ -437,6 +448,7 @@ export const MAPLIBRE_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   nativeDataSources: false,
   deferredEngineReady: false,
   measureTool: true,
+  edgeLengthLabels: true,
   controlLayerPanels: true,
   supportedLayerKinds: MAPLIBRE_SUPPORTED_LAYER_KINDS,
 });

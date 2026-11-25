@@ -123,6 +123,8 @@ export const ARCGIS_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   // The engine is published once its view is ready.
   deferredEngineReady: true,
   measureTool: true,
+  // Side labels are a MapLibre/Mapbox symbol layer; the SDK has no analogue yet.
+  edgeLengthLabels: false,
   controlLayerPanels: false,
   supportedLayerKinds: ARCGIS_SUPPORTED_LAYER_KINDS,
 });

@@ -60,6 +60,7 @@ import { installDiagnosticsCapture } from "./lib/diagnostics";
 import { notify } from "./lib/notify";
 import { isDesktopRuntime, isWindows } from "./lib/is-mobile";
 import { isTauri } from "./lib/is-tauri";
+import { restoreNativeDocumentCopies } from "./lib/native-document-copies";
 import { installStaleChunkReload } from "./lib/stale-chunk-reload";
 import { isNewBuildDeployed, offerAppUpdate, watchForAppUpdates } from "./lib/app-update";
 import { resolveAuthGate, type AuthGateConfig } from "./lib/auth-gate";
@@ -143,20 +144,7 @@ const nativeShareAuthReady = isDesktopRuntime()
 const nativeCoordinateOpenReady = initializeNativeCoordinateOpen();
 const nativeProjectOpenReady = initializeNativeProjectOpen();
 const nativeDocumentCopiesReady = isTauri()
-  ? import("./lib/native-document-copies")
-      .then(({ initializeNativeDocumentCopies }) => initializeNativeDocumentCopies())
-      .then(async (problems) => {
-        if (problems.length > 0) {
-          console.error("[GeoLibre] Some retained imports are unavailable", problems);
-          await i18nReady;
-          notify.error(i18n.t("notifications.nativeDocumentCopiesFailed"));
-        }
-      })
-      .catch(async (error: unknown) => {
-        console.error("[GeoLibre] Failed to restore retained imports", error);
-        await i18nReady;
-        notify.error(i18n.t("notifications.nativeDocumentCopiesInitFailed"));
-      })
+  ? restoreNativeDocumentCopies(i18nReady)
   : Promise.resolve();
 const nativeOfflinePackagesReady = isTauri()
   ? import("./lib/native-offline-packages")

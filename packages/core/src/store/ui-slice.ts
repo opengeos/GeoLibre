@@ -220,6 +220,11 @@ export interface UiSlice {
      */
     processingRerun: ProcessingRerunRequest | null;
     zoomToSelectedFeature: boolean;
+    /**
+     * Whether the map labels each side of the selected polygons with its
+     * length, on engines that can (`MapEngineCapabilities.edgeLengthLabels`).
+     */
+    showEdgeLengths: boolean;
     // Live-collaboration dialog visibility. Lifted into the store (rather than
     // local toolbar state) so the on-canvas session-status badge can reopen the
     // Collaborate dialog from outside the toolbar's component tree (#754).
@@ -279,6 +284,7 @@ export interface UiSlice {
   setProcessingRerun: (request: ProcessingRerunRequest | null) => void;
   setCollaborateDialogOpen: (open: boolean) => void;
   setZoomToSelectedFeature: (enabled: boolean) => void;
+  setShowEdgeLengths: (enabled: boolean) => void;
   setStyleManagerOpen: (open: boolean) => void;
 }
 
@@ -322,6 +328,7 @@ export const createUiSlice: SliceCreator<UiSlice> = (set) => ({
     selectByLocationLayerId: null,
     processingRerun: null,
     zoomToSelectedFeature: false,
+    showEdgeLengths: false,
     collaborateDialogOpen: false,
   },
 
@@ -485,6 +492,7 @@ export const createUiSlice: SliceCreator<UiSlice> = (set) => ({
     set((s) => ({ ui: { ...s.ui, collaborateDialogOpen: open } })),
   setZoomToSelectedFeature: (enabled) =>
     set((s) => ({ ui: { ...s.ui, zoomToSelectedFeature: enabled } })),
+  setShowEdgeLengths: (enabled) => set((s) => ({ ui: { ...s.ui, showEdgeLengths: enabled } })),
 
   setStyleManagerOpen: (open) => set((s) => ({ ui: { ...s.ui, styleManagerOpen: open } })),
 });

@@ -7,6 +7,7 @@ import { DEFAULT_LAYER_STYLE, useAppStore, type MapPreferences } from "@geolibre
 import { MapboxEngine, redactMapboxError } from "../packages/map/src/mapbox-engine";
 import { isMapboxSupportedLayer } from "../packages/map/src/mapbox-layers";
 import { geojsonLayer } from "./helpers/layer-fixtures";
+import { EDGE_LENGTH_LAYER_ID, EDGE_LENGTH_SOURCE_ID } from "../packages/map/src/edge-lengths";
 
 // The Mapbox engine never loads mapbox-gl here (its import in the module under
 // test is type-only), so the map is a fake that records the style-spec calls
@@ -2372,6 +2373,7 @@ describe("MapboxEngine layer control", () => {
       // A style with a root basemap layer, loaded afresh.
       map.layers.push({ id: "background", type: "background" });
       map.fire("style.load");
+      map.layers.push({ id: EDGE_LENGTH_LAYER_ID, type: "symbol", source: EDGE_LENGTH_SOURCE_ID });
       engine.syncLayers([geojsonLayer()]);
       const nativeIds = map.layers.map((l) => l.id as string).filter((id) => id !== "background");
       assert.ok(nativeIds.length > 0);
@@ -2572,5 +2574,181 @@ describe("MapboxEngine story camera", () => {
         ["center", "duration", "pitch", "zoom"],
       ],
     );
+  });
+});
+
+describe("MapboxEngine edge length labels", () => {
+  // A ~100 m square in Lisbon.
+  const parcel = () =>
+    geojsonLayer({
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "parcel",
+            properties: {},
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [-9.14, 38.72],
+                  [-9.13885, 38.72],
+                  [-9.13885, 38.7209],
+                  [-9.14, 38.7209],
+                  [-9.14, 38.72],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    });
+  const labelSource = (map: ReturnType<typeof makeMap>) =>
+    map.sources.get(EDGE_LENGTH_SOURCE_ID) as
+      | { data: { features: { properties: { label: string } }[] } }
+      | undefined;
+
+  it("labels the highlighted polygon's sides once switched on, above the highlight", () => {
+    const { engine, map } = makeEngine();
+    const layer = parcel();
+    engine.syncLayers([layer]);
+    engine.highlightFeature(layer, ["parcel"]);
+    assert.equal(map.getLayer(EDGE_LENGTH_LAYER_ID), undefined);
+
+    engine.setEdgeLengthLabels(true);
+    assert.equal(labelSource(map)?.data.features.length, 4);
+    assert.equal(map.layers.at(-1)?.id, EDGE_LENGTH_LAYER_ID);
+
+    engine.setEdgeLengthLabels(false);
+    assert.equal(map.getLayer(EDGE_LENGTH_LAYER_ID), undefined);
+    assert.equal(labelSource(map), undefined);
+  });
+
+  it("retries an update the loading map deferred, once it is idle", () => {
+    const { engine, map } = makeEngine();
+    const layer = parcel();
+    engine.syncLayers([layer]);
+    engine.setEdgeLengthLabels(true);
+    // Adding the highlight's source starts it loading, so the map reports
+    // the style as not loaded until it is idle, as Mapbox GL does.
+    const addSource = map.addSource;
+    map.addSource = (id: string, spec: Record<string, unknown>) => {
+      addSource(id, spec);
+      map.setStyleLoaded(false);
+    };
+    engine.highlightFeature(layer, ["parcel"]);
+    assert.equal(labelSource(map), undefined);
+    map.setStyleLoaded(true);
+    map.fire("idle");
+    assert.equal(labelSource(map)?.data.features.length, 4);
+
+    // Switching off while loading is applied on idle too.
+    map.setStyleLoaded(false);
+    engine.setEdgeLengthLabels(false);
+    assert.ok(map.getLayer(EDGE_LENGTH_LAYER_ID));
+    map.setStyleLoaded(true);
+    map.fire("idle");
+    assert.equal(map.getLayer(EDGE_LENGTH_LAYER_ID), undefined);
+  });
+
+  it("follows the highlight, and clears with it", () => {
+    const { engine, map } = makeEngine();
+    const layer = parcel();
+    engine.syncLayers([layer]);
+    engine.setEdgeLengthLabels(true);
+    engine.highlightFeature(layer, ["parcel"]);
+    assert.equal(labelSource(map)?.data.features.length, 4);
+    engine.clearFeatureHighlight();
+    assert.equal(map.getLayer(EDGE_LENGTH_LAYER_ID), undefined);
+  });
+
+  it("retains the latest selection received while sources load", () => {
+    const { engine, map } = makeEngine();
+    const layer = parcel();
+    const triangle = structuredClone(layer.geojson!.features[0]);
+    triangle.id = "triangle";
+    assert.equal(triangle.geometry.type, "Polygon");
+    if (triangle.geometry.type === "Polygon") {
+      triangle.geometry.coordinates[0].splice(2, 1);
+    }
+    layer.geojson!.features.push(triangle);
+    engine.syncLayers([layer]);
+    engine.setEdgeLengthLabels(true);
+    engine.highlightFeature(layer, ["parcel"]);
+    map.setStyleLoaded(false);
+    engine.highlightFeature(layer, ["parcel"]);
+    engine.highlightFeature(layer, ["triangle"]);
+    map.setStyleLoaded(true);
+    map.fire("idle");
+    assert.equal(labelSource(map)?.data.features.length, 3);
+    const highlight = map.sources.get("geolibre-mapbox-highlight") as
+      | { data: { features: { id: string }[] } }
+      | undefined;
+    assert.deepEqual(
+      highlight?.data.features.map((feature) => feature.id),
+      ["triangle"],
+    );
+  });
+
+  it("fits a ready-map selection even when its new highlight source starts loading", () => {
+    const { engine, map } = makeEngine();
+    const layer = parcel();
+    engine.syncLayers([layer]);
+    const addSource = map.addSource;
+    map.addSource = (id: string, spec: Record<string, unknown>) => {
+      addSource(id, spec);
+      map.setStyleLoaded(false);
+    };
+    const before = map.calls.filter((call) => call.startsWith("fitBounds:")).length;
+    engine.highlightFeature(layer, ["parcel"], { fit: true });
+    assert.equal(map.calls.filter((call) => call.startsWith("fitBounds:")).length, before + 1);
+  });
+
+  it("applies a clear that supersedes a selection during source loading", () => {
+    const { engine, map } = makeEngine();
+    const layer = parcel();
+    engine.syncLayers([layer]);
+    engine.setEdgeLengthLabels(true);
+    engine.highlightFeature(layer, ["parcel"]);
+    map.setStyleLoaded(false);
+    engine.highlightFeature(layer, ["parcel"]);
+    engine.clearFeatureHighlight();
+    map.setStyleLoaded(true);
+    map.fire("idle");
+    assert.equal(labelSource(map), undefined);
+    assert.equal(map.sources.get("geolibre-mapbox-highlight"), undefined);
+  });
+
+  it("does not fit the whole layer when a selection is cleared with fit enabled", () => {
+    const { engine, map } = makeEngine();
+    const layer = parcel();
+    layer.metadata.bounds = [-10, 38, -9, 39];
+    engine.syncLayers([layer]);
+    engine.highlightFeature(layer, ["parcel"]);
+    const before = map.calls.filter((call) => call.startsWith("fitBounds:")).length;
+    engine.highlightFeature(layer, null, { fit: true });
+    assert.equal(map.calls.filter((call) => call.startsWith("fitBounds:")).length, before);
+  });
+
+  it("labels in the scale bar's unit system", () => {
+    const { engine, map } = makeEngine();
+    const layer = parcel();
+    engine.syncLayers([layer]);
+    engine.setEdgeLengthLabels(true);
+    engine.highlightFeature(layer, ["parcel"]);
+    assert.ok(labelSource(map)!.data.features.every((f) => f.properties.label.endsWith(" m")));
+    engine.applyMapPreferences({
+      minZoom: 0,
+      maxZoom: 22,
+      maxPitch: 60,
+      bounds: [-180, -90, 180, 90],
+      restrictBounds: false,
+      renderWorldCopies: true,
+      projection: "mercator",
+      terrainEnabled: false,
+      scaleUnit: "imperial",
+    } as unknown as MapPreferences);
+    assert.ok(labelSource(map)!.data.features.every((f) => f.properties.label.endsWith(" ft")));
   });
 });

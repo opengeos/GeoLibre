@@ -302,6 +302,9 @@ export function MapboxCanvas({
                   : next.mapView,
               );
             }
+            if (!viewId && (!previous || next.ui.showEdgeLengths !== previous.ui.showEdgeLengths)) {
+              current.setEdgeLengthLabels(next.ui.showEdgeLengths);
+            }
             if (
               !viewId &&
               (!previous ||

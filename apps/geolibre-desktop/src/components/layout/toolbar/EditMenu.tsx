@@ -10,6 +10,7 @@ import type { MapEngine } from "@geolibre/map";
 import {
   Button,
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -22,6 +23,7 @@ import {
   Locate,
   Pencil,
   Redo2,
+  Ruler,
   Shuffle,
   SquareDashed,
   SquareFunction,
@@ -32,6 +34,7 @@ import { useTranslation } from "react-i18next";
 import { useSyncExternalStore } from "react";
 import { useStore } from "zustand";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
+import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
 import {
   clearFeatureSelection,
   exportSelectionAsLayer,
@@ -87,6 +90,9 @@ export function EditMenu({ chrome, mapControllerRef }: EditMenuProps) {
   });
   const selectionCount = useAppStore((s) => s.selectedFeatureIds.length);
   const hasSelection = activeLayerSelectable && selectionCount > 0;
+  const showEdgeLengths = useAppStore((s) => s.ui.showEdgeLengths);
+  const setShowEdgeLengths = useAppStore((s) => s.setShowEdgeLengths);
+  const edgeLengthsSupported = useMapCapabilities(mapControllerRef).edgeLengthLabels;
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const deploymentCapabilities = useAppStore((s) => s.deploymentCapabilities);
   // Same dual gate as ProjectMenu: the deployment's capability first (not on
@@ -179,6 +185,17 @@ export function EditMenu({ chrome, mapControllerRef }: EditMenuProps) {
             <X className={iconClass} />
             <span className="whitespace-nowrap">{t("toolbar.item.clearSelection")}</span>
           </DropdownMenuItem>
+        )}
+        {show("edit.showEdgeLengths") && (
+          <DropdownMenuCheckboxItem
+            checked={showEdgeLengths && edgeLengthsSupported}
+            disabled={!edgeLengthsSupported}
+            title={edgeLengthsSupported ? undefined : t("toolbar.item.showEdgeLengthsUnsupported")}
+            onCheckedChange={(checked) => setShowEdgeLengths(checked === true)}
+          >
+            <Ruler className={iconClass} />
+            <span className="whitespace-nowrap">{t("toolbar.item.showEdgeLengths")}</span>
+          </DropdownMenuCheckboxItem>
         )}
         {show("edit.exportSelection") && (
           <DropdownMenuItem disabled={!hasSelection} onSelect={handleExportSelection}>

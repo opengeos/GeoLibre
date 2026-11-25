@@ -99,7 +99,10 @@ fn copy_file(source: &Path, destination: &Path) -> io::Result<(u64, String)> {
     let mut bytes = 0_u64;
     let mut buffer = [0_u8; 128 * 1024];
     loop {
-        let count = input.read(&mut buffer)?;
+        let count = match input.read(&mut buffer) {
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            result => result?,
+        };
         if count == 0 {
             break;
         }
