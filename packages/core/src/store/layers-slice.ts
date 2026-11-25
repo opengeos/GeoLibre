@@ -348,14 +348,13 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
       isDirty: true,
     })),
 
-  // Imported-copy paths are rebased and held at entry (addLayer, newProject,
-  // loadProject). A patch edits a layer already in the store, so it is applied
-  // as given, not rebased again.
   updateLayer: (id, patch) =>
     set((s) => {
       let layers = s.layers.map((l) => {
         if (l.id !== id) return l;
-        const updated = { ...l, ...patch };
+        const merged = { ...l, ...patch };
+        assertImportedDocumentCopiesAvailable([merged], s.nativeDocumentCopyError);
+        const updated = rebaseImportedDocumentLayer(merged, s.nativeDocumentCopyRoot);
         // If a patch explicitly replaces geojson but does not explicitly supply geoarrow,
         // clear the existing GeoArrow batch to avoid retaining stale geometry.
         if (patch.geojson !== undefined && !("geoarrow" in patch)) {

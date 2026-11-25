@@ -2,7 +2,7 @@ import { useAppStore } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { createEmptyProject, projectFromStore } from "@geolibre/core";
+import { createEmptyProject, projectFromStore, type GeoLibreLayer } from "@geolibre/core";
 import {
   rebaseImportedDocumentLayer,
   rebaseImportedDocumentPath,
@@ -26,7 +26,125 @@ const currentRoot =
 const oldPath = `${oldRoot}/${selection}/data/map % # é.geojson`;
 const currentPath = `${currentRoot}/${selection}/data/map % # é.geojson`;
 
+function retainedPatches(): { patch: Partial<GeoLibreLayer>; expected: Partial<GeoLibreLayer> }[] {
+  const tiles = (path: string) => [
+    `geolibre-mbtiles://tile/{z}/{x}/{y}?path=${encodeURIComponent(path)}`,
+  ];
+  return [
+    { patch: { sourcePath: oldPath }, expected: { sourcePath: currentPath } },
+    {
+      patch: { metadata: { localFilePath: oldPath, label: "Keep" } },
+      expected: { metadata: { localFilePath: currentPath, label: "Keep" } },
+    },
+    {
+      patch: { metadata: { localBytesUrl: `asset://localhost/${encodeURIComponent(oldPath)}` } },
+      expected: {
+        metadata: { localBytesUrl: `asset://localhost/${encodeURIComponent(currentPath)}` },
+      },
+    },
+    {
+      patch: { source: { type: "raster", tiles: tiles(oldPath) } },
+      expected: { source: { type: "raster", tiles: tiles(currentPath) } },
+    },
+    {
+      patch: {
+        source: {
+          type: "vector",
+          url: `pmtiles://local-pmtiles://localhost/file?path=${encodeURIComponent(oldPath)}`,
+        },
+      },
+      expected: {
+        source: {
+          type: "vector",
+          url: `pmtiles://local-pmtiles://localhost/file?path=${encodeURIComponent(currentPath)}`,
+        },
+      },
+    },
+  ];
+}
+
 describe("retained iOS document references", () => {
+  it("rebases reference-bearing layer patches before publishing while preserving data and untouched layers", () => {
+    const store = useAppStore.getState();
+    store.setNativeDocumentCopyRoot(currentRoot);
+    try {
+      for (const { patch, expected } of retainedPatches()) {
+        store.newProject({
+          layers: [geojsonLayer({ id: "target" }), geojsonLayer({ id: "other" })],
+        });
+        const before = useAppStore.getState();
+        const originalPatch = JSON.stringify(patch);
+        const published: GeoLibreLayer[] = [];
+        const unsubscribe = useAppStore.subscribe((state) => {
+          if (state.layers !== before.layers) published.push(state.layers[0]);
+        });
+        try {
+          store.updateLayer("target", patch);
+          assert.equal(published.length, 1);
+          assert.deepEqual(published[0], { ...before.layers[0], ...expected });
+          assert.equal(published[0].geojson, before.layers[0].geojson);
+          assert.equal(useAppStore.getState().layers[1], before.layers[1]);
+          assert.equal(JSON.stringify(patch), originalPatch);
+        } finally {
+          unsubscribe();
+        }
+      }
+    } finally {
+      store.setNativeDocumentCopyRoot(null);
+    }
+  });
+
+  it("refuses retained layer patches before changing the workspace or undo history during an outage", () => {
+    const store = useAppStore.getState();
+    store.newProject({ layers: [geojsonLayer({ id: "target" })] });
+    store.setNativeDocumentCopyError("Imported-file access is unavailable.");
+    const before = useAppStore.getState();
+    const history = useAppStore.temporal.getState();
+    const past = history.pastStates.length;
+    const future = history.futureStates.length;
+    let published = 0;
+    const unsubscribe = useAppStore.subscribe((state) => {
+      if (state.layers !== before.layers) published++;
+    });
+    try {
+      for (const { patch } of retainedPatches())
+        assert.throws(
+          () => store.updateLayer("target", patch),
+          /Imported-file access is unavailable/,
+        );
+      const after = useAppStore.getState();
+      assert.equal(published, 0);
+      assert.equal(after.layers, before.layers);
+      assert.equal(after.isDirty, before.isDirty);
+      assert.equal(after.projectGeneration, before.projectGeneration);
+      assert.equal(useAppStore.temporal.getState().pastStates.length, past);
+      assert.equal(useAppStore.temporal.getState().futureStates.length, future);
+    } finally {
+      unsubscribe();
+      store.setNativeDocumentCopyRoot(null);
+    }
+  });
+
+  it("allows ordinary layer patches while retained files are held", () => {
+    const store = useAppStore.getState();
+    store.newProject({ layers: [geojsonLayer({ id: "target" })] });
+    store.setNativeDocumentCopyError("Imported-file access is unavailable.");
+    const url = `https://example.com/data?path=${encodeURIComponent(oldPath)}`;
+    try {
+      store.updateLayer("target", {
+        opacity: 0.3,
+        source: { type: "geojson", url },
+        metadata: { description: oldPath },
+      });
+      const layer = useAppStore.getState().layers[0];
+      assert.equal(layer.opacity, 0.3);
+      assert.equal(layer.source.url, url);
+      assert.equal(layer.metadata.description, oldPath);
+    } finally {
+      store.setNativeDocumentCopyRoot(null);
+    }
+  });
+
   it("rebases an encoded path query name without rewriting tile templates or other parameters", () => {
     for (const base of [
       "geolibre-mbtiles://tile/{z}/{x}/{y}",

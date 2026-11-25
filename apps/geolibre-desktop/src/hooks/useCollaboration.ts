@@ -514,6 +514,10 @@ export function useCollaboration(
         },
         onMessage: (msg) => {
           if (connRef.current !== conn) return;
+          if (msg.type !== "welcome" && msg.type !== "snapshot") {
+            handleMessage(msg);
+            return;
+          }
           try {
             const incoming =
               msg.type === "welcome"
@@ -527,9 +531,11 @@ export function useCollaboration(
                 useAppStore.getState().nativeDocumentCopyError,
               );
             }
+            handleMessage(msg);
           } catch (error) {
-            // Stop outbound synchronization before reporting a refused snapshot:
-            // the unchanged local workspace must not replace the peer's project.
+            // Failed welcome/snapshot application must stop outbound sync.
+            // Preserve the actual error and settle a pending join before the
+            // unchanged local workspace can replace the peer's project.
             const pending = pendingConnectRef.current;
             pendingConnectRef.current = null;
             disconnect();
@@ -541,11 +547,7 @@ export function useCollaboration(
               .setCollaboration({ isActive: false, connecting: false, error: message });
             pending?.reject(failure);
             notify.error(message, { error: failure });
-            return;
           }
-          // Outside the refusal path: other message errors keep their
-          // existing behavior instead of tearing the session down.
-          handleMessage(msg);
         },
         onClose: (reconnecting) => {
           if (connRef.current && connRef.current !== conn) return;

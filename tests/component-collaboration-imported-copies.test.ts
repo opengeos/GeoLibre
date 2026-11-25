@@ -124,6 +124,83 @@ it("rejects an unavailable initial snapshot without hanging the join or publishi
   }
 });
 
+it("settles an unexpected snapshot application failure with its original error", async () => {
+  const original = useAppStore.getState().loadProject;
+  const applyFailure = new Error("Unexpected project application failure");
+  useAppStore.setState({
+    loadProject: () => {
+      throw applyFailure;
+    },
+  });
+  const before = useAppStore.getState();
+  const hook = renderHook(() => useCollaboration({ current: null }, 0));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const joined = hook.result.current.join("ABC", "Guest", "#ff0000");
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("Join did not settle")), 1000);
+    });
+    const rejected = assert.rejects(
+      Promise.race([joined, deadline]),
+      (error: Error) => error === applyFailure,
+    );
+    socket.open();
+    assert.doesNotThrow(() => socket.message(welcome(createEmptyProject("Remote"))));
+    await rejected;
+    assert.equal(useAppStore.getState().layers, before.layers);
+    assert.equal(useAppStore.getState().collaboration.error, applyFailure.message);
+    assert.equal(socket.closed, true);
+    assert.equal(useNotificationStore.getState().notifications[0].message, applyFailure.message);
+    assert.equal(
+      socket.sent.some((frame) => JSON.parse(frame).type === "snapshot"),
+      false,
+    );
+  } finally {
+    clearTimeout(timer);
+    hook.unmount();
+    useAppStore.setState({ loadProject: original });
+  }
+});
+
+it("preserves unrelated chat error behavior without disconnecting the session", async () => {
+  const original = useAppStore.getState().addCollaborationChat;
+  const chatFailure = new Error("Unexpected chat application failure");
+  const hook = renderHook(() => useCollaboration({ current: null }, 0));
+  try {
+    const joined = hook.result.current.join("ABC", "Guest", "#ff0000");
+    socket.open();
+    socket.message(welcome(createEmptyProject("Session")));
+    await joined;
+    useAppStore.setState({
+      addCollaborationChat: () => {
+        throw chatFailure;
+      },
+    });
+    assert.throws(
+      () =>
+        socket.message({
+          type: "chat",
+          message: {
+            id: "chat-1",
+            clientId: "host",
+            displayName: "Host",
+            color: "#ff0000",
+            text: "Hello",
+            ts: 1,
+          },
+        }),
+      (error: Error) => error === chatFailure,
+    );
+    assert.equal(socket.closed, false);
+    assert.equal(useAppStore.getState().collaboration.isActive, true);
+    assert.equal(useAppStore.getState().collaboration.error, null);
+    assert.equal(useNotificationStore.getState().notifications.length, 0);
+  } finally {
+    useAppStore.setState({ addCollaborationChat: original });
+    hook.unmount();
+  }
+});
+
 it("disconnects before a later unavailable snapshot can replace the open project", async () => {
   const hook = renderHook(() => useCollaboration({ current: null }, 0));
   try {
