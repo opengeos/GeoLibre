@@ -55,8 +55,8 @@ env:
 jobs:
   build:
     name: Build iOS app
-    # Apple Silicon macOS image; ships a recent Xcode + CocoaPods. Pin the major
-    # image so a runner update can't silently change the Xcode/SDK under us.
+    # Apple Silicon image for the Xcode 27 family, with CocoaPods. Minor Xcode
+    # and SDK versions may advance; select and verify the newest one below.
     #
     # macos-14 does NOT work: `tauri ios init` generates an Xcode project in
     # object format 77, which only Xcode 16+ can open. That image's Xcode is
@@ -139,8 +139,8 @@ jobs:
           # `Undefined symbols: _init_plugin_geolocation`. swift-rs promotes
           # them back to global with rustup's llvm-objcopy, and without this
           # component it only prints a cargo warning and the link fails later.
-          # See `globalize_cdecl_symbols` in swift-rs's src-rs/build.rs; the
-          # failure is in run 45536853769. Drop this once SwiftPM stops hiding
+          # See `globalize_cdecl_symbols` in swift-rs's src-rs/build.rs.
+          # Drop this once SwiftPM stops hiding
           # @_cdecl exports or swift-rs no longer needs objcopy.
           components: llvm-tools
 

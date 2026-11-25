@@ -30,7 +30,7 @@ binary:
 - **Locally** on a Mac with Xcode 27+ (iOS 27 SDK) and rustup's `llvm-tools`
   component: `tauri ios init` → unsigned archive → `xcodebuild -exportArchive`.
   From April 2027 App Store Connect rejects uploads built with an older Xcode,
-  so an Xcode 26 archive is no longer submittable.
+  so an Xcode 26 archive will not meet that future SDK requirement.
 - **In CI**, on the `xcode-27` runner (Xcode 27): it imports the certificate and
   profile from the `APPLE_IOS_*` secrets, archives, exports under manual
   signing, verifies the signature, and publishes the `geolibre-ios-ipa`
@@ -386,9 +386,11 @@ Developer"` and automatic signing therefore hunts for a development profile no
 > llvm-objcopy not found`) and then fails to link with `Undefined symbols:
 > _init_plugin_geolocation`. The logic is `globalize_cdecl_symbols` in swift-rs's
 > `src-rs/build.rs` (1.0.8+). If a build already failed this way, run
-> `cargo clean` (or `cargo clean -p <crate>` for the failing plugin crate) after
-> installing the component: Cargo can reuse the cached build-script output and
-> skip the step, failing the link again.
+> `cargo clean --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml` from
+> the repository root after installing the component. To clean only the failing
+> plugin crate, add `-p <crate>` to that command.
+> Without that clean, Cargo can reuse the cached build-script output, skip the
+> globalization step, and fail the link again.
 
 The `workflow_dispatch` `export_method` input picks the export path
 (`app-store-connect` for TestFlight/App Store, `release-testing` for ad-hoc
