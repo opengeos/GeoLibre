@@ -5,13 +5,13 @@ import { PRINT_LAYOUT_INSET_BASEMAPS, type PrintLayoutInsetBasemap } from "@geol
 import type { LayoutEditorProps } from "./state";
 
 interface InsetMapEditorProps extends LayoutEditorProps {
-  /** Whether the capture is georeferenced, so the extent box can be drawn. */
-  georeferenced: boolean;
+  /** Whether the capture has affine or sampled map coordinates. */
+  hasLocation: boolean;
   status: { loading: boolean; failed: boolean; retry: () => void };
 }
 
 /** The overview / inset locator map's basemap, zoom and extent colour (GH #3530). */
-export function InsetMapEditor({ layout, dispatch, georeferenced, status }: InsetMapEditorProps) {
+export function InsetMapEditor({ layout, dispatch, hasLocation, status }: InsetMapEditorProps) {
   const { t } = useTranslation();
   const [zoomDraft, setZoomDraft] = useState(String(-layout.insetZoomOffset));
   useEffect(() => setZoomDraft(String(-layout.insetZoomOffset)), [layout.insetZoomOffset]);
@@ -77,8 +77,8 @@ export function InsetMapEditor({ layout, dispatch, georeferenced, status }: Inse
           />
         </div>
       </div>
-      {!georeferenced && (
-        <p className="text-xs text-muted-foreground">{t("printLayout.inset.needsGeoref")}</p>
+      {!hasLocation && (
+        <p className="text-xs text-muted-foreground">{t("printLayout.inset.needsLocation")}</p>
       )}
       {status.loading && (
         <p role="status" className="text-xs text-muted-foreground">

@@ -10,7 +10,7 @@ interface ExportActionsProps {
   ui: Pick<PrintLayoutUiState, "atlasProgress" | "atlasBusy" | "exporting" | "copied">;
   hasCapture: boolean;
   insetReady: boolean;
-  insetNeedsGeoref: boolean;
+  insetNeedsLocation: boolean;
   /** Whether the capture carries a georeference, so the PDF is a GeoPDF. */
   georeferenced: boolean;
   /** The atlas setting, AND-ed with the renderer being able to drive it. */
@@ -24,7 +24,7 @@ export function ExportActions({
   ui,
   hasCapture,
   insetReady,
-  insetNeedsGeoref,
+  insetNeedsLocation,
   georeferenced,
   atlasEnabled,
   atlas,
@@ -42,9 +42,9 @@ export function ExportActions({
   } = actions;
   return (
     <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
-      {hasCapture && !insetReady && insetNeedsGeoref && (
+      {hasCapture && !insetReady && insetNeedsLocation && (
         <span role="status" className="me-auto text-sm text-muted-foreground">
-          {t("printLayout.inset.needsGeoref")}
+          {t("printLayout.inset.needsLocation")}
         </span>
       )}
       {/* Atlas export progress and cancel button, kept visible next to the export buttons. */}

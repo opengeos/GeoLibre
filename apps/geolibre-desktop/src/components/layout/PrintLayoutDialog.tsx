@@ -414,7 +414,7 @@ export function PrintLayoutDialog({
             {layout.showInset && (
               <InsetMapEditor
                 {...editorProps}
-                georeferenced={Boolean(captured?.georef)}
+                hasLocation={Boolean(captured?.georef || captured?.lngLatGrid)}
                 status={insetState}
               />
             )}
@@ -480,7 +480,7 @@ export function PrintLayoutDialog({
 
         <ExportActions
           insetReady={insetState.ready}
-          insetNeedsGeoref={insetState.unavailable}
+          insetNeedsLocation={insetState.unavailable}
           ui={state}
           hasCapture={Boolean(captured)}
           georeferenced={canGeoPdf}

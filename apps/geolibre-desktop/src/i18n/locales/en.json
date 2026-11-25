@@ -2535,6 +2535,7 @@
       "zoomOffset": "Zoom out (levels)",
       "extentColor": "Extent color",
       "needsGeoref": "The overview map needs a flat 2D capture. Recapture in 2D or turn off the overview map to export.",
+      "needsLocation": "This capture has no map location. Recapture the map or turn off the overview map to export.",
       "loading": "Loading overview map…",
       "failed": "The overview map could not load. Check your connection and retry.",
       "retry": "Retry overview map",
