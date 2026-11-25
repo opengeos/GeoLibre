@@ -95,6 +95,14 @@ that replaces `_camera.transform` in 6.19, and verify blend composites against
 the renderer as well as the style spec. The 26.9 spec adds a fill-extrusion
 composite that the current renderer integration does not elect.
 
+- **Print-capture pole visibility** uses public projection/unprojection in
+  production. `tests/print-visible-poles.test.ts` also exercises the installed
+  package's private `createGlobeTransform` with a pitched southern camera that
+  sees only the North Pole. Keep this test aligned with the installed engine
+  on upgrades. A pole projected inside the viewport can still be occluded;
+  capture metadata requires an unprojection round trip and records image pixels
+  so layout crops can exclude the pole correctly.
+
 - **`GLOBE_CONTROL_TOGGLE_SELECTOR`** (`packages/map/src/globe-control-toggle.ts`)
   mirrors the class names MapLibre's own `GlobeControl` puts on its toggle button
   — `maplibregl-ctrl-globe` and `maplibregl-ctrl-globe-enabled`, swapped on every

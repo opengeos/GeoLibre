@@ -618,8 +618,8 @@ export function mercatorViewPx(view: MercatorView, lng: number, lat: number, wra
  * @param view - The inset view.
  * @param boundary - The ring, in order, without its closing vertex.
  * @param dir - 1 when the ring travels east, -1 when it travels west.
- * @param centreLat - Latitude of the frame centre, whose hemisphere holds the
- *   enclosed pole; the boundary's mean latitude stands in when absent.
+ * @param centreLat - Legacy hemisphere hint when explicit visibility is absent.
+ * @param visiblePole - Pole verified on the actual capture surface.
  * @returns The footprint in view pixels.
  */
 function polarFootprint(
@@ -627,10 +627,13 @@ function polarFootprint(
   boundary: readonly [number, number][],
   dir: 1 | -1,
   centreLat?: number,
+  visiblePole?: -90 | 90,
 ): Point[] {
-  const hemisphere = Number.isFinite(centreLat)
-    ? centreLat!
-    : boundary.reduce((sum, point) => sum + point[1], 0);
+  const hemisphere =
+    visiblePole ??
+    (Number.isFinite(centreLat)
+      ? centreLat!
+      : boundary.reduce<number>((sum, point) => sum + point[1], 0));
   const pole = hemisphere >= 0 ? MAX_MERCATOR_LAT : -MAX_MERCATOR_LAT;
   const seam = view.center[0] - 180;
   const offset = (lng: number) => (((lng - seam) % 360) + 360) % 360;
@@ -671,14 +674,15 @@ function polarFootprint(
  *
  * @param view - The inset view.
  * @param boundary - The main frame's boundary, in order.
- * @param centreLat - Latitude of the main frame's centre, which picks the pole
- *   a boundary circling one encloses.
+ * @param centreLat - Legacy hemisphere hint when explicit visibility is absent.
+ * @param visiblePole - Verified enclosed pole, or null when no single pole is enclosed.
  * @returns The footprint in view pixels.
  */
 export function insetFootprint(
   view: MercatorView,
   boundary: readonly [number, number][],
   centreLat?: number,
+  visiblePole?: -90 | 90 | null,
 ): Point[] {
   const unwrapped: [number, number][] = [];
   for (const [lng, lat] of boundary) {
@@ -693,7 +697,8 @@ export function insetFootprint(
   // whole turns between its ends mean it circles a pole: a globe seen from
   // above it (GH #3551). An open curve is not expected here.
   const turns = Math.round((unwrapped[unwrapped.length - 1][0] - unwrapped[0][0]) / 360);
-  if (turns !== 0) return polarFootprint(view, boundary, turns > 0 ? 1 : -1, centreLat);
+  if (turns !== 0 && visiblePole !== null)
+    return polarFootprint(view, boundary, turns > 0 ? 1 : -1, centreLat, visiblePole);
   const west = Math.min(...unwrapped.map((point) => point[0]));
   const east = Math.max(...unwrapped.map((point) => point[0]));
   if (east - west >= 360 - 1e-7) {

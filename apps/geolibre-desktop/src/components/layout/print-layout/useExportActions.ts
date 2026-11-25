@@ -86,7 +86,11 @@ export function useExportActions({
   const requireInset = () => {
     if (insetReady) return true;
     setError(
-      t(captured?.georef ? "printLayout.inset.waitForMap" : "printLayout.inset.needsGeoref"),
+      t(
+        captured?.georef || captured?.lngLatGrid
+          ? "printLayout.inset.waitForMap"
+          : "printLayout.inset.needsLocation",
+      ),
     );
     return false;
   };

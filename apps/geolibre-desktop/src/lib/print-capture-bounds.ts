@@ -1,4 +1,4 @@
-import { captureLocator } from "./print-capture-grid";
+import { captureLocator, capturePolesInRect } from "./print-capture-grid";
 import { mapImagePlacement, resolvePageSize, type LayoutOptions } from "./print-layout";
 import type { CapturedMap } from "./print-layout-export";
 
@@ -59,9 +59,9 @@ export function capturedBounds(
   // The walk ends where it began, so whole turns mean it circles a pole: a
   // globe seen from above it (GH #3551). The pole is then inside the frame.
   const turns = Math.round((lngs[lngs.length - 1] - lngs[0]) / 360);
-  // The enclosed pole is the one in the frame centre's hemisphere: a view
-  // centred north of the equator cannot circle the south pole.
-  if (turns !== 0) lats.push(locate((x0 + x1) / 2, (y0 + y1) / 2)[1] >= 0 ? 90 : -90);
+  const poles = !georef ? capturePolesInRect(lngLatGrid, x0, y0, x1, y1) : undefined;
+  if (poles) lats.push(...poles);
+  else if (turns !== 0) lats.push(locate((x0 + x1) / 2, (y0 + y1) / 2)[1] >= 0 ? 90 : -90);
   // A grid's interior can reach further north or south than its frame edge.
   if (!georef && lngLatGrid) {
     const { cols, rows } = lngLatGrid;

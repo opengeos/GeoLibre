@@ -376,7 +376,10 @@ export function captureMapImage(
   // Another body's coordinates are not Earth's, so it gets neither.
   const lngLatGrid =
     !georef && getActiveEllipsoid().id === "earth"
-      ? sampleCaptureLngLatGrid(image.width, image.height, locate)
+      ? sampleCaptureLngLatGrid(image.width, image.height, locate, undefined, (location) => {
+          const pixel = map.project(location);
+          return { x: pixel.x * dpr - originX, y: pixel.y * dpr - originY };
+        })
       : null;
 
   return {

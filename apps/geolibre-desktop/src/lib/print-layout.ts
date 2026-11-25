@@ -19,7 +19,7 @@ import {
 } from "@geolibre/core";
 import { prefersLightForeground } from "./theme-schemes";
 import { type CaptureGeoref, type MapImagePlacement } from "./geopdf";
-import { captureLocator, type CaptureLngLatGrid } from "./print-capture-grid";
+import { captureLocator, capturePolesInRect, type CaptureLngLatGrid } from "./print-capture-grid";
 import {
   clampElementScale,
   computeMapGrid,
@@ -1751,9 +1751,25 @@ function drawInsetMap(
           boundary.push(ll);
         }
       }
-      // The frame centre's latitude picks the pole a polar footprint encloses.
+      // Actual projected visibility determines the pole, including on a pitched
+      // globe whose frame centre can lie in the opposite hemisphere.
       const centre = geo.toLngLat(frame.x + frame.w / 2, frame.y + frame.h / 2);
-      const ring = insetFootprint(view, boundary, centre?.[1]).map((p) => ({
+      const placement = mapImagePlacement(opts, W, H)!;
+      const poles = !opts.mapGeoref
+        ? capturePolesInRect(
+            opts.mapLngLatGrid,
+            (frame.x - placement.dx) / placement.scale,
+            (frame.y - placement.dy) / placement.scale,
+            (frame.x + frame.w - placement.dx) / placement.scale,
+            (frame.y + frame.h - placement.dy) / placement.scale,
+          )
+        : undefined;
+      const ring = insetFootprint(
+        view,
+        boundary,
+        centre?.[1],
+        poles === undefined ? undefined : poles.length === 1 ? poles[0] : null,
+      ).map((p) => ({
         x: ox + p.x * scale,
         y: oy + p.y * scale,
       }));

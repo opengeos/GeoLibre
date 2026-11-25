@@ -22,6 +22,61 @@ export interface CaptureLngLatGrid {
   lngs: number[];
   /** Latitudes, row-major. */
   lats: number[];
+  /** Visible poles located in capture image pixels. An empty array explicitly
+   * means neither pole is enclosed; absent only on older/synthetic grids. */
+  poles?: CapturePolePixel[];
+}
+
+export interface CapturePolePixel {
+  latitude: -90 | 90;
+  x: number;
+  y: number;
+}
+
+/** Locate poles on the actual capture surface. Projection alone can place an
+ * occluded pole inside the viewport, so its unprojection must round-trip too. */
+export function captureVisiblePoles(
+  width: number,
+  height: number,
+  project: (location: [number, number]) => { x: number; y: number },
+  locate: (x: number, y: number) => { lng: number; lat: number } | null,
+): CapturePolePixel[] {
+  const result: CapturePolePixel[] = [];
+  for (const latitude of [-90, 90] as const) {
+    try {
+      const pixel = project([0, latitude]);
+      if (
+        !Number.isFinite(pixel.x) ||
+        !Number.isFinite(pixel.y) ||
+        pixel.x < 0 ||
+        pixel.x > width ||
+        pixel.y < 0 ||
+        pixel.y > height
+      )
+        continue;
+      const actual = locate(pixel.x, pixel.y);
+      if (actual && Number.isFinite(actual.lat) && Math.abs(actual.lat - latitude) <= 1e-4) {
+        result.push({ latitude, x: pixel.x, y: pixel.y });
+      }
+    } catch {
+      /* Some renderers refuse locations outside their visible surface. */
+    }
+  }
+  return result;
+}
+
+/** Poles within the visible image crop; undefined retains compatibility with
+ * callers whose old grid did not record explicit projection visibility. */
+export function capturePolesInRect(
+  grid: CaptureLngLatGrid | null | undefined,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+): (-90 | 90)[] | undefined {
+  return grid?.poles
+    ?.filter((pole) => pole.x >= x0 && pole.x <= x1 && pole.y >= y0 && pole.y <= y1)
+    .map((pole) => pole.latitude);
 }
 
 /**
@@ -58,6 +113,7 @@ export function sampleCaptureLngLatGrid(
   height: number,
   locate: (px: number, py: number) => { lng: number; lat: number } | null,
   cells = GRID_CELLS,
+  project?: (location: [number, number]) => { x: number; y: number },
 ): CaptureLngLatGrid | null {
   if (!(width > 0) || !(height > 0) || !(cells >= 1)) return null;
   const cols = cells;
@@ -114,7 +170,15 @@ export function sampleCaptureLngLatGrid(
     lngs.push(ref === undefined ? lng : lng + 360 * Math.round((ref - lng) / 360));
     lats.push(lat);
   }
-  return { cols, rows, width, height, lngs, lats };
+  return {
+    cols,
+    rows,
+    width,
+    height,
+    lngs,
+    lats,
+    ...(project ? { poles: captureVisiblePoles(width, height, project, locate) } : {}),
+  };
 }
 
 /**
