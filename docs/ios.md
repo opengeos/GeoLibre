@@ -468,9 +468,9 @@ Most mirror Android:
 - Local-file sources (MBTiles, local rasters, project files) assume real
   filesystem paths; iOS hands apps sandboxed URLs via the document picker, so
   those flows need adapting before they work natively.
-- **Offline basemap** uses the shared native PMTiles package store rather than
+- **Offline basemap** includes shared native PMTiles and MBTiles extraction and package storage rather than
   the PWA's service-worker cache. See [Native offline basemap packages](native-offline-packages.md).
-  Real iOS device verification, managed MBTiles extraction, and conflict-aware sync remain future
+  Real iOS device verification and conflict-aware sync remain future
   work.
 - Earth Engine is hidden in the App Store build because its OAuth uses a
   desktop loopback flow; a mobile deep-link redirect (an iOS URL scheme /

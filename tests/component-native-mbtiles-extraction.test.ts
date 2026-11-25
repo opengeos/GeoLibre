@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, useAppStore } from "./helpers/dom";
+import { render, screen, fireEvent, waitFor, act, useAppStore } from "./helpers/dom";
 import { createElement } from "react";
 import { afterEach, it } from "node:test";
 import assert from "node:assert/strict";
@@ -84,6 +84,95 @@ for (const maximum of [18, 24]) {
     assert.equal(screen.queryByText("Using the package saved on this device.") === null, true);
   });
 }
+
+for (const actualMinimumHigher of [false, true]) {
+  it(`${actualMinimumHigher ? "identifies the committed package when copied tiles start above the project limit" : "rejects an unsupported requested zoom before starting extraction"}`, async () => {
+    const preferences = useAppStore.getState().preferences;
+    useAppStore.setState({
+      preferences: { ...preferences, map: { ...preferences.map, maxZoom: 18 } },
+    });
+    let saved = false;
+    let extractions = 0;
+    mockIPC((command) => {
+      if (command === "list_native_offline_packages")
+        return { packages: saved ? [entry] : [], problems: [] };
+      if (command === "plugin:dialog|open") return "/data/source.mbtiles";
+      if (command === "prepare_native_offline_extraction") return "extract-zoom";
+      if (command === "inspect_native_mbtiles_source") return rasterMetadata;
+      if (command === "extract_native_mbtiles_package") {
+        extractions++;
+        saved = true;
+        return {
+          package: entry,
+          tileCount: 42,
+          payloadBytes: 100,
+          tileFormat: "png",
+          sourceLayers: [],
+        };
+      }
+      if (command === "cancel_native_offline_extraction" || command.startsWith("plugin:event|"))
+        return 1;
+      throw new Error(`Unexpected command: ${command}`);
+    });
+    const before = useAppStore.getState().basemapStyleUrl;
+    mountPanel();
+    await chooseSource();
+    if (actualMinimumHigher)
+      fireEvent.change(screen.getByLabelText("Min zoom"), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Extract" }));
+    await screen.findByText(
+      actualMinimumHigher
+        ? /Saved "Berkeley subset" on this device, but it needs zoom 19/
+        : /This package needs zoom 19/,
+    );
+    assert.equal(extractions, actualMinimumHigher ? 1 : 0);
+    assert.equal(saved, actualMinimumHigher);
+    assert.equal(useAppStore.getState().basemapStyleUrl, before);
+    assert.equal(useAppStore.getState().layers.length, 0);
+    if (actualMinimumHigher)
+      assert.ok(await screen.findByRole("button", { name: "Use as basemap" }));
+  });
+}
+
+it("an unsupported extract supersedes an older pending saved-package apply", async () => {
+  const preferences = useAppStore.getState().preferences;
+  useAppStore.setState({
+    preferences: { ...preferences, map: { ...preferences.map, maxZoom: 18 } },
+  });
+  const saved = { ...entry, id: "pkg-88888888888888888888888888888888", minZoom: 0 };
+  let finishVerify!: (value: NativeOfflinePackage) => void;
+  let verifying = false;
+  const pending = new Promise<NativeOfflinePackage>((resolve) => {
+    finishVerify = resolve;
+  });
+  mockIPC((command) => {
+    if (command === "list_native_offline_packages") return { packages: [saved], problems: [] };
+    if (command === "plugin:dialog|open") return "/data/source.mbtiles";
+    if (command === "prepare_native_offline_extraction") return "extract-rejected";
+    if (command === "inspect_native_mbtiles_source") return rasterMetadata;
+    if (command === "verify_native_offline_package") {
+      verifying = true;
+      return pending;
+    }
+    if (command === "cancel_native_offline_extraction" || command.startsWith("plugin:event|"))
+      return 1;
+    throw new Error(`Unexpected command: ${command}`);
+  });
+  mountPanel();
+  await chooseSource();
+  const before = useAppStore.getState().basemapStyleUrl;
+  fireEvent.click(screen.getByRole("button", { name: "Use as basemap" }));
+  await waitFor(() => assert.equal(verifying, true));
+  fireEvent.click(screen.getByRole("button", { name: "Extract" }));
+  await screen.findByText(/This package needs zoom 19/);
+  await act(async () => {
+    finishVerify(saved);
+    await pending;
+  });
+  assert.equal(useAppStore.getState().basemapStyleUrl, before);
+  assert.equal(screen.queryByText("Using the package saved on this device.") === null, true);
+  assert.ok(screen.getByText(/This package needs zoom 19/));
+});
 
 it("extracts a raster area by native path and reapplies the persisted package as a basemap", async () => {
   let saved = false;

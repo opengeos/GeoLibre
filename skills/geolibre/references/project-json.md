@@ -118,8 +118,9 @@ For local MBTiles area extraction in the native app, use a non-wrapping extent
 and zooms 0 through 30. The native writer preserves encoded tile bytes,
 normalizes rows to TMS, and limits each output to 200,000 tiles, 32 MiB per tile,
 1 MiB of metadata in at most 1,024 rows, and a final SQLite file of 512 MiB.
-These are accepted-data limits, not a whole-process memory bound. Cancellation
-interrupts SQLite work and staged publication; an already committed package may
+These are accepted-data limits, not a whole-process memory bound. Duplicate
+metadata keys, including case-only duplicates, are rejected before extraction.
+Cancellation interrupts SQLite work and staged publication; an already committed package may
 remain in the catalog after a late cancel. Prepared/running jobs are limited to
 eight, with unclaimed preparations expiring after 60 seconds. Native iOS device
 verification remains outstanding.

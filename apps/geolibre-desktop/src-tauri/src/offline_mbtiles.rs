@@ -198,7 +198,9 @@ pub(crate) fn source_metadata(source: &Connection) -> Result<BTreeMap<String, St
         if count > 1024 || total > MAX_METADATA_BYTES {
             return Err("MBTiles metadata exceeds the extraction limit".into());
         }
-        result.insert(key.to_ascii_lowercase(), value);
+        if result.insert(key.to_ascii_lowercase(), value).is_some() {
+            return Err("MBTiles metadata has duplicate keys".into());
+        }
     }
     Ok(result)
 }
@@ -316,7 +318,7 @@ pub(crate) fn extract_mbtiles_area_with_progress(
                 let bytes = row
                     .get::<_, Option<Vec<u8>>>(2)
                     .map_err(|error| error.to_string())?
-                    .ok_or("MBTiles tile is invalid or exceeds 32 MiB")?;
+                    .ok_or("MBTiles tile is missing, is not a blob, or exceeds 32 MiB")?;
                 result.payload_bytes = result
                     .payload_bytes
                     .checked_add(bytes.len() as u64)
@@ -786,5 +788,23 @@ mod tests {
         );
         assert_eq!(zoom, 3.);
         assert_eq!((left, right, top, bottom), (1, 1, 3, 3));
+    }
+
+    #[test]
+    fn rejects_duplicate_metadata_keys_including_case_folded_collisions() {
+        for keys in [["json", "json"], ["JSON", "json"]] {
+            let source = Connection::open_in_memory().unwrap();
+            source
+                .execute_batch("CREATE TABLE metadata(name TEXT,value TEXT)")
+                .unwrap();
+            for key in keys {
+                source
+                    .execute("INSERT INTO metadata VALUES (?1,'{}')", [key])
+                    .unwrap();
+            }
+            assert!(source_metadata(&source)
+                .unwrap_err()
+                .contains("duplicate keys"));
+        }
     }
 }

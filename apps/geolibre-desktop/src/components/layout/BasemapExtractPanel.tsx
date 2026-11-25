@@ -762,6 +762,11 @@ export function BasemapExtractPanel({
     if (!bbox || zoomInvalid) return;
     setApplyingId(null);
     clearStatus();
+    if (minZoomValue > Math.min(24, useAppStore.getState().preferences.map.maxZoom)) {
+      applicationRequests.invalidate();
+      setError(t("basemapExtract.errorPackageZoom", { zoom: minZoomValue }));
+      return;
+    }
     const completed = await nativeMbtiles.extract(
       { bbox, minZoom: minZoomValue, maxZoom: maxZoomValue },
       nativeCanStyle && flavor ? flavor : null,
@@ -775,7 +780,9 @@ export function BasemapExtractPanel({
     try {
       const { package: entry, sourceLayers, tileFormat } = completed.result;
       if (entry.minZoom > Math.min(24, useAppStore.getState().preferences.map.maxZoom))
-        throw new Error(t("basemapExtract.errorPackageZoom", { zoom: entry.minZoom }));
+        throw new Error(
+          t("basemapExtract.errorSavedPackageZoom", { name: entry.name, zoom: entry.minZoom }),
+        );
       if (entry.tileType === "raster" || entry.flavor != null) {
         setBasemapStyleUrl(
           nativeOfflineBasemapStyleUrl(entry, (entry.flavor as ProtomapsFlavor | null) ?? "light"),

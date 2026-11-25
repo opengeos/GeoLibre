@@ -137,11 +137,16 @@ pub(crate) fn validate_details(details: &PackageDetails) -> Result<(), String> {
         || details
             .view_center
             .is_some_and(|[longitude, latitude, zoom]| {
+                let longitude_inside = if west <= east {
+                    longitude >= west && longitude <= east
+                } else {
+                    longitude >= west || longitude <= east
+                };
                 ![longitude, latitude, zoom]
                     .iter()
                     .all(|value| value.is_finite())
-                    || longitude < west
-                    || longitude > east
+                    || !(-180.0..=180.0).contains(&longitude)
+                    || !longitude_inside
                     || latitude < south
                     || latitude > north
                     || zoom < details.min_zoom as f64
@@ -671,6 +676,30 @@ mod tests {
         );
         cross.bbox[0] = 181.0;
         assert!(root.store().save(cross, &archive()).is_err());
+    }
+
+    #[test]
+    fn view_centers_round_trip_on_both_sides_of_wrapped_bounds() {
+        let root = TestRoot::new();
+        let mut cross = details();
+        cross.bbox = [170.0, -10.0, -170.0, 10.0];
+        for longitude in [175.0, -175.0] {
+            cross.view_center = Some([longitude, 0.0, 5.0]);
+            let saved = root.store().save(cross.clone(), &archive()).unwrap();
+            assert_eq!(
+                root.store()
+                    .verify(saved.id())
+                    .unwrap()
+                    .manifest
+                    .details
+                    .view_center,
+                cross.view_center
+            );
+        }
+        for longitude in [0.0, 185.0, -185.0, f64::NAN] {
+            cross.view_center = Some([longitude, 0.0, 5.0]);
+            assert!(validate_details(&cross).is_err());
+        }
     }
 
     #[test]

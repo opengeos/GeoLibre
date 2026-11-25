@@ -90,6 +90,7 @@ and output rows are normalized to TMS. Each extraction accepts at most 200,000
 tiles, 32 MiB per encoded tile, and 1 MiB of metadata across at most 1,024 rows.
 The final SQLite archive must also fit the 512 MiB package limit. These bounds
 and SQLite query/value limits do not constitute a whole-process memory cap.
+Archives with duplicate metadata keys, including case-only duplicates, are rejected.
 
 Cancel interrupts native SQLite execution and checksum work before publication.
 An already published package can still appear in the saved list after a late

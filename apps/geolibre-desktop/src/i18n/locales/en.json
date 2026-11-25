@@ -2749,6 +2749,7 @@
     "zoomHint": "Zoom levels must be whole numbers with min ≤ max (0–30). Levels above the archive's maximum are ignored.",
     "errorNoSourceLayers": "This vector archive has no layer metadata, so it can't be rendered. Try a different archive.",
     "errorPackageZoom": "This package needs zoom {{zoom}}. Increase the project's maximum zoom in Map Settings, or choose an archive with tiles at lower zoom levels. The map supports zoom levels up to 24.",
+    "errorSavedPackageZoom": "Saved \"{{name}}\" on this device, but it needs zoom {{zoom}} to display. Increase the project's maximum zoom in Map Settings, then apply it from Saved basemaps. Do not extract it again. The map supports zoom levels up to 24.",
     "savedTitle": "Saved basemaps",
     "openFile": "Open file…",
     "savedEmpty": "No saved basemaps yet. Extract one above, or open a .pmtiles file.",
