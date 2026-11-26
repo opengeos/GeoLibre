@@ -66,7 +66,9 @@ def test_requires_an_authenticated_project_scope(tmp_path, monkeypatch, clock, f
             client.post("/api/collab/identity-token", headers=auth(share_only)).status_code == 403
         )
         reader = pat(client, "ada", scopes=["read:projects"])
-        assert client.post("/api/collab/identity-token", headers=auth(reader)).status_code == 200
+        assert client.post("/api/collab/identity-token", headers=auth(reader)).status_code == 403
+        writer = pat(client, "ada", scopes=["write:projects"])
+        assert client.post("/api/collab/identity-token", headers=auth(writer)).status_code == 200
 
 
 def test_refuses_an_account_without_a_username(tmp_path, monkeypatch, clock, fake_idp):

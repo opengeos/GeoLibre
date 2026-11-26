@@ -247,7 +247,7 @@ that phrase and direct the user to account settings.
 Mints a short-lived credential that a GeoLibre live-collaboration relay
 accepts as the joiner's `identityToken` (see
 [Signed-in identity](collaboration.md#signed-in-identity-optional)). Requires a
-credential with `read:projects` or `write:projects`; answers `404` with
+credential with `write:projects`; answers `404` with
 `{"error": "collaboration identity is not configured"}` unless the server has
 `GEOLIBRE_COLLAB_IDENTITY_SECRET`, which must equal the relay's
 `COLLAB_IDENTITY_SECRET`. Responses are `Cache-Control: no-store`.

@@ -96,6 +96,8 @@ export function useCollaboration(
   // The join can wait on the identity lookup; frames sent before it would be
   // refused by the relay, so project pushes hold until it is out.
   const joinSentRef = useRef(false);
+  // A push skipped while the join was still out; sent once it is.
+  const snapshotHeldRef = useRef(false);
   const pendingConnectRef = useRef<{
     resolve: () => void;
     reject: (error: Error) => void;
@@ -155,7 +157,11 @@ export function useCollaboration(
   }, []);
 
   const sendSnapshot = async (): Promise<void> => {
-    if (!joinSentRef.current || !canEdit() || syncPausedRef.current) return;
+    if (!joinSentRef.current) {
+      snapshotHeldRef.current = true;
+      return;
+    }
+    if (!canEdit() || syncPausedRef.current) return;
     const request = ++snapshotRequestRef.current;
     let project: GeoLibreProject;
     try {
@@ -433,12 +439,17 @@ export function useCollaboration(
         ...(identity ? { identityToken: identity } : {}),
       });
       joinSentRef.current = true;
+      if (snapshotHeldRef.current) {
+        snapshotHeldRef.current = false;
+        void sendSnapshot();
+      }
     };
     if (identityToken) {
       sendJoin(identityToken);
     } else {
-      // Signed in to the server API: join as that account. A fresh token per
-      // (re)connect, since each lives only minutes. Any failure joins
+      // Signed in to the server API: join as that account. The token is reused
+      // across reconnects while it has a minute left. Worst case the join (and
+      // so `connect()`) waits the lookup's 3 s deadline before going out
       // anonymously, as before.
       void import("../lib/collab-identity")
         .then(({ fetchCollabIdentityToken }) => fetchCollabIdentityToken())
@@ -449,6 +460,7 @@ export function useCollaboration(
     teardownRef.current = () => {
       joinGenerationRef.current += 1;
       joinSentRef.current = false;
+      snapshotHeldRef.current = false;
       if (debounce) clearTimeout(debounce);
       unsubscribe();
     };

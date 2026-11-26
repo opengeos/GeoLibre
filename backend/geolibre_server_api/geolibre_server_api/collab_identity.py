@@ -99,7 +99,9 @@ def build_collab_identity_router(secret: str | None, ttl_seconds: int) -> APIRou
     @router.post("/api/collab/identity-token")
     def mint_collab_identity_token(
         response: Response,
-        principal: AuthPrincipal = Depends(require_any_scope("read:projects", "write:projects")),
+        # A relay identity lets its holder join and edit sessions as the
+        # account, so it needs the account's write grant, not read alone.
+        principal: AuthPrincipal = Depends(require_any_scope("write:projects")),
         clock: Callable[[], int] = Depends(get_clock),
     ):
         """Return a short-lived relay identity token for the signed-in account."""
