@@ -143,9 +143,9 @@ notes:
   first or the hillshade looks like crumpled paper.
 - The right-click **Quick analysis** menu runs a **viewshed** or **line of
   sight** on the map's own global terrain tiles, so it needs no DEM at all.
-  It is reconnaissance: the quick viewshed ignores Earth curvature and
-  refraction (immaterial over a few kilometers), and the terrain tiles are a
-  generalized global model that knows nothing about buildings or trees.
+  It is reconnaissance: both model Earth curvature and refraction, but the
+  terrain tiles are a generalized global model that knows nothing about
+  buildings or trees.
 
 ### From clicks to a reproducible workflow
 
