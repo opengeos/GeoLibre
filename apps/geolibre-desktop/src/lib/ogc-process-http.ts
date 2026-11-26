@@ -161,6 +161,7 @@ export async function processHttp(
       // Match only errors owned by this native protocol command. Server details
       // and arbitrary connection errors must retain their original meaning.
       const message = error instanceof Error ? error.message : String(error);
+      // Mirrors http_body.rs::read_limited_body and ResponseLimitError's wording.
       if (/^Response exceeds the \d+-byte download limit$/.test(message))
         throw new OgcProcessError("responseTooLarge");
       const nativeCodes = {

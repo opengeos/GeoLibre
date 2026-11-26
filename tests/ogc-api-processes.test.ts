@@ -15,6 +15,7 @@ import {
   readOgcProcessResults,
 } from "../apps/geolibre-desktop/src/lib/ogc-api-processes";
 import { processHttp } from "../apps/geolibre-desktop/src/lib/ogc-process-http";
+import { jsonNumbersNeedSource } from "../apps/geolibre-desktop/src/lib/json-result-source";
 import { ogcProcessMonitorLinks } from "../apps/geolibre-desktop/src/lib/ogc-process-link-header";
 import { monitorOgcProcessJob } from "../apps/geolibre-desktop/src/lib/ogc-process-job";
 import { validOgcProcessGeoJson } from "../apps/geolibre-desktop/src/lib/ogc-process-geometry";
@@ -75,6 +76,22 @@ test("signed status URLs retain their exact query representation", async () => {
     return { jobID: "one", status: "running" };
   });
   assert.equal((await readOgcProcessJob(target, new AbortController().signal)).status, "running");
+});
+
+test("numeric source detection distinguishes canonical integers from changed tokens", () => {
+  for (const [text, expected] of [
+    ["[0,1,42,999999999999999]", false],
+    ["[1000000000000000,-1,0.5]", false],
+    ['["9007199254740993",{"value":123}]', false],
+    ["[999999999999999,9007199254740993]", true],
+    ["[999999999999999,-0]", true],
+    ["[999999999999999,1e3]", true],
+    ["[999999999999999,0.10000000000000000001]", true],
+  ] as const) {
+    JSON.parse(text);
+    const bytes = new TextEncoder().encode(text);
+    assert.equal(jsonNumbersNeedSource(bytes, { start: 0, end: bytes.length }), expected, text);
+  }
 });
 
 test("numeric document downloads preserve original tokens and nested JSON values", async () => {

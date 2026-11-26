@@ -66,7 +66,7 @@ export function OgcProcessInputs({
   return (
     <div className="space-y-4">
       {inputProblem !== null && (
-        <p id={`${prefix}-limit`} role="alert" className="text-sm text-destructive">
+        <p id={`${prefix}-problem`} role="alert" className="text-sm text-destructive">
           {t(`processing.ogcProcesses.errors.${inputProblem.code}`, inputProblem.parameters ?? {})}
         </p>
       )}
@@ -93,7 +93,7 @@ export function OgcProcessInputs({
         );
         const errorId =
           inputProblem?.key === key
-            ? `${prefix}-limit`
+            ? `${prefix}-problem`
             : error?.name === key
               ? error.id
               : undefined;

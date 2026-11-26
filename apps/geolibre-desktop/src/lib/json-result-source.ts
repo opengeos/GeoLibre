@@ -89,8 +89,18 @@ export function jsonNumbersNeedSource(bytes: Uint8Array, span: JsonSourceSpan): 
     if (byte === 34) position = stringEnd(bytes, position, span.end) - 1;
     else if (byte === 45 || (byte >= 48 && byte <= 57)) {
       const start = position;
+      let unsignedInteger = byte !== 45;
       position++;
-      while (position < span.end && numericByte(bytes[position])) position++;
+      while (position < span.end && numericByte(bytes[position])) {
+        if (bytes[position] < 48 || bytes[position] > 57) unsignedInteger = false;
+        position++;
+      }
+      // Validated JSON integers of at most 15 digits round-trip exactly. Avoid
+      // decoding and serializing every value in ordinary numeric arrays.
+      if (unsignedInteger && position - start <= 15) {
+        position--;
+        continue;
+      }
       const token = decoder.decode(bytes.subarray(start, position));
       if (JSON.stringify(Number(token)) !== token) return true;
       position--;

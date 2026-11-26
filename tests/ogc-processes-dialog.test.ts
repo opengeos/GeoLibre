@@ -116,7 +116,9 @@ test("a resumed running job stays locked when a later description uses a JSON fo
     (screen.getByLabelText("Job status URL") as HTMLInputElement).value,
     /\/jobs\/existing/,
   );
-  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  });
   assert.equal(posts, 0);
 });
 

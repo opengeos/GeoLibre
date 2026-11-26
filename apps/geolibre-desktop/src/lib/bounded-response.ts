@@ -1,4 +1,8 @@
-/** A transport-owned size refusal with the shared native/browser wording. */
+/**
+ * A transport-owned size refusal. Keep its wording aligned with native
+ * `src-tauri/src/http_body.rs::read_limited_body`: the OGC process HTTP layer
+ * recognizes that native message to localize size refusals.
+ */
 export class ResponseLimitError extends Error {
   constructor(maxBytes: number) {
     super(`Response exceeds the ${maxBytes}-byte download limit`);
