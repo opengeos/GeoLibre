@@ -7,6 +7,9 @@ import types
 
 import pytest
 
+import geolibre._map_raster as map_raster
+import geolibre._map_support as map_support
+import geolibre._map_vector as map_vector
 import geolibre.geolibre as gmod
 from geolibre.geolibre import Map
 
@@ -500,7 +503,7 @@ def test_add_vector_local_file_inlined(monkeypatch, m):
         captured["source_layer"] = source_layer
         return fake_fc
 
-    monkeypatch.setattr(gmod, "_read_local_vector", fake_read)
+    monkeypatch.setattr(map_vector, "_read_local_vector", fake_read)
     # add_geoparquet routes a local path with the parquet hint threaded through.
     m.add_geoparquet("/data/cities.parquet")
     layer = _last_layer(m)
@@ -511,7 +514,7 @@ def test_add_vector_local_file_inlined(monkeypatch, m):
 
 def test_add_vector_local_file_warns_on_ignored_render_mode(monkeypatch, m):
     monkeypatch.setattr(
-        gmod,
+        map_vector,
         "_read_local_vector",
         lambda _p, data_format=None, source_layer=None: {"type": "x"},
     )
@@ -526,7 +529,7 @@ def test_add_gpkg_forwards_local_source_layer(monkeypatch, m):
         captured.update(path=path, data_format=data_format, source_layer=source_layer)
         return {"type": "FeatureCollection", "features": []}
 
-    monkeypatch.setattr(gmod, "_read_local_vector", fake_read)
+    monkeypatch.setattr(map_vector, "_read_local_vector", fake_read)
     m.add_gpkg("/data/maps.gpkg", layer="roads")
     assert captured == {
         "path": "/data/maps.gpkg",
@@ -573,7 +576,7 @@ def test_add_vector_geo_interface_warns_on_ignored_kwargs(m):
 
 def test_add_raster_local_path_served(monkeypatch, m):
     monkeypatch.setattr(
-        gmod, "register_local_file", lambda path: f"http://127.0.0.1:0/served/{path}"
+        map_raster, "register_local_file", lambda path: f"http://127.0.0.1:0/served/{path}"
     )
     m.add_raster("/data/dem.tif", colormap="terrain")
     layer = _last_layer(m)
@@ -589,7 +592,7 @@ def test_add_raster_url_not_served(monkeypatch, m):
         called["n"] += 1
         raise AssertionError("URL rasters must not be routed to the file server")
 
-    monkeypatch.setattr(gmod, "register_local_file", boom)
+    monkeypatch.setattr(map_raster, "register_local_file", boom)
     m.add_raster("https://e/dem.tif")
     assert called["n"] == 0
     assert _last_layer(m)["source"]["url"] == "https://e/dem.tif"
@@ -663,7 +666,7 @@ def test_add_raster_xarray_dataarray_materializes_geotiff(monkeypatch, m):
     DataArray, _ = _fake_xarray_modules(monkeypatch)
     captured = {}
     monkeypatch.setattr(
-        gmod,
+        map_raster,
         "register_local_file",
         lambda path: captured.update(path=path) or "http://127.0.0.1/xarray.tif",
     )
@@ -685,7 +688,7 @@ def test_add_raster_xarray_dataset_selects_variable(monkeypatch, m):
     DataArray, Dataset = _fake_xarray_modules(monkeypatch)
     selected = DataArray(dims=("time", "y", "x"), crs="EPSG:3857")
     dataset = Dataset({"temperature": selected})
-    monkeypatch.setattr(gmod, "register_local_file", lambda _path: "http://local/x.tif")
+    monkeypatch.setattr(map_raster, "register_local_file", lambda _path: "http://local/x.tif")
 
     m.add_raster(
         dataset,
@@ -702,7 +705,7 @@ def test_add_raster_xarray_dataset_applies_nodata_to_each_variable(monkeypatch, 
     red = DataArray()
     green = DataArray()
     dataset = Dataset({"red": red, "green": green})
-    monkeypatch.setattr(gmod, "register_local_file", lambda _path: "http://local/rgb.tif")
+    monkeypatch.setattr(map_raster, "register_local_file", lambda _path: "http://local/rgb.tif")
 
     m.add_raster(dataset, array_args={"nodata": 255})
 
@@ -726,13 +729,13 @@ def test_add_raster_xarray_temp_file_removed_without_close(monkeypatch):
     DataArray, _ = _fake_xarray_modules(monkeypatch)
     captured = {}
     monkeypatch.setattr(
-        gmod,
+        map_raster,
         "register_local_file",
         lambda path: captured.update(path=path) or "http://local/x.tif",
     )
 
     unregistered = []
-    monkeypatch.setattr(gmod, "unregister_local_file", unregistered.append)
+    monkeypatch.setattr(map_support, "unregister_local_file", unregistered.append)
 
     widget = Map()
     widget.add_raster(DataArray())
@@ -770,7 +773,7 @@ def test_add_raster_xarray_round_trip_with_real_rioxarray(monkeypatch, m):
     )
     captured = {}
     monkeypatch.setattr(
-        gmod,
+        map_raster,
         "register_local_file",
         lambda path: captured.update(path=path) or "http://local/ds.tif",
     )
@@ -791,7 +794,7 @@ def test_add_raster_xarray_uses_xyz_tiles_on_colab(monkeypatch, m):
     monkeypatch.setattr(Map, "_running_on_colab", staticmethod(lambda: True))
     captured = {}
     monkeypatch.setattr(
-        gmod,
+        map_raster,
         "register_raster_tiles",
         lambda path, **options: (
             captured.update(path=path, options=options)
@@ -840,7 +843,7 @@ def test_add_cog_on_colab_computes_bounds_from_the_local_raster(monkeypatch, m, 
 
     monkeypatch.setattr(Map, "_running_on_colab", staticmethod(lambda: True))
     monkeypatch.setattr(
-        gmod,
+        map_raster,
         "register_raster_tiles",
         lambda path, **_options: "http://127.0.0.1:1234/_geolibre_tiles/t/{z}/{x}/{y}.png",
     )
@@ -860,7 +863,7 @@ def test_add_cog_on_colab_tolerates_an_unreadable_raster(monkeypatch, m, tmp_pat
     raster.write_bytes(b"fake geotiff")
     monkeypatch.setattr(Map, "_running_on_colab", staticmethod(lambda: True))
     monkeypatch.setattr(
-        gmod,
+        map_raster,
         "register_raster_tiles",
         lambda path, **_options: "http://127.0.0.1:1234/_geolibre_tiles/t/{z}/{x}/{y}.png",
     )
@@ -1038,7 +1041,7 @@ def test_add_csv_rejects_non_public_url(m):
 def test_add_csv_rejects_oversized_file(monkeypatch, tmp_path, m):
     path = tmp_path / "points.csv"
     path.write_text("longitude,latitude\n-100,40\n", encoding="utf-8")
-    monkeypatch.setattr(gmod, "_MAX_TABULAR_BYTES", 4)
+    monkeypatch.setattr(map_vector, "_MAX_TABULAR_BYTES", 4)
     with pytest.raises(ValueError, match="size limit"):
         m.add_csv(str(path))
 
