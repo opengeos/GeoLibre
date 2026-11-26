@@ -287,14 +287,16 @@ export function createRelay(options: RelayOptions = {}): {
     const rev = session.rev;
     store.saveRev(id, rev);
     appendLog(id, { type: "snapshot", ts: Date.now(), rev, origin });
-    const frames = docUpdateMessages(update, origin, rev, () => randomUUID()).map((m) =>
-      JSON.stringify(m),
-    );
+    // Built on first use: a session may have no op-level (or no snapshot) peer.
+    let frames: string[] | undefined;
     let snapshotPayload: string | null | undefined;
     for (const peer of session.peers) {
       const participant = peer.participant;
       if (!participant || participant.clientId === origin) continue;
       if (participant.crdt) {
+        frames ??= docUpdateMessages(update, origin, rev, () => randomUUID()).map((m) =>
+          JSON.stringify(m),
+        );
         for (const frame of frames) sendRaw(peer, frame);
         continue;
       }
@@ -307,8 +309,14 @@ export function createRelay(options: RelayOptions = {}): {
         } satisfies ServerMessage);
         snapshotPayload = ENCODER.encode(payload).length > maxSnapshotBytes ? null : payload;
       }
-      if (snapshotPayload) sendRaw(peer, snapshotPayload);
-      else send(peer, tooLarge());
+      if (snapshotPayload) {
+        sendRaw(peer, snapshotPayload);
+      } else if (!participant.snapshotWithheld) {
+        // This peer no longer holds the session's project; refuse its
+        // snapshots from now on.
+        participant.snapshotWithheld = true;
+        send(peer, tooLarge());
+      }
     }
   }
 
@@ -475,7 +483,10 @@ export function createRelay(options: RelayOptions = {}): {
         ...(welcomeInvites ? { invites: welcomeInvites } : {}),
         features: [CRDT_FEATURE],
       });
-      if (snapshotTooLarge) send(peer, tooLarge());
+      if (snapshotTooLarge) {
+        peer.participant.snapshotWithheld = true;
+        send(peer, tooLarge());
+      }
       broadcastParticipants(session, peer);
       return;
     }
@@ -496,6 +507,12 @@ export function createRelay(options: RelayOptions = {}): {
       // A whole-project snapshot from a client on the snapshot protocol: checked
       // as before, then written into the document as the differences from it,
       // so op-level peers receive it as an ordinary update.
+      // A snapshot client that was not sent the project (it outgrew the frame
+      // cap) would delete everything its own project lacks.
+      if (participant.snapshotWithheld) {
+        send(peer, tooLarge());
+        return;
+      }
       const stored = doc.project.isEmpty() ? null : doc.materialize();
       const byteLength = ENCODER.encode(text).length;
       const authorization = authorizeSnapshot(
@@ -904,8 +921,9 @@ export function createRelay(options: RelayOptions = {}): {
       // The Worker bounds the document the same way before persisting it
       // (workers/collab/src/session.ts). Without this the per-comment caps still
       // permit a worst case orders of magnitude past the document ceiling.
-      const added = ENCODER.encode(JSON.stringify(project.comments)).length;
-      if (doc.byteSize + added > maxDocBytes) {
+      const grows = sanitized.type === "add" || sanitized.type === "reply";
+      const added = grows ? ENCODER.encode(JSON.stringify(project.comments)).length : 0;
+      if (grows && doc.byteSize + added > maxDocBytes) {
         send(peer, {
           type: "error",
           code: "bad-message",

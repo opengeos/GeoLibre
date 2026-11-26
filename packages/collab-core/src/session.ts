@@ -44,6 +44,12 @@ export interface SessionParticipant {
   lastCommentTs?: number;
   /** True when the client joined with the op-level `crdt-v1` protocol. */
   crdt?: boolean;
+  /**
+   * Set when a snapshot-protocol client was not sent the project because it
+   * outgrew the frame cap; its snapshots are refused from then on, since
+   * writing one would delete everything it never received.
+   */
+  snapshotWithheld?: boolean;
 }
 
 export function participantCanEdit(

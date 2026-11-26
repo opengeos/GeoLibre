@@ -275,14 +275,28 @@ export class RelayDoc {
       );
       doc.on("afterTransaction", watch);
     }
+    let unreadable = false;
     try {
       Y.applyUpdate(doc, update, origin);
     } catch {
-      return { status: "error", code: "resync", message: "Update could not be read; resyncing." };
+      // Yjs may have integrated part of the update before decoding failed;
+      // the lock check below still reverts whatever reached a locked layer.
+      unreadable = true;
     } finally {
       if (guard) doc.off("afterTransaction", watch);
     }
-    let result: DocReceiveResult = { status: "applied" };
+    // Structs whose dependencies never arrived are held by Yjs outside the
+    // document (and outside `byteSize`). A client syncs against our state, so
+    // this only happens to a broken or hostile sender: drop them and resync.
+    const store = doc.store as { pendingStructs: unknown; pendingDs: unknown };
+    if (store.pendingStructs !== null || store.pendingDs !== null) {
+      store.pendingStructs = null;
+      store.pendingDs = null;
+      unreadable = true;
+    }
+    let result: DocReceiveResult = unreadable
+      ? { status: "error", code: "resync", message: "Update could not be read; resyncing." }
+      : { status: "applied" };
     if (undo) {
       const locked = context.lockedLayerIds.find((id) => touched.has(id));
       if (locked) {
@@ -291,6 +305,9 @@ export class RelayDoc {
         const name = layer instanceof Y.Map ? layer.get("name") : undefined;
         result = { status: "reverted", layerName: typeof name === "string" ? name : locked };
       }
+      // clear() releases the deleted content the manager kept for undo, so
+      // it can be garbage collected; destroy() alone only detaches it.
+      undo.clear();
       undo.destroy();
     }
     this.maybeCompact();

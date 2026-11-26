@@ -21,7 +21,8 @@ Configuration:
   document (default `33554432`, 32 MiB, `MAX_DOC_BYTES` from
   `@geolibre/collab-core/crdt-relay`). Op-level clients send it in chunks of
   at most 512 KiB, so this bound is independent of the frame size; raise it on
-  a host with memory to spare
+  a host with memory to spare. A session migrated from a stored snapshot keeps
+  that project even if it is larger; later growth is then refused
 - `COLLAB_IDLE_TTL_MS` — time after the last participant disconnects before the
   session and its persisted data are deleted (default two hours)
 

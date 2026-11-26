@@ -184,17 +184,21 @@ export class CollabSession extends DurableObject<Env> {
       },
       append: (update) => {
         this.ensureTables();
-        const next =
-          sql
-            .exec<{ entry: number | null }>("SELECT MAX(entry) AS entry FROM collab_doc_log")
-            .toArray()[0]?.entry ?? -1;
-        chunkBytes(update).forEach((part, index) => {
-          sql.exec(
-            "INSERT INTO collab_doc_log (entry, part, value) VALUES (?, ?, ?)",
-            next + 1,
-            index,
-            part.slice().buffer,
-          );
+        // One transaction, so a failure cannot leave a partial entry that
+        // would break every later load.
+        this.ctx.storage.transactionSync(() => {
+          const next =
+            sql
+              .exec<{ entry: number | null }>("SELECT MAX(entry) AS entry FROM collab_doc_log")
+              .toArray()[0]?.entry ?? -1;
+          chunkBytes(update).forEach((part, index) => {
+            sql.exec(
+              "INSERT INTO collab_doc_log (entry, part, value) VALUES (?, ?, ?)",
+              next + 1,
+              index,
+              part.slice().buffer,
+            );
+          });
         });
       },
       replace: (base) => {
@@ -254,14 +258,16 @@ export class CollabSession extends DurableObject<Env> {
     const rev = this.rev;
     void this.ctx.storage.put("rev", rev);
     void this.appendLog({ type: "snapshot", ts: Date.now(), rev, origin });
-    const frames = docUpdateMessages(update, origin, rev, () => crypto.randomUUID()).map((m) =>
-      JSON.stringify(m),
-    );
+    // Built on first use: a session may have no op-level (or no snapshot) peer.
+    let frames: string[] | undefined;
     let snapshotPayload: string | null | undefined;
     for (const { socket, attachment } of this.attachedSockets()) {
       if (attachment.clientId === origin) continue;
       try {
         if (attachment.crdt) {
+          frames ??= docUpdateMessages(update, origin, rev, () => crypto.randomUUID()).map((m) =>
+            JSON.stringify(m),
+          );
           for (const frame of frames) socket.send(frame);
           continue;
         }
@@ -275,8 +281,15 @@ export class CollabSession extends DurableObject<Env> {
           snapshotPayload =
             ENCODER.encode(payload).length > this.maxSnapshotBytes() ? null : payload;
         }
-        if (snapshotPayload) socket.send(snapshotPayload);
-        else this.send(socket, tooLargeError());
+        if (snapshotPayload) {
+          socket.send(snapshotPayload);
+        } else if (!attachment.snapshotWithheld) {
+          // This peer no longer holds the session's project; refuse its
+          // snapshots from now on (see handleSnapshot).
+          attachment.snapshotWithheld = true;
+          socket.serializeAttachment(attachment);
+          this.send(socket, tooLargeError());
+        }
       } catch {
         // A dead socket; its close handler reconciles.
       }
@@ -736,7 +749,11 @@ export class CollabSession extends DurableObject<Env> {
         ...(welcomeInvites ? { invites: welcomeInvites } : {}),
         features: [CRDT_FEATURE],
       });
-      if (snapshotTooLarge) this.send(ws, tooLargeError());
+      if (snapshotTooLarge) {
+        attachment.snapshotWithheld = true;
+        ws.serializeAttachment(attachment);
+        this.send(ws, tooLargeError());
+      }
 
       this.broadcastParticipants(ws);
     } finally {
@@ -760,6 +777,12 @@ export class CollabSession extends DurableObject<Env> {
       this.ctx.storage.get<string[]>("lockedLayerIds"),
     ]);
     const relayDoc = await this.relayDocument();
+    // A snapshot client that was not sent the project (it outgrew the frame
+    // cap) would delete everything its own project lacks.
+    if (attachment.snapshotWithheld) {
+      this.send(ws, tooLargeError());
+      return;
+    }
     const mode = rawMode ?? "co-edit";
     const lockedLayerIds = rawLockedLayerIds ?? [];
     const storedSnapshot = relayDoc.project.isEmpty() ? null : relayDoc.materialize();
@@ -1277,8 +1300,9 @@ export class CollabSession extends DurableObject<Env> {
       // Bound the document the way every other write is bounded. Check before
       // the write so an oversized value surfaces as an error the sender can
       // see rather than a throw the catch below would have to guess at.
-      const added = ENCODER.encode(JSON.stringify(updatedComments)).length;
-      if (relayDoc.byteSize + added > this.maxDocBytes()) {
+      const grows = sanitizedAction.type === "add" || sanitizedAction.type === "reply";
+      const added = grows ? ENCODER.encode(JSON.stringify(updatedComments)).length : 0;
+      if (grows && relayDoc.byteSize + added > this.maxDocBytes()) {
         this.send(ws, {
           type: "error",
           code: "bad-message",

@@ -184,6 +184,18 @@ describe("RelayDoc", () => {
     assert.equal((relay.materialize().layers as { name: string }[])[0].name, "Host rename");
   });
 
+  it("drops updates whose dependencies never arrived and asks for a resync", () => {
+    const relay = new RelayDoc({ storage: memoryStorage() });
+    const client = new ProjectDoc();
+    clientWrite(client, project());
+    // Only the second edit, without the first it builds on.
+    const [second] = clientWrite(client, { ...client.read(), projectName: "Later" });
+    assert.equal((relay.receive("c", second, editor) as { code: string }).code, "resync");
+    const store = relay.project.doc.store as unknown as { pendingStructs: unknown };
+    assert.equal(store.pendingStructs, null);
+    assert.equal(relay.byteSize, 0);
+  });
+
   it("compacts the log into a base state once it grows", () => {
     const storage = memoryStorage();
     const relay = new RelayDoc({ storage });

@@ -304,6 +304,25 @@ describe("op-level sync through the Node relay", () => {
     assert.equal(layer(snapshot.project as ProjectRecord, "parcels").name, "From legacy");
   });
 
+  it("refuses snapshots from a client that was never sent the project", async () => {
+    const { http } = await start({ maxSnapshotBytes: 2_000 });
+    const created = await createSession(http);
+    const host = await CrdtClient.connect(http, created.sessionId);
+    await host.join(created.hostToken);
+    await host.sync();
+    host.write({ ...baseProject(), notes: "x".repeat(5_000) });
+    const legacy = await CrdtClient.connect(http, created.sessionId);
+    await legacy.join(undefined, []);
+    assert.equal((await legacy.next((m) => m.type === "error")).code, "too-large");
+    const before = legacy.messages.length;
+    legacy.socket.send(
+      JSON.stringify({ type: "snapshot", project: { projectName: "Tiny", layers: [] }, rev: 0 }),
+    );
+    const refused = await legacy.next((m) => m.type === "error", 5000, before);
+    assert.equal(refused.code, "too-large");
+    assert.equal(layer(host.read(), "roads").name, "Roads", "the session keeps its layers");
+  });
+
   it("migrates a session's stored snapshot into a document", async () => {
     const { http, relay } = await start();
     const created = await createSession(http);
