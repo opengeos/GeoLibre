@@ -257,7 +257,29 @@ const selectSqlTableSources = () =>
  * immediate feedback, and the editor autocompletes layer tables, columns, SQL
  * keywords, and spatial functions. Rendered only while open.
  */
-export function SqlWorkspacePanel() {
+/** The query engines and file save the workspace drives; tests substitute their own. */
+export interface SqlWorkspaceServices {
+  runSqlQuery: typeof runSqlQuery;
+  runPostgisQuery: typeof runPostgisQuery;
+  runSedonaQuery: typeof runSedonaQuery;
+  exportBinaryVectorLayer: typeof exportBinaryVectorLayer;
+  saveBinaryFile: typeof saveBinaryFileWithFallback;
+}
+
+const DEFAULT_SQL_SERVICES: SqlWorkspaceServices = {
+  runSqlQuery,
+  runPostgisQuery,
+  runSedonaQuery,
+  exportBinaryVectorLayer,
+  saveBinaryFile: saveBinaryFileWithFallback,
+};
+
+export function SqlWorkspacePanel({
+  services = DEFAULT_SQL_SERVICES,
+}: {
+  /** Replaces the DuckDB, PGlite and Sedona engines and the file save; tests only. */
+  services?: SqlWorkspaceServices;
+}) {
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const tableSources = useLayerSlices(useMemo(selectSqlTableSources, []));
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
@@ -412,10 +434,10 @@ export function SqlWorkspacePanel() {
       const layers = useAppStore.getState().layers;
       const queryResult =
         engine === "postgis"
-          ? await runPostgisQuery(trimmed, layers)
+          ? await services.runPostgisQuery(trimmed, layers)
           : engine === "sedona"
-            ? await runSedonaQuery(trimmed, layers)
-            : await runSqlQuery(trimmed, layers);
+            ? await services.runSedonaQuery(trimmed, layers)
+            : await services.runSqlQuery(trimmed, layers);
       setResult(queryResult);
       setLastRun({ sql: trimmed, engine });
     } catch (err) {
@@ -473,7 +495,7 @@ export function SqlWorkspacePanel() {
   };
 
   const saveBinary = async (payload: BinaryVectorExportResult, label: string) => {
-    const savedName = await saveBinaryFileWithFallback(payload.data, {
+    const savedName = await services.saveBinaryFile(payload.data, {
       defaultName: `sql-result.${payload.extension}`,
       filters: [{ name: label, extensions: [payload.extension] }],
       browserTypes: [
@@ -518,7 +540,11 @@ export function SqlWorkspacePanel() {
     setNotice(null);
     setExporting(true);
     try {
-      const exported = await exportBinaryVectorLayer(result.geojson, "geoparquet", "SQL result");
+      const exported = await services.exportBinaryVectorLayer(
+        result.geojson,
+        "geoparquet",
+        "SQL result",
+      );
       // exportBinaryVectorLayer already sets the GeoParquet mimeType.
       await saveBinary(exported, "GeoParquet");
     } catch (err) {

@@ -7,7 +7,5 @@
   "apps/geolibre-desktop/src/components/layout/GeoreferencerDialog.tsx": 669,
   "apps/geolibre-desktop/src/components/layout/LoadFeaturesIntoEditorDialog.tsx": 665,
   "apps/geolibre-desktop/src/components/layout/RecordVideoDialog.tsx": 621,
-  "apps/geolibre-desktop/src/components/panels/PythonConsolePanel.tsx": 535,
-  "apps/geolibre-desktop/src/components/panels/SqlWorkspacePanel.tsx": 1003,
   "apps/geolibre-desktop/src/components/processing/ObjectDetectionDialog.tsx": 741
 }
