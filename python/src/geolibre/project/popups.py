@@ -5,6 +5,14 @@ from __future__ import annotations
 import re
 from typing import Any
 
+# -- popups, tooltips, and marker symbology ------------------------------
+#
+# Mirrors LayerPopupConfig / PopupFieldConfig in packages/core/src/types.ts and
+# the resolution rules in packages/core/src/popup.ts. The stored JSON is
+# camelCase because the app reads it straight off the layer; the builders below
+# take snake_case Python arguments and translate, so a notebook never has to
+# hand-write the camelCase shape.
+
 #: How a popup value renders. ``"auto"`` stringifies (and draws an inline
 #: base64 image or sanitized KML description markup as itself).
 POPUP_FIELD_KINDS = frozenset({"auto", "text", "number", "date", "link", "image"})

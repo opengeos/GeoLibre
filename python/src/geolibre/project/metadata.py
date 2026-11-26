@@ -6,6 +6,12 @@ import re
 from typing import Any
 from urllib.parse import urlsplit
 
+# ---------------------------------------------------------------------------
+# Descriptive (catalog) layer metadata -- mirrors packages/core's
+# layer-descriptive-metadata.ts. Stored on the layer as `descriptiveMetadata`,
+# separate from the internal `metadata` record the app's renderers key off.
+# ---------------------------------------------------------------------------
+
 _METADATA_TEXT_KEYS = ("title", "abstract", "license", "attribution", "lineage")
 
 

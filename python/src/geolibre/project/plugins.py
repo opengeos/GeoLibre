@@ -7,6 +7,13 @@ from typing import Any
 
 from ._constants import _PROJECT_CONSTANTS
 
+# -- plugin (map control) state -----------------------------------------------
+# The split-map (swipe), legend, and colorbar helpers are thin wrappers over the
+# app's built-in map-control plugins, configured through the project's `plugins`
+# block. The shapes here mirror the plugin project-state interfaces in
+# packages/plugins/src/plugins/* (maplibre-swipe.ts, components/gui-state.ts),
+# so the app replays them via PluginManager.restoreProjectState on load.
+
 # The four corners every map control accepts (CONTROL_POSITIONS in
 # components/gui-state.ts; PROJECT_PLUGIN_CONTROL_POSITIONS in core).
 CONTROL_POSITIONS = frozenset({"top-left", "top-right", "bottom-left", "bottom-right"})
