@@ -398,3 +398,16 @@ def test_real_standard_resolution_rounding_stays_within_one_pixel(cache_metadata
     declared_east = grid["origin"]["x"] + resolution * 256 * 2**23
     expected_east = math.pi * 6378137
     assert abs(declared_east - expected_east) / resolution < 1
+
+
+def test_non_json_numbers_in_cache_metadata_are_refused(cache_metadata, monkeypatch):
+    """Refuse NaN in cache metadata, which a project file cannot store.
+
+    Args:
+        cache_metadata: The fixture disabling actual network access.
+        monkeypatch: Pytest fixture for replacing the response body.
+    """
+    info, _ = cache_metadata
+    info["tileInfo"]["lods"][0]["resolution"] = float("nan")
+    with pytest.raises(ValueError, match="not valid JSON"):
+        project_api.arcgis_layer("NaN", "https://example.org/A/MapServer", tiled=True)
