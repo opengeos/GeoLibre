@@ -338,6 +338,84 @@ describe("ProjectDoc", () => {
   });
 });
 
+describe("feature identity and edge cases", () => {
+  it("keeps features with GeoJSON ids on their own keys", () => {
+    const { a, b, sync } = pair();
+    const withIds = (fs: Feature[]) =>
+      project({
+        layers: [{ id: "roads", geojson: { type: "FeatureCollection", features: fs } }],
+      });
+    const A = { ...feature(0), id: "A" };
+    const B = { ...feature(1), id: "B" };
+    const C = { ...feature(2), id: "C" };
+    a.write(withIds([A, B, C]), "local");
+    sync();
+    // A deletes feature A and edits B; B edits feature A at the same time.
+    a.write(withIds([{ ...B, properties: { n: 10 } }, C]), "local");
+    b.write(withIds([{ ...A, properties: { n: 99 } }, B, C]), "local");
+    sync();
+    const features = layers(a.read())[0].geojson!.features as (Feature & { id: string })[];
+    assert.deepEqual(
+      features.map((f) => [f.id, f.properties.n]),
+      [
+        ["B", 10],
+        ["C", 2],
+      ],
+    );
+    assert.ok(deepEqual(a.read(), b.read()));
+  });
+
+  it("deletes an omitted field even when its name is inherited", () => {
+    const doc = new ProjectDoc();
+    doc.write(project({ constructor: "x" } as Partial<ProjectRecord>), "local");
+    doc.write(project(), "local");
+    assert.equal(Object.prototype.hasOwnProperty.call(doc.read(), "constructor"), false);
+  });
+
+  it("keeps a top-level __proto__ field as data", () => {
+    const doc = new ProjectDoc();
+    doc.doc.transact(() => doc.fields.set("__proto__", { polluted: true }));
+    const read = doc.read();
+    assert.equal(Object.getPrototypeOf(read), Object.prototype);
+    assert.ok(Object.keys(read).includes("__proto__"));
+  });
+
+  it("writes correctly inside a caller's transaction", () => {
+    const doc = new ProjectDoc();
+    const source = project();
+    doc.write(source, "local");
+    doc.doc.transact(() => {
+      doc.fields.set("projectName", "Direct");
+      doc.write(source, "local");
+    });
+    assert.equal(doc.read().projectName, "Shared");
+  });
+
+  it("stops observing after destroy", () => {
+    const doc = new ProjectDoc();
+    doc.write(project(), "local");
+    const before = doc.read();
+    doc.destroy();
+    doc.fields.set("projectName", "Changed");
+    assert.equal(before.projectName, "Shared");
+  });
+
+  it("refuses a chunk id the assembler would reject", () => {
+    const big = new Uint8Array(MAX_UPDATE_CHUNK_BYTES + 1);
+    assert.throws(() => splitUpdate(big, () => "x".repeat(65)), RangeError);
+    assert.equal(splitUpdate(new Uint8Array(3), () => "").length, 1);
+  });
+
+  it("records no transaction from a constructor-matched origin", () => {
+    const doc = new ProjectDoc();
+    const undo = createLocalUndoManager(doc, Object, 0);
+    doc.write(project(), {});
+    assert.equal(undo.undoStack.length, 0);
+    doc.write({ ...doc.read(), projectName: "Mine" }, Object);
+    assert.equal(undo.undoStack.length, 1);
+  });
+});
+
 describe("untrusted keys", () => {
   it("keeps a remote __proto__ key as data, not as the prototype", () => {
     const doc = new ProjectDoc();

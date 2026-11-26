@@ -92,6 +92,11 @@ export function deepEqual(a: unknown, b: unknown): boolean {
   return aCount === bCount;
 }
 
+/** A key's value when it is an own property of `value`, else undefined. */
+function own(value: JsonObject, key: string): unknown {
+  return Object.prototype.hasOwnProperty.call(value, key) ? value[key] : undefined;
+}
+
 /**
  * Set an own, enumerable property. Plain assignment of a remote-chosen key
  * such as `__proto__` would replace the object's prototype instead.
@@ -136,7 +141,7 @@ function objectToYMap(value: JsonObject): Y.Map<unknown> {
 /** Bring `map` in line with `value`, touching only the keys that differ. */
 function syncMap(map: Y.Map<unknown>, value: JsonObject): void {
   for (const key of Array.from(map.keys())) {
-    if (value[key] === undefined) map.delete(key);
+    if (own(value, key) === undefined) map.delete(key);
   }
   for (const key of Object.keys(value)) {
     if (value[key] !== undefined) syncField(map, key, value[key]);
@@ -299,8 +304,12 @@ function writeFeatureCollection(
   const segments = matchMiddle(current, nextFeatures, prefix, oldEnd, newEnd);
   // Walk the segments last to first so the indexes of earlier ones stay valid.
   for (let s = segments.length - 1; s >= 0; s -= 1) {
-    const { oldStart, oldStop, newStart, newStop } = segments[s];
-    const paired = Math.min(oldStop - oldStart, newStop - newStart);
+    const { oldStart, oldStop, newStart, newStop, anchor } = segments[s];
+    // An anchor matched by GeoJSON id may still have been edited.
+    if (anchor && !deepEqual(current[anchor[0]], nextFeatures[anchor[1]])) {
+      features.set(keys[anchor[0]], cloneJson(nextFeatures[anchor[1]]));
+    }
+    const paired = pairable(current, nextFeatures, oldStart, oldStop, newStart, newStop);
     // Pair old and new features position by position: an edit in place keeps
     // the feature's key, so a concurrent edit to the same feature resolves on
     // one value and an edit to a neighbour is not disturbed.
@@ -326,11 +335,46 @@ function writeFeatureCollection(
   }
 }
 
+/** A feature's GeoJSON `id`, when it has a usable one. */
+function featureId(feature: unknown): string | null {
+  if (!isPlainObject(feature)) return null;
+  const id = feature.id;
+  if (typeof id === "string" && id) return `s:${id}`;
+  if (typeof id === "number" && Number.isFinite(id)) return `n:${id}`;
+  return null;
+}
+
+/**
+ * How many leading positions of a changed run pair up as edits in place.
+ * Two features that both carry (different) GeoJSON ids are different
+ * features, so pairing stops there and the rest are removed and inserted.
+ */
+function pairable(
+  current: readonly unknown[],
+  next: readonly unknown[],
+  oldStart: number,
+  oldStop: number,
+  newStart: number,
+  newStop: number,
+): number {
+  const max = Math.min(oldStop - oldStart, newStop - newStart);
+  let paired = 0;
+  while (paired < max) {
+    const a = featureId(current[oldStart + paired]);
+    const b = featureId(next[newStart + paired]);
+    if (a !== null && b !== null && a !== b) break;
+    paired += 1;
+  }
+  return paired;
+}
+
 interface Segment {
   oldStart: number;
   oldStop: number;
   newStart: number;
   newStop: number;
+  /** The matched old/new pair that ends this run (absent for the last run). */
+  anchor?: [number, number];
 }
 
 /**
@@ -350,8 +394,11 @@ function matchMiddle(
   const segments: Segment[] = [];
   if (oldEnd - start > 0 && newEnd - start > 0) {
     const byJson = new Map<string, { indexes: number[]; at: number }>();
+    // A feature with a GeoJSON id matches by id (an edited feature keeps its
+    // key even if it moved); one without matches by its whole JSON.
+    const fingerprint = (feature: unknown) => featureId(feature) ?? `j:${JSON.stringify(feature)}`;
     for (let i = start; i < oldEnd; i += 1) {
-      const json = JSON.stringify(current[i]);
+      const json = fingerprint(current[i]);
       const bucket = byJson.get(json);
       if (bucket) bucket.indexes.push(i);
       else byJson.set(json, { indexes: [i], at: 0 });
@@ -359,7 +406,7 @@ function matchMiddle(
     let oldCursor = start;
     let newCursor = start;
     for (let j = start; j < newEnd; j += 1) {
-      const bucket = byJson.get(JSON.stringify(next[j]));
+      const bucket = byJson.get(fingerprint(next[j]));
       if (!bucket) continue;
       while (bucket.at < bucket.indexes.length && bucket.indexes[bucket.at] < oldCursor) {
         bucket.at += 1;
@@ -367,7 +414,13 @@ function matchMiddle(
       if (bucket.at >= bucket.indexes.length) continue;
       const i = bucket.indexes[bucket.at];
       bucket.at += 1;
-      segments.push({ oldStart: oldCursor, oldStop: i, newStart: newCursor, newStop: j });
+      segments.push({
+        oldStart: oldCursor,
+        oldStop: i,
+        newStart: newCursor,
+        newStop: j,
+        anchor: [i, j],
+      });
       oldCursor = i + 1;
       newCursor = j + 1;
     }
@@ -384,15 +437,22 @@ function layerId(layer: unknown): string | null {
   return isPlainObject(layer) && typeof layer.id === "string" && layer.id ? layer.id : null;
 }
 
-function syncLayer(map: Y.Map<unknown>, layer: JsonObject, newKey: () => string): void {
+function syncLayer(
+  map: Y.Map<unknown>,
+  layer: JsonObject,
+  newKey: () => string,
+  skipGeojson = false,
+): void {
   for (const key of Array.from(map.keys())) {
-    if (layer[key] === undefined) map.delete(key);
+    if (own(layer, key) === undefined) map.delete(key);
   }
   for (const key of Object.keys(layer)) {
     const next = layer[key];
     if (next === undefined) continue;
     if (key === "geojson" && isFeatureCollectionValue(next)) {
-      writeFeatureCollection(map, key, next, newKey);
+      // The same collection object the document last wrote or read for this
+      // layer: skip the per-feature comparison (a style edit on a big layer).
+      if (!skipGeojson) writeFeatureCollection(map, key, next, newKey);
     } else {
       syncField(map, key, next);
     }
@@ -434,6 +494,16 @@ export class ProjectDoc {
   private readonly layerCache = new Map<string, { map: Y.Map<unknown>; value: JsonObject }>();
   /** The same, per top-level field. */
   private readonly fieldCache = new Map<string, unknown>();
+  /** Per layer, the FeatureCollection object known to equal the document's. */
+  private readonly geojsonCache = new Map<string, unknown>();
+  private readonly onLayers: (
+    events: Y.YEvent<Y.AbstractType<unknown>>[],
+    t: Y.Transaction,
+  ) => void;
+  private readonly onFields: (
+    events: Y.YEvent<Y.AbstractType<unknown>>[],
+    t: Y.Transaction,
+  ) => void;
 
   /** The transaction `write` is running, while it runs. */
   private activeWrite: Y.Transaction | null = null;
@@ -445,12 +515,26 @@ export class ProjectDoc {
     this.fields = doc.getMap<unknown>(ROOT_FIELDS);
     this.layers = doc.getMap<Y.Map<unknown>>(ROOT_LAYERS);
     this.layerOrder = doc.getArray<string>(ROOT_LAYER_ORDER);
-    this.layers.observeDeep((events, transaction) =>
-      this.invalidate(events, transaction, this.layerCache, this.foreignChanges.layers),
-    );
-    this.fields.observeDeep((events, transaction) =>
-      this.invalidate(events, transaction, this.fieldCache, this.foreignChanges.fields),
-    );
+    this.onLayers = (events, transaction) =>
+      this.invalidate(
+        events,
+        transaction,
+        [this.layerCache, this.geojsonCache],
+        this.foreignChanges.layers,
+      );
+    this.onFields = (events, transaction) =>
+      this.invalidate(events, transaction, [this.fieldCache], this.foreignChanges.fields);
+    this.layers.observeDeep(this.onLayers);
+    this.fields.observeDeep(this.onFields);
+  }
+
+  /** Stop observing the document and drop the caches (the doc lives on). */
+  destroy(): void {
+    this.layers.unobserveDeep(this.onLayers);
+    this.fields.unobserveDeep(this.onFields);
+    this.layerCache.clear();
+    this.fieldCache.clear();
+    this.geojsonCache.clear();
   }
 
   /**
@@ -460,11 +544,11 @@ export class ProjectDoc {
   private invalidate(
     events: Y.YEvent<Y.AbstractType<unknown>>[],
     transaction: Y.Transaction,
-    cache: Map<string, unknown>,
+    caches: Map<string, unknown>[],
     foreign: Set<string>,
   ): void {
     const record = (key: string) => {
-      cache.delete(key);
+      for (const cache of caches) cache.delete(key);
       if (this.activeWrite && transaction !== this.activeWrite) foreign.add(key);
     };
     for (const event of events) {
@@ -496,18 +580,24 @@ export class ProjectDoc {
    * therefore write only once it holds the session's state (after its first
    * sync), or into an empty document; writing a stale or empty project
    * otherwise deletes what it lacks.
+   *
+   * Called inside a transaction the caller opened, the write joins it and
+   * takes that transaction's origin (Yjs keeps the outermost one), and the
+   * identity shortcuts are skipped, since the caller may have changed the
+   * document in the same transaction.
    */
   write(project: ProjectRecord, origin: unknown = null, options: ProjectWriteOptions = {}): void {
     const ignore = options.ignore;
     const writtenFields: [string, unknown][] = [];
     const writtenLayers: [string, JsonObject][] = [];
+    const nested = this.doc._transaction !== null;
     this.foreignChanges.fields.clear();
     this.foreignChanges.layers.clear();
     try {
       this.doc.transact((transaction) => {
         this.activeWrite = transaction;
         for (const key of Array.from(this.fields.keys())) {
-          if (key !== "layers" && !ignore?.has(key) && project[key] === undefined) {
+          if (key !== "layers" && !ignore?.has(key) && own(project, key) === undefined) {
             this.fields.delete(key);
           }
         }
@@ -515,7 +605,7 @@ export class ProjectDoc {
           if (key === "layers" || ignore?.has(key)) continue;
           const next = project[key];
           if (next === undefined) continue;
-          if (this.fieldCache.has(key) && this.fieldCache.get(key) === next) continue;
+          if (!nested && this.fieldCache.has(key) && this.fieldCache.get(key) === next) continue;
           syncField(this.fields, key, next);
           writtenFields.push([key, next]);
         }
@@ -532,11 +622,21 @@ export class ProjectDoc {
         for (const [id, layer] of byId) {
           const existing = this.layers.get(id);
           const cached = this.layerCache.get(id);
-          if (existing instanceof Y.Map && cached?.map === existing && cached.value === layer) {
+          if (
+            !nested &&
+            existing instanceof Y.Map &&
+            cached?.map === existing &&
+            cached.value === layer
+          ) {
             continue;
           }
+          const sameGeojson =
+            !nested &&
+            layer.geojson !== undefined &&
+            this.geojsonCache.get(id) === layer.geojson &&
+            existing instanceof Y.Map;
           if (existing instanceof Y.Map) {
-            syncLayer(existing, layer, this.newFeatureKey);
+            syncLayer(existing, layer, this.newFeatureKey, sameGeojson);
           } else {
             const map = new Y.Map<unknown>();
             this.layers.set(id, map);
@@ -559,13 +659,16 @@ export class ProjectDoc {
     // Observers ran (and dropped these entries) as the transaction closed, so
     // record what the document now equals only afterwards, and not for a key
     // an update handler changed again in the meantime.
+    if (nested) return;
     for (const [key, value] of writtenFields) {
       if (!this.foreignChanges.fields.has(key)) this.fieldCache.set(key, value);
     }
+    if (nested) return;
     for (const [id, value] of writtenLayers) {
       const map = this.layers.get(id);
       if (map instanceof Y.Map && !this.foreignChanges.layers.has(id)) {
         this.layerCache.set(id, { map, value });
+        if (isFeatureCollectionValue(value.geojson)) this.geojsonCache.set(id, value.geojson);
       }
     }
   }
@@ -576,12 +679,12 @@ export class ProjectDoc {
     this.fields.forEach((value, key) => {
       if (key === "layers") return;
       if (this.fieldCache.has(key)) {
-        project[key] = this.fieldCache.get(key);
+        setOwn(project, key, this.fieldCache.get(key));
         return;
       }
       const read = readValue(value);
       this.fieldCache.set(key, read);
-      project[key] = read;
+      setOwn(project, key, read);
     });
     const ids = liveKeys(this.layerOrder, this.layers);
     // A layer whose id never reached the order array (it should not happen,
@@ -601,6 +704,7 @@ export class ProjectDoc {
     const value = readValue(map) as JsonObject;
     value.id = id;
     this.layerCache.set(id, { map, value });
+    if (isFeatureCollectionValue(value.geojson)) this.geojsonCache.set(id, value.geojson);
     return value;
   }
 }
@@ -620,10 +724,19 @@ export function createLocalUndoManager(
   if (localOrigin === null || localOrigin === undefined) {
     throw new TypeError("createLocalUndoManager needs a non-null local origin.");
   }
-  return new Y.UndoManager([project.fields, project.layers, project.layerOrder], {
-    trackedOrigins: new Set([localOrigin]),
-    captureTimeout,
-  });
+  // Match the origin by identity: Yjs also tracks an origin whose
+  // *constructor* is in trackedOrigins, which a constructor-valued origin
+  // would turn into "every plain-object origin".
+  const manager: Y.UndoManager = new Y.UndoManager(
+    [project.fields, project.layers, project.layerOrder],
+    {
+      trackedOrigins: new Set([localOrigin]),
+      captureTimeout,
+      captureTransaction: (transaction) =>
+        transaction.origin === localOrigin || transaction.origin === manager,
+    },
+  );
+  return manager;
 }
 
 // -- Update framing -------------------------------------------------------------
@@ -710,6 +823,9 @@ export function splitUpdate(update: Uint8Array, makeId: () => string): UpdateFra
   if (update.length <= maxBytes) return [{ update: encodeBase64(update) }];
   const count = Math.ceil(update.length / maxBytes);
   const id = makeId();
+  if (typeof id !== "string" || !id || id.length > 64) {
+    throw new RangeError("splitUpdate needs a chunk id of 1 to 64 characters.");
+  }
   const frames: UpdateFrame[] = [];
   for (let index = 0; index < count; index += 1) {
     frames.push({

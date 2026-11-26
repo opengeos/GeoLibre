@@ -60,8 +60,9 @@ Limitations).
 The whole-snapshot protocol below is being replaced by op-level sync over a
 [Yjs](https://docs.yjs.dev/) document, so simultaneous edits merge instead of
 overwriting each other. The shared model is `ProjectDoc` in
-`packages/collab-core/src/crdt.ts` (`@geolibre/collab-core/crdt`), used by the
-relays and the app alike:
+`packages/collab-core/src/crdt.ts` (`@geolibre/collab-core/crdt`). It is not
+wired up yet: the relays and the app still run the snapshot protocol and its
+limits below, and adopt the model in follow-up changes. The model:
 
 | Root | Type | Holds |
 | --- | --- | --- |
