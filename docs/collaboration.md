@@ -117,7 +117,8 @@ participant who cannot edit is refused with `error: forbidden`. An update from
 a guest that touches a layer the host locked is applied and immediately undone
 on the relay; both the update and its inverse are fanned out (the sender gets
 the inverse plus `error: layer-locked`), so every client converges on the
-unchanged layer. A chunk out of order or an unreadable update answers
+unchanged layer. As with a refused snapshot, the whole update is undone, so
+an edit to an unlocked layer made in the same update is undone with it. A chunk out of order or an unreadable update answers
 `error: resync`, after which the client runs `doc-sync` again.
 
 **Persistence.** Every accepted update is appended to a log; once the log
