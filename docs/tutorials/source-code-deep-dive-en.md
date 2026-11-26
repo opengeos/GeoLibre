@@ -330,7 +330,7 @@ This sounds modest, but it's a high-frequency bug: many virtual list implementat
 
 ### 3.5 Bundle Size: How Far Does Lazy Loading Go?
 
-The code-splitting configuration in `apps/geolibre-desktop/vite.config.ts` (`manualChunks` plus the Rolldown `CODE_SPLITTING_GROUPS`) is the core of this approach. Take the most representative example — Cesium. The source comments record that when Cesium's chunk once swallowed shared helpers, "the whole ~4.7 MB Cesium chunk was modulepreloaded on every boot"; it now sits in its own group because **"Cesium only loads when a pane switches to the 3D globe."**
+The code-splitting configuration in `apps/geolibre-desktop/vite-chunking.ts` (`manualChunks` plus the Rolldown `CODE_SPLITTING_GROUPS`) is the core of this approach. Take the most representative example — Cesium. The source comments record that when Cesium's chunk once swallowed shared helpers, "the whole ~4.7 MB Cesium chunk was modulepreloaded on every boot"; it now sits in its own group because **"Cesium only loads when a pane switches to the 3D globe."**
 
 **Keeping it off the boot path is the key point.** For web GIS, this is the easiest performance win: the users who actually need 3D may only be 20%; there is no reason for 100% of users to pay the first-screen cost for it.
 

@@ -1481,7 +1481,7 @@ output.
 `npm run build` fails when the JS the app entry imports statically (what
 `index.html` modulepreloads before the shell mounts) grows past either budget
 in `apps/geolibre-desktop/boot-budget.json`, or when it contains Cesium. The
-check is `bootBundleBudgetPlugin` in `apps/geolibre-desktop/vite.config.ts`.
+check is `bootBundleBudgetPlugin` in `apps/geolibre-desktop/vite-chunking.ts`.
 
 | Budget      | Limit                     | Measured when set |
 | ----------- | ------------------------- | ----------------- |
