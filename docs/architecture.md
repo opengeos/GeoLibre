@@ -95,8 +95,11 @@ extent" / "Draw on map" shortcuts. `ProcessingDialog` keeps only the floating
 window's drag, resize, focus and Escape handling, and renders the view-model.
 Network and runtime calls go through an injectable `services` object
 (`WHITEBOX_TOOLBOX_SERVICES` in production), so tests drive the controller
-without a sidecar or the WASM runner. Outputs of a job dispatched before a
-different project loaded are dropped rather than imported into the new one.
+without a sidecar or the WASM runner. Jobs retain their dispatching project's
+generation, including Global DEM downloads. The controller rejects output imports
+after a different project loads. Async raster/LiDAR callbacks still need ownership
+checks inside their own load/conversion steps; that pre-existing gap is tracked
+in #3665 rather than covered by the controller's check before invoking them.
 
 ### GPS session ownership
 
