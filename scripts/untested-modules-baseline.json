@@ -31,7 +31,6 @@
   "apps/geolibre-desktop/src/components/panels/StyleManagerPanel.tsx": 863,
   "apps/geolibre-desktop/src/components/panels/WidgetEditorDialog.tsx": 615,
   "apps/geolibre-desktop/src/components/processing/ObjectDetectionDialog.tsx": 741,
-  "apps/geolibre-desktop/src/components/processing/ProcessingDialog.tsx": 2891,
   "apps/geolibre-desktop/src/components/storymap/StoryMapHandoutDialog.tsx": 640,
   "apps/geolibre-desktop/src/components/storymap/StoryMapPanel.tsx": 1146,
   "apps/geolibre-desktop/src/hooks/desktop-shell/useFileDrop.ts": 544
