@@ -804,11 +804,13 @@ test("required state is exposed for every schema control without native empty-st
   assert.equal(screen.getByLabelText("Name *").hasAttribute("required"), false);
 });
 
-for (const replaceMonitor of [false, true]) {
-  test(`dismissal retains a monitored alias association${replaceMonitor ? " without stopping another job" : ""}`, async () => {
+for (const replacement of ["none", "other", "stopped-canonical"] as const) {
+  test(`dismissal retains a monitored alias association (${replacement})`, async () => {
     const alias = "https://demo.pygeoapi.io/master/jobs/alias";
     const canonical = "https://demo.pygeoapi.io/master/jobs/canonical";
     const other = "https://demo.pygeoapi.io/master/jobs/other";
+    const latest = "https://demo.pygeoapi.io/master/jobs/latest";
+    let resumed = false;
     let releaseDelete: ((response: Response) => void) | undefined;
     let deletes = 0;
     serve(async (url, init) => {
@@ -820,18 +822,25 @@ for (const replaceMonitor of [false, true]) {
       if (init?.method === "DELETE") {
         assert.equal(url, alias);
         deletes++;
-        return new Promise((resolve) => {
-          releaseDelete = resolve;
+        return new Promise<Response>((resolve, reject) => {
+          const signal = init?.signal;
+          const abort = () => reject(new DOMException("Aborted", "AbortError"));
+          releaseDelete = (response) => {
+            signal?.removeEventListener("abort", abort);
+            resolve(response);
+          };
+          if (signal?.aborted) abort();
+          else signal?.addEventListener("abort", abort, { once: true });
         });
       }
-      const target = url.includes("/other") ? other : canonical;
+      const target = url.includes("/other") ? other : resumed ? latest : canonical;
       return new Response(
         JSON.stringify({
           jobID: target.split("/").pop(),
           status: "running",
           links: [{ rel: "self", href: target }],
         }),
-        { headers: { "Content-Type": "application/json", "Retry-After": "30" } },
+        { headers: { "Content-Type": "application/json", "Retry-After": resumed ? "30" : "0" } },
       );
     });
     let client!: ReturnType<typeof useOgcProcesses>;
@@ -859,13 +868,17 @@ for (const replaceMonitor of [false, true]) {
       completion = client.dismiss();
     });
     await waitFor(() => assert.ok(releaseDelete));
-    if (replaceMonitor) {
+    if (replacement !== "none") {
       act(() => client.stop());
-      act(() => client.setJobUrl(other));
+      resumed = replacement === "stopped-canonical";
+      act(() => client.setJobUrl(resumed ? canonical : other));
       act(() => {
         void client.resume();
       });
-      await waitFor(() => assert.equal(client.job?.url, other), { timeout: 2500 });
+      await waitFor(() => assert.equal(client.job?.url, resumed ? latest : other), {
+        timeout: 2500,
+      });
+      if (resumed) act(() => client.stop());
     }
     await act(async () => {
       releaseDelete?.(new Response("{}", { status: 200 }));
@@ -873,7 +886,7 @@ for (const replaceMonitor of [false, true]) {
     });
     assert.equal(deletes, 1);
     assert.equal(client.runningForProcess, false);
-    if (replaceMonitor) {
+    if (replacement === "other") {
       assert.equal(client.job?.url, other);
       assert.equal(client.job?.status, "running");
       assert.equal(client.phase, "monitoring");

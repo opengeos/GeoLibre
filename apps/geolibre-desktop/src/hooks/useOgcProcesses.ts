@@ -64,6 +64,7 @@ export function useOgcProcesses(open: boolean) {
   const [error, setError] = useState<unknown>(null);
   const active = useRef<AbortController | null>(null);
   const observedJob = useRef<{ initialUrl: string; url: string; signal: AbortSignal } | null>(null);
+  const pendingDismissals = useRef(new Set<Set<string>>());
   const pendingSubmission = useRef<{ controller: AbortController; processUrl: string } | null>(
     null,
   );
@@ -91,6 +92,7 @@ export function useOgcProcesses(open: boolean) {
 
   useEffect(() => {
     mounted.current = true;
+    const dismissals = pendingDismissals.current;
     const unsubscribe = useAppStore.subscribe((state, previous) => {
       if (state.projectLoadCount === previous.projectLoadCount) return;
       stop();
@@ -105,6 +107,7 @@ export function useOgcProcesses(open: boolean) {
       setValues({});
       setJob(null);
       setJobsByProcess(new Map());
+      dismissals.clear();
       setJobUrl("");
       setOutputs([]);
       setOutputSourceUrl("");
@@ -114,6 +117,7 @@ export function useOgcProcesses(open: boolean) {
     return () => {
       unsubscribe();
       mounted.current = false;
+      dismissals.clear();
       pendingSubmission.current?.controller.abort();
       pendingSubmission.current = null;
       active.current?.abort();
@@ -245,6 +249,13 @@ export function useOgcProcesses(open: boolean) {
     observedJob.current = observation;
     try {
       const result = await monitorOgcProcessJob(initial, context.signal, (next) => {
+        context.commit(() => {
+          // Keep aliases for pending remote mutations after this monitor stops.
+          for (const aliases of pendingDismissals.current) {
+            if ([...aliases].some((url) => sameOgcProcessJob(url, sourceUrl)))
+              aliases.add(next.url);
+          }
+        });
         observation.url = next.url;
         const selectedUrl = selectedProcess.current?.url;
         if (
@@ -390,44 +401,53 @@ export function useOgcProcesses(open: boolean) {
         sameOgcProcessJob(observation.url, target))
     )
       knownUrls.push(observation.initialUrl, observation.url);
-    return run("dismissing", async (context) => {
+    return run("dismissing", async () => {
       const project = useAppStore.getState().projectLoadCount;
-      await dismissOgcProcessJob(target, context.signal);
-      if (!mounted.current || useAppStore.getState().projectLoadCount !== project) return;
-      // A caller may resume this job while DELETE is pending. Its current
-      // observation can supply another canonical URL, but an unrelated monitor
-      // must not be stopped or acquire the dismissal's state.
-      const observationAtCompletion = observedJob.current;
-      const matchingLiveObservation =
-        observationAtCompletion &&
-        active.current?.signal === observationAtCompletion.signal &&
-        knownUrls.some(
-          (url) =>
-            sameOgcProcessJob(url, observationAtCompletion.initialUrl) ||
-            sameOgcProcessJob(url, observationAtCompletion.url),
-        )
-          ? observationAtCompletion
-          : null;
-      const relatedUrls = matchingLiveObservation
-        ? [...knownUrls, matchingLiveObservation.initialUrl, matchingLiveObservation.url]
-        : knownUrls;
-      const matchesTarget = (url: string) =>
-        relatedUrls.some((alias) => sameOgcProcessJob(url, alias));
-      // A completed remote mutation survives stopped observation. Only update
-      // its retained identity; another displayed job may now own the dialog.
-      setJob((previous) =>
-        previous && matchesTarget(previous.url) ? { ...previous, status: "dismissed" } : previous,
-      );
-      setJobsByProcess(
-        (previous) =>
-          new Map(
-            [...previous].map(([key, value]) => [
-              key,
-              matchesTarget(value.url) ? { ...value, status: "dismissed" as const } : value,
-            ]),
-          ),
-      );
-      if (matchingLiveObservation) stop();
+      const aliases = new Set(knownUrls);
+      pendingDismissals.current.add(aliases);
+      try {
+        // A dispatched DELETE has the transport's own deadline. Stopping local
+        // observation must not discard its acknowledgement on browser builds.
+        const mutation = new AbortController();
+        await dismissOgcProcessJob(target, mutation.signal);
+        if (!mounted.current || useAppStore.getState().projectLoadCount !== project) return;
+        // A caller may resume this job while DELETE is pending. Its current
+        // observation can supply another canonical URL, but an unrelated monitor
+        // must not be stopped or acquire the dismissal's state.
+        const observationAtCompletion = observedJob.current;
+        const matchingLiveObservation =
+          observationAtCompletion &&
+          active.current?.signal === observationAtCompletion.signal &&
+          [...aliases].some(
+            (url) =>
+              sameOgcProcessJob(url, observationAtCompletion.initialUrl) ||
+              sameOgcProcessJob(url, observationAtCompletion.url),
+          )
+            ? observationAtCompletion
+            : null;
+        const relatedUrls = matchingLiveObservation
+          ? [...aliases, matchingLiveObservation.initialUrl, matchingLiveObservation.url]
+          : [...aliases];
+        const matchesTarget = (url: string) =>
+          relatedUrls.some((alias) => sameOgcProcessJob(url, alias));
+        // A completed remote mutation survives stopped observation. Only update
+        // its retained identity; another displayed job may now own the dialog.
+        setJob((previous) =>
+          previous && matchesTarget(previous.url) ? { ...previous, status: "dismissed" } : previous,
+        );
+        setJobsByProcess(
+          (previous) =>
+            new Map(
+              [...previous].map(([key, value]) => [
+                key,
+                matchesTarget(value.url) ? { ...value, status: "dismissed" as const } : value,
+              ]),
+            ),
+        );
+        if (matchingLiveObservation) stop();
+      } finally {
+        pendingDismissals.current.delete(aliases);
+      }
     });
   };
   const changeEndpoint = (value: string) => {
