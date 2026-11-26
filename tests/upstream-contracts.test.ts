@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { NasaEarthdataControl } from "maplibre-gl-nasa-earthdata";
 import { isolateMaplibreRegistry } from "../apps/geolibre-desktop/vite-plugins/isolate-maplibre-registry";
 import { MAX_VECTOR_BYTES } from "../packages/plugins/src/plugins/remote-file-formats";
 import {

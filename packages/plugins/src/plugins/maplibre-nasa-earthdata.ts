@@ -206,7 +206,13 @@ export const maplibreNasaEarthdataPlugin: GeoLibrePlugin = {
   },
 };
 
-function getNasaEarthdataControlOptions(): NasaEarthdataControlOptions {
+/**
+ * Options the plugin builds the NASA Earthdata control with.
+ *
+ * @internal Exported for tests.
+ * @returns The control options.
+ */
+export function getNasaEarthdataControlOptions(): NasaEarthdataControlOptions {
   return {
     ...NASA_EARTHDATA_OPTIONS,
     position: "top-left",
