@@ -238,6 +238,11 @@ export interface NetworkSearchEngine {
   /** Short name for logs. */
   readonly name: string;
   /**
+   * Readies the engine for `net` (copying the graph in, for one) and says
+   * whether its searches will run here; false means they fall back to JS.
+   */
+  prepare?(net: LocalNetwork): boolean;
+  /**
    * Starts a search, or returns null when this engine cannot run it (an
    * `onSettle` callback, for one), so the JS search runs instead.
    */
@@ -1051,7 +1056,7 @@ export class LocalNetwork {
     const run = searchEngine?.start(this, sources, options, budget);
     if (!run) return this.searchJs(sources, { ...options, budget });
     try {
-      run.step(Infinity);
+      if (!run.step(Infinity)) throw new Error("The network search did not finish");
       return run.result();
     } finally {
       run.dispose();

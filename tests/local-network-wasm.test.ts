@@ -6,11 +6,13 @@ import { getActiveMeanRadiusMeters } from "@geolibre/core";
 import {
   buildLocalNetwork,
   createNetworkSearchBudget,
+  createWasmNetworkEngine,
+  LocalNetwork,
+  type RoutingWasmModule,
   getNetworkSearchEngine,
   loadWasmNetworkEngine,
   setNetworkSearchEngine,
   installWasmNetworkEngine,
-  type LocalNetwork,
   type NetworkSearchBudget,
   type NetworkSearchEngine,
   type NetworkSearchOptions,
@@ -336,6 +338,35 @@ describe("WASM network engine", { skip }, () => {
     compare(net, [0], { reverse: true });
     net.setTurnRules(null);
     compare(net, [0], {});
+  });
+
+  it("remembers a graph it rejects instead of copying it in again", async () => {
+    const mod = (await import("geolibre-wasm")) as unknown as RoutingWasmModule;
+    let builds = 0;
+    const counted: RoutingWasmModule = {
+      RoutingGraph: class extends mod.RoutingGraph {
+        constructor(...args: ConstructorParameters<RoutingWasmModule["RoutingGraph"]>) {
+          builds++;
+          super(...args);
+        }
+      },
+    };
+    const engine = createWasmNetworkEngine(counted);
+    // A NaN cost is rejected by the WASM graph validation.
+    const net = new LocalNetwork();
+    const a = net.addNode(0, 0);
+    const b = net.addNode(0.001, 0);
+    net.addEdge({ a, b, costAB: Number.NaN, costBA: 1, length: 111, feature: 0 });
+    assert.equal(engine.prepare?.(net), false);
+    for (let i = 0; i < 3; i++) {
+      assert.equal(engine.start(net, [a], {}, createNetworkSearchBudget()), null);
+    }
+    assert.equal(builds, 1);
+    // A change gives the next search a fresh attempt.
+    net.edges[0].costAB = 1;
+    net.touch();
+    assert.equal(engine.prepare?.(net), true);
+    assert.equal(builds, 2);
   });
 
   it("leaves callback searches to the JS engine", () => {

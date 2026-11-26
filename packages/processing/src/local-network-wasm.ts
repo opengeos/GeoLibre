@@ -165,30 +165,44 @@ function rethrow(error: unknown): never {
  */
 export function createWasmNetworkEngine(wasm: RoutingWasmModule): NetworkSearchEngine {
   // One WASM graph per network, rebuilt when the network's revision moves.
-  const graphs = new WeakMap<LocalNetwork, { revision: number; graph: WasmRoutingGraph }>();
-  const graphFor = (net: LocalNetwork): WasmRoutingGraph => {
+  // A graph the WASM side rejects is remembered as null for that revision,
+  // so its searches go straight to JS instead of copying it in again.
+  const graphs = new WeakMap<LocalNetwork, { revision: number; graph: WasmRoutingGraph | null }>();
+  const graphFor = (net: LocalNetwork): WasmRoutingGraph | null => {
     const cached = graphs.get(net);
     if (cached && cached.revision === net.revision) return cached.graph;
-    cached?.graph.free();
-    const a = graphArrays(net);
-    const graph = new wasm.RoutingGraph(
-      a.lon,
-      a.lat,
-      a.edgeA,
-      a.edgeB,
-      a.costAB,
-      a.costBA,
-      a.feature,
-      a.adjOffsets,
-      a.adjEdges,
-    );
-    applyTurnRules(graph, net);
+    graphs.delete(net);
+    cached?.graph?.free();
+    let graph: WasmRoutingGraph | null = null;
+    try {
+      const a = graphArrays(net);
+      graph = new wasm.RoutingGraph(
+        a.lon,
+        a.lat,
+        a.edgeA,
+        a.edgeB,
+        a.costAB,
+        a.costBA,
+        a.feature,
+        a.adjOffsets,
+        a.adjEdges,
+      );
+      applyTurnRules(graph, net);
+    } catch {
+      // The WASM side validates every index and cost; a graph it rejects
+      // still has a JS search.
+      graph?.free();
+      graph = null;
+    }
     graphs.set(net, { revision: net.revision, graph });
     return graph;
   };
 
   return {
     name: "WebAssembly",
+    prepare(net: LocalNetwork): boolean {
+      return graphFor(net) !== null;
+    },
     start(
       net: LocalNetwork,
       sources: number[],
@@ -197,9 +211,11 @@ export function createWasmNetworkEngine(wasm: RoutingWasmModule): NetworkSearchE
     ): NetworkSearchRun | null {
       // A per-node JS callback cannot run inside WASM.
       if (options.onSettle) return null;
+      const graph = graphFor(net);
+      if (!graph) return null;
       let search: WasmRoutingSearch | null;
       try {
-        search = graphFor(net).start_search(
+        search = graph.start_search(
           Uint32Array.from(sources),
           options.target ?? -1,
           options.astar === true,
@@ -212,8 +228,8 @@ export function createWasmNetworkEngine(wasm: RoutingWasmModule): NetworkSearchE
           budget.remainingAdjacencyVisits,
         );
       } catch {
-        // A graph the WASM side rejects (it validates every index and cost)
-        // still has a JS search.
+        // Only out-of-range sources or targets are rejected here, which the
+        // JS search handles the same way it always has.
         return null;
       }
       const reverse = options.reverse === true;

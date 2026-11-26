@@ -10,6 +10,7 @@ import type { Feature, Point, Position, Polygon, MultiPolygon } from "geojson";
 import {
   buildLocalNetwork,
   createNetworkSearchBudget,
+  getNetworkSearchEngine,
   splitNetworkLine,
   type LocalNetwork,
   type NetworkCostMode,
@@ -376,8 +377,7 @@ async function buildNetworkFromParams(ctx: ProcessingContext): Promise<{
     net.setTurnRules(turnRules);
     if (!net.hasTurnRules) ctx.log("Turn rules are on but set no restriction or cost.");
   }
-  const engine = await installWasmNetworkEngine();
-  ctx.log(`Network searches run in ${engine ? engine.name : "JavaScript"}.`);
+  await installWasmNetworkEngine();
   return { net, mode, unit: costUnit(mode, costField), budget: createNetworkSearchBudget() };
 }
 
@@ -477,6 +477,16 @@ export function readTurnRules(
     );
   }
   return rules;
+}
+
+/**
+ * Logs which engine will run the searches, once the points are placed (the
+ * graph is final): an engine that rejects the graph leaves them to JS.
+ */
+function logSearchEngine(ctx: ProcessingContext, net: LocalNetwork): void {
+  const engine = getNetworkSearchEngine();
+  const name = engine && (engine.prepare?.(net) ?? true) ? engine.name : "JavaScript";
+  ctx.log(`Network searches run in ${name}.`);
 }
 
 interface PlacedPoint {
@@ -581,6 +591,7 @@ export const localShortestPathTool: ProcessingAlgorithm = {
     const { net, unit, budget } = built;
     const astar = (ctx.parameters.algorithm as string) !== "dijkstra";
     const placed = placePoints(net, stops, ctx);
+    logSearchEngine(ctx, net);
     if ((placed.length - 1) * net.searchStateCount > 50_000_000) {
       ctx.log(
         "Error: routing selection is too large; reduce stops or use a smaller network extract",
@@ -710,6 +721,7 @@ export const localClosestFacilityTool: ProcessingAlgorithm = {
     const fromFacility = (ctx.parameters.travelDirection as string) === "from";
     const placedFacilities = placePoints(net, facilities, ctx);
     const placedIncidents = placePoints(net, incidents, ctx);
+    logSearchEngine(ctx, net);
     if (placedIncidents.length * net.searchStateCount > 50_000_000) {
       ctx.log(
         "Error: closest-facility selection is too large; reduce incidents or use a smaller network extract",
@@ -867,6 +879,7 @@ export const localServiceAreaTool: ProcessingAlgorithm = {
     const toward = (ctx.parameters.travelDirection as string) === "to";
     const width = Math.max(0, Number(ctx.parameters.polygonWidth ?? 0) || 0);
     const placed = placePoints(net, facilities, ctx);
+    logSearchEngine(ctx, net);
     const passes = (separate ? facilities.length : 1) * breaks.length;
     if (
       passes * Math.max(net.edges.length, net.searchStateCount) > 5_000_000 ||
