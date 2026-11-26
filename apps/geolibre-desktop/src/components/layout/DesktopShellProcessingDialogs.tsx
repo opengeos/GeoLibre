@@ -34,7 +34,7 @@ export function DesktopShellProcessingDialogs({
         <Suspense fallback={null}>
           <ProcessingDialog
             mapControllerRef={mapControllerRef}
-            onAddRaster={async (bytes, name, fileName) => {
+            onAddRaster={async (bytes, name, fileName, { signal }) => {
               // Cast required: TS types Uint8Array as Uint8Array<ArrayBufferLike>,
               // which is not directly assignable to BlobPart under this lib.
               // `fileName` (when given) becomes the layer's sourcePath while `name`
@@ -43,13 +43,19 @@ export function DesktopShellProcessingDialogs({
               const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
                 type: "image/tiff",
               });
+              // `signal` aborts once another project opens, so a raster still
+              // reading its header never lands in that project.
               await addRasterToMap(createAppAPI(mapControllerRef), file, {
                 name,
+                signal,
               });
             }}
-            onAddLidar={async (bytes, name, fileName) => {
+            onAddLidar={async (bytes, name, fileName, { signal }) => {
               try {
                 const cloud = await lidarOutputForMap(bytes, fileName);
+                // Converting a large cloud takes a while; stop if another
+                // project opened meanwhile. The loader rechecks the signal.
+                signal.throwIfAborted();
                 const id = await addLidarLayerFromBytes(
                   createAppAPI(mapControllerRef),
                   cloud.bytes,
@@ -57,10 +63,13 @@ export function DesktopShellProcessingDialogs({
                     name,
                     fileName: cloud.fileName,
                     fit: shouldZoomToNewLayers(),
+                    signal,
                   },
                 );
                 return id !== null;
               } catch (error) {
+                // Superseded by another project: the dialog drops the output.
+                if (signal.aborted) throw error;
                 // Too large to convert, or unreadable by the viewer: the dialog
                 // downloads the output instead.
                 console.warn("[lidar] could not add tool output to the map", error);
