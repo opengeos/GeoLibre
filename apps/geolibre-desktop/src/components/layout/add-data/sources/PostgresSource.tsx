@@ -438,7 +438,7 @@ function PostgresMartinSource({ initialPostgres }: PostgresSourceProps) {
           // survives a reload (keys are not credentials).
           postgisBaselineKeys: databaseFeatureKeys(result.geojson),
           // Base fingerprints for offline, conflict-aware sync-back (#3530).
-          [EDIT_SYNC_BASELINE_KEY]: postgisSyncBaseline(result.geojson),
+          [EDIT_SYNC_BASELINE_KEY]: postgisSyncBaseline(result.geojson, result.primary_key),
         },
         { geojson: result.geojson },
       ),

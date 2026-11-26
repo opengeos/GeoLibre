@@ -176,6 +176,9 @@ export function StatusBar({
         compact ? "overflow-hidden" : "overflow-x-auto",
       )}
     >
+      {/* First in the compact footer, which clips its overflow: pending edits
+          must stay visible on a narrow screen. */}
+      {compact ? <EditOutboxStatus compact /> : null}
       {!compact && touchUiMode === "desktop" ? (
         <button
           type="button"
@@ -260,7 +263,7 @@ export function StatusBar({
         <Bug className="h-3 w-3" />
         {compact ? "Diag" : t("diagnostics.title")}: {diagnosticsCount}
       </button>
-      <EditOutboxStatus compact={compact} />
+      {compact ? null : <EditOutboxStatus />}
     </footer>
   );
 }

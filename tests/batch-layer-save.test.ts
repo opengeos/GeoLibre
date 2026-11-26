@@ -500,6 +500,36 @@ describe("writeLayerEditsToSource and saveLayerEditsBatch", () => {
     assert.ok(!JSON.stringify(queued).includes("secret"));
   });
 
+  it("refuses an outbox save while a landed sync still awaits its reload", async () => {
+    const pgLayer = makeLayer("pg3", "PG Refresh", {
+      sourcePath: undefined,
+      metadata: {
+        sourceKind: "postgis-table",
+        postgisTable: "roads",
+        postgisPrimaryKey: "id",
+        editSyncRefreshRequired: true,
+      },
+    });
+    let queued = false;
+    const res = await writeLayerEditsToSource(pgLayer, {
+      map: undefined,
+      t,
+      canEditLayer: () => true,
+      deps: {
+        commitDrafts: () => "none",
+        readLatestLayer: () => pgLayer,
+        readProjectGeneration: () => 7,
+        resolveGeojson: async () => pgLayer.geojson!,
+        saveOutbox: async () => {
+          queued = true;
+          return { status: "success", message: "" };
+        },
+      },
+    });
+    assert.equal(res.status, "error");
+    assert.equal(queued, false);
+  });
+
   it("catches synchronous commitDrafts throws so later batch layers still run", async () => {
     const l1 = makeLayer("l1", "Layer 1");
     const l2 = makeLayer("l2", "Layer 2");

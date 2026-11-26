@@ -48,6 +48,7 @@ import { ensureEditSyncBackends } from "./edit-sync/register-backends";
 import {
   buildPostgisChangeSet,
   EDIT_SYNC_BASELINE_KEY,
+  EDIT_SYNC_REFRESH_REQUIRED_KEY,
   hasPostgisSyncBaseline,
   postgisOutboxId,
   postgisOutboxTarget,
@@ -613,6 +614,11 @@ export async function writeLayerEditsToSource(
       return { status, message };
     }
 
+    if (isPostgis && layer.metadata[EDIT_SYNC_REFRESH_REQUIRED_KEY] === true) {
+      // A sync landed but the layer was not reloaded: saving again could send
+      // its new features twice.
+      return { status: "error", message: t("layers.saveEditsPostgisRefreshWarning") };
+    }
     if (isPostgis && hasPostgisSyncBaseline(layer)) {
       // Offline-first save (#3530): queue only the changed features, then sync
       // with per-row conflict detection. The queue survives a lost connection.
@@ -668,6 +674,10 @@ export async function writeLayerEditsToSource(
         }
         throw error;
       }
+      const excludedList = layer.fieldVisibility
+        ? Object.keys(layer.fieldVisibility).filter((k) => layer.fieldVisibility![k] === "excluded")
+        : [];
+      const excludedFields = excludedList.length ? excludedList : undefined;
       let fresh;
       try {
         fresh = await readPostgis({
@@ -675,11 +685,7 @@ export async function writeLayerEditsToSource(
           schema_name: schema,
           table,
           geometry_column: geometryColumn,
-          excluded_fields: layer.fieldVisibility
-            ? Object.keys(layer.fieldVisibility).filter(
-                (k) => layer.fieldVisibility![k] === "excluded",
-              )
-            : undefined,
+          excluded_fields: layer.fieldVisibility ? excludedList : undefined,
         });
       } catch {
         if (isCurrentPostgisRequest()) {
@@ -699,8 +705,19 @@ export async function writeLayerEditsToSource(
           ...restMetadata,
           featureCount: fresh.feature_count,
           postgisBaselineKeys: databaseFeatureKeys(fresh.geojson),
-          // From now on this layer saves through the offline edit outbox.
-          [EDIT_SYNC_BASELINE_KEY]: postgisSyncBaseline(fresh.geojson),
+          // From now on this layer saves through the offline edit outbox. Not
+          // when this read dropped "excluded" columns: the outbox compares
+          // full rows, so a base without them would fake conflicts.
+          ...(excludedFields
+            ? {}
+            : {
+                [EDIT_SYNC_BASELINE_KEY]: postgisSyncBaseline(
+                  fresh.geojson,
+                  typeof layer.metadata.postgisPrimaryKey === "string"
+                    ? layer.metadata.postgisPrimaryKey
+                    : undefined,
+                ),
+              }),
         },
       });
       let message = t("layers.saveEditsPostgisSuccess", {

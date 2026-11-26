@@ -413,6 +413,7 @@
     "theirs": "Source",
     "geometryDiffers": "The shape or position differs.",
     "keepMine": "Keep mine",
+    "keepMineDelete": "Delete it anyway",
     "keepTheirs": "Keep source",
     "skip": "Decide later",
     "allMine": "Keep all mine",

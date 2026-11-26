@@ -86,12 +86,27 @@ export function postgisFingerprint(feature: Feature, omitProperties?: readonly s
   });
 }
 
-/** Base fingerprints of a PostGIS read, for `metadata.editSyncBaseline`. */
-export function postgisSyncBaseline(geojson: FeatureCollection): Record<string, string> {
-  return captureFingerprintBaseline(geojson.features, featureIdKey, {
-    coordinateDecimals: POSTGIS_COORDINATE_DECIMALS,
-  });
+/**
+ * Base fingerprints of a PostGIS read, for `metadata.editSyncBaseline`, keyed
+ * the same way change detection keys rows (the key column when known).
+ *
+ * @param geojson The table as read.
+ * @param primaryKey The key column, when known.
+ * @returns Key to fingerprint.
+ */
+export function postgisSyncBaseline(
+  geojson: FeatureCollection,
+  primaryKey?: string | null,
+): Record<string, string> {
+  return captureFingerprintBaseline(
+    geojson.features,
+    primaryKey ? postgisKeyOf(primaryKey) : featureIdKey,
+    { coordinateDecimals: POSTGIS_COORDINATE_DECIMALS },
+  );
 }
+
+/** Layer metadata flag: a sync landed but the layer could not be reloaded. */
+export const EDIT_SYNC_REFRESH_REQUIRED_KEY = "editSyncRefreshRequired";
 
 /**
  * Describe a PostGIS layer's table as an outbox target, or null when the
@@ -177,11 +192,26 @@ export function buildPostgisChangeSet(
   const typedKeys = new Map(
     (databaseBaselineKeys(layer, "postgisBaselineKeys") ?? []).map((key) => [String(key), key]),
   );
+  // A feature whose key column an editor dropped entirely (not set to null)
+  // still names its row through its feature id, when that id is a loaded key.
+  const byColumn = postgisKeyOf(primaryKey);
+  const keyOf = (feature: Feature): string | null => {
+    const key = byColumn(feature);
+    if (key !== null) return key;
+    if (feature.properties && primaryKey in feature.properties) return null;
+    const id = featureIdKey(feature);
+    return id !== null && baseline.has(id) ? id : null;
+  };
   return buildChangeSet({
     baseline,
     features: geojson.features,
-    keyOf: postgisKeyOf(primaryKey),
-    rawKeyOf: postgisRawKeyOf(primaryKey),
+    keyOf,
+    rawKeyOf: (feature) => {
+      const raw = postgisRawKeyOf(primaryKey)(feature);
+      if (raw !== undefined) return raw;
+      const key = keyOf(feature);
+      return key === null ? undefined : (typedKeys.get(key) ?? (feature.id as string | number));
+    },
     rawKeyOfBase: (key) => typedKeys.get(key) ?? key,
     fingerprint: (feature) => postgisFingerprint(feature),
     stripKey: (feature) => {
@@ -220,8 +250,18 @@ export function resolveEntryConnection(entry: OutboxEntry): string | null {
 /** Statuses a proxy in front of the sidecar (nginx in the web build) answers with when it is down. */
 const GATEWAY_STATUSES = new Set([502, 503, 504]);
 
+/** The sidecar's 503 for a missing PostgreSQL driver: permanent, not a network blip. */
+function isMissingDriver(error: unknown): boolean {
+  return (
+    error instanceof PostgisRequestError && error.status === 503 && /psycopg/i.test(error.message)
+  );
+}
+
 function readFailure(error: unknown): Error {
-  if (error instanceof PostgisRequestError && !GATEWAY_STATUSES.has(error.status ?? 0)) {
+  if (
+    error instanceof PostgisRequestError &&
+    (!GATEWAY_STATUSES.has(error.status ?? 0) || isMissingDriver(error))
+  ) {
     return new EditSyncRejectedError(error.message);
   }
   // Database or sidecar unreachable, or no answer at all: a read is safe to retry.
@@ -231,6 +271,7 @@ function readFailure(error: unknown): Error {
 function writeFailure(error: unknown): Error {
   if (error instanceof PostgisWriteRejectedError) {
     if (error.status === 409) return new EditSyncConflictRaceError(error.message);
+    if (isMissingDriver(error)) return new EditSyncRejectedError(error.message);
     // The sidecar's own 503 means it never reached the database.
     if (error.status === 503) return new EditSyncOfflineError(error.message);
     // A gateway timeout or bad gateway may follow a committed write.
@@ -296,15 +337,26 @@ export function createPostgisSyncAdapter(
       const insertMatches = new Map<string, string>();
       if (maybeApplied.length) {
         const referenced = new Set(entry.ops.map((op) => op.key).filter(Boolean));
-        const candidates = new Map<string, string>();
-        for (const [key, feature] of rows) {
-          if (!referenced.has(key)) candidates.set(key, contentFingerprint(feature));
-        }
+        const candidates = new Map<string, Feature>();
+        for (const [key, feature] of rows) if (!referenced.has(key)) candidates.set(key, feature);
         for (const op of maybeApplied) {
           if (!op.feature) continue;
           const wanted = contentFingerprint(op.feature);
-          for (const [key, fingerprint] of candidates) {
-            if (fingerprint !== wanted) continue;
+          // Compare only what the insert set: columns it left out may have
+          // been filled by database defaults.
+          const sent = new Set(
+            Object.entries(op.feature.properties ?? {})
+              .filter(([, value]) => value !== null && value !== undefined)
+              .map(([name]) => name),
+          );
+          for (const [key, feature] of candidates) {
+            const narrowed = {
+              ...feature,
+              properties: Object.fromEntries(
+                Object.entries(feature.properties ?? {}).filter(([name]) => sent.has(name)),
+              ),
+            };
+            if (contentFingerprint(narrowed) !== wanted) continue;
             insertMatches.set(op.id, key);
             candidates.delete(key);
             break;
@@ -316,9 +368,11 @@ export function createPostgisSyncAdapter(
 
     async apply(_entry, plan): Promise<ApplyResult> {
       const touched = [...plan.updates, ...plan.deletes];
-      const expected: Record<string, string> = {};
+      // No prototype, so a text key "__proto__" stays an entry.
+      const expected: Record<string, string> = Object.create(null);
       for (const op of touched) {
-        const hash = op.key !== null ? rowHashes[op.key] : undefined;
+        const hash =
+          op.key !== null && Object.hasOwn(rowHashes, op.key) ? rowHashes[op.key] : undefined;
         if (hash) expected[op.key!] = hash;
       }
       const features = [...plan.inserts, ...plan.updates].map((op) => op.feature as Feature);
@@ -389,6 +443,9 @@ export async function refreshPostgisLayerAfterSync(
   });
   const live = getLayer(entry.layerId);
   if (!live?.geojson) return false;
+  // The layer may have been pointed elsewhere while the table was read.
+  const after = postgisOutboxTarget(live);
+  if (!after || postgisOutboxId(after) !== entry.id) return false;
   // Everything the layer holds that its old base does not: the edits this
   // sync sent, edits still queued, and edits made since the save (possibly
   // while this sync ran in the background). Only the ones this sync settled
@@ -397,7 +454,11 @@ export async function refreshPostgisLayerAfterSync(
   const remaining = new Set((outcome.entry?.ops ?? []).map((op) => op.id));
   const settled = entry.ops.filter((op) => !remaining.has(op.id));
   const unsynced = unsyncedLocalOps(localOps, settled);
-  const { geometryEdited: _cleared, ...metadata } = live.metadata;
+  const {
+    geometryEdited: _cleared,
+    [EDIT_SYNC_REFRESH_REQUIRED_KEY]: _refreshed,
+    ...metadata
+  } = live.metadata;
   updateLayer(entry.layerId, {
     geojson: overlayLocalOps(fresh.geojson, unsynced, keyOfTarget(current)),
     metadata: {
@@ -405,7 +466,7 @@ export async function refreshPostgisLayerAfterSync(
       ...(unsynced.length ? { geometryEdited: true } : {}),
       featureCount: fresh.feature_count,
       postgisBaselineKeys: databaseFeatureKeys(fresh.geojson),
-      [EDIT_SYNC_BASELINE_KEY]: postgisSyncBaseline(fresh.geojson),
+      [EDIT_SYNC_BASELINE_KEY]: postgisSyncBaseline(fresh.geojson, current.primaryKey),
     },
   });
   return true;
@@ -471,15 +532,43 @@ export function overlayLocalOps(
   for (const feature of geojson.features) {
     const key = keyOf(feature);
     if (key !== null && deleted.has(key)) continue;
-    features.push(key !== null && replaced.has(key) ? replaced.get(key)! : feature);
+    if (key !== null && replaced.has(key)) {
+      features.push(replaced.get(key)!);
+      replaced.delete(key);
+    } else {
+      features.push(feature);
+    }
   }
-  return { ...geojson, features: [...features, ...inserts] };
+  // Updates of rows the server no longer has (a conflict under review) stay visible.
+  return { ...geojson, features: [...features, ...replaced.values(), ...inserts] };
 }
 
 /** The outbox handler for PostGIS. */
 export const postgisEditSyncHandler: EditSyncBackendHandler = {
   createAdapter: (entry) => createPostgisSyncAdapter(entry),
   afterSync: async (entry, outcome) => {
-    await refreshPostgisLayerAfterSync(entry, outcome);
+    try {
+      await refreshPostgisLayerAfterSync(entry, outcome);
+    } catch {
+      // The edits landed but the layer still shows the old base, so a new
+      // save would send its inserts again: block saving until it reloads.
+      markPostgisRefreshRequired(entry.layerId);
+    }
   },
 };
+
+/**
+ * Flag a layer whose sync landed but whose reload failed; saving is refused
+ * until it is reloaded (or a later sync refreshes it), so its inserts are not
+ * sent twice.
+ *
+ * @param layerId The layer.
+ */
+export function markPostgisRefreshRequired(layerId: string): void {
+  const store = useAppStore.getState();
+  const layer = store.layers.find((candidate) => candidate.id === layerId);
+  if (!layer) return;
+  store.updateLayer(layerId, {
+    metadata: { ...layer.metadata, [EDIT_SYNC_REFRESH_REQUIRED_KEY]: true },
+  });
+}

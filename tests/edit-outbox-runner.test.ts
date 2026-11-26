@@ -16,6 +16,7 @@ import {
 } from "../apps/geolibre-desktop/src/lib/edit-sync/edit-outbox";
 import {
   editSessionToken,
+  discardOutboxEntry,
   enqueueChangeSet,
   flushDueOutboxEntries,
   isOutboxEntrySyncing,
@@ -105,6 +106,30 @@ describe("edit outbox store", () => {
     assert.equal(getOutboxSnapshot().loaded, true);
     assert.equal(getOutboxEntry(stored.id)!.status, "pending");
     assert.equal(notified, 1);
+  });
+
+  it("trusts memory after a failed write and clears the warning once storage recovers", async () => {
+    let failWrites = true;
+    const inner = memoryOutboxPersistence();
+    setOutboxPersistence({
+      load: () => inner.load(),
+      get: () => inner.get!("x"),
+      put: async (entry) => {
+        if (failWrites) throw new Error("QuotaExceededError");
+        await inner.put(entry);
+      },
+      remove: (id) => inner.remove(id),
+    });
+    await loadOutbox();
+    const entry = await enqueueShape();
+    await putOutboxEntry(entry);
+    assert.equal(getOutboxSnapshot().writeError, "QuotaExceededError");
+    // Storage lacks the entry, but the sync must still see it.
+    assert.equal((await reloadOutboxEntry(entry.id))!.id, entry.id);
+    failWrites = false;
+    await putOutboxEntry({ ...entry, attempts: 1 });
+    assert.equal(getOutboxSnapshot().writeError, undefined);
+    assert.equal(getOutboxSnapshot().durable, true);
   });
 
   it("falls back to memory and reports it when storage refuses", async () => {
@@ -317,6 +342,26 @@ describe("edit outbox runner", () => {
       if (original) Object.defineProperty(globalThis, "navigator", original);
       else delete (globalThis as { navigator?: unknown }).navigator;
     }
+  });
+
+  it("records conflict decisions on the stored entry and discards after a sync", async () => {
+    const seen: OutboxEntry[] = [];
+    registerEditSyncBackend("postgis", {
+      createAdapter: (entry) => {
+        seen.push(entry);
+        return {
+          fetchRemote: async () => {
+            throw new EditSyncOfflineError("down");
+          },
+          apply: async () => ({ applied: [], failed: [] }),
+        };
+      },
+    });
+    await enqueueChangeSet(input([updateOp("a", "1")]));
+    await syncOutboxEntryNow("postgis:t", new Map([["a", "skip" as const]]));
+    assert.equal(seen[0].ops[0].resolution, "skip");
+    await discardOutboxEntry("postgis:t");
+    assert.equal(getOutboxEntry("postgis:t"), undefined);
   });
 
   it("starts once and stops cleanly", () => {

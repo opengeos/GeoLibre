@@ -4,7 +4,7 @@
  */
 
 import type { Feature } from "geojson";
-import { canonicalJson } from "./feature-fingerprint";
+import { canonicalJson, isInternalProperty } from "./feature-fingerprint";
 
 /** One attribute that differs between the two versions. */
 export interface AttributeDifference {
@@ -17,10 +17,6 @@ export interface AttributeDifference {
 export interface FeatureDifference {
   geometryDiffers: boolean;
   attributes: AttributeDifference[];
-}
-
-function isInternal(key: string): boolean {
-  return key.startsWith("__gm_") || key === "__geolibre_fid";
 }
 
 /**
@@ -41,7 +37,7 @@ export function diffConflictVersions(
   const names = new Set([...Object.keys(mineProps), ...Object.keys(theirProps)]);
   const attributes: AttributeDifference[] = [];
   for (const name of [...names].sort()) {
-    if (isInternal(name)) continue;
+    if (isInternalProperty(name)) continue;
     const a = mineProps[name] ?? null;
     const b = theirProps[name] ?? null;
     if (canonicalJson(a) !== canonicalJson(b)) attributes.push({ name, mine: a, theirs: b });

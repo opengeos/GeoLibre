@@ -17,7 +17,7 @@ import type { Feature } from "geojson";
 const GEOMETRY_EDIT_FID_PROPERTY = "__geolibre_fid";
 
 /** Editor-internal keys that can survive an edit session but are not data. */
-function isInternalProperty(key: string): boolean {
+export function isInternalProperty(key: string): boolean {
   return key.startsWith("__gm_") || key === GEOMETRY_EDIT_FID_PROPERTY;
 }
 
@@ -112,7 +112,8 @@ export function featureFingerprint(
   options: FingerprintOptions = {},
 ): string {
   const omit = new Set(options.omitProperties ?? []);
-  const properties: Record<string, unknown> = {};
+  // No prototype, so an attribute named "__proto__" is kept as data.
+  const properties: Record<string, unknown> = Object.create(null);
   for (const [key, value] of Object.entries(feature.properties ?? {})) {
     if (value === null || value === undefined) continue;
     if (omit.has(key) || isInternalProperty(key)) continue;

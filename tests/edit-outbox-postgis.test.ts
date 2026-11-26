@@ -52,12 +52,7 @@ class FakeSidecar {
   loseWriteResponse = false;
 
   hash(feature: Feature): string {
-    return (
-      canonicalJson({ g: feature.geometry, p: feature.properties }).length.toString(36) +
-      canonicalJson(feature)
-        .replace(/[^a-z0-9]/gi, "")
-        .slice(-12)
-    );
+    return canonicalJson({ g: feature.geometry, p: feature.properties });
   }
 
   reads: ReadPostgisTableRequest[] = [];
@@ -365,15 +360,31 @@ describe("PostGIS sync adapter", () => {
     assert.equal(refused.kind, "error");
     assert.match(refused.entry!.lastError!, /permission denied/);
 
+    // With an insert queued, 503 (nothing written) and 502 (maybe written) differ.
+    const withInsert = entryFor(layer, [
+      row(1, 1, "b"),
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [4, 4] },
+        properties: { name: "n" },
+      },
+    ] as Feature[]);
+    const insertAdapter = adapterFor(sidecar, withInsert);
     sidecar.writeError = new PostgisWriteRejectedError("Could not connect", 503);
-    const down = await syncOutboxEntry(entry, adapter);
+    const down = await syncOutboxEntry(withInsert, insertAdapter);
     assert.equal(down.kind, "offline");
-    assert.equal(down.entry!.ops[0].maybeApplied, undefined);
+    assert.equal(down.entry!.ops.find((op) => op.kind === "insert")!.maybeApplied, undefined);
 
     sidecar.writeError = new PostgisWriteRejectedError("Bad Gateway", 502);
-    const gateway = await syncOutboxEntry(entry, adapter);
+    const gateway = await syncOutboxEntry(withInsert, insertAdapter);
     assert.equal(gateway.kind, "offline");
-    assert.equal(gateway.entry!.status, "pending");
+    assert.equal(gateway.entry!.ops.find((op) => op.kind === "insert")!.maybeApplied, true);
+
+    sidecar.writeError = new PostgisWriteRejectedError(
+      "psycopg is not installed in the sidecar",
+      503,
+    );
+    assert.equal((await syncOutboxEntry(entry, adapter)).kind, "error");
     sidecar.writeError = null;
 
     sidecar.readError = new PostgisRequestError("Bad Gateway", 502);
@@ -395,6 +406,46 @@ describe("PostGIS sync adapter", () => {
     const outcome = await syncOutboxEntry(entry, adapterFor(sidecar, entry));
     assert.equal(outcome.kind, "synced");
     assert.ok(sidecar.reads.every((read) => read.excluded_fields === undefined));
+  });
+
+  it("finds a landed insert whose omitted columns got database defaults", async () => {
+    const sidecar = new FakeSidecar();
+    sidecar.rows.set(1, row(1, 1, "a"));
+    const layer = loadLayer(sidecar);
+    const drawn = {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [3, 3] },
+      properties: { name: "new" },
+    } as Feature;
+    const entry = entryFor(layer, [row(1, 1, "a"), drawn]);
+    const write = sidecar.write;
+    sidecar.write = async (request) => {
+      const result = await write(request);
+      // The table fills a default for a column the insert left out.
+      for (const feature of sidecar.rows.values()) {
+        if (feature.properties!.name === "new") feature.properties!.status = "draft";
+      }
+      void result;
+      throw new TypeError("connection reset");
+    };
+    const lost = await syncOutboxEntry(entry, adapterFor(sidecar, entry));
+    assert.equal(lost.kind, "offline");
+    sidecar.write = write;
+    const retry = await syncOutboxEntry(lost.entry!, adapterFor(sidecar, entry));
+    assert.equal(retry.kind, "synced");
+    assert.equal(sidecar.rows.size, 2);
+  });
+
+  it("keeps a row's identity when an editor dropped its key column", () => {
+    const sidecar = new FakeSidecar();
+    sidecar.rows.set(4, row(4, 4, "four"));
+    const layer = loadLayer(sidecar);
+    const edited = { ...row(4, 4, "renamed"), properties: { name: "renamed" } } as Feature;
+    const ops = buildPostgisChangeSet(layer, { type: "FeatureCollection", features: [edited] })!;
+    assert.deepEqual(
+      ops.map((op) => [op.kind, op.key, op.rawKey]),
+      [["update", "4", 4]],
+    );
   });
 
   it("refuses to build without a connection", () => {
@@ -488,6 +539,13 @@ describe("overlayLocalOps", () => {
       ["mine", "n"],
     );
     assert.equal(overlayLocalOps(fresh, [], keyOf), fresh);
+    // An update of a row the server deleted (a conflict under review) stays visible.
+    const kept = overlayLocalOps(
+      fresh,
+      [{ id: "g", kind: "update", key: "7", feature: row(7, 7, "orphan") }],
+      keyOf,
+    );
+    assert.equal(kept.features.at(-1)!.properties!.name, "orphan");
   });
 
   it("keeps only the local edits a sync did not settle", () => {

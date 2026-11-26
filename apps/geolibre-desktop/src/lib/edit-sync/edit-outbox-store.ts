@@ -239,13 +239,21 @@ export function loadOutbox(): Promise<void> {
 function persist(run: (backend: OutboxPersistence) => Promise<void>): Promise<void> {
   const backend = resolvePersistence();
   const next = writeChain.then(() => run(backend));
-  writeChain = next.catch((error: unknown) => {
-    emit({
-      ...snapshot,
-      durable: false,
-      writeError: error instanceof Error ? error.message : String(error),
-    });
-  });
+  writeChain = next.then(
+    () => {
+      // Storage recovered: the warning from an earlier failed write no longer holds.
+      if (snapshot.writeError && !snapshot.storageError && persistence === backend) {
+        emit({ ...snapshot, durable: true, writeError: undefined });
+      }
+    },
+    (error: unknown) => {
+      emit({
+        ...snapshot,
+        durable: false,
+        writeError: error instanceof Error ? error.message : String(error),
+      });
+    },
+  );
   return writeChain;
 }
 
@@ -287,7 +295,8 @@ export async function reloadOutboxEntry(id: string): Promise<OutboxEntry | undef
   const backend = resolvePersistence();
   // This tab's own pending writes land first.
   await writeChain;
-  if (!backend.get) return getOutboxEntry(id);
+  // After a failed write, memory holds edits storage does not: trust memory.
+  if (!backend.get || snapshot.writeError) return getOutboxEntry(id);
   let row: OutboxEntry | undefined;
   try {
     row = await backend.get(id);

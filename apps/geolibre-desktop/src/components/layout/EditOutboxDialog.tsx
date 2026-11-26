@@ -19,14 +19,12 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { diffConflictVersions, formatAttributeValue } from "../../lib/edit-sync/conflict-diff";
 import {
-  applyConflictResolutions,
   countOps,
   type ConflictResolution,
   type OutboxConflict,
   type OutboxEntry,
 } from "../../lib/edit-sync/edit-outbox";
-import { putOutboxEntry, removeOutboxEntry } from "../../lib/edit-sync/edit-outbox-store";
-import { syncOutboxEntryNow } from "../../lib/edit-sync/edit-outbox-runner";
+import { discardOutboxEntry, syncOutboxEntryNow } from "../../lib/edit-sync/edit-outbox-runner";
 import { describeSyncOutcome } from "../../lib/edit-sync/outbox-save";
 import { notify } from "../../lib/notify";
 
@@ -53,11 +51,12 @@ export function EditOutboxDialog({
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
   const reviewing = entries.find((entry) => entry.id === reviewId) ?? null;
 
-  const runSync = async (entry: OutboxEntry, prepared?: OutboxEntry) => {
+  const runSync = async (entry: OutboxEntry, decisions?: Map<string, ConflictResolution>) => {
     setBusyIds((current) => new Set(current).add(entry.id));
     try {
-      if (prepared) await putOutboxEntry(prepared);
-      const outcome = await syncOutboxEntryNow(entry.id);
+      // Decisions are recorded on the stored entry under its lock, not on this
+      // dialog's copy, which another tab may have changed meanwhile.
+      const outcome = await syncOutboxEntryNow(entry.id, decisions);
       const result = describeSyncOutcome(outcome, entry.targetLabel, t);
       notify[result.status](result.message);
     } finally {
@@ -87,8 +86,7 @@ export function EditOutboxDialog({
             busy={busyIds.has(reviewing.id)}
             onBack={() => setReviewId(null)}
             onApply={async (decisions) => {
-              const prepared = applyConflictResolutions(reviewing, decisions);
-              await runSync(reviewing, prepared);
+              await runSync(reviewing, decisions);
               setReviewId(null);
             }}
           />
@@ -127,7 +125,7 @@ export function EditOutboxDialog({
                     busy={busyIds.has(entry.id) || entry.status === "syncing"}
                     onSync={() => void runSync(entry)}
                     onReview={() => setReviewId(entry.id)}
-                    onDiscard={() => void removeOutboxEntry(entry.id)}
+                    onDiscard={() => void discardOutboxEntry(entry.id)}
                   />
                 ))}
               </ul>
@@ -341,7 +339,8 @@ function ConflictItem({
   const diff = diffConflictVersions(mineDeleted ? undefined : mine, conflict.theirs);
   const choices: ConflictResolution[] = ["mine", "theirs", "skip"];
   const label: Record<ConflictResolution, string> = {
-    mine: t("editOutbox.keepMine"),
+    // For my delete, keeping mine means deleting the server's version.
+    mine: mineDeleted ? t("editOutbox.keepMineDelete") : t("editOutbox.keepMine"),
     theirs: t("editOutbox.keepTheirs"),
     skip: t("editOutbox.skip"),
   };
@@ -381,25 +380,31 @@ function ConflictItem({
       {diff.geometryDiffers && !mineDeleted && conflict.theirs && (
         <p className="mb-2 text-xs text-muted-foreground">{t("editOutbox.geometryDiffers")}</p>
       )}
-      <div role="radiogroup" className="flex flex-wrap gap-1.5">
+      {/* Native radios: one tab stop, arrow keys move between the choices. */}
+      <fieldset className="flex flex-wrap gap-1.5">
+        <legend className="sr-only">{t("editOutbox.feature", { key: conflict.key })}</legend>
         {choices.map((choice) => (
-          <button
+          <label
             key={choice}
-            type="button"
-            role="radio"
-            aria-checked={value === choice}
-            onClick={() => onChange(choice)}
             className={cn(
-              "rounded-md border px-2.5 py-1 text-xs",
+              "cursor-pointer rounded-md border px-2.5 py-1 text-xs has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
               value === choice
                 ? "border-primary bg-primary text-primary-foreground"
                 : "hover:bg-accent hover:text-accent-foreground",
             )}
           >
+            <input
+              type="radio"
+              className="sr-only"
+              name={`conflict-${conflict.opId}`}
+              value={choice}
+              checked={value === choice}
+              onChange={() => onChange(choice)}
+            />
             {label[choice]}
-          </button>
+          </label>
         ))}
-      </div>
+      </fieldset>
     </li>
   );
 }

@@ -68,8 +68,9 @@ class FakeServer implements EditSyncAdapter {
     this.beforeApply = null;
     const next = this.failApply.shift();
     if (next) throw next;
-    // Optimistic check: every touched row must still be what the plan read.
-    for (const op of [...plan.updates, ...plan.deletes]) {
+    // Optimistic check: every touched row must still be what the plan read,
+    // including a client-keyed insert's key that the read found free.
+    for (const op of [...plan.updates, ...plan.deletes, ...plan.inserts.filter((i) => i.key)]) {
       const read = plan.remote.byKey.get(op.key!) ?? null;
       const now = this.rows.get(op.key!) ?? null;
       if (canonicalJson(read) !== canonicalJson(now)) throw new EditSyncConflictRaceError("race");
@@ -141,6 +142,12 @@ describe("feature fingerprints", () => {
       featureFingerprint(local, { omitProperties: ["gid"] }),
       featureFingerprint(stored, { omitProperties: ["gid"] }),
     );
+  });
+
+  it("hashes an attribute named __proto__ as data", () => {
+    const a = JSON.parse('{"type":"Feature","geometry":null,"properties":{"__proto__":"x"}}');
+    const b = JSON.parse('{"type":"Feature","geometry":null,"properties":{"__proto__":"y"}}');
+    assert.notEqual(featureFingerprint(a), featureFingerprint(b));
   });
 
   it("keeps prototype-like keys as data", () => {
@@ -513,6 +520,97 @@ describe("mergeChangeSet after a restart", () => {
       merged.ops.map((op) => [op.id, op.kind, op.baseFingerprint]),
       [["n1", "delete", "old"]],
     );
+  });
+});
+
+describe("conflict decisions", () => {
+  it("keep theirs drops my edit even when the server went back to the base", async () => {
+    const server = new FakeServer();
+    const baseline = seed(server, [point(1, 1)]);
+    const ops = buildChangeSet({ baseline, features: [point(1, 10)], keyOf: featureIdKey, newId });
+    server.rows.set("1", point(1, 77));
+    const conflicted = (await syncOutboxEntry(entryFor(ops), server)).entry!;
+    const resolved = applyConflictResolutions(
+      conflicted,
+      new Map([[conflicted.ops[0].id, "theirs" as const]]),
+    );
+    server.rows.set("1", point(1, 1)); // reverted to the base before the sync
+    const outcome = await syncOutboxEntry(resolved, server);
+    assert.equal(outcome.kind, "synced");
+    assert.equal(outcome.keptTheirs, 1);
+    assert.equal((server.rows.get("1")!.geometry as { coordinates: number[] }).coordinates[0], 1);
+  });
+
+  it("keep mine applies only to the server version that was reviewed", async () => {
+    const server = new FakeServer();
+    const baseline = seed(server, [point(1, 1)]);
+    const ops = buildChangeSet({ baseline, features: [point(1, 10)], keyOf: featureIdKey, newId });
+    server.rows.set("1", point(1, 77));
+    const conflicted = (await syncOutboxEntry(entryFor(ops), server)).entry!;
+    assert.ok(conflicted.conflicts[0].theirsFingerprint);
+    const resolved = applyConflictResolutions(
+      conflicted,
+      new Map([[conflicted.ops[0].id, "mine" as const]]),
+    );
+    server.rows.set("1", point(1, 88)); // changed again after the review
+    const outcome = await syncOutboxEntry(resolved, server);
+    assert.equal(outcome.kind, "conflict");
+    assert.equal((server.rows.get("1")!.geometry as { coordinates: number[] }).coordinates[0], 88);
+    assert.equal(outcome.entry!.ops[0].resolution, undefined);
+  });
+});
+
+describe("write-ahead flag", () => {
+  it("persists inserts as maybe-applied before the write is sent", async () => {
+    const server = new FakeServer();
+    const baseline = seed(server, []);
+    const ops = buildChangeSet({
+      baseline,
+      features: [point(undefined, 4, { n: "new" })],
+      keyOf: featureIdKey,
+      newId,
+    });
+    const dispatched: OutboxEntry[] = [];
+    await syncOutboxEntry(entryFor(ops), server, {
+      onDispatch: async (entry) => {
+        dispatched.push(entry);
+      },
+    });
+    assert.equal(dispatched.length, 1);
+    assert.equal(dispatched[0].ops[0].maybeApplied, true);
+  });
+});
+
+describe("mergeChangeSet sessions", () => {
+  it("drops only edits recorded in the same load, never uncertain writes", () => {
+    const op = (id: string, key: string | null, extra: Partial<OutboxOp> = {}): OutboxOp => ({
+      id,
+      kind: key === null ? "insert" : "update",
+      key,
+      feature: point(key ?? undefined, 1),
+      mineFingerprint: id,
+      ...extra,
+    });
+    const queued = entryFor([
+      op("a", "1", { session: "load-1" }), // inherited from an earlier load
+      op("b", "2", { session: "load-2" }), // recorded in this load, now undone
+      op("c", "3", { session: "load-2", kind: "insert", maybeApplied: true }),
+      op("d", null, { session: "load-2", mineFingerprint: "same" }),
+      op("e", null, { session: "load-1", mineFingerprint: "same" }),
+    ]);
+    const merged = mergeChangeSet(
+      queued,
+      [op("n", null, { mineFingerprint: "same" })],
+      1,
+      "load-2",
+    );
+    // "d" claims the only newer twin; "e" (an earlier load) is kept, not
+    // matched against an operation appended during the merge.
+    assert.deepEqual(
+      merged.ops.map((o) => o.id),
+      ["d", "a", "c", "e"],
+    );
+    assert.ok(merged.ops.every((o) => o.id === "a" || o.id === "e" || o.session === "load-2"));
   });
 });
 

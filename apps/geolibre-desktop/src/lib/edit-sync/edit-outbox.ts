@@ -59,6 +59,15 @@ export interface OutboxOp {
   resolution?: ConflictResolution;
   /** The last per-feature error the source reported for this operation. */
   error?: string;
+  /**
+   * For a "keep mine" decision: the fingerprint of the server version the user
+   * reviewed (null when it was deleted). If the server has changed again by
+   * the time the sync runs, the conflict comes back instead of overwriting a
+   * version nobody looked at.
+   */
+  reviewedFingerprint?: string | null;
+  /** The layer load (see `editSessionToken`) this operation was recorded in. */
+  session?: string;
 }
 
 /** Why an operation conflicts with the server. */
@@ -71,6 +80,8 @@ export interface OutboxConflict {
   reason: ConflictReason;
   /** The server's version, or null when the server deleted the feature. */
   theirs: Feature | null;
+  /** Fingerprint of {@link theirs} (null when deleted), to bind a decision to it. */
+  theirsFingerprint?: string | null;
 }
 
 /** Lifecycle of an outbox entry. */
@@ -265,8 +276,7 @@ export function buildChangeSet(input: ChangeSetInput): OutboxOp[] {
     input.rawKeyOf ??
     ((feature: Feature) =>
       typeof feature.id === "string" || typeof feature.id === "number" ? feature.id : undefined);
-  let counter = 0;
-  const newId = input.newId ?? (() => `op-${Date.now().toString(36)}-${(counter++).toString(36)}`);
+  const newId = input.newId ?? (() => crypto.randomUUID());
   const ops: OutboxOp[] = [];
   const seen = new Set<string>();
   for (const feature of input.features) {
@@ -340,6 +350,9 @@ export function classifyOp(
   remote: RemoteState,
   fingerprint: (feature: Feature) => string,
 ): OpVerdict {
+  // Keep theirs drops my change whatever the server holds now; even a server
+  // that went back to the base must not receive the edit the user gave up.
+  if (op.resolution === "theirs") return { kind: "theirs", op };
   if (op.kind === "insert") {
     if (op.maybeApplied && remote.insertMatches?.has(op.id)) return { kind: "done", op };
     if (op.key === null) return { kind: "apply", op };
@@ -353,27 +366,51 @@ export function classifyOp(
       key: op.key,
       reason: "remoteChanged",
       theirs: existing,
+      theirsFingerprint: fingerprint(existing),
     });
   }
   const key = op.key as string;
   const theirs = remote.byKey.has(key) ? (remote.byKey.get(key) ?? null) : null;
   if (op.kind === "delete") {
     if (!theirs) return { kind: "done", op };
-    if (fingerprint(theirs) === op.baseFingerprint) return { kind: "apply", op };
-    return resolveConflict(op, { opId: op.id, key, reason: "remoteChanged", theirs });
+    const deleteTheirs = fingerprint(theirs);
+    if (deleteTheirs === op.baseFingerprint) return { kind: "apply", op };
+    return resolveConflict(op, {
+      opId: op.id,
+      key,
+      reason: "remoteChanged",
+      theirs,
+      theirsFingerprint: deleteTheirs,
+    });
   }
   if (!theirs) {
-    return resolveConflict(op, { opId: op.id, key, reason: "remoteDeleted", theirs: null });
+    return resolveConflict(op, {
+      opId: op.id,
+      key,
+      reason: "remoteDeleted",
+      theirs: null,
+      theirsFingerprint: null,
+    });
   }
   const theirsFingerprint = fingerprint(theirs);
   if (theirsFingerprint === op.mineFingerprint) return { kind: "done", op };
   if (theirsFingerprint === op.baseFingerprint) return { kind: "apply", op };
-  return resolveConflict(op, { opId: op.id, key, reason: "remoteChanged", theirs });
+  return resolveConflict(op, {
+    opId: op.id,
+    key,
+    reason: "remoteChanged",
+    theirs,
+    theirsFingerprint,
+  });
 }
 
 function resolveConflict(op: OutboxOp, conflict: OutboxConflict): OpVerdict {
-  if (op.resolution === "theirs") return { kind: "theirs", op };
-  if (op.resolution === "mine") {
+  // A keep mine applies only to the server version the user reviewed.
+  const stale =
+    op.reviewedFingerprint !== undefined &&
+    conflict.theirsFingerprint !== undefined &&
+    op.reviewedFingerprint !== conflict.theirsFingerprint;
+  if (op.resolution === "mine" && !stale) {
     // Keeping my update of a feature the server deleted re-creates it.
     if (op.kind === "update" && conflict.reason === "remoteDeleted") {
       return { kind: "apply", op: { ...op, kind: "insert" } };
@@ -389,6 +426,12 @@ export interface SyncOptions {
   now?: () => number;
   /** How many times to re-read after a read/write race before giving up. */
   maxRaceRetries?: number;
+  /**
+   * Persist the entry right before a write is sent, with every insert in it
+   * flagged `maybeApplied`. If the app dies mid-write, the reloaded entry then
+   * deduplicates those inserts instead of sending them again.
+   */
+  onDispatch?: (entry: OutboxEntry) => Promise<void>;
 }
 
 function errorMessage(error: unknown): string {
@@ -435,6 +478,8 @@ export async function syncOutboxEntry(
   const startedAt = now();
   const failRetryable = (error: unknown, ops: OutboxOp[]): SyncOutcome => {
     const attempts = entry.attempts + 1;
+    // The backoff counts from when the attempt failed, not when it started.
+    const failedAt = now();
     return {
       ...outcome,
       kind: "offline",
@@ -447,8 +492,8 @@ export async function syncOutboxEntry(
         lastError: errorMessage(error),
         lastErrorCode: errorCode(error),
         lastAttemptAt: startedAt,
-        nextAttemptAt: startedAt + retryDelayMs(attempts),
-        updatedAt: startedAt,
+        nextAttemptAt: failedAt + retryDelayMs(attempts),
+        updatedAt: failedAt,
       },
     };
   };
@@ -488,6 +533,14 @@ export async function syncOutboxEntry(
         deletes: toApply.filter((op) => op.kind === "delete"),
         remote,
       };
+      if (options.onDispatch && plan.inserts.length) {
+        const sending = new Set(plan.inserts.map((op) => op.id));
+        await options.onDispatch({
+          ...entry,
+          status: "syncing",
+          ops: ops.map((op) => (sending.has(op.id) ? { ...op, maybeApplied: true } : op)),
+        });
+      }
       try {
         result = await adapter.apply(entry, plan);
       } catch (error) {
@@ -535,7 +588,10 @@ export async function syncOutboxEntry(
         // keep theirs that did not settle (a rejected write) must not be
         // applied unseen to whatever the server holds next time. Only "decide
         // later" persists, since it is a decision not to act.
-        if (conflictIds.has(op.id) || next.resolution !== "skip") delete next.resolution;
+        if (conflictIds.has(op.id) || next.resolution !== "skip") {
+          delete next.resolution;
+          delete next.reviewedFingerprint;
+        }
         return next;
       });
     if (remaining.length === 0) return outcome;
@@ -604,11 +660,20 @@ export function applyConflictResolutions(
   entry: OutboxEntry,
   decisions: ReadonlyMap<string, ConflictResolution>,
 ): OutboxEntry {
+  const reviewed = new Map(entry.conflicts.map((c) => [c.opId, c.theirsFingerprint]));
   return {
     ...entry,
     ops: entry.ops.map((op) => {
       const decision = decisions.get(op.id);
-      return decision ? { ...op, resolution: decision } : op;
+      if (!decision) return op;
+      const fingerprint = reviewed.get(op.id);
+      return {
+        ...op,
+        resolution: decision,
+        ...(decision === "mine" && fingerprint !== undefined
+          ? { reviewedFingerprint: fingerprint }
+          : {}),
+      };
     }),
   };
 }
@@ -633,14 +698,16 @@ export function applyConflictResolutions(
  * @param queued The entry already in the outbox.
  * @param ops The newer change set.
  * @param at Timestamp of the merge.
- * @param sameSession Whether both change sets come from the same layer load.
+ * @param session The layer load the newer change set comes from (see
+ *   `editSessionToken`); operations recorded in that same load and missing
+ *   from the newer set were undone.
  * @returns The merged entry, reset to pending.
  */
 export function mergeChangeSet(
   queued: OutboxEntry,
   ops: OutboxOp[],
   at: number,
-  sameSession = false,
+  session?: string,
 ): OutboxEntry {
   const olderBase = new Map<string, string>();
   for (const op of queued.ops) {
@@ -650,25 +717,39 @@ export function mergeChangeSet(
   }
   const merged = ops.map((op) => {
     const base = op.key !== null ? olderBase.get(op.key) : undefined;
-    return base !== undefined && op.kind !== "insert" ? { ...op, baseFingerprint: base } : op;
+    const next = session !== undefined ? { ...op, session } : { ...op };
+    return base !== undefined && op.kind !== "insert" ? { ...next, baseFingerprint: base } : next;
   });
+  const newerCount = merged.length;
   const newerKeys = new Set(ops.map((op) => op.key).filter((key): key is string => key !== null));
   const claimed = new Set<number>();
+  // An unmentioned operation was undone only if it was recorded in this same
+  // load of the layer; one inherited from an earlier load may simply be
+  // missing from it. A write with an unknown outcome is never dropped.
+  const undone = (op: OutboxOp) =>
+    session !== undefined && op.session === session && !op.maybeApplied;
   for (const op of queued.ops) {
     if (op.key !== null) {
-      if (!newerKeys.has(op.key) && !sameSession) merged.push(op);
+      if (!newerKeys.has(op.key) && !undone(op)) merged.push(op);
       continue;
     }
-    // A keyless insert: the newer change set holds it again if the feature is still there.
-    const twin = merged.findIndex(
-      (candidate, index) =>
+    // A keyless insert: the newer change set holds it again if the feature is
+    // still there. Only the newer operations are candidates.
+    let twin = -1;
+    for (let index = 0; index < newerCount; index++) {
+      const candidate = merged[index];
+      if (
         !claimed.has(index) &&
         candidate.kind === "insert" &&
         candidate.key === null &&
-        candidate.mineFingerprint === op.mineFingerprint,
-    );
+        candidate.mineFingerprint === op.mineFingerprint
+      ) {
+        twin = index;
+        break;
+      }
+    }
     if (twin < 0) {
-      if (!sameSession || op.maybeApplied) merged.push(op);
+      if (!undone(op)) merged.push(op);
       continue;
     }
     claimed.add(twin);

@@ -9,11 +9,13 @@
  */
 
 import {
+  applyConflictResolutions,
   EditSyncError,
   mergeChangeSet,
   syncOutboxEntry,
   type EditSyncAdapter,
   type EditSyncBackend,
+  type ConflictResolution,
   type OutboxEntry,
   type OutboxOp,
   type SyncOutcome,
@@ -77,6 +79,18 @@ function withEntryLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
   return locks.request(`geolibre-edit-outbox:${id}`, fn) as Promise<T>;
 }
 
+/**
+ * Discard a queued entry, waiting for any sync of it (in this or another tab)
+ * to finish first, so a sync that is mid-write cannot bring it back.
+ *
+ * @param id The entry id.
+ * @returns Resolves once the entry is gone.
+ */
+export async function discardOutboxEntry(id: string): Promise<void> {
+  await inFlight.get(id)?.catch(() => null);
+  await withEntryLock(id, () => removeOutboxEntry(id));
+}
+
 /** Whether an entry has a sync attempt running. */
 export function isOutboxEntrySyncing(id: string): boolean {
   return inFlight.has(id);
@@ -133,42 +147,48 @@ export async function enqueueChangeSet(
 ): Promise<EnqueueResult> {
   await loadOutbox();
   if (inFlight.has(input.id)) return { kind: "busy" };
-  const at = now();
-  // Merge with the stored entry: another tab may have changed it.
-  const queued = await reloadOutboxEntry(input.id);
-  const sameSession =
-    queued !== undefined && input.session !== undefined && queued.session === input.session;
-  if (input.ops.length === 0) {
-    // Nothing new to send. From the same load of the layer that means the
-    // queued edits were undone, so they go (except inserts that may already be
-    // on the server). From a later load the layer may never have had them, so
-    // the entry stays until a sync or a Discard.
-    if (queued && sameSession) {
-      const merged = mergeChangeSet(queued, [], at, true);
-      if (merged.ops.length === 0) await removeOutboxEntry(input.id);
-      else await putOutboxEntry(merged);
-    }
-    return { kind: "empty" };
-  }
-  const entry: OutboxEntry = queued
-    ? {
-        ...mergeChangeSet(queued, input.ops, at, sameSession),
-        session: input.session,
-        target: input.target,
-        targetLabel: input.targetLabel,
-        layerId: input.layerId,
-        layerName: input.layerName,
+  // Read, merge and write under the entry's lock, so neither this tab's nor
+  // another tab's sync can interleave with the merge.
+  return withEntryLock(input.id, async (): Promise<EnqueueResult> => {
+    if (inFlight.has(input.id)) return { kind: "busy" };
+    const at = now();
+    const queued = await reloadOutboxEntry(input.id);
+    const ops =
+      input.session !== undefined
+        ? input.ops.map((op) => ({ ...op, session: input.session }))
+        : input.ops;
+    if (ops.length === 0) {
+      // Nothing new to send. Queued edits recorded in this same load were
+      // undone and go; edits from an earlier load (or with an unknown write
+      // outcome) stay until a sync or a Discard.
+      if (queued) {
+        const merged = mergeChangeSet(queued, [], at, input.session);
+        if (merged.ops.length === 0) await removeOutboxEntry(input.id);
+        else if (merged.ops.length !== queued.ops.length) await putOutboxEntry(merged);
       }
-    : {
-        ...input,
-        status: "pending",
-        conflicts: [],
-        attempts: 0,
-        createdAt: at,
-        updatedAt: at,
-      };
-  await putOutboxEntry(entry);
-  return { kind: "queued", entry };
+      return { kind: "empty" };
+    }
+    const entry: OutboxEntry = queued
+      ? {
+          ...mergeChangeSet(queued, ops, at, input.session),
+          session: input.session,
+          target: input.target,
+          targetLabel: input.targetLabel,
+          layerId: input.layerId,
+          layerName: input.layerName,
+        }
+      : {
+          ...input,
+          ops,
+          status: "pending",
+          conflicts: [],
+          attempts: 0,
+          createdAt: at,
+          updatedAt: at,
+        };
+    await putOutboxEntry(entry);
+    return { kind: "queued", entry };
+  });
 }
 
 /**
@@ -178,23 +198,29 @@ export async function enqueueChangeSet(
  * promise. Returns null when the entry is gone or no backend is registered.
  *
  * @param id The entry id.
+ * @param decisions Conflict decisions (op id to choice) to record first, on
+ *   the stored entry under the lock, so they apply to what is stored now.
  * @returns The attempt's outcome.
  */
-export function syncOutboxEntryNow(id: string): Promise<SyncOutcome | null> {
+export function syncOutboxEntryNow(
+  id: string,
+  decisions?: ReadonlyMap<string, ConflictResolution>,
+): Promise<SyncOutcome | null> {
   const running = inFlight.get(id);
   if (running) return running;
   const attempt = withEntryLock(id, async (): Promise<SyncOutcome | null> => {
     // Under the lock, act on the stored entry: another tab may have synced or
     // discarded it since this tab last read the outbox.
-    const entry = await reloadOutboxEntry(id);
-    if (!entry) return null;
+    const stored = await reloadOutboxEntry(id);
+    if (!stored) return null;
+    const entry = decisions?.size ? applyConflictResolutions(stored, decisions) : stored;
     const handler = handlers.get(entry.backend);
     if (!handler) return null;
     await putOutboxEntry({ ...entry, status: "syncing" });
     let outcome: SyncOutcome;
     try {
       const adapter = await handler.createAdapter(entry);
-      outcome = await syncOutboxEntry(entry, adapter);
+      outcome = await syncOutboxEntry(entry, adapter, { onDispatch: putOutboxEntry });
     } catch (error) {
       // The adapter could not be built (credentials missing): the user must act.
       const message = error instanceof Error ? error.message : String(error);
