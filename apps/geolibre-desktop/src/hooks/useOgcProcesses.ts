@@ -377,27 +377,42 @@ export function useOgcProcesses(open: boolean) {
         tracked?.[0],
       );
     });
-  const dismiss = () =>
-    run("dismissing", async (context) => {
-      const target = jobUrl.trim();
+  const dismiss = () => {
+    const target = jobUrl.trim();
+    const observation = observedJob.current;
+    // run replaces the active request and aborts the monitor. Preserve its
+    // known aliases before that transition, even if its finally clears the ref.
+    const knownUrls = [target];
+    if (
+      observation &&
+      active.current?.signal === observation.signal &&
+      (sameOgcProcessJob(observation.initialUrl, target) ||
+        sameOgcProcessJob(observation.url, target))
+    )
+      knownUrls.push(observation.initialUrl, observation.url);
+    return run("dismissing", async (context) => {
       const project = useAppStore.getState().projectLoadCount;
       await dismissOgcProcessJob(target, context.signal);
       if (!mounted.current || useAppStore.getState().projectLoadCount !== project) return;
-      const observation = observedJob.current;
-      const matchingObservation =
-        observation &&
-        active.current?.signal === observation.signal &&
-        (sameOgcProcessJob(observation.initialUrl, target) ||
-          sameOgcProcessJob(observation.url, target))
-          ? observation
+      // A caller may resume this job while DELETE is pending. Its current
+      // observation can supply another canonical URL, but an unrelated monitor
+      // must not be stopped or acquire the dismissal's state.
+      const observationAtCompletion = observedJob.current;
+      const matchingLiveObservation =
+        observationAtCompletion &&
+        active.current?.signal === observationAtCompletion.signal &&
+        knownUrls.some(
+          (url) =>
+            sameOgcProcessJob(url, observationAtCompletion.initialUrl) ||
+            sameOgcProcessJob(url, observationAtCompletion.url),
+        )
+          ? observationAtCompletion
           : null;
+      const relatedUrls = matchingLiveObservation
+        ? [...knownUrls, matchingLiveObservation.initialUrl, matchingLiveObservation.url]
+        : knownUrls;
       const matchesTarget = (url: string) =>
-        sameOgcProcessJob(url, target) ||
-        Boolean(
-          matchingObservation &&
-          (sameOgcProcessJob(url, matchingObservation.initialUrl) ||
-            sameOgcProcessJob(url, matchingObservation.url)),
-        );
+        relatedUrls.some((alias) => sameOgcProcessJob(url, alias));
       // A completed remote mutation survives stopped observation. Only update
       // its retained identity; another displayed job may now own the dialog.
       setJob((previous) =>
@@ -412,8 +427,9 @@ export function useOgcProcesses(open: boolean) {
             ]),
           ),
       );
-      if (matchingObservation) stop();
+      if (matchingLiveObservation) stop();
     });
+  };
   const changeEndpoint = (value: string) => {
     stop();
     setEndpoint(value);

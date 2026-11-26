@@ -32,7 +32,7 @@ export async function readLimitedBody(
       chunks.push(value);
     }
   } finally {
-    await reader.cancel();
+    await reader.cancel().catch(() => {});
   }
   const bytes = new Uint8Array(size);
   let offset = 0;

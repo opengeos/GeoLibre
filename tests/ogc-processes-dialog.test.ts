@@ -8,6 +8,7 @@ import i18next from "i18next";
 
 const { OgcProcessesDialog } =
   await import("../apps/geolibre-desktop/src/components/processing/OgcProcessesDialog");
+const { useOgcProcesses } = await import("../apps/geolibre-desktop/src/hooks/useOgcProcesses");
 const description = () =>
   JSON.parse(
     readFileSync(new URL("./fixtures/ogc-processes/hello-world.json", import.meta.url), "utf8"),
@@ -802,6 +803,83 @@ test("required state is exposed for every schema control without native empty-st
   assert.equal(screen.getByLabelText("Message").getAttribute("aria-required"), "false");
   assert.equal(screen.getByLabelText("Name *").hasAttribute("required"), false);
 });
+
+for (const replaceMonitor of [false, true]) {
+  test(`dismissal retains a monitored alias association${replaceMonitor ? " without stopping another job" : ""}`, async () => {
+    const alias = "https://demo.pygeoapi.io/master/jobs/alias";
+    const canonical = "https://demo.pygeoapi.io/master/jobs/canonical";
+    const other = "https://demo.pygeoapi.io/master/jobs/other";
+    let releaseDelete: ((response: Response) => void) | undefined;
+    let deletes = 0;
+    serve(async (url, init) => {
+      if (init?.method === "POST")
+        return new Response(null, {
+          status: 202,
+          headers: { Location: alias, "Retry-After": "0" },
+        });
+      if (init?.method === "DELETE") {
+        assert.equal(url, alias);
+        deletes++;
+        return new Promise((resolve) => {
+          releaseDelete = resolve;
+        });
+      }
+      const target = url.includes("/other") ? other : canonical;
+      return new Response(
+        JSON.stringify({
+          jobID: target.split("/").pop(),
+          status: "running",
+          links: [{ rel: "self", href: target }],
+        }),
+        { headers: { "Content-Type": "application/json", "Retry-After": "30" } },
+      );
+    });
+    let client!: ReturnType<typeof useOgcProcesses>;
+    function Probe() {
+      client = useOgcProcesses(true);
+      return null;
+    }
+    render(createElement(Probe));
+    act(() => client.changeEndpoint("https://demo.pygeoapi.io/master/processes"));
+    await act(async () => {
+      await client.retrieve();
+    });
+    assert.equal(client.process?.id, "hello-world");
+    act(() => {
+      client.setValues({ name: "Ada" });
+      client.setAsynchronous(true);
+    });
+    act(() => {
+      void client.execute();
+    });
+    await waitFor(() => assert.equal(client.job?.url, canonical), { timeout: 2500 });
+    act(() => client.setJobUrl(alias));
+    let completion: Promise<void> | undefined;
+    act(() => {
+      completion = client.dismiss();
+    });
+    await waitFor(() => assert.ok(releaseDelete));
+    if (replaceMonitor) {
+      act(() => client.stop());
+      act(() => client.setJobUrl(other));
+      act(() => {
+        void client.resume();
+      });
+      await waitFor(() => assert.equal(client.job?.url, other), { timeout: 2500 });
+    }
+    await act(async () => {
+      releaseDelete?.(new Response("{}", { status: 200 }));
+      await completion;
+    });
+    assert.equal(deletes, 1);
+    assert.equal(client.runningForProcess, false);
+    if (replaceMonitor) {
+      assert.equal(client.job?.url, other);
+      assert.equal(client.job?.status, "running");
+      assert.equal(client.phase, "monitoring");
+    } else assert.equal(client.job?.status, "dismissed");
+  });
+}
 
 for (const canonicalBeforeDismissal of [false, true]) {
   test(`a delayed running poll cannot resurrect a dismissal (${canonicalBeforeDismissal ? "canonical URL first" : "acknowledgement first"})`, async () => {
