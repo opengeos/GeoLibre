@@ -369,21 +369,17 @@ def discovery_files() -> list[Path]:
     """Return every place a desktop relay may advertise itself, in order.
 
     Returns:
-        :func:`sidecar_discovery_file`, then, on macOS without an override, the
-        same file under the Mac App Store build's container home.
+        :func:`sidecar_discovery_file`, then, on macOS without an override and
+        when the Mac App Store build is installed (its container exists), the
+        same file under that container's home. Reading inside another app's
+        container can raise a macOS privacy prompt, so users without the store
+        build never trigger it.
     """
     files = [sidecar_discovery_file()]
     if sys.platform == "darwin" and not os.environ.get(SIDECAR_DISCOVERY_ENV, "").strip():
-        files.append(
-            Path.home()
-            / "Library"
-            / "Containers"
-            / MAS_BUNDLE_ID
-            / "Data"
-            / ".geolibre"
-            / "runtime"
-            / "live-relay.json"
-        )
+        container = Path.home() / "Library" / "Containers" / MAS_BUNDLE_ID
+        if container.is_dir():
+            files.append(container / "Data" / ".geolibre" / "runtime" / "live-relay.json")
     return files
 
 

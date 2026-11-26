@@ -78,7 +78,9 @@ export function createLiveRelayAccessController(options: {
     // Stop handling commands at once on an opt-out, before the shell answers.
     // A retry of the same preference keeps its error, so a persistent
     // notice does not flicker on every attempt.
-    if (desired !== state.enabled || state.ready) {
+    // Reasserting "on" is idempotent and keeps the window subscribed; only a
+    // change, or an opt-out, stops commands before the shell answers.
+    if (desired !== state.enabled || (!desired && state.ready)) {
       publish({ enabled: desired, ready: false, error: state.error && desired === state.enabled });
     }
     queue = queue.then(async () => {

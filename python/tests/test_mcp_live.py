@@ -871,6 +871,9 @@ def test_mac_app_store_container_is_searched(tmp_path, monkeypatch):
     monkeypatch.delenv("GEOLIBRE_LIVE_RELAY_FILE", raising=False)
     monkeypatch.setattr(live.Path, "home", classmethod(lambda cls: tmp_path))
     monkeypatch.setattr(live.sys, "platform", "darwin")
+    # Without the store build's container, it is never looked at.
+    assert live.discovery_files() == [tmp_path / ".geolibre" / "runtime" / "live-relay.json"]
+    (tmp_path / "Library/Containers/org.geolibre.desktop").mkdir(parents=True)
     files = live.discovery_files()
     assert files[0] == tmp_path / ".geolibre" / "runtime" / "live-relay.json"
     assert files[1] == (

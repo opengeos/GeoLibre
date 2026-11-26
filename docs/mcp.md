@@ -41,7 +41,8 @@ the network-server entitlement, so it listens on a Unix socket,
 `live-relay.sock`, next to the discovery file in its container, and the MCP
 server connects to that socket. The first time a terminal or MCP client reads
 the container, recent macOS versions ask whether it may access another app's
-data; allow it.
+data; allow it. The MCP server only looks in that container when the Mac App
+Store build is installed.
 
 Each time access is turned on the relay generates a new token, and only a
 client holding it (read from the owner-only discovery file) can send map

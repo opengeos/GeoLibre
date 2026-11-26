@@ -366,7 +366,10 @@ impl RelayCore {
             let state = self.lock();
             if state.enabled && state.server.is_some() {
                 drop(state);
-                // Republish in case another process overwrote the file.
+                // Republish in case another process overwrote the file. With
+                // two desktop instances listening over TCP, the last to
+                // publish is the one clients find (the single-instance
+                // plugin prevents that on Windows and Linux).
                 self.publish()?;
                 return Ok(self.status());
             }
