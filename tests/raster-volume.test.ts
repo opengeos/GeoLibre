@@ -270,7 +270,7 @@ describe("projectedAreaScale", () => {
     };
     // Spherical cos²(60°) is 0.25; on the ellipsoid the ground cell is a
     // little larger (M and N exceed the sphere's radius at 60°N).
-    near(projectedAreaScale(raster, inverse, 1)(0, 0), 0.25, 0.004);
+    near(projectedAreaScale(raster, inverse, 1).scaleAt(0, 0), 0.25, 0.004);
   });
 
   it("applies UTM's point scale factor", async () => {
@@ -281,7 +281,7 @@ describe("projectedAreaScale", () => {
         utm([0], 1, 1, { originX: easting - 1, originY: 4_000_001 }),
         inverse,
         1,
-      )(0, 0);
+      ).scaleAt(0, 0);
     // k = 0.9996 on the central meridian, so ground/map area = 1/k² = 1.0008.
     near(at(500_000), 1 / 0.9996 ** 2, 2e-4, "central meridian");
     // About 180 km off it, k ≈ 0.9996 · (1 + (180/6371)²/2) ≈ 1.0000: area ratio ≈ 1.
@@ -300,7 +300,7 @@ describe("projectedAreaScale", () => {
   });
 
   it("refuses an untagged raster with degree-sized cells", async () => {
-    for (const res of [0.0001, 0.1]) {
+    for (const res of [0.0001, 0.008333]) {
       const raster = utm([12], 1, 1, {
         originX: -84,
         originY: 36,
@@ -345,5 +345,38 @@ describe("projectedAreaScale", () => {
       return run.kind === "raster" ? run.cutFill!.cutVolume : Number.NaN;
     };
     near(await volume(southUp), await volume(northUp), 1e-6 * (await volume(northUp)));
+  });
+});
+
+describe("projectedAreaScale edge cases", () => {
+  it("wraps longitude steps across the antimeridian and counts failed nodes", () => {
+    const raster = utm([0], 1, 1, { originX: 0, originY: 10, resX: 1, resY: 1 });
+    // A fake inverse whose cell straddles 180°, normalised the way proj4 does.
+    const inverse = ([x, y]: [number, number]): [number, number] => {
+      const lon = 179.999995 + x * 1e-5;
+      return [lon >= 180 ? lon - 360 : lon, y * 1e-5];
+    };
+    const plain = projectedAreaScale(raster, ([x, y]) => [x * 1e-5, y * 1e-5], 1).scaleAt(0, 0);
+    near(
+      projectedAreaScale(raster, inverse, 1).scaleAt(0, 0),
+      plain,
+      plain * 1e-3,
+      "no ±360° blow-up",
+    );
+    const failing = projectedAreaScale(raster, () => [Number.NaN, Number.NaN], 1);
+    assert.equal(failing.scaleAt(0, 0), 1);
+    assert.ok(failing.failedNodes > 0);
+  });
+
+  it("warns, rather than refuses, for coarser untagged sub-unit cells", async () => {
+    const raster = utm([12], 1, 1, {
+      originX: -84,
+      originY: 36,
+      resX: 0.1,
+      resY: 0.1,
+      geoKeys: {},
+    });
+    const run = await runRasterToolClientAsync("cut-fill", { raster }, { plane_elevation: 10 });
+    assert.ok(run.detailMessages.some((line) => line.includes("may be degrees")));
   });
 });

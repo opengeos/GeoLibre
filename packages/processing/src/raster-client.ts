@@ -1302,6 +1302,11 @@ export async function runRasterToolClientAsync(
       return rasterResult(out.raster, out.messages);
     }
     case "cut-fill": {
+      const looksLikeLonLat = (r: RasterData) =>
+        r.originX >= -180 &&
+        r.originX + r.width * r.resX <= 360 &&
+        r.originY <= 90 &&
+        r.originY - r.height * r.resY >= -90;
       // North-up first: the area-scale lattice is indexed by north-up rows.
       let existing = toNorthUp(requireRaster(inputs, toolId));
       let surface =
@@ -1332,20 +1337,23 @@ export async function runRasterToolClientAsync(
         if (definition) {
           // The projection's own area distortion, via its inverse.
           const inverse = await crsTransform(definition, "EPSG:4326");
-          areaScale = projectedAreaScale(existing, inverse, metersPerUnit);
-        } else if (
-          existing.resX < 1 &&
-          existing.resY < 1 &&
-          existing.originX >= -180 &&
-          existing.originX + existing.width * existing.resX <= 360 &&
-          existing.originY <= 90 &&
-          existing.originY - existing.height * existing.resY >= -90
-        ) {
-          // Sub-metre cells inside the lon/lat range are almost certainly
-          // degrees with no CRS tag; treating them as metres would understate
-          // volume by about 10^10.
+          const projected = projectedAreaScale(existing, inverse, metersPerUnit);
+          areaScale = projected.scaleAt;
+          if (projected.failedNodes > 0) {
+            extra.push(
+              `Warning: ${projected.failedNodes} sample point(s) could not be inverse-projected (outside the projection's valid area?); cells near them use no area correction.`,
+            );
+          }
+        } else if (existing.resX <= 0.01 && existing.resY <= 0.01 && looksLikeLonLat(existing)) {
+          // Centimetre-or-smaller cells inside the lon/lat range are almost
+          // certainly degrees with no CRS tag (1 to 30 arc-second DEMs);
+          // treating them as metres would understate volume by about 10^10.
           throw new Error(
             "The raster has no usable CRS and its cell size looks like degrees, so cell areas cannot be computed. Assign a CRS first.",
+          );
+        } else if (existing.resX < 1 && existing.resY < 1 && looksLikeLonLat(existing)) {
+          extra.push(
+            "Warning: the raster has no usable CRS and its cells may be degrees; volumes assume metres, so assign a CRS if they are degrees.",
           );
         } else {
           extra.push(

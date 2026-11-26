@@ -149,13 +149,15 @@ export type InverseProjection = (coord: [number, number]) => [number, number];
  * @param raster - A north-up projected raster.
  * @param inverse - Map coordinates (CRS units) to `[lon, lat]` degrees.
  * @param metersPerUnit - Metres per horizontal unit.
- * @returns `(row, col) => ground area / map area` for that cell.
+ * @returns `scaleAt(row, col)`, the ground-to-map area ratio for that cell,
+ *   and `failedNodes`, how many lattice nodes could not be inverse-projected
+ *   (their neighbourhood falls back to no correction).
  */
 export function projectedAreaScale(
   raster: RasterData,
   inverse: InverseProjection,
   metersPerUnit: number,
-): (row: number, col: number) => number {
+): { scaleAt: (row: number, col: number) => number; failedNodes: number } {
   const nodesX = Math.min(65, raster.width + 1);
   const nodesY = Math.min(65, raster.height + 1);
   const scale = new Float64Array(nodesX * nodesY);
@@ -163,6 +165,10 @@ export function projectedAreaScale(
   const dy = raster.resY;
   const mapArea = dx * metersPerUnit * dy * metersPerUnit;
   const rad = Math.PI / 180;
+  // proj4 normalises longitudes, so a step across the antimeridian would read
+  // as ±360°; wrap each difference back into [-180, 180).
+  const wrapLon = (d: number) => ((((d + 180) % 360) + 360) % 360) - 180;
+  let failedNodes = 0;
   for (let j = 0; j < nodesY; j += 1) {
     const row = nodesY > 1 ? (j / (nodesY - 1)) * raster.height : 0;
     for (let i = 0; i < nodesX; i += 1) {
@@ -177,15 +183,17 @@ export function projectedAreaScale(
       const m = (WGS84_A * (1 - WGS84_E2)) / w ** 1.5;
       const n = WGS84_A / Math.sqrt(w);
       // Edge vectors in local metres (east, north); the cell is their parallelogram.
-      const ex = (lon1 - lon0) * rad * n * Math.cos(phi);
+      const ex = wrapLon(lon1 - lon0) * rad * n * Math.cos(phi);
       const ey = (lat1 - lat0) * rad * m;
-      const nx = (lon2 - lon0) * rad * n * Math.cos(phi);
+      const nx = wrapLon(lon2 - lon0) * rad * n * Math.cos(phi);
       const ny = (lat2 - lat0) * rad * m;
       const ground = Math.abs(ex * ny - ey * nx);
-      scale[j * nodesX + i] = Number.isFinite(ground) && mapArea > 0 ? ground / mapArea : 1;
+      const ok = Number.isFinite(ground) && ground > 0 && mapArea > 0;
+      if (!ok) failedNodes += 1;
+      scale[j * nodesX + i] = ok ? ground / mapArea : 1;
     }
   }
-  return (row, col) => {
+  const scaleAt = (row: number, col: number): number => {
     const fy = nodesY > 1 ? ((row + 0.5) / raster.height) * (nodesY - 1) : 0;
     const fx = nodesX > 1 ? ((col + 0.5) / raster.width) * (nodesX - 1) : 0;
     const j0 = Math.min(Math.floor(fy), Math.max(nodesY - 2, 0));
@@ -198,6 +206,7 @@ export function projectedAreaScale(
     const bottom = scale[j1 * nodesX + i0] * (1 - tx) + scale[j1 * nodesX + i1] * tx;
     return top * (1 - ty) + bottom * ty;
   };
+  return { scaleAt, failedNodes };
 }
 
 /**
