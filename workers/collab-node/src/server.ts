@@ -14,7 +14,6 @@ import {
   shouldLogDocUpdate,
   shouldResyncRejectedSnapshot,
   clearParticipantOverrides,
-  diffLockedLayers,
   getParticipantKey,
   isAllowedOrigin,
   isIdentityConfigured,
@@ -302,7 +301,7 @@ export function createRelay(options: RelayOptions = {}): {
       if (!participant || participant.clientId === origin) continue;
       // Snapshot-protocol peers get the comment-mutation instead of a whole
       // project for a comment (which could overwrite their unsent edits).
-      if (!participant.crdt && session.commentWrite) continue;
+      if (!participant.crdt && (session.commentWrite || participant.snapshotWithheld)) continue;
       if (participant.crdt) {
         frames ??= docUpdateMessages(update, origin, rev, () => randomUUID()).map((m) =>
           JSON.stringify(m),
@@ -551,7 +550,10 @@ export function createRelay(options: RelayOptions = {}): {
         return;
       }
       const project = preserveStoredComments(message.project ?? null, stored);
-      if (!project || typeof project !== "object" || Array.isArray(project)) return;
+      if (!project || typeof project !== "object" || Array.isArray(project)) {
+        send(peer, { type: "error", code: "bad-message", message: "A project must be an object." });
+        return;
+      }
       if (doc.byteSize + byteLength > maxDocBytes) {
         send(peer, tooLarge());
         return;

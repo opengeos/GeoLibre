@@ -272,7 +272,7 @@ export class CollabSession extends DurableObject<Env> {
     for (const { socket, attachment } of this.attachedSockets()) {
       if (attachment.clientId === origin) continue;
       try {
-        if (!attachment.crdt && this.commentWrite) continue;
+        if (!attachment.crdt && (this.commentWrite || attachment.snapshotWithheld)) continue;
         if (attachment.crdt) {
           frames ??= docUpdateMessages(update, origin, rev, () => crypto.randomUUID()).map((m) =>
             JSON.stringify(m),
@@ -826,7 +826,14 @@ export class CollabSession extends DurableObject<Env> {
     // `handleCommentMutation`), so keep the stored list when this snapshot
     // doesn't carry one — see `preserveStoredComments`.
     const project = preserveStoredComments(message.project ?? null, storedSnapshot);
-    if (!project || typeof project !== "object" || Array.isArray(project)) return;
+    if (!project || typeof project !== "object" || Array.isArray(project)) {
+      this.send(ws, {
+        type: "error",
+        code: "bad-message",
+        message: "A project must be an object.",
+      });
+      return;
+    }
     if (relayDoc.byteSize + byteLength > this.maxDocBytes()) {
       this.send(ws, tooLargeError());
       return;

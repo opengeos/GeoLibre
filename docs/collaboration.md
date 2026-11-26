@@ -118,8 +118,9 @@ a guest that touches a layer the host locked is applied and immediately undone
 on the relay; both the update and its inverse are fanned out (the sender gets
 the inverse plus `error: layer-locked`), so every client converges on the
 unchanged layer. As with a refused snapshot, the whole update is undone, so
-an edit to an unlocked layer made in the same update is undone with it. A chunk out of order or an unreadable update answers
-`error: resync`, after which the client runs `doc-sync` again.
+an edit to an unlocked layer made in the same update is undone with it. A
+chunk out of order or an unreadable update answers `error: resync`, after
+which the client runs `doc-sync` again.
 
 **Persistence.** Every accepted update is appended to a log; once the log
 passes 4 MiB or 256 entries it is folded into a fresh base state
