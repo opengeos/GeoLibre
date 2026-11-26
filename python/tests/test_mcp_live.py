@@ -702,8 +702,15 @@ def test_timeout_policy_matches_the_desktop_relay():
     source = path.read_text(encoding="utf-8")
     table = source.split("METHOD_RESULT_TIMEOUT_SECONDS: &[(&str, f64)] = &[", 1)[1]
     table = table.split("];", 1)[0]
+
+    def product(expression: str) -> float:
+        value = 1.0
+        for factor in expression.split("*"):
+            value *= float(factor)
+        return value
+
     parsed = {
-        name: eval(expression, {"__builtins__": {}})  # noqa: S307 - literal arithmetic
+        name: product(expression)
         for name, expression in re.findall(r'\("(\w+)",\s*([0-9.*\s]+)\)', table)
     }
     assert parsed == live.METHOD_TIMEOUT_SECONDS
@@ -711,7 +718,7 @@ def test_timeout_policy_matches_the_desktop_relay():
     def constant(name: str) -> float:
         match = re.search(rf"const {name}: f64 = ([0-9.*\s]+);", source)
         assert match, name
-        return eval(match.group(1), {"__builtins__": {}})  # noqa: S307 - literal arithmetic
+        return product(match.group(1))
 
     assert constant("DEFAULT_RESULT_TIMEOUT_SECONDS") == live.DEFAULT_TIMEOUT_SECONDS
     assert constant("MIN_RESULT_TIMEOUT_SECONDS") == live.MIN_TIMEOUT_SECONDS

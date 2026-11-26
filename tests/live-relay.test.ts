@@ -263,3 +263,32 @@ describe("connectLiveRelay", () => {
     assert.deepEqual(fake.calls, ["listen", "subscribe", "unlisten", "unsubscribe"]);
   });
 });
+
+describe("connectLiveRelay retries", () => {
+  it("retries a failed subscription while access stays on", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    let setReady!: (ready: boolean) => void;
+    const fake = fakeTransport();
+    let attempts = 0;
+    fake.transport.subscribe = async () => {
+      attempts += 1;
+      fake.calls.push(`subscribe${attempts}`);
+      if (attempts === 1) throw new Error("shell busy");
+    };
+    const stop = connectLiveRelay(
+      (listener) => {
+        setReady = listener;
+        return () => {};
+      },
+      {} as ScriptingHandlers,
+      fake.transport,
+    );
+    setReady(true);
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    t.mock.timers.tick(1000);
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    assert.equal(attempts, 2);
+    assert.deepEqual(fake.calls.slice(0, 3), ["listen", "subscribe1", "unlisten"]);
+    stop();
+  });
+});

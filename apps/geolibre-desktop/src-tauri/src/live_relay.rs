@@ -503,7 +503,8 @@ impl RelayCore {
                 let _ = std::fs::remove_file(&path);
                 let listener = UnixListener::bind(&path)
                     .map_err(|error| format!("Could not open the Live MCP relay: {error}"))?;
-                let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+                    .map_err(|error| format!("Could not restrict the Live MCP socket: {error}"))?;
                 listener
                     .set_nonblocking(true)
                     .map_err(|error| format!("Could not open the Live MCP relay: {error}"))?;

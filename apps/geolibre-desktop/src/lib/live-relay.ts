@@ -225,11 +225,19 @@ export function connectLiveRelay(
     }
   };
 
+  let retry: ReturnType<typeof setTimeout> | null = null;
+  const clearRetry = () => {
+    if (retry !== null) clearTimeout(retry);
+    retry = null;
+  };
+
   const unsubscribe = ready((isReady) => {
     stop();
+    clearRetry();
     if (!isReady) return;
     const mine = generation;
-    void (async () => {
+    let attempt = 0;
+    const attach = async () => {
       try {
         const remove = await transport.listen((payload) => {
           if (mine !== generation) return;
@@ -247,12 +255,28 @@ export function connectLiveRelay(
         await inOrder(transport.subscribe);
       } catch (error) {
         console.warn("Live MCP relay: could not subscribe this window", error);
+        if (mine !== generation) return;
+        // Undo the partial attach and try again, so a transient shell failure
+        // cannot leave the relay silently dead while access reads as on.
+        unlisten?.();
+        unlisten = null;
+        subscribed = false;
+        retry = setTimeout(
+          () => {
+            retry = null;
+            if (mine === generation) void attach();
+          },
+          Math.min(1000 * 2 ** attempt++, 15000),
+        );
+        if (typeof retry !== "number") retry.unref();
       }
-    })();
+    };
+    void attach();
   });
 
   return () => {
     unsubscribe();
+    clearRetry();
     stop();
   };
 }

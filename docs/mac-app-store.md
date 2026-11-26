@@ -70,9 +70,9 @@ drop the feature: the module is gated
 `#[cfg(not(any(feature = "mas", target_os = "ios")))]` and replaced with stub
 commands that bind nothing, so **neither the Mac App Store build nor the iOS app
 ever opens a network listening socket** (the Live MCP relay below uses a Unix
-domain socket, which the sandbox allows without the entitlement). The entitlement is gone from
-`mas/Entitlements.mas.plist.template`, and `mas-store.yml` fails the build if it
-reappears in the signature. (iOS has no entitlements file — those sandbox keys
+domain socket, which the sandbox allows without the entitlement). The
+entitlement is gone from `mas/Entitlements.mas.plist.template`, and
+`mas-store.yml` fails the build if it reappears in the signature. (iOS has no entitlements file — those sandbox keys
 are macOS-only — but it ships through the same review pipeline, so it gets the
 same treatment.)
 
