@@ -23,6 +23,7 @@ import {
 } from "../../../lib/geometry-measure";
 import { formatAttributeValue } from "../../../lib/vector-export";
 import type { TFunction } from "i18next";
+import type { CalcPreview } from "./useFieldCalculator";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 
@@ -56,11 +57,7 @@ interface FieldCalculatorDialogProps {
   setCalcGeomUnit: Dispatch<SetStateAction<string>>;
   calcGeomUnitOptions: readonly AreaUnit[] | readonly DistanceUnit[];
   insertGeometrySnippet: () => void;
-  calcPreview:
-    | { kind: "empty" }
-    | { kind: "ok"; value: unknown }
-    | { kind: "syntax"; message: string }
-    | { kind: "runtime"; message: string };
+  calcPreview: CalcPreview;
   calcSelectedOnly: boolean;
   calcHasSelection: boolean;
   setCalcSelectedOnly: Dispatch<SetStateAction<boolean>>;

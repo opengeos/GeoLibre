@@ -15,6 +15,13 @@ import type { CalcOutputType } from "../../../lib/attribute-expression";
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { AttributeTableRow } from "./attribute-drafts";
 
+/** The field calculator's live preview of the expression against a sample row. */
+export type CalcPreview =
+  | { kind: "empty" }
+  | { kind: "ok"; value: unknown }
+  | { kind: "syntax"; message: string }
+  | { kind: "runtime"; message: string };
+
 /**
  * The attribute table's field calculator: target columns, geometry metrics and units, the expression preview against a sample row, and applying the calculation.
  */
@@ -195,12 +202,7 @@ export function useFieldCalculator({
   // the dialog is open.
   const calcSampleGeomKey =
     calcOpen && calcSampleRow ? JSON.stringify(features[calcSampleIndex]?.geometry ?? null) : "";
-  const calcPreview = useMemo<
-    | { kind: "empty" }
-    | { kind: "ok"; value: unknown }
-    | { kind: "syntax"; message: string }
-    | { kind: "runtime"; message: string }
-  >(() => {
+  const calcPreview = useMemo<CalcPreview>(() => {
     if (!calcOpen || calcExpression.trim() === "") return { kind: "empty" };
     try {
       const compiled = compileExpression(calcExpression, discoveredColumns);
