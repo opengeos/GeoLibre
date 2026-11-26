@@ -300,7 +300,7 @@ describe("projectedAreaScale", () => {
   });
 
   it("refuses an untagged raster with degree-sized cells", async () => {
-    for (const res of [0.0001, 0.008333]) {
+    for (const res of [0.0001, 0.008333, 1 / 60]) {
       const raster = utm([12], 1, 1, {
         originX: -84,
         originY: 36,

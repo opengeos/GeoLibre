@@ -1355,20 +1355,26 @@ export async function runRasterToolClientAsync(
               "Warning: the raster's CRS could not be inverse-projected; cell sizes are taken with no projection correction.",
             );
           }
-        } else if (existing.resX <= 0.01 && existing.resY <= 0.01 && looksLikeLonLat(existing)) {
-          // Centimetre-or-smaller cells inside the lon/lat range are almost
-          // certainly degrees with no CRS tag (1 to 30 arc-second DEMs);
-          // treating them as metres would understate volume by about 10^10.
+        } else if (
+          existing.resX < 0.1 &&
+          existing.resY < 0.1 &&
+          looksLikeLonLat(existing) &&
+          (Math.abs(existing.originX) > 1 || Math.abs(existing.originY) > 1)
+        ) {
+          // Sub-0.1 cells inside the lon/lat range, away from a local grid's
+          // (0, 0) origin, are almost certainly degrees with no CRS tag (arc-
+          // second to arc-minute DEMs); treating them as metres would
+          // understate volume by about 10^10.
           throw new Error(
             "The raster has no usable CRS and its cell size looks like degrees, so cell areas cannot be computed. Assign a CRS first.",
           );
         } else if (existing.resX < 1 && existing.resY < 1 && looksLikeLonLat(existing)) {
           extra.push(
-            "Warning: the raster has no usable CRS and its cells may be degrees; volumes assume metres, so assign a CRS if they are degrees.",
+            "Warning: the raster has no usable CRS and its cells may be degrees; if they are, these totals are unusable, so assign a CRS.",
           );
         } else {
           extra.push(
-            "Warning: the raster's CRS could not be resolved; cell sizes are taken as metres with no projection correction.",
+            "Warning: the raster's CRS could not be resolved; cell sizes use its linear unit (metres if none) with no projection correction.",
           );
         }
       }
