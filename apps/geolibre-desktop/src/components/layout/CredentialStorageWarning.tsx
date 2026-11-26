@@ -18,7 +18,7 @@ export function CredentialStorageWarning() {
     <div
       data-testid="credential-storage-warning"
       role="alert"
-      className="absolute bottom-36 start-1/2 z-50 max-w-[min(90vw,36rem)] -translate-x-1/2 rounded-md border border-destructive/40 bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg"
+      className="absolute bottom-36 left-1/2 z-50 max-w-[min(90vw,36rem)] -translate-x-1/2 rounded-md border border-destructive/40 bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg"
     >
       {t("settings.credentials.unavailable", { error })}
       <button
