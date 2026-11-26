@@ -42,6 +42,15 @@ export const MAX_SHADOW_CELLS = 4_000_000;
  */
 export const MAX_SHADOW_WORK = 100_000_000;
 
+/**
+ * Most roof-walk samples a day simulation may take before it stops. The
+ * walk's length depends on the skyline, so it cannot be bounded up front the
+ * way {@link MAX_SHADOW_WORK} bounds the cell passes; it is counted as it
+ * runs instead. The Midtown Manhattan example takes about 1 billion over a
+ * solstice day at 15-minute steps (roughly 8 s).
+ */
+export const MAX_ROOF_WALK_SAMPLES = 5_000_000_000;
+
 /** Lowest sun elevation that casts a shadow; below it the sun counts as down. */
 export const MIN_SUN_ELEVATION_DEGREES = 0.5;
 
@@ -107,6 +116,22 @@ function polygonsOf(geometry: Geometry | null): Position[][][] {
 }
 
 /**
+ * Parse a length attribute strictly: a bare number or one with a metre or
+ * foot unit (`"12"`, `"12 m"`, `"40 ft"`, `"40'"`), in metres. Anything else
+ * (`"1,200 m"`, `"tall"`) is null, so it falls through to the next rule
+ * instead of silently reading its leading digits.
+ */
+export function parseLength(text: string): number | null {
+  const match = /^\s*([0-9]*\.?[0-9]+)\s*(m|metres?|meters?|ft|feet|foot|')?\s*$/i.exec(text);
+  if (!match) return null;
+  const value = Number(match[1]);
+  const unit = (match[2] ?? "m").toLowerCase();
+  return unit === "ft" || unit === "feet" || unit === "foot" || unit === "'"
+    ? value * 0.3048
+    : value;
+}
+
+/**
  * A building's height from its properties: the height field, else storeys
  * times the storey height, else the default. Strings like "12 m" parse.
  */
@@ -117,8 +142,8 @@ export function buildingHeight(
   const read = (key: string | undefined): number | null => {
     if (!key || !properties) return null;
     const raw = properties[key];
-    const n = typeof raw === "number" ? raw : Number.parseFloat(String(raw ?? ""));
-    return Number.isFinite(n) && n > 0 ? n : null;
+    const n = typeof raw === "number" ? raw : parseLength(String(raw ?? ""));
+    return n != null && Number.isFinite(n) && n > 0 ? n : null;
   };
   const h = read(params.height_field ?? "height");
   if (h != null) return h;
@@ -252,13 +277,14 @@ export function buildHeightGrid(features: Feature[], params: BuildingShadowParam
  * @param azimuth - Sun azimuth, degrees clockwise from north.
  * @param elevation - Sun elevation, degrees (must be above the horizon).
  * @param out - Reused mask: 1 shadowed, 0 lit; cleared first.
+ * @returns The number of roof-walk samples taken, for work accounting.
  */
 export function castShadows(
   grid: HeightGrid,
   azimuth: number,
   elevation: number,
   out: Uint8Array,
-): void {
+): number {
   out.fill(0);
   const { width, height, heights, cellSize } = grid;
   const tanEl = Math.tan(elevation * (Math.PI / 180));
@@ -298,6 +324,7 @@ export function castShadows(
   }
   // Roofs: walk toward the sun until the ray clears the tallest building.
   const step = 0.5;
+  let samples = 0;
   for (let row = 0; row < height; row += 1) {
     for (let col = 0; col < width; col += 1) {
       const i = row * width + col;
@@ -307,6 +334,7 @@ export function castShadows(
       const x0 = col + 0.5;
       const y0 = row + 0.5;
       for (let d = step; d <= maxDistance; d += step) {
+        samples += 1;
         const c = Math.floor(x0 + sunX * d);
         const r = Math.floor(y0 + sunY * d);
         if (c < 0 || r < 0 || c >= width || r >= height) break;
@@ -317,6 +345,7 @@ export function castShadows(
       }
     }
   }
+  return samples;
 }
 
 /** The outcome of {@link buildingShadows}. */
@@ -396,6 +425,7 @@ export function buildingShadows(
         `This run would evaluate ${daylight} sun positions over ${cells.toLocaleString("en-US")} cells, more than the browser budget of ${MAX_SHADOW_WORK.toLocaleString("en-US")}; use a longer time step or a larger cell size.`,
       );
     }
+    let walked = 0;
     let firstUp: number | null = null;
     let lastUp: number | null = null;
     let positions = 0;
@@ -409,7 +439,12 @@ export function buildingShadows(
       positions += 1;
       firstUp ??= minute;
       lastUp = minute;
-      castShadows(grid, sun.azimuth, sun.elevation, mask);
+      walked += castShadows(grid, sun.azimuth, sun.elevation, mask);
+      if (walked > MAX_ROOF_WALK_SAMPLES) {
+        throw new Error(
+          "Tracing sunlight across the roofs is taking too long for the browser; use a longer time step, a larger cell size, or fewer buildings.",
+        );
+      }
       const weight =
         mode === "sun-hours"
           ? step / 60

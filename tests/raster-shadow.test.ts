@@ -106,6 +106,13 @@ describe("buildingHeight", () => {
     assert.equal(buildingHeight({ levels: 5 }, { levels_field: "levels", level_height: 4 }), 20);
     assert.equal(buildingHeight({}, { default_height: 7 }), 7);
   });
+
+  it("parses lengths strictly, converting feet", () => {
+    near(buildingHeight({ height: "40 ft" }, {}), 12.192, 1e-9);
+    // An unparseable height falls through to the storeys rule.
+    assert.equal(buildingHeight({ height: "1,200 m", "building:levels": 2 }, {}), 6);
+    assert.equal(buildingHeight({ height: "tall" }, { default_height: 9 }), 9);
+  });
 });
 
 describe("fillPolygon", () => {
