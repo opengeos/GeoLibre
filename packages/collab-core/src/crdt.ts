@@ -267,7 +267,8 @@ function writeFeatureCollection(
     fresh.set(FC_ORDER, new Y.Array<string>());
   }
   const { meta, features, order } = featureCollectionParts(map as Y.Map<unknown>);
-  const { features: nextFeatures, type: _type, ...rest } = value;
+  const { features: nextFeatures, ...rest } = value;
+  delete rest.type;
   syncMap(meta, rest);
 
   compactOrder(order, features, true);
@@ -280,25 +281,81 @@ function writeFeatureCollection(
   );
   const oldEnd = current.length - suffix;
   const newEnd = nextFeatures.length - suffix;
-  if (oldEnd - prefix === newEnd - prefix) {
-    // Same count in the changed middle: edits in place, keeping each feature's
-    // key so a concurrent edit to a neighbour is not disturbed.
-    for (let i = prefix; i < oldEnd; i += 1) {
-      if (!deepEqual(current[i], nextFeatures[i])) {
-        features.set(keys[i], cloneJson(nextFeatures[i]));
+  const segments = matchMiddle(current, nextFeatures, prefix, oldEnd, newEnd);
+  // Walk the segments last to first so the indexes of earlier ones stay valid.
+  for (let s = segments.length - 1; s >= 0; s -= 1) {
+    const { oldStart, oldStop, newStart, newStop } = segments[s];
+    const paired = Math.min(oldStop - oldStart, newStop - newStart);
+    // Pair old and new features position by position: an edit in place keeps
+    // the feature's key, so a concurrent edit to the same feature resolves on
+    // one value and an edit to a neighbour is not disturbed.
+    for (let i = 0; i < paired; i += 1) {
+      if (!deepEqual(current[oldStart + i], nextFeatures[newStart + i])) {
+        features.set(keys[oldStart + i], cloneJson(nextFeatures[newStart + i]));
       }
     }
-    return;
+    const removed = oldStop - oldStart - paired;
+    if (removed > 0) {
+      for (let i = oldStart + paired; i < oldStop; i += 1) features.delete(keys[i]);
+      order.delete(oldStart + paired, removed);
+    }
+    if (newStop - newStart > paired) {
+      const inserted: string[] = [];
+      for (let i = newStart + paired; i < newStop; i += 1) {
+        const featureKey = newKey();
+        features.set(featureKey, cloneJson(nextFeatures[i]));
+        inserted.push(featureKey);
+      }
+      order.insert(oldStart + paired, inserted);
+    }
   }
-  for (let i = prefix; i < oldEnd; i += 1) features.delete(keys[i]);
-  if (oldEnd > prefix) order.delete(prefix, oldEnd - prefix);
-  const inserted: string[] = [];
-  for (let i = prefix; i < newEnd; i += 1) {
-    const featureKey = newKey();
-    features.set(featureKey, cloneJson(nextFeatures[i]));
-    inserted.push(featureKey);
+}
+
+interface Segment {
+  oldStart: number;
+  oldStop: number;
+  newStart: number;
+  newStop: number;
+}
+
+/**
+ * Split the changed middle of a feature list into the runs between features
+ * that survive unchanged, so those keep their keys. Unchanged features are
+ * matched greedily, in order, by their JSON; the cost is linear in the size of
+ * the middle, which is small for an ordinary edit.
+ */
+function matchMiddle(
+  current: readonly unknown[],
+  next: readonly unknown[],
+  start: number,
+  oldEnd: number,
+  newEnd: number,
+): Segment[] {
+  const segments: Segment[] = [];
+  if (oldEnd - start > 0 && newEnd - start > 0) {
+    const byJson = new Map<string, number[]>();
+    for (let i = start; i < oldEnd; i += 1) {
+      const json = JSON.stringify(current[i]);
+      const list = byJson.get(json);
+      if (list) list.push(i);
+      else byJson.set(json, [i]);
+    }
+    let oldCursor = start;
+    let newCursor = start;
+    for (let j = start; j < newEnd; j += 1) {
+      const list = byJson.get(JSON.stringify(next[j]));
+      while (list?.length && list[0] < oldCursor) list.shift();
+      if (!list?.length) continue;
+      const i = list.shift() as number;
+      segments.push({ oldStart: oldCursor, oldStop: i, newStart: newCursor, newStop: j });
+      oldCursor = i + 1;
+      newCursor = j + 1;
+    }
+    segments.push({ oldStart: oldCursor, oldStop: oldEnd, newStart: newCursor, newStop: newEnd });
+  } else {
+    segments.push({ oldStart: start, oldStop: oldEnd, newStart: start, newStop: newEnd });
   }
-  if (inserted.length) order.insert(prefix, inserted);
+  return segments;
 }
 
 // -- Layers ------------------------------------------------------------------
@@ -331,6 +388,11 @@ function syncLayer(map: Y.Map<unknown>, layer: JsonObject, newKey: () => string)
  * change produces small updates. {@link read} rebuilds the project, reusing the
  * previous object for every layer no update touched, so a consumer comparing
  * layers by reference (the map's layer sync) only redraws what changed.
+ *
+ * Immutability contract: values passed to `write` and returned by `read` are
+ * treated as immutable, like Zustand store state. Both remember objects by
+ * identity to skip unchanged layers and fields, so mutating one in place and
+ * writing it again records nothing. Replace an object to change it.
  */
 export class ProjectDoc {
   readonly doc: Y.Doc;
@@ -338,6 +400,11 @@ export class ProjectDoc {
   readonly layers: Y.Map<Y.Map<unknown>>;
   readonly layerOrder: Y.Array<string>;
   private featureCounter = 0;
+  /**
+   * Random per-instance prefix for feature keys, so two wrappers over one
+   * document (a reconnect, a hot reload) never mint the same key.
+   */
+  private readonly keyNonce = Math.floor(Math.random() * 2 ** 32).toString(36);
   /**
    * Per layer, an object known to equal the document's copy of it: the one a
    * read produced or a write recorded. A write handed that same object again
@@ -348,13 +415,45 @@ export class ProjectDoc {
   /** The same, per top-level field. */
   private readonly fieldCache = new Map<string, unknown>();
 
+  /** The transaction `write` is running, while it runs. */
+  private activeWrite: Y.Transaction | null = null;
+  /** Keys another transaction changed while `write` was still running. */
+  private readonly foreignChanges = { fields: new Set<string>(), layers: new Set<string>() };
+
   constructor(doc: Y.Doc = new Y.Doc()) {
     this.doc = doc;
     this.fields = doc.getMap<unknown>(ROOT_FIELDS);
     this.layers = doc.getMap<Y.Map<unknown>>(ROOT_LAYERS);
     this.layerOrder = doc.getArray<string>(ROOT_LAYER_ORDER);
-    this.layers.observeDeep((events) => invalidate(events, this.layerCache));
-    this.fields.observeDeep((events) => invalidate(events, this.fieldCache));
+    this.layers.observeDeep((events, transaction) =>
+      this.invalidate(events, transaction, this.layerCache, this.foreignChanges.layers),
+    );
+    this.fields.observeDeep((events, transaction) =>
+      this.invalidate(events, transaction, this.fieldCache, this.foreignChanges.fields),
+    );
+  }
+
+  /**
+   * Drop the cache entries of every top-level key a batch of events touched,
+   * noting the keys changed by anything but the running `write`.
+   */
+  private invalidate(
+    events: Y.YEvent<Y.AbstractType<unknown>>[],
+    transaction: Y.Transaction,
+    cache: Map<string, unknown>,
+    foreign: Set<string>,
+  ): void {
+    const record = (key: string) => {
+      cache.delete(key);
+      if (this.activeWrite && transaction !== this.activeWrite) foreign.add(key);
+    };
+    for (const event of events) {
+      if (event.path.length === 0) {
+        for (const key of event.keys.keys()) record(key);
+      } else {
+        record(String(event.path[0]));
+      }
+    }
   }
 
   /** Whether the document holds no project yet. */
@@ -365,7 +464,7 @@ export class ProjectDoc {
   /** A key for a new feature, unique across every client of the document. */
   private newFeatureKey = (): string => {
     this.featureCounter += 1;
-    return `${this.doc.clientID.toString(36)}.${this.featureCounter.toString(36)}`;
+    return `${this.doc.clientID.toString(36)}.${this.keyNonce}.${this.featureCounter.toString(36)}`;
   };
 
   /**
@@ -376,60 +475,72 @@ export class ProjectDoc {
     const ignore = options.ignore;
     const writtenFields: [string, unknown][] = [];
     const writtenLayers: [string, JsonObject][] = [];
-    this.doc.transact(() => {
-      for (const key of Array.from(this.fields.keys())) {
-        if (key !== "layers" && !ignore?.has(key) && project[key] === undefined) {
-          this.fields.delete(key);
+    this.foreignChanges.fields.clear();
+    this.foreignChanges.layers.clear();
+    try {
+      this.doc.transact((transaction) => {
+        this.activeWrite = transaction;
+        for (const key of Array.from(this.fields.keys())) {
+          if (key !== "layers" && !ignore?.has(key) && project[key] === undefined) {
+            this.fields.delete(key);
+          }
         }
-      }
-      for (const key of Object.keys(project)) {
-        if (key === "layers" || ignore?.has(key)) continue;
-        const next = project[key];
-        if (next === undefined) continue;
-        if (this.fieldCache.has(key) && this.fieldCache.get(key) === next) continue;
-        syncField(this.fields, key, next);
-        writtenFields.push([key, next]);
-      }
-      if (ignore?.has("layers")) return;
-      const nextLayers = Array.isArray(project.layers) ? project.layers : [];
-      const byId = new Map<string, JsonObject>();
-      for (const layer of nextLayers) {
-        const id = layerId(layer);
-        if (id && !byId.has(id)) byId.set(id, layer as JsonObject);
-      }
-      for (const id of Array.from(this.layers.keys())) {
-        if (!byId.has(id)) this.layers.delete(id);
-      }
-      for (const [id, layer] of byId) {
-        const existing = this.layers.get(id);
-        const cached = this.layerCache.get(id);
-        if (existing instanceof Y.Map && cached?.map === existing && cached.value === layer) {
-          continue;
+        for (const key of Object.keys(project)) {
+          if (key === "layers" || ignore?.has(key)) continue;
+          const next = project[key];
+          if (next === undefined) continue;
+          if (this.fieldCache.has(key) && this.fieldCache.get(key) === next) continue;
+          syncField(this.fields, key, next);
+          writtenFields.push([key, next]);
         }
-        if (existing instanceof Y.Map) {
-          syncLayer(existing, layer, this.newFeatureKey);
-        } else {
-          const map = new Y.Map<unknown>();
-          this.layers.set(id, map);
-          syncLayer(map, layer, this.newFeatureKey);
+        if (ignore?.has("layers")) return;
+        const nextLayers = Array.isArray(project.layers) ? project.layers : [];
+        const byId = new Map<string, JsonObject>();
+        for (const layer of nextLayers) {
+          const id = layerId(layer);
+          if (id && !byId.has(id)) byId.set(id, layer as JsonObject);
         }
-        writtenLayers.push([id, layer]);
-      }
-      compactOrder(this.layerOrder, this.layers as Y.Map<unknown>, false);
-      const order = this.layerOrder.toArray();
-      const desired = Array.from(byId.keys());
-      const { prefix, suffix } = commonEnds(order, desired, (a, b) => a === b);
-      const oldEnd = order.length - suffix;
-      const newEnd = desired.length - suffix;
-      if (oldEnd > prefix) this.layerOrder.delete(prefix, oldEnd - prefix);
-      if (newEnd > prefix) this.layerOrder.insert(prefix, desired.slice(prefix, newEnd));
-    }, origin);
+        for (const id of Array.from(this.layers.keys())) {
+          if (!byId.has(id)) this.layers.delete(id);
+        }
+        for (const [id, layer] of byId) {
+          const existing = this.layers.get(id);
+          const cached = this.layerCache.get(id);
+          if (existing instanceof Y.Map && cached?.map === existing && cached.value === layer) {
+            continue;
+          }
+          if (existing instanceof Y.Map) {
+            syncLayer(existing, layer, this.newFeatureKey);
+          } else {
+            const map = new Y.Map<unknown>();
+            this.layers.set(id, map);
+            syncLayer(map, layer, this.newFeatureKey);
+          }
+          writtenLayers.push([id, layer]);
+        }
+        compactOrder(this.layerOrder, this.layers as Y.Map<unknown>, false);
+        const order = this.layerOrder.toArray();
+        const desired = Array.from(byId.keys());
+        const { prefix, suffix } = commonEnds(order, desired, (a, b) => a === b);
+        const oldEnd = order.length - suffix;
+        const newEnd = desired.length - suffix;
+        if (oldEnd > prefix) this.layerOrder.delete(prefix, oldEnd - prefix);
+        if (newEnd > prefix) this.layerOrder.insert(prefix, desired.slice(prefix, newEnd));
+      }, origin);
+    } finally {
+      this.activeWrite = null;
+    }
     // Observers ran (and dropped these entries) as the transaction closed, so
-    // record what the document now equals only afterwards.
-    for (const [key, value] of writtenFields) this.fieldCache.set(key, value);
+    // record what the document now equals only afterwards, and not for a key
+    // an update handler changed again in the meantime.
+    for (const [key, value] of writtenFields) {
+      if (!this.foreignChanges.fields.has(key)) this.fieldCache.set(key, value);
+    }
     for (const [id, value] of writtenLayers) {
       const map = this.layers.get(id);
-      if (map instanceof Y.Map) this.layerCache.set(id, { map, value });
+      if (map instanceof Y.Map && !this.foreignChanges.layers.has(id)) {
+        this.layerCache.set(id, { map, value });
+      }
     }
   }
 
@@ -465,20 +576,6 @@ export class ProjectDoc {
     value.id = id;
     this.layerCache.set(id, { map, value });
     return value;
-  }
-}
-
-/** Drop the cache entries of every top-level key a batch of events touched. */
-function invalidate(
-  events: Y.YEvent<Y.AbstractType<unknown>>[],
-  cache: Map<string, unknown>,
-): void {
-  for (const event of events) {
-    if (event.path.length === 0) {
-      for (const key of event.keys.keys()) cache.delete(key);
-    } else {
-      cache.delete(String(event.path[0]));
-    }
   }
 }
 
@@ -574,14 +671,11 @@ export function decodeBase64(text: unknown): Uint8Array | null {
 }
 
 /**
- * Split an update into frames of at most `maxBytes` payload each. A small
- * update is a single frame with no chunk header.
+ * Split an update into frames of at most `MAX_UPDATE_CHUNK_BYTES` payload
+ * each. A small update is a single frame with no chunk header.
  */
-export function splitUpdate(
-  update: Uint8Array,
-  makeId: () => string,
-  maxBytes = MAX_UPDATE_CHUNK_BYTES,
-): UpdateFrame[] {
+export function splitUpdate(update: Uint8Array, makeId: () => string): UpdateFrame[] {
+  const maxBytes = MAX_UPDATE_CHUNK_BYTES;
   if (update.length <= maxBytes) return [{ update: encodeBase64(update) }];
   const count = Math.ceil(update.length / maxBytes);
   const id = makeId();
@@ -621,12 +715,27 @@ export class UpdateAssembler {
   constructor(private readonly maxBytes: number) {}
 
   push(sender: string, frame: { update?: unknown; chunk?: unknown }): AssembleResult {
+    // Refuse an oversized frame by its text length, before decoding allocates it.
+    if (
+      typeof frame.update === "string" &&
+      frame.update.length > Math.ceil(this.maxBytes / 3) * 4
+    ) {
+      this.pending.delete(sender);
+      return { status: "error", reason: "too-large" };
+    }
     const bytes = decodeBase64(frame.update);
     if (!bytes) {
       this.pending.delete(sender);
       return { status: "error", reason: "malformed" };
     }
     const chunk = frame.chunk as Partial<UpdateChunk> | undefined;
+    const inFlight = this.pending.get(sender);
+    // One update at a time per sender: a new update (unchunked, or a first
+    // chunk) while another is half received means frames went missing.
+    if (inFlight && (chunk === undefined || chunk?.index === 0)) {
+      this.pending.delete(sender);
+      return { status: "error", reason: "out-of-order" };
+    }
     if (chunk === undefined) {
       if (bytes.length > this.maxBytes) return { status: "error", reason: "too-large" };
       return { status: "complete", update: bytes };
@@ -640,7 +749,14 @@ export class UpdateAssembler {
       !Number.isSafeInteger(count) ||
       (count as number) < 1 ||
       (index as number) < 0 ||
-      (index as number) >= (count as number)
+      (index as number) >= (count as number) ||
+      // `splitUpdate` fills every chunk but the last, so a chunk of any other
+      // size (an empty one in particular) is not ours. This also bounds `count`
+      // and the parts a sender can make us hold.
+      (count as number) > Math.ceil(this.maxBytes / MAX_UPDATE_CHUNK_BYTES) ||
+      ((index as number) < (count as number) - 1
+        ? bytes.length !== MAX_UPDATE_CHUNK_BYTES
+        : bytes.length === 0 || bytes.length > MAX_UPDATE_CHUNK_BYTES)
     ) {
       this.pending.delete(sender);
       return { status: "error", reason: "malformed" };

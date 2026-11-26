@@ -175,6 +175,63 @@ describe("ProjectDoc", () => {
     assert.ok(deepEqual(a.read(), b.read()));
   });
 
+  it("keeps an unchanged feature's key when its neighbours are deleted", () => {
+    const { a, b, sync } = pair();
+    a.write(project(), "local");
+    sync();
+    const edit = (p: ProjectRecord, fn: (features: Feature[]) => Feature[]) =>
+      withLayer(p, "roads", (layer) => ({
+        ...layer,
+        geojson: { type: "FeatureCollection", features: fn(layer.geojson!.features) },
+      }));
+    // A deletes features 0 and 2; B edits feature 1 at the same time.
+    a.write(
+      edit(a.read(), (fs) => fs.filter((f) => f.properties.n % 2 === 1)),
+      "local",
+    );
+    b.write(
+      edit(b.read(), (fs) => fs.map((f) => (f.properties.n === 1 ? feature(1, { b: true }) : f))),
+      "local",
+    );
+    sync();
+    const features = layers(a.read()).find((l) => l.id === "roads")!.geojson!.features;
+    assert.deepEqual(features, [feature(1, { b: true }), feature(3)]);
+    assert.ok(deepEqual(a.read(), b.read()));
+  });
+
+  it("never reuses a feature key across two wrappers of one document", () => {
+    const doc = new Y.Doc();
+    const first = new ProjectDoc(doc);
+    first.write(project(), "local");
+    const second = new ProjectDoc(doc);
+    second.write(
+      withLayer(second.read(), "roads", (layer) => ({
+        ...layer,
+        geojson: {
+          type: "FeatureCollection",
+          features: [...layer.geojson!.features, feature(4)],
+        },
+      })),
+      "local",
+    );
+    const features = layers(first.read()).find((l) => l.id === "roads")!.geojson!.features;
+    assert.equal(features.length, 5);
+  });
+
+  it("does not cache a written value an update handler replaced", () => {
+    const doc = new ProjectDoc();
+    doc.write(project(), "local");
+    let rewrite = true;
+    doc.doc.on("update", () => {
+      if (!rewrite) return;
+      rewrite = false;
+      doc.doc.transact(() => doc.fields.set("projectName", "From handler"), "handler");
+    });
+    doc.write({ ...doc.read(), projectName: "From write" }, "local");
+    assert.equal(doc.fields.get("projectName"), "From handler");
+    assert.equal(doc.read().projectName, "From handler");
+  });
+
   it("converges when both clients set the same value at once", () => {
     const { a, b, sync } = pair();
     a.write(project(), "local");
@@ -366,14 +423,46 @@ describe("update framing", () => {
     assert.equal(assembler.push("s", frames[0]).status, "pending");
     assert.deepEqual(assembler.push("s", frames[2]), { status: "error", reason: "out-of-order" });
 
-    const small = new UpdateAssembler(MAX_UPDATE_CHUNK_BYTES);
-    assert.equal(small.push("s", frames[0]).status, "pending");
-    assert.deepEqual(small.push("s", frames[1]), { status: "error", reason: "too-large" });
+    const small = new UpdateAssembler(MAX_UPDATE_CHUNK_BYTES * 2);
+    // Three chunks cannot fit under a two-chunk ceiling, so the header alone is refused.
+    assert.deepEqual(small.push("s", frames[0]), { status: "error", reason: "malformed" });
+    assert.deepEqual(small.push("s", { update: encodeBase64(update) }), {
+      status: "error",
+      reason: "too-large",
+    });
+    // Empty or short non-final chunks cannot pin memory with a huge count.
+    assert.deepEqual(small.push("s", { update: "", chunk: { id: "x", index: 0, count: 2 } }), {
+      status: "error",
+      reason: "malformed",
+    });
+    assert.deepEqual(small.push("s", { update: "AAAA", chunk: { id: "x", index: 0, count: 2 } }), {
+      status: "error",
+      reason: "malformed",
+    });
+    assert.deepEqual(small.push("s", { update: "", chunk: { id: "x", index: 0, count: 1 } }), {
+      status: "error",
+      reason: "malformed",
+    });
     assert.deepEqual(small.push("s", { update: "%%%%" }), { status: "error", reason: "malformed" });
     assert.deepEqual(small.push("s", { update: "AAAA", chunk: { id: "", index: 0, count: 1 } }), {
       status: "error",
       reason: "malformed",
     });
+    // A new update while another is half received is refused.
+    const overlap = new UpdateAssembler(update.length);
+    assert.equal(overlap.push("s", frames[0]).status, "pending");
+    assert.deepEqual(overlap.push("s", { update: "AAAA" }), {
+      status: "error",
+      reason: "out-of-order",
+    });
+    assert.equal(overlap.push("s", frames[0]).status, "pending");
+    assert.deepEqual(
+      overlap.push("s", { ...frames[0], chunk: { ...frames[0].chunk!, id: "other" } }),
+      {
+        status: "error",
+        reason: "out-of-order",
+      },
+    );
     // Independent senders do not interfere.
     const shared = new UpdateAssembler(update.length);
     shared.push("one", frames[0]);
