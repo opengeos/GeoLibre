@@ -72,10 +72,10 @@ describe("WmsSource", () => {
     assert.equal((screen.getByLabelText("Layers") as HTMLInputElement).value, "topp:rivers");
     fireEvent.click(screen.getByRole("button", { name: "Add layer" }));
     await waitFor(() => assert.equal(added.length, 1));
-    const tiles = JSON.stringify(added[0]!.source);
-    assert.match(tiles, /LAYERS=topp%3Arivers|LAYERS=topp:rivers/i);
-    assert.match(tiles, /REQUEST=GetMap/i);
-    assert.match(tiles, /VERSION=1\.3\.0/i);
+    const tile = new URL((added[0]!.source as { tiles: string[] }).tiles[0]!);
+    assert.equal(tile.searchParams.get("LAYERS"), "topp:rivers");
+    assert.equal(tile.searchParams.get("REQUEST"), "GetMap");
+    assert.equal(tile.searchParams.get("VERSION"), "1.3.0");
     assert.equal(closed(), 1);
   });
 
