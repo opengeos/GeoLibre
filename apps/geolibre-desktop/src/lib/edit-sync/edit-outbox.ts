@@ -98,6 +98,8 @@ export interface OutboxEntry {
   /** Consecutive failed attempts, for backoff. */
   attempts: number;
   lastError?: string;
+  /** Translation key suffix for `lastError` (`editOutbox.errors.<code>`), when known. */
+  lastErrorCode?: string;
   lastAttemptAt?: number;
   nextAttemptAt?: number;
   createdAt: number;
@@ -153,23 +155,36 @@ export interface EditSyncAdapter {
   fingerprint?(feature: Feature): string;
 }
 
+/**
+ * Base of the outbox's errors. `code`, when set, names a translated message
+ * the UI shows instead of the raw `message` (adapters have no translator).
+ */
+export class EditSyncError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message);
+  }
+}
+
 /** The source could not be reached; nothing was written. Retry later. */
-export class EditSyncOfflineError extends Error {
+export class EditSyncOfflineError extends EditSyncError {
   override readonly name = "EditSyncOfflineError";
 }
 
 /** A write was sent but its outcome is unknown. Inserts must be deduplicated on retry. */
-export class EditSyncUncertainError extends Error {
+export class EditSyncUncertainError extends EditSyncError {
   override readonly name = "EditSyncUncertainError";
 }
 
 /** The server changed between the read and the write; nothing was written. */
-export class EditSyncConflictRaceError extends Error {
+export class EditSyncConflictRaceError extends EditSyncError {
   override readonly name = "EditSyncConflictRaceError";
 }
 
 /** The source refused the write for a reason a retry will not fix. */
-export class EditSyncRejectedError extends Error {
+export class EditSyncRejectedError extends EditSyncError {
   override readonly name = "EditSyncRejectedError";
 }
 
@@ -374,6 +389,10 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function errorCode(error: unknown): string | undefined {
+  return error instanceof EditSyncError ? error.code : undefined;
+}
+
 /**
  * Run one sync attempt for an entry.
  *
@@ -420,6 +439,7 @@ export async function syncOutboxEntry(
         status: "pending",
         attempts,
         lastError: errorMessage(error),
+        lastErrorCode: errorCode(error),
         lastAttemptAt: startedAt,
         nextAttemptAt: startedAt + retryDelayMs(attempts),
         updatedAt: startedAt,
@@ -504,8 +524,12 @@ export async function syncOutboxEntry(
         if (!next.maybeApplied) delete next.maybeApplied;
         if (message !== undefined) next.error = message;
         else delete next.error;
-        // A conflict is re-reviewed against the server's latest version.
-        if (conflictIds.has(op.id)) delete next.resolution;
+        // A decision applies to the attempt it was made for: a conflict is
+        // re-reviewed against the server's latest version, and a keep mine or
+        // keep theirs that did not settle (a rejected write) must not be
+        // applied unseen to whatever the server holds next time. Only "decide
+        // later" persists, since it is a decision not to act.
+        if (conflictIds.has(op.id) || next.resolution !== "skip") delete next.resolution;
         return next;
       });
     if (remaining.length === 0) return outcome;
@@ -530,6 +554,7 @@ export async function syncOutboxEntry(
         conflicts: keptConflicts,
         attempts: 0,
         lastError: failed ? [...failedById.values()].join("; ") : undefined,
+        lastErrorCode: undefined,
         lastAttemptAt: startedAt,
         nextAttemptAt: undefined,
         updatedAt: startedAt,
@@ -554,6 +579,7 @@ function failHard(
       ops,
       status: "error",
       lastError: errorMessage(error),
+      lastErrorCode: errorCode(error),
       lastAttemptAt: at,
       nextAttemptAt: undefined,
       updatedAt: at,

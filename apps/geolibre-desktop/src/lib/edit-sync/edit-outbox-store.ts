@@ -130,8 +130,13 @@ export interface OutboxSnapshot {
   loaded: boolean;
   /** False when entries live only in memory and will not survive a reload. */
   durable: boolean;
-  /** The last persistence failure, if any. */
+  /**
+   * Set when the queue stored on this device could not be read at startup:
+   * entries saved earlier are still on disk but not in this session's list.
+   */
   storageError?: string;
+  /** The last failed write to storage, if any (entries then live in memory). */
+  writeError?: string;
 }
 
 type Listener = () => void;
@@ -228,7 +233,7 @@ function persist(run: (backend: OutboxPersistence) => Promise<void>): Promise<vo
     emit({
       ...snapshot,
       durable: false,
-      storageError: error instanceof Error ? error.message : String(error),
+      writeError: error instanceof Error ? error.message : String(error),
     });
   });
   return writeChain;

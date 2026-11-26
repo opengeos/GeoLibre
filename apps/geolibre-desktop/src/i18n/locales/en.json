@@ -372,6 +372,10 @@
     "title": "Pending edits",
     "description": "Edits saved to remote sources wait here until they reach the source. They survive reloads and restarts, and sync automatically when the connection returns.",
     "notDurable": "This browser is not keeping data between sessions, so queued edits are lost if you close or reload the page.",
+    "storageUnreadable": "Edits queued in an earlier session could not be read from this device's storage ({{error}}). They are still stored, but cannot be synced until storage is readable again; new edits are kept for this session only.",
+    "errors": {
+      "postgisNoConnection": "No PostgreSQL connection is available for this table. Reconnect in Add data > PostgreSQL, then sync again."
+    },
     "offlineNotice": "You are offline. Queued edits sync automatically when the connection returns.",
     "empty": "No edits are waiting to sync.",
     "counts": "{{inserted}} new, {{updated}} changed, {{deleted}} deleted",

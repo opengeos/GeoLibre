@@ -43,6 +43,7 @@ import { participantCanEditLayer } from "./collab-protocol";
 import { databaseBaselineKeys, databaseFeatureKeys } from "./database-tables";
 import { embedEditedGeometry, hasEditedGeometry } from "./edited-geometry-save";
 import { saveThroughOutbox } from "./edit-sync/outbox-save";
+import { ensureEditSyncBackends } from "./edit-sync/register-backends";
 import {
   buildPostgisChangeSet,
   EDIT_SYNC_BASELINE_KEY,
@@ -326,6 +327,12 @@ export function clearLayerGeometryEditedFlag(
     ),
   }));
 }
+
+/** Queue-and-sync with the built-in backends registered (they load lazily elsewhere). */
+const defaultSaveOutbox: typeof saveThroughOutbox = (input, t, outboxDeps) => {
+  ensureEditSyncBackends();
+  return saveThroughOutbox(input, t, outboxDeps);
+};
 
 /** Injectable dependencies for {@link writeLayerEditsToSource} (unit tests). */
 export interface WriteLayerEditsDeps {
@@ -611,7 +618,7 @@ export async function writeLayerEditsToSource(
       const target = postgisOutboxTarget(layer);
       const ops = target ? buildPostgisChangeSet(layer, geojson) : null;
       if (target && ops) {
-        const saveOutbox = deps?.saveOutbox ?? saveThroughOutbox;
+        const saveOutbox = deps?.saveOutbox ?? defaultSaveOutbox;
         return await saveOutbox(
           {
             id: postgisOutboxId(target),

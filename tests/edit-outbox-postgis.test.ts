@@ -20,7 +20,8 @@ import {
   createPostgisSyncAdapter,
   EDIT_SYNC_BASELINE_KEY,
   hasPostgisSyncBaseline,
-  overlayPendingOps,
+  overlayLocalOps,
+  unsyncedLocalOps,
   postgisOutboxId,
   postgisOutboxTarget,
   postgisSyncBaseline,
@@ -309,6 +310,15 @@ describe("PostGIS sync adapter", () => {
     assert.equal(down.kind, "offline");
     assert.equal(down.entry!.ops[0].maybeApplied, undefined);
 
+    sidecar.writeError = new PostgisWriteRejectedError("Bad Gateway", 502);
+    const gateway = await syncOutboxEntry(entry, adapter);
+    assert.equal(gateway.kind, "offline");
+    assert.equal(gateway.entry!.status, "pending");
+    sidecar.writeError = null;
+
+    sidecar.readError = new PostgisRequestError("Bad Gateway", 502);
+    assert.equal((await syncOutboxEntry(entry, adapter)).kind, "offline");
+
     sidecar.readError = new PostgisRequestError("relation does not exist", 404);
     const missing = await syncOutboxEntry(entry, adapter);
     assert.equal(missing.kind, "error");
@@ -320,7 +330,7 @@ describe("PostGIS sync adapter", () => {
     const entry = entryFor(layer, []);
     assert.throws(
       () => createPostgisSyncAdapter(entry, { resolveConnection: () => null }),
-      /No PostgreSQL connection/,
+      (error: Error & { code?: string }) => error.code === "postgisNoConnection",
     );
   });
 });
@@ -334,10 +344,26 @@ describe("refreshPostgisLayerAfterSync", () => {
     const entry = entryFor(layer, [row(1, 1, "mine"), row(2, 2, "b2")]);
     sidecar.rows.set(1, row(1, 1, "theirs"));
     const outcome = await syncOutboxEntry(entry, adapterFor(sidecar, entry));
+    // While the sync ran, the user edited feature 2 again and drew a feature.
+    const live = {
+      ...layer,
+      geojson: {
+        type: "FeatureCollection" as const,
+        features: [
+          row(1, 1, "mine"),
+          row(2, 2, "b3"),
+          {
+            type: "Feature" as const,
+            geometry: { type: "Point" as const, coordinates: [7, 7] },
+            properties: { name: "drawn" },
+          },
+        ],
+      },
+    } as GeoLibreLayer;
     let patched: Partial<GeoLibreLayer> | null = null;
     const refreshed = await refreshPostgisLayerAfterSync(entry, outcome, {
       read: sidecar.read,
-      getLayer: () => layer,
+      getLayer: () => live,
       updateLayer: (_id, patch) => {
         patched = patch;
       },
@@ -346,8 +372,9 @@ describe("refreshPostgisLayerAfterSync", () => {
     assert.ok(refreshed);
     const next = patched as unknown as Partial<GeoLibreLayer>;
     const names = next.geojson!.features.map((f) => f.properties!.name).sort();
-    // Feature 1 waits on a conflict, so my version stays on screen.
-    assert.deepEqual(names, ["b2", "mine"]);
+    // Feature 1 waits on a conflict, so my version stays on screen; the edits
+    // made during the sync survive the refresh.
+    assert.deepEqual(names, ["b3", "drawn", "mine"]);
     assert.equal(next.metadata!.geometryEdited, true);
     const baseline = next.metadata![EDIT_SYNC_BASELINE_KEY] as Record<string, string>;
     assert.deepEqual(Object.keys(baseline).sort(), ["1", "2"]);
@@ -367,19 +394,18 @@ describe("refreshPostgisLayerAfterSync", () => {
   });
 });
 
-describe("overlayPendingOps", () => {
-  it("applies queued updates, deletes, and inserts over a fresh read", () => {
+describe("overlayLocalOps", () => {
+  it("applies kept edits over a fresh read", () => {
     const fresh: FeatureCollection = {
       type: "FeatureCollection",
       features: [row(1, 1, "a"), row(2, 2, "b")],
     };
     const keyOf = (f: Feature) => String(f.id);
-    const out = overlayPendingOps(
+    const out = overlayLocalOps(
       fresh,
       [
         { id: "u", kind: "update", key: "1", feature: row(1, 1, "mine") },
         { id: "d", kind: "delete", key: "2" },
-        { id: "t", kind: "update", key: "2", feature: row(2, 2, "x"), resolution: "theirs" },
         { id: "i", kind: "insert", key: null, feature: row(9, 9, "n") },
       ],
       keyOf,
@@ -388,6 +414,25 @@ describe("overlayPendingOps", () => {
       out.features.map((f) => f.properties!.name),
       ["mine", "n"],
     );
-    assert.equal(overlayPendingOps(fresh, [], keyOf), fresh);
+    assert.equal(overlayLocalOps(fresh, [], keyOf), fresh);
+  });
+
+  it("keeps only the local edits a sync did not settle", () => {
+    const settled = [
+      { id: "a", kind: "update" as const, key: "1", mineFingerprint: "m1" },
+      { id: "b", kind: "insert" as const, key: null, mineFingerprint: "new" },
+      { id: "c", kind: "delete" as const, key: "3" },
+    ];
+    const local = [
+      { id: "x", kind: "update" as const, key: "1", mineFingerprint: "m1" }, // synced
+      { id: "y", kind: "update" as const, key: "2", mineFingerprint: "m2" }, // edited since
+      { id: "z", kind: "insert" as const, key: null, mineFingerprint: "new" }, // synced
+      { id: "w", kind: "insert" as const, key: null, mineFingerprint: "new" }, // a second copy
+      { id: "v", kind: "delete" as const, key: "3" }, // synced
+    ];
+    assert.deepEqual(
+      unsyncedLocalOps(local, settled).map((op) => op.id),
+      ["y", "w"],
+    );
   });
 });

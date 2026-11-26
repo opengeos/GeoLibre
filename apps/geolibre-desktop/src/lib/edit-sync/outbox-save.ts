@@ -12,7 +12,6 @@ import {
   type EnqueueInput,
   type EnqueueResult,
 } from "./edit-outbox-runner";
-import { ensureEditSyncBackends } from "./register-backends";
 
 /** A save result, mirroring `SingleLayerWriteBackResult`. */
 export interface OutboxSaveResult {
@@ -88,7 +87,6 @@ export async function saveThroughOutbox(
   t: TFunction,
   deps: OutboxSaveDeps = {},
 ): Promise<OutboxSaveResult> {
-  ensureEditSyncBackends();
   const enqueue = deps.enqueue ?? ((value: EnqueueInput) => enqueueChangeSet(value));
   const syncNow = deps.syncNow ?? syncOutboxEntryNow;
   const queued = await enqueue(input);

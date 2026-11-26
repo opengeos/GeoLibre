@@ -305,6 +305,34 @@ describe("syncOutboxEntry", () => {
     assert.deepEqual(server.calls, []);
   });
 
+  it("drops a keep mine or keep theirs decision that did not settle", async () => {
+    const server = new FakeServer();
+    const baseline = seed(server, [point(1, 1), point(2, 2)]);
+    const ops = buildChangeSet({
+      baseline,
+      features: [point(1, 10), point(2, 20)],
+      keyOf: featureIdKey,
+      newId,
+    });
+    server.rows.set("1", point(1, 77));
+    server.rows.set("2", point(2, 88));
+    const conflicted = (await syncOutboxEntry(entryFor(ops), server)).entry!;
+    const [first, second] = conflicted.ops;
+    const resolved = applyConflictResolutions(
+      conflicted,
+      new Map([
+        [first.id, "mine" as const],
+        [second.id, "skip" as const],
+      ]),
+    );
+    server.rejectOps.set(first.id, "check constraint");
+    const outcome = await syncOutboxEntry(resolved, server);
+    const byId = new Map(outcome.entry!.ops.map((op) => [op.id, op]));
+    // The rejected keep mine must be decided again against the server's next version.
+    assert.equal(byId.get(first.id)!.resolution, undefined);
+    assert.equal(byId.get(second.id)!.resolution, "skip");
+  });
+
   it("re-reads after a read/write race instead of overwriting", async () => {
     const server = new FakeServer();
     const baseline = seed(server, [point(1, 1)]);

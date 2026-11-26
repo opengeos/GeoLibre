@@ -1,18 +1,17 @@
 /**
- * Status bar indicator for the offline edit outbox (#3530). Starts the
- * background sync runner, shows how many edits are waiting (and whether any
- * need review), and opens the Pending edits dialog. Hidden while the outbox
- * is empty and the app is online.
+ * Status bar indicator for the offline edit outbox (#3530): shows how many
+ * edits are waiting (and whether any need review), and opens the Pending
+ * edits dialog. Hidden while the outbox is empty and the app is online. The
+ * background sync itself runs from `useEditOutboxRunner`.
  */
 
 import { cn } from "@geolibre/ui";
 import { AlertTriangle, CloudOff, CloudUpload } from "lucide-react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { countOps } from "../../lib/edit-sync/edit-outbox";
-import { startEditOutboxRunner, isNavigatorOnline } from "../../lib/edit-sync/edit-outbox-runner";
+import { isNavigatorOnline } from "../../lib/edit-sync/edit-outbox-runner";
 import { getOutboxSnapshot, subscribeOutbox } from "../../lib/edit-sync/edit-outbox-store";
-import { ensureEditSyncBackends } from "../../lib/edit-sync/register-backends";
 import { EditOutboxDialog } from "./EditOutboxDialog";
 
 function subscribeOnline(listener: () => void): () => void {
@@ -31,12 +30,6 @@ export function EditOutboxStatus({ compact = false }: { compact?: boolean }) {
   const snapshot = useSyncExternalStore(subscribeOutbox, getOutboxSnapshot, getOutboxSnapshot);
   const online = useSyncExternalStore(subscribeOnline, isNavigatorOnline, () => true);
 
-  useEffect(() => {
-    ensureEditSyncBackends();
-    // The runner is app-wide and outlives this indicator's remounts.
-    startEditOutboxRunner();
-  }, []);
-
   const pending = snapshot.entries.reduce((sum, entry) => {
     const counts = countOps(entry.ops);
     return sum + counts.insert + counts.update + counts.delete;
@@ -54,6 +47,7 @@ export function EditOutboxStatus({ compact = false }: { compact?: boolean }) {
         entries={snapshot.entries}
         online={online}
         durable={snapshot.durable}
+        storageError={snapshot.storageError}
       />
     ) : null;
   }
@@ -87,6 +81,7 @@ export function EditOutboxStatus({ compact = false }: { compact?: boolean }) {
         entries={snapshot.entries}
         online={online}
         durable={snapshot.durable}
+        storageError={snapshot.storageError}
       />
     </>
   );

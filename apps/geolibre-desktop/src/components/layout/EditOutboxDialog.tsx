@@ -15,6 +15,7 @@ import {
 } from "@geolibre/ui";
 import { AlertTriangle, CloudOff, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { diffConflictVersions, formatAttributeValue } from "../../lib/edit-sync/conflict-diff";
 import {
@@ -35,6 +36,8 @@ export interface EditOutboxDialogProps {
   entries: readonly OutboxEntry[];
   online: boolean;
   durable: boolean;
+  /** Set when the queue stored on this device could not be read. */
+  storageError?: string;
 }
 
 export function EditOutboxDialog({
@@ -43,6 +46,7 @@ export function EditOutboxDialog({
   entries,
   online,
   durable,
+  storageError,
 }: EditOutboxDialogProps) {
   const { t } = useTranslation();
   const [reviewId, setReviewId] = useState<string | null>(null);
@@ -100,7 +104,12 @@ export function EditOutboxDialog({
                 {t("editOutbox.offlineNotice")}
               </p>
             )}
-            {!durable && (
+            {storageError ? (
+              <p className="rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+                {t("editOutbox.storageUnreadable", { error: storageError })}
+              </p>
+            ) : null}
+            {!durable && !storageError && (
               <p className="rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
                 {t("editOutbox.notDurable")}
               </p>
@@ -188,7 +197,7 @@ function OutboxEntryRow({
             entry.status === "pending" ? "text-muted-foreground" : "text-destructive",
           )}
         >
-          {t("editOutbox.lastError", { error: entry.lastError })}
+          {t("editOutbox.lastError", { error: describeEntryError(entry, t) })}
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2 pt-0.5">
@@ -393,4 +402,19 @@ function ConflictItem({
       </div>
     </li>
   );
+}
+
+/**
+ * The translated message for an entry's last error when its code is known,
+ * else the source's own message.
+ *
+ * @param entry The entry.
+ * @param t Translator.
+ * @returns Display text.
+ */
+function describeEntryError(entry: OutboxEntry, t: TFunction): string {
+  if (entry.lastErrorCode === "postgisNoConnection") {
+    return t("editOutbox.errors.postgisNoConnection");
+  }
+  return entry.lastError ?? "";
 }

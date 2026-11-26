@@ -9,6 +9,7 @@
  */
 
 import {
+  EditSyncError,
   mergeChangeSet,
   syncOutboxEntry,
   type EditSyncAdapter,
@@ -100,7 +101,9 @@ export async function enqueueChangeSet(
   const at = now();
   const queued = getOutboxEntry(input.id);
   if (input.ops.length === 0) {
-    if (queued) await removeOutboxEntry(input.id);
+    // Nothing new to send. A queued entry is kept: its edits never reached
+    // the source, and the layer may simply have been reloaded without them.
+    // Only a successful sync or an explicit Discard removes it.
     return { kind: "empty" };
   }
   const entry: OutboxEntry = queued
@@ -153,6 +156,7 @@ export function syncOutboxEntryNow(id: string): Promise<SyncOutcome | null> {
         ...entry,
         status: "error",
         lastError: message,
+        lastErrorCode: error instanceof EditSyncError ? error.code : undefined,
         lastAttemptAt: Date.now(),
         nextAttemptAt: undefined,
         updatedAt: Date.now(),

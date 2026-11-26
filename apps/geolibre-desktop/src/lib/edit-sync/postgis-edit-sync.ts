@@ -198,18 +198,26 @@ export function resolveEntryConnection(entry: OutboxEntry): string | null {
   } as unknown as GeoLibreLayer);
 }
 
+/** Statuses a proxy in front of the sidecar (nginx in the web build) answers with when it is down. */
+const GATEWAY_STATUSES = new Set([502, 503, 504]);
+
 function readFailure(error: unknown): Error {
-  if (error instanceof PostgisRequestError && error.status !== 503) {
+  if (error instanceof PostgisRequestError && !GATEWAY_STATUSES.has(error.status ?? 0)) {
     return new EditSyncRejectedError(error.message);
   }
-  // 503 (database unreachable) or no answer from the sidecar at all.
+  // Database or sidecar unreachable, or no answer at all: a read is safe to retry.
   return new EditSyncOfflineError(error instanceof Error ? error.message : String(error));
 }
 
 function writeFailure(error: unknown): Error {
   if (error instanceof PostgisWriteRejectedError) {
     if (error.status === 409) return new EditSyncConflictRaceError(error.message);
+    // The sidecar's own 503 means it never reached the database.
     if (error.status === 503) return new EditSyncOfflineError(error.message);
+    // A gateway timeout or bad gateway may follow a committed write.
+    if (GATEWAY_STATUSES.has(error.status ?? 0)) {
+      return new EditSyncUncertainError(error.message);
+    }
     return new EditSyncRejectedError(error.message);
   }
   // The request may have reached the database before the answer was lost.
@@ -234,7 +242,8 @@ export function createPostgisSyncAdapter(
   const connection = (deps.resolveConnection ?? resolveEntryConnection)(entry);
   if (!connection) {
     throw new EditSyncRejectedError(
-      "No PostgreSQL connection is available for this table. Reconnect in Add data > PostgreSQL, then sync again.",
+      "No PostgreSQL connection is available for this table.",
+      "postgisNoConnection",
     );
   }
   const keyOf = postgisKeyOf(target.primaryKey);
@@ -362,16 +371,21 @@ export async function refreshPostgisLayerAfterSync(
     excluded_fields: current.excludedFields,
   });
   const live = getLayer(entry.layerId);
-  if (!live) return false;
+  if (!live?.geojson) return false;
+  // Everything the layer holds that its old base does not: the edits this
+  // sync sent, edits still queued, and edits made since the save (possibly
+  // while this sync ran in the background). Only the ones this sync settled
+  // are replaced by the table's version; the rest are laid back on top.
+  const localOps = buildPostgisChangeSet(live, live.geojson) ?? [];
+  const remaining = new Set((outcome.entry?.ops ?? []).map((op) => op.id));
+  const settled = entry.ops.filter((op) => !remaining.has(op.id));
+  const unsynced = unsyncedLocalOps(localOps, settled);
   const { geometryEdited: _cleared, ...metadata } = live.metadata;
-  // Unsynced operations (conflicts under review, rejected features) stay in
-  // the layer so the user does not lose them while deciding.
-  const pending = outcome.entry?.ops ?? [];
   updateLayer(entry.layerId, {
-    geojson: overlayPendingOps(fresh.geojson, pending, keyOfTarget(current)),
+    geojson: overlayLocalOps(fresh.geojson, unsynced, keyOfTarget(current)),
     metadata: {
       ...metadata,
-      ...(pending.length ? { geometryEdited: true } : {}),
+      ...(unsynced.length ? { geometryEdited: true } : {}),
       featureCount: fresh.feature_count,
       postgisBaselineKeys: databaseFeatureKeys(fresh.geojson),
       [EDIT_SYNC_BASELINE_KEY]: postgisSyncBaseline(fresh.geojson),
@@ -385,15 +399,44 @@ function keyOfTarget(target: PostgisOutboxTarget) {
 }
 
 /**
- * Re-apply still-queued operations on top of freshly read features, so a
- * refresh does not visually discard edits that are waiting on a conflict.
+ * The layer's local edits that a sync did not settle: everything except an
+ * edit identical to one the sync applied (or resolved as keep theirs).
+ *
+ * @param localOps The layer's current edits against its old base.
+ * @param settled The entry's operations this sync finished.
+ * @returns The edits to keep on top of the refreshed table.
+ */
+export function unsyncedLocalOps(
+  localOps: readonly OutboxOp[],
+  settled: readonly OutboxOp[],
+): OutboxOp[] {
+  const settledByKey = new Map<string, OutboxOp>();
+  const settledInserts: OutboxOp[] = [];
+  for (const op of settled) {
+    if (op.kind === "insert" && op.key === null) settledInserts.push(op);
+    else if (op.key !== null) settledByKey.set(op.key, op);
+  }
+  return localOps.filter((op) => {
+    if (op.kind === "insert" && op.key === null) {
+      const twin = settledInserts.findIndex((s) => s.mineFingerprint === op.mineFingerprint);
+      if (twin < 0) return true;
+      settledInserts.splice(twin, 1);
+      return false;
+    }
+    const done = op.key !== null ? settledByKey.get(op.key) : undefined;
+    return !(done && done.kind === op.kind && done.mineFingerprint === op.mineFingerprint);
+  });
+}
+
+/**
+ * Lay local edits on top of freshly read features.
  *
  * @param geojson The table as read.
- * @param ops Operations still in the outbox.
+ * @param ops The edits to keep.
  * @param keyOf How to key a feature.
  * @returns The collection to show.
  */
-export function overlayPendingOps(
+export function overlayLocalOps(
   geojson: FeatureCollection,
   ops: readonly OutboxOp[],
   keyOf: (feature: Feature) => string | null,
@@ -403,7 +446,6 @@ export function overlayPendingOps(
   const deleted = new Set<string>();
   const inserts: Feature[] = [];
   for (const op of ops) {
-    if (op.resolution === "theirs") continue;
     if (op.kind === "update" && op.key !== null && op.feature) replaced.set(op.key, op.feature);
     else if (op.kind === "delete" && op.key !== null) deleted.add(op.key);
     else if (op.kind === "insert" && op.feature) inserts.push(op.feature);

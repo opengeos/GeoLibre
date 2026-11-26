@@ -8,6 +8,7 @@ import {
 } from "../apps/geolibre-desktop/src/lib/edit-sync/conflict-diff";
 import {
   EditSyncOfflineError,
+  EditSyncRejectedError,
   type EditSyncAdapter,
   type OutboxEntry,
   type OutboxOp,
@@ -168,7 +169,7 @@ describe("edit outbox runner", () => {
     resetEditSyncBackends();
   });
 
-  it("queues, merges a newer change set, and clears an emptied one", async () => {
+  it("queues, merges a newer change set, and keeps the queue on an empty one", async () => {
     const first = await enqueueChangeSet(input([updateOp("a", "1")]), () => 10);
     assert.equal(first.kind, "queued");
     const second = await enqueueChangeSet(input([updateOp("b", "2")]), () => 20);
@@ -180,9 +181,14 @@ describe("edit outbox runner", () => {
     );
     assert.equal(entry.createdAt, 10);
     assert.equal(entry.updatedAt, 20);
+    // An empty diff (say, the layer was reloaded without the queued edits)
+    // must not discard edits that never reached the source.
     assert.equal((await enqueueChangeSet(input([]))).kind, "empty");
-    assert.equal(getOutboxEntry("postgis:t"), undefined);
-    assert.ok(rec.log.includes("remove:postgis:t"));
+    assert.deepEqual(
+      getOutboxEntry("postgis:t")!.ops.map((op) => op.key),
+      ["2"],
+    );
+    assert.ok(!rec.log.includes("remove:postgis:t"));
   });
 
   it("syncs through the registered backend, persists progress, and runs afterSync", async () => {
@@ -225,13 +231,14 @@ describe("edit outbox runner", () => {
   it("records a missing credential as an error the user must act on", async () => {
     registerEditSyncBackend("postgis", {
       createAdapter: () => {
-        throw new Error("No PostgreSQL connection");
+        throw new EditSyncRejectedError("No PostgreSQL connection", "postgisNoConnection");
       },
     });
     await enqueueChangeSet(input([updateOp("a", "1")]));
     const outcome = await syncOutboxEntryNow("postgis:t");
     assert.equal(outcome!.kind, "error");
     assert.equal(getOutboxEntry("postgis:t")!.status, "error");
+    assert.equal(getOutboxEntry("postgis:t")!.lastErrorCode, "postgisNoConnection");
     assert.equal(await syncOutboxEntryNow("missing"), null);
   });
 
