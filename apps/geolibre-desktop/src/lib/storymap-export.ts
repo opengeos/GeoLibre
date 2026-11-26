@@ -2,6 +2,7 @@ import type { FeatureCollection, Geometry } from "geojson";
 import {
   circleRadiusValue,
   documentLocale,
+  excludeHiddenFieldsFromGeojson,
   extrusionBaseValue,
   extrusionColorValue,
   extrusionHeightValue,
@@ -168,8 +169,8 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
   const {
     storymap,
     basemapStyleUrl,
-    layers,
     projection = "globe",
+    layers,
     navToggleLabel = "Toggle chapter list",
   } = options;
 
@@ -197,7 +198,10 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
   const popups: Record<string, ExportFeaturePopup[]> = {};
   // Resolve popups the way the app would on the story's opening view.
   const popupContext = { zoom: storymap.chapters[0].location.zoom, locale: documentLocale() };
-  for (const layer of storyExportCandidates(storymap, layers)) {
+  for (const candidate of storyExportCandidates(storymap, layers)) {
+    // The page inlines each layer's raw features, so fields the author marked
+    // "excluded" are stripped here like every other export path does.
+    const layer = withoutExcludedFields(candidate);
     // Inline GeoJSON layers and raster tile layers (the latter covers basemaps
     // added through the Basemaps plugin, which are raster layers rather than a
     // style URL, #936). Layers iterate in store order; the store array is
@@ -350,6 +354,19 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     .join("\n");
 
   return renderTemplate(config, inlineLayerScript, usesCog);
+}
+
+/**
+ * Strips the fields a layer marks `"excluded"` from its inline GeoJSON.
+ *
+ * @param layer A project layer about to be inlined into the export.
+ * @returns The layer with excluded properties removed, or the same layer when
+ *   it has no inline features or no excluded fields.
+ */
+function withoutExcludedFields(layer: GeoLibreLayer): GeoLibreLayer {
+  if (!layer.geojson || !layer.fieldVisibility) return layer;
+  const geojson = excludeHiddenFieldsFromGeojson(layer.geojson, layer.fieldVisibility);
+  return geojson === layer.geojson ? layer : { ...layer, geojson };
 }
 
 /**

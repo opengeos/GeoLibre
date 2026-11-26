@@ -56,6 +56,7 @@ describe("Processing menu browser raster entries", () => {
     ["sar-rgb", "sarRgb"],
     ["flood-map", "floodMap"],
     ["cut-fill", "cutFill"],
+    ["building-shadows", "buildingShadows"],
   ] as const) {
     it(`opens ${id} from the raster menu`, async () => {
       renderMenu();

@@ -8,7 +8,7 @@ import { normalizeBaseUrl } from "./geolens-api";
  *
  * Every sub-key is listed in `PUBLISHABLE_PLUGIN_SETTINGS`
  * (`packages/core/src/credentials.ts`, mirrored in
- * `python/src/geolibre/project.py`), so a field added here stays out of shared
+ * `python/src/geolibre/project/credentials.py`), so a field added here stays out of shared
  * and exported projects until it is listed there too.
  */
 export interface GeoLensProjectState {

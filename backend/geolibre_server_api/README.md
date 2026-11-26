@@ -66,6 +66,14 @@ Configuration:
   organization identity providers in addition to the public CAs bundled with
   `certifi`, for providers behind a private CA (default empty: the public CAs
   only). An unreadable file fails startup.
+- `GEOLIBRE_COLLAB_IDENTITY_SECRET`: secret (at least 32 characters; startup
+  fails otherwise) shared with a live-collaboration
+  relay (its `COLLAB_IDENTITY_SECRET`). When set,
+  `POST /api/collab/identity-token` mints short-lived relay identity tokens for
+  signed-in accounts, so collaboration sessions show who is who and a host can
+  require signed-in participants. Unset (the default) disables the route.
+  `GEOLIBRE_COLLAB_IDENTITY_TTL_SECONDS` sets the token lifetime (default
+  `300`, at most `3600`).
 - `GEOLIBRE_SECRET_KEYS`: comma-separated Fernet keys that encrypt each
   organization identity provider's OIDC `client_secret` at rest. Generate one
   with

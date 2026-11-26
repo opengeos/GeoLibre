@@ -87,7 +87,7 @@ def vts(monkeypatch):
     """
     info, style = _documents()
     requested = []
-    monkeypatch.setattr(project_api, "_assert_public_url", lambda _url: None)
+    monkeypatch.setattr(project_api.services, "_assert_public_url", lambda _url: None)
 
     def open_metadata(url, timeout):
         """Return the document a URL names as a binary response.
@@ -118,7 +118,7 @@ def _build(url=SERVICE, **kwargs):
     Returns:
         The layer dict.
     """
-    with mock.patch.object(project_api.uuid, "uuid4", lambda: "arcgis-layer-1"):
+    with mock.patch.object(project_api.layers.uuid, "uuid4", lambda: "arcgis-layer-1"):
         return project_api.arcgis_vector_tile_layer(url, **kwargs)
 
 
@@ -293,7 +293,7 @@ def test_tile_hosts_must_be_public(vts, monkeypatch):
         if "127.0.0.1" in url:
             raise ValueError("non-public address")
 
-    monkeypatch.setattr(project_api, "_assert_public_url", guard)
+    monkeypatch.setattr(project_api.services, "_assert_public_url", guard)
     _build()
     assert SERVICE + "/tile/0/0/0.pbf" in checked
     style["sources"]["Santa_Monica_parcels_VTL"]["tiles"] = ["http://127.0.0.1:8765/{z}/{y}/{x}"]
@@ -366,7 +366,7 @@ def test_too_many_sources_and_repeated_hosts(vts, monkeypatch):
     base = style["sources"]["Santa_Monica_parcels_VTL"]
     style["sources"].update({f"extra{i}": dict(base) for i in range(3)})
     checked = []
-    monkeypatch.setattr(project_api, "_assert_public_url", checked.append)
+    monkeypatch.setattr(project_api.services, "_assert_public_url", checked.append)
     _build()
     # The two metadata reads, then a single probe for the shared tile host.
     assert len([url for url in checked if "/tile/" in url]) == 1
@@ -598,7 +598,7 @@ def test_style_size_is_bounded(vts, monkeypatch):
         vts: The metadata transport fixture.
         monkeypatch: Pytest fixture for lowering the limit.
     """
-    monkeypatch.setattr(project_api, "_ARCGIS_STYLE_LIMIT", 64)
+    monkeypatch.setattr(project_api.services, "_ARCGIS_STYLE_LIMIT", 64)
     with pytest.raises(ValueError, match="size limit"):
         _build()
 

@@ -325,9 +325,36 @@ secret configured:
   how the Collaborate dialog decides to hide the "require a signed-in account"
   option entirely.
 
-GeoLibre itself ships no sign-in flow yet, so the stock deployment leaves the
-secret unset and the whole identity path dormant. The protocol and relay support
-are in place for a deployment that fronts the relay with its own issuer.
+**The GeoLibre server API as issuer (#3530).** `backend/geolibre_server_api`
+mints these tokens for its accounts at `POST /api/collab/identity-token` (see
+[the server API reference](server-api.md#post-apicollabidentity-token)). To
+enable it, give the server `GEOLIBRE_COLLAB_IDENTITY_SECRET` and the relay the
+same value as `COLLAB_IDENTITY_SECRET` (the root `docker-compose.yml` passes
+one `COLLAB_IDENTITY_SECRET` to both). When the user is signed in to that server
+(the share server's OAuth sign-in), `useCollaboration` presents a token on
+every (re)connect's `join`, reusing one while it has more than a minute left
+and otherwise requesting a new one
+(`lib/collab-identity.ts`), so the roster shows the account, the session log
+attributes joins to it, blocks and permission overrides key on `user:<id>`,
+and the host can turn on "require a signed-in account". Only this five-minute,
+single-purpose token reaches the relay, never the OAuth access token; the relay
+checks it offline with the shared secret. A user who is not signed in, or a
+server without the secret, joins anonymously as before.
+
+The token carries the account's id and username, so a signed-in user's
+identity goes to whichever relay the deployment configures
+(`VITE_GEOLIBRE_COLLAB_URL` / `GEOLIBRE_COLLAB_URL`). The secret is symmetric:
+whoever holds it can also mint tokens for any account (`signIdentityToken`),
+so every holder, the server and each relay, must be trusted to issue
+identities, not just to see users' names. The server only issues tokens when
+an operator configures that shared secret, which makes the pairing an
+explicit operator decision.
+Tokens carry no audience: any relay holding the same secret accepts one until
+it expires (five minutes by default), so share a secret only among relays of
+one deployment.
+
+The stock hosted relay leaves the secret unset, so the identity path stays
+dormant there until a deployment pairs a relay with its server API.
 
 ### Moderation
 

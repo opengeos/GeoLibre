@@ -79,7 +79,7 @@ plugin registry and blocklist above.
 | `languages.geolibre.app` | Optional Whitebox tool translation packs, downloaded on request from Settings. | `apps/geolibre-desktop/src/lib/language-pack.ts` | `VITE_LANGUAGE_PACK_BASE_URL`; removed by `GEOLIBRE_NO_EXTERNAL_CDN=1`. |
 | `assets.geolibre.app` | Starter project thumbnails and files shown in the New Project dialog, and the sample workflows (and their vector sample data) in Model Builder's **Samples** menu. | `apps/geolibre-desktop/src/lib/starter-projects.json`, `apps/geolibre-desktop/src/lib/sample-models.json` | Fetched only when that dialog is opened or a sample is picked. |
 | `datasets.geolibre.app` | A public GeoLens catalog offered as a sample server in the GeoLens plugin. | `packages/plugins/src/plugins/maplibre-geolens.ts` | `geolens.url` in `deployment.json`. |
-| `web.geolibre.app` | The app URL that a standalone HTML export from the Python package (`render_project_html`) loads by default. | `python/src/geolibre/geolibre.py` | Pass `app_url=` to load the app from your own host. |
+| `web.geolibre.app` | The app URL that a standalone HTML export from the Python package (`render_project_html`) loads by default. | `python/src/geolibre/_html_export.py` | Pass `app_url=` to load the app from your own host. |
 
 ### The `tiles.geolibre.app` relay
 

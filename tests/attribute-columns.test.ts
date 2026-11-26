@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  excludeHiddenFieldsFromGeojson,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import {
   addColumn,
@@ -199,6 +203,21 @@ describe("renameColumn (destructive)", () => {
     );
   });
 
+  it("moves an excluded field's flag to the new name so exports keep stripping it", () => {
+    const layer = makeLayer({ fieldVisibility: { pop: "excluded", area: "hidden" } });
+    const patch = renameColumn(layer, DISCOVERED, "pop", "Population");
+    assert.deepEqual(patch?.fieldVisibility, { Population: "excluded", area: "hidden" });
+    // The real egress filter drops the renamed field.
+    const stripped = excludeHiddenFieldsFromGeojson(patch!.geojson!, patch!.fieldVisibility);
+    assert.deepEqual(stripped.features[0].properties, { name: "A", area: 5 });
+  });
+
+  it("leaves fieldVisibility out of the patch when the field had no flag", () => {
+    const layer = makeLayer({ fieldVisibility: { area: "excluded" } });
+    const patch = renameColumn(layer, DISCOVERED, "pop", "Population");
+    assert.equal(Object.hasOwn(patch!, "fieldVisibility"), false);
+  });
+
   it("is a no-op for empty, unchanged, colliding, or absent names", () => {
     const layer = makeLayer();
     assert.equal(renameColumn(layer, DISCOVERED, "pop", "  "), null);
@@ -210,6 +229,11 @@ describe("renameColumn (destructive)", () => {
 });
 
 describe("deleteColumn (destructive)", () => {
+  it("drops the deleted field's visibility flag", () => {
+    const layer = makeLayer({ fieldVisibility: { pop: "excluded", area: "hidden" } });
+    assert.deepEqual(deleteColumn(layer, "pop")?.fieldVisibility, { area: "hidden" });
+  });
+
   it("removes the key from every feature", () => {
     const layer = makeLayer();
     const patch = deleteColumn(layer, "pop");

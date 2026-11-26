@@ -1,6 +1,6 @@
 """Widget-free operations on whole GeoLibre project dicts.
 
-``project.py`` *builds* pieces (a layer, a plugin-state blob). This module
+The ``project`` package *builds* pieces (a layer, a plugin-state blob). This module
 *applies* them to a project: adding and restyling layers, moving the camera,
 composing the map controls, and reading a project back as a summary.
 
@@ -479,7 +479,7 @@ def add_layer(project: dict[str, Any], layer: dict[str, Any], *, index: int | No
 
     Args:
         project: The project dict (mutated in place).
-        layer: A layer dict from one of the ``project.py`` builders.
+        layer: A layer dict from one of the ``geolibre.project`` builders.
         index: Draw-order position; appended (drawn on top) when omitted.
 
     Returns:

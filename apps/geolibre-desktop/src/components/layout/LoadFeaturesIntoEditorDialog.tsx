@@ -34,12 +34,48 @@ import { clamp } from "../../lib/clamp";
 import { createAppAPI, getPluginManager } from "../../hooks/usePlugins";
 import { exportVectorLayer } from "../../lib/vector-export";
 
+/**
+ * The GeoEditor and file-system operations the panel drives. Production uses
+ * the real plugin state and export helpers; tests substitute their own.
+ */
+export interface LoadFeaturesEditorServices {
+  /** Activate the GeoEditor if needed; resolves to whether it can import. */
+  ensureEditorActive: (mapControllerRef: React.RefObject<MapEngine | null>) => Promise<boolean>;
+  getGeoEditorFeatureCount: typeof getGeoEditorFeatureCount;
+  hasViewImportBaseline: typeof hasViewImportBaseline;
+  loadViewFeaturesIntoEditor: typeof loadViewFeaturesIntoEditor;
+  queryViewLayerFeatures: typeof queryViewLayerFeatures;
+  buildEditorSaveCollection: typeof buildEditorSaveCollection;
+  exportVectorLayer: typeof exportVectorLayer;
+}
+
+const DEFAULT_EDITOR_SERVICES: LoadFeaturesEditorServices = {
+  // The editor's packages load on first activation, so this can take a moment.
+  // A manager that is already activating the editor hands back that pending
+  // result, so awaiting here also covers an activation started elsewhere.
+  ensureEditorActive: async (mapControllerRef) => {
+    if (isGeoEditorAvailableForImport()) return true;
+    const appAPI = createAppAPI(mapControllerRef);
+    const manager = getPluginManager();
+    await manager.activate("maplibre-gl-geo-editor", appAPI);
+    return isGeoEditorAvailableForImport();
+  },
+  getGeoEditorFeatureCount,
+  hasViewImportBaseline,
+  loadViewFeaturesIntoEditor,
+  queryViewLayerFeatures,
+  buildEditorSaveCollection,
+  exportVectorLayer,
+};
+
 interface LoadFeaturesIntoEditorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mapControllerRef: React.RefObject<MapEngine | null>;
   /** Store layer to preselect (set when opened from a layer's context menu). */
   initialLayerId: string | null;
+  /** Replaces the GeoEditor and export operations; tests only. */
+  services?: LoadFeaturesEditorServices;
 }
 
 /** localStorage key for the optional editor-name field (stamped onto changes). */
@@ -88,6 +124,7 @@ export function LoadFeaturesIntoEditorDialog({
   onOpenChange,
   mapControllerRef,
   initialLayerId,
+  services = DEFAULT_EDITOR_SERVICES,
 }: LoadFeaturesIntoEditorDialogProps) {
   const { t } = useTranslation();
   // Layers are only read while the panel is open; closed, it stays mounted
@@ -177,7 +214,7 @@ export function LoadFeaturesIntoEditorDialog({
     setConfirmCount(null);
     setPendingLoad(null);
     setCollapsed(false);
-    setChangesAvailable(hasViewImportBaseline());
+    setChangesAvailable(services.hasViewImportBaseline());
     // Open at the bottom-left of the map canvas by default (measured from the
     // map container, so it clears the left Layers panel), leaving a gap above
     // the status bar. Anchored by `bottom` so growing content extends upward.
@@ -191,7 +228,7 @@ export function LoadFeaturesIntoEditorDialog({
     } catch {
       // Persistence unavailable (e.g. privacy mode); leave the field empty.
     }
-  }, [open, initialLayerId, computeEligible]);
+  }, [open, initialLayerId, computeEligible, services]);
 
   const selectedLayer = useMemo(
     () => eligible.find((entry) => entry.id === selectedId) ?? null,
@@ -212,15 +249,10 @@ export function LoadFeaturesIntoEditorDialog({
    * Activate the GeoEditor plugin if needed; resolves to whether it is ready.
    * The editor's packages load on first activation, so this can take a moment.
    */
-  const ensureEditorActive = useCallback(async (): Promise<boolean> => {
-    if (isGeoEditorAvailableForImport()) return true;
-    const appAPI = createAppAPI(mapControllerRef);
-    const manager = getPluginManager();
-    // A manager that is already activating the editor hands back that pending
-    // result, so awaiting here also covers an activation started elsewhere.
-    await manager.activate("maplibre-gl-geo-editor", appAPI);
-    return isGeoEditorAvailableForImport();
-  }, [mapControllerRef]);
+  const ensureEditorActive = useCallback(
+    (): Promise<boolean> => services.ensureEditorActive(mapControllerRef),
+    [mapControllerRef, services],
+  );
 
   // Load already-queried features into the editor (past the warning gate).
   const commitLoad = useCallback(
@@ -235,8 +267,10 @@ export function LoadFeaturesIntoEditorDialog({
           });
           return;
         }
-        const { imported, dropped } = await loadViewFeaturesIntoEditor(features, { replace });
-        setChangesAvailable(hasViewImportBaseline());
+        const { imported, dropped } = await services.loadViewFeaturesIntoEditor(features, {
+          replace,
+        });
+        setChangesAvailable(services.hasViewImportBaseline());
         if (imported === 0) {
           setStatus({ message: t("loadEditorFeatures.noEditable"), kind: "error" });
           return;
@@ -266,7 +300,7 @@ export function LoadFeaturesIntoEditorDialog({
         setBusy(false);
       }
     },
-    [ensureEditorActive, t],
+    [ensureEditorActive, services, t],
   );
 
   // Query the selected layer's in-view features, then either warn (too many),
@@ -294,7 +328,10 @@ export function LoadFeaturesIntoEditorDialog({
       window.setTimeout(() => {
         let features: Feature[];
         try {
-          features = queryViewLayerFeatures(map as unknown as ViewImportMap, selectedLayer.source);
+          features = services.queryViewLayerFeatures(
+            map as unknown as ViewImportMap,
+            selectedLayer.source,
+          );
         } catch (error) {
           // e.g. the layer's source was removed between selecting and loading.
           setStatus({
@@ -320,13 +357,13 @@ export function LoadFeaturesIntoEditorDialog({
         void commitLoad(features, replace, selectedLayer.name);
       }, 0);
     },
-    [commitLoad, mapControllerRef, selectedLayer, t],
+    [commitLoad, mapControllerRef, selectedLayer, services, t],
   );
 
   const runSave = useCallback(
     async (changedOnly: boolean) => {
       const now = new Date().toISOString();
-      const result = buildEditorSaveCollection({
+      const result = services.buildEditorSaveCollection({
         changedOnly,
         editorName,
         now,
@@ -344,7 +381,7 @@ export function LoadFeaturesIntoEditorDialog({
       setBusy(true);
       try {
         const baseName = `${changedOnly ? "feature-changes" : "features"}_${timestampSlug(now)}`;
-        const saved = await exportVectorLayer(result.collection, "geojson", baseName);
+        const saved = await services.exportVectorLayer(result.collection, "geojson", baseName);
         if (saved === null) return; // user cancelled the save dialog
         const { added, modified, deleted } = result.counts;
         setStatus({
@@ -364,7 +401,7 @@ export function LoadFeaturesIntoEditorDialog({
         setBusy(false);
       }
     },
-    [editorName, t],
+    [editorName, services, t],
   );
 
   const handleLoadClick = async () => {
@@ -393,7 +430,7 @@ export function LoadFeaturesIntoEditorDialog({
     }
     // The panel was closed (or reopened) while the editor activated.
     if (generation !== openGenerationRef.current) return;
-    const count = ready ? getGeoEditorFeatureCount() : 0;
+    const count = ready ? services.getGeoEditorFeatureCount() : 0;
     if (count > 0) {
       setConfirmCount(count);
     } else {
