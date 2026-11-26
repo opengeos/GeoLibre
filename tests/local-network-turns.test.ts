@@ -376,11 +376,12 @@ describe("turn costs", () => {
 
 describe("turn cost edge cases", () => {
   it("uses one adjacency budget for every search in each local tool run", async () => {
-    const original = LocalNetwork.prototype.search;
+    // The tools search through searchChunked, which yields between chunks.
+    const original = LocalNetwork.prototype.searchChunked;
     const budgets: (NetworkSearchBudget | undefined)[] = [];
     const search = mock.method(
       LocalNetwork.prototype,
-      "search",
+      "searchChunked",
       function (this: LocalNetwork, ...args: Parameters<typeof original>) {
         budgets.push(args[1]?.budget);
         return original.apply(this, args);

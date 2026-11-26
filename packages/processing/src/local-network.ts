@@ -25,6 +25,11 @@ import { getActiveMeanRadiusMeters } from "@geolibre/core/worker-safe";
  * entry, a left or right turn penalty, a U-turn) can depend on the edge the
  * route arrived by. With no turn rules the original node search runs, so
  * results without turn rules are unchanged.
+ *
+ * The searches can run in WebAssembly ({@link setNetworkSearchEngine},
+ * `local-network-wasm.ts`): the graph stays here, and an engine receives it as
+ * typed arrays and returns the same search arrays. Both engines follow the
+ * same heap and relaxation order, so they agree on costs and paths.
  */
 
 /** How the cost of traversing an edge is derived. */
@@ -88,6 +93,27 @@ export interface SearchResult {
   prevNode: Int32Array;
   /** Directed-edge search state, present when the network has turn rules. */
   turns?: TurnSearchState;
+  /** With {@link NetworkSearchOptions.stopAt}: weighted nodes settled, in order. */
+  settledTargets?: number[];
+}
+
+/** Tracks a {@link NetworkSearchStop} as nodes settle; returns true to stop. */
+function stopTracker(
+  stop: NetworkSearchStop | undefined,
+  result: SearchResult,
+): (node: number) => boolean {
+  if (!stop) return () => false;
+  const settled: number[] = [];
+  result.settledTargets = settled;
+  let found = 0;
+  return (node) => {
+    const weight = stop.weights[node];
+    if (weight > 0) {
+      settled.push(node);
+      found += weight;
+    }
+    return found >= stop.count;
+  };
 }
 
 /**
@@ -146,7 +172,7 @@ export interface TurnRules {
 }
 
 /** {@link TurnRules} with defaults applied and the table keyed for lookup. */
-interface CompiledTurnRules {
+export interface CompiledTurnRules {
   table: Map<number, Map<number, number>>;
   leftCost: number;
   rightCost: number;
@@ -163,15 +189,101 @@ export interface NetworkSearchBudget {
   remainingAdjacencyVisits: number;
 }
 
+/**
+ * Stop a search once enough weighted nodes are settled (closest facility:
+ * the facilities at each node). Settled weighted nodes are reported, in
+ * settle order, in {@link SearchResult.settledTargets}.
+ */
+export interface NetworkSearchStop {
+  /** Weight per node; nodes with weight 0 do not count. */
+  weights: Uint32Array;
+  /** Settled weight that stops the search. */
+  count: number;
+}
+
 /** Search limits and callbacks; an omitted budget starts a fresh allowance. */
 export interface NetworkSearchOptions {
   target?: number;
   astar?: boolean;
   maxCost?: number;
   reverse?: boolean;
+  /** Called per settled node; return true to stop. Runs the JS engine. */
   onSettle?: (node: number, cost: number) => boolean | void;
+  /** A stop condition every engine supports (prefer it to `onSettle`). */
+  stopAt?: NetworkSearchStop;
   budget?: NetworkSearchBudget;
 }
+
+/** A search an engine runs in bounded steps. */
+export interface NetworkSearchRun {
+  /**
+   * Advances the search by about `maxVisits` adjacency entries, charging the
+   * budget it was started with.
+   *
+   * @returns True once the search is complete.
+   * @throws RangeError when the adjacency budget runs out.
+   */
+  step(maxVisits: number): boolean;
+  /** The finished search, in the same form as {@link LocalNetwork.searchJs}. */
+  result(): SearchResult;
+  /** Releases engine memory; the run cannot be used afterwards. */
+  dispose(): void;
+}
+
+/**
+ * An alternative implementation of {@link LocalNetwork.searchJs}, such as the
+ * WebAssembly engine. It must return the same result as the JS search.
+ */
+export interface NetworkSearchEngine {
+  /** Short name for logs. */
+  readonly name: string;
+  /**
+   * Readies the engine for `net` (copying the graph in, for one) and says
+   * whether its searches will run here; false means they fall back to JS.
+   */
+  prepare?(net: LocalNetwork): boolean;
+  /**
+   * Starts a search, or returns null when this engine cannot run it (an
+   * `onSettle` callback, for one), so the JS search runs instead.
+   */
+  start(
+    net: LocalNetwork,
+    sources: number[],
+    options: NetworkSearchOptions,
+    budget: NetworkSearchBudget,
+  ): NetworkSearchRun | null;
+}
+
+let searchEngine: NetworkSearchEngine | null = null;
+
+/**
+ * Routes every later {@link LocalNetwork.search} through `engine`, or back to
+ * the JS search with null. The engine is per thread (the processing worker
+ * sets its own).
+ *
+ * @param engine - The engine, or null for the JS search.
+ */
+export function setNetworkSearchEngine(engine: NetworkSearchEngine | null): void {
+  searchEngine = engine;
+}
+
+/** The engine {@link LocalNetwork.search} uses, or null for the JS search. */
+export function getNetworkSearchEngine(): NetworkSearchEngine | null {
+  return searchEngine;
+}
+
+/** Hooks that let a chunked search yield to its host and stop early. */
+export interface NetworkSearchYield {
+  /** Resolves once the host has had a turn (a timer, for one). */
+  yieldToHost: () => Promise<void>;
+  /** Whether to abandon the search. */
+  aborted: () => boolean;
+  /** Adjacency entries per chunk (default {@link NETWORK_SEARCH_CHUNK}). */
+  chunk?: number;
+}
+
+/** Adjacency entries a chunked search inspects between yields. */
+export const NETWORK_SEARCH_CHUNK = 250_000;
 
 /** Create an independent adjacency allowance, optionally smaller for a caller. */
 export function createNetworkSearchBudget(
@@ -578,6 +690,32 @@ export class LocalNetwork {
   };
   private extent = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
   private turnRules: CompiledTurnRules | null = null;
+  private revisionCount = 0;
+
+  /**
+   * Bumped by every change that can alter a search (nodes, edges, splits,
+   * costs, turn rules), so an engine can cache a copy of the graph. Code that
+   * edits {@link edges} in place must call {@link touch}.
+   */
+  get revision(): number {
+    return this.revisionCount;
+  }
+
+  /**
+   * Marks the graph as changed after an in-place edit of its edges, and
+   * recomputes the A* heuristic scale, which a lowered cost would otherwise
+   * leave overestimating.
+   */
+  touch(): void {
+    this.revisionCount++;
+    this.minCostPerMeter = Infinity;
+    for (const edge of this.edges) this.updateHeuristic(edge);
+  }
+
+  /** The active turn rules with defaults applied, or null. */
+  get compiledTurnRules(): Readonly<CompiledTurnRules> | null {
+    return this.turnRules;
+  }
 
   get nodeCount(): number {
     return this.lon.length;
@@ -604,6 +742,7 @@ export class LocalNetwork {
    * @param rules - The turn rules, or null for free turns.
    */
   setTurnRules(rules: TurnRules | null): void {
+    this.revisionCount++;
     if (!rules || !turnRulesActive(rules)) {
       this.turnRules = null;
       return;
@@ -708,6 +847,7 @@ export class LocalNetwork {
 
   /** @internal Adds a node and returns its id. */
   addNode(lon: number, lat: number): number {
+    this.revisionCount++;
     this.lon.push(lon);
     this.lat.push(lat);
     this.adj.push([]);
@@ -721,6 +861,7 @@ export class LocalNetwork {
   /** @internal Adds an edge and returns its id. */
   addEdge(edge: NetworkEdge): number {
     const id = this.edges.length;
+    this.revisionCount++;
     this.edges.push(edge);
     this.adj[edge.a].push(id);
     this.adj[edge.b].push(id);
@@ -757,6 +898,7 @@ export class LocalNetwork {
 
   /** @internal Builds the edge spatial index once the edges are in. */
   buildIndex(): void {
+    this.revisionCount++;
     this.minCostPerMeter = Infinity;
     for (const edge of this.edges) this.updateHeuristic(edge);
     const { minX, minY, maxX, maxY } = this.extent;
@@ -851,6 +993,7 @@ export class LocalNetwork {
 
   /** Splits edge `id` at parameter `t` through an existing node. */
   private splitEdgeAt(id: number, t: number, node: number): number {
+    this.revisionCount++;
     const edge = this.edges[id];
     const tail: NetworkEdge = {
       a: node,
@@ -911,9 +1054,61 @@ export class LocalNetwork {
    * @param options.reverse - Follow edges against their allowed direction,
    *   which gives costs *to* the sources rather than from them.
    * @param options.onSettle - Called per settled node; return true to stop.
+   * @param options.stopAt - Stop once enough weighted nodes are settled.
    * @returns Distances and predecessor links.
    */
   search(sources: number[], options: NetworkSearchOptions = {}): SearchResult {
+    const budget = options.budget ?? createNetworkSearchBudget();
+    const run = searchEngine?.start(this, sources, options, budget);
+    if (!run) return this.searchJs(sources, { ...options, budget });
+    try {
+      // The WASM run takes an f64 and saturates Infinity to "no limit".
+      if (!run.step(Infinity)) throw new Error("The network search did not finish");
+      return run.result();
+    } finally {
+      run.dispose();
+    }
+  }
+
+  /**
+   * {@link search} in chunks, yielding to the host between them so a long
+   * search stays cancellable. The JS search has no yield points, so without
+   * an engine it runs in one piece.
+   *
+   * @param sources - Start nodes (cost 0).
+   * @param options - As for {@link search}.
+   * @param hooks - How to yield, and when to give up.
+   * @returns The search result, or null when `hooks.aborted()` turned true.
+   */
+  async searchChunked(
+    sources: number[],
+    options: NetworkSearchOptions,
+    hooks: NetworkSearchYield,
+  ): Promise<SearchResult | null> {
+    const budget = options.budget ?? createNetworkSearchBudget();
+    const run = searchEngine?.start(this, sources, options, budget);
+    if (!run) return this.searchJs(sources, { ...options, budget });
+    try {
+      const chunk = Math.max(1, hooks.chunk ?? NETWORK_SEARCH_CHUNK);
+      while (!run.step(chunk)) {
+        await hooks.yieldToHost();
+        if (hooks.aborted()) return null;
+      }
+      return run.result();
+    } finally {
+      run.dispose();
+    }
+  }
+
+  /**
+   * The JS search behind {@link search}, whatever engine is set: the
+   * reference implementation other engines must match.
+   *
+   * @param sources - Start nodes (cost 0).
+   * @param options - As for {@link search}.
+   * @returns Distances and predecessor links.
+   */
+  searchJs(sources: number[], options: NetworkSearchOptions = {}): SearchResult {
     const budget = options.budget ?? createNetworkSearchBudget();
     if (this.turnRules) return this.searchTurns(sources, options, budget);
     const n = this.nodeCount;
@@ -924,9 +1119,12 @@ export class LocalNetwork {
     const heap = new MinHeap();
     const maxCost = options.maxCost ?? Infinity;
     const target = options.target;
+    // A weighted stop needs nodes settled in true cost order, so it runs
+    // Dijkstra even when a target is given.
     const useHeuristic =
       options.astar === true &&
       target !== undefined &&
+      !options.stopAt &&
       Number.isFinite(this.minCostPerMeter) &&
       this.minCostPerMeter > 0;
     const tLon = target !== undefined ? this.lon[target] : 0;
@@ -935,6 +1133,8 @@ export class LocalNetwork {
       useHeuristic
         ? haversineMeters(this.lon[node], this.lat[node], tLon, tLat) * this.minCostPerMeter
         : 0;
+    const result: SearchResult = { dist, prevEdge, prevNode };
+    const stop = stopTracker(options.stopAt, result);
     for (const s of sources) {
       if (dist[s] === 0) continue;
       dist[s] = 0;
@@ -945,6 +1145,7 @@ export class LocalNetwork {
       if (settled[u]) continue;
       settled[u] = 1;
       if (options.onSettle?.(u, dist[u])) break;
+      if (stop(u)) break;
       if (u === target) break;
       for (const e of this.adj[u]) {
         chargeAdjacencyVisit(budget);
@@ -960,7 +1161,7 @@ export class LocalNetwork {
         }
       }
     }
-    return { dist, prevEdge, prevNode };
+    return result;
   }
 
   /**
@@ -994,9 +1195,13 @@ export class LocalNetwork {
       prevNode,
       turns: { entry, prevState, bestState, reverse },
     };
+    const stop = stopTracker(options.stopAt, result);
+    // A weighted stop needs nodes settled in true cost order, so it runs
+    // Dijkstra even when a target is given.
     const useHeuristic =
       options.astar === true &&
       target !== undefined &&
+      !options.stopAt &&
       Number.isFinite(this.minCostPerMeter) &&
       this.minCostPerMeter > 0;
     const tLon = target !== undefined ? this.lon[target] : 0;
@@ -1016,7 +1221,7 @@ export class LocalNetwork {
     const starts = [...new Set(sources)];
     for (const s of starts) dist[s] = 0;
     for (const s of starts) {
-      if (options.onSettle?.(s, 0) || s === target) return result;
+      if (options.onSettle?.(s, 0) || stop(s) || s === target) return result;
     }
     for (const s of starts) {
       for (const e of this.adj[s]) {
@@ -1042,6 +1247,7 @@ export class LocalNetwork {
         prevEdge[node] = state >> 1;
         prevNode[node] = reverse ? this.stateTo(state) : this.stateFrom(state);
         if (options.onSettle?.(node, cost)) break;
+        if (stop(node)) break;
         if (node === target) break;
       }
       for (const e of this.adj[node]) {
