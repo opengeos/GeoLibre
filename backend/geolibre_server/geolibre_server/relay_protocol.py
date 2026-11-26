@@ -1,15 +1,11 @@
-"""Wire protocol shared by the two GeoLibre map-command relays.
+"""Wire protocol of the GeoLibre map-command relays.
 
-GeoLibre has two loopback relays that carry scripting commands to the open app
-window over a WebSocket and return correlated results:
-
-- the Jupyter Server extension (``jupyter_relay.py``), which lives on the
-  desktop JupyterLab server started from Processing -> Jupyter Notebook, and
-- the sidecar relay (``app/relay.py``), which lives on the FastAPI sidecar so a
-  Live MCP client can reach the map without a Jupyter server.
-
-Both speak the same envelope, so the helpers here have no Jupyter or FastAPI
-dependency.
+The Jupyter Server extension (``jupyter_relay.py``) carries scripting commands
+from a kernel to the open app window over a WebSocket and returns correlated
+results. The desktop shell's Live MCP relay (``src-tauri/src/live_relay.rs``)
+speaks the same command and result envelopes and mirrors the per-method result
+budgets below, which ``python/tests/test_mcp_live.py`` compares across all
+three implementations. The helpers here have no Jupyter dependency.
 """
 
 from __future__ import annotations

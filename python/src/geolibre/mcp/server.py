@@ -2700,8 +2700,8 @@ def build_server(workspace: Workspace) -> MCPServer:
         return preview_sessions.close(preview_id)
 
     # -- live desktop session -------------------------------------------------
-    # These talk to a loopback relay GeoLibre Desktop runs (the sidecar relay,
-    # or the Jupyter relay; see live.py). They do not write the project file;
+    # These talk to a loopback relay GeoLibre Desktop runs (the desktop
+    # shell's own, or the Jupyter relay; see live.py). They do not write the project file;
     # the user saves in the app when the session should persist.
 
     @tool()
