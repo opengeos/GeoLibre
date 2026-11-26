@@ -346,6 +346,8 @@ export class ArcgisEngine extends ArcgisEngineBasemap implements MapEngine {
         const zoom = Math.round(viewZoom(this.view));
         if (zoom === this.compiledZoom) return;
         this.compiledZoom = zoom;
+        // Zoom-dependent filters can change what a cached hit would return.
+        this.invalidateHitCache();
         if ([...this.natives.values()].some((n) => n.plan.zoomDependent))
           this.syncLayers(this.layers);
       },

@@ -23,9 +23,9 @@ import {
   authorizeSnapshot,
   RELAY_SNAPSHOT_ORIGIN,
   resolveJoin,
+  shouldLogDocUpdate,
   shouldResyncRejectedSnapshot,
   clearParticipantOverrides,
-  diffLockedLayers,
   EMPTY_SESSION_TTL_MS,
   getParticipantKey,
   isIdentityConfigured,
@@ -42,7 +42,16 @@ import {
   timingSafeEqual,
   toWireParticipant,
   type SessionParticipant,
+  CRDT_FEATURE,
 } from "@geolibre/collab-core";
+import {
+  chunkBytes,
+  docUpdateMessages,
+  joinBytes,
+  MAX_DOC_BYTES,
+  RelayDoc,
+  type DocStorage,
+} from "@geolibre/collab-core/crdt-relay";
 
 /** Parse the stored snapshot defensively: a corrupt value yields null rather
  *  than throwing (which would lock joiners out of the session). */
@@ -55,10 +64,20 @@ function parseStoredSnapshot(snapshot: string | undefined): unknown {
   }
 }
 
+function tooLargeError(): ServerMessage {
+  return {
+    type: "error",
+    code: "too-large",
+    message: "Project is too large to sync live. Share it via URL instead.",
+  };
+}
+
 export interface Env {
   COLLAB_SESSION: DurableObjectNamespace<CollabSession>;
   /** Optional deployment-specific snapshot ceiling, expressed in bytes. */
   COLLAB_MAX_SNAPSHOT_BYTES?: string;
+  /** Optional ceiling on a session's op-level document, in bytes. */
+  COLLAB_MAX_DOC_BYTES?: string;
   /** Optional allowed origins list for session creation. */
   ALLOWED_ORIGINS?: string;
   /**
@@ -93,11 +112,6 @@ function parseStoredSessionLog(raw: unknown): SessionLogEntry[] {
   }
 }
 
-// Characters per stored snapshot chunk. A Durable Object caps a SQLite string
-// at 2 MB of UTF-8, and a JS string character can encode to 4 bytes, so this
-// leaves a chunk at half the ceiling even for text that is entirely non-ASCII.
-const SNAPSHOT_CHUNK_CHARS = 256 * 1024;
-
 /**
  * The shared `SessionParticipant` state, serialized onto a hibernatable socket.
  * `editOverride`, `lastChatTs`, and `lastCommentTs` ride on the attachment so
@@ -129,6 +143,168 @@ export class CollabSession extends DurableObject<Env> {
   // cannot race through the duplicate-join guard while identity is verifying.
   private joiningSockets = new WeakSet<WebSocket>();
 
+  // The session's authoritative Yjs document, loaded on first use after each
+  // wake (see `relayDocument`). `rev` mirrors the stored counter while it is.
+  private relayDoc: RelayDoc | null = null;
+  private rev = 0;
+  // When each origin's last change was logged; see shouldLogDocUpdate.
+  private lastLogged = new Map<string, number>();
+  private commentWrite = false;
+
+  private maxDocBytes(): number {
+    const configured = Number(this.env.COLLAB_MAX_DOC_BYTES);
+    return Number.isSafeInteger(configured) && configured > 0 ? configured : MAX_DOC_BYTES;
+  }
+
+  /**
+   * Row-chunked document storage in this object's SQLite database: a base
+   * state plus an append-only log of the updates since, each split into
+   * values under the 2 MB SQLite cap.
+   */
+  private docStorage(): DocStorage {
+    const sql = this.ctx.storage.sql;
+    return {
+      load: () => {
+        this.ensureTables();
+        const base = sql
+          .exec<{ value: ArrayBuffer }>("SELECT value FROM collab_doc_base ORDER BY seq")
+          .toArray()
+          .map((row) => new Uint8Array(row.value));
+        const log = new Map<number, Uint8Array[]>();
+        for (const row of sql
+          .exec<{
+            entry: number;
+            value: ArrayBuffer;
+          }>("SELECT entry, value FROM collab_doc_log ORDER BY entry, part")
+          .toArray()) {
+          const parts = log.get(row.entry) ?? [];
+          parts.push(new Uint8Array(row.value));
+          log.set(row.entry, parts);
+        }
+        return {
+          base: base.length ? joinBytes(base) : null,
+          log: Array.from(log.values(), (parts) => joinBytes(parts)),
+        };
+      },
+      append: (update) => {
+        this.ensureTables();
+        // One transaction, so a failure cannot leave a partial entry that
+        // would break every later load.
+        this.ctx.storage.transactionSync(() => {
+          const next =
+            sql
+              .exec<{ entry: number | null }>("SELECT MAX(entry) AS entry FROM collab_doc_log")
+              .toArray()[0]?.entry ?? -1;
+          chunkBytes(update).forEach((part, index) => {
+            sql.exec(
+              "INSERT INTO collab_doc_log (entry, part, value) VALUES (?, ?, ?)",
+              next + 1,
+              index,
+              part.slice().buffer,
+            );
+          });
+        });
+      },
+      replace: (base) => {
+        this.ensureTables();
+        this.ctx.storage.transactionSync(() => {
+          sql.exec("DELETE FROM collab_doc_base");
+          sql.exec("DELETE FROM collab_doc_log");
+          chunkBytes(base).forEach((part, index) => {
+            sql.exec(
+              "INSERT INTO collab_doc_base (seq, value) VALUES (?, ?)",
+              index,
+              part.slice().buffer,
+            );
+          });
+        });
+      },
+    };
+  }
+
+  /**
+   * The session document, opened (and, for a session that predates op-level
+   * sync, migrated from its stored snapshot) on first use.
+   */
+  private async relayDocument(): Promise<RelayDoc> {
+    if (this.relayDoc) return this.relayDoc;
+    this.ensureTables();
+    const hasDoc =
+      this.ctx.storage.sql
+        .exec<{ n: number }>(
+          "SELECT (SELECT COUNT(*) FROM collab_doc_base) + (SELECT COUNT(*) FROM collab_doc_log) AS n",
+        )
+        .toArray()[0].n > 0;
+    const legacy = hasDoc ? null : parseStoredSnapshot(await this.readSnapshot());
+    const storedRev = (await this.ctx.storage.get<number>("rev")) ?? 0;
+    // Another frame may have opened it (and advanced rev) while this one
+    // awaited; only the frame that creates the document sets rev.
+    if (this.relayDoc) return this.relayDoc;
+    this.rev = storedRev;
+    this.relayDoc = new RelayDoc({
+      storage: this.docStorage(),
+      maxDocBytes: this.maxDocBytes(),
+      legacySnapshot: () => legacy,
+      onMigrated: () => {
+        this.ctx.storage.sql.exec("DELETE FROM collab_snapshot_chunks");
+        void this.ctx.storage.delete("snapshot");
+      },
+      onUpdate: (update, origin) => this.fanOutDocUpdate(update, origin),
+    });
+    return this.relayDoc;
+  }
+
+  /**
+   * Send one accepted document change to every other participant: as
+   * `doc-update` frames to op-level clients, and as a whole `snapshot` to
+   * clients still on the snapshot protocol.
+   */
+  private fanOutDocUpdate(update: Uint8Array, origin: string): void {
+    this.rev += 1;
+    const rev = this.rev;
+    void this.ctx.storage.put("rev", rev);
+    if (shouldLogDocUpdate(this.lastLogged, origin, Date.now())) {
+      void this.appendLog({ type: "snapshot", ts: Date.now(), rev, origin });
+    }
+    // Built on first use: a session may have no op-level (or no snapshot) peer.
+    let frames: string[] | undefined;
+    let snapshotPayload: string | null | undefined;
+    for (const { socket, attachment } of this.attachedSockets()) {
+      if (attachment.clientId === origin) continue;
+      try {
+        if (!attachment.crdt && (this.commentWrite || attachment.snapshotWithheld)) continue;
+        if (attachment.crdt) {
+          frames ??= docUpdateMessages(update, origin, rev, () => crypto.randomUUID()).map((m) =>
+            JSON.stringify(m),
+          );
+          for (const frame of frames) socket.send(frame);
+          continue;
+        }
+        if (snapshotPayload === undefined) {
+          const payload = JSON.stringify({
+            type: "snapshot",
+            project: this.relayDoc!.materialize(),
+            origin,
+            rev,
+          } satisfies ServerMessage);
+          snapshotPayload =
+            ENCODER.encode(payload).length > this.maxSnapshotBytes() ? null : payload;
+        }
+        if (snapshotPayload) {
+          socket.send(snapshotPayload);
+        } else if (!attachment.snapshotWithheld) {
+          // This peer no longer holds the session's project; refuse its
+          // snapshots from now on (see handleSnapshot).
+          attachment.snapshotWithheld = true;
+          socket.serializeAttachment(attachment);
+          this.send(socket, tooLargeError());
+        }
+      } catch {
+        // A dead socket; its close handler reconciles.
+      }
+    }
+  }
+
   private maxSnapshotBytes(): number {
     const configured = Number(this.env.COLLAB_MAX_SNAPSHOT_BYTES);
     return Number.isSafeInteger(configured) && configured > 0 ? configured : MAX_SNAPSHOT_BYTES;
@@ -137,6 +313,12 @@ export class CollabSession extends DurableObject<Env> {
   private ensureTables(): void {
     this.ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS collab_snapshot_chunks (seq INTEGER PRIMARY KEY, value TEXT NOT NULL)",
+    );
+    this.ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS collab_doc_base (seq INTEGER PRIMARY KEY, value BLOB NOT NULL)",
+    );
+    this.ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS collab_doc_log (entry INTEGER NOT NULL, part INTEGER NOT NULL, value BLOB NOT NULL, PRIMARY KEY (entry, part))",
     );
     this.ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS collab_invites (token TEXT PRIMARY KEY, role TEXT NOT NULL, created_at INTEGER NOT NULL, max_uses INTEGER, use_count INTEGER NOT NULL DEFAULT 0, revoked INTEGER NOT NULL DEFAULT 0)",
@@ -252,10 +434,12 @@ export class CollabSession extends DurableObject<Env> {
   }
 
   /**
-   * Read the stored project, reassembled from its chunks.
+   * Read a whole-project snapshot stored before op-level sync, reassembled
+   * from its chunks. Only `relayDocument` reads it, to migrate the session into
+   * a document; the migration then deletes it.
    *
-   * Falls back to the legacy `snapshot` key/value entry so a session created
-   * before this table existed still serves late joiners.
+   * Falls back to the older `snapshot` key/value entry so a session created
+   * before the chunk table existed migrates too.
    */
   private readSqlSnapshot(): string | undefined {
     this.ensureTables();
@@ -272,33 +456,6 @@ export class CollabSession extends DurableObject<Env> {
     const sqlSnapshot = this.readSqlSnapshot();
     if (sqlSnapshot !== undefined) return sqlSnapshot;
     return this.ctx.storage.get<string>("snapshot");
-  }
-
-  /**
-   * Store the project across as many rows as it needs.
-   *
-   * A snapshot outgrew single-value storage once portable GeoJSON from local
-   * files and external plugins started being embedded: a Durable Object caps a
-   * key/value entry *and* a SQLite string at 2 MB, while `MAX_SNAPSHOT_BYTES`
-   * now admits several times that. Only the per-object total (10 GB) bounds a
-   * run of rows, so the project is split and rejoined on read.
-   */
-  private async writeSnapshot(snapshot: string): Promise<void> {
-    this.ensureTables();
-    this.ctx.storage.sql.exec("DELETE FROM collab_snapshot_chunks");
-    for (
-      let offset = 0, seq = 0;
-      offset < snapshot.length;
-      offset += SNAPSHOT_CHUNK_CHARS, seq += 1
-    ) {
-      this.ctx.storage.sql.exec(
-        "INSERT INTO collab_snapshot_chunks (seq, value) VALUES (?, ?)",
-        seq,
-        snapshot.slice(offset, offset + SNAPSHOT_CHUNK_CHARS),
-      );
-    }
-    // A migrated session must not retain a second, stale copy.
-    await this.ctx.storage.delete("snapshot");
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -459,6 +616,12 @@ export class CollabSession extends DurableObject<Env> {
       case "set-layer-locks":
         await this.handleSetLayerLocks(ws, attachment, message);
         break;
+      case "doc-sync":
+        await this.handleDocSync(ws, attachment, message);
+        break;
+      case "doc-update":
+        await this.handleDocUpdate(ws, attachment, message);
+        break;
     }
   }
 
@@ -466,6 +629,7 @@ export class CollabSession extends DurableObject<Env> {
     const attachment = ws.deserializeAttachment() as SocketAttachment | null;
     if (attachment) {
       this.presence.delete(attachment.clientId);
+      this.relayDoc?.forget(attachment.clientId);
       await this.appendLog({
         type: "leave",
         ts: Date.now(),
@@ -499,6 +663,8 @@ export class CollabSession extends DurableObject<Env> {
     // live sockets we must not orphan.
     if (this.ctx.getWebSockets().length === 0) {
       await this.ctx.storage.deleteAll();
+      this.relayDoc = null;
+      this.rev = 0;
     }
   }
 
@@ -514,16 +680,14 @@ export class CollabSession extends DurableObject<Env> {
     if (ws.deserializeAttachment() || this.joiningSockets.has(ws)) return;
     this.joiningSockets.add(ws);
     try {
-      const [storedToken, mode, rev, snapshot, chat, requireIdentity, lockedLayerIds] =
-        await Promise.all([
-          this.ctx.storage.get<string>("hostToken"),
-          this.ctx.storage.get<CollaborationMode>("mode"),
-          this.ctx.storage.get<number>("rev"),
-          this.readSnapshot(),
-          this.ctx.storage.get<string>("chat"),
-          this.ctx.storage.get<boolean>("requireIdentity"),
-          this.ctx.storage.get<string[]>("lockedLayerIds"),
-        ]);
+      const [storedToken, mode, chat, requireIdentity, lockedLayerIds] = await Promise.all([
+        this.ctx.storage.get<string>("hostToken"),
+        this.ctx.storage.get<CollaborationMode>("mode"),
+        this.ctx.storage.get<string>("chat"),
+        this.ctx.storage.get<boolean>("requireIdentity"),
+        this.ctx.storage.get<string[]>("lockedLayerIds"),
+      ]);
+      const relayDoc = await this.relayDocument();
 
       const joined = await resolveJoin({
         message,
@@ -566,6 +730,17 @@ export class CollabSession extends DurableObject<Env> {
       });
 
       const welcomeInvites = role === "host" ? this.readInvites() : undefined;
+      // An op-level client fetches the project with `doc-sync`; a snapshot
+      // client gets it inline, unless it outgrew what one frame may carry.
+      let snapshot: unknown = null;
+      let snapshotTooLarge = false;
+      if (!attachment.crdt && !relayDoc.project.isEmpty()) {
+        snapshot = relayDoc.materialize();
+        if (ENCODER.encode(JSON.stringify(snapshot)).length > this.maxSnapshotBytes()) {
+          snapshot = null;
+          snapshotTooLarge = true;
+        }
+      }
 
       this.send(ws, {
         type: "welcome",
@@ -573,15 +748,21 @@ export class CollabSession extends DurableObject<Env> {
         role,
         mode: mode ?? "co-edit",
         participants: this.participants(),
-        snapshot: parseStoredSnapshot(snapshot),
+        snapshot,
         presence: Object.fromEntries(this.presence),
         chat: parseStoredChat(chat),
-        rev: rev ?? 0,
+        rev: this.rev,
         requireIdentity: requireIdentity ?? false,
         identitySupported: isIdentityConfigured(this.env.COLLAB_IDENTITY_SECRET),
         lockedLayerIds: lockedLayerIds ?? [],
         ...(welcomeInvites ? { invites: welcomeInvites } : {}),
+        features: [CRDT_FEATURE],
       });
+      if (snapshotTooLarge) {
+        attachment.snapshotWithheld = true;
+        ws.serializeAttachment(attachment);
+        this.send(ws, tooLargeError());
+      }
 
       this.broadcastParticipants(ws);
     } finally {
@@ -589,20 +770,31 @@ export class CollabSession extends DurableObject<Env> {
     }
   }
 
+  /**
+   * A whole-project snapshot from a client on the snapshot protocol. It is
+   * checked as before and then written into the session document as the
+   * differences from it, so op-level clients receive it as an ordinary update.
+   */
   private async handleSnapshot(
     ws: WebSocket,
     attachment: SocketAttachment,
     message: Extract<ClientMessage, { type: "snapshot" }>,
     byteLength: number,
   ): Promise<void> {
-    const [rawMode, rawLockedLayerIds, storedRaw] = await Promise.all([
+    const [rawMode, rawLockedLayerIds] = await Promise.all([
       this.ctx.storage.get<CollaborationMode>("mode"),
       this.ctx.storage.get<string[]>("lockedLayerIds"),
-      this.readSnapshot(),
     ]);
+    const relayDoc = await this.relayDocument();
+    // A snapshot client that was not sent the project (it outgrew the frame
+    // cap) would delete everything its own project lacks.
+    if (attachment.snapshotWithheld) {
+      this.send(ws, tooLargeError());
+      return;
+    }
     const mode = rawMode ?? "co-edit";
     const lockedLayerIds = rawLockedLayerIds ?? [];
-    const storedSnapshot = parseStoredSnapshot(storedRaw);
+    const storedSnapshot = relayDoc.project.isEmpty() ? null : relayDoc.materialize();
 
     const decision = authorizeSnapshot(
       attachment,
@@ -624,44 +816,83 @@ export class CollabSession extends DurableObject<Env> {
           type: "snapshot",
           project: storedSnapshot,
           origin: RELAY_SNAPSHOT_ORIGIN,
-          rev: (await this.ctx.storage.get<number>("rev")) ?? 0,
+          rev: this.rev,
         });
       }
       return;
     }
 
-    // The project was parsed in webSocketMessage; re-serialize it only to
-    // persist a string for storage and forward the object verbatim. `comments`
-    // is the one field the relay touches (it also writes it directly in
-    // `handleCommentMutation`), so preserve the stored list when this snapshot
-    // doesn't carry one — see `preserveStoredComments`. Peers get the merged
-    // project below, which heals a sender that had drifted.
-    const project = preserveStoredComments(
-      message.project ?? null,
-      parseStoredSnapshot(await this.readSnapshot()),
-    );
-    // `rev` is written during /init before any socket can join, so the stored
-    // value is always present; the `?? 0` is a defensive floor, never the
-    // client's counter (a server-owned monotonic value must not trust input).
-    const rev = ((await this.ctx.storage.get<number>("rev")) ?? 0) + 1;
-    await this.writeSnapshot(JSON.stringify(project));
-    await this.ctx.storage.put("rev", rev);
-    await this.appendLog({
-      type: "snapshot",
-      ts: Date.now(),
-      rev,
-      origin: attachment.clientId,
-    });
+    // `comments` is the one field the relay itself writes (see
+    // `handleCommentMutation`), so keep the stored list when this snapshot
+    // doesn't carry one — see `preserveStoredComments`.
+    const project = preserveStoredComments(message.project ?? null, storedSnapshot);
+    if (!project || typeof project !== "object" || Array.isArray(project)) {
+      this.send(ws, {
+        type: "error",
+        code: "bad-message",
+        message: "A project must be an object.",
+      });
+      return;
+    }
+    if (relayDoc.byteSize + byteLength > this.maxDocBytes()) {
+      this.send(ws, tooLargeError());
+      return;
+    }
+    // Fans out through `fanOutDocUpdate`, which also advances `rev`.
+    relayDoc.writeSnapshot(project as Record<string, unknown>, attachment.clientId);
+  }
 
-    this.broadcast(
-      {
-        type: "snapshot",
-        project,
-        origin: attachment.clientId,
-        rev,
-      },
-      ws,
-    );
+  /**
+   * Answer an op-level client's state vector with the updates it lacks, then
+   * `doc-synced` with the relay's own vector so it can send what we lack.
+   */
+  private async handleDocSync(
+    ws: WebSocket,
+    attachment: SocketAttachment,
+    message: Extract<ClientMessage, { type: "doc-sync" }>,
+  ): Promise<void> {
+    const relayDoc = await this.relayDocument();
+    relayDoc.forget(attachment.clientId);
+    const frames = relayDoc.framesFor(message.stateVector, () => crypto.randomUUID());
+    if (!frames) {
+      this.send(ws, { type: "error", code: "bad-message", message: "Malformed state vector." });
+      return;
+    }
+    for (const frame of frames) {
+      this.send(ws, { type: "doc-update", ...frame, origin: RELAY_SNAPSHOT_ORIGIN, rev: this.rev });
+    }
+    this.send(ws, { type: "doc-synced", stateVector: relayDoc.stateVector(), rev: this.rev });
+  }
+
+  private async handleDocUpdate(
+    ws: WebSocket,
+    attachment: SocketAttachment,
+    message: Extract<ClientMessage, { type: "doc-update" }>,
+  ): Promise<void> {
+    const [rawMode, rawLockedLayerIds] = await Promise.all([
+      this.ctx.storage.get<CollaborationMode>("mode"),
+      this.ctx.storage.get<string[]>("lockedLayerIds"),
+    ]);
+    const relayDoc = await this.relayDocument();
+    const mode = rawMode ?? "co-edit";
+    const result = relayDoc.receive(attachment.clientId, message, {
+      canEdit: participantCanEdit(attachment, mode),
+      isHost: attachment.role === "host",
+      lockedLayerIds: rawLockedLayerIds ?? [],
+    });
+    if (result.status === "error") {
+      const text =
+        result.code === "forbidden" && attachment.editOverride === false
+          ? "The host has set you to view-only."
+          : result.message;
+      this.send(ws, { type: "error", code: result.code, message: text });
+    } else if (result.status === "reverted") {
+      this.send(ws, {
+        type: "error",
+        code: "layer-locked",
+        message: `Layer "${result.layerName}" is locked by the host and cannot be modified.`,
+      });
+    }
   }
 
   private handlePresence(
@@ -1007,26 +1238,18 @@ export class CollabSession extends DurableObject<Env> {
       action: sanitizedAction,
     };
 
-    // Persist even when no full project snapshot has been written yet, so early
-    // comments survive late joiners / reconnects. Seed an empty object when
-    // storage is empty or corrupt — the relay never inspects other project fields.
-    const rawSnapshot = await this.readSnapshot();
-    let parsed: Record<string, unknown> = { comments: [] };
-    if (rawSnapshot) {
-      try {
-        const value = JSON.parse(rawSnapshot) as unknown;
-        if (value && typeof value === "object" && !Array.isArray(value)) {
-          parsed = value as Record<string, unknown>;
-        }
-      } catch {
-        // Fall through with the empty seed; still fan out below.
-      }
-    }
+    // Persist in the session document even when no project has been shared
+    // yet, so early comments survive late joiners / reconnects. The relay
+    // never inspects other project fields.
+    const relayDoc = await this.relayDocument();
+    const storedComments = relayDoc.project.fields.get("comments");
 
     try {
-      const comments = Array.isArray(parsed.comments)
-        ? (parsed.comments as Record<string, unknown>[])
-        : [];
+      // Non-object entries are dropped: project content is unvalidated, so a
+      // client could plant `null` here and break every `.id` read below.
+      const comments = (Array.isArray(storedComments) ? storedComments : []).filter(
+        (entry): entry is Record<string, unknown> => !!entry && typeof entry === "object",
+      );
       let updatedComments = comments;
 
       if (sanitizedAction.type === "add") {
@@ -1090,12 +1313,16 @@ export class CollabSession extends DurableObject<Env> {
         );
       }
 
-      parsed.comments = updatedComments;
-      const serialized = JSON.stringify(parsed);
-      // `handleSnapshot` bounds a full project the same way. Check before the
-      // put so an oversized value surfaces as an error the sender can see
-      // rather than a throw the catch below would have to guess at.
-      if (ENCODER.encode(serialized).length > this.maxSnapshotBytes()) {
+      // Bound the document the way every other write is bounded. Check before
+      // the write so an oversized value surfaces as an error the sender can
+      // see rather than a throw the catch below would have to guess at.
+      const grows = sanitizedAction.type === "add" || sanitizedAction.type === "reply";
+      // byteSize already counts the stored list; charge only the growth.
+      const added = grows
+        ? ENCODER.encode(JSON.stringify(updatedComments)).length -
+          ENCODER.encode(JSON.stringify(comments)).length
+        : 0;
+      if (grows && relayDoc.byteSize + added > this.maxDocBytes()) {
         this.send(ws, {
           type: "error",
           code: "bad-message",
@@ -1103,7 +1330,14 @@ export class CollabSession extends DurableObject<Env> {
         });
         return;
       }
-      await this.writeSnapshot(serialized);
+      // Snapshot-protocol peers get the comment-mutation below, not a whole
+      // project for it (which could overwrite their unsent edits).
+      this.commentWrite = true;
+      try {
+        relayDoc.setField("comments", updatedComments);
+      } finally {
+        this.commentWrite = false;
+      }
     } catch {
       // The mutation never reached storage, so a late joiner or a reconnect
       // (both of which read from storage) would not see it. Tell the sender and

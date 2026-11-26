@@ -1097,6 +1097,27 @@ placeholder style landed in `index.html`). `"dangerousDisableAssetCspModificatio
 behaved; `script-src` still gets Tauri's nonces and hashes.
 `tests/tauri-csp.test.ts` fails if the exemption is dropped or widened.
 
+### `yjs` (`packages/collab-core/package.json`) — private document internals
+
+The collaboration relay core (`packages/collab-core/src/crdt-relay.ts`) and
+document model (`crdt.ts`) read a few Yjs internals that are not public API,
+checked against yjs 13.6.33:
+
+- `doc.store.pendingStructs` / `doc.store.pendingDs`: `RelayDoc.receive`
+  drops updates whose dependencies never arrived. Covered by "drops updates
+  whose dependencies never arrived" in `tests/collab-crdt-relay.test.ts`.
+- `type._item.parent` / `_item.parentSub`: `touchedLayers` finds which layer a
+  change landed under for the layer-lock check. Covered by the lock tests in
+  `tests/collab-crdt-relay.test.ts` and `workers/collab-node/test/crdt.test.ts`.
+- `doc._transaction`: `ProjectDoc.write` detects a caller's open transaction.
+  Covered by "writes correctly inside a caller's transaction" in
+  `tests/collab-crdt.test.ts`.
+- lib0 decodes an object key `__proto__` by assignment; `safeJson` in
+  `crdt.ts` rebuilds such values. Covered by the `__proto__` tests there.
+
+After a Yjs bump, run those suites (`npm run test:frontend` and
+`npm test -w geolibre-collab-node`).
+
 ### `httpx` (`backend/geolibre_server_api/pyproject.toml`) — private transport pool
 
 The projects server's protection against identity-provider requests to internal

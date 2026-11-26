@@ -27,8 +27,7 @@
 
 import * as Y from "yjs";
 
-/** Capability string a client and relay exchange to opt into this protocol. */
-export const CRDT_FEATURE = "crdt-v1";
+export { CRDT_FEATURE } from "./protocol";
 
 export const ROOT_FIELDS = "fields";
 export const ROOT_LAYERS = "layers";

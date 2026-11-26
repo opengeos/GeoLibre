@@ -235,7 +235,8 @@ describe("Node collaboration relay", () => {
 
     guest.send(JSON.stringify({ type: "snapshot", project: { name: "accepted" }, rev: 999 }));
     const snapshot = await next(host, "snapshot");
-    assert.deepEqual(snapshot.project, { name: "accepted" });
+    // The relay keeps the project in a document, which always has a layer list.
+    assert.deepEqual(snapshot.project, { name: "accepted", layers: [] });
     assert.equal(snapshot.rev, 1);
     host.close();
     guest.close();
@@ -438,7 +439,7 @@ describe("Node collaboration relay", () => {
     const second = await start({ dbPath, idleTtlMs: 60_000 });
     const rejoined = await connect(second.http, created.sessionId);
     const welcome = await joinSession(rejoined, created.hostToken);
-    assert.deepEqual(welcome.snapshot, { persisted: true });
+    assert.deepEqual(welcome.snapshot, { persisted: true, layers: [] });
     assert.equal(welcome.rev, 1);
     rejoined.close();
   });
@@ -755,7 +756,7 @@ describe("Node collaboration relay", () => {
     // Clearing the log leaves the session and its snapshot intact.
     const rejoin = await connect(http, created.sessionId);
     const welcome = await joinSession(rejoin, created.hostToken, "Host");
-    assert.deepEqual(welcome.snapshot, { name: "logged" });
+    assert.deepEqual(welcome.snapshot, { name: "logged", layers: [] });
     host.close();
     rejoin.close();
   });

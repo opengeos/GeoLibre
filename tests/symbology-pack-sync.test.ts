@@ -479,6 +479,51 @@ describe("geometry generator sync", () => {
     assert.ok(!sources.has("source-poly-generator"));
   });
 
+  it("suppresses generator layers while an annotation layer hides a feature (#3697)", () => {
+    const { map, layers } = makeMap();
+    const annotation = (visible: boolean | undefined): GeoLibreLayer => {
+      const base = polygonLayer({ geometryGenerator: "bounding-box" });
+      return {
+        ...base,
+        metadata: { sourceKind: "annotation" },
+        geojson: {
+          type: "FeatureCollection",
+          features: base.geojson!.features.map((feature) => ({
+            ...feature,
+            properties: { ...feature.properties, ...(visible === undefined ? {} : { visible }) },
+          })),
+        },
+      };
+    };
+    // Every annotation visible: the predicate filters nothing, so the
+    // generator draws.
+    syncLayer(map as never, annotation(undefined));
+    const generated = () => [...layers.keys()].some((id) => id.startsWith("layer-poly-generator"));
+    assert.ok(generated());
+    // A hidden annotation must not leave its bounding box behind.
+    syncLayer(map as never, annotation(false));
+    assert.ok(!generated());
+    // One hidden, one visible: like a time or rule filter, the hidden feature
+    // turns derived symbology off for the whole layer, since it is built from
+    // the raw features and cannot honor a per-feature filter.
+    const mixed = annotation(undefined);
+    mixed.geojson = {
+      type: "FeatureCollection",
+      features: [
+        mixed.geojson!.features[0],
+        {
+          ...mixed.geojson!.features[0],
+          properties: { ...mixed.geojson!.features[0].properties, visible: false },
+        },
+      ],
+    };
+    syncLayer(map as never, mixed);
+    assert.ok(!generated());
+    // Unhiding it brings the generator back.
+    syncLayer(map as never, annotation(true));
+    assert.ok(generated());
+  });
+
   it("suppresses generator layers while the layer renders as an extrusion", () => {
     const { map, layers, sources } = makeMap();
     syncLayer(map as never, polygonLayer({ geometryGenerator: "centroid" }));

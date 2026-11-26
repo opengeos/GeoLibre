@@ -38,7 +38,11 @@ import {
 import { renderMarkerCanvas } from "./markers";
 import { parseLabelOverride } from "./label-style";
 import { redactArcgisError, type ArcgisGraphic, type ArcgisLayer } from "./arcgis-sdk";
-import { ArcgisEngineIdentify, stripSyntheticFields } from "./arcgis-engine-identify";
+import {
+  ArcgisEngineIdentify,
+  layersChangeHits,
+  stripSyntheticFields,
+} from "./arcgis-engine-identify";
 
 /** Pages of a service's features `getLayerGeoJson` reads before stopping. */
 const SERVICE_GEOJSON_MAX_PAGES = 50;
@@ -261,6 +265,7 @@ export abstract class ArcgisEngineLayers extends ArcgisEngineIdentify {
   // ------------------------------------------------------------------- layers
 
   syncLayers(layers: GeoLibreLayer[]): void {
+    if (layersChangeHits(this.layers, layers)) this.invalidateHitCache();
     this.layers = layers;
     const map = this.map;
     if (!map) return;
@@ -368,14 +373,17 @@ export abstract class ArcgisEngineLayers extends ArcgisEngineIdentify {
             geojson: layer.geojson,
           };
           this.natives.set(layer.id, entry);
-          for (const native of this.instantiate(plan, entry.urls, entry.disposers)) {
+          // Every part is recorded on the entry before any is added, so a
+          // map.add failing part way leaves nothing the catch below
+          // (removeLayer) cannot find and destroy.
+          entry.layers.push(...this.instantiate(plan, entry.urls, entry.disposers));
+          entry.layers.forEach((native, index) => {
             // A mixed-geometry GeoJSON record has several native layers but
             // one shared visibility toggle. Service sublayers stay managed by
             // their source record rather than exposing unsaved native changes.
-            native.listMode = entry.layers.length ? "hide" : "hide-children";
-            entry.layers.push(native);
-            map.add(native);
-          }
+            native.listMode = index ? "hide" : "hide-children";
+          });
+          for (const native of entry.layers) map.add(native);
           const first = entry.layers[0];
           if (first && this.options.onLayerVisibilityChange) {
             entry.visibilityHandle = this.sdk.reactiveUtils.watch(
@@ -485,46 +493,26 @@ export abstract class ArcgisEngineLayers extends ArcgisEngineIdentify {
               : undefined,
           ),
         ];
-      case "geojson":
-        return plan.parts.map((part) => {
-          let url = part.url;
-          if (!url) {
-            url = URL.createObjectURL(
-              new Blob(
-                [JSON.stringify(part.features ?? { type: "FeatureCollection", features: [] })],
-                {
-                  type: "application/geo+json",
-                },
-              ),
-            );
-            urls.push(url);
+      case "geojson": {
+        // A part failing to construct must not strand the parts built before
+        // it: the caller only learns of the layers this returns.
+        const built: ArcgisLayer[] = [];
+        try {
+          for (const part of plan.parts)
+            built.push(this.instantiateGeoJsonPart(part, common, urls));
+        } catch (error) {
+          for (const native of built) {
+            this.companions.delete(native);
+            try {
+              native.destroy();
+            } catch {
+              // Keep destroying the rest; the construction error is what to report.
+            }
           }
-          const native = new layers.GeoJSONLayer({
-            ...common,
-            url,
-            geometryType: part.geometryType,
-            renderer: rendererWithFallbackMarkers(part.renderer),
-            // Hit-test graphics only carry the fields the renderer and labels
-            // read unless every field is requested; identify needs the
-            // compiler's identity field.
-            outFields: ["*"],
-            // Declared rather than inferred: the SDK sizes an inferred string
-            // field from sampled features and truncates longer values later,
-            // which would clip labels (and once clipped the symbol key).
-            fields: part.url ? undefined : ARCGIS_GEOJSON_FIELDS,
-            ...(part.labelingInfo ? { labelingInfo: part.labelingInfo, labelsVisible: true } : {}),
-            ...(part.elevationInfo ? { elevationInfo: part.elevationInfo } : {}),
-            ...(part.hasZ ? { hasZ: true } : {}),
-            ...(part.featureReduction ? { featureReduction: part.featureReduction } : {}),
-            // The SDK's popup is not used; identify goes through hitTest.
-            popupEnabled: false,
-            legendEnabled: false,
-          });
-          if (part.interactive === false) this.companions.add(native);
-          if (part.markerStyle) void this.bakeMarkers(native, part);
-          if (part.patternStyle) void this.bakePattern(native, part);
-          return native;
-        });
+          throw error;
+        }
+        return built;
+      }
       case "web-tile":
         return [
           new layers.WebTileLayer({
@@ -667,6 +655,55 @@ export abstract class ArcgisEngineLayers extends ArcgisEngineIdentify {
     }
   }
 
+  /**
+   * Build the GeoJSONLayer for one part of a GeoJSON plan.
+   *
+   * @param part The compiled part (one geometry type of the record).
+   * @param common The display properties every part of the record shares.
+   * @param urls Receives the blob URL created for inline features.
+   * @returns The constructed SDK layer.
+   */
+  private instantiateGeoJsonPart(
+    part: ArcgisGeoJsonPart,
+    common: Record<string, unknown>,
+    urls: string[],
+  ): ArcgisLayer {
+    let url = part.url;
+    if (!url) {
+      url = URL.createObjectURL(
+        new Blob([JSON.stringify(part.features ?? { type: "FeatureCollection", features: [] })], {
+          type: "application/geo+json",
+        }),
+      );
+      urls.push(url);
+    }
+    const native = new this.sdk.layers.GeoJSONLayer({
+      ...common,
+      url,
+      geometryType: part.geometryType,
+      renderer: rendererWithFallbackMarkers(part.renderer),
+      // Hit-test graphics only carry the fields the renderer and labels
+      // read unless every field is requested; identify needs the
+      // compiler's identity field.
+      outFields: ["*"],
+      // Declared rather than inferred: the SDK sizes an inferred string
+      // field from sampled features and truncates longer values later,
+      // which would clip labels (and once clipped the symbol key).
+      fields: part.url ? undefined : ARCGIS_GEOJSON_FIELDS,
+      ...(part.labelingInfo ? { labelingInfo: part.labelingInfo, labelsVisible: true } : {}),
+      ...(part.elevationInfo ? { elevationInfo: part.elevationInfo } : {}),
+      ...(part.hasZ ? { hasZ: true } : {}),
+      ...(part.featureReduction ? { featureReduction: part.featureReduction } : {}),
+      // The SDK's popup is not used; identify goes through hitTest.
+      popupEnabled: false,
+      legendEnabled: false,
+    });
+    if (part.interactive === false) this.companions.add(native);
+    if (part.markerStyle) void this.bakeMarkers(native, part);
+    if (part.patternStyle) void this.bakePattern(native, part);
+    return native;
+  }
+
   protected removeLayer(id: string): void {
     const entry = this.natives.get(id);
     if (entry) {
@@ -729,6 +766,8 @@ export abstract class ArcgisEngineLayers extends ArcgisEngineIdentify {
         (native as { capabilities?: { query?: { supportsOrderBy?: boolean } } }).capabilities?.query
           ?.supportsOrderBy === true;
       let firstOfPreviousPage: string | undefined;
+      const seenOids = new Set<unknown>();
+      let offset = 0;
       // The SDK's query asks for 10 rows once `start` is set unless told
       // otherwise; later pages ask for as many as the first page returned
       // (the service's per-request limit).
@@ -740,15 +779,31 @@ export abstract class ArcgisEngineLayers extends ArcgisEngineIdentify {
           returnGeometry: true,
           outSpatialReference: { wkid: 4326 },
           ...(oidField && orderBy ? { orderByFields: [oidField] } : {}),
-          ...(graphics.length ? { start: graphics.length, num: pageSize } : {}),
+          // The offset counts rows the service returned, duplicates included.
+          ...(offset ? { start: offset, num: pageSize } : {}),
         });
         if (page === 0) pageSize = result.features.length;
+        offset += result.features.length;
         // A service that ignores the offset returns its first page again;
-        // stop rather than repeat it.
+        // stop rather than repeat it. With an object id field that is a page
+        // adding no new row (an overlapping page that adds one still counts);
+        // without one, a repeated first row is the only signal.
         const first = JSON.stringify(result.features[0]?.attributes ?? null);
-        if (page > 0 && first === firstOfPreviousPage) break;
+        if (!oidField && page > 0 && first === firstOfPreviousPage) break;
         firstOfPreviousPage = first;
-        graphics.push(...result.features);
+        const keptBefore = graphics.length;
+        // Without a stable order (no ORDER BY support, or a service that
+        // ignores it) offset pages can overlap; the object id says which rows
+        // were already read.
+        for (const graphic of result.features) {
+          const oid = oidField ? graphic.attributes?.[oidField] : undefined;
+          if (oid != null) {
+            if (seenOids.has(oid)) continue;
+            seenOids.add(oid);
+          }
+          graphics.push(graphic);
+        }
+        if (oidField && page > 0 && graphics.length === keptBefore) break;
         if (!result.exceededTransferLimit || !result.features.length) break;
       }
       return toCollection();

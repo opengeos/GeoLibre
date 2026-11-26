@@ -147,10 +147,27 @@ function datasetGrid(
     : dataset.file.readGrid(variable, selector);
 }
 
+/** The readers, file picker and layer helper the dialog drives; tests substitute their own. */
+export interface AddNetcdfServices {
+  addCloudNetcdfLayer: typeof addCloudNetcdfLayer;
+  openRemoteNetcdfFile: typeof openRemoteNetcdfFile;
+  openLocalNetcdf: typeof openLocalNetcdf;
+  openLocalDataFile: typeof openLocalDataFileWithFallback;
+}
+
+const DEFAULT_NETCDF_SERVICES: AddNetcdfServices = {
+  addCloudNetcdfLayer,
+  openRemoteNetcdfFile,
+  openLocalNetcdf,
+  openLocalDataFile: openLocalDataFileWithFallback,
+};
+
 interface AddNetcdfDialogProps {
   open: boolean;
   appApi: GeoLibreAppAPI;
   onOpenChange: (open: boolean) => void;
+  /** Replaces the NetCDF readers, file picker and Zarr layer helper; tests only. */
+  services?: AddNetcdfServices;
 }
 
 /**
@@ -165,7 +182,12 @@ interface AddNetcdfDialogProps {
  * user picks a variable and any leading-dimension index, and the grid is
  * colormapped here rather than by a shader.
  */
-export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogProps) {
+export function AddNetcdfDialog({
+  open,
+  appApi,
+  onOpenChange,
+  services = DEFAULT_NETCDF_SERVICES,
+}: AddNetcdfDialogProps) {
   const { t } = useTranslation();
   const addImageOverlayLayer = useAppStore((state) => state.addImageOverlayLayer);
   // The same catalogue the Style panel's Raster symbology offers, so the choice
@@ -353,7 +375,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
         closeOpenFile();
         setDataset(null);
         setStatus(t("addData.netcdf.readingRemote"));
-        const remote = await openRemoteNetcdfFile(target);
+        const remote = await services.openRemoteNetcdfFile(target);
         if (gen !== opGen.current) {
           remote.close();
           return;
@@ -391,7 +413,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
     setStatus(null);
     let selected: { data?: ArrayBuffer; path: string } | null;
     try {
-      selected = await openLocalDataFileWithFallback({
+      selected = await services.openLocalDataFile({
         filters: [{ name: "NetCDF / HDF5", extensions: LOCAL_EXTENSIONS }],
         accept: LOCAL_EXTENSIONS.map((ext) => `.${ext}`).join(","),
         readBinary: true,
@@ -411,7 +433,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
     // corrupt dataset) still closes the WASM file handle in the catch.
     let file: LocalNetcdfFile | null = null;
     try {
-      file = await openLocalNetcdf(selected.data);
+      file = await services.openLocalNetcdf(selected.data);
       const vars = file.listVariables();
       if (gen !== opGen.current) {
         file.close(); // dialog was closed/reopened while decoding
@@ -534,7 +556,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
           // whole world), so such a cube is baked as an image of the selected
           // step, like a remote one.
           if (built && !crossesAntimeridian(built.bounds)) {
-            await addCloudNetcdfLayer(appApi, {
+            await services.addCloudNetcdfLayer(appApi, {
               // Encoded so a name with URL-special chars (#, ?, %) survives
               // layerNameFromUrl's new URL(...) parse; that helper decodes it
               // again for the display name.
@@ -559,7 +581,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
         }
       } else {
         // No opened dataset: a kerchunk manifest, streamed by the Zarr renderer.
-        await addCloudNetcdfLayer(appApi, {
+        await services.addCloudNetcdfLayer(appApi, {
           url: url.trim(),
           refs: loadedRefs ?? undefined,
           variable,
