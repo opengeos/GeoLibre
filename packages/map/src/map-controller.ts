@@ -78,8 +78,9 @@ export { DEFAULT_BUILT_IN_CONTROL_VISIBILITY, DEFAULT_BUILT_IN_CONTROL_POSITIONS
 // MapControllerTerrain <- MapControllerControls (built-in controls) <-
 // MapControllerStyle (CRS and style application) <- MapControllerLayers (layer
 // sync, basemap and story opacity) <- MapControllerHighlight (identify and
-// highlight) <- MapController (init, view, camera, fits and teardown). A member
-// another layer reads is `protected`; everything else stays `private`.
+// highlight) <- MapController (init, view, camera, fits and teardown). A
+// formerly private member another layer reads is `protected`; the rest keep
+// their visibility.
 export class MapController extends MapControllerHighlight implements MapEngine {
   /** Whether {@link clampViewToPreferences} has a clamp queued on `moveend`. */
   private pendingViewClamp = false;

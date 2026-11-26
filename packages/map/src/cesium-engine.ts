@@ -113,7 +113,7 @@ export const CESIUM_PANE_CAPABILITIES: MapEngineCapabilities = Object.freeze({
 
 /**
  * Coerce a preference zoom into MapLibre's [0, 24] range, falling back to
- * `fallback` for a non-finite value. Mirrors `clampNumber` in `map-controller.ts`.
+ * `fallback` for a non-finite value. Mirrors `clampNumber` in `map-controller-style.ts`.
  */
 function clampZoom(value: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
