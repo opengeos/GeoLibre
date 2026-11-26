@@ -8,8 +8,6 @@
   "apps/geolibre-desktop/src/components/layout/AddNetcdfDialog.tsx": 896,
   "apps/geolibre-desktop/src/components/layout/GeoreferencerDialog.tsx": 669,
   "apps/geolibre-desktop/src/components/layout/LoadFeaturesIntoEditorDialog.tsx": 665,
-  "apps/geolibre-desktop/src/components/layout/ManagePluginsDialog.tsx": 1116,
-  "apps/geolibre-desktop/src/components/layout/ProjectGalleryDialog.tsx": 1209,
   "apps/geolibre-desktop/src/components/layout/RecordTourDialog.tsx": 1212,
   "apps/geolibre-desktop/src/components/layout/RecordVideoDialog.tsx": 621,
   "apps/geolibre-desktop/src/components/layout/ShareProjectDialog.tsx": 1157,
