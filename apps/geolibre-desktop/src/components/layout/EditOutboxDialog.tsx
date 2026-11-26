@@ -15,9 +15,9 @@ import {
 } from "@geolibre/ui";
 import { AlertTriangle, CloudOff, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { diffConflictVersions, formatAttributeValue } from "../../lib/edit-sync/conflict-diff";
+import { describeSyncError } from "../../lib/edit-sync/error-messages";
 import {
   countOps,
   type ConflictResolution,
@@ -197,7 +197,9 @@ function OutboxEntryRow({
             entry.status === "pending" ? "text-muted-foreground" : "text-destructive",
           )}
         >
-          {t("editOutbox.lastError", { error: describeEntryError(entry, t) })}
+          {t("editOutbox.lastError", {
+            error: describeSyncError(entry.lastErrorCode, entry.lastError, t),
+          })}
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2 pt-0.5">
@@ -409,25 +411,4 @@ function ConflictItem({
       </fieldset>
     </li>
   );
-}
-
-/**
- * The translated message for an entry's last error when its code is known,
- * else the source's own message.
- *
- * @param entry The entry.
- * @param t Translator.
- * @returns Display text.
- */
-function describeEntryError(entry: OutboxEntry, t: TFunction): string {
-  switch (entry.lastErrorCode) {
-    case "postgisNoConnection":
-      return t("editOutbox.errors.postgisNoConnection");
-    case "arcgisLayerClosed":
-      return t("editOutbox.errors.arcgisLayerClosed");
-    case "geolensNotConnected":
-      return t("editOutbox.errors.geolensNotConnected");
-    default:
-      return entry.lastError ?? "";
-  }
 }

@@ -371,6 +371,7 @@ export function createPostgisSyncAdapter(
 
   return {
     fingerprint: (feature) => postgisFingerprint(feature),
+    insertFingerprint: (stored, op) => postgisFingerprint(narrowToSent(stored, op.feature)),
     async fetchRemote(_entry, keys, maybeApplied): Promise<RemoteState> {
       let result: ReadPostgisTableResult;
       try {
@@ -468,6 +469,28 @@ export function createPostgisSyncAdapter(
   };
 }
 
+/**
+ * A stored row limited to the columns an insert set (non-null), since the
+ * table may have filled the others with defaults or triggers.
+ *
+ * @param stored The row as read.
+ * @param sent The feature the insert carried.
+ * @returns The row with only those columns.
+ */
+function narrowToSent(stored: Feature, sent: Feature | undefined): Feature {
+  const names = new Set(
+    Object.entries(sent?.properties ?? {})
+      .filter(([, value]) => value !== null && value !== undefined)
+      .map(([name]) => name),
+  );
+  return {
+    ...stored,
+    properties: Object.fromEntries(
+      Object.entries(stored.properties ?? {}).filter(([name]) => names.has(name)),
+    ),
+  };
+}
+
 /** Injectable store access for {@link refreshPostgisLayerAfterSync}. */
 export interface PostgisRefreshDeps {
   read?: typeof readPostgisTable;
@@ -560,16 +583,18 @@ export function unsyncedLocalOps(
   settled: readonly OutboxOp[],
 ): OutboxOp[] {
   const settledByKey = new Map<string, OutboxOp>();
-  const settledInserts: OutboxOp[] = [];
+  // Settled keyless inserts counted by content, each matching one local copy.
+  const settledInserts = new Map<string | undefined, number>();
   for (const op of settled) {
-    if (op.kind === "insert" && op.key === null) settledInserts.push(op);
-    else if (op.key !== null) settledByKey.set(op.key, op);
+    if (op.kind === "insert" && op.key === null) {
+      settledInserts.set(op.mineFingerprint, (settledInserts.get(op.mineFingerprint) ?? 0) + 1);
+    } else if (op.key !== null) settledByKey.set(op.key, op);
   }
   return localOps.filter((op) => {
     if (op.kind === "insert" && op.key === null) {
-      const twin = settledInserts.findIndex((s) => s.mineFingerprint === op.mineFingerprint);
-      if (twin < 0) return true;
-      settledInserts.splice(twin, 1);
+      const left = settledInserts.get(op.mineFingerprint) ?? 0;
+      if (left === 0) return true;
+      settledInserts.set(op.mineFingerprint, left - 1);
       return false;
     }
     const done = op.key !== null ? settledByKey.get(op.key) : undefined;

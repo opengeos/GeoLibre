@@ -446,6 +446,25 @@ describe("PostGIS sync adapter", () => {
     assert.equal(sidecar.rows.size, 2);
   });
 
+  it("recognises its own keyed insert although the table filled a default", async () => {
+    const sidecar = new FakeSidecar();
+    sidecar.rows.set(1, row(1, 1, "a"));
+    const layer = loadLayer(sidecar);
+    const keyed = row(50, 5, "typed key");
+    const entry = entryFor(layer, [row(1, 1, "a"), keyed]);
+    const write = sidecar.write;
+    sidecar.write = async (request) => {
+      await write(request);
+      sidecar.rows.get(50)!.properties!.status = "draft"; // a column default
+      throw new TypeError("connection reset");
+    };
+    const lost = await syncOutboxEntry(entry, adapterFor(sidecar, entry));
+    sidecar.write = write;
+    const retry = await syncOutboxEntry(lost.entry!, adapterFor(sidecar, entry));
+    assert.equal(retry.kind, "synced");
+    assert.equal(retry.alreadyApplied, 1);
+  });
+
   it("keeps a row's identity when an editor dropped its key column", () => {
     const sidecar = new FakeSidecar();
     sidecar.rows.set(4, row(4, 4, "four"));

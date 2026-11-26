@@ -1,6 +1,7 @@
 /**
  * Registers every built-in offline edit sync backend with the outbox runner
- * (#3530). Idempotent, so each entry point that can sync calls it.
+ * (#3530). Idempotent, so each entry point that can sync (the app-wide
+ * runner, the save path) calls it.
  */
 
 import { useAppStore } from "@geolibre/core";

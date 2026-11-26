@@ -214,6 +214,8 @@ _TRANSPORT_FAILURES = (
     "network is unreachable",
     "server closed the connection unexpectedly",
     "could not connect to server",
+    # A local server reached over its Unix socket that is not running.
+    "is the server running locally",
     # A server that answered but cannot take a session right now; retrying
     # later is the right response (SQLSTATE 57P03 and 53300).
     "the database system is starting up",

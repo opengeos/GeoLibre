@@ -170,6 +170,11 @@ export interface EditSyncAdapter {
   apply(entry: OutboxEntry, plan: ApplyPlan): Promise<ApplyResult>;
   /** Fingerprint a server feature the same way the base was fingerprinted. */
   fingerprint?(feature: Feature): string;
+  /**
+   * Fingerprint a stored row for comparison with a keyed insert, limited to
+   * the columns the insert set (the table may fill the rest with defaults).
+   */
+  insertFingerprint?(stored: Feature, op: OutboxOp): string;
 }
 
 /**
@@ -354,12 +359,15 @@ type OpVerdict =
  * @param op The queued operation.
  * @param remote The server's current state.
  * @param fingerprint How to fingerprint a server feature.
+ * @param insertFingerprint How to fingerprint a stored row against a keyed
+ *   insert (only the columns it set), when the adapter defines it.
  * @returns What the sync should do with it.
  */
 export function classifyOp(
   op: OutboxOp,
   remote: RemoteState,
   fingerprint: (feature: Feature) => string,
+  insertFingerprint?: (stored: Feature, op: OutboxOp) => string,
 ): OpVerdict {
   // Keep theirs drops my change whatever the server holds now; even a server
   // that went back to the base must not receive the edit the user gave up.
@@ -371,7 +379,9 @@ export function classifyOp(
     // landing earlier, or someone else's row, which is a conflict.
     const existing = remote.byKey.get(op.key) ?? null;
     if (!existing) return { kind: "apply", op };
-    if (fingerprint(existing) === op.mineFingerprint) return { kind: "done", op };
+    // Compare only what the insert set: the table may fill other columns.
+    const stored = insertFingerprint ? insertFingerprint(existing, op) : fingerprint(existing);
+    if (stored === op.mineFingerprint) return { kind: "done", op };
     return resolveConflict(op, {
       opId: op.id,
       key: op.key,
@@ -530,7 +540,8 @@ export async function syncOutboxEntry(
       return failRetryable(error, ops);
     }
 
-    const verdicts = active.map((op) => classifyOp(op, remote, fingerprint));
+    const insertFingerprint = adapter.insertFingerprint?.bind(adapter);
+    const verdicts = active.map((op) => classifyOp(op, remote, fingerprint, insertFingerprint));
     const toApply = verdicts.filter((v) => v.kind === "apply").map((v) => v.op);
     const conflicts = verdicts.flatMap((v) => (v.kind === "conflict" ? [v.conflict] : []));
     const doneIds = new Set(
@@ -745,9 +756,15 @@ export function mergeChangeSet(
     const next = session !== undefined ? { ...op, session } : { ...op };
     return base !== undefined && op.kind !== "insert" ? { ...next, baseFingerprint: base } : next;
   });
-  const newerCount = merged.length;
+  // Newer keyless inserts by content, each claimable once.
+  const newerInserts = new Map<string | undefined, number[]>();
+  merged.forEach((candidate, index) => {
+    if (candidate.kind !== "insert" || candidate.key !== null) return;
+    const list = newerInserts.get(candidate.mineFingerprint);
+    if (list) list.push(index);
+    else newerInserts.set(candidate.mineFingerprint, [index]);
+  });
   const newerKeys = new Set(ops.map((op) => op.key).filter((key): key is string => key !== null));
-  const claimed = new Set<number>();
   // An unmentioned operation was undone only if it was recorded in this same
   // load of the layer; one inherited from an earlier load may simply be
   // missing from it. A write with an unknown outcome is never dropped.
@@ -760,24 +777,11 @@ export function mergeChangeSet(
     }
     // A keyless insert: the newer change set holds it again if the feature is
     // still there. Only the newer operations are candidates.
-    let twin = -1;
-    for (let index = 0; index < newerCount; index++) {
-      const candidate = merged[index];
-      if (
-        !claimed.has(index) &&
-        candidate.kind === "insert" &&
-        candidate.key === null &&
-        candidate.mineFingerprint === op.mineFingerprint
-      ) {
-        twin = index;
-        break;
-      }
-    }
+    const twin = newerInserts.get(op.mineFingerprint)?.shift() ?? -1;
     if (twin < 0) {
       if (!undone(op)) merged.push(op);
       continue;
     }
-    claimed.add(twin);
     merged[twin] = {
       ...merged[twin],
       id: op.id,

@@ -6,6 +6,7 @@
 
 import type { TFunction } from "i18next";
 import { countOps, type SyncOutcome } from "./edit-outbox";
+import { describeSyncError } from "./error-messages";
 import {
   enqueueChangeSet,
   syncOutboxEntryNow,
@@ -66,13 +67,16 @@ export function describeSyncOutcome(
       message: t("editOutbox.save.queued", {
         target,
         count: queued.insert + queued.update + queued.delete,
-        error: outcome.error ?? "",
+        error: describeSyncError(outcome.entry?.lastErrorCode, outcome.error, t),
       }),
     };
   }
   return {
     status: "error",
-    message: t("editOutbox.save.failed", { target, error: outcome.error ?? "" }),
+    message: t("editOutbox.save.failed", {
+      target,
+      error: describeSyncError(outcome.entry?.lastErrorCode, outcome.error, t),
+    }),
   };
 }
 
