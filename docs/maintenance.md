@@ -61,6 +61,16 @@ at zoom >= 12 on Mesa GPUs without them). Before bumping it, confirm
   `backend/geolibre_server/geolibre_server/app/conversion.py`), and the dialog
   validates against whichever engine is about to run.
   `tests/wasm-convert.test.ts` fails if the mirror drifts.
+- **`RoutingGraph` mirrors the JS network search.** The local network tools
+  (`packages/processing/src/local-network.ts`) run their Dijkstra, A* and
+  turn-rule searches in geolibre-wasm's `RoutingGraph` when it loads
+  (`local-network-wasm.ts`) and fall back to `LocalNetwork.searchJs`
+  otherwise. The Rust search copies the JS one step for step (heap, tie
+  order, budget charging, the weighted stop), so the two must change
+  together: a search change in either repo needs the same change in the
+  other. `tests/local-network-wasm.test.ts` runs randomized networks and the
+  whole routing suite through both engines and fails on any difference; it
+  skips itself only when the installed geolibre-wasm has no `RoutingGraph`.
 - **`DISTANCE_SEGMENTS` / `NON_DISTANCE_NAMES`**
   (`apps/geolibre-desktop/src/lib/whitebox-distance-params.ts`) decide, by
   parameter _name_, which Whitebox parameters are ground distances and so get the

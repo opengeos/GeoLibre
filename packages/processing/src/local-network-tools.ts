@@ -14,10 +14,12 @@ import {
   type LocalNetwork,
   type NetworkCostMode,
   type NetworkSearchBudget,
+  type NetworkSearchYield,
   type TurnRules,
   type TurnTableEntry,
   type UTurnPolicy,
 } from "./local-network";
+import { installWasmNetworkEngine } from "./local-network-wasm";
 import {
   prepareAntimeridianInput,
   unwrapPolygonal,
@@ -124,6 +126,14 @@ function numericValue(value: unknown): number | null {
 function yieldToHost(ctx: ProcessingContext): Promise<void> {
   if (!ctx.signal) return Promise.resolve();
   return new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+
+/** Lets a chunked network search yield to the host and stop on cancel. */
+function searchHooks(ctx: ProcessingContext): NetworkSearchYield {
+  return {
+    yieldToHost: () => yieldToHost(ctx),
+    aborted: () => ctx.signal?.aborted === true,
+  };
 }
 
 /** Cap on stops for a local route, to keep one run interactive. */
@@ -304,12 +314,16 @@ function round(value: number, digits = 3): number {
 }
 
 /**
- * Reads the shared network parameters and builds the graph, logging counters.
+ * Reads the shared network parameters and builds the graph, logging counters,
+ * and loads the WebAssembly search engine when it is available.
  * Returns null (after logging an error) when the network is unusable.
  */
-function buildNetworkFromParams(
-  ctx: ProcessingContext,
-): { net: LocalNetwork; mode: NetworkCostMode; unit: string; budget: NetworkSearchBudget } | null {
+async function buildNetworkFromParams(ctx: ProcessingContext): Promise<{
+  net: LocalNetwork;
+  mode: NetworkCostMode;
+  unit: string;
+  budget: NetworkSearchBudget;
+} | null> {
   const layer = getLayer(ctx, "network");
   const features = layer?.geojson?.features ?? [];
   if (!features.length) {
@@ -362,6 +376,8 @@ function buildNetworkFromParams(
     net.setTurnRules(turnRules);
     if (!net.hasTurnRules) ctx.log("Turn rules are on but set no restriction or cost.");
   }
+  const engine = await installWasmNetworkEngine();
+  ctx.log(`Network searches run in ${engine ? engine.name : "JavaScript"}.`);
   return { net, mode, unit: costUnit(mode, costField), budget: createNetworkSearchBudget() };
 }
 
@@ -560,7 +576,7 @@ export const localShortestPathTool: ProcessingAlgorithm = {
       ctx.log(`Error: ${stops.length} stops exceeds the ${MAX_LOCAL_STOPS}-stop limit`);
       return;
     }
-    const built = buildNetworkFromParams(ctx);
+    const built = await buildNetworkFromParams(ctx);
     if (!built) return;
     const { net, unit, budget } = built;
     const astar = (ctx.parameters.algorithm as string) !== "dijkstra";
@@ -580,7 +596,13 @@ export const localShortestPathTool: ProcessingAlgorithm = {
       if (ctx.signal?.aborted) return;
       const from = placed[i - 1];
       const to = placed[i];
-      const path = net.shortestPath(from.node, to.node, astar, budget);
+      const result = await net.searchChunked(
+        [from.node],
+        { target: to.node, astar, budget },
+        searchHooks(ctx),
+      );
+      if (!result) return;
+      const path = net.pathTo(result, to.node);
       if (!path) {
         unreachable++;
         ctx.log(`No path from stop ${from.id} to stop ${to.id}: they are not connected.`);
@@ -673,7 +695,7 @@ export const localClosestFacilityTool: ProcessingAlgorithm = {
       );
       return;
     }
-    const built = buildNetworkFromParams(ctx);
+    const built = await buildNetworkFromParams(ctx);
     if (!built) return;
     const { net, unit, budget } = built;
     const count = Math.max(1, Math.floor(Number(ctx.parameters.count ?? 1)) || 1);
@@ -695,30 +717,38 @@ export const localClosestFacilityTool: ProcessingAlgorithm = {
       return;
     }
     const facilitiesAt = new Map<number, PlacedPoint[]>();
+    const facilityWeights = new Uint32Array(net.nodeCount);
     for (const facility of placedFacilities) {
       const list = facilitiesAt.get(facility.node) ?? [];
       list.push(facility);
       facilitiesAt.set(facility.node, list);
+      facilityWeights[facility.node]++;
     }
     const features: Feature[] = [];
     let short = 0;
     for (const incident of placedIncidents) {
       await yieldToHost(ctx);
       if (ctx.signal?.aborted) return;
-      const found: { facility: PlacedPoint; node: number }[] = [];
       // Searching against edge direction from the incident gives costs from
       // each facility to it, so one search serves either travel direction.
-      const result = net.search([incident.node], {
-        budget,
-        maxCost,
-        reverse: fromFacility,
-        onSettle: (node) => {
-          for (const facility of facilitiesAt.get(node) ?? []) {
-            if (found.length < count) found.push({ facility, node });
-          }
-          return found.length >= count;
+      // It stops once `count` facilities are settled, nearest first.
+      const result = await net.searchChunked(
+        [incident.node],
+        {
+          budget,
+          maxCost,
+          reverse: fromFacility,
+          stopAt: { weights: facilityWeights, count },
         },
-      });
+        searchHooks(ctx),
+      );
+      if (!result) return;
+      const found: { facility: PlacedPoint; node: number }[] = [];
+      for (const node of result.settledTargets ?? []) {
+        for (const facility of facilitiesAt.get(node) ?? []) {
+          if (found.length < count) found.push({ facility, node });
+        }
+      }
       if (found.length < count) short++;
       found.forEach(({ facility, node }, rank) => {
         const path = net.pathTo(result, node);
@@ -830,7 +860,7 @@ export const localServiceAreaTool: ProcessingAlgorithm = {
       ctx.log(`Error: at most ${MAX_SERVICE_BREAKS} cost breaks are supported`);
       return;
     }
-    const built = buildNetworkFromParams(ctx);
+    const built = await buildNetworkFromParams(ctx);
     if (!built) return;
     const { net, unit, budget } = built;
     const separate = (ctx.parameters.overlap as string) === "separate";
@@ -856,7 +886,12 @@ export const localServiceAreaTool: ProcessingAlgorithm = {
     let bufferedPieces = 0;
     for (const group of groups) {
       if (ctx.signal?.aborted) return;
-      const result = net.search(group.nodes, { maxCost: maxBreak, reverse: toward, budget });
+      const result = await net.searchChunked(
+        group.nodes,
+        { maxCost: maxBreak, reverse: toward, budget },
+        searchHooks(ctx),
+      );
+      if (!result) return;
       // Largest break first, so smaller areas draw on top in the result layer.
       for (const brk of [...breaks].reverse()) {
         await yieldToHost(ctx);
