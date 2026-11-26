@@ -79,9 +79,8 @@ export function useOgcProcesses(open: boolean) {
       if (state.projectLoadCount === previous.projectLoadCount) return;
       stop();
       pendingSubmission.current?.controller.abort();
-      pendingSubmission.current = null;
-      setAwaitingSubmission(false);
-      setPhase("idle");
+      setAwaitingSubmission(Boolean(pendingSubmission.current));
+      setPhase(pendingSubmission.current ? "awaiting" : "idle");
       setProcesses([]);
       setProcess(null);
       setSelectedId("");
@@ -175,17 +174,34 @@ export function useOgcProcesses(open: boolean) {
       const summary = processes.find((item) => item.id === id);
       if (summary) await loadDescription(summary, context);
     });
-  const updateJob = (context: RequestContext, next: OgcProcessJob, processUrl?: string) =>
+  const updateJob = (
+    context: RequestContext,
+    next: OgcProcessJob,
+    processUrl?: string,
+    observedUrl = next.url,
+  ) =>
     context.commit(() => {
-      setJob(next);
+      setJob((previous) =>
+        previous?.status === "dismissed" &&
+        (sameOgcProcessJob(previous.url, next.url) || sameOgcProcessJob(previous.url, observedUrl))
+          ? previous
+          : next,
+      );
       setJobUrl(next.url);
       if (processUrl)
         setJobsByProcess((previous) => {
           const tracked = previous.get(processUrl);
           if (
+            tracked?.status === "dismissed" &&
+            (sameOgcProcessJob(tracked.url, next.url) ||
+              sameOgcProcessJob(tracked.url, observedUrl))
+          )
+            return previous;
+          if (
             tracked &&
             ["accepted", "running"].includes(tracked.status) &&
-            !sameOgcProcessJob(tracked.url, next.url)
+            !sameOgcProcessJob(tracked.url, next.url) &&
+            !sameOgcProcessJob(tracked.url, observedUrl)
           )
             return previous;
           return new Map(previous).set(processUrl, next);
@@ -203,8 +219,14 @@ export function useOgcProcesses(open: boolean) {
     });
     let sourceUrl = typeof initial === "string" ? initial : initial.url;
     const result = await monitorOgcProcessJob(initial, context.signal, (next) => {
+      const selectedUrl = selectedProcess.current?.url;
+      const key =
+        processUrl ??
+        (selectedUrl && next.processUrl && sameOgcProcessJob(selectedUrl, next.processUrl)
+          ? selectedUrl
+          : next.processUrl);
+      updateJob(context, next, key, sourceUrl);
       sourceUrl = next.url;
-      updateJob(context, next, processUrl ?? next.processUrl);
     });
     context.commit(() => {
       setOutputs(result);
@@ -254,7 +276,7 @@ export function useOgcProcesses(open: boolean) {
         } finally {
           if (pendingSubmission.current === submission) {
             pendingSubmission.current = null;
-            if (ownsProject()) {
+            if (mounted.current) {
               setAwaitingSubmission(false);
               if (context.signal.aborted && !active.current) setPhase("idle");
             }

@@ -28,3 +28,10 @@ striped Float64 and replaced its first pixel with NaN to exercise NoData.
 The other 48 samples are unchanged. The conversion regression independently
 reads every source and converted sample with geotiff.js and checks exact
 Float64 equality, including NaN, CRS and NoData metadata.
+
+`striped-uint64.tif` and `striped-int64.tif` are synthetic 2 × 2 WGS84 TIFFs
+written with Rasterio, with samples `[[9007199254740993, 9007199254740995], [1, 2]]`.
+Their extent is `[0, 0, 2, 2]`, their pixel size is one degree, and they are
+striped with no compression. The first two integers cannot be represented
+exactly by Float64. Import tests read the real TIFF metadata and verify that
+these results are rejected before lossy conversion or layer publication.

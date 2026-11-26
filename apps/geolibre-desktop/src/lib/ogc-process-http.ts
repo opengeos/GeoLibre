@@ -68,12 +68,14 @@ export async function processHttp(
   }
   const deadline = AbortSignal.timeout(120_000);
   const abort = AbortSignal.any([signal, deadline]);
+  let nativeDispatched = false;
   abort.throwIfAborted();
   try {
     if (isTauri()) {
       const { requestOgcProcess } = await import("./native-http");
       // In particular, do not submit a job cancelled while the module loaded.
       abort.throwIfAborted();
+      nativeDispatched = true;
       const pending = requestOgcProcess(url, {
         ...options,
         method,
@@ -122,6 +124,7 @@ export async function processHttp(
         response.ok ? maxBytes : Math.min(maxBytes, 64 * 1024),
       );
     } catch (error) {
+      void response.body?.cancel().catch(() => {});
       const accepted = acknowledged(method, response.status);
       if (!accepted && (response.ok || signal.aborted)) throw error;
       body = new Uint8Array();
@@ -142,7 +145,8 @@ export async function processHttp(
   } catch (error) {
     if (
       !signal.aborted &&
-      (deadline.aborted || (error instanceof DOMException && error.name === "TimeoutError"))
+      ((!nativeDispatched && deadline.aborted) ||
+        (error instanceof DOMException && error.name === "TimeoutError"))
     )
       throw new OgcProcessError("requestTimeout");
     throw normalizeFetchError(error);

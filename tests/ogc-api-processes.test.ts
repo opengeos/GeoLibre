@@ -17,7 +17,11 @@ import { processHttp } from "../apps/geolibre-desktop/src/lib/ogc-process-http";
 import { ogcProcessMonitorLinks } from "../apps/geolibre-desktop/src/lib/ogc-process-link-header";
 import { monitorOgcProcessJob } from "../apps/geolibre-desktop/src/lib/ogc-process-job";
 import { validOgcProcessGeoJson } from "../apps/geolibre-desktop/src/lib/ogc-process-geometry";
-import { ogcProcessOutputPreview } from "../apps/geolibre-desktop/src/lib/ogc-process-results";
+import {
+  canImportOgcProcessOutput,
+  ogcProcessOutputPreview,
+} from "../apps/geolibre-desktop/src/lib/ogc-process-results";
+import { fromArrayBuffer } from "geotiff";
 import {
   ogcProcessInputDefaults,
   parseOgcProcessInputs,
@@ -584,6 +588,137 @@ test("binary output schemas survive synchronous execution and asynchronous polli
       new Uint8Array([0, 1, 2, 255]),
     );
   }
+});
+
+test("oneOf output defaults retain their media type and explicit result formats override it", async () => {
+  const process = await processDescription();
+  process.outputs = {
+    image: {
+      schema: {
+        oneOf: [
+          { type: "string", contentEncoding: "binary", contentMediaType: "image/tiff" },
+          { type: "string", contentEncoding: "binary", contentMediaType: "image/jp2" },
+        ],
+      },
+    },
+  };
+  const signal = new AbortController().signal;
+  for (const explicit of [false, true]) {
+    serve(() => ({ image: explicit ? { value: "AAEC/w==", mediaType: "image/jp2" } : "AAEC/w==" }));
+    const result = await executeOgcProcess(process, {}, signal);
+    if (result.kind !== "results") throw new Error("Expected synchronous result");
+    const downloaded = await downloadOgcProcessOutput(result.outputs[0], signal);
+    assert.equal(downloaded.type, explicit ? "image/jp2" : "image/tiff");
+    assert.deepEqual(
+      new Uint8Array(await downloaded.arrayBuffer()),
+      new Uint8Array([0, 1, 2, 255]),
+    );
+  }
+  process.outputs.image.schema = {
+    oneOf: [
+      { type: "string", contentMediaType: "text/plain" },
+      { type: "string", contentEncoding: "binary", contentMediaType: "image/tiff" },
+    ],
+  };
+  serve(() => ({ image: "AAEC/w==" }));
+  const text = await executeOgcProcess(process, {}, signal);
+  if (text.kind !== "results") throw new Error("Expected synchronous result");
+  assert.equal(await (await downloadOgcProcessOutput(text.outputs[0], signal)).text(), "AAEC/w==");
+  assert.equal(text.outputs[0].encoding, undefined);
+  process.outputs.image.schema = {
+    oneOf: [
+      { type: "string", contentEncoding: "binary", contentMediaType: "image/tiff" },
+      { type: "string", contentMediaType: "text/plain" },
+    ],
+  };
+  serve(() => ({ image: { value: "A literal message", mediaType: "text/plain" } }));
+  const overridden = await executeOgcProcess(process, {}, signal);
+  if (overridden.kind !== "results") throw new Error("Expected synchronous result");
+  assert.equal(overridden.outputs[0].encoding, undefined);
+  assert.equal(
+    await (await downloadOgcProcessOutput(overridden.outputs[0], signal)).text(),
+    "A literal message",
+  );
+});
+
+test("repeated defaults produce occurrence arrays while single defaults retain their values", async () => {
+  const process = await processDescription();
+  const collection = { type: "FeatureCollection", features: [] };
+  process.inputs = {
+    number: { schema: { type: "integer", default: 5 }, maxOccurs: 2 },
+    object: { schema: { type: "object", default: collection }, maxOccurs: "unbounded" },
+    array: { schema: { type: "array", default: [1, 2] }, maxOccurs: 2 },
+    single: { schema: { type: "integer", default: 5 } },
+  };
+  assert.deepEqual(parseOgcProcessInputs(process, ogcProcessInputDefaults(process)), {
+    number: [5],
+    object: [{ value: collection }],
+    array: [[1, 2]],
+    single: 5,
+  });
+});
+
+test("declared size rejection cancels the unread body while preserving accepted routing", async () => {
+  const process = await processDescription();
+  let cancelled = 0;
+  const oversized = (status: number) =>
+    new Response(
+      new ReadableStream(
+        {
+          cancel() {
+            cancelled++;
+          },
+        },
+        { highWaterMark: 0 },
+      ),
+      {
+        status,
+        headers: { "Content-Length": "999999999", Location: "/api/jobs/retained" },
+      },
+    );
+  serve(() => oversized(202));
+  const accepted = await executeOgcProcess(process, {}, new AbortController().signal);
+  assert.equal(accepted.kind, "job");
+  assert.equal(new URL(accepted.job!.url).pathname, "/api/jobs/retained");
+  assert.equal(cancelled, 1);
+  serve(() => oversized(200));
+  await assert.rejects(
+    processHttp("https://example.org/result", new AbortController().signal),
+    /download limit/,
+  );
+  assert.equal(cancelled, 2);
+});
+
+test("generic binary TIFF outputs remain eligible for validated import", async () => {
+  const bytes = new Uint8Array(
+    readFileSync(new URL("./fixtures/ogc-processes/gdps-striped-float64.tif", import.meta.url)),
+  );
+  const output = { id: "raster", bytes, mediaType: "application/octet-stream" };
+  assert.equal(canImportOgcProcessOutput(output), true);
+  assert.equal(
+    canImportOgcProcessOutput({
+      id: "raster",
+      href: "https://example.org/result",
+      mediaType: "application/octet-stream",
+    }),
+    true,
+  );
+  assert.equal(
+    canImportOgcProcessOutput({
+      id: "raster",
+      encoding: "base64",
+      value: "AA==",
+      mediaType: "application/octet-stream",
+    }),
+    true,
+  );
+  assert.equal(
+    canImportOgcProcessOutput({ id: "text", value: "A message", mediaType: "text/plain" }),
+    false,
+  );
+  const blob = await downloadOgcProcessOutput(output, new AbortController().signal);
+  const image = await (await fromArrayBuffer(await blob.arrayBuffer())).getImage();
+  assert.ok(image.getWidth() > 0 && image.getHeight() > 0);
 });
 
 test("unencoded string outputs keep their schema media type and original text", async () => {

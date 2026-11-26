@@ -224,7 +224,14 @@ function createSnapshot(nextRecords: DiagnosticRecord[]): DiagnosticsSnapshot {
 
 function emitChange(): void {
   snapshot = createSnapshot(records);
-  for (const listener of listeners) listener();
+  for (const listener of listeners) {
+    try {
+      listener();
+    } catch {
+      // Observers must not change the outcome of the operation being recorded.
+      // Logging here could reenter diagnostic notification.
+    }
+  }
 }
 
 function truncate(value: string): string {
@@ -332,7 +339,8 @@ function requestMethod(
   ).toUpperCase();
 }
 
-function subscribe(listener: () => void): () => void {
+/** Observe snapshot changes without coupling operation outcomes to observers. */
+export function subscribeDiagnostics(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
@@ -401,7 +409,7 @@ export function setCaptureNetworkInfo(enabled: boolean): void {
 }
 
 export function useDiagnosticsSnapshot(): DiagnosticsSnapshot {
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  return useSyncExternalStore(subscribeDiagnostics, getSnapshot, getSnapshot);
 }
 
 /**

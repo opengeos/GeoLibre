@@ -148,6 +148,7 @@ export async function proxyOgcProcessRequest(
     const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(120_000)]);
     const upstream = await processRequest(url, method, body, headers, signal);
     const acknowledged = (method === "POST" || method === "DELETE") && upstream.response.ok;
+    const earlyMetadata = acknowledged || !upstream.response.ok;
     const forwardHeaders = () => {
       res.statusCode = upstream.response.status;
       res.setHeader("cache-control", "no-store");
@@ -161,7 +162,7 @@ export async function proxyOgcProcessRequest(
         if (value) res.setHeader(name, value);
       }
     };
-    if (acknowledged) {
+    if (earlyMetadata) {
       forwardHeaders();
       // The caller's deadline starts before ours. Deliver the acknowledgement
       // now, while preserving a completed optional body verbatim below.
@@ -176,7 +177,7 @@ export async function proxyOgcProcessRequest(
       );
     } catch (error) {
       await upstream.response.body?.cancel().catch(() => {});
-      if (acknowledged) {
+      if (earlyMetadata) {
         // A broken response stream lets the caller retain already delivered
         // status/routing while distinguishing failure from valid empty results.
         res.destroy();

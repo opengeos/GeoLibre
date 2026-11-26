@@ -70,12 +70,15 @@ export function ogcInputSchema(definition: OgcInputDefinition): Record<string, u
     : {};
 }
 
-export function ogcInputKind(definition: OgcInputDefinition): OgcInputKind {
-  if (
+function isRepeatedInput(definition: OgcInputDefinition): boolean {
+  return (
     definition.maxOccurs === "unbounded" ||
     (typeof definition.maxOccurs === "number" && definition.maxOccurs > 1)
-  )
-    return "json";
+  );
+}
+
+export function ogcInputKind(definition: OgcInputDefinition): OgcInputKind {
+  if (isRepeatedInput(definition)) return "json";
   const type = ogcInputSchema(definition).type;
   return type === "string" || type === "number" || type === "integer" || type === "boolean"
     ? type
@@ -111,7 +114,12 @@ export function ogcProcessInputDefaults(process: OgcProcess): Record<string, str
           ? { value: schema.default }
           : schema.default;
       return Object.hasOwn(schema, "default")
-        ? [[key, ogcInputText(value, ogcInputKind(definition))]]
+        ? [
+            [
+              key,
+              ogcInputText(isRepeatedInput(definition) ? [value] : value, ogcInputKind(definition)),
+            ],
+          ]
         : [];
     }),
   );

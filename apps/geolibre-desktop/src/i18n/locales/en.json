@@ -9278,6 +9278,7 @@
       "dismiss": "Dismiss job",
       "results": "Results",
       "outputBytes": "{{count}} bytes",
+      "layerName": "OGC: {{id}}",
       "download": "Download",
       "addToMap": "Add to map",
       "stopWaiting": "Stop waiting",

@@ -1,6 +1,6 @@
 //! Bounded desktop transport for OGC API Processes discovery, execution and jobs.
 
-use std::{sync::Arc, time::Duration};
+use std::{future::Future, sync::Arc, time::Duration};
 use tokio::time::{timeout_at, Instant};
 
 use base64::Engine;
@@ -93,6 +93,25 @@ fn request_timeout() -> String {
     "OGC process request timed out".into()
 }
 
+/// Check the absolute deadline before each poll that could dispatch a request.
+async fn send_before_deadline<F>(future: F, deadline: Instant) -> Result<F::Output, String>
+where
+    F: Future,
+{
+    let mut future = std::pin::pin!(future);
+    timeout_at(
+        deadline,
+        std::future::poll_fn(|context| {
+            if Instant::now() >= deadline {
+                return std::task::Poll::Ready(Err(request_timeout()));
+            }
+            future.as_mut().poll(context).map(Ok)
+        }),
+    )
+    .await
+    .map_err(|_| request_timeout())?
+}
+
 fn client() -> Result<reqwest::Client, String> {
     static CLIENT: std::sync::OnceLock<Result<reqwest::Client, String>> =
         std::sync::OnceLock::new();
@@ -165,9 +184,8 @@ where
         if options.prefer_async && method == reqwest::Method::POST {
             request = request.header("Prefer", "respond-async");
         }
-        let response = timeout_at(options.deadline, request.send())
-            .await
-            .map_err(|_| request_timeout())?
+        let response = send_before_deadline(request.send(), options.deadline)
+            .await?
             .map_err(|error| request_error_message(&error.without_url()))?;
         if method == reqwest::Method::GET
             && matches!(response.status().as_u16(), 301 | 302 | 303 | 307 | 308)
@@ -297,6 +315,20 @@ mod tests {
     use super::{request_method, MAX_INPUT_BYTES};
 
     #[test]
+    fn expired_send_is_never_polled() {
+        tauri::async_runtime::block_on(async {
+            let dispatched = std::cell::Cell::new(false);
+            let send = std::future::poll_fn(|_| {
+                dispatched.set(true);
+                std::task::Poll::Ready(())
+            });
+            let result = super::send_before_deadline(send, super::Instant::now()).await;
+            assert!(result.unwrap_err().contains("timed out"));
+            assert!(!dispatched.get());
+        });
+    }
+
+    #[test]
     fn execution_inputs_and_methods_are_bounded_before_network_access() {
         assert!(request_method("POST", Some(r#"{"inputs":{"name":"GeoLibre"}}"#)).is_ok());
         assert!(request_method("GET", None).is_ok());
@@ -382,7 +414,10 @@ mod tests {
                 let mut reader = BufReader::new(socket.try_clone().unwrap());
                 loop {
                     let mut line = String::new();
-                    reader.read_line(&mut line).unwrap();
+                    assert!(
+                        reader.read_line(&mut line).unwrap() > 0,
+                        "unexpected EOF before headers completed"
+                    );
                     if line == "\r\n" {
                         break;
                     }

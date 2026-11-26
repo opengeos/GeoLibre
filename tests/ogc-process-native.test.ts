@@ -106,6 +106,55 @@ test("compact native result transport retains all byte values", async () => {
   assert.deepEqual(result.body, bytes);
 });
 
+test("a failing diagnostic observer cannot discard an accepted native job", async () => {
+  const { subscribeDiagnostics, setCaptureNetworkInfo, getDiagnosticsSnapshot, clearDiagnostics } =
+    await import("../apps/geolibre-desktop/src/lib/diagnostics");
+  const previous = getDiagnosticsSnapshot().captureNetworkInfo;
+  setCaptureNetworkInfo(true);
+  clearDiagnostics();
+  let notifications = 0;
+  let invocations = 0;
+  const unsubscribeFailure = subscribeDiagnostics(() => {
+    throw new Error("observer failed");
+  });
+  const unsubscribeHealthy = subscribeDiagnostics(() => {
+    notifications++;
+  });
+  Object.defineProperty(window, "__TAURI_INTERNALS__", {
+    configurable: true,
+    value: {
+      invoke: async () => {
+        invocations++;
+        return {
+          status: 202,
+          final_url: "https://example.org/execution",
+          content_type: "application/json",
+          location: "/jobs/accepted",
+          retry_after: null,
+          link: null,
+          body_base64: "",
+        };
+      },
+    },
+  });
+  try {
+    const response = await requestOgcProcess("https://example.org/execution", {
+      method: "POST",
+      body: "{}",
+    });
+    assert.equal(response.status, 202);
+    assert.equal(response.location, "/jobs/accepted");
+    assert.equal(invocations, 1);
+    assert.equal(notifications, 1);
+    assert.equal(getDiagnosticsSnapshot().networkCount, 1);
+  } finally {
+    unsubscribeFailure();
+    unsubscribeHealthy();
+    setCaptureNetworkInfo(previous);
+    clearDiagnostics();
+  }
+});
+
 test("native error metadata survives the local deadline while explicit cancellation still wins", async (t) => {
   let deadline = new AbortController();
   let caller = new AbortController();
@@ -146,6 +195,24 @@ test("native error metadata survives the local deadline while explicit cancellat
   cancel = true;
   await assert.rejects(processHttp("https://example.org/jobs/one", caller.signal), {
     name: "AbortError",
+  });
+});
+
+test("a frontend deadline does not relabel a native connection failure", async (t) => {
+  const deadline = new AbortController();
+  t.mock.method(AbortSignal, "timeout", () => deadline.signal);
+  Object.defineProperty(window, "__TAURI_INTERNALS__", {
+    configurable: true,
+    value: {
+      invoke: async () => {
+        deadline.abort(new DOMException("deadline", "TimeoutError"));
+        throw "Connection refused by service";
+      },
+    },
+  });
+  const { processHttp } = await import("../apps/geolibre-desktop/src/lib/ogc-process-http");
+  await assert.rejects(processHttp("https://example.org/jobs/one", new AbortController().signal), {
+    message: "Connection refused by service",
   });
 });
 

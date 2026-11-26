@@ -30,9 +30,11 @@ export function ogcProcessOutputPreview(output: OgcProcessOutput): string {
 
 /** Literal messages stay downloadable; structured or referenced geodata can be imported. */
 export function canImportOgcProcessOutput(output: OgcProcessOutput): boolean {
-  if (output.href || output.bytes) return !output.mediaType || /json|tiff/i.test(output.mediaType);
+  const mediaType = output.mediaType?.split(";", 1)[0].trim().toLowerCase();
+  const unknownBinary = !mediaType || mediaType === "application/octet-stream";
+  if (output.href || output.bytes) return unknownBinary || /json|tiff/i.test(mediaType ?? "");
   if (/geo\+json|tiff/i.test(output.mediaType ?? "")) return true;
-  if (output.encoding === "base64" && /json/i.test(output.mediaType ?? "")) return true;
+  if (output.encoding === "base64" && (unknownBinary || /json/i.test(mediaType ?? ""))) return true;
   const value = output.value;
   return (
     !!value &&
@@ -96,13 +98,19 @@ export async function importOgcProcessOutput(
     ogcProcessOutput: output.id,
     sourceUrl: redactUrlCredentials(sourceUrl),
   };
-  const name = uniqueLayerName(`OGC: ${output.id}`, useAppStore.getState().layers);
+  const name = uniqueLayerName(
+    i18next.t("processing.ogcProcesses.layerName", { id: output.id }),
+    useAppStore.getState().layers,
+  );
   if (tiff && blob) {
     const { convertGeoTiffToCog, readGeoTiffInfo } = await import("@geolibre/processing");
     let data = new Uint8Array(await blob.arrayBuffer());
     const info = await readGeoTiffInfo(data);
     if (!info.ok) throw new OgcProcessError("rasterUnreadable");
     if (!info.tiled) {
+      // Float64 cannot preserve arbitrary 64-bit integer samples exactly.
+      if (info.bits_per_sample === 64 && info.sample_format !== "ieeefloat")
+        throw new OgcProcessError("rasterPrecision");
       data = new Uint8Array(await convertGeoTiffToCog(data, { signal, float64: true }));
       const converted = await readGeoTiffInfo(data);
       if (

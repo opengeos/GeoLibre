@@ -85,6 +85,7 @@ export function OgcProcessInputs({
             {enumeration ? (
               <Select
                 id={id}
+                aria-required={definition.minOccurs !== 0}
                 disabled={disabled}
                 value={selected === undefined ? "" : JSON.stringify(selected)}
                 onChange={(event) =>
@@ -106,6 +107,7 @@ export function OgcProcessInputs({
             ) : kind === "boolean" ? (
               <Select
                 id={id}
+                aria-required={definition.minOccurs !== 0}
                 disabled={disabled}
                 value={fieldValue}
                 onChange={(event) => set(key, event.target.value || undefined)}
@@ -117,6 +119,7 @@ export function OgcProcessInputs({
             ) : kind === "json" ? (
               <Textarea
                 id={id}
+                aria-required={definition.minOccurs !== 0}
                 disabled={disabled}
                 value={fieldValue}
                 className="min-h-24 font-mono text-xs"
@@ -125,6 +128,7 @@ export function OgcProcessInputs({
             ) : (
               <Input
                 id={id}
+                aria-required={definition.minOccurs !== 0}
                 disabled={disabled}
                 value={fieldValue}
                 type={kind === "string" ? "text" : "number"}

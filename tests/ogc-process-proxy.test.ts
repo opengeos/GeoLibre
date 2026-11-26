@@ -12,73 +12,82 @@ const { Agent, MockAgent } = createRequire(
   new URL("../apps/geolibre-desktop/vite-proxy-guard.ts", import.meta.url),
 )("undici") as typeof import("undici");
 
-test("write acknowledgement headers arrive before a stalled body and completed bodies remain intact", async (t) => {
-  let writes = 0;
-  let release: (() => void) | undefined;
-  const upstream = createServer((req, res) => {
-    writes++;
-    req.resume();
-    res.writeHead(202, {
-      Location: "/jobs/retained",
-      "Content-Type": "application/json",
-      Connection: "close",
+for (const status of [202, 401])
+  test(`received HTTP ${status} headers precede a stalled body and completed bodies remain intact`, async (t) => {
+    const payload = JSON.stringify({ status: status === 202 ? "accepted" : "unauthorized" });
+    let writes = 0;
+    let release: (() => void) | undefined;
+    const upstream = createServer((req, res) => {
+      writes++;
+      req.resume();
+      res.writeHead(status, {
+        Location: "/jobs/retained",
+        "Retry-After": "2",
+        "Content-Type": "application/json",
+        Connection: "close",
+      });
+      res.flushHeaders();
+      const finish = () => {
+        if (!res.destroyed) res.end(payload);
+      };
+      if (new URL(req.url ?? "/", "http://localhost").pathname === "/pending") release = finish;
+      else finish();
     });
-    res.flushHeaders();
-    const finish = () => {
-      if (!res.destroyed) res.end('{"status":"accepted"}');
-    };
-    if (req.url === "/pending") release = finish;
-    else finish();
+    upstream.listen(0, "127.0.0.1");
+    await once(upstream, "listening");
+    const delegate = new Agent();
+    delegate.dispatch = delegate.dispatch.bind(delegate);
+    const origin = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
+    t.mock.method(
+      Agent.prototype,
+      "dispatch",
+      (...[options, handler]: Parameters<InstanceType<typeof Agent>["dispatch"]>) =>
+        // Some Node versions share this dispatcher with global fetch. Redirect
+        // only the upstream request, keeping the real local proxy in the path.
+        delegate.dispatch(
+          String(options.origin) === "https://process.example" ? { ...options, origin } : options,
+          handler,
+        ),
+    );
+    const proxy = createServer((req, res) => {
+      void proxyOgcProcessRequest(req, res);
+    });
+    proxy.listen(0, "127.0.0.1");
+    await once(proxy, "listening");
+    const url = (path: string) =>
+      `http://127.0.0.1:${(proxy.address() as AddressInfo).port}/proxy?url=${encodeURIComponent(`https://process.example${path}`)}`;
+    try {
+      const abort = new AbortController();
+      const acknowledged = await fetch(url("/pending"), {
+        method: status === 202 ? "POST" : "GET",
+        body: status === 202 ? "{}" : undefined,
+        headers: { "Content-Type": "application/json", Connection: "close" },
+        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(5000)]),
+      });
+      assert.equal(acknowledged.status, status);
+      assert.equal(acknowledged.headers.get("location"), "/jobs/retained");
+      assert.equal(acknowledged.headers.get("retry-after"), "2");
+      assert.ok(release);
+      abort.abort();
+      await assert.rejects(acknowledged.arrayBuffer());
+      release();
+      const complete = await fetch(url("/complete"), {
+        method: "POST",
+        body: "{}",
+        headers: { "Content-Type": "application/json", Connection: "close" },
+        signal: AbortSignal.timeout(5000),
+      });
+      assert.equal(complete.status, status);
+      assert.equal(await complete.text(), payload);
+      assert.equal(writes, 2, "one dispatch per submission, with no retry");
+    } finally {
+      release?.();
+      await delegate.close();
+      proxy.close();
+      upstream.close();
+      await Promise.all([once(proxy, "close"), once(upstream, "close")]);
+    }
   });
-  upstream.listen(0, "127.0.0.1");
-  await once(upstream, "listening");
-  const delegate = new Agent();
-  delegate.dispatch = delegate.dispatch.bind(delegate);
-  const origin = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
-  t.mock.method(
-    Agent.prototype,
-    "dispatch",
-    (...[options, handler]: Parameters<InstanceType<typeof Agent>["dispatch"]>) =>
-      delegate.dispatch({ ...options, origin }, handler),
-  );
-  const proxy = createServer((req, res) => {
-    void proxyOgcProcessRequest(req, res);
-  });
-  proxy.listen(0, "127.0.0.1");
-  await once(proxy, "listening");
-  const url = (path: string) =>
-    `http://127.0.0.1:${(proxy.address() as AddressInfo).port}/proxy?url=${encodeURIComponent(`https://process.example${path}`)}`;
-  try {
-    const abort = new AbortController();
-    const acknowledged = await fetch(url("/pending"), {
-      method: "POST",
-      body: "{}",
-      headers: { "Content-Type": "application/json", Connection: "close" },
-      signal: AbortSignal.any([abort.signal, AbortSignal.timeout(5000)]),
-    });
-    assert.equal(acknowledged.status, 202);
-    assert.equal(acknowledged.headers.get("location"), "/jobs/retained");
-    assert.ok(release);
-    abort.abort();
-    await assert.rejects(acknowledged.arrayBuffer());
-    release();
-    const complete = await fetch(url("/complete"), {
-      method: "POST",
-      body: "{}",
-      headers: { "Content-Type": "application/json", Connection: "close" },
-      signal: AbortSignal.timeout(5000),
-    });
-    assert.equal(complete.status, 202);
-    assert.equal(await complete.text(), '{"status":"accepted"}');
-    assert.equal(writes, 2, "one dispatch per submission, with no retry");
-  } finally {
-    release?.();
-    await delegate.close();
-    proxy.close();
-    upstream.close();
-    await Promise.all([once(proxy, "close"), once(upstream, "close")]);
-  }
-});
 
 test("process proxy preserves execution/job controls, redirect methods and response limits", async (t) => {
   const delegate = new Agent();

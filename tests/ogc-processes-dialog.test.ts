@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { createElement, createRef } from "react";
 import type { MapEngine } from "@geolibre/map";
+import i18next from "i18next";
 
 const { OgcProcessesDialog } =
   await import("../apps/geolibre-desktop/src/components/processing/OgcProcessesDialog");
@@ -445,6 +446,117 @@ test("input names matching inherited object properties start empty and can be su
   );
 });
 
+test("required state is exposed for every schema control without native empty-string rejection", async () => {
+  const process = description();
+  process.inputs.choice = { title: "Choice", schema: { type: "string", enum: ["a", "b"] } };
+  process.inputs.flag = { title: "Flag", schema: { type: "boolean" } };
+  process.inputs.data = { title: "Data", schema: { type: "object" } };
+  serve(async () => new Response("{}"), process);
+  await form();
+  for (const label of ["Name *", "Choice *", "Flag *", "Data *"])
+    assert.equal(screen.getByLabelText(label).getAttribute("aria-required"), "true");
+  assert.equal(screen.getByLabelText("Message").getAttribute("aria-required"), "false");
+  assert.equal(screen.getByLabelText("Name *").hasAttribute("required"), false);
+});
+
+test("a delayed running poll cannot resurrect an acknowledged dismissal", async () => {
+  let posts = 0;
+  serve(async (_url, init) => {
+    if (init?.method === "POST") {
+      posts++;
+      return new Response(null, {
+        status: 202,
+        headers: { Location: `/master/jobs/${posts === 1 ? "one" : "two"}`, "Retry-After": "0" },
+      });
+    }
+    return new Response(JSON.stringify({ status: "running" }), {
+      headers: { "Content-Type": "application/json", "Retry-After": "0" },
+    });
+  });
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() =>
+    assert.match(
+      (screen.getByLabelText("Job status URL") as HTMLInputElement).value,
+      /\/jobs\/one/,
+    ),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+  const descriptor = Object.getOwnPropertyDescriptor(window, "__TAURI_INTERNALS__");
+  const pending: { dismiss?: (value: unknown) => void; poll?: (value: unknown) => void } = {};
+  let reads = 0;
+  const wire = (status: number, body: string) => ({
+    status,
+    final_url: "https://demo.pygeoapi.io/master/jobs/one",
+    content_type: "application/json",
+    location: null,
+    retry_after: "0",
+    link: null,
+    body_base64: btoa(body),
+  });
+  Object.defineProperty(window, "__TAURI_INTERNALS__", {
+    configurable: true,
+    value: {
+      invoke: async (_command: string, args: Record<string, unknown>) => {
+        if (args.method === "DELETE")
+          return new Promise((resolve) => {
+            pending.dismiss = resolve;
+          });
+        assert.equal(args.method, "GET");
+        if (++reads === 1)
+          return new Promise((resolve) => {
+            pending.poll = resolve;
+          });
+        return wire(404, "{}");
+      },
+    },
+  });
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss job" }));
+    await waitFor(() => assert.ok(pending.dismiss));
+    fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resume monitoring" }));
+    await waitFor(() => assert.ok(pending.poll), { timeout: 2500 });
+    await act(async () => pending.dismiss?.(wire(200, "{}")));
+    await act(async () => pending.poll?.(wire(200, '{"status":"running"}')));
+    // The second poll establishes that the stale first status was processed.
+    await waitFor(() => assert.match(screen.getByRole("alert").textContent ?? "", /404/), {
+      timeout: 2500,
+    });
+    assert.ok(screen.queryByText("Dismissed"));
+    assert.equal(
+      screen.getByRole("button", { name: "Run process" }).hasAttribute("disabled"),
+      false,
+    );
+  } finally {
+    if (descriptor) Object.defineProperty(window, "__TAURI_INTERNALS__", descriptor);
+    else Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  }
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() =>
+    assert.match(
+      (screen.getByLabelText("Job status URL") as HTMLInputElement).value,
+      /\/jobs\/two/,
+    ),
+  );
+  assert.equal(posts, 2, "a new execution identity remains allowed");
+});
+
+test("unsupported generic binary content is rejected before a layer is added", async () => {
+  serve(
+    async () =>
+      new Response("not a TIFF or GeoJSON", {
+        headers: { "Content-Type": "application/octet-stream" },
+      }),
+  );
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.ok(screen.queryByRole("button", { name: "Add to map" })));
+  fireEvent.click(screen.getByRole("button", { name: "Add to map" }));
+  await waitFor(() => assert.ok(screen.queryByRole("alert")));
+  assert.equal(useAppStore.getState().layers.length, 0);
+});
+
 test("stopped synchronous results retain their job association across process selection", async () => {
   const first = description();
   const second = JSON.parse(JSON.stringify(first).replaceAll("hello-world", "second"));
@@ -566,6 +678,15 @@ test("editing imported inline GeoJSON leaves the retained output snapshot unchan
   };
   const output = { id: "map", value, mediaType: "application/geo+json" };
   const signal = new AbortController().signal;
+  const previousLanguage = i18next.language;
+  i18next.addResourceBundle(
+    "fr",
+    "translation",
+    { processing: { ogcProcesses: { layerName: "Résultat {{id}}" } } },
+    true,
+    true,
+  );
+  await i18next.changeLanguage("fr");
   const id = await importOgcProcessOutput(
     output,
     "https://example.org/jobs/one",
@@ -581,8 +702,10 @@ test("editing imported inline GeoJSON leaves the retained output snapshot unchan
       setBuiltInMapControlPosition: () => false,
     },
     signal,
-  );
-  const imported = useAppStore.getState().layers.find((layer) => layer.id === id)!.geojson!;
+  ).finally(() => i18next.changeLanguage(previousLanguage));
+  const layer = useAppStore.getState().layers.find((layer) => layer.id === id)!;
+  assert.equal(layer.name, "Résultat map");
+  const imported = layer.geojson!;
   imported.features[0].properties!.label = "edited";
   assert.equal(value.features[0].properties.label, "original");
   assert.deepEqual(
@@ -590,6 +713,33 @@ test("editing imported inline GeoJSON leaves the retained output snapshot unchan
     value,
   );
 });
+
+for (const type of ["uint64", "int64"]) {
+  test(`striped ${type} process rasters are rejected before lossy conversion or layer publication`, async () => {
+    const { initCogWasm, readGeoTiffInfo } = await import("@geolibre/processing");
+    await initCogWasm(
+      new Uint8Array(
+        readFileSync(
+          new URL("../node_modules/geolibre-wasm/geolibre_wasm_bg.wasm", import.meta.url),
+        ),
+      ),
+    );
+    const bytes = new Uint8Array(
+      readFileSync(new URL(`./fixtures/ogc-processes/striped-${type}.tif`, import.meta.url)),
+    );
+    const info = await readGeoTiffInfo(bytes);
+    assert.equal(info.bits_per_sample, 64);
+    assert.equal(info.tiled, false);
+    assert.notEqual(info.sample_format, "ieeefloat");
+    serve(async () => new Response(bytes, { headers: { "Content-Type": "image/tiff" } }));
+    await form();
+    fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+    await waitFor(() => assert.ok(screen.queryByRole("button", { name: "Add to map" })));
+    fireEvent.click(screen.getByRole("button", { name: "Add to map" }));
+    await waitFor(() => assert.match(screen.getByRole("alert").textContent ?? "", /precision/));
+    assert.equal(useAppStore.getState().layers.length, 0);
+  });
+}
 
 test("layer FeatureCollections are sent as qualified GeoJSON inputs", async () => {
   const process = description();
@@ -778,6 +928,63 @@ test("a completed synchronous job retains its advertised output context when res
   assert.equal(posts, 1);
 });
 
+test("the owning monitor can replace its status URL with the canonical redirect target", async () => {
+  let deleted = "";
+  let posts = 0;
+  serve(async (url, init) => {
+    if (init?.method === "POST") {
+      posts++;
+      return new Response(null, { status: 202, headers: { Location: "/master/jobs/one" } });
+    }
+    if (init?.method === "DELETE") {
+      deleted = url;
+      return new Response(null, { status: 204 });
+    }
+    if (url.includes("/results"))
+      return new Response(JSON.stringify({ echo: "Canonical result" }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    const response = new Response(JSON.stringify({ jobID: "one", status: "successful" }));
+    Object.defineProperty(response, "url", { value: "https://demo.pygeoapi.io/master/jobs/one/" });
+    return response;
+  });
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.ok(screen.queryByText("Canonical result")), { timeout: 3000 });
+  assert.equal(screen.getByRole("button", { name: "Run process" }).hasAttribute("disabled"), false);
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss job" }));
+  await waitFor(() => assert.match(deleted, /\/jobs\/one\//));
+  assert.equal(posts, 1);
+});
+
+test("resumed jobs keep the selected process locked when its advertised description is unavailable", async () => {
+  serve(async () => new Response("{}"));
+  await form();
+  let descriptions = 0;
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (!url.pathname.includes("/jobs/")) {
+      descriptions++;
+      return new Response(null, { status: 503 });
+    }
+    return new Response(
+      JSON.stringify({
+        jobID: "resumed",
+        status: "running",
+        links: [{ rel: "process", href: "https://demo.pygeoapi.io/master/processes/hello-world" }],
+      }),
+    );
+  };
+  fireEvent.change(screen.getByLabelText("Job status URL"), {
+    target: { value: "https://demo.pygeoapi.io/master/jobs/resumed" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Resume monitoring" }));
+  await waitFor(() => assert.ok(screen.queryByText("Running")));
+  fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+  assert.equal(descriptions, 1);
+  assert.equal(screen.getByRole("button", { name: "Run process" }).hasAttribute("disabled"), true);
+});
+
 test("paused jobs lock their own processes and remain resumable after switching", async () => {
   const first = description();
   const second = JSON.parse(JSON.stringify(first).replaceAll("hello-world", "second"));
@@ -919,6 +1126,13 @@ for (const outcome of ["accepted job", "synchronous result"] as const) {
     await waitFor(() => assert.ok(pending.resolve));
     await act(async () => {
       useAppStore.setState((state) => ({ projectLoadCount: state.projectLoadCount + 1 }));
+    });
+    assert.equal(
+      screen.getByRole("button", { name: "Retrieve processes" }).hasAttribute("disabled"),
+      true,
+    );
+    assert.equal((screen.getByLabelText("Job status URL") as HTMLInputElement).value, "");
+    await act(async () => {
       // This submission intentionally ignores abort, as a native dispatch may.
       pending.resolve?.(
         outcome === "accepted job"
@@ -940,6 +1154,12 @@ for (const outcome of ["accepted job", "synchronous result"] as const) {
       );
     });
     assert.ok(signal?.aborted);
+    await waitFor(() =>
+      assert.equal(
+        screen.getByRole("button", { name: "Retrieve processes" }).hasAttribute("disabled"),
+        false,
+      ),
+    );
     assert.equal(posts, 1);
     assert.equal((screen.getByLabelText("Job status URL") as HTMLInputElement).value, "");
     assert.equal(screen.queryByRole("button", { name: "Add to map" }), null);

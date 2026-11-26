@@ -329,6 +329,7 @@ export async function resolveOgcProcessJobContext(
 function outputFormat(
   definition: JsonObject | undefined,
   depth = 0,
+  selectedMediaType?: string,
 ): { encoding?: string; mediaType?: string } {
   const schema = definition?.schema;
   if (!schema || typeof schema !== "object" || Array.isArray(schema) || depth > 8) return {};
@@ -342,7 +343,22 @@ function outputFormat(
     return { encoding: "base64", mediaType };
   const alternatives = value.oneOf ?? value.anyOf;
   if (Array.isArray(alternatives) && alternatives.length) {
-    const formats = alternatives.map((schema) => outputFormat({ schema }, depth + 1));
+    const formats = alternatives.map((schema) =>
+      outputFormat({ schema }, depth + 1, selectedMediaType),
+    );
+    if (selectedMediaType) {
+      const exact = formats.find((format) => format.mediaType === selectedMediaType);
+      const matches = formats.filter(
+        (format) =>
+          format.mediaType?.split(";", 1)[0].trim().toLowerCase() ===
+          selectedMediaType.split(";", 1)[0].trim().toLowerCase(),
+      );
+      if (exact) return exact;
+      if (matches.length === 1) return matches[0];
+    }
+    // OGC Processes Core Requirement 54 makes the first oneOf format the default.
+    if (Array.isArray(value.oneOf) && !selectedMediaType)
+      return formats[0].mediaType || !mediaType ? formats[0] : { ...formats[0], mediaType };
     if (formats.every((format) => format.encoding === "base64"))
       return {
         encoding: "base64",
@@ -411,12 +427,16 @@ function outputs(
           ...(typeof value.mediaType === "string" ? { mediaType: value.mediaType } : {}),
         };
       if (Object.hasOwn(value, "value")) {
-        const mediaType = typeof value.mediaType === "string" ? value.mediaType : format.mediaType;
+        const explicitMediaType = typeof value.mediaType === "string" ? value.mediaType : undefined;
+        const selectedFormat = explicitMediaType
+          ? outputFormat(definitions?.[id], 0, explicitMediaType)
+          : format;
+        const mediaType = explicitMediaType ?? selectedFormat.mediaType;
         const encoding =
           typeof value.encoding === "string"
             ? value.encoding
             : typeof value.value === "string"
-              ? format.encoding
+              ? selectedFormat.encoding
               : undefined;
         return {
           id,
