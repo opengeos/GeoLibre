@@ -211,7 +211,7 @@ export function bootBundleBudgetPlugin(): Plugin {
         this.error(
           `Boot bundle regression: ${offenders.join("; ")}.\n` +
             `Largest statically imported chunks:\n${largest.join("\n")}\n` +
-            "See CODE_SPLITTING_GROUPS and manualChunks in vite.config.ts.",
+            "See CODE_SPLITTING_GROUPS and manualChunks in vite-chunking.ts.",
         );
       }
     },
