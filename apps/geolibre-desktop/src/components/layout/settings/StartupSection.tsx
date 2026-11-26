@@ -5,6 +5,7 @@ import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { StartupSettings } from "../../../hooks/useDesktopSettings";
 import { isTauri } from "../../../lib/is-tauri";
+import { isDesktopRuntime } from "../../../lib/is-mobile";
 import { pickLayerStylesFile } from "../../../lib/layer-style-files";
 import { pickLayersFile } from "../../../lib/startup-layers";
 import { openProjectFile } from "../../../lib/tauri-io";
@@ -199,8 +200,8 @@ export function StartupSection({ mapControllerRef }: StartupSectionProps) {
         </span>
       </label>
       {/* The desktop shell hosts the Live MCP relay in every desktop build,
-          the Mac App Store one included; the web build has none. */}
-      {isTauri() && (
+          the Mac App Store one included; web and the mobile apps have none. */}
+      {isDesktopRuntime() && (
         <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
           <input
             className="mt-0.5 h-4 w-4"

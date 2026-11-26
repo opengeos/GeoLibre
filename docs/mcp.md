@@ -48,8 +48,8 @@ client holding it (read from the owner-only discovery file) can send map
 commands. Turning the setting off immediately closes the listener, fails
 commands still waiting for a result, disconnects the window, and removes the
 discovery file; a failed change retries automatically with a persistent notice
-until the app confirms it. Requests that carry a browser `Origin` header, or a
-`Host` other than the loopback address, are refused. Only a loopback URL is
+until the app confirms it. Requests that carry a browser `Origin` header are
+refused, and over TCP so is a `Host` other than the loopback address. Only a loopback URL is
 accepted and redirects are refused, so the token stays on the machine.
 
 Commands wait for the app's result for a per-method budget: 60 seconds for

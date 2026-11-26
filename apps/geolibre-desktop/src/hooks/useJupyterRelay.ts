@@ -11,7 +11,7 @@ import {
   runRelayCommand,
 } from "../lib/jupyter-relay";
 import { connectLiveRelay, subscribeLiveRelayReady } from "../lib/live-relay";
-import { isTauri } from "../lib/is-tauri";
+import { isDesktopRuntime } from "../lib/is-mobile";
 import { type ScriptingHandlers, createScriptingHandlers } from "../lib/scripting/scriptingApi";
 
 // The app side of the desktop map-command relays. This is the SIBLING of
@@ -153,7 +153,9 @@ export function useJupyterRelay(mapControllerRef: RefObject<MapEngine | null>): 
       handlers,
       "Jupyter relay",
     );
-    const stopDesktop = isTauri() ? connectLiveRelay(subscribeLiveRelayReady, handlers) : null;
+    const stopDesktop = isDesktopRuntime()
+      ? connectLiveRelay(subscribeLiveRelayReady, handlers)
+      : null;
     return () => {
       stopJupyter();
       stopDesktop?.();

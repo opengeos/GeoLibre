@@ -588,7 +588,8 @@ impl RelayCore {
         let _ = connection.limit_reads(Duration::from_secs(1));
         let mut sink = [0u8; 16 * 1024];
         let mut drained = 0usize;
-        while drained < MAX_COMMAND_BYTES {
+        let drain_until = std::time::Instant::now() + Duration::from_secs(2);
+        while drained < MAX_COMMAND_BYTES && std::time::Instant::now() < drain_until {
             match connection.read(&mut sink) {
                 Ok(0) | Err(_) => break,
                 Ok(read) => drained += read,
@@ -921,10 +922,12 @@ fn create_private_dir(directory: &Path) -> Result<(), String> {
             .mode(0o700)
             .create(directory)
             .map_err(|error| format!("Could not create {}: {error}", directory.display()))?;
-        // An existing directory may be looser; tighten it when it is ours.
-        // A directory we do not own (an override pointing into a shared
-        // one) is left as is: the files inside are still owner-only.
-        let _ = std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700));
+        // An existing default runtime directory may be looser; tighten it.
+        // A directory named by an override is the user's own folder and is
+        // left as is: the files inside are still owner-only.
+        if directory.ends_with(Path::new(".geolibre").join("runtime")) {
+            let _ = std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700));
+        }
         Ok(())
     }
     #[cfg(not(unix))]

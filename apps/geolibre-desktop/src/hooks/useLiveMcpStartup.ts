@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { isTauri } from "../lib/is-tauri";
+import { isDesktopRuntime } from "../lib/is-mobile";
 import { updateLiveRelayAccess } from "../lib/live-relay";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 
@@ -11,14 +11,15 @@ import { useDesktopSettingsStore } from "./useDesktopSettings";
  * Runs at launch and again when the setting changes. Turning it off closes the
  * relay, fails pending commands and withdraws its discovery file. Failed
  * updates retry and display a persistent notice until the shell confirms them.
- * Inert on web; works in every desktop build, the Mac App Store one included.
+ * Inert on web and mobile; works in every desktop build, the Mac App Store one
+ * included.
  */
 export function useLiveMcpStartup(): void {
   const allowLiveMcp = useDesktopSettingsStore(
     (state) => state.desktopSettings.startup.allowLiveMcp,
   );
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isDesktopRuntime()) return;
     void updateLiveRelayAccess();
   }, [allowLiveMcp]);
 }
