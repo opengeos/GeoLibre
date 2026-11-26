@@ -187,7 +187,7 @@ See the [Vector Analysis tutorial](../tutorials/vector-analysis.md).
 
 ![The Raster tools dialog, with the tool list at the top and the engine picker above the parameters](https://assets.geolibre.app/images/geolibre-raster-tools.webp)
 
-Every raster tool also offers a **Client (browser)** engine that computes on the loaded raster with no sidecar at all. These computations are supported by the web and mobile runtimes. The engine picker in the dialog shows which engines a tool accepts, and the line beneath it says what the selected one will do. The browser engine follows the sidecar's algorithms (GDAL's warp kernels and output grid for Reproject and Resample, GDAL's rasterization rules for Clip by mask layer and Zonal statistics, ContourPy's marching squares for Contour, the same IDW and kriging pipeline for Interpolation), and a parity test replays sidecar outputs against it. A few inputs stay sidecar-only, and the browser engine says so when it meets them: a Reproject target that is not an EPSG code, Mosaic inputs on different pixel grids, zonal statistics over line zones, and a kriging system that is singular (for example, duplicate sample locations). The Change detection and SAR tools run in the browser only.
+Every raster tool also offers a **Client (browser)** engine that computes on the loaded raster with no sidecar at all. These computations are supported by the web and mobile runtimes. The engine picker in the dialog shows which engines a tool accepts, and the line beneath it says what the selected one will do. The browser engine follows the sidecar's algorithms (GDAL's warp kernels and output grid for Reproject and Resample, GDAL's rasterization rules for Clip by mask layer and Zonal statistics, ContourPy's marching squares for Contour, the same IDW and kriging pipeline for Interpolation), and a parity test replays sidecar outputs against it. A few inputs stay sidecar-only, and the browser engine says so when it meets them: a Reproject target that is not an EPSG code, Mosaic inputs on different pixel grids, zonal statistics over line zones, and a kriging system that is singular (for example, duplicate sample locations). The 3D terrain analysis, Change detection and SAR tools run in the browser only.
 
 Browser interpolation also enforces a 200-million-operation work estimate,
 including point/grid comparisons and the kriging dense solve. This can limit a
@@ -282,6 +282,14 @@ on mobile; the sidecar engine requires the desktop app and its permission.
 | **Reclassify** | Map pixel value ranges onto new values. |
 | **Mosaic / merge** | Combine several rasters into one. |
 | **Focal statistics** | Compute a moving-window statistic (mean, min, max, …) over a raster. |
+
+**3D terrain analysis** (browser only)
+
+| Tool | Description |
+| --- | --- |
+| **Building shadows and sun hours** | Extrude building footprints (a GeoJSON polygon layer) by a height attribute, or by a storey count times a storey height, and simulate the sun. **Shadows at a date and time** writes 0 for lit ground, 1 for shaded ground, 2 for a lit roof and 3 for a shaded roof. **Hours of direct sun over the day** and **Clear-sky direct insolation over the day** sample the sun every few minutes from midnight to midnight and write hours of sun, or kWh/m² of direct beam on a horizontal surface, per cell. The log reports the sun's azimuth and elevation, the share of shaded ground, and the mean on open ground and on roofs. |
+
+The sun position follows the NOAA solar calculator (within about 0.05° of NREL's SPA), so enter the local **Date**, **Local time**, and **UTC offset** of the place (for example -4 for US Eastern daylight time). Ground shadows are exact on flat ground: each building's shadow is its footprint plus every wall swept `height / tan(elevation)` away from the sun, which agrees with a Shapely polygon union of the same shadows to within 0.05% of the shaded area. Roofs check their line to the sun across the height grid, so a tall tower shades the lower roofs behind it. The ground is treated as flat, and the insolation counts only clear-sky direct sun (the Meinel model); diffuse sky light and terrain are not modelled. The output is an EPSG:4326 raster at the requested **Cell size** in metres, extended by the **Ground margin** so shadows have room to fall; a run is capped at four million cells.
 
 **Change detection** (browser only; the two dates must share a pixel grid)
 

@@ -4329,6 +4329,8 @@
       "speckleFilter": "Speckle filter",
       "sarRgb": "Dual-pol RGB composite",
       "floodMap": "Flood mapping (SAR threshold)",
+      "buildingShadows": "Building shadows and sun hours",
+      "inputBuildings": "Building footprints (GeoJSON)",
       "inputBefore": "Before raster",
       "inputVv": "VV raster",
       "inputPostEvent": "Post-event raster",
@@ -4351,6 +4353,7 @@
       "downloadGeoJson": "Download GeoJSON",
       "chooseInputRaster": "Choose an input raster.",
       "chooseInputPoints": "Choose an input point layer (GeoJSON).",
+      "chooseInputGeoJson": "Choose an input GeoJSON file.",
       "invalidGeoJson": "\"{{name}}\" is not valid GeoJSON.",
       "clientOnlyHint": "This tool runs in your browser and adds the result to the map.",
       "useAddedLayer": "Use a layer on the map",
@@ -4516,6 +4519,7 @@
       "subGroupRasterToVector": "Raster to vector",
       "subGroupVectorToRaster": "Vector to raster",
       "subGroupAnalysis": "Analysis",
+      "subGroup3dTerrain": "3D terrain analysis",
       "subGroupChangeDetection": "Change detection",
       "subGroupSar": "SAR",
       "mapControls": "Map controls",
@@ -9225,10 +9229,61 @@
               "description": "With a pre-event image: how much darker a pixel must get to count as new flooding."
             }
           }
+        },
+        "building-shadows": {
+          "name": "Building shadows and sun hours",
+          "description": "Cast shadows from extruded building footprints (a height or storey-count attribute) for a date and time, or simulate a whole day: hours of direct sun, or clear-sky direct insolation (kWh/m²), on the ground and on roofs.",
+          "params": {
+            "mode": {
+              "label": "Output",
+              "options": {
+                "shadow": "Shadows at a date and time",
+                "sun-hours": "Hours of direct sun over the day",
+                "insolation": "Clear-sky direct insolation over the day (kWh/m²)"
+              }
+            },
+            "date": {
+              "label": "Date (YYYY-MM-DD)"
+            },
+            "time": {
+              "label": "Local time (HH:MM)"
+            },
+            "utc_offset": {
+              "label": "UTC offset (hours)",
+              "description": "Local time minus UTC, e.g. -4 for US Eastern daylight time or 2 for CEST."
+            },
+            "step_minutes": {
+              "label": "Time step (minutes)",
+              "description": "How often the sun position is sampled across the day."
+            },
+            "height_field": {
+              "label": "Height attribute",
+              "description": "Building height in metres."
+            },
+            "levels_field": {
+              "label": "Storeys attribute",
+              "description": "Used when a building has no height: storeys times the storey height."
+            },
+            "level_height": {
+              "label": "Storey height (m)"
+            },
+            "default_height": {
+              "label": "Default height (m)",
+              "description": "Used when a building has neither attribute."
+            },
+            "cell_size": {
+              "label": "Cell size (m)"
+            },
+            "margin": {
+              "label": "Ground margin (m)",
+              "description": "Open ground added around the buildings so their shadows have room to fall."
+            }
+          }
         }
       }
     },
     "toolGroup": {
+      "3dTerrain": "3D Terrain",
       "analysis": "Analysis",
       "changeDetection": "Change Detection",
       "clip": "Clip",

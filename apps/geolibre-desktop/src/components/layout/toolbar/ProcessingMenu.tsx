@@ -27,6 +27,7 @@ import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "../../../lib/global-dem";
 import { openObiaWorkbench } from "../../../lib/obia/obia-panel";
 import { CapabilityNotice, capabilityNoticeId, useCapabilityReason } from "./CapabilityNotice";
 import {
+  RASTER_3D_TERRAIN_TOOLS,
   RASTER_CHANGE_TOOLS,
   RASTER_SAR_TOOLS,
   VECTOR_JOIN_TOOL_COMMANDS,
@@ -755,6 +756,15 @@ export function ProcessingMenu({
                     <DropdownMenuSeparator />
                     {/* Browser-only tools: no sidecar gate, the submenu
                             trigger already carries the processing gate. */}
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {t("toolbar.item.subGroup3dTerrain")}
+                    </DropdownMenuLabel>
+                    {RASTER_3D_TERRAIN_TOOLS.map(({ kind, titleKey }) => (
+                      <DropdownMenuItem key={kind} onSelect={() => setRasterToolOpen(kind)}>
+                        {t(titleKey)}
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuSeparator />
                     <DropdownMenuLabel className="text-xs text-muted-foreground">
                       {t("toolbar.item.subGroupChangeDetection")}
                     </DropdownMenuLabel>
