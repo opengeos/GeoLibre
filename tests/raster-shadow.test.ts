@@ -466,3 +466,11 @@ describe("review hardening", () => {
     assert.ok(grid.width < 60, `a ~22 m wide building plus margins, got ${grid.width} cells`);
   });
 });
+
+describe("height attribute hygiene", () => {
+  it("reads storeys as plain numbers and clamps absurd heights", () => {
+    assert.equal(buildingHeight({ "building:levels": "3 ft" }, { default_height: 8 }), 8);
+    assert.equal(buildingHeight({ "building:levels": "4" }, {}), 12);
+    assert.equal(buildingHeight({ height: 99_999 }, {}), 1000);
+  });
+});

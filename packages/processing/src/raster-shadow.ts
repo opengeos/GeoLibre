@@ -32,9 +32,17 @@ import { clearSkyDni, localTimeToUtc, sunPosition } from "./solar-position";
  *
  * The output grid is EPSG:4326, built from the requested metre cell size with
  * the WGS84 metres-per-degree at the footprints' centre latitude
- * ({@link metersPerDegree}); over a city district the scale drifts by well
- * under 0.01%.
+ * ({@link metersPerDegree}). The east-west scale drifts by about
+ * `tan(lat) · Δlat` away from the centre: under 0.01% within 1.5 km of it at
+ * 40°, about 0.07% at the edge of a 10 km district.
  */
+
+/**
+ * Heights are clamped to this. The tallest building is about 830 m, and one
+ * bad attribute (an OSM `height=99999`) would otherwise make every roof walk
+ * run to the grid edge.
+ */
+export const MAX_BUILDING_HEIGHT_METERS = 1000;
 
 /** NoData of the shadow outputs (none of the modes leave a cell undefined). */
 export const SHADOW_NODATA = -9999;
@@ -165,22 +173,25 @@ export function buildingHeight(
   properties: Record<string, unknown> | null | undefined,
   params: BuildingShadowParams,
 ): number {
-  const read = (key: string | undefined): number | null => {
+  // External GeoJSON: only numbers and strings count. Heights accept a
+  // metre or foot unit; storey counts are unitless.
+  const read = (key: string | undefined, parse: (text: string) => number | null) => {
     if (!key || !properties) return null;
     const raw = properties[key];
-    // External GeoJSON: only numbers and strings are heights.
-    const n = typeof raw === "number" ? raw : typeof raw === "string" ? parseLength(raw) : null;
+    const n = typeof raw === "number" ? raw : typeof raw === "string" ? parse(raw) : null;
     return n != null && Number.isFinite(n) && n > 0 ? n : null;
   };
-  const h = read(params.height_field ?? "height");
-  if (h != null) return h;
-  const levels = read(params.levels_field ?? "building:levels");
+  const h = read(params.height_field ?? "height", parseLength);
+  if (h != null) return Math.min(h, MAX_BUILDING_HEIGHT_METERS);
+  const levels = read(params.levels_field ?? "building:levels", (text) =>
+    /^\s*[0-9]*\.?[0-9]+\s*$/.test(text) ? Number(text) : null,
+  );
   if (levels != null) {
     const levelHeight = params.level_height == null ? 3 : Number(params.level_height);
     if (!(Number.isFinite(levelHeight) && levelHeight > 0)) {
       throw new Error("The storey height must be greater than zero.");
     }
-    return levels * levelHeight;
+    return Math.min(levels * levelHeight, MAX_BUILDING_HEIGHT_METERS);
   }
   const fallback = Number(params.default_height ?? 10);
   return Number.isFinite(fallback) && fallback > 0 ? fallback : 10;
