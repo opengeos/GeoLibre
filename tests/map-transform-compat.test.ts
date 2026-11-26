@@ -158,6 +158,7 @@ describe("cameraAltitudeFromProjectedCamera", () => {
       ["mercator", 0, 12, 50],
       ["globe", 1, 2, 30],
       ["globe", 0, 14, 60],
+      ["globe", 0.5, 4, 20],
     ] as const) {
       const context = createCameraContext({ projection, projectionTransition: transition });
       let view = resize(createCameraViewState(), context, 1000, 600);

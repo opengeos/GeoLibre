@@ -86,7 +86,7 @@ function resolveOccludableTransform(
 function maplibreMarkedOccluded(container: HTMLElement, opacity: number | string): boolean {
   const written = container.style.opacity;
   if (written === "") return false;
-  return Number(written) === Number(opacity) || written === `${opacity}`.trim();
+  return Number(written) === Number(opacity);
 }
 
 function shouldSuppressInteraction(popup: PopupInternals): boolean {
