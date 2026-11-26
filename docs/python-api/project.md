@@ -2,6 +2,10 @@
 
 The `geolibre.project` package builds `.geolibre.json` projects and their
 layers. Every name below is also importable from `geolibre.project` directly.
+Each name is defined in one submodule, so code that monkeypatches a module
+global (in tests, say) must patch it on that submodule, for example
+`geolibre.project.fetch._assert_public_url`; patching the re-export on
+`geolibre.project` does not reach the submodule's own references.
 
 ::: geolibre.project
 
