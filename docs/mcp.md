@@ -30,7 +30,8 @@ order, for:
 2. the desktop's discovery file, `~/.geolibre/runtime/live-relay.json`
    (override with `GEOLIBRE_LIVE_RELAY_FILE`), which the app writes with
    owner-only permissions while access is on and deletes when it is turned off
-   or the app quits;
+   or the app quits normally (a file left by a crash names a dead process and
+   is ignored);
 3. on macOS, the same file inside the Mac App Store build's sandbox container,
    `~/Library/Containers/org.geolibre.desktop/Data/.geolibre/runtime/live-relay.json`;
 4. the desktop Jupyter server's connection file (port 8766).

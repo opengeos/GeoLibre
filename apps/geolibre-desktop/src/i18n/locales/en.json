@@ -363,6 +363,76 @@
     "autosaveUnavailable": "Autosave off",
     "autosaveUnavailableDetail": "Autosave is off: this browser is blocking local storage (IndexedDB), as some private windows do, so no project history or crash recovery is kept. Save the project to disk to keep your work."
   },
+  "editOutbox": {
+    "status_one": "{{count}} edit to sync",
+    "status_other": "{{count}} edits to sync",
+    "statusReview_one": "{{count}} edit needs review",
+    "statusReview_other": "{{count}} edits need review",
+    "statusOffline": "Offline",
+    "statusUnreadable": "Queued edits unreadable",
+    "title": "Pending edits",
+    "description": "Edits saved to remote sources wait here until they reach the source. They survive reloads and restarts, and sync automatically when the connection returns.",
+    "notDurable": "This browser is not keeping data between sessions, so queued edits are lost if you close or reload the page.",
+    "storageUnreadable": "Edits queued in an earlier session could not be read from this device's storage ({{error}}). They are still stored, but cannot be synced until storage is readable again; new edits are kept for this session only.",
+    "errors": {
+      "postgisNoConnection": "No PostgreSQL connection is available for this table. Reconnect in Add data > PostgreSQL, then sync again."
+    },
+    "offlineNotice": "You are offline. Queued edits sync automatically when the connection returns.",
+    "empty": "No edits are waiting to sync.",
+    "counts": "{{inserted}} new, {{updated}} changed, {{deleted}} deleted",
+    "backend": {
+      "postgis": "PostGIS",
+      "arcgis": "ArcGIS",
+      "geolens": "GeoLens",
+      "geopackage": "GeoPackage"
+    },
+    "entryStatus": {
+      "pending": "Waiting to sync",
+      "syncing": "Syncing…",
+      "conflict": "Needs review",
+      "error": "Failed"
+    },
+    "nextRetry": "next retry at {{time}}",
+    "lastError": "Last error: {{error}}",
+    "syncNow": "Sync now",
+    "review_one": "Review {{count}} conflict",
+    "review_other": "Review {{count}} conflicts",
+    "discard": "Discard",
+    "discardConfirm": "Discard these queued edits? The source keeps its current data.",
+    "conflictsTitle": "Review conflicts: {{target}}",
+    "conflictsDescription": "These features also changed on the source after you loaded them. Choose which version to keep for each one. Features you decide later stay queued.",
+    "conflictReason": {
+      "remoteChanged": "Changed on the source",
+      "remoteDeleted": "Deleted on the source"
+    },
+    "feature": "Feature {{key}}",
+    "mineDeleted": "You deleted this feature.",
+    "theirsDeleted": "The source no longer has this feature. Keeping yours adds it again.",
+    "attribute": "Attribute",
+    "mine": "Mine",
+    "theirs": "Source",
+    "geometryDiffers": "The shape or position differs.",
+    "keepMine": "Keep mine",
+    "keepMineDelete": "Delete it anyway",
+    "keepTheirs": "Keep source",
+    "skip": "Decide later",
+    "allMine": "Keep all mine",
+    "allTheirs": "Keep all from source",
+    "apply_one": "Apply {{count}} choice and sync",
+    "apply_other": "Apply {{count}} choices and sync",
+    "back": "Back",
+    "save": {
+      "synced": "Synced to {{target}}: {{inserted}} inserted, {{updated}} updated, {{deleted}} deleted.",
+      "conflicts_one": "{{count}} feature also changed on the source; review it under Pending edits in the status bar.",
+      "conflicts_other": "{{count}} features also changed on the source; review them under Pending edits in the status bar.",
+      "queued_one": "{{target}} cannot be reached, so {{count}} edit is queued and syncs automatically when it is back. {{error}}",
+      "queued_other": "{{target}} cannot be reached, so {{count}} edits are queued and sync automatically when it is back. {{error}}",
+      "failed": "Could not sync to {{target}}. The edits stay queued under Pending edits in the status bar. {{error}}",
+      "busy": "A sync to {{target}} is already running. Try again when it finishes.",
+      "noChanges": "No changes to save to {{target}}.",
+      "reloaded": "The layer was reloaded from the table, because the last sync could not refresh it. Check it and save again."
+    }
+  },
   "fileNamePrompt": {
     "title": "Save file as",
     "description": "Enter a file name. The file downloads to your browser's downloads folder.",
@@ -4337,6 +4407,8 @@
       "floodMap": "Flood mapping (SAR threshold)",
       "cutFill": "Cut and fill volume",
       "inputExistingSurface": "Existing surface",
+      "buildingShadows": "Building shadows and sun hours",
+      "inputBuildings": "Building footprints (GeoJSON)",
       "inputBefore": "Before raster",
       "inputVv": "VV raster",
       "inputPostEvent": "Post-event raster",
@@ -4359,6 +4431,7 @@
       "downloadGeoJson": "Download GeoJSON",
       "chooseInputRaster": "Choose an input raster.",
       "chooseInputPoints": "Choose an input point layer (GeoJSON).",
+      "chooseInputGeoJson": "Choose an input GeoJSON file.",
       "invalidGeoJson": "\"{{name}}\" is not valid GeoJSON.",
       "clientOnlyHint": "This tool runs in your browser and adds the result to the map.",
       "useAddedLayer": "Use a layer on the map",
@@ -9272,6 +9345,56 @@
                 "ft": "Feet",
                 "us-ft": "US survey feet"
               }
+            }
+          }
+        },
+        "building-shadows": {
+          "name": "Building shadows and sun hours",
+          "description": "Cast shadows from extruded building footprints (a height or storey-count attribute) for a date and time, or simulate a whole day: hours of direct sun, or clear-sky direct insolation (kWh/m²), on the ground and on roofs.",
+          "params": {
+            "mode": {
+              "label": "Output",
+              "options": {
+                "shadow": "Shadows at a date and time",
+                "sun-hours": "Hours of direct sun over the day",
+                "insolation": "Clear-sky direct insolation over the day (kWh/m²)"
+              }
+            },
+            "date": {
+              "label": "Date (YYYY-MM-DD)"
+            },
+            "time": {
+              "label": "Local time (HH:MM)"
+            },
+            "utc_offset": {
+              "label": "UTC offset (hours)",
+              "description": "Local time minus UTC, e.g. -4 for US Eastern daylight time or 2 for CEST."
+            },
+            "step_minutes": {
+              "label": "Time step (minutes)",
+              "description": "How often the sun position is sampled across the day."
+            },
+            "height_field": {
+              "label": "Height attribute",
+              "description": "Building height in metres."
+            },
+            "levels_field": {
+              "label": "Storeys attribute",
+              "description": "Used when a building has no height: storeys times the storey height."
+            },
+            "level_height": {
+              "label": "Storey height (m)"
+            },
+            "default_height": {
+              "label": "Default height (m)",
+              "description": "Used when a building has neither attribute."
+            },
+            "cell_size": {
+              "label": "Cell size (m)"
+            },
+            "margin": {
+              "label": "Ground margin (m)",
+              "description": "Open ground added around the buildings so their shadows have room to fall."
             }
           }
         }

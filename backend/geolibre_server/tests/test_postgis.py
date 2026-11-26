@@ -172,7 +172,8 @@ def test_nested_dbname_cannot_redirect_the_connection(monkeypatch) -> None:
     )
     with pytest.raises(HTTPException) as exc:
         postgis_tables(request)
-    assert exc.value.status_code == 400
+    # Port 1 on loopback refuses the connection: unreachable, reported as 503.
+    assert exc.value.status_code == 503
     assert "192.0.2.9" not in str(exc.value.detail)
 
 
@@ -192,8 +193,77 @@ def test_connect_failure_does_not_leak_password(monkeypatch) -> None:
     )
     with pytest.raises(HTTPException) as exc:
         postgis_read(request)
-    assert exc.value.status_code == 400
+    # Nothing listens on port 1: the server is unreachable, not refusing.
+    assert exc.value.status_code == 503
     assert "sekretpw" not in str(exc.value.detail)
+
+
+@requires_psycopg
+def test_connect_refusal_by_the_server_stays_a_client_error(monkeypatch) -> None:
+    import geolibre_server.app.postgis as postgis_module
+
+    def refuse(*_args, **_kwargs):
+        # A server with a localized lc_messages translates its own wording.
+        raise psycopg.OperationalError(
+            'connection failed: connection to server at "db", port 5432 failed: '
+            'FATAL:  Passwort-Authentifizierung für Benutzer "alice" fehlgeschlagen'
+        )
+
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "*")
+    monkeypatch.setattr(postgis_module._import_psycopg(), "connect", refuse)
+    with pytest.raises(HTTPException) as exc:
+        postgis_read(PostgisReadRequest(connection="postgresql://alice@db/x", table="t"))
+    assert exc.value.status_code == 400
+
+
+@requires_psycopg
+def test_write_still_refuses_an_empty_direct_save() -> None:
+    # No hashes (the direct save), or a hash missing for one deleted row.
+    for hashes in (None, {"1": "a"}):
+        request = PostgisWriteRequest(
+            connection="postgresql://localhost/ignored",
+            table=TABLE,
+            geojson=_collection([]),
+            baseline_keys=[1, 2],
+            expected_row_hashes=hashes,
+        )
+        with pytest.raises(HTTPException) as exc:
+            postgis_write(request)
+        assert exc.value.status_code == 400
+
+
+def test_server_not_ready_is_retryable() -> None:
+    from geolibre_server.app.postgis import _is_transport_failure
+
+    assert _is_transport_failure("FATAL:  the database system is starting up")
+    assert _is_transport_failure("FATAL:  sorry, too many clients already")
+    assert not _is_transport_failure('FATAL:  password authentication failed for user "a"')
+
+
+@requires_psycopg
+def test_write_allows_a_delete_only_change_set(monkeypatch) -> None:
+    import geolibre_server.app.postgis as postgis_module
+
+    reached: list[str] = []
+
+    def connect(*_args, **_kwargs):
+        reached.append("connect")
+        raise psycopg.OperationalError("connection failed: timeout expired")
+
+    monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "*")
+    monkeypatch.setattr(postgis_module._import_psycopg(), "connect", connect)
+    request = PostgisWriteRequest(
+        connection="postgresql://alice@db/x",
+        table=TABLE,
+        geojson=_collection([]),
+        baseline_keys=[1, 2],
+        expected_row_hashes={"1": "a", "2": "b"},
+    )
+    with pytest.raises(HTTPException) as exc:
+        postgis_write(request)
+    # Validation let the empty payload through to the connection attempt.
+    assert reached == ["connect"]
+    assert exc.value.status_code == 503
 
 
 @requires_psycopg
@@ -632,6 +702,58 @@ def test_write_diffs_correctly_with_uuid_primary_key(live_table) -> None:
             with conn.cursor() as cur:
                 cur.execute(f"DROP TABLE IF EXISTS {table}")
             conn.commit()
+
+
+@requires_live_postgis
+def test_partial_change_set_deletes_only_listed_rows(live_table) -> None:
+    """The offline edit outbox sends only changed rows with a delete-only baseline."""
+    read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
+    features = read["geojson"]["features"]
+    doomed = features[0]["properties"]["gid"]
+    result = postgis_write(
+        PostgisWriteRequest(
+            connection=LIVE_DSN,
+            table=TABLE,
+            geojson=_collection([]),
+            baseline_keys=[doomed],
+            expected_row_hashes={str(doomed): read["row_hashes"][str(doomed)]},
+        )
+    )
+    assert result["deleted"] == 1
+    remaining = {row[0] for row in _rows(f"SELECT gid FROM {TABLE}")}
+    # Rows absent from the (empty) payload but not in the baseline survive.
+    assert remaining == {f["properties"]["gid"] for f in features[1:]}
+
+
+@requires_live_postgis
+def test_stale_row_hash_rolls_back_the_change_set(live_table) -> None:
+    """A row changed since the read fails the whole write with 409."""
+    read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
+    first, second = read["geojson"]["features"][:2]
+    with psycopg.connect(LIVE_DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"UPDATE {TABLE} SET name = 'Theirs' WHERE gid = %s",
+                (first["properties"]["gid"],),
+            )
+        conn.commit()
+    mine_first = {**first, "properties": {**first["properties"], "name": "Mine"}}
+    mine_second = {**second, "properties": {**second["properties"], "name": "Mine too"}}
+    keys = [str(f["properties"]["gid"]) for f in (first, second)]
+    with pytest.raises(HTTPException) as exc:
+        postgis_write(
+            PostgisWriteRequest(
+                connection=LIVE_DSN,
+                table=TABLE,
+                geojson=_collection([mine_first, mine_second]),
+                baseline_keys=[],
+                expected_row_hashes={key: read["row_hashes"][key] for key in keys},
+            )
+        )
+    assert exc.value.status_code == 409
+    names = {row[0] for row in _rows(f"SELECT name FROM {TABLE}")}
+    assert "Theirs" in names
+    assert "Mine too" not in names
 
 
 @requires_live_postgis

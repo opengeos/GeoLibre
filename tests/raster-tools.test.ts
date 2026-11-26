@@ -27,6 +27,7 @@ const EXPECTED_IDS = [
   "sar-rgb",
   "flood-map",
   "cut-fill",
+  "building-shadows",
 ];
 
 describe("raster tools registry", () => {

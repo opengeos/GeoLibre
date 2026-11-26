@@ -62,6 +62,7 @@ nav:
       - Attribute Table: user-guide/attribute-table.md
       - Map Controls & Tools: user-guide/map-controls.md
       - GPS Tracking & Field Collection: user-guide/field-collection.md
+      - Offline Edit Sync: user-guide/offline-edit-sync.md
       - Print Layout: user-guide/print-layout.md
       - Processing Tools: user-guide/processing.md
       - Model Builder: user-guide/model-builder.md

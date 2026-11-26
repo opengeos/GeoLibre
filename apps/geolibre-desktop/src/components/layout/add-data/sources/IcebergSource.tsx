@@ -34,6 +34,15 @@ interface IcebergConnection {
   endpoint: string;
 }
 
+/** The DuckDB-backed Iceberg reader this source drives. */
+export type IcebergRuntime = Pick<
+  typeof import("../../../../lib/iceberg-loader"),
+  "listIcebergTables" | "inspectIcebergTable" | "loadIcebergTable"
+>;
+
+/** Load the Iceberg reader on first use, so DuckDB stays out of the dialog chunk. */
+const loadIcebergRuntime = (): Promise<IcebergRuntime> => import("../../../../lib/iceberg-loader");
+
 /**
  * Add Data source for Apache Iceberg tables, read through DuckDB's `iceberg`
  * extension with `spatial` turning the geometry column into features.
@@ -46,7 +55,12 @@ interface IcebergConnection {
  * results is a snapshot and is never re-scanned on a timer — see
  * `supportsAutoRefresh` in lib/layer-refresh.ts.
  */
-export function IcebergSource() {
+export function IcebergSource({
+  loadRuntime = loadIcebergRuntime,
+}: {
+  /** Supplies the Iceberg reader; tests pass one that needs no DuckDB. */
+  loadRuntime?: () => Promise<IcebergRuntime>;
+}) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.iceberg.defaultName"));
   const [mode, setMode] = useState<IcebergMode>("table");
@@ -176,7 +190,7 @@ export function IcebergSource() {
   ) => {
     if (connection.mode === "catalog" && !table) return;
     setStatus(t("addData.iceberg.statusInspecting"));
-    const { inspectIcebergTable } = await import("../../../../lib/iceberg-loader");
+    const { inspectIcebergTable } = await loadRuntime();
     const info = await inspectIcebergTable({
       mode: connection.mode,
       location: connection.location,
@@ -266,7 +280,7 @@ export function IcebergSource() {
         endpoint: mode === "catalog" ? normalizedEndpoint : "",
       };
       setStatus(t("addData.iceberg.statusConnecting"));
-      const { listIcebergTables } = await import("../../../../lib/iceberg-loader");
+      const { listIcebergTables } = await loadRuntime();
       const listed = await listIcebergTables({
         mode: connection.mode,
         location: connection.location,
@@ -334,7 +348,7 @@ export function IcebergSource() {
     if (!config) {
       throw new Error(t("addData.iceberg.errorConnectFirst"));
     }
-    const { loadIcebergTable } = await import("../../../../lib/iceberg-loader");
+    const { loadIcebergTable } = await loadRuntime();
     const result = await loadIcebergTable(config);
     const name = source.layerName.trim() || selectedTable?.name || t("addData.iceberg.defaultName");
     const layer = {

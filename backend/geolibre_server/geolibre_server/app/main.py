@@ -15,13 +15,10 @@ import os
 import signal
 import threading
 import time
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .. import __version__
@@ -39,8 +36,6 @@ from .obia import router as obia_router
 from .pointcloud import router as pointcloud_router
 from .postgis import router as postgis_router
 from .raster import router as raster_router
-from .relay import RELAY_CLIENT_PATHS, remove_discovery_file
-from .relay import router as relay_router
 from .sql import router as sql_router
 from .tenant import (
     is_multi_tenant_enabled,
@@ -70,16 +65,7 @@ _SIDECAR_TOKEN_BYTES = SIDECAR_TOKEN.encode("utf-8")
 _TOKEN_EXEMPT_PATHS = frozenset({"/health"})
 
 
-@asynccontextmanager
-async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Remove discovery state on shutdown without blocking the HTTP event loop."""
-    try:
-        yield
-    finally:
-        await run_in_threadpool(remove_discovery_file)
-
-
-app = FastAPI(title="GeoLibre Server", version=__version__, lifespan=_lifespan)
+app = FastAPI(title="GeoLibre Server", version=__version__)
 app.add_exception_handler(MssqlWriteRolledBack, mssql_write_rolled_back_handler)
 
 
@@ -96,9 +82,6 @@ async def require_sidecar_token(request: Request, call_next):
         SIDECAR_TOKEN
         and request.method != "OPTIONS"
         and request.url.path not in _TOKEN_EXEMPT_PATHS
-        # The Live MCP relay's client endpoints check their own, narrower
-        # token (app/relay.py), so an MCP client never holds this one.
-        and request.url.path not in RELAY_CLIENT_PATHS
     ):
         provided = request.headers.get("x-geolibre-token", "")
         if not provided:
@@ -178,7 +161,6 @@ app.include_router(sql_router)
 app.include_router(pointcloud_router)
 app.include_router(ml_router)
 app.include_router(obia_router)
-app.include_router(relay_router)
 
 
 @app.get("/health")

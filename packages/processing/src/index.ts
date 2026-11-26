@@ -267,6 +267,17 @@ export {
   type CutFillSummary,
 } from "./raster-volume";
 export {
+  buildHeightGrid,
+  buildingHeight,
+  buildingShadows,
+  castShadows,
+  MAX_SHADOW_CELLS,
+  SHADOW_NODATA,
+  type BuildingShadowParams,
+  type HeightGrid,
+} from "./raster-shadow";
+export { clearSkyDni, localTimeToUtc, sunPosition, type SunPosition } from "./solar-position";
+export {
   sarDbConvert,
   speckleFilter,
   dualPolRgb,
@@ -436,6 +447,7 @@ export {
   type ReadPostgisTableResult,
   type WritePostgisTableRequest,
   type WritePostgisTableResult,
+  PostgisRequestError,
   PostgisWriteRejectedError,
   type MssqlAuthMethod,
   type MssqlStatus,

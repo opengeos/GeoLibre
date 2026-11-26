@@ -8,6 +8,7 @@ import { OnboardingDialog } from "./components/layout/OnboardingDialog";
 import { RegionalBasemapPrompt } from "./components/layout/RegionalBasemapPrompt";
 import { UpdateNotificationModal } from "./components/layout/UpdateNotificationModal";
 import { useDesktopSettingsPersistence } from "./hooks/useDesktopSettings";
+import { useEditOutboxRunner } from "./hooks/useEditOutboxRunner";
 import "./lib/s3-signer-setup";
 import { useLayoutOptions } from "./hooks/useLayoutOptions";
 import { useMapCrsUrl } from "./hooks/useMapCrsUrl";
@@ -69,6 +70,7 @@ export default function App() {
   useUndoRedoShortcuts();
   useBeforeUnloadGuard();
   useWhiteboxToolUrl();
+  useEditOutboxRunner();
   return (
     <DirectionProvider dir={languageDirection(i18n.language)}>
       {restoringStartupProject ? (
