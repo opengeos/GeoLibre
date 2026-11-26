@@ -15,6 +15,7 @@ import {
   type SyncOutcome,
 } from "../apps/geolibre-desktop/src/lib/edit-sync/edit-outbox";
 import {
+  editSessionToken,
   enqueueChangeSet,
   flushDueOutboxEntries,
   isOutboxEntrySyncing,
@@ -205,6 +206,30 @@ describe("edit outbox runner", () => {
       ["2", "1"],
     );
     assert.ok(!rec.log.includes("remove:postgis:t"));
+  });
+
+  it("drops edits undone in the same layer load, keeps them across loads", async () => {
+    const session = editSessionToken("layer-1", 3);
+    await enqueueChangeSet({ ...input([updateOp("a", "1"), updateOp("b", "2")]), session });
+    // Same load: feature 1 was reverted, so only feature 2 is still edited.
+    await enqueueChangeSet({ ...input([updateOp("c", "2")]), session });
+    assert.deepEqual(
+      getOutboxEntry("postgis:t")!.ops.map((op) => op.key),
+      ["2"],
+    );
+    // Same load, everything undone: the entry goes.
+    await enqueueChangeSet({ ...input([]), session });
+    assert.equal(getOutboxEntry("postgis:t"), undefined);
+
+    await enqueueChangeSet({ ...input([updateOp("d", "1")]), session });
+    // A later load (new project generation) lacks the queued edit to feature 1.
+    const later = editSessionToken("layer-1", 4);
+    assert.notEqual(later, session);
+    await enqueueChangeSet({ ...input([updateOp("e", "2")]), session: later });
+    assert.deepEqual(
+      getOutboxEntry("postgis:t")!.ops.map((op) => op.key),
+      ["2", "1"],
+    );
   });
 
   it("syncs through the registered backend, persists progress, and runs afterSync", async () => {

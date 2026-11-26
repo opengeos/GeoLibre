@@ -91,6 +91,12 @@ export interface OutboxEntry {
   targetLabel: string;
   /** The layer the edits were made on, if it is still open. */
   layerId: string;
+  /**
+   * Which load of the layer the queued operations came from (app run,
+   * project, layer). A newer change set from the same load is the whole truth;
+   * one from a later load may lack edits it never had.
+   */
+  session?: string;
   layerName: string;
   ops: OutboxOp[];
   status: OutboxEntryStatus;
@@ -610,23 +616,32 @@ export function applyConflictResolutions(
 /**
  * Merge a newer change set for the same target into a queued entry.
  *
- * The newer change set wins for every feature it mentions. Queued operations
- * it does not mention are **kept**: the layer may have been reopened without
- * them (a restart before the project was saved), and their edits never
- * reached the source, so only a sync or an explicit Discard may drop them. A
- * queued insert is matched to a newer one by content, so the same drawn
- * feature is not queued twice. Two things carry over to a newer operation:
- * the feature's **older** base fingerprint (the layer may have been re-based
- * onto the server's version after a partial sync, and comparing against that
- * would hide a conflict still under review), and the dedupe flag of an insert
- * already sent with an unknown outcome.
+ * The newer change set wins for every feature it mentions, carrying over the
+ * feature's **older** base fingerprint (the layer may have been re-based onto
+ * the server's version after a partial sync, and comparing against that would
+ * hide a conflict still under review) and the dedupe flag of an insert already
+ * sent with an unknown outcome.
+ *
+ * What happens to queued operations it does not mention depends on where it
+ * came from. From the **same load** of the layer, the newer change set is the
+ * whole truth: an edit missing from it was undone (a drawn feature deleted, a
+ * value reverted), so it is dropped. From a **later load** (a restart or a
+ * reopened project), the layer may simply never have had those edits, which
+ * never reached the source, so they are kept until a sync or a Discard.
+ * Uncertain inserts are always kept: they may already be on the server.
  *
  * @param queued The entry already in the outbox.
  * @param ops The newer change set.
  * @param at Timestamp of the merge.
+ * @param sameSession Whether both change sets come from the same layer load.
  * @returns The merged entry, reset to pending.
  */
-export function mergeChangeSet(queued: OutboxEntry, ops: OutboxOp[], at: number): OutboxEntry {
+export function mergeChangeSet(
+  queued: OutboxEntry,
+  ops: OutboxOp[],
+  at: number,
+  sameSession = false,
+): OutboxEntry {
   const olderBase = new Map<string, string>();
   for (const op of queued.ops) {
     if (op.key !== null && op.baseFingerprint !== undefined) {
@@ -641,7 +656,7 @@ export function mergeChangeSet(queued: OutboxEntry, ops: OutboxOp[], at: number)
   const claimed = new Set<number>();
   for (const op of queued.ops) {
     if (op.key !== null) {
-      if (!newerKeys.has(op.key)) merged.push(op);
+      if (!newerKeys.has(op.key) && !sameSession) merged.push(op);
       continue;
     }
     // A keyless insert: the newer change set holds it again if the feature is still there.
@@ -653,7 +668,7 @@ export function mergeChangeSet(queued: OutboxEntry, ops: OutboxOp[], at: number)
         candidate.mineFingerprint === op.mineFingerprint,
     );
     if (twin < 0) {
-      merged.push(op);
+      if (!sameSession || op.maybeApplied) merged.push(op);
       continue;
     }
     claimed.add(twin);

@@ -92,7 +92,18 @@ class FakeSidecar {
     }
     let inserted = 0;
     let updated = 0;
-    for (const feature of request.geojson.features) {
+    // PostGIS serves coordinates with 9 decimals (ST_AsGeoJSON's default).
+    const stored = (feature: Feature): Feature => {
+      const round = (v: unknown): unknown =>
+        typeof v === "number" ? Math.round(v * 1e9) / 1e9 : Array.isArray(v) ? v.map(round) : v;
+      const geometry = feature.geometry as { type: string; coordinates: unknown };
+      return {
+        ...structuredClone(feature),
+        geometry: { ...geometry, coordinates: round(geometry.coordinates) } as Feature["geometry"],
+      };
+    };
+    for (const raw of request.geojson.features) {
+      const feature = stored(raw);
       const key = feature.properties?.gid ?? feature.id;
       if (typeof key === "number" && this.rows.has(key)) {
         this.rows.set(key, { ...structuredClone(feature), id: key });
@@ -295,6 +306,52 @@ describe("PostGIS sync adapter", () => {
     assert.equal(retry.kind, "synced");
     assert.equal(retry.alreadyApplied, 1);
     assert.equal(sidecar.rows.size, 2, "the insert must not land twice");
+  });
+
+  it("matches a landed edit despite PostGIS rounding coordinates to 9 decimals", async () => {
+    const sidecar = new FakeSidecar();
+    sidecar.rows.set(1, row(1, 1, "a"));
+    const layer = loadLayer(sidecar);
+    const drawn = {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [-83.912345678912, 35.955555555555] },
+      properties: { name: "precise" },
+    } as Feature;
+    const moved = {
+      ...row(1, 1, "a"),
+      geometry: { type: "Point", coordinates: [1.123456789123, 1] },
+    } as Feature;
+    const entry = entryFor(layer, [moved, drawn]);
+    const adapter = adapterFor(sidecar, entry);
+    sidecar.loseWriteResponse = true;
+    const lost = await syncOutboxEntry(entry, adapter);
+    assert.equal(lost.kind, "offline");
+    const retry = await syncOutboxEntry(lost.entry!, adapter);
+    // Neither a false conflict on the moved row nor a second insert.
+    assert.equal(retry.kind, "synced");
+    assert.equal(retry.alreadyApplied, 2);
+    assert.equal(sidecar.rows.size, 2);
+  });
+
+  it("never treats a drawn feature's editor id as a table key", () => {
+    const sidecar = new FakeSidecar();
+    sidecar.rows.set(5, row(5, 5, "five"));
+    const layer = loadLayer(sidecar);
+    const drawn = {
+      type: "Feature",
+      id: 5,
+      geometry: { type: "Point", coordinates: [9, 9] },
+      properties: { name: "drawn" },
+    } as Feature;
+    const ops = buildPostgisChangeSet(layer, {
+      type: "FeatureCollection",
+      features: [row(5, 5, "five"), drawn],
+    })!;
+    assert.deepEqual(
+      ops.map((op) => [op.kind, op.key]),
+      [["insert", null]],
+    );
+    assert.equal(ops[0].feature!.id, undefined, "the editor id is not sent as a key");
   });
 
   it("maps refusals to errors and a 503 write to a retry", async () => {

@@ -82,6 +82,23 @@ export function isOutboxEntrySyncing(id: string): boolean {
   return inFlight.has(id);
 }
 
+/** Identifies this run of the app, for {@link editSessionToken}. */
+const APP_RUN =
+  typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+
+/**
+ * A token for one load of a layer: this app run, this project, this layer.
+ * Change sets with equal tokens come from the same in-memory layer, so a
+ * feature missing from the newer one was undone rather than never loaded.
+ *
+ * @param layerId The layer.
+ * @param projectGeneration The store's project generation.
+ * @returns The token.
+ */
+export function editSessionToken(layerId: string, projectGeneration: number): string {
+  return `${APP_RUN}:${projectGeneration}:${layerId}`;
+}
+
 /** Input for {@link enqueueChangeSet}. */
 export interface EnqueueInput {
   id: string;
@@ -91,6 +108,8 @@ export interface EnqueueInput {
   layerId: string;
   layerName: string;
   ops: OutboxOp[];
+  /** See {@link editSessionToken}. */
+  session?: string;
 }
 
 /** Result of {@link enqueueChangeSet}. */
@@ -117,15 +136,24 @@ export async function enqueueChangeSet(
   const at = now();
   // Merge with the stored entry: another tab may have changed it.
   const queued = await reloadOutboxEntry(input.id);
+  const sameSession =
+    queued !== undefined && input.session !== undefined && queued.session === input.session;
   if (input.ops.length === 0) {
-    // Nothing new to send. A queued entry is kept: its edits never reached
-    // the source, and the layer may simply have been reloaded without them.
-    // Only a successful sync or an explicit Discard removes it.
+    // Nothing new to send. From the same load of the layer that means the
+    // queued edits were undone, so they go (except inserts that may already be
+    // on the server). From a later load the layer may never have had them, so
+    // the entry stays until a sync or a Discard.
+    if (queued && sameSession) {
+      const merged = mergeChangeSet(queued, [], at, true);
+      if (merged.ops.length === 0) await removeOutboxEntry(input.id);
+      else await putOutboxEntry(merged);
+    }
     return { kind: "empty" };
   }
   const entry: OutboxEntry = queued
     ? {
-        ...mergeChangeSet(queued, input.ops, at),
+        ...mergeChangeSet(queued, input.ops, at, sameSession),
+        session: input.session,
         target: input.target,
         targetLabel: input.targetLabel,
         layerId: input.layerId,

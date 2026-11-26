@@ -38,7 +38,8 @@ export function EditOutboxStatus({ compact = false }: { compact?: boolean }) {
     (entry) => entry.status === "conflict" || entry.status === "error",
   );
 
-  if (pending === 0 && online) {
+  const unreadable = Boolean(snapshot.storageError);
+  if (pending === 0 && online && !unreadable) {
     // Keep the dialog mounted while open so the last sync's result can close it.
     return open ? (
       <EditOutboxDialog
@@ -54,11 +55,13 @@ export function EditOutboxStatus({ compact = false }: { compact?: boolean }) {
 
   const label =
     pending === 0
-      ? t("editOutbox.statusOffline")
+      ? unreadable
+        ? t("editOutbox.statusUnreadable")
+        : t("editOutbox.statusOffline")
       : needsReview
         ? t("editOutbox.statusReview", { count: pending })
         : t("editOutbox.status", { count: pending });
-  const Icon = needsReview ? AlertTriangle : online ? CloudUpload : CloudOff;
+  const Icon = needsReview || unreadable ? AlertTriangle : online ? CloudUpload : CloudOff;
 
   return (
     <>
@@ -67,7 +70,7 @@ export function EditOutboxStatus({ compact = false }: { compact?: boolean }) {
         data-testid="edit-outbox-status"
         className={cn(
           "inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent hover:text-accent-foreground",
-          needsReview && "text-amber-700 dark:text-amber-300",
+          (needsReview || unreadable) && "text-amber-700 dark:text-amber-300",
         )}
         title={t("editOutbox.title")}
         onClick={() => setOpen(true)}

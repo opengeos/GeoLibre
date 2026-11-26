@@ -42,6 +42,7 @@ import {
 import { participantCanEditLayer } from "./collab-protocol";
 import { databaseBaselineKeys, databaseFeatureKeys } from "./database-tables";
 import { embedEditedGeometry, hasEditedGeometry } from "./edited-geometry-save";
+import { editSessionToken } from "./edit-sync/edit-outbox-runner";
 import { saveThroughOutbox } from "./edit-sync/outbox-save";
 import { ensureEditSyncBackends } from "./edit-sync/register-backends";
 import {
@@ -628,6 +629,7 @@ export async function writeLayerEditsToSource(
             layerId: layer.id,
             layerName: layer.name,
             ops,
+            session: editSessionToken(layer.id, requestProjectGeneration),
           },
           t,
         );

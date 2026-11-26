@@ -369,6 +369,7 @@
     "statusReview_one": "{{count}} edit needs review",
     "statusReview_other": "{{count}} edits need review",
     "statusOffline": "Offline",
+    "statusUnreadable": "Queued edits unreadable",
     "title": "Pending edits",
     "description": "Edits saved to remote sources wait here until they reach the source. They survive reloads and restarts, and sync automatically when the connection returns.",
     "notDurable": "This browser is not keeping data between sessions, so queued edits are lost if you close or reload the page.",

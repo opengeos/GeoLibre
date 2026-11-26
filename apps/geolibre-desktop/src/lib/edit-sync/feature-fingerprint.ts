@@ -72,6 +72,28 @@ export interface FingerprintOptions {
    * inserted row can be matched to its local feature before it had a key.
    */
   omitProperties?: readonly string[];
+  /**
+   * Round coordinates to this many decimals before hashing, to match a source
+   * that stores or serves fewer digits than a drawn vertex carries (PostGIS's
+   * `ST_AsGeoJSON` writes 9), so the stored copy of my edit still matches it.
+   */
+  coordinateDecimals?: number;
+}
+
+/** Round every number in a GeoJSON geometry's coordinates. */
+function roundGeometry(geometry: unknown, decimals: number): unknown {
+  const factor = 10 ** decimals;
+  const round = (value: unknown): unknown => {
+    if (typeof value === "number") return Math.round(value * factor) / factor;
+    if (Array.isArray(value)) return value.map(round);
+    return value;
+  };
+  if (!geometry || typeof geometry !== "object") return geometry;
+  const record = geometry as Record<string, unknown>;
+  if (Array.isArray(record.geometries)) {
+    return { ...record, geometries: record.geometries.map((g) => roundGeometry(g, decimals)) };
+  }
+  return "coordinates" in record ? { ...record, coordinates: round(record.coordinates) } : record;
 }
 
 /**
@@ -96,7 +118,11 @@ export function featureFingerprint(
     if (omit.has(key) || isInternalProperty(key)) continue;
     properties[key] = value;
   }
-  return hashText(canonicalJson({ g: feature.geometry ?? null, p: properties }));
+  const geometry =
+    options.coordinateDecimals === undefined
+      ? (feature.geometry ?? null)
+      : roundGeometry(feature.geometry ?? null, options.coordinateDecimals);
+  return hashText(canonicalJson({ g: geometry, p: properties }));
 }
 
 /** The string key a feature carries in its GeoJSON `id`, or null. */

@@ -26,8 +26,18 @@ changed since the layer was loaded (new, changed and deleted features) and only
 sends those features.
 
 Saving again while edits are still queued replaces the queued version of every
-feature the new save touches. Queued edits to other features are kept, even if
-the layer was reopened without them, until they sync or you discard them.
+feature the new save touches. If you undid a queued edit in the same session
+(deleted a feature you drew, or put a value back), the new save drops it from
+the queue. After a restart or reopening the project, GeoLibre cannot tell an
+undone edit from one the reopened layer simply never had, so queued edits to
+features the new save does not touch are kept until they sync or you discard
+them in **Pending edits**.
+
+For a PostGIS table, each sync attempt reads the whole table to compare rows,
+plus once more to refresh the layer afterwards. That is cheap for typical
+editable layers but grows with the table (editable layers are capped by
+`GEOLIBRE_DB_MAX_FEATURES`, one million rows by default), so very large tables
+are better edited through smaller views.
 
 The save then reports one of four results:
 

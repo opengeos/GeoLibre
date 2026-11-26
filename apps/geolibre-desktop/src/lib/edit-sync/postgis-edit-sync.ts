@@ -71,9 +71,26 @@ export interface PostgisOutboxTarget {
   capabilities?: { create: boolean; update: boolean; delete: boolean };
 }
 
+/**
+ * Decimals PostGIS serves coordinates with (`ST_AsGeoJSON`'s default). Every
+ * fingerprint on this path rounds to it, so a drawn vertex with more digits
+ * still matches the row the table stores once my edit landed.
+ */
+const POSTGIS_COORDINATE_DECIMALS = 9;
+
+/** Fingerprint a feature the way every PostGIS comparison does. */
+export function postgisFingerprint(feature: Feature, omitProperties?: readonly string[]): string {
+  return featureFingerprint(feature, {
+    coordinateDecimals: POSTGIS_COORDINATE_DECIMALS,
+    ...(omitProperties ? { omitProperties } : {}),
+  });
+}
+
 /** Base fingerprints of a PostGIS read, for `metadata.editSyncBaseline`. */
 export function postgisSyncBaseline(geojson: FeatureCollection): Record<string, string> {
-  return captureFingerprintBaseline(geojson.features);
+  return captureFingerprintBaseline(geojson.features, featureIdKey, {
+    coordinateDecimals: POSTGIS_COORDINATE_DECIMALS,
+  });
 }
 
 /**
@@ -123,11 +140,13 @@ export function hasPostgisSyncBaseline(layer: GeoLibreLayer): boolean {
 /** A feature's primary key, preferring the key column over `feature.id`. */
 function postgisKeyOf(primaryKey: string) {
   return (feature: Feature): string | null => {
+    // Only the key column identifies a row: every row read from the table
+    // carries it, while a drawn feature's editor id could collide with a key.
     const value = feature.properties?.[primaryKey];
     if (typeof value === "number" || (typeof value === "string" && value !== "")) {
       return String(value);
     }
-    return featureIdKey(feature);
+    return null;
   };
 }
 
@@ -135,9 +154,7 @@ function postgisRawKeyOf(primaryKey: string) {
   return (feature: Feature): string | number | undefined => {
     const value = feature.properties?.[primaryKey];
     if (typeof value === "number" || (typeof value === "string" && value !== "")) return value;
-    return typeof feature.id === "number" || typeof feature.id === "string"
-      ? feature.id
-      : undefined;
+    return undefined;
   };
 }
 
@@ -166,6 +183,7 @@ export function buildPostgisChangeSet(
     keyOf: postgisKeyOf(primaryKey),
     rawKeyOf: postgisRawKeyOf(primaryKey),
     rawKeyOfBase: (key) => typedKeys.get(key) ?? key,
+    fingerprint: (feature) => postgisFingerprint(feature),
     stripKey: (feature) => {
       const { id: _id, ...rest } = feature;
       const properties = { ...(feature.properties ?? {}) };
@@ -173,6 +191,12 @@ export function buildPostgisChangeSet(
       return { ...rest, properties } as Feature;
     },
     newId: () => crypto.randomUUID(),
+  }).map((op) => {
+    // A new row takes its key from the table (identity/default), never from
+    // an editor-assigned feature id the sidecar would try to insert as one.
+    if (op.kind !== "insert" || op.key !== null || op.feature?.id === undefined) return op;
+    const { id: _id, ...feature } = op.feature;
+    return { ...op, feature: feature as Feature };
   });
 }
 
@@ -242,11 +266,11 @@ export function createPostgisSyncAdapter(
     );
   }
   const keyOf = postgisKeyOf(target.primaryKey);
-  const contentFingerprint = (feature: Feature) =>
-    featureFingerprint(feature, { omitProperties: [target.primaryKey] });
+  const contentFingerprint = (feature: Feature) => postgisFingerprint(feature, [target.primaryKey]);
   let rowHashes: Record<string, string> = {};
 
   return {
+    fingerprint: (feature) => postgisFingerprint(feature),
     async fetchRemote(_entry, keys, maybeApplied): Promise<RemoteState> {
       let result: ReadPostgisTableResult;
       try {
