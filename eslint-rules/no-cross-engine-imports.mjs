@@ -12,7 +12,9 @@
 // - Cesium:   `cesium-*`, `Cesium*`
 // - Mapbox:   `mapbox-*`, `Mapbox*`
 // - MapLibre: `maplibre-*`, `layer-sync`, `map-controller`, `MapCanvas`,
-//   `SecondaryMapCanvas` (the original engine, which predates the prefixes)
+//   `SecondaryMapCanvas` (the original engine, which predates the prefixes),
+//   plus the modules split out of the first two (`layer-sync-*`,
+//   `map-controller-*`)
 // Everything else is neutral. Neutral modules may import any engine's files
 // (the package index, `headless.ts`), and engine files may import neutral
 // modules and their own engine's files.
@@ -34,6 +36,9 @@ const MAPLIBRE_BASENAMES = new Set([
   "SecondaryMapCanvas",
 ]);
 
+/** Modules split out of an unprefixed MapLibre module keep its name as a prefix. */
+const MAPLIBRE_SPLIT_PREFIX = /^(layer-sync|map-controller)-/;
+
 const ENGINE_PREFIXES = [
   ["arcgis", /^(arcgis-|Arcgis[A-Z])/],
   ["cesium", /^(cesium-|Cesium[A-Z])/],
@@ -52,7 +57,7 @@ const ENGINE_PREFIXES = [
 export function engineOf(file) {
   const base = path.basename(file).replace(/\.(d\.)?[cm]?[jt]sx?$/, "");
   if (NEUTRAL_BASENAMES.has(base)) return null;
-  if (MAPLIBRE_BASENAMES.has(base)) return "maplibre";
+  if (MAPLIBRE_BASENAMES.has(base) || MAPLIBRE_SPLIT_PREFIX.test(base)) return "maplibre";
   for (const [engine, pattern] of ENGINE_PREFIXES) {
     if (pattern.test(base)) return engine;
   }

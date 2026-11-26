@@ -184,16 +184,22 @@ export async function addLidarLayerFromUrl(
  * @param app - The GeoLibre app API.
  * @param bytes - The LAS/LAZ/COPC file bytes, or a dropped file.
  * @param options - `name` is the layer's display name, `fileName` the file
- *   name the loader sees, and `fit: false` keeps the camera still.
+ *   name the loader sees, and `fit: false` keeps the camera still. `signal`,
+ *   when given, is checked before the control opens, before the cloud loads
+ *   and once it has loaded; a cloud that finished loading after the abort is
+ *   removed again, so a caller whose project was replaced adds nothing.
  * @returns The store layer id of the loaded point cloud, or null when the LiDAR
  *   control could not be mounted.
- * @throws When the point cloud fails to load.
+ * @throws When the point cloud fails to load, or with the signal's reason once
+ *   it is aborted.
  */
 export async function addLidarLayerFromBytes(
   app: GeoLibreAppAPI,
   bytes: Uint8Array | File,
-  options: { name: string; fileName: string; fit?: boolean },
+  options: { name: string; fileName: string; fit?: boolean; signal?: AbortSignal },
 ): Promise<string | null> {
+  const { signal } = options;
+  signal?.throwIfAborted();
   // A dropped File loads as-is, so a large COPC streams without being copied.
   const file =
     bytes instanceof File && bytes.name === options.fileName
@@ -201,9 +207,18 @@ export async function addLidarLayerFromBytes(
       : new File([bytes as BlobPart], options.fileName);
   const load = async () => {
     const opened = await openStandaloneLidarControl(app, { reveal: false });
+    signal?.throwIfAborted();
     if (!opened || !lidarControl) return null;
     const info = await lidarControl.loadPointCloud(file);
     const store = useAppStore.getState();
+    if (signal?.aborted) {
+      // The control listed the cloud as a layer of whatever project is open
+      // now; take it back out (the store sync unloads it from the control).
+      // A cloud the store never listed is unloaded from the control directly.
+      if (store.layers.some((layer) => layer.id === info.id)) store.removeLayer(info.id);
+      else if (hasLidarPointCloud(info.id)) lidarLayerAdapter?.removeLayer(info.id);
+      signal.throwIfAborted();
+    }
     if (!store.layers.some((layer) => layer.id === info.id)) {
       throw new Error(`The LiDAR control did not create a layer for ${options.fileName}.`);
     }
