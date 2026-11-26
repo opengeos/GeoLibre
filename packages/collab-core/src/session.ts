@@ -42,6 +42,14 @@ export interface SessionParticipant {
   inviteShared?: boolean;
   lastChatTs?: number;
   lastCommentTs?: number;
+  /** True when the client joined with the op-level `crdt-v1` protocol. */
+  crdt?: boolean;
+  /**
+   * Set when a snapshot-protocol client was not sent the project because it
+   * outgrew the frame cap; its snapshots are refused from then on, since
+   * writing one would delete everything it never received.
+   */
+  snapshotWithheld?: boolean;
 }
 
 export function participantCanEdit(
@@ -363,4 +371,26 @@ export function parseStoredChat(raw: unknown): CollabChatMessage[] {
     }
   }
   return Array.isArray(raw) ? raw.filter(isValidChatMessage) : [];
+}
+
+/** Minimum gap between two session-log entries for one origin's edits. */
+export const DOC_LOG_INTERVAL_MS = 30_000;
+
+/**
+ * Whether a document change from `origin` goes in the host's session log.
+ * Op-level clients send one update per edit, so logging each would rewrite
+ * the bounded log constantly and push joins and leaves out of it; one entry
+ * per origin per {@link DOC_LOG_INTERVAL_MS} keeps who-edited-when. Relay-made
+ * changes (reverts, comments) are not logged as edits. Updates `lastLogged`.
+ */
+export function shouldLogDocUpdate(
+  lastLogged: Map<string, number>,
+  origin: string,
+  now: number,
+): boolean {
+  if (origin === "relay") return false;
+  const last = lastLogged.get(origin);
+  if (last !== undefined && now - last < DOC_LOG_INTERVAL_MS) return false;
+  lastLogged.set(origin, now);
+  return true;
 }

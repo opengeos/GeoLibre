@@ -8,6 +8,9 @@
 // contents — it only stores and forwards the opaque JSON — so here `project` is
 // `unknown`. Keep the two `type` discriminants and field names in sync.
 
+/** Capability string a client and relay exchange to opt into op-level sync. */
+export const CRDT_FEATURE = "crdt-v1";
+
 export type CollaborationRole = "host" | "guest";
 export type CollaborationMode = "view-only" | "co-edit";
 
@@ -87,6 +90,35 @@ export interface JoinMessage {
    * signing secret configured ignores this field entirely.
    */
   identityToken?: string;
+  /**
+   * Protocol capabilities the client speaks, e.g. `"crdt-v1"` for op-level
+   * document sync (#3530). A client that omits it is on the whole-snapshot
+   * protocol and keeps receiving `snapshot` frames.
+   */
+  features?: string[];
+}
+
+/** Base64 Yjs update, possibly one chunk of a larger update. */
+export interface DocUpdateChunk {
+  id: string;
+  index: number;
+  count: number;
+}
+
+/**
+ * Ask the relay for the document updates this client lacks. `stateVector` is
+ * the base64 Yjs state vector of the client's document ("" for an empty one).
+ */
+export interface ClientDocSyncMessage {
+  type: "doc-sync";
+  stateVector: string;
+}
+
+/** One Yjs update (or one chunk of it) from a co-editor. */
+export interface ClientDocUpdateMessage {
+  type: "doc-update";
+  update: string;
+  chunk?: DocUpdateChunk;
 }
 
 export interface ClientSnapshotMessage {
@@ -177,7 +209,9 @@ export type ClientMessage =
   | SetSessionConfigMessage
   | KickParticipantMessage
   | BlockParticipantMessage
-  | SetLayerLocksMessage;
+  | SetLayerLocksMessage
+  | ClientDocSyncMessage
+  | ClientDocUpdateMessage;
 
 // Server -> client -----------------------------------------------------------
 
@@ -203,6 +237,11 @@ export interface WelcomeMessage {
   identitySupported?: boolean;
   lockedLayerIds?: string[];
   invites?: CollabInvite[];
+  /**
+   * Capabilities the relay speaks. When it lists `"crdt-v1"` and the client
+   * asked for it, `snapshot` is null and the project arrives over `doc-sync`.
+   */
+  features?: string[];
 }
 
 export interface PresenceEntry {
@@ -214,6 +253,25 @@ export interface ServerSnapshotMessage {
   type: "snapshot";
   project: unknown;
   origin: string;
+  rev: number;
+}
+
+/** A document update for this client, relayed from `origin` (or the relay). */
+export interface ServerDocUpdateMessage {
+  type: "doc-update";
+  update: string;
+  chunk?: DocUpdateChunk;
+  origin: string;
+  rev: number;
+}
+
+/**
+ * Ends the reply to `doc-sync`: every update the client lacked has been sent.
+ * `stateVector` is the relay's, so the client can send what the relay lacks.
+ */
+export interface DocSyncedMessage {
+  type: "doc-synced";
+  stateVector: string;
   rev: number;
 }
 
@@ -275,7 +333,8 @@ export interface ErrorMessage {
     | "not-found"
     | "identity-required"
     | "identity-unavailable"
-    | "layer-locked";
+    | "layer-locked"
+    | "resync";
   message: string;
 }
 
@@ -292,7 +351,9 @@ export type ServerMessage =
   | SessionConfigMessage
   | LayerLocksMessage
   | KickedMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | ServerDocUpdateMessage
+  | DocSyncedMessage;
 
 // Session Log ----------------------------------------------------------------
 
