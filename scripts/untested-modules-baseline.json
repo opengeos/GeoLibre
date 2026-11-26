@@ -1,8 +1,5 @@
 {
-  "apps/geolibre-desktop/src/components/layout/add-data/sources/ArcGISSource.tsx": 632,
   "apps/geolibre-desktop/src/components/layout/add-data/sources/DeckVizSource.tsx": 866,
-  "apps/geolibre-desktop/src/components/layout/add-data/sources/IcebergSource.tsx": 538,
-  "apps/geolibre-desktop/src/components/layout/add-data/sources/PostgresSource.tsx": 624,
   "apps/geolibre-desktop/src/components/layout/AddNetcdfDialog.tsx": 896,
   "apps/geolibre-desktop/src/components/layout/GeoreferencerDialog.tsx": 669,
   "apps/geolibre-desktop/src/components/layout/LoadFeaturesIntoEditorDialog.tsx": 665,
