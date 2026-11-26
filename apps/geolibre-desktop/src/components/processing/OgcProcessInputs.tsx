@@ -13,6 +13,7 @@ import {
   ogcInputKind,
   ogcInputSchema,
   ogcInputText,
+  isRepeatedInput,
   serializeOgcProcessLayerInput,
 } from "../../lib/ogc-process-inputs";
 
@@ -22,15 +23,17 @@ export function OgcProcessInputs({
   values,
   onChange,
   disabled,
+  error,
 }: {
   process: OgcProcess;
   values: Record<string, string>;
   onChange: (values: Record<string, string>) => void;
   disabled: boolean;
+  error?: { name: string; id: string };
 }) {
   const { t } = useTranslation();
   const prefix = useId();
-  const [inputLimit, setInputLimit] = useState(false);
+  const [inputLimit, setInputLimit] = useState<string | null>(null);
   const exporting = useAppCapability("export:data");
   const layers = useLayerSlices(
     useMemo(
@@ -44,7 +47,7 @@ export function OgcProcessInputs({
     ),
   );
   const set = (key: string, value: string | undefined) => {
-    setInputLimit(false);
+    setInputLimit(null);
     const next = { ...values };
     if (value === undefined) delete next[key];
     else
@@ -58,8 +61,8 @@ export function OgcProcessInputs({
   };
   return (
     <div className="space-y-4">
-      {inputLimit && (
-        <p role="alert" className="text-sm text-destructive">
+      {inputLimit !== null && (
+        <p id={`${prefix}-limit`} role="alert" className="text-sm text-destructive">
           {t("processing.ogcProcesses.errors.inputLimit")}
         </p>
       )}
@@ -73,6 +76,12 @@ export function OgcProcessInputs({
         const selected = enumeration?.find(
           (item) => Object.hasOwn(values, key) && ogcInputText(item, kind) === values[key],
         );
+        const errorId =
+          inputLimit === key ? `${prefix}-limit` : error?.name === key ? error.id : undefined;
+        const invalid = {
+          "aria-invalid": errorId ? (true as const) : undefined,
+          "aria-describedby": errorId,
+        };
         return (
           <div key={key} className="space-y-1.5">
             <Label htmlFor={id}>
@@ -85,6 +94,7 @@ export function OgcProcessInputs({
             {enumeration ? (
               <Select
                 id={id}
+                {...invalid}
                 aria-required={definition.minOccurs !== 0}
                 disabled={disabled}
                 value={selected === undefined ? "" : JSON.stringify(selected)}
@@ -107,6 +117,7 @@ export function OgcProcessInputs({
             ) : kind === "boolean" ? (
               <Select
                 id={id}
+                {...invalid}
                 aria-required={definition.minOccurs !== 0}
                 disabled={disabled}
                 value={fieldValue}
@@ -119,6 +130,7 @@ export function OgcProcessInputs({
             ) : kind === "json" ? (
               <Textarea
                 id={id}
+                {...invalid}
                 aria-required={definition.minOccurs !== 0}
                 disabled={disabled}
                 value={fieldValue}
@@ -128,6 +140,7 @@ export function OgcProcessInputs({
             ) : (
               <Input
                 id={id}
+                {...invalid}
                 aria-required={definition.minOccurs !== 0}
                 disabled={disabled}
                 value={fieldValue}
@@ -164,13 +177,22 @@ export function OgcProcessInputs({
                       : representation === "geometries"
                         ? layer.geojson.features.map((feature) => feature.geometry)
                         : layer.geojson;
-                  const serialized = serializeOgcProcessLayerInput(
+                  const qualify = (value: unknown) => ({
+                    value,
+                    mediaType: "application/geo+json",
+                  });
+                  const repeated = isRepeatedInput(definition);
+                  const input =
                     representation === "collection"
-                      ? { value, mediaType: "application/geo+json" }
-                      : value,
-                  );
+                      ? repeated
+                        ? [qualify(value)]
+                        : qualify(value)
+                      : repeated && Array.isArray(value)
+                        ? value.map(qualify)
+                        : value;
+                  const serialized = serializeOgcProcessLayerInput(input);
                   if (serialized === null) {
-                    setInputLimit(true);
+                    setInputLimit(key);
                     return;
                   }
                   set(key, serialized);

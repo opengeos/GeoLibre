@@ -6,6 +6,8 @@ import type { NetworkToolKind } from "@geolibre/core";
 
 const { ProcessingMenu } =
   await import("../apps/geolibre-desktop/src/components/layout/toolbar/ProcessingMenu");
+const { useDesktopSettingsStore, DEFAULT_UI_PROFILE_SETTINGS } =
+  await import("../apps/geolibre-desktop/src/hooks/useDesktopSettings");
 const noop = () => {};
 
 /** Open the real menu with the same callback boundary as the desktop toolbar. */
@@ -47,6 +49,34 @@ async function openGroup(name: string) {
 }
 
 describe("Processing menu model and routing entries", () => {
+  for (const hidden of [false, true]) {
+    it(`OGC Processes is ${hidden ? "hidden by its profile" : "visible in the default profile"}`, async () => {
+      const settings = useDesktopSettingsStore.getState().desktopSettings;
+      useDesktopSettingsStore.getState().setDesktopSettings({
+        ...settings,
+        uiProfile: hidden
+          ? {
+              ...DEFAULT_UI_PROFILE_SETTINGS,
+              enabled: true,
+              hiddenMenuItems: ["processing.ogcProcesses"],
+            }
+          : DEFAULT_UI_PROFILE_SETTINGS,
+      });
+      renderMenu();
+      const parent = screen.getByRole("menuitem", { name: "GeoLibre toolbox" });
+      await act(async () => parent.focus());
+      fireEvent.keyDown(parent, { key: "ArrowRight" });
+      const menu = await screen.findByRole("menu", { name: "GeoLibre toolbox" });
+      const item = within(menu).queryByRole("menuitem", {
+        name: "OGC API - Processes",
+      });
+      assert.equal(item !== null, !hidden);
+      if (item) {
+        fireEvent.click(item);
+        assert.equal(useAppStore.getState().ui.ogcProcessesOpen, true);
+      }
+    });
+  }
   for (const [id, label] of [
     ["ols-regression", "Ordinary least squares (OLS)"],
     ["gwr", "Geographically weighted regression (GWR)"],

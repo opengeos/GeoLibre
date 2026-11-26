@@ -31,6 +31,7 @@ export function ogcProcessOutputPreview(output: OgcProcessOutput): string {
 
 /** Literal messages stay downloadable; structured or referenced geodata can be imported. */
 export function canImportOgcProcessOutput(output: OgcProcessOutput): boolean {
+  if (output.completeDocument) return false;
   if (output.warning) return false;
   const mediaType = output.mediaType?.split(";", 1)[0].trim().toLowerCase();
   const unknownBinary = !mediaType || mediaType === "application/octet-stream";

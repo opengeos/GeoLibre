@@ -1,5 +1,6 @@
 import "./helpers/dom";
 import assert from "node:assert/strict";
+import { atob as standardAtob } from "node:buffer";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
@@ -940,6 +941,47 @@ test("duplicate rel parameters cannot redirect monitoring away from the first re
   );
 });
 
+test("zero-byte raw HTTP 200 outputs remain downloadable while empty 204 has no output", async () => {
+  const signal = new AbortController().signal;
+  serve(() => ({ jobID: "one", status: "successful" }));
+  const job = await readOgcProcessJob("https://example.org/api/jobs/one", signal);
+  serve(() => new Response("", { headers: { "Content-Type": "text/plain" } }));
+  const result = await readOgcProcessResults(job, signal);
+  assert.equal(result.length, 1);
+  const blob = await downloadOgcProcessOutput(result[0], signal);
+  assert.equal(blob.size, 0);
+  assert.equal(blob.type, "text/plain");
+  serve(() => new Response(null, { status: 204 }));
+  assert.deepEqual(await readOgcProcessResults(job, signal), []);
+});
+
+test("a raw JSON report retains its original bytes without changing wrapped document outputs", async () => {
+  const signal = new AbortController().signal;
+  serve(() => ({ jobID: "one", status: "successful" }));
+  const job = await readOgcProcessJob("https://example.org/api/jobs/one", signal);
+  job.outputIds = ["report"];
+  job.outputDefinitions = { report: { schema: { type: "object" } } };
+  for (const original of [
+    ' {"count":9007199254740993, "mean":7}\n',
+    '{"count":{"value":3},"mean":7}',
+  ]) {
+    serve(() => new Response(original, { headers: { "Content-Type": "application/json" } }));
+    const result = await readOgcProcessResults(job, signal);
+    assert.deepEqual(
+      result.filter((output) => !output.completeDocument).map((output) => output.id),
+      ["count", "mean"],
+    );
+    const complete = result.find((output) => output.completeDocument);
+    assert.ok(complete);
+    assert.equal(canImportOgcProcessOutput(complete), false);
+    assert.equal(await (await downloadOgcProcessOutput(complete, signal)).text(), original);
+  }
+  serve(() => ({ report: { value: { count: 3, mean: 7 } } }));
+  assert.deepEqual(await readOgcProcessResults(job, signal), [
+    { id: "report", value: { count: 3, mean: 7 } },
+  ]);
+});
+
 test("execution input nesting matches the native parser limit before any dispatch", async () => {
   const process = await processDescription();
   let value: unknown = 0;
@@ -1102,18 +1144,33 @@ test("equivalent parameterized media types retain the selected encoding and para
 });
 
 test("invalid base64 errors are localized and valid padded or whitespace encodings download", async () => {
-  const signal = new AbortController().signal;
-  await assert.rejects(
-    downloadOgcProcessOutput({ id: "bad", value: "!bad!", encoding: "base64" }, signal),
-    { code: "invalidBase64" },
-  );
-  for (const value of ["dGV4dA==", " dG\nV4dA==\t", "dGV4dA"]) {
-    assert.equal(
-      await (
-        await downloadOgcProcessOutput({ id: "ok", value, encoding: "base64" }, signal)
-      ).text(),
-      "text",
-    );
+  const previousAtob = globalThis.atob;
+  const descriptor = Object.getOwnPropertyDescriptor(Uint8Array, "fromBase64");
+  // happy-dom rejects ASCII whitespace that browser atob must ignore. Use the
+  // real platform decoder for both paths: https://infra.spec.whatwg.org/#forgiving-base64-decode
+  globalThis.atob = standardAtob;
+  try {
+    for (const compatibility of [false, true]) {
+      if (compatibility)
+        Object.defineProperty(Uint8Array, "fromBase64", { configurable: true, value: undefined });
+      const signal = new AbortController().signal;
+      await assert.rejects(
+        downloadOgcProcessOutput({ id: "bad", value: "!bad!", encoding: "base64" }, signal),
+        { code: "invalidBase64" },
+      );
+      for (const value of ["dGV4dA==", " dG\nV4dA==\t", "dGV4dA"]) {
+        assert.equal(
+          await (
+            await downloadOgcProcessOutput({ id: "ok", value, encoding: "base64" }, signal)
+          ).text(),
+          "text",
+        );
+      }
+    }
+  } finally {
+    globalThis.atob = previousAtob;
+    if (descriptor) Object.defineProperty(Uint8Array, "fromBase64", descriptor);
+    else Reflect.deleteProperty(Uint8Array, "fromBase64");
   }
 });
 
@@ -1326,6 +1383,7 @@ test("catalog and completed execution links use the document retrieval context",
     const value = {
       ...description(),
       id: "p",
+      outputs: { result: { schema: { type: "number" } } },
       links: [
         { rel: "self", href: "./processes/p" },
         { rel: "http://www.opengis.net/def/rel/ogc/1.0/execute", href: "./processes/p/execution" },

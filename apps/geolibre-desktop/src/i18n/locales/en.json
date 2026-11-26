@@ -9329,6 +9329,7 @@
         "executionUncertain": "The execution response was interrupted. The service may still be running or may have completed the work. Retrying submits a new execution. Check the service before retrying, or use asynchronous execution for a recoverable job URL when available. {{detail}}",
         "requestBody": "Only an OGC process execution POST may have a request body.",
         "requestTimeout": "The OGC process request timed out after 120 seconds.",
+        "redirectLimit": "The OGC process service returned too many redirects.",
         "monitoringTimeout": "Monitoring paused after 30 minutes. Resume monitoring with the retained job URL.",
         "submissionPending": "The previous submission is still awaiting its outcome. Wait for its job URL before starting another execution.",
         "responseTooLarge": "OGC process response exceeds its download limit.",
@@ -9354,6 +9355,7 @@
         "jobFailed": "The OGC process job did not complete successfully.",
         "http": "OGC process HTTP {{status}}{{detail}}"
       },
+      "completeResponse": "Complete JSON response",
       "featureCollection": "GeoJSON FeatureCollection"
     }
   },

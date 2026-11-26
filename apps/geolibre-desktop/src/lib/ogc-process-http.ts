@@ -156,6 +156,25 @@ export async function processHttp(
       ...(bodyReadFailed ? { bodyReadFailed: true } : {}),
     };
   } catch (error) {
+    if (nativeDispatched) {
+      // Match only errors owned by this native protocol command. Server details
+      // and arbitrary connection errors must retain their original meaning.
+      const message = error instanceof Error ? error.message : String(error);
+      const nativeCodes = {
+        "OGC process request timed out": "requestTimeout",
+        "Too many OGC process redirects": "redirectLimit",
+        "Invalid OGC process URL": "invalidUrl",
+        "Invalid OGC process redirect": "invalidUrl",
+        "OGC process URLs must not contain user information": "invalidUrl",
+        "OGC process inputs must be valid JSON": "inputsJsonSyntax",
+        "OGC process inputs exceed the 1 MiB limit": "inputLimit",
+        "OGC process execution requires a JSON object": "inputObject",
+        "OGC process execution requires a request body": "inputObject",
+        "Only an OGC process execution POST may have a request body": "requestBody",
+      } as const;
+      if (Object.hasOwn(nativeCodes, message))
+        throw new OgcProcessError(nativeCodes[message as keyof typeof nativeCodes]);
+    }
     if (
       !signal.aborted &&
       ((!nativeDispatched && deadline.aborted) ||

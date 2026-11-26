@@ -243,10 +243,14 @@ Standalone JSON values retain their original bytes for download, including
 quoted strings and numeric representations. Resumed jobs use a process
 description's output schemas only when its identifier matches a reported
 process identifier.
+Empty HTTP 200 raw results remain downloadable. When a sole advertised object
+output makes a JSON response ambiguous, **Complete JSON response** provides the
+original download alongside parsed outputs, preserving their identifiers.
 Monitoring honors bounded `Retry-After` values and stops after 30
 minutes; the job URL can be used to resume. Closing and reopening retains
 dialog state in the current session. Changing projects clears inputs, job
-status, and results and aborts pending observation and cancellable requests.
+status, and results and aborts pending observation. A dispatched execution keeps
+its submission lock until the bounded transport settles, including in the browser.
 Already-dispatched native writes remain bounded by the host timeout; their late
 results cannot enter a replacement project. Job history and input
 credentials are not saved in projects.
@@ -264,9 +268,11 @@ proxy that permits public HTTP(S) hosts on their default ports; local/LAN servic
 and custom ports supported by desktop are unavailable through that development proxy.
 Execution POSTs and job DELETEs do not follow redirects in any build: use the
 final execution/job URL. Discovery and result GETs retain guarded redirects.
-The hosted web app requires the remote service to permit cross-origin
-GET, POST, and DELETE requests, the `Content-Type` and `Prefer` request headers,
-and access to `Location`, `Link`, and `Retry-After` response headers. A successful
+The hosted web app requires the remote service to permit cross-origin GET for
+discovery and monitoring, and POST with `Content-Type` for execution. Asynchronous
+execution also sends `Prefer`; job dismissal requires DELETE. Response headers
+need exposure only when used for routing or retry timing. Synchronous JSON
+results and usable JSON status links work without exposed job headers. A successful
 development test does not establish hosted-site CORS support. Credentials may
 be supplied in the service URL query; they follow same-origin links only and
 are redacted from imported-layer provenance.

@@ -62,6 +62,7 @@ export function useOgcProcesses(open: boolean) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<unknown>(null);
   const active = useRef<AbortController | null>(null);
+  const observedJob = useRef<{ initialUrl: string; url: string; signal: AbortSignal } | null>(null);
   const pendingSubmission = useRef<{ controller: AbortController; processUrl: string } | null>(
     null,
   );
@@ -83,6 +84,7 @@ export function useOgcProcesses(open: boolean) {
       setError(new OgcProcessError("submissionPending"));
     active.current?.abort();
     active.current = null;
+    observedJob.current = null;
     setPhase(pendingSubmission.current ? "awaiting" : "idle");
   }, []);
 
@@ -91,7 +93,9 @@ export function useOgcProcesses(open: boolean) {
     const unsubscribe = useAppStore.subscribe((state, previous) => {
       if (state.projectLoadCount === previous.projectLoadCount) return;
       stop();
-      pendingSubmission.current?.controller.abort();
+      // Keep a dispatched submission bounded by its transport deadline. Aborting
+      // browser fetch here would release its lock before the acknowledgement.
+      // The captured project still prevents publishing any of its private results.
       setAwaitingSubmission(Boolean(pendingSubmission.current));
       setPhase(pendingSubmission.current ? "awaiting" : "idle");
       setProcesses([]);
@@ -232,23 +236,30 @@ export function useOgcProcesses(open: boolean) {
     });
     let sourceUrl = typeof initial === "string" ? initial : initial.url;
     let owningProcessUrl = processUrl;
-    const result = await monitorOgcProcessJob(initial, context.signal, (next) => {
-      const selectedUrl = selectedProcess.current?.url;
-      if (
-        !owningProcessUrl &&
-        selectedUrl &&
-        next.processUrl &&
-        sameOgcProcessJob(selectedUrl, next.processUrl)
-      )
-        owningProcessUrl = selectedUrl;
-      const key = owningProcessUrl ?? next.processUrl;
-      updateJob(context, next, key, sourceUrl);
-      sourceUrl = next.url;
-    });
-    context.commit(() => {
-      setOutputs(result);
-      setOutputSourceUrl(sourceUrl);
-    });
+    const observation = { initialUrl: sourceUrl, url: sourceUrl, signal: context.signal };
+    observedJob.current = observation;
+    try {
+      const result = await monitorOgcProcessJob(initial, context.signal, (next) => {
+        observation.url = next.url;
+        const selectedUrl = selectedProcess.current?.url;
+        if (
+          !owningProcessUrl &&
+          selectedUrl &&
+          next.processUrl &&
+          sameOgcProcessJob(selectedUrl, next.processUrl)
+        )
+          owningProcessUrl = selectedUrl;
+        const key = owningProcessUrl ?? next.processUrl;
+        updateJob(context, next, key, sourceUrl);
+        sourceUrl = next.url;
+      });
+      context.commit(() => {
+        setOutputs(result);
+        setOutputSourceUrl(sourceUrl);
+      });
+    } finally {
+      if (observedJob.current === observation) observedJob.current = null;
+    }
   };
   const execute = () =>
     run("executing", async (context) => {
@@ -365,26 +376,36 @@ export function useOgcProcesses(open: boolean) {
       const project = useAppStore.getState().projectLoadCount;
       await dismissOgcProcessJob(target, context.signal);
       if (!mounted.current || useAppStore.getState().projectLoadCount !== project) return;
+      const observation = observedJob.current;
+      const matchingObservation =
+        observation &&
+        active.current?.signal === observation.signal &&
+        (sameOgcProcessJob(observation.initialUrl, target) ||
+          sameOgcProcessJob(observation.url, target))
+          ? observation
+          : null;
+      const matchesTarget = (url: string) =>
+        sameOgcProcessJob(url, target) ||
+        Boolean(
+          matchingObservation &&
+          (sameOgcProcessJob(url, matchingObservation.initialUrl) ||
+            sameOgcProcessJob(url, matchingObservation.url)),
+        );
       // A completed remote mutation survives stopped observation. Only update
       // its retained identity; another displayed job may now own the dialog.
       setJob((previous) =>
-        previous && sameOgcProcessJob(previous.url, target)
-          ? { ...previous, status: "dismissed" }
-          : context.signal.aborted
-            ? previous
-            : null,
+        previous && matchesTarget(previous.url) ? { ...previous, status: "dismissed" } : previous,
       );
       setJobsByProcess(
         (previous) =>
           new Map(
             [...previous].map(([key, value]) => [
               key,
-              sameOgcProcessJob(value.url, target)
-                ? { ...value, status: "dismissed" as const }
-                : value,
+              matchesTarget(value.url) ? { ...value, status: "dismissed" as const } : value,
             ]),
           ),
       );
+      if (matchingObservation) stop();
     });
   const changeEndpoint = (value: string) => {
     stop();
@@ -449,7 +470,7 @@ export function useOgcProcesses(open: boolean) {
     outputSourceUrl,
     phase,
     busy: phase !== "idle" || awaitingSubmission,
-    error: error === null ? null : ogcProcessErrorText(error),
+    error,
     retrieve,
     select,
     execute,

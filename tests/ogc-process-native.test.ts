@@ -10,6 +10,39 @@ afterEach(() => {
   else Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
 });
 
+test("native protocol-owned errors use localized codes while unknown failures retain their detail", async () => {
+  const { processHttp } = await import("../apps/geolibre-desktop/src/lib/ogc-process-http");
+  for (const [message, code] of [
+    ["OGC process request timed out", "requestTimeout"],
+    ["Too many OGC process redirects", "redirectLimit"],
+    ["OGC process inputs must be valid JSON", "inputsJsonSyntax"],
+  ]) {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: async () => {
+          throw message;
+        },
+      },
+    });
+    await assert.rejects(
+      processHttp("https://example.org/jobs/one", new AbortController().signal),
+      { code },
+    );
+  }
+  Object.defineProperty(window, "__TAURI_INTERNALS__", {
+    configurable: true,
+    value: {
+      invoke: async () => {
+        throw "Custom connection failure";
+      },
+    },
+  });
+  await assert.rejects(processHttp("https://example.org/jobs/one", new AbortController().signal), {
+    message: "Custom connection failure",
+  });
+});
+
 test("a dispatched native submission retains a late accepted job after observation aborts", async () => {
   const pending: { resolve?: (value: unknown) => void } = {};
   Object.defineProperty(window, "__TAURI_INTERNALS__", {

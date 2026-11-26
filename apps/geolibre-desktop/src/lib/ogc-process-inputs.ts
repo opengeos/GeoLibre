@@ -70,7 +70,7 @@ export function ogcInputSchema(definition: OgcInputDefinition): Record<string, u
     : {};
 }
 
-function isRepeatedInput(definition: OgcInputDefinition): boolean {
+export function isRepeatedInput(definition: OgcInputDefinition): boolean {
   return (
     definition.maxOccurs === "unbounded" ||
     (typeof definition.maxOccurs === "number" && definition.maxOccurs > 1)

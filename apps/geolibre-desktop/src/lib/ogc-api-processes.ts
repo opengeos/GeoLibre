@@ -52,6 +52,8 @@ export interface OgcProcessOutput {
   bytes?: Uint8Array<ArrayBuffer>;
   /** Original representation of a standalone JSON value, for lossless download. */
   documentBytes?: Uint8Array<ArrayBuffer>;
+  /** A complete response download kept alongside ambiguously parsed outputs. */
+  completeDocument?: true;
   warning?: "invalidReference" | "invalidDocument";
 }
 export type OgcProcessExecution =
@@ -401,8 +403,8 @@ function outputs(
   outputIds?: readonly string[],
   definitions?: OgcProcess["outputs"],
 ): OgcProcessOutput[] {
-  if (!response.body.length)
-    return ogcProcessHeaderLinks(response.link)
+  if (!response.body.length) {
+    const references = ogcProcessHeaderLinks(response.link)
       .filter(
         (link) =>
           !link.relations.some((relation) =>
@@ -429,6 +431,15 @@ function outputs(
               warning: "invalidReference" as const,
             };
       });
+    if (references.length || response.status !== 200) return references;
+    return [
+      {
+        id: "result",
+        bytes: response.body,
+        mediaType: response.contentType ?? "application/octet-stream",
+      },
+    ];
+  }
   if (!/json/i.test(response.contentType ?? ""))
     return [
       {
@@ -468,13 +479,26 @@ function outputs(
     !outputIds.includes("outputs") &&
     Object.keys(doc).length === 1 &&
     Array.isArray(doc.outputs);
+  // A raw JSON report need not be a map of output identifiers. Keep its
+  // complete representation when it cannot name the sole advertised output.
+  // Existing Core identifiers and legacy envelopes take precedence.
+  const soleSchema = outputIds?.length === 1 ? definitions?.[outputIds[0]]?.schema : undefined;
+  const objectSchema =
+    soleSchema &&
+    typeof soleSchema === "object" &&
+    !Array.isArray(soleSchema) &&
+    "type" in soleSchema &&
+    (soleSchema.type === "object" ||
+      (Array.isArray(soleSchema.type) && soleSchema.type.includes("object")));
+  const ambiguousObject =
+    outputIds?.length === 1 && objectSchema && !Object.hasOwn(doc, outputIds[0]) && !legacyArray;
   const entries = legacyArray
     ? (doc.outputs as unknown[]).map((raw) => {
         const value = object(raw);
         return [String(value.id ?? "result"), value] as const;
       })
     : Object.entries(doc);
-  return entries.map(([id, raw]): OgcProcessOutput => {
+  const parsed = entries.map(([id, raw]): OgcProcessOutput => {
     const format = outputFormat(definitions?.[id]);
     if (raw && typeof raw === "object" && !Array.isArray(raw)) {
       const value = raw as JsonObject;
@@ -512,6 +536,15 @@ function outputs(
     }
     return { id, value: raw, ...(typeof raw === "string" ? format : {}) };
   });
+  if (ambiguousObject)
+    parsed.push({
+      id: "result-document",
+      completeDocument: true,
+      value: doc,
+      documentBytes: response.body,
+      mediaType: response.contentType ?? "application/json",
+    });
+  return parsed;
 }
 
 /** Resolve the advertised destination for display and for the execution POST. */

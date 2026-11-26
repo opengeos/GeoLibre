@@ -17,6 +17,7 @@ import { useId, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../hooks/usePlugins";
 import { useOgcProcesses } from "../../hooks/useOgcProcesses";
+import { OgcProcessError, ogcProcessErrorText } from "../../lib/ogc-process-errors";
 import {
   downloadOgcProcessOutput,
   ogcProcessExecutionUrl,
@@ -49,6 +50,22 @@ export function OgcProcessesDialog({
   const exporting = useAppCapability("export:data");
   const running = client.runningForProcess;
   const executionUrl = client.process ? ogcProcessExecutionUrl(client.process) : null;
+  const inputError = client.error instanceof OgcProcessError ? client.error : undefined;
+  const fieldError =
+    inputError &&
+    !client.jsonMode &&
+    ["missingInput", "inputNumber", "inputInteger", "inputBoolean", "inputJson"].includes(
+      inputError.code,
+    ) &&
+    typeof inputError.parameters.name === "string"
+      ? { name: inputError.parameters.name, id: `${id}-error` }
+      : undefined;
+  const jsonInvalid =
+    client.jsonMode &&
+    inputError &&
+    ["inputsJsonSyntax", "inputObject", "inputLimit", "inputDepth", "inputUnicode"].includes(
+      inputError.code,
+    );
   const download = (output: OgcProcessOutput) => {
     if (!exporting.granted) return;
     void client.run("output", async ({ signal }) => {
@@ -163,6 +180,8 @@ export function OgcProcessesDialog({
                         </Label>
                         <Textarea
                           id={`${id}-json`}
+                          aria-invalid={jsonInvalid ? true : undefined}
+                          aria-describedby={jsonInvalid ? `${id}-error` : undefined}
                           className="min-h-52 font-mono text-xs"
                           value={client.inputsJson}
                           disabled={client.busy}
@@ -175,6 +194,7 @@ export function OgcProcessesDialog({
                         values={client.values}
                         onChange={client.setValues}
                         disabled={client.busy}
+                        error={fieldError}
                       />
                     )}
                     <div className="space-y-1.5">
@@ -221,7 +241,11 @@ export function OgcProcessesDialog({
                         key={`${output.id}-${index}`}
                         className="space-y-2 rounded-md border p-3"
                       >
-                        <p className="text-sm font-medium">{output.id}</p>
+                        <p className="text-sm font-medium">
+                          {output.completeDocument
+                            ? t("processing.ogcProcesses.completeResponse")
+                            : output.id}
+                        </p>
                         {output.warning && (
                           <p className="text-sm text-muted-foreground" role="status">
                             {t(`processing.ogcProcesses.outputWarnings.${output.warning}`)}
@@ -320,7 +344,11 @@ export function OgcProcessesDialog({
                 </div>
               </section>
             </div>
-            {client.error && <AddDataError message={client.error} />}
+            {client.error !== null && (
+              <div id={`${id}-error`}>
+                <AddDataError message={ogcProcessErrorText(client.error)} />
+              </div>
+            )}
           </div>
         </ScrollArea>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">

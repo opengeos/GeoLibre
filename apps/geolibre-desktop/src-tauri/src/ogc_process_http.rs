@@ -93,6 +93,14 @@ fn request_timeout() -> String {
     "OGC process request timed out".into()
 }
 
+fn process_request_error(error: reqwest::Error) -> String {
+    if error.is_timeout() {
+        request_timeout()
+    } else {
+        request_error_message(&error.without_url())
+    }
+}
+
 /// Check the absolute deadline before each poll that could dispatch a request.
 async fn send_before_deadline<F>(future: F, deadline: Instant) -> Result<F::Output, String>
 where
@@ -191,7 +199,7 @@ where
         }
         let response = send_before_deadline(request.send(), options.deadline)
             .await?
-            .map_err(|error| request_error_message(&error.without_url()))?;
+            .map_err(process_request_error)?;
         if method == reqwest::Method::GET
             && matches!(response.status().as_u16(), 301 | 302 | 303 | 307 | 308)
         {
@@ -228,11 +236,7 @@ async fn read_body(mut response: reqwest::Response, limit: u64) -> Result<Vec<u8
         return Err(format!("Response exceeds the {limit}-byte download limit"));
     }
     let mut bytes = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|error| request_error_message(&error.without_url()))?
-    {
+    while let Some(chunk) = response.chunk().await.map_err(process_request_error)? {
         if chunk.len() as u64 > limit.saturating_sub(bytes.len() as u64) {
             return Err(format!("Response exceeds the {limit}-byte download limit"));
         }
@@ -287,8 +291,7 @@ async fn read_response(
         .and_then(|result| result);
     match body {
         Ok(bytes) => result.body_base64 = base64::engine::general_purpose::STANDARD.encode(bytes),
-        Err(_) if write && (200..300).contains(&status) => result.body_read_failed = true,
-        Err(_) if !(200..300).contains(&status) => result.body_read_failed = true,
+        Err(_) if write || !(200..300).contains(&status) => result.body_read_failed = true,
         Err(error) => return Err(error),
     }
     Ok(result)
