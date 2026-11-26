@@ -36,6 +36,9 @@ it("persists an update", () => {
   act(() => useTerrainVisibility.getState().update({ refractionCoefficient: 0.2 }));
   assert.equal(useTerrainVisibility.getState().refractionCoefficient, 0.2);
   assert.equal(readTerrainVisibility().refractionCoefficient, 0.2);
+  // An undefined key keeps the stored value rather than resetting it.
+  act(() => useTerrainVisibility.getState().update({ refractionCoefficient: undefined }));
+  assert.equal(useTerrainVisibility.getState().refractionCoefficient, 0.2);
 });
 
 it("toggles viewshed curvature from the right-click menu", async () => {

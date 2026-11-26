@@ -75,11 +75,12 @@ export const useTerrainVisibility = create<TerrainVisibilityState>((set, get) =>
   ...readTerrainVisibility(),
   update: (patch) => {
     const { curvature, refractionCoefficient, earthRadiusMeters } = get();
+    // `??` per field rather than a spread, so a key passed as undefined
+    // keeps the stored value instead of resetting it to the default.
     const next = resolveCurvature({
-      curvature,
-      refractionCoefficient,
-      earthRadiusMeters,
-      ...patch,
+      curvature: patch.curvature ?? curvature,
+      refractionCoefficient: patch.refractionCoefficient ?? refractionCoefficient,
+      earthRadiusMeters: patch.earthRadiusMeters ?? earthRadiusMeters,
     });
     writeTerrainVisibility(next);
     set(next);

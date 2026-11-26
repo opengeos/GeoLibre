@@ -21,7 +21,9 @@ export const EARTH_RADIUS_METERS = 6_371_008.8;
 /**
  * Standard coefficient of atmospheric refraction for visible light. Refraction
  * bends a sight line back toward the ground, so it offsets part of the
- * curvature drop; 0.13 is the value most GIS viewshed tools default to.
+ * curvature drop. 0.13 is the ArcGIS viewshed default; GDAL's
+ * `gdal_viewshed -cc` defaults to a curvature coefficient of 0.85714, which
+ * is k = 1/7 (about 0.143).
  */
 export const DEFAULT_REFRACTION_COEFFICIENT = 0.13;
 
