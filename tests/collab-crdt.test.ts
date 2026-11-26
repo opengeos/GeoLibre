@@ -338,7 +338,26 @@ describe("ProjectDoc", () => {
   });
 });
 
+describe("untrusted keys", () => {
+  it("keeps a remote __proto__ key as data, not as the prototype", () => {
+    const doc = new ProjectDoc();
+    doc.doc.transact(() => {
+      const meta = new Y.Map<unknown>();
+      meta.set("__proto__", { polluted: true });
+      doc.fields.set("metadata", meta);
+    });
+    const metadata = doc.read().metadata as Record<string, unknown>;
+    assert.equal(Object.getPrototypeOf(metadata), Object.prototype);
+    assert.deepEqual(Object.keys(metadata), ["__proto__"]);
+    assert.equal((metadata as { polluted?: boolean }).polluted, undefined);
+  });
+});
+
 describe("per-user undo", () => {
+  it("refuses a null local origin", () => {
+    assert.throws(() => createLocalUndoManager(new ProjectDoc(), null), TypeError);
+  });
+
   it("undoes only the local user's edits", () => {
     const { a, b, sync } = pair();
     a.write(project(), "init");

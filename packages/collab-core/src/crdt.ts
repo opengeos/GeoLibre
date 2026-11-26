@@ -14,6 +14,8 @@
 // and scalars are single values (last writer wins on that one value), with one
 // exception: a layer's `geojson` FeatureCollection is stored feature by
 // feature, so concurrent edits to different features of one layer merge too.
+// Each feature is itself one value: two people editing the same feature at
+// once (even different attributes of it) resolve to one of the two edits.
 //
 //   geojson     Y.Map  { meta: Y.Map, features: Y.Map key -> feature, order: Y.Array key }
 //
@@ -91,6 +93,19 @@ export function deepEqual(a: unknown, b: unknown): boolean {
 }
 
 /**
+ * Set an own, enumerable property. Plain assignment of a remote-chosen key
+ * such as `__proto__` would replace the object's prototype instead.
+ */
+function setOwn(target: JsonObject, key: string, value: unknown): void {
+  Object.defineProperty(target, key, {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true,
+  });
+}
+
+/**
  * Copy a JSON-like value so the document never aliases an object the caller
  * may still hold. Object keys whose value is `undefined` are dropped.
  */
@@ -100,7 +115,7 @@ function cloneJson(value: unknown): unknown {
     const out: JsonObject = {};
     for (const key of Object.keys(value)) {
       const entry = value[key];
-      if (entry !== undefined) out[key] = cloneJson(entry);
+      if (entry !== undefined) setOwn(out, key, cloneJson(entry));
     }
     return out;
   }
@@ -134,7 +149,7 @@ function readValue(value: unknown): unknown {
     if (isFeatureCollectionMap(value)) return readFeatureCollection(value);
     const out: JsonObject = {};
     value.forEach((entry, key) => {
-      out[key] = readValue(entry);
+      setOwn(out, key, readValue(entry));
     });
     return out;
   }
@@ -322,7 +337,8 @@ interface Segment {
  * Split the changed middle of a feature list into the runs between features
  * that survive unchanged, so those keep their keys. Unchanged features are
  * matched greedily, in order, by their JSON; the cost is linear in the size of
- * the middle, which is small for an ordinary edit.
+ * the middle (each candidate list is walked once, by a cursor), which is
+ * small for an ordinary edit.
  */
 function matchMiddle(
   current: readonly unknown[],
@@ -333,20 +349,24 @@ function matchMiddle(
 ): Segment[] {
   const segments: Segment[] = [];
   if (oldEnd - start > 0 && newEnd - start > 0) {
-    const byJson = new Map<string, number[]>();
+    const byJson = new Map<string, { indexes: number[]; at: number }>();
     for (let i = start; i < oldEnd; i += 1) {
       const json = JSON.stringify(current[i]);
-      const list = byJson.get(json);
-      if (list) list.push(i);
-      else byJson.set(json, [i]);
+      const bucket = byJson.get(json);
+      if (bucket) bucket.indexes.push(i);
+      else byJson.set(json, { indexes: [i], at: 0 });
     }
     let oldCursor = start;
     let newCursor = start;
     for (let j = start; j < newEnd; j += 1) {
-      const list = byJson.get(JSON.stringify(next[j]));
-      while (list?.length && list[0] < oldCursor) list.shift();
-      if (!list?.length) continue;
-      const i = list.shift() as number;
+      const bucket = byJson.get(JSON.stringify(next[j]));
+      if (!bucket) continue;
+      while (bucket.at < bucket.indexes.length && bucket.indexes[bucket.at] < oldCursor) {
+        bucket.at += 1;
+      }
+      if (bucket.at >= bucket.indexes.length) continue;
+      const i = bucket.indexes[bucket.at];
+      bucket.at += 1;
       segments.push({ oldStart: oldCursor, oldStop: i, newStart: newCursor, newStop: j });
       oldCursor = i + 1;
       newCursor = j + 1;
@@ -595,6 +615,11 @@ export function createLocalUndoManager(
   localOrigin: unknown,
   captureTimeout = 400,
 ): Y.UndoManager {
+  // Yjs gives an update applied without an origin the origin `null`, so a
+  // null (or undefined) local origin would record collaborators' edits too.
+  if (localOrigin === null || localOrigin === undefined) {
+    throw new TypeError("createLocalUndoManager needs a non-null local origin.");
+  }
   return new Y.UndoManager([project.fields, project.layers, project.layerOrder], {
     trackedOrigins: new Set([localOrigin]),
     captureTimeout,

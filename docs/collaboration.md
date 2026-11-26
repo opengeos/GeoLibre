@@ -76,7 +76,9 @@ writer wins on that one value. A layer's `geojson` FeatureCollection is stored
 feature by feature (`meta`, `features` keyed by a generated key, and an `order`
 array), so concurrent edits to different features of one layer merge too, and
 editing one feature of a large layer sends a few hundred bytes rather than the
-layer. A delete wins over a concurrent edit of the deleted layer or feature.
+layer. Each feature is one value, though: two people editing the same feature
+at once (even different attributes of it) resolve to one of the two edits. A
+delete wins over a concurrent edit of the deleted layer or feature.
 
 `ProjectDoc.write(project, origin)` diffs a whole project against the document
 and records only the differences in one transaction tagged with `origin`;
