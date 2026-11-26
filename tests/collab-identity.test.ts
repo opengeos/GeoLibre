@@ -8,7 +8,30 @@ import {
 
 const SECRET = "relay-issuer-secret";
 
+// Minted by `sign_collab_identity_token` in backend/geolibre_server_api
+// (pinned in tests/test_collab_identity.py there): the relay must accept the
+// server API's tokens byte for byte.
+const SERVER_API_TOKEN =
+  "eyJwcm92aWRlciI6Imdlb2xpYnJlIiwidXNlcklkIjoidS0xIiwidXNlcm5hbWUiOiJBZGEgTG92ZWxhY2UiLCJleHAiOjQxMDI0NDQ4MDB9" +
+  ".cgXPTdcpCie9rzq7rrl8xtYIUYEONhRQxQ-9nq-Cy0s";
+
 describe("collaboration identity tokens", () => {
+  it("accepts a token minted by the server API, and mints the same bytes", async () => {
+    assert.deepEqual(await verifyIdentityToken(SERVER_API_TOKEN, "pinned-secret"), {
+      provider: "geolibre",
+      userId: "u-1",
+      username: "Ada Lovelace",
+    });
+    assert.equal(
+      await signIdentityToken(
+        { provider: "geolibre", userId: "u-1", username: "Ada Lovelace", exp: 4102444800 },
+        "pinned-secret",
+      ),
+      SERVER_API_TOKEN,
+    );
+    assert.equal(await verifyIdentityToken(SERVER_API_TOKEN, "other-secret"), null);
+  });
+
   it("round-trips a signed token", async () => {
     const token = await signIdentityToken(
       { provider: "geolibre", userId: "u-1", username: "Ada" },

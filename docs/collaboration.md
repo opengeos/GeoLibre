@@ -232,9 +232,23 @@ secret configured:
   how the Collaborate dialog decides to hide the "require a signed-in account"
   option entirely.
 
-GeoLibre itself ships no sign-in flow yet, so the stock deployment leaves the
-secret unset and the whole identity path dormant. The protocol and relay support
-are in place for a deployment that fronts the relay with its own issuer.
+**The GeoLibre server API as issuer (#3530).** `backend/geolibre_server_api`
+mints these tokens for its accounts at `POST /api/collab/identity-token` (see
+[the server API reference](server-api.md#post-apicollabidentity-token)). To
+enable it, give the server `GEOLIBRE_COLLAB_IDENTITY_SECRET` and the relay the
+same value as `COLLAB_IDENTITY_SECRET` (the root `docker-compose.yml` passes
+one `COLLAB_IDENTITY_SECRET` to both). When the user is signed in to that server
+(the share server's OAuth sign-in), `useCollaboration` requests a fresh token
+on every (re)connect and presents it on `join`
+(`lib/collab-identity.ts`), so the roster shows the account, the session log
+attributes joins to it, blocks and permission overrides key on `user:<id>`,
+and the host can turn on "require a signed-in account". Only this five-minute,
+single-purpose token reaches the relay, never the OAuth access token; the relay
+checks it offline with the shared secret. A user who is not signed in, or a
+server without the secret, joins anonymously as before.
+
+The stock hosted relay leaves the secret unset, so the identity path stays
+dormant there until a deployment pairs a relay with its server API.
 
 ### Moderation
 

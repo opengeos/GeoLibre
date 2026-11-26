@@ -64,6 +64,11 @@ from geolibre_server_api.auth import (
     token_digest,
 )
 from geolibre_server_api.auth_models import OAUTH_INDEXES, Account, Base
+from geolibre_server_api.collab_identity import (
+    COLLAB_IDENTITY_SECRET_ENV,
+    build_collab_identity_router,
+    collab_identity_ttl,
+)
 from geolibre_server_api.enterprise_admin import build_enterprise_admin_router
 from geolibre_server_api.enterprise_models import (
     FEDERATED_IDENTITY_INDEXES,
@@ -1192,6 +1197,11 @@ def create_app(
     app.include_router(build_lifecycle_router())
     app.include_router(build_enterprise_admin_router())
     app.include_router(build_scim_router())
+    app.include_router(
+        build_collab_identity_router(
+            os.getenv(COLLAB_IDENTITY_SECRET_ENV, "").strip() or None, collab_identity_ttl()
+        )
+    )
     if oauth_config is not None:
         app.include_router(build_oauth_router(oauth_config))
 

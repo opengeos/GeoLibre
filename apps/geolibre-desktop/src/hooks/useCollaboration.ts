@@ -414,15 +414,29 @@ export function useCollaboration(
       });
     });
 
-    conn.send({
-      type: "join",
-      clientId: selfIdRef.current ?? crypto.randomUUID(),
-      displayName,
-      color,
-      hostToken,
-      inviteToken,
-      identityToken,
-    });
+    const sendJoin = (verifiedIdentity: string | null | undefined) => {
+      if (connRef.current !== conn) return;
+      conn.send({
+        type: "join",
+        clientId: selfIdRef.current ?? crypto.randomUUID(),
+        displayName,
+        color,
+        hostToken,
+        inviteToken,
+        ...(verifiedIdentity ? { identityToken: verifiedIdentity } : {}),
+      });
+    };
+    if (identityToken) {
+      sendJoin(identityToken);
+    } else {
+      // Signed in to the server API: join as that account. A fresh token per
+      // (re)connect, since each lives only minutes. Any failure joins
+      // anonymously, as before.
+      void import("../lib/collab-identity")
+        .then(({ fetchCollabIdentityToken }) => fetchCollabIdentityToken())
+        .catch(() => null)
+        .then(sendJoin);
+    }
 
     teardownRef.current = () => {
       if (debounce) clearTimeout(debounce);
