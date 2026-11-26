@@ -286,6 +286,10 @@ function writeFeatureCollection(
     fresh.set(FC_FEATURES, new Y.Map<unknown>());
     fresh.set(FC_ORDER, new Y.Array<string>());
   }
+  // A peer may have removed or replaced `meta`; recreate it rather than fail.
+  if (!((map as Y.Map<unknown>).get(FC_META) instanceof Y.Map)) {
+    (map as Y.Map<unknown>).set(FC_META, new Y.Map<unknown>());
+  }
   const { meta, features, order } = featureCollectionParts(map as Y.Map<unknown>);
   const { features: nextFeatures, ...rest } = value;
   delete rest.type;
@@ -687,7 +691,13 @@ export class ProjectDoc {
     }
   }
 
-  /** The project the document currently holds, as plain JSON. */
+  /**
+   * The project the document currently holds, as plain JSON.
+   *
+   * The caches behind it are invalidated by deep observers, which Yjs runs
+   * after shallow ones; read from a deep observer or after the transaction,
+   * not from a shallow `observe` callback on these types.
+   */
   read(): ProjectRecord {
     this.assertLive();
     const project: JsonObject = {};
@@ -701,12 +711,15 @@ export class ProjectDoc {
       this.fieldCache.set(key, read);
       setOwn(project, key, read);
     });
-    const ids = liveKeys(this.layerOrder, this.layers);
+    // Only Y.Map entries are layers: a peer could store anything under an id,
+    // and one bad entry must not break every read.
+    const isLayer = (id: string) => this.layers.get(id) instanceof Y.Map;
+    const ids = liveKeys(this.layerOrder, this.layers).filter(isLayer);
     // A layer whose id never reached the order array (it should not happen,
     // but a hand-built doc could) still renders, on top, in a stable order.
     const listed = new Set(ids);
     const strays = Array.from(this.layers.keys())
-      .filter((id) => !listed.has(id))
+      .filter((id) => !listed.has(id) && isLayer(id))
       .sort();
     project.layers = [...ids, ...strays].map((id) => this.readLayer(id));
     return project;

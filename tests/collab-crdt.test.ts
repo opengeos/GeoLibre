@@ -372,6 +372,29 @@ describe("feature identity and edge cases", () => {
     assert.equal(Object.prototype.hasOwnProperty.call(doc.read(), "constructor"), false);
   });
 
+  it("survives malformed entries a peer could store", () => {
+    const doc = new ProjectDoc();
+    doc.write(project(), "local");
+    doc.doc.transact(() => {
+      doc.layers.set("bogus", null as unknown as Y.Map<unknown>);
+      doc.layerOrder.push(["bogus"]);
+      const roads = doc.layers.get("roads")!;
+      (roads.get("geojson") as Y.Map<unknown>).delete("meta");
+    });
+    assert.deepEqual(
+      layers(doc.read()).map((l) => l.id),
+      ["roads", "parcels"],
+    );
+    doc.write(
+      withLayer(doc.read(), "roads", (l) => ({
+        ...l,
+        geojson: { ...l.geojson!, name: "renamed" } as Layer["geojson"],
+      })),
+      "local",
+    );
+    assert.equal((layers(doc.read())[0].geojson as { name?: string }).name, "renamed");
+  });
+
   it("keeps a top-level __proto__ field as data", () => {
     const doc = new ProjectDoc();
     doc.doc.transact(() => doc.fields.set("__proto__", { polluted: true }));
