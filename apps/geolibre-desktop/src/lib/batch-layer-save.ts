@@ -42,6 +42,15 @@ import {
 import { participantCanEditLayer } from "./collab-protocol";
 import { databaseBaselineKeys, databaseFeatureKeys } from "./database-tables";
 import { embedEditedGeometry, hasEditedGeometry } from "./edited-geometry-save";
+import { saveThroughOutbox } from "./edit-sync/outbox-save";
+import {
+  buildPostgisChangeSet,
+  EDIT_SYNC_BASELINE_KEY,
+  hasPostgisSyncBaseline,
+  postgisOutboxId,
+  postgisOutboxTarget,
+  postgisSyncBaseline,
+} from "./edit-sync/postgis-edit-sync";
 import { isGeojsonSourcePath, isImportedDocumentCopyPath, joinLocalPath } from "./file-io/paths";
 import { collectGeojsonLayersForExport, type CollectGeojsonExportDeps } from "./geojson-zip-export";
 import { isTauri } from "./is-tauri";
@@ -344,6 +353,8 @@ export interface WriteLayerEditsDeps {
   updateLayer?: (layerId: string, patch: Partial<GeoLibreLayer>) => void;
   markMssqlRefreshRequired?: (layerId: string) => void;
   inFlightMssqlIds?: Set<string>;
+  /** Queue-and-sync through the offline edit outbox (#3530). */
+  saveOutbox?: typeof saveThroughOutbox;
 }
 
 /**
@@ -594,6 +605,28 @@ export async function writeLayerEditsToSource(
       return { status, message };
     }
 
+    if (isPostgis && hasPostgisSyncBaseline(layer)) {
+      // Offline-first save (#3530): queue only the changed features, then sync
+      // with per-row conflict detection. The queue survives a lost connection.
+      const target = postgisOutboxTarget(layer);
+      const ops = target ? buildPostgisChangeSet(layer, geojson) : null;
+      if (target && ops) {
+        const saveOutbox = deps?.saveOutbox ?? saveThroughOutbox;
+        return await saveOutbox(
+          {
+            id: postgisOutboxId(target),
+            backend: "postgis",
+            target,
+            targetLabel: `${target.schema}.${target.table}`,
+            layerId: layer.id,
+            layerName: layer.name,
+            ops,
+          },
+          t,
+        );
+      }
+    }
+
     if (isPostgis) {
       const connection = resolvePostgisConn(layer);
       if (!connection) {
@@ -657,6 +690,8 @@ export async function writeLayerEditsToSource(
           ...restMetadata,
           featureCount: fresh.feature_count,
           postgisBaselineKeys: databaseFeatureKeys(fresh.geojson),
+          // From now on this layer saves through the offline edit outbox.
+          [EDIT_SYNC_BASELINE_KEY]: postgisSyncBaseline(fresh.geojson),
         },
       });
       let message = t("layers.saveEditsPostgisSuccess", {

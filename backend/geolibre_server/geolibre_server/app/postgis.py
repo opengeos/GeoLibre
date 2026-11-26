@@ -238,8 +238,14 @@ def _connect(connection: str) -> Any:
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001 - surface a stable, scrubbed error
+        # Report a server that never answered (no route, refused, timed out)
+        # as 503 so clients can tell "unreachable, retry later" from a rejected
+        # login or an unknown database (400). libpq gives connect failures no
+        # SQLSTATE, but a server that answered always prefixes its refusal with
+        # its severity ("FATAL:"), which a network failure never carries.
+        unreachable = isinstance(exc, psycopg.OperationalError) and "FATAL" not in str(exc)
         raise HTTPException(
-            status_code=400,
+            status_code=503 if unreachable else 400,
             detail=f"Could not connect to PostgreSQL: {scrub_secrets(str(exc))}",
         ) from exc
 
@@ -580,7 +586,15 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
     psycopg = _import_psycopg()
     sql = psycopg.sql
 
-    features = require_features(request.geojson)
+    submitted = request.geojson.get("features") if request.geojson else None
+    # A delete-only change set (the offline edit outbox sends just the changed
+    # features) is a valid save: with a non-empty baseline the diff deletes
+    # exactly those rows. Without one, an empty payload stays an error.
+    features = (
+        []
+        if request.baseline_keys and isinstance(submitted, list) and not submitted
+        else require_features(request.geojson)
+    )
 
     with _connect(request.connection) as conn:
         info = _table_info(conn, request.schema_name, request.table, request.geometry_column)

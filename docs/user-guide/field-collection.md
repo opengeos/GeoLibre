@@ -242,3 +242,8 @@ Captures are kept in the project, so collecting needs no connection once the app
 is loaded. Cache the basemap for the area before you go with
 [Project → Offline Basemap...](projects.md#offline-basemap), and save the
 project before closing the app.
+
+Edits saved to a remote source, such as a PostGIS table, while you are out of
+coverage are queued and sync when the connection returns, with a review step
+for features someone else changed in the meantime. See
+[Offline Edit Sync](offline-edit-sync.md).

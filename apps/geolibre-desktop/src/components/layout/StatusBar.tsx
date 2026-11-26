@@ -21,6 +21,7 @@ import { getIsCoarsePointer } from "../../hooks/useTouchUi";
 import { formatAccuracy, formatSpeedKmh } from "../../lib/gps-tracking";
 import { isMobile } from "../../lib/is-mobile";
 import { autosavePausedMessage } from "../../lib/autosave-status";
+import { EditOutboxStatus } from "./EditOutboxStatus";
 
 /**
  * Ground elevation for the readout, in the scale bar's unit family: feet for
@@ -259,6 +260,7 @@ export function StatusBar({
         <Bug className="h-3 w-3" />
         {compact ? "Diag" : t("diagnostics.title")}: {diagnosticsCount}
       </button>
+      <EditOutboxStatus compact={compact} />
     </footer>
   );
 }

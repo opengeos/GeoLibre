@@ -412,6 +412,7 @@ export {
   type ReadPostgisTableResult,
   type WritePostgisTableRequest,
   type WritePostgisTableResult,
+  PostgisRequestError,
   PostgisWriteRejectedError,
   type MssqlAuthMethod,
   type MssqlStatus,
