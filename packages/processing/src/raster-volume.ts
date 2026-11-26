@@ -51,7 +51,7 @@ const LINEAR_UNIT_METERS: Record<number, number> = {
 
 export interface CutFillParams {
   /** `"plane"` (default) or `"surface"`. */
-  reference?: "plane" | "surface" | string;
+  reference?: "plane" | "surface";
   /** Elevation of the reference plane, in the raster's elevation units. */
   plane_elevation?: number;
   /** One-based band of both surfaces (default 1). */
@@ -314,7 +314,10 @@ export function cutFill(
   const reference = usePlane ? null : referenceInput ? toNorthUp(referenceInput) : null;
   if (!usePlane && !reference) throw new Error("Choose the reference surface raster.");
   if (reference) assertSameGrid(existing, reference, "reference surface");
-  const bandNo = Math.trunc(Number(params.band ?? 1)) || 1;
+  const bandNo = Number(params.band ?? 1);
+  if (!Number.isInteger(bandNo) || bandNo < 1) {
+    throw new Error(`The band must be a whole number of 1 or more (got ${String(params.band)}).`);
+  }
   const a = existing.bands[bandNo - 1];
   if (!a) {
     throw new Error(

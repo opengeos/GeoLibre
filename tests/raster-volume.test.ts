@@ -380,3 +380,58 @@ describe("projectedAreaScale edge cases", () => {
     assert.ok(run.detailMessages.some((line) => line.includes("may be degrees")));
   });
 });
+
+describe("cut-fill input checks", () => {
+  it("rejects a band that is not a whole number of 1 or more", () => {
+    for (const band of [0, -3, 1.5, Number.NaN]) {
+      assert.throws(() => cutFill(halves(), null, { band }), /whole number/, `band ${band}`);
+    }
+  });
+
+  it("clips both surfaces to the boundary", async () => {
+    const boundary = {
+      type: "FeatureCollection",
+      crs: { type: "name", properties: { name: "urn:ogc:def:crs:EPSG::32617" } },
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [500_000, 4_100_000],
+                [500_010, 4_100_000],
+                [500_010, 4_099_980],
+                [500_000, 4_099_980],
+                [500_000, 4_100_000],
+              ],
+            ],
+          },
+        },
+      ],
+    };
+    // Reference at 10 m: the 12 m left half inside the boundary is all cut.
+    const run = await runRasterToolClientAsync(
+      "cut-fill",
+      {
+        raster: halves(),
+        rasters: { surface_path: utm(new Array(100).fill(10), 10, 10) },
+        vectors: { boundary_path: boundary },
+      },
+      { reference: "surface" },
+    );
+    assert.equal(run.kind, "raster");
+    if (run.kind !== "raster") return;
+    assert.equal(run.raster.width, 5);
+    near(run.cutFill!.cutVolume, 400 / 0.9996 ** 2, 0.05);
+    assert.equal(run.cutFill!.fillVolume, 0);
+  });
+
+  it("stops when a projected CRS tag cannot be resolved", async () => {
+    const raster = utm([12], 1, 1, {
+      geoKeys: { GTModelTypeGeoKey: 1, ProjectedCSTypeGeoKey: 999_999 },
+    });
+    await assert.rejects(runRasterToolClientAsync("cut-fill", { raster }, { plane_elevation: 10 }));
+  });
+});

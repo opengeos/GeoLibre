@@ -1329,7 +1329,12 @@ export async function runRasterToolClientAsync(
         let definition: string | null = null;
         try {
           definition = await rasterCrsDefinition(existing, "cut-fill");
-        } catch {
+        } catch (error) {
+          // A raster tagged with a projected CRS that cannot be resolved has
+          // an unknown unit and distortion; guessing metres could be off by
+          // 10x for a feet grid, so stop. Only untagged rasters fall through.
+          const keys = existing.geoKeys ?? {};
+          if (keys.ProjectedCSTypeGeoKey != null || keys.ProjCoordTransGeoKey != null) throw error;
           definition = null;
         }
         const resolved = projectedMetersPerUnit(existing, definition);
