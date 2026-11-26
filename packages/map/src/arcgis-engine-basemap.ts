@@ -1,7 +1,5 @@
 // ArcgisEngine layer: basemap and story-map layer opacity.
-// ArcgisEngine is split by concern across an inheritance chain, one layer per
-// module: base <- terrain <- camera <- identify <- layers <- basemap <-
-// ArcgisEngine; see arcgis-engine.ts.
+// The ArcgisEngine layer chain is documented in arcgis-engine.ts.
 
 import { planArcgisBasemap, type ArcgisBasemapPlan, sameArcgisBasemapPlan } from "./arcgis-basemap";
 import { redactArcgisError, type ArcgisLayer } from "./arcgis-sdk";

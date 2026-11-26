@@ -1,7 +1,5 @@
 // ArcgisEngine layer: view, camera, navigation limits and fits.
-// ArcgisEngine is split by concern across an inheritance chain, one layer per
-// module: base <- terrain <- camera <- identify <- layers <- basemap <-
-// ArcgisEngine; see arcgis-engine.ts.
+// The ArcgisEngine layer chain is documented in arcgis-engine.ts.
 
 import { boundsFillMinZoom, normalizeMapBounds } from "./map-bounds";
 import type { GeoLibreLayer, MapViewState, StoryChapterLocation } from "@geolibre/core";

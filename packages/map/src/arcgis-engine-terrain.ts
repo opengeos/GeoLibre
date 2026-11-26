@@ -1,7 +1,5 @@
 // ArcgisEngine layer: terrain, elevation and COG DEM terrain.
-// ArcgisEngine is split by concern across an inheritance chain, one layer per
-// module: base <- terrain <- camera <- identify <- layers <- basemap <-
-// ArcgisEngine; see arcgis-engine.ts.
+// The ArcgisEngine layer chain is documented in arcgis-engine.ts.
 
 import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
 import { createCogElevationLayer } from "./arcgis-cog-terrain";

@@ -1,7 +1,5 @@
 // ArcgisEngine layer: identify, picking and highlight.
-// ArcgisEngine is split by concern across an inheritance chain, one layer per
-// module: base <- terrain <- camera <- identify <- layers <- basemap <-
-// ArcgisEngine; see arcgis-engine.ts.
+// The ArcgisEngine layer chain is documented in arcgis-engine.ts.
 
 import { identifyArcgisControls } from "./arcgis-control-adapters";
 import { controlLayerMirrors } from "./shadow-style";

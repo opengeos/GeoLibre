@@ -1,7 +1,5 @@
 // ArcgisEngine layer: layer sync and native layer construction.
-// ArcgisEngine is split by concern across an inheritance chain, one layer per
-// module: base <- terrain <- camera <- identify <- layers <- basemap <-
-// ArcgisEngine; see arcgis-engine.ts.
+// The ArcgisEngine layer chain is documented in arcgis-engine.ts.
 
 import { ArcgisControlHost } from "./arcgis-control-host";
 import { createArcgisZarrLayer } from "./arcgis-zarr";
