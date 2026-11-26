@@ -25,6 +25,7 @@ import {
   postgisOutboxId,
   postgisOutboxTarget,
   postgisSyncBaseline,
+  recoverPostgisLayer,
   refreshPostgisLayerAfterSync,
 } from "../apps/geolibre-desktop/src/lib/edit-sync/postgis-edit-sync";
 
@@ -504,6 +505,48 @@ describe("refreshPostgisLayerAfterSync", () => {
     assert.equal(next.metadata!.geometryEdited, true);
     const baseline = next.metadata![EDIT_SYNC_BASELINE_KEY] as Record<string, string>;
     assert.deepEqual(Object.keys(baseline).sort(), ["1", "2"]);
+  });
+
+  it("recovers a layer whose reload failed without re-adding synced features", async () => {
+    const sidecar = new FakeSidecar();
+    sidecar.rows.set(1, row(1, 1, "a"));
+    const layer = loadLayer(sidecar);
+    const drawn = {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [6, 6] },
+      properties: { name: "drawn" },
+    } as Feature;
+    const entry = entryFor(layer, [row(1, 1, "a"), drawn]);
+    const outcome = await syncOutboxEntry(entry, adapterFor(sidecar, entry));
+    assert.equal(outcome.kind, "synced");
+    // The reload failed: the layer still holds the drawn feature without a key.
+    let live = {
+      ...layer,
+      geojson: { type: "FeatureCollection" as const, features: [row(1, 1, "a"), drawn] },
+      metadata: {
+        ...layer.metadata,
+        editSyncRefreshRequired: {
+          settled: entry.ops.map(({ id, kind, key, mineFingerprint }) => ({
+            id,
+            kind,
+            key,
+            mineFingerprint,
+          })),
+        },
+      },
+    } as GeoLibreLayer;
+    const ok = await recoverPostgisLayer(live, {
+      read: sidecar.read,
+      getLayer: () => live,
+      updateLayer: (_id, patch) => {
+        live = { ...live, ...patch } as GeoLibreLayer;
+      },
+      resolveConnection: () => "x",
+    });
+    assert.ok(ok);
+    assert.equal(live.geojson!.features.length, 2, "the drawn feature is not doubled");
+    assert.equal(live.metadata.editSyncRefreshRequired, undefined);
+    assert.deepEqual(buildPostgisChangeSet(live, live.geojson!), []);
   });
 
   it("does nothing when the layer now points elsewhere", async () => {

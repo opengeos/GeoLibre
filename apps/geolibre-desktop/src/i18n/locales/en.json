@@ -429,7 +429,8 @@
       "queued_other": "{{target}} cannot be reached, so {{count}} edits are queued and sync automatically when it is back. {{error}}",
       "failed": "Could not sync to {{target}}. The edits stay queued under Pending edits in the status bar. {{error}}",
       "busy": "A sync to {{target}} is already running. Try again when it finishes.",
-      "noChanges": "No changes to save to {{target}}."
+      "noChanges": "No changes to save to {{target}}.",
+      "reloaded": "The layer was reloaded from the table, because the last sync could not refresh it. Check it and save again."
     }
   },
   "fileNamePrompt": {

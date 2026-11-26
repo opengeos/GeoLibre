@@ -507,7 +507,7 @@ describe("writeLayerEditsToSource and saveLayerEditsBatch", () => {
         sourceKind: "postgis-table",
         postgisTable: "roads",
         postgisPrimaryKey: "id",
-        editSyncRefreshRequired: true,
+        editSyncRefreshRequired: { settled: [] },
       },
     });
     let queued = false;
@@ -528,6 +528,24 @@ describe("writeLayerEditsToSource and saveLayerEditsBatch", () => {
     });
     assert.equal(res.status, "error");
     assert.equal(res.message, "layers.saveEditsPostgisRefreshWarning");
+    assert.equal(queued, false);
+    // Once the table can be read again, the save reloads the layer instead.
+    const reloaded = await writeLayerEditsToSource(pgLayer, {
+      map: undefined,
+      t,
+      canEditLayer: () => true,
+      deps: {
+        commitDrafts: () => "none",
+        readLatestLayer: () => pgLayer,
+        readProjectGeneration: () => 7,
+        recoverPostgis: async () => true,
+        saveOutbox: async () => {
+          queued = true;
+          return { status: "success", message: "" };
+        },
+      },
+    });
+    assert.equal(reloaded.message, "editOutbox.save.reloaded");
     assert.equal(queued, false);
   });
 

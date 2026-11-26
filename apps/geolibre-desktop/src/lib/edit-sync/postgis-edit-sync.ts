@@ -111,8 +111,18 @@ export function postgisSyncBaseline(
   );
 }
 
-/** Layer metadata flag: a sync landed but the layer could not be reloaded. */
+/**
+ * Layer metadata: a sync landed but the layer could not be reloaded. Holds the
+ * operations that sync settled, so the eventual reload can tell the features
+ * that are already in the table from new edits.
+ */
 export const EDIT_SYNC_REFRESH_REQUIRED_KEY = "editSyncRefreshRequired";
+
+/** The settled operations recorded with a refresh-required flag. */
+function pendingRefreshSettled(layer: GeoLibreLayer): OutboxOp[] {
+  const flag = layer.metadata[EDIT_SYNC_REFRESH_REQUIRED_KEY] as { settled?: unknown } | undefined;
+  return Array.isArray(flag?.settled) ? (flag.settled as OutboxOp[]) : [];
+}
 
 /**
  * Describe a PostGIS layer's table as an outbox target, or null when the
@@ -411,7 +421,8 @@ export function createPostgisSyncAdapter(
     },
 
     async apply(_entry, plan): Promise<ApplyResult> {
-      const touched = [...plan.updates, ...plan.deletes];
+      // A keyed insert onto an existing row (keep mine) is checked like an update.
+      const touched = [...plan.inserts, ...plan.updates, ...plan.deletes];
       // No prototype, so a text key "__proto__" stays an entry.
       const expected: Record<string, string> = Object.create(null);
       for (const op of touched) {
@@ -496,7 +507,11 @@ export async function refreshPostgisLayerAfterSync(
   // are replaced by the table's version; the rest are laid back on top.
   const localOps = buildPostgisChangeSet(live, live.geojson) ?? [];
   const remaining = new Set((outcome.entry?.ops ?? []).map((op) => op.id));
-  const settled = entry.ops.filter((op) => !remaining.has(op.id));
+  // Plus what an earlier sync settled whose reload failed.
+  const settled = [
+    ...entry.ops.filter((op) => !remaining.has(op.id)),
+    ...pendingRefreshSettled(live),
+  ];
   const unsynced = unsyncedLocalOps(localOps, settled);
   const {
     geometryEdited: _cleared,
@@ -595,12 +610,14 @@ export function overlayLocalOps(
 export const postgisEditSyncHandler: EditSyncBackendHandler = {
   createAdapter: (entry) => createPostgisSyncAdapter(entry),
   afterSync: async (entry, outcome) => {
+    // The edits landed but if the layer still shows the old base, a new save
+    // would send its inserts again: flag it until it reloads.
     try {
-      await refreshPostgisLayerAfterSync(entry, outcome);
+      if (!(await refreshPostgisLayerAfterSync(entry, outcome))) {
+        markPostgisRefreshRequired(entry, outcome);
+      }
     } catch {
-      // The edits landed but the layer still shows the old base, so a new
-      // save would send its inserts again: block saving until it reloads.
-      markPostgisRefreshRequired(entry);
+      markPostgisRefreshRequired(entry, outcome);
     }
   },
 };
@@ -612,7 +629,7 @@ export const postgisEditSyncHandler: EditSyncBackendHandler = {
  *
  * @param entry The synced entry.
  */
-export function markPostgisRefreshRequired(entry: OutboxEntry): void {
+export function markPostgisRefreshRequired(entry: OutboxEntry, outcome?: SyncOutcome): void {
   const layerId = entry.layerId;
   const store = useAppStore.getState();
   const layer = store.layers.find((candidate) => candidate.id === layerId);
@@ -620,7 +637,60 @@ export function markPostgisRefreshRequired(entry: OutboxEntry): void {
   // Only while the layer still points at the table that was written.
   const target = postgisOutboxTarget(layer);
   if (!target || postgisOutboxId(target, layerId) !== entry.id) return;
+  const remaining = new Set((outcome?.entry?.ops ?? []).map((op) => op.id));
+  const settled = [
+    ...pendingRefreshSettled(layer),
+    ...entry.ops
+      .filter((op) => !remaining.has(op.id))
+      .map(({ id, kind, key, mineFingerprint }) => ({ id, kind, key, mineFingerprint })),
+  ];
   store.updateLayer(layerId, {
-    metadata: { ...layer.metadata, [EDIT_SYNC_REFRESH_REQUIRED_KEY]: true },
+    metadata: { ...layer.metadata, [EDIT_SYNC_REFRESH_REQUIRED_KEY]: { settled } },
   });
+}
+
+/**
+ * Reload a layer flagged refresh-required from its table, laying back only
+ * the edits the earlier sync did not settle, and clear the flag.
+ *
+ * @param layer The flagged layer.
+ * @param deps Injectable store and I/O access (tests).
+ * @returns True when the layer was reloaded.
+ */
+export async function recoverPostgisLayer(
+  layer: GeoLibreLayer,
+  deps: PostgisRefreshDeps = {},
+): Promise<boolean> {
+  const target = postgisOutboxTarget(layer);
+  if (!target) return false;
+  const entry: OutboxEntry = {
+    id: postgisOutboxId(target, layer.id),
+    backend: "postgis",
+    target,
+    targetLabel: `${target.schema}.${target.table}`,
+    layerId: layer.id,
+    layerName: layer.name,
+    ops: [],
+    status: "pending",
+    conflicts: [],
+    attempts: 0,
+    createdAt: 0,
+    updatedAt: 0,
+  };
+  const outcome: SyncOutcome = {
+    kind: "synced",
+    entry: null,
+    inserted: 0,
+    updated: 0,
+    deleted: 0,
+    alreadyApplied: 0,
+    keptTheirs: 0,
+    insertedKeys: new Map(),
+    touchedKeys: [],
+  };
+  try {
+    return await refreshPostgisLayerAfterSync(entry, outcome, deps);
+  } catch {
+    return false;
+  }
 }

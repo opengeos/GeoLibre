@@ -53,6 +53,7 @@ import {
   postgisOutboxId,
   postgisOutboxTarget,
   postgisSyncBaseline,
+  recoverPostgisLayer,
 } from "./edit-sync/postgis-edit-sync";
 import { isGeojsonSourcePath, isImportedDocumentCopyPath, joinLocalPath } from "./file-io/paths";
 import { collectGeojsonLayersForExport, type CollectGeojsonExportDeps } from "./geojson-zip-export";
@@ -364,6 +365,8 @@ export interface WriteLayerEditsDeps {
   inFlightMssqlIds?: Set<string>;
   /** Queue-and-sync through the offline edit outbox (#3530). */
   saveOutbox?: typeof saveThroughOutbox;
+  /** Reload a PostGIS layer whose last sync could not be reloaded. */
+  recoverPostgis?: (layer: GeoLibreLayer) => Promise<boolean>;
 }
 
 /**
@@ -614,10 +617,13 @@ export async function writeLayerEditsToSource(
       return { status, message };
     }
 
-    if (isPostgis && layer.metadata[EDIT_SYNC_REFRESH_REQUIRED_KEY] === true) {
-      // A sync landed but the layer was not reloaded: saving again could send
-      // its new features twice.
-      return { status: "error", message: t("layers.saveEditsPostgisRefreshWarning") };
+    if (isPostgis && layer.metadata[EDIT_SYNC_REFRESH_REQUIRED_KEY]) {
+      // A sync landed but the layer was not reloaded: saving now could send
+      // its new features twice. Reload it first; the user then saves again.
+      const recover = deps?.recoverPostgis ?? recoverPostgisLayer;
+      return (await recover(layer))
+        ? { status: "warning", message: t("editOutbox.save.reloaded") }
+        : { status: "error", message: t("layers.saveEditsPostgisRefreshWarning") };
     }
     if (isPostgis && hasPostgisSyncBaseline(layer)) {
       // Offline-first save (#3530): queue only the changed features, then sync

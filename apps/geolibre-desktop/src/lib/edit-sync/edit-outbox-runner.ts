@@ -326,12 +326,18 @@ export function startEditOutboxRunner(intervalMs = 15_000): () => void {
   };
   const onOnline = () => {
     // Coming back online makes every pending entry due now.
-    for (const entry of getOutboxSnapshot().entries) {
-      if (entry.status === "pending" && entry.nextAttemptAt !== undefined) {
-        void putOutboxEntry({ ...entry, nextAttemptAt: undefined });
-      }
-    }
-    tick();
+    // Reset under each entry's lock, on the stored copy, so this tab never
+    // brings back an entry another tab synced or discarded meanwhile.
+    void Promise.all(
+      getOutboxSnapshot().entries.map((snapshotEntry) =>
+        withEntryLock(snapshotEntry.id, async () => {
+          const stored = await reloadOutboxEntry(snapshotEntry.id);
+          if (stored?.status === "pending" && stored.nextAttemptAt !== undefined) {
+            await putOutboxEntry({ ...stored, nextAttemptAt: undefined });
+          }
+        }),
+      ),
+    ).then(tick);
   };
   void loadOutbox().then(tick);
   const timer = setInterval(tick, intervalMs);
