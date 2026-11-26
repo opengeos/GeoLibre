@@ -151,7 +151,8 @@ function objectIdKey(field: string) {
  *
  * @param layer The layer.
  * @param target Its target.
- * @returns The operations, or null without a base.
+ * @returns The operations, or null without a base or when a downloaded
+ *   feature lost its object ID (the direct save then reports it).
  */
 export function buildArcGISChangeSet(
   layer: GeoLibreLayer,
@@ -162,9 +163,21 @@ export function buildArcGISChangeSet(
   const keyOf = objectIdKey(target.objectIdField);
   const fingerprint = arcgisFingerprint(target);
   const base = new Map<string, string>();
+  const baseIds = new Set<string | number>();
   for (const feature of baseline.features) {
     const key = keyOf(feature);
     if (key !== null && !base.has(key)) base.set(key, fingerprint(feature));
+    if (feature.id !== undefined) baseIds.add(feature.id);
+  }
+  // A downloaded feature that lost its object ID would become a delete plus a
+  // new insert; ArcGIS object IDs cannot be cleared, so leave it to the direct
+  // save, which refuses it with an explanation.
+  if (
+    layer.geojson.features.some(
+      (feature) => keyOf(feature) === null && feature.id !== undefined && baseIds.has(feature.id),
+    )
+  ) {
+    return null;
   }
   return buildChangeSet({
     baseline: base,
@@ -246,12 +259,41 @@ export function createArcGISSyncAdapter(
     );
   }
   const target = entry.target as ArcGISOutboxTarget;
+  // The session is opened by layer id: never send edits queued for one
+  // service to another the layer now points at.
+  const normalize = (url: string) =>
+    url
+      .replace(/\/+$/, "")
+      .replace(/\/query$/i, "")
+      .toLowerCase();
+  if (normalize(session.layerUrl) !== normalize(target.layerUrl)) {
+    throw new EditSyncRejectedError(
+      "This layer now points at a different ArcGIS service than the queued edits.",
+      "arcgisTargetMismatch",
+    );
+  }
   const field = target.objectIdField;
   const keyOf = objectIdKey(field);
   const fingerprint = arcgisFingerprint(target);
+  // An insert is compared on the attributes it set: the service may fill
+  // others with defaults.
+  const sentFingerprint = (stored: Feature, sent: Feature | undefined) => {
+    const names = new Set(
+      Object.entries(sent?.properties ?? {})
+        .filter(([, value]) => value !== null && value !== undefined)
+        .map(([name]) => name),
+    );
+    return fingerprint({
+      ...stored,
+      properties: Object.fromEntries(
+        Object.entries(stored.properties ?? {}).filter(([name]) => names.has(name)),
+      ),
+    });
+  };
 
   return {
     fingerprint,
+    insertFingerprint: (stored, op) => sentFingerprint(stored, op.feature),
     async fetchRemote(_entry, keys, maybeApplied): Promise<RemoteState> {
       const byKey = new Map<string, Feature | null>(keys.map((key) => [key, null]));
       const insertMatches = new Map<string, string>();
@@ -269,14 +311,15 @@ export function createArcGISSyncAdapter(
           const fresh = await session.query({
             where: `${field} > ${Math.max(target.maxObjectId, -1)}`,
           });
-          const candidates = new Map<string, string>();
+          // Filter on the client too: not every paging path keeps the where.
+          const candidates = new Map<string, Feature>();
           for (const feature of fresh) {
             const key = keyOf(feature);
-            if (key !== null) candidates.set(key, fingerprint(feature));
+            if (key !== null && Number(key) > target.maxObjectId) candidates.set(key, feature);
           }
           for (const op of maybeApplied) {
-            for (const [key, value] of candidates) {
-              if (value !== op.mineFingerprint) continue;
+            for (const [key, feature] of candidates) {
+              if (sentFingerprint(feature, op.feature) !== op.mineFingerprint) continue;
               insertMatches.set(op.id, key);
               candidates.delete(key);
               break;
@@ -358,6 +401,16 @@ export function createArcGISSyncAdapter(
         }
         throw new EditSyncUncertainError(message);
       }
+      // A missing result, or an add that succeeded without an object ID, leaves
+      // the outcome unknown: the retry then looks for those inserts first.
+      if (
+        (response.addResults?.length ?? 0) !== edits.adds.length ||
+        (response.updateResults?.length ?? 0) !== edits.updates.length ||
+        (response.deleteResults?.length ?? 0) !== edits.deletes.length ||
+        response.addResults?.some((r) => r.success && !Number.isSafeInteger(r.objectId))
+      ) {
+        throw new EditSyncUncertainError("ArcGIS returned incomplete edit results.");
+      }
       const opByKey = new Map(
         [...plan.updates, ...plan.deletes].map((op) => [op.key as string, op]),
       );
@@ -430,67 +483,95 @@ export async function reconcileArcGISLayerAfterSync(
   if (!current || arcgisOutboxId(current) !== entry.id) return false;
   const field = target.objectIdField;
   const keyOf = objectIdKey(field);
+  const fingerprint = arcgisFingerprint(target);
   const remaining = new Set((outcome.entry?.ops ?? []).map((op) => op.id));
   const settled = entry.ops.filter((op) => !remaining.has(op.id));
+  const theirsKeys = new Set(outcome.theirsKeys);
 
-  // Local feature id -> assigned object ID, for inserts that landed.
+  // Local feature id -> assigned object ID, for every operation that was sent
+  // as an insert (including an update re-created by keep mine).
   const assigned = new Map<string | number, number>();
-  for (const op of settled) {
-    const key = outcome.insertedKeys.get(op.id);
-    if (op.kind === "insert" && key !== undefined && op.feature?.id !== undefined) {
-      assigned.set(op.feature.id, Number(key));
-    }
-  }
-  const refreshKeys = new Set<string>(outcome.insertedKeys.values());
+  // Server key -> the version this sync wrote, to tell later local edits apart.
+  const written = new Map<string, Feature>();
   const deleted = new Set<string>();
   for (const op of settled) {
-    if (op.key === null) continue;
-    if (op.kind === "delete") deleted.add(op.key);
-    else refreshKeys.add(op.key);
+    const insertedKey = outcome.insertedKeys.get(op.id);
+    if (insertedKey !== undefined && op.feature?.id !== undefined) {
+      assigned.set(op.feature.id, Number(insertedKey));
+    }
+    const key = insertedKey ?? op.key;
+    if (key === null || theirsKeys.has(key)) continue;
+    if (op.kind === "delete") deleted.add(key);
+    else if (op.feature)
+      written.set(key, {
+        ...op.feature,
+        properties: { ...op.feature.properties, [field]: Number(key) },
+      });
   }
-  let fresh: Feature[] = [];
+  const refreshKeys = new Set<string>([...written.keys(), ...theirsKeys]);
+  // A failed read is not an empty server: keep the old versions instead.
+  let freshByKey: Map<string | null, Feature> | null = new Map();
   if (refreshKeys.size) {
     try {
-      fresh = await deps.session.query({ objectIds: [...refreshKeys].join(",") });
+      const fresh = await deps.session.query({ objectIds: [...refreshKeys].join(",") });
+      freshByKey = new Map(fresh.map((f) => [keyOf(f), f]));
     } catch {
-      fresh = [];
+      freshByKey = null;
     }
   }
-  const freshByKey = new Map(fresh.map((f) => [keyOf(f), f]));
   const live = deps.getLayer(entry.layerId);
   if (!live?.geojson) return false;
   const baseline = baselineOf(live) ?? { type: "FeatureCollection", features: [] };
-  const theirsKeys = new Set(outcome.theirsKeys);
 
-  const features = live.geojson.features
-    .filter((f) => {
-      const key = keyOf(f);
-      // Kept-theirs deletes: the server no longer has the feature.
-      return !(key !== null && theirsKeys.has(key) && !freshByKey.get(key));
-    })
-    .map((feature) => {
-      const oid =
-        feature.id !== undefined && assigned.has(feature.id) ? assigned.get(feature.id) : undefined;
-      const withId =
-        oid === undefined
-          ? feature
-          : { ...feature, properties: { ...feature.properties, [field]: oid } };
-      const key = keyOf(withId);
-      const server = key !== null ? freshByKey.get(key) : undefined;
-      // Synced features take the server's values (calculated fields); a
-      // feature edited again since the save keeps its newer local values.
-      if (server && (theirsKeys.has(key!) || refreshKeys.has(key!))) {
-        return { ...server, id: withId.id };
-      }
-      return withId;
-    });
+  const seen = new Set<string>();
+  const features: Feature[] = [];
+  for (const feature of live.geojson.features) {
+    const oid =
+      feature.id !== undefined && assigned.has(feature.id) ? assigned.get(feature.id) : undefined;
+    const withId =
+      oid === undefined
+        ? feature
+        : { ...feature, properties: { ...feature.properties, [field]: oid } };
+    const key = keyOf(withId);
+    if (key !== null) seen.add(key);
+    const server = key !== null && freshByKey ? freshByKey.get(key) : undefined;
+    if (key !== null && theirsKeys.has(key) && freshByKey) {
+      // Keep theirs: show the server's version, or drop a feature it deleted.
+      if (server) features.push({ ...server, id: withId.id });
+      continue;
+    }
+    // Synced features take server-calculated values, unless edited again
+    // since the save (then the newer local values stay).
+    const sent = key !== null ? written.get(key) : undefined;
+    if (server && sent && fingerprint(withId) === fingerprint(sent)) {
+      features.push({ ...server, id: withId.id });
+      continue;
+    }
+    features.push(withId);
+  }
+  // Keep theirs on a feature deleted locally: bring the server's version back.
+  if (freshByKey) {
+    for (const key of theirsKeys) {
+      const server = freshByKey.get(key);
+      if (server && !seen.has(key)) features.push(server);
+    }
+  }
   const nextBase = new Map<string, Feature>();
   for (const feature of baseline.features) {
     const key = keyOf(feature);
     if (key !== null && !deleted.has(key)) nextBase.set(key, feature);
   }
-  for (const [key, feature] of freshByKey) if (key !== null) nextBase.set(key, feature);
-  for (const key of theirsKeys) if (!freshByKey.get(key)) nextBase.delete(key);
+  for (const [key, sent] of written) {
+    // The server's copy when it was read, else what this sync wrote.
+    nextBase.set(key, freshByKey?.get(key) ?? sent);
+  }
+  if (freshByKey) {
+    for (const key of theirsKeys) {
+      const server = freshByKey.get(key);
+      if (server) nextBase.set(key, server);
+      else nextBase.delete(key);
+    }
+  }
   const { geometryEdited: _cleared, ...metadata } = live.metadata;
   deps.updateLayer(entry.layerId, {
     geojson: { ...live.geojson, features },

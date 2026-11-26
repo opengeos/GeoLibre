@@ -338,3 +338,32 @@ describe("reconcileGeoLensLayerAfterSync", () => {
     assert.equal(buildGeoLensChangeSet(layer.geojson!, base).length, 0, "nothing left to save");
   });
 });
+
+describe("GeoLens identity guards", () => {
+  it("gives a copied feature its own local id and settles a missing gid as unknown", async () => {
+    const fc = withGeoLensLocalIds({
+      type: "FeatureCollection",
+      features: [building(1, 10), building(1, 10)],
+    });
+    assert.equal(fc.features[0].id, 1);
+    assert.match(String(fc.features[1].id), /^geolens-new-/);
+
+    const { server, baseline } = seed();
+    const entry = entryFor(
+      [building(1, 10), building(2, 20), building(3, 30), { ...building(0, 4), id: undefined }],
+      baseline,
+    );
+    const fetchImpl = server.fetch;
+    server.fetch = async (url, init) => {
+      const res = await fetchImpl(url, init);
+      // A POST answer without a usable id.
+      return init?.method === "POST" ? { ...res, json: async () => ({}) } : res;
+    };
+    const outcome = await syncOutboxEntry(
+      entry,
+      createGeoLensSyncAdapter(entry, server.connection()),
+    );
+    assert.equal(outcome.kind, "offline");
+    assert.equal(outcome.entry!.ops[0].maybeApplied, true);
+  });
+});

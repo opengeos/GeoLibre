@@ -25,6 +25,8 @@ export function describeSyncError(
       return t("editOutbox.errors.postgisNoConnection");
     case "arcgisLayerClosed":
       return t("editOutbox.errors.arcgisLayerClosed");
+    case "arcgisTargetMismatch":
+      return t("editOutbox.errors.arcgisTargetMismatch");
     case "geolensNotConnected":
       return t("editOutbox.errors.geolensNotConnected");
     default:

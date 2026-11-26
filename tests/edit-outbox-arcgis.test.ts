@@ -434,3 +434,71 @@ describe("ArcGIS keep mine on a server delete", () => {
     assert.equal(added.last_edited_date, undefined);
   });
 });
+
+describe("ArcGIS sync guards", () => {
+  it("refuses a session for another service and treats incomplete results as unknown", async () => {
+    const service = seed();
+    const layer = edit(loadLayer(service), (features) => [
+      features[0],
+      features[1],
+      features[2],
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [8, 8] },
+        properties: { name: "n", status: "new" },
+      },
+    ]);
+    const entry = entryFor(layer);
+    const other = { ...service.session(), layerUrl: "https://other.example.com/FeatureServer/0" };
+    assert.throws(
+      () => createArcGISSyncAdapter(entry, other),
+      (error: Error & { code?: string }) => error.code === "arcgisTargetMismatch",
+    );
+    const partial = service.session();
+    partial.applyEdits = async () => ({ addResults: [], updateResults: [], deleteResults: [] });
+    const outcome = await syncOutboxEntry(entry, createArcGISSyncAdapter(entry, partial));
+    assert.equal(outcome.kind, "offline");
+    assert.equal(outcome.entry!.ops.find((op) => op.kind === "insert")!.maybeApplied, true);
+  });
+
+  it("leaves the layer to a downloaded feature that lost its object ID", () => {
+    const service = seed();
+    const layer = edit(loadLayer(service), (features) => [
+      { ...features[0], properties: { ...features[0].properties, OBJECTID: null } },
+      features[1],
+      features[2],
+    ]);
+    assert.equal(buildArcGISChangeSet(layer, arcgisOutboxTarget(layer)!), null);
+  });
+
+  it("keeps kept-theirs features when the follow-up read fails", async () => {
+    const service = seed();
+    const edited = edit(loadLayer(service), (features) => [
+      { ...features[0], properties: { ...features[0].properties, status: "mine" } },
+      features[1],
+      features[2],
+    ]);
+    const entry = entryFor(edited);
+    service.rows.set(1, row(1, 1, "theirs", 9_999));
+    const adapter = createArcGISSyncAdapter(entry, service.session());
+    const first = await syncOutboxEntry(entry, adapter);
+    const resolved = applyConflictResolutions(
+      first.entry!,
+      new Map([[first.entry!.ops[0].id, "theirs" as const]]),
+    );
+    const second = await syncOutboxEntry(resolved, adapter);
+    let live = edited;
+    const failing = service.session();
+    failing.query = async () => {
+      throw new TypeError("Failed to fetch");
+    };
+    await reconcileArcGISLayerAfterSync(resolved, second, {
+      getLayer: () => live,
+      updateLayer: (_id, patch) => {
+        live = { ...live, ...patch } as GeoLibreLayer;
+      },
+      session: failing,
+    });
+    assert.equal(live.geojson!.features.length, 3, "nothing is dropped on a failed read");
+  });
+});

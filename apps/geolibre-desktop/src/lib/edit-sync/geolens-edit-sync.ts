@@ -86,8 +86,14 @@ function gidKey(feature: Feature): string | null {
  */
 export function withGeoLensLocalIds(collection: FeatureCollection): FeatureCollection {
   let changed = false;
+  const seen = new Set<number>();
   const features = collection.features.map((feature) => {
-    if (featureGid(feature) !== null) return feature;
+    const gid = featureGid(feature);
+    // A second feature claiming a gid (a copy) is new, and needs its own id.
+    if (gid !== null && !seen.has(gid)) {
+      seen.add(gid);
+      return feature;
+    }
     if (typeof feature.id === "string" && feature.id.startsWith("geolens-new-")) return feature;
     changed = true;
     return { ...feature, id: `geolens-new-${crypto.randomUUID()}` };
@@ -112,7 +118,11 @@ export function buildGeoLensChangeSet(
   }
   return buildChangeSet({
     baseline: base,
-    features: collection.features,
+    // GeoLens cannot store a feature without geometry; like the plugin's own
+    // diff, such a drawing is not sent.
+    features: collection.features.filter(
+      (feature) => feature.geometry || featureGid(feature) !== null,
+    ),
     keyOf: gidKey,
     rawKeyOf: (feature) => featureGid(feature) ?? undefined,
     rawKeyOfBase: (key) => Number(key),
@@ -141,6 +151,9 @@ export function geolensOutboxTarget(
   for (const key of baseline.keys()) maxGid = Math.max(maxGid, Number(key));
   return { baseUrl, datasetId, featureLimit, maxGid };
 }
+
+/** How many rows past the download limit the lost-insert search reads. */
+const RECOVERY_EXTRA_FEATURES = 10_000;
 
 /** A live GeoLens connection for syncing. */
 export interface GeoLensConnection {
@@ -191,10 +204,11 @@ export function createGeoLensSyncAdapter(
           );
         }
         if (maybeApplied.length) {
+          // Room for rows added since the download, which follow the old ones.
           const all = await fetchDatasetFeatures(
             client,
             target.datasetId,
-            target.featureLimit,
+            target.featureLimit + RECOVERY_EXTRA_FEATURES,
             fetchImpl,
           );
           const candidates = new Map<string, string>();
@@ -255,10 +269,7 @@ export function createGeoLensSyncAdapter(
       }
       for (const op of plan.inserts) {
         const feature = op.feature as Feature;
-        if (!feature.geometry) {
-          failed.push({ opId: op.id, message: "GeoLens needs a geometry to add a feature." });
-          continue;
-        }
+        if (!feature.geometry) continue;
         await run(op, async () => {
           const gid = await createFeature(
             client,
@@ -266,7 +277,10 @@ export function createGeoLensSyncAdapter(
             { geometry: feature.geometry, properties: cleanProperties(feature.properties) },
             fetchImpl,
           );
-          if (gid !== null) insertedKeys.set(op.id, String(gid));
+          // Without its gid the feature cannot be linked to its row, and a
+          // later save would add it again: settle it through the dedupe.
+          if (gid === null) throw new Error("GeoLens did not return the new feature's id.");
+          insertedKeys.set(op.id, String(gid));
         });
       }
       for (const op of plan.deletes) {
@@ -323,6 +337,9 @@ export async function reconcileGeoLensLayerAfterSync(
   }
   const theirsKeys = new Set(outcome.theirsKeys);
   const theirs = new Map<string, Feature | null>();
+  // Keep-theirs features whose read failed keep their old base, so the next
+  // save still sees them as differing and they come back for review.
+  const unread = new Set<string>(theirsKeys);
   if (deps.connection && theirsKeys.size) {
     for (const key of theirsKeys) {
       try {
@@ -335,18 +352,21 @@ export async function reconcileGeoLensLayerAfterSync(
             deps.connection.fetchImpl,
           ),
         );
+        unread.delete(key);
       } catch {
-        // Leave that feature as it is; the next save will flag it again.
+        // Leave that feature and its base as they are.
       }
     }
   }
   const next: GeoLensFeatureBaseline = new Map(baseline);
   const live = deps.getLayer(entry.layerId) ?? layer;
   const features: Feature[] = [];
+  const present = new Set<string>();
   for (const feature of live.geojson!.features) {
     const gid = feature.id !== undefined ? assigned.get(feature.id) : undefined;
     const current = gid === undefined ? feature : { ...feature, id: gid };
     const key = gidKey(current);
+    if (key !== null) present.add(key);
     if (key !== null && theirs.has(key)) {
       const server = theirs.get(key);
       if (server) features.push(server);
@@ -354,14 +374,17 @@ export async function reconcileGeoLensLayerAfterSync(
     }
     features.push(current);
   }
+  // Keep theirs on a feature deleted locally: bring the server's version back.
+  for (const [key, server] of theirs) if (server && !present.has(key)) features.push(server);
   for (const op of settled) {
-    const key = op.key ?? outcome.insertedKeys.get(op.id) ?? null;
+    // An insert is based under the gid the server assigned, not a local id.
+    const key = outcome.insertedKeys.get(op.id) ?? op.key ?? null;
     if (key === null) continue;
+    if (theirs.has(key) || unread.has(key)) continue;
     if (op.kind === "delete") {
       next.delete(key);
       continue;
     }
-    if (theirs.has(key)) continue;
     if (op.feature) {
       next.set(key, {
         geometry: op.feature.geometry ? structuredClone(op.feature.geometry) : null,
