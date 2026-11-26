@@ -31,9 +31,18 @@ export interface GeoTiffInfo {
   bigtiff: boolean;
 }
 
-/** Tile size (px) for the encoded COG. 512 matches the COGs GeoLibre's sample
- * data ships with and the upstream reader's expectations. */
+/**
+ * Default tile size matches GeoLibre's sample COGs and the upstream reader.
+ * High band counts use smaller supported tile sizes to reduce padded samples.
+ */
 const COG_TILE_SIZE = 512;
+
+/** Keep a padded tile at or below four default single-band tiles when possible. */
+function tileSizeForBands(bands: number): number {
+  let size = COG_TILE_SIZE;
+  while (size > 16 && size * size * bands > COG_TILE_SIZE * COG_TILE_SIZE * 4) size /= 2;
+  return size;
+}
 
 /**
  * Compressions {@link CogBuilder} can encode for *any* pixel type, and so the
@@ -50,6 +59,8 @@ export const COG_WASM_COMPRESSIONS = ["deflate", "lzw", "packbits", "none"] as c
 export type CogWasmCompression = (typeof COG_WASM_COMPRESSIONS)[number];
 
 export interface ConvertGeoTiffToCogOptions {
+  /** Encode non-byte samples as Float64 instead of the default Float32. */
+  float64?: boolean;
   /** Tile compression codec. Defaults to `"deflate"`. */
   compression?: CogWasmCompression;
   /**
@@ -183,10 +194,13 @@ export async function convertGeoTiffToCog(
       const geoTransform = reader.geo_transform();
       if (geoTransform.length >= 6) builder.set_geo_transform(geoTransform);
       const nodata = reader.nodata;
-      if (typeof nodata === "number" && Number.isFinite(nodata)) {
+      if (
+        typeof nodata === "number" &&
+        (Number.isFinite(nodata) || (options.float64 && Number.isNaN(nodata)))
+      ) {
         builder.set_nodata(nodata);
       }
-      builder.set_tile_size(COG_TILE_SIZE);
+      builder.set_tile_size(tileSizeForBands(bands));
       builder.set_compression(options.compression ?? "deflate");
       // An explicit empty list writes no overviews (unset would auto-compute them).
       builder.set_overview_levels(
@@ -202,6 +216,7 @@ export async function convertGeoTiffToCog(
       // pixel), matching what CogBuilder expects.
       const pixels = reader.read_all_f64();
       const isByte = info.sample_format === "uint" && info.bits_per_sample <= 8;
+      if (!isByte && options.float64) return builder.write_f64(pixels);
       return isByte
         ? builder.write_u8(Uint8Array.from(pixels))
         : builder.write_f32(Float32Array.from(pixels));
@@ -281,7 +296,7 @@ export async function convertRasterDataToCog(
     } else if (nodata != null && Number.isFinite(nodata)) {
       builder.set_nodata(nodata);
     }
-    builder.set_tile_size(COG_TILE_SIZE);
+    builder.set_tile_size(tileSizeForBands(raster.bands.length));
     builder.set_compression("deflate");
     builder.set_overview_levels(overviewLevels(raster.width, raster.height));
 

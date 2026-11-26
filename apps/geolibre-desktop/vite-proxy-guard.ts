@@ -921,6 +921,7 @@ export async function proxyBinaryRequestGuarded(
   req: IncomingMessage,
   res: ServerResponse,
   proxyPath: string,
+  options: { forwardAccept?: boolean; discardErrorBody?: boolean; maxBodyBytes?: number } = {},
 ): Promise<void> {
   const requestUrl = new URL(req.url ?? "", `http://localhost${proxyPath}`);
   const target = requestUrl.searchParams.get("url");
@@ -942,6 +943,8 @@ export async function proxyBinaryRequestGuarded(
   const headers = new Headers();
   const range = req.headers.range;
   if (range) headers.set("range", range);
+  const accept = req.headers.accept;
+  if (options.forwardAccept && accept) headers.set("accept", accept);
 
   let response: Response;
   try {
@@ -957,9 +960,19 @@ export async function proxyBinaryRequestGuarded(
   }
 
   const contentType = response.headers.get("content-type") ?? "application/octet-stream";
+  if (options.discardErrorBody && !response.ok) {
+    await response.body?.cancel().catch(() => {});
+    res.statusCode = response.status;
+    res.setHeader("access-control-allow-origin", "*");
+    res.setHeader("cache-control", "no-store");
+    res.setHeader("content-type", contentType);
+    res.setHeader("content-length", "0");
+    res.end();
+    return;
+  }
   let body: Buffer;
   try {
-    body = await readBodyWithLimit(response);
+    body = await readBodyWithLimit(response, options.maxBodyBytes);
   } catch (err) {
     console.warn("[vite-proxy-guard] upstream body rejected:", err);
     res.statusCode = 502;
@@ -972,6 +985,10 @@ export async function proxyBinaryRequestGuarded(
   res.setHeader("access-control-allow-origin", "*");
   res.setHeader("cache-control", "public, max-age=3600");
   res.setHeader("content-type", contentType);
+  if (options.forwardAccept) {
+    res.setHeader("x-geolibre-final-url", response.url || target);
+    res.setHeader("vary", "Accept");
+  }
   for (const header of ["accept-ranges", "content-range"]) {
     const value = response.headers.get(header);
     if (value) res.setHeader(header, value);

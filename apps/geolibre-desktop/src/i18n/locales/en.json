@@ -607,6 +607,10 @@
       "wcs": {
         "label": "WCS layer",
         "description": "Load a numerical GeoTIFF subset from a WCS 1.0.0 / 2.0.1 service."
+      },
+      "ogcCoverages": {
+        "label": "Add OGC API - Coverages",
+        "description": "Discover coverage collections and import a GeoTIFF or CoverageJSON numerical subset."
       }
     },
     "shared": {
@@ -1607,6 +1611,19 @@
         "response": "The service did not return a valid GeoTIFF.",
         "grid": "This coverage needs a supported two-dimensional rectified grid and WCS scaling support.",
         "crs": "This request CRS is unavailable. Without the WCS CRS extension, only a native EPSG:4326 or EPSG:3857 CRS is supported."
+      }
+    },
+    "ogcCoverages": {
+      "subset": "Additional axis subsets (optional)",
+      "parameter": "CoverageJSON fields (optional)",
+      "hint": "Enter a CRS84 bounding box. Leave fields blank to import every numeric CoverageJSON range, or enter comma-separated names. Extra axes must be sliced to one value. Downloads are limited to 128 MiB and 8 million samples. Layers are snapshots; export their GeoTIFF to keep the bytes.",
+      "errors": {
+        "response": "The service did not return a supported coverage document or GeoTIFF.",
+        "grid": "Select a numeric, regular two-dimensional grid in CRS84, EPSG:4326 or EPSG:3857. Slice other axes to one value.",
+        "empty": "No GeoTIFF or CoverageJSON coverage collections were advertised.",
+        "size": "The coverage exceeds the 128 MiB download limit or 8 million decoded samples.",
+        "metadata": "The service catalog is too large to retrieve safely.",
+        "bbox": "Enter valid west, south, east and north coordinates in CRS84. Split areas crossing the antimeridian into separate requests."
       }
     }
   },
@@ -4135,7 +4152,8 @@
       "postgres": "PostgreSQL layer",
       "mssql": "SQL Server layer",
       "iceberg": "Apache Iceberg layer",
-      "wcs": "WCS layer"
+      "wcs": "WCS layer",
+      "ogcCoverages": "OGC API - Coverages"
     },
     "conversion": {
       "vectorToVector": "Vector to vector",

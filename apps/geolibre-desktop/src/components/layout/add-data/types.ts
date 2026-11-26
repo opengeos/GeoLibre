@@ -10,6 +10,7 @@ export type AddDataKind =
   | "wfs"
   | "wmts"
   | "ogc-features"
+  | "ogc-coverages"
   | "ogc-vector-tiles"
   | "gpx"
   | "geopdf"

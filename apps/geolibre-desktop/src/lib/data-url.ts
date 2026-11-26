@@ -35,6 +35,7 @@ const SERVICE_KINDS = new Set([
   "wfs",
   "wcs",
   "ogc-features",
+  "ogc-coverages",
   "ogc-vector-tiles",
   "arcgis",
   // A Zarr store needs a variable and value range picked before it can draw,

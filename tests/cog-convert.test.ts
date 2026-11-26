@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { before, describe, it } from "node:test";
 import { CogBuilder, GeoTiffReader } from "geolibre-wasm";
+import { fromArrayBuffer } from "geotiff";
 import {
   COG_WASM_COMPRESSIONS,
   convertGeoTiffToCog,
@@ -68,6 +69,34 @@ describe("convertGeoTiffToCog", () => {
       assert.equal(band[20], 9);
     } finally {
       reader.free();
+    }
+  });
+
+  it("retains 512-pixel tiles for one- and four-band processing and GeoTIFF conversions", async () => {
+    for (const count of [1, 4]) {
+      const raster = await convertRasterDataToCog({
+        bands: Array.from({ length: count }, (_, i) =>
+          Float32Array.from([i, i + 0.5, i + 1, i + 2]),
+        ),
+        width: 2,
+        height: 2,
+        originX: 0,
+        originY: 2,
+        resX: 1,
+        resY: 1,
+        nodata: -9999,
+        geoKeys: { GTModelTypeGeoKey: 2, GeographicTypeGeoKey: 4326 },
+      });
+      const converted = await convertGeoTiffToCog(raster, { overviews: false });
+      for (const bytes of [raster, converted]) {
+        const image = await (await fromArrayBuffer(Uint8Array.from(bytes).buffer)).getImage();
+        assert.equal(image.getTileWidth(), 512);
+        assert.equal(image.getTileHeight(), 512);
+        assert.equal(image.getSamplesPerPixel(), count);
+        const bands = await image.readRasters();
+        for (let i = 0; i < count; i++)
+          assert.deepEqual(Array.from(bands[i]), [i, i + 0.5, i + 1, i + 2]);
+      }
     }
   });
 

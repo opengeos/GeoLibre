@@ -55,6 +55,7 @@ describe("COG conversion worker lifecycle", () => {
     const run = convertGeoTiffToCog(source, {
       compression: "lzw",
       overviews: false,
+      float64: true,
       signal: controller.signal,
     });
     const worker = lastWorker();
@@ -62,7 +63,11 @@ describe("COG conversion worker lifecycle", () => {
     assert.equal(worker.options.type, "module");
     assert.deepEqual(source, Uint8Array.of(1, 2, 3));
     assert.deepEqual(worker.request?.bytes, source);
-    assert.deepEqual(worker.request?.options, { compression: "lzw", overviews: false });
+    assert.deepEqual(worker.request?.options, {
+      compression: "lzw",
+      overviews: false,
+      float64: true,
+    });
     const result = Uint8Array.of(4, 5);
     worker.answer({ ok: true, bytes: result });
     assert.equal(await run, result);
@@ -85,7 +90,9 @@ describe("COG conversion worker lifecycle", () => {
   it("copies only a subarray's range without detaching sibling views", async () => {
     installWorker();
     const source = Uint8Array.of(0, 1, 2, 3);
-    const run = convertGeoTiffToCog(source.subarray(1, 3), { transferInput: true });
+    const run = convertGeoTiffToCog(source.subarray(1, 3), {
+      transferInput: true,
+    });
     assert.deepEqual(source, Uint8Array.of(0, 1, 2, 3));
     assert.deepEqual(lastWorker().request?.bytes, Uint8Array.of(1, 2));
     lastWorker().answer({ ok: true, bytes: Uint8Array.of(4) });
@@ -95,7 +102,9 @@ describe("COG conversion worker lifecycle", () => {
   it("terminates synchronous work on abort and leaves the next conversion independent", async () => {
     installWorker();
     const controller = new AbortController();
-    const run = convertGeoTiffToCog(Uint8Array.of(1), { signal: controller.signal });
+    const run = convertGeoTiffToCog(Uint8Array.of(1), {
+      signal: controller.signal,
+    });
     const first = lastWorker();
     controller.abort();
     await assert.rejects(run, { name: "AbortError" });
@@ -109,7 +118,9 @@ describe("COG conversion worker lifecycle", () => {
   it("cancels one concurrent conversion without stopping another", async () => {
     installWorker();
     const controller = new AbortController();
-    const first = convertGeoTiffToCog(Uint8Array.of(1), { signal: controller.signal });
+    const first = convertGeoTiffToCog(Uint8Array.of(1), {
+      signal: controller.signal,
+    });
     const firstWorker = lastWorker();
     const second = convertGeoTiffToCog(Uint8Array.of(2));
     const secondWorker = lastWorker();
@@ -139,7 +150,10 @@ describe("COG conversion worker lifecycle", () => {
     controller.abort();
     const bytes = Uint8Array.of(1);
     await assert.rejects(
-      convertGeoTiffToCog(bytes, { signal: controller.signal, transferInput: true }),
+      convertGeoTiffToCog(bytes, {
+        signal: controller.signal,
+        transferInput: true,
+      }),
       {
         name: "AbortError",
       },
@@ -162,7 +176,10 @@ describe("COG conversion worker lifecycle", () => {
       const worker = lastWorker();
       if (mode === "engine") worker.answer({ ok: false, error: "Unsupported sample format" });
       if (mode === "load")
-        worker.onerror?.({ message: "load failed", preventDefault() {} } as ErrorEvent);
+        worker.onerror?.({
+          message: "load failed",
+          preventDefault() {},
+        } as ErrorEvent);
       if (mode === "message") worker.onmessageerror?.();
       await assert.rejects(run, /Unsupported sample format|load failed|response|send failed/);
       assert.ok(worker.terminated);
