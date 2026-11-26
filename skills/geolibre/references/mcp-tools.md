@@ -24,7 +24,8 @@ Pick by what the data **is**:
 | A PMTiles archive, or a vector tile service | `add_tiles_layer` | `kind="pmtiles"` (with `tile_type`) or `kind="vector-tiles"`. |
 | A WMS or WMTS endpoint | `add_ogc_layer` | `service="wms"` or `"wmts"`. |
 | A WFS feature type | `add_wfs_layer` | Fetched by the app each time the project opens; the endpoint must return GeoJSON. |
-| An ArcGIS REST MapServer, ImageServer, or FeatureServer layer | `add_arcgis_layer` | `service="map"`, `"image"`, or `"feature"`; `tiled=True` uses a validated public map/image cache. No tokens. A VectorTileServer goes to `add_tiles_layer`. |
+| An ArcGIS REST MapServer, ImageServer, or FeatureServer layer | `add_arcgis_layer` | `service="map"`, `"image"`, or `"feature"`; `tiled=True` uses a validated public map/image cache. No tokens. A VectorTileServer goes to `add_arcgis_vector_tile_layer`. |
+| An ArcGIS VectorTileServer | `add_arcgis_vector_tile_layer` | Drawn with the service's own style, read once and stored. Public services only (no tokens or portal items); metadata reads are capped at 2 MiB / 8 MiB with a 30-second deadline each. |
 | A Zarr data cube (climate, ocean, imagery stacks) | `add_zarr_layer` | One `variable`, sliced with `selector`. For a public HTTP(S) Icechunk repository, set `icechunk_branch="main"`. Local stores need a session reader. |
 | A georeferenced video | `add_video_layer` | `https://` URLs plus four corner coordinates. |
 | A LAS/LAZ/COPC/EPT point cloud | `add_lidar_layer` | COPC and EPT stream by level of detail; the app's Point Cloud Annotation plugin can label it. |
@@ -101,6 +102,8 @@ add_wfs_layer(path, name, endpoint, type_name, version="2.0.0",
 add_arcgis_layer(path, name, url, service="map", tiled=False, sublayers=None,
                  rendering_rule=None, max_features=None, bounds=None,
                  attribution=None, index=None)
+add_arcgis_vector_tile_layer(path, url, name=None, bounds=None, attribution=None,
+                             index=None)
 add_zarr_layer(path, name, url, variable, selector=None, clim=None,
                colormap=None, bounds=None, crs=None, index=None, icechunk_branch=None)
 add_video_layer(path, name, urls, coordinates, index=None)

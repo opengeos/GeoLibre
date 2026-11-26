@@ -295,6 +295,7 @@ Give it a directory meant for maps, not your home directory.
 | `add_ogc_layer` | WMS and WMTS endpoints. |
 | `add_wfs_layer` | A WFS feature type, fetched by the app when the project opens. |
 | `add_arcgis_layer` | ArcGIS REST MapServer and ImageServer (dynamic export, or a validated public image cache with `tiled=true`) and FeatureServer layers (features in view loaded on open). Cached mode refuses sublayers, rendering rules, incompatible grids and raw LERC caches before changing the project. |
+| `add_arcgis_vector_tile_layer` | An ArcGIS VectorTileServer drawn with the service's own default style, read now and stored on the layer the way the app saves it. Metadata reads are bounded (2 MiB description, 8 MiB style, 30-second deadline each); styles the app cannot draw are refused before the project changes. No tokens or portal items. |
 | `add_zarr_layer` | One variable of a Zarr data cube, sliced with a dimension selector. Set `icechunk_branch="main"` for a public HTTP(S) Icechunk repository; its branch and settings survive reopening. |
 | `add_video_layer` | A georeferenced video overlay from `https://` URLs and four corners. |
 | `add_lidar_layer` | LAS/LAZ/COPC/EPT point clouds by URL. |
