@@ -203,9 +203,10 @@ def test_connect_refusal_by_the_server_stays_a_client_error(monkeypatch) -> None
     import geolibre_server.app.postgis as postgis_module
 
     def refuse(*_args, **_kwargs):
+        # A server with a localized lc_messages translates its own wording.
         raise psycopg.OperationalError(
             'connection failed: connection to server at "db", port 5432 failed: '
-            'FATAL:  password authentication failed for user "alice"'
+            'FATAL:  Passwort-Authentifizierung für Benutzer "alice" fehlgeschlagen'
         )
 
     monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "*")

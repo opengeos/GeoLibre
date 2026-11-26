@@ -610,12 +610,16 @@ export function applyConflictResolutions(
 /**
  * Merge a newer change set for the same target into a queued entry.
  *
- * The newer change set is the whole truth for what I want each feature to
- * be. Two things carry over from the queued one: a feature's **older** base
- * fingerprint (the layer may have been re-based onto the server's version
- * after a partial sync, and comparing against that would hide a conflict
- * still under review), and the dedupe flag of an insert already sent with an
- * unknown outcome.
+ * The newer change set wins for every feature it mentions. Queued operations
+ * it does not mention are **kept**: the layer may have been reopened without
+ * them (a restart before the project was saved), and their edits never
+ * reached the source, so only a sync or an explicit Discard may drop them. A
+ * queued insert is matched to a newer one by content, so the same drawn
+ * feature is not queued twice. Two things carry over to a newer operation:
+ * the feature's **older** base fingerprint (the layer may have been re-based
+ * onto the server's version after a partial sync, and comparing against that
+ * would hide a conflict still under review), and the dedupe flag of an insert
+ * already sent with an unknown outcome.
  *
  * @param queued The entry already in the outbox.
  * @param ops The newer change set.
@@ -623,30 +627,51 @@ export function applyConflictResolutions(
  * @returns The merged entry, reset to pending.
  */
 export function mergeChangeSet(queued: OutboxEntry, ops: OutboxOp[], at: number): OutboxEntry {
-  const uncertain = queued.ops.filter((op) => op.kind === "insert" && op.maybeApplied);
   const olderBase = new Map<string, string>();
   for (const op of queued.ops) {
-    if (op.key !== null && op.baseFingerprint !== undefined)
+    if (op.key !== null && op.baseFingerprint !== undefined) {
       olderBase.set(op.key, op.baseFingerprint);
+    }
   }
   const merged = ops.map((op) => {
     const base = op.key !== null ? olderBase.get(op.key) : undefined;
     return base !== undefined && op.kind !== "insert" ? { ...op, baseFingerprint: base } : op;
   });
-  for (const op of uncertain) {
+  const newerKeys = new Set(ops.map((op) => op.key).filter((key): key is string => key !== null));
+  const claimed = new Set<number>();
+  for (const op of queued.ops) {
+    if (op.key !== null) {
+      if (!newerKeys.has(op.key)) merged.push(op);
+      continue;
+    }
+    // A keyless insert: the newer change set holds it again if the feature is still there.
     const twin = merged.findIndex(
-      (candidate) =>
-        candidate.kind === "insert" && candidate.mineFingerprint === op.mineFingerprint,
+      (candidate, index) =>
+        !claimed.has(index) &&
+        candidate.kind === "insert" &&
+        candidate.key === null &&
+        candidate.mineFingerprint === op.mineFingerprint,
     );
-    if (twin >= 0) merged[twin] = { ...merged[twin], id: op.id, maybeApplied: true };
+    if (twin < 0) {
+      merged.push(op);
+      continue;
+    }
+    claimed.add(twin);
+    merged[twin] = {
+      ...merged[twin],
+      id: op.id,
+      ...(op.maybeApplied ? { maybeApplied: true } : {}),
+    };
   }
+  const keptIds = new Set(merged.map((op) => op.id));
   return {
     ...queued,
     ops: merged,
     status: "pending",
-    conflicts: [],
+    conflicts: queued.conflicts.filter((conflict) => keptIds.has(conflict.opId)),
     attempts: 0,
     lastError: undefined,
+    lastErrorCode: undefined,
     nextAttemptAt: undefined,
     updatedAt: at,
   };

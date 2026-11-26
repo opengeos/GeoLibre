@@ -25,6 +25,10 @@ with **Project → Save layer edits to source files**. GeoLibre works out what
 changed since the layer was loaded (new, changed and deleted features) and only
 sends those features.
 
+Saving again while edits are still queued replaces the queued version of every
+feature the new save touches. Queued edits to other features are kept, even if
+the layer was reopened without them, until they sync or you discard them.
+
 The save then reports one of four results:
 
 - **Synced**: everything reached the source. The layer reloads from the source,

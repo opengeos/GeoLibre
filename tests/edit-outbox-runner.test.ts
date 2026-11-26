@@ -32,6 +32,7 @@ import {
   loadOutbox,
   memoryOutboxPersistence,
   putOutboxEntry,
+  reloadOutboxEntry,
   setOutboxPersistence,
   subscribeOutbox,
   type OutboxPersistence,
@@ -121,6 +122,20 @@ describe("edit outbox store", () => {
     assert.equal(getOutboxSnapshot().entries.length, 1);
   });
 
+  it("re-reads an entry another tab synced or changed", async () => {
+    const shared = memoryOutboxPersistence();
+    setOutboxPersistence(shared);
+    const entry = await enqueueShape();
+    await putOutboxEntry(entry);
+    // Another tab updates, then removes, the stored entry.
+    await shared.put({ ...entry, attempts: 7 });
+    assert.equal((await reloadOutboxEntry(entry.id))!.attempts, 7);
+    assert.equal(getOutboxEntry(entry.id)!.attempts, 7);
+    await shared.remove(entry.id);
+    assert.equal(await reloadOutboxEntry(entry.id), undefined);
+    assert.equal(getOutboxEntry(entry.id), undefined);
+  });
+
   it("validates rows read back from storage", () => {
     assert.equal(isOutboxEntry(null), false);
     assert.equal(isOutboxEntry({ id: "x", backend: "postgis", layerId: "l", ops: [] }), false);
@@ -175,9 +190,10 @@ describe("edit outbox runner", () => {
     const second = await enqueueChangeSet(input([updateOp("b", "2")]), () => 20);
     assert.equal(second.kind, "queued");
     const entry = getOutboxEntry("postgis:t")!;
+    // The newer change set adds feature 2; the queued edit to feature 1 is kept.
     assert.deepEqual(
       entry.ops.map((op) => op.key),
-      ["2"],
+      ["2", "1"],
     );
     assert.equal(entry.createdAt, 10);
     assert.equal(entry.updatedAt, 20);
@@ -186,7 +202,7 @@ describe("edit outbox runner", () => {
     assert.equal((await enqueueChangeSet(input([]))).kind, "empty");
     assert.deepEqual(
       getOutboxEntry("postgis:t")!.ops.map((op) => op.key),
-      ["2"],
+      ["2", "1"],
     );
     assert.ok(!rec.log.includes("remove:postgis:t"));
   });

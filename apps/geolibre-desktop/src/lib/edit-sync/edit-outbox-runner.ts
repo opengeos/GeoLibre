@@ -23,6 +23,7 @@ import {
   getOutboxSnapshot,
   loadOutbox,
   putOutboxEntry,
+  reloadOutboxEntry,
   removeOutboxEntry,
 } from "./edit-outbox-store";
 
@@ -59,6 +60,21 @@ export function resetEditSyncBackends(): void {
 /** Whether the browser believes it has a network connection. */
 export function isNavigatorOnline(): boolean {
   return typeof navigator === "undefined" || navigator.onLine !== false;
+}
+
+/**
+ * Run `fn` holding an exclusive cross-tab lock for one entry (Web Locks), so
+ * two tabs never sync the same change set at once and send its inserts
+ * twice. Runs without a lock where Web Locks are unavailable.
+ *
+ * @param id The entry id.
+ * @param fn The work to run.
+ * @returns What `fn` returns.
+ */
+function withEntryLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
+  if (!locks?.request) return fn();
+  return locks.request(`geolibre-edit-outbox:${id}`, fn) as Promise<T>;
 }
 
 /** Whether an entry has a sync attempt running. */
@@ -99,7 +115,8 @@ export async function enqueueChangeSet(
   await loadOutbox();
   if (inFlight.has(input.id)) return { kind: "busy" };
   const at = now();
-  const queued = getOutboxEntry(input.id);
+  // Merge with the stored entry: another tab may have changed it.
+  const queued = await reloadOutboxEntry(input.id);
   if (input.ops.length === 0) {
     // Nothing new to send. A queued entry is kept: its edits never reached
     // the source, and the layer may simply have been reloaded without them.
@@ -138,9 +155,10 @@ export async function enqueueChangeSet(
 export function syncOutboxEntryNow(id: string): Promise<SyncOutcome | null> {
   const running = inFlight.get(id);
   if (running) return running;
-  const attempt = (async (): Promise<SyncOutcome | null> => {
-    await loadOutbox();
-    const entry = getOutboxEntry(id);
+  const attempt = withEntryLock(id, async (): Promise<SyncOutcome | null> => {
+    // Under the lock, act on the stored entry: another tab may have synced or
+    // discarded it since this tab last read the outbox.
+    const entry = await reloadOutboxEntry(id);
     if (!entry) return null;
     const handler = handlers.get(entry.backend);
     if (!handler) return null;
@@ -191,7 +209,7 @@ export function syncOutboxEntryNow(id: string): Promise<SyncOutcome | null> {
       }
     }
     return outcome;
-  })().finally(() => inFlight.delete(id));
+  }).finally(() => inFlight.delete(id));
   inFlight.set(id, attempt);
   return attempt;
 }

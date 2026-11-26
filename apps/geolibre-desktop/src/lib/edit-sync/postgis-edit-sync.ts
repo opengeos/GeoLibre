@@ -14,6 +14,11 @@
  * - the sidecar answers 503 when the database cannot be reached, which keeps
  *   the change set queued for a retry instead of failing it.
  *
+ * Reads here never pass `excluded_fields`: an "excluded" field is still in
+ * the layer's data (it is dropped only on export and sharing), and the base
+ * was fingerprinted with every column, so leaving it out of the server's
+ * version would make every row look changed by someone else.
+ *
  * Credentials never enter the outbox: the connection is resolved at sync time
  * from the layer's in-session registry or the saved connection that matches
  * its masked label, exactly like a direct save.
@@ -63,21 +68,12 @@ export interface PostgisOutboxTarget {
   primaryKey: string;
   /** Password-masked label of the connection the layer was read with. */
   connectionLabel: string;
-  excludedFields?: string[];
   capabilities?: { create: boolean; update: boolean; delete: boolean };
 }
 
 /** Base fingerprints of a PostGIS read, for `metadata.editSyncBaseline`. */
 export function postgisSyncBaseline(geojson: FeatureCollection): Record<string, string> {
   return captureFingerprintBaseline(geojson.features);
-}
-
-function excludedFields(layer: GeoLibreLayer): string[] | undefined {
-  if (!layer.fieldVisibility) return undefined;
-  const fields = Object.keys(layer.fieldVisibility).filter(
-    (key) => layer.fieldVisibility![key] === "excluded",
-  );
-  return fields.length ? fields : undefined;
 }
 
 /**
@@ -102,7 +98,6 @@ export function postgisOutboxTarget(layer: GeoLibreLayer): PostgisOutboxTarget |
     primaryKey: metadata.postgisPrimaryKey,
     connectionLabel:
       typeof metadata.postgisConnectionLabel === "string" ? metadata.postgisConnectionLabel : "",
-    ...(excludedFields(layer) ? { excludedFields: excludedFields(layer) } : {}),
     capabilities: { create: caps.create, update: caps.update, delete: caps.delete },
   };
 }
@@ -260,7 +255,6 @@ export function createPostgisSyncAdapter(
           schema_name: target.schema,
           table: target.table,
           geometry_column: target.geometryColumn,
-          excluded_fields: target.excludedFields,
         });
       } catch (error) {
         throw readFailure(error);
@@ -368,7 +362,6 @@ export async function refreshPostgisLayerAfterSync(
     schema_name: current.schema,
     table: current.table,
     geometry_column: current.geometryColumn,
-    excluded_fields: current.excludedFields,
   });
   const live = getLayer(entry.layerId);
   if (!live?.geojson) return false;

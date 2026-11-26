@@ -20,6 +20,8 @@ const STORE_NAME = "entries";
 /** Where entries are persisted. Swappable for tests. */
 export interface OutboxPersistence {
   load(): Promise<OutboxEntry[]>;
+  /** Read one entry as stored now (another tab may have changed it). */
+  get?(id: string): Promise<OutboxEntry | undefined>;
   put(entry: OutboxEntry): Promise<void>;
   remove(id: string): Promise<void>;
 }
@@ -80,6 +82,10 @@ export function indexedDbOutboxPersistence(
       const rows = await withStore("readonly", (store) => store.getAll() as IDBRequest<unknown[]>);
       return (rows ?? []).filter(isOutboxEntry);
     },
+    async get(id) {
+      const row = await withStore("readonly", (store) => store.get(id) as IDBRequest<unknown>);
+      return isOutboxEntry(row) ? row : undefined;
+    },
     async put(entry) {
       await withStore("readwrite", (store) => {
         store.put(entry);
@@ -99,6 +105,10 @@ export function memoryOutboxPersistence(initial: OutboxEntry[] = []): OutboxPers
   return {
     async load() {
       return [...rows.values()].map((entry) => structuredClone(entry));
+    },
+    async get(id) {
+      const row = rows.get(id);
+      return row ? structuredClone(row) : undefined;
     },
     async put(entry) {
       rows.set(entry.id, structuredClone(entry));
@@ -262,4 +272,40 @@ export function putOutboxEntry(entry: OutboxEntry): Promise<void> {
 export function removeOutboxEntry(id: string): Promise<void> {
   emit({ ...snapshot, entries: snapshot.entries.filter((entry) => entry.id !== id) });
   return persist((backend) => backend.remove(id));
+}
+
+/**
+ * Re-read one entry from storage, so a sync acts on what is stored now and
+ * not on a snapshot another tab has since synced or discarded. Updates the
+ * in-memory list to match.
+ *
+ * @param id The entry id.
+ * @returns The stored entry, or undefined when it is gone.
+ */
+export async function reloadOutboxEntry(id: string): Promise<OutboxEntry | undefined> {
+  await loadOutbox();
+  const backend = resolvePersistence();
+  // This tab's own pending writes land first.
+  await writeChain;
+  if (!backend.get) return getOutboxEntry(id);
+  let row: OutboxEntry | undefined;
+  try {
+    row = await backend.get(id);
+  } catch {
+    return getOutboxEntry(id);
+  }
+  if (!row) {
+    if (getOutboxEntry(id)) {
+      emit({ ...snapshot, entries: snapshot.entries.filter((entry) => entry.id !== id) });
+    }
+    return undefined;
+  }
+  const stored = row;
+  emit({
+    ...snapshot,
+    entries: snapshot.entries.some((entry) => entry.id === id)
+      ? snapshot.entries.map((entry) => (entry.id === id ? stored : entry))
+      : [...snapshot.entries, stored],
+  });
+  return stored;
 }

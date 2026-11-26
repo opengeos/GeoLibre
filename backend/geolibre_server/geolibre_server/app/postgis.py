@@ -200,6 +200,29 @@ class PostgisWriteRequest(BaseModel):
     expected_row_hashes: Optional[dict[str, str]] = None
 
 
+# Client-side libpq messages for a server that could not be reached. They are
+# produced by libpq, not by the server, and the psycopg binary wheels ship
+# libpq without translations, so they stay in English.
+_TRANSPORT_FAILURES = (
+    "connection refused",
+    "timeout expired",
+    "connection timed out",
+    "could not translate host name",
+    "name or service not known",
+    "temporary failure in name resolution",
+    "no route to host",
+    "network is unreachable",
+    "server closed the connection unexpectedly",
+    "could not connect to server",
+)
+
+
+def _is_transport_failure(message: str) -> bool:
+    """Whether a libpq connect error means the server never answered."""
+    lowered = message.lower()
+    return any(phrase in lowered for phrase in _TRANSPORT_FAILURES)
+
+
 def _connect(connection: str) -> Any:
     """Open a psycopg connection with a bounded statement timeout.
 
@@ -241,9 +264,9 @@ def _connect(connection: str) -> Any:
         # Report a server that never answered (no route, refused, timed out)
         # as 503 so clients can tell "unreachable, retry later" from a rejected
         # login or an unknown database (400). libpq gives connect failures no
-        # SQLSTATE, but a server that answered always prefixes its refusal with
-        # its severity ("FATAL:"), which a network failure never carries.
-        unreachable = isinstance(exc, psycopg.OperationalError) and "FATAL" not in str(exc)
+        # SQLSTATE, so match the transport failures libpq itself reports; a
+        # server's own refusal (whose wording it may localize) never matches.
+        unreachable = isinstance(exc, psycopg.OperationalError) and _is_transport_failure(str(exc))
         raise HTTPException(
             status_code=503 if unreachable else 400,
             detail=f"Could not connect to PostgreSQL: {scrub_secrets(str(exc))}",

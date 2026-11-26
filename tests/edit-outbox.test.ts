@@ -459,6 +459,63 @@ describe("mergeChangeSet", () => {
   });
 });
 
+describe("mergeChangeSet after a restart", () => {
+  it("keeps queued edits the newer change set does not mention", () => {
+    const queuedInsert = point(undefined, 4, { n: "drawn offline" });
+    const queued = entryFor([
+      {
+        id: "q1",
+        kind: "update",
+        key: "1",
+        feature: point(1, 10),
+        baseFingerprint: "b1",
+        mineFingerprint: featureFingerprint(point(1, 10)),
+      },
+      {
+        id: "q2",
+        kind: "insert",
+        key: null,
+        feature: queuedInsert,
+        mineFingerprint: featureFingerprint(queuedInsert),
+      },
+    ]);
+    // The layer was reopened without the queued edits; the user edits row 2.
+    const merged = mergeChangeSet(
+      queued,
+      [
+        {
+          id: "n1",
+          kind: "update",
+          key: "2",
+          feature: point(2, 20),
+          baseFingerprint: "b2",
+          mineFingerprint: featureFingerprint(point(2, 20)),
+        },
+      ],
+      5,
+    );
+    assert.deepEqual(
+      merged.ops.map((op) => op.id),
+      ["n1", "q1", "q2"],
+    );
+  });
+
+  it("lets the newer change set win for a feature it mentions", () => {
+    const queued = entryFor([
+      { id: "q1", kind: "update", key: "1", feature: point(1, 10), baseFingerprint: "old" },
+    ]);
+    const merged = mergeChangeSet(
+      queued,
+      [{ id: "n1", kind: "delete", key: "1", baseFingerprint: "rebased" }],
+      5,
+    );
+    assert.deepEqual(
+      merged.ops.map((op) => [op.id, op.kind, op.baseFingerprint]),
+      [["n1", "delete", "old"]],
+    );
+  });
+});
+
 describe("retryDelayMs", () => {
   it("doubles from five seconds and caps at five minutes", () => {
     assert.equal(retryDelayMs(1), 5_000);

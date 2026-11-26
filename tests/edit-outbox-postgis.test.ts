@@ -60,7 +60,10 @@ class FakeSidecar {
     );
   }
 
-  read = async (_request: ReadPostgisTableRequest): Promise<ReadPostgisTableResult> => {
+  reads: ReadPostgisTableRequest[] = [];
+
+  read = async (request: ReadPostgisTableRequest): Promise<ReadPostgisTableResult> => {
+    this.reads.push(request);
     if (this.readError) throw this.readError;
     const features = [...this.rows.values()].map((f) => structuredClone(f));
     const row_hashes: Record<string, string> = {};
@@ -322,6 +325,19 @@ describe("PostGIS sync adapter", () => {
     sidecar.readError = new PostgisRequestError("relation does not exist", 404);
     const missing = await syncOutboxEntry(entry, adapter);
     assert.equal(missing.kind, "error");
+  });
+
+  it("reads every column, so an excluded field cannot fake a conflict", async () => {
+    const sidecar = new FakeSidecar();
+    sidecar.rows.set(1, row(1, 1, "a"));
+    const layer = {
+      ...loadLayer(sidecar),
+      fieldVisibility: { name: "excluded" as const },
+    } as GeoLibreLayer;
+    const entry = entryFor(layer, [row(1, 2, "a")]);
+    const outcome = await syncOutboxEntry(entry, adapterFor(sidecar, entry));
+    assert.equal(outcome.kind, "synced");
+    assert.ok(sidecar.reads.every((read) => read.excluded_fields === undefined));
   });
 
   it("refuses to build without a connection", () => {
