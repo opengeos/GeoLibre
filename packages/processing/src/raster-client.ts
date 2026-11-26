@@ -29,6 +29,7 @@ import {
   cutFill,
   isGeographicRaster,
   projectedMetersPerUnit,
+  type CutFillParams,
   type CutFillSummary,
 } from "./raster-volume";
 import { mosaicRasters, reprojectRaster, resampleRaster } from "./raster-warp";
@@ -1328,7 +1329,7 @@ export async function runRasterToolClientAsync(
           metersPerUnit = resolved;
         }
       }
-      const out = cutFill(existing, surface, p as never, metersPerUnit);
+      const out = cutFill(existing, surface, p as CutFillParams, metersPerUnit);
       messages.push(...extra, ...out.messages, `Computed "${toolId}" in the browser.`);
       return {
         kind: "raster",

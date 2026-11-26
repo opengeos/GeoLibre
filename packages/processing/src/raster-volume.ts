@@ -14,10 +14,12 @@ import { rasterEpsg, toNorthUp } from "./raster-geo";
  * reference is higher and the hole must be **filled**. Volumes are the depths
  * times each cell's ground area, summed separately for cut and fill.
  *
- * Cell areas are true ground areas: a projected raster's cell size is
- * converted from its linear unit to metres, and a geographic (degree) raster
- * gets a per-row spherical area, since a degree of longitude shrinks toward
- * the poles. Elevations can be metres or feet; volumes are always reported in
+ * Cell areas are ground areas to within the projection's scale factor: a
+ * projected raster's cell size is converted from its linear unit to metres
+ * (UTM and state-plane grids stay within about 0.1% of the ground), Web
+ * Mercator rows are scaled by `cos²φ`, and a geographic (degree) raster gets
+ * a per-row spherical area, since a degree of longitude shrinks toward the
+ * poles. Elevations can be metres or feet; volumes are always reported in
  * cubic metres.
  */
 
@@ -239,7 +241,10 @@ export function cutFill(
   }
   const plane = Number(params.plane_elevation ?? 0);
   if (usePlane && !Number.isFinite(plane)) throw new Error("The plane elevation must be a number.");
-  const zUnits = params.z_units && ELEVATION_UNIT_METERS[params.z_units] ? params.z_units : "m";
+  const zUnits = params.z_units || "m";
+  if (ELEVATION_UNIT_METERS[zUnits] == null) {
+    throw new Error(`Unknown elevation unit "${zUnits}" (use m, ft or us-ft).`);
+  }
   const zToMeters = ELEVATION_UNIT_METERS[zUnits];
   const areas = cellAreasByRow(existing, metersPerUnit);
 
@@ -262,7 +267,7 @@ export function cutFill(
       const i = row * width + col;
       const x = a[i];
       const y = b ? b[i] : plane;
-      if (!valid(x, existing.nodata) || (b && !valid(y, reference!.nodata))) {
+      if (!valid(x, existing.nodata) || (b && !valid(y, reference?.nodata ?? null))) {
         out[i] = CUT_FILL_NODATA;
         continue;
       }

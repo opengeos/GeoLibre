@@ -239,3 +239,12 @@ describe("Web Mercator cell areas", () => {
     near(area, 25, 1e-9);
   });
 });
+
+describe("cutFill elevation units", () => {
+  it("rejects an unknown unit instead of assuming metres", () => {
+    assert.throws(
+      () => cutFill(halves(), null, { z_units: "feet" }),
+      /Unknown elevation unit "feet"/,
+    );
+  });
+});
