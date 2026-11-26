@@ -87,7 +87,7 @@ interface AttributeTableGridProps {
   paddingBottom: number;
 }
 
-/** The attribute table's virtualized grid: header row, filter row and the visible feature rows. */
+/** The attribute table's virtualized grid: the header row and the visible feature rows. */
 export function AttributeTableGrid({
   scrollViewportRef,
   hasAttributeSource,
@@ -331,8 +331,8 @@ export function AttributeTableGrid({
                             >
                               <option value="">—</option>
                               {/* Keep an out-of-map current value listed so
-                                      the select shows it instead of silently
-                                      snapping to the first entry. */}
+                                  the select shows it instead of silently
+                                  snapping to the first entry. */}
                               {current !== "" &&
                                 !config.valueMap.some((entry) => entry.value === current) && (
                                   <option value={current}>{current}</option>

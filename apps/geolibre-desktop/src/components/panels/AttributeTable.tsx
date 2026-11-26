@@ -170,6 +170,7 @@ import {
   DEFAULT_TABLE_HEIGHT,
 } from "./attribute-table/table-sizes";
 import { useTableResize } from "./attribute-table/useTableResize";
+
 const EMPTY_DRAFTS: AttributeDrafts = {};
 
 /** Reserved inline-image property keys (photo thumbnail + full-resolution) that
