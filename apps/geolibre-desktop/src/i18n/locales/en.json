@@ -9319,7 +9319,7 @@
         "invalidUrl": "OGC process links must be HTTP(S) URLs without user information.",
         "responseLimit": "Invalid OGC process response limit.",
         "inputLimit": "OGC process inputs exceed 1 MiB.",
-        "inputOccurrences": "Input {{name}} accepts {{minimum}} to {{maximum}} occurrences; the selected layer supplies {{count}}.",
+        "inputOccurrences": "Input {{name}} accepts {{minimum}} to {{maximum}} occurrences; this selection has {{count}}.",
         "inputDepth": "OGC process inputs exceed the {{depth}}-level JSON nesting limit.",
         "inputUnicode": "OGC process inputs contain invalid Unicode characters.",
         "invalidBase64": "The service returned an invalid base64-encoded output.",

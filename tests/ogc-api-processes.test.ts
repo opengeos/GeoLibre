@@ -141,6 +141,17 @@ test("numeric document downloads preserve original tokens and nested JSON values
   );
 });
 
+test("inline vendor GeoJSON remains importable while sequence types stay downloadable", () => {
+  for (const mediaType of ["application/geo+json", "Application/Vnd.Geo+Json; charset=utf-8"])
+    assert.equal(canImportOgcProcessOutput({ id: "map", value: "{}", mediaType }), true);
+  for (const mediaType of [
+    "application/geo+json-seq",
+    "application/vnd.geo+json-seq",
+    "text/plain",
+  ])
+    assert.equal(canImportOgcProcessOutput({ id: "map", value: "{}", mediaType }), false);
+});
+
 test("JSON text sequences remain raw downloadable bytes without an import action", async () => {
   const original = '\u001e{"id":9007199254740993}\n\u001e{"id":2}\n';
   serve(() => ({ jobID: "one", status: "successful" }));
@@ -683,6 +694,32 @@ test("an error-body deadline preserves received HTTP rejection while caller canc
   await assert.rejects(processHttp("https://example.org/jobs/one", caller.signal), {
     name: "AbortError",
   });
+});
+
+test("standalone GeoJSON downloads retain original bytes and unsafe numeric tokens", async () => {
+  const process = await processDescription();
+  const text =
+    '\uFEFF { "type":"Feature", "properties":{"id":9007199254740993,"fraction":0.10000000000000000001,"zero":-0}, "geometry":{"type":"Point","coordinates":[3,4]} }\n';
+  const original = new TextEncoder().encode(text);
+  for (const mediaType of [
+    "application/json",
+    "application/geo+json",
+    "application/vnd.geo+json",
+  ]) {
+    serve(() => new Response(original, { headers: { "Content-Type": mediaType } }));
+    const signal = new AbortController().signal;
+    const result = await executeOgcProcess(process, {}, signal);
+    if (result.kind !== "results") throw Error("Expected standalone GeoJSON result");
+    assert.equal(result.outputs.length, 1);
+    assert.equal(canImportOgcProcessOutput(result.outputs[0]), true);
+    assert.deepEqual(
+      new Uint8Array(
+        await (await downloadOgcProcessOutput(result.outputs[0], signal)).arrayBuffer(),
+      ),
+      original,
+    );
+    assert.match(ogcProcessOutputPreview(result.outputs[0]), /9007199254740993/);
+  }
 });
 
 test("JSON GeoJSON and GeometryCollection results stay whole without reserving output IDs", async () => {

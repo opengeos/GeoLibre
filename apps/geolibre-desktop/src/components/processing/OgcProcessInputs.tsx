@@ -206,7 +206,7 @@ export function OgcProcessInputs({
                     value,
                     mediaType: "application/geo+json",
                   });
-                  const input =
+                  let input =
                     representation === "collection"
                       ? repeated
                         ? [qualify(value)]
@@ -221,6 +221,16 @@ export function OgcProcessInputs({
                       typeof definition.minOccurs === "number" ? definition.minOccurs : 1;
                     const maximum =
                       typeof definition.maxOccurs === "number" ? definition.maxOccurs : Infinity;
+                    if (
+                      representation !== "collection" &&
+                      acceptsObject &&
+                      acceptsArray &&
+                      Array.isArray(value) &&
+                      (input.length < minimum || input.length > maximum) &&
+                      minimum <= 1 &&
+                      maximum >= 1
+                    )
+                      input = [value];
                     if (input.length < minimum || input.length > maximum) {
                       setInputProblem({
                         key,

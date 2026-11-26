@@ -528,7 +528,9 @@ function outputs(
     (/geo\+json/i.test(response.contentType ?? "") ||
       (outputIds !== undefined && !Object.keys(doc).some((key) => outputIds.includes(key))))
   )
-    return [{ id: "result", value: doc, mediaType: "application/geo+json" }];
+    return [
+      { id: "result", value: doc, documentBytes: response.body, mediaType: "application/geo+json" },
+    ];
   const legacyArray =
     outputIds !== undefined &&
     !outputIds.includes("outputs") &&

@@ -251,6 +251,62 @@ for (const type of ["object", "array", "integer"]) {
   });
 }
 
+for (const representation of ["features", "geometries"] as const) {
+  for (const [count, minimum] of [
+    [0, 1],
+    [2, 1],
+    [3, 1],
+    [3, 2],
+  ] as const) {
+    test(`mixed object/array input selects a valid ${representation} occurrence shape for ${count} features and minimum ${minimum}`, async () => {
+      const process = description();
+      process.inputs.area = {
+        title: "Area",
+        schema: { type: ["object", "array"] },
+        minOccurs: minimum,
+        maxOccurs: 2,
+      };
+      const data = {
+        type: "FeatureCollection" as const,
+        features: Array.from({ length: count }, (_, index) => ({
+          type: "Feature" as const,
+          properties: { id: index },
+          geometry: { type: "Point" as const, coordinates: [index, 4] },
+        })),
+      };
+      const id = useAppStore.getState().addGeoJsonLayer("Mixed", data);
+      let submitted: { inputs: { area: unknown } } | undefined;
+      serve(async (_url, init) => {
+        submitted = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify({ echo: "Done" }));
+      }, process);
+      await form();
+      const editor = screen.getByLabelText("Area *") as HTMLTextAreaElement;
+      fireEvent.change(editor, { target: { value: "[]" } });
+      fireEvent.change(screen.getByLabelText("Layer input for Area"), {
+        target: { value: JSON.stringify([id, representation]) },
+      });
+      if (minimum === 2) {
+        assert.equal(editor.value, "[]");
+        assert.match(screen.getByRole("alert").textContent ?? "", /accepts 2 to 2/);
+        return;
+      }
+      fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+      await waitFor(() => assert.ok(submitted));
+      const values =
+        representation === "features"
+          ? data.features
+          : data.features.map((feature) => feature.geometry);
+      assert.deepEqual(
+        submitted?.inputs.area,
+        count === 2
+          ? values.map((value) => ({ value, mediaType: "application/geo+json" }))
+          : [values],
+      );
+    });
+  }
+}
+
 test("a single object layer input offers no bare array representations", async () => {
   const process = description();
   process.inputs.area = { title: "Area", minOccurs: 0, schema: { type: "object" } };
@@ -1061,7 +1117,38 @@ test("editing imported inline GeoJSON leaves the retained output snapshot unchan
   );
 });
 
-for (const layout of ["striped", "tiled"])
+test("vendor GeoJSON string results can be imported as a validated layer", async () => {
+  const data = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { name: "Vendor" },
+        geometry: { type: "Point", coordinates: [3, 4] },
+      },
+    ],
+  };
+  serve(
+    async () =>
+      new Response(
+        JSON.stringify({
+          map: {
+            value: JSON.stringify(data),
+            mediaType: "application/vnd.geo+json",
+          },
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+  );
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.ok(screen.queryByRole("button", { name: "Add to map" })));
+  fireEvent.click(screen.getByRole("button", { name: "Add to map" }));
+  await waitFor(() => assert.equal(useAppStore.getState().layers.length, 1));
+  assert.deepEqual(useAppStore.getState().layers[0].geojson, data);
+});
+
+for (const layout of ["striped", "tiled"]) {
   for (const type of ["uint64", "int64"]) {
     test(`${layout} ${type} process rasters are rejected before lossy conversion or layer publication`, async () => {
       const { initCogWasm, readGeoTiffInfo } = await import("@geolibre/processing");
@@ -1088,8 +1175,9 @@ for (const layout of ["striped", "tiled"])
       assert.equal(useAppStore.getState().layers.length, 0);
     });
   }
+}
 
-for (const repeated of [false, true])
+for (const repeated of [false, true]) {
   for (const representation of ["collection", "features", "geometries"] as const) {
     test(`layer ${representation} inputs preserve ${repeated ? "repeated" : "single"} occurrence qualification`, async () => {
       const process = description();
@@ -1140,6 +1228,7 @@ for (const repeated of [false, true])
       assert.deepEqual((submitted as { inputs: { area: unknown } }).inputs.area, expected);
     });
   }
+}
 
 test("base64 JSON geodata is importable while ordinary JSON messages stay download-only", async () => {
   const collection = {

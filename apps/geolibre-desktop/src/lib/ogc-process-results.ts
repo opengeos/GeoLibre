@@ -40,7 +40,12 @@ export function canImportOgcProcessOutput(output: OgcProcessOutput): boolean {
     return (
       unknownBinary || isProcessJsonMediaType(mediaType ?? "") || /tiff/i.test(mediaType ?? "")
     );
-  if (mediaType === "application/geo+json" || /tiff/i.test(mediaType ?? "")) return true;
+  if (
+    mediaType === "application/geo+json" ||
+    mediaType === "application/vnd.geo+json" ||
+    /tiff/i.test(mediaType ?? "")
+  )
+    return true;
   if (output.encoding === "base64" && (unknownBinary || isProcessJsonMediaType(mediaType ?? "")))
     return true;
   const value = output.value;
