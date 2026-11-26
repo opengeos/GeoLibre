@@ -109,8 +109,16 @@ def build_collab_identity_router(secret: str | None, ttl_seconds: int) -> APIRou
                 status_code=404,
                 headers={"Cache-Control": "no-store"},
             )
-        expires_at = clock() + ttl_seconds
         account = principal.account
+        # The relay requires a username claim; an identity-provider account
+        # may not have one yet. Same sentinel as project creation.
+        if not account.username:
+            return JSONResponse(
+                {"error": "username required"},
+                status_code=400,
+                headers={"Cache-Control": "no-store"},
+            )
+        expires_at = clock() + ttl_seconds
         token = sign_collab_identity_token(
             {
                 "provider": PROVIDER,

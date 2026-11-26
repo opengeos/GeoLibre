@@ -69,6 +69,17 @@ def test_requires_an_authenticated_project_scope(tmp_path, monkeypatch, clock, f
         assert client.post("/api/collab/identity-token", headers=auth(reader)).status_code == 200
 
 
+def test_refuses_an_account_without_a_username(tmp_path, monkeypatch, clock, fake_idp):
+    with _client(tmp_path, monkeypatch, clock, fake_idp, SECRET) as client:
+        token = account(client, "ada")
+        engine = client.app.state.engine
+        with engine.begin() as connection:
+            connection.exec_driver_sql("UPDATE accounts SET username = NULL")
+        response = client.post("/api/collab/identity-token", headers=auth(token))
+        assert response.status_code == 400
+        assert response.json() == {"error": "username required"}
+
+
 def test_is_disabled_without_a_shared_secret(tmp_path, monkeypatch, clock, fake_idp):
     with _client(tmp_path, monkeypatch, clock, fake_idp, None) as client:
         token = account(client, "ada")

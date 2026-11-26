@@ -92,6 +92,7 @@ export function useCollaboration(
   const applyingRemoteRef = useRef(false);
   const viewOnlyNoticeRef = useRef(createViewOnlyNotice());
   const restoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const joinGenerationRef = useRef(0);
   const pendingConnectRef = useRef<{
     resolve: () => void;
     reject: (error: Error) => void;
@@ -414,8 +415,11 @@ export function useCollaboration(
       });
     });
 
+    // CollabConnection reuses one object across reconnects, so a generation
+    // tells a join for this socket from one a reconnect has superseded.
+    const generation = ++joinGenerationRef.current;
     const sendJoin = (verifiedIdentity: string | null | undefined) => {
-      if (connRef.current !== conn) return;
+      if (connRef.current !== conn || joinGenerationRef.current !== generation) return;
       conn.send({
         type: "join",
         clientId: selfIdRef.current ?? crypto.randomUUID(),
@@ -439,6 +443,7 @@ export function useCollaboration(
     }
 
     teardownRef.current = () => {
+      joinGenerationRef.current += 1;
       if (debounce) clearTimeout(debounce);
       unsubscribe();
     };

@@ -12,7 +12,17 @@ import { getShareFetch } from "./share-fetch";
 import { shareAuthorizedFetch } from "./share-gallery";
 import { getShareAccessToken, resolveShareIssuer, supportsShareOAuth } from "./share-oauth";
 
-const REQUEST_TIMEOUT_MS = 10_000;
+// The join waits on this request, so keep a slow server from holding it long.
+const REQUEST_TIMEOUT_MS = 3_000;
+/** Reuse a token while it has at least this long left (reconnects). */
+const REUSE_MARGIN_MS = 60_000;
+
+let cached: { issuer: string; accessToken: string; token: string; expiresAt: number } | null = null;
+
+/** Forget the reusable token (tests, sign-out). */
+export function clearCollabIdentityCache(): void {
+  cached = null;
+}
 
 export interface CollabIdentityDeps {
   /** The server API issuer; defaults to the configured share server. */
@@ -39,14 +49,30 @@ export async function fetchCollabIdentityToken(
     if (!issuer) return null;
     const accessToken = await (deps.getAccessToken ?? (() => getShareAccessToken()))();
     if (!accessToken) return null;
+    if (
+      cached &&
+      cached.issuer === issuer &&
+      cached.accessToken === accessToken &&
+      cached.expiresAt - REUSE_MARGIN_MS > Date.now()
+    ) {
+      return cached.token;
+    }
     const request = shareAuthorizedFetch(accessToken, issuer, deps.fetchImpl ?? getShareFetch());
     const response = await request(new URL("api/collab/identity-token", `${issuer}/`), {
       method: "POST",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) return null;
-    const body = (await response.json().catch(() => null)) as { token?: unknown } | null;
-    return typeof body?.token === "string" && body.token ? body.token : null;
+    const body = (await response.json().catch(() => null)) as {
+      token?: unknown;
+      expiresAt?: unknown;
+    } | null;
+    if (typeof body?.token !== "string" || !body.token) return null;
+    const expiresAt = typeof body.expiresAt === "string" ? Date.parse(body.expiresAt) : NaN;
+    cached = Number.isFinite(expiresAt)
+      ? { issuer, accessToken, token: body.token, expiresAt }
+      : null;
+    return body.token;
   } catch {
     return null;
   }

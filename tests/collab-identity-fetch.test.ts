@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { fetchCollabIdentityToken } from "../apps/geolibre-desktop/src/lib/collab-identity";
+import { afterEach, describe, it } from "node:test";
+import {
+  clearCollabIdentityCache,
+  fetchCollabIdentityToken,
+} from "../apps/geolibre-desktop/src/lib/collab-identity";
+
+afterEach(() => clearCollabIdentityCache());
 
 const ISSUER = "https://share.example";
 
@@ -27,6 +32,24 @@ describe("fetchCollabIdentityToken", () => {
     assert.equal(calls[0].url, `${ISSUER}/api/collab/identity-token`);
     assert.equal(calls[0].init.method, "POST");
     assert.equal(new Headers(calls[0].init.headers).get("Authorization"), "Bearer access-1");
+  });
+
+  it("reuses a token across reconnects until it nears expiry", async () => {
+    let calls = 0;
+    const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
+    const { impl } = fakeFetch(() => {
+      calls += 1;
+      return Response.json({ token: `t${calls}`, expiresAt });
+    });
+    const deps = { issuer: ISSUER, getAccessToken: async () => "access", fetchImpl: impl };
+    assert.equal(await fetchCollabIdentityToken(deps), "t1");
+    assert.equal(await fetchCollabIdentityToken(deps), "t1");
+    assert.equal(calls, 1);
+    // A different account (access token) never gets the cached one.
+    assert.equal(
+      await fetchCollabIdentityToken({ ...deps, getAccessToken: async () => "other" }),
+      "t2",
+    );
   });
 
   it("stays anonymous when signed out, unconfigured, or failing", async () => {
