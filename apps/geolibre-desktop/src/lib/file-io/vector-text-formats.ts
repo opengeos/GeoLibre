@@ -26,7 +26,12 @@ import { browserSafeFileName, fileExtension, pathWithoutExtension } from "./path
 import { assertFeatureCollection, mergeFeatureCollections } from "./vector-shared";
 
 export async function parseGeoJsonText(text: string): Promise<FeatureCollection> {
-  const fc = assertFeatureCollection(JSON.parse(text));
+  return parseGeoJsonValue(JSON.parse(text));
+}
+
+/** Validate and normalize decoded GeoJSON without serializing it a second time. */
+export async function parseGeoJsonValue(value: unknown): Promise<FeatureCollection> {
+  const fc = assertFeatureCollection(value);
   // A projected GeoJSON declares a non-WGS84 CRS via a legacy top-level `crs`
   // member and carries raw projected coordinates MapLibre cannot render. When
   // one is present, reproject to WGS84 (the heavy DuckDB loader is pulled in

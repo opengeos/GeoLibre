@@ -3,7 +3,7 @@ import { redactUrlCredentials, shouldZoomToNewLayers, useAppStore } from "@geoli
 import type { GeoLibreAppAPI } from "@geolibre/plugins";
 import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
 import { downloadOgcProcessOutput, type OgcProcessOutput } from "./ogc-api-processes";
-import { parseGeoJsonText } from "./file-io/vector-text-formats";
+import { parseGeoJsonValue } from "./file-io/vector-text-formats";
 import { uniqueLayerName } from "./unique-layer-name";
 
 /** Bounded display copy; large results stay intact for downloading and import. */
@@ -153,7 +153,7 @@ export async function importOgcProcessOutput(
             }
           : null;
   if (!collection) throw new OgcProcessError("geodataOnly");
-  const data = await parseGeoJsonText(JSON.stringify(collection));
+  const data = await parseGeoJsonValue(collection);
   signal.throwIfAborted();
   const state = useAppStore.getState();
   if (state.projectLoadCount !== project) throw new DOMException("Project changed", "AbortError");

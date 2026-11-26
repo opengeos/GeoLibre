@@ -386,6 +386,16 @@ pub(crate) fn guarded_http_client_without_referer() -> Result<reqwest::blocking:
         .clone()
 }
 
+/// Do not forward process inputs or job mutations through redirects.
+pub(crate) fn guarded_http_write_client_without_redirects(
+) -> Result<reqwest::blocking::Client, String> {
+    static CLIENT: std::sync::OnceLock<Result<reqwest::blocking::Client, String>> =
+        std::sync::OnceLock::new();
+    CLIENT
+        .get_or_init(|| build_guarded_http_client_options(reqwest::redirect::Policy::none(), false))
+        .clone()
+}
+
 /// An async `reqwest` client builder with the same SSRF guard, enterprise CAs
 /// and mTLS identity as [`build_guarded_http_client_with_redirects`]. The async
 /// transports (ArcGIS, plugin requests) add their own redirect policy and any

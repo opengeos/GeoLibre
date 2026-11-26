@@ -337,6 +337,34 @@ test("layer FeatureCollections are sent as qualified GeoJSON inputs", async () =
   });
 });
 
+test("oversized layer inputs are rejected before replacing the editor value", async () => {
+  const process = description();
+  process.inputs.area = { title: "Area", schema: { type: "object" }, minOccurs: 0 };
+  const id = useAppStore.getState().addGeoJsonLayer("Large area", {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { label: "é".repeat(600000) },
+        geometry: { type: "Point", coordinates: [0, 0] },
+      },
+    ],
+  });
+  let posts = 0;
+  serve(async () => {
+    posts++;
+    return new Response("{}");
+  }, process);
+  await form();
+  fireEvent.change(screen.getByLabelText("Area"), { target: { value: '{"value":{}}' } });
+  fireEvent.change(screen.getByLabelText("Layer input for Area"), {
+    target: { value: JSON.stringify([id, "collection"]) },
+  });
+  assert.match(screen.getByRole("alert").textContent ?? "", /1 MiB/);
+  assert.equal((screen.getByLabelText("Area") as HTMLTextAreaElement).value, '{"value":{}}');
+  assert.equal(posts, 0);
+});
+
 test("cleared required strings fail locally and JSON mode can send explicit empty strings", async () => {
   const submissions: Array<{ inputs: Record<string, unknown> }> = [];
   serve(async (_url, init) => {

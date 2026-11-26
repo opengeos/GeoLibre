@@ -91,6 +91,16 @@ function linked(items: ProcessLink[], rel: string, base: string): string | undef
   }
   return undefined;
 }
+
+/** Optional routing headers must not discard successful outputs or body links. */
+function optionalLink(href: string | null, base: string): string | undefined {
+  if (!href) return undefined;
+  try {
+    return ogcProcessLink(href, base);
+  } catch {
+    return undefined;
+  }
+}
 function append(url: string, suffix: string): string {
   const next = processHttpUrl(url);
   next.pathname = next.pathname.replace(/\/$/, "") + suffix;
@@ -227,9 +237,11 @@ function job(response: ProcessHttpResponse, fallback: string): OgcProcessJob {
   if (!["accepted", "running", "successful", "failed", "dismissed"].includes(String(status)))
     throw new OgcProcessError("unknownJobStatus");
   const items = links(doc.links);
-  const url = response.location
-    ? ogcProcessLink(response.location, response.url)
-    : (linked(items, "status", response.url) ?? linked(items, "self", response.url) ?? fallback);
+  const url =
+    optionalLink(response.location, response.url) ??
+    linked(items, "status", response.url) ??
+    linked(items, "self", response.url) ??
+    fallback;
   return {
     id:
       typeof doc.jobID === "string"
@@ -326,7 +338,7 @@ export async function executeOgcProcess(
   });
   successful(response);
   if (response.status === 201 || response.status === 202) {
-    let fallback = response.location ? ogcProcessLink(response.location, response.url) : undefined;
+    let fallback = optionalLink(response.location, response.url);
     if (!fallback) {
       const document = object(decode(response));
       const jobs = linked(process.links, REL + "job-list", process.url);
@@ -356,15 +368,15 @@ export async function executeOgcProcess(
       job: { ...job(response, fallback), outputIds: Object.keys(process.outputs) },
     };
   }
-  const retainedJob = response.location
-    ? ogcProcessLink(response.location, response.url)
-    : ogcProcessMonitorLinks(response.link).flatMap((href) => {
-        try {
-          return [ogcProcessLink(href, response.url)];
-        } catch {
-          return [];
-        }
-      })[0];
+  const retainedJob =
+    optionalLink(response.location, response.url) ??
+    ogcProcessMonitorLinks(response.link).flatMap((href) => {
+      try {
+        return [ogcProcessLink(href, response.url)];
+      } catch {
+        return [];
+      }
+    })[0];
   return {
     kind: "results",
     outputs: outputs(response, Object.keys(process.outputs)),

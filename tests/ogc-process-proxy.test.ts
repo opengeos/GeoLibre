@@ -68,17 +68,16 @@ test("process proxy preserves execution/job controls, redirect methods and respo
   pool
     .intercept({ path: "/redirect", method: "POST", body })
     .reply(303, "", { headers: { Location: "/results" } });
-  pool.intercept({ path: "/results", method: "GET" }).reply((options) => {
-    assert.equal(options.body == null, true);
-    const headers = new Headers(options.headers as HeadersInit);
-    assert.equal(headers.get("content-type"), null);
-    assert.equal(headers.get("prefer"), null);
-    return { statusCode: 200, data: "result" };
-  });
   pool
     .intercept({ path: "/preserve", method: "POST", body })
-    .reply(307, "", { headers: { Location: "/preserved" } });
-  pool.intercept({ path: "/preserved", method: "POST", body }).reply(200, "preserved");
+    .reply(307, "", { headers: { Location: "https://other.example/preserved" } });
+  pool
+    .intercept({ path: "/delete-redirect", method: "DELETE" })
+    .reply(308, "", { headers: { Location: "https://other.example/job" } });
+  pool
+    .intercept({ path: "/read-redirect", method: "GET" })
+    .reply(302, "", { headers: { Location: "/read-result" } });
+  pool.intercept({ path: "/read-result", method: "GET" }).reply(200, "read result");
   pool.intercept({ path: "/private", method: "GET" }).reply(302, "", {
     headers: { Location: "http://169.254.169.254/latest/meta-data/" },
   });
@@ -145,11 +144,16 @@ test("process proxy preserves execution/job controls, redirect methods and respo
     const failure = await send("GET", "/failure", undefined, { "x-geolibre-max-bytes": "4" });
     assert.equal(failure.status, 503);
     assert.equal(failure.body, "");
-    assert.equal(
-      (await send("POST", "/redirect", body, { prefer: "respond-async" })).body,
-      "result",
-    );
-    assert.equal((await send("POST", "/preserve", body)).body, "preserved");
+    for (const [method, path] of [
+      ["POST", "/redirect"],
+      ["POST", "/preserve"],
+      ["DELETE", "/delete-redirect"],
+    ]) {
+      const before = dispatches;
+      assert.equal((await send(method, path, method === "POST" ? body : undefined)).status, 502);
+      assert.equal(dispatches, before + 1, "mutating redirects never forward a second request");
+    }
+    assert.equal((await send("GET", "/read-redirect")).body, "read result");
     assert.equal((await send("GET", "/private")).status, 502);
     upstream.assertNoPendingInterceptors();
     const before = dispatches;

@@ -235,7 +235,11 @@ Clearing an optional text input omits it from the request. Use raw JSON input
 editing when an explicit empty string is needed.
 
 Desktop uses guarded native HTTP. Development uses a guarded same-origin
-proxy. The hosted web app requires the remote service to permit cross-origin
+proxy that permits public HTTP(S) hosts on their default ports; local/LAN services
+and custom ports supported by desktop are unavailable through that development proxy.
+Execution POSTs and job DELETEs do not follow redirects in any build: use the
+final execution/job URL. Discovery and result GETs retain guarded redirects.
+The hosted web app requires the remote service to permit cross-origin
 GET, POST, and DELETE requests, the `Content-Type` and `Prefer` request headers,
 and access to `Location`, `Link`, and `Retry-After` response headers. A successful
 development test does not establish hosted-site CORS support. Credentials may

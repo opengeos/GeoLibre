@@ -47,6 +47,7 @@ export function ogcProcessInputDefaults(process: OgcProcess): Record<string, str
   return Object.fromEntries(
     Object.entries(process.inputs).flatMap(([key, definition]) => {
       const schema = ogcInputSchema(definition);
+      if (schema.default === null && ogcInputKind(definition) !== "json") return [];
       const value =
         schema.default && typeof schema.default === "object" && !Array.isArray(schema.default)
           ? { value: schema.default }

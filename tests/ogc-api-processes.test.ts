@@ -15,6 +15,10 @@ import {
 } from "../apps/geolibre-desktop/src/lib/ogc-api-processes";
 import { processHttp } from "../apps/geolibre-desktop/src/lib/ogc-process-http";
 import { monitorOgcProcessJob } from "../apps/geolibre-desktop/src/lib/ogc-process-job";
+import {
+  ogcProcessInputDefaults,
+  parseOgcProcessInputs,
+} from "../apps/geolibre-desktop/src/lib/ogc-process-inputs";
 import i18next from "i18next";
 import {
   OgcProcessError,
@@ -84,6 +88,16 @@ async function processDescription() {
   )[0];
 }
 
+test("incompatible primitive null defaults are omitted while nullable JSON defaults survive", async () => {
+  const process = await processDescription();
+  process.inputs.name.schema = { type: "string", default: null };
+  process.inputs.nullable = { schema: { type: ["string", "null"], default: null }, minOccurs: 0 };
+  const defaults = ogcProcessInputDefaults(process);
+  assert.equal(Object.hasOwn(defaults, "name"), false);
+  assert.equal(defaults.nullable, "null");
+  assert.equal(parseOgcProcessInputs(process, defaults, false).nullable, null);
+});
+
 test("empty accepted responses preserve the job before any status request", async () => {
   const process = await processDescription();
   const calls = serve(
@@ -101,12 +115,53 @@ test("empty accepted responses preserve the job before any status request", asyn
   );
   assert.equal(calls.length, 1);
   assert.equal(calls[0].init?.method, "POST");
+  assert.equal(calls[0].init?.redirect, "error");
   assert.equal(result.kind, "job");
   if (result.kind !== "job") return;
   assert.equal(new URL(result.job.url).pathname, "/api/jobs/accepted");
   assert.equal(result.job.status, "accepted");
   assert.equal(result.job.retryAfterMs, 3000);
   assert.deepEqual(result.job.outputIds, Object.keys(process.outputs));
+});
+
+test("invalid optional Location headers preserve outputs and usable monitor or body links", async () => {
+  const process = await processDescription();
+  const signal = new AbortController().signal;
+  serve(
+    () =>
+      new Response(JSON.stringify({ echo: "Done" }), {
+        headers: {
+          "Content-Type": "application/json",
+          Location: "http://[",
+          Link: "</api/jobs/retained>; rel=monitor",
+        },
+      }),
+  );
+  const sync = await executeOgcProcess(process, { name: "GeoLibre" }, signal);
+  assert.equal(sync.kind, "results");
+  if (sync.kind !== "results") return;
+  assert.equal(sync.outputs[0].value, "Done");
+  assert.equal(new URL(sync.jobUrl!).pathname, "/api/jobs/retained");
+  serve(
+    () =>
+      new Response(
+        JSON.stringify({
+          jobID: "one",
+          status: "accepted",
+          links: [{ rel: "status", href: "/api/jobs/one" }],
+        }),
+        {
+          status: 202,
+          headers: {
+            "Content-Type": "application/json",
+            Location: "http://[",
+          },
+        },
+      ),
+  );
+  const asyncJob = await executeOgcProcess(process, { name: "GeoLibre" }, signal);
+  assert.equal(asyncJob.kind, "job");
+  if (asyncJob.kind === "job") assert.equal(new URL(asyncJob.job.url).pathname, "/api/jobs/one");
 });
 
 test("synchronous monitor links retain job routing without changing successful outputs", async () => {

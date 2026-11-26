@@ -86,7 +86,13 @@ export async function processHttp(
     if (dev) headers.set("x-geolibre-max-bytes", String(maxBytes));
     if (method === "POST") headers.set("Content-Type", "application/json");
     if (method === "POST" && options.preferAsync) headers.set("Prefer", "respond-async");
-    const response = await fetch(target, { method, body: options.body, headers, signal: abort });
+    const response = await fetch(target, {
+      method,
+      body: options.body,
+      headers,
+      signal: abort,
+      redirect: method === "GET" ? "follow" : "error",
+    });
     let body: Uint8Array<ArrayBuffer>;
     try {
       body = await readLimitedBody(

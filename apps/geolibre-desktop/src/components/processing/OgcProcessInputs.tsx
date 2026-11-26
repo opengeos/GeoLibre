@@ -6,10 +6,11 @@ import {
   useLayerSlices,
 } from "@geolibre/core";
 import { Input, Label, Select, Textarea } from "@geolibre/ui";
-import { useId, useMemo } from "react";
+import { useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { OgcProcess } from "../../lib/ogc-api-processes";
 import { ogcInputKind, ogcInputSchema, ogcInputText } from "../../lib/ogc-process-inputs";
+import { MAX_PROCESS_INPUT_BYTES } from "../../lib/ogc-process-limits";
 
 /** Schema-driven literals and JSON fields, with explicit layer-to-input insertion. */
 export function OgcProcessInputs({
@@ -25,6 +26,7 @@ export function OgcProcessInputs({
 }) {
   const { t } = useTranslation();
   const prefix = useId();
+  const [inputLimit, setInputLimit] = useState(false);
   const exporting = useAppCapability("export:data");
   const layers = useLayerSlices(
     useMemo(
@@ -38,6 +40,7 @@ export function OgcProcessInputs({
     ),
   );
   const set = (key: string, value: string | undefined) => {
+    setInputLimit(false);
     const next = { ...values };
     if (value === undefined) delete next[key];
     else
@@ -51,6 +54,11 @@ export function OgcProcessInputs({
   };
   return (
     <div className="space-y-4">
+      {inputLimit && (
+        <p role="alert" className="text-sm text-destructive">
+          {t("processing.ogcProcesses.errors.inputLimit")}
+        </p>
+      )}
       {Object.entries(process.inputs).map(([key, definition]) => {
         const schema = ogcInputSchema(definition),
           kind = ogcInputKind(definition);
@@ -142,14 +150,16 @@ export function OgcProcessInputs({
                       : representation === "geometries"
                         ? layer.geojson.features.map((feature) => feature.geometry)
                         : layer.geojson;
-                  set(
-                    key,
-                    JSON.stringify(
-                      representation === "collection"
-                        ? { value, mediaType: "application/geo+json" }
-                        : value,
-                    ),
+                  const serialized = JSON.stringify(
+                    representation === "collection"
+                      ? { value, mediaType: "application/geo+json" }
+                      : value,
                   );
+                  if (new TextEncoder().encode(serialized).byteLength > MAX_PROCESS_INPUT_BYTES) {
+                    setInputLimit(true);
+                    return;
+                  }
+                  set(key, serialized);
                 }}
               >
                 <option value="">{t("processing.ogcProcesses.insertLayer")}</option>

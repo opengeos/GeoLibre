@@ -6,7 +6,8 @@ use base64::Engine;
 use serde::Serialize;
 
 use crate::guarded_http::{
-    guarded_http_client_without_referer, request_error_message, url_is_fetchable,
+    guarded_http_client_without_referer, guarded_http_write_client_without_redirects,
+    request_error_message, url_is_fetchable,
 };
 
 const MAX_INPUT_BYTES: usize = 1024 * 1024;
@@ -91,7 +92,11 @@ fn request_blocking(
         return Err("OGC process URLs must not contain user information".into());
     }
     url_is_fetchable(&target)?;
-    let client = guarded_http_client_without_referer()?;
+    let client = if method == reqwest::Method::GET {
+        guarded_http_client_without_referer()?
+    } else {
+        guarded_http_write_client_without_redirects()?
+    };
     let mut request = client
         .request(method.clone(), target)
         .timeout(Duration::from_secs(
@@ -183,6 +188,70 @@ mod transport_tests {
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn mutating_redirects_never_send_a_second_request() {
+        let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+        let destination = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/execution", origin.local_addr().unwrap());
+        let redirected = format!("http://{}/unexpected", destination.local_addr().unwrap());
+        origin.set_nonblocking(true).unwrap();
+        destination.set_nonblocking(true).unwrap();
+        let server = std::thread::spawn(move || {
+            for (method, status) in [("POST", 303), ("POST", 307), ("DELETE", 308)] {
+                let deadline = Instant::now() + Duration::from_secs(5);
+                let mut socket = loop {
+                    match origin.accept() {
+                        Ok((socket, _)) => break socket,
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                            assert!(Instant::now() < deadline, "write request did not arrive");
+                            std::thread::sleep(Duration::from_millis(10));
+                        }
+                        Err(error) => panic!("accept failed: {error}"),
+                    }
+                };
+                socket.set_nonblocking(false).unwrap();
+                socket
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut line = String::new();
+                let mut reader = BufReader::new(socket.try_clone().unwrap());
+                reader.read_line(&mut line).unwrap();
+                assert!(line.starts_with(&format!("{method} /execution ")));
+                let mut length = 0;
+                loop {
+                    let mut header = String::new();
+                    assert!(reader.read_line(&mut header).unwrap() > 0);
+                    if header == "\r\n" {
+                        break;
+                    }
+                    if let Some(value) = header.to_ascii_lowercase().strip_prefix("content-length:")
+                    {
+                        length = value.trim().parse::<usize>().unwrap();
+                    }
+                }
+                reader.read_exact(&mut vec![0; length]).unwrap();
+                write!(socket, "HTTP/1.1 {status} Redirect\r\nLocation: {redirected}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+            }
+        });
+        for (method, status) in [("POST", 303), ("POST", 307), ("DELETE", 308)] {
+            let result = request_blocking(
+                url.clone(),
+                method.into(),
+                (method == "POST").then(|| "{}".to_owned()),
+                None,
+                false,
+                None,
+                Some(8),
+            )
+            .unwrap();
+            assert_eq!(result.status, status);
+        }
+        server.join().unwrap();
+        assert!(
+            matches!(destination.accept(), Err(error) if error.kind() == std::io::ErrorKind::WouldBlock)
+        );
+    }
 
     #[test]
     fn redirects_do_not_disclose_query_credentials_through_referer() {

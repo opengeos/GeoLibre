@@ -38,7 +38,7 @@ async function readInputs(req: IncomingMessage): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-/** Follow HTTP redirects with Fetch's method/body rules and a guard at every hop. */
+/** Follow guarded read redirects; execution and job mutations never redirect. */
 async function processRequest(
   initialUrl: string,
   initialMethod: string,
@@ -47,7 +47,7 @@ async function processRequest(
   signal: AbortSignal,
 ): Promise<{ response: Response; url: string }> {
   let url = initialUrl;
-  let method = initialMethod;
+  const method = initialMethod;
   for (let hop = 0; hop <= PROXY_MAX_REDIRECT_HOPS; hop++) {
     const response = await fetchWithGuard(
       url,
@@ -58,28 +58,16 @@ async function processRequest(
       },
     );
     if (![301, 302, 303, 307, 308].includes(response.status)) return { response, url };
+    if (method !== "GET") {
+      await response.body?.cancel().catch(() => {});
+      throw new ProcessProxyError(502, "OGC process writes do not follow redirects.");
+    }
     const location = response.headers.get("location");
     if (!location) return { response, url };
     await response.body?.cancel().catch(() => {});
     const next = new URL(location, url);
     if (validatePublicUrl(next.href))
       throw new ProcessProxyError(502, "OGC process redirect is not allowed.");
-    if (
-      (response.status === 303 && method !== "GET") ||
-      ([301, 302].includes(response.status) && method === "POST")
-    ) {
-      method = "GET";
-      body = undefined;
-      for (const name of [
-        "content-type",
-        "content-encoding",
-        "content-language",
-        "content-location",
-        "content-length",
-        "prefer",
-      ])
-        headers.delete(name);
-    }
     if (next.origin !== new URL(url).origin) {
       headers.delete("authorization");
       headers.delete("cookie");
