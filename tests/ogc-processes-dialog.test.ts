@@ -245,7 +245,7 @@ test("malformed JSON stays in the editor and produces a catalog-backed error", a
   assert.equal(posts, 0);
 });
 
-test("closing an unacknowledged submission retains its uncertainty notice on reopening", async () => {
+test("closing an unacknowledged submission retains its pending notice on reopening", async () => {
   let posts = 0;
   let signal: AbortSignal | undefined;
   const pending: { resolve?: (value: Response) => void } = {};
@@ -267,7 +267,10 @@ test("closing an unacknowledged submission retains its uncertainty notice on reo
   );
   await act(async () => useAppStore.getState().setOgcProcessesOpen(true));
   await waitFor(() =>
-    assert.match(screen.getByRole("alert").textContent ?? "", /Retrying submits a new execution/),
+    assert.match(
+      screen.getByRole("alert").textContent ?? "",
+      /previous submission is still awaiting/,
+    ),
   );
   assert.equal(posts, 1);
   assert.equal(screen.getByRole("button", { name: "Run process" }).hasAttribute("disabled"), true);
@@ -329,6 +332,117 @@ test("equivalent resumed status URLs update the tracked process and unlock Run",
   fireEvent.click(screen.getByRole("button", { name: "Dismiss job" }));
   await waitFor(() => assert.ok(screen.queryByText("Dismissed")));
   assert.equal(screen.getByRole("button", { name: "Dismiss job" }).hasAttribute("disabled"), true);
+});
+
+for (const action of ["Stop", "close", "replace project"] as const) {
+  test(`an acknowledged native dismissal survives ${action} within its project boundary`, async () => {
+    let posts = 0;
+    serve(async (_url, init) => {
+      if (init?.method === "POST") {
+        posts++;
+        return new Response(null, {
+          status: 202,
+          headers: { Location: "/master/jobs/one", "Retry-After": "0" },
+        });
+      }
+      return new Response(JSON.stringify({ jobID: "one", status: "running" }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    await form();
+    fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+    await waitFor(() =>
+      assert.match(
+        (screen.getByLabelText("Job status URL") as HTMLInputElement).value,
+        /\/jobs\/one/,
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+    const descriptor = Object.getOwnPropertyDescriptor(window, "__TAURI_INTERNALS__");
+    const pending: { resolve?: (value: unknown) => void } = {};
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: async (_command: string, args: Record<string, unknown>) => {
+          assert.equal(args.method, "DELETE");
+          return new Promise((resolve) => {
+            pending.resolve = resolve;
+          });
+        },
+      },
+    });
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Dismiss job" }));
+      await waitFor(() => assert.ok(pending.resolve));
+      if (action === "Stop") fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+      else if (action === "close") fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      else
+        await act(async () =>
+          useAppStore.setState((state) => ({ projectLoadCount: state.projectLoadCount + 1 })),
+        );
+      await act(async () =>
+        pending.resolve?.({
+          status: 200,
+          final_url: "https://demo.pygeoapi.io/master/jobs/one",
+          content_type: "application/json",
+          location: null,
+          retry_after: null,
+          link: null,
+          body_base64: "e30=",
+        }),
+      );
+      if (action === "close")
+        await act(async () => useAppStore.getState().setOgcProcessesOpen(true));
+      if (action === "replace project") {
+        assert.equal((screen.getByLabelText("Job status URL") as HTMLInputElement).value, "");
+        assert.equal(screen.queryByText("Dismissed"), null);
+      } else {
+        await waitFor(() => assert.ok(screen.queryByText("Dismissed")));
+        assert.equal(
+          screen.getByRole("button", { name: "Run process" }).hasAttribute("disabled"),
+          false,
+        );
+      }
+      assert.equal(posts, 1);
+      assert.equal(screen.queryByRole("alert"), null);
+    } finally {
+      if (descriptor) Object.defineProperty(window, "__TAURI_INTERNALS__", descriptor);
+      else Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    }
+  });
+}
+
+test("input names matching inherited object properties start empty and can be submitted", async () => {
+  const process = description();
+  process.inputs = {
+    ...process.inputs,
+    constructor: { title: "Constructor input", schema: { type: "string" } },
+    toString: { title: "String input", schema: { type: "object" } },
+    valueOf: { title: "Boolean input", schema: { type: "boolean" } },
+  };
+  let inputs: unknown;
+  serve(async (_url, init) => {
+    inputs = JSON.parse(String(init?.body)).inputs;
+    return new Response("{}", { headers: { "Content-Type": "application/json" } });
+  }, process);
+  await form();
+  assert.equal((screen.getByLabelText("Constructor input *") as HTMLInputElement).value, "");
+  assert.equal((screen.getByLabelText("String input *") as HTMLTextAreaElement).value, "");
+  assert.equal((screen.getByLabelText("Boolean input *") as HTMLSelectElement).value, "");
+  fireEvent.change(screen.getByLabelText("Constructor input *"), { target: { value: "literal" } });
+  fireEvent.change(screen.getByLabelText("String input *"), { target: { value: '{"hello":1}' } });
+  fireEvent.change(screen.getByLabelText("Boolean input *"), { target: { value: "false" } });
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() =>
+    assert.deepEqual(inputs, {
+      name: "GeoLibre",
+      as_bytes: false,
+      media_type: "application/json",
+      constructor: "literal",
+      toString: { hello: 1 },
+      valueOf: false,
+    }),
+  );
 });
 
 test("stopped synchronous results retain their job association across process selection", async () => {

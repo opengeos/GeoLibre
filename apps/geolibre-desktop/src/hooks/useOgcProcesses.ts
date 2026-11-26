@@ -67,7 +67,7 @@ export function useOgcProcesses(open: boolean) {
 
   const stop = useCallback(() => {
     if (pendingSubmission.current && !pendingSubmission.current.controller.signal.aborted)
-      setError(new OgcProcessError("executionUncertain", { detail: "" }));
+      setError(new OgcProcessError("submissionPending"));
     active.current?.abort();
     active.current = null;
     setPhase(pendingSubmission.current ? "awaiting" : "idle");
@@ -322,25 +322,30 @@ export function useOgcProcesses(open: boolean) {
     });
   const dismiss = () =>
     run("dismissing", async (context) => {
-      await dismissOgcProcessJob(jobUrl.trim(), context.signal);
-      context.commit(() => {
-        setJob((previous) =>
-          previous && sameOgcProcessJob(previous.url, jobUrl.trim())
-            ? { ...previous, status: "dismissed" }
+      const target = jobUrl.trim();
+      const project = useAppStore.getState().projectLoadCount;
+      await dismissOgcProcessJob(target, context.signal);
+      if (!mounted.current || useAppStore.getState().projectLoadCount !== project) return;
+      // A completed remote mutation survives stopped observation. Only update
+      // its retained identity; another displayed job may now own the dialog.
+      setJob((previous) =>
+        previous && sameOgcProcessJob(previous.url, target)
+          ? { ...previous, status: "dismissed" }
+          : context.signal.aborted
+            ? previous
             : null,
-        );
-        setJobsByProcess(
-          (previous) =>
-            new Map(
-              [...previous].map(([key, value]) => [
-                key,
-                sameOgcProcessJob(value.url, jobUrl.trim())
-                  ? { ...value, status: "dismissed" as const }
-                  : value,
-              ]),
-            ),
-        );
-      });
+      );
+      setJobsByProcess(
+        (previous) =>
+          new Map(
+            [...previous].map(([key, value]) => [
+              key,
+              sameOgcProcessJob(value.url, target)
+                ? { ...value, status: "dismissed" as const }
+                : value,
+            ]),
+          ),
+      );
     });
   const changeEndpoint = (value: string) => {
     stop();

@@ -12,6 +12,74 @@ const { Agent, MockAgent } = createRequire(
   new URL("../apps/geolibre-desktop/vite-proxy-guard.ts", import.meta.url),
 )("undici") as typeof import("undici");
 
+test("write acknowledgement headers arrive before a stalled body and completed bodies remain intact", async (t) => {
+  let writes = 0;
+  let release: (() => void) | undefined;
+  const upstream = createServer((req, res) => {
+    writes++;
+    req.resume();
+    res.writeHead(202, {
+      Location: "/jobs/retained",
+      "Content-Type": "application/json",
+      Connection: "close",
+    });
+    res.flushHeaders();
+    const finish = () => {
+      if (!res.destroyed) res.end('{"status":"accepted"}');
+    };
+    if (req.url === "/pending") release = finish;
+    else finish();
+  });
+  upstream.listen(0, "127.0.0.1");
+  await once(upstream, "listening");
+  const delegate = new Agent();
+  delegate.dispatch = delegate.dispatch.bind(delegate);
+  const origin = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
+  t.mock.method(
+    Agent.prototype,
+    "dispatch",
+    (...[options, handler]: Parameters<InstanceType<typeof Agent>["dispatch"]>) =>
+      delegate.dispatch({ ...options, origin }, handler),
+  );
+  const proxy = createServer((req, res) => {
+    void proxyOgcProcessRequest(req, res);
+  });
+  proxy.listen(0, "127.0.0.1");
+  await once(proxy, "listening");
+  const url = (path: string) =>
+    `http://127.0.0.1:${(proxy.address() as AddressInfo).port}/proxy?url=${encodeURIComponent(`https://process.example${path}`)}`;
+  try {
+    const abort = new AbortController();
+    const acknowledged = await fetch(url("/pending"), {
+      method: "POST",
+      body: "{}",
+      headers: { "Content-Type": "application/json", Connection: "close" },
+      signal: AbortSignal.any([abort.signal, AbortSignal.timeout(5000)]),
+    });
+    assert.equal(acknowledged.status, 202);
+    assert.equal(acknowledged.headers.get("location"), "/jobs/retained");
+    assert.ok(release);
+    abort.abort();
+    await assert.rejects(acknowledged.arrayBuffer());
+    release();
+    const complete = await fetch(url("/complete"), {
+      method: "POST",
+      body: "{}",
+      headers: { "Content-Type": "application/json", Connection: "close" },
+      signal: AbortSignal.timeout(5000),
+    });
+    assert.equal(complete.status, 202);
+    assert.equal(await complete.text(), '{"status":"accepted"}');
+    assert.equal(writes, 2, "one dispatch per submission, with no retry");
+  } finally {
+    release?.();
+    await delegate.close();
+    proxy.close();
+    upstream.close();
+    await Promise.all([once(proxy, "close"), once(upstream, "close")]);
+  }
+});
+
 test("process proxy preserves execution/job controls, redirect methods and response limits", async (t) => {
   const delegate = new Agent();
   delegate.dispatch = delegate.dispatch.bind(delegate);
@@ -101,34 +169,40 @@ test("process proxy preserves execution/job controls, redirect methods and respo
     headers: Record<string, string> = {},
     chunked = false,
   ) =>
-    new Promise<{ status: number | undefined; headers: IncomingHttpHeaders; body: string }>(
-      (resolve, reject) => {
-        const req = request(
-          {
-            hostname: "127.0.0.1",
-            port,
-            method,
-            path: `/proxy?url=${encodeURIComponent(`https://process.example${path}`)}`,
-            headers: { "content-type": "application/json", ...headers },
-          },
-          (res) => {
-            let body = "";
-            res.setEncoding("utf8");
-            res.on("data", (chunk) => {
-              body += chunk;
-            });
-            res.on("error", reject);
-            res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body }));
-          },
-        );
-        req.on("error", reject);
-        if (chunked && data) {
-          const bytes = typeof data === "string" ? Buffer.from(data) : data;
-          req.write(bytes.subarray(0, bytes.length / 2));
-          req.end(bytes.subarray(bytes.length / 2));
-        } else req.end(data);
-      },
-    );
+    new Promise<{
+      status: number | undefined;
+      headers: IncomingHttpHeaders;
+      body: string;
+      bodyReadFailed?: boolean;
+    }>((resolve, reject) => {
+      const req = request(
+        {
+          hostname: "127.0.0.1",
+          port,
+          method,
+          path: `/proxy?url=${encodeURIComponent(`https://process.example${path}`)}`,
+          headers: { "content-type": "application/json", ...headers },
+        },
+        (res) => {
+          let body = "";
+          res.setEncoding("utf8");
+          res.on("data", (chunk) => {
+            body += chunk;
+          });
+          res.on("error", reject);
+          res.on("aborted", () =>
+            resolve({ status: res.statusCode, headers: res.headers, body, bodyReadFailed: true }),
+          );
+          res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body }));
+        },
+      );
+      req.on("error", reject);
+      if (chunked && data) {
+        const bytes = typeof data === "string" ? Buffer.from(data) : data;
+        req.write(bytes.subarray(0, bytes.length / 2));
+        req.end(bytes.subarray(bytes.length / 2));
+      } else req.end(data);
+    });
   try {
     const accepted = await send("POST", "/execution", body, { prefer: "respond-async" });
     assert.equal(accepted.status, 201);
@@ -144,7 +218,7 @@ test("process proxy preserves execution/job controls, redirect methods and respo
     const synchronous = await send("POST", "/sync-large", body, { "x-geolibre-max-bytes": "4" });
     assert.equal(synchronous.status, 200);
     assert.equal(synchronous.headers.link, '</jobs/sync>; rel="monitor"');
-    assert.equal(synchronous.headers["x-geolibre-process-body-incomplete"], "1");
+    assert.equal(synchronous.bodyReadFailed, true);
     assert.equal(synchronous.body, "");
     const dismissed = await send("DELETE", "/delete-large", undefined, {
       "x-geolibre-max-bytes": "4",

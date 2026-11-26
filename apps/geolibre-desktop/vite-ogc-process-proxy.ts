@@ -147,6 +147,26 @@ export async function proxyOgcProcessRequest(
     }
     const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(120_000)]);
     const upstream = await processRequest(url, method, body, headers, signal);
+    const acknowledged = (method === "POST" || method === "DELETE") && upstream.response.ok;
+    const forwardHeaders = () => {
+      res.statusCode = upstream.response.status;
+      res.setHeader("cache-control", "no-store");
+      res.setHeader(
+        "content-type",
+        upstream.response.headers.get("content-type") ?? "application/octet-stream",
+      );
+      res.setHeader("x-geolibre-final-url", upstream.url);
+      for (const name of ["location", "retry-after", "link"]) {
+        const value = upstream.response.headers.get(name);
+        if (value) res.setHeader(name, value);
+      }
+    };
+    if (acknowledged) {
+      forwardHeaders();
+      // The caller's deadline starts before ours. Deliver the acknowledgement
+      // now, while preserving a completed optional body verbatim below.
+      res.flushHeaders();
+    }
     let data: Buffer;
     let bodyReadFailed = false;
     try {
@@ -156,37 +176,33 @@ export async function proxyOgcProcessRequest(
       );
     } catch (error) {
       await upstream.response.body?.cancel().catch(() => {});
-      const accepted =
-        (method === "POST" && upstream.response.ok) ||
-        (method === "DELETE" && upstream.response.ok);
-      if (!accepted && upstream.response.ok)
+      if (acknowledged) {
+        // A broken response stream lets the caller retain already delivered
+        // status/routing while distinguishing failure from valid empty results.
+        res.destroy();
+        return;
+      }
+      if (upstream.response.ok)
         throw new ProcessProxyError(
           502,
           error instanceof ProxyBodyLimitError
             ? "OGC process response exceeds its download limit."
             : "OGC process response could not be read completely.",
         );
-      if (!accepted && signal.aborted) throw error;
+      if (signal.aborted) throw error;
       data = Buffer.alloc(0);
       bodyReadFailed = true;
     }
-    res.statusCode = upstream.response.status;
-    res.setHeader("cache-control", "no-store");
-    res.setHeader(
-      "content-type",
-      upstream.response.headers.get("content-type") ?? "application/octet-stream",
-    );
-    res.setHeader("x-geolibre-final-url", upstream.url);
-    if (bodyReadFailed) res.setHeader("x-geolibre-process-body-incomplete", "1");
-    for (const name of ["location", "retry-after", "link"]) {
-      const value = upstream.response.headers.get(name);
-      if (value) res.setHeader(name, value);
+    if (!res.headersSent) {
+      forwardHeaders();
+      if (bodyReadFailed) res.setHeader("x-geolibre-process-body-incomplete", "1");
+      res.setHeader("content-length", String(data.length));
     }
-    res.setHeader("content-length", String(data.length));
     res.end(data);
   } catch (error) {
     req.resume();
-    if (!res.destroyed) {
+    if (res.headersSent) res.destroy();
+    else if (!res.destroyed) {
       res.statusCode = error instanceof ProcessProxyError ? error.status : 502;
       res.setHeader("cache-control", "no-store");
       res.setHeader("content-type", "application/json");

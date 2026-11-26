@@ -1,13 +1,13 @@
 //! Bounded desktop transport for OGC API Processes discovery, execution and jobs.
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
+use tokio::time::{timeout_at, Instant};
 
 use base64::Engine;
 use serde::Serialize;
 
 use crate::guarded_http::{
-    guarded_http_client_without_referer, guarded_http_write_client_without_redirects,
-    request_error_message, url_is_fetchable,
+    guarded_async_client_builder, request_error_message, url_is_fetchable, MAX_HTTP_REDIRECTS,
 };
 
 const MAX_INPUT_BYTES: usize = 1024 * 1024;
@@ -63,21 +63,215 @@ pub(crate) async fn ogc_process_http_request(
     max_bytes: Option<u64>,
     timeout_secs: Option<u64>,
 ) -> Result<ProcessHttpResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        request_blocking(
+    execute_request(
+        ProcessRequest {
             url,
             method,
             body,
             accept,
-            prefer_async.unwrap_or(false),
+            prefer_async: prefer_async.unwrap_or(false),
             max_bytes,
-            timeout_secs,
-        )
-    })
+            deadline: Instant::now()
+                + Duration::from_secs(timeout_secs.unwrap_or(120).clamp(8, 600)),
+        },
+        Arc::new(url_is_fetchable),
+    )
     .await
-    .map_err(|error| format!("OGC process HTTP task failed: {error}"))?
 }
 
+struct ProcessRequest {
+    url: String,
+    method: String,
+    body: Option<String>,
+    accept: Option<String>,
+    prefer_async: bool,
+    max_bytes: Option<u64>,
+    deadline: Instant,
+}
+
+fn request_timeout() -> String {
+    "OGC process request timed out".into()
+}
+
+fn client() -> Result<reqwest::Client, String> {
+    static CLIENT: std::sync::OnceLock<Result<reqwest::Client, String>> =
+        std::sync::OnceLock::new();
+    CLIENT
+        .get_or_init(|| {
+            // The shared builder preserves TLS, mTLS and direct-connection DNS guards.
+            // A configured proxy must enforce destination policy for writes as well
+            // as reads. Redirects are handled below so validation shares the deadline.
+            guarded_async_client_builder(reqwest::redirect::Policy::none())?
+                .referer(false)
+                .build()
+                .map_err(|error| format!("Could not create OGC process client: {error}"))
+        })
+        .clone()
+}
+
+/// Preparation can outlive its timeout, but it can never dispatch a request.
+async fn prepare_request<F>(
+    target: reqwest::Url,
+    deadline: Instant,
+    validate: Arc<F>,
+) -> Result<reqwest::Client, String>
+where
+    F: Fn(&reqwest::Url) -> Result<(), String> + Send + Sync + 'static,
+{
+    timeout_at(
+        deadline,
+        tauri::async_runtime::spawn_blocking(move || {
+            if !target.username().is_empty() || target.password().is_some() {
+                return Err("OGC process URLs must not contain user information".into());
+            }
+            validate(&target)?;
+            client()
+        }),
+    )
+    .await
+    .map_err(|_| request_timeout())?
+    .map_err(|error| format!("OGC process preparation failed: {error}"))?
+}
+
+async fn execute_request<F>(
+    options: ProcessRequest,
+    validate: Arc<F>,
+) -> Result<ProcessHttpResponse, String>
+where
+    F: Fn(&reqwest::Url) -> Result<(), String> + Send + Sync + 'static,
+{
+    let method = request_method(&options.method, options.body.as_deref())?;
+    let mut target =
+        reqwest::Url::parse(&options.url).map_err(|_| "Invalid OGC process URL".to_owned())?;
+    for hop in 0..=MAX_HTTP_REDIRECTS {
+        let client = prepare_request(target.clone(), options.deadline, validate.clone()).await?;
+        let remaining = options
+            .deadline
+            .checked_duration_since(Instant::now())
+            .filter(|duration| !duration.is_zero())
+            .ok_or_else(request_timeout)?;
+        let mut request = client
+            .request(method.clone(), target.clone())
+            .timeout(remaining)
+            .header(
+                reqwest::header::ACCEPT,
+                options.accept.as_deref().unwrap_or("application/json"),
+            );
+        if let Some(body) = &options.body {
+            request = request
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .body(body.clone());
+        }
+        if options.prefer_async && method == reqwest::Method::POST {
+            request = request.header("Prefer", "respond-async");
+        }
+        let response = timeout_at(options.deadline, request.send())
+            .await
+            .map_err(|_| request_timeout())?
+            .map_err(|error| request_error_message(&error.without_url()))?;
+        if method == reqwest::Method::GET
+            && matches!(response.status().as_u16(), 301 | 302 | 303 | 307 | 308)
+        {
+            if let Some(location) = response
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|value| value.to_str().ok())
+            {
+                if hop == MAX_HTTP_REDIRECTS {
+                    return Err("Too many OGC process redirects".into());
+                }
+                target = target
+                    .join(location)
+                    .map_err(|_| "Invalid OGC process redirect".to_owned())?;
+                continue;
+            }
+        }
+        return read_response(
+            response,
+            options.deadline,
+            options.max_bytes,
+            method != reqwest::Method::GET,
+        )
+        .await;
+    }
+    Err("Too many OGC process redirects".into())
+}
+
+async fn read_body(mut response: reqwest::Response, limit: u64) -> Result<Vec<u8>, String> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > limit)
+    {
+        return Err(format!("Response exceeds the {limit}-byte download limit"));
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| request_error_message(&error.without_url()))?
+    {
+        if chunk.len() as u64 > limit.saturating_sub(bytes.len() as u64) {
+            return Err(format!("Response exceeds the {limit}-byte download limit"));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
+async fn read_response(
+    response: reqwest::Response,
+    deadline: Instant,
+    max_bytes: Option<u64>,
+    write: bool,
+) -> Result<ProcessHttpResponse, String> {
+    let status = response.status().as_u16();
+    let header = |name: &str| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned)
+    };
+    let links: Vec<_> = response
+        .headers()
+        .get_all(reqwest::header::LINK)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .collect();
+    let mut result = ProcessHttpResponse {
+        status,
+        final_url: response.url().as_str().to_owned(),
+        content_type: header("content-type"),
+        location: header("location"),
+        retry_after: header("retry-after"),
+        link: if links.is_empty() {
+            None
+        } else {
+            Some(links.join(", "))
+        },
+        body_base64: String::new(),
+        body_read_failed: false,
+    };
+    let limit = max_bytes.unwrap_or(2 * 1024 * 1024).min(MAX_RESPONSE_BYTES);
+    let limit = if (200..300).contains(&status) {
+        limit
+    } else {
+        limit.min(64 * 1024)
+    };
+    let body = timeout_at(deadline, read_body(response, limit))
+        .await
+        .map_err(|_| request_timeout())
+        .and_then(|result| result);
+    match body {
+        Ok(bytes) => result.body_base64 = base64::engine::general_purpose::STANDARD.encode(bytes),
+        Err(_) if write && (200..300).contains(&status) => result.body_read_failed = true,
+        Err(_) if !(200..300).contains(&status) => result.body_read_failed = true,
+        Err(error) => return Err(error),
+    }
+    Ok(result)
+}
+
+#[cfg(test)]
 fn request_blocking(
     url: String,
     method: String,
@@ -87,90 +281,15 @@ fn request_blocking(
     max_bytes: Option<u64>,
     timeout_secs: Option<u64>,
 ) -> Result<ProcessHttpResponse, String> {
-    let method = request_method(&method, body.as_deref())?;
-    let target = reqwest::Url::parse(&url).map_err(|_| "Invalid OGC process URL".to_owned())?;
-    if !target.username().is_empty() || target.password().is_some() {
-        return Err("OGC process URLs must not contain user information".into());
-    }
-    url_is_fetchable(&target)?;
-    let client = if method == reqwest::Method::GET {
-        guarded_http_client_without_referer()?
-    } else {
-        guarded_http_write_client_without_redirects()?
-    };
-    let mut request = client
-        .request(method.clone(), target)
-        .timeout(Duration::from_secs(
-            timeout_secs.unwrap_or(120).clamp(8, 600),
-        ))
-        .header(
-            reqwest::header::ACCEPT,
-            accept.as_deref().unwrap_or("application/json"),
-        );
-    if let Some(body) = body {
-        request = request
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(body);
-    }
-    if prefer_async && method == reqwest::Method::POST {
-        request = request.header("Prefer", "respond-async");
-    }
-    let response = request
-        .send()
-        .map_err(|error| request_error_message(&error.without_url()))?;
-    let status = response.status().as_u16();
-    let final_url = response.url().as_str().to_owned();
-    let header = |name: &str| {
-        response
-            .headers()
-            .get(name)
-            .and_then(|v| v.to_str().ok())
-            .map(str::to_owned)
-    };
-    let content_type = header("content-type");
-    let location = header("location");
-    let retry_after = header("retry-after");
-    let links: Vec<&str> = response
-        .headers()
-        .get_all(reqwest::header::LINK)
-        .iter()
-        .filter_map(|value| value.to_str().ok())
-        .collect();
-    let link = if links.is_empty() {
-        None
-    } else {
-        Some(links.join(", "))
-    };
-    let length = response.content_length();
-    let max_bytes = max_bytes.unwrap_or(2 * 1024 * 1024).min(MAX_RESPONSE_BYTES);
-    // Keep small OGC exception documents, but an oversized/broken error page
-    // must not hide the server's HTTP status behind a download-limit error.
-    let accepted = method == reqwest::Method::POST && (200..300).contains(&status);
-    let dismissed = method == reqwest::Method::DELETE && (200..300).contains(&status);
-    let mut body_read_failed = false;
-    let body = if accepted || dismissed {
-        // Keep write acknowledgements and routing even if body processing fails.
-        // The caller distinguishes a missing body from valid empty results.
-        crate::http_body::read_limited_body(response, length, max_bytes).unwrap_or_else(|_| {
-            body_read_failed = true;
-            Vec::new()
-        })
-    } else if (200..300).contains(&status) {
-        crate::http_body::read_limited_body(response, length, max_bytes)?
-    } else {
-        crate::http_body::read_limited_body(response, length, max_bytes.min(64 * 1024))
-            .unwrap_or_default()
-    };
-    Ok(ProcessHttpResponse {
-        status,
-        final_url,
-        content_type,
-        location,
-        retry_after,
-        link,
-        body_base64: base64::engine::general_purpose::STANDARD.encode(body),
-        body_read_failed,
-    })
+    tauri::async_runtime::block_on(ogc_process_http_request(
+        url,
+        method,
+        body,
+        accept,
+        Some(prefer_async),
+        max_bytes,
+        timeout_secs,
+    ))
 }
 
 #[cfg(test)]
@@ -190,6 +309,126 @@ mod tests {
         assert!(request_method("POST", Some("[]")).is_err());
         assert!(request_method("POST", Some("broken")).is_err());
         assert!(request_method("POST", Some(&" ".repeat(MAX_INPUT_BYTES + 1))).is_err());
+    }
+
+    #[test]
+    fn expired_validation_never_dispatches_a_late_write() {
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            mpsc, Mutex,
+        };
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let (release, wait) = mpsc::channel();
+        let wait = Mutex::new(wait);
+        let finished = super::Arc::new(AtomicBool::new(false));
+        let completed = finished.clone();
+        let validator = super::Arc::new(move |target: &reqwest::Url| {
+            wait.lock()
+                .unwrap()
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .unwrap();
+            let result = super::url_is_fetchable(target);
+            completed.store(true, Ordering::SeqCst);
+            result
+        });
+        let result = tauri::async_runtime::block_on(super::execute_request(
+            super::ProcessRequest {
+                url: format!("http://{}/execution", listener.local_addr().unwrap()),
+                method: "POST".into(),
+                body: Some("{}".into()),
+                accept: None,
+                prefer_async: false,
+                max_bytes: None,
+                deadline: super::Instant::now() + std::time::Duration::from_millis(150),
+            },
+            validator,
+        ));
+        assert!(result.err().unwrap().contains("timed out"));
+        release.send(()).unwrap();
+        for _ in 0..100 {
+            if finished.load(Ordering::SeqCst) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(finished.load(Ordering::SeqCst));
+        let observe_until = std::time::Instant::now() + std::time::Duration::from_millis(100);
+        while std::time::Instant::now() < observe_until {
+            assert_eq!(
+                listener.accept().unwrap_err().kind(),
+                std::io::ErrorKind::WouldBlock
+            );
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn body_deadline_preserves_write_acknowledgements_but_fails_reads() {
+        use std::{
+            io::{BufRead, BufReader, Write},
+            net::TcpListener,
+            time::Duration,
+        };
+        for method in ["POST", "GET"] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let address = listener.local_addr().unwrap();
+            let (release, hold) = std::sync::mpsc::channel();
+            let server = std::thread::spawn(move || {
+                let (mut socket, _) = listener.accept().unwrap();
+                socket
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                let mut reader = BufReader::new(socket.try_clone().unwrap());
+                loop {
+                    let mut line = String::new();
+                    reader.read_line(&mut line).unwrap();
+                    if line == "\r\n" {
+                        break;
+                    }
+                }
+                socket.write_all(b"HTTP/1.1 202 Accepted\r\nLocation: /jobs/retained\r\nContent-Length: 1000\r\nConnection: close\r\n\r\n").unwrap();
+                hold.recv_timeout(Duration::from_secs(5)).unwrap();
+            });
+            let result = tauri::async_runtime::block_on(async {
+                let target = reqwest::Url::parse(&format!("http://{address}/execution")).unwrap();
+                let client = super::prepare_request(
+                    target.clone(),
+                    super::Instant::now() + Duration::from_secs(5),
+                    super::Arc::new(super::url_is_fetchable),
+                )
+                .await
+                .unwrap();
+                let response = client
+                    .request(
+                        reqwest::Method::from_bytes(method.as_bytes()).unwrap(),
+                        target,
+                    )
+                    .timeout(Duration::from_secs(5))
+                    .send()
+                    .await
+                    .unwrap();
+                // The body is held until this read returns. Start this test's
+                // deadline only after headers exist, independent of setup load.
+                super::read_response(
+                    response,
+                    super::Instant::now() + Duration::from_millis(50),
+                    None,
+                    method == "POST",
+                )
+                .await
+            });
+            release.send(()).unwrap();
+            if method == "POST" {
+                let response = result.unwrap();
+                assert_eq!(response.status, 202);
+                assert_eq!(response.location.as_deref(), Some("/jobs/retained"));
+                assert!(response.body_read_failed);
+            } else {
+                assert!(result.is_err());
+            }
+            server.join().unwrap();
+        }
     }
 }
 

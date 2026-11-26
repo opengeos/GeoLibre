@@ -67,6 +67,7 @@ export function OgcProcessInputs({
         const schema = ogcInputSchema(definition),
           kind = ogcInputKind(definition);
         const id = `${prefix}-${encodeURIComponent(key)}`;
+        const fieldValue = Object.hasOwn(values, key) ? values[key] : "";
         const title = typeof definition.title === "string" ? definition.title : key;
         const enumeration = kind !== "json" && Array.isArray(schema.enum) ? schema.enum : undefined;
         const selected = enumeration?.find(
@@ -106,7 +107,7 @@ export function OgcProcessInputs({
               <Select
                 id={id}
                 disabled={disabled}
-                value={values[key] ?? ""}
+                value={fieldValue}
                 onChange={(event) => set(key, event.target.value || undefined)}
               >
                 <option value="">{t("processing.ogcProcesses.notSet")}</option>
@@ -117,7 +118,7 @@ export function OgcProcessInputs({
               <Textarea
                 id={id}
                 disabled={disabled}
-                value={values[key] ?? ""}
+                value={fieldValue}
                 className="min-h-24 font-mono text-xs"
                 onChange={(event) => set(key, event.target.value)}
               />
@@ -125,7 +126,7 @@ export function OgcProcessInputs({
               <Input
                 id={id}
                 disabled={disabled}
-                value={values[key] ?? ""}
+                value={fieldValue}
                 type={kind === "string" ? "text" : "number"}
                 step={kind === "integer" ? 1 : "any"}
                 min={typeof schema.minimum === "number" ? schema.minimum : undefined}
@@ -147,8 +148,11 @@ export function OgcProcessInputs({
                 value=""
                 onChange={(event) => {
                   if (!event.target.value || !exporting.granted) return;
-                  const [id, representation] = JSON.parse(event.target.value) as [string, string];
-                  const layer = useAppStore.getState().layers.find((item) => item.id === id);
+                  const [layerId, representation] = JSON.parse(event.target.value) as [
+                    string,
+                    string,
+                  ];
+                  const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
                   if (!layer?.geojson || !resolveLayerCapabilities(layer).export) return;
                   const value =
                     representation === "features"

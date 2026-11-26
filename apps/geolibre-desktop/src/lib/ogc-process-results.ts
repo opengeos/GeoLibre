@@ -1,4 +1,5 @@
 import { OgcProcessError } from "./ogc-process-errors";
+import i18next from "i18next";
 import { redactUrlCredentials, shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import type { GeoLibreAppAPI } from "@geolibre/plugins";
 import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
@@ -10,7 +11,8 @@ import { validOgcProcessGeoJson } from "./ogc-process-geometry";
 /** Bounded display copy; large results stay intact for downloading and import. */
 export function ogcProcessOutputPreview(output: OgcProcessOutput): string {
   if (output.href) return redactUrlCredentials(output.href);
-  if (output.bytes) return `${output.bytes.byteLength.toLocaleString()} bytes`;
+  if (output.bytes)
+    return i18next.t("processing.ogcProcesses.outputBytes", { count: output.bytes.byteLength });
   if (typeof output.value === "string") return output.value.slice(0, 2000);
   const shorten = (value: unknown, depth: number): unknown => {
     if (typeof value === "string") return value.slice(0, 300);

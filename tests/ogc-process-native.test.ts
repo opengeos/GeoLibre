@@ -106,6 +106,49 @@ test("compact native result transport retains all byte values", async () => {
   assert.deepEqual(result.body, bytes);
 });
 
+test("native error metadata survives the local deadline while explicit cancellation still wins", async (t) => {
+  let deadline = new AbortController();
+  let caller = new AbortController();
+  let status = 401;
+  let cancel = false;
+  t.mock.method(AbortSignal, "timeout", () => deadline.signal);
+  Object.defineProperty(window, "__TAURI_INTERNALS__", {
+    configurable: true,
+    value: {
+      invoke: async () => {
+        if (cancel) caller.abort(new DOMException("cancelled", "AbortError"));
+        else deadline.abort(new DOMException("deadline", "TimeoutError"));
+        return {
+          status,
+          final_url: "https://example.org/jobs/one",
+          content_type: "application/json",
+          location: null,
+          retry_after: null,
+          link: null,
+          body_base64: "",
+          body_read_failed: true,
+        };
+      },
+    },
+  });
+  const { processHttp } = await import("../apps/geolibre-desktop/src/lib/ogc-process-http");
+  const rejected = await processHttp("https://example.org/jobs/one", caller.signal);
+  assert.equal(rejected.status, 401);
+  assert.equal(rejected.bodyReadFailed, true);
+  deadline = new AbortController();
+  status = 200;
+  await assert.rejects(processHttp("https://example.org/jobs/one", caller.signal), {
+    code: "requestTimeout",
+  });
+  deadline = new AbortController();
+  caller = new AbortController();
+  status = 401;
+  cancel = true;
+  await assert.rejects(processHttp("https://example.org/jobs/one", caller.signal), {
+    name: "AbortError",
+  });
+});
+
 test("native synchronous write acknowledgement retains routing and body failure separately", async () => {
   Object.defineProperty(window, "__TAURI_INTERNALS__", {
     configurable: true,

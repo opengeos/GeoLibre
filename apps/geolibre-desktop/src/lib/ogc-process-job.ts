@@ -58,6 +58,9 @@ export async function monitorOgcProcessJob(
       const next = await readOgcProcessJob(current.url, abort);
       current = {
         ...next,
+        ...(current.resultsUrlAdvertised && !next.resultsUrlAdvertised
+          ? { resultsUrl: current.resultsUrl, resultsUrlAdvertised: true }
+          : {}),
         outputIds: current.outputIds,
         outputDefinitions: current.outputDefinitions,
         processUrl: current.processUrl ?? next.processUrl,

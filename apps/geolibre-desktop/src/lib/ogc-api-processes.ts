@@ -28,6 +28,7 @@ export interface OgcProcessJob {
   message: string;
   progress?: number;
   resultsUrl: string;
+  resultsUrlAdvertised?: boolean;
   retryAfterMs: number;
   /** Advertised identifiers disambiguate legacy pygeoapi result envelopes. */
   outputIds?: string[];
@@ -273,6 +274,8 @@ function job(response: ProcessHttpResponse, fallback: string): OgcProcessJob {
     linked(items, "status", response.url) ??
     linked(items, "self", response.url) ??
     fallback;
+  const resultsUrl =
+    linked(items, REL + "results", response.url) ?? linked(items, "results", response.url);
   return {
     id: typeof doc.jobID === "string" ? doc.jobID : pathIdentifier(url),
     url,
@@ -281,10 +284,8 @@ function job(response: ProcessHttpResponse, fallback: string): OgcProcessJob {
     ...(typeof doc.progress === "number" && Number.isFinite(doc.progress)
       ? { progress: Math.max(0, Math.min(100, doc.progress)) }
       : {}),
-    resultsUrl:
-      linked(items, REL + "results", response.url) ??
-      linked(items, "results", response.url) ??
-      append(url, "/results"),
+    resultsUrl: resultsUrl ?? append(url, "/results"),
+    ...(resultsUrl ? { resultsUrlAdvertised: true } : {}),
     retryAfterMs: ogcProcessRetryDelay(response.retryAfter),
     ...(typeof doc.processID === "string" ? { processId: doc.processID } : {}),
     ...(processUrl ? { processUrl } : {}),

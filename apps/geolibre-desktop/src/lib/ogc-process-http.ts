@@ -83,14 +83,19 @@ export async function processHttp(
       });
       // Once dispatched, the bounded native write may outlive observation.
       // Await its outcome so an accepted job is not discarded on cancellation.
-      const result = method === "GET" ? await waitForWcsRequest(pending, abort) : await pending;
-      if (!acknowledged(method, result.status)) abort.throwIfAborted();
+      // The native command bounds validation and network work itself. Keep
+      // caller cancellation responsive without racing away a received HTTP
+      // rejection while the host finishes its bounded error-body read.
+      const result = method === "GET" ? await waitForWcsRequest(pending, signal) : await pending;
+      const rejected = result.status < 200 || result.status >= 300;
+      if (!acknowledged(method, result.status) && (!rejected || signal.aborted))
+        abort.throwIfAborted();
       const body =
         result.body.buffer instanceof ArrayBuffer
           ? new Uint8Array(result.body.buffer, result.body.byteOffset, result.body.byteLength)
           : new Uint8Array(result.body);
       if (body.byteLength > maxBytes) {
-        if (acknowledged(method, result.status))
+        if (acknowledged(method, result.status) || rejected)
           return { ...result, body: new Uint8Array(), bodyReadFailed: true };
         throw new OgcProcessError("responseTooLarge");
       }
@@ -118,11 +123,12 @@ export async function processHttp(
       );
     } catch (error) {
       const accepted = acknowledged(method, response.status);
-      if (!accepted && (response.ok || abort.aborted)) throw error;
+      if (!accepted && (response.ok || signal.aborted)) throw error;
       body = new Uint8Array();
       bodyReadFailed = true;
     }
-    if (!acknowledged(method, response.status)) abort.throwIfAborted();
+    if (!acknowledged(method, response.status) && (response.ok || signal.aborted))
+      abort.throwIfAborted();
     return {
       status: response.status,
       url: dev ? (response.headers.get("x-geolibre-final-url") ?? url) : response.url || url,

@@ -17,6 +17,7 @@ import { processHttp } from "../apps/geolibre-desktop/src/lib/ogc-process-http";
 import { ogcProcessMonitorLinks } from "../apps/geolibre-desktop/src/lib/ogc-process-link-header";
 import { monitorOgcProcessJob } from "../apps/geolibre-desktop/src/lib/ogc-process-job";
 import { validOgcProcessGeoJson } from "../apps/geolibre-desktop/src/lib/ogc-process-geometry";
+import { ogcProcessOutputPreview } from "../apps/geolibre-desktop/src/lib/ogc-process-results";
 import {
   ogcProcessInputDefaults,
   parseOgcProcessInputs,
@@ -57,6 +58,54 @@ test("client errors follow the active language and retain original service detai
     );
   } finally {
     await i18next.changeLanguage(previous);
+  }
+});
+
+test("binary output previews use the active language", async () => {
+  const previous = i18next.language;
+  i18next.addResourceBundle(
+    "fr",
+    "translation",
+    { processing: { ogcProcesses: { outputBytes: "{{count}} octets" } } },
+    true,
+    true,
+  );
+  try {
+    await i18next.changeLanguage("fr");
+    assert.equal(ogcProcessOutputPreview({ id: "bytes", bytes: new Uint8Array(3) }), "3 octets");
+  } finally {
+    await i18next.changeLanguage(previous);
+  }
+});
+
+test("polling keeps an advertised results route unless a later status explicitly replaces it", async () => {
+  for (const replace of [false, true]) {
+    let reads = 0;
+    const calls = serve((url) => {
+      if (new URL(url).pathname.startsWith("/artifacts/")) return { echo: 5 };
+      const first = reads++ === 0;
+      return new Response(
+        JSON.stringify({
+          jobID: "one",
+          status: first ? "running" : "successful",
+          ...(first || replace
+            ? {
+                links: [{ rel: "results", href: first ? "/artifacts/first" : "/artifacts/second" }],
+              }
+            : {}),
+        }),
+        { headers: { "Content-Type": "application/json", "Retry-After": "0" } },
+      );
+    });
+    assert.deepEqual(
+      await monitorOgcProcessJob("https://example.org/jobs/one", new AbortController().signal),
+      [{ id: "echo", value: 5 }],
+    );
+    assert.equal(
+      new URL(calls.at(-1)!.url).pathname,
+      replace ? "/artifacts/second" : "/artifacts/first",
+    );
+    assert.equal(calls.length, 3);
   }
 });
 
@@ -368,6 +417,55 @@ test("monitoring and request deadlines use localized errors and preserve caller 
   };
   await assert.rejects(processHttp("https://example.org/processes", new AbortController().signal), {
     code: "requestTimeout",
+  });
+});
+
+test("an error-body deadline preserves received HTTP rejection while caller cancellation stays distinct", async (t) => {
+  let deadline = new AbortController();
+  t.mock.method(AbortSignal, "timeout", () => deadline.signal);
+  for (const status of [401, 503]) {
+    deadline = new AbortController();
+    serve(
+      () =>
+        new Response(
+          new ReadableStream(
+            {
+              pull(controller) {
+                deadline.abort(new DOMException("deadline", "TimeoutError"));
+                controller.error(deadline.signal.reason);
+              },
+            },
+            { highWaterMark: 0 },
+          ),
+          { status },
+        ),
+    );
+    const response = await processHttp(
+      "https://example.org/jobs/one",
+      new AbortController().signal,
+    );
+    assert.equal(response.status, status);
+    assert.equal(response.bodyReadFailed, true);
+  }
+  deadline = new AbortController();
+  const caller = new AbortController();
+  serve(
+    () =>
+      new Response(
+        new ReadableStream(
+          {
+            pull(controller) {
+              caller.abort(new DOMException("cancelled", "AbortError"));
+              controller.error(caller.signal.reason);
+            },
+          },
+          { highWaterMark: 0 },
+        ),
+        { status: 401 },
+      ),
+  );
+  await assert.rejects(processHttp("https://example.org/jobs/one", caller.signal), {
+    name: "AbortError",
   });
 });
 
