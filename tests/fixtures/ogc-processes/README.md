@@ -35,3 +35,8 @@ Their extent is `[0, 0, 2, 2]`, their pixel size is one degree, and they are
 striped with no compression. The first two integers cannot be represented
 exactly by Float64. Import tests read the real TIFF metadata and verify that
 these results are rejected before lossy conversion or layer publication.
+
+`tiled-uint64.tif` and `tiled-int64.tif` contain the identical 2 × 2 samples
+and georeferencing, rewritten with Rasterio as 16 × 16 uncompressed tiles.
+The fixtures verify that tiled inputs receive the same integer precision
+check before a renderer can decode their samples into Float64.

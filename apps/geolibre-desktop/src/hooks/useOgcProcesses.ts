@@ -8,6 +8,7 @@ import {
   executeOgcProcess,
   readOgcProcessJob,
   sameOgcProcessJob,
+  ogcProcessIdentity,
   type OgcProcess,
   type OgcProcessJob,
   type OgcProcessOutput,
@@ -162,7 +163,7 @@ export function useOgcProcesses(open: boolean) {
     const defaults = ogcProcessInputDefaults(full);
     context.commit(() => {
       setProcess(full);
-      const previousJob = retainedJobs.current.get(full.url);
+      const previousJob = retainedJobs.current.get(ogcProcessIdentity(full.url));
       setJob(previousJob ?? null);
       setJobUrl(previousJob?.url ?? "");
       setValues(defaults);
@@ -207,7 +208,8 @@ export function useOgcProcesses(open: boolean) {
       setJobUrl(next.url);
       if (processUrl)
         setJobsByProcess((previous) => {
-          const tracked = previous.get(processUrl);
+          const key = ogcProcessIdentity(processUrl);
+          const tracked = previous.get(key);
           if (
             tracked?.status === "dismissed" &&
             (sameOgcProcessJob(tracked.url, next.url) ||
@@ -221,7 +223,7 @@ export function useOgcProcesses(open: boolean) {
             !sameOgcProcessJob(tracked.url, observedUrl)
           )
             return previous;
-          return new Map(previous).set(processUrl, next);
+          return new Map(previous).set(key, next);
         });
     });
   const monitor = async (
@@ -318,7 +320,9 @@ export function useOgcProcesses(open: boolean) {
       const submissionJob = result.job;
       if (context.signal.aborted) {
         if (submissionJob)
-          setJobsByProcess((previous) => new Map(previous).set(process.url, submissionJob));
+          setJobsByProcess((previous) =>
+            new Map(previous).set(ogcProcessIdentity(process.url), submissionJob),
+          );
         if (canPublishDetached()) {
           setError(null);
           if (result.kind === "job") {
@@ -465,7 +469,7 @@ export function useOgcProcesses(open: boolean) {
     setAsynchronous,
     job,
     runningForProcess: ["accepted", "running"].includes(
-      jobsByProcess.get(process?.url ?? "")?.status ?? "",
+      (process ? jobsByProcess.get(ogcProcessIdentity(process.url))?.status : undefined) ?? "",
     ),
     jobUrl,
     setJobUrl,

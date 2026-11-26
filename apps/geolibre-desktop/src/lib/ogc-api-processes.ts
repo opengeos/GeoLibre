@@ -7,9 +7,10 @@ import {
   MAX_PROCESS_INPUT_DEPTH,
   processInputProblem,
 } from "./ogc-process-limits";
-import { parseProcessMediaType } from "./ogc-process-media-type";
+import { isProcessJsonMediaType, parseProcessMediaType } from "./ogc-process-media-type";
 import { decodeProcessBase64 } from "./ogc-process-base64";
 import { multipartBytes } from "./multipart-bytes";
+import { jsonMemberSpans, jsonArraySpans, jsonNumbersNeedSource } from "./json-result-source";
 
 type JsonObject = Record<string, unknown>;
 interface ProcessLink {
@@ -130,15 +131,17 @@ function jsonUrl(url: string): string {
   return next.href;
 }
 
-/** Compare status request identities while preserving service-specific query values. */
+/** Canonical storage key for retained resources; never use it as a request URL. */
+export function ogcProcessIdentity(value: string): string {
+  const url = processHttpUrl(jsonUrl(value));
+  url.searchParams.sort();
+  return url.href;
+}
+
+/** Compare resource identities while leaving request URLs untouched. */
 export function sameOgcProcessJob(first: string, second: string): boolean {
   try {
-    const key = (value: string) => {
-      const url = processHttpUrl(jsonUrl(value));
-      url.searchParams.sort();
-      return url.href;
-    };
-    return key(first) === key(second);
+    return ogcProcessIdentity(first) === ogcProcessIdentity(second);
   } catch {
     return false;
   }
@@ -358,9 +361,10 @@ function outputFormat(
     return { encoding: "base64", mediaType };
   const alternatives = value.oneOf ?? value.anyOf;
   if (Array.isArray(alternatives) && alternatives.length) {
-    const formats = alternatives.map((schema) =>
-      outputFormat({ schema }, depth + 1, selectedMediaType),
-    );
+    const formats = alternatives.map((schema) => {
+      const format = outputFormat({ schema }, depth + 1, selectedMediaType);
+      return format.mediaType || !mediaType ? format : { ...format, mediaType };
+    });
     if (selectedMediaType) {
       const selected = parseProcessMediaType(selectedMediaType);
       const exact =
@@ -491,7 +495,7 @@ function outputs(
       },
     ];
   }
-  if (!/json/i.test(response.contentType ?? ""))
+  if (!isProcessJsonMediaType(response.contentType ?? ""))
     return [
       {
         id: "result",
@@ -587,6 +591,20 @@ function outputs(
     }
     return { id, value: raw, ...(typeof raw === "string" ? format : {}) };
   });
+  const members = jsonMemberSpans(response.body);
+  const legacySource = members.get("outputs");
+  const records = legacyArray && legacySource ? jsonArraySpans(response.body, legacySource) : [];
+  for (let index = 0; index < parsed.length; index++) {
+    const output = parsed[index];
+    if (output.href || output.warning || typeof output.value === "string") continue;
+    let source = legacyArray ? records[index] : members.get(output.id);
+    if (!source) continue;
+    const raw = entries[index][1];
+    if (raw && typeof raw === "object" && !Array.isArray(raw) && Object.hasOwn(raw, "value"))
+      source = jsonMemberSpans(response.body, source).get("value");
+    if (source && jsonNumbersNeedSource(response.body, source))
+      output.documentBytes = response.body.subarray(source.start, source.end);
+  }
   if (ambiguousObject)
     parsed.push({
       id: "result-document",
@@ -711,7 +729,7 @@ export async function executeOgcProcess(
 
 /** Read a submitted or explicitly resumed job without modifying it. */
 export async function readOgcProcessJob(url: string, signal: AbortSignal): Promise<OgcProcessJob> {
-  const response = await processHttp(jsonUrl(url), signal);
+  const response = await processHttp(url, signal);
   successful(response);
   return job(response, response.url);
 }

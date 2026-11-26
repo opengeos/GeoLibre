@@ -66,6 +66,111 @@ test("client errors follow the active language and retain original service detai
   }
 });
 
+test("signed status URLs retain their exact query representation", async () => {
+  const target =
+    "https://example.org/jobs/one?f=application%2Fjson&signature=a%2Bb%20c&scope=two&scope=one";
+  serve((url, init) => {
+    assert.equal(url, target);
+    assert.equal(new Headers(init?.headers).get("accept"), "application/json");
+    return { jobID: "one", status: "running" };
+  });
+  assert.equal((await readOgcProcessJob(target, new AbortController().signal)).status, "running");
+});
+
+test("numeric document downloads preserve original tokens and nested JSON values", async () => {
+  const process = await processDescription();
+  for (const [text, id, expected] of [
+    ['{"recordId":9007199254740993}', "recordId", "9007199254740993"],
+    ['\uFEFF{"recordId":9007199254740993}', "recordId", "9007199254740993"],
+    ['{"recordId":3,"recordId":9007199254740993}', "recordId", "9007199254740993"],
+    [
+      '{"r\\u0065port":{"value":{"id":9007199254740993,"n":0.10000000000000000001}}}',
+      "report",
+      '{"id":9007199254740993,"n":0.10000000000000000001}',
+    ],
+    [
+      '{"outputs":[{"id":"report","value":[9007199254740993, -0, 1e400]}]}',
+      "report",
+      "[9007199254740993, -0, 1e400]",
+    ],
+    [
+      '{"report":{"value":' + "[".repeat(1000) + "9007199254740993" + "]".repeat(1000) + "}}",
+      "report",
+      "[".repeat(1000) + "9007199254740993" + "]".repeat(1000),
+    ],
+  ]) {
+    serve(() => new Response(text, { headers: { "Content-Type": "application/json" } }));
+    const signal = new AbortController().signal;
+    const result = await executeOgcProcess(process, {}, signal);
+    if (result.kind !== "results") throw Error("Expected outputs");
+    const output = result.outputs.find((value) => value.id === id);
+    assert.ok(output);
+    assert.equal(await (await downloadOgcProcessOutput(output, signal)).text(), expected);
+  }
+  serve(() => ({
+    label: { value: "9007199254740993" },
+    binary: { value: "AQID", encoding: "base64" },
+  }));
+  const signal = new AbortController().signal;
+  const result = await executeOgcProcess(process, {}, signal);
+  if (result.kind !== "results") throw Error("Expected outputs");
+  assert.equal(
+    await (await downloadOgcProcessOutput(result.outputs[0], signal)).text(),
+    "9007199254740993",
+  );
+  assert.deepEqual(
+    new Uint8Array(await (await downloadOgcProcessOutput(result.outputs[1], signal)).arrayBuffer()),
+    new Uint8Array([1, 2, 3]),
+  );
+});
+
+test("JSON text sequences remain raw downloadable bytes without an import action", async () => {
+  const original = '\u001e{"id":9007199254740993}\n\u001e{"id":2}\n';
+  serve(() => ({ jobID: "one", status: "successful" }));
+  const signal = new AbortController().signal;
+  const job = await readOgcProcessJob("https://example.org/jobs/one", signal);
+  serve(() => new Response(original, { headers: { "Content-Type": "application/json-seq" } }));
+  const result = await readOgcProcessResults(job, signal);
+  assert.equal(canImportOgcProcessOutput(result[0]), false);
+  assert.equal(await (await downloadOgcProcessOutput(result[0], signal)).text(), original);
+});
+
+test("nested output alternatives inherit parent media types while explicit children override", async () => {
+  const process = await processDescription();
+  process.outputs.echo.schema = {
+    oneOf: [
+      {
+        contentMediaType: "image/tiff",
+        oneOf: [
+          { contentEncoding: "base64" },
+          { contentMediaType: "image/png", contentEncoding: "base64" },
+        ],
+      },
+      { type: "string", contentMediaType: "text/plain" },
+    ],
+  };
+  for (const mediaType of ["image/tiff", "image/png", "text/plain"]) {
+    serve(() => ({
+      echo: { value: mediaType === "text/plain" ? "Plain text" : "AQID", mediaType },
+    }));
+    const signal = new AbortController().signal;
+    const result = await executeOgcProcess(process, {}, signal);
+    if (result.kind !== "results") throw Error("Expected outputs");
+    assert.equal(result.outputs[0].encoding, mediaType === "text/plain" ? undefined : "base64");
+    const blob = await downloadOgcProcessOutput(result.outputs[0], signal);
+    if (mediaType === "text/plain") assert.equal(await blob.text(), "Plain text");
+    else assert.deepEqual(new Uint8Array(await blob.arrayBuffer()), new Uint8Array([1, 2, 3]));
+  }
+});
+
+test("successful browser response size refusals use the localized process code", async () => {
+  serve(() => new Response("larger", { headers: { "Content-Length": "6" } }));
+  await assert.rejects(
+    processHttp("https://example.org/result", new AbortController().signal, { maxBytes: 1 }),
+    { code: "responseTooLarge" },
+  );
+});
+
 test("binary output previews use the active language", async () => {
   const previous = i18next.language;
   await i18next.changeLanguage("en");
