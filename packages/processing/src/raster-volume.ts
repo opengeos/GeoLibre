@@ -14,13 +14,14 @@ import { rasterEpsg, toNorthUp } from "./raster-geo";
  * reference is higher and the hole must be **filled**. Volumes are the depths
  * times each cell's ground area, summed separately for cut and fill.
  *
- * Cell areas are ground areas to within the projection's scale factor: a
- * projected raster's cell size is converted from its linear unit to metres
- * (UTM and state-plane grids stay within about 0.1% of the ground), Web
- * Mercator rows are scaled by `cos²φ`, and a geographic (degree) raster gets
- * a per-row spherical area, since a degree of longitude shrinks toward the
- * poles. Elevations can be metres or feet; volumes are always reported in
- * cubic metres.
+ * Cell areas are ground areas. A projected raster's cell size is converted
+ * from its linear unit to metres and then corrected by the projection's own
+ * area distortion, measured through its inverse projection on the WGS84
+ * ellipsoid ({@link projectedAreaScale}); that covers UTM's 0.1%, Mercator's
+ * `sec²φ`, false origins and scale factors alike. A geographic (degree)
+ * raster gets a per-row spherical area, since a degree of longitude shrinks
+ * toward the poles. Elevations can be metres or feet; volumes are always
+ * reported in cubic metres.
  */
 
 /** NoData written to the difference raster. */
@@ -126,25 +127,77 @@ const WEB_MERCATOR_EPSG = new Set([3857, 3785, 900913, 102100, 102113]);
 /** Sphere radius Web Mercator projects onto, in metres. */
 const WEB_MERCATOR_RADIUS = 6_378_137;
 
+/** WGS84 semi-major axis and first eccentricity squared. */
+const WGS84_A = 6_378_137;
+const WGS84_E2 = 0.00669437999014;
+
+/** An inverse projection: map coordinates to `[lon, lat]` in degrees. */
+export type InverseProjection = (coord: [number, number]) => [number, number];
+
 /**
- * The sphere radius of a spherical Mercator proj4 definition (`+proj=merc`
- * with `+R` or equal `+a`/`+b`), so a Web Mercator CRS published under a
- * code other than 3857, or a custom definition, still gets the area scaling.
+ * Ground-to-map area ratio across a projected raster, from its inverse
+ * projection.
  *
- * @param proj4Definition - The CRS definition, when it could be resolved.
- * @returns The radius in metres, or null for anything else.
+ * Every projection distorts area somewhere: UTM by up to about 0.1%, Lambert
+ * conformal grids by a few percent away from their standard parallels, and
+ * Mercator by `sec²φ`. Rather than special-case each, a cell-sized step is
+ * inverse-projected at the nodes of a coarse lattice (at most 65 x 65) and its
+ * ground area measured on the WGS84 ellipsoid (meridional radius `M` and prime
+ * vertical radius `N`). Cells take the bilinear blend of the surrounding
+ * nodes; the ratio varies smoothly, so the blend is far finer than a cell.
+ *
+ * @param raster - A north-up projected raster.
+ * @param inverse - Map coordinates (CRS units) to `[lon, lat]` degrees.
+ * @param metersPerUnit - Metres per horizontal unit.
+ * @returns `(row, col) => ground area / map area` for that cell.
  */
-export function sphericalMercatorRadius(proj4Definition?: string | null): number | null {
-  if (!proj4Definition || !/\+proj=merc\b/.test(proj4Definition)) return null;
-  const param = (name: string) => {
-    const match = new RegExp(`\\+${name}=([0-9.eE+-]+)`).exec(proj4Definition);
-    return match ? Number(match[1]) : null;
+export function projectedAreaScale(
+  raster: RasterData,
+  inverse: InverseProjection,
+  metersPerUnit: number,
+): (row: number, col: number) => number {
+  const nodesX = Math.min(65, raster.width + 1);
+  const nodesY = Math.min(65, raster.height + 1);
+  const scale = new Float64Array(nodesX * nodesY);
+  const dx = raster.resX;
+  const dy = raster.resY;
+  const mapArea = dx * metersPerUnit * dy * metersPerUnit;
+  const rad = Math.PI / 180;
+  for (let j = 0; j < nodesY; j += 1) {
+    const row = nodesY > 1 ? (j / (nodesY - 1)) * raster.height : 0;
+    for (let i = 0; i < nodesX; i += 1) {
+      const col = nodesX > 1 ? (i / (nodesX - 1)) * raster.width : 0;
+      const x = raster.originX + col * dx;
+      const y = raster.originY - row * dy;
+      const [lon0, lat0] = inverse([x - dx / 2, y - dy / 2]);
+      const [lon1, lat1] = inverse([x + dx / 2, y - dy / 2]);
+      const [lon2, lat2] = inverse([x - dx / 2, y + dy / 2]);
+      const phi = ((lat0 + lat1 + lat2) / 3) * rad;
+      const w = 1 - WGS84_E2 * Math.sin(phi) ** 2;
+      const m = (WGS84_A * (1 - WGS84_E2)) / w ** 1.5;
+      const n = WGS84_A / Math.sqrt(w);
+      // Edge vectors in local metres (east, north); the cell is their parallelogram.
+      const ex = (lon1 - lon0) * rad * n * Math.cos(phi);
+      const ey = (lat1 - lat0) * rad * m;
+      const nx = (lon2 - lon0) * rad * n * Math.cos(phi);
+      const ny = (lat2 - lat0) * rad * m;
+      const ground = Math.abs(ex * ny - ey * nx);
+      scale[j * nodesX + i] = Number.isFinite(ground) && mapArea > 0 ? ground / mapArea : 1;
+    }
+  }
+  return (row, col) => {
+    const fy = nodesY > 1 ? ((row + 0.5) / raster.height) * (nodesY - 1) : 0;
+    const fx = nodesX > 1 ? ((col + 0.5) / raster.width) * (nodesX - 1) : 0;
+    const j0 = Math.min(Math.floor(fy), Math.max(nodesY - 2, 0));
+    const i0 = Math.min(Math.floor(fx), Math.max(nodesX - 2, 0));
+    const j1 = Math.min(j0 + 1, nodesY - 1);
+    const i1 = Math.min(i0 + 1, nodesX - 1);
+    const ty = fy - j0;
+    const tx = fx - i0;
+    const top = scale[j0 * nodesX + i0] * (1 - tx) + scale[j0 * nodesX + i1] * tx;
+    const bottom = scale[j1 * nodesX + i0] * (1 - tx) + scale[j1 * nodesX + i1] * tx;
+    return top * (1 - ty) + bottom * ty;
   };
-  const r = param("R");
-  if (r && r > 0) return r;
-  const a = param("a");
-  const b = param("b");
-  return a && b && a > 0 && a === b ? a : null;
 }
 
 /**
@@ -157,22 +210,14 @@ export function sphericalMercatorRadius(proj4Definition?: string | null): number
  * @param raster - A north-up raster.
  * @param metersPerUnit - Metres per horizontal unit for a projected raster
  *   (ignored for a geographic one).
- * @param mercatorRadius - Sphere radius of a spherical Mercator CRS found
- *   from its definition (see {@link sphericalMercatorRadius}); the Web
- *   Mercator EPSG codes are recognised without it.
  * @returns One area per row; constant for an ordinary projected raster.
  */
-export function cellAreasByRow(
-  raster: RasterData,
-  metersPerUnit: number,
-  mercatorRadius: number | null = null,
-): Float64Array {
+export function cellAreasByRow(raster: RasterData, metersPerUnit: number): Float64Array {
   const areas = new Float64Array(raster.height);
   if (!isGeographicRaster(raster)) {
     const mapArea = raster.resX * metersPerUnit * raster.resY * metersPerUnit;
     const epsg = rasterEpsg(raster);
-    const radius =
-      mercatorRadius ?? (epsg != null && WEB_MERCATOR_EPSG.has(epsg) ? WEB_MERCATOR_RADIUS : null);
+    const radius = epsg != null && WEB_MERCATOR_EPSG.has(epsg) ? WEB_MERCATOR_RADIUS : null;
     if (radius == null) {
       areas.fill(mapArea);
       return areas;
@@ -240,8 +285,9 @@ export function formatCutFillSummary(summary: CutFillSummary, zUnits = "m"): str
  * @param params - Reference kind, plane elevation, band and elevation units.
  * @param metersPerUnit - Metres per horizontal unit of a projected raster
  *   (default 1; ignored for a geographic raster).
- * @param mercatorRadius - Sphere radius when the CRS definition is a
- *   spherical Mercator under a code other than 3857.
+ * @param areaScale - Ground-to-map area ratio per cell for a projected
+ *   raster (see {@link projectedAreaScale}); without it, only the Web
+ *   Mercator EPSG codes are corrected.
  * @returns A difference raster (`existing - reference`, NaN where either is
  *   NoData), the totals, and log lines.
  * @throws When the band is missing, the surfaces are on different grids, or
@@ -252,7 +298,7 @@ export function cutFill(
   referenceInput: RasterData | null,
   params: CutFillParams,
   metersPerUnit = 1,
-  mercatorRadius: number | null = null,
+  areaScale: ((row: number, col: number) => number) | null = null,
 ): { raster: RasterData; summary: CutFillSummary; messages: string[] } {
   const existing = toNorthUp(existingInput);
   const usePlane = (params.reference ?? "plane") !== "surface";
@@ -279,7 +325,9 @@ export function cutFill(
     throw new Error(`Unknown elevation unit "${zUnits}" (use m, ft or us-ft).`);
   }
   const zToMeters = ELEVATION_UNIT_METERS[zUnits];
-  const areas = cellAreasByRow(existing, metersPerUnit, mercatorRadius);
+  const areas = cellAreasByRow(existing, metersPerUnit);
+  const projectedScale = areaScale && !isGeographicRaster(existing) ? areaScale : null;
+  const mapArea = existing.resX * metersPerUnit * existing.resY * metersPerUnit;
 
   const out = new Float32Array(a.length);
   const summary: CutFillSummary = {
@@ -295,8 +343,9 @@ export function cutFill(
   };
   const { width, height } = existing;
   for (let row = 0; row < height; row += 1) {
-    const area = areas[row];
+    const rowArea = areas[row];
     for (let col = 0; col < width; col += 1) {
+      const area = projectedScale ? mapArea * projectedScale(row, col) : rowArea;
       const i = row * width + col;
       const x = a[i];
       const y = b ? b[i] : plane;

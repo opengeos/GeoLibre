@@ -12,8 +12,8 @@ import {
   AUTHALIC_EARTH_RADIUS_METERS,
   cellAreasByRow,
   cutFill,
+  projectedAreaScale,
   projectedMetersPerUnit,
-  sphericalMercatorRadius,
 } from "../packages/processing/src/raster-volume";
 import { runRasterToolClientAsync, type RasterData } from "@geolibre/processing";
 
@@ -204,9 +204,10 @@ describe("cut-fill through the browser dispatcher", () => {
     assert.equal(run.kind, "raster");
     if (run.kind !== "raster") return;
     assert.equal(run.raster.width, 5, "cropped to the polygon");
-    near(run.cutFill!.cutVolume, 400, 1e-6);
+    // 400 m³ of map volume, times UTM's 1/k² = 1.0008 at the central meridian.
+    near(run.cutFill!.cutVolume, 400 / 0.9996 ** 2, 0.05);
     assert.equal(run.cutFill!.fillVolume, 0);
-    assert.ok(run.detailMessages.some((line) => line.startsWith("Cut volume: 400 m³")));
+    assert.ok(run.detailMessages.some((line) => line.startsWith("Cut volume: 400.32 m³")));
   });
 
   it("reads the reference surface from the secondary inputs", async () => {
@@ -216,7 +217,7 @@ describe("cut-fill through the browser dispatcher", () => {
       { reference: "surface" },
     );
     assert.equal(run.kind, "raster");
-    if (run.kind === "raster") near(run.cutFill!.netVolume, 0, 1e-9);
+    if (run.kind === "raster") near(run.cutFill!.netVolume, 0, 1e-6);
   });
 });
 
@@ -250,15 +251,11 @@ describe("cutFill elevation units", () => {
   });
 });
 
-describe("spherical Mercator from a CRS definition", () => {
-  it("recognises +proj=merc on a sphere and scales a custom-code raster", () => {
-    const def3857 =
-      "+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +no_defs";
-    assert.equal(sphericalMercatorRadius(def3857), 6_378_137);
-    assert.equal(sphericalMercatorRadius("+proj=merc +R=6371000 +units=m"), 6_371_000);
-    assert.equal(sphericalMercatorRadius("+proj=merc +datum=WGS84 +units=m"), null, "ellipsoidal");
-    assert.equal(sphericalMercatorRadius("+proj=utm +zone=17"), null);
-    // The same 60°N cell as above, but published under a user-defined code.
+describe("projectedAreaScale", () => {
+  it("recovers Web Mercator's cos² from the inverse projection", async () => {
+    const { crsTransform, epsgDefinition } = await import("../packages/processing/src/raster-geo");
+    const inverse = await crsTransform(await epsgDefinition(3857), "EPSG:4326");
+    // A 10 m row centred on 60°N.
     const y = 6_378_137 * Math.log(Math.tan((75 * Math.PI) / 180));
     const raster: RasterData = {
       bands: [new Float32Array(1)],
@@ -269,9 +266,44 @@ describe("spherical Mercator from a CRS definition", () => {
       resX: 10,
       resY: 10,
       nodata: null,
-      geoKeys: { GTModelTypeGeoKey: 1, ProjectedCSTypeGeoKey: 32767 },
+      geoKeys: { GTModelTypeGeoKey: 1, ProjectedCSTypeGeoKey: 3857 },
     };
-    near(cellAreasByRow(raster, 1)[0], 100, 1e-9, "unscaled without the definition");
-    near(cellAreasByRow(raster, 1, 6_378_137)[0], 25, 1e-9, "scaled with it");
+    // Spherical cos²(60°) is 0.25; on the ellipsoid the ground cell is a
+    // little larger (M and N exceed the sphere's radius at 60°N).
+    near(projectedAreaScale(raster, inverse, 1)(0, 0), 0.25, 0.004);
+  });
+
+  it("applies UTM's point scale factor", async () => {
+    const { crsTransform, epsgDefinition } = await import("../packages/processing/src/raster-geo");
+    const inverse = await crsTransform(await epsgDefinition(32617), "EPSG:4326");
+    const at = (easting: number) =>
+      projectedAreaScale(
+        utm([0], 1, 1, { originX: easting - 1, originY: 4_000_001 }),
+        inverse,
+        1,
+      )(0, 0);
+    // k = 0.9996 on the central meridian, so ground/map area = 1/k² = 1.0008.
+    near(at(500_000), 1 / 0.9996 ** 2, 2e-4, "central meridian");
+    // About 180 km off it, k ≈ 0.9996 · (1 + (180/6371)²/2) ≈ 1.0000: area ratio ≈ 1.
+    near(at(680_000), 1, 3e-4, "near the secant line");
+  });
+
+  it("is used by the dispatcher for a projected raster", async () => {
+    const run = await runRasterToolClientAsync(
+      "cut-fill",
+      { raster: halves() },
+      { reference: "plane", plane_elevation: 10 },
+    );
+    assert.equal(run.kind, "raster");
+    // The halves grid sits at easting 500 km in UTM 17N: 400 m³ x 1/k².
+    if (run.kind === "raster") near(run.cutFill!.cutVolume, 400 / 0.9996 ** 2, 0.05);
+  });
+
+  it("refuses an untagged raster with degree-sized cells", async () => {
+    const raster = utm([12], 1, 1, { resX: 0.0001, resY: 0.0001, geoKeys: {} });
+    await assert.rejects(
+      runRasterToolClientAsync("cut-fill", { raster }, { plane_elevation: 10 }),
+      /looks like degrees/,
+    );
   });
 });

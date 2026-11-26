@@ -28,8 +28,8 @@ import {
 import {
   cutFill,
   isGeographicRaster,
+  projectedAreaScale,
   projectedMetersPerUnit,
-  sphericalMercatorRadius,
   type CutFillParams,
   type CutFillSummary,
 } from "./raster-volume";
@@ -1317,28 +1317,33 @@ export async function runRasterToolClientAsync(
         if (surface) surface = (await clipRasterByMask(surface, boundary, { crop: true })).raster;
       }
       let metersPerUnit = 1;
-      let mercatorRadius: number | null = null;
+      let areaScale: ((row: number, col: number) => number) | null = null;
       if (!isGeographicRaster(existing)) {
         let definition: string | null = null;
         try {
           definition = await rasterCrsDefinition(existing, "cut-fill");
         } catch {
           definition = null;
-          extra.push(
-            "Warning: the raster's CRS could not be resolved in the browser; Web Mercator area scaling cannot be applied if it is one.",
-          );
         }
-        mercatorRadius = sphericalMercatorRadius(definition);
         const resolved = projectedMetersPerUnit(existing, definition);
-        if (resolved == null) {
-          extra.push(
-            "Warning: the raster's horizontal unit is unknown; cell sizes are assumed to be metres.",
+        if (resolved != null) metersPerUnit = resolved;
+        if (definition) {
+          // The projection's own area distortion, via its inverse.
+          const inverse = await crsTransform(definition, "EPSG:4326");
+          areaScale = projectedAreaScale(existing, inverse, metersPerUnit);
+        } else if (existing.resX <= 0.01 && existing.resY <= 0.01) {
+          // Sub-centimetre cells are almost certainly degrees with no CRS tag;
+          // treating them as metres would understate volume ~10^10 times.
+          throw new Error(
+            "The raster has no usable CRS and its cell size looks like degrees, so cell areas cannot be computed. Assign a CRS first.",
           );
         } else {
-          metersPerUnit = resolved;
+          extra.push(
+            "Warning: the raster's CRS could not be resolved; cell sizes are taken as metres with no projection correction.",
+          );
         }
       }
-      const out = cutFill(existing, surface, p as CutFillParams, metersPerUnit, mercatorRadius);
+      const out = cutFill(existing, surface, p as CutFillParams, metersPerUnit, areaScale);
       return { ...rasterResult(out.raster, [...extra, ...out.messages]), cutFill: out.summary };
     }
     default:
