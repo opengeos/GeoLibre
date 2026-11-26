@@ -301,6 +301,22 @@ def test_tile_hosts_must_be_public(vts, monkeypatch):
         _build()
 
 
+def test_absolute_tile_template_and_malformed_wkid(vts):
+    """Keep an absolute service tile template and ignore a non-numeric WKID.
+
+    Args:
+        vts: The mutable metadata transport fixture.
+    """
+    info, style, _ = vts
+    info["tiles"] = ["https://tiles.example.org/vt/{z}/{y}/{x}.pbf"]
+    info["fullExtent"]["spatialReference"] = {"latestWkid": [3857]}
+    del style["sources"]["Santa_Monica_parcels_VTL"]["bounds"]
+    layer = _build()
+    (spec,) = layer["source"]["arcgisSources"].values()
+    assert spec["tiles"] == ["https://tiles.example.org/vt/{z}/{y}/{x}.pbf"]
+    assert "bounds" not in layer["metadata"]
+
+
 @pytest.mark.parametrize("ymax", [4.5e9, float("inf")])
 def test_out_of_range_service_extent_has_no_bounds(vts, ymax):
     """Treat an extent outside the Web Mercator square as unknown.

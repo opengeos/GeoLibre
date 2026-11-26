@@ -103,6 +103,8 @@ def _extent_bounds(extent: Any) -> list[float] | None:
     ):
         return None
     xmin, ymin, xmax, ymax = (float(item) for item in values)
+    if isinstance(wkid, bool) or not isinstance(wkid, (int, float)):
+        wkid = None
     if wkid in _WEB_MERCATOR_WKIDS:
         # Beyond the Web Mercator square the conversion is meaningless (and
         # math.exp overflows for absurd values), so such an extent has no bounds.
@@ -123,7 +125,7 @@ def _extent_bounds(extent: Any) -> list[float] | None:
             lat(ymax),
         ]
         return bounds if _is_geo_bounds(bounds) else None
-    if isinstance(wkid, int) and not isinstance(wkid, bool) and not _is_geographic_wkid(wkid):
+    if wkid is not None and not _is_geographic_wkid(int(wkid)):
         return None
     bounds = [xmin, ymin, xmax, ymax]
     return bounds if _is_geo_bounds(bounds) else None
@@ -251,7 +253,9 @@ def build_arcgis_vector_tile_style(
         if tiles is None:
             if url is None:
                 raise ValueError("ArcGIS vector tile source has neither a url nor tiles")
-            tiles = [url + (tile_template or "tile/{z}/{y}/{x}.pbf")]
+            # urljoin keeps an absolute service template intact and appends a
+            # relative one to the source URL, as the SDK's concatenation does.
+            tiles = [urljoin(url, tile_template or "tile/{z}/{y}/{x}.pbf")]
         if (
             not isinstance(tiles, list)
             or not tiles
