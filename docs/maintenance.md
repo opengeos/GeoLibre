@@ -573,30 +573,18 @@ an open control open. The compiler checks all of it. Rebuild semantics are not
 visible to it, so still drive the control in the app on a bump: toggle a
 grouped layer, reorder inside a group, and hide a group.
 
-### `maplibre-gl-splat` (`packages/plugins/package.json`) — private internals
+### `maplibre-gl-splat` (`packages/plugins/package.json`)
 
-`packages/plugins/src/plugins/components/splatting.ts` reaches into
-`GaussianSplatControl`'s private fields, which the compiler cannot check:
-
-- `reserveSplattingIds` replaces the `_layerCounter` / `_modelCounter` instance
-  fields with accessors. Upstream names each asset `splat-${this._layerCounter++}`
-  / `model-${this._modelCounter++}`, and a new control restarts at 0, so without
-  the accessors a fresh load could take a saved layer's id and overwrite it.
-  Restoring a saved layer under its own id also goes through them.
-- `recordSplattingPlacements` wraps `loadSplat` / `loadModel` on the instance and
-  reads `_splatLayers` / `_modelLayers` (per-asset longitude/latitude/altitude),
-  `_state.rotation` / `_state.scale` and `_options.defaultModelRotation`, so the
-  store layer carries the placement a restore needs. The restore turns
-  `_options.flyTo` off while it runs.
-
-If upstream renames those fields or changes how it assigns ids, id reservation
-and placement restore stop working without an error.
-`tests/splatting-restore.test.ts` drives a fake with the same shape, so it will
-not catch that; `tests/upstream-contracts.test.ts` builds a real control and
-checks each field and the `splat-${counter}` / `model-${counter}` naming and
-placement recording in `loadSplat` / `loadModel`.
-Better still, upstream an id option and a per-asset placement getter and delete
-the patching.
+`packages/plugins/src/plugins/components/splatting.ts` drives
+`GaussianSplatControl` through its public API only (0.3.0 and later): the
+`isIdReserved` option keeps generated `splat-N` / `model-N` ids off layers
+already in the store, a restore reloads each saved layer with
+`loadSplat`/`loadModel` under its saved `id` and placement with `flyTo: false`,
+the `splatload`/`modelload` events' `placement` is written onto the store layer
+so a restore can put the asset back, and `hide`/`show` keep a control mounted
+only for a restore out of sight. The compiler checks all of it;
+`tests/splatting-restore.test.ts` drives a fake with that API. After a bump,
+load a splat, save and reopen the project, and check it comes back in place.
 
 ### `@geoman-io/maplibre-geoman-free` (`packages/plugins/package.json`) — change-mode and shape-marker internals
 
