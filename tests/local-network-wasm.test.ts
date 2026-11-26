@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import { getActiveMeanRadiusMeters } from "@geolibre/core";
@@ -29,15 +29,25 @@ import type { Feature } from "geojson";
 // local-network-turns.test.ts re-run with an engine that runs each search in
 // both engines and compares them.
 
+// Skip only when the installed geolibre-wasm predates RoutingGraph. When it
+// has RoutingGraph, a failed load must fail this file, not hollow it out.
+const hasRoutingGraph =
+  typeof ((await import("geolibre-wasm")) as Record<string, unknown>).RoutingGraph === "function";
 // In the browser wasm-bindgen fetches the bundled asset; under node:test it
 // gets the wasm bytes directly.
-const wasmPath = fileURLToPath(
-  new URL("../node_modules/geolibre-wasm/geolibre_wasm_bg.wasm", import.meta.url),
-);
-// A package without this file cannot have RoutingGraph either; skip, not fail.
-const wasm = existsSync(wasmPath)
-  ? await loadWasmNetworkEngine(new Uint8Array(readFileSync(wasmPath)))
+const wasm = hasRoutingGraph
+  ? await loadWasmNetworkEngine(
+      new Uint8Array(
+        readFileSync(
+          fileURLToPath(
+            new URL("../node_modules/geolibre-wasm/geolibre_wasm_bg.wasm", import.meta.url),
+          ),
+        ),
+      ),
+    )
   : null;
+if (hasRoutingGraph)
+  assert.ok(wasm, "geolibre-wasm has RoutingGraph but its engine failed to load");
 const skip = wasm ? false : "the installed geolibre-wasm has no RoutingGraph";
 
 /** Asserts two typed arrays hold the same values (NaN-free, Infinity-aware). */

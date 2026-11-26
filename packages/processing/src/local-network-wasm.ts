@@ -299,7 +299,10 @@ export function loadWasmNetworkEngine(
       if (typeof exports.RoutingGraph !== "function") return null;
       await mod.default(moduleOrPath === undefined ? undefined : { module_or_path: moduleOrPath });
       return createWasmNetworkEngine(exports as RoutingWasmModule);
-    } catch {
+    } catch (error) {
+      // A missing RoutingGraph (an older package) returns null quietly above;
+      // a module that has it but fails to load is worth a trace.
+      console.warn("geolibre-wasm network engine unavailable; using the JS search", error);
       return null;
     }
   })();
