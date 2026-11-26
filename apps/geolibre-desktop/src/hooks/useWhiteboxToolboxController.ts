@@ -949,9 +949,11 @@ export function useWhiteboxToolboxController({
     async (nextJob: WhiteboxJob) => {
       if (importedJobIdRef.current === nextJob.id) return;
       importedJobIdRef.current = nextJob.id;
-      const startLoadCount =
-        jobGenerationByJobRef.current.get(nextJob.id) ?? useAppStore.getState().projectLoadCount;
-      jobGenerationByJobRef.current.delete(nextJob.id);
+      const startLoadCount = jobGenerationByJobRef.current.get(nextJob.id);
+      if (startLoadCount === undefined) {
+        runParametersByJobRef.current.delete(nextJob.id);
+        return;
+      }
       if (useAppStore.getState().projectLoadCount !== startLoadCount) {
         runParametersByJobRef.current.delete(nextJob.id);
         return;
@@ -1021,7 +1023,6 @@ export function useWhiteboxToolboxController({
     if (!selectedTool || selectedTool.locked) return;
     const dispatchLoadCount = useAppStore.getState().projectLoadCount;
     setError(null);
-    importedJobIdRef.current = null;
     // Flag "running" before any prep so the Run button shows its busy state
     // immediately (input fetching can take a moment, and the local WASM run then
     // blocks the main thread).
@@ -1058,8 +1059,12 @@ export function useWhiteboxToolboxController({
         if (controller.signal.aborted) return;
         const now = new Date().toISOString();
         const id = `global-dem-${crypto.randomUUID()}`;
+        jobGenerationByJobRef.current.set(id, dispatchLoadCount);
         historyTrackersRef.current.set(id, tracker);
-        evictOldestEntries(historyTrackersRef.current, MAX_TRACKED_HISTORY_JOBS);
+        evictOldestEntries(historyTrackersRef.current, MAX_TRACKED_HISTORY_JOBS, (oldest) =>
+          jobGenerationByJobRef.current.delete(oldest),
+        );
+        importedJobIdRef.current = null;
         setJob({
           id,
           status: "succeeded",
@@ -1093,42 +1098,43 @@ export function useWhiteboxToolboxController({
       return;
     }
 
-    const resolved = await resolveRunInputs({
-      tool: selectedTool,
-      values,
-      layers,
-      browsedInputs: new Map(browsedInputsRef.current),
-      runLocal,
-      t,
-      parameterLabel: (param) => translateWhiteboxParameterLabel(t, selectedTool.id, param),
-      fetchLayerBytes: services.fetchLayerBytes,
-    });
-    if (!resolved.ok) {
-      setError(resolved.error);
-      setRunningLocal(false);
-      return;
-    }
-    const { parameters, layerInputs } = resolved;
-
-    // In WASM mode a vector_out param carries the chosen output format (its value
-    // is otherwise unused by the runner). A CRS-preserving format keeps a
-    // reprojection's target CRS and comes back as a downloadable file.
-    // Validated against the known formats: a stale sidecar-mode output path left
-    // in the form state (the form only resets on tool change) would otherwise be
-    // cast to a bogus format and produce a `..._output.undefined` filename.
-    const vectorOutputFormat = runVectorOutputFormat(selectedTool, values, runLocal);
-
-    // Track the run for the Processing History panel (#1292). The raw form
-    // values (with `layer:` tokens) are recorded, not the resolved request
-    // parameters, so Edit & re-run can restore the form exactly.
-    const tracker = beginProcessingRun({
-      kind: "whitebox",
-      toolId: selectedTool.id,
-      toolName: toolLabel(t, selectedTool),
-      engine: runLocal ? "wasm" : "sidecar",
-      parameters: { ...values },
-    });
+    let tracker: ProcessingRunTracker | undefined;
     try {
+      const resolved = await resolveRunInputs({
+        tool: selectedTool,
+        values,
+        layers,
+        browsedInputs: new Map(browsedInputsRef.current),
+        runLocal,
+        t,
+        parameterLabel: (param) => translateWhiteboxParameterLabel(t, selectedTool.id, param),
+        fetchLayerBytes: services.fetchLayerBytes,
+      });
+      if (!resolved.ok) {
+        setError(resolved.error);
+        setRunningLocal(false);
+        return;
+      }
+      const { parameters, layerInputs } = resolved;
+
+      // In WASM mode a vector_out param carries the chosen output format (its value
+      // is otherwise unused by the runner). A CRS-preserving format keeps a
+      // reprojection's target CRS and comes back as a downloadable file.
+      // Validated against the known formats: a stale sidecar-mode output path left
+      // in the form state (the form only resets on tool change) would otherwise be
+      // cast to a bogus format and produce a `..._output.undefined` filename.
+      const vectorOutputFormat = runVectorOutputFormat(selectedTool, values, runLocal);
+
+      // Track the run for the Processing History panel (#1292). The raw form
+      // values (with `layer:` tokens) are recorded, not the resolved request
+      // parameters, so Edit & re-run can restore the form exactly.
+      tracker = beginProcessingRun({
+        kind: "whitebox",
+        toolId: selectedTool.id,
+        toolName: toolLabel(t, selectedTool),
+        engine: runLocal ? "wasm" : "sidecar",
+        parameters: { ...values },
+      });
       const request = {
         tool_id: selectedTool.id,
         parameters,
@@ -1160,10 +1166,11 @@ export function useWhiteboxToolboxController({
       evictOldestEntries(historyTrackersRef.current, MAX_TRACKED_HISTORY_JOBS, (oldest) =>
         jobGenerationByJobRef.current.delete(oldest),
       );
+      importedJobIdRef.current = null;
       setJob(nextJob);
     } catch (err) {
       const message = err instanceof Error ? err.message : t("processing.whitebox.errorStartTool");
-      tracker.finish("error", message);
+      tracker?.finish("error", message);
       setError(message);
     } finally {
       setRunningLocal(false);
