@@ -1,3 +1,8 @@
+// Barrel for the client-side vector tools. The Turf geoprocessing, join, selection,
+// geometry and movement tools live in the vector-tools-*.ts siblings and are
+// re-exported here so existing importers keep working. The merge-layers and
+// polyline tools are defined in this file.
+
 import { featureCollection } from "@turf/helpers";
 import type { Feature, LineString, MultiLineString } from "geojson";
 import {
