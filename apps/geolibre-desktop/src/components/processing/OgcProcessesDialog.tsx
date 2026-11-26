@@ -1,4 +1,4 @@
-import { useAppCapability, useAppStore } from "@geolibre/core";
+import { redactUrlCredentials, useAppCapability, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import {
   Button,
@@ -17,7 +17,11 @@ import { useId, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../hooks/usePlugins";
 import { useOgcProcesses } from "../../hooks/useOgcProcesses";
-import { downloadOgcProcessOutput, type OgcProcessOutput } from "../../lib/ogc-api-processes";
+import {
+  downloadOgcProcessOutput,
+  ogcProcessExecutionUrl,
+  type OgcProcessOutput,
+} from "../../lib/ogc-api-processes";
 import {
   canImportOgcProcessOutput,
   importOgcProcessOutput,
@@ -43,6 +47,7 @@ export function OgcProcessesDialog({
   const adding = useAppCapability("layers:add-remote");
   const exporting = useAppCapability("export:data");
   const running = client.runningForProcess;
+  const executionUrl = client.process ? ogcProcessExecutionUrl(client.process) : null;
   const download = (output: OgcProcessOutput) => {
     if (!exporting.granted) return;
     void client.run("output", async ({ signal }) => {
@@ -126,6 +131,13 @@ export function OgcProcessesDialog({
                 )}
               </div>
             )}
+            {executionUrl && (
+              <p className="break-all text-xs text-muted-foreground">
+                {t("processing.ogcProcesses.executionDestination", {
+                  url: redactUrlCredentials(executionUrl),
+                })}
+              </p>
+            )}
             <div className="grid gap-5 md:grid-cols-2">
               <section className="space-y-3" aria-label={t("processing.ogcProcesses.inputs")}>
                 <h3 className="font-medium">{t("processing.ogcProcesses.inputs")}</h3>
@@ -190,6 +202,11 @@ export function OgcProcessesDialog({
                           {t("processing.ogcProcesses.asynchronous")}
                         </option>
                       </Select>
+                      {!client.asynchronous && (
+                        <p className="text-xs text-muted-foreground">
+                          {t("processing.ogcProcesses.syncNotice")}
+                        </p>
+                      )}
                     </div>
                   </>
                 )}
@@ -285,7 +302,8 @@ export function OgcProcessesDialog({
                       !processing.granted ||
                       !client.jobUrl.trim() ||
                       client.phase === "dismissing" ||
-                      client.job?.status === "dismissed"
+                      (client.job?.status === "dismissed" &&
+                        client.job.url === client.jobUrl.trim())
                     }
                     onClick={() => {
                       void client.dismiss();

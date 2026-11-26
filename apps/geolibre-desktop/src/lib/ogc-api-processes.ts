@@ -1,5 +1,6 @@
 import { OgcProcessError } from "./ogc-process-errors";
 import { processHttp, processHttpUrl, type ProcessHttpResponse } from "./ogc-process-http";
+import { ogcProcessMonitorLinks } from "./ogc-process-link-header";
 import { MAX_PROCESS_INPUT_BYTES, MAX_PROCESS_RESULT_BYTES } from "./ogc-process-limits";
 
 type JsonObject = Record<string, unknown>;
@@ -300,6 +301,11 @@ function outputs(response: ProcessHttpResponse, outputIds?: readonly string[]): 
   });
 }
 
+/** Resolve the advertised destination for display and for the execution POST. */
+export function ogcProcessExecutionUrl(process: OgcProcess): string {
+  return linked(process.links, REL + "execute", process.url) ?? append(process.url, "/execution");
+}
+
 /** Submit exactly once, accepting synchronous outputs and 201/202 job responses. */
 export async function executeOgcProcess(
   process: OgcProcess,
@@ -311,8 +317,7 @@ export async function executeOgcProcess(
   const body = JSON.stringify({ inputs, response: "document" });
   if (new TextEncoder().encode(body).length > MAX_PROCESS_INPUT_BYTES)
     throw new OgcProcessError("inputLimit");
-  const endpoint =
-    linked(process.links, REL + "execute", process.url) ?? append(process.url, "/execution");
+  const endpoint = ogcProcessExecutionUrl(process);
   const response = await processHttp(endpoint, signal, {
     method: "POST",
     body,
@@ -337,7 +342,12 @@ export async function executeOgcProcess(
       return {
         kind: "job",
         job: {
-          ...(await readOgcProcessJob(fallback, signal)),
+          id: processHttpUrl(fallback).pathname.split("/").pop() ?? "",
+          url: fallback,
+          status: "accepted",
+          message: "",
+          resultsUrl: append(fallback, "/results"),
+          retryAfterMs: ogcProcessRetryDelay(response.retryAfter),
           outputIds: Object.keys(process.outputs),
         },
       };
@@ -346,10 +356,19 @@ export async function executeOgcProcess(
       job: { ...job(response, fallback), outputIds: Object.keys(process.outputs) },
     };
   }
+  const retainedJob = response.location
+    ? ogcProcessLink(response.location, response.url)
+    : ogcProcessMonitorLinks(response.link).flatMap((href) => {
+        try {
+          return [ogcProcessLink(href, response.url)];
+        } catch {
+          return [];
+        }
+      })[0];
   return {
     kind: "results",
     outputs: outputs(response, Object.keys(process.outputs)),
-    ...(response.location ? { jobUrl: ogcProcessLink(response.location, response.url) } : {}),
+    ...(retainedJob ? { jobUrl: retainedJob } : {}),
   };
 }
 

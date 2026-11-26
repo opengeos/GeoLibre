@@ -32,6 +32,7 @@ test("native process execution preserves its method, inputs, headers and asynchr
           content_type: "application/json",
           location: "/jobs/one",
           retry_after: "1",
+          link: '</jobs/one>; rel="monitor"',
           body_base64: "e30=",
         };
       },
@@ -48,6 +49,7 @@ test("native process execution preserves its method, inputs, headers and asynchr
   assert.equal(response.status, 202);
   assert.equal(response.location, "/jobs/one");
   assert.equal(response.retryAfter, "1");
+  assert.equal(response.link, '</jobs/one>; rel="monitor"');
   assert.equal(response.url, "https://example.org/execution");
   assert.equal(new TextDecoder().decode(response.body), "{}");
 });

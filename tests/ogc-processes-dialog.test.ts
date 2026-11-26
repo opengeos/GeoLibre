@@ -46,6 +46,143 @@ async function form() {
   return view;
 }
 
+test("failed dialog loading offers visible recovery and close controls", async () => {
+  const { OgcProcessesLoadError } =
+    await import("../apps/geolibre-desktop/src/components/processing/OgcProcessesLoadError");
+  useAppStore.getState().setOgcProcessesOpen(true);
+  render(createElement(OgcProcessesLoadError));
+  assert.match(screen.getByRole("alert").textContent ?? "", /could not load/);
+  assert.ok(screen.getByRole("button", { name: "Reload app" }));
+  fireEvent.click(screen.getAllByRole("button", { name: "Close" })[0]);
+  assert.equal(useAppStore.getState().ui.ogcProcessesOpen, false);
+});
+
+test("repeated enum inputs accept an array instead of a single selection", async () => {
+  const process = description();
+  process.inputs.name.schema.enum = ["red", "blue"];
+  process.inputs.name.maxOccurs = 2;
+  let submitted: Record<string, unknown> | undefined;
+  serve(async (_url, init) => {
+    submitted = JSON.parse(String(init?.body)).inputs;
+    return new Response(JSON.stringify({ echo: "Done" }));
+  }, process);
+  await form();
+  assert.equal(screen.getByLabelText("Name *").tagName, "TEXTAREA");
+  fireEvent.change(screen.getByLabelText("Name *"), { target: { value: '["red","blue"]' } });
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.deepEqual(submitted?.name, ["red", "blue"]));
+});
+
+test("reference inputs remain unchanged when the literal editor cannot represent them", async () => {
+  let submitted: Record<string, unknown> | undefined;
+  serve(async (_url, init) => {
+    submitted = JSON.parse(String(init?.body)).inputs;
+    return new Response(JSON.stringify({ echo: "Done" }));
+  });
+  await form();
+  const toggle = screen.getByRole("checkbox", { name: "Edit all inputs as JSON" });
+  fireEvent.click(toggle);
+  const inputs = { name: { href: "https://data.example/name.txt" } };
+  fireEvent.change(screen.getByLabelText("Inputs JSON"), {
+    target: { value: JSON.stringify(inputs) },
+  });
+  fireEvent.click(toggle);
+  assert.equal((toggle as HTMLInputElement).checked, true);
+  assert.equal(
+    (screen.getByLabelText("Inputs JSON") as HTMLTextAreaElement).value,
+    JSON.stringify(inputs),
+  );
+  assert.match(screen.getByRole("alert").textContent ?? "", /JSON/);
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.deepEqual(submitted, inputs));
+});
+
+for (const variant of ["empty default", "explicit empty JSON", "object default"] as const) {
+  test(`${variant} survives the typed input editor`, async () => {
+    const process = description();
+    process.inputs.name.schema =
+      variant === "object default"
+        ? { type: "object", default: { threshold: 5 } }
+        : { type: "string", default: "" };
+    let submitted: Record<string, unknown> | undefined;
+    serve(async (_url, init) => {
+      submitted = JSON.parse(String(init?.body)).inputs;
+      return new Response(JSON.stringify({ echo: "Done" }));
+    }, process);
+    await form();
+    // form() enters a sample name; restore the original advertised default.
+    fireEvent.click(screen.getByRole("button", { name: "Retrieve processes" }));
+    await waitFor(() =>
+      assert.equal(
+        (screen.getByLabelText("Name *") as HTMLInputElement).value,
+        variant === "object default" ? '{"value":{"threshold":5}}' : "",
+      ),
+    );
+    if (variant === "explicit empty JSON") {
+      const toggle = screen.getByRole("checkbox", { name: "Edit all inputs as JSON" });
+      fireEvent.click(toggle);
+      fireEvent.change(screen.getByLabelText("Inputs JSON"), { target: { value: '{"name":""}' } });
+      fireEvent.click(toggle);
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+    await waitFor(() =>
+      assert.deepEqual(
+        submitted?.name,
+        variant === "object default" ? { value: { threshold: 5 } } : "",
+      ),
+    );
+  });
+}
+
+test("an empty accepted response keeps its job recoverable after a failed status read", async () => {
+  let posts = 0,
+    recovered = false;
+  const deleted: string[] = [];
+  serve(async (url, init) => {
+    if (init?.method === "POST") {
+      posts++;
+      return new Response(null, {
+        status: 202,
+        headers: { Location: "/master/jobs/retained", "Retry-After": "0" },
+      });
+    }
+    if (init?.method === "DELETE") {
+      deleted.push(url);
+      return new Response(null, { status: 204 });
+    }
+    if (!recovered) return new Response("unavailable", { status: 503 });
+    return new Response(
+      JSON.stringify(
+        new URL(url).pathname.endsWith("/results")
+          ? { echo: "Recovered" }
+          : { jobID: "retained", status: "successful" },
+      ),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  });
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.match(screen.getByRole("alert").textContent ?? "", /503/));
+  assert.match(
+    (screen.getByLabelText("Job status URL") as HTMLInputElement).value,
+    /jobs\/retained/,
+  );
+  assert.ok(screen.getByRole("button", { name: "Run process" }).hasAttribute("disabled"));
+  recovered = true;
+  fireEvent.click(screen.getByRole("button", { name: "Resume monitoring" }));
+  await waitFor(() => assert.ok(screen.queryByText("Recovered")), { timeout: 3000 });
+  assert.equal(posts, 1);
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss job" }));
+  await waitFor(() => assert.ok(screen.queryByText("Dismissed")));
+  fireEvent.change(screen.getByLabelText("Job status URL"), {
+    target: { value: "https://demo.pygeoapi.io/master/jobs/other" },
+  });
+  assert.equal(screen.getByRole("button", { name: "Dismiss job" }).hasAttribute("disabled"), false);
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss job" }));
+  await waitFor(() => assert.equal(deleted.length, 2));
+  assert.equal(new URL(deleted[1]).pathname, "/master/jobs/other");
+});
+
 test("process dialog submits typed inputs and renders synchronous literal outputs", async () => {
   let submitted: unknown;
   serve(async (_url, init) => {
@@ -66,6 +203,81 @@ test("process dialog submits typed inputs and renders synchronous literal output
   });
   assert.equal(screen.queryByRole("button", { name: "Add to map" }) === null, true);
   assert.equal(screen.queryByRole("alert") === null, true);
+});
+
+test("advertised execution destinations are visible before inputs leave the dialog", async () => {
+  const process = description();
+  process.links.find((link: { rel: string }) => link.rel.endsWith("/execute")).href =
+    "https://worker.example/execution?api_key=private";
+  let destination = "";
+  serve(async (url) => {
+    destination = url;
+    return new Response(JSON.stringify({ echo: "Done" }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }, process);
+  await form();
+  const notice = screen.getByText(/^Execution endpoint:/).textContent ?? "";
+  assert.match(notice, /https:\/\/worker\.example\/execution/);
+  assert.ok(!notice.includes("private"));
+  assert.equal(destination, "");
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.equal(new URL(destination).hostname, "worker.example"));
+});
+
+test("malformed JSON stays in the editor and produces a catalog-backed error", async () => {
+  let posts = 0;
+  serve(async () => {
+    posts++;
+    return new Response("{}");
+  });
+  await form();
+  const toggle = screen.getByRole("checkbox", { name: "Edit all inputs as JSON" });
+  fireEvent.click(toggle);
+  fireEvent.change(screen.getByLabelText("Inputs JSON"), { target: { value: "{" } });
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() =>
+    assert.equal(screen.getByRole("alert").textContent, "Inputs must contain valid JSON."),
+  );
+  fireEvent.click(toggle);
+  assert.equal((toggle as HTMLInputElement).checked, true);
+  assert.equal(posts, 0);
+});
+
+test("closing an unacknowledged submission retains its uncertainty notice on reopening", async () => {
+  let posts = 0;
+  let signal: AbortSignal | undefined;
+  serve(async (_url, init) => {
+    posts++;
+    signal = init?.signal ?? undefined;
+    return new Promise<Response>((_resolve, reject) =>
+      signal?.addEventListener("abort", () => reject(signal?.reason), { once: true }),
+    );
+  });
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.ok(signal));
+  fireEvent.click(screen.getByRole("button", { name: "Close" }));
+  await waitFor(() => assert.ok(signal?.aborted));
+  await act(async () => useAppStore.getState().setOgcProcessesOpen(true));
+  await waitFor(() =>
+    assert.match(screen.getByRole("alert").textContent ?? "", /Retrying submits a new execution/),
+  );
+  assert.equal(posts, 1);
+});
+
+test("submission timeouts report uncertain remote completion without retrying", async () => {
+  let posts = 0;
+  serve(async () => {
+    posts++;
+    throw new DOMException("deadline", "TimeoutError");
+  });
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() =>
+    assert.match(screen.getByRole("alert").textContent ?? "", /service may still be running/),
+  );
+  assert.equal(posts, 1);
 });
 
 test("import provenance stays attached to the execution after endpoint and job URL edits", async () => {
@@ -116,6 +328,7 @@ test("layer FeatureCollections are sent as qualified GeoJSON inputs", async () =
   fireEvent.change(screen.getByLabelText("Layer input for Area"), {
     target: { value: JSON.stringify([id, "collection"]) },
   });
+  assert.ok(!(screen.getByLabelText("Area *") as HTMLTextAreaElement).value.includes("\n"));
   fireEvent.click(screen.getByRole("button", { name: "Run process" }));
   await waitFor(() => assert.ok(submitted));
   assert.deepEqual((submitted as { inputs: { area: unknown } }).inputs.area, {

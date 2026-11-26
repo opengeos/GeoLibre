@@ -56,7 +56,7 @@ export function OgcProcessInputs({
           kind = ogcInputKind(definition);
         const id = `${prefix}-${encodeURIComponent(key)}`;
         const title = typeof definition.title === "string" ? definition.title : key;
-        const enumeration = Array.isArray(schema.enum) ? schema.enum : undefined;
+        const enumeration = kind !== "json" && Array.isArray(schema.enum) ? schema.enum : undefined;
         const selected = enumeration?.find(
           (item) => Object.hasOwn(values, key) && ogcInputText(item, kind) === values[key],
         );
@@ -118,7 +118,12 @@ export function OgcProcessInputs({
                 step={kind === "integer" ? 1 : "any"}
                 min={typeof schema.minimum === "number" ? schema.minimum : undefined}
                 max={typeof schema.maximum === "number" ? schema.maximum : undefined}
-                onChange={(event) => set(key, event.target.value)}
+                onChange={(event) =>
+                  set(
+                    key,
+                    kind === "string" && event.target.value === "" ? undefined : event.target.value,
+                  )
+                }
               />
             )}
             {kind === "json" && layers.length > 0 && (
@@ -143,8 +148,6 @@ export function OgcProcessInputs({
                       representation === "collection"
                         ? { value, mediaType: "application/geo+json" }
                         : value,
-                      null,
-                      2,
                     ),
                   );
                 }}

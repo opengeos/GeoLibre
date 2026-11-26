@@ -201,9 +201,9 @@ host the CSP allows, and GeoLibre does not track which. On the desktop,
 `app.nativeFetch` sends a plugin's requests through the native HTTP client,
 which the webview CSP does not govern. It can reach loopback and private LAN
 addresses; it refuses only link-local addresses (including the
-`169.254.169.254` cloud metadata address), unspecified, multicast, and the
-limited broadcast address `255.255.255.255`. Other metadata endpoints, such as
-AWS's IPv6 `fd00:ec2::254`, and subnet-directed broadcasts are not blocked.
+`169.254.169.254` cloud metadata address), AWS's IPv6 metadata address
+`fd00:ec2::254`, unspecified, multicast, and the limited broadcast address
+`255.255.255.255`. Subnet-directed broadcasts are not blocked.
 Review a plugin before
 allowing it, and use `plugins.allowed` to limit which ones load (see
 [Plugin API](plugin-api.md)).

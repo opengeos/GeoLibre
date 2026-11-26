@@ -5,7 +5,9 @@ use std::time::Duration;
 use base64::Engine;
 use serde::Serialize;
 
-use crate::guarded_http::{guarded_http_client, request_error_message, url_is_fetchable};
+use crate::guarded_http::{
+    guarded_http_client_without_referer, request_error_message, url_is_fetchable,
+};
 
 const MAX_INPUT_BYTES: usize = 1024 * 1024;
 const MAX_RESPONSE_BYTES: u64 = 128 * 1024 * 1024;
@@ -17,6 +19,7 @@ pub(crate) struct ProcessHttpResponse {
     content_type: Option<String>,
     location: Option<String>,
     retry_after: Option<String>,
+    link: Option<String>,
     body_base64: String,
 }
 
@@ -88,7 +91,7 @@ fn request_blocking(
         return Err("OGC process URLs must not contain user information".into());
     }
     url_is_fetchable(&target)?;
-    let client = guarded_http_client()?;
+    let client = guarded_http_client_without_referer()?;
     let mut request = client
         .request(method.clone(), target)
         .timeout(Duration::from_secs(
@@ -121,6 +124,17 @@ fn request_blocking(
     let content_type = header("content-type");
     let location = header("location");
     let retry_after = header("retry-after");
+    let links: Vec<&str> = response
+        .headers()
+        .get_all(reqwest::header::LINK)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .collect();
+    let link = if links.is_empty() {
+        None
+    } else {
+        Some(links.join(", "))
+    };
     let length = response.content_length();
     let max_bytes = max_bytes.unwrap_or(2 * 1024 * 1024).min(MAX_RESPONSE_BYTES);
     // Keep small OGC exception documents, but an oversized/broken error page
@@ -137,6 +151,7 @@ fn request_blocking(
         content_type,
         location,
         retry_after,
+        link,
         body_base64: base64::engine::general_purpose::STANDARD.encode(body),
     })
 }
@@ -170,6 +185,65 @@ mod transport_tests {
     use std::time::{Duration, Instant};
 
     #[test]
+    fn redirects_do_not_disclose_query_credentials_through_referer() {
+        let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+        let destination = TcpListener::bind("127.0.0.1:0").unwrap();
+        let initial_url = format!(
+            "http://{}/execution?token=private-value",
+            origin.local_addr().unwrap()
+        );
+        let final_url = format!("http://{}/results", destination.local_addr().unwrap());
+        let destination_url = final_url.clone();
+        let server = std::thread::spawn(move || {
+            for (listener, redirect) in [(origin, true), (destination, false)] {
+                listener.set_nonblocking(true).unwrap();
+                let deadline = Instant::now() + Duration::from_secs(5);
+                let mut socket = loop {
+                    match listener.accept() {
+                        Ok((socket, _)) => break socket,
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                            assert!(Instant::now() < deadline, "redirect request did not arrive");
+                            std::thread::sleep(Duration::from_millis(10));
+                        }
+                        Err(error) => panic!("accept failed: {error}"),
+                    }
+                };
+                socket.set_nonblocking(false).unwrap();
+                socket
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut reader = BufReader::new(socket.try_clone().unwrap());
+                let mut request = String::new();
+                loop {
+                    let mut line = String::new();
+                    assert!(reader.read_line(&mut line).unwrap() > 0);
+                    if line == "\r\n" {
+                        break;
+                    }
+                    request.push_str(&line);
+                }
+                if redirect {
+                    assert!(request.contains("?token=private-value"));
+                    write!(socket, "HTTP/1.1 302 Found\r\nLocation: {destination_url}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+                } else {
+                    assert!(!request.to_ascii_lowercase().contains("referer:"));
+                    assert!(!request.contains("private-value"));
+                    socket
+                        .write_all(
+                            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+                        )
+                        .unwrap();
+                }
+            }
+        });
+        let response =
+            request_blocking(initial_url, "GET".into(), None, None, false, None, Some(8)).unwrap();
+        assert_eq!(response.status, 200);
+        assert_eq!(response.final_url, final_url);
+        server.join().unwrap();
+    }
+
+    #[test]
     fn execution_job_headers_dismissal_errors_and_body_limits_survive_transport() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
@@ -180,7 +254,7 @@ mod transport_tests {
                     "POST",
                     "/execution",
                     "202 Accepted",
-                    "Location: /jobs/one\r\nRetry-After: 1\r\n",
+                    "Location: /jobs/one\r\nRetry-After: 1\r\nLink: </execution>; rel=\"self\"\r\nLink: </jobs/one>; rel=\"monitor\"\r\n",
                     r#"{"status":"accepted"}"#,
                 ),
                 (
@@ -278,6 +352,10 @@ mod transport_tests {
         assert_eq!(accepted.status, 202);
         assert_eq!(accepted.location.as_deref(), Some("/jobs/one"));
         assert_eq!(accepted.retry_after.as_deref(), Some("1"));
+        assert_eq!(
+            accepted.link.as_deref(),
+            Some("</execution>; rel=\"self\", </jobs/one>; rel=\"monitor\"")
+        );
         assert_eq!(accepted.content_type.as_deref(), Some("application/json"));
         assert_eq!(accepted.final_url, url("/execution"));
         for (method, path, status, field, value) in [

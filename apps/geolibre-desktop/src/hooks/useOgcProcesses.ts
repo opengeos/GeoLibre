@@ -14,7 +14,7 @@ import {
 import { monitorOgcProcessJob } from "../lib/ogc-process-job";
 import {
   ogcInputKind,
-  ogcInputText,
+  ogcInputFieldText,
   ogcProcessInputDefaults,
   parseOgcProcessInputs,
 } from "../lib/ogc-process-inputs";
@@ -47,8 +47,20 @@ export function useOgcProcesses(open: boolean) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<unknown>(null);
   const active = useRef<AbortController | null>(null);
+  const submitting = useRef<AbortSignal | null>(null);
+
+  const parseJsonInputs = (value: string): unknown => {
+    try {
+      return JSON.parse(value);
+    } catch {
+      throw new OgcProcessError("inputsJsonSyntax");
+    }
+  };
 
   const stop = useCallback(() => {
+    if (submitting.current && !submitting.current.aborted)
+      setError(new OgcProcessError("executionUncertain", { detail: "" }));
+    submitting.current = null;
     active.current?.abort();
     active.current = null;
     setPhase("idle");
@@ -178,7 +190,7 @@ export function useOgcProcesses(open: boolean) {
     run("executing", async (context) => {
       if (!process) return;
       const inputs: unknown = jsonMode
-        ? JSON.parse(inputsJson)
+        ? parseJsonInputs(inputsJson)
         : parseOgcProcessInputs(process, values);
       if (!inputs || typeof inputs !== "object" || Array.isArray(inputs))
         throw new OgcProcessError("inputObject");
@@ -187,12 +199,22 @@ export function useOgcProcesses(open: boolean) {
         setJob(null);
         setJobUrl("");
       });
-      const result = await executeOgcProcess(
-        process,
-        inputs as Record<string, unknown>,
-        context.signal,
-        asynchronous,
-      );
+      submitting.current = context.signal;
+      const result = await (async () => {
+        try {
+          return await executeOgcProcess(
+            process,
+            inputs as Record<string, unknown>,
+            context.signal,
+            asynchronous,
+          );
+        } catch (failure) {
+          if (context.signal.aborted || failure instanceof OgcProcessError) throw failure;
+          throw new OgcProcessError("executionUncertain", { detail: ogcProcessErrorText(failure) });
+        } finally {
+          if (submitting.current === context.signal) submitting.current = null;
+        }
+      })();
       context.signal.throwIfAborted();
       if (result.kind === "job") {
         updateJob(context, result.job, process.url);
@@ -265,7 +287,7 @@ export function useOgcProcesses(open: boolean) {
     }
     if (!next && process) {
       try {
-        const parsed: unknown = JSON.parse(inputsJson);
+        const parsed: unknown = parseJsonInputs(inputsJson);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
           throw new OgcProcessError("inputObject");
         if (Object.keys(parsed).some((key) => !Object.hasOwn(process.inputs, key)))
@@ -274,7 +296,7 @@ export function useOgcProcesses(open: boolean) {
           Object.fromEntries(
             Object.entries(parsed).map(([key, value]) => [
               key,
-              ogcInputText(value, ogcInputKind(process.inputs[key])),
+              ogcInputFieldText(value, ogcInputKind(process.inputs[key])),
             ]),
           ),
         );

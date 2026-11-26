@@ -52,7 +52,12 @@ test("process proxy preserves execution/job controls, redirect methods and respo
       headers: { "content-type": "application/json", prefer: "respond-async" },
     })
     .reply(201, JSON.stringify({ jobID: "one", status: "accepted" }), {
-      headers: { "Content-Type": "application/json", Location: "/jobs/one", "Retry-After": "2" },
+      headers: {
+        "Content-Type": "application/json",
+        Location: "/jobs/one",
+        "Retry-After": "2",
+        Link: '</jobs/one>; rel="monitor"',
+      },
     });
   pool.intercept({ path: "/jobs/one", method: "DELETE" }).reply(204, "");
   pool.intercept({ path: "/large", method: "GET" }).reply(200, "123456789");
@@ -123,6 +128,7 @@ test("process proxy preserves execution/job controls, redirect methods and respo
     assert.equal(accepted.status, 201);
     assert.equal(accepted.headers.location, "/jobs/one");
     assert.equal(accepted.headers["retry-after"], "2");
+    assert.equal(accepted.headers.link, '</jobs/one>; rel="monitor"');
     assert.equal(accepted.headers["x-geolibre-final-url"], "https://process.example/execution");
     assert.equal(accepted.headers["cache-control"], "no-store");
     assert.match(String(accepted.headers["content-security-policy"]), /sandbox/);

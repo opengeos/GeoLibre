@@ -376,6 +376,16 @@ pub(crate) fn guarded_http_client() -> Result<reqwest::blocking::Client, String>
     CLIENT.get_or_init(build_guarded_http_client).clone()
 }
 
+/// Keep query credentials out of automatically generated redirect Referer headers.
+/// This client retains the same destination guard, proxies and TLS configuration.
+pub(crate) fn guarded_http_client_without_referer() -> Result<reqwest::blocking::Client, String> {
+    static CLIENT: std::sync::OnceLock<Result<reqwest::blocking::Client, String>> =
+        std::sync::OnceLock::new();
+    CLIENT
+        .get_or_init(|| build_guarded_http_client_options(guarded_redirect_policy(), false))
+        .clone()
+}
+
 /// An async `reqwest` client builder with the same SSRF guard, enterprise CAs
 /// and mTLS identity as [`build_guarded_http_client_with_redirects`]. The async
 /// transports (ArcGIS, plugin requests) add their own redirect policy and any
@@ -406,6 +416,13 @@ fn build_guarded_http_client() -> Result<reqwest::blocking::Client, String> {
 fn build_guarded_http_client_with_redirects(
     redirects: reqwest::redirect::Policy,
 ) -> Result<reqwest::blocking::Client, String> {
+    build_guarded_http_client_options(redirects, true)
+}
+
+fn build_guarded_http_client_options(
+    redirects: reqwest::redirect::Policy,
+    automatic_referer: bool,
+) -> Result<reqwest::blocking::Client, String> {
     // The SSRF guard (GuardedDnsResolver + redirect re-validation) is applied
     // here, independent of the TLS backend chosen below, for direct connections
     // on both rustls and native-tls. A configured proxy resolves destinations
@@ -413,6 +430,7 @@ fn build_guarded_http_client_with_redirects(
     let mut builder = reqwest::blocking::Client::builder()
         .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
         .redirect(redirects)
+        .referer(automatic_referer)
         .dns_resolver(std::sync::Arc::new(GuardedDnsResolver))
         .user_agent("GeoLibre Desktop");
 

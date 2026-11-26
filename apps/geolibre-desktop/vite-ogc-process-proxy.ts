@@ -184,7 +184,7 @@ export async function proxyOgcProcessRequest(
       upstream.response.headers.get("content-type") ?? "application/octet-stream",
     );
     res.setHeader("x-geolibre-final-url", upstream.url);
-    for (const name of ["location", "retry-after"]) {
+    for (const name of ["location", "retry-after", "link"]) {
       const value = upstream.response.headers.get(name);
       if (value) res.setHeader(name, value);
     }

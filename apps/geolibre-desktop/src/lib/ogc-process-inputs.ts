@@ -28,13 +28,31 @@ export function ogcInputText(value: unknown, kind: OgcInputKind): string {
   return kind === "string" && typeof value === "string" ? value : (JSON.stringify(value) ?? "null");
 }
 
+/** Keep protocol references in JSON mode when a literal control cannot represent them. */
+export function ogcInputFieldText(value: unknown, kind: OgcInputKind): string {
+  const representable =
+    kind === "json" ||
+    (kind === "string" && typeof value === "string") ||
+    (kind === "boolean" && typeof value === "boolean") ||
+    ((kind === "number" || kind === "integer") &&
+      typeof value === "number" &&
+      Number.isFinite(value) &&
+      (kind !== "integer" || Number.isInteger(value)));
+  if (!representable) throw new OgcProcessError("inputRepresentation");
+  return ogcInputText(value, kind);
+}
+
 /** Populate only advertised defaults; unspecified optional values stay absent. */
 export function ogcProcessInputDefaults(process: OgcProcess): Record<string, string> {
   return Object.fromEntries(
     Object.entries(process.inputs).flatMap(([key, definition]) => {
       const schema = ogcInputSchema(definition);
+      const value =
+        schema.default && typeof schema.default === "object" && !Array.isArray(schema.default)
+          ? { value: schema.default }
+          : schema.default;
       return Object.hasOwn(schema, "default")
-        ? [[key, ogcInputText(schema.default, ogcInputKind(definition))]]
+        ? [[key, ogcInputText(value, ogcInputKind(definition))]]
         : [];
     }),
   );
@@ -50,8 +68,7 @@ export function parseOgcProcessInputs(
     Object.entries(process.inputs).flatMap(([key, definition]) => {
       const kind = ogcInputKind(definition);
       const present =
-        Object.hasOwn(values, key) &&
-        (kind === "string" ? values[key] !== "" : values[key].trim() !== "");
+        Object.hasOwn(values, key) && (kind === "string" || values[key].trim() !== "");
       if (!present) {
         if (requireInputs && definition.minOccurs !== 0)
           throw new OgcProcessError("missingInput", { name: key });

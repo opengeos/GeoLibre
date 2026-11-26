@@ -84,6 +84,54 @@ async function processDescription() {
   )[0];
 }
 
+test("empty accepted responses preserve the job before any status request", async () => {
+  const process = await processDescription();
+  const calls = serve(
+    () =>
+      new Response(null, {
+        status: 202,
+        headers: { Location: "/api/jobs/accepted", "Retry-After": "3" },
+      }),
+  );
+  const result = await executeOgcProcess(
+    process,
+    { name: "GeoLibre" },
+    new AbortController().signal,
+    true,
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].init?.method, "POST");
+  assert.equal(result.kind, "job");
+  if (result.kind !== "job") return;
+  assert.equal(new URL(result.job.url).pathname, "/api/jobs/accepted");
+  assert.equal(result.job.status, "accepted");
+  assert.equal(result.job.retryAfterMs, 3000);
+  assert.deepEqual(result.job.outputIds, Object.keys(process.outputs));
+});
+
+test("synchronous monitor links retain job routing without changing successful outputs", async () => {
+  const process = await processDescription();
+  const signal = new AbortController().signal;
+  for (const location of [undefined, "/api/jobs/location"]) {
+    serve(
+      () =>
+        new Response(JSON.stringify({ echo: "Done" }), {
+          headers: {
+            "Content-Type": "application/json",
+            Link: '<https://other.example/a,b>; title="a,b; rel=monitor"; rel="other", <ftp://invalid/job>; rel=monitor, <../jobs/retained>; title="a,b; rel=other"; rel="alternate monitor"',
+            ...(location ? { Location: location } : {}),
+          },
+        }),
+    );
+    const result = await executeOgcProcess(process, { name: "GeoLibre" }, signal);
+    assert.equal(result.kind, "results");
+    if (result.kind !== "results") return;
+    assert.equal(new URL(result.jobUrl!).pathname, location ?? "/api/processes/jobs/retained");
+    assert.equal(new URL(result.jobUrl!).searchParams.get("token"), "secret");
+    assert.equal(result.outputs[0].value, "Done");
+  }
+});
+
 test("discovers advertised process catalogs and describes real pygeoapi input schemas", async () => {
   const calls = serve((url) => {
     if (new URL(url).pathname === "/api/")

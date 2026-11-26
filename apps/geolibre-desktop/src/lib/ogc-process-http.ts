@@ -16,6 +16,7 @@ export interface ProcessHttpResponse {
   contentType: string | null;
   location: string | null;
   retryAfter: string | null;
+  link: string | null;
   body: Uint8Array<ArrayBuffer>;
 }
 
@@ -103,6 +104,7 @@ export async function processHttp(
       contentType: response.headers.get("content-type"),
       location: response.headers.get("location"),
       retryAfter: response.headers.get("retry-after"),
+      link: response.headers.get("link"),
       body,
     };
   } catch (error) {

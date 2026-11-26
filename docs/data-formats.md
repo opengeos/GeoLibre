@@ -216,7 +216,12 @@ Open **Processing > GeoLibre > OGC API - Processes**, or search for
 
 Execution submits once and does not retry automatically. Individual HTTP
 requests time out after 120 seconds; choose asynchronous execution for longer
-work when the service supports it. Input documents are
+work when the service supports it. Stopping or closing during submission can
+leave work running remotely without a returned job URL. The dialog retains an
+interruption notice when reopened; check the service before retrying, since a
+retry starts a new execution. The actual advertised execution endpoint is
+shown before submission, including when it differs from the catalog host.
+Input documents are
 limited to 1 MiB, process descriptions and status documents to 2 MiB, and result
 downloads to 128 MiB each. Decoding JSON and rasters requires additional working
 memory. Native result transport uses base64 rather than JSON number arrays.
@@ -232,7 +237,7 @@ editing when an explicit empty string is needed.
 Desktop uses guarded native HTTP. Development uses a guarded same-origin
 proxy. The hosted web app requires the remote service to permit cross-origin
 GET, POST, and DELETE requests, the `Content-Type` and `Prefer` request headers,
-and access to `Location` and `Retry-After` response headers. A successful
+and access to `Location`, `Link`, and `Retry-After` response headers. A successful
 development test does not establish hosted-site CORS support. Credentials may
 be supplied in the service URL query; they follow same-origin links only and
 are redacted from imported-layer provenance.
