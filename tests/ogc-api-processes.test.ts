@@ -15,6 +15,10 @@ import {
   readOgcProcessResults,
 } from "../apps/geolibre-desktop/src/lib/ogc-api-processes";
 import { processHttp } from "../apps/geolibre-desktop/src/lib/ogc-process-http";
+import {
+  readLimitedBody,
+  ResponseLimitError,
+} from "../apps/geolibre-desktop/src/lib/bounded-response";
 import { jsonNumbersNeedSource } from "../apps/geolibre-desktop/src/lib/json-result-source";
 import { ogcProcessMonitorLinks } from "../apps/geolibre-desktop/src/lib/ogc-process-link-header";
 import { monitorOgcProcessJob } from "../apps/geolibre-desktop/src/lib/ogc-process-job";
@@ -35,6 +39,23 @@ import {
   OgcProcessError,
   ogcProcessErrorText,
 } from "../apps/geolibre-desktop/src/lib/ogc-process-errors";
+
+test("a failing stream cleanup cannot replace its response size refusal", async () => {
+  let cancelled = false;
+  const response = new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2]));
+      },
+      cancel() {
+        cancelled = true;
+        throw new Error("Cleanup failed");
+      },
+    }),
+  );
+  await assert.rejects(readLimitedBody(response, 1), ResponseLimitError);
+  assert.equal(cancelled, true);
+});
 
 test("client errors follow the active language and retain original service details", async () => {
   const previous = i18next.language;

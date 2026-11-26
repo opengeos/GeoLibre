@@ -209,6 +209,16 @@ Review a plugin before
 allowing it, and use `plugins.allowed` to limit which ones load (see
 [Plugin API](plugin-api.md)).
 
+Desktop OGC API Processes uses the native `ogc_process_http` command for GET,
+POST and DELETE. Mutating requests can reach loopback and private/LAN services
+under the same native destination policy; they are not restricted to the host
+entered in the dialog, and webview CSP does not constrain this native transport.
+The built-in UI sends execution inputs only after Run and sends DELETE only
+after Dismiss. Those UI actions are not an authorization boundary for other
+trusted JavaScript running in the webview. POST and DELETE never follow redirects.
+The development proxy reports a redirected mutation as HTTP 502, while the
+native transport exposes the upstream 3xx status. Both refuse to resend it.
+
 ## Differences between builds
 
 - **Desktop** adds the startup update check and the Python sidecar bootstrap.
