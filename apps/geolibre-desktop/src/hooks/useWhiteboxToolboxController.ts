@@ -726,7 +726,9 @@ export function useWhiteboxToolboxController({
   // not cancelled: switching tools to look at another one should not throw
   // away a long computation. Switching back to its tool shows a fresh form,
   // not the detached job; its result arrives as layers and a History entry.
-  const backgroundJobsRef = useRef<Map<string, () => void>>(new Map());
+  // Stops a background poller; given a reason, also records the job as
+  // failed with it (the sidecar it ran on was stopped).
+  const backgroundJobsRef = useRef<Map<string, (reason?: string) => void>>(new Map());
   // Job ids whose outputs a background settle imported, so a job that is
   // shown again afterwards is not imported a second time. Only sidecar job
   // ids (unique per sidecar) land here.
@@ -798,9 +800,10 @@ export function useWhiteboxToolboxController({
         }
       };
       timer = window.setTimeout(poll, 1000);
-      backgroundJobsRef.current.set(id, () => {
+      backgroundJobsRef.current.set(id, (reason) => {
         stopped = true;
         if (timer !== undefined) window.clearTimeout(timer);
+        if (reason !== undefined) tracker?.finish("error", reason);
       });
     },
     [services, t],
@@ -1453,7 +1456,12 @@ export function useWhiteboxToolboxController({
     setError(null);
     try {
       await services.stopGeoLibreSidecar();
+      // Jobs on the stopped sidecar die with it: record them as stopped now
+      // rather than polling a dead server until the requests fail.
       detachJob();
+      const stoppedReason = t("processing.whitebox.sidecarStopped");
+      for (const stop of backgroundJobsRef.current.values()) stop(stoppedReason);
+      backgroundJobsRef.current.clear();
       setJob(null);
       // Read the mode now, not at click time: the user may have switched to
       // WASM while the stop was pending, and that mode's catalog and status

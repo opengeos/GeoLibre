@@ -824,3 +824,27 @@ it("names the detached job's tool when its background import fails", async () =>
     { timeout: 3000 },
   );
 });
+
+it("records a background sidecar job as stopped when the server stops", async () => {
+  const stub = services();
+  const hook = controller(stub);
+  await loaded(hook);
+  act(() => hook.result.current.handleRunLocalChange(false));
+  await waitFor(() => assert.equal(hook.result.current.runtimeAvailable, true));
+  act(() => hook.result.current.setSelectedToolId(SLOPE.id));
+  await waitFor(() => assert.equal(hook.result.current.selectedToolId, SLOPE.id));
+  act(() => hook.result.current.updateValue("dem", "/data/dem.tif"));
+  stub.value.fetchWhiteboxJob = async (id) => {
+    stub.calls.polls.push(id);
+    return job({ id, tool_id: SLOPE.id, status: "running" });
+  };
+  await act(() => hook.result.current.runSelectedTool());
+  act(() => hook.result.current.setSelectedToolId(CENTROID.id));
+  await waitFor(() => assert.equal(hook.result.current.job, null));
+  await act(() => hook.result.current.stopServer());
+  const [run] = useAppStore.getState().processingHistory;
+  assert.equal(run?.status, "error");
+  assert.equal(run?.error, "GeoLibre sidecar is stopped.");
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  assert.deepEqual(stub.calls.polls, [], "the stopped server is not polled");
+});
