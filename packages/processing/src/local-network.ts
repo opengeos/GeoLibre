@@ -701,9 +701,15 @@ export class LocalNetwork {
     return this.revisionCount;
   }
 
-  /** Marks the graph as changed after an in-place edit of its edges. */
+  /**
+   * Marks the graph as changed after an in-place edit of its edges, and
+   * recomputes the A* heuristic scale, which a lowered cost would otherwise
+   * leave overestimating.
+   */
   touch(): void {
     this.revisionCount++;
+    this.minCostPerMeter = Infinity;
+    for (const edge of this.edges) this.updateHeuristic(edge);
   }
 
   /** The active turn rules with defaults applied, or null. */
@@ -736,7 +742,7 @@ export class LocalNetwork {
    * @param rules - The turn rules, or null for free turns.
    */
   setTurnRules(rules: TurnRules | null): void {
-    this.touch();
+    this.revisionCount++;
     if (!rules || !turnRulesActive(rules)) {
       this.turnRules = null;
       return;
@@ -841,7 +847,7 @@ export class LocalNetwork {
 
   /** @internal Adds a node and returns its id. */
   addNode(lon: number, lat: number): number {
-    this.touch();
+    this.revisionCount++;
     this.lon.push(lon);
     this.lat.push(lat);
     this.adj.push([]);
@@ -855,7 +861,7 @@ export class LocalNetwork {
   /** @internal Adds an edge and returns its id. */
   addEdge(edge: NetworkEdge): number {
     const id = this.edges.length;
-    this.touch();
+    this.revisionCount++;
     this.edges.push(edge);
     this.adj[edge.a].push(id);
     this.adj[edge.b].push(id);
@@ -892,7 +898,7 @@ export class LocalNetwork {
 
   /** @internal Builds the edge spatial index once the edges are in. */
   buildIndex(): void {
-    this.touch();
+    this.revisionCount++;
     this.minCostPerMeter = Infinity;
     for (const edge of this.edges) this.updateHeuristic(edge);
     const { minX, minY, maxX, maxY } = this.extent;
@@ -987,7 +993,7 @@ export class LocalNetwork {
 
   /** Splits edge `id` at parameter `t` through an existing node. */
   private splitEdgeAt(id: number, t: number, node: number): number {
-    this.touch();
+    this.revisionCount++;
     const edge = this.edges[id];
     const tail: NetworkEdge = {
       a: node,

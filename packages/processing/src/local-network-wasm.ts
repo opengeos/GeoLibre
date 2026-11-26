@@ -228,9 +228,10 @@ export function createWasmNetworkEngine(wasm: RoutingWasmModule): NetworkSearchE
           options.stopAt?.count ?? 0,
           budget.remainingAdjacencyVisits,
         );
-      } catch {
+      } catch (error) {
         // Only out-of-range sources or targets are rejected here, which the
         // JS search handles the same way it always has.
+        console.warn("WebAssembly search could not start; this search uses the JS engine", error);
         return null;
       }
       const reverse = options.reverse === true;

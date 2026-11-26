@@ -380,6 +380,24 @@ describe("WASM network engine", { skip }, () => {
     assert.equal(builds, 2);
   });
 
+  it("recomputes the A* heuristic when touch() follows a cost cut", () => {
+    // S-T direct costs 10; the detour S-V-T costs 200 until both of its
+    // edges drop to 1, which must lower the heuristic scale with them.
+    const net = new LocalNetwork();
+    const s = net.addNode(0, 0);
+    const t = net.addNode(0.002, 0);
+    const v = net.addNode(0, 0.01);
+    net.addEdge({ a: s, b: t, costAB: 10, costBA: 10, length: 222, feature: 0 });
+    net.addEdge({ a: s, b: v, costAB: 100, costBA: 100, length: 1112, feature: 1 });
+    net.addEdge({ a: v, b: t, costAB: 100, costBA: 100, length: 1114, feature: 2 });
+    net.buildIndex();
+    net.edges[1].costAB = net.edges[1].costBA = 1;
+    net.edges[2].costAB = net.edges[2].costBA = 1;
+    net.touch();
+    const result = compare(net, [s], { target: t, astar: true });
+    assert.equal(result.dist[t], 2);
+  });
+
   it("leaves callback searches to the JS engine", () => {
     const { features } = randomStreets(5, 6);
     const net = buildLocalNetwork(features, {});
