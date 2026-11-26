@@ -31,7 +31,7 @@ export interface WhiteboxMenuCategory {
   subcategories: WhiteboxMenuSubcategory[];
 }
 
-/** 1068 tools across 9 categories. */
+/** 1069 tools across 9 categories. */
 export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
   {
     key: "conversion",
@@ -564,6 +564,7 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
           { id: "is_nodata", name: "Is Nodata" },
           { id: "kappa_index", name: "Kappa Index" },
           { id: "ks_normality_test", name: "Ks Normality Test" },
+          { id: "lee_sigma_filter", name: "Lee Sigma Filter" },
           { id: "less_than", name: "Less Than" },
           { id: "less_than_or_equal_to", name: "LessThanOrEqualTo" },
           { id: "list_unique_values_raster", name: "List Unique Values Raster" },

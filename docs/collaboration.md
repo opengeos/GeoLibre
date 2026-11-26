@@ -55,6 +55,45 @@ The MVP deliberately picks the simplest thing that works:
 CRDT / per-action mutation transport is the documented **v2** path (see
 Limitations).
 
+## Op-level document model (#3530)
+
+The whole-snapshot protocol below is being replaced by op-level sync over a
+[Yjs](https://docs.yjs.dev/) document, so simultaneous edits merge instead of
+overwriting each other. The shared model is `ProjectDoc` in
+`packages/collab-core/src/crdt.ts` (`@geolibre/collab-core/crdt`). It is not
+wired up yet: the relays and the app still run the snapshot protocol and its
+limits below, and adopt the model in follow-up changes. The model:
+
+| Root | Type | Holds |
+| --- | --- | --- |
+| `fields` | `Y.Map` | every top-level project key except `layers` |
+| `layers` | `Y.Map` | layer id to a `Y.Map` of that layer's properties |
+| `layerOrder` | `Y.Array` | layer ids, bottom to top as in `project.layers` |
+
+Plain objects are nested `Y.Map`s at any depth, so two people changing
+different properties of one layer (its fill colour and its line width, say)
+both keep their change. Arrays and scalars are single values, where the last
+writer wins on that one value. A layer's `geojson` FeatureCollection is stored
+feature by feature (`meta`, `features` keyed by a generated key, and an `order`
+array), so concurrent edits to different features of one layer merge too, and
+editing one feature of a large layer sends a few hundred bytes rather than the
+layer. Each feature is one value, though: two people editing the same feature
+at once (even different attributes of it) resolve to one of the two edits. A
+delete wins over a concurrent edit of the deleted layer or feature.
+
+`ProjectDoc.write(project, origin)` diffs a whole project against the document
+and records only the differences in one transaction tagged with `origin`;
+`read()` rebuilds the project and reuses the previous object for every layer no
+update touched. `createLocalUndoManager` gives each participant a
+`Y.UndoManager` that records only that participant's own transactions, so
+undoing never reverts a collaborator's edit.
+
+Updates travel as base64 in JSON frames. `splitUpdate` cuts an update larger
+than `MAX_UPDATE_CHUNK_BYTES` (512 KiB) into numbered chunks and
+`UpdateAssembler` rebuilds it on the far side, so a project well beyond the
+snapshot cap syncs without any single WebSocket message nearing a platform
+limit.
+
 ## Sync protocol
 
 All frames are JSON, and each direction is a discriminated union on `type`

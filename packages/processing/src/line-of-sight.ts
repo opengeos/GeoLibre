@@ -17,11 +17,10 @@
  *     for the path's length, fetches only the tiles the path crosses, and
  *     samples them bilinearly.
  *
- * Unlike the viewshed, the computation models Earth curvature and atmospheric
- * refraction by default. A line of sight is cheap (one ray, not one per cell),
- * and it is the tool people reach for at exactly the ranges -- a summit to a
- * distant peak, a mast to a mast -- where a 50 km curvature drop of ~170 m
- * decides the answer.
+ * Like the viewshed, the computation models Earth curvature and atmospheric
+ * refraction by default (`earth-curvature.ts`). The line of sight is the tool
+ * people reach for at exactly the ranges -- a summit to a distant peak, a mast
+ * to a mast -- where a 50 km curvature drop of ~170 m decides the answer.
  */
 
 import {
@@ -31,16 +30,16 @@ import {
   TERRARIUM_TILE_SIZE,
   TERRARIUM_TILE_URL,
 } from "./terrain-viewshed";
+import {
+  curvatureDrop,
+  DEFAULT_REFRACTION_COEFFICIENT,
+  EARTH_RADIUS_METERS,
+  resolveCurvature,
+  type CurvatureOptions,
+} from "./earth-curvature";
 
-/** Mean Earth radius in metres (IUGG). */
-export const EARTH_RADIUS_METERS = 6_371_008.8;
-
-/**
- * Standard coefficient of atmospheric refraction for visible light. Refraction
- * bends a sight line back toward the ground, so it offsets part of the
- * curvature drop; 0.13 is the value most GIS viewshed tools default to.
- */
-export const DEFAULT_REFRACTION_COEFFICIENT = 0.13;
+// Re-exported so existing imports from this module keep working.
+export { curvatureDrop, DEFAULT_REFRACTION_COEFFICIENT, EARTH_RADIUS_METERS };
 
 /** Default observer eye height above the ground -- a standing person. */
 export const DEFAULT_LOS_OBSERVER_HEIGHT_METERS = 1.7;
@@ -94,15 +93,12 @@ export interface LineOfSightSegment {
   endDistance: number;
 }
 
-export interface LineOfSightOptions {
+/** Heights plus the curvature model (see `earth-curvature.ts`). */
+export interface LineOfSightOptions extends CurvatureOptions {
   /** Observer eye height above the ground, in metres. */
   observerHeightMeters?: number;
   /** Target height above the ground, in metres. */
   targetHeightMeters?: number;
-  /** Model Earth curvature and refraction (default true). */
-  curvature?: boolean;
-  /** Refraction coefficient used with curvature (default 0.13). */
-  refractionCoefficient?: number;
 }
 
 export interface LineOfSightResult {
@@ -212,21 +208,6 @@ export function sampleGreatCircleProfile(
 }
 
 /**
- * How far below the observer's tangent plane the ground at `distance` appears
- * to sit, once curvature and refraction are combined: `d²(1 - k) / 2R`.
- *
- * @param distance - Ground distance from the observer, in metres.
- * @param refractionCoefficient - The refraction coefficient `k`.
- * @returns The apparent drop, in metres.
- */
-export function curvatureDrop(
-  distance: number,
-  refractionCoefficient = DEFAULT_REFRACTION_COEFFICIENT,
-): number {
-  return ((distance * distance) / (2 * EARTH_RADIUS_METERS)) * (1 - refractionCoefficient);
-}
-
-/**
  * Work out what an observer can see along a terrain profile.
  *
  * Two related answers come out of one walk:
@@ -258,9 +239,9 @@ export function computeLineOfSight(
   if (profile.length < 2) throw new Error("A line of sight needs at least two samples.");
   const observerHeight = options.observerHeightMeters ?? DEFAULT_LOS_OBSERVER_HEIGHT_METERS;
   const targetHeight = options.targetHeightMeters ?? DEFAULT_LOS_TARGET_HEIGHT_METERS;
-  const curvature = options.curvature ?? true;
-  const k = options.refractionCoefficient ?? DEFAULT_REFRACTION_COEFFICIENT;
-  const drop = (distance: number) => (curvature ? curvatureDrop(distance, k) : 0);
+  const { curvature, refractionCoefficient, earthRadiusMeters } = resolveCurvature(options);
+  const drop = (distance: number) =>
+    curvature ? curvatureDrop(distance, refractionCoefficient, earthRadiusMeters) : 0;
 
   const first = profile[0];
   const last = profile[profile.length - 1];

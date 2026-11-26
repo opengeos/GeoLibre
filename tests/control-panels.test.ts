@@ -90,6 +90,12 @@ class Ruler {
   setRadius() {
     return this;
   }
+  getPanelElement(): HTMLElement | undefined {
+    return undefined;
+  }
+  getSourceId() {
+    return "measure-source";
+  }
   getState() {
     return { collapsed: this.collapsed, isDrawing: !this.collapsed };
   }

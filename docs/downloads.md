@@ -163,6 +163,7 @@ shipping them broken. Here is how the two macOS builds compare:
 | Add Data → PostgreSQL / PostGIS (martin tile server) | Yes | No |
 | Add Data → SQL Server, File Geodatabase (sidecar-backed) | Yes | No |
 | Notebook panel on a local JupyterLab server | Yes | JupyterLite only |
+| Live MCP (`live_*` tools driving the open map) | Yes | Yes (over a Unix socket in the app container) |
 | Installing external plugins from a zip or the registry | Yes | Built-in and bundled plugins only |
 | Earth Engine sign-in | Yes | No |
 | In-app update checks | Yes | Updates come from the Store |

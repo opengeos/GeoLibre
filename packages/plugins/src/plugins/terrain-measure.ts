@@ -167,50 +167,23 @@ interface MeasureStateLike {
   areaUnit: AreaUnit;
 }
 
-/** Private members of the upstream MeasureControl this package reads. */
-interface MeasureControlInternals {
-  _panel?: HTMLElement;
-  _sourceId?: string;
-}
-
 /**
  * The id of the GeoJSON source the MeasureControl draws its line/polygon into
- * (`measure-<uid>-source`). Private as of maplibre-gl-components@0.25.x, and
- * read for the same reason as `_panel` above: only the control knows the id,
- * which it generates per instance. Losing it costs the LiDAR measure mirror
- * (see `lidar-measure-mirror.ts`) and nothing else, so this warns rather than
- * throwing.
+ * (`measure-<uid>-source`), which the control generates per instance. The
+ * LiDAR measure mirror (see `lidar-measure-mirror.ts`) reads the geometry
+ * from it.
  */
 export function measureSourceId(control: MeasureControl): string | null {
-  const sourceId = (control as unknown as MeasureControlInternals)._sourceId;
-  if (!sourceId) {
-    console.warn(
-      "MeasureControl: _sourceId not found; measured geometry will stay " +
-        "hidden inside LiDAR point clouds. Check maplibre-gl-components.",
-    );
-    return null;
-  }
-  return sourceId;
+  return control.getSourceId() || null;
 }
 
 /**
- * The MeasureControl's panel element. `_panel` is a private member as of
- * maplibre-gl-components@0.25.x; if a future version renames it, everything
- * layered on the panel (the terrain section, the resize styling) silently
- * disappears while planar measuring keeps working — so warn loudly to catch
- * the regression when bumping the dependency. Shared by this module and
- * `makeMeasurePanelResizable` so an upstream rename needs one fix.
+ * The MeasureControl's panel element, which carries the Terrain (3D) section
+ * and the resize styling, or null before the panel is first shown. Shared by
+ * this module and `makeMeasurePanelResizable`.
  */
 export function measurePanelElement(control: MeasureControl): HTMLElement | null {
-  const panel = (control as unknown as MeasureControlInternals)._panel;
-  if (!panel) {
-    console.warn(
-      "MeasureControl: _panel not found; the Terrain (3D) section and panel " +
-        "resize styling are inactive. Check maplibre-gl-components.",
-    );
-    return null;
-  }
-  return panel;
+  return control.getPanelElement() ?? null;
 }
 
 /**

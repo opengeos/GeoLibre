@@ -22,6 +22,7 @@
  * geometry can be tested without a network.
  */
 
+import { curvatureDrop, resolveCurvature, type CurvatureOptions } from "./earth-curvature";
 import type { ViewshedWorkerRequest, ViewshedWorkerResponse } from "./terrain-viewshed.worker";
 
 /** The Terrarium terrain tiles the map's terrain control already uses. */
@@ -159,20 +160,28 @@ export interface ViewshedResult {
  * the whole grid, so a tall square at high latitude carries a small north-south
  * stretch. At the radii this is capped to it stays well under a cell.
  *
- * Earth curvature and refraction are **not** modelled. Over the radii this is
- * capped to (50 km) curvature drop reaches ~180 m, which matters for a
- * long-range radio study but not for the "what can I see from this overlook"
- * question this answers. The Whitebox tool remains the rigorous option.
+ * Earth curvature and atmospheric refraction are modelled by default (issue
+ * #3530): every elevation is lowered by `d²(1 - k) / 2R` before its slope is
+ * taken, exactly as the line of sight does (`earth-curvature.ts`). At the
+ * 50 km radius cap the drop reaches ~170 m, enough to hide a whole valley
+ * floor a flat-Earth walk would call visible. Pass `{ curvature: false }` for
+ * the flat-Earth answer.
  *
  * @param dem - The elevation grid to analyse.
  * @param observer - Position and height above ground.
  * @param radiusMeters - Ignore cells beyond this distance, or 0 for no limit.
+ * @param options - The curvature model: on/off, refraction coefficient and
+ *   Earth radius.
  */
 export function computeViewshed(
   dem: TerrainDem,
   observer: ViewshedObserver,
   radiusMeters = 0,
+  options: CurvatureOptions = {},
 ): ViewshedResult {
+  const { curvature, refractionCoefficient, earthRadiusMeters } = resolveCurvature(options);
+  const drop = (distance: number): number =>
+    curvature ? curvatureDrop(distance, refractionCoefficient, earthRadiusMeters) : 0;
   const { width, height, values, bbox } = dem;
   const [west, south, east, north] = bbox;
   const visible = new Uint8Array(width * height);
@@ -226,13 +235,13 @@ export function computeViewshed(
           (sampleRow - clampedRow) * cellLatMeters,
         );
         if (distance <= 0) continue;
-        const slope = (elevation - eyeMeters) / distance;
+        const slope = (elevation - drop(distance) - eyeMeters) / distance;
         if (slope > maxSlope) maxSlope = slope;
       }
 
       const targetElevation = values[targetRow * width + targetCol];
       if (targetElevation === undefined || groundDistance <= 0) continue;
-      const targetSlope = (targetElevation - eyeMeters) / groundDistance;
+      const targetSlope = (targetElevation - drop(groundDistance) - eyeMeters) / groundDistance;
       // Strictly greater: a cell exactly on the horizon line is grazed, not seen.
       blocked = targetSlope <= maxSlope;
       if (!blocked) markVisible(targetRow * width + targetCol);
@@ -505,12 +514,13 @@ export function computeViewshedAsync(
   observer: ViewshedObserver,
   radiusMeters = 0,
   signal?: AbortSignal,
+  options: CurvatureOptions = {},
 ): Promise<ViewshedResult> {
   if (signal?.aborted) {
     return Promise.reject(viewshedAbortError());
   }
   if (typeof Worker === "undefined") {
-    return Promise.resolve(computeViewshed(dem, observer, radiusMeters));
+    return Promise.resolve(computeViewshed(dem, observer, radiusMeters, options));
   }
   return new Promise((resolve, reject) => {
     let worker: Worker;
@@ -525,7 +535,7 @@ export function computeViewshedAsync(
         reject(viewshedAbortError());
         return;
       }
-      resolve(computeViewshed(dem, observer, radiusMeters));
+      resolve(computeViewshed(dem, observer, radiusMeters, options));
       return;
     }
     let settled = false;
@@ -562,7 +572,7 @@ export function computeViewshedAsync(
     try {
       // The DEM is cloned rather than transferred: the caller still owns it (it
       // is reused for the result's bbox), and a neutered input would be a trap.
-      worker.postMessage({ dem, observer, radiusMeters } satisfies ViewshedWorkerRequest);
+      worker.postMessage({ dem, observer, radiusMeters, options } satisfies ViewshedWorkerRequest);
     } catch (error) {
       settle(() => reject(error instanceof Error ? error : new Error(String(error))));
     }

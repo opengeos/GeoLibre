@@ -3,6 +3,7 @@ import { rendererCapabilities, type MapEngine } from "@geolibre/map";
 import { isGeoEditorUsingRightClick } from "@geolibre/plugins/geo-editor-state";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -59,6 +60,7 @@ import { useLineOfSightTool } from "../../lib/line-of-sight-store";
 import { useNavigationTool } from "../../lib/navigation/store";
 import { hasRoutingConsent, recordRoutingConsent } from "../../lib/routing-consent";
 import { runViewshed } from "../../lib/run-viewshed";
+import { useTerrainVisibility } from "../../lib/terrain-visibility-settings";
 import { RoutingConsentDialog } from "./RoutingConsentDialog";
 
 interface ContextMenuState {
@@ -259,6 +261,8 @@ export function MapContextMenu({
   );
 
   const [viewshedBusy, setViewshedBusy] = useState(false);
+  const viewshedCurvature = useTerrainVisibility((s) => s.curvature);
+  const updateTerrainVisibility = useTerrainVisibility((s) => s.update);
   const viewshedAbortRef = useRef<AbortController | null>(null);
   useEffect(() => () => viewshedAbortRef.current?.abort(), []);
   const viewshedHere = useCallback(
@@ -557,6 +561,19 @@ export function MapContextMenu({
                   })}
                 </DropdownMenuItem>
               ))}
+              {/* Shared with the Line of Sight panel, which also edits the
+                refraction coefficient and Earth radius. Kept open on toggle
+                so the change is visible before picking a radius. */}
+              <DropdownMenuCheckboxItem
+                checked={viewshedCurvature}
+                indicator="box"
+                onCheckedChange={(checked) =>
+                  updateTerrainVisibility({ curvature: checked === true })
+                }
+                onSelect={(event) => event.preventDefault()}
+              >
+                {t("quickAnalysis.viewshedCurvature")}
+              </DropdownMenuCheckboxItem>
               {lineOfSightAvailable ? (
                 <DropdownMenuItem onSelect={lineOfSightHere} className="gap-2">
                   <Spline className="h-4 w-4 shrink-0 text-muted-foreground" />

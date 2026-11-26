@@ -10,7 +10,6 @@ import {
   readPMTilesArchiveInfo,
   registerOfflineBasemapStyle,
   registerPMTilesArchive,
-  unregisterPMTilesArchive,
   type MapEngine,
 } from "@geolibre/map";
 import { extractPmtiles, type PmtilesExtractProgress } from "@geolibre/processing";
@@ -30,19 +29,27 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import {
-  type PointerEvent as ReactPointerEvent,
-  type RefObject,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { screenOverlayCovers, useExtentScreenOverlay } from "../../hooks/useExtentScreenOverlay";
 import { useNativeMbtilesExtraction } from "../../hooks/useNativeMbtilesExtraction";
-import { clamp } from "../../lib/clamp";
+import { useFloatingPanelGeometry } from "../../hooks/useFloatingPanelGeometry";
+import {
+  baseNameFromUrl,
+  CONFIRM_BYTES,
+  coordsFromBbox,
+  type CoordFields,
+  EMPTY_COORDS,
+  extractProgressPercent,
+  isBboxInvalid,
+  isProtomapsCompatible,
+  isZoomRangeInvalid,
+  packageZoomErrorKey,
+  parseBbox,
+  seededArchiveUrl,
+  URL_STORAGE_KEY,
+} from "../../lib/basemap-extract";
+import { forgetStyledBasemap, trackStyledBasemap } from "../../lib/styled-basemap-tracker";
 import {
   loadOfflineBasemaps,
   type OfflineBasemap,
@@ -80,30 +87,8 @@ import {
 } from "../../lib/tauri-io";
 import { sanitizeExportFileName } from "../../lib/vector-export";
 
-/** Default panel geometry (px); the user can drag it around the map area. */
-const PANEL_DEFAULT_W = 320;
-const PANEL_MARGIN = 12;
-/** Smallest the panel can be resized to, so the form stays usable. */
-const PANEL_MIN_W = 260;
-const PANEL_MIN_H = 240;
-
-/** Remembered across sessions so repeat extracts don't retype the archive URL. */
-const URL_STORAGE_KEY = "geolibre.basemapExtract.url";
-
-/** GeoLibre's Cloudflare Worker (workers/tiles) range-proxies the Protomaps
- * daily planet builds with CORS. */
-const PLANET_PROXY_PREFIX = "https://tiles.geolibre.app/pmtiles/";
-
-/**
- * Default archive URL: the latest Protomaps planet build through the proxy. The
- * Worker resolves `latest` to the newest daily build, so this URL is always
- * current (no client-side date to go stale) and works from any origin —
- * build.protomaps.com itself only allowlists a few and has no `latest` alias.
- */
-const DEFAULT_ARCHIVE_URL = `${PLANET_PROXY_PREFIX}latest.pmtiles`;
-
-/** Above this planned size the user must explicitly confirm the download. */
-const CONFIRM_BYTES = 150 * 1024 * 1024;
+/** Floating panel geometry (px); the user can drag and resize it in the map area. */
+const PANEL_LIMITS = { defaultWidth: 320, margin: 12, minWidth: 260, minHeight: 240 };
 
 type Phase = "idle" | "running" | "done";
 
@@ -115,97 +100,11 @@ type Phase = "idle" | "running" | "done";
  */
 const MAX_OVERLAY_SPAN_DEG = 170;
 
-interface PanelPos {
-  x: number;
-  y: number;
-}
-
-/** The four editable bounding-box fields, held as strings so partial edits
- * (a lone "-", an in-progress decimal) don't fight the controlled inputs. */
-interface CoordFields {
-  west: string;
-  south: string;
-  east: string;
-  north: string;
-}
-
-const EMPTY_COORDS: CoordFields = { west: "", south: "", east: "", north: "" };
-
 interface BasemapExtractPanelProps {
   open: boolean;
   onClose: () => void;
   mapControllerRef: RefObject<MapEngine | null>;
   mapReadyGeneration: number;
-}
-
-/** Round a coordinate to a readable-but-precise 6 decimal places. */
-function fmtCoord(value: number): string {
-  return Number(value.toFixed(6)).toString();
-}
-
-/** Parse the four coordinate fields into an ordered box, or `null` if any are
- * missing, out of the valid lng/lat range, or the box is degenerate. */
-function parseBbox(coords: CoordFields): [number, number, number, number] | null {
-  const west = Number(coords.west);
-  const south = Number(coords.south);
-  const east = Number(coords.east);
-  const north = Number(coords.north);
-  if (
-    coords.west === "" ||
-    coords.south === "" ||
-    coords.east === "" ||
-    coords.north === "" ||
-    !Number.isFinite(west) ||
-    !Number.isFinite(south) ||
-    !Number.isFinite(east) ||
-    !Number.isFinite(north) ||
-    west < -180 ||
-    east > 180 ||
-    south < -90 ||
-    north > 90 ||
-    west >= east ||
-    south >= north
-  ) {
-    return null;
-  }
-  return [west, south, east, north];
-}
-
-/** Coordinate fields from an ordered box, clamped to the valid lng/lat range so
- * a low-zoom "use view" that reads past ±180/±90 still forms a valid box. */
-function coordsFromBbox(bbox: [number, number, number, number]): CoordFields {
-  return {
-    west: fmtCoord(Math.max(bbox[0], -180)),
-    south: fmtCoord(Math.max(bbox[1], -90)),
-    east: fmtCoord(Math.min(bbox[2], 180)),
-    north: fmtCoord(Math.min(bbox[3], 90)),
-  };
-}
-
-/** Source layers a Protomaps basemap style targets; if an archive exposes some
- * of these it can render with the Protomaps flavors (styled as a basemap)
- * rather than a flat overlay. */
-const PROTOMAPS_SCHEMA_LAYERS = ["earth", "water", "roads", "places", "landcover"];
-
-/** `earth`/`water` are distinctively Protomaps-schema; `roads`/`places` are
- * generic names other vector schemas also use. Requiring one of the former
- * (plus two schema layers overall) keeps a non-Protomaps archive that merely
- * has a `roads`/`places` layer from being styled with Protomaps-specific
- * expressions and rendering blank. */
-function isProtomapsCompatible(
-  sourceLayers: string[],
-  sourceLayerFields?: Record<string, string[]>,
-): boolean {
-  const set = new Set(sourceLayers);
-  if (!set.has("earth") && !set.has("water")) return false;
-  if (
-    ["roads", "places", "landcover"].some((layer) => {
-      const fields = sourceLayerFields?.[layer];
-      return fields != null && !fields.includes("kind");
-    })
-  )
-    return false;
-  return PROTOMAPS_SCHEMA_LAYERS.filter((l) => set.has(l)).length >= 2;
 }
 
 /** Build a project-owned overlay whose source stays in managed native storage. */
@@ -249,66 +148,6 @@ function managedMbtilesLayer(entry: NativeOfflinePackage, sourceLayers: string[]
  * turns the base-relative path into an absolute one that honours both. */
 const BASEMAP_ASSETS_BASE = new URL(`${import.meta.env.BASE_URL}basemaps-assets`, document.baseURI)
   .href;
-
-// Tracks the in-memory archive (and style-registry id) backing the currently
-// applied styled offline basemap. A styled basemap is not a GeoLibreLayer, so
-// removeLayerFromMap never frees its archive; we free the previous one here
-// when a different basemap is applied, deleted, or the panel supersedes it.
-//
-// Kept on globalThis (like the style registry and archive-key set this feature
-// adds) so it survives a Vite HMR reload of this module — a plain module `let`
-// would reset to null on reload and then fail to free the archive the live
-// PMTiles protocol still holds.
-type ActiveStyledBasemap = { archiveKey: string; id: string; persistent?: boolean } | null;
-const ACTIVE_STYLED_BASEMAP_KEY = "__geolibreActiveStyledBasemap";
-
-function activeStyledBasemap(): ActiveStyledBasemap {
-  const scope = globalThis as typeof globalThis & {
-    [ACTIVE_STYLED_BASEMAP_KEY]?: ActiveStyledBasemap;
-  };
-  return scope[ACTIVE_STYLED_BASEMAP_KEY] ?? null;
-}
-
-function setActiveStyledBasemap(value: ActiveStyledBasemap): void {
-  (
-    globalThis as typeof globalThis & {
-      [ACTIVE_STYLED_BASEMAP_KEY]?: ActiveStyledBasemap;
-    }
-  )[ACTIVE_STYLED_BASEMAP_KEY] = value;
-}
-
-/** Records the archive/id now backing the styled basemap, freeing the one it
- * replaces (a different id) so archives don't accumulate for the session. */
-function trackStyledBasemap(id: string, archiveKey: string, persistent = false): void {
-  const active = activeStyledBasemap();
-  if (active && active.id !== id && !active.persistent) {
-    unregisterPMTilesArchive(active.archiveKey);
-    evictOfflineBasemapStyle(active.id);
-  }
-  setActiveStyledBasemap({ id, archiveKey, persistent });
-}
-
-/** Frees a styled basemap's archive/style if it is the active one (e.g. on
- * delete), so nothing keeps its bytes resident after it's gone. */
-function forgetStyledBasemap(id: string): void {
-  const active = activeStyledBasemap();
-  if (active?.id !== id) return;
-  unregisterPMTilesArchive(active.archiveKey);
-  evictOfflineBasemapStyle(id);
-  setActiveStyledBasemap(null);
-}
-
-/** A layer/file base name from the archive URL, e.g. "planet" for
- * `https://host/planet.pmtiles`. */
-function baseNameFromUrl(url: string): string {
-  try {
-    const path = new URL(url).pathname;
-    const base = path.split("/").filter(Boolean).pop() ?? "basemap";
-    return base.replace(/\.pmtiles$/i, "") || "basemap";
-  } catch {
-    return "basemap";
-  }
-}
 
 /**
  * A floating, draggable panel that extracts a bbox/zoom subset of a remote
@@ -483,12 +322,7 @@ export function BasemapExtractPanel({
   }, []);
 
   const bbox = useMemo(() => parseBbox(coords), [coords]);
-  const bboxInvalid =
-    bbox === null &&
-    coords.west !== "" &&
-    coords.south !== "" &&
-    coords.east !== "" &&
-    coords.north !== "";
+  const bboxInvalid = isBboxInvalid(coords);
 
   const clearStatus = useCallback(() => {
     setSuccess(null);
@@ -496,21 +330,16 @@ export function BasemapExtractPanel({
   }, []);
 
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<PanelPos | null>(null);
-  // Explicit size, null until first resized (the responsive default applies).
-  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
-  const resizeStart = useRef<{
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    // Parent-relative top-start corner (the panel is absolute within MapGrid),
-    // matching the drag coordinate system so pinning doesn't jump.
-    left: number;
-    top: number;
-    parentW: number;
-    parentH: number;
-  } | null>(null);
+  const {
+    pos,
+    setPos,
+    size,
+    setSize,
+    handleDragStart,
+    handleResizeStart,
+    handleResizeMove,
+    handleResizeEnd,
+  } = useFloatingPanelGeometry(panelRef, PANEL_LIMITS);
 
   // Cancels an in-flight extraction when the panel closes or a new run starts.
   const abortRef = useRef<AbortController | null>(null);
@@ -550,15 +379,14 @@ export function BasemapExtractPanel({
     // remembered *custom* URL. A remembered proxy URL — including an old dated
     // one saved before the `latest` default — defers to `latest` so the default
     // never pins a stale date; only a different host is restored.
-    let seededUrl = DEFAULT_ARCHIVE_URL;
+    let stored: string | null = null;
     try {
-      const stored = localStorage.getItem(URL_STORAGE_KEY);
-      if (stored && !stored.startsWith(PLANET_PROXY_PREFIX)) seededUrl = stored;
+      stored = localStorage.getItem(URL_STORAGE_KEY);
     } catch {
       // Storage may be unavailable (private mode); keep the default.
     }
-    setUrl(seededUrl);
-  }, [open]);
+    setUrl(seededArchiveUrl(stored));
+  }, [open, setPos, setSize]);
 
   // Keep the SVG overlay's corner positions in sync with the camera. Rendered
   // as an SVG so it sits above any deck.gl overlay, and projected through the
@@ -613,121 +441,9 @@ export function BasemapExtractPanel({
     [clearStatus],
   );
 
-  // Dragging the panel by its header. Mirrors the Raster Subset panel.
-  const handleDragStart = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if ((event.target as HTMLElement).closest("button")) return;
-      event.preventDefault();
-      const el = panelRef.current;
-      const parent = (el?.offsetParent as HTMLElement | null) ?? el?.parentElement ?? null;
-      const pb = parent?.getBoundingClientRect();
-      const eb = el?.getBoundingClientRect();
-      const start: PanelPos = pos ?? {
-        x: (eb?.left ?? 0) - (pb?.left ?? 0),
-        y: (eb?.top ?? 0) - (pb?.top ?? 0),
-      };
-      if (!pos) setPos(start);
-      const handle = event.currentTarget;
-      handle.setPointerCapture(event.pointerId);
-      const startX = event.clientX;
-      const startY = event.clientY;
-      const w = eb?.width ?? PANEL_DEFAULT_W;
-      const h = eb?.height ?? 0;
-      const move = (m: PointerEvent) => {
-        if (!panelRef.current) return;
-        const bounds = parent?.getBoundingClientRect();
-        const maxX = bounds ? bounds.width - w - PANEL_MARGIN : Number.POSITIVE_INFINITY;
-        const maxY = bounds ? bounds.height - h - PANEL_MARGIN : Number.POSITIVE_INFINITY;
-        setPos({
-          x: clamp(start.x + (m.clientX - startX), 0, Math.max(0, maxX)),
-          y: clamp(start.y + (m.clientY - startY), 0, Math.max(0, maxY)),
-        });
-      };
-      const end = () => {
-        if (handle.hasPointerCapture(event.pointerId))
-          handle.releasePointerCapture(event.pointerId);
-        handle.removeEventListener("pointermove", move);
-        handle.removeEventListener("pointerup", end);
-        handle.removeEventListener("pointercancel", end);
-      };
-      handle.addEventListener("pointermove", move);
-      handle.addEventListener("pointerup", end);
-      handle.addEventListener("pointercancel", end);
-    },
-    [pos],
-  );
-
-  // Resize from the bottom-end grip. Pins the top-start corner so the panel
-  // grows toward the grip, clamped to a usable minimum and the room to the
-  // viewport edge. Mirrors the Processing dialog's resize.
-  const handleResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    event.stopPropagation();
-    const el = panelRef.current;
-    if (!el) return;
-    const parent = (el.offsetParent as HTMLElement | null) ?? el.parentElement ?? null;
-    const pb = parent?.getBoundingClientRect();
-    const eb = el.getBoundingClientRect();
-    const left = eb.left - (pb?.left ?? 0);
-    const top = eb.top - (pb?.top ?? 0);
-    // Pin the top-start corner (parent-relative) so the panel grows toward the
-    // grip without jumping.
-    setPos({ x: left, y: top });
-    resizeStart.current = {
-      x: event.clientX,
-      y: event.clientY,
-      w: eb.width,
-      h: eb.height,
-      left,
-      top,
-      parentW: pb?.width ?? window.innerWidth,
-      parentH: pb?.height ?? window.innerHeight,
-    };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }, []);
-
-  const handleResizeMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    const start = resizeStart.current;
-    if (!start) return;
-    // In an RTL layout the grip renders on the physical left, so the drag
-    // delta is inverted and the room to the edge is measured to the left. Pin
-    // the physical right edge by shifting `pos.x` as the width changes.
-    const isRtl = document.documentElement.dir === "rtl";
-    const availW = isRtl
-      ? start.left + start.w - PANEL_MARGIN
-      : start.parentW - start.left - PANEL_MARGIN;
-    const availH = start.parentH - start.top - PANEL_MARGIN;
-    const deltaX = event.clientX - start.x;
-    const newW = clamp(
-      start.w + (isRtl ? -deltaX : deltaX),
-      Math.min(PANEL_MIN_W, availW),
-      Math.max(PANEL_MIN_W, availW),
-    );
-    if (isRtl) setPos({ x: start.left + start.w - newW, y: start.top });
-    setSize({
-      w: newW,
-      h: clamp(
-        start.h + (event.clientY - start.y),
-        Math.min(PANEL_MIN_H, availH),
-        Math.max(PANEL_MIN_H, availH),
-      ),
-    });
-  }, []);
-
-  const handleResizeEnd = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    resizeStart.current = null;
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-  }, []);
-
   const minZoomValue = Number(minZoom);
   const maxZoomValue = Number(maxZoom);
-  const zoomInvalid =
-    minZoom === "" ||
-    maxZoom === "" ||
-    !Number.isInteger(minZoomValue) ||
-    !Number.isInteger(maxZoomValue) ||
-    minZoomValue < 0 ||
-    maxZoomValue > 30 ||
-    minZoomValue > maxZoomValue;
+  const zoomInvalid = isZoomRangeInvalid(minZoom, maxZoom);
 
   const urlValue = url.trim();
   const running = phase === "running" || nativeMbtiles.busy;
@@ -762,16 +478,13 @@ export function BasemapExtractPanel({
     if (!bbox || zoomInvalid) return;
     setApplyingId(null);
     clearStatus();
-    if (minZoomValue > Math.min(24, useAppStore.getState().preferences.map.maxZoom)) {
+    const requestedZoomError = packageZoomErrorKey(
+      minZoomValue,
+      useAppStore.getState().preferences.map.maxZoom,
+    );
+    if (requestedZoomError) {
       applicationRequests.invalidate();
-      setError(
-        t(
-          minZoomValue > 24
-            ? "basemapExtract.errorPackageZoomUnsupported"
-            : "basemapExtract.errorPackageZoom",
-          { zoom: minZoomValue },
-        ),
-      );
+      setError(t(requestedZoomError, { zoom: minZoomValue }));
       return;
     }
     const completed = await nativeMbtiles.extract(
@@ -786,15 +499,13 @@ export function BasemapExtractPanel({
     if (completed.signal.aborted || !completed.request.isCurrent()) return;
     try {
       const { package: entry, sourceLayers, tileFormat } = completed.result;
-      if (entry.minZoom > Math.min(24, useAppStore.getState().preferences.map.maxZoom))
-        throw new Error(
-          t(
-            entry.minZoom > 24
-              ? "basemapExtract.errorSavedPackageZoomUnsupported"
-              : "basemapExtract.errorSavedPackageZoom",
-            { name: entry.name, zoom: entry.minZoom },
-          ),
-        );
+      const savedZoomError = packageZoomErrorKey(
+        entry.minZoom,
+        useAppStore.getState().preferences.map.maxZoom,
+        true,
+      );
+      if (savedZoomError)
+        throw new Error(t(savedZoomError, { name: entry.name, zoom: entry.minZoom }));
       if (entry.tileType === "raster" || entry.flavor != null) {
         setBasemapStyleUrl(
           nativeOfflineBasemapStyleUrl(entry, (entry.flavor as ProtomapsFlavor | null) ?? "light"),
@@ -1058,15 +769,11 @@ export function BasemapExtractPanel({
         if (entry.managed) {
           const verified = await verifyNativeOfflinePackage(entry.id);
           if (!request.isCurrent()) return;
-          if (verified.minZoom > Math.min(24, useAppStore.getState().preferences.map.maxZoom))
-            throw new Error(
-              t(
-                verified.minZoom > 24
-                  ? "basemapExtract.errorPackageZoomUnsupported"
-                  : "basemapExtract.errorPackageZoom",
-                { zoom: verified.minZoom },
-              ),
-            );
+          const zoomError = packageZoomErrorKey(
+            verified.minZoom,
+            useAppStore.getState().preferences.map.maxZoom,
+          );
+          if (zoomError) throw new Error(t(zoomError, { zoom: verified.minZoom }));
           if (
             verified.archiveFormat === "mbtiles" &&
             verified.tileType === "vector" &&
@@ -1291,10 +998,7 @@ export function BasemapExtractPanel({
     t,
   ]);
 
-  const percent =
-    progress && progress.dataBytesTotal > 0
-      ? Math.round((progress.dataBytesReceived / progress.dataBytesTotal) * 100)
-      : 0;
+  const percent = extractProgressPercent(progress);
   const phaseLabel =
     progress?.phase === "data"
       ? t("basemapExtract.phaseData")
