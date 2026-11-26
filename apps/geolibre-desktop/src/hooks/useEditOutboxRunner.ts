@@ -2,8 +2,7 @@ import { useEffect } from "react";
 
 /**
  * Start the offline edit outbox's background sync (#3530) for the life of the
- * app, independent of whether the status bar indicator is visible. Backends
- * pull in service clients, so they load off the boot path.
+ * app, independent of whether the status bar indicator is visible.
  */
 export function useEditOutboxRunner(): void {
   useEffect(() => {

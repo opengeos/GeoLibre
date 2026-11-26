@@ -11,7 +11,10 @@
 import {
   applyConflictResolutions,
   EditSyncError,
+  EditSyncOfflineError,
+  EditSyncWaitingError,
   mergeChangeSet,
+  retryDelayMs,
   syncOutboxEntry,
   type EditSyncAdapter,
   type EditSyncBackend,
@@ -229,20 +232,27 @@ export function syncOutboxEntryNow(
       const adapter = await handler.createAdapter(entry);
       outcome = await syncOutboxEntry(entry, adapter, { onDispatch: putOutboxEntry });
     } catch (error) {
-      // The adapter could not be built (credentials missing): the user must act.
+      // The adapter could not be built: either it is waiting on something that
+      // resolves itself (credentials still loading, its layer not open), or
+      // credentials are missing and the user must act.
       const message = error instanceof Error ? error.message : String(error);
+      const waiting =
+        error instanceof EditSyncWaitingError || error instanceof EditSyncOfflineError;
+      const at = Date.now();
+      const attempts = waiting ? entry.attempts + 1 : entry.attempts;
       const failed: OutboxEntry = {
         ...entry,
-        status: "error",
+        status: waiting ? "pending" : "error",
+        attempts,
         lastError: message,
         lastErrorCode: error instanceof EditSyncError ? error.code : undefined,
-        lastAttemptAt: Date.now(),
-        nextAttemptAt: undefined,
-        updatedAt: Date.now(),
+        lastAttemptAt: at,
+        nextAttemptAt: waiting ? at + retryDelayMs(attempts) : undefined,
+        updatedAt: at,
       };
       await putOutboxEntry(failed);
       return {
-        kind: "error",
+        kind: waiting ? "offline" : "error",
         entry: failed,
         inserted: 0,
         updated: 0,

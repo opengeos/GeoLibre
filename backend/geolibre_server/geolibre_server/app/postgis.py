@@ -617,13 +617,14 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
 
     submitted = request.geojson.get("features") if request.geojson else None
     # A delete-only change set from the offline edit outbox (it sends just the
-    # changed features, with row hashes for every row it deletes) is a valid
+    # changed features, with a row hash for every row it deletes) is a valid
     # save: the diff deletes exactly those rows. Any other empty payload stays
     # an error, so the direct save still refuses to empty a table.
     features = (
         []
         if request.baseline_keys
         and request.expected_row_hashes
+        and all(str(key) in request.expected_row_hashes for key in request.baseline_keys)
         and isinstance(submitted, list)
         and not submitted
         else require_features(request.geojson)

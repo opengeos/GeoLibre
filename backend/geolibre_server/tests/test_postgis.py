@@ -218,15 +218,18 @@ def test_connect_refusal_by_the_server_stays_a_client_error(monkeypatch) -> None
 
 @requires_psycopg
 def test_write_still_refuses_an_empty_direct_save() -> None:
-    request = PostgisWriteRequest(
-        connection="postgresql://localhost/ignored",
-        table=TABLE,
-        geojson=_collection([]),
-        baseline_keys=[1, 2],
-    )
-    with pytest.raises(HTTPException) as exc:
-        postgis_write(request)
-    assert exc.value.status_code == 400
+    # No hashes (the direct save), or a hash missing for one deleted row.
+    for hashes in (None, {"1": "a"}):
+        request = PostgisWriteRequest(
+            connection="postgresql://localhost/ignored",
+            table=TABLE,
+            geojson=_collection([]),
+            baseline_keys=[1, 2],
+            expected_row_hashes=hashes,
+        )
+        with pytest.raises(HTTPException) as exc:
+            postgis_write(request)
+        assert exc.value.status_code == 400
 
 
 def test_server_not_ready_is_retryable() -> None:

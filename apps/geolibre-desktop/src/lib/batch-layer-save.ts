@@ -628,7 +628,7 @@ export async function writeLayerEditsToSource(
         const saveOutbox = deps?.saveOutbox ?? defaultSaveOutbox;
         return await saveOutbox(
           {
-            id: postgisOutboxId(target),
+            id: postgisOutboxId(target, layer.id),
             backend: "postgis",
             target,
             targetLabel: `${target.schema}.${target.table}`,

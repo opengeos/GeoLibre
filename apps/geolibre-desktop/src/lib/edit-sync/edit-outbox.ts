@@ -200,6 +200,15 @@ export class EditSyncConflictRaceError extends EditSyncError {
   override readonly name = "EditSyncConflictRaceError";
 }
 
+/**
+ * The entry cannot sync yet for a reason that resolves on its own, such as
+ * credentials that are still loading or a layer (which holds them) that is not
+ * open. Retried later without being reported as a failure.
+ */
+export class EditSyncWaitingError extends EditSyncError {
+  override readonly name = "EditSyncWaitingError";
+}
+
 /** The source refused the write for a reason a retry will not fix. */
 export class EditSyncRejectedError extends EditSyncError {
   override readonly name = "EditSyncRejectedError";

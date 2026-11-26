@@ -41,6 +41,7 @@ import {
   EditSyncOfflineError,
   EditSyncRejectedError,
   EditSyncUncertainError,
+  EditSyncWaitingError,
   type ApplyResult,
   type EditSyncAdapter,
   type OutboxEntry,
@@ -69,6 +70,11 @@ export interface PostgisOutboxTarget {
   /** Password-masked label of the connection the layer was read with. */
   connectionLabel: string;
   capabilities?: { create: boolean; update: boolean; delete: boolean };
+  /**
+   * The largest key in the base when every key is numeric: a lost insert is
+   * looked for only above it, never among rows that existed at load.
+   */
+  maxBaseKey?: number;
 }
 
 /**
@@ -131,16 +137,29 @@ export function postgisOutboxTarget(layer: GeoLibreLayer): PostgisOutboxTarget |
     connectionLabel:
       typeof metadata.postgisConnectionLabel === "string" ? metadata.postgisConnectionLabel : "",
     capabilities: { create: caps.create, update: caps.update, delete: caps.delete },
+    ...maxNumericKey(layer),
   };
 }
 
-/** Outbox entry id for a PostGIS table; one entry per table and connection. */
-export function postgisOutboxId(target: PostgisOutboxTarget): string {
+/** The largest base key when all are numeric (serial keys only grow). */
+function maxNumericKey(layer: GeoLibreLayer): { maxBaseKey?: number } {
+  const keys = databaseBaselineKeys(layer, "postgisBaselineKeys");
+  if (!keys?.length || !keys.every((key) => typeof key === "number")) return {};
+  return { maxBaseKey: Math.max(...(keys as number[])) };
+}
+
+/**
+ * Outbox entry id for a PostGIS layer: one entry per table, connection and
+ * layer. Two layers on the same table each diff against their own base, so
+ * one layer's change set never replaces the other's queued edits.
+ */
+export function postgisOutboxId(target: PostgisOutboxTarget, layerId: string): string {
   return `postgis:${JSON.stringify([
     target.connectionLabel,
     target.schema,
     target.table,
     target.geometryColumn ?? "",
+    layerId,
   ])}`;
 }
 
@@ -208,9 +227,20 @@ export function buildPostgisChangeSet(
     const id = featureIdKey(feature);
     return id !== null && baseline.has(id) && !columnKeys.has(id) ? id : null;
   };
+  // Give a feature recovered through its id its key column back, so its
+  // fingerprint matches the base and the server's row (both carry it).
+  const features = geojson.features.map((feature) => {
+    if (byColumn(feature) !== null) return feature;
+    const key = keyOf(feature);
+    if (key === null) return feature;
+    return {
+      ...feature,
+      properties: { ...(feature.properties ?? {}), [primaryKey]: typedKeys.get(key) ?? key },
+    };
+  });
   return buildChangeSet({
     baseline,
-    features: geojson.features,
+    features,
     keyOf,
     rawKeyOf: (feature) => {
       const raw = postgisRawKeyOf(primaryKey)(feature);
@@ -307,7 +337,9 @@ export function createPostgisSyncAdapter(
   const target = entry.target as PostgisOutboxTarget;
   const connection = (deps.resolveConnection ?? resolveEntryConnection)(entry);
   if (!connection) {
-    throw new EditSyncRejectedError(
+    // Saved connections may still be loading from the keychain at startup, so
+    // wait and retry instead of failing; the dialog says how to reconnect.
+    throw new EditSyncWaitingError(
       "No PostgreSQL connection is available for this table.",
       "postgisNoConnection",
     );
@@ -343,8 +375,14 @@ export function createPostgisSyncAdapter(
       const insertMatches = new Map<string, string>();
       if (maybeApplied.length) {
         const referenced = new Set(entry.ops.map((op) => op.key).filter(Boolean));
+        // Rows that existed when the layer was loaded are not new inserts.
+        const above = typeof target.maxBaseKey === "number" ? target.maxBaseKey : undefined;
         const candidates = new Map<string, Feature>();
-        for (const [key, feature] of rows) if (!referenced.has(key)) candidates.set(key, feature);
+        for (const [key, feature] of rows) {
+          if (referenced.has(key)) continue;
+          if (above !== undefined && !(Number(key) > above)) continue;
+          candidates.set(key, feature);
+        }
         for (const op of maybeApplied) {
           if (!op.feature) continue;
           const wanted = contentFingerprint(op.feature);
@@ -438,7 +476,7 @@ export async function refreshPostgisLayerAfterSync(
   const layer = getLayer(entry.layerId);
   if (!layer) return false;
   const current = postgisOutboxTarget(layer);
-  if (!current || postgisOutboxId(current) !== entry.id) return false;
+  if (!current || postgisOutboxId(current, entry.layerId) !== entry.id) return false;
   const connection = (deps.resolveConnection ?? resolveEntryConnection)(entry);
   if (!connection) return false;
   const fresh = await read({
@@ -451,7 +489,7 @@ export async function refreshPostgisLayerAfterSync(
   if (!live?.geojson) return false;
   // The layer may have been pointed elsewhere while the table was read.
   const after = postgisOutboxTarget(live);
-  if (!after || postgisOutboxId(after) !== entry.id) return false;
+  if (!after || postgisOutboxId(after, entry.layerId) !== entry.id) return false;
   // Everything the layer holds that its old base does not: the edits this
   // sync sent, edits still queued, and edits made since the save (possibly
   // while this sync ran in the background). Only the ones this sync settled
@@ -532,6 +570,10 @@ export function overlayLocalOps(
   for (const op of ops) {
     if (op.kind === "update" && op.key !== null && op.feature) replaced.set(op.key, op.feature);
     else if (op.kind === "delete" && op.key !== null) deleted.add(op.key);
+    // A keyed insert waiting on a conflict shows in place of the server's row
+    // under that key, never as a second feature with the same key.
+    else if (op.kind === "insert" && op.key !== null && op.feature)
+      replaced.set(op.key, op.feature);
     else if (op.kind === "insert" && op.feature) inserts.push(op.feature);
   }
   const features: Feature[] = [];
@@ -558,7 +600,7 @@ export const postgisEditSyncHandler: EditSyncBackendHandler = {
     } catch {
       // The edits landed but the layer still shows the old base, so a new
       // save would send its inserts again: block saving until it reloads.
-      markPostgisRefreshRequired(entry.layerId);
+      markPostgisRefreshRequired(entry);
     }
   },
 };
@@ -568,12 +610,16 @@ export const postgisEditSyncHandler: EditSyncBackendHandler = {
  * until it is reloaded (or a later sync refreshes it), so its inserts are not
  * sent twice.
  *
- * @param layerId The layer.
+ * @param entry The synced entry.
  */
-export function markPostgisRefreshRequired(layerId: string): void {
+export function markPostgisRefreshRequired(entry: OutboxEntry): void {
+  const layerId = entry.layerId;
   const store = useAppStore.getState();
   const layer = store.layers.find((candidate) => candidate.id === layerId);
   if (!layer) return;
+  // Only while the layer still points at the table that was written.
+  const target = postgisOutboxTarget(layer);
+  if (!target || postgisOutboxId(target, layerId) !== entry.id) return;
   store.updateLayer(layerId, {
     metadata: { ...layer.metadata, [EDIT_SYNC_REFRESH_REQUIRED_KEY]: true },
   });

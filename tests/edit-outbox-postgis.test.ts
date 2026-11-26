@@ -165,7 +165,7 @@ function entryFor(layer: GeoLibreLayer, features: Feature[]): OutboxEntry {
   const target = postgisOutboxTarget(layer)!;
   const ops = buildPostgisChangeSet(layer, { type: "FeatureCollection", features })!;
   return {
-    id: postgisOutboxId(target),
+    id: postgisOutboxId(target, layer.id),
     backend: "postgis",
     target,
     targetLabel: "public.parcels",
@@ -198,7 +198,8 @@ describe("PostGIS outbox target", () => {
     assert.equal(target.primaryKey, "gid");
     assert.ok(!JSON.stringify(target).includes("secret"));
     assert.ok(hasPostgisSyncBaseline(layer));
-    assert.equal(postgisOutboxId(target), postgisOutboxId(postgisOutboxTarget(layer)!));
+    assert.equal(postgisOutboxId(target, "a"), postgisOutboxId(postgisOutboxTarget(layer)!, "a"));
+    assert.notEqual(postgisOutboxId(target, "a"), postgisOutboxId(target, "b"));
     const legacy = {
       ...layer,
       metadata: { ...layer.metadata, [EDIT_SYNC_BASELINE_KEY]: undefined },

@@ -527,6 +527,7 @@ describe("writeLayerEditsToSource and saveLayerEditsBatch", () => {
       },
     });
     assert.equal(res.status, "error");
+    assert.equal(res.message, "layers.saveEditsPostgisRefreshWarning");
     assert.equal(queued, false);
   });
 
