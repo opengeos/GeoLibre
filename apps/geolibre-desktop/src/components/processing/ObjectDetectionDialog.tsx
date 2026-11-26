@@ -43,8 +43,35 @@ import {
 } from "../../lib/object-detection-photo";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 
+/** The decoders, model runtime and file picker the dialog drives; tests substitute their own. */
+export interface ObjectDetectionServices {
+  isOrtAvailable: typeof isOrtAvailable;
+  readRasterData: typeof readRasterData;
+  readDetectionImage: typeof readDetectionImage;
+  readPhotoLocation: typeof readPhotoLocation;
+  fetchDetectionModel: typeof fetchDetectionModel;
+  detectObjects: typeof detectObjects;
+  openLocalDataFile: typeof openLocalDataFileWithFallback;
+  /** Reproject GeoTIFF detections to WGS84; loads DuckDB on first use. */
+  reprojectToWgs84: (collection: FeatureCollection) => Promise<FeatureCollection>;
+}
+
+const DEFAULT_DETECTION_SERVICES: ObjectDetectionServices = {
+  isOrtAvailable,
+  readRasterData,
+  readDetectionImage,
+  readPhotoLocation,
+  fetchDetectionModel,
+  detectObjects,
+  openLocalDataFile: openLocalDataFileWithFallback,
+  reprojectToWgs84: async (collection) =>
+    (await import("../../lib/duckdb-vector-loader")).reprojectFeatureCollectionToWgs84(collection),
+};
+
 interface ObjectDetectionDialogProps {
   mapControllerRef: React.RefObject<MapEngine | null>;
+  /** Replaces the decoders, ONNX runtime and file picker; tests only. */
+  services?: ObjectDetectionServices;
 }
 
 const IMAGE_EXTENSIONS = ["tif", "tiff", ...DETECTION_PHOTO_EXTENSIONS];
@@ -177,6 +204,7 @@ function detectionsToFeatureCollection(
  */
 export function ObjectDetectionDialog({
   mapControllerRef,
+  services = DEFAULT_DETECTION_SERVICES,
 }: ObjectDetectionDialogProps): ReactElement | null {
   const { t } = useTranslation();
   const open = useAppStore((s) => s.ui.objectDetectionOpen);
@@ -187,7 +215,7 @@ export function ObjectDetectionDialog({
   const [imageName, setImageName] = useState("");
   // Inference always goes through onnxruntime-web, which cannot load in a
   // no-external-CDN build — a user-supplied .onnx does not help.
-  const ortAvailable = isOrtAvailable();
+  const ortAvailable = services.isOrtAvailable();
 
   // Default to a built-in model so detection works out of the box with no file.
   // A build with external CDNs disabled ships no built-ins (the weights are
@@ -275,7 +303,7 @@ export function ObjectDetectionDialog({
   }, [open]);
 
   const pickImage = useCallback(async () => {
-    const result = await openLocalDataFileWithFallback({
+    const result = await services.openLocalDataFile({
       filters: IMAGE_FILTERS,
       accept: IMAGE_ACCEPT,
       readBinary: true,
@@ -285,10 +313,10 @@ export function ObjectDetectionDialog({
       const name = (result.path || "image.tif").split(/[/\\]/).pop();
       setImageName(name || "image.tif");
     }
-  }, []);
+  }, [services]);
 
   const pickModel = useCallback(async () => {
-    const result = await openLocalDataFileWithFallback({
+    const result = await services.openLocalDataFile({
       filters: MODEL_FILTERS,
       accept: MODEL_ACCEPT,
       readBinary: true,
@@ -302,7 +330,7 @@ export function ObjectDetectionDialog({
       // the field falls back to class_<index> until the user fills it in.
       setClassNames("");
     }
-  }, []);
+  }, [services]);
 
   // Picking a built-in model prefills the class names with that model's labels
   // (in output order) so detections come out named without any typing.
@@ -341,8 +369,8 @@ export function ObjectDetectionDialog({
       if (isPhoto) {
         const mimeType = detectionPhotoMimeType(imageName);
         const [decoded, location] = await Promise.all([
-          readDetectionImage(imageBytes, mimeType),
-          readPhotoLocation(new Blob([imageBytes], { type: mimeType })),
+          services.readDetectionImage(imageBytes, mimeType),
+          services.readPhotoLocation(new Blob([imageBytes], { type: mimeType })),
         ]);
         if (!location) {
           setError(t("objectDetection.error.photoLocation"));
@@ -351,7 +379,7 @@ export function ObjectDetectionDialog({
         raster = decoded;
         photoLocation = location;
       } else {
-        raster = await readRasterData(imageBytes);
+        raster = await services.readRasterData(imageBytes);
       }
 
       // Resolve the model bytes: download (and cache) the chosen built-in model,
@@ -365,7 +393,7 @@ export function ObjectDetectionDialog({
         }
         setDownloading(true);
         try {
-          modelData = await fetchDetectionModel(model.url);
+          modelData = await services.fetchDetectionModel(model.url);
         } catch {
           setError(t("objectDetection.error.downloadModel"));
           return;
@@ -377,7 +405,7 @@ export function ObjectDetectionDialog({
         setError(t("objectDetection.error.chooseModel"));
         return;
       }
-      const detections = await detectObjects(raster, modelData, {
+      const detections = await services.detectObjects(raster, modelData, {
         inputSize,
         confidenceThreshold: confidence,
         iouThreshold: iou,
@@ -392,11 +420,7 @@ export function ObjectDetectionDialog({
         .filter(Boolean);
       const fc = photoLocation
         ? detectionsToPhotoFeatureCollection(detections, photoLocation, names, imageName)
-        : await (
-            await import("../../lib/duckdb-vector-loader")
-          ).reprojectFeatureCollectionToWgs84(
-            detectionsToFeatureCollection(detections, raster, names),
-          );
+        : await services.reprojectToWgs84(detectionsToFeatureCollection(detections, raster, names));
       // Split by class so each class becomes its own layer (issue #902:
       // "classes can be created as layers").
       const byClass = new Map<string, Feature[]>();
@@ -470,6 +494,7 @@ export function ObjectDetectionDialog({
     classNames,
     addGeoJsonLayer,
     mapControllerRef,
+    services,
     t,
   ]);
 
