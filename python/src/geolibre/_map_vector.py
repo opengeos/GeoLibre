@@ -387,9 +387,9 @@ class _MapVectorMixin:
                 # non-public hosts up front, re-check every redirect hop through
                 # the shared opener, and bound the response. read(limit + 1)
                 # detects an over-limit body without buffering the whole thing.
-                # Read through project.fetch, the module that defines them, so
-                # the security check has one binding site: a patch of
-                # project.fetch reaches this path and load_featurecollection alike.
+                # Read through project.fetch, the module that defines them, so a
+                # patch of project.fetch reaches this CSV path and
+                # load_featurecollection alike.
                 _fetch._assert_public_url(source)
                 try:
                     with _fetch._GEOJSON_OPENER.open(  # noqa: S310 - user URL
