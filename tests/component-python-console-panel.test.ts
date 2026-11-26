@@ -23,11 +23,12 @@ function fakeRuntime(options: { initFails?: string; manualStart?: boolean } = {}
         progress = null;
       };
     },
-    initConsoleRuntime: (async () => {
+    initConsoleRuntime: async () => {
       await started;
       if (options.initFails) throw new Error(options.initFails);
-      return {};
-    }) as unknown as Runtime["initConsoleRuntime"],
+      // The panel only awaits start-up; it never touches the runtime object.
+      return {} as Awaited<ReturnType<Runtime["initConsoleRuntime"]>>;
+    },
     runConsoleCode: async (_deps, source) => {
       ran.push(source);
       if (source.includes("boom"))
@@ -46,6 +47,8 @@ function renderConsole(runtime: Runtime) {
 
 const input = () => screen.getByPlaceholderText(/Python here/) as HTMLTextAreaElement;
 const text = () => document.body.textContent ?? "";
+/** Whether an output entry reads exactly `line`, so the echoed input cannot match. */
+const hasOutput = (line: string) => screen.queryAllByText(line, { exact: true }).length > 0;
 
 /** Wait until Run is enabled for typed code, which needs a started runtime. */
 async function ready() {
@@ -74,7 +77,7 @@ describe("PythonConsolePanel", () => {
     assert.ok(!text().includes("Loading Pyodide…"));
 
     submit("  geolibre.get_center()  ");
-    await waitFor(() => assert.ok(text().includes(">> geolibre.get_center()")));
+    await waitFor(() => assert.ok(hasOutput(">> geolibre.get_center()")));
     assert.deepEqual(ran, ["geolibre.get_center()"]);
     assert.equal(input().value, "");
   });
@@ -92,9 +95,9 @@ describe("PythonConsolePanel", () => {
     renderConsole(runtime);
     await ready();
     submit("a = 1");
-    await waitFor(() => assert.ok(text().includes(">> a = 1")));
+    await waitFor(() => assert.ok(hasOutput(">> a = 1")));
     submit("b = 2");
-    await waitFor(() => assert.ok(text().includes(">> b = 2")));
+    await waitFor(() => assert.ok(hasOutput(">> b = 2")));
     fireEvent.change(input(), { target: { value: "draft" } });
     fireEvent.keyDown(input(), { key: "ArrowUp" });
     assert.equal(input().value, "b = 2");
@@ -119,9 +122,9 @@ describe("PythonConsolePanel", () => {
     renderConsole(runtime);
     await ready();
     submit("x = 3");
-    await waitFor(() => assert.ok(text().includes(">> x = 3")));
+    await waitFor(() => assert.ok(hasOutput(">> x = 3")));
     fireEvent.click(screen.getByTitle("Clear output"));
-    assert.ok(!text().includes(">> x = 3"));
+    assert.ok(!hasOutput(">> x = 3"));
     fireEvent.click(screen.getByTitle("Close Python console"));
     assert.equal(useAppStore.getState().ui.pythonConsoleOpen, false);
   });

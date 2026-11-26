@@ -250,13 +250,6 @@ const selectSqlTableSources = () =>
     layer.geojson ? { id: layer.id, name: layer.name, geojson: layer.geojson } : null,
   );
 
-/**
- * The in-app SQL Workspace: a bottom-docked, resizable panel (à la the Python
- * Console) that runs DuckDB / PostGIS / Apache Sedona SQL against loaded layers,
- * local files, and URLs. Results render beside the editor so a query gives
- * immediate feedback, and the editor autocompletes layer tables, columns, SQL
- * keywords, and spatial functions. Rendered only while open.
- */
 /** The query engines and file save the workspace drives; tests substitute their own. */
 export interface SqlWorkspaceServices {
   runSqlQuery: typeof runSqlQuery;
@@ -274,6 +267,13 @@ const DEFAULT_SQL_SERVICES: SqlWorkspaceServices = {
   saveBinaryFile: saveBinaryFileWithFallback,
 };
 
+/**
+ * The in-app SQL Workspace: a bottom-docked, resizable panel (à la the Python
+ * Console) that runs DuckDB / PostGIS / Apache Sedona SQL against loaded layers,
+ * local files, and URLs. Results render beside the editor so a query gives
+ * immediate feedback, and the editor autocompletes layer tables, columns, SQL
+ * keywords, and spatial functions. Rendered only while open.
+ */
 export function SqlWorkspacePanel({
   services = DEFAULT_SQL_SERVICES,
 }: {
