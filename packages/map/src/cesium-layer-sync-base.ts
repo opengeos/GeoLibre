@@ -1,6 +1,5 @@
 // Base layer of CesiumLayerSync: engine handles, dependencies and entry state.
-// The class is split across modules as an inheritance chain (base, selection,
-// appearance, imagery, entries, then CesiumLayerSync); see cesium-layer-sync.ts.
+// The CesiumLayerSync layer chain is documented in cesium-layer-sync.ts.
 
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";

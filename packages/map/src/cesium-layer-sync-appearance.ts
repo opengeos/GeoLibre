@@ -1,6 +1,5 @@
 // CesiumLayerSync layer: in-place style, filter and appearance updates.
-// The class is split across modules as an inheritance chain (base, selection,
-// appearance, imagery, entries, then CesiumLayerSync); see cesium-layer-sync.ts.
+// The CesiumLayerSync layer chain is documented in cesium-layer-sync.ts.
 
 import { i3sGroundOffset, DEFAULT_LAYER_STYLE, extrusionColorValue } from "@geolibre/core";
 import { imageryColorAdjustments } from "./raster-color-adjustments";
