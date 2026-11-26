@@ -29,6 +29,7 @@ export type RasterToolId =
   | "speckle-filter"
   | "sar-rgb"
   | "flood-map"
+  | "cut-fill"
   | "building-shadows";
 
 /** A native file-dialog filter (Tauri `open`/`save` shape). */
@@ -1158,6 +1159,82 @@ export const floodMapTool: RasterTool = {
   ],
 };
 
+export const cutFillTool: RasterTool = {
+  id: "cut-fill",
+  name: "Cut and fill volume",
+  description:
+    "Compare an existing surface with a reference plane or a second surface on the same grid, optionally inside a boundary polygon. Reports cut, fill and net volume (m³) and their areas, and writes the difference raster (existing - reference; positive = cut, negative = fill).",
+  group: "3D Terrain",
+  outputKind: "raster",
+  defaultOutputName: "cut-fill.tif",
+  inputFilters: GEOTIFF_INPUT,
+  outputFilters: GEOTIFF_OUTPUT,
+  inputLabel: "toolbar.rasterTool.inputExistingSurface",
+  supportsClient: true,
+  clientOnly: true,
+  parameters: [
+    {
+      id: "reference",
+      label: "Reference",
+      type: "select",
+      default: "plane",
+      options: [
+        { value: "plane", label: "Plane at a fixed elevation" },
+        { value: "surface", label: "Second surface (design or later survey)" },
+      ],
+    },
+    {
+      id: "plane_elevation",
+      label: "Plane elevation",
+      type: "number",
+      required: true,
+      default: 0,
+      step: 0.1,
+      visibleWhen: { param: "reference", in: ["plane"] },
+      description: "Elevation of the reference plane, in the raster's elevation units.",
+    },
+    {
+      id: "surface_path",
+      label: "Reference surface",
+      type: "path",
+      required: true,
+      fileFilters: GEOTIFF_INPUT,
+      visibleWhen: { param: "reference", in: ["surface"] },
+      description:
+        "A design surface or later survey on the same pixel grid as the existing surface (reproject or resample it first if needed).",
+    },
+    {
+      id: "boundary_path",
+      label: "Boundary polygon (optional)",
+      type: "path",
+      fileFilters: GEOJSON_INPUT,
+      description:
+        "Only cells whose centres fall inside these polygons are counted, and the output is cropped to them.",
+    },
+    {
+      id: "band",
+      label: "Band",
+      type: "number",
+      default: 1,
+      min: 1,
+      max: 99,
+      step: 1,
+    },
+    {
+      id: "z_units",
+      label: "Elevation units",
+      type: "select",
+      default: "m",
+      options: [
+        { value: "m", label: "Metres" },
+        { value: "ft", label: "Feet" },
+        { value: "us-ft", label: "US survey feet" },
+      ],
+      description: "Volumes are always reported in cubic metres and areas in square metres.",
+    },
+  ],
+};
+
 const SHADOW_DAY_MODES = { param: "mode", in: ["sun-hours", "insolation"] };
 
 export const buildingShadowsTool: RasterTool = {
@@ -1297,6 +1374,7 @@ export const RASTER_TOOLS: RasterTool[] = [
   speckleFilterTool,
   dualPolRgbTool,
   floodMapTool,
+  cutFillTool,
   buildingShadowsTool,
 ];
 

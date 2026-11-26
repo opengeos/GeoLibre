@@ -2930,6 +2930,9 @@
     "viewshedLayerName": "Viewshed ({{radius}})",
     "viewshedToolName": "Viewshed",
     "viewshedNoResult": "No visible area could be computed here.",
+    "viewshedCurvature": "Viewshed: Earth curvature and refraction",
+    "viewshedCurvatureOn": "On. Tap to turn off.",
+    "viewshedCurvatureOff": "Off. Tap to turn on.",
     "lineOfSightHere": "Line of sight from here",
     "cogoHere": "Start a COGO traverse here"
   },
@@ -2992,6 +2995,9 @@
     "observerHeight": "Observer height (m)",
     "targetHeight": "Target height (m)",
     "curvature": "Earth curvature and refraction",
+    "refractionCoefficient": "Refraction coefficient",
+    "earthRadius": "Earth radius (km)",
+    "usingValue": "Using {{value, number}} (allowed range).",
     "pickObserver": "Click the map to place the observer.",
     "pickTarget": "Click the map to place the target.",
     "pickAgain": "Click the map to start a new line.",
@@ -3306,7 +3312,7 @@
       "openS3Browser": "Open the S3 browser at startup",
       "openS3BrowserHint": "Show the S3 browser panel each time GeoLibre starts. It stays open when you open a project.",
       "allowLiveMcp": "Allow AI agents to drive the map",
-      "allowLiveMcpHint": "Start the local processing server at launch so the GeoLibre MCP server's live tools can control this map. No Jupyter notebook is needed. Only programs on this computer that can read your user folder can connect.",
+      "allowLiveMcpHint": "Let the GeoLibre MCP server's live tools control this map. GeoLibre listens for them itself, so no Jupyter notebook or processing server is needed. Only programs on this computer that can read your user folder can connect.",
       "defaultView": "Default map view",
       "defaultViewHint": "Set the center and zoom for the untitled workspace.",
       "longitude": "Center longitude",
@@ -4329,6 +4335,8 @@
       "speckleFilter": "Speckle filter",
       "sarRgb": "Dual-pol RGB composite",
       "floodMap": "Flood mapping (SAR threshold)",
+      "cutFill": "Cut and fill volume",
+      "inputExistingSurface": "Existing surface",
       "buildingShadows": "Building shadows and sun hours",
       "inputBuildings": "Building footprints (GeoJSON)",
       "inputBefore": "Before raster",
@@ -6849,6 +6857,7 @@
       "stopServer": "Stop server",
       "loadingTools": "Loading…",
       "lockedPrefix": "[Locked] ",
+      "lockedFallback": "This tool is locked.",
       "missingRequiredParameter": "Missing required parameter: {{label}}",
       "sidecarCannotReadBrowserFiles": "The sidecar cannot read browser-selected files for {{label}}. Run locally (WASM), or enter filesystem paths available to the sidecar.",
       "selectedLayersMissing": "One or more selected layers for {{label}} no longer exist.",
@@ -6856,7 +6865,9 @@
       "layerNotFetchable": "Layer \"{{layer}}\" is not fetchable for {{label}}.",
       "layerMissingPath": "Layer \"{{layer}}\" has no filesystem path for {{label}}.",
       "importOutputFailed": "Could not import Whitebox output.",
+      "backgroundImportFailed": "Could not import the output of {{tool}}: {{message}}",
       "showingSnapshotOnly": "Showing GitHub catalog only.",
+      "sidecarStopped": "GeoLibre sidecar is stopped.",
       "liveCatalogEmpty": "Live catalog is empty. Showing GitHub catalog only.",
       "jobStatus": {
         "pending": "Pending",
@@ -9230,6 +9241,43 @@
             }
           }
         },
+        "cut-fill": {
+          "name": "Cut and fill volume",
+          "description": "Compare an existing surface with a reference plane or a second surface on the same grid, optionally inside a boundary polygon. Reports cut, fill and net volume (m³) and their areas, and writes the difference raster (existing - reference; positive = cut, negative = fill).",
+          "params": {
+            "reference": {
+              "label": "Reference",
+              "options": {
+                "plane": "Plane at a fixed elevation",
+                "surface": "Second surface (design or later survey)"
+              }
+            },
+            "plane_elevation": {
+              "label": "Plane elevation",
+              "description": "Elevation of the reference plane, in the raster's elevation units."
+            },
+            "surface_path": {
+              "label": "Reference surface",
+              "description": "A design surface or later survey on the same pixel grid as the existing surface (reproject or resample it first if needed)."
+            },
+            "boundary_path": {
+              "label": "Boundary polygon (optional)",
+              "description": "Only cells whose centres fall inside these polygons are counted, and the output is cropped to them."
+            },
+            "band": {
+              "label": "Band"
+            },
+            "z_units": {
+              "label": "Elevation units",
+              "description": "Volumes are always reported in cubic metres and areas in square metres.",
+              "options": {
+                "m": "Metres",
+                "ft": "Feet",
+                "us-ft": "US survey feet"
+              }
+            }
+          }
+        },
         "building-shadows": {
           "name": "Building shadows and sun hours",
           "description": "Cast shadows from extruded building footprints (a height or storey-count attribute) for a date and time, or simulate a whole day: hours of direct sun, or clear-sky direct insolation (kWh/m²), on the ground and on roofs.",
@@ -11549,8 +11597,8 @@
   "notifications": {
     "nativeDocumentCopiesFailed": "Some imported files could not be restored. Open a new workspace or import the affected files again. Details are in Diagnostics.",
     "nativeDocumentCopiesInitFailed": "Could not restore access to imported files. Restart GeoLibre to retry. You can use a blank workspace meanwhile. Details are in Diagnostics.",
-    "liveMcpEnableRetry": "Live MCP access could not be enabled. Retrying automatically; processing remains available.",
-    "liveMcpDisableRetry": "Live MCP server access has not been revoked yet. This window is disconnected and GeoLibre is retrying; processing remains available.",
+    "liveMcpEnableRetry": "Live MCP access could not be enabled. Retrying automatically.",
+    "liveMcpDisableRetry": "Live MCP access has not been revoked yet. This window is disconnected and GeoLibre is retrying.",
     "regionLabel": "Notifications",
     "dismiss": "Dismiss notification",
     "reportIssue": "Report issue",

@@ -11,6 +11,7 @@ import {
   restoreGuiControlState,
 } from "./gui-state";
 import { constrainGuiPanelToViewport } from "./shared";
+import { GEOLIBRE_GUI_OUTPUT_STYLE } from "./gui-output-style";
 
 const htmlControlPosition: GeoLibreMapControlPosition = "top-left";
 
@@ -174,24 +175,7 @@ export function themeHtmlControlOutputs(control: HtmlGuiControl): void {
   ) {
     control.setState({ html: initialState.html.replace("color: #666;", "") });
   }
-  // HtmlGuiControl 0.31.1 creates each output HtmlControl in a private factory,
-  // without forwarding its GUI options. Wrap only those GUI-created outputs and
-  // use the public update API so their default surface follows live theme tokens.
-  type ThemedHtmlOutput = {
-    update(options: { backgroundColor: string; fontColor: string }): void;
-  };
-  const guiControl = control as unknown as {
-    _createHtmlControl: (entry: unknown) => ThemedHtmlOutput;
-  };
-  const createOutput = guiControl._createHtmlControl;
-  guiControl._createHtmlControl = (entry) => {
-    const output = createOutput.call(guiControl, entry);
-    output.update({
-      backgroundColor: "var(--geolibre-bg)",
-      fontColor: "var(--geolibre-fg)",
-    });
-    return output;
-  };
+  control.setOutputStyle(GEOLIBRE_GUI_OUTPUT_STYLE);
 }
 
 export function teardownHtmlControl(app: GeoLibreAppAPI): void {

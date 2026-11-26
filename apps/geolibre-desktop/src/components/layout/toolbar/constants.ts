@@ -272,6 +272,7 @@ export const RASTER_TOOL_COMMANDS: Array<{
   { kind: "speckle-filter", titleKey: "toolbar.rasterTool.speckleFilter" },
   { kind: "sar-rgb", titleKey: "toolbar.rasterTool.sarRgb" },
   { kind: "flood-map", titleKey: "toolbar.rasterTool.floodMap" },
+  { kind: "cut-fill", titleKey: "toolbar.rasterTool.cutFill" },
   { kind: "building-shadows", titleKey: "toolbar.rasterTool.buildingShadows" },
 ];
 
@@ -293,6 +294,7 @@ export const RASTER_CHANGE_TOOLS = RASTER_TOOL_COMMANDS.filter(({ kind }) =>
 );
 
 const RASTER_3D_TERRAIN_KINDS: ReadonlySet<RasterToolKind> = new Set<RasterToolKind>([
+  "cut-fill",
   "building-shadows",
 ]);
 

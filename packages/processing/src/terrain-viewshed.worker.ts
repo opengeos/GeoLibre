@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import type { CurvatureOptions } from "./earth-curvature";
 import {
   computeViewshed,
   type TerrainDem,
@@ -20,6 +21,8 @@ export interface ViewshedWorkerRequest {
   dem: TerrainDem;
   observer: ViewshedObserver;
   radiusMeters: number;
+  /** The curvature model; omitted fields take the defaults. */
+  options?: CurvatureOptions;
 }
 
 /** The single message this worker posts back. */
@@ -30,9 +33,9 @@ export type ViewshedWorkerResponse =
   ({ ok: true } & ViewshedResult) | { ok: false; error: string };
 
 worker.addEventListener("message", (event: MessageEvent<ViewshedWorkerRequest>) => {
-  const { dem, observer, radiusMeters } = event.data;
+  const { dem, observer, radiusMeters, options } = event.data;
   try {
-    const result = computeViewshed(dem, observer, radiusMeters);
+    const result = computeViewshed(dem, observer, radiusMeters, options);
     // The visibility grid is transferred rather than copied: it is the only
     // large payload going back, and this worker is terminated immediately
     // afterwards so it has no use for the buffer.

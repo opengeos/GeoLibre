@@ -25,24 +25,31 @@ type Placement = {
   rotation?: [number, number, number];
   scale?: number;
 };
-type Handler = (event: { url?: string; splatId?: string; modelId?: string }) => void;
+type LoadOptions = Placement & { id?: string; flyTo?: boolean };
+type AssetPlacement = Required<Placement> & { id: string; type: "splat" | "model"; url: string };
+type Handler = (event: {
+  url?: string;
+  splatId?: string;
+  modelId?: string;
+  placement?: AssetPlacement;
+}) => void;
 
 let lastControl: FakeSplatControl | null = null;
 
-// Mirrors the parts of maplibre-gl-splat's GaussianSplatControl GeoLibre uses:
-// ids come from `${prefix}-${this._counter++}`, taken synchronously for splats
-// and after an await for models, as upstream does.
+// Mirrors the public API of maplibre-gl-splat's GaussianSplatControl (0.3+)
+// that GeoLibre uses: generated `splat-N` / `model-N` ids skip ids the
+// `isIdReserved` option claims, an explicit `id` is used as given (and rejected
+// when taken), `flyTo` overrides the option per call, and load events carry the
+// resolved placement. Model ids are taken after an await, as upstream does.
 class FakeSplatControl {
-  _layerCounter = 0;
-  _modelCounter = 0;
-  _splatLayers = new Map<string, Placement & { url: string }>();
-  _modelLayers = new Map<string, Placement & { url: string }>();
-  _options = { defaultModelRotation: [90, 0, 0] as [number, number, number], flyTo: true };
-  _state = { rotation: [-90, 90, 0] as [number, number, number], scale: 0.5 };
+  splats = new Map<string, AssetPlacement>();
+  models = new Map<string, AssetPlacement>();
   flyToDuringLoad: boolean[] = [];
+  hidden = false;
+  private counters = { splat: 0, model: 0 };
   private handlers = new Map<string, Handler[]>();
 
-  constructor() {
+  constructor(private options: { flyTo?: boolean; isIdReserved?: (id: string) => boolean }) {
     lastControl = this;
   }
 
@@ -56,43 +63,59 @@ class FakeSplatControl {
     for (const handler of this.handlers.get(event) ?? []) handler(payload);
   }
 
-  async loadSplat(url: string, options?: Placement): Promise<string> {
-    this.flyToDuringLoad.push(this._options.flyTo);
-    const id = `splat-${this._layerCounter++}`;
-    this._splatLayers.set(id, {
+  private nextId(type: "splat" | "model"): string {
+    for (;;) {
+      const id = `${type}-${this.counters[type]++}`;
+      if (!this.options.isIdReserved?.(id) && !this.splats.has(id) && !this.models.has(id)) {
+        return id;
+      }
+    }
+  }
+
+  private place(type: "splat" | "model", url: string, options?: LoadOptions): string {
+    if (options?.id && (this.splats.has(options.id) || this.models.has(options.id))) {
+      throw new Error(`id ${options.id} is taken`);
+    }
+    const id = options?.id ?? this.nextId(type);
+    this.flyToDuringLoad.push(options?.flyTo ?? this.options.flyTo ?? true);
+    const placement: AssetPlacement = {
+      id,
+      type,
       url,
       longitude: options?.longitude ?? 1,
       latitude: options?.latitude ?? 2,
       altitude: options?.altitude ?? 0,
-    });
-    this.emit("splatload", { url, splatId: id });
+      rotation: options?.rotation ?? (type === "splat" ? [-90, 90, 0] : [90, 0, 0]),
+      scale: options?.scale ?? 0.5,
+    };
+    (type === "splat" ? this.splats : this.models).set(id, placement);
+    this.emit(`${type}load`, { url, [`${type}Id`]: id, placement });
     return id;
   }
 
-  async loadModel(url: string, options?: Placement): Promise<string> {
-    this.flyToDuringLoad.push(this._options.flyTo);
+  async loadSplat(url: string, options?: LoadOptions): Promise<string> {
+    return this.place("splat", url, options);
+  }
+
+  async loadModel(url: string, options?: LoadOptions): Promise<string> {
     await Promise.resolve();
-    const id = `model-${this._modelCounter++}`;
-    this._modelLayers.set(id, {
-      url,
-      longitude: options?.longitude ?? 1,
-      latitude: options?.latitude ?? 2,
-      altitude: options?.altitude ?? 0,
-    });
-    this.emit("modelload", { url, modelId: id });
-    return id;
+    return this.place("model", url, options);
   }
 
   removeSplat(id: string): void {
-    if (this._splatLayers.delete(id)) this.emit("splatremove", { splatId: id });
+    if (this.splats.delete(id)) this.emit("splatremove", { splatId: id });
   }
 
   removeModel(id: string): void {
-    if (this._modelLayers.delete(id)) this.emit("modelremove", { modelId: id });
+    if (this.models.delete(id)) this.emit("modelremove", { modelId: id });
   }
 
-  getSplatIds(): string[] {
-    return [...this._splatLayers.keys()];
+  show(): void {
+    this.hidden = false;
+  }
+
+  hide(): void {
+    this.hidden = true;
   }
 
   expand(): void {}
@@ -105,7 +128,7 @@ class FakeSplatLayerAdapter {
   constructor(private control: FakeSplatControl) {}
 
   getLayerIds(): string[] {
-    return [...this.control._splatLayers.keys(), ...this.control._modelLayers.keys()];
+    return [...this.control.splats.keys(), ...this.control.models.keys()];
   }
 
   getLayerState(): { opacity: number } {
@@ -236,19 +259,24 @@ describe("splatting control", () => {
     useAppStore.getState().addLayer(savedSplatLayer("model-2", "https://example.org/saved.glb"));
     const control = await openControl();
 
-    assert.deepEqual([...control._splatLayers.keys()], ["splat-3"]);
-    assert.deepEqual([...control._modelLayers.keys()], ["model-2"]);
-    assert.equal(control._splatLayers.get("splat-3")?.longitude, 10);
-    assert.equal(control._splatLayers.get("splat-3")?.latitude, 20);
+    assert.deepEqual([...control.splats.keys()], ["splat-3"]);
+    assert.deepEqual([...control.models.keys()], ["model-2"]);
+    assert.equal(control.splats.get("splat-3")?.longitude, 10);
+    assert.equal(control.splats.get("splat-3")?.latitude, 20);
+    assert.deepEqual(control.splats.get("splat-3")?.rotation, [1, 2, 3]);
+    // The saved placement stays on the store layer.
+    assert.deepEqual(
+      (storeLayer("splat-3")?.source as Record<string, unknown>).rotation,
+      [1, 2, 3],
+    );
     // The saved hidden state and opacity are pushed onto the reloaded asset and
     // kept on the store layer.
     assert.deepEqual(visibilityCalls, [["splat-3", false]]);
     assert.deepEqual(opacityCalls, [["splat-3", 0.4]]);
     assert.equal(storeLayer("splat-3")?.visible, false);
     assert.equal(storeLayer("splat-3")?.opacity, 0.4);
-    // No per-restore fly-to, and the option is put back afterwards.
+    // No per-restore fly-to; a restored control stays hidden until opened.
     assert.deepEqual(control.flyToDuringLoad, [false, false]);
-    assert.equal(control._options.flyTo, true);
     assert.equal(useAppStore.getState().layers.length, 2);
 
     // A later load skips the restored ids.
@@ -270,9 +298,19 @@ describe("splatting control", () => {
     assert.equal(source.longitude, 7);
     assert.equal(source.latitude, 8);
     assert.equal(source.altitude, 9);
-    // Not passed, so resolved from the control state the way upstream does.
+    // Not passed, so taken from the placement the control reports.
     assert.deepEqual(source.rotation, [-90, 90, 0]);
     assert.equal(source.scale, 0.5);
+  });
+
+  it("restores a layer whose id is not splat-N or model-N", async () => {
+    useAppStore
+      .getState()
+      .addLayer(
+        savedSplatLayer("my-scan", "https://example.org/scan.splat", {}, { assetType: "splat" }),
+      );
+    const control = await openControl();
+    assert.deepEqual([...control.splats.keys()], ["my-scan"]);
   });
 
   it("does not reload a layer that is already loaded", async () => {
@@ -294,6 +332,6 @@ describe("splatting control", () => {
     const second = restoreSplattingLayers(app);
     await Promise.all([first, second]);
 
-    assert.deepEqual([...control._modelLayers.keys()].sort(), ["model-1", "model-2"]);
+    assert.deepEqual([...control.models.keys()].sort(), ["model-1", "model-2"]);
   });
 });

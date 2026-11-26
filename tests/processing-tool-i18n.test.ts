@@ -25,6 +25,8 @@ describe("toolGroupKey", () => {
     assert.equal(toolGroupKey("Geometry"), "geometry");
     assert.equal(toolGroupKey("Raster to Vector"), "rasterToVector");
     assert.equal(toolGroupKey("Data quality"), "dataQuality");
+    // A leading token is lower-cased whole, so "3D Terrain" keys as 3dTerrain.
+    assert.equal(toolGroupKey("3D Terrain"), "3dTerrain");
   });
 
   it("drops punctuation that JSON nesting cannot carry", () => {

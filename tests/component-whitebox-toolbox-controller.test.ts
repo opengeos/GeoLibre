@@ -7,7 +7,10 @@ import type { WhiteboxJob, WhiteboxTool } from "@geolibre/processing";
 import type { FeatureCollection } from "geojson";
 import { renderHook } from "@testing-library/react";
 import { geojsonLayer } from "./helpers/layer-fixtures";
-import type { WhiteboxToolboxServices } from "../apps/geolibre-desktop/src/hooks/useWhiteboxToolboxController";
+import type {
+  WhiteboxToolboxControllerOptions,
+  WhiteboxToolboxServices,
+} from "../apps/geolibre-desktop/src/hooks/useWhiteboxToolboxController";
 
 const { useWhiteboxToolboxController } =
   await import("../apps/geolibre-desktop/src/hooks/useWhiteboxToolboxController");
@@ -35,6 +38,20 @@ const SLOPE: WhiteboxTool = {
   ],
 };
 const LOCKED: WhiteboxTool = { id: "pro_tool", display_name: "Pro Tool", locked: true };
+const RASTER_TOOL: WhiteboxTool = {
+  id: "raster_tool",
+  display_name: "Raster Tool",
+  category: "Terrain",
+  params: [],
+};
+const LIDAR_TOOL: WhiteboxTool = {
+  id: "lidar_tool",
+  display_name: "LiDAR Tool",
+  category: "LiDAR",
+  params: [{ name: "output", kind: "lidar_out" }],
+};
+const TIFF_BYTES = new Uint8Array([0x49, 0x49, 0x2a, 0x00, 1, 2, 3]);
+const LAS_BYTES = new Uint8Array([0x4c, 0x41, 0x53, 0x46, 1, 2, 3]);
 const GEOLIBRE_TOOL: WhiteboxTool = {
   id: "write_geoparquet",
   display_name: "Write GeoParquet",
@@ -134,13 +151,15 @@ function controller(
   stub = services(),
   extra: {
     mapControllerRef?: { current: MapEngine | null };
-    onAddRaster?: (bytes: Uint8Array, name: string, fileName?: string) => void;
+    onAddRaster?: WhiteboxToolboxControllerOptions["onAddRaster"];
+    onAddLidar?: WhiteboxToolboxControllerOptions["onAddLidar"];
   } = {},
 ) {
   const hook = renderHook(() =>
     useWhiteboxToolboxController({
       mapControllerRef: extra.mapControllerRef ?? { current: null },
       onAddRaster: extra.onAddRaster,
+      onAddLidar: extra.onAddLidar,
       services: stub.value,
     }),
   );
@@ -500,4 +519,332 @@ it("renders the dialog from the controller and runs the selected tool", async ()
 
   act(() => useAppStore.getState().setProcessingOpen(false));
   assert.equal(document.querySelector("[data-processing-dialog]") === null, true);
+});
+
+/** A promise whose settlement the test controls. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+it("ignores a catalog load that a newer load superseded", async () => {
+  const wasm = deferred<WhiteboxTool[]>();
+  const stub = services({ listWasmToolManifests: () => wasm.promise });
+  const hook = controller(stub);
+  await waitFor(() => assert.equal(hook.result.current.loadingTools, true));
+  // Switch to the sidecar while the WASM manifests are still enumerating.
+  act(() => hook.result.current.handleRunLocalChange(false));
+  await waitFor(() => assert.equal(hook.result.current.runtimeAvailable, true));
+  assert.equal(hook.result.current.loadingTools, false);
+  await act(async () => {
+    wasm.resolve([GEOLIBRE_TOOL]);
+    await wasm.promise;
+  });
+  const model = hook.result.current;
+  assert.deepEqual(
+    model.tools.map((tool) => tool.id),
+    [CENTROID.id, SLOPE.id, DOWNLOAD_GLOBAL_DEM_TOOL_ID],
+    "the late WASM catalog does not replace the sidecar catalog",
+  );
+  assert.equal(model.runtimeAvailable, true);
+  assert.equal(model.runtimeMessage, "Sidecar ready");
+  assert.equal(model.loadingTools, false);
+});
+
+it("ignores a stale sidecar probe that resolves after a newer WASM load", async () => {
+  const status = deferred<{ available: boolean; message: string }>();
+  const stub = services({ fetchWhiteboxStatus: () => status.promise });
+  const hook = controller(stub);
+  await loaded(hook);
+  act(() => hook.result.current.handleRunLocalChange(false));
+  await waitFor(() => assert.equal(hook.result.current.loadingTools, true));
+  // Back to WASM: that load finishes, then the stale sidecar probe resolves.
+  act(() => hook.result.current.handleRunLocalChange(true));
+  await waitFor(() => assert.equal(hook.result.current.loadingTools, false));
+  await act(async () => {
+    status.resolve({ available: true, message: "Sidecar ready" });
+    await status.promise;
+  });
+  assert.equal(hook.result.current.runtimeAvailable, false);
+  assert.ok(hook.result.current.tools.some((tool) => tool.id === GEOLIBRE_TOOL.id));
+});
+
+it("clears the spinner and reports the error when the local catalog merge throws", async () => {
+  const broken = {
+    get id(): string {
+      throw new Error("Malformed WASM manifest");
+    },
+  } as unknown as WhiteboxTool;
+  const stub = services({ listWasmToolManifests: async () => [broken] });
+  const hook = controller(stub);
+  await waitFor(() => assert.equal(hook.result.current.error, "Malformed WASM manifest"));
+  assert.equal(hook.result.current.loadingTools, false);
+  assert.equal(hook.result.current.serverBusy, false, "Refresh is enabled again");
+});
+
+it("reloads the catalog snapshot with a translated message when the server stops", async () => {
+  let stopped = 0;
+  const stub = services({
+    fetchWhiteboxTools: async () => [SLOPE],
+    stopGeoLibreSidecar: async () => {
+      stopped += 1;
+    },
+  });
+  const hook = controller(stub);
+  await loaded(hook);
+  act(() => hook.result.current.handleRunLocalChange(false));
+  await waitFor(() =>
+    assert.deepEqual(
+      hook.result.current.tools.map((tool) => tool.id),
+      [SLOPE.id, DOWNLOAD_GLOBAL_DEM_TOOL_ID],
+    ),
+  );
+  await act(() => hook.result.current.stopServer());
+  assert.equal(stopped, 1);
+  const model = hook.result.current;
+  assert.equal(model.runtimeAvailable, false);
+  assert.equal(model.runtimeMessage, "GeoLibre sidecar is stopped. Showing GitHub catalog only.");
+  assert.deepEqual(
+    model.tools.map((tool) => tool.id),
+    [CENTROID.id, SLOPE.id, DOWNLOAD_GLOBAL_DEM_TOOL_ID],
+    "the snapshot replaces the stopped server's live catalog",
+  );
+  assert.equal(model.loadingTools, false);
+});
+
+it("translates the locked-tool fallback instead of hardcoding it", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(
+    new URL(
+      "../apps/geolibre-desktop/src/components/processing/ProcessingDialog.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.equal(source.includes('"This tool is locked."'), false);
+  assert.match(source, /locked_reason \|\| t\("processing\.whitebox\.lockedFallback"\)/);
+  const en = JSON.parse(
+    await readFile(
+      new URL("../apps/geolibre-desktop/src/i18n/locales/en.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.equal(en.processing.whitebox.lockedFallback, "This tool is locked.");
+});
+
+it("keeps tracking a running sidecar job after switching tools, then imports it", async () => {
+  const stub = services();
+  const hook = controller(stub);
+  await loaded(hook);
+  act(() => hook.result.current.handleRunLocalChange(false));
+  await waitFor(() => assert.equal(hook.result.current.runtimeAvailable, true));
+  act(() => hook.result.current.setSelectedToolId(SLOPE.id));
+  await waitFor(() => assert.equal(hook.result.current.selectedToolId, SLOPE.id));
+  act(() => hook.result.current.updateValue("dem", "/data/dem.tif"));
+  stub.value.fetchWhiteboxJob = async (id) => {
+    stub.calls.polls.push(id);
+    return job({ id, tool_id: SLOPE.id, outputs: { output: { path: "/out/slope.geojson" } } });
+  };
+  await act(() => hook.result.current.runSelectedTool());
+  assert.equal(hook.result.current.job?.status, "running");
+
+  act(() => hook.result.current.setSelectedToolId(CENTROID.id));
+  await waitFor(() => assert.equal(hook.result.current.selectedToolId, CENTROID.id));
+  assert.equal(hook.result.current.job, null, "the new tool starts with a clean form");
+
+  await waitFor(
+    () => {
+      const [run] = useAppStore.getState().processingHistory;
+      assert.equal(run?.status, "success");
+      assert.deepEqual(run?.outputLayerNames, ["Slope Output"]);
+    },
+    { timeout: 3000 },
+  );
+  assert.deepEqual(stub.calls.polls, ["sidecar-job"]);
+  assert.ok(useAppStore.getState().layers.some((layer) => layer.name === "Slope Output"));
+  assert.equal(hook.result.current.job, null, "the detached job is not shown on the new tool");
+});
+
+it("records a background sidecar job that fails after a tool switch", async () => {
+  const stub = services();
+  const hook = controller(stub);
+  await loaded(hook);
+  act(() => hook.result.current.handleRunLocalChange(false));
+  await waitFor(() => assert.equal(hook.result.current.runtimeAvailable, true));
+  act(() => hook.result.current.setSelectedToolId(SLOPE.id));
+  await waitFor(() => assert.equal(hook.result.current.selectedToolId, SLOPE.id));
+  act(() => hook.result.current.updateValue("dem", "/data/dem.tif"));
+  stub.value.fetchWhiteboxJob = async (id) =>
+    job({ id, tool_id: SLOPE.id, status: "failed", error: "DEM unreadable" });
+  await act(() => hook.result.current.runSelectedTool());
+  act(() => hook.result.current.setSelectedToolId(CENTROID.id));
+  await waitFor(
+    () => {
+      const [run] = useAppStore.getState().processingHistory;
+      assert.equal(run?.status, "error");
+      assert.equal(run?.error, "DEM unreadable");
+    },
+    { timeout: 3000 },
+  );
+});
+
+/**
+ * Run `tool` in WASM mode, returning `bytes` as its output, with the output
+ * callback held open until the test releases it.
+ */
+async function startDelayedBinaryImport(kind: "raster" | "lidar") {
+  const tool = kind === "raster" ? RASTER_TOOL : LIDAR_TOOL;
+  const bytes = kind === "raster" ? TIFF_BYTES : LAS_BYTES;
+  const gate = deferred<void>();
+  const seen: { signal?: AbortSignal } = {};
+  const added: string[] = [];
+  const stub = services({
+    fetchRemoteWhiteboxCatalogSnapshot: async () => [CENTROID, RASTER_TOOL, LIDAR_TOOL],
+    listWasmToolManifests: async () => [],
+    runWhiteboxToolWasm: async (request) =>
+      job({ id: `${kind}-job`, tool_id: request.tool_id, outputs: { output: bytes } }),
+  });
+  // Both stand-ins wait on the gate, then add their layer only while the
+  // signal is live, as addRasterToMap and the shell's LiDAR loader do.
+  const hook = controller(stub, {
+    onAddRaster: async (_bytes, name, _fileName, { signal }) => {
+      seen.signal = signal;
+      await gate.promise;
+      signal.throwIfAborted();
+      added.push(name);
+    },
+    onAddLidar: async (_bytes, name, _fileName, { signal }) => {
+      seen.signal = signal;
+      await gate.promise;
+      // A loader that ignores the abort and reports success anyway: the
+      // controller must still not credit it to the replacement project.
+      if (!signal.aborted) added.push(name);
+      return true;
+    },
+  });
+  await loaded(hook);
+  act(() => hook.result.current.setSelectedToolId(tool.id));
+  await waitFor(() => assert.equal(hook.result.current.selectedToolId, tool.id));
+  await act(() => hook.result.current.runSelectedTool());
+  await waitFor(() => assert.ok(seen.signal, "the output callback has started"));
+  return { hook, stub, gate, seen, added, outputName: `${tool.display_name} Output` };
+}
+
+for (const kind of ["raster", "lidar"] as const) {
+  it(`drops a delayed ${kind} import after another project opens`, async () => {
+    const run = await startDelayedBinaryImport(kind);
+    assert.equal(run.seen.signal?.aborted, false);
+    act(() => useAppStore.getState().newProject());
+    assert.equal(run.seen.signal?.aborted, true, "the project change aborts the import");
+    await act(async () => {
+      run.gate.resolve();
+      await run.gate.promise;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(run.added, []);
+    assert.equal(run.hook.result.current.error, null, "a superseded import is not an error");
+    assert.deepEqual(run.stub.calls.downloads, [], "nor is the output downloaded instead");
+    assert.ok(
+      useAppStore
+        .getState()
+        .processingHistory.every((entry) => !entry.outputLayerNames?.includes(run.outputName)),
+      "the replacement project's History is not credited with the output",
+    );
+  });
+
+  it(`records a delayed ${kind} import that stays in its project`, async () => {
+    const run = await startDelayedBinaryImport(kind);
+    await act(async () => {
+      run.gate.resolve();
+      await run.gate.promise;
+    });
+    await waitFor(() => {
+      const [entry] = useAppStore.getState().processingHistory;
+      assert.deepEqual(entry?.outputLayerNames, [run.outputName]);
+    });
+    assert.deepEqual(run.added, [run.outputName]);
+    assert.equal(run.seen.signal?.aborted, false);
+    assert.equal(run.hook.result.current.error, null);
+  });
+}
+
+it("leaves the WASM catalog alone when a server stop resolves after a switch to WASM", async () => {
+  const stop = deferred<void>();
+  const stub = services({ stopGeoLibreSidecar: () => stop.promise });
+  const hook = controller(stub);
+  await loaded(hook);
+  act(() => hook.result.current.handleRunLocalChange(false));
+  await waitFor(() => assert.equal(hook.result.current.runtimeAvailable, true));
+  let stopping: Promise<void> = Promise.resolve();
+  act(() => {
+    stopping = hook.result.current.stopServer();
+  });
+  act(() => hook.result.current.handleRunLocalChange(true));
+  await waitFor(() =>
+    assert.ok(hook.result.current.tools.some((tool) => tool.id === GEOLIBRE_TOOL.id)),
+  );
+  await act(async () => {
+    stop.resolve();
+    await stopping;
+  });
+  const model = hook.result.current;
+  assert.equal(model.runtimeMessage, "Running locally with WebAssembly. No sidecar required.");
+  assert.ok(model.tools.some((tool) => tool.id === GEOLIBRE_TOOL.id));
+  assert.equal(model.loadingTools, false);
+});
+
+it("names the detached job's tool when its background import fails", async () => {
+  const stub = services({
+    fetchWhiteboxJsonOutput: async () => {
+      throw new Error("Output unreadable");
+    },
+  });
+  const hook = controller(stub);
+  await loaded(hook);
+  act(() => hook.result.current.handleRunLocalChange(false));
+  await waitFor(() => assert.equal(hook.result.current.runtimeAvailable, true));
+  act(() => hook.result.current.setSelectedToolId(SLOPE.id));
+  await waitFor(() => assert.equal(hook.result.current.selectedToolId, SLOPE.id));
+  act(() => hook.result.current.updateValue("dem", "/data/dem.tif"));
+  stub.value.fetchWhiteboxJob = async (id) =>
+    job({ id, tool_id: SLOPE.id, outputs: { output: { path: "/out/slope.geojson" } } });
+  await act(() => hook.result.current.runSelectedTool());
+  act(() => hook.result.current.setSelectedToolId(CENTROID.id));
+  await waitFor(
+    () =>
+      assert.equal(
+        hook.result.current.error,
+        "Could not import the output of Slope: Output unreadable",
+      ),
+    { timeout: 3000 },
+  );
+});
+
+it("records a background sidecar job as stopped when the server stops", async () => {
+  const stub = services();
+  const hook = controller(stub);
+  await loaded(hook);
+  act(() => hook.result.current.handleRunLocalChange(false));
+  await waitFor(() => assert.equal(hook.result.current.runtimeAvailable, true));
+  act(() => hook.result.current.setSelectedToolId(SLOPE.id));
+  await waitFor(() => assert.equal(hook.result.current.selectedToolId, SLOPE.id));
+  act(() => hook.result.current.updateValue("dem", "/data/dem.tif"));
+  stub.value.fetchWhiteboxJob = async (id) => {
+    stub.calls.polls.push(id);
+    return job({ id, tool_id: SLOPE.id, status: "running" });
+  };
+  await act(() => hook.result.current.runSelectedTool());
+  act(() => hook.result.current.setSelectedToolId(CENTROID.id));
+  await waitFor(() => assert.equal(hook.result.current.job, null));
+  await act(() => hook.result.current.stopServer());
+  const [run] = useAppStore.getState().processingHistory;
+  assert.equal(run?.status, "error");
+  assert.equal(run?.error, "GeoLibre sidecar is stopped.");
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  assert.deepEqual(stub.calls.polls, [], "the stopped server is not polled");
 });

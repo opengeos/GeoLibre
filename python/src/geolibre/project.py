@@ -28,6 +28,11 @@ from urllib.parse import quote, unquote, unquote_plus, urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
 
 from ._arcgis_cache import cached_arcgis_source
+from ._arcgis_vector_tiles import (
+    build_arcgis_vector_tile_style,
+    layer_name_from_service_url,
+    style_endpoint,
+)
 from .basemaps import DEFAULT_BASEMAP
 
 # Shared TS/Python constants synced from packages/core/src/project-constants.json.
@@ -4524,6 +4529,89 @@ ARCGIS_SERVICES: dict[str, tuple[str, str]] = {
 _ARCGIS_EXPORT_TILE_SIZE = 256
 
 
+def _refuse_non_json_number(token: str) -> Any:
+    """Refuse the ``NaN``/``Infinity`` literals Python's decoder accepts.
+
+    Args:
+        token: The non-standard literal.
+
+    Raises:
+        json.JSONDecodeError: Always, so the reader reports invalid JSON.
+    """
+    raise json.JSONDecodeError(f"non-JSON number {token}", token, 0)
+
+
+def _finite_float(token: str) -> float:
+    """Decode a JSON float, refusing one that overflows to infinity.
+
+    Args:
+        token: The numeric literal, e.g. ``1e400``.
+
+    Returns:
+        The finite value.
+
+    Raises:
+        json.JSONDecodeError: When the literal is out of float range.
+    """
+    value = float(token)
+    if not math.isfinite(value):
+        raise json.JSONDecodeError(f"non-JSON number {token}", token, 0)
+    return value
+
+
+def _read_public_arcgis_json(url: str, label: str, limit: int = 2 * 1024 * 1024) -> Any:
+    """Read one bounded public ArcGIS REST JSON document.
+
+    Args:
+        url: The public URL to read, including its ``f=json`` query.
+        label: What the document is, for error messages (e.g. ``"ArcGIS cache
+            metadata"``).
+        limit: Maximum response size in bytes.
+
+    Returns:
+        The decoded JSON value.
+
+    Raises:
+        ValueError: If the request is unsafe, fails, exceeds the size limit,
+            takes longer than 30 seconds or is not valid JSON.
+    """
+    _assert_public_url(url)
+    deadline = time.monotonic() + 30
+    chunks: list[bytes] = []
+    size = 0
+    try:
+        with _GEOJSON_OPENER.open(url, timeout=30) as response:  # noqa: S310 - public URL checked
+            # The socket timeout bounds each read, not the whole response, so
+            # read one buffer at a time and enforce a total deadline as well.
+            read = getattr(response, "read1", response.read)
+            while size <= limit:
+                if time.monotonic() > deadline:
+                    raise ValueError(f"{label} took longer than 30 seconds to load")
+                chunk = read(min(65536, limit + 1 - size))
+                if time.monotonic() > deadline:
+                    raise ValueError(f"{label} took longer than 30 seconds to load")
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                size += len(chunk)
+    except (OSError, HTTPException) as exc:
+        raise ValueError(f"Could not load {label}") from exc
+    raw = b"".join(chunks)
+    if len(raw) > limit:
+        raise ValueError(f"{label} exceeds the {limit // (1024 * 1024)} MiB size limit")
+    try:
+        return json.loads(
+            raw.decode("utf-8"),
+            parse_constant=_refuse_non_json_number,
+            parse_float=_finite_float,
+        )
+    except RecursionError as exc:
+        raise ValueError(f"{label} is too deeply nested") from exc
+    except ValueError as exc:
+        # Decoding errors, JSONDecodeError and int() digit-limit errors.
+        raise ValueError(f"{label} is not valid JSON") from exc
+
+
 def _load_arcgis_cached_source(service_url: str) -> dict[str, Any]:
     """Read bounded public service metadata and validate its image tile cache.
 
@@ -4537,36 +4625,7 @@ def _load_arcgis_cached_source(service_url: str) -> dict[str, Any]:
         ValueError: If the request is unsafe, fails, exceeds the size limit or
             describes an incompatible cache.
     """
-    url = f"{service_url}?f=json"
-    _assert_public_url(url)
-    limit = 2 * 1024 * 1024
-    deadline = time.monotonic() + 30
-    chunks: list[bytes] = []
-    size = 0
-    try:
-        with _GEOJSON_OPENER.open(url, timeout=30) as response:  # noqa: S310 - public URL checked
-            # The socket timeout bounds each read, not the whole response, so
-            # read one buffer at a time and enforce a total deadline as well.
-            read = getattr(response, "read1", response.read)
-            while size <= limit:
-                if time.monotonic() > deadline:
-                    raise ValueError("ArcGIS cache metadata took longer than 30 seconds to load")
-                chunk = read(min(65536, limit + 1 - size))
-                if time.monotonic() > deadline:
-                    raise ValueError("ArcGIS cache metadata took longer than 30 seconds to load")
-                if not chunk:
-                    break
-                chunks.append(chunk)
-                size += len(chunk)
-    except (OSError, HTTPException) as exc:
-        raise ValueError("Could not load ArcGIS cache metadata") from exc
-    raw = b"".join(chunks)
-    if len(raw) > limit:
-        raise ValueError("ArcGIS cache metadata exceeds the 2 MiB size limit")
-    try:
-        info = json.loads(raw.decode("utf-8"))
-    except RecursionError as exc:
-        raise ValueError("ArcGIS cache metadata is too deeply nested") from exc
+    info = _read_public_arcgis_json(f"{service_url}?f=json", "ArcGIS cache metadata")
     return cached_arcgis_source(info, service_url)
 
 
@@ -4772,6 +4831,127 @@ def arcgis_layer(
     if sublayer_text is not None:
         raster_metadata["arcgisSublayers"] = sublayer_text
     layer["metadata"] = raster_metadata
+    layer["sourcePath"] = service_url
+    return layer
+
+
+#: Style JSON size cap; Esri's World Basemap style is about 0.8 MiB.
+_ARCGIS_STYLE_LIMIT = 8 * 1024 * 1024
+
+
+def arcgis_vector_tile_layer(
+    url: str,
+    name: str | None = None,
+    *,
+    bounds: list[float] | None = None,
+    attribution: str | None = None,
+) -> dict[str, Any]:
+    """Build a styled ArcGIS VectorTileServer layer the way the ArcGIS plugin saves one.
+
+    The app adds a VectorTileServer through ``@esri/maplibre-arcgis`` and
+    stores the service's resolved default style on an ``arcgis`` layer
+    (``createArcGISStoreLayer`` with ``arcgisSources``/``arcgisLayers``), which
+    every renderer redraws on open. This builder reads the same two public
+    documents, the service description and its ``defaultStyles`` style, and
+    writes the same record, so the project opens with the service's own
+    cartography. Credentials and portal item ids are not supported.
+
+    Both reads are limited in size (2 MiB for the description, 8 MiB for the
+    style) and each has a 30-second deadline checked around body reads and a
+    socket inactivity timeout. The style is validated against what the app can
+    draw (vector sources, drawable layer kinds naming those sources) and is
+    refused rather than saved when it would not render.
+
+    Args:
+        url: The ``.../VectorTileServer`` URL.
+        name: Layer display name; defaults to the service name, as the app does.
+        bounds: ``[west, south, east, north]`` to use for "Zoom to layer"
+            instead of the style's or service's extent.
+        attribution: Attribution text to use instead of the service credit.
+
+    Returns:
+        A layer dict for the project's ``layers`` array.
+
+    Raises:
+        ValueError: If ``url`` is not a public http(s) VectorTileServer URL,
+            carries credentials or a token, or the metadata cannot be read or
+            describes a style the app cannot draw.
+    """
+    if not isinstance(url, str) or not url.strip().lower().startswith(("https://", "http://")):
+        raise ValueError("url must be an http(s) ArcGIS VectorTileServer URL")
+    if "token=" in unquote(url).lower():
+        raise ValueError("url must not carry a token: it would be saved into the project")
+    input_url = url.strip()
+    service_url = input_url.split("?", 1)[0].split("#", 1)[0].rstrip("/")
+    _assert_no_url_userinfo(service_url)
+    if not re.search(r"/VectorTileServer$", service_url, re.IGNORECASE):
+        raise ValueError("url must end in /VectorTileServer")
+    resolved_bounds = _resolve_bounds(bounds)
+    if attribution is not None and not isinstance(attribution, str):
+        raise ValueError("attribution must be a string")
+    info = _read_public_arcgis_json(f"{service_url}?f=json", "ArcGIS vector tile service metadata")
+    if isinstance(info, dict) and isinstance(info.get("error"), dict):
+        raise ValueError("ArcGIS vector tile service returned an error")
+    endpoint = style_endpoint(info)
+    style = _read_public_arcgis_json(
+        f"{service_url}/{endpoint}?f=json", "ArcGIS vector tile style", _ARCGIS_STYLE_LIMIT
+    )
+    layer = _layer_base(
+        name or layer_name_from_service_url(service_url),
+        "arcgis",
+        fillColor="#2563eb",
+        fillOpacity=0.45,
+        strokeColor="#1d4ed8",
+    )
+    resolved = build_arcgis_vector_tile_style(info, style, service_url, layer["id"])
+    # The app fetches these templates whenever the project opens, so a remote
+    # style must not aim them at loopback or private hosts.
+    # Each distinct host is resolved once; the style is capped at
+    # MAX_STYLE_SOURCES sources, which bounds the lookups.
+    checked_hosts: set[tuple[str, str]] = set()
+    for spec in resolved["sources"].values():
+        for target in [*spec["tiles"], *([spec["url"]] if spec.get("url") else [])]:
+            probe = re.sub(r"\{[^{}]*\}", "0", target)
+            parts = urlsplit(probe)
+            host_key = (parts.scheme.lower(), (parts.hostname or "").lower())
+            if host_key in checked_hosts:
+                continue
+            checked_hosts.add(host_key)
+            try:
+                _assert_public_url(probe)
+            except ValueError as exc:
+                raise ValueError(
+                    f"ArcGIS vector tile sources must point at public http(s) hosts ({exc})"
+                ) from exc
+    if attribution is not None:
+        for source in resolved["sources"].values():
+            source["attribution"] = attribution
+    layer_bounds = resolved_bounds if resolved_bounds is not None else resolved["bounds"]
+    source_ids = resolved["sourceIds"]
+    source: dict[str, Any] = {
+        "layerType": "vector-tile",
+        "sourceId": source_ids[0],
+        "sourceIds": source_ids,
+        "type": "vector",
+        "url": service_url,
+        "arcgisSources": resolved["sources"],
+        "arcgisLayers": resolved["layers"],
+    }
+    metadata: dict[str, Any] = {
+        "arcgisLayerType": "vector-tile",
+        "arcgisSourceType": "url",
+        "externalNativeLayer": True,
+        "hasAccessToken": False,
+        "nativeLayerIds": resolved["nativeLayerIds"],
+        "sourceId": source_ids[0],
+        "sourceIds": source_ids,
+        "sourceKind": "arcgis-vector-tile-url",
+    }
+    if layer_bounds is not None:
+        source["bounds"] = layer_bounds
+        metadata["bounds"] = layer_bounds
+    layer["source"] = source
+    layer["metadata"] = metadata
     layer["sourcePath"] = service_url
     return layer
 

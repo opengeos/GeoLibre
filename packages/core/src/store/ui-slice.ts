@@ -122,6 +122,7 @@ export type RasterToolKind =
   | "speckle-filter"
   | "sar-rgb"
   | "flood-map"
+  | "cut-fill"
   | "building-shadows";
 
 /** Unsaved cell text, keyed by feature id and field name. Kept only for this project session. */

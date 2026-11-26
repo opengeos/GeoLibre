@@ -6,7 +6,10 @@ import {
   viewshedToRgba,
   MAX_VIEWSHED_RADIUS_METERS,
   MIN_VIEWSHED_RADIUS_METERS,
+  resolveCurvature,
+  type CurvatureOptions,
 } from "@geolibre/processing";
+import { getTerrainVisibility } from "./terrain-visibility-settings";
 
 /**
  * Run a viewshed from a clicked map point and add the result as a layer
@@ -39,6 +42,11 @@ export interface RunViewshedOptions {
   layerName: string;
   /** Optional abort signal to cancel terrain fetching and viewshed computation. */
   signal?: AbortSignal;
+  /**
+   * The Earth model. Defaults to the shared terrain-visibility settings the
+   * Line of Sight panel edits, so both tools agree.
+   */
+  curvature?: CurvatureOptions;
 }
 
 export interface ViewshedRunResult {
@@ -91,6 +99,16 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
     MAX_VIEWSHED_RADIUS_METERS,
     Math.max(MIN_VIEWSHED_RADIUS_METERS, options.radiusMeters),
   );
+  // Captured before the terrain fetch, so toggling the setting while tiles
+  // load affects only later runs, not this one.
+  // Merged per field, so a partial override keeps the rest of the stored model.
+  const stored = getTerrainVisibility();
+  const override = options.curvature ?? {};
+  const curvature = resolveCurvature({
+    curvature: override.curvature ?? stored.curvature,
+    refractionCoefficient: override.refractionCoefficient ?? stored.refractionCoefficient,
+    earthRadiusMeters: override.earthRadiusMeters ?? stored.earthRadiusMeters,
+  });
   const dem = await assembleTerrainDem({
     lng: options.lng,
     lat: options.lat,
@@ -108,6 +126,7 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
     },
     radiusMeters,
     options.signal,
+    curvature,
   );
   if (options.signal?.aborted) return null;
   // Not checked for zero: computeViewshed always marks the observer's own cell,
@@ -146,6 +165,10 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
           radiusMeters,
           observerHeightMeters: options.observerHeightMeters ?? DEFAULT_OBSERVER_HEIGHT_METERS,
           observerGroundMeters: result.observerGroundMeters,
+          // Recorded so a saved result says which Earth model produced it.
+          curvature: curvature.curvature,
+          refractionCoefficient: curvature.refractionCoefficient,
+          earthRadiusMeters: curvature.earthRadiusMeters,
         },
       },
     },

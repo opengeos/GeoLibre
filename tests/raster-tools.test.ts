@@ -26,6 +26,7 @@ const EXPECTED_IDS = [
   "speckle-filter",
   "sar-rgb",
   "flood-map",
+  "cut-fill",
   "building-shadows",
 ];
 

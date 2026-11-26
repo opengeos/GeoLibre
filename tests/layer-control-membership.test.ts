@@ -115,3 +115,66 @@ it("mounts one row per project layer, mapped or not, top-most first", () => {
     globals.window = previous.window;
   }
 });
+
+it("keeps project layers out of the basemap when the basemap has no root layers", () => {
+  // A style whose basemap lives in imports (Mapbox Standard) reports no basemap
+  // layer ids. The control must honour that empty list rather than treating
+  // every layer on the map at mount as basemap, or the Background toggle would
+  // hide GeoLibre's own layers.
+  const { window } = parseHTML('<div id="map"><div class="maplibregl-ctrl-top-right"></div></div>');
+  const globals = globalThis as { document?: unknown; window?: unknown };
+  const previous = { document: globals.document, window: globals.window };
+  globals.document = window.document;
+  globals.window = window;
+  try {
+    const container = window.document.getElementById("map")!;
+    const layers = [geojsonLayer({ id: "roads", name: "Roads" })];
+    const styleLayers = [{ id: "native-roads", type: "line", source: "roads" }];
+    const map = {
+      getLayer: (id: string) => styleLayers.find((layer) => layer.id === id),
+      getStyle: () => ({ version: 8, sources: { roads: {} }, layers: styleLayers }),
+      getSource: () => undefined,
+      getContainer: () => container,
+      getLayoutProperty: () => "visible",
+      getPaintProperty: () => undefined,
+      on: () => {},
+      off: () => {},
+    };
+    let mounted: { getBackgroundLayerVisibility(): Record<string, boolean> } | null = null;
+    const adapter: LayerControlHostAdapter = {
+      getMap: () => map,
+      addControl: (control) => {
+        mounted = control as unknown as typeof mounted;
+        container.firstElementChild!.appendChild(control.onAdd(map as never));
+      },
+      removeControl: (control) => {
+        control.onRemove?.(map as never);
+      },
+      getLayers: () => layers,
+      getNativeLayerIds: () => ["native-roads"],
+      getCandidateNativeLayerIds: () => ["native-roads"],
+      getSourceIds: () => ["roads"],
+      excludedLayerIds: [],
+      getBasemapStyleUrl: () => null,
+      getBasemapLayerIds: () => [],
+      getBasemapState: () => ({ visible: false, opacity: 0.5 }),
+    };
+    const host = new LayerControlHost(adapter);
+    assert.equal(host.add("top-right"), true);
+    host.syncState();
+    const control = mounted as unknown as {
+      getBackgroundLayerVisibility(): Record<string, boolean>;
+    };
+    assert.deepEqual(Object.keys(control.getBackgroundLayerVisibility()), []);
+    // GeoLibre still gets a Background row to drive its basemap from.
+    const background = container.querySelector<HTMLElement>(
+      '.layer-control-item[data-layer-id="Background"] .layer-control-checkbox',
+    ) as HTMLInputElement | null;
+    assert.ok(background, "the host adds a Background row");
+    assert.equal(background.checked, false);
+    host.destroy();
+  } finally {
+    globals.document = previous.document;
+    globals.window = previous.window;
+  }
+});

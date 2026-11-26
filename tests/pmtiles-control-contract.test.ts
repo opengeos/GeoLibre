@@ -17,7 +17,6 @@ import {
   createPMTilesLayerAddHandler,
   __resetPMTilesControlForTests,
   addPMTilesLayerFromUrl,
-  guardPMTilesSourceRemoval,
 } from "../packages/plugins/src/plugins/maplibre-components";
 
 /**
@@ -359,10 +358,9 @@ function statefulMap(document: Document, { mapbox = false } = {}) {
       addLayer: (layer: { id: string; source?: string }) => layers.set(layer.id, layer),
       getLayer: (id: string) => layers.get(id),
       removeLayer: (id: string) => layers.delete(id),
-      // mapbox-gl has no getLayersOrder; its style's layer list is the only way to walk them.
-      ...(mapbox
-        ? { getLayersOrder: undefined, getStyle: () => ({ layers: [...layers.values()] }) }
-        : { getLayersOrder: () => [...layers.keys()] }),
+      getStyle: () => ({ layers: [...layers.values()] }),
+      // mapbox-gl has no getLayersOrder.
+      ...(mapbox ? { getLayersOrder: undefined } : { getLayersOrder: () => [...layers.keys()] }),
       getCanvasContainer: () => document.createElement("div"),
     } as Record<string, unknown>,
     {
@@ -375,12 +373,11 @@ function statefulMap(document: Document, { mapbox = false } = {}) {
 
 /**
  * GeoLibre draws line decorations (flow arrows) as its own symbol layer on the archive's source.
- * The control drops that source in its private `_removeLayer`, which every removal path runs
- * through, so the guard wraps it; a rename leaves the guard wrapping nothing and the archive's
- * source stranded on the map.
+ * The control removes every style layer still reading an archive's source before the source
+ * (maplibre-gl-components 0.32); without that the decoration strands the source on the map.
  */
 describe("removing an archive GeoLibre has decorated", () => {
-  async function decoratedArchive(guarded: boolean, mapbox = false) {
+  async function decoratedArchive(mapbox = false) {
     const { document, window } = parseHTML("<!doctype html><html><body></body></html>");
     const globals = globalThis as Record<string, unknown>;
     const restore = { document: globals.document, window: globals.window, fetch: globals.fetch };
@@ -395,8 +392,6 @@ describe("removing an archive GeoLibre has decorated", () => {
         getState: () => { layers: { id: string }[]; error: string | null };
       };
       const fake = statefulMap(document as unknown as Document, { mapbox });
-      // Guarded before it is added, as the plugin does, so the guard captures this map.
-      if (guarded) guardPMTilesSourceRemoval(control as never);
       control.onAdd(fake.map);
       await control.addLayer("https://example.test/flow.pmtiles");
       assert.equal(control.getState().error, null, "the control loaded the archive");
@@ -416,99 +411,12 @@ describe("removing an archive GeoLibre has decorated", () => {
     }
   }
 
-  it("ignores an unknown archive id without touching another source's companions", () => {
-    const { document, window } = parseHTML("<!doctype html><html><body></body></html>");
-    const globals = globalThis as Record<string, unknown>;
-    const previous = { document: globals.document, window: globals.window };
-    globals.document = document;
-    globals.window = Object.assign(window, { maplibregl: { addProtocol: () => {} } });
-    try {
-      const control = new PMTilesLayerControl({});
-      const fake = statefulMap(document as unknown as Document);
-      guardPMTilesSourceRemoval(control);
-      control.onAdd(fake.map as never);
-      fake.sources.add("unrelated-source");
-      fake.layers.set("unrelated-companion", {
-        id: "unrelated-companion",
-        source: "unrelated-source",
-        metadata: { "geolibre:internal": true },
-      });
-      control.removeLayer("unrelated-source");
-      assert.ok(fake.layers.has("unrelated-companion"));
-      assert.ok(fake.sources.has("unrelated-source"));
-    } finally {
-      globals.document = previous.document;
-      globals.window = previous.window;
-    }
-  });
-
-  it("always calls archive teardown when a disposed map rejects companion cleanup", () => {
-    let calls = 0;
-    const control = {
-      onAdd: () => ({}),
-      getState: () => ({ layers: [{ id: "owned" }] }),
-      onRemove() {},
-      _removeLayer: (_id?: string) => {
-        calls++;
-      },
-    };
-    guardPMTilesSourceRemoval(control as never);
-    (control.onAdd as (map: unknown) => unknown)({
-      getLayersOrder: () => {
-        throw new Error("map disposed");
-      },
-    });
-    assert.doesNotThrow(() => control._removeLayer("owned"));
-    assert.equal(calls, 1);
-  });
-
-  it("preserves the original archive-removal error", () => {
-    const failure = new Error("native removal failed");
-    const control = {
-      onAdd: () => ({}),
-      getState: () => ({ layers: [] }),
-      onRemove() {},
-      _removeLayer: (_id?: string) => {
-        throw failure;
-      },
-    };
-    guardPMTilesSourceRemoval(control as never);
-    assert.throws(
-      () => control._removeLayer("owned"),
-      (error) => error === failure,
-    );
-  });
-
-  it("releases the captured map after the control finishes removal", () => {
-    let mapReads = 0;
-    const control = {
-      onAdd: (_map: unknown) => ({}),
-      onRemove() {},
-      getState: () => ({ layers: [{ id: "owned" }] }),
-      _removeLayer: (_id?: string) => {},
-    };
-    guardPMTilesSourceRemoval(control as never);
-    control.onAdd({
-      getLayersOrder: () => {
-        mapReads++;
-        return [];
-      },
-    });
-    control._removeLayer("owned");
-    assert.equal(mapReads, 1);
-    control.onRemove();
-    control._removeLayer("owned");
-    assert.equal(mapReads, 1, "a removed control must not retain access to its former map");
-  });
-
-  it("strands the source without the guard, which is why it exists", async () => {
-    const { sources, refused, archiveId } = await decoratedArchive(false);
-    assert.deepEqual(refused, [archiveId]);
-    assert.ok(sources.has(archiveId));
-  });
-
-  it("drops GeoLibre's decoration first, so the control removes its source", async () => {
-    const { layers, sources, refused, archiveId } = await decoratedArchive(true);
+  // Line decorations (flow arrows) are a GeoLibre-owned symbol layer on the
+  // control's source. MapLibre refuses to remove a source a style layer still
+  // reads, so the control must drop such layers first (maplibre-gl-components
+  // 0.32; GeoLibre wrapped its private _removeLayer before that).
+  it("drops GeoLibre's decoration first, so it removes its source", async () => {
+    const { layers, sources, refused, archiveId } = await decoratedArchive();
     assert.deepEqual(refused, []);
     assert.ok(!sources.has(archiveId), "the archive's source is gone");
     assert.ok(!layers.has("layer-x-line-decoration-streams"));
@@ -516,7 +424,7 @@ describe("removing an archive GeoLibre has decorated", () => {
   });
 
   it("does the same on a Mapbox map, which has no getLayersOrder", async () => {
-    const { layers, sources, refused, archiveId } = await decoratedArchive(true, true);
+    const { layers, sources, refused, archiveId } = await decoratedArchive(true);
     assert.deepEqual(refused, []);
     assert.ok(!sources.has(archiveId));
     assert.equal(layers.size, 0);

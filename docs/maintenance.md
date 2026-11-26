@@ -61,6 +61,16 @@ at zoom >= 12 on Mesa GPUs without them). Before bumping it, confirm
   `backend/geolibre_server/geolibre_server/app/conversion.py`), and the dialog
   validates against whichever engine is about to run.
   `tests/wasm-convert.test.ts` fails if the mirror drifts.
+- **`RoutingGraph` mirrors the JS network search.** The local network tools
+  (`packages/processing/src/local-network.ts`) run their Dijkstra, A* and
+  turn-rule searches in geolibre-wasm's `RoutingGraph` when it loads
+  (`local-network-wasm.ts`) and fall back to `LocalNetwork.searchJs`
+  otherwise. The Rust search copies the JS one step for step (heap, tie
+  order, budget charging, the weighted stop), so the two must change
+  together: a search change in either repo needs the same change in the
+  other. `tests/local-network-wasm.test.ts` runs randomized networks and the
+  whole routing suite through both engines and fails on any difference; it
+  skips itself only when the installed geolibre-wasm has no `RoutingGraph`.
 - **`DISTANCE_SEGMENTS` / `NON_DISTANCE_NAMES`**
   (`apps/geolibre-desktop/src/lib/whitebox-distance-params.ts`) decide, by
   parameter _name_, which Whitebox parameters are ground distances and so get the
@@ -314,14 +324,14 @@ black — it declines the stack.
   any of these packages, activate every migrated Web Services plugin and verify that
   its catalog renders, resizing the GeoLibre dock preserves the content, and
   no vendor panel remains under the map container.
-- **NASA Earthdata panel Add date fallback.** `nasa-earthdata-date-fallback.ts`
-  replaces the control instance's `addLayer` (`addAtAvailableDefaultDate`), so a
-  panel Add of a time-enabled layer probes the zoom-0 tile at its default date
-  and adds the newest earlier date with imagery. It depends on the panel Add
-  calling `this.addLayer(layer.id)` through the instance, and on `addLayer`
-  reading `options.date` and `options.key`. `tests/upstream-contracts.test.ts`
-  checks both. The probe URL shape (`{z}/{y}/{x}` from `buildTileUrl`) is covered
-  by `tests/nasa-earthdata-date-fallback.test.ts`.
+- **NASA Earthdata panel Add date fallback.** GeoLibre turns on the control's
+  `defaultDateFallback` option (0.2.0+), so a panel Add of a time-enabled layer
+  probes the zoom-0 tile at its default date and adds the newest earlier date
+  with imagery (#3259). This used to be a GeoLibre wrapper around the
+  instance's `addLayer`. The probe's behaviour (de-duplicating a repeat Add,
+  passing adds with a `date` or `key` straight through, adding nothing after
+  `onRemove`, which deactivating the plugin runs) is upstream's and tested
+  there; `tests/nasa-earthdata-options.test.ts` checks GeoLibre turns it on.
 
 ### `maplibre-gl-components` (`packages/plugins/package.json`)
 
@@ -363,24 +373,14 @@ black — it declines the stack.
   real archive, through the real `layeradd` handler into the store, and fails if
   the id scheme moves or the selection stops reaching the handler.
 
-- **The PMTiles control's private `_removeLayer(id?)`** is wrapped by
-  `guardPMTilesSourceRemoval` (`packages/plugins/src/plugins/components/pmtiles.ts`).
-  Line decorations (flow arrows) on a vector archive are a GeoLibre-owned symbol
-  layer on the control's source, and every way the control drops an archive (its
-  `removeLayer`, the panel's remove button, `onRemove`) runs through
-  `_removeLayer`, which removes the source right after the control's own layers.
-  MapLibre refuses to remove a source a style layer still reads (an error event,
-  not a throw), so without the wrap the decoration strands the source and logs a
-  Diagnostics error. If the method is renamed the guard wraps nothing;
-  `tests/pmtiles-control-contract.test.ts` drives the real control and fails.
-  The guard removes those layers from the map directly, not through
-  store-driven sync, because the control drops the source before sync runs
-  (synchronously from the store subscription, or with no store write at all
-  from the panel's remove button). The same file also asserts that the
-  unguarded control strands the source: if an upstream bump makes that case
-  fail (the control drops its source safely on its own), the guard is no
-  longer needed, so delete it and that test rather than inverting the
-  assertion.
+- **Line decorations on a PMTiles archive.** Flow arrows on a vector archive
+  are a GeoLibre-owned symbol layer on the control's source, and MapLibre
+  refuses to remove a source a style layer still reads. Since 0.32 every way
+  the control drops an archive removes the other style layers reading its
+  source first, so GeoLibre no longer wraps the private `_removeLayer`.
+  `tests/pmtiles-control-contract.test.ts` drives the real control on
+  MapLibre- and Mapbox-shaped maps and fails if the decoration strands the
+  source again.
 
 - **The AddVectorControl's layer id rule** (`upstreamUrlLayerId` /
   `flatGeobufLayerName`, `packages/plugins/src/plugins/components/flatgeobuf.ts`)
@@ -393,23 +393,17 @@ black — it declines the stack.
   (undecoded) instead of the file name. `tests/flatgeobuf-layer-name.test.ts`
   uses a fake control, so after a bump add a FlatGeobuf URL with and without a
   Layer Name and check the Layers panel.
-- **The MeasureControl's `_panel` and `_sourceId`**
-  (`packages/plugins/src/plugins/terrain-measure.ts`, via `measurePanelElement`
-  and `measureSourceId`) are private members that only the control knows: the
-  panel carries GeoLibre's Terrain (3D)/heading sections and the resize styling,
-  and the source id is how `lidar-measure-mirror.ts` finds the geometry it
-  redraws above a LiDAR point cloud (#2533). Both readers warn and fall back to
-  doing nothing on a rename; `tests/upstream-contracts.test.ts` builds a real
-  `MeasureControl` and fails if either field is gone. After a bump, still
-  confirm the Terrain section appears and a measured line shows inside a point
-  cloud.
-- **The MeasureControl's `_setupMapSources` and `_updateMapGeometry`**
-  (`healMeasureLayersOnStyleSwap`, `packages/plugins/src/plugins/components/measure.ts`)
-  re-add the measured line and polygon after a basemap swap: the control adds
-  its source once in `onAdd`, so a `setStyle` (the celestial body switch, any
-  basemap change) left the line undrawn (#3471). The heal is skipped when
-  either method is gone, and `tests/upstream-contracts.test.ts` checks both.
-  Drop it once the control re-adds its own layers on `style.load`.
+- **The MeasureControl's panel and source id** come from its public
+  `getPanelElement()` and `getSourceId()` (0.32+), read through
+  `measurePanelElement` / `measureSourceId`
+  (`packages/plugins/src/plugins/terrain-measure.ts`): the panel carries
+  GeoLibre's Terrain (3D)/heading sections and the resize styling, and the
+  source id is how `lidar-measure-mirror.ts` finds the geometry it redraws
+  above a LiDAR point cloud (#2533). Since 0.32 the control also re-adds its
+  measured line and polygon on `style.load` itself, which GeoLibre used to
+  heal after a basemap swap (#3471). After a bump, still confirm the Terrain
+  section appears, a measured line shows inside a point cloud, and a measured
+  line survives a basemap change.
 - **The measure paint** (`MEASURE_LINE_COLOR`/`MEASURE_LINE_WIDTH`/
   `MEASURE_FILL_COLOR`, `packages/plugins/src/plugins/lidar-measure-mirror.ts`)
   is passed to the control explicitly rather than left to its defaults, because
@@ -418,22 +412,17 @@ black — it declines the stack.
   `tests/lidar-measure-mirror.test.ts` asserts the pair agrees.
 - **Theme defaults for GUI-created overlays** (`themeHtmlControlOutputs`,
   `themeLegendControlOutputs`, `themeColorbarControlOutputs` in
-  `packages/plugins/src/plugins/components/{html,legend,colorbar}.ts`) wrap the
-  private factories `HtmlGuiControl._createHtmlControl`,
-  `LegendGuiControl._createLegend` and `ColorbarGuiControl._syncPositionControl`
-  (which keeps the per-corner outputs in the private `_positionControls` map),
-  then call each output's public `update({ backgroundColor, fontColor })` with
-  `var(--geolibre-bg)` / `var(--geolibre-fg)`. The GUI constructor's own
-  `backgroundColor`/`fontColor` options only style the editor panel and are not
-  forwarded, so this is the only way the on-map legend/colorbar/HTML surfaces
-  follow the app theme. A rename leaves the wrapper calling an undefined
-  function (the panel throws on Add) or skipping silently (the surface reverts
-  to upstream white). `createComponentsControl` (`maplibre-components.ts`)
-  applies the same wrappers, and adds the standalone `geolibre-*` theme class
-  plus `geolibre-grid-child` in each child's `onAdd`, to the ControlGrid's
-  internally created children. After a bump, toggle the app theme with a
-  legend, colorbar and HTML overlay on the map, from both the Controls menu and
-  the Components grid.
+  `packages/plugins/src/plugins/components/{html,legend,colorbar}.ts`) call
+  each GUI control's public `setOutputStyle` (0.32+) with
+  `GEOLIBRE_GUI_OUTPUT_STYLE` (`var(--geolibre-bg)` / `var(--geolibre-fg)`),
+  so the on-map legend/colorbar/HTML surfaces follow the app theme; the GUI
+  constructor's `backgroundColor`/`fontColor` options only style the editor
+  panel. `createComponentsControl` (`maplibre-components.ts`) applies the same
+  to the ControlGrid's internally created children, and still wraps each
+  child's `onAdd` to add the standalone `geolibre-*` theme class plus
+  `geolibre-grid-child`. After a bump, toggle the app theme with a legend,
+  colorbar and HTML overlay on the map, from both the Controls menu and the
+  Components grid.
 - **Theme overrides in `index.css`** assume the component/Layer
   Control/Street View stylesheets may load **after** `index.css` (they arrive
   with lazily imported chunks), so a same-specificity override loses. Overrides
@@ -453,14 +442,14 @@ black — it declines the stack.
 ### `maplibre-gl-basemap-control` (`packages/plugins/package.json`)
 
 `BASEMAP_PANEL_SELECTOR` / `BASEMAP_ROW_SELECTOR` / `BASEMAP_ROW_ID_ATTR`
-(`packages/plugins/src/plugins/basemap-thumbnails.ts`) mirror the DOM the control
-renders — `.basemap-control-panel`, `.basemap-control-result`, `data-basemap-id` —
-which the Basemaps panel's thumbnails hook into to find rows and join each one
-back to its catalog entry. That package exports only
-`BasemapControl`/`BasemapDefinition`, so a renamed class fails nothing at build
-time: the queries stop matching and thumbnails silently stop appearing.
-`tests/basemap-thumbnails.test.ts` builds a real control and asserts its rendered
-panel against the mirror.
+(`packages/plugins/src/plugins/basemap-thumbnails.ts`) copy the DOM names the
+control renders and exports (0.15.0 and later): `.basemap-control-panel`,
+`.basemap-control-result` and `data-basemap-id`, which the Basemaps panel's
+thumbnails hook into to find rows and join each one back to its catalog entry.
+They stay copies so the thumbnails module does not pull the control's chunk;
+a renamed class would fail nothing at build time, so
+`tests/basemap-thumbnails.test.ts` compares them with the package's exports and
+builds a real control to assert its rendered panel.
 
 The same file's `hasUnresolvedPlaceholder` deliberately matches the **complement**
 of the tile tokens it substitutes rather than mirroring that package's credential
@@ -470,15 +459,14 @@ enumerating placeholder names.
 
 ### `maplibre-gl-vector` (`packages/plugins/package.json`)
 
-`MAX_VECTOR_BYTES` (`packages/plugins/src/plugins/remote-file-formats.ts`) mirrors
-`MAX_REMOTE_FILE_BYTES`, an **internal, unexported** constant in that package
-(2 GiB — DuckDB-WASM holds remote file sizes in 32 bits). It cannot be imported,
-so re-check `src/lib/utils/remote.ts` in that package and update the mirror if it
-moved. If it drifts, the remote-browse panels (Source Cooperative, Hugging Face)
-silently block GeoParquet the engine could now open, or offer an Add that is
-certain to fail. Updating the constant is enough: the limit the user is shown is
-rendered from it, not written into the copy. `tests/upstream-contracts.test.ts`
-reads the constant out of the published chunk and compares.
+`MAX_VECTOR_BYTES` (`packages/plugins/src/plugins/remote-file-formats.ts`) copies
+`MAX_REMOTE_FILE_BYTES`, which that package exports from 0.12.0 (2 GiB:
+DuckDB-WASM holds remote file sizes in 32 bits). It stays a copy so the browse
+panels never import the control's chunk. If it drifts, the remote-browse panels
+(Source Cooperative, Hugging Face) silently block GeoParquet the engine could
+now open, or offer an Add that is certain to fail. Updating the constant is
+enough: the limit the user is shown is rendered from it, not written into the
+copy. `tests/upstream-contracts.test.ts` compares it with the export.
 
 `remote-file-formats.ts` is the **single** home for this and the other
 format/reader/size rules those panels share — a per-panel copy would miss this
@@ -487,14 +475,15 @@ check, so add new browse panels against that module rather than duplicating it
 
 Adoption (`adoptVectorControlLayers` in `vector-layer-sync.ts`, #2715) hands the
 control's small GeoJSON-mode layers to GeoLibre, and leans on three things the
-package does not promise. `getLayerGeoJSON` must return the whole collection for
-a `renderMode: "geojson"`, `ingestMode: "table"` layer. `removeLayer` must drop
+package documents as API since 0.12.0. `getLayerGeoJSON` must return the whole
+collection for a `renderMode: "geojson"`, `ingestMode: "table"` layer. `removeLayer` must drop
 the layer's DuckDB table as well as its map source, or adoption keeps two copies
-of the data. And `KML_ICON_PROPERTY` mirrors the feature property the control's
+of the data (the drop is asynchronous and unreported). And `KML_ICON_PROPERTY`
+copies the exported `KML_ICON_URL_PROPERTY`, the feature property the control's
 KML/KMZ icon layer filters on (`__geolibre_kml_icon_url`); a layer carrying it
 stays with the control, so a rename upstream would adopt KML layers and drop
-their icons. Re-check all three on a bump (the contract test covers only
-`KML_ICON_PROPERTY`).
+their icons. Re-check all three on a bump (the contract test compares
+`KML_ICON_PROPERTY` with the export).
 
 ### `maplibre-gl-lidar` (`packages/plugins/package.json`) — half checked by the compiler
 
@@ -555,15 +544,18 @@ maplibre-gl-lidar's `nodeRanges` index points within a node.
 
 The `?data=` LiDAR deep link leans on two more things the compiler cannot see.
 `isStreamedLidarUrl` (`apps/geolibre-desktop/src/lib/data-url.ts`) copies the
-routing at the top of `LidarControl.loadPointCloud` (an `/ept.json` suffix or a
-`.copc.` anywhere in the URL streams; anything else downloads whole) so that only
-whole downloads get the size check. If upstream changes that routing, update the
-copy, or a streamed file gets a needless size check and a downloaded one skips
-it. `addLidarLayerFromUrl` also relies on `load` firing, and adding the store
-layer, before `loadPointCloud` resolves; it throws if not.
+package's exported `isStreamedPointCloudUrl` (0.22.0 and later), which
+`LidarControl.loadPointCloud` routes through (an `/ept.json` suffix or a
+`.copc.` in an http(s) URL streams; anything else downloads whole), so that only
+whole downloads get the size check. It stays a copy to keep the lidar chunk off
+the startup path. If upstream changes that routing, update the copy, or a
+streamed file gets a needless size check and a downloaded one skips it. Note
+that a COPC stream that fails falls back to a whole download, which then skips
+the size check. `addLidarLayerFromUrl` also relies on `load` firing, and adding
+the store layer, before `loadPointCloud` resolves; it throws if not.
 `tests/lidar-url-layer.test.ts` pins the GeoLibre side of both, and
-`tests/upstream-contracts.test.ts` fails if `loadPointCloud` stops routing on
-those strings. Re-read `loadPointCloud` on a bump.
+`tests/upstream-contracts.test.ts` compares the copy with
+`isStreamedPointCloudUrl` over a set of URLs.
 
 The point cloud annotator (`packages/plugins/src/plugins/point-cloud-annotation/`)
 edits the control's loaded points through the point-editing API the package
@@ -575,60 +567,37 @@ relies on them being the buffers the layers render from (for a streamed cloud,
 views of the loader's buffers). Saved labels are keyed by `nodeRanges`
 (`(node key, index - start)`), so a change in how the loaders order a node's
 points would silently re-apply labels to the wrong points. `ASPRS_CLASSES` in
-`classes.ts` hand-mirrors the package's unexported `CLASSIFICATION_COLORS`;
+`classes.ts` hand-mirrors the package's `CLASSIFICATION_COLORS` (exported since
+0.22.0, kept as a copy for the same startup reason);
 `tests/point-cloud-annotation.test.ts` reads the real colours back through
 `ColorSchemeProcessor` and fails on drift. Run
 `npx playwright test e2e/point-cloud-annotation.spec.ts --project=features` on
 a bump.
 
-### `maplibre-gl-layer-control` (`packages/map/package.json`) — private internals
+### `maplibre-gl-layer-control` (`packages/map/package.json`)
 
 `packages/map/src/layer-control-host.ts` drives the on-map layer control
-through its public options and adapter methods (including the layer-group
-methods added in 0.18.0), but it also reaches into private members the
-compiler cannot check; `LayerControlInternalState` in that file lists them:
+through its public API only (0.19.0 and later): the `basemapLayerIds` option
+when there is no fetchable basemap style URL, `setLayerState` to mirror store
+visibility, opacity and names into the built panel (and to add the Background
+row on styles with no root basemap layers), `setLayerOrder` to put the panel
+back after a reorder the store refused, and `isCollapsed` so a rebuild remounts
+an open control open. The compiler checks all of it. Rebuild semantics are not
+visible to it, so still drive the control in the app on a bump: toggle a
+grouped layer, reorder inside a group, and hide a group.
 
-- `panel` and the `.layer-control-item` / `.layer-control-checkbox` /
-  `.layer-control-opacity` / `.layer-control-name` DOM, to mirror store
-  visibility, opacity, and names into an already-built panel in place.
-- `state.layerStates` (same reason) and `state.collapsed`, read before a
-  rebuild so a control that was open is remounted open.
-- `basemapLayerIds`, seeded when there is no fetchable basemap style URL.
-- `buildLayerItems()`, called to add the Background row on styles with no root
-  basemap layers, and to redraw the rows after a reorder the store refused.
+### `maplibre-gl-splat` (`packages/plugins/package.json`)
 
-If upstream renames any of these, the panel stops following the store (or a
-rebuild closes the panel) without an error. `tests/upstream-contracts.test.ts`
-builds a real `LayerControl` and checks every member above and the row class
-names; it cannot check how a rebuild uses them, so still drive the control in
-the app on a bump: toggle a grouped layer, reorder
-inside a group, and hide a group. The fix belongs upstream as public API; this
-package is ours (`opengeos/maplibre-gl-layer-control`).
-
-### `maplibre-gl-splat` (`packages/plugins/package.json`) — private internals
-
-`packages/plugins/src/plugins/components/splatting.ts` reaches into
-`GaussianSplatControl`'s private fields, which the compiler cannot check:
-
-- `reserveSplattingIds` replaces the `_layerCounter` / `_modelCounter` instance
-  fields with accessors. Upstream names each asset `splat-${this._layerCounter++}`
-  / `model-${this._modelCounter++}`, and a new control restarts at 0, so without
-  the accessors a fresh load could take a saved layer's id and overwrite it.
-  Restoring a saved layer under its own id also goes through them.
-- `recordSplattingPlacements` wraps `loadSplat` / `loadModel` on the instance and
-  reads `_splatLayers` / `_modelLayers` (per-asset longitude/latitude/altitude),
-  `_state.rotation` / `_state.scale` and `_options.defaultModelRotation`, so the
-  store layer carries the placement a restore needs. The restore turns
-  `_options.flyTo` off while it runs.
-
-If upstream renames those fields or changes how it assigns ids, id reservation
-and placement restore stop working without an error.
-`tests/splatting-restore.test.ts` drives a fake with the same shape, so it will
-not catch that; `tests/upstream-contracts.test.ts` builds a real control and
-checks each field and the `splat-${counter}` / `model-${counter}` naming and
-placement recording in `loadSplat` / `loadModel`.
-Better still, upstream an id option and a per-asset placement getter and delete
-the patching.
+`packages/plugins/src/plugins/components/splatting.ts` drives
+`GaussianSplatControl` through its public API only (0.3.0 and later): the
+`isIdReserved` option keeps generated `splat-N` / `model-N` ids off layers
+already in the store, a restore reloads each saved layer with
+`loadSplat`/`loadModel` under its saved `id` and placement with `flyTo: false`,
+the `splatload`/`modelload` events' `placement` is written onto the store layer
+so a restore can put the asset back, and `hide`/`show` keep a control mounted
+only for a restore out of sight. The compiler checks all of it;
+`tests/splatting-restore.test.ts` drives a fake with that API. After a bump,
+load a splat, save and reopen the project, and check it comes back in place.
 
 ### `@geoman-io/maplibre-geoman-free` (`packages/plugins/package.json`) — change-mode and shape-marker internals
 
@@ -741,8 +710,8 @@ so update those lists when a preset is added or renamed.
 
 ### `maplibre-gl-raster` — stretch and gamma curves
 
-`buildContinuousColormapRgba`
-(`packages/plugins/src/plugins/raster-symbology.ts`) mirrors the render
+`buildContinuousColormapRgba` (through `invertRasterAdjustments`,
+`packages/plugins/src/plugins/raster-symbology.ts`) mirrors the render
 pipeline's value adjustments **by hand**, inverted. Value-range opacity paints
 its alpha into the injected 256-wide colormap texture, so it has to map a
 texture column back to a data value — and the renderer samples that texture
@@ -756,30 +725,24 @@ the stretch:
 - `log` stretch — renderer `log(1 + 99x) / log(1 + 99)`, mirror
   `(100^t - 1) / 99`
 
-None of it is exported: the curves live in the package's `pushAdjustments` /
-shader modules, and the strength constant (99) is a hard-coded prop. If
-upstream reorders the pipeline, changes a curve, or retunes the log strength,
-nothing fails to build — opacity thresholds just drift off the values the user
-typed, and only under a non-default stretch or gamma. On a bump, re-read that
-package's `pushAdjustments` for the forward curves and their order (its own
-`inverseStretch` helper, used for the histogram ticks, is a second copy of the
-two stretch inverses above) and run `tests/raster-symbology.test.ts`.
-`tests/upstream-contracts.test.ts` reads `pushAdjustments` and the three shader
-curves out of the published chunk and fails if the order, a curve or the
-strength changes.
+The package exports the same curves as `applyAdjustments` /
+`invertAdjustments` (0.15.0 and later), but importing them here would put the
+whole ~0.35 MB raster chunk on the startup path, so `invertRasterAdjustments`
+in `raster-symbology.ts` stays a hand-kept copy.
+`tests/upstream-contracts.test.ts` compares it numerically with the exported
+`invertAdjustments` for every stretch and a range of gammas, so a reordered
+pipeline, a changed curve or a retuned log strength fails
+`npm run test:frontend`. Run `tests/raster-symbology.test.ts` too.
 
-### `maplibre-gl-raster` — pixel inspector click guard
+### `maplibre-gl-raster`: pixel inspector click filter
 
-`guardRasterInspectorClicks` (`packages/plugins/src/plugins/maplibre-raster.ts`)
-wraps the private `RasterControl._inspector._onClick` once after mount, so the
-pixel inspector ignores a click that a drawing map tool (Measure, the Geo
-Editor) has claimed through `isMapClickClaimed` (#3237). It works only because
-the inspector's `enable()` and `disable()` both read `this._onClick` at call
-time; if upstream binds a copy instead, the guard is skipped (the inspector
-opens on measure clicks again) or, worse, `disable()` stops unbinding it.
-`tests/upstream-contracts.test.ts` reads the published chunk and fails if the
-field, the arrow property or either binding moves. Better still, upstream a
-click-filter option and delete the wrap.
+`packages/plugins/src/plugins/maplibre-raster.ts` passes
+`rasterInspectorClickFilter` to the control's public `setInspectorClickFilter`
+(0.15.0 and later), so the pixel inspector ignores a click that a drawing map
+tool (Measure, the Geo Editor) has claimed (#3237). Upstream's contract is that
+the filter returns `true` to inspect a click and `false` to ignore it;
+`tests/upstream-contracts.test.ts` pins the GeoLibre side against a claimed and
+an unclaimed click.
 
 ### `maplibre-gl-raster` — rasters stay out of the depth buffer
 
@@ -1481,7 +1444,7 @@ output.
 `npm run build` fails when the JS the app entry imports statically (what
 `index.html` modulepreloads before the shell mounts) grows past either budget
 in `apps/geolibre-desktop/boot-budget.json`, or when it contains Cesium. The
-check is `bootBundleBudgetPlugin` in `apps/geolibre-desktop/vite.config.ts`.
+check is `bootBundleBudgetPlugin` in `apps/geolibre-desktop/vite-chunking.ts`.
 
 | Budget      | Limit                     | Measured when set |
 | ----------- | ------------------------- | ----------------- |

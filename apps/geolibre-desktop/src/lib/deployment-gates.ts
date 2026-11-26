@@ -128,6 +128,7 @@ const BROWSER_ONLY_RASTER_TOOLS = [
   "speckle-filter",
   "sar-rgb",
   "flood-map",
+  "cut-fill",
   "building-shadows",
 ] as const;
 

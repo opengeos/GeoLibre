@@ -93,7 +93,8 @@ APIs described in the [Plugin API](plugin-api.md).
 
 `MapController` is the MapLibre implementation of `MapEngine`.
 `packages/map/src/layer-sync.ts` reconciles project layer records with native
-sources and style layers, while specialized controls register protocols or
+sources and style layers (the per-kind work lives in the `layer-sync-*.ts`
+modules beside it), while specialized controls register protocols or
 shared overlays for formats that MapLibre does not draw directly. The reusable
 headless surface is published as `@geolibre/map`.
 

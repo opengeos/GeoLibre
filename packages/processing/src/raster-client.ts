@@ -17,6 +17,7 @@ import {
   mapGeometry,
   rasterCrsDefinition,
   rasterEpsg,
+  toNorthUp,
 } from "./raster-geo";
 import { interpolatePoints } from "./raster-interpolate";
 import { dualPolRgb, floodMap, sarDbConvert, speckleFilter } from "./raster-sar";
@@ -26,6 +27,14 @@ import {
   polygonizeRaster,
   zonalStatistics,
 } from "./raster-vector";
+import {
+  cutFill,
+  isGeographicRaster,
+  projectedAreaScale,
+  projectedMetersPerUnit,
+  type CutFillParams,
+  type CutFillSummary,
+} from "./raster-volume";
 import { buildingShadows, type BuildingShadowParams } from "./raster-shadow";
 import { mosaicRasters, reprojectRaster, resampleRaster } from "./raster-warp";
 
@@ -109,6 +118,7 @@ export const CLIENT_RASTER_TOOL_IDS: ReadonlySet<RasterToolId> = new Set<RasterT
   "speckle-filter",
   "sar-rgb",
   "flood-map",
+  "cut-fill",
   "building-shadows",
 ]);
 
@@ -1049,6 +1059,8 @@ export type ClientToolResult =
       detailMessages: string[];
       /** The transition matrix, for `transition-matrix`. */
       matrix?: TransitionMatrix;
+      /** The volume totals, for `cut-fill`. */
+      cutFill?: CutFillSummary;
     }
   | {
       kind: "vector";
@@ -1132,7 +1144,10 @@ export async function runRasterToolClientAsync(
       `Loaded raster: ${inputs.raster.width}×${inputs.raster.height}, ${inputs.raster.bands.length} band(s).`,
     );
   }
-  const rasterResult = (raster: RasterData, extra: string[] = []): ClientToolResult => {
+  const rasterResult = (
+    raster: RasterData,
+    extra: string[] = [],
+  ): Extract<ClientToolResult, { kind: "raster" }> => {
     messages.push(...extra, `Computed "${toolId}" in the browser.`);
     return {
       kind: "raster",
@@ -1288,6 +1303,86 @@ export async function runRasterToolClientAsync(
         p as never,
       );
       return rasterResult(out.raster, out.messages);
+    }
+    case "cut-fill": {
+      const looksLikeLonLat = (r: RasterData) =>
+        r.originX >= -180 &&
+        r.originX + r.width * r.resX <= 360 &&
+        r.originY <= 90 &&
+        r.originY - r.height * r.resY >= -90;
+      // North-up first: the area-scale lattice is indexed by north-up rows.
+      let existing = toNorthUp(requireRaster(inputs, toolId));
+      let surface =
+        p.reference === "surface"
+          ? requireSecondary(inputs, "surface_path", "reference surface")
+          : null;
+      const extra: string[] = [];
+      const boundary = inputs.vectors?.boundary_path;
+      if (boundary != null) {
+        // Both surfaces share a grid, so the same mask crops them to the same
+        // window and they stay aligned.
+        const clipped = await clipRasterByMask(existing, boundary, { crop: true });
+        existing = clipped.raster;
+        extra.push(...clipped.messages);
+        if (surface) surface = (await clipRasterByMask(surface, boundary, { crop: true })).raster;
+      }
+      let metersPerUnit = 1;
+      let areaScale: ((row: number, col: number) => number) | null = null;
+      if (!isGeographicRaster(existing)) {
+        let definition: string | null = null;
+        try {
+          definition = await rasterCrsDefinition(existing, "cut-fill");
+        } catch (error) {
+          // A raster tagged with a projected CRS that cannot be resolved has
+          // an unknown unit and distortion; guessing metres could be off by
+          // 10x for a feet grid, so stop. Only untagged rasters fall through.
+          const keys = existing.geoKeys ?? {};
+          if (keys.ProjectedCSTypeGeoKey != null || keys.ProjCoordTransGeoKey != null) throw error;
+          definition = null;
+        }
+        const resolved = projectedMetersPerUnit(existing, definition);
+        if (resolved != null) metersPerUnit = resolved;
+        if (definition) {
+          // The projection's own area distortion, via its inverse.
+          try {
+            const inverse = await crsTransform(definition, "EPSG:4326");
+            const projected = projectedAreaScale(existing, inverse, metersPerUnit);
+            areaScale = projected.scaleAt;
+            if (projected.failedNodes > 0) {
+              extra.push(
+                `Warning: ${projected.failedNodes} sample point(s) could not be inverse-projected (outside the projection's valid area?); cells near them use no area correction.`,
+              );
+            }
+          } catch {
+            extra.push(
+              "Warning: the raster's CRS could not be inverse-projected; cell sizes are taken with no projection correction.",
+            );
+          }
+        } else if (
+          existing.resX < 0.1 &&
+          existing.resY < 0.1 &&
+          looksLikeLonLat(existing) &&
+          (Math.abs(existing.originX) > 1 || Math.abs(existing.originY) > 1)
+        ) {
+          // Sub-0.1 cells inside the lon/lat range, away from a local grid's
+          // (0, 0) origin, are almost certainly degrees with no CRS tag (arc-
+          // second to arc-minute DEMs); treating them as metres would
+          // understate volume by about 10^10.
+          throw new Error(
+            "The raster has no usable CRS and its cell size looks like degrees, so cell areas cannot be computed. Assign a CRS first.",
+          );
+        } else if (existing.resX < 1 && existing.resY < 1 && looksLikeLonLat(existing)) {
+          extra.push(
+            "Warning: the raster has no usable CRS and its cells may be degrees; if they are, these totals are unusable, so assign a CRS.",
+          );
+        } else {
+          extra.push(
+            "Warning: the raster's CRS could not be resolved; cell sizes use its linear unit (metres if none) with no projection correction.",
+          );
+        }
+      }
+      const out = cutFill(existing, surface, p as CutFillParams, metersPerUnit, areaScale);
+      return { ...rasterResult(out.raster, [...extra, ...out.messages]), cutFill: out.summary };
     }
     case "building-shadows": {
       const buildings = requireVector(inputs, "input", "buildings");
