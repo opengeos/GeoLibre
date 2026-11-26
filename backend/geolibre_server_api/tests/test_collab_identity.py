@@ -105,9 +105,20 @@ def test_signature_matches_the_relay_format():
         "pinned-secret",
     )
     assert token == PINNED_TOKEN
+    # Non-ASCII usernames travel as raw UTF-8 on both sides.
+    unicode_token = sign_collab_identity_token(
+        {"provider": "geolibre", "userId": "u-2", "username": "Zoë", "exp": 4102444800},
+        "pinned-secret",
+    )
+    assert unicode_token == PINNED_UNICODE_TOKEN
 
 
 PINNED_TOKEN = (
     "eyJwcm92aWRlciI6Imdlb2xpYnJlIiwidXNlcklkIjoidS0xIiwidXNlcm5hbWUiOiJBZGEgTG92ZWxhY2UiLCJleHAiOjQxMDI0NDQ4MDB9"
     ".cgXPTdcpCie9rzq7rrl8xtYIUYEONhRQxQ-9nq-Cy0s"
+)
+
+PINNED_UNICODE_TOKEN = (
+    "eyJwcm92aWRlciI6Imdlb2xpYnJlIiwidXNlcklkIjoidS0yIiwidXNlcm5hbWUiOiJab8OrIiwiZXhwIjo0MTAyNDQ0ODAwfQ"
+    ".hMbtKwWLurrnpkQLVr3kSroEaxJKZ8nj_KtYCrsDSLg"
 )

@@ -15,7 +15,25 @@ const SERVER_API_TOKEN =
   "eyJwcm92aWRlciI6Imdlb2xpYnJlIiwidXNlcklkIjoidS0xIiwidXNlcm5hbWUiOiJBZGEgTG92ZWxhY2UiLCJleHAiOjQxMDI0NDQ4MDB9" +
   ".cgXPTdcpCie9rzq7rrl8xtYIUYEONhRQxQ-9nq-Cy0s";
 
+const SERVER_API_UNICODE_TOKEN =
+  "eyJwcm92aWRlciI6Imdlb2xpYnJlIiwidXNlcklkIjoidS0yIiwidXNlcm5hbWUiOiJab8OrIiwiZXhwIjo0MTAyNDQ0ODAwfQ" +
+  ".hMbtKwWLurrnpkQLVr3kSroEaxJKZ8nj_KtYCrsDSLg";
+
 describe("collaboration identity tokens", () => {
+  it("matches the server API byte for byte for a non-ASCII username", async () => {
+    assert.equal(
+      (await verifyIdentityToken(SERVER_API_UNICODE_TOKEN, "pinned-secret"))?.username,
+      "Zoë",
+    );
+    assert.equal(
+      await signIdentityToken(
+        { provider: "geolibre", userId: "u-2", username: "Zoë", exp: 4102444800 },
+        "pinned-secret",
+      ),
+      SERVER_API_UNICODE_TOKEN,
+    );
+  });
+
   it("accepts a token minted by the server API, and mints the same bytes", async () => {
     assert.deepEqual(await verifyIdentityToken(SERVER_API_TOKEN, "pinned-secret"), {
       provider: "geolibre",

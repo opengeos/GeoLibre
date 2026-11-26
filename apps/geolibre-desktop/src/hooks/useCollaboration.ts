@@ -93,6 +93,9 @@ export function useCollaboration(
   const viewOnlyNoticeRef = useRef(createViewOnlyNotice());
   const restoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const joinGenerationRef = useRef(0);
+  // The join can wait on the identity lookup; frames sent before it would be
+  // refused by the relay, so project pushes hold until it is out.
+  const joinSentRef = useRef(false);
   const pendingConnectRef = useRef<{
     resolve: () => void;
     reject: (error: Error) => void;
@@ -152,7 +155,7 @@ export function useCollaboration(
   }, []);
 
   const sendSnapshot = async (): Promise<void> => {
-    if (!canEdit() || syncPausedRef.current) return;
+    if (!joinSentRef.current || !canEdit() || syncPausedRef.current) return;
     const request = ++snapshotRequestRef.current;
     let project: GeoLibreProject;
     try {
@@ -418,7 +421,7 @@ export function useCollaboration(
     // CollabConnection reuses one object across reconnects, so a generation
     // tells a join for this socket from one a reconnect has superseded.
     const generation = ++joinGenerationRef.current;
-    const sendJoin = (verifiedIdentity: string | null | undefined) => {
+    const sendJoin = (identity: string | null | undefined) => {
       if (connRef.current !== conn || joinGenerationRef.current !== generation) return;
       conn.send({
         type: "join",
@@ -427,8 +430,9 @@ export function useCollaboration(
         color,
         hostToken,
         inviteToken,
-        ...(verifiedIdentity ? { identityToken: verifiedIdentity } : {}),
+        ...(identity ? { identityToken: identity } : {}),
       });
+      joinSentRef.current = true;
     };
     if (identityToken) {
       sendJoin(identityToken);
@@ -444,6 +448,7 @@ export function useCollaboration(
 
     teardownRef.current = () => {
       joinGenerationRef.current += 1;
+      joinSentRef.current = false;
       if (debounce) clearTimeout(debounce);
       unsubscribe();
     };

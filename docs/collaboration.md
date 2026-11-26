@@ -247,6 +247,13 @@ single-purpose token reaches the relay, never the OAuth access token; the relay
 checks it offline with the shared secret. A user who is not signed in, or a
 server without the secret, joins anonymously as before.
 
+The token carries the account's id and username, so a signed-in user's
+identity goes to whichever relay the deployment configures
+(`VITE_GEOLIBRE_COLLAB_URL` / `GEOLIBRE_COLLAB_URL`). That relay can only
+verify (not mint) tokens, and the server only issues them when it shares a
+secret with a relay, so this pairing is an operator decision; a deployment
+should not point the app at a relay it does not trust with its users' names.
+
 The stock hosted relay leaves the secret unset, so the identity path stays
 dormant there until a deployment pairs a relay with its server API.
 

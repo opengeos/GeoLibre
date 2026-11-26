@@ -52,6 +52,17 @@ describe("fetchCollabIdentityToken", () => {
     );
   });
 
+  it("gives up on a slow token refresh within its deadline", async () => {
+    const started = Date.now();
+    const token = await fetchCollabIdentityToken({
+      issuer: ISSUER,
+      getAccessToken: () => new Promise<string | null>(() => {}),
+      timeoutMs: 50,
+    });
+    assert.equal(token, null);
+    assert.ok(Date.now() - started < 1000);
+  });
+
   it("stays anonymous when signed out, unconfigured, or failing", async () => {
     const never = fakeFetch(() => {
       throw new Error("must not be called");

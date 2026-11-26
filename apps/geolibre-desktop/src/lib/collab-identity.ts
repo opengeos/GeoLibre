@@ -30,6 +30,8 @@ export interface CollabIdentityDeps {
   /** Resolve the OAuth access token; null when not signed in. */
   getAccessToken?: () => Promise<string | null>;
   fetchImpl?: typeof fetch;
+  /** Overall deadline; defaults to three seconds. */
+  timeoutMs?: number;
 }
 
 /**
@@ -42,6 +44,20 @@ export interface CollabIdentityDeps {
 export async function fetchCollabIdentityToken(
   deps: CollabIdentityDeps = {},
 ): Promise<string | null> {
+  // One deadline for the whole lookup, token refresh included: the join waits
+  // on it, and a desktop refresh alone may take up to 30 s.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), deps.timeoutMs ?? REQUEST_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([lookup(deps), deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function lookup(deps: CollabIdentityDeps): Promise<string | null> {
   try {
     const injected = deps.issuer !== undefined || deps.getAccessToken !== undefined;
     if (!injected && !supportsShareOAuth()) return null;
