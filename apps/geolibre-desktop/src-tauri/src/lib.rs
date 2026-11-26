@@ -23,6 +23,7 @@ mod offline_extraction_jobs;
 mod offline_mbtiles;
 mod offline_package_commands;
 mod offline_packages;
+mod ogc_process_http;
 mod plugin_http;
 mod plugins_io;
 mod port_reclaim;
@@ -354,6 +355,7 @@ pub fn run() {
             martin::ensure_martin_binary,
             guarded_http::fetch_url_bytes,
             guarded_http::fetch_url_response,
+            ogc_process_http::ogc_process_http_request,
             arcgis_http::fetch_arcgis_response,
             arcgis_http::cancel_arcgis_request,
             plugin_http::plugin_http_request,

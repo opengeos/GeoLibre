@@ -54,6 +54,7 @@ type HookSuppliedContext =
   | "setGeocodeOpen"
   | "setModelBuilderOpen"
   | "setBatchToolsOpen"
+  | "setOgcProcessesOpen"
   | "setSegmentationOpen"
   | "setObjectDetectionOpen"
   | "setSegmentEverythingOpen"
@@ -104,6 +105,7 @@ export function useToolbarCommands(options: UseToolbarCommandsOptions): Command[
   const setGeocodeOpen = useAppStore((s) => s.setGeocodeOpen);
   const setModelBuilderOpen = useAppStore((s) => s.setModelBuilderOpen);
   const setBatchToolsOpen = useAppStore((s) => s.setBatchToolsOpen);
+  const setOgcProcessesOpen = useAppStore((s) => s.setOgcProcessesOpen);
   const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
@@ -130,6 +132,7 @@ export function useToolbarCommands(options: UseToolbarCommandsOptions): Command[
     setGeocodeOpen,
     setModelBuilderOpen,
     setBatchToolsOpen,
+    setOgcProcessesOpen,
     setSegmentationOpen,
     setObjectDetectionOpen,
     setSegmentEverythingOpen,

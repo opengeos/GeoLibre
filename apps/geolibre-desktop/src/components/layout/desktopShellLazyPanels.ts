@@ -2,6 +2,17 @@
 // first render and falls back to a no-op component if its chunk fails to load.
 import { lazy } from "react";
 
+export const OgcProcessesDialog = lazy(() =>
+  import("../processing/OgcProcessesDialog")
+    .then((module) => ({ default: module.OgcProcessesDialog }))
+    .catch((error) => {
+      console.error("Failed to load OgcProcessesDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/OgcProcessesDialog").OgcProcessesDialog;
+      return { default: Fallback };
+    }),
+);
+
 export const ProcessingDialog = lazy(() =>
   import("../processing/ProcessingDialog")
     .then((module) => ({

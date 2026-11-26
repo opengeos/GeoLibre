@@ -593,6 +593,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "advanced",
   },
   {
+    id: "processing.ogcProcesses",
+    menuId: "processing",
+    labelKey: "toolbar.item.ogcProcesses",
+    tier: "advanced",
+  },
+  {
     id: "processing.modelBuilder",
     menuId: "processing",
     labelKey: "toolbar.item.modelBuilder",

@@ -57,6 +57,7 @@ see [vector import details](user-guide/adding-data.md#files).
 | WMTS | WMTS Layer | Map tiles from a Web Map Tile Service. |
 | OGC API - Features | OGC API - Features | Browse collections and load their features. |
 | OGC API - Tiles | OGC Vector Tiles | Vector tile services. |
+| [OGC API - Processes](#ogc-api-processes) | Processing > GeoLibre > OGC API - Processes | Discover remote processes, supply typed inputs, monitor jobs, and download or import their results. |
 | ArcGIS FeatureServer | ArcGIS Layer: Feature layer | Features and attributes from a service URL or portal item. |
 | ArcGIS VectorTileServer | ArcGIS Layer: Vector tile layer | Vector tiles and their styling. |
 | ArcGIS MapServer | ArcGIS Layer: Map service | Cached tiles or rendered exports, with sublayer selection. |
@@ -169,3 +170,46 @@ support on the hosted site.
 
 References: [OGC WCS 1.0.0 conformance tests](https://cite.opengeospatial.org/teamengine/about/wcs/1.0.0/site/testreq.html)
 and [GeoServer WCS documentation](https://docs.geoserver.org/main/en/user/services/wcs/reference/).
+
+## OGC API Processes
+
+Open **Processing > GeoLibre > OGC API - Processes**, or search for
+**OGC API - Processes** in the command palette.
+
+1. Enter a landing-page, process-list, or individual-process URL and click
+   **Retrieve processes**.
+2. Select a process. Its advertised schema supplies string, number, integer,
+   Boolean, enumeration, and JSON inputs. Expand **Input schema** for details,
+   or choose **Edit all inputs as JSON** for compound or referenced schemas.
+   An eligible vector layer can be inserted into a JSON input as a GeoJSON
+   FeatureCollection, feature array, or geometry array. Inputs and selected
+   layer data are sent to the chosen service when you click **Run process**.
+3. Choose synchronous or asynchronous execution when the service advertises
+   it. Asynchronous execution displays job status and progress when available.
+   **Stop waiting** and closing the dialog stop monitoring without deleting the
+   remote job. Reopen the dialog and choose **Resume monitoring**, or paste an
+   existing job status URL. **Dismiss job** explicitly requests remote job
+   dismissal; the service determines whether this cancels running work or
+   deletes a completed job.
+4. Download an output, or use **Add to map** for supported GeoJSON and GeoTIFF
+   results. Imported results are fixed snapshots. GeoJSON becomes a vector
+   layer; GeoTIFF becomes a file-backed raster, whose bytes should be exported
+   separately before ending the session. A saved project alone does not retain
+   downloaded raster bytes.
+
+Execution submits once and does not retry automatically. Input documents are
+limited to 1 MiB, process descriptions and status documents to 2 MiB, and result
+downloads to 128 MiB each. Decoding JSON and rasters requires additional working
+memory. Monitoring honors bounded `Retry-After` values and stops after 30
+minutes; the job URL can be used to resume. Closing and reopening retains
+dialog state in the current session. Changing projects clears inputs, job
+status, and results and aborts pending requests. Job history and input
+credentials are not saved in projects.
+
+Desktop uses guarded native HTTP. Development uses a guarded same-origin
+proxy. The hosted web app requires the remote service to permit cross-origin
+GET, POST, and DELETE requests, the `Content-Type` and `Prefer` request headers,
+and access to `Location` and `Retry-After` response headers. A successful
+development test does not establish hosted-site CORS support. Credentials may
+be supplied in the service URL query; they follow same-origin links only and
+are redacted from imported-layer provenance.

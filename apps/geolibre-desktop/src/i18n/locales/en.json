@@ -4106,7 +4106,8 @@
       "about": "About",
       "togglePlugin": "Toggle {{name}}",
       "managePlugins": "Manage plugins",
-      "styleManager": "Style manager…"
+      "styleManager": "Style manager…",
+      "ogcProcesses": "OGC API - Processes…"
     },
     "layerType": {
       "delimitedText": "Delimited text layer",
@@ -4778,7 +4779,8 @@
       "storymapEllipsis": "Story map…",
       "pointerElevationNoticeTitle": "Elevation uses a public elevation service",
       "pointerElevationNoticeDesc": "The status bar's elevation readout is resolved from the map's own 3D terrain when that is enabled, which sends nothing anywhere. Without 3D terrain it falls back to the public Open-Meteo elevation API, and the coordinates under your pointer leave your device for those requests.",
-      "batchTools": "Batch tools"
+      "batchTools": "Batch tools",
+      "ogcProcesses": "OGC API - Processes"
     },
     "plugin": {
       "maplibre-gl-annotations": "Annotations",
@@ -9232,6 +9234,57 @@
       "spatialStatistics": "Spatial Statistics",
       "terrain": "Terrain",
       "vectorToRaster": "Vector to Raster"
+    },
+    "ogcProcesses": {
+      "title": "OGC API - Processes",
+      "description": "Run remote processes, monitor jobs, and import results.",
+      "serviceUrl": "Service URL",
+      "retrieve": "Retrieve processes",
+      "process": "Process",
+      "inputs": "Inputs",
+      "sendNotice": "Inputs and selected layer data are sent to the chosen service. Execution inputs are limited to 1 MiB.",
+      "jsonMode": "Edit all inputs as JSON",
+      "inputsJson": "Inputs JSON",
+      "executionMode": "Execution mode",
+      "synchronous": "Synchronous",
+      "asynchronous": "Asynchronous",
+      "job": "Job",
+      "jobUrl": "Job status URL",
+      "jobNotice": "Closing this dialog or stopping monitoring does not dismiss the remote job. Use Dismiss job to stop or delete it.",
+      "progress": "Job progress",
+      "resume": "Resume monitoring",
+      "dismiss": "Dismiss job",
+      "results": "Results",
+      "outputBytes": "{{count}} bytes",
+      "download": "Download",
+      "addToMap": "Add to map",
+      "stopWaiting": "Stop waiting",
+      "run": "Run process",
+      "notSet": "Not set",
+      "true": "True",
+      "false": "False",
+      "layerInput": "Layer input for {{name}}",
+      "insertLayer": "Insert layer data",
+      "features": "GeoJSON features",
+      "geometries": "GeoJSON geometries",
+      "schema": "Input schema",
+      "resultFile": "Process result",
+      "phase": {
+        "idle": "Ready",
+        "discovering": "Retrieving processes…",
+        "describing": "Loading process description…",
+        "executing": "Submitting execution…",
+        "monitoring": "Monitoring job…",
+        "dismissing": "Dismissing job…",
+        "output": "Loading result…"
+      },
+      "status": {
+        "accepted": "Accepted",
+        "running": "Running",
+        "successful": "Successful",
+        "failed": "Failed",
+        "dismissed": "Dismissed"
+      }
     }
   },
   "segmentation": {

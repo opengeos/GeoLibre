@@ -110,6 +110,7 @@ const FULL_REGISTRY_IDS = [
   "proc.modelBuilder",
   "proc.obiaWorkbench",
   "proc.batchTools",
+  "proc.ogcProcesses",
   "proc.segmentation",
   "proc.objectDetection",
   "proc.segmentEverything",

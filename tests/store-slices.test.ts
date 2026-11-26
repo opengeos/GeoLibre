@@ -38,6 +38,7 @@ function uiSetterCalls(layerId: string): Array<[string, () => void]> {
   const rerun: ProcessingRerunRequest = { kind: "vector", toolId: "buffer", parameters: {} };
   return [
     ["setProcessingOpen", () => store().setProcessingOpen(true)],
+    ["setOgcProcessesOpen", () => store().setOgcProcessesOpen(true)],
     ["setProcessingInitialTool", () => store().setProcessingInitialTool("slope")],
     ["setConversionOpen", () => store().setConversionOpen("vector-to-vector")],
     ["setVectorToolOpen", () => store().setVectorToolOpen("buffer")],

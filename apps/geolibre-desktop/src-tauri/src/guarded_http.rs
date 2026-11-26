@@ -368,7 +368,7 @@ fn client_identity() -> Result<Option<ClientIdentity>, String> {
 /// blocking `Client` is `Arc`-backed, so cloning the cached instance is cheap. A
 /// load error is cached too: the config is static, so re-reading a bad
 /// certificate would fail identically.
-fn guarded_http_client() -> Result<reqwest::blocking::Client, String> {
+pub(crate) fn guarded_http_client() -> Result<reqwest::blocking::Client, String> {
     static CLIENT: std::sync::OnceLock<Result<reqwest::blocking::Client, String>> =
         std::sync::OnceLock::new();
     CLIENT.get_or_init(build_guarded_http_client).clone()

@@ -1,0 +1,113 @@
+{
+  "version": "0.2.0",
+  "id": "hello-world",
+  "title": "Hello World",
+  "description": "An example process that takes a name as input, and echoes it back as output. Intended to demonstrate a simple process with a single literal input.",
+  "jobControlOptions": ["sync-execute", "async-execute"],
+  "keywords": ["hello world", "example", "echo"],
+  "links": [
+    {
+      "type": "text/html",
+      "rel": "about",
+      "title": "information",
+      "href": "https://example.org/process",
+      "hreflang": "en-US"
+    },
+    {
+      "type": "application/json",
+      "rel": "self",
+      "href": "https://demo.pygeoapi.io/master/processes/hello-world?f=json",
+      "title": "Process description as JSON",
+      "hreflang": "en-US"
+    },
+    {
+      "type": "text/html",
+      "rel": "alternate",
+      "href": "https://demo.pygeoapi.io/master/processes/hello-world?f=html",
+      "title": "Process description as HTML",
+      "hreflang": "en-US"
+    },
+    {
+      "type": "text/html",
+      "rel": "http://www.opengis.net/def/rel/ogc/1.0/job-list",
+      "href": "https://demo.pygeoapi.io/master/jobs?f=html",
+      "title": "Jobs list as HTML",
+      "hreflang": "en-US"
+    },
+    {
+      "type": "application/json",
+      "rel": "http://www.opengis.net/def/rel/ogc/1.0/job-list",
+      "href": "https://demo.pygeoapi.io/master/jobs?f=json",
+      "title": "Jobs list as JSON",
+      "hreflang": "en-US"
+    },
+    {
+      "type": "application/json",
+      "rel": "http://www.opengis.net/def/rel/ogc/1.0/execute",
+      "href": "https://demo.pygeoapi.io/master/processes/hello-world/execution?f=json",
+      "title": "Execution for this process as JSON",
+      "hreflang": "en-US"
+    }
+  ],
+  "inputs": {
+    "name": {
+      "title": "Name",
+      "description": "The name of the person or entity that you wish tobe echoed back as an output",
+      "schema": {
+        "type": "string"
+      },
+      "minOccurs": 1,
+      "maxOccurs": 1,
+      "keywords": ["full name", "personal"]
+    },
+    "message": {
+      "title": "Message",
+      "description": "An optional message to echo as well",
+      "schema": {
+        "type": "string"
+      },
+      "minOccurs": 0,
+      "maxOccurs": 1,
+      "keywords": ["message"]
+    },
+    "as_bytes": {
+      "title": "As bytes",
+      "description": "Whether to force return as bytes",
+      "schema": {
+        "type": "boolean",
+        "default": false
+      },
+      "minOccurs": 0,
+      "maxOccurs": 1,
+      "keywords": ["as_bytes"]
+    },
+    "media_type": {
+      "title": "Media type",
+      "description": "Force a specific media type",
+      "schema": {
+        "type": "string",
+        "default": "application/json"
+      },
+      "minOccurs": 0,
+      "maxOccurs": 1,
+      "keywords": ["media_type"]
+    }
+  },
+  "outputs": {
+    "echo": {
+      "title": "Hello, world",
+      "description": "A \"hello world\" echo with the name and (optional) message submitted for processing",
+      "schema": {
+        "type": "object",
+        "contentMediaType": "application/json"
+      }
+    }
+  },
+  "example": {
+    "inputs": {
+      "name": "World",
+      "message": "An optional message."
+    }
+  },
+  "outputTransmission": ["value"]
+}

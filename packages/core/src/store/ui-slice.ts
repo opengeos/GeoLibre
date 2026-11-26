@@ -194,6 +194,8 @@ export interface UiSlice {
     storymapComposingId: string | null;
     /** The Batch tools dialog (run one tool across many layers). */
     batchToolsOpen: boolean;
+    /** Remote OGC API process execution and job controls. */
+    ogcProcessesOpen: boolean;
     /** The Model Builder canvas panel (author a processing graph). */
     modelBuilderOpen: boolean;
     /** One-shot request for Model Builder to load a saved model. */
@@ -274,6 +276,7 @@ export interface UiSlice {
   setStorymapLayerOpacity: (changes: Record<string, number>) => void;
   setStorymapComposing: (chapterId: string | null) => void;
   setBatchToolsOpen: (open: boolean) => void;
+  setOgcProcessesOpen: (open: boolean) => void;
   setModelBuilderOpen: (open: boolean) => void;
   setModelBuilderRequestedModelId: (id: string | null) => void;
   setProcessingHistoryOpen: (open: boolean) => void;
@@ -318,6 +321,7 @@ export const createUiSlice: SliceCreator<UiSlice> = (set) => ({
     storymapLayerOpacity: {},
     storymapComposingId: null,
     batchToolsOpen: false,
+    ogcProcessesOpen: false,
     modelBuilderOpen: false,
     modelBuilderRequestedModelId: null,
     styleManagerOpen: false,
@@ -466,6 +470,7 @@ export const createUiSlice: SliceCreator<UiSlice> = (set) => ({
   setStorymapComposing: (chapterId) =>
     set((s) => ({ ui: { ...s.ui, storymapComposingId: chapterId } })),
   setBatchToolsOpen: (open) => set((s) => ({ ui: { ...s.ui, batchToolsOpen: open } })),
+  setOgcProcessesOpen: (open) => set((s) => ({ ui: { ...s.ui, ogcProcessesOpen: open } })),
   setModelBuilderOpen: (open) => set((s) => ({ ui: { ...s.ui, modelBuilderOpen: open } })),
   setModelBuilderRequestedModelId: (id) =>
     set((s) => ({ ui: { ...s.ui, modelBuilderRequestedModelId: id } })),

@@ -1,0 +1,108 @@
+{
+  "id": "3f342f64-9348-11df-ba6a-0014c2c00eab",
+  "conformsTo": ["http://www.opengis.net/spec/ogcapi-records-1/1.0/conf/record-core"],
+  "type": "Feature",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-141, 42],
+        [-141, 84],
+        [-52, 84],
+        [-52, 42],
+        [-141, 42]
+      ]
+    ]
+  },
+  "properties": {
+    "title": "title in English",
+    "description": "abstract in English",
+    "themes": [
+      {
+        "concepts": [
+          {
+            "id": "FOO"
+          },
+          {
+            "id": "BAR"
+          }
+        ],
+        "scheme": "http://example.org/vocab"
+      }
+    ],
+    "type": "dataset",
+    "externalIds": [
+      {
+        "value": "10.277/3f342f64-9348",
+        "scheme": "https://doi.org"
+      }
+    ],
+    "language": {
+      "code": "en"
+    },
+    "created": "2014-11-11T00:00:00Z",
+    "rights": "Copyright (c) 2010 Her Majesty the Queen in Right of Canada",
+    "contacts": [
+      {
+        "addresses": [
+          {
+            "deliveryPoint": ["4905 Dufferin Street"],
+            "city": "Toronto",
+            "administrativeArea": "Ontario",
+            "postalCode": "M3H 5T4",
+            "country": "Canada"
+          }
+        ],
+        "roles": ["pointOfContact", "distributor"],
+        "organization": "Environment Canada",
+        "name": "Tom Kralidis",
+        "position": "Senior Systems Scientist",
+        "hoursOfService": "0700h - 1500h EST",
+        "contactInstructions": "email",
+        "phones": [
+          {
+            "value": "+11234567890"
+          }
+        ],
+        "emails": [
+          {
+            "value": "foo@bar.tld"
+          }
+        ],
+        "links": [
+          {
+            "rel": "canonical",
+            "type": "text/html",
+            "href": "https://www.ec.gc.ca/"
+          }
+        ]
+      }
+    ],
+    "keywords": ["kw1 in English", "kw2 in English", "kw3 in English", "kw1", "kw2"]
+  },
+  "links": [
+    {
+      "href": "https://creativecommons.org/licenses/by/4.0",
+      "type": "text/html",
+      "rel": "license",
+      "title": "CC BY 4.0"
+    },
+    {
+      "href": "https://example.org/data",
+      "type": "WWW:LINK",
+      "rel": "canonical",
+      "title": "my waf"
+    },
+    {
+      "href": "https://example.org/wms",
+      "type": "OGC:WMS",
+      "rel": "service",
+      "title": "roads"
+    }
+  ],
+  "time": {
+    "interval": ["1950-07-31", ".."],
+    "resolution": "P1Y"
+  },
+  "generated_by": "pygeometa 0.21.1"
+}
