@@ -129,6 +129,7 @@ const BROWSER_ONLY_RASTER_TOOLS = [
   "sar-rgb",
   "flood-map",
   "cut-fill",
+  "building-shadows",
 ] as const;
 
 /**

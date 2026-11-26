@@ -29,7 +29,8 @@ export type RasterToolId =
   | "speckle-filter"
   | "sar-rgb"
   | "flood-map"
-  | "cut-fill";
+  | "cut-fill"
+  | "building-shadows";
 
 /** A native file-dialog filter (Tauri `open`/`save` shape). */
 export interface FileFilter {
@@ -1234,6 +1235,120 @@ export const cutFillTool: RasterTool = {
   ],
 };
 
+const SHADOW_DAY_MODES = { param: "mode", in: ["sun-hours", "insolation"] };
+
+export const buildingShadowsTool: RasterTool = {
+  id: "building-shadows",
+  name: "Building shadows and sun hours",
+  description:
+    "Cast shadows from extruded building footprints (a height or storey-count attribute) for a date and time, or simulate a whole day: hours of direct sun, or clear-sky direct insolation (kWh/m²), on the ground and on roofs.",
+  group: "3D Terrain",
+  outputKind: "raster",
+  defaultOutputName: "building-shadows.tif",
+  inputFilters: GEOJSON_INPUT,
+  outputFilters: GEOTIFF_OUTPUT,
+  inputLabel: "toolbar.rasterTool.inputBuildings",
+  supportsClient: true,
+  clientOnly: true,
+  parameters: [
+    {
+      id: "mode",
+      label: "Output",
+      type: "select",
+      default: "shadow",
+      options: [
+        { value: "shadow", label: "Shadows at a date and time" },
+        { value: "sun-hours", label: "Hours of direct sun over the day" },
+        { value: "insolation", label: "Clear-sky direct insolation over the day (kWh/m²)" },
+      ],
+    },
+    {
+      id: "date",
+      label: "Date (YYYY-MM-DD)",
+      type: "string",
+      required: true,
+      default: "2026-06-21",
+    },
+    {
+      id: "time",
+      label: "Local time (HH:MM)",
+      type: "string",
+      required: true,
+      default: "15:00",
+      visibleWhen: { param: "mode", in: ["shadow"] },
+    },
+    {
+      id: "utc_offset",
+      label: "UTC offset (hours)",
+      type: "number",
+      default: 0,
+      min: -14,
+      max: 14,
+      step: 0.5,
+      description: "Local time minus UTC, e.g. -4 for US Eastern daylight time or 2 for CEST.",
+    },
+    {
+      id: "step_minutes",
+      label: "Time step (minutes)",
+      type: "number",
+      default: 15,
+      min: 1,
+      max: 120,
+      step: 1,
+      visibleWhen: SHADOW_DAY_MODES,
+      description: "How often the sun position is sampled across the day.",
+    },
+    {
+      id: "height_field",
+      label: "Height attribute",
+      type: "string",
+      default: "height",
+      description: "Building height in metres.",
+    },
+    {
+      id: "levels_field",
+      label: "Storeys attribute",
+      type: "string",
+      default: "building:levels",
+      description: "Used when a building has no height: storeys times the storey height.",
+    },
+    {
+      id: "level_height",
+      label: "Storey height (m)",
+      type: "number",
+      default: 3,
+      min: 0.5,
+      step: 0.1,
+    },
+    {
+      id: "default_height",
+      label: "Default height (m)",
+      type: "number",
+      default: 10,
+      min: 0.5,
+      step: 0.5,
+      description: "Used when a building has neither attribute.",
+    },
+    {
+      id: "cell_size",
+      label: "Cell size (m)",
+      type: "number",
+      default: 2,
+      min: 0.25,
+      step: 0.25,
+    },
+    {
+      id: "margin",
+      label: "Ground margin (m)",
+      type: "number",
+      default: 100,
+      min: 0,
+      step: 10,
+      description: "Open ground added around the buildings so their shadows have room to fall.",
+    },
+  ],
+};
+
 /** Every raster tool, in display order (grouped by `group`). */
 export const RASTER_TOOLS: RasterTool[] = [
   hillshadeTool,
@@ -1260,6 +1375,7 @@ export const RASTER_TOOLS: RasterTool[] = [
   dualPolRgbTool,
   floodMapTool,
   cutFillTool,
+  buildingShadowsTool,
 ];
 
 export function getRasterTool(id: string): RasterTool | undefined {

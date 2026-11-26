@@ -710,7 +710,9 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       setError(
         t(
           vectorPrimaryInput
-            ? "toolbar.rasterTool.chooseInputPoints"
+            ? tool.id === "interpolate"
+              ? "toolbar.rasterTool.chooseInputPoints"
+              : "toolbar.rasterTool.chooseInputGeoJson"
             : "toolbar.rasterTool.chooseInputRaster",
         ),
       );

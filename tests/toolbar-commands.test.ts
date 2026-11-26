@@ -181,6 +181,7 @@ const FULL_REGISTRY_IDS = [
   "proc.raster.sar-rgb",
   "proc.raster.flood-map",
   "proc.raster.cut-fill",
+  "proc.raster.building-shadows",
   "proc.georeferencer",
   "proc.planetary-computer",
   "proc.earth-engine",

@@ -13,6 +13,7 @@ import {
   crsTransform,
   epsgDefinition,
   geojsonEpsg,
+  geojsonFeatures,
   mapGeometry,
   rasterCrsDefinition,
   rasterEpsg,
@@ -34,6 +35,7 @@ import {
   type CutFillParams,
   type CutFillSummary,
 } from "./raster-volume";
+import { buildingShadows, type BuildingShadowParams } from "./raster-shadow";
 import { mosaicRasters, reprojectRaster, resampleRaster } from "./raster-warp";
 
 /**
@@ -117,6 +119,7 @@ export const CLIENT_RASTER_TOOL_IDS: ReadonlySet<RasterToolId> = new Set<RasterT
   "sar-rgb",
   "flood-map",
   "cut-fill",
+  "building-shadows",
 ]);
 
 /** Whether a tool can run in the browser without the sidecar. */
@@ -1083,7 +1086,7 @@ const SYNC_CLIENT_TOOLS = new Set([
 
 /** Whether a tool's primary input is a GeoJSON layer rather than a raster. */
 export function rasterToolTakesVectorInput(toolId: string): boolean {
-  return toolId === "interpolate";
+  return toolId === "interpolate" || toolId === "building-shadows";
 }
 
 async function toWgs84(fc: FeatureCollection, definition: string): Promise<FeatureCollection> {
@@ -1380,6 +1383,19 @@ export async function runRasterToolClientAsync(
       }
       const out = cutFill(existing, surface, p as CutFillParams, metersPerUnit, areaScale);
       return { ...rasterResult(out.raster, [...extra, ...out.messages]), cutFill: out.summary };
+    }
+    case "building-shadows": {
+      const buildings = requireVector(inputs, "input", "buildings");
+      const epsg = geojsonEpsg(buildings);
+      const collection: FeatureCollection = {
+        type: "FeatureCollection",
+        features: geojsonFeatures(buildings),
+      };
+      // The shadow grid is built in lon/lat; a projected input is brought there first.
+      const wgs84 =
+        epsg === 4326 ? collection : await toWgs84(collection, await epsgDefinition(epsg));
+      const out = buildingShadows(wgs84.features, p as BuildingShadowParams);
+      return rasterResult(out.raster, out.messages);
     }
     default:
       throw new Error(`"${toolId}" has no client-side implementation.`);
