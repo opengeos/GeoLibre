@@ -59,7 +59,7 @@ const MAX_MARKER_SPRITES = 64;
 const PATTERN_TILE_METERS = 20;
 
 /**
- * In-place appearance updates for {@link CesiumLayerSync}: GeoJSON styles and
+ * In-place appearance updates for `CesiumLayerSync`: GeoJSON styles and
  * filters, zoom-dependent markers, point batches and clustering, and 3D Tiles
  * and point cloud styling and grounding.
  */

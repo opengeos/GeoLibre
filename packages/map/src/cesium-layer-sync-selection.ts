@@ -13,7 +13,7 @@ import { CesiumLayerSyncBase } from "./cesium-layer-sync-base";
 const SELECTED_ORBIT_STEPS = 180;
 
 /**
- * Feature identification and selection highlighting for {@link CesiumLayerSync}:
+ * Feature identification and selection highlighting for `CesiumLayerSync`:
  * resolving picked objects to layer features and drawing the selected-feature
  * highlight, including moving points, TLE orbits and CZML entities.
  */

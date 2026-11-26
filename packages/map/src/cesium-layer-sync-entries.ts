@@ -82,7 +82,7 @@ const REGIONAL_TILESET_MAX_RADIUS_M = 1_000_000;
 const LARGE_TILESET_VIEW_RANGE_M = 1_200;
 
 /**
- * Entry construction for {@link CesiumLayerSync}: building the Cesium object for
+ * Entry construction for `CesiumLayerSync`: building the Cesium object for
  * each layer kind (GeoJSON, KML, CZML, video, point clouds, point batches, 3D
  * Tiles), settling it, and flying to a layer once it has loaded.
  */

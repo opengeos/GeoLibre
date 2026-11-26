@@ -51,7 +51,7 @@ async function readSharedPMTilesHeader(url: string): Promise<PMTilesRasterHeader
 }
 
 /**
- * Imagery layers for {@link CesiumLayerSync}: building COG, Zarr, PMTiles and
+ * Imagery layers for `CesiumLayerSync`: building COG, Zarr, PMTiles and
  * service imagery providers, attaching them to the globe, and keeping the
  * imagery stack in store order.
  */
@@ -70,7 +70,7 @@ export class CesiumLayerSyncImagery extends CesiumLayerSyncAppearance {
    * The WASM COG tiler, loaded on first use and shared by every COG layer.
    * Lazy for the same reason the raster control loads it lazily: the module
    * and its peers are several megabytes that a globe without a COG never
-   * needs. Injectable through {@link CesiumLayerSyncDeps} for tests.
+   * needs. Injectable through `CesiumLayerSyncDeps` for tests.
    */
   protected cogTiler: Promise<ReturnType<typeof cachingCogTiler>> | null = null;
 

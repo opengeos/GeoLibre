@@ -29,7 +29,7 @@ type CesiumNs = typeof import("@cesium/engine");
 // the branch it was lifted from built it.
 
 /**
- * What {@link CesiumLayerSync} gets back when it starts building an imagery
+ * What `CesiumLayerSync` gets back when it starts building an imagery
  * provider: the provider itself for the synchronous branches, or a pending
  * one (`null` when the layer was removed before a provider existed).
  */

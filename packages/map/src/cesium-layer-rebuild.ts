@@ -19,7 +19,7 @@ import {
 import { entryKind } from "./cesium-layer-entry";
 
 /**
- * Style fields re-applied in place by {@link CesiumLayerSync.applyGeoJsonStyle}
+ * Style fields re-applied in place by `CesiumLayerSync.applyGeoJsonStyle`
  * rather than by reloading the data source. Everything else in the style —
  * colours, classification stops and rules, expressions, widths, marker shape
  * and size, patterns, decorations, extrusion, elevation, labels, the zoom

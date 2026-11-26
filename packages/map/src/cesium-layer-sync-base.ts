@@ -67,7 +67,7 @@ export interface CesiumLayerSyncDeps {
    */
   onTilesetFields?: (layerId: string, fields: string[]) => void;
   /**
-   * Called when {@link CesiumLayerSync.zoomToLayer} actually starts a flight,
+   * Called when `CesiumLayerSync.zoomToLayer` actually starts a flight,
    * which for a layer still loading is later than the request. The engine uses
    * it to stop its terrain correction pulling the flight back (#2878), and only
    * once the camera is really leaving its placement.
@@ -93,7 +93,7 @@ export interface CesiumLayerSyncDeps {
 
 /**
  * The engine handles, injected dependencies and per-layer entry state shared by
- * every layer of {@link CesiumLayerSync}.
+ * every layer of `CesiumLayerSync`.
  */
 export class CesiumLayerSyncBase {
   protected readonly entries = new Map<string, LayerEntry>();

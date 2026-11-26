@@ -7,7 +7,7 @@ import {
   isCzmlLayer,
   type GeoLibreLayer,
 } from "@geolibre/core";
-import { PointCloudStreamer } from "./cesium-point-cloud-stream";
+import type { PointCloudStreamer } from "./cesium-point-cloud-stream";
 import type { FeatureStyleResolver } from "./feature-style";
 import { configureClustering, planPointRendering, type PointRenderPlan } from "./cesium-points";
 import type {
