@@ -263,7 +263,6 @@ function createPMTilesControl(
   const control = new PMTilesLayerControlClass(PMTILES_OPTIONS);
   // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   if (app.getMapRenderer?.() === "mapbox") adaptMapboxPMTilesControl(control, app);
-  guardPMTilesSourceRemoval(control);
   const removeHandler = createPMTilesLayerRemoveHandler();
   const onRemove = control.onRemove.bind(control);
   control.onRemove = () => {
@@ -298,120 +297,6 @@ function createPMTilesControl(
     }
   });
   return control;
-}
-
-/** The slice of a MapLibre or Mapbox map {@link dropGeoLibreLayersOnSources} touches. */
-interface CompanionLayerMap {
-  getLayersOrder?: () => string[];
-  getStyle?: () => { layers?: { id: string }[] } | undefined;
-  getLayer: (id: string) => { source?: unknown; metadata?: unknown } | undefined | null;
-  removeLayer: (id: string) => unknown;
-}
-
-/**
- * Remove the GeoLibre-owned companion layers (`metadata["geolibre:internal"]`)
- * that read any of `sourceIds`, such as the line-decoration arrows layer sync
- * draws over an archive. MapLibre refuses to remove a source while a style
- * layer still reads it (it reports an error and keeps the source), so these
- * must go before the control drops the archive's source.
- *
- * @internal Exported only so the guard can be unit-tested.
- * @param map - The map the archive is drawn on.
- * @param sourceIds - The archive source ids about to be removed.
- */
-export function dropGeoLibreLayersOnSources(
-  map: CompanionLayerMap,
-  sourceIds: ReadonlySet<string>,
-): void {
-  if (sourceIds.size === 0) return;
-  for (const id of styleLayerIds(map)) {
-    const layer = map.getLayer(id);
-    if (!layer || typeof layer.source !== "string" || !sourceIds.has(layer.source)) continue;
-    const metadata = layer.metadata as Record<string, unknown> | undefined;
-    if (metadata?.["geolibre:internal"] === true) map.removeLayer(id);
-  }
-}
-
-/**
- * The map's style layer ids. mapbox-gl has no `getLayersOrder`, so fall back to the style's layer
- * list there; its `getStyle` throws while a style is still loading, which leaves nothing to drop.
- */
-function styleLayerIds(map: CompanionLayerMap): string[] {
-  const order = map.getLayersOrder?.();
-  if (Array.isArray(order)) return order;
-  try {
-    return (map.getStyle?.()?.layers ?? []).map(({ id }) => id);
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Every way the control drops an archive (its public `removeLayer`, the
- * panel's remove button, and `onRemove`) runs through its private
- * `_removeLayer(id?)`, which removes the archive's source by id right after its
- * own style layers. Wrap it on this instance so GeoLibre's companion layers on
- * that source are removed first. This mutates the map directly rather than
- * through store-driven sync on purpose: the store subscription above calls
- * `removeLayer` synchronously on the same store write that removes the layer,
- * and the panel's remove button needs no store write at all, so sync has not
- * run (or will not run) before the source goes. `tests/pmtiles-control-contract.test.ts`
- * drives the real control and fails if the method is renamed or stops
- * removing the source.
- *
- * The map is the one handed to the control's `onAdd`, captured there, so the guard always works on
- * the map the source lives on even after a renderer switch has given the app a different one.
- * Call it before the control is added.
- *
- * @internal Exported only so the guard can be tested against the real control.
- * @param control - The PMTiles control instance to guard.
- */
-export function guardPMTilesSourceRemoval(control: PMTilesLayerControl): void {
-  const target = control as unknown as {
-    _removeLayer?: (id?: string) => void;
-    onAdd: (map: unknown) => HTMLElement;
-    onRemove?: () => void;
-  };
-  const original = target._removeLayer;
-  if (typeof original !== "function") return;
-  let attached: CompanionLayerMap | null = null;
-  const onAdd = target.onAdd.bind(control);
-  target.onAdd = (map: unknown) => {
-    attached = map as CompanionLayerMap;
-    return onAdd(map);
-  };
-  // onRemove clears every archive through `_removeLayer()` below, so the map is released after it.
-  const onRemove = target.onRemove?.bind(control);
-  if (onRemove) {
-    target.onRemove = () => {
-      try {
-        onRemove();
-      } finally {
-        attached = null;
-      }
-    };
-  }
-  target._removeLayer = (id?: string) => {
-    try {
-      if (attached) {
-        // Unknown IDs are a no-op in the control. Only archives it owns may
-        // authorize removal of GeoLibre companions on their source.
-        const ids = control
-          .getState()
-          .layers.filter((layer) => !id || layer.id === id)
-          .map((layer) => layer.id);
-        dropGeoLibreLayersOnSources(attached, new Set(ids));
-      }
-    } catch (error) {
-      // Companion cleanup is best effort. Preserve the rest of onRemove and
-      // the public removeLayer caller, including other store subscribers.
-      console.warn("Could not remove PMTiles companion layers", error);
-    } finally {
-      // A disposed map may reject companion cleanup; the control still owns
-      // its archive state and must always get its teardown call.
-      original.call(control, id);
-    }
-  };
 }
 
 /** @internal Exported only so the control's teardown can be unit-tested. */

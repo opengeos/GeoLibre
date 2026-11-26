@@ -286,6 +286,32 @@ export function buildSteppedColormapRgba(
 }
 
 /**
+ * Map a colormap texture coordinate back to the rescaled data value it shows.
+ *
+ * `maplibre-gl-raster` samples its 256-wide colormap texture after rescale,
+ * the stretch curve and gamma, so a texture column is the fully adjusted value.
+ * This unwinds gamma first, then the stretch curve:
+ *   gamma  `pow(x, 1 / max(gamma, 0.0001))`  -> `pow(t, max(gamma, 0.0001))`
+ *   sqrt   `sqrt(x)`                         -> `t * t`
+ *   log    `log(1 + 99x) / log(1 + 99)`      -> `(100^t - 1) / 99`
+ *
+ * It is a hand-kept copy of the package's exported `invertAdjustments`
+ * (importing that would put the whole raster chunk on the startup path);
+ * `tests/upstream-contracts.test.ts` compares the two numerically.
+ *
+ * @param t - The texture coordinate, 0 to 1.
+ * @param stretch - The layer's stretch (`linear`, `sqrt` or `log`).
+ * @param gamma - The layer's gamma (default 1).
+ * @returns The rescaled data value, 0 to 1.
+ */
+export function invertRasterAdjustments(t: number, stretch?: string, gamma?: number): number {
+  let value = Math.pow(t, Math.max(gamma ?? 1, 0.0001));
+  if (stretch === "sqrt") value *= value;
+  if (stretch === "log") value = Math.expm1(value * Math.log(100)) / 99;
+  return value;
+}
+
+/**
  * Builds a 256-wide RGBA lookup row that interpolates custom anchor colors
  * smoothly across the rescaled [0, 1] data window, for a continuous
  * (unclassified) single-band raster with custom colors or value-range opacity.
@@ -325,21 +351,7 @@ export function buildContinuousColormapRgba(
     rgba[offset + 2] = color.b;
     // Undo the upstream stretch and gamma for opacity lookup only. Colors
     // still sample the adjusted coordinate, while opacity stays tied to values.
-    //
-    // This inverts `maplibre-gl-raster`'s render pipeline, which the package
-    // does not export, so it is a hand-written mirror (docs/maintenance.md).
-    // Its `pushAdjustments` runs rescale → stretch → gamma and only then
-    // samples the colormap, so a texture column is the fully adjusted value and
-    // the inverse has to unwind gamma first, then the stretch curve:
-    //   gamma  `pow(x, 1.0 / max(gamma, 0.0001))`  → `pow(t, max(gamma, 1e-4))`
-    //   sqrt   `sqrt(x)`                           → `t * t`
-    //   log    `log(1 + 99x) / log(1 + 99)`        → `(100^t - 1) / 99`
-    // The package's own `inverseStretch` helper (used for its histogram ticks)
-    // is the same pair of curves.
-    let t = column / (width - 1);
-    t = Math.pow(t, Math.max(opacity?.gamma ?? 1, 0.0001));
-    if (opacity?.stretch === "sqrt") t *= t;
-    if (opacity?.stretch === "log") t = Math.expm1(t * Math.log(100)) / 99;
+    const t = invertRasterAdjustments(column / (width - 1), opacity?.stretch, opacity?.gamma);
     const value = min + t * (max - min);
     let index = (opacity?.breaks.length ?? 2) - 2;
     if (opacity && max > min) {

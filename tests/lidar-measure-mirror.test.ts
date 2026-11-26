@@ -109,7 +109,7 @@ function makeControl(sourceId: string | null = SOURCE_ID): {
 } {
   const listeners = new Set<() => void>();
   const control = {
-    _sourceId: sourceId ?? undefined,
+    getSourceId: () => sourceId ?? "",
     on: (_event: string, handler: () => void) => listeners.add(handler),
     off: (_event: string, handler: () => void) => listeners.delete(handler),
   };

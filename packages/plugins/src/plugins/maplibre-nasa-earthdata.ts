@@ -11,7 +11,6 @@ import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
-import { addAtAvailableDefaultDate } from "./nasa-earthdata-date-fallback";
 import { getControlMap } from "./style-map";
 import {
   createWebServiceStoreSync,
@@ -167,10 +166,6 @@ export const maplibreNasaEarthdataPlugin: GeoLibrePlugin = {
     if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     if (!nasaEarthdataControl) {
       nasaEarthdataControl = new NasaEarthdataControl(getNasaEarthdataControlOptions());
-      // Panel adds probe GIBS first so a default date with no tiles falls
-      // back to the newest date that has imagery (issue #3259).
-      const created = nasaEarthdataControl;
-      addAtAvailableDefaultDate(created, () => nasaEarthdataControl === created);
     }
 
     const activeControl = nasaEarthdataControl;
@@ -215,5 +210,8 @@ function getNasaEarthdataControlOptions(): NasaEarthdataControlOptions {
   return {
     ...NASA_EARTHDATA_OPTIONS,
     position: "top-left",
+    // Panel adds probe GIBS first so a default date with no tiles falls back
+    // to the newest date that has imagery (issue #3259).
+    defaultDateFallback: true,
   };
 }

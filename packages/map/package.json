@@ -149,7 +149,7 @@
     "laz-perf": "^0.0.7",
     "mapbox-gl": "3.35.2",
     "maplibre-gl": "6.19.0",
-    "maplibre-gl-layer-control": "^0.18.3",
+    "maplibre-gl-layer-control": "^0.19.0",
     "pmtiles": "^4.5.0",
     "proj4": "^2.23.0",
     "react": "^19.3.1",
