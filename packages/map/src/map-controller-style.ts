@@ -1,7 +1,5 @@
 // MapController layer: map CRS, view constraints and style application.
-// MapController is split by concern across an inheritance chain, one layer per
-// module: base <- terrain <- controls <- style <- layers <- highlight <-
-// MapController; see map-controller.ts.
+// The MapController layer chain is documented in map-controller.ts.
 
 import {
   normalizeMapCrs,

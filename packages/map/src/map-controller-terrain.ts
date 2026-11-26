@@ -1,7 +1,5 @@
 // MapController layer: terrain source, COG DEM terrain and the terrain control.
-// MapController is split by concern across an inheritance chain, one layer per
-// module: base <- terrain <- controls <- style <- layers <- highlight <-
-// MapController; see map-controller.ts.
+// The MapController layer chain is documented in map-controller.ts.
 
 import * as maplibregl from "maplibre-gl";
 import { TerrainControl, DEFAULT_TERRAIN_EXAGGERATION } from "./terrain-control";

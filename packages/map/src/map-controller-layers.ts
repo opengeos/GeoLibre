@@ -1,7 +1,5 @@
 // MapController layer: layer sync, basemap visibility/opacity and story opacity.
-// MapController is split by concern across an inheritance chain, one layer per
-// module: base <- terrain <- controls <- style <- layers <- highlight <-
-// MapController; see map-controller.ts.
+// The MapController layer chain is documented in map-controller.ts.
 
 import { mapZoomStepOutputs, styleValue, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";

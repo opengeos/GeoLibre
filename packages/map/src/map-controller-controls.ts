@@ -1,7 +1,5 @@
 // MapController layer: built-in map controls and the layer control.
-// MapController is split by concern across an inheritance chain, one layer per
-// module: base <- terrain <- controls <- style <- layers <- highlight <-
-// MapController; see map-controller.ts.
+// The MapController layer chain is documented in map-controller.ts.
 
 import { BLANK_BASEMAP, DEFAULT_BASEMAP } from "@geolibre/core";
 import * as maplibregl from "maplibre-gl";
