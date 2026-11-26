@@ -482,6 +482,16 @@ function layerId(layer: unknown): string | null {
   return isPlainObject(layer) && typeof layer.id === "string" && layer.id ? layer.id : null;
 }
 
+/** Layers keyed by id, first occurrence of each id only. */
+function layersById(layers: unknown): Map<string, JsonObject> {
+  const byId = new Map<string, JsonObject>();
+  for (const layer of Array.isArray(layers) ? layers : []) {
+    const id = layerId(layer);
+    if (id && !byId.has(id)) byId.set(id, layer as JsonObject);
+  }
+  return byId;
+}
+
 function syncLayer(
   map: Y.Map<unknown>,
   layer: JsonObject,
@@ -502,6 +512,193 @@ function syncLayer(
       syncField(map, key, next);
     }
   }
+}
+
+// -- Three-way writes ------------------------------------------------------------
+
+function sameValue(a: unknown, b: unknown): boolean {
+  return a === b || deepEqual(a, b);
+}
+
+/**
+ * Apply to `map` only what changed from `base` to `next`, leaving every key
+ * the writer did not touch as the document has it (a peer may have changed
+ * it since `base` was read).
+ */
+function patchMap(map: Y.Map<unknown>, next: JsonObject, base: JsonObject): void {
+  const keys = new Set([...Object.keys(base), ...Object.keys(next)]);
+  for (const key of keys) patchField(map, key, own(next, key), own(base, key));
+}
+
+function patchField(map: Y.Map<unknown>, key: string, next: unknown, base: unknown): void {
+  if (sameValue(next, base)) return;
+  if (next === undefined) {
+    map.delete(key);
+    return;
+  }
+  const current = map.get(key);
+  if (
+    isPlainObject(next) &&
+    isPlainObject(base) &&
+    current instanceof Y.Map &&
+    !isFeatureCollectionMap(current)
+  ) {
+    patchMap(current, next, base);
+  } else {
+    syncField(map, key, next);
+  }
+}
+
+function patchLayer(
+  map: Y.Map<unknown>,
+  layer: JsonObject,
+  base: JsonObject,
+  newKey: () => string,
+): void {
+  const keys = new Set([...Object.keys(base), ...Object.keys(layer)]);
+  for (const key of keys) {
+    const next = own(layer, key);
+    const before = own(base, key);
+    const current = map.get(key);
+    if (
+      key === "geojson" &&
+      isFeatureCollectionValue(next) &&
+      isFeatureCollectionValue(before) &&
+      current instanceof Y.Map &&
+      isFeatureCollectionMap(current)
+    ) {
+      if (!sameValue(next, before)) patchFeatureCollection(current, next, before, newKey);
+      continue;
+    }
+    if (key === "geojson" && isFeatureCollectionValue(next) && !sameValue(next, before)) {
+      writeFeatureCollection(map, key, next, newKey);
+      continue;
+    }
+    patchField(map, key, next, before);
+  }
+}
+
+/**
+ * Apply the feature edits that turn `base` into `next` to the document's
+ * collection: edited features keep their keys, removed ones are deleted, and
+ * new ones go in after the feature that preceded them. A feature a peer has
+ * changed or deleted since `base` is left to the peer.
+ */
+function patchFeatureCollection(
+  map: Y.Map<unknown>,
+  next: JsonObject & { features: unknown[] },
+  base: JsonObject & { features: unknown[] },
+  newKey: () => string,
+): void {
+  const { meta, features, order } = featureCollectionParts(map);
+  const { features: nextFeatures, ...nextRest } = next;
+  const { features: baseFeatures, ...baseRest } = base;
+  delete nextRest.type;
+  delete baseRest.type;
+  patchMap(meta, nextRest, baseRest);
+
+  compactOrder(order, features, true);
+  const byValue = new Map<unknown, string>();
+  features.forEach((value, key) => byValue.set(value, key));
+  const keyOf = (value: unknown): string | undefined => {
+    const exact = byValue.get(value);
+    if (exact !== undefined) return exact;
+    for (const [candidate, key] of byValue) {
+      if (deepEqual(candidate, value)) return key;
+    }
+    return undefined;
+  };
+
+  const { prefix, suffix } = commonEnds(baseFeatures, nextFeatures, sameValue);
+  const oldEnd = baseFeatures.length - suffix;
+  const newEnd = nextFeatures.length - suffix;
+  const segments = matchMiddle(baseFeatures, nextFeatures, prefix, oldEnd, newEnd);
+  for (let s = segments.length - 1; s >= 0; s -= 1) {
+    const { oldStart, oldStop, newStart, newStop, anchor } = segments[s];
+    if (anchor && !deepEqual(baseFeatures[anchor[0]], nextFeatures[anchor[1]])) {
+      const key = keyOf(baseFeatures[anchor[0]]);
+      if (key !== undefined) features.set(key, cloneJson(nextFeatures[anchor[1]]));
+    }
+    const paired = pairable(baseFeatures, nextFeatures, oldStart, oldStop, newStart, newStop);
+    for (let i = 0; i < paired; i += 1) {
+      const key = keyOf(baseFeatures[oldStart + i]);
+      if (key !== undefined && !deepEqual(baseFeatures[oldStart + i], nextFeatures[newStart + i])) {
+        features.set(key, cloneJson(nextFeatures[newStart + i]));
+      }
+    }
+    for (let i = oldStart + paired; i < oldStop; i += 1) {
+      const key = keyOf(baseFeatures[i]);
+      if (key === undefined) continue;
+      features.delete(key);
+      const index = order.toArray().indexOf(key);
+      if (index >= 0) order.delete(index, 1);
+    }
+    if (newStop - newStart > paired) {
+      // Anchor on the base feature just before this run (the last paired one,
+      // or the unchanged feature before the segment).
+      const anchorIndex = oldStart + paired - 1;
+      const anchorKey = anchorIndex >= 0 ? keyOf(baseFeatures[anchorIndex]) : undefined;
+      const at = anchorKey === undefined ? 0 : order.toArray().indexOf(anchorKey) + 1;
+      const inserted: string[] = [];
+      for (let i = newStart + paired; i < newStop; i += 1) {
+        const featureKey = newKey();
+        features.set(featureKey, cloneJson(nextFeatures[i]));
+        inserted.push(featureKey);
+      }
+      order.insert(Math.max(0, at), inserted);
+    }
+  }
+}
+
+/**
+ * Bring `order` in line with the writer's layer order where the writer moved
+ * layers, keeping layers only the document has (a peer's additions) next to
+ * the layer they follow there.
+ */
+function patchLayerOrder(
+  order: Y.Array<string>,
+  layers: Y.Map<unknown>,
+  nextIds: readonly string[],
+  baseIds: readonly string[],
+): void {
+  compactOrder(order, layers, false);
+  const live = order.toArray();
+  const present = new Set(live);
+  const local = new Set(nextIds);
+  let desired: string[];
+  if (
+    sameValue(
+      nextIds.filter((id) => baseIds.includes(id)),
+      baseIds.filter((id) => local.has(id)),
+    )
+  ) {
+    // No local move: keep the document's order and only place layers the
+    // writer added (not yet in the order) after the layer before them.
+    desired = [...live];
+    nextIds.forEach((id, index) => {
+      if (present.has(id) || !layers.has(id)) return;
+      const before = nextIds
+        .slice(0, index)
+        .reverse()
+        .find((other) => desired.includes(other));
+      desired.splice(before === undefined ? 0 : desired.indexOf(before) + 1, 0, id);
+    });
+  } else {
+    desired = nextIds.filter((id) => layers.has(id));
+    live.forEach((id, index) => {
+      if (local.has(id)) return;
+      const before = live
+        .slice(0, index)
+        .reverse()
+        .find((other) => desired.includes(other));
+      desired.splice(before === undefined ? 0 : desired.indexOf(before) + 1, 0, id);
+    });
+  }
+  const { prefix, suffix } = commonEnds(live, desired, (a, b) => a === b);
+  const oldEnd = live.length - suffix;
+  const newEnd = desired.length - suffix;
+  if (oldEnd > prefix) order.delete(prefix, oldEnd - prefix);
+  if (newEnd > prefix) order.insert(prefix, desired.slice(prefix, newEnd));
 }
 
 /**
@@ -742,6 +939,56 @@ export class ProjectDoc {
         if (isFeatureCollectionValue(value.geojson)) this.geojsonCache.set(id, value.geojson);
       }
     }
+  }
+
+  /**
+   * Record only what the writer changed: the differences between `base` (the
+   * project the writer last saw, as it read it) and `project`. Unlike
+   * {@link write}, anything the writer did not change keeps the document's
+   * value, so a peer's edit that arrived after `base` survives even though
+   * `project` still holds the older value. A layer a peer deleted is not
+   * brought back by an edit to it, and a peer's new layer is kept.
+   */
+  writeChanges(
+    project: ProjectRecord,
+    base: ProjectRecord,
+    origin: unknown = null,
+    options: ProjectWriteOptions = {},
+  ): void {
+    this.assertLive();
+    const ignore = options.ignore;
+    this.doc.transact(() => {
+      const keys = new Set([...Object.keys(base), ...Object.keys(project)]);
+      for (const key of keys) {
+        if (key === "layers" || ignore?.has(key)) continue;
+        patchField(this.fields, key, own(project, key), own(base, key));
+      }
+      if (ignore?.has("layers")) return;
+      const byId = layersById(project.layers);
+      const baseById = layersById(base.layers);
+      for (const id of baseById.keys()) {
+        if (!byId.has(id)) this.layers.delete(id);
+      }
+      for (const [id, layer] of byId) {
+        const before = baseById.get(id);
+        if (before && sameValue(before, layer)) continue;
+        const existing = this.layers.get(id);
+        if (existing instanceof Y.Map) {
+          if (before) patchLayer(existing, layer, before, this.newFeatureKey);
+          else syncLayer(existing, layer, this.newFeatureKey);
+        } else if (!before) {
+          const map = new Y.Map<unknown>();
+          this.layers.set(id, map);
+          syncLayer(map, layer, this.newFeatureKey);
+        }
+      }
+      patchLayerOrder(
+        this.layerOrder,
+        this.layers as Y.Map<unknown>,
+        Array.from(byId.keys()),
+        Array.from(baseById.keys()),
+      );
+    }, origin);
   }
 
   /**

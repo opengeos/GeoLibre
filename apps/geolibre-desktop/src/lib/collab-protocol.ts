@@ -19,6 +19,9 @@ import type {
 
 export type { CollaborationMode, CollaborationRole, CollabInvite };
 
+/** Capability a client and relay exchange to sync op by op (#3530). */
+export const CRDT_FEATURE = "crdt-v1";
+
 export interface CollabCursor {
   lng: number;
   lat: number;
@@ -73,6 +76,28 @@ export interface JoinMessage {
    * secret configured ignores this field entirely.
    */
   identityToken?: string;
+  /** Protocol capabilities this client speaks (`"crdt-v1"`: op-level sync, #3530). */
+  features?: string[];
+}
+
+/** One chunk of a Yjs update that spans several frames. */
+export interface DocUpdateChunk {
+  id: string;
+  index: number;
+  count: number;
+}
+
+/** Ask for the document updates this client lacks (base64 state vector). */
+export interface ClientDocSyncMessage {
+  type: "doc-sync";
+  stateVector: string;
+}
+
+/** One Yjs update (or one chunk of it) from a co-editor. */
+export interface ClientDocUpdateMessage {
+  type: "doc-update";
+  update: string;
+  chunk?: DocUpdateChunk;
 }
 
 export interface ClientSnapshotMessage {
@@ -163,7 +188,9 @@ export type ClientMessage =
   | SetSessionConfigMessage
   | KickParticipantMessage
   | BlockParticipantMessage
-  | SetLayerLocksMessage;
+  | SetLayerLocksMessage
+  | ClientDocSyncMessage
+  | ClientDocUpdateMessage;
 
 // Server -> client -----------------------------------------------------------
 
@@ -189,6 +216,8 @@ export interface WelcomeMessage {
   identitySupported?: boolean;
   lockedLayerIds?: string[];
   invites?: CollabInvite[];
+  /** Capabilities the relay speaks; `"crdt-v1"` means `snapshot` is null and the project syncs op by op. */
+  features?: string[];
 }
 
 export interface PresenceEntry {
@@ -200,6 +229,22 @@ export interface ServerSnapshotMessage {
   type: "snapshot";
   project: GeoLibreProject;
   origin: string;
+  rev: number;
+}
+
+/** A document update relayed from `origin` (or the relay itself). */
+export interface ServerDocUpdateMessage {
+  type: "doc-update";
+  update: string;
+  chunk?: DocUpdateChunk;
+  origin: string;
+  rev: number;
+}
+
+/** Ends the reply to `doc-sync`; carries the relay's own state vector. */
+export interface DocSyncedMessage {
+  type: "doc-synced";
+  stateVector: string;
   rev: number;
 }
 
@@ -260,7 +305,8 @@ export interface ErrorMessage {
     | "not-found"
     | "identity-required"
     | "identity-unavailable"
-    | "layer-locked";
+    | "layer-locked"
+    | "resync";
   message: string;
 }
 
@@ -277,4 +323,6 @@ export type ServerMessage =
   | SessionConfigMessage
   | LayerLocksMessage
   | KickedMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | ServerDocUpdateMessage
+  | DocSyncedMessage;

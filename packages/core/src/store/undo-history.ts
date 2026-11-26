@@ -103,11 +103,55 @@ export function subscribeProjectRestoreHistory(listener: () => void): () => void
   return () => projectRestoreHistoryListeners.delete(listener);
 }
 
+/**
+ * An undo history that replaces the store's own while it is installed. A live
+ * collaboration session installs one backed by a per-user CRDT undo manager
+ * (#3530): the store's snapshot history would revert collaborators' edits along
+ * with the user's, so while a delegate is set the store records no history and
+ * {@link undo} / {@link redo} go to the delegate.
+ */
+export interface HistoryDelegate {
+  undo: () => void;
+  redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
+}
+
+let historyDelegate: HistoryDelegate | null = null;
+
+/**
+ * Install (or, with `null`, remove) the {@link HistoryDelegate}. Either way the
+ * store's own history is cleared: entries recorded before a session describe a
+ * project the session has since replaced, and none are recorded during one.
+ *
+ * @param delegate - The history to use, or `null` to go back to the store's.
+ */
+export function setHistoryDelegate(delegate: HistoryDelegate | null): void {
+  historyDelegate = delegate;
+  clearHistory();
+  notifyProjectRestoreHistory();
+}
+
+/**
+ * Tell undo/redo availability listeners that the delegate's stacks changed.
+ * They subscribe through {@link subscribeProjectRestoreHistory}.
+ */
+export function notifyHistoryDelegateChanged(): void {
+  notifyProjectRestoreHistory();
+}
+
+/**
+ * Whether undo has something to do beyond the store's snapshot stack: a
+ * whole-project restore, or the installed {@link HistoryDelegate}'s history.
+ */
 export function canUndoProjectRestore(): boolean {
+  if (historyDelegate) return historyDelegate.canUndo();
   return projectRestoreUndo !== null;
 }
 
+/** The redo counterpart of {@link canUndoProjectRestore}. */
 export function canRedoProjectRestore(): boolean {
+  if (historyDelegate) return historyDelegate.canRedo();
   return projectRestoreRedo !== null;
 }
 
@@ -207,6 +251,8 @@ export function createHistoryOptions(): ZundoOptions<AppState, HistoryState> {
       // burst-suppressed calls leave `pastStates` untouched, so skip the scan
       // unless a new snapshot was appended.
       return (...args: Parameters<typeof debounced>) => {
+        // A history delegate owns undo for now; record nothing here.
+        if (historyDelegate) return;
         const before = boundStore().temporal.getState().pastStates;
         debounced(...args);
         if (boundStore().temporal.getState().pastStates !== before) {
@@ -336,6 +382,10 @@ function finishHistoryStep(previousBasemapStyleUrl: string): void {
  * reconciles through MapController.syncLayers (never mutated directly here).
  */
 export function undo(): void {
+  if (historyDelegate) {
+    historyDelegate.undo();
+    return;
+  }
   const temporal = boundStore().temporal.getState();
   if (temporal.pastStates.length === 0 && projectRestoreUndo) {
     const entry = projectRestoreUndo;
@@ -367,6 +417,10 @@ export function undo(): void {
 
 /** Step the history forward one entry and mark the project dirty. */
 export function redo(): void {
+  if (historyDelegate) {
+    historyDelegate.redo();
+    return;
+  }
   const temporal = boundStore().temporal.getState();
   if (temporal.futureStates.length === 0 && projectRestoreRedo) {
     const entry = projectRestoreRedo;
