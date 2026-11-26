@@ -136,7 +136,7 @@ describe("stripGeoPackageHeader", () => {
 });
 
 describe("readGeoPackageSync", () => {
-  it("reads features with geometry and properties, excluding the id column", () => {
+  it("reads features with geometry and properties, the row id as the feature id", () => {
     const bytes = buildGpkg([
       { geometry: { type: "Point", coordinates: [-85.6, 42.9] }, name: "a" },
       {
@@ -155,9 +155,11 @@ describe("readGeoPackageSync", () => {
     assert.equal(featureCollection.features.length, 2);
     assert.deepEqual(featureCollection.features[0], {
       type: "Feature",
+      id: 1,
       geometry: { type: "Point", coordinates: [-85.6, 42.9] },
-      properties: { name: "a" }, // fid excluded
+      properties: { name: "a" }, // fid is the id, not an attribute
     });
+    assert.equal(featureCollection.features[1].id, 2);
     assert.equal(featureCollection.features[1].geometry?.type, "LineString");
   });
 

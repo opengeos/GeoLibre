@@ -202,7 +202,15 @@ function readLayerFeatures(
           );
         }
       }
-      features.push({ type: "Feature", geometry, properties });
+      // The row id becomes the feature id (not an attribute), so a save can
+      // match features back to their rows (offline edit sync, #3530).
+      const fid = idIndex >= 0 ? row[idIndex] : null;
+      features.push({
+        type: "Feature",
+        ...(typeof fid === "number" && Number.isSafeInteger(fid) ? { id: fid } : {}),
+        geometry,
+        properties,
+      });
     }
   }
   return { type: "FeatureCollection", features };
@@ -370,4 +378,28 @@ export async function loadGeoPackageTableRows(
   limit?: number,
 ): Promise<Record<string, unknown>[]> {
   return readGeoPackageTableRowsSync(await loadSqlJs(), bytes, table, limit);
+}
+
+/**
+ * Carry the row ids of a GeoPackage read across reprojection, which goes
+ * through GeoJSON and ST_Read and so drops `feature.id`. Features come back in
+ * input order; when the counts differ the ids are left off rather than guessed.
+ *
+ * @param source The collection as read, with row ids.
+ * @param reprojected The same features in WGS84.
+ * @returns The reprojected collection with the row ids restored.
+ */
+export function restoreFeatureIds(
+  source: FeatureCollection,
+  reprojected: FeatureCollection,
+): FeatureCollection {
+  if (source.features.length !== reprojected.features.length) return reprojected;
+  if (!source.features.some((feature) => feature.id !== undefined)) return reprojected;
+  return {
+    ...reprojected,
+    features: reprojected.features.map((feature, index) => {
+      const id = source.features[index].id;
+      return id === undefined ? feature : { ...feature, id };
+    }),
+  };
 }

@@ -64,6 +64,15 @@ class WriteVectorRequest(BaseModel):
     # Optional target table within a multi-layer GeoPackage. When omitted, a
     # GeoPackage with a single feature layer writes back to that layer.
     layer: Optional[str] = None
+    # Optimistic concurrency for the offline edit outbox: the SHA-256 (hex) of
+    # the file as the client last read it. When it no longer matches, nothing
+    # is written and the request fails with HTTP 409, so a change another
+    # program saved meanwhile is never overwritten unseen.
+    expected_sha256: Optional[str] = None
+    # GeoPackage only: write each feature's GeoJSON ``id`` as its row id (the
+    # table's FID column) instead of renumbering the rows, so row identities
+    # survive a save and later saves can match features to rows.
+    preserve_fids: bool = False
 
 
 @router.get("/status")
@@ -394,7 +403,40 @@ def _write_shapefile(target: Path, geojson: dict) -> int:
     return len(gdf)
 
 
-def _write_geopackage(target: Path, geojson: dict, layer: Optional[str]) -> tuple[int, str]:
+def _geopackage_fid_column(target: Path, table: str) -> str:
+    """Return the integer primary-key (FID) column of a GeoPackage table, or ``fid``."""
+    import sqlite3
+
+    with sqlite3.connect(f"file:{target}?mode=ro", uri=True) as conn:
+        quoted = '"' + table.replace('"', '""') + '"'
+        for row in conn.execute(f"PRAGMA table_info({quoted})"):
+            # table_info columns: cid, name, type, notnull, dflt_value, pk.
+            if row[5] == 1:
+                return str(row[1])
+    return "fid"
+
+
+def _with_feature_fids(gdf: Any, features: list[dict], fid_column: str) -> Any:
+    """Attach each feature's integer GeoJSON ``id`` as the ``fid_column`` column."""
+    fids = []
+    for feature in features:
+        fid = feature.get("id")
+        if isinstance(fid, bool) or not isinstance(fid, int) or fid <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="preserve_fids needs a positive integer id on every feature.",
+            )
+        fids.append(fid)
+    if len(set(fids)) != len(fids):
+        raise HTTPException(status_code=400, detail="preserve_fids got duplicate feature ids.")
+    gdf = gdf.copy()
+    gdf[fid_column] = fids
+    return gdf
+
+
+def _write_geopackage(
+    target: Path, geojson: dict, layer: Optional[str], preserve_fids: bool = False
+) -> tuple[int, str]:
     """Overwrite one layer of a GeoPackage in place, preserving the others.
 
     Resolves the target table (the given ``layer``, or the sole feature layer of
@@ -447,6 +489,13 @@ def _write_geopackage(target: Path, geojson: dict, layer: Optional[str]) -> tupl
         )
 
     gdf = _build_wgs84_gdf(geojson)
+    write_options: dict[str, Any] = {}
+    if preserve_fids:
+        # GDAL's GPKG driver takes a column named like the FID column as the
+        # row id, so naming the FID column keeps both its name and its values.
+        fid_column = _geopackage_fid_column(target, target_layer)
+        gdf = _with_feature_fids(gdf, geojson["features"], fid_column)
+        write_options["FID"] = fid_column
     # The reader reprojects a non-WGS84 GeoPackage to WGS84 for display; reproject
     # the edits back into the stored CRS so the file keeps its original
     # projection. Reading one row is enough to recover the layer's CRS cheaply.
@@ -458,7 +507,7 @@ def _write_geopackage(target: Path, geojson: dict, layer: Optional[str]) -> tupl
     # so writing the single layer preserves the copy's sibling tables.
     def _write(tmp: Path) -> None:
         shutil.copy2(target, tmp)
-        gdf.to_file(tmp, layer=target_layer, driver="GPKG")
+        gdf.to_file(tmp, layer=target_layer, driver="GPKG", **write_options)
 
     _atomic_write(target, _write)
     return len(gdf), target_layer
@@ -493,11 +542,61 @@ def vector_write(request: WriteVectorRequest):
             detail=f"Layer exceeds the {vector_ops.MAX_FEATURES}-feature limit",
         )
 
-    layer_name: Optional[str] = None
     ext = target.suffix.lower()
+    if request.preserve_fids and ext != ".gpkg":
+        raise HTTPException(status_code=400, detail="preserve_fids applies to GeoPackages only.")
+    with _source_write_lock(target):
+        if request.expected_sha256 is not None:
+            _check_unchanged(target, request.expected_sha256)
+        return _write_vector_source(request, target, ext)
+
+
+def _file_sha256(path: Path) -> str:
+    """Hex SHA-256 of a file's bytes, read in chunks."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _check_unchanged(target: Path, expected_sha256: str) -> None:
+    """Raise HTTP 409 when ``target`` no longer has the bytes the client read."""
+    try:
+        current = _file_sha256(target)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=409, detail=f"{target.name} was removed since it was read."
+        ) from exc
+    if current != expected_sha256.strip().lower():
+        raise HTTPException(
+            status_code=409,
+            detail=f"{target.name} changed since it was read. Read it again before saving.",
+        )
+
+
+_SOURCE_WRITE_LOCKS: dict[str, threading.Lock] = {}
+_SOURCE_WRITE_LOCKS_GUARD = threading.Lock()
+
+
+def _source_write_lock(target: Path) -> threading.Lock:
+    """One lock per resolved path, so a hash check and its write are not interleaved."""
+    key = str(target)
+    with _SOURCE_WRITE_LOCKS_GUARD:
+        lock = _SOURCE_WRITE_LOCKS.get(key)
+        if lock is None:
+            lock = _SOURCE_WRITE_LOCKS[key] = threading.Lock()
+        return lock
+
+
+def _write_vector_source(request: WriteVectorRequest, target: Path, ext: str) -> dict:
+    """Write ``request.geojson`` to ``target`` by format and describe the result."""
+    layer_name: Optional[str] = None
     try:
         if ext == ".gpkg":
-            count, layer_name = _write_geopackage(target, request.geojson, request.layer)
+            count, layer_name = _write_geopackage(
+                target, request.geojson, request.layer, request.preserve_fids
+            )
         elif ext == ".shp":
             count = _write_shapefile(target, request.geojson)
         elif ext == ".fgb":

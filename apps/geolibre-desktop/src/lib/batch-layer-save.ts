@@ -49,6 +49,13 @@ import {
   withLocalFeatureIds,
 } from "./edit-sync/arcgis-edit-sync";
 import { editSessionToken } from "./edit-sync/edit-outbox-runner";
+import {
+  buildGeoPackageChangeSet,
+  geopackageOutboxId,
+  geopackageOutboxTarget,
+  isGeoPackagePath,
+  withGeoPackageLocalIds,
+} from "./edit-sync/geopackage-edit-sync";
 import { saveThroughOutbox } from "./edit-sync/outbox-save";
 import { ensureEditSyncBackends } from "./edit-sync/register-backends";
 import {
@@ -788,6 +795,34 @@ export async function writeLayerEditsToSource(
           { count: geojson.features.length },
         ),
       };
+    }
+
+    if (isDesktop() && isGeoPackagePath(path)) {
+      // Offline-first save (#3530): queue the changed rows, then sync with a
+      // per-row conflict check against the file's current content.
+      const tableName = localFileSourceLayer(layer) || undefined;
+      const withIds = withGeoPackageLocalIds(geojson);
+      const target = geopackageOutboxTarget(layer, tableName);
+      if (target) {
+        if (withIds !== geojson) updateLayer(layer.id, { geojson: withIds });
+        const ops = buildGeoPackageChangeSet({ ...layer, geojson: withIds });
+        if (ops) {
+          const saveOutbox = deps?.saveOutbox ?? defaultSaveOutbox;
+          return await saveOutbox(
+            {
+              id: geopackageOutboxId(target, layer.id),
+              backend: "geopackage",
+              target,
+              targetLabel: tableName ? `${path} (${tableName})` : path,
+              layerId: layer.id,
+              layerName: layer.name,
+              ops,
+              session: editSessionToken(layer.id, requestProjectGeneration),
+            },
+            t,
+          );
+        }
+      }
     }
 
     if (isDesktop()) await startSidecar();

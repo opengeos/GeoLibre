@@ -28,7 +28,7 @@ import { confirmLargeDataset, type DuckDbVectorLoadOptions } from "./duckdb-vect
 import { readDxfCodepage, recodeCadFeatureCollection } from "./cad-encoding";
 import { featureCollectionFromBatches } from "./duckdb-feature-batches";
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
-import { isLikelyGeoPackage, loadGeoPackageVectorFile } from "./gpkg-reader";
+import { isLikelyGeoPackage, loadGeoPackageVectorFile, restoreFeatureIds } from "./gpkg-reader";
 import { prjSidecarCrs } from "./prj-sidecar";
 import { createDuckDbWorker, selectDuckDbBundle } from "./duckdb-wasm-bundles";
 import { getSpatialExtensionPath } from "./spatial-extension-config";
@@ -704,7 +704,10 @@ async function loadGeoPackageVector(
     ...featureCollection,
     crs: { type: "name", properties: { name: `EPSG:${epsgCode}` } },
   } as FeatureCollection;
-  return reprojectFeatureCollectionToWgs84(tagged);
+  return restoreFeatureIds(
+    featureCollection as FeatureCollection,
+    await reprojectFeatureCollectionToWgs84(tagged),
+  );
 }
 
 export async function loadDuckDbVectorFile(

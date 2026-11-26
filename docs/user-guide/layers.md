@@ -121,7 +121,7 @@ The **Layer actions** menu (the `…` button) holds everything else:
 | **Copy style** / **Paste style** | Carry symbology from one layer to another. |
 | **Refresh** / **Auto refresh** | Reload the source now, or on an interval — see [Refreshing live layers](#refreshing-live-layers). |
 | **Reload from disk** / **Watch file for changes** | Desktop app, layers read from a local file: re-read the file now, or reload it whenever it changes on disk. These replace **Refresh** / **Auto refresh** on such layers. |
-| **Save edits to source file** | Desktop app: write attribute and geometry edits back to the layer's GeoJSON or GeoPackage file. On an ArcGIS feature layer, a PostGIS table, or a SQL Server table it reads **Save edits to ArcGIS service**, **Save edits to PostGIS table**, or **Save edits to SQL Server table**. PostGIS and ArcGIS saves go through the [offline edit outbox](offline-edit-sync.md), which queues them while the source is unreachable and checks for conflicting changes. |
+| **Save edits to source file** | Desktop app: write attribute and geometry edits back to the layer's GeoJSON or GeoPackage file. On an ArcGIS feature layer, a PostGIS table, or a SQL Server table it reads **Save edits to ArcGIS service**, **Save edits to PostGIS table**, or **Save edits to SQL Server table**. PostGIS, ArcGIS and GeoPackage saves go through the [offline edit outbox](offline-edit-sync.md), which queues them while the source is unreachable and checks for conflicting changes. |
 | **Materialize to editable layer** | DuckDB layers: copy the query result into an editable GeoJSON layer. |
 | **Edit query in SQL Workspace** | SQL query layers: reopen the layer's query in the [SQL Workspace](sql-workspace.md). |
 

@@ -29,6 +29,12 @@ export function describeSyncError(
       return t("editOutbox.errors.arcgisTargetMismatch");
     case "geolensNotConnected":
       return t("editOutbox.errors.geolensNotConnected");
+    case "geopackageUnreachable":
+      return t("editOutbox.errors.geopackageUnreachable");
+    case "geopackageNoRowIds":
+      return t("editOutbox.errors.geopackageNoRowIds");
+    case "geopackageEmpty":
+      return t("editOutbox.errors.geopackageEmpty");
     default:
       return fallback ?? "";
   }

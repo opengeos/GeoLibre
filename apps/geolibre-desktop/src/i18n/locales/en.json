@@ -378,7 +378,10 @@
       "postgisNoConnection": "No PostgreSQL connection is available for this table. Reconnect in Add data > PostgreSQL, then sync again.",
       "arcgisLayerClosed": "Open the project that holds this ArcGIS layer to sync its queued edits. They sync on their own once it is open.",
       "arcgisTargetMismatch": "This layer now points at a different ArcGIS service than the queued edits, so they were not sent. Discard them, or point the layer back at the original service.",
-      "geolensNotConnected": "Connect to this GeoLens server with an API key in the GeoLens panel to sync its queued edits."
+      "geolensNotConnected": "Connect to this GeoLens server with an API key in the GeoLens panel to sync its queued edits.",
+      "geopackageUnreachable": "The GeoPackage cannot be reached (is its drive or network share connected?). The edits sync once it is back.",
+      "geopackageNoRowIds": "The GeoPackage's row ids could not be read, so its edits cannot be matched to rows safely.",
+      "geopackageEmpty": "Saving would leave the GeoPackage layer with no features, which is not allowed."
     },
     "offlineNotice": "You are offline. Queued edits sync automatically when the connection returns.",
     "empty": "No edits are waiting to sync.",
