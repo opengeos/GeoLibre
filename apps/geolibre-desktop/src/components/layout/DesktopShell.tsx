@@ -1,6 +1,6 @@
 // @refresh reset
 import { useAppStore } from "@geolibre/core";
-import type { MapDiagnosticEvent, MapEngine } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { MapCanvas, rendererCapabilities } from "@geolibre/map";
 import { useTranslation } from "react-i18next";
 import { addRasterToMap, openRasterLayerPanel } from "@geolibre/plugins/maplibre-raster";
@@ -47,10 +47,7 @@ import {
 import type { DataUrlLoadState } from "../../hooks/useDataUrlLoader";
 import { wikipediaLang } from "../../lib/knowledge";
 import { isMapClickModeActive } from "../../lib/map-click-modes";
-import { createLatch } from "../../lib/settle-gate";
-import { useLineOfSightTool } from "../../lib/line-of-sight-store";
 import { bindNetcdfProfileSamplesToProject } from "../../lib/netcdf-profile-store";
-import { projectUrlFromLocation } from "../../lib/project-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
 import { useGlobalRasterIdentify } from "../../hooks/useGlobalRasterIdentify";
@@ -100,14 +97,7 @@ import { useCommandBridge } from "../../hooks/useCommandBridge";
 import { useEmbedApi } from "../../hooks/useEmbedApi";
 import { useJupyterRelay } from "../../hooks/useJupyterRelay";
 import { useLiveMcpStartup } from "../../hooks/useLiveMcpStartup";
-import {
-  appendDiagnostic,
-  observeNetworkResponses,
-  useDiagnosticsSnapshot,
-} from "../../lib/diagnostics";
-import { createLayerFailureNotifier } from "../../lib/layer-failure-notifier";
-import { mapDiagnosticLevel } from "../../lib/map-error-notification";
-import { useCredentialStorageStatus } from "../../lib/credential-store";
+import { useDiagnosticsSnapshot } from "../../lib/diagnostics";
 import { SectionErrorBoundary, SilentErrorBoundary } from "../common/error-boundaries";
 import { LayerPanel } from "../panels/LayerPanel";
 import { useLayerRefresh } from "../panels/layer-panel/useLayerRefresh";
@@ -121,7 +111,9 @@ import { Layers, SlidersHorizontal } from "lucide-react";
 import { StoryMapComposeBar } from "../storymap/StoryMapComposeBar";
 import { StoryMapPanel } from "../storymap/StoryMapPanel";
 import { StoryMapPresenter } from "../storymap/StoryMapPresenter";
+import { CredentialStorageWarning } from "./CredentialStorageWarning";
 import { DiagnosticsDialog } from "./DiagnosticsDialog";
+import { FileDropOverlay } from "./FileDropOverlay";
 import { CreationTemplateDialog } from "./CreationTemplateDialog";
 import { FileNamePromptDialog } from "./FileNamePromptDialog";
 import { ProjectPluginTrustDialog } from "./ProjectPluginTrustDialog";
@@ -154,6 +146,12 @@ import { useDropStatus } from "../../hooks/desktop-shell/useDropStatus";
 import { useUrlLoadErrorNotices } from "../../hooks/desktop-shell/useUrlLoadErrorNotices";
 import { useWebglContextLossNotice } from "../../hooks/desktop-shell/useWebglContextLossNotice";
 import { useFileDrop } from "../../hooks/desktop-shell/useFileDrop";
+import { useIdentifyAllLabels } from "../../hooks/desktop-shell/useIdentifyAllLabels";
+import { useKnowledgeLineOfSightExclusivity } from "../../hooks/desktop-shell/useKnowledgeLineOfSightExclusivity";
+import { useMapDiagnosticEvents } from "../../hooks/desktop-shell/useMapDiagnosticEvents";
+import { usePluginRegistryPrefetch } from "../../hooks/desktop-shell/usePluginRegistryPrefetch";
+import { useProjectReadyMarkers } from "../../hooks/desktop-shell/useProjectReadyMarkers";
+import { useProjectUrlSettled } from "../../hooks/desktop-shell/useProjectUrlSettled";
 import { useKnowledgeCard } from "../../hooks/desktop-shell/useKnowledgeCard";
 import { useLayerEditActions } from "../../hooks/desktop-shell/useLayerEditActions";
 import { useIdentifyEditActions } from "../../hooks/desktop-shell/useIdentifyEditActions";
@@ -164,7 +162,6 @@ import { useNativeProjectOpenListener } from "../../hooks/desktop-shell/useNativ
 import { usePanelResize } from "../../hooks/desktop-shell/usePanelResize";
 import { usePluginStateRestore } from "../../hooks/desktop-shell/usePluginStateRestore";
 import { useStartupPanels } from "../../hooks/desktop-shell/useStartupPanels";
-import { fetchPluginRegistry } from "../../lib/plugin-registry";
 import { usePluginDeepLink } from "../../hooks/desktop-shell/usePluginDeepLink";
 import { useRasterFileHandlers } from "../../hooks/desktop-shell/useRasterFileHandlers";
 import { useRasterSubsetLayer } from "../../hooks/desktop-shell/useRasterSubsetLayer";
@@ -196,39 +193,8 @@ export function DesktopShell({
   onMapReady,
 }: DesktopShellProps) {
   const { t } = useTranslation();
-  // Read once: whether the page opened with a `?url=` project to wait for.
-  const hasProjectUrl = useMemo(() => projectUrlFromLocation() !== null, []);
   const identifyRasterLayerAt = useGlobalRasterIdentify();
-  const identifyAllLabels = useMemo(
-    () => ({
-      title: (count: number) => t("map.identifyAll.title", { count }),
-      resultCount: (count: number) => t("map.identifyAll.resultCount", { count }),
-      featureFallback: (index: number) => t("map.identifyAll.featureFallback", { index }),
-      pixel: t("map.identifyAll.pixel"),
-      expandAll: t("map.identifyAll.expandAll"),
-      collapseAll: t("map.identifyAll.collapseAll"),
-      loadingTitle: t("map.identifyAll.loadingTitle"),
-      loading: t("map.identifyAll.loading"),
-      errorLabel: t("map.identifyAll.errorLabel"),
-      error: t("map.identifyAll.error"),
-      noData: t("map.identifyAll.noData"),
-      pixelReadFailed: t("map.identifyAll.pixelReadFailed"),
-      pixelValue: t("map.identifyAll.pixelValue"),
-      pixelBand: (index: number) => t("map.identifyAll.pixelBand", { index }),
-      wmsFailed: t("map.identifyAll.wmsFailed"),
-      wmsNotQueryable: t("map.identifyAll.wmsNotQueryable"),
-      editGeometry: t("map.identifyAll.editGeometry"),
-      editAttributes: t("map.identifyAll.editAttributes"),
-      photo: {
-        photo: t("map.identifyAll.photo"),
-        noPreview: t("map.identifyAll.photoNoPreview"),
-        viewFullResolution: t("map.identifyAll.photoViewFullResolution"),
-        viewFullscreen: t("map.identifyAll.photoViewFullscreen"),
-        close: t("map.identifyAll.photoClose"),
-      },
-    }),
-    [t],
-  );
+  const identifyAllLabels = useIdentifyAllLabels(t);
   const shellRef = useRef<HTMLDivElement>(null);
   const verticalResizeGuideRef = useRef<HTMLDivElement>(null);
   useTranslatedPluginLabels(t);
@@ -249,15 +215,7 @@ export function DesktopShell({
     confirmKnowledgeConsent,
     handleKnowledgeFlyTo,
   } = useKnowledgeCard(mapControllerRef);
-  // The Line of Sight panel and the knowledge card share the map's bottom
-  // corner, so opening either closes the other rather than stacking them.
-  const lineOfSightRequest = useLineOfSightTool((s) => s.request);
-  useEffect(() => {
-    if (lineOfSightRequest > 0) setKnowledgePlace(null);
-  }, [lineOfSightRequest, setKnowledgePlace]);
-  useEffect(() => {
-    if (knowledgePlace) useLineOfSightTool.getState().closeLineOfSight();
-  }, [knowledgePlace]);
+  useKnowledgeLineOfSightExclusivity(knowledgePlace, setKnowledgePlace);
   const [rasterSubsetLayer, setRasterSubsetLayer] = useRasterSubsetLayer();
   // The Offline Basemap Extract panel is a non-modal floating panel over the
   // map (so the map stays interactive for drawing a bbox), mounted here beside
@@ -320,10 +278,6 @@ export function DesktopShell({
   useUrlLoadErrorNotices(projectUrlLoadState?.error, dataUrlLoadState?.error);
   const mapAreaRef = useRef<HTMLElement>(null);
   useWebglContextLossNotice(mapAreaRef);
-  const credentialStorageError = useCredentialStorageStatus((s) => s.error);
-  const credentialStorageRevision = useCredentialStorageStatus((s) => s.revision);
-  // A new failure bumps the revision, which re-shows a dismissed warning.
-  const [dismissedCredentialRevision, setDismissedCredentialRevision] = useState(0);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const diagnostics = useDiagnosticsSnapshot();
   const externalPluginsReady = useExternalPluginsReady(mapControllerRef);
@@ -423,29 +377,8 @@ export function DesktopShell({
   useLiveMapUrl(mapControllerRef);
   useTileProtocols();
   useRasterFileHandlers(mapControllerRef, t);
-  // Fetching the registry also tells the credential redaction which external
-  // plugins declared their project state publishable, so a save made before the
-  // Manage Plugins dialog is ever opened still keeps that state. A failed fetch
-  // only leaves the conservative default of dropping external plugin state.
-  const canInstallPlugins = useAppStore((state) =>
-    state.deploymentCapabilities.has("plugins:install"),
-  );
-  useEffect(() => {
-    // Same gate as the marketplace: a deployment that disables plugin
-    // installation has no registry plugins, so there is nothing to declare.
-    if (!canInstallPlugins) return;
-    const controller = new AbortController();
-    fetchPluginRegistry(undefined, controller.signal).catch(() => {});
-    return () => controller.abort();
-  }, [canInstallPlugins]);
-  // Latched: the loader goes from `loaded` back to `idle` after a few seconds,
-  // which must not un-settle a project that has already loaded.
-  const [latchProjectUrlSettled] = useState(createLatch);
-  const projectUrlSettled = latchProjectUrlSettled(
-    !hasProjectUrl ||
-      projectUrlLoadState?.status === "loaded" ||
-      projectUrlLoadState?.status === "error",
-  );
+  usePluginRegistryPrefetch();
+  const projectUrlSettled = useProjectUrlSettled(projectUrlLoadState);
   const restoredProjectGeneration = usePluginStateRestore({
     mapControllerRef,
     enforceViewerPlugins,
@@ -454,27 +387,12 @@ export function DesktopShell({
     projectGeneration,
     projectUrlSettled,
   });
-  useEffect(() => {
-    const root = document.documentElement;
-    root.dataset.geolibreProjectGeneration = String(projectGeneration);
-    root.dataset.geolibreProjectReadyGeneration =
-      externalPluginsReady &&
-      projectPluginTrust.pendingUrls.length === 0 &&
-      restoredProjectGeneration === projectGeneration
-        ? String(projectGeneration)
-        : "";
-    // Clear both markers on unmount so an embed teardown or hot reload cannot
-    // leave a stale "ready" generation on the root element for external readers.
-    return () => {
-      delete root.dataset.geolibreProjectReadyGeneration;
-      delete root.dataset.geolibreProjectGeneration;
-    };
-  }, [
-    externalPluginsReady,
+  useProjectReadyMarkers({
     projectGeneration,
-    projectPluginTrust.pendingUrls.length,
+    externalPluginsReady,
+    pendingTrustCount: projectPluginTrust.pendingUrls.length,
     restoredProjectGeneration,
-  ]);
+  });
   // After the restore above, so a `?url=` project's plugin state cannot close
   // what the link opened.
   const registryPluginLink = usePluginDeepLink({
@@ -529,39 +447,7 @@ export function DesktopShell({
   });
   useMapControlLabels(mapControllerRef, mapReadyGeneration, t);
 
-  // One toast per layer per session: a broken tile source errors on every pan,
-  // and the first notice is enough (the rest stay in Diagnostics). Created once
-  // so the "already told" record survives re-renders and renderer swaps.
-  const translateRef = useRef(t);
-  translateRef.current = t;
-  const [layerFailureNotifier] = useState(() =>
-    createLayerFailureNotifier({
-      getLayers: () => useAppStore.getState().layers,
-      t: (key, options) => String(translateRef.current(key as never, options as never)),
-    }),
-  );
-  // MapLibre drops a 404 tile as "empty" before it becomes an error event, so
-  // a layer whose every tile is missing is only visible in the responses.
-  useEffect(
-    () =>
-      observeNetworkResponses((response) => layerFailureNotifier.handleNetworkResponse(response)),
-    [layerFailureNotifier],
-  );
-  const handleMapDiagnosticEvent = useCallback(
-    (event: MapDiagnosticEvent) => {
-      const record = appendDiagnostic({
-        category: "map",
-        level: mapDiagnosticLevel(event),
-        message: event.message,
-        detail: event.detail,
-        source: event.source,
-        status: event.status,
-        url: event.url,
-      });
-      layerFailureNotifier.handleMapEvent(event, record ?? undefined);
-    },
-    [layerFailureNotifier],
-  );
+  const handleMapDiagnosticEvent = useMapDiagnosticEvents(t);
 
   const { addDroppedPhotos, addDroppedRasters, addFilePath, finishDrop } = useLayerImport({
     mapControllerRef,
@@ -1272,35 +1158,8 @@ export function DesktopShell({
         ref={verticalResizeGuideRef}
         className="pointer-events-none fixed bottom-7 top-11 z-50 hidden w-px bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.25)]"
       />
-      {isDraggingFiles ? (
-        <div
-          data-testid="file-drop-overlay"
-          className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm"
-        >
-          <div className="max-w-sm rounded-md border bg-background px-4 py-3 text-center shadow-lg">
-            <p className="text-sm font-medium">{t("toolbar.fileDrop.overlayTitle")}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("toolbar.fileDrop.overlaySubtext")}
-            </p>
-          </div>
-        </div>
-      ) : null}
-      {credentialStorageError && credentialStorageRevision !== dismissedCredentialRevision ? (
-        <div
-          data-testid="credential-storage-warning"
-          role="alert"
-          className="absolute bottom-36 left-1/2 z-50 max-w-[min(90vw,36rem)] -translate-x-1/2 rounded-md border border-destructive/40 bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg"
-        >
-          {t("settings.credentials.unavailable", { error: credentialStorageError })}
-          <button
-            type="button"
-            onClick={() => setDismissedCredentialRevision(credentialStorageRevision)}
-            className="ms-2 underline underline-offset-2"
-          >
-            {t("common.close")}
-          </button>
-        </div>
-      ) : null}
+      {isDraggingFiles ? <FileDropOverlay /> : null}
+      <CredentialStorageWarning />
       {commentTool.pendingComment && (
         <AddCommentDialog
           pendingComment={commentTool.pendingComment}
