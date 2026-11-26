@@ -158,7 +158,49 @@ function readValue(value: unknown): unknown {
     });
     return out;
   }
-  return value;
+  return safeJson(value);
+}
+
+/** Values already checked by {@link safeJson} (they are immutable). */
+const checked = new WeakSet<object>();
+
+/**
+ * A stored JSON value with no object whose prototype is not
+ * `Object.prototype`. lib0 decodes a remote `__proto__` key by assignment,
+ * which sets the decoded object's prototype; such a value is rebuilt with own
+ * properties. Clean values (the normal case) are returned as they are, and a
+ * checked value is not walked again.
+ */
+function safeJson(value: unknown): unknown {
+  return isCleanJson(value) ? value : rebuildJson(value);
+}
+
+function isCleanJson(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || checked.has(value)) return true;
+  if (Array.isArray(value)) {
+    // Coordinate arrays: numbers all the way down, nothing to check.
+    if (typeof value[0] === "number") {
+      checked.add(value);
+      return true;
+    }
+    for (const entry of value) if (!isCleanJson(entry)) return false;
+  } else {
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) return false;
+    for (const key of Object.keys(value)) {
+      if (!isCleanJson((value as JsonObject)[key])) return false;
+    }
+  }
+  checked.add(value);
+  return true;
+}
+
+function rebuildJson(value: unknown): unknown {
+  if (typeof value !== "object" || value === null) return value;
+  if (Array.isArray(value)) return value.map(rebuildJson);
+  const out: JsonObject = {};
+  for (const key of Object.keys(value)) setOwn(out, key, rebuildJson((value as JsonObject)[key]));
+  return out;
 }
 
 /** Bring one key of `map` in line with `next`. */
@@ -204,7 +246,7 @@ function readFeatureCollection(map: Y.Map<unknown>): JsonObject {
   const { meta, features, order } = featureCollectionParts(map);
   const out: JsonObject = meta instanceof Y.Map ? (readValue(meta) as JsonObject) : {};
   out.type = "FeatureCollection";
-  out.features = liveKeys(order, features).map((key) => features.get(key));
+  out.features = liveKeys(order, features).map((key) => safeJson(features.get(key)));
   return out;
 }
 
@@ -478,6 +520,11 @@ function syncLayer(
  * identity to skip unchanged layers and fields, so mutating one in place and
  * writing it again records nothing. Replace an object to change it.
  */
+interface WriteFrame {
+  transaction: Y.Transaction | null;
+  foreign: { fields: Set<string>; layers: Set<string> };
+}
+
 export class ProjectDoc {
   readonly doc: Y.Doc;
   readonly fields: Y.Map<unknown>;
@@ -509,30 +556,24 @@ export class ProjectDoc {
     t: Y.Transaction,
   ) => void;
 
-  /** The transaction `write` is running, while it runs. */
-  private activeWrite: Y.Transaction | null = null;
-  /** Keys another transaction changed while `write` was still running. */
-  private readonly foreignChanges = { fields: new Set<string>(), layers: new Set<string>() };
+  /**
+   * One frame per running `write` (a write can re-enter from an update
+   * handler): its transaction once open, and the keys any other transaction
+   * changed while it ran, which it must then not cache.
+   */
+  private readonly writeFrames: WriteFrame[] = [];
+  private destroyed = false;
 
   constructor(doc: Y.Doc = new Y.Doc()) {
     this.doc = doc;
     this.fields = doc.getMap<unknown>(ROOT_FIELDS);
     this.layers = doc.getMap<Y.Map<unknown>>(ROOT_LAYERS);
     this.layerOrder = doc.getArray<string>(ROOT_LAYER_ORDER);
-    this.onLayers = (events, transaction) =>
-      this.invalidate(
-        events,
-        transaction,
-        [this.layerCache, this.geojsonCache],
-        this.foreignChanges.layers,
-      );
-    this.onFields = (events, transaction) =>
-      this.invalidate(events, transaction, [this.fieldCache], this.foreignChanges.fields);
+    this.onLayers = (events, transaction) => this.invalidate(events, transaction, "layers");
+    this.onFields = (events, transaction) => this.invalidate(events, transaction, "fields");
     this.layers.observeDeep(this.onLayers);
     this.fields.observeDeep(this.onFields);
   }
-
-  private destroyed = false;
 
   private assertLive(): void {
     if (this.destroyed) throw new TypeError("This ProjectDoc has been destroyed.");
@@ -559,18 +600,27 @@ export class ProjectDoc {
   private invalidate(
     events: Y.YEvent<Y.AbstractType<unknown>>[],
     transaction: Y.Transaction,
-    caches: Map<string, unknown>[],
-    foreign: Set<string>,
+    root: "fields" | "layers",
   ): void {
-    const record = (key: string) => {
-      for (const cache of caches) cache.delete(key);
-      if (this.activeWrite && transaction !== this.activeWrite) foreign.add(key);
+    const record = (key: string, geojson: boolean) => {
+      if (root === "fields") {
+        this.fieldCache.delete(key);
+      } else {
+        this.layerCache.delete(key);
+        // A style edit leaves the layer's collection as it was.
+        if (geojson) this.geojsonCache.delete(key);
+      }
+      for (const frame of this.writeFrames) {
+        if (transaction !== frame.transaction) frame.foreign[root].add(key);
+      }
     };
     for (const event of events) {
       if (event.path.length === 0) {
-        for (const key of event.keys.keys()) record(key);
+        for (const key of event.keys.keys()) record(key, true);
+      } else if (event.path.length === 1 && root === "layers") {
+        record(String(event.path[0]), event.keys.has("geojson"));
       } else {
-        record(String(event.path[0]));
+        record(String(event.path[0]), root === "layers" && event.path[1] === "geojson");
       }
     }
   }
@@ -607,14 +657,18 @@ export class ProjectDoc {
     const writtenLayers: [string, JsonObject][] = [];
     this.assertLive();
     // `_transaction` is Yjs's open-transaction slot (checked against
-    // yjs 13.6.33); "writes correctly inside a caller's transaction" in
-    // tests/collab-crdt.test.ts fails if an upgrade changes it.
+    // yjs 13.6.33). If an upgrade renamed it, `nested` would read true and
+    // only switch the identity shortcuts off; "writes correctly inside a
+    // caller's transaction" in tests/collab-crdt.test.ts covers the other way.
     const nested = this.doc._transaction !== null;
-    this.foreignChanges.fields.clear();
-    this.foreignChanges.layers.clear();
+    const frame: WriteFrame = {
+      transaction: null,
+      foreign: { fields: new Set<string>(), layers: new Set<string>() },
+    };
+    this.writeFrames.push(frame);
     try {
       this.doc.transact((transaction) => {
-        this.activeWrite = transaction;
+        frame.transaction = transaction;
         for (const key of Array.from(this.fields.keys())) {
           if (key !== "layers" && !ignore?.has(key) && own(project, key) === undefined) {
             this.fields.delete(key);
@@ -673,18 +727,18 @@ export class ProjectDoc {
         if (newEnd > prefix) this.layerOrder.insert(prefix, desired.slice(prefix, newEnd));
       }, origin);
     } finally {
-      this.activeWrite = null;
+      this.writeFrames.splice(this.writeFrames.indexOf(frame), 1);
     }
     // Observers ran (and dropped these entries) as the transaction closed, so
     // record what the document now equals only afterwards, and not for a key
     // an update handler changed again in the meantime.
     if (nested) return;
     for (const [key, value] of writtenFields) {
-      if (!this.foreignChanges.fields.has(key)) this.fieldCache.set(key, value);
+      if (!frame.foreign.fields.has(key)) this.fieldCache.set(key, value);
     }
     for (const [id, value] of writtenLayers) {
       const map = this.layers.get(id);
-      if (map instanceof Y.Map && !this.foreignChanges.layers.has(id)) {
+      if (map instanceof Y.Map && !frame.foreign.layers.has(id)) {
         this.layerCache.set(id, { map, value });
         if (isFeatureCollectionValue(value.geojson)) this.geojsonCache.set(id, value.geojson);
       }

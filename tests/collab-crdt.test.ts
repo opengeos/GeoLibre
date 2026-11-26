@@ -395,12 +395,45 @@ describe("feature identity and edge cases", () => {
     assert.equal((layers(doc.read())[0].geojson as { name?: string }).name, "renamed");
   });
 
+  it("strips a __proto__ key a remote update smuggles into a feature", () => {
+    const sender = new ProjectDoc();
+    const poisoned = JSON.parse(
+      '{"type":"Feature","geometry":null,"properties":{"__proto__":{"admin":true},"n":1}}',
+    );
+    sender.write(
+      project({
+        layers: [{ id: "x", geojson: { type: "FeatureCollection", features: [poisoned] } }],
+      }),
+      "local",
+    );
+    const receiver = new ProjectDoc();
+    Y.applyUpdate(receiver.doc, Y.encodeStateAsUpdate(sender.doc), "remote");
+    const props = (layers(receiver.read())[0].geojson!.features[0] as Feature).properties;
+    assert.equal(Object.getPrototypeOf(props), Object.prototype);
+    assert.equal((props as { admin?: boolean }).admin, undefined);
+    assert.equal(props.n, 1);
+  });
+
   it("keeps a top-level __proto__ field as data", () => {
     const doc = new ProjectDoc();
     doc.doc.transact(() => doc.fields.set("__proto__", { polluted: true }));
     const read = doc.read();
     assert.equal(Object.getPrototypeOf(read), Object.prototype);
     assert.ok(Object.keys(read).includes("__proto__"));
+  });
+
+  it("keeps the cache right when a write re-enters from an update handler", () => {
+    const doc = new ProjectDoc();
+    doc.write(project(), "local");
+    let reenter = true;
+    doc.doc.on("update", () => {
+      if (!reenter) return;
+      reenter = false;
+      doc.write({ ...doc.read(), projectName: "Inner" }, "handler");
+    });
+    doc.write({ ...doc.read(), projectName: "Outer" }, "local");
+    assert.equal(doc.fields.get("projectName"), "Inner");
+    assert.equal(doc.read().projectName, "Inner");
   });
 
   it("writes correctly inside a caller's transaction", () => {
