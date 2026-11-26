@@ -694,3 +694,33 @@ describe("buildStoryMapHtml chapter list (#3477)", () => {
     assert.match(html, /document\.body\.classList\.toggle\('sm-nav-open', !nowHidden\);/);
   });
 });
+
+describe("buildStoryMapHtml excluded fields (#3697)", () => {
+  it("never inlines a field the layer marks excluded", () => {
+    const layer = markerLayer({
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [2.886, 50.85] },
+            properties: { name: "Ypres", ssn: "SECRET-123-45", note: "hidden-note" },
+          },
+        ],
+      },
+      fieldVisibility: { ssn: "excluded", note: "hidden" },
+    });
+    const html = buildStoryMapHtml({
+      storymap: story(),
+      basemapStyleUrl: "https://tiles.example.com/style.json",
+      layers: [layer],
+    });
+    assert.doesNotMatch(html, /SECRET-123-45/);
+    assert.doesNotMatch(html, /"ssn"/);
+    // Only "excluded" leaves the data; a "hidden" field stays in the features.
+    assert.match(html, /hidden-note/);
+    assert.match(html, /Ypres/);
+    // The caller's layer is not mutated.
+    assert.equal(layer.geojson?.features[0].properties?.ssn, "SECRET-123-45");
+  });
+});

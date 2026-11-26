@@ -389,6 +389,28 @@ export function calculateField(
 }
 
 /**
+ * Moves a field's hidden/excluded flag to its new name, or drops it.
+ *
+ * `fieldVisibility` is keyed by field name, so a rename that left the entry
+ * behind would let an excluded field reach every export under its new name
+ * until the user excluded it again.
+ *
+ * @param fieldVisibility The layer's current per-field visibility map.
+ * @param oldKey The field being renamed or deleted.
+ * @param newKey The field's new name, or `null` when the field is deleted.
+ * @returns The updated map, or the input itself when it has no entry for `oldKey`.
+ */
+function renameKeyInFieldVisibility(
+  fieldVisibility: GeoLibreLayer["fieldVisibility"],
+  oldKey: string,
+  newKey: string | null,
+): GeoLibreLayer["fieldVisibility"] {
+  if (!fieldVisibility || !Object.hasOwn(fieldVisibility, oldKey)) return fieldVisibility;
+  const { [oldKey]: visibility, ...rest } = fieldVisibility;
+  return newKey === null ? rest : { ...rest, [newKey]: visibility };
+}
+
+/**
  * Destructive rename of a property key across every feature, keeping styling and
  * column settings in sync. Returns null (no-op) when the new name is empty,
  * unchanged, or collides with an existing column, or when the layer has no
@@ -410,10 +432,12 @@ export function renameColumn(
   // is what the attribute table's disabled menu item points at.
   if (isMaintainedEditorTrackingField(oldKey, layer.editorTracking)) return null;
   const settings = getColumnSettings(layer);
+  const fieldVisibility = renameKeyInFieldVisibility(layer.fieldVisibility, oldKey, newKey);
   return {
     geojson: renameFieldInGeojson(layer.geojson, oldKey, newKey),
     style: renameFieldInStyle(layer.style, oldKey, newKey),
     metadata: metadataWithSettings(layer, renameKeyInSettings(settings, oldKey, newKey)),
+    ...(fieldVisibility !== layer.fieldVisibility ? { fieldVisibility } : {}),
   };
 }
 
@@ -430,10 +454,12 @@ export function deleteColumn(layer: GeoLibreLayer, key: string): Partial<GeoLibr
   // config names, so deleting it here only discards the history it held.
   if (isMaintainedEditorTrackingField(key, layer.editorTracking)) return null;
   const settings = getColumnSettings(layer);
+  const fieldVisibility = renameKeyInFieldVisibility(layer.fieldVisibility, key, null);
   return {
     geojson: deleteFieldInGeojson(layer.geojson, key),
     style: clearFieldInStyle(layer.style, key),
     metadata: metadataWithSettings(layer, removeKeyFromSettings(settings, key)),
+    ...(fieldVisibility !== layer.fieldVisibility ? { fieldVisibility } : {}),
   };
 }
 

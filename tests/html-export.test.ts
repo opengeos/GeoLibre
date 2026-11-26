@@ -8,6 +8,7 @@ import {
   resolveViewerBaseUrl,
   viewerChromeParams,
 } from "../apps/geolibre-desktop/src/lib/html-export";
+import { parseInlineProjectFragment } from "../apps/geolibre-desktop/src/lib/inline-project-fragment";
 
 // A minimal project that only exercises the fields the HTML builder touches.
 const PROJECT = {
@@ -62,6 +63,39 @@ describe("buildProjectHtml", () => {
     const html = buildProjectHtml({ project, title: project.name });
     assert.ok(!html.includes("html-egress-secret"));
     assert.match(html, /"apiKeys":\{\}/);
+  });
+
+  it("drops fields marked excluded from both inlined payloads (#3697)", () => {
+    const project = createEmptyProject("Private map");
+    project.layers.push({
+      id: "people",
+      name: "People",
+      type: "geojson",
+      source: { type: "geojson" },
+      visible: true,
+      opacity: 1,
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: {},
+      fieldVisibility: { ssn: "excluded" },
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [0, 0] },
+            properties: { name: "A", ssn: "SECRET-123-45" },
+          },
+        ],
+      },
+    });
+    const html = buildProjectHtml({ project, title: project.name });
+    assert.ok(!html.includes("SECRET-123-45"));
+    const fragment = html.match(/#geolibreProject=([A-Za-z0-9_-]+)/);
+    assert.ok(fragment, "the inline fragment is present");
+    const inlined = parseInlineProjectFragment(`geolibreProject=${fragment[1]}`);
+    assert.deepEqual(inlined?.layers[0].geojson?.features[0].properties, { name: "A" });
+    // The caller's project is not mutated.
+    assert.equal(project.layers[0].geojson?.features[0].properties?.ssn, "SECRET-123-45");
   });
 
   it("defaults the app URL to the hosted viewer", () => {

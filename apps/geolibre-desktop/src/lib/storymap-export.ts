@@ -2,6 +2,7 @@ import type { FeatureCollection, Geometry } from "geojson";
 import {
   circleRadiusValue,
   documentLocale,
+  excludeHiddenFieldsFromGeojson,
   extrusionBaseValue,
   extrusionColorValue,
   extrusionHeightValue,
@@ -168,10 +169,12 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
   const {
     storymap,
     basemapStyleUrl,
-    layers,
     projection = "globe",
     navToggleLabel = "Toggle chapter list",
   } = options;
+  // The page inlines each layer's raw features, so fields the author marked
+  // "excluded" must be stripped here like every other export path does.
+  const layers = options.layers.map(withoutExcludedFields);
 
   // The template reads chapters[0] for the initial camera, so an empty story
   // cannot produce a working page. Callers gate this behind a chapter count,
@@ -350,6 +353,19 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     .join("\n");
 
   return renderTemplate(config, inlineLayerScript, usesCog);
+}
+
+/**
+ * Strips the fields a layer marks `"excluded"` from its inline GeoJSON.
+ *
+ * @param layer A project layer about to be inlined into the export.
+ * @returns The layer with excluded properties removed, or the same layer when
+ *   it has no inline features or no excluded fields.
+ */
+function withoutExcludedFields(layer: GeoLibreLayer): GeoLibreLayer {
+  if (!layer.geojson || !layer.fieldVisibility) return layer;
+  const geojson = excludeHiddenFieldsFromGeojson(layer.geojson, layer.fieldVisibility);
+  return geojson === layer.geojson ? layer : { ...layer, geojson };
 }
 
 /**

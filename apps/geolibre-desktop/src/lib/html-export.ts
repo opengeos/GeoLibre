@@ -1,7 +1,12 @@
 // Standalone "Export as interactive HTML" builder; the in-app counterpart of the
 // Python widget's `Map.to_html()`. See `docs/python.md` and `embedHost.ts`.
 
-import { getBuildEnvironment, redactCredentials, type GeoLibreProject } from "@geolibre/core";
+import {
+  excludeHiddenFieldsFromProject,
+  getBuildEnvironment,
+  redactCredentials,
+  type GeoLibreProject,
+} from "@geolibre/core";
 import {
   encodeInlineProjectFragment,
   INLINE_PROJECT_FRAGMENT_KEY,
@@ -163,9 +168,12 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
     throw new Error(`Invalid CSS height value: ${height}`);
   }
   const iframeSrc = withViewerFlags(appUrl, options.viewerParams);
+  // The page is egress like Share: drop fields the author marked "excluded"
+  // and redact credentials before the project is inlined anywhere.
+  const egressProject = redactCredentials(excludeHiddenFieldsFromProject(project));
   // Escape "<" so a property value can't break out of the JSON <script> block.
-  const projectJson = JSON.stringify(redactCredentials(project)).replace(/</g, "\\u003c");
-  const inlineProject = encodeInlineProjectFragment(redactCredentials(project));
+  const projectJson = JSON.stringify(egressProject).replace(/</g, "\\u003c");
+  const inlineProject = encodeInlineProjectFragment(egressProject);
   const viewerFragment = new URL(iframeSrc).hash;
   const inlineViewerFragment = viewerFragment
     ? `&${INLINE_VIEWER_FRAGMENT_KEY}=${encodeURIComponent(viewerFragment)}`
