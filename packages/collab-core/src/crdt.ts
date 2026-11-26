@@ -179,7 +179,7 @@ function isCleanJson(value: unknown): boolean {
   if (typeof value !== "object" || value === null || checked.has(value)) return true;
   if (Array.isArray(value)) {
     // Coordinate arrays: numbers all the way down, nothing to check.
-    if (typeof value[0] === "number") {
+    if (value.every((entry) => typeof entry === "number")) {
       checked.add(value);
       return true;
     }
@@ -746,7 +746,9 @@ export class ProjectDoc {
   }
 
   /**
-   * The project the document currently holds, as plain JSON.
+   * The project the document currently holds, as plain JSON. It always has a
+   * `layers` array, as every GeoLibre project does, and layers without a
+   * string `id` are never stored (a project's layers always have one).
    *
    * The caches behind it are invalidated by deep observers, which Yjs runs
    * after shallow ones; read from a deep observer or after the transaction,

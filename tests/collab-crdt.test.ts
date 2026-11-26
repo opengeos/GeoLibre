@@ -414,6 +414,15 @@ describe("feature identity and edge cases", () => {
     assert.equal(props.n, 1);
   });
 
+  it("rebuilds a poisoned object hidden behind a number in an array", () => {
+    const sender = new ProjectDoc();
+    sender.write(project({ extra: JSON.parse('[1, {"__proto__": {"admin": true}}]') }), "local");
+    const receiver = new ProjectDoc();
+    Y.applyUpdate(receiver.doc, Y.encodeStateAsUpdate(sender.doc), "remote");
+    const extra = receiver.read().extra as unknown[];
+    assert.equal(Object.getPrototypeOf(extra[1]), Object.prototype);
+  });
+
   it("keeps a top-level __proto__ field as data", () => {
     const doc = new ProjectDoc();
     doc.doc.transact(() => doc.fields.set("__proto__", { polluted: true }));
