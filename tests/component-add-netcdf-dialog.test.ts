@@ -1,6 +1,6 @@
 import { fireEvent, mockFetch, render, screen, useAppStore, waitFor } from "./helpers/dom";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import { createElement } from "react";
 import type { GeoLibreAppAPI } from "@geolibre/plugins";
 
@@ -49,6 +49,9 @@ function fakeServices(overrides: Partial<Services> = {}) {
 
 const fitted: unknown[] = [];
 const appApi = { fitBounds: (bounds: unknown) => fitted.push(bounds) } as unknown as GeoLibreAppAPI;
+afterEach(() => {
+  fitted.length = 0;
+});
 
 function renderDialog(services: Services) {
   let open = true;
@@ -180,7 +183,7 @@ describe("AddNetcdfDialog", () => {
     assert.equal(added[0]!.url, "local:era5.nc");
     assert.deepEqual(added[0]!.clim, [260, 300]);
     assert.deepEqual(added[0]!.bounds, [-10, 40, 10, 50]);
-    assert.deepEqual(fitted.at(-1), [-10, 40, 10, 50]);
+    assert.deepEqual(fitted, [[-10, 40, 10, 50]]);
     // The refs are self-contained, so the file is released once the layer is added.
     assert.equal(closed, 1);
     // The form resets for the next file.

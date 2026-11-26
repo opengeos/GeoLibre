@@ -119,7 +119,7 @@ describe("ObjectDetectionDialog", () => {
     assert.deepEqual(layerNames().sort(), ["Detection: car", "Detection: person"]);
     const cars = useAppStore.getState().layers.find((l) => l.name === "Detection: car")!;
     assert.equal(cars.geojson?.features.length, 2);
-    // Pixel (10,10)-(20,20) maps through the 1 m geotransform.
+    // The union of the three boxes (pixel x 10-90, y 5-50) through the 1 m geotransform.
     assert.deepEqual(fitted[0], [500010, 4099950, 500090, 4099995]);
   });
 
