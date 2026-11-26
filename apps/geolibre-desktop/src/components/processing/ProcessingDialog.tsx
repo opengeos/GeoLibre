@@ -1,5 +1,6 @@
 import {
   useWhiteboxToolboxController,
+  type WhiteboxToolboxControllerOptions,
   type WhiteboxToolboxServices,
 } from "../../hooks/useWhiteboxToolboxController";
 import { type GeoLibreLayer } from "@geolibre/core";
@@ -97,12 +98,14 @@ interface ProcessingDialogProps {
   mapControllerRef: React.RefObject<MapEngine | null>;
   // Renders a raster tool output (a Cloud Optimized GeoTIFF, from the WASM
   // runner) as a new map layer. Wired by the desktop shell, which owns the
-  // raster control / app API.
-  onAddRaster?: (bytes: Uint8Array, name: string, fileName?: string) => Promise<void> | void;
+  // raster control / app API. `options.signal` aborts when another project
+  // opens before the import finishes; pass it on so nothing lands there.
+  onAddRaster?: WhiteboxToolboxControllerOptions["onAddRaster"];
   // Renders a LiDAR tool output (LAS/LAZ/COPC bytes from the WASM runner) as a
   // new point cloud layer. Resolves false when the LiDAR control could not be
-  // mounted, so the dialog falls back to downloading the file.
-  onAddLidar?: (bytes: Uint8Array, name: string, fileName: string) => Promise<boolean>;
+  // mounted, so the dialog falls back to downloading the file. Honors
+  // `options.signal` like `onAddRaster`.
+  onAddLidar?: WhiteboxToolboxControllerOptions["onAddLidar"];
   // Catalog, runtime and download services; defaults to the real sidecar and
   // WASM runner. Tests pass stand-ins so no network or WASM module is needed.
   services?: WhiteboxToolboxServices;
@@ -792,7 +795,7 @@ export function ProcessingDialog({
             {selectedTool?.locked && (
               <p className="mt-2 flex items-center gap-2 text-sm text-destructive">
                 <AlertCircle className="h-4 w-4" />
-                {selectedTool.locked_reason || "This tool is locked."}
+                {selectedTool.locked_reason || t("processing.whitebox.lockedFallback")}
               </p>
             )}
           </div>

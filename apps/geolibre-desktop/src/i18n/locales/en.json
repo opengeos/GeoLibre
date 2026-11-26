@@ -6845,6 +6845,7 @@
       "stopServer": "Stop server",
       "loadingTools": "Loading…",
       "lockedPrefix": "[Locked] ",
+      "lockedFallback": "This tool is locked.",
       "missingRequiredParameter": "Missing required parameter: {{label}}",
       "sidecarCannotReadBrowserFiles": "The sidecar cannot read browser-selected files for {{label}}. Run locally (WASM), or enter filesystem paths available to the sidecar.",
       "selectedLayersMissing": "One or more selected layers for {{label}} no longer exist.",
@@ -6853,6 +6854,7 @@
       "layerMissingPath": "Layer \"{{layer}}\" has no filesystem path for {{label}}.",
       "importOutputFailed": "Could not import Whitebox output.",
       "showingSnapshotOnly": "Showing GitHub catalog only.",
+      "sidecarStopped": "GeoLibre sidecar is stopped.",
       "liveCatalogEmpty": "Live catalog is empty. Showing GitHub catalog only.",
       "jobStatus": {
         "pending": "Pending",

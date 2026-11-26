@@ -47,6 +47,7 @@ import {
 import { clearPrintExtent, drawPrintExtent } from "../lib/print-extent";
 import { IS_MAS_BUILD } from "../lib/build-flags";
 import { startGeoLibreSidecar, stopGeoLibreSidecar } from "../lib/sidecar";
+import { startProjectImportSession } from "../lib/project-import-session";
 import {
   beginProcessingRun,
   MAX_TRACKED_HISTORY_JOBS,
@@ -143,17 +144,39 @@ export const WHITEBOX_TOOLBOX_SERVICES: WhiteboxToolboxServices = {
   downloadBytes,
 };
 
+/** Passed to the output callbacks of {@link useWhiteboxToolboxController}. */
+export interface WhiteboxOutputImportOptions {
+  /**
+   * Aborted as soon as another project replaces the one that dispatched the
+   * job. A callback must check it after each asynchronous step (reading a
+   * raster header, converting a point cloud) and add nothing once it is
+   * aborted, rejecting or resolving as it likes: the controller ignores the
+   * result of a superseded import.
+   */
+  signal: AbortSignal;
+}
+
 /** Options for {@link useWhiteboxToolboxController}. */
 export interface WhiteboxToolboxControllerOptions {
   /** The active map engine, read for "Use map extent", drawing and zooming. */
   mapControllerRef: RefObject<MapEngine | null>;
   /** Renders a raster output (a Cloud Optimized GeoTIFF) as a map layer. */
-  onAddRaster?: (bytes: Uint8Array, name: string, fileName?: string) => Promise<void> | void;
+  onAddRaster?: (
+    bytes: Uint8Array,
+    name: string,
+    fileName: string | undefined,
+    options: WhiteboxOutputImportOptions,
+  ) => Promise<void> | void;
   /**
    * Renders a LiDAR output as a point cloud layer. Resolves false when the
    * LiDAR control could not be mounted, so the output is downloaded instead.
    */
-  onAddLidar?: (bytes: Uint8Array, name: string, fileName: string) => Promise<boolean>;
+  onAddLidar?: (
+    bytes: Uint8Array,
+    name: string,
+    fileName: string,
+    options: WhiteboxOutputImportOptions,
+  ) => Promise<boolean>;
   /**
    * Catalog, runtime and download services. Must be referentially stable:
    * the catalog load and job polling re-run when it changes.
@@ -452,7 +475,46 @@ export function useWhiteboxToolboxController({
     [filteredTools, semanticTools],
   );
 
-  const loadWhitebox = useCallback(async () => {
+  // Each catalog load takes the next generation. Toggling "Run locally
+  // (WASM)", pressing Refresh or stopping the server while a load is in flight
+  // starts another one, and only the newest may write the catalog, runtime
+  // status, error and spinner: an older load that resolves later (a slow WASM
+  // manifest enumeration after a sidecar load, say) is discarded.
+  const catalogLoadGenerationRef = useRef(0);
+
+  // Load the remote catalog snapshot as the whole catalog, with `message` as
+  // the runtime status. `isCurrent` is the calling load's generation check.
+  const applyRemoteCatalogSnapshot = useCallback(
+    async (message: string, available: boolean, isCurrent: () => boolean) => {
+      try {
+        // Hide locked ("pro"-tier) tools: they cannot run, so omit them from the
+        // catalog entirely rather than show them as disabled rows.
+        const snapshotTools = (await services.fetchRemoteWhiteboxCatalogSnapshot()).filter(
+          (tool) => !tool.locked,
+        );
+        if (!isCurrent()) return;
+        setRuntimeAvailable(available);
+        setRuntimeMessage(message);
+        const availableTools = withGlobalDemTool(snapshotTools);
+        setTools(availableTools);
+        setSelectedToolId((current) => keepOrFirstToolId(availableTools, current));
+      } catch (err) {
+        if (!isCurrent()) return;
+        setRuntimeAvailable(available);
+        setRuntimeMessage(message);
+        const availableTools = withGlobalDemTool([]);
+        setTools(availableTools);
+        setSelectedToolId(availableTools[0]?.id ?? "");
+        setError(err instanceof Error ? err.message : t("processing.whitebox.errorLoadSnapshot"));
+      }
+    },
+    [services, t],
+  );
+
+  // Start a catalog load: supersede any load in flight, show the spinner and
+  // clear the previous error. Returns the new load's generation check.
+  const beginCatalogLoad = useCallback(() => {
+    const generation = ++catalogLoadGenerationRef.current;
     setLoadingTools(true);
     setError(null);
     // Reset the source filter so a stale "geolibre" selection from a previous
@@ -461,28 +523,11 @@ export function useWhiteboxToolboxController({
     // Drop the in-memory snapshot so a fresh load reflects upstream catalog
     // changes; calls within this load still dedup once it is repopulated.
     services.clearRemoteWhiteboxCatalogSnapshotCache();
+    return () => catalogLoadGenerationRef.current === generation;
+  }, [services]);
 
-    const applyRemoteCatalogSnapshot = async (message: string, available: boolean) => {
-      try {
-        // Hide locked ("pro"-tier) tools: they cannot run, so omit them from the
-        // catalog entirely rather than show them as disabled rows.
-        const snapshotTools = (await services.fetchRemoteWhiteboxCatalogSnapshot()).filter(
-          (tool) => !tool.locked,
-        );
-        setRuntimeAvailable(available);
-        setRuntimeMessage(message);
-        const availableTools = withGlobalDemTool(snapshotTools);
-        setTools(availableTools);
-        setSelectedToolId((current) => keepOrFirstToolId(availableTools, current));
-      } catch (err) {
-        setRuntimeAvailable(available);
-        setRuntimeMessage(message);
-        const availableTools = withGlobalDemTool([]);
-        setTools(availableTools);
-        setSelectedToolId(availableTools[0]?.id ?? "");
-        setError(err instanceof Error ? err.message : t("processing.whitebox.errorLoadSnapshot"));
-      }
-    };
+  const loadWhitebox = useCallback(async () => {
+    const isCurrent = beginCatalogLoad();
 
     // In WASM mode the tools run in-browser, so skip the Python sidecar probe
     // entirely (on the web build that request 404s to the SPA index.html, which
@@ -495,59 +540,72 @@ export function useWhiteboxToolboxController({
     if (runLocal) {
       setRuntimeAvailable(false);
       setRuntimeMessage(t("processing.whitebox.runningLocally"));
-      // The catalog snapshot (HTTP/bundled asset) and the WASM manifest
-      // enumeration (loads + queries the WASM module) are independent, so fetch
-      // them concurrently rather than serially.
-      const [catalogResult, wasmResult] = await Promise.allSettled([
-        services.fetchRemoteWhiteboxCatalogSnapshot(),
-        services.listWasmToolManifests(),
-      ]);
-      // Hide locked ("pro"-tier) tools: they cannot run, so omit them from the
-      // catalog entirely rather than show them as disabled rows.
-      const catalogTools =
-        catalogResult.status === "fulfilled"
-          ? catalogResult.value.filter((tool) => !tool.locked)
-          : [];
-      const catalogError = catalogResult.status === "rejected" ? catalogResult.reason : null;
-      // A snapshot that resolves to an empty list (malformed/empty JSON that
-      // doesn't throw) silently drops the ~700 Whitebox tools. Detect it from
-      // the raw result, not `catalogTools`, so a fetch that returned only locked
-      // tools isn't mistaken for a load failure.
-      const catalogEmpty = catalogResult.status === "fulfilled" && catalogResult.value.length === 0;
-      const wasmTools = wasmResult.status === "fulfilled" ? wasmResult.value : [];
-      const wasmError = wasmResult.status === "rejected" ? wasmResult.reason : null;
-      if (wasmError) {
-        console.warn("[GeoLibre] Could not enumerate WASM tool manifests:", wasmError);
+      try {
+        // The catalog snapshot (HTTP/bundled asset) and the WASM manifest
+        // enumeration (loads + queries the WASM module) are independent, so fetch
+        // them concurrently rather than serially.
+        const [catalogResult, wasmResult] = await Promise.allSettled([
+          services.fetchRemoteWhiteboxCatalogSnapshot(),
+          services.listWasmToolManifests(),
+        ]);
+        if (!isCurrent()) return;
+        // Hide locked ("pro"-tier) tools: they cannot run, so omit them from the
+        // catalog entirely rather than show them as disabled rows.
+        const catalogTools =
+          catalogResult.status === "fulfilled"
+            ? catalogResult.value.filter((tool) => !tool.locked)
+            : [];
+        const catalogError = catalogResult.status === "rejected" ? catalogResult.reason : null;
+        // A snapshot that resolves to an empty list (malformed/empty JSON that
+        // doesn't throw) silently drops the ~700 Whitebox tools. Detect it from
+        // the raw result, not `catalogTools`, so a fetch that returned only locked
+        // tools isn't mistaken for a load failure.
+        const catalogEmpty =
+          catalogResult.status === "fulfilled" && catalogResult.value.length === 0;
+        const wasmTools = wasmResult.status === "fulfilled" ? wasmResult.value : [];
+        const wasmError = wasmResult.status === "rejected" ? wasmResult.reason : null;
+        if (wasmError) {
+          console.warn("[GeoLibre] Could not enumerate WASM tool manifests:", wasmError);
+        }
+        if (catalogError) {
+          console.warn("[GeoLibre] Could not load Whitebox catalog snapshot:", catalogError);
+        }
+        const nextTools = withGlobalDemTool(mergeWasmToolManifests(catalogTools, wasmTools));
+        setTools(nextTools);
+        setSelectedToolId((current) => keepOrFirstToolId(nextTools, current));
+        // In local mode the WASM runner is what actually executes tools, so its
+        // failure is the most important to report: without it every tool keeps the
+        // catalog's parameter names and would fail on run (exactly #1047). Failing
+        // that, surface a catalog-fetch failure even when the WASM manifests still
+        // yielded a few GeoLibre-authored tools, so the user is not silently left
+        // without the ~700 Whitebox catalog tools.
+        const loadError = localCatalogLoadError(
+          { wasmError, catalogError, catalogEmpty, toolCount: nextTools.length },
+          t,
+        );
+        if (loadError) setError(loadError);
+      } catch (err) {
+        // A malformed manifest can make the merge itself throw; report it
+        // rather than leave an unhandled rejection behind.
+        if (isCurrent()) {
+          setError(err instanceof Error ? err.message : t("processing.whitebox.errorLoadSnapshot"));
+        }
+      } finally {
+        if (isCurrent()) setLoadingTools(false);
       }
-      if (catalogError) {
-        console.warn("[GeoLibre] Could not load Whitebox catalog snapshot:", catalogError);
-      }
-      const nextTools = withGlobalDemTool(mergeWasmToolManifests(catalogTools, wasmTools));
-      setTools(nextTools);
-      setSelectedToolId((current) => keepOrFirstToolId(nextTools, current));
-      // In local mode the WASM runner is what actually executes tools, so its
-      // failure is the most important to report: without it every tool keeps the
-      // catalog's parameter names and would fail on run (exactly #1047). Failing
-      // that, surface a catalog-fetch failure even when the WASM manifests still
-      // yielded a few GeoLibre-authored tools, so the user is not silently left
-      // without the ~700 Whitebox catalog tools.
-      const loadError = localCatalogLoadError(
-        { wasmError, catalogError, catalogEmpty, toolCount: nextTools.length },
-        t,
-      );
-      if (loadError) setError(loadError);
-      setLoadingTools(false);
       return;
     }
 
     try {
       const status = await services.fetchWhiteboxStatus();
+      if (!isCurrent()) return;
       setRuntimeAvailable(status.available);
       setRuntimeMessage(status.message);
       if (!status.available) {
         await applyRemoteCatalogSnapshot(
           `${status.message} ${t("processing.whitebox.showingSnapshotOnly")}`,
           false,
+          isCurrent,
         );
         return;
       }
@@ -555,16 +613,23 @@ export function useWhiteboxToolboxController({
       try {
         nextTools = await services.fetchWhiteboxTools();
       } catch (err) {
+        if (!isCurrent()) return;
         await applyRemoteCatalogSnapshot(
           `${
             err instanceof Error ? err.message : t("processing.whitebox.errorLoadLive")
           } ${t("processing.whitebox.showingSnapshotOnly")}`,
           true,
+          isCurrent,
         );
         return;
       }
+      if (!isCurrent()) return;
       if (nextTools.length === 0) {
-        await applyRemoteCatalogSnapshot(t("processing.whitebox.liveCatalogEmpty"), true);
+        await applyRemoteCatalogSnapshot(
+          t("processing.whitebox.liveCatalogEmpty"),
+          true,
+          isCurrent,
+        );
         return;
       }
       try {
@@ -573,22 +638,41 @@ export function useWhiteboxToolboxController({
       } catch {
         // Keep the live catalog when the optional parameter fallback is unavailable.
       }
+      if (!isCurrent()) return;
       // Hide locked ("pro"-tier) tools: they cannot run, so omit them entirely.
       const freeTools = withGlobalDemTool(nextTools.filter((tool) => !tool.locked));
       setTools(freeTools);
       setSelectedToolId((current) => keepOrFirstToolId(freeTools, current));
     } catch (err) {
+      if (!isCurrent()) return;
       setRuntimeAvailable(false);
       await applyRemoteCatalogSnapshot(
         `${
           err instanceof Error ? err.message : t("processing.whitebox.errorConnect")
         } ${t("processing.whitebox.showingSnapshotOnly")}`,
         false,
+        isCurrent,
       );
     } finally {
-      setLoadingTools(false);
+      if (isCurrent()) setLoadingTools(false);
     }
-  }, [runLocal, services, t]);
+  }, [applyRemoteCatalogSnapshot, beginCatalogLoad, runLocal, services, t]);
+
+  // Show the remote catalog snapshot after the sidecar stops, as the stop
+  // message promises. Takes a generation like any load, so it supersedes a
+  // load still probing the server it just stopped.
+  const loadStoppedSidecarCatalog = useCallback(async () => {
+    const isCurrent = beginCatalogLoad();
+    try {
+      await applyRemoteCatalogSnapshot(
+        `${t("processing.whitebox.sidecarStopped")} ${t("processing.whitebox.showingSnapshotOnly")}`,
+        false,
+        isCurrent,
+      );
+    } finally {
+      if (isCurrent()) setLoadingTools(false);
+    }
+  }, [applyRemoteCatalogSnapshot, beginCatalogLoad, t]);
 
   useEffect(() => {
     if (!open) return;
@@ -629,11 +713,98 @@ export function useWhiteboxToolboxController({
     }
   }, [loadingTools, tools]);
 
+  // Background tracking for a sidecar job the user switched away from while
+  // it was still running (#3665). The job keeps running on the sidecar, so it
+  // keeps being polled until it settles; then its History entry is recorded
+  // and its outputs are imported, exactly as if it had stayed on screen. It is
+  // not cancelled: switching tools to look at another one should not throw
+  // away a long computation. Switching back to its tool shows a fresh form,
+  // not the detached job; its result arrives as layers and a History entry.
+  const backgroundJobsRef = useRef<Map<string, () => void>>(new Map());
+  // Set once `importJobOutputs` is defined below; read when a job settles.
+  const importJobOutputsRef = useRef<((job: WhiteboxJob) => Promise<void>) | null>(null);
+
+  const trackJobInBackground = useCallback(
+    (detached: WhiteboxJob) => {
+      if (!isJobRunning(detached) || backgroundJobsRef.current.has(detached.id)) return;
+      const id = detached.id;
+      let stopped = false;
+      let timer: number | undefined;
+      let failures = 0;
+      const settle = (final: WhiteboxJob) => {
+        backgroundJobsRef.current.delete(id);
+        historyTrackersRef.current
+          .get(id)
+          ?.finish(final.status === "succeeded" ? "success" : "error", final.error ?? undefined);
+        if (final.status !== "succeeded") return;
+        void importJobOutputsRef.current?.(final).catch((err) => {
+          setError(
+            err instanceof Error ? err.message : t("processing.whitebox.importOutputFailed"),
+          );
+        });
+      };
+      const poll = async () => {
+        if (stopped) return;
+        try {
+          const next = await services.fetchWhiteboxJob(id);
+          if (stopped) return;
+          failures = 0;
+          if (isJobRunning(next)) {
+            timer = window.setTimeout(poll, 1000);
+            return;
+          }
+          settle(next);
+        } catch (err) {
+          if (stopped) return;
+          failures += 1;
+          if (failures < 3) {
+            timer = window.setTimeout(poll, 1000 * failures);
+            return;
+          }
+          const message = err instanceof Error ? err.message : t("processing.whitebox.errorPoll");
+          settle({ ...detached, status: "failed", error: message });
+        }
+      };
+      timer = window.setTimeout(poll, 1000);
+      backgroundJobsRef.current.set(id, () => {
+        stopped = true;
+        if (timer !== undefined) window.clearTimeout(timer);
+      });
+    },
+    [services, t],
+  );
+
+  // Stop background polling on unmount; the sidecar job itself keeps running.
+  useEffect(
+    () => () => {
+      for (const stop of backgroundJobsRef.current.values()) stop();
+      backgroundJobsRef.current.clear();
+    },
+    [],
+  );
+
+  // The job currently on screen, readable from callbacks and effects that must
+  // not re-run on every poll.
+  const jobRef = useRef<WhiteboxJob | null>(null);
+  useEffect(() => {
+    jobRef.current = job;
+  }, [job]);
+
+  // Hand the displayed job to background tracking before it is replaced by a
+  // tool switch or a server stop. A finished job needs nothing more.
+  const detachJob = useCallback(() => {
+    const current = jobRef.current;
+    if (current && isJobRunning(current)) trackJobInBackground(current);
+  }, [trackJobInBackground]);
+
   useEffect(() => {
     setValues(createDefaultValues(selectedTool));
     // Drop any browsed input bytes from the previous tool so they cannot be
     // silently reused by a same-named parameter on the new tool.
     browsedInputsRef.current.clear();
+    // A sidecar job still running for the previous tool keeps being tracked
+    // in the background, so its History entry and outputs are not lost.
+    detachJob();
     setJob(null);
     importedJobIdRef.current = null;
   }, [selectedTool?.id]);
@@ -945,10 +1116,13 @@ export function useWhiteboxToolboxController({
     [],
   );
 
-  const importGeoJsonOutputs = useCallback(
+  // Import a finished job's outputs into the project that dispatched it. A
+  // project opened at any point during the import supersedes it: the session's
+  // signal aborts at once, slow raster and LiDAR loads check it before adding
+  // anything, and every asynchronous step is rechecked here so no layer and no
+  // History output lands in (or is credited to) the replacement project.
+  const importJobOutputs = useCallback(
     async (nextJob: WhiteboxJob) => {
-      if (importedJobIdRef.current === nextJob.id) return;
-      importedJobIdRef.current = nextJob.id;
       const startLoadCount = jobGenerationByJobRef.current.get(nextJob.id);
       if (startLoadCount === undefined) {
         runParametersByJobRef.current.delete(nextJob.id);
@@ -958,58 +1132,100 @@ export function useWhiteboxToolboxController({
         runParametersByJobRef.current.delete(nextJob.id);
         return;
       }
-      const entries = geoJsonOutputEntries(nextJob.outputs);
-      const jobTool = tools.find((item) => item.id === nextJob.tool_id);
-      const jobToolLabel = jobTool ? toolLabel(t, jobTool) : humanize(nextJob.tool_id);
-      const runParameters = runParametersByJobRef.current.get(nextJob.id) ?? {};
-      runParametersByJobRef.current.delete(nextJob.id);
-      for (const [name, value] of entries) {
-        const path = isFeatureCollection(value) ? "" : (outputPath(value) ?? "");
-        const data = isFeatureCollection(value)
-          ? value
-          : await services.fetchWhiteboxJsonOutput(path);
-        if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
-        if (!isFeatureCollection(data)) continue;
-        const layerName = uniqueLayerName(
-          `${jobToolLabel} ${humanize(name)}`,
-          useAppStore.getState().layers,
-        );
-        const layerId = addGeoJsonLayer(layerName, data, path || undefined);
-        historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(layerName);
-        const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-        if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
-      }
+      // Started while the dispatching project is still open, so the session
+      // owns that project and is superseded by the next load.
+      const session = startProjectImportSession();
+      const superseded = session.superseded;
+      try {
+        const entries = geoJsonOutputEntries(nextJob.outputs);
+        const jobTool = tools.find((item) => item.id === nextJob.tool_id);
+        const jobToolLabel = jobTool ? toolLabel(t, jobTool) : humanize(nextJob.tool_id);
+        const runParameters = runParametersByJobRef.current.get(nextJob.id) ?? {};
+        runParametersByJobRef.current.delete(nextJob.id);
+        for (const [name, value] of entries) {
+          const path = isFeatureCollection(value) ? "" : (outputPath(value) ?? "");
+          const data = isFeatureCollection(value)
+            ? value
+            : await services.fetchWhiteboxJsonOutput(path);
+          if (superseded()) return;
+          if (!isFeatureCollection(data)) continue;
+          const layerName = uniqueLayerName(
+            `${jobToolLabel} ${humanize(name)}`,
+            useAppStore.getState().layers,
+          );
+          const layerId = addGeoJsonLayer(layerName, data, path || undefined);
+          historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(layerName);
+          const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
+          if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
+        }
 
-      for (const [name, value] of Object.entries(nextJob.outputs)) {
-        if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
-        if (!(value instanceof Uint8Array)) continue;
-        const param = jobTool?.params?.find((item) => item.name === name);
-        const outKind = param ? parameterKind(param) : "";
-        if (outKind === "lidar_out" && isLas(value) && onAddLidar) {
-          const lidarName = `${jobToolLabel} ${humanize(name)}`;
-          const fileName = `${outputBaseName(nextJob.tool_id, name)}.${lidarBytesExtension(value)}`;
-          if (await onAddLidar(value, lidarName, fileName)) {
-            if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
-            historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(lidarName);
-            continue;
+        const importOptions: WhiteboxOutputImportOptions = { signal: session.signal };
+        for (const [name, value] of Object.entries(nextJob.outputs)) {
+          if (superseded()) return;
+          if (!(value instanceof Uint8Array)) continue;
+          const param = jobTool?.params?.find((item) => item.name === name);
+          const outKind = param ? parameterKind(param) : "";
+          if (outKind === "lidar_out" && isLas(value) && onAddLidar) {
+            const lidarName = `${jobToolLabel} ${humanize(name)}`;
+            const fileName = `${outputBaseName(nextJob.tool_id, name)}.${lidarBytesExtension(value)}`;
+            let added: boolean;
+            try {
+              added = await onAddLidar(value, lidarName, fileName, importOptions);
+            } catch (err) {
+              // An abort because another project opened is not an error.
+              if (superseded()) return;
+              throw err;
+            }
+            if (superseded()) return;
+            if (added) {
+              historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(lidarName);
+              continue;
+            }
           }
-          if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
+          const declaredFile =
+            outKind === "file_out" || outKind === "vector_out" || outKind === "lidar_out";
+          if (declaredFile && (!isTiff(value) || !onAddRaster)) {
+            const label = `${jobToolLabel} ${humanize(name)}`.replace(/\s+/g, "_");
+            const extension = binaryOutputExtension(value, outKind, param, runParameters[name]);
+            services.downloadBytes(value, `${label}.${extension}`);
+          } else if (onAddRaster) {
+            const rasterName = `${jobToolLabel} ${humanize(name)}`;
+            try {
+              await onAddRaster(
+                value,
+                rasterName,
+                `${outputBaseName(nextJob.tool_id, name)}.tif`,
+                importOptions,
+              );
+            } catch (err) {
+              if (superseded()) return;
+              throw err;
+            }
+            if (superseded()) return;
+            historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(rasterName);
+          }
         }
-        const declaredFile =
-          outKind === "file_out" || outKind === "vector_out" || outKind === "lidar_out";
-        if (declaredFile && (!isTiff(value) || !onAddRaster)) {
-          const label = `${jobToolLabel} ${humanize(name)}`.replace(/\s+/g, "_");
-          const extension = binaryOutputExtension(value, outKind, param, runParameters[name]);
-          services.downloadBytes(value, `${label}.${extension}`);
-        } else if (onAddRaster) {
-          const rasterName = `${jobToolLabel} ${humanize(name)}`;
-          await onAddRaster(value, rasterName, `${outputBaseName(nextJob.tool_id, name)}.tif`);
-          if (useAppStore.getState().projectLoadCount !== startLoadCount) return;
-          historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(rasterName);
-        }
+      } finally {
+        session.dispose();
       }
     },
     [addGeoJsonLayer, mapControllerRef, onAddLidar, onAddRaster, services, t, tools],
+  );
+
+  useEffect(() => {
+    importJobOutputsRef.current = importJobOutputs;
+  }, [importJobOutputs]);
+
+  // The displayed job's outputs are imported once: the marker is cleared only
+  // when a new job is displayed, so re-renders and catalog refreshes that
+  // rebuild `importJobOutputs` cannot import them again.
+  const importGeoJsonOutputs = useCallback(
+    async (nextJob: WhiteboxJob) => {
+      if (importedJobIdRef.current === nextJob.id) return;
+      importedJobIdRef.current = nextJob.id;
+      await importJobOutputs(nextJob);
+    },
+    [importJobOutputs],
   );
 
   useEffect(() => {
@@ -1196,8 +1412,14 @@ export function useWhiteboxToolboxController({
     try {
       await services.stopGeoLibreSidecar();
       setRuntimeAvailable(false);
-      setRuntimeMessage("GeoLibre sidecar is stopped. Showing GitHub catalog only.");
+      setRuntimeMessage(
+        `${t("processing.whitebox.sidecarStopped")} ${t("processing.whitebox.showingSnapshotOnly")}`,
+      );
+      detachJob();
       setJob(null);
+      // The live catalog came from the server just stopped; replace it with
+      // the snapshot the message names. Local (WASM) mode keeps its catalog.
+      if (!runLocal) await loadStoppedSidecarCatalog();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("processing.whitebox.errorStopSidecar"));
     } finally {
