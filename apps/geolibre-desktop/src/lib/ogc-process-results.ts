@@ -76,9 +76,15 @@ export async function importOgcProcessOutput(
   signal: AbortSignal,
 ): Promise<string> {
   const project = useAppStore.getState().projectLoadCount;
-  const blob = await downloadOgcProcessOutput(output, signal);
+  const inline =
+    !output.href &&
+    !output.bytes &&
+    !output.encoding &&
+    output.value !== null &&
+    typeof output.value === "object";
+  const blob = inline ? null : await downloadOgcProcessOutput(output, signal);
   signal.throwIfAborted();
-  const header = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+  const header = blob ? new Uint8Array(await blob.slice(0, 4).arrayBuffer()) : new Uint8Array();
   const tiff =
     header.length === 4 &&
     ((header[0] === 73 && header[1] === 73 && [42, 43].includes(header[2])) ||
@@ -89,7 +95,7 @@ export async function importOgcProcessOutput(
     sourceUrl: redactUrlCredentials(sourceUrl),
   };
   const name = uniqueLayerName(`OGC: ${output.id}`, useAppStore.getState().layers);
-  if (tiff) {
+  if (tiff && blob) {
     const { convertGeoTiffToCog, readGeoTiffInfo } = await import("@geolibre/processing");
     let data = new Uint8Array(await blob.arrayBuffer());
     const info = await readGeoTiffInfo(data);
@@ -120,7 +126,8 @@ export async function importOgcProcessOutput(
   }
   let document: unknown;
   try {
-    document = JSON.parse(await blob.text());
+    // Layer edits must never mutate the retained, downloadable result snapshot.
+    document = inline ? structuredClone(output.value) : JSON.parse(await blob!.text());
   } catch {
     throw new OgcProcessError("geodataOnly");
   }

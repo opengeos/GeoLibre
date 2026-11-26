@@ -1,5 +1,63 @@
 import { OgcProcessError } from "./ogc-process-errors";
 import type { OgcProcess } from "./ogc-api-processes";
+import { MAX_PROCESS_INPUT_BYTES } from "./ogc-process-limits";
+
+/** Serialize layer inputs with an early lower-bound limit and an exact final UTF-8 check. */
+export function serializeOgcProcessLayerInput(value: unknown): string | null {
+  const exceeded = new RangeError("Process input limit");
+  let bytes = 0;
+  const add = (count: number) => {
+    bytes += count;
+    if (bytes > MAX_PROCESS_INPUT_BYTES) throw exceeded;
+  };
+  const string = (text: string) => {
+    add(2);
+    for (let index = 0; index < text.length; index++) {
+      const code = text.charCodeAt(index);
+      if (code < 32) add([8, 9, 10, 12, 13].includes(code) ? 2 : 6);
+      else if (code === 34 || code === 92) add(2);
+      else if (code < 128) add(1);
+      else if (code < 2048) add(2);
+      else if (code >= 0xd800 && code <= 0xdbff) {
+        const next = text.charCodeAt(index + 1);
+        if (next >= 0xdc00 && next <= 0xdfff) {
+          add(4);
+          index++;
+        } else add(6);
+      } else add(code >= 0xdc00 && code <= 0xdfff ? 6 : 3);
+    }
+  };
+  let root = true;
+  try {
+    const serialized = JSON.stringify(value, function (this: unknown, key, item: unknown) {
+      if (item instanceof String) item = String(item);
+      else if (item instanceof Number) item = Number(item);
+      else if (item instanceof Boolean) item = Boolean.prototype.valueOf.call(item);
+      const omitted = item === undefined || typeof item === "function" || typeof item === "symbol";
+      // The replacer sees toJSON's result. Omitted object properties must not
+      // count toward the bound; undefined array items serialize as null.
+      if (!root && !Array.isArray(this) && !omitted) string(key);
+      root = false;
+      if (omitted) {
+        if (Array.isArray(this)) add(4);
+      } else if (typeof item === "string") string(item);
+      else if (item === null) add(4);
+      else if (typeof item === "object") add(2);
+      else if (typeof item === "boolean") add(item ? 4 : 5);
+      else if (typeof item === "number") add(Number.isFinite(item) ? String(item).length : 4);
+      return item;
+    });
+    // Commas/colons are excluded above so the early bound never rejects valid
+    // input. The partial serializer stays bounded; enforce the exact wire size.
+    return serialized !== undefined &&
+      new TextEncoder().encode(serialized).byteLength <= MAX_PROCESS_INPUT_BYTES
+      ? serialized
+      : null;
+  } catch (error) {
+    if (error === exceeded) return null;
+    throw error;
+  }
+}
 
 export type OgcInputDefinition = OgcProcess["inputs"][string];
 export type OgcInputKind = "string" | "number" | "integer" | "boolean" | "json";

@@ -33,6 +33,9 @@ export function ogcProcessMonitorLinks(header: string | null): string[] {
     const [target, ...parameters] = splitHeader(part, ";");
     const href = /^\s*<([^>]*)>\s*$/.exec(target)?.[1];
     if (!href) return [];
+    // An anchor changes the resource described by this link. We only consume
+    // links whose context is the current execution response.
+    if (parameters.some((parameter) => /^\s*anchor\s*=/i.test(parameter))) return [];
     const monitor = parameters.some((parameter) => {
       const match = /^\s*rel\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^\s;]+))\s*$/i.exec(parameter);
       const relations = (match?.[1] ?? match?.[2] ?? "").replace(/\\(.)/g, "$1");

@@ -179,7 +179,17 @@ export function useOgcProcesses(open: boolean) {
     context.commit(() => {
       setJob(next);
       setJobUrl(next.url);
-      if (processUrl) setJobsByProcess((previous) => new Map(previous).set(processUrl, next));
+      if (processUrl)
+        setJobsByProcess((previous) => {
+          const tracked = previous.get(processUrl);
+          if (
+            tracked &&
+            ["accepted", "running"].includes(tracked.status) &&
+            !sameOgcProcessJob(tracked.url, next.url)
+          )
+            return previous;
+          return new Map(previous).set(processUrl, next);
+        });
     });
   const monitor = async (
     initial: OgcProcessJob | string,

@@ -14,12 +14,15 @@ import {
   readOgcProcessResults,
 } from "../apps/geolibre-desktop/src/lib/ogc-api-processes";
 import { processHttp } from "../apps/geolibre-desktop/src/lib/ogc-process-http";
+import { ogcProcessMonitorLinks } from "../apps/geolibre-desktop/src/lib/ogc-process-link-header";
 import { monitorOgcProcessJob } from "../apps/geolibre-desktop/src/lib/ogc-process-job";
 import { validOgcProcessGeoJson } from "../apps/geolibre-desktop/src/lib/ogc-process-geometry";
 import {
   ogcProcessInputDefaults,
   parseOgcProcessInputs,
+  serializeOgcProcessLayerInput,
 } from "../apps/geolibre-desktop/src/lib/ogc-process-inputs";
+import { MAX_PROCESS_INPUT_BYTES } from "../apps/geolibre-desktop/src/lib/ogc-process-limits";
 import i18next from "i18next";
 import {
   OgcProcessError,
@@ -55,6 +58,44 @@ test("client errors follow the active language and retain original service detai
   } finally {
     await i18next.changeLanguage(previous);
   }
+});
+
+test("layer input serialization stops early and preserves JSON and UTF-8 semantics", () => {
+  const limit = MAX_PROCESS_INPUT_BYTES;
+  assert.equal(serializeOgcProcessLayerInput("x".repeat(limit - 2))?.length, limit);
+  assert.equal(serializeOgcProcessLayerInput("x".repeat(limit - 1)), null);
+  assert.equal(serializeOgcProcessLayerInput("é".repeat(limit / 2)), null);
+  assert.equal(serializeOgcProcessLayerInput("\u0000".repeat(Math.ceil(limit / 6))), null);
+  assert.equal(
+    serializeOgcProcessLayerInput({
+      oversized: "x".repeat(limit),
+      get later() {
+        throw new Error("Serialization should already have stopped");
+      },
+    }),
+    null,
+  );
+  let calls = 0;
+  const value = {
+    text: 'é😀\ud800\u0000"\\',
+    omitted: undefined,
+    array: [undefined, NaN],
+    custom: {
+      toJSON() {
+        calls++;
+        return "small";
+      },
+    },
+    skipped: {
+      toJSON() {
+        return undefined;
+      },
+    },
+  };
+  const actual = serializeOgcProcessLayerInput(value);
+  assert.equal(calls, 1);
+  assert.equal(actual, JSON.stringify(value));
+  assert.equal(serializeOgcProcessLayerInput({ ["x".repeat(limit)]: undefined }), "{}");
 });
 
 function description() {
@@ -339,6 +380,43 @@ test("binary output schemas survive synchronous execution and asynchronous polli
   }
 });
 
+test("unencoded string outputs keep their schema media type and original text", async () => {
+  const process = await processDescription();
+  process.outputs = {
+    map: { schema: { type: "string", contentMediaType: "application/geo+json" } },
+  };
+  const text = JSON.stringify({ type: "FeatureCollection", features: [] });
+  serve(() => ({ map: text }));
+  const signal = new AbortController().signal;
+  const execution = await executeOgcProcess(process, {}, signal);
+  assert.equal(execution.kind, "results");
+  if (execution.kind !== "results") throw new Error("Expected synchronous outputs");
+  assert.equal(execution.outputs[0].encoding, undefined);
+  const blob = await downloadOgcProcessOutput(execution.outputs[0], signal);
+  assert.equal(blob.type, "application/geo+json");
+  assert.equal(await blob.text(), text);
+});
+
+test("job status rejects non-string values rather than polling indefinitely", async () => {
+  for (const status of [["successful"], null, {}, 1, true]) {
+    serve(() => ({ status }));
+    await assert.rejects(
+      readOgcProcessJob("https://example.org/jobs/one", new AbortController().signal),
+      { code: "unknownJobStatus" },
+    );
+  }
+});
+
+test("monitor links with a different anchor context are ignored", () => {
+  assert.deepEqual(
+    ogcProcessMonitorLinks(
+      '</jobs/other>; rel=monitor; anchor="/other/execution", </jobs/current>; rel="monitor"',
+    ),
+    ["/jobs/current"],
+  );
+  assert.deepEqual(ogcProcessMonitorLinks('</jobs/other>; ANCHOR=""; rel=monitor'), []);
+});
+
 test("an untracked job resolves advertised process outputs before parsing legacy results", async () => {
   const descriptionValue = description();
   const calls = serve((url) => {
@@ -373,6 +451,49 @@ test("an untracked job resolves advertised process outputs before parsing legacy
   );
   assert.equal(core[0].id, "outputs");
   assert.ok(Array.isArray(core[0].value));
+});
+
+test("monitoring resolves context when processID first appears in a later status", async () => {
+  for (const coreOutput of [false, true]) {
+    let reads = 0;
+    let descriptions = 0;
+    const document = description();
+    if (coreOutput) document.outputs = { outputs: { schema: { type: "array" } } };
+    serve((url) => {
+      const path = new URL(url).pathname;
+      if (path.endsWith("/results")) return { outputs: [{ id: "echo", value: 5 }] };
+      if (path.includes("/processes/")) {
+        descriptions++;
+        return document;
+      }
+      return reads++ ? { status: "successful", processID: "hello-world" } : { status: "running" };
+    });
+    const result = await monitorOgcProcessJob(
+      "https://example.org/api/jobs/late",
+      new AbortController().signal,
+    );
+    assert.equal(descriptions, 1);
+    assert.equal(result[0].id, coreOutput ? "outputs" : "echo");
+    assert.deepEqual(result[0].value, coreOutput ? [{ id: "echo", value: 5 }] : 5);
+  }
+});
+
+test("an unavailable process description is not repeatedly fetched while monitoring", async () => {
+  let reads = 0;
+  let descriptions = 0;
+  serve((url) => {
+    if (url.includes("/results")) return { echo: 1 };
+    if (url.includes("/processes/")) {
+      descriptions++;
+      return new Response(null, { status: 404 });
+    }
+    return { status: reads++ < 2 ? "running" : "successful", processID: "hello-world" };
+  });
+  assert.deepEqual(
+    await monitorOgcProcessJob("https://example.org/api/jobs/late", new AbortController().signal),
+    [{ id: "echo", value: 1 }],
+  );
+  assert.equal(descriptions, 1);
 });
 
 test("incompatible primitive null defaults are omitted while nullable JSON defaults survive", async () => {
@@ -647,7 +768,7 @@ test("synchronous execution submits once and preserves pygeoapi document outputs
   assert.equal(result.kind, "results");
   if (result.kind !== "results") throw Error("Expected results");
   assert.deepEqual(result.outputs, [
-    { id: "echo", value: "Hello GeoLibre!" },
+    { id: "echo", value: "Hello GeoLibre!", mediaType: "application/json" },
     { id: "zero", value: 0 },
   ]);
   assert.equal(calls.length, 1);

@@ -260,7 +260,10 @@ export function ogcProcessRetryDelay(value: string | null, now = Date.now()): nu
 function job(response: ProcessHttpResponse, fallback: string): OgcProcessJob {
   const doc = object(decode(response));
   const status = doc.status;
-  if (!["accepted", "running", "successful", "failed", "dismissed"].includes(String(status)))
+  if (
+    typeof status !== "string" ||
+    !["accepted", "running", "successful", "failed", "dismissed"].includes(status)
+  )
     throw new OgcProcessError("unknownJobStatus");
   const items = links(doc.links);
   const processUrl =
@@ -322,7 +325,7 @@ export async function resolveOgcProcessJobContext(
   }
 }
 
-function binaryFormat(
+function outputFormat(
   definition: JsonObject | undefined,
   depth = 0,
 ): { encoding?: string; mediaType?: string } {
@@ -338,7 +341,7 @@ function binaryFormat(
     return { encoding: "base64", mediaType };
   const alternatives = value.oneOf ?? value.anyOf;
   if (Array.isArray(alternatives) && alternatives.length) {
-    const formats = alternatives.map((schema) => binaryFormat({ schema }, depth + 1));
+    const formats = alternatives.map((schema) => outputFormat({ schema }, depth + 1));
     if (formats.every((format) => format.encoding === "base64"))
       return {
         encoding: "base64",
@@ -347,7 +350,7 @@ function binaryFormat(
           : undefined,
       };
   }
-  return {};
+  return mediaType ? { mediaType } : {};
 }
 
 function outputs(
@@ -395,7 +398,7 @@ function outputs(
       })
     : Object.entries(doc);
   return entries.map(([id, raw]): OgcProcessOutput => {
-    const format = binaryFormat(definitions?.[id]);
+    const format = outputFormat(definitions?.[id]);
     if (raw && typeof raw === "object" && !Array.isArray(raw)) {
       const value = raw as JsonObject;
       if (typeof value.href === "string")

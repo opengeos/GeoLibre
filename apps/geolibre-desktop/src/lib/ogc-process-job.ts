@@ -41,12 +41,15 @@ export async function monitorOgcProcessJob(
   const deadline = AbortSignal.timeout(30 * 60_000);
   const abort = AbortSignal.any([signal, deadline]);
   try {
-    let current =
-      typeof initial === "string"
-        ? await resolveOgcProcessJobContext(await readOgcProcessJob(initial, abort), abort)
-        : initial;
+    let current = typeof initial === "string" ? await readOgcProcessJob(initial, abort) : initial;
+    const attemptedContexts = new Set<string>();
     for (;;) {
       abort.throwIfAborted();
+      const reference = current.processUrl ?? current.processId;
+      if (reference && !current.outputDefinitions && !attemptedContexts.has(reference)) {
+        attemptedContexts.add(reference);
+        current = await resolveOgcProcessJobContext(current, abort);
+      }
       onUpdate?.(current);
       if (current.status === "successful") return await readOgcProcessResults(current, abort);
       if (current.status === "failed" || current.status === "dismissed")

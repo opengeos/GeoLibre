@@ -9,8 +9,12 @@ import { Input, Label, Select, Textarea } from "@geolibre/ui";
 import { useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { OgcProcess } from "../../lib/ogc-api-processes";
-import { ogcInputKind, ogcInputSchema, ogcInputText } from "../../lib/ogc-process-inputs";
-import { MAX_PROCESS_INPUT_BYTES } from "../../lib/ogc-process-limits";
+import {
+  ogcInputKind,
+  ogcInputSchema,
+  ogcInputText,
+  serializeOgcProcessLayerInput,
+} from "../../lib/ogc-process-inputs";
 
 /** Schema-driven literals and JSON fields, with explicit layer-to-input insertion. */
 export function OgcProcessInputs({
@@ -129,7 +133,9 @@ export function OgcProcessInputs({
                 onChange={(event) =>
                   set(
                     key,
-                    kind === "string" && event.target.value === "" ? undefined : event.target.value,
+                    kind === "string" && definition.minOccurs === 0 && event.target.value === ""
+                      ? undefined
+                      : event.target.value,
                   )
                 }
               />
@@ -150,12 +156,12 @@ export function OgcProcessInputs({
                       : representation === "geometries"
                         ? layer.geojson.features.map((feature) => feature.geometry)
                         : layer.geojson;
-                  const serialized = JSON.stringify(
+                  const serialized = serializeOgcProcessLayerInput(
                     representation === "collection"
                       ? { value, mediaType: "application/geo+json" }
                       : value,
                   );
-                  if (new TextEncoder().encode(serialized).byteLength > MAX_PROCESS_INPUT_BYTES) {
+                  if (serialized === null) {
                     setInputLimit(true);
                     return;
                   }
