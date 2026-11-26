@@ -75,3 +75,43 @@ it("toggles viewshed curvature from the right-click menu", async () => {
     canvas.remove();
   }
 });
+
+it("toggles viewshed curvature from the touch long-press sheet", async () => {
+  const { MapContextTouchSheet } =
+    await import("../apps/geolibre-desktop/src/components/layout/mobile/MapContextTouchSheet");
+  const noop = () => {};
+  const view = render(
+    createElement(MapContextTouchSheet, {
+      open: true,
+      onOpenChange: noop,
+      coordLabel: "35.96, -83.92",
+      hasExplorePlace: false,
+      lineOfSightAvailable: true,
+      viewshedBusy: false,
+      bufferPresets: [],
+      viewshedRadiiMeters: [2000],
+      formatDistance: () => "",
+      formatViewshedRadius: () => "2 km",
+      onCopyCoords: noop,
+      onExplorePlace: noop,
+      onCopyGeoJson: noop,
+      onCenterHere: noop,
+      onZoomInHere: noop,
+      onDirections: noop,
+      onBufferHere: noop,
+      onTravelTimeHere: noop,
+      onViewshedHere: noop,
+      onLineOfSightHere: noop,
+      onOpenBufferProcessing: noop,
+      onViewInGoogleMaps: noop,
+      onViewInGoogleEarth: noop,
+    }),
+  );
+  try {
+    fireEvent.click(await screen.findByText(i18n.t("quickAnalysis.menu")));
+    fireEvent.click(await screen.findByText(i18n.t("quickAnalysis.viewshedCurvature")));
+    assert.equal(useTerrainVisibility.getState().curvature, false);
+  } finally {
+    view.unmount();
+  }
+});

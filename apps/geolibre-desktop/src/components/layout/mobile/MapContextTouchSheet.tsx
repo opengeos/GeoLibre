@@ -5,6 +5,7 @@ import {
   Crosshair,
   Earth,
   Eye,
+  Globe2,
   MapIcon,
   MapPin,
   Navigation2,
@@ -18,6 +19,7 @@ import { useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { registerMobileBackHandler } from "../../../lib/mobile-back-stack";
+import { useTerrainVisibility } from "../../../lib/terrain-visibility-settings";
 import { QUICK_TRAVEL_CONTOURS_LABEL, type QuickBufferPreset } from "../../../lib/quick-analysis";
 import type { TouchMenuItem } from "../../../lib/touch-menu-nav";
 import { TouchMenuSheet } from "./TouchMenuSheet";
@@ -78,6 +80,10 @@ export function MapContextTouchSheet({
   onViewInGoogleEarth,
 }: MapContextTouchSheetProps) {
   const { t } = useTranslation();
+  // The same Earth-model switch as the desktop menu's checkbox and the Line of
+  // Sight panel, so a long-press viewshed honours (and can change) it.
+  const viewshedCurvature = useTerrainVisibility((s) => s.curvature);
+  const updateTerrainVisibility = useTerrainVisibility((s) => s.update);
 
   useEffect(() => {
     if (!open) return;
@@ -179,6 +185,19 @@ export function MapContextTouchSheet({
         icon: <Eye className="h-4 w-4" />,
         onSelect: () => onViewshedHere(radiusMeters),
       })),
+      {
+        kind: "action",
+        id: "viewshed-curvature",
+        label: t("quickAnalysis.viewshedCurvature"),
+        description: t(
+          viewshedCurvature
+            ? "quickAnalysis.viewshedCurvatureOn"
+            : "quickAnalysis.viewshedCurvatureOff",
+        ),
+        active: viewshedCurvature,
+        icon: <Globe2 className="h-4 w-4" />,
+        onSelect: () => updateTerrainVisibility({ curvature: !viewshedCurvature }),
+      },
       ...(lineOfSightAvailable
         ? [
             {
@@ -256,6 +275,8 @@ export function MapContextTouchSheet({
     formatViewshedRadius,
     viewshedBusy,
     onViewshedHere,
+    viewshedCurvature,
+    updateTerrainVisibility,
     onLineOfSightHere,
     onOpenBufferProcessing,
     onViewInGoogleMaps,

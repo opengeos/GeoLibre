@@ -99,6 +99,9 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
     MAX_VIEWSHED_RADIUS_METERS,
     Math.max(MIN_VIEWSHED_RADIUS_METERS, options.radiusMeters),
   );
+  // Captured before the terrain fetch, so toggling the setting while tiles
+  // load affects only later runs, not this one.
+  const curvature = resolveCurvature(options.curvature ?? getTerrainVisibility());
   const dem = await assembleTerrainDem({
     lng: options.lng,
     lat: options.lat,
@@ -107,7 +110,6 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
   });
   if (!dem) return null;
 
-  const curvature = resolveCurvature(options.curvature ?? getTerrainVisibility());
   const result = await computeViewshedAsync(
     dem,
     {

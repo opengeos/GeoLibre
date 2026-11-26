@@ -116,6 +116,16 @@ function LineOfSightTool({
   // store keeps the last valid value and the field shows it again on blur.
   const [refractionDraft, setRefractionDraft] = useState(String(refractionCoefficient));
   const [radiusDraft, setRadiusDraft] = useState(String(earthRadiusMeters / 1000));
+  // The store clamps out-of-range values; say so while the field still shows
+  // the typed number, so the screen never disagrees silently with the model.
+  const clampedHint = (draft: string, applied: number): string | null => {
+    const typed = Number.parseFloat(draft);
+    return Number.isFinite(typed) && Math.abs(typed - applied) > 1e-9
+      ? t("lineOfSight.usingValue", { value: applied })
+      : null;
+  };
+  const refractionHint = clampedHint(refractionDraft, refractionCoefficient);
+  const radiusHint = clampedHint(radiusDraft, earthRadiusMeters / 1000);
   const [savedResult, setSavedResult] = useState<LineOfSightResult | null>(null);
   const ids = useId();
 
@@ -352,8 +362,14 @@ function LineOfSightTool({
                 onBlur={() =>
                   setRefractionDraft(String(useTerrainVisibility.getState().refractionCoefficient))
                 }
+                aria-describedby={refractionHint ? `${ids}-refraction-hint` : undefined}
                 className="h-8"
               />
+              {refractionHint && (
+                <p id={`${ids}-refraction-hint`} className="text-xs text-muted-foreground">
+                  {refractionHint}
+                </p>
+              )}
             </div>
             <div className="flex flex-col gap-1">
               <Label htmlFor={`${ids}-radius`} className="text-xs">
@@ -376,8 +392,14 @@ function LineOfSightTool({
                 onBlur={() =>
                   setRadiusDraft(String(useTerrainVisibility.getState().earthRadiusMeters / 1000))
                 }
+                aria-describedby={radiusHint ? `${ids}-radius-hint` : undefined}
                 className="h-8"
               />
+              {radiusHint && (
+                <p id={`${ids}-radius-hint`} className="text-xs text-muted-foreground">
+                  {radiusHint}
+                </p>
+              )}
             </div>
           </div>
         )}
