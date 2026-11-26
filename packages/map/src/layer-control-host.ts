@@ -93,34 +93,6 @@ interface LayerControlConfig {
 }
 
 /**
- * The upstream control's private state the host reaches into. It mirrors store
- * changes into an already-built panel in place (the control has no public
- * setter for that), and seeds `basemapLayerIds` when no fetchable style URL
- * exists — otherwise the control falls back to "whatever was on the map when
- * I mounted is basemap", which sweeps up GeoLibre's own layers and lets the
- * Background toggle hide them.
- */
-interface LayerControlInternalState {
-  panel?: HTMLElement;
-  basemapLayerIds?: Set<string> | null;
-  state?: {
-    /** False while the panel is open. */
-    collapsed?: boolean;
-    layerStates?: Record<string, { visible: boolean; opacity: number; name: string }>;
-  };
-  /** Rebuilds the panel's rows from `state.layerStates`; the control's own refresh path. */
-  buildLayerItems?: () => void;
-}
-
-/**
- * Member of the seeded basemap-id set that never matches a real layer, so the
- * set stays non-empty (the control only trusts a non-empty set) on a style
- * whose basemap has no root layers, such as Mapbox Standard, where the
- * basemap lives in style imports.
- */
-const BASEMAP_ID_SENTINEL = "geolibre:basemap";
-
-/**
  * Style layers that libraries add as plumbing, never as data, matched as the
  * control's wildcard `excludeLayers` patterns. They are hidden from the
  * control on every engine.
@@ -178,33 +150,6 @@ export function layerControlReorderMove(
   });
   if (layerId === undefined) return null;
   return { layerId, storeIndex: nextOrder.length - 1 - nextOrder.indexOf(layerId) };
-}
-
-/**
- * Reorder the layer control's `layerStates` record to match a panel order. The
- * control sorts layers with no native layer on the map by this record's key
- * order, with Background kept first. Keys missing from `panelOrder` keep their
- * relative order after the listed ones.
- *
- * Exported for unit testing.
- *
- * @param states The control's layer states, keyed by layer id.
- * @param panelOrder Layer ids top to bottom.
- * @returns A new record with the same entries in panel order.
- */
-export function orderLayerStates<T>(
-  states: Record<string, T>,
-  panelOrder: readonly string[],
-): Record<string, T> {
-  const ordered: Record<string, T> = {};
-  if ("Background" in states) ordered.Background = states.Background;
-  for (const id of panelOrder) {
-    if (id in states) ordered[id] = states[id];
-  }
-  for (const [id, state] of Object.entries(states)) {
-    if (!(id in ordered)) ordered[id] = state;
-  }
-  return ordered;
 }
 
 /**
@@ -322,9 +267,14 @@ export class LayerControlHost {
     const basemapStyleUrl = this.adapter.getBasemapStyleUrl();
     const collapsed = !this.mountExpanded;
     const control = new LayerControl({
-      // The control fetches this URL to introspect the basemap's layers; a
-      // basemap it cannot fetch is seeded below instead.
+      // The control fetches this URL to introspect the basemap's layers. With
+      // no fetchable URL, hand it the engine's basemap layer ids instead:
+      // otherwise the control falls back to "whatever was on the map when I
+      // mounted is basemap", which sweeps up GeoLibre's own layers and lets
+      // the Background toggle hide them. An empty list (a style whose basemap
+      // lives in imports, such as Mapbox Standard) is honoured as such.
       basemapStyleUrl: basemapStyleUrl ?? undefined,
+      basemapLayerIds: basemapStyleUrl === null ? this.adapter.getBasemapLayerIds() : undefined,
       collapsed,
       panelWidth: 340,
       panelMinWidth: 240,
@@ -353,12 +303,6 @@ export class LayerControlHost {
         this.applyReorder(layerOrder);
       },
     });
-    if (basemapStyleUrl === null) {
-      (control as unknown as LayerControlInternalState).basemapLayerIds = new Set([
-        ...this.adapter.getBasemapLayerIds(),
-        BASEMAP_ID_SENTINEL,
-      ]);
-    }
     // The control reads the style in onAdd, and both engines' getStyle() throws
     // while a style is still loading. A mount requested in that window (a
     // control toggled on mid style swap) must not surface as an exception;
@@ -419,8 +363,7 @@ export class LayerControlHost {
     const anchor = previous?.nextElementSibling ?? null;
     const parent = previous?.parentElement ?? null;
 
-    this.mountExpanded =
-      (this.control as unknown as LayerControlInternalState).state?.collapsed === false;
+    this.mountExpanded = this.control?.isCollapsed() === false;
     this.remove();
     this.add();
 
@@ -497,15 +440,10 @@ export class LayerControlHost {
     }
     // Nothing changes, so no layer sync will rebuild the control, but the
     // panel already shows the move: a drag moved the row, and a context-menu
-    // move rewrote the control's `layerStates` order, which is what it sorts
-    // layers by while none of their native layers is on the map (e.g. hidden
-    // Overture layers). Put that order back, then redraw the rows.
-    const control = this.control as unknown as LayerControlInternalState | null;
-    if (!control) return;
-    if (control.state?.layerStates) {
-      control.state.layerStates = orderLayerStates(control.state.layerStates, previousOrder);
-    }
-    control.buildLayerItems?.();
+    // move changed the order the control sorts layers by while none of their
+    // native layers is on the map (e.g. hidden Overture layers). Put that
+    // order back, which also redraws the rows.
+    this.control?.setLayerOrder(previousOrder);
   }
 
   /**
@@ -628,54 +566,22 @@ export class LayerControlHost {
 
   private syncBackgroundState(): void {
     if (!this.control) return;
-    const control = this.control as unknown as LayerControlInternalState;
     const { visible, opacity } = this.adapter.getBasemapState();
-
-    // Only touch the control's state once it has mounted (onAdd builds the
-    // panel). Seeding `Background` earlier would make the control skip its own
-    // layer detection, which is keyed on the state being empty at mount.
-    if (!control.panel || !control.state?.layerStates) return;
-
-    let backgroundState = control.state.layerStates.Background;
-    if (!backgroundState) {
-      // The control only creates a Background row when it finds basemap
-      // layers in the root style. A style whose basemap lives in imports
-      // (Mapbox Standard) has none, so a project with no layers would show an
-      // empty panel. GeoLibre always has a basemap to toggle (the store drives
-      // it through onBackgroundVisibilityChange), so add the row ourselves.
-      backgroundState = control.state.layerStates.Background = {
-        visible,
-        opacity,
-        name: "Background",
-      };
-      control.buildLayerItems?.();
-    }
-    backgroundState.visible = visible;
-    backgroundState.opacity = opacity;
-
-    const backgroundItem = this.getItem("Background");
-    if (!backgroundItem) return;
-
-    this.updateItem(backgroundItem, { name: "Background", visible, opacity });
+    // The control only creates a Background row when it finds basemap layers
+    // in the root style. A style whose basemap lives in imports (Mapbox
+    // Standard) has none, so a project with no layers would show an empty
+    // panel. GeoLibre always has a basemap to toggle (the store drives it
+    // through onBackgroundVisibilityChange), so setLayerState adds the row.
+    // It does nothing until the control has listed the map's layers.
+    this.control.setLayerState("Background", { visible, opacity });
   }
 
   private syncLayerStates(layers: GeoLibreLayer[]): void {
     if (!this.control) return;
-    const control = this.control as unknown as LayerControlInternalState;
     const ownState = this.ownLayerStates();
-
     for (const layer of layers) {
       const { visible, opacity } = ownState(layer);
-      const layerState = control.state?.layerStates?.[layer.id];
-      if (layerState) {
-        layerState.visible = visible;
-        layerState.opacity = opacity;
-        layerState.name = layer.name;
-      }
-
-      const layerItem = this.getItem(layer.id);
-      if (!layerItem) continue;
-      this.updateItem(layerItem, { name: layer.name, visible, opacity });
+      this.control.setLayerState(layer.id, { name: layer.name, visible, opacity });
     }
   }
 
@@ -707,36 +613,6 @@ export class LayerControlHost {
       }
       return { visible: layer.visible, opacity: layer.opacity };
     };
-  }
-
-  private getItem(layerId: string): HTMLElement | null {
-    const control = this.control as unknown as LayerControlInternalState;
-    const items = control.panel?.querySelectorAll(".layer-control-item") ?? [];
-    return (
-      (Array.from(items).find((item) => (item as HTMLElement).dataset.layerId === layerId) as
-        | HTMLElement
-        | undefined) ?? null
-    );
-  }
-
-  private updateItem(
-    item: HTMLElement,
-    state: { name: string; visible: boolean; opacity: number },
-  ): void {
-    const checkbox = item.querySelector(".layer-control-checkbox") as HTMLInputElement | null;
-    if (checkbox) checkbox.checked = state.visible;
-
-    const opacity = item.querySelector(".layer-control-opacity") as HTMLInputElement | null;
-    if (opacity) {
-      opacity.value = String(state.opacity);
-      opacity.title = `Opacity: ${Math.round(state.opacity * 100)}%`;
-    }
-
-    const name = item.querySelector(".layer-control-name") as HTMLElement | null;
-    if (name) {
-      name.textContent = state.name;
-      name.title = state.name;
-    }
   }
 
   private createGeoLibreLayerAdapter(layers: GeoLibreLayer[]): CustomLayerAdapter {

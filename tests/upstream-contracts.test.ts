@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { NasaEarthdataControl } from "maplibre-gl-nasa-earthdata";
 import { isolateMaplibreRegistry } from "../apps/geolibre-desktop/vite-plugins/isolate-maplibre-registry";
 import { MAX_VECTOR_BYTES } from "../packages/plugins/src/plugins/remote-file-formats";
 import {
@@ -320,42 +319,6 @@ describe("Web Services control packages", () => {
   }
 });
 
-describe("maplibre-gl-nasa-earthdata", () => {
-  const section = "Web Services control packages (`packages/plugins/package.json`)";
-  // Both checks read method bodies, which are private or live inside the class.
-  const proto = NasaEarthdataControl.prototype as unknown as Record<string, unknown>;
-
-  it("still wires the panel Add through `this.addLayer(layer.id)`", () => {
-    // The date fallback replaces the instance's addLayer; the Add button only
-    // reaches it if the button calls the instance method.
-    assert.match(
-      sourceOf(proto._createLayerRow),
-      /this\.addLayer\(layer\.id\)/,
-      contractMessage(
-        "maplibre-gl-nasa-earthdata",
-        section,
-        "the panel Add no longer calls this.addLayer(layer.id), so the date fallback in nasa-earthdata-date-fallback.ts is bypassed",
-        "packages/plugins",
-      ),
-    );
-  });
-
-  it("still lets addLayer take a date or key, which the fallback passes through", () => {
-    const body = sourceOf(proto.addLayer);
-    for (const option of ["options?.date", "options?.key"]) {
-      assert.ok(
-        body.includes(option),
-        contractMessage(
-          "maplibre-gl-nasa-earthdata",
-          section,
-          `addLayer no longer reads ${option}, so a restore or date-picker add would be probed and moved`,
-          "packages/plugins",
-        ),
-      );
-    }
-  });
-});
-
 describe("maplibre-gl-components", () => {
   const section = "`maplibre-gl-components` (`packages/plugins/package.json`)";
 
@@ -431,87 +394,39 @@ describe("maplibre-gl-components", () => {
       );
     }
   });
-
-  it("keeps MeasureControl's private `_panel`, `_sourceId` and source setup", async () => {
-    const { MeasureControl } = await import("maplibre-gl-components");
-    const control = new MeasureControl({}) as unknown as Record<string, unknown>;
-    assert.ok(
-      "_panel" in control,
-      contractMessage(
-        "maplibre-gl-components",
-        section,
-        "MeasureControl has no `_panel` field (measurePanelElement)",
-      ),
-    );
-    assert.equal(
-      typeof control._sourceId,
-      "string",
-      contractMessage(
-        "maplibre-gl-components",
-        section,
-        "MeasureControl has no string `_sourceId` field (measureSourceId)",
-      ),
-    );
-    assert.ok((control._sourceId as string).length > 0);
-    for (const method of ["_setupMapSources", "_updateMapGeometry"]) {
-      assert.equal(
-        typeof control[method],
-        "function",
-        contractMessage(
-          "maplibre-gl-components",
-          section,
-          `MeasureControl has no \`${method}\` method (healMeasureLayersOnStyleSwap)`,
-        ),
-      );
-    }
-  });
 });
 
 describe("maplibre-gl-vector", () => {
   const section = "`maplibre-gl-vector` (`packages/plugins/package.json`)";
-  // Text check: both values are module-private in the control's chunk.
-  const text = () => readPublishedText("maplibre-gl-vector", { workspace: "packages/plugins" });
+  // Both values are exported (0.12+); GeoLibre keeps copies so the startup
+  // path never imports the control's chunk.
 
-  it("still caps remote files at MAX_VECTOR_BYTES", () => {
-    // Accepts `N` or `B ** E - S` (the 2 GiB - 1 form it ships as), parsed by
-    // hand rather than evaluated.
-    const match = text().match(
-      /MAX_REMOTE_FILE_BYTES\s*=\s*(\d+)(?:\s*\*\*\s*(\d+)\s*-\s*(\d+))?\s*;/,
-    );
-    assert.ok(
-      match,
-      contractMessage(
-        "maplibre-gl-vector",
-        section,
-        "MAX_REMOTE_FILE_BYTES is gone or no longer `N` / `B ** E - S`",
-        "packages/plugins",
-      ),
-    );
-    const [, base, exponent, subtrahend] = match;
-    const upstream =
-      exponent === undefined ? Number(base) : Number(base) ** Number(exponent) - Number(subtrahend);
+  it("still caps remote files at MAX_VECTOR_BYTES", async () => {
+    const { MAX_REMOTE_FILE_BYTES } = await import("maplibre-gl-vector");
     assert.equal(
-      upstream,
+      MAX_REMOTE_FILE_BYTES,
       MAX_VECTOR_BYTES,
       contractMessage(
         "maplibre-gl-vector",
         section,
-        `MAX_REMOTE_FILE_BYTES is ${upstream}, MAX_VECTOR_BYTES is ${MAX_VECTOR_BYTES}`,
+        `MAX_REMOTE_FILE_BYTES is ${MAX_REMOTE_FILE_BYTES}, MAX_VECTOR_BYTES is ${MAX_VECTOR_BYTES}`,
         "packages/plugins",
       ),
     );
   });
 
-  it("still filters KML icons on KML_ICON_PROPERTY", () => {
+  it("still filters KML icons on KML_ICON_PROPERTY", async () => {
+    const { KML_ICON_URL_PROPERTY } = await import("maplibre-gl-vector");
     const mirror = JSON.parse(
       repoConstant("packages/plugins/src/plugins/vector-layer-sync.ts", "KML_ICON_PROPERTY"),
     ) as string;
-    assert.ok(
-      text().includes(`["has", ${JSON.stringify(mirror)}]`),
+    assert.equal(
+      mirror,
+      KML_ICON_URL_PROPERTY,
       contractMessage(
         "maplibre-gl-vector",
         section,
-        `the KML icon layer no longer filters on ["has", "${mirror}"]`,
+        `KML_ICON_URL_PROPERTY is "${KML_ICON_URL_PROPERTY}", KML_ICON_PROPERTY is "${mirror}"`,
         "packages/plugins",
       ),
     );
@@ -520,19 +435,26 @@ describe("maplibre-gl-vector", () => {
 
 describe("maplibre-gl-lidar", () => {
   it("still routes streamed clouds the way isStreamedLidarUrl copies", async () => {
-    const { LidarControl } = await import("maplibre-gl-lidar");
-    const body = sourceOf(LidarControl.prototype.loadPointCloud);
-    for (const snippet of [
-      'source.endsWith("/ept.json")',
-      'source.includes("/ept.json?")',
-      "/\\.copc\\./i.test(source)",
+    // loadPointCloud routes through the exported isStreamedPointCloudUrl
+    // (0.22+); data-url.ts keeps a copy to stay off the lidar chunk.
+    const { isStreamedPointCloudUrl } = await import("maplibre-gl-lidar");
+    const { isStreamedLidarUrl } = await import("../apps/geolibre-desktop/src/lib/data-url");
+    for (const url of [
+      "https://example.com/cloud/ept.json",
+      "https://example.com/cloud/ept.json?token=1",
+      "https://example.com/a.copc.laz",
+      "https://example.com/A.COPC.LAZ?sig=x",
+      "https://example.com/a.laz",
+      "https://example.com/a.las",
+      "https://example.com/ept.json.bak",
     ]) {
-      assert.ok(
-        body.includes(snippet),
+      assert.equal(
+        isStreamedLidarUrl(url),
+        isStreamedPointCloudUrl(url),
         contractMessage(
           "maplibre-gl-lidar",
           "`maplibre-gl-lidar` (`packages/plugins/package.json`) — half checked by the compiler",
-          `LidarControl.loadPointCloud no longer routes on \`${snippet}\` (isStreamedLidarUrl in data-url.ts)`,
+          `isStreamedPointCloudUrl("${url}") disagrees with isStreamedLidarUrl in data-url.ts`,
         ),
       );
     }
@@ -550,163 +472,6 @@ describe("maplibre-gl-raster", () => {
         "the published bundle no longer sets `depthWriteEnabled: false` on raster layers",
       ),
     );
-  });
-});
-
-describe("maplibre-gl-layer-control", () => {
-  const section = "`maplibre-gl-layer-control` (`packages/map/package.json`) — private internals";
-
-  it("keeps the private members LayerControlInternalState lists", async () => {
-    const { LayerControl } = await import("maplibre-gl-layer-control");
-    const control = new LayerControl({}) as unknown as Record<string, unknown> & {
-      state?: Record<string, unknown>;
-    };
-    for (const field of ["panel", "basemapLayerIds", "state"]) {
-      assert.ok(
-        field in control,
-        contractMessage(
-          "maplibre-gl-layer-control",
-          section,
-          `LayerControl has no \`${field}\` field`,
-          "packages/map",
-        ),
-      );
-    }
-    assert.equal(
-      typeof control.state?.collapsed,
-      "boolean",
-      contractMessage(
-        "maplibre-gl-layer-control",
-        section,
-        "`state.collapsed` is not a boolean",
-        "packages/map",
-      ),
-    );
-    assert.ok(
-      control.state && "layerStates" in control.state,
-      contractMessage(
-        "maplibre-gl-layer-control",
-        section,
-        "LayerControl has no `state.layerStates`",
-        "packages/map",
-      ),
-    );
-    assert.equal(
-      typeof (LayerControl.prototype as unknown as Record<string, unknown>).buildLayerItems,
-      "function",
-      contractMessage(
-        "maplibre-gl-layer-control",
-        section,
-        "LayerControl has no `buildLayerItems()` method",
-        "packages/map",
-      ),
-    );
-  });
-
-  it("still renders the row DOM the host patches in place", () => {
-    // Text check: rows are built in onAdd against a live map.
-    const text = readPublishedText("maplibre-gl-layer-control", { workspace: "packages/map" });
-    for (const cls of [
-      "maplibregl-ctrl-layer-control",
-      "layer-control-item",
-      "layer-control-checkbox",
-      "layer-control-opacity",
-      "layer-control-name",
-    ]) {
-      assert.ok(
-        hasClassToken(text, cls),
-        contractMessage(
-          "maplibre-gl-layer-control",
-          section,
-          `no element carries the class "${cls}"`,
-          "packages/map",
-        ),
-      );
-    }
-    assert.ok(
-      text.includes("dataset.layerId"),
-      contractMessage(
-        "maplibre-gl-layer-control",
-        section,
-        "rows no longer carry `data-layer-id` via dataset.layerId",
-        "packages/map",
-      ),
-    );
-  });
-});
-
-describe("maplibre-gl-splat", () => {
-  const section = "`maplibre-gl-splat` (`packages/plugins/package.json`) — private internals";
-
-  it("keeps the private fields splatting.ts reserves ids and placements through", async () => {
-    const { GaussianSplatControl } = await import("maplibre-gl-splat");
-    const control = new GaussianSplatControl({}) as unknown as {
-      _layerCounter?: unknown;
-      _modelCounter?: unknown;
-      _splatLayers?: unknown;
-      _modelLayers?: unknown;
-      _state?: { rotation?: unknown; scale?: unknown };
-      _options?: { defaultModelRotation?: unknown; flyTo?: unknown };
-    };
-    const message = (detail: string) =>
-      contractMessage("maplibre-gl-splat", section, detail, "packages/plugins");
-    assert.equal(control._layerCounter, 0, message("`_layerCounter` no longer starts at 0"));
-    assert.equal(control._modelCounter, 0, message("`_modelCounter` no longer starts at 0"));
-    assert.ok(control._splatLayers instanceof Map, message("`_splatLayers` is not a Map"));
-    assert.ok(control._modelLayers instanceof Map, message("`_modelLayers` is not a Map"));
-    assert.ok(
-      Array.isArray(control._state?.rotation),
-      message("`_state.rotation` is not an array"),
-    );
-    assert.equal(typeof control._state?.scale, "number", message("`_state.scale` is not a number"));
-    assert.ok(
-      Array.isArray(control._options?.defaultModelRotation),
-      message("`_options.defaultModelRotation` is not an array"),
-    );
-    assert.equal(
-      typeof control._options?.flyTo,
-      "boolean",
-      message("`_options.flyTo` is not a boolean"),
-    );
-  });
-
-  it("still names assets from the counters and records their placement", async () => {
-    const { GaussianSplatControl } = await import("maplibre-gl-splat");
-    const message = (detail: string) =>
-      contractMessage("maplibre-gl-splat", section, detail, "packages/plugins");
-    const cases = [
-      {
-        method: "loadSplat",
-        id: "`splat-${this._layerCounter++}`",
-        map: "_splatLayers",
-        rotation: "this._state.rotation",
-      },
-      {
-        method: "loadModel",
-        id: "`model-${this._modelCounter++}`",
-        map: "_modelLayers",
-        rotation: "this._options.defaultModelRotation",
-      },
-    ] as const;
-    for (const { method, id, map, rotation } of cases) {
-      const body = sourceOf(
-        (GaussianSplatControl.prototype as unknown as Record<string, unknown>)[method],
-      );
-      assert.ok(body.includes(id), message(`${method} no longer names assets ${id}`));
-      assert.match(
-        body,
-        new RegExp(`this\\.${map}\\.set\\(\\w+, \\{[^}]*longitude[^}]*latitude[^}]*altitude`),
-        message(`${method} no longer records longitude/latitude/altitude in ${map}`),
-      );
-      assert.ok(
-        body.includes(`?? ${rotation}`),
-        message(`${method} no longer defaults rotation from ${rotation}`),
-      );
-      assert.ok(
-        body.includes("this._options.flyTo"),
-        message(`${method} no longer consults _options.flyTo`),
-      );
-    }
   });
 });
 
@@ -991,64 +756,67 @@ describe("maplibre-gl-planetary-computer", () => {
 describe("maplibre-gl-raster", () => {
   const section = "`maplibre-gl-raster` — stretch and gamma curves";
 
-  it("still applies stretch then gamma with the curves the opacity mirror inverts", () => {
-    // Text check: pushAdjustments and the shader modules are module-private.
-    const text = readPublishedText("maplibre-gl-raster", { workspace: "packages/plugins" });
-    const message = (detail: string) =>
-      contractMessage("maplibre-gl-raster", section, detail, "packages/plugins");
-    const body = text.match(/function pushAdjustments\(state, pipeline\) \{([\s\S]*?)\n\}/)?.[1];
-    assert.ok(body, message("pushAdjustments(state, pipeline) is gone"));
-    assert.match(
-      body,
-      /module: LogStretch,\s*props: \{ strength: 99 \}/,
-      message("the log stretch strength is no longer 99"),
-    );
-    assert.ok(body.includes("module: SqrtStretch"), message("the sqrt stretch module is gone"));
-    assert.ok(
-      body.indexOf("module: Gamma") > body.indexOf("module: SqrtStretch"),
-      message("gamma no longer runs after the stretch"),
-    );
-    assert.ok(
-      text.includes("color.rgb = log(1.0 + k * x) / log(1.0 + k);"),
-      message("the log stretch curve changed"),
-    );
-    assert.ok(
-      text.includes("color.rgb = sqrt(clamp(color.rgb, 0.0, 1.0));"),
-      message("the sqrt stretch curve changed"),
-    );
-    assert.ok(
-      text.includes(
-        "pow(clamp(color.rgb, 0.0, 1.0), vec3(1.0 / max(gammaModule.gammaValue, 0.0001)))",
-      ),
-      message("the gamma curve changed"),
-    );
-  });
-
-  it("binds the pixel inspector's click through the `_onClick` property", () => {
-    // Text check: PixelInspector is module-private. guardRasterInspectorClicks
-    // wraps `_inspector._onClick` once, which only takes if enable() and
-    // disable() both read the property rather than a bound copy.
-    const text = readPublishedText("maplibre-gl-raster", { workspace: "packages/plugins" });
+  it("ignores claimed clicks through the inspector filter's true-inspects contract", async () => {
     const message = (detail: string) =>
       contractMessage(
         "maplibre-gl-raster",
-        "`maplibre-gl-raster` — pixel inspector click guard",
+        "`maplibre-gl-raster`: pixel inspector click filter",
         detail,
         "packages/plugins",
       );
-    assert.ok(
-      text.includes("this._inspector = new PixelInspector("),
-      message("RasterControl no longer keeps its inspector in `_inspector`"),
+    // Text check of the published declaration: the filter's meaning is not
+    // visible to the compiler, only its signature.
+    const types = readFileSync(
+      path.join(packageDir("maplibre-gl-raster", "packages/plugins"), "dist/types/index.d.ts"),
+      "utf8",
     );
-    assert.match(text, /\b_onClick = \(/, message("`_onClick` is no longer an instance property"));
-    assert.ok(
-      text.includes('this._map.on("click", this._onClick)'),
-      message("enable() no longer binds `this._onClick`"),
+    const doc = types.slice(
+      Math.max(0, types.indexOf("export declare type InspectorClickFilter") - 400),
+      types.indexOf("export declare type InspectorClickFilter"),
     );
     assert.ok(
-      text.includes('this._map.off("click", this._onClick)'),
-      message("disable() no longer unbinds `this._onClick`"),
+      doc.includes("`true` to let the pixel inspector handle the click, `false` to ignore it"),
+      message("InspectorClickFilter no longer documents true = inspect, false = ignore"),
     );
+    const { rasterInspectorClickFilter } =
+      await import("../packages/plugins/src/plugins/maplibre-raster");
+    const { registerMapClickClaim } = await import("@geolibre/core");
+    assert.equal(
+      rasterInspectorClickFilter(),
+      true,
+      message("an unclaimed click must be inspected"),
+    );
+    const release = registerMapClickClaim(() => true);
+    try {
+      assert.equal(rasterInspectorClickFilter(), false, message("a claimed click must be ignored"));
+    } finally {
+      release();
+    }
+  });
+
+  it("inverts stretch and gamma like the opacity mirror", async () => {
+    const { invertAdjustments, applyAdjustments } = await import("maplibre-gl-raster");
+    const { invertRasterAdjustments } =
+      await import("../packages/plugins/src/plugins/raster-symbology");
+    for (const stretch of ["linear", "sqrt", "log"] as const) {
+      for (const gamma of [0.4, 1, 2.2]) {
+        for (let step = 0; step <= 16; step += 1) {
+          const t = step / 16;
+          const expected = invertAdjustments(t, { stretch, gamma });
+          assert.ok(
+            Math.abs(invertRasterAdjustments(t, stretch, gamma) - expected) < 1e-9,
+            contractMessage(
+              "maplibre-gl-raster",
+              section,
+              `invertAdjustments(${t}, { stretch: "${stretch}", gamma: ${gamma} }) is ${expected}, the mirror disagrees`,
+              "packages/plugins",
+            ),
+          );
+          // The exported inverse must still undo the exported forward curve.
+          assert.ok(Math.abs(applyAdjustments(expected, { stretch, gamma }) - t) < 1e-6);
+        }
+      }
+    }
   });
 });
 

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { parseHTML } from "linkedom";
-import { BasemapControl, type BasemapDefinition } from "maplibre-gl-basemap-control";
+import {
+  BasemapControl,
+  type BasemapDefinition,
+  BASEMAP_PANEL_SELECTOR as UPSTREAM_PANEL_SELECTOR,
+  BASEMAP_ROW_ID_ATTRIBUTE as UPSTREAM_ROW_ID_ATTRIBUTE,
+  BASEMAP_ROW_SELECTOR as UPSTREAM_ROW_SELECTOR,
+} from "maplibre-gl-basemap-control";
 import {
   BASEMAP_PANEL_SELECTOR,
   BASEMAP_ROW_ID_ATTR,
@@ -136,11 +142,11 @@ describe("basemap preview urls", () => {
 
 /**
  * `BASEMAP_PANEL_SELECTOR` / `BASEMAP_ROW_SELECTOR` / `BASEMAP_ROW_ID_ATTR`
- * mirror DOM that `maplibre-gl-basemap-control` renders but does not export, so
- * nothing but this file notices if a bump renames one — the queries would just
- * stop matching and thumbnails would silently stop appearing. Rather than
- * restate the strings, this builds a real `BasemapControl` and asks it for its
- * rendered panel.
+ * copy the DOM names `maplibre-gl-basemap-control` exports (0.15+), kept as
+ * copies so the thumbnails module does not import the control's chunk. If a
+ * bump renames one, the queries would just stop matching and thumbnails would
+ * silently stop appearing, so this compares them with the exports and builds a
+ * real `BasemapControl` to check its rendered panel.
  */
 describe("the preview state rank", () => {
   it("only ever moves a row forward", () => {
@@ -208,6 +214,12 @@ describe("the maplibre-gl-basemap-control DOM mirror", () => {
   function fakeMap(container: HTMLElement) {
     return { getContainer: () => container, on: () => {}, off: () => {} } as never;
   }
+
+  it("copies the exported DOM names", () => {
+    assert.equal(BASEMAP_PANEL_SELECTOR, UPSTREAM_PANEL_SELECTOR);
+    assert.equal(BASEMAP_ROW_SELECTOR, UPSTREAM_ROW_SELECTOR);
+    assert.equal(BASEMAP_ROW_ID_ATTR, UPSTREAM_ROW_ID_ATTRIBUTE);
+  });
 
   it("matches the panel, the rows and the row id attribute", () => {
     const container = document.createElement("div");

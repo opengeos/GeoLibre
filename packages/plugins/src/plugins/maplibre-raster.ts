@@ -138,26 +138,18 @@ const SAMPLE_RASTER_DATASETS: RasterSampleDataset[] = [
 export type RasterControlInternals = {
   _layerManager?: RasterLayerManagerInternals;
   _panel?: HTMLElement;
-  _inspector?: { _onClick?: (event: unknown) => void };
 };
 
 /**
- * Keep the pixel inspector from reading a click that a drawing map tool
- * (Measure, the Geo Editor) owns, the way the host's Identify handlers stand
- * down (GeoLibre#3237). The inspector binds its click handler through the
- * `_onClick` instance property on both enable and disable, so wrapping it once,
- * after onAdd creates the inspector, keeps on/off symmetric.
+ * The pixel inspector's click filter: `true` inspects the click, `false`
+ * ignores it (maplibre-gl-raster's `InspectorClickFilter` contract). A click a
+ * drawing map tool (Measure, the Geo Editor) has claimed is ignored, the way
+ * the host's Identify handlers stand down (GeoLibre#3237).
  *
- * @param control - The mounted raster control.
+ * @returns Whether the inspector should read this click.
  */
-function guardRasterInspectorClicks(control: RasterControl): void {
-  const inspector = (control as unknown as RasterControlInternals)._inspector;
-  const onClick = inspector?._onClick;
-  if (!inspector || typeof onClick !== "function") return;
-  inspector._onClick = (event: unknown) => {
-    if (isMapClickClaimed()) return;
-    onClick.call(inspector, event);
-  };
+export function rasterInspectorClickFilter(): boolean {
+  return !isMapClickClaimed();
 }
 
 type RasterControlConstructor = typeof RasterControl;
@@ -1071,10 +1063,10 @@ async function ensureRasterControl(app: GeoLibreAppAPI): Promise<RasterControl |
     }
     rasterControlMounted = true;
     rasterHostApp = app;
-    // Before the first await: setRasterPixelInspect can enable the inspector
-    // as soon as the control is mounted, and an enable that binds the
-    // unwrapped handler would leave it attached after disable().
-    guardRasterInspectorClicks(rasterControl);
+    // Keep the pixel inspector from reading a click that a drawing map tool
+    // (Measure, the Geo Editor) owns, the way the host's Identify handlers
+    // stand down (GeoLibre#3237).
+    rasterControl.setInspectorClickFilter(rasterInspectorClickFilter);
     // The control mounts hidden: project restore must not surface a map
     // button the user never asked for. openRasterLayerPanel shows it.
     await patchTauriRasterOverlayFactory(rasterControl);

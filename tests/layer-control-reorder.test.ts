@@ -6,7 +6,6 @@ import {
   LayerControlHost,
   type LayerControlHostAdapter,
   layerControlReorderMove,
-  orderLayerStates,
 } from "../packages/map/src/layer-control-host";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
@@ -57,38 +56,11 @@ describe("layerControlReorderMove", () => {
   });
 });
 
-// A refused move must not leave the control's layerStates in the move's
-// order: the control sorts layers with no native layer on the map (e.g.
-// hidden plugin layers) by that record's key order.
-describe("orderLayerStates", () => {
-  it("restores the panel order, Background first", () => {
-    const refused = { Background: 0, g1: 1, top: 2, s1: 3, g2: 4 };
-    assert.deepEqual(Object.keys(orderLayerStates(refused, ["top", "g1", "s1", "g2"])), [
-      "Background",
-      "top",
-      "g1",
-      "s1",
-      "g2",
-    ]);
-  });
-
-  it("keeps entries the panel order does not list, after the listed ones", () => {
-    const states = { extra: "x", b: "b", a: "a" };
-    const ordered = orderLayerStates(states, ["a", "b", "missing"]);
-    assert.deepEqual(Object.keys(ordered), ["a", "b", "extra"]);
-    assert.equal(ordered.extra, "x");
-  });
-});
-
 interface MountedControlWithReorder {
   onAdd: (map: unknown) => HTMLElement;
   onRemove?: (map: unknown) => void;
   onLayerReorder?: (ids: string[]) => void;
-  state?: {
-    collapsed?: boolean;
-    layerStates?: Record<string, { visible: boolean; opacity: number; name: string }>;
-  };
-  buildLayerItems?: () => void;
+  setLayerOrder: (ids: readonly string[]) => void;
 }
 
 describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)", () => {
@@ -259,22 +231,14 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
         .reverse();
       assert.deepEqual(currentOrder, ["g2", "g1", "u"]);
 
-      // Set up the control's internal layerStates reflecting the rejected reorder attempt
-      // (as would occur during a drag or context-menu reorder before validation).
-      let buildLayerItemsCalled = false;
-      mounted.state = {
-        ...mounted.state,
-        layerStates: {
-          Background: { visible: true, opacity: 1, name: "Background" },
-          g2: { visible: true, opacity: 1, name: "G2" },
-          u: { visible: true, opacity: 1, name: "U" },
-          g1: { visible: true, opacity: 1, name: "G1" },
-        },
-      };
-      const originalBuildLayerItems = mounted.buildLayerItems?.bind(mounted);
-      mounted.buildLayerItems = () => {
-        buildLayerItemsCalled = true;
-        originalBuildLayerItems?.();
+      // The control has already moved the row by the time it reports the
+      // reorder, so a refused move must put the panel back through the
+      // control's public setLayerOrder.
+      const restoredOrders: string[][] = [];
+      const setLayerOrder = mounted.setLayerOrder.bind(mounted);
+      mounted.setLayerOrder = (ids) => {
+        restoredOrders.push([...ids]);
+        setLayerOrder(ids);
       };
 
       // Attempt to split the group by inserting u between g2 and g1: ["g2", "u", "g1"]
@@ -289,14 +253,8 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
         ["g2", "g1", "u"],
       );
 
-      // Control state order must be restored to previous panel order (Background first)
-      assert.deepEqual(Object.keys(mounted.state?.layerStates ?? {}), [
-        "Background",
-        "g2",
-        "g1",
-        "u",
-      ]);
-      assert.equal(buildLayerItemsCalled, true);
+      // The panel order is restored to the previous one.
+      assert.deepEqual(restoredOrders, [["g2", "g1", "u"]]);
     } finally {
       host?.destroy();
       globals.document = previous.document;
