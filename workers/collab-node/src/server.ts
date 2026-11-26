@@ -36,7 +36,9 @@ import {
   type ServerMessage,
   type SessionLogEntry,
   type SessionParticipant,
+  CRDT_FEATURE,
 } from "@geolibre/collab-core";
+import { docUpdateMessages, MAX_DOC_BYTES, RelayDoc } from "@geolibre/collab-core/crdt-relay";
 import { WebSocket, WebSocketServer } from "ws";
 import { SessionStore, type StoredSession } from "./store.js";
 
@@ -76,6 +78,10 @@ interface LiveSession {
   peers: Set<Peer>;
   presence: Map<string, PresenceEntry>;
   cleanup?: NodeJS.Timeout;
+  /** The session's op-level document, opened on first use (`relayDocument`). */
+  doc?: RelayDoc;
+  /** Revision counter, mirrored from storage while the document is open. */
+  rev: number;
 }
 
 export interface RelayOptions {
@@ -83,6 +89,8 @@ export interface RelayOptions {
   host?: string;
   dbPath?: string;
   maxSnapshotBytes?: number;
+  /** Ceiling on a session's op-level document; `COLLAB_MAX_DOC_BYTES`. */
+  maxDocBytes?: number;
   idleTtlMs?: number;
   trustProxy?: boolean;
   /**
@@ -163,6 +171,8 @@ export function createRelay(options: RelayOptions = {}): {
   const dbPath = options.dbPath ?? process.env.COLLAB_DB_PATH ?? "./data/collab.sqlite";
   const maxSnapshotBytes =
     options.maxSnapshotBytes ?? positive(process.env.COLLAB_MAX_SNAPSHOT_BYTES, MAX_SNAPSHOT_BYTES);
+  const maxDocBytes =
+    options.maxDocBytes ?? positive(process.env.COLLAB_MAX_DOC_BYTES, MAX_DOC_BYTES);
   const idleTtlMs =
     options.idleTtlMs ?? positive(process.env.COLLAB_IDLE_TTL_MS, DEFAULT_IDLE_TTL_MS);
   const trustProxy =
@@ -227,7 +237,7 @@ export function createRelay(options: RelayOptions = {}): {
   function live(id: string): LiveSession {
     let session = sessions.get(id);
     if (!session) {
-      session = { peers: new Set(), presence: new Map() };
+      session = { peers: new Set(), presence: new Map(), rev: 0 };
       sessions.set(id, session);
     }
     if (session.cleanup) {
@@ -235,6 +245,71 @@ export function createRelay(options: RelayOptions = {}): {
       session.cleanup = undefined;
     }
     return session;
+  }
+
+  function tooLarge(): ServerMessage {
+    return {
+      type: "error",
+      code: "too-large",
+      message: "Project is too large to sync live. Share it via URL instead.",
+    };
+  }
+
+  /**
+   * The session document, opened (and, for a session that predates op-level
+   * sync, migrated from its stored snapshot) on first use.
+   */
+  function relayDocument(id: string, session: LiveSession, persisted: StoredSession): RelayDoc {
+    if (session.doc) return session.doc;
+    session.rev = persisted.rev ?? 0;
+    session.doc = new RelayDoc({
+      storage: store.docStorage(id),
+      maxDocBytes,
+      legacySnapshot: () => persisted.snapshot,
+      onMigrated: () => store.clearSnapshot(id),
+      onUpdate: (update, origin) => fanOutDocUpdate(id, session, update, origin),
+    });
+    return session.doc;
+  }
+
+  /**
+   * Send one accepted document change to every other peer: as `doc-update`
+   * frames to op-level clients, and as a whole `snapshot` to clients still on
+   * the snapshot protocol.
+   */
+  function fanOutDocUpdate(
+    id: string,
+    session: LiveSession,
+    update: Uint8Array,
+    origin: string,
+  ): void {
+    session.rev += 1;
+    const rev = session.rev;
+    store.saveRev(id, rev);
+    appendLog(id, { type: "snapshot", ts: Date.now(), rev, origin });
+    const frames = docUpdateMessages(update, origin, rev, () => randomUUID()).map((m) =>
+      JSON.stringify(m),
+    );
+    let snapshotPayload: string | null | undefined;
+    for (const peer of session.peers) {
+      const participant = peer.participant;
+      if (!participant || participant.clientId === origin) continue;
+      if (participant.crdt) {
+        for (const frame of frames) sendRaw(peer, frame);
+        continue;
+      }
+      if (snapshotPayload === undefined) {
+        const payload = JSON.stringify({
+          type: "snapshot",
+          project: session.doc!.materialize(),
+          origin,
+          rev,
+        } satisfies ServerMessage);
+        snapshotPayload = ENCODER.encode(payload).length > maxSnapshotBytes ? null : payload;
+      }
+      if (snapshotPayload) sendRaw(peer, snapshotPayload);
+      else send(peer, tooLarge());
+    }
   }
 
   function participants(session: LiveSession): SessionParticipant[] {
@@ -280,6 +355,7 @@ export function createRelay(options: RelayOptions = {}): {
     if (!session.peers.delete(peer)) return;
     if (peer.participant) {
       session.presence.delete(peer.participant.clientId);
+      session.doc?.forget(peer.participant.clientId);
       appendLog(id, { type: "leave", ts: Date.now(), clientId: peer.participant.clientId });
     }
     broadcastParticipants(session);
@@ -370,6 +446,18 @@ export function createRelay(options: RelayOptions = {}): {
         identity: joined.identity,
       });
       const welcomeInvites = role === "host" ? store.getInvites(id) : undefined;
+      const doc = relayDocument(id, session, persisted);
+      // An op-level client fetches the project with `doc-sync`; a snapshot
+      // client gets it inline, unless it outgrew what one frame may carry.
+      let snapshot: unknown = null;
+      let snapshotTooLarge = false;
+      if (!peer.participant.crdt && !doc.project.isEmpty()) {
+        snapshot = doc.materialize();
+        if (ENCODER.encode(JSON.stringify(snapshot)).length > maxSnapshotBytes) {
+          snapshot = null;
+          snapshotTooLarge = true;
+        }
+      }
 
       send(peer, {
         type: "welcome",
@@ -377,15 +465,17 @@ export function createRelay(options: RelayOptions = {}): {
         role,
         mode: persisted.mode,
         participants: participants(session).map(toWireParticipant),
-        snapshot: persisted.snapshot,
+        snapshot,
         presence: Object.fromEntries(session.presence),
         chat: persisted.chat,
-        rev: persisted.rev,
+        rev: session.rev,
         requireIdentity: persisted.requireIdentity,
         identitySupported,
         lockedLayerIds: persisted.lockedLayerIds,
         ...(welcomeInvites ? { invites: welcomeInvites } : {}),
+        features: [CRDT_FEATURE],
       });
+      if (snapshotTooLarge) send(peer, tooLarge());
       broadcastParticipants(session, peer);
       return;
     }
@@ -400,13 +490,20 @@ export function createRelay(options: RelayOptions = {}): {
       return;
     }
 
+    const doc = relayDocument(id, session, persisted);
+
     if (message.type === "snapshot") {
+      // A whole-project snapshot from a client on the snapshot protocol: checked
+      // as before, then written into the document as the differences from it,
+      // so op-level peers receive it as an ordinary update.
+      const stored = doc.project.isEmpty() ? null : doc.materialize();
+      const byteLength = ENCODER.encode(text).length;
       const authorization = authorizeSnapshot(
         participant,
         persisted.mode,
-        ENCODER.encode(text).length,
+        byteLength,
         maxSnapshotBytes,
-        persisted.snapshot,
+        stored,
         message.project,
         persisted.lockedLayerIds,
       );
@@ -416,31 +513,65 @@ export function createRelay(options: RelayOptions = {}): {
           code: authorization.code,
           message: authorization.message,
         });
-        if (shouldResyncRejectedSnapshot(authorization) && persisted.snapshot) {
+        if (shouldResyncRejectedSnapshot(authorization) && stored) {
           send(peer, {
             type: "snapshot",
-            project: persisted.snapshot,
+            project: stored,
             origin: RELAY_SNAPSHOT_ORIGIN,
-            rev: persisted.rev ?? 0,
+            rev: session.rev,
           });
         }
         return;
       }
-      const project = preserveStoredComments(message.project ?? null, persisted.snapshot);
-      const nextRev = (persisted.rev ?? 0) + 1;
-      store.saveSnapshot(id, project, nextRev);
-      persisted.rev = nextRev;
-      appendLog(id, {
-        type: "snapshot",
-        ts: Date.now(),
-        rev: nextRev,
-        origin: participant.clientId,
+      const project = preserveStoredComments(message.project ?? null, stored);
+      if (!project || typeof project !== "object" || Array.isArray(project)) return;
+      if (doc.byteSize + byteLength > maxDocBytes) {
+        send(peer, tooLarge());
+        return;
+      }
+      // Fans out through `fanOutDocUpdate`, which also advances `rev`.
+      doc.writeSnapshot(project as Record<string, unknown>, participant.clientId);
+      return;
+    }
+
+    if (message.type === "doc-sync") {
+      doc.forget(participant.clientId);
+      const frames = doc.framesFor(message.stateVector, () => randomUUID());
+      if (!frames) {
+        send(peer, { type: "error", code: "bad-message", message: "Malformed state vector." });
+        return;
+      }
+      for (const frame of frames) {
+        send(peer, {
+          type: "doc-update",
+          ...frame,
+          origin: RELAY_SNAPSHOT_ORIGIN,
+          rev: session.rev,
+        });
+      }
+      send(peer, { type: "doc-synced", stateVector: doc.stateVector(), rev: session.rev });
+      return;
+    }
+
+    if (message.type === "doc-update") {
+      const result = doc.receive(participant.clientId, message, {
+        canEdit: participantCanEdit(participant, persisted.mode),
+        isHost: participant.role === "host",
+        lockedLayerIds: persisted.lockedLayerIds,
       });
-      broadcast(
-        session,
-        { type: "snapshot", project, origin: participant.clientId, rev: nextRev },
-        peer,
-      );
+      if (result.status === "error") {
+        const text =
+          result.code === "forbidden" && participant.editOverride === false
+            ? "The host has set you to view-only."
+            : result.message;
+        send(peer, { type: "error", code: result.code, message: text });
+      } else if (result.status === "reverted") {
+        send(peer, {
+          type: "error",
+          code: "layer-locked",
+          message: `Layer "${result.layerName}" is locked by the host and cannot be modified.`,
+        });
+      }
       return;
     }
 
@@ -708,19 +839,15 @@ export function createRelay(options: RelayOptions = {}): {
       )
         return;
       participant.lastCommentTs = now;
-      const project =
-        persisted.snapshot &&
-        typeof persisted.snapshot === "object" &&
-        !Array.isArray(persisted.snapshot)
-          ? { ...(persisted.snapshot as Record<string, unknown>) }
-          : {};
+      const project: Record<string, unknown> = {};
+      const storedComments = doc.project.fields.get("comments");
       // Non-object entries are filtered out, not just checked for array-ness.
-      // Snapshot content is opaque and unvalidated, so a client can plant `null`
-      // into project.comments with an ordinary snapshot frame; every `.id` read
-      // below would then throw and leave commenting permanently broken for that
+      // Project content is opaque and unvalidated, so a client can plant `null`
+      // into project.comments with an ordinary edit; every `.id` read below
+      // would then throw and leave commenting permanently broken for that
       // session. The Worker tolerates the same corrupt data, so this is parity
       // as well as robustness.
-      const comments = (Array.isArray(project.comments) ? project.comments : []).filter(
+      const comments = (Array.isArray(storedComments) ? storedComments : []).filter(
         (entry): entry is Record<string, unknown> => !!entry && typeof entry === "object",
       );
       if (sanitized.type === "add") {
@@ -774,12 +901,11 @@ export function createRelay(options: RelayOptions = {}): {
       } else {
         project.comments = comments.filter((comment) => comment.id !== sanitized.commentId);
       }
-      // The Worker bounds the mutated project the same way before persisting it
+      // The Worker bounds the document the same way before persisting it
       // (workers/collab/src/session.ts). Without this the per-comment caps still
-      // permit a worst case orders of magnitude past the snapshot ceiling, so
-      // the Node relay would store and broadcast a project the Worker would have
-      // refused.
-      if (ENCODER.encode(JSON.stringify(project)).length > maxSnapshotBytes) {
+      // permit a worst case orders of magnitude past the document ceiling.
+      const added = ENCODER.encode(JSON.stringify(project.comments)).length;
+      if (doc.byteSize + added > maxDocBytes) {
         send(peer, {
           type: "error",
           code: "bad-message",
@@ -787,7 +913,7 @@ export function createRelay(options: RelayOptions = {}): {
         });
         return;
       }
-      store.saveProjectState(id, project);
+      doc.setField("comments", project.comments);
       broadcast(session, { type: "comment-mutation", action: sanitized }, peer);
     }
   }

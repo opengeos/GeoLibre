@@ -7,6 +7,7 @@ import {
   parseStoredChat,
   SESSION_LOG_LIMIT,
 } from "@geolibre/collab-core";
+import { chunkBytes, joinBytes, type DocStorage } from "@geolibre/collab-core/crdt-relay";
 import type {
   CollabChatMessage,
   CollabInvite,
@@ -110,7 +111,17 @@ export class SessionStore {
         session_id TEXT PRIMARY KEY,
         log TEXT NOT NULL DEFAULT '[]'
       );
+      CREATE TABLE IF NOT EXISTS collab_doc_chunks (
+        session_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        entry INTEGER NOT NULL,
+        part INTEGER NOT NULL,
+        value BLOB NOT NULL,
+        PRIMARY KEY (session_id, kind, entry, part)
+      );
     `);
+    // The op-level document (#3530): kind 'base' holds the compacted state
+    // and kind 'log' the updates since, each split into row-sized parts.
     // The host-only session log has its own table so the per-frame session
     // read (`get`) does not also load up to 100 KB of log text.
 
@@ -176,10 +187,82 @@ export class SessionStore {
       .run(JSON.stringify(snapshot), rev, Date.now(), id);
   }
 
-  saveProjectState(id: string, project: unknown): void {
+  /** Drop a session's whole-project snapshot once it lives in a document. */
+  clearSnapshot(id: string): void {
+    this.db.prepare("UPDATE collab_sessions SET snapshot = NULL WHERE id = ?").run(id);
+  }
+
+  /** Save the revision counter the relay advances on every document change. */
+  saveRev(id: string, rev: number): void {
     this.db
-      .prepare("UPDATE collab_sessions SET snapshot = ?, updated_at = ? WHERE id = ?")
-      .run(JSON.stringify(project), Date.now(), id);
+      .prepare("UPDATE collab_sessions SET rev = ?, updated_at = ? WHERE id = ?")
+      .run(rev, Date.now(), id);
+  }
+
+  /**
+   * Storage for one session's op-level document, backed by
+   * `collab_doc_chunks`.
+   *
+   * @param sessionId - The session code.
+   * @returns The synchronous storage interface `RelayDoc` drives.
+   */
+  docStorage(sessionId: string): DocStorage {
+    const db = this.db;
+    const insert = db.prepare(
+      "INSERT INTO collab_doc_chunks (session_id, kind, entry, part, value) VALUES (?, ?, ?, ?, ?)",
+    );
+    return {
+      load: () => {
+        const rows = db
+          .prepare(
+            "SELECT kind, entry, value FROM collab_doc_chunks WHERE session_id = ? ORDER BY kind, entry, part",
+          )
+          .all(sessionId) as { kind: string; entry: number; value: Uint8Array }[];
+        const base: Uint8Array[] = [];
+        const log = new Map<number, Uint8Array[]>();
+        for (const row of rows) {
+          if (row.kind === "base") base.push(row.value);
+          else {
+            const parts = log.get(row.entry) ?? [];
+            parts.push(row.value);
+            log.set(row.entry, parts);
+          }
+        }
+        return {
+          base: base.length ? joinBytes(base) : null,
+          log: Array.from(log.values(), (parts) => joinBytes(parts)),
+        };
+      },
+      append: (update) => {
+        const row = db
+          .prepare(
+            "SELECT MAX(entry) AS entry FROM collab_doc_chunks WHERE session_id = ? AND kind = 'log'",
+          )
+          .get(sessionId) as { entry: number | null } | undefined;
+        const entry = (row?.entry ?? -1) + 1;
+        db.exec("BEGIN");
+        try {
+          chunkBytes(update).forEach((part, index) =>
+            insert.run(sessionId, "log", entry, index, part),
+          );
+          db.exec("COMMIT");
+        } catch (error) {
+          db.exec("ROLLBACK");
+          throw error;
+        }
+      },
+      replace: (base) => {
+        db.exec("BEGIN");
+        try {
+          db.prepare("DELETE FROM collab_doc_chunks WHERE session_id = ?").run(sessionId);
+          chunkBytes(base).forEach((part, index) => insert.run(sessionId, "base", 0, index, part));
+          db.exec("COMMIT");
+        } catch (error) {
+          db.exec("ROLLBACK");
+          throw error;
+        }
+      },
+    };
   }
 
   saveMode(id: string, mode: CollaborationMode): void {
@@ -387,6 +470,7 @@ export class SessionStore {
       this.db.prepare("DELETE FROM collab_durable_overrides WHERE session_id = ?").run(id);
       this.db.prepare("DELETE FROM collab_blocked_keys WHERE session_id = ?").run(id);
       this.db.prepare("DELETE FROM collab_session_logs WHERE session_id = ?").run(id);
+      this.db.prepare("DELETE FROM collab_doc_chunks WHERE session_id = ?").run(id);
       this.db.exec("COMMIT");
     } catch (err) {
       this.db.exec("ROLLBACK");
@@ -408,6 +492,7 @@ export class SessionStore {
           this.db.prepare("DELETE FROM collab_durable_overrides WHERE session_id = ?").run(row.id);
           this.db.prepare("DELETE FROM collab_blocked_keys WHERE session_id = ?").run(row.id);
           this.db.prepare("DELETE FROM collab_session_logs WHERE session_id = ?").run(row.id);
+          this.db.prepare("DELETE FROM collab_doc_chunks WHERE session_id = ?").run(row.id);
         }
       }
       this.db.exec("COMMIT");

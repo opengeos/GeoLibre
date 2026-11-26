@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./protocol": "./src/protocol.ts",
     "./comment-validate": "./src/comment-validate.ts",
-    "./crdt": "./src/crdt.ts"
+    "./crdt": "./src/crdt.ts",
+    "./crdt-relay": "./src/crdt-relay.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

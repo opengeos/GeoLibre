@@ -42,6 +42,8 @@ export interface SessionParticipant {
   inviteShared?: boolean;
   lastChatTs?: number;
   lastCommentTs?: number;
+  /** True when the client joined with the op-level `crdt-v1` protocol. */
+  crdt?: boolean;
 }
 
 export function participantCanEdit(

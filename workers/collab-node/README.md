@@ -17,6 +17,11 @@ Configuration:
 - `COLLAB_MAX_SNAPSHOT_BYTES` — maximum UTF-8 snapshot frame size (default
   `10000000`, `MAX_SNAPSHOT_BYTES` from `@geolibre/collab-core`, matching the
   hosted Worker and the root `docker-compose.yml`)
+- `COLLAB_MAX_DOC_BYTES` — maximum persisted size of a session's op-level
+  document (default `33554432`, 32 MiB, `MAX_DOC_BYTES` from
+  `@geolibre/collab-core/crdt-relay`). Op-level clients send it in chunks of
+  at most 512 KiB, so this bound is independent of the frame size; raise it on
+  a host with memory to spare
 - `COLLAB_IDLE_TTL_MS` — time after the last participant disconnects before the
   session and its persisted data are deleted (default two hours)
 

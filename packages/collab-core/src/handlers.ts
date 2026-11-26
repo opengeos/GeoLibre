@@ -1,3 +1,4 @@
+import { CRDT_FEATURE } from "./protocol";
 import type {
   ClientMessage,
   CollabChatMessage,
@@ -244,6 +245,9 @@ export async function resolveJoin(options: ResolveJoinOptions): Promise<ResolveJ
     identity,
     inviteToken,
     ...(finalInviteShared ? { inviteShared: true } : {}),
+    ...(Array.isArray(message.features) && message.features.includes(CRDT_FEATURE)
+      ? { crdt: true }
+      : {}),
   };
 
   return { status: "ok", participant, identity, role };
