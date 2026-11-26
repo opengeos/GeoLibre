@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { PopupOptions } from "maplibre-gl";
+import { Popup as MapLibrePopup, type PopupOptions } from "maplibre-gl";
+// The installed engine's camera modules, to drive its real Popup on a globe.
+import { createCameraContext } from "../node_modules/maplibre-gl/src/camera/camera_context.ts";
+import {
+  resize,
+  setCenter,
+  setZoom,
+} from "../node_modules/maplibre-gl/src/camera/camera_updates.ts";
+import { createCameraViewState } from "../node_modules/maplibre-gl/src/camera/camera_view_state.ts";
+import { projectCamera } from "../node_modules/maplibre-gl/src/camera/project_camera.ts";
+import { LngLat } from "../node_modules/maplibre-gl/src/geo/lng_lat.ts";
 import {
   GLOBE_POPUP_OCCLUDED_CLASS,
   installGlobePopupOcclusion,
@@ -336,5 +346,32 @@ describe("installGlobePopupOcclusion", () => {
     installGlobePopupOcclusion(maplibre);
 
     assert.equal((maplibre.Popup.prototype as { addTo: unknown }).addTo, once);
+  });
+});
+
+describe("the installed maplibre-gl Popup", () => {
+  it("writes the occluded opacity behind the globe and clears it in front, on every call", () => {
+    // The 6.19 fallback reads this write back, so it must also clear on
+    // visible frames, or a popup that came round the globe would stay hidden.
+    const context = createCameraContext({ projection: "globe", projectionTransition: 1 });
+    let view = resize(createCameraViewState(), context, 1000, 600);
+    view = setCenter(view, context, new LngLat(0, 0));
+    view = setZoom(view, context, 1);
+    const popup = new MapLibrePopup({ locationOccludedOpacity: "50%" }) as unknown as {
+      _container: { style: { opacity: string } };
+      _map: unknown;
+      _lngLat: unknown;
+      _updateOpacity: () => void;
+    };
+    popup._container = { style: { opacity: "" } };
+    popup._map = { _camera: { projectedCamera: projectCamera(view, context), context } };
+
+    popup._lngLat = new LngLat(180, 0);
+    popup._updateOpacity();
+    assert.equal(popup._container.style.opacity, "50%");
+
+    popup._lngLat = new LngLat(0, 0);
+    popup._updateOpacity();
+    assert.equal(popup._container.style.opacity, "");
   });
 });

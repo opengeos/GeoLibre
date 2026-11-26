@@ -80,13 +80,14 @@ function resolveOccludableTransform(
  * MapLibre 6.19 removed the transform and computes occlusion with camera math
  * it does not export, so there is nothing left to ask. Its `_updateOpacity`
  * (which the instrumented wrapper runs right before this) writes
- * `locationOccludedOpacity` onto the container when the location is behind the
- * globe and clears it otherwise, so that write is the answer.
+ * `locationOccludedOpacity` onto the container on every call when the location
+ * is behind the globe and clears it otherwise, so a non-empty inline opacity is
+ * the answer. Comparing it with the option would miss values the browser
+ * normalizes or cannot read as a number, such as `"50%"`.
+ * `tests/globe-popup-occlusion.test.ts` holds the installed `Popup` to that.
  */
-function maplibreMarkedOccluded(container: HTMLElement, opacity: number | string): boolean {
-  const written = container.style.opacity;
-  if (written === "") return false;
-  return Number(written) === Number(opacity);
+function maplibreMarkedOccluded(container: HTMLElement): boolean {
+  return container.style.opacity !== "";
 }
 
 function shouldSuppressInteraction(popup: PopupInternals): boolean {
@@ -141,7 +142,7 @@ export function syncPopupGlobeOcclusion(popup: Popup): boolean {
   const occluded =
     typeof isLocationOccluded === "function"
       ? Boolean(lngLat) && Boolean(isLocationOccluded.call(transform, lngLat))
-      : Boolean(lngLat) && maplibreMarkedOccluded(container, opacity);
+      : Boolean(lngLat) && maplibreMarkedOccluded(container);
   container.style.opacity = occluded ? `${opacity}` : "";
   setPopupOccluded(container, occluded && shouldSuppressInteraction(popupInternals));
   return occluded;

@@ -110,6 +110,13 @@ const cameraViews = new WeakMap<CameraLike, object>();
  * A stand-in transform for MapLibre 6.19+, one per camera, that reads every
  * property from the camera's current `projectedCamera`. `_nearZ`/`_farZ` map to
  * `nearZ`/`farZ` as on 6.18.
+ *
+ * Unlike the per-instance aliases above, this is a Proxy: `projectedCamera` is
+ * a fresh object whenever the camera moves, so there is no stable instance to
+ * define properties on. It stays cheap on the render path because deck.gl reads
+ * at most four properties a frame and MapLibre memoizes the getter (its
+ * rendered state and projected camera are cached per view state), so each read
+ * is a lookup, not a recomputation.
  */
 function projectedCameraView(camera: CameraLike): object {
   let view = cameraViews.get(camera);
