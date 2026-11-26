@@ -528,8 +528,19 @@ export class ProjectDoc {
     this.fields.observeDeep(this.onFields);
   }
 
-  /** Stop observing the document and drop the caches (the doc lives on). */
+  private destroyed = false;
+
+  private assertLive(): void {
+    if (this.destroyed) throw new TypeError("This ProjectDoc has been destroyed.");
+  }
+
+  /**
+   * Stop observing the document and drop the caches (the doc lives on). The
+   * wrapper cannot be used afterwards: without its observers its caches
+   * would go stale.
+   */
   destroy(): void {
+    this.destroyed = true;
     this.layers.unobserveDeep(this.onLayers);
     this.fields.unobserveDeep(this.onFields);
     this.layerCache.clear();
@@ -590,6 +601,10 @@ export class ProjectDoc {
     const ignore = options.ignore;
     const writtenFields: [string, unknown][] = [];
     const writtenLayers: [string, JsonObject][] = [];
+    this.assertLive();
+    // `_transaction` is Yjs's open-transaction slot (checked against
+    // yjs 13.6.33); "writes correctly inside a caller's transaction" in
+    // tests/collab-crdt.test.ts fails if an upgrade changes it.
     const nested = this.doc._transaction !== null;
     this.foreignChanges.fields.clear();
     this.foreignChanges.layers.clear();
@@ -663,7 +678,6 @@ export class ProjectDoc {
     for (const [key, value] of writtenFields) {
       if (!this.foreignChanges.fields.has(key)) this.fieldCache.set(key, value);
     }
-    if (nested) return;
     for (const [id, value] of writtenLayers) {
       const map = this.layers.get(id);
       if (map instanceof Y.Map && !this.foreignChanges.layers.has(id)) {
@@ -675,6 +689,7 @@ export class ProjectDoc {
 
   /** The project the document currently holds, as plain JSON. */
   read(): ProjectRecord {
+    this.assertLive();
     const project: JsonObject = {};
     this.fields.forEach((value, key) => {
       if (key === "layers") return;

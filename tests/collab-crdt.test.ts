@@ -398,6 +398,8 @@ describe("feature identity and edge cases", () => {
     doc.destroy();
     doc.fields.set("projectName", "Changed");
     assert.equal(before.projectName, "Shared");
+    assert.throws(() => doc.read(), TypeError);
+    assert.throws(() => doc.write(project(), "local"), TypeError);
   });
 
   it("refuses a chunk id the assembler would reject", () => {
