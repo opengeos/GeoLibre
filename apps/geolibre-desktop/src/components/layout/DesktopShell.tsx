@@ -9,15 +9,7 @@ import {
   subscribeGeometryEdit,
 } from "@geolibre/plugins/geo-editor-state";
 import { openRightPanel } from "@geolibre/plugins/runtime";
-import {
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { BROWSER_PANEL_ID, useRegisterBrowserPanel } from "../../hooks/useRegisterBrowserPanel";
 import { COMMENTS_PANEL_ID, useRegisterCommentsPanel } from "../../hooks/useRegisterCommentsPanel";
 import { useRegisterObiaPanel } from "../../hooks/useRegisterObiaPanel";
