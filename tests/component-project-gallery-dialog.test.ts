@@ -140,9 +140,7 @@ describe("ProjectGalleryDialog", () => {
     });
     await waitFor(() => assert.ok(text().includes("Great Lakes")));
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
-    await waitFor(() =>
-      assert.ok(text().includes("bad file") || text().includes("Could not open")),
-    );
+    await waitFor(() => assert.ok(text().includes("bad file")));
     assert.deepEqual(opened, [`${BASE}/mapper/lakes.geolibre.json`]);
     fail = false;
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
@@ -153,9 +151,10 @@ describe("ProjectGalleryDialog", () => {
     const urls = shareServer({ failPublic: 500 });
     renderGallery();
     await waitFor(() => assert.ok(text().includes("HTTP 500")));
-    const before = urls.length;
+    const listings = () => urls.filter((url) => url.startsWith("/api/projects")).length;
+    const before = listings();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => assert.ok(urls.length > before));
+    await waitFor(() => assert.ok(listings() > before));
   });
 
   it("hides the personal tabs without a share token", async () => {
@@ -178,7 +177,8 @@ describe("ProjectGalleryDialog", () => {
       "true",
     );
     assert.ok(urls.includes("/api/users/me"));
-    assert.ok(text().includes("Private"));
+    // The visibility badge itself, not the "Private survey" title.
+    assert.equal(screen.queryAllByText("Private", { exact: true }).length, 1);
   });
 
   it("browses public collections", async () => {

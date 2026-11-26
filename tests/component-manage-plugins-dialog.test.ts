@@ -5,6 +5,7 @@ import {
   screen,
   useDesktopSettingsStore,
   waitFor,
+  within,
 } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -127,7 +128,7 @@ describe("ManagePluginsDialog", () => {
     const input = screen.getByRole("textbox", { name: "Plugin manifest URL" });
     fireEvent.change(input, { target: { value: "http://plugins.example.com/x/plugin.json" } });
     // The directory row has its own Add button; use the one beside this field.
-    fireEvent.click(input.parentElement!.querySelector("button")!);
+    fireEvent.click(within(input.parentElement!).getByRole("button", { name: "Add" }));
     assert.ok(text().includes("Manifest URLs must use HTTPS"));
     assert.deepEqual(manifestUrls(), []);
     fireEvent.change(input, { target: { value: "https://plugins.example.com/x/plugin.json" } });
