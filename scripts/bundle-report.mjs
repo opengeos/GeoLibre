@@ -9,7 +9,7 @@
 // The boot set is read from the built index.html rather than recomputed from
 // the module graph, so it is exactly what a browser fetches. The build itself
 // enforces the boot budgets (bootBundleBudgetPlugin in
-// apps/geolibre-desktop/vite.config.ts); this report only shows them next to
+// apps/geolibre-desktop/vite-chunking.ts); this report only shows them next to
 // the measured numbers. Both read apps/geolibre-desktop/boot-budget.json.
 //
 // Options:
