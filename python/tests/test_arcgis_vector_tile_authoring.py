@@ -1,0 +1,407 @@
+"""Styled ArcGIS VectorTileServer authoring across the project, Map and MCP APIs."""
+
+import asyncio
+import copy
+import io
+import json
+from unittest import mock
+
+import pytest
+
+import geolibre.geolibre as gmod
+from geolibre import Map
+from geolibre import project as project_api
+
+SERVICE = (
+    "https://vectortileservices3.arcgis.com/GVgbJbqm8hXASVYi/arcgis/rest/services/"
+    "Santa_Monica_parcels_VTL/VectorTileServer"
+)
+
+
+def _documents():
+    """Build the service description and style the public service serves.
+
+    Returns:
+        The service JSON and its default style JSON, trimmed to two layers.
+    """
+    info = {
+        "name": "Santa_Monica_parcels_VTL",
+        "defaultStyles": "resources/styles",
+        "tiles": ["tile/{z}/{y}/{x}.pbf"],
+        "fullExtent": {
+            "xmin": -13193261.092669973,
+            "ymin": 4028181.640355066,
+            "xmax": -13185072.883365816,
+            "ymax": 4035576.6410953267,
+            "spatialReference": {"wkid": 102100, "latestWkid": 3857},
+        },
+    }
+    style = {
+        "version": 8,
+        "sprite": "../sprites/sprite",
+        "glyphs": "../fonts/{fontstack}/{range}.pbf",
+        "sources": {
+            "Santa_Monica_parcels_VTL": {
+                "type": "vector",
+                "bounds": [-118.517, 33.9954, -118.444, 34.0504],
+                "minzoom": 0,
+                "maxzoom": 23,
+                "scheme": "xyz",
+                "url": "../../",
+            }
+        },
+        "layers": [
+            {
+                "id": "Santa_Monica_ClientSide_Parcels/Residential",
+                "type": "fill",
+                "source": "Santa_Monica_parcels_VTL",
+                "source-layer": "Santa_Monica_ClientSide_Parcels",
+                "filter": ["==", "_symbol", 0],
+                "minzoom": 11,
+                "maxzoom": 18,
+                "layout": {},
+                "paint": {"fill-color": "rgba(255,222,62,0.7)"},
+            },
+            {
+                "id": "Parcel labels",
+                "type": "symbol",
+                "source": "Santa_Monica_parcels_VTL",
+                "source-layer": "Santa_Monica_ClientSide_Parcels",
+                "layout": {"text-field": "{APN}", "text-font": ["Arial Regular"]},
+                "paint": {},
+            },
+        ],
+    }
+    return info, style
+
+
+@pytest.fixture
+def vts(monkeypatch):
+    """Serve a VectorTileServer's description and style without network access.
+
+    Args:
+        monkeypatch: Pytest fixture for replacing the public metadata transport.
+
+    Returns:
+        The mutable service JSON, style JSON and the list of requested URLs.
+    """
+    info, style = _documents()
+    requested = []
+    monkeypatch.setattr(project_api, "_assert_public_url", lambda _url: None)
+
+    def open_metadata(url, timeout):
+        """Return the document a URL names as a binary response.
+
+        Args:
+            url: The requested metadata URL.
+            timeout: The request timeout passed by the reader.
+
+        Returns:
+            A binary response with the service or style JSON.
+        """
+        assert 0 < timeout <= 30
+        requested.append(url)
+        document = style if "/resources/" in url or "/custom/" in url else info
+        return io.BytesIO(json.dumps(document).encode())
+
+    monkeypatch.setattr(project_api._GEOJSON_OPENER, "open", open_metadata)
+    return info, style, requested
+
+
+def _build(url=SERVICE, **kwargs):
+    """Build a layer whose id is fixed, as ``createArcGISLayerId`` would give.
+
+    Args:
+        url: The VectorTileServer URL.
+        **kwargs: Options for the builder.
+
+    Returns:
+        The layer dict.
+    """
+    with mock.patch.object(project_api.uuid, "uuid4", lambda: "arcgis-layer-1"):
+        return project_api.arcgis_vector_tile_layer(url, **kwargs)
+
+
+def test_layer_matches_the_record_the_app_saves(vts):
+    """Write the record ``addArcGISLayer`` stores for the same public service.
+
+    The expected values were captured from the app's own plugin adding this
+    service (``createArcGISStoreLayer`` plus the resolved SDK style).
+
+    Args:
+        vts: The metadata transport fixture.
+    """
+    _, _, requested = vts
+    layer = _build()
+    assert requested == [SERVICE + "?f=json", SERVICE + "/resources/styles/?f=json"]
+    source_id = "arcgis-layer-1-source-0-Santa_Monica_parcels_VTL"
+    bounds = [-118.517, 33.9954, -118.444, 34.0504]
+    assert layer["name"] == "Santa Monica parcels VTL"
+    assert layer["type"] == "arcgis"
+    assert layer["sourcePath"] == SERVICE
+    assert (layer["style"]["fillColor"], layer["style"]["fillOpacity"]) == ("#2563eb", 0.45)
+    assert layer["style"]["strokeColor"] == "#1d4ed8"
+    assert layer["metadata"] == {
+        "arcgisLayerType": "vector-tile",
+        "arcgisSourceType": "url",
+        "bounds": bounds,
+        "externalNativeLayer": True,
+        "hasAccessToken": False,
+        "nativeLayerIds": [
+            "arcgis-layer-1-layer-0-Santa_Monica_ClientSide_Parcels-Residential",
+            "arcgis-layer-1-layer-1-Parcel-labels",
+        ],
+        "sourceId": source_id,
+        "sourceIds": [source_id],
+        "sourceKind": "arcgis-vector-tile-url",
+    }
+    source = layer["source"]
+    assert {key: value for key, value in source.items() if not key.startswith("arcgis")} == {
+        "bounds": bounds,
+        "layerType": "vector-tile",
+        "sourceId": source_id,
+        "sourceIds": [source_id],
+        "type": "vector",
+        "url": SERVICE,
+    }
+    assert source["arcgisSources"] == {
+        source_id: {
+            "type": "vector",
+            "bounds": bounds,
+            "minzoom": 0,
+            "maxzoom": 23,
+            "scheme": "xyz",
+            "url": SERVICE + "/",
+            "tiles": [SERVICE + "/tile/{z}/{y}/{x}.pbf"],
+            "attribution": "",
+        }
+    }
+    first, label = source["arcgisLayers"]
+    assert first["source"] == label["source"] == source_id
+    assert first["filter"] == ["==", "_symbol", 0]
+    assert label["layout"]["text-font"] == ["Arial Regular"]
+
+
+def test_service_extent_credit_and_custom_style_path(vts):
+    """Fall back to the service extent and credit, and follow ``defaultStyles``.
+
+    Args:
+        vts: The mutable metadata transport fixture.
+    """
+    info, style, requested = vts
+    info["defaultStyles"] = "custom/root"
+    info["copyrightText"] = '<a href="x" onclick="y">City</a> of <b>Santa Monica'
+    info["tiles"] = ["tiles/{z}/{y}/{x}.mvt"]
+    del style["sources"]["Santa_Monica_parcels_VTL"]["bounds"]
+    layer = _build()
+    assert requested[-1] == SERVICE + "/custom/root/?f=json"
+    west, south, east, north = layer["metadata"]["bounds"]
+    assert west == pytest.approx(-118.517, abs=1e-3)
+    assert north == pytest.approx(34.0504, abs=1e-3)
+    assert layer["source"]["bounds"] == layer["metadata"]["bounds"]
+    (spec,) = layer["source"]["arcgisSources"].values()
+    # "../../" is resolved against the custom style URL, as the SDK does.
+    assert spec["url"] == SERVICE + "/"
+    assert spec["tiles"] == [SERVICE + "/tiles/{z}/{y}/{x}.mvt"]
+    assert spec["attribution"] == "City of Santa Monica"
+
+
+def test_overrides_and_missing_default_styles(vts):
+    """Honor caller name, bounds and attribution; default the style path.
+
+    Args:
+        vts: The mutable metadata transport fixture.
+    """
+    info, _, requested = vts
+    del info["defaultStyles"]
+    layer = _build(name="Parcels", bounds=[-119, 33, -118, 35], attribution="Mine")
+    assert requested[-1] == SERVICE + "/resources/styles/?f=json"
+    assert layer["name"] == "Parcels"
+    assert layer["metadata"]["bounds"] == [-119, 33, -118, 35]
+    assert all(s["attribution"] == "Mine" for s in layer["source"]["arcgisSources"].values())
+
+
+def test_background_layer_is_kept_without_a_source(vts):
+    """Keep a style's sourceless background, which ``arcgisVectorStyle`` accepts.
+
+    Args:
+        vts: The mutable metadata transport fixture.
+    """
+    _, style, _ = vts
+    style["layers"].insert(0, {"id": "bg", "type": "background", "paint": {}})
+    layer = _build()
+    assert layer["source"]["arcgisLayers"][0] == {
+        "id": "arcgis-layer-1-layer-0-bg",
+        "type": "background",
+        "paint": {},
+    }
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        SERVICE + "?token=abc",
+        "ftp://example.org/A/VectorTileServer",
+        "https://example.org/A/MapServer",
+        "https://user:pw@example.org/A/VectorTileServer",
+    ],
+)
+def test_bad_urls_are_refused_before_any_request(vts, url):
+    """Refuse tokens, credentials, other schemes and other service types.
+
+    Args:
+        vts: The metadata transport fixture.
+        url: The invalid service URL.
+    """
+    with pytest.raises(ValueError):
+        _build(url)
+    assert vts[2] == []
+
+
+def test_private_hosts_are_refused():
+    """Keep the kernel-side SSRF guard on the metadata reads."""
+    with pytest.raises(ValueError):
+        project_api.arcgis_vector_tile_layer("http://127.0.0.1/A/VectorTileServer")
+
+
+def _damage(info, style, damage):
+    """Break one part of the service documents.
+
+    Args:
+        info: The service JSON.
+        style: The style JSON.
+        damage: Which part to break.
+    """
+    source = style["sources"]["Santa_Monica_parcels_VTL"]
+    layer = style["layers"][0]
+    if damage == "raster_source":
+        source["type"] = "raster"
+    elif damage == "raster_layer":
+        layer["type"] = "raster"
+    elif damage == "unknown_source":
+        layer["source"] = "elsewhere"
+    elif damage == "no_source_layer":
+        del layer["source-layer"]
+    elif damage == "no_tiles":
+        del source["url"]
+    elif damage == "template":
+        info["tiles"] = ["tile/{z}/{x}.pbf"]
+    elif damage == "absolute_styles":
+        info["defaultStyles"] = "https://evil.example/styles"
+    elif damage == "error":
+        info.clear()
+        info["error"] = {"code": 499, "message": "Token Required"}
+    elif damage == "no_layers":
+        style["layers"] = []
+    elif damage == "too_many_layers":
+        style["layers"] = [copy.deepcopy(layer) for _ in range(5001)]
+    elif damage == "tokened_tiles":
+        source["tiles"] = ["https://example.org/t/{z}/{y}/{x}.pbf?token=abc"]
+    elif damage == "not_object":
+        style.clear()
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "raster_source",
+        "raster_layer",
+        "unknown_source",
+        "no_source_layer",
+        "no_tiles",
+        "template",
+        "absolute_styles",
+        "error",
+        "no_layers",
+        "too_many_layers",
+        "tokened_tiles",
+        "not_object",
+    ],
+)
+def test_styles_the_app_cannot_draw_never_reach_the_map(vts, monkeypatch, damage):
+    """Refuse a style ``arcgisVectorStyle`` would reject, leaving the map unchanged.
+
+    Args:
+        vts: The mutable metadata transport fixture.
+        monkeypatch: Pytest fixture for preventing the widget server startup.
+        damage: The part of the documents to break.
+    """
+    info, style, _ = vts
+    _damage(info, style, damage)
+    monkeypatch.setattr(gmod, "serve_app", lambda *_args, **_kwargs: "http://127.0.0.1:0/")
+    monkeypatch.setattr(gmod, "app_port", lambda: 0)
+    view = Map()
+    before = copy.deepcopy(view.project)
+    with pytest.raises(ValueError):
+        view.add_arcgis_vector_tile_layer(SERVICE)
+    assert view.project == before
+
+
+def test_style_size_is_bounded(vts, monkeypatch):
+    """Stop reading a style larger than its size limit.
+
+    Args:
+        vts: The metadata transport fixture.
+        monkeypatch: Pytest fixture for lowering the limit.
+    """
+    monkeypatch.setattr(project_api, "_ARCGIS_STYLE_LIMIT", 64)
+    with pytest.raises(ValueError, match="size limit"):
+        _build()
+
+
+def test_invalid_json_uses_the_documented_error(vts, monkeypatch):
+    """Report a non-JSON response as a ValueError naming the document.
+
+    Args:
+        vts: The metadata transport fixture.
+        monkeypatch: Pytest fixture for replacing the response body.
+    """
+    monkeypatch.setattr(
+        project_api._GEOJSON_OPENER, "open", lambda *_a, **_k: io.BytesIO(b"<html>")
+    )
+    with pytest.raises(ValueError, match="service metadata is not valid JSON"):
+        _build()
+
+
+def test_map_method_adds_the_layer(vts, monkeypatch):
+    """Add the styled layer through the widget API.
+
+    Args:
+        vts: The metadata transport fixture.
+        monkeypatch: Pytest fixture for preventing the widget server startup.
+    """
+    monkeypatch.setattr(gmod, "serve_app", lambda *_args, **_kwargs: "http://127.0.0.1:0/")
+    monkeypatch.setattr(gmod, "app_port", lambda: 0)
+    view = Map()
+    layer_id = view.add_arcgis_vector_tile_layer(SERVICE)
+    (layer,) = [item for item in view.project["layers"] if item["id"] == layer_id]
+    assert layer["type"] == "arcgis"
+    assert all(spec.startswith(layer_id) for spec in layer["metadata"]["nativeLayerIds"])
+
+
+def test_mcp_tool_writes_the_layer_and_preserves_the_file_on_refusal(vts, tmp_path):
+    """Publish only a drawable style and keep the file intact on a refusal.
+
+    Args:
+        vts: The mutable metadata transport fixture.
+        tmp_path: Temporary workspace root for the MCP tools.
+    """
+    pytest.importorskip("mcp", reason="the mcp SDK is an optional extra")
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    from geolibre.mcp.server import build_server
+    from geolibre.mcp.workspace import Workspace
+
+    server = build_server(Workspace([tmp_path]))
+    path = str(tmp_path / "vts.geolibre.json")
+    asyncio.run(server.call_tool("create_project", {"path": path, "name": "VTS"}))
+    kwargs = {"path": path, "url": SERVICE}
+    asyncio.run(server.call_tool("add_arcgis_vector_tile_layer", kwargs))
+    saved = (tmp_path / "vts.geolibre.json").read_bytes()
+    (layer,) = json.loads(saved)["layers"]
+    assert layer["type"] == "arcgis"
+    assert layer["metadata"]["sourceKind"] == "arcgis-vector-tile-url"
+    vts[1]["layers"][0]["type"] = "raster"
+    with pytest.raises(ToolError):
+        asyncio.run(server.call_tool("add_arcgis_vector_tile_layer", kwargs))
+    assert (tmp_path / "vts.geolibre.json").read_bytes() == saved

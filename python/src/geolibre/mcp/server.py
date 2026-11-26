@@ -825,7 +825,7 @@ def build_server(workspace: Workspace) -> MCPServer:
         endpoint. `feature` loads the features in view from the layer's query
         endpoint when the project opens (MapLibre renderer). Token-protected
         services are not supported. For a VectorTileServer use
-        `add_tiles_layer` with its tile URL.
+        `add_arcgis_vector_tile_layer`.
         With `tiled=True`, public map/image cache metadata is fetched and its
         Web Mercator XYZ grid is validated before the project is changed.
 
@@ -863,6 +863,39 @@ def build_server(workspace: Workspace) -> MCPServer:
             bounds=bounds,
             attribution=attribution,
         )
+        return add(path, layer, index)
+
+    @tool()
+    def add_arcgis_vector_tile_layer(
+        path: str,
+        url: str,
+        name: str | None = None,
+        bounds: list[float] | None = None,
+        attribution: str | None = None,
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        """Add an ArcGIS VectorTileServer drawn with the service's own style.
+
+        The service description and default style are read now and stored on
+        the layer the way the app saves one, so the project opens with the
+        service's cartography on every renderer. Public metadata reads are
+        limited to 2 MiB (description) and 8 MiB (style) with a 30-second
+        deadline each; a style the app cannot draw is refused before the
+        project changes. Tokens and portal item ids are not supported.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            url: The `.../VectorTileServer` URL.
+            name: The layer's display name; defaults to the service name.
+            bounds: `[west, south, east, north]` in WGS84 for "zoom to layer",
+                instead of the style's or service's extent.
+            attribution: Attribution text instead of the service credit.
+            index: Draw-order position; appended on top when omitted.
+
+        Returns:
+            The new layer's id and the project's updated layer count.
+        """
+        layer = _project.arcgis_vector_tile_layer(url, name, bounds=bounds, attribution=attribution)
         return add(path, layer, index)
 
     @tool()
