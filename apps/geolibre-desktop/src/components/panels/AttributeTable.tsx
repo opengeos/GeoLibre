@@ -4,8 +4,6 @@ import {
   isVectorControlAttributeSource,
 } from "../../lib/attribute-table-source";
 import {
-  computeBulkFillDrafts,
-  computeFindReplaceDrafts,
   filterAttributeRowsByColumns,
   hasActiveColumnFilter,
   matchesColumnFilter,
@@ -15,21 +13,15 @@ import {
   type SortSpec,
 } from "../../lib/attribute-table-ops";
 import { AttributeBulkEditDialog, ColumnFilterBar } from "./AttributeBulkEditDialog";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
-  attributeLinkUrl,
-  currentEditorIdentity,
   editorTrackingFieldNames,
   ensureEditorTrackingFields,
   isDuckDBQueryLayer,
   useAppStore,
-  excludeHiddenFieldsFromGeojson,
   resolveLayerCapabilities,
   type AttributeTableDrafts as AttributeDrafts,
   type AttributeTableDraftTarget,
-  type AttributeFormFieldConfig,
-  type AttributeFormFieldError,
   type GeoLibreLayer,
   useLayer,
 } from "@geolibre/core";
@@ -54,7 +46,7 @@ import {
   arcGISRelatedParentObjectId,
   arcGISRelationships,
 } from "@geolibre/plugins/arcgis-related-records";
-import { getDuckDBLayerRows, updateDuckDBLayerRows } from "@geolibre/plugins/maplibre-duckdb";
+import { getDuckDBLayerRows } from "@geolibre/plugins/maplibre-duckdb";
 import { getVectorLayerGeoJSON } from "@geolibre/plugins/maplibre-vector";
 import type { MapEngine } from "@geolibre/map";
 import type { GeoJSONSource } from "maplibre-gl";
@@ -76,15 +68,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   Input,
-  Label,
-  ScrollArea,
   Select,
-  Textarea,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from "@geolibre/ui";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Feature, FeatureCollection } from "geojson";
@@ -122,9 +106,7 @@ import {
   Ban,
 } from "lucide-react";
 import {
-  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
-  type ReactNode,
   type RefObject,
   useEffect,
   useMemo,
@@ -135,63 +117,27 @@ import {
 import { isTauri } from "../../lib/tauri-io";
 import { isRefreshableLayer } from "../../lib/layer-refresh";
 import { isLocalFileLayer } from "../../lib/local-file-watch";
-import { AttributeCardList } from "./attribute-table/AttributeCardList";
 import type { LayerRefreshStatus } from "./layer-panel/layer-panel-utils";
 import {
-  addColumn,
-  calculateField,
-  deleteColumn,
   getColumnSettings,
   hiddenColumns,
-  moveColumn,
-  showAllColumns,
-  toggleColumnHidden,
-  renameColumn,
   visibleColumns,
-  type ColumnMoveDirection,
   type NewColumnType,
   attributeValuesMatchQuery,
-  formatAttributeCellText,
   numericColumnSet,
 } from "../../lib/attribute-columns";
-import { markAttributeEdit } from "../../lib/edited-geometry-save";
-import {
-  coerceComputedValue,
-  compileExpression,
-  EXPRESSION_HELPERS,
-  fieldReference,
-  type CalcOutputType,
-} from "../../lib/attribute-expression";
+import { type CalcOutputType } from "../../lib/attribute-expression";
 import { useResolvedAttributeForm } from "../../hooks/useResolvedAttributeForm";
-import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
 import { coerceNumericStringRows, pickAnalysisRows } from "../../lib/attribute-charts";
 import { computeRowSelection } from "../../lib/attribute-selection";
-import { registerPendingAttributeDrafts } from "../../lib/attribute-draft-commit";
 import { RESERVED_PROPERTY_KEYS } from "../../lib/field-collection";
-import {
-  AREA_UNITS,
-  detectGeometryFamilies,
-  DISTANCE_UNITS,
-  UNIT_SYMBOLS,
-  type GeometryMetric,
-} from "../../lib/geometry-measure";
+import { type GeometryMetric } from "../../lib/geometry-measure";
 import { AttributeChartDialog } from "./AttributeChartDialog";
 import { AttributeStatsDialog } from "./AttributeStatsDialog";
 import { ColumnExplorerDialog } from "./ColumnExplorerDialog";
 import { ArcGISAttachmentsDialog } from "./ArcGISAttachmentsDialog";
 import { ArcGISRelatedRecordsDialog } from "./ArcGISRelatedRecordsDialog";
-import {
-  exportVectorLayer,
-  formatAttributeValue,
-  geojsonVectorSourceId,
-  kmlExportErrorMessage,
-  layerSupportsPolylineExport,
-  sanitizeExportFileName,
-  shapefileFieldWarnings,
-  type VectorExportFormat,
-} from "../../lib/vector-export";
-import { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "../../lib/panel-resize";
-import { openExternalLink } from "../../lib/open-external";
+import { geojsonVectorSourceId, layerSupportsPolylineExport } from "../../lib/vector-export";
 import {
   type AttributeTableRow,
   isInvalidObjectDraft,
@@ -199,81 +145,37 @@ import {
   getAttributeDraftRow,
   hasDraftEdits,
   makeRowFormResolver,
-  draftCandidate,
-  applyDraftsToFeatures,
   computeFormDraftErrors,
   type ContingencyContext,
   contingencyNotices,
   duckDBRowsToAttributeRows,
-  applyDraftsToDuckDBRows,
 } from "./attribute-table/attribute-drafts";
+import { FieldCalculatorDialog } from "./attribute-table/FieldCalculatorDialog";
+import { AddFieldDialog } from "./attribute-table/AddFieldDialog";
+import {
+  type SortDirection,
+  type SortKey,
+  VERTICAL_SCROLLBAR_GUTTER,
+} from "./attribute-table/table-layout";
+import { AttributeTableGrid } from "./attribute-table/AttributeTableGrid";
+import { useFieldCalculator } from "./attribute-table/useFieldCalculator";
+import { useColumnManagement } from "./attribute-table/useColumnManagement";
+import { useAttributeEditing } from "./attribute-table/useAttributeEditing";
+import {
+  type ColumnWidths,
+  DEFAULT_FEATURE_ID_COLUMN_WIDTH,
+  DEFAULT_ATTRIBUTE_COLUMN_WIDTH,
+  ESTIMATED_ROW_HEIGHT,
+  ATTRIBUTE_TABLE_CHROME_HEIGHT,
+  DEFAULT_TABLE_HEIGHT,
+} from "./attribute-table/table-sizes";
+import { useTableResize } from "./attribute-table/useTableResize";
 
-type SortDirection = "asc" | "desc";
-type SortKey = "__featureId" | string;
-type ColumnWidths = Record<string, number>;
 const EMPTY_DRAFTS: AttributeDrafts = {};
 
 /** Reserved inline-image property keys (photo thumbnail + full-resolution) that
  * hold data URLs, so they are hidden from the attribute table's columns. */
 const RESERVED_IMAGE_KEYS = new Set<string>(RESERVED_PROPERTY_KEYS);
-
-const DEFAULT_FEATURE_ID_COLUMN_WIDTH = 72;
-const DEFAULT_ATTRIBUTE_COLUMN_WIDTH = 160;
-const MIN_FEATURE_ID_COLUMN_WIDTH = 48;
-const MAX_FEATURE_ID_COLUMN_WIDTH = 180;
-const MIN_ATTRIBUTE_COLUMN_WIDTH = 72;
-const MAX_ATTRIBUTE_COLUMN_WIDTH = 520;
-// Estimated row height used to size the virtualizer before real rows are
-// measured. View-mode rows are ~27px (3px block padding around a 20px line);
-// edit-mode rows (with an Input) are taller and are corrected by
-// measureElement once rendered.
-const ESTIMATED_ROW_HEIGHT = 27;
-/** Sticky header (30px) plus horizontal scrollbar (14px): the table's non-row height, in px. */
-const ATTRIBUTE_TABLE_CHROME_HEIGHT = 44;
-// The vertical scrollbar (w-3.5) overlays the viewport's inline-end edge, so
-// the last column is widened by this much and padded past it; otherwise the
-// scrollbar covers the end of right-aligned numbers.
-// Both are rem so they track the scrollbar (w-3.5) and cell padding (p-2 /
-// px-2) at any root font size. CELL_PADDING mirrors TableCell/TableHead in
-// packages/ui/src/components/table.tsx and must change with them. (The compact
-// rows below override only block padding, so the inline padding is still p-2.)
-const VERTICAL_SCROLLBAR_GUTTER = "0.875rem";
-const CELL_PADDING = "0.5rem";
-// With the one-line toolbar and compact rows, this shows four to five rows at
-// laptop widths.
-const DEFAULT_TABLE_HEIGHT = 240;
-const MIN_TABLE_HEIGHT = 96;
-const MAX_TABLE_HEIGHT = 520;
-
-/**
- * The options of a coded-value cell. When field groups govern the field, the
- * values that fit the rest of the row come first and the others follow in a
- * second group: nothing is hidden, so a row is never stuck without a way to
- * correct another field first.
- */
-function valueMapOptions(
-  valueMap: NonNullable<AttributeFormFieldConfig["valueMap"]>,
-  fits: ((value: unknown) => boolean) | undefined,
-  t: TFunction,
-): ReactNode {
-  const option = (entry: (typeof valueMap)[number]) => (
-    <option key={entry.value} value={entry.value}>
-      {entry.label ?? entry.value}
-    </option>
-  );
-  if (!fits) return valueMap.map(option);
-  const fitting = valueMap.filter((entry) => fits(entry.value));
-  if (fitting.length === valueMap.length) return valueMap.map(option);
-  const others = valueMap.filter((entry) => !fits(entry.value));
-  return (
-    <>
-      {fitting.length ? (
-        <optgroup label={t("contingentValues.fitting")}>{fitting.map(option)}</optgroup>
-      ) : null}
-      <optgroup label={t("contingentValues.others")}>{others.map(option)}</optgroup>
-    </>
-  );
-}
 
 interface AttributeTableProps {
   mapControllerRef: RefObject<MapEngine | null>;
@@ -1002,147 +904,15 @@ export function AttributeTable({
     (key === "__featureId" ? DEFAULT_FEATURE_ID_COLUMN_WIDTH : DEFAULT_ATTRIBUTE_COLUMN_WIDTH);
   const columnsWidth = tableColumns.reduce((width, column) => width + columnWidth(column), 0);
   const tableWidth = `calc(${columnsWidth}px + ${VERTICAL_SCROLLBAR_GUTTER})`;
-
-  const columnWidthLimits = (key: SortKey) =>
-    key === "__featureId"
-      ? {
-          max: MAX_FEATURE_ID_COLUMN_WIDTH,
-          min: MIN_FEATURE_ID_COLUMN_WIDTH,
-        }
-      : {
-          max: MAX_ATTRIBUTE_COLUMN_WIDTH,
-          min: MIN_ATTRIBUTE_COLUMN_WIDTH,
-        };
-
-  const resizeCleanupRef = useRef<(() => void) | null>(null);
-  useEffect(() => {
-    return () => {
-      resizeCleanupRef.current?.();
-      resizeCleanupRef.current = null;
-    };
-  }, []);
-
-  const startColumnResize = (key: SortKey, event: ReactMouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    resizeCleanupRef.current?.();
-
-    const startX = event.clientX;
-    const startWidth = columnWidth(key);
-    const { min, max } = columnWidthLimits(key);
-    // The handle sits at the column's logical inline-end (`-end-2`) — the right
-    // edge in LTR, the left edge in RTL. clientX still increases to the right in
-    // both, so invert the delta under RTL: dragging the (left-side) RTL handle
-    // outward lowers clientX but should widen the column.
-    const directionSign = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
-    let pendingWidth = startWidth;
-    let resizeFrame: number | null = null;
-
-    const flushWidth = () => {
-      resizeFrame = null;
-      const width = pendingWidth;
-      setColumnWidths((current) =>
-        current[key] === width ? current : { ...current, [key]: width },
-      );
-    };
-
-    const onMouseMove = (moveEvent: MouseEvent) => {
-      pendingWidth = Math.min(
-        max,
-        Math.max(min, startWidth + directionSign * (moveEvent.clientX - startX)),
-      );
-      if (resizeFrame === null) {
-        resizeFrame = window.requestAnimationFrame(flushWidth);
-      }
-    };
-
-    const cleanup = () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-      if (resizeFrame !== null) {
-        window.cancelAnimationFrame(resizeFrame);
-        resizeFrame = null;
-      }
-      if (resizeCleanupRef.current === cleanup) resizeCleanupRef.current = null;
-    };
-
-    const onMouseUp = () => {
-      if (resizeFrame !== null) {
-        window.cancelAnimationFrame(resizeFrame);
-        flushWidth();
-      }
-      cleanup();
-    };
-
-    resizeCleanupRef.current = cleanup;
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-  };
-
-  const startTableResize = (event: ReactMouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    resizeCleanupRef.current?.();
-
-    const startY = event.clientY;
-    const startHeight = tableHeight;
-    let nextHeight = startHeight;
-    let resizeFrame: number | null = null;
-    const previousCursor = document.body.style.cursor;
-    const previousUserSelect = document.body.style.userSelect;
-    document.body.style.cursor = "row-resize";
-    document.body.style.userSelect = "none";
-    window.dispatchEvent(new Event(PANEL_RESIZE_START_EVENT));
-
-    const onMouseMove = (moveEvent: MouseEvent) => {
-      const availableHeight = Math.max(MIN_TABLE_HEIGHT, window.innerHeight - 180);
-      const maxHeight = Math.min(MAX_TABLE_HEIGHT, availableHeight);
-      nextHeight = Math.min(
-        maxHeight,
-        Math.max(MIN_TABLE_HEIGHT, startHeight + startY - moveEvent.clientY),
-      );
-      if (resizeFrame !== null) return;
-      resizeFrame = window.requestAnimationFrame(() => {
-        resizeFrame = null;
-        if (deferTableResize) {
-          if (tableResizeGuideRef.current) {
-            tableResizeGuideRef.current.style.top = `${startY + startHeight - nextHeight}px`;
-            tableResizeGuideRef.current.classList.remove("hidden");
-          }
-          return;
-        }
-        if (tableSectionRef.current) {
-          tableSectionRef.current.style.height = `${nextHeight}px`;
-        }
-      });
-    };
-
-    const teardown = () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-      if (resizeFrame !== null) {
-        window.cancelAnimationFrame(resizeFrame);
-        resizeFrame = null;
-      }
-      tableResizeGuideRef.current?.classList.add("hidden");
-      window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
-      document.body.style.cursor = previousCursor;
-      document.body.style.userSelect = previousUserSelect;
-      if (resizeCleanupRef.current === teardown) resizeCleanupRef.current = null;
-    };
-
-    const onMouseUp = () => {
-      teardown();
-      if (tableSectionRef.current) {
-        tableSectionRef.current.style.height = `${nextHeight}px`;
-      }
-      setTableHeight(nextHeight);
-    };
-
-    resizeCleanupRef.current = teardown;
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-  };
+  const { startColumnResize, startTableResize } = useTableResize({
+    columnWidth,
+    setColumnWidths,
+    tableHeight,
+    deferTableResize,
+    tableResizeGuideRef,
+    tableSectionRef,
+    setTableHeight,
+  });
 
   const toggleSort = (key: SortKey, additive = false) => {
     setSortSpecs((current) => toggleMultiSort(current, key, additive));
@@ -1183,569 +953,131 @@ export function AttributeTable({
     () => columns.filter((col) => !readOnlyColumns.has(col)),
     [columns, readOnlyColumns],
   );
-
-  const handleBulkFill = ({
-    column,
-    value,
-    scope,
-  }: {
-    column: string;
-    value: string;
-    scope: "selected" | "filtered";
-  }): number => {
-    if (!canEnterEditMode || readOnlyColumns.has(column)) return 0;
-    const targetRowIds =
-      scope === "selected" && selectedIdSet.size > 0
-        ? selectedIdSet
-        : new Set(filtered.map((row) => row.featureId));
-    const result = computeBulkFillDrafts({
-      rows: attributeRows,
-      targetRowIds,
-      column,
-      value,
-      currentDrafts: drafts,
-    });
-    if (result.updatedCount > 0) {
-      setIsEditing(true);
-      setDrafts(result.drafts);
-    }
-    return result.updatedCount;
-  };
-
-  const handleFindReplace = ({
-    column,
-    find,
-    replace,
-    matchCase,
-    wholeCell,
-    scope,
-  }: {
-    column: string;
-    find: string;
-    replace: string;
-    matchCase: boolean;
-    wholeCell: boolean;
-    scope: "selected" | "filtered";
-  }): number => {
-    if (!canEnterEditMode || readOnlyColumns.has(column)) return 0;
-    const targetRowIds =
-      scope === "selected" && selectedIdSet.size > 0
-        ? selectedIdSet
-        : new Set(filtered.map((row) => row.featureId));
-    const result = computeFindReplaceDrafts({
-      rows: attributeRows,
-      targetRowIds,
-      column,
-      find,
-      replace,
-      matchCase,
-      wholeCell,
-      currentDrafts: drafts,
-    });
-    if (result.updatedCount > 0) {
-      setIsEditing(true);
-      setDrafts(result.drafts);
-    }
-    return result.updatedCount;
-  };
-
-  // Localize an Attribute Form validation error for a cell tooltip.
-  const formErrorText = (error: AttributeFormFieldError): string =>
-    attributeFormErrorMessage(t, error);
-
-  const updateCellDraft = (
-    featureId: string,
-    column: string,
-    value: string,
-    previousValue: unknown,
-  ) => {
-    setDrafts((current) => {
-      const row = { ...getAttributeDraftRow(current, featureId) };
-
-      if (value === formatAttributeValue(previousValue)) {
-        delete row[column];
-      } else {
-        row[column] = value;
-      }
-
-      const rows = Object.entries(current).filter(([id]) => id !== featureId);
-      if (Object.keys(row).length > 0) rows.push([featureId, row]);
-      return Object.fromEntries(rows);
-    });
-  };
-
-  const cancelEditing = () => {
-    setIsEditing(false);
-    setDrafts({});
-  };
-
-  const toggleEditing = () => {
-    if (isEditing && !hasEdits) {
-      setIsEditing(false);
-      return;
-    }
-
-    if (!isEditing) {
-      setIsEditing(true);
-    }
-  };
-
-  /** Apply the drafts to the layer; returns whether they were committed. */
-  const saveDrafts = (): boolean => {
-    // Re-read the capability here rather than trusting the disabled state:
-    // edit mode (and the dialogs below) can be open across a project reload or
-    // a collaborator's change that revokes the capability, and the commit would
-    // otherwise still run.
-    if (
-      !layer ||
-      !canEnterEditMode ||
-      !hasEdits ||
-      hasUnsafeDraftTargets ||
-      hasInvalidDrafts ||
-      hasFormErrors
-    )
-      return false;
-
-    if (isDuckDBLayer) {
-      updateDuckDBLayerRows(layer.id, applyDraftsToDuckDBRows(attributeRows, drafts));
-      setIsEditing(false);
-      setDrafts({});
-      return true;
-    }
-
-    if (!layer.geojson) return false;
-
-    const geojson = {
-      ...layer.geojson,
-      features: applyDraftsToFeatures(
-        layer.geojson.features,
-        drafts,
-        formForRow,
-        editorTrackingFieldNames(layer.editorTracking)
-          ? {
-              config: layer.editorTracking,
-              userIdentity: currentEditorIdentity(),
-              // One timestamp for the save, so rows edited together agree.
-              timestamp: new Date().toISOString(),
-            }
-          : undefined,
-      ),
-    };
-
-    updateLayer(layer.id, markAttributeEdit(layer, { geojson }));
-    setIsEditing(false);
-    setDrafts({});
-    return true;
-  };
-
-  // Offer unsaved drafts to the Layers panel's write-back action, which reads
-  // the layer from the store: without this, Save edits to source/ArcGIS/PostGIS
-  // silently writes the pre-edit values the table no longer shows (#2438, #2439).
-  // Re-registered every render so the committer always sees the latest drafts.
-  const pendingDraftsLayerId = isEditing && hasEdits ? (layer?.id ?? null) : null;
-  useEffect(() => {
-    if (!pendingDraftsLayerId) return;
-    return registerPendingAttributeDrafts(pendingDraftsLayerId, saveDrafts);
+  const {
+    handleBulkFill,
+    handleFindReplace,
+    formErrorText,
+    updateCellDraft,
+    cancelEditing,
+    toggleEditing,
+    saveDrafts,
+    exportLayer,
+  } = useAttributeEditing({
+    canEnterEditMode,
+    readOnlyColumns,
+    selectedIdSet,
+    filtered,
+    attributeRows,
+    drafts,
+    setIsEditing,
+    setDrafts,
+    t,
+    isEditing,
+    hasEdits,
+    layer,
+    hasUnsafeDraftTargets,
+    hasInvalidDrafts,
+    hasFormErrors,
+    isDuckDBLayer,
+    formForRow,
+    updateLayer,
+    setExportError,
+    setExportWarning,
   });
-
-  const geojsonWithDrafts = () => {
-    if (!layer?.geojson || hasUnsafeDraftTargets) return null;
-
-    return {
-      ...layer.geojson,
-      features: applyDraftsToFeatures(layer.geojson.features, drafts, formForRow),
-    };
-  };
-
-  const exportLayer = async (format: VectorExportFormat, precision?: number) => {
-    if (!layer?.geojson) return;
-    if (hasUnsafeDraftTargets) {
-      setExportError(t("layers.pendingTableDraftsBlocked"));
-      return;
-    }
-
-    try {
-      setExportError(null);
-      setExportWarning(null);
-      let exportGeojson = geojsonWithDrafts();
-      if (!exportGeojson) return;
-      if (layer.fieldVisibility) {
-        exportGeojson = excludeHiddenFieldsFromGeojson(exportGeojson, layer.fieldVisibility);
-      }
-
-      const baseName = sanitizeExportFileName(layer.name);
-      const polylinePrecision =
-        precision ??
-        (typeof layer.metadata?.polylinePrecision === "number"
-          ? layer.metadata.polylinePrecision
-          : 5);
-      const savedPath = await exportVectorLayer(
-        exportGeojson,
-        format,
-        baseName,
-        layer.name,
-        polylinePrecision,
-      );
-      // Surface Shapefile field-name limitations (10-char truncation and any
-      // resulting collisions) only when a file was actually written; a null
-      // path means the user cancelled the save dialog.
-      if (savedPath !== null && format === "shapefile") {
-        const warnings = shapefileFieldWarnings(exportGeojson);
-        setExportWarning(warnings.length > 0 ? warnings.join(" ") : null);
-      }
-    } catch (error) {
-      console.error("Failed to export attribute table", error);
-      setExportError(
-        kmlExportErrorMessage(error, t) ??
-          (error instanceof Error ? error.message : t("attributeTable.exportFailed")),
-      );
-    }
-  };
-
-  const beginColumnRename = (col: string) => {
-    suppressColumnBlurRef.current = false;
-    setEditingColumn(col);
-    setEditingColumnName(col);
-  };
-
-  const cancelColumnRename = () => {
-    suppressColumnBlurRef.current = true;
-    setEditingColumn(null);
-    setEditingColumnName("");
-  };
-
-  const commitColumnRename = () => {
-    if (suppressColumnBlurRef.current || !editingColumn || !layer || !canManageColumns) {
-      suppressColumnBlurRef.current = false;
-      return;
-    }
-    suppressColumnBlurRef.current = true;
-    const oldKey = editingColumn;
-    // Normalize the key here so the view-state updates below use exactly what
-    // renameColumn writes. (renameColumn also trims defensively for other
-    // callers; passing the already-trimmed value keeps the two in agreement.)
-    const newKey = editingColumnName.trim();
-    const patch = isReservedFieldName(newKey)
-      ? null
-      : renameColumn(layer, mutationColumns, oldKey, newKey);
-    if (patch) {
-      updateLayer(layer.id, markAttributeEdit(layer, patch));
-      // Keep view state pointing at the renamed column.
-      setColumnWidths((current) => {
-        if (!(oldKey in current)) return current;
-        const { [oldKey]: width, ...rest } = current;
-        return { ...rest, [newKey]: width };
-      });
-      setSortSpecs((current) =>
-        current.map((spec) => (spec.key === oldKey ? { ...spec, key: newKey } : spec)),
-      );
-      setColumnFilters((current) => {
-        if (!(oldKey in current)) return current;
-        const { [oldKey]: spec, ...rest } = current;
-        return { ...rest, [newKey]: spec };
-      });
-    }
-    // Always close the editor when committing, even on a no-op (empty,
-    // unchanged, or a name that collides with an existing — possibly hidden —
-    // column); the original name is kept. This matches the layer-rename UX in
-    // LayerPanel. Use Escape to cancel.
-    setEditingColumn(null);
-    setEditingColumnName("");
-  };
-
-  const handleToggleHidden = (col: string) => {
-    if (!layer) return;
-    updateLayer(layer.id, toggleColumnHidden(layer, col));
-  };
-
-  const handleToggleExcluded = (col: string) => {
-    if (!layer) return;
-    const current = layer.fieldVisibility || {};
-    const isExcluded = current[col] === "excluded";
-    const next = { ...current };
-    if (isExcluded) {
-      delete next[col];
-    } else {
-      next[col] = "excluded";
-    }
-    updateLayer(layer.id, { fieldVisibility: next });
-  };
-
-  const handleShowAllColumns = () => {
-    if (!layer) return;
-    updateLayer(layer.id, showAllColumns(layer));
-  };
-
-  const handleMoveColumn = (col: string, direction: ColumnMoveDirection) => {
-    if (!layer) return;
-    const patch = moveColumn(layer, discoveredColumns, col, direction);
-    if (patch) updateLayer(layer.id, patch);
-  };
-
-  const confirmDeleteColumn = () => {
-    if (!layer || !canManageColumns || !layerCaps.delete || !columnPendingDelete) return;
-    const patch = deleteColumn(layer, columnPendingDelete);
-    if (patch) updateLayer(layer.id, markAttributeEdit(layer, patch));
-    // Drop a sort that pointed at the deleted column, which would otherwise
-    // leave sort.key referencing an absent field (every row compares equal).
-    setSortSpecs((current) => {
-      const remaining = current.filter((spec) => spec.key !== columnPendingDelete);
-      return remaining.length > 0 ? remaining : [{ key: "__featureId", direction: "asc" }];
-    });
-    setColumnFilters((current) => {
-      if (!(columnPendingDelete in current)) return current;
-      const { [columnPendingDelete]: _removed, ...rest } = current;
-      return rest;
-    });
-    // Drop the deleted column's width so columnWidths doesn't accumulate stale
-    // entries across a session (mirrors the migration in commitColumnRename).
-    setColumnWidths((current) => {
-      if (!(columnPendingDelete in current)) return current;
-      const { [columnPendingDelete]: _removed, ...rest } = current;
-      return rest;
-    });
-    setColumnPendingDelete(null);
-  };
-
-  const newColumnNameTrimmed = newColumnName.trim();
-  const newColumnCollides =
-    newColumnNameTrimmed !== "" && mutationColumns.includes(newColumnNameTrimmed);
-  const newColumnReserved = isReservedFieldName(newColumnNameTrimmed);
-  // A field is only discoverable through feature property keys, so a new column
-  // cannot be added to a layer with no features (see addColumn).
-  const canAddColumn = features.length > 0;
-  const canSubmitNewColumn =
-    newColumnNameTrimmed !== "" && !newColumnCollides && !newColumnReserved && canAddColumn;
-
-  const openAddColumn = () => {
-    setNewColumnName("");
-    setNewColumnType("text");
-    setNewColumnDefault("");
-    setAddingColumn(true);
-  };
-
-  const changeNewColumnType = (type: NewColumnType) => {
-    setNewColumnType(type);
-    // Reset the default to blank ("no default" → null) for every type so a value
-    // typed for one type does not carry over to an incompatible one, and so the
-    // user must explicitly choose a value rather than silently persisting one.
-    setNewColumnDefault("");
-  };
-
-  const confirmAddColumn = () => {
-    if (!layer || !canManageColumns || !canSubmitNewColumn) return;
-    const patch = addColumn(layer, mutationColumns, newColumnName, newColumnType, newColumnDefault);
-    if (patch) updateLayer(layer.id, markAttributeEdit(layer, patch));
-    setAddingColumn(false);
-  };
-
-  // The Field Calculator must not target a derived column (joined or virtual)
-  // either: the calculated value would be overwritten by the re-derivation in
-  // the same store update.
-  const calculatorTargetColumns = discoveredColumns.filter((col) => !readOnlyColumns.has(col));
-
-  const openCalculator = () => {
-    const hasColumns = calculatorTargetColumns.length > 0;
-    setCalcMode(hasColumns ? "update" : "create");
-    setCalcTargetField(hasColumns ? calculatorTargetColumns[0] : "");
-    setCalcNewName("");
-    setCalcOutputType("auto");
-    setCalcExpression("");
-    setCalcSelectedOnly(false);
-    setCalcError(null);
-    // Seed the geometry measurement to a metric that suits the layer; the
-    // effective-metric fallback still corrects any mismatch on render.
-    const families = detectGeometryFamilies(features);
-    const lineOnly = families.has("line") && !families.has("polygon");
-    setCalcGeomMetric(lineOnly ? "length" : "area");
-    setCalcGeomUnit(lineOnly ? "meters" : "square-meters");
-    setCalcOpen(true);
-  };
-
-  // Insert a field reference (or function call) into the expression at the
-  // caret, then restore focus so chips can be clicked without losing position.
-  // `caretOffset` overrides where the caret lands relative to the inserted text
-  // (default: at its end) — function chips use it to land inside the parens.
-  const insertExpressionSnippet = (snippet: string, caretOffset?: number) => {
-    const el = calcExpressionRef.current;
-    if (!el) {
-      setCalcExpression((current) => current + snippet);
-      return;
-    }
-    const start = el.selectionStart ?? el.value.length;
-    const end = el.selectionEnd ?? el.value.length;
-    const next = el.value.slice(0, start) + snippet + el.value.slice(end);
-    // Write the DOM value and caret synchronously, then sync React state. Doing
-    // this in a deferred rAF let a rapid second chip click read a stale caret
-    // (still 0) and splice at the wrong offset.
-    el.value = next;
-    const caret = start + (caretOffset ?? snippet.length);
-    el.focus();
-    el.setSelectionRange(caret, caret);
-    setCalcExpression(next);
-  };
-
-  // Geometry family drives which measurements the calculator offers: a polygon
-  // layer gets Area/Perimeter, a line layer gets Length, a mixed layer gets all
-  // three, and point/geometry-less layers get none (the row is hidden).
-  const calcGeometryFamilies = useMemo(
-    () => detectGeometryFamilies(features),
-    // Recompute when the layer or its feature count changes, and each time the
-    // dialog opens, so a geometry-type edit made while it was closed is picked
-    // up. The families are otherwise stable across renders (and the calc dialog
-    // is modal, so geometry cannot be edited while it is open). eslint can't see
-    // that the array identity of `features` alone is not a meaningful dep.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [layer?.id, features.length, calcOpen],
-  );
-  const calcAvailableMetrics = useMemo<GeometryMetric[]>(() => {
-    // Offer only metrics the layer's geometry actually supports, so a mixed
-    // point+line layer gets Length but not a no-op Area.
-    const metrics: GeometryMetric[] = [];
-    if (calcGeometryFamilies.has("polygon")) metrics.push("area", "perimeter");
-    if (calcGeometryFamilies.has("line")) metrics.push("length");
-    return metrics;
-  }, [calcGeometryFamilies]);
-  // Fall back to the first available metric/unit when the current selection is
-  // not valid for this layer (e.g. an "area" choice carried over to a line layer).
-  const calcEffectiveMetric = calcAvailableMetrics.includes(calcGeomMetric)
-    ? calcGeomMetric
-    : (calcAvailableMetrics[0] ?? "length");
-  const calcGeomUnitOptions = calcEffectiveMetric === "area" ? AREA_UNITS : DISTANCE_UNITS;
-  const calcEffectiveUnit = (calcGeomUnitOptions as readonly string[]).includes(calcGeomUnit)
-    ? calcGeomUnit
-    : calcGeomUnitOptions[0];
-
-  const insertGeometrySnippet = () => {
-    const snippet = `$${calcEffectiveMetric}(${JSON.stringify(calcEffectiveUnit)})`;
-    insertExpressionSnippet(snippet);
-  };
-
-  const calcNewNameTrimmed = calcNewName.trim();
-  const calcNameCollides =
-    calcMode === "create" &&
-    calcNewNameTrimmed !== "" &&
-    mutationColumns.includes(calcNewNameTrimmed);
-  const calcNameReserved = calcMode === "create" && isReservedFieldName(calcNewNameTrimmed);
-  const calcHasTarget =
-    calcMode === "create"
-      ? calcNewNameTrimmed !== "" && !calcNameCollides && !calcNameReserved
-      : calcTargetField !== "" && !isReservedFieldName(calcTargetField);
-  const calcHasSelection = selectedFeatureIds.length > 0;
-
-  // Live preview of the expression against a sample feature: the selected row
-  // when present (and a single feature is targeted), else the first row. A
-  // syntax error blocks submission; a runtime error on the sample does not,
-  // since other features may still evaluate cleanly.
-  const calcSampleRow =
-    (calcSelectedOnly && calcHasSelection
-      ? attributeRows.find((row) => row.featureId === selectedFeatureId)
-      : undefined) ?? attributeRows[0];
-  const calcSampleIndex = calcSampleRow ? attributeRows.indexOf(calcSampleRow) : -1;
-  // Stable string keys so the memo skips recompiling the expression on renders
-  // that don't change the inputs (discoveredColumns / the sample row are rebuilt
-  // with fresh identities every render, so they can't be deps directly).
-  // Only serialize while the dialog is open — these exist solely as stable memo
-  // deps, and the memo short-circuits to "empty" when closed anyway.
-  const calcColumnsKey = calcOpen ? JSON.stringify(discoveredColumns) : "";
-  const calcSampleKey = calcOpen && calcSampleRow ? JSON.stringify(calcSampleRow.properties) : "";
-  // The preview feeds the sample feature's geometry to $length/$perimeter/$area,
-  // so key on the geometry too — a geometry change (not just a property change)
-  // must recompute the preview. Only one feature is serialized, and only while
-  // the dialog is open.
-  const calcSampleGeomKey =
-    calcOpen && calcSampleRow ? JSON.stringify(features[calcSampleIndex]?.geometry ?? null) : "";
-  const calcPreview = useMemo<
-    | { kind: "empty" }
-    | { kind: "ok"; value: unknown }
-    | { kind: "syntax"; message: string }
-    | { kind: "runtime"; message: string }
-  >(() => {
-    if (!calcOpen || calcExpression.trim() === "") return { kind: "empty" };
-    try {
-      const compiled = compileExpression(calcExpression, discoveredColumns);
-      if (!calcSampleRow) return { kind: "ok", value: null };
-      try {
-        // attributeRows map 1:1 to geojson features by index, so the sample
-        // row's geometry drives the $length/$perimeter/$area helpers in the
-        // preview (undefined for DuckDB layers, which the helpers treat as 0).
-        const raw = compiled.evaluate(
-          calcSampleRow.properties,
-          calcSampleIndex,
-          features[calcSampleIndex]?.geometry,
-        );
-        return { kind: "ok", value: coerceComputedValue(raw, calcOutputType) };
-      } catch (error) {
-        return {
-          kind: "runtime",
-          message: error instanceof Error ? error.message : t("attributeTable.evaluationFailed"),
-        };
-      }
-    } catch (error) {
-      return {
-        kind: "syntax",
-        message: error instanceof Error ? error.message : t("attributeTable.invalidExpression"),
-      };
-    }
-    // Keyed on the stable strings above rather than the rebuilt arrays/objects.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
+  const {
+    beginColumnRename,
+    cancelColumnRename,
+    commitColumnRename,
+    handleToggleHidden,
+    handleToggleExcluded,
+    handleShowAllColumns,
+    handleMoveColumn,
+    confirmDeleteColumn,
+    newColumnNameTrimmed,
+    newColumnCollides,
+    newColumnReserved,
+    canAddColumn,
+    canSubmitNewColumn,
+    openAddColumn,
+    changeNewColumnType,
+    confirmAddColumn,
+  } = useColumnManagement({
+    suppressColumnBlurRef,
+    setEditingColumn,
+    setEditingColumnName,
+    editingColumn,
+    layer,
+    canManageColumns,
+    editingColumnName,
+    isReservedFieldName,
+    mutationColumns,
+    updateLayer,
+    setColumnWidths,
+    setSortSpecs,
+    setColumnFilters,
+    discoveredColumns,
+    layerCaps,
+    columnPendingDelete,
+    setColumnPendingDelete,
+    newColumnName,
+    features,
+    setNewColumnName,
+    setNewColumnType,
+    setNewColumnDefault,
+    setAddingColumn,
+    newColumnType,
+    newColumnDefault,
+  });
+  const {
+    calculatorTargetColumns,
+    openCalculator,
+    insertExpressionSnippet,
+    calcAvailableMetrics,
+    calcEffectiveMetric,
+    calcGeomUnitOptions,
+    calcEffectiveUnit,
+    insertGeometrySnippet,
+    calcNewNameTrimmed,
+    calcNameCollides,
+    calcNameReserved,
+    calcHasSelection,
+    calcPreview,
+    calcCanSubmit,
+    confirmCalculate,
+  } = useFieldCalculator({
+    discoveredColumns,
+    readOnlyColumns,
+    setCalcMode,
+    setCalcTargetField,
+    setCalcNewName,
+    setCalcOutputType,
+    setCalcExpression,
+    setCalcSelectedOnly,
+    setCalcError,
+    features,
+    setCalcGeomMetric,
+    setCalcGeomUnit,
+    setCalcOpen,
+    calcExpressionRef,
+    layer,
     calcOpen,
+    calcGeomMetric,
+    calcGeomUnit,
+    calcNewName,
+    calcMode,
+    mutationColumns,
+    isReservedFieldName,
+    calcTargetField,
+    selectedFeatureIds,
+    calcSelectedOnly,
+    attributeRows,
+    selectedFeatureId,
     calcExpression,
     calcOutputType,
-    calcColumnsKey,
-    calcSampleKey,
-    calcSampleGeomKey,
-    calcSampleIndex,
-  ]);
-  const calcCanSubmit =
-    features.length > 0 &&
-    calcHasTarget &&
-    calcExpression.trim() !== "" &&
-    calcPreview.kind !== "syntax";
-
-  const confirmCalculate = () => {
-    if (!layer || !canManageColumns || !calcCanSubmit) return;
-    const targetName = calcMode === "create" ? calcNewNameTrimmed : calcTargetField;
-    const scope =
-      calcSelectedOnly && selectedFeatureIds.length > 0 ? new Set(selectedFeatureIds) : undefined;
-    const result = calculateField(
-      layer,
-      mutationColumns,
-      targetName,
-      calcMode === "create",
-      calcExpression,
-      calcOutputType,
-      scope,
-    );
-    if (!result) {
-      setCalcError(t("attributeTable.calcCouldNotApply"));
-      return;
-    }
-    if ("error" in result) {
-      setCalcError(result.error);
-      return;
-    }
-    updateLayer(layer.id, markAttributeEdit(layer, result.patch));
-    if (result.errors > 0) {
-      // The calculation was applied, but some rows threw and were written as
-      // null. If we just created the column, switch to update mode targeting it
-      // so the user can refine the expression without hitting a name collision.
-      if (calcMode === "create") {
-        setCalcMode("update");
-        setCalcTargetField(targetName);
-      }
-      setCalcError(
-        t("attributeTable.calcAppliedWithErrors", {
-          errors: result.errors,
-          evaluated: result.evaluated,
-        }),
-      );
-      return;
-    }
-    setCalcError(null);
-    setCalcOpen(false);
-  };
+    t,
+    canManageColumns,
+    updateLayer,
+  });
 
   const sortableHeader = (key: SortKey, label: string, numeric = false) => (
     <div className="relative flex h-full min-h-7 items-center">
@@ -2422,318 +1754,46 @@ export function AttributeTable({
         />
       ) : null}
       {!collapsed ? (
-        <ScrollArea
-          type="always"
-          viewportRef={scrollViewportRef}
-          className="flex-1 [&_[data-orientation=vertical]]:!top-[1.875rem] [&_[data-orientation=vertical]]:!h-[calc(100%-2.75rem)]"
-        >
-          {!hasAttributeSource ? (
-            <p className="p-4 text-xs text-muted-foreground">
-              {loadingVectorGeojson
-                ? t("attributeTable.loadingAttributes")
-                : t("attributeTable.requiresVectorLayer")}
-            </p>
-          ) : isCardViewActive ? (
-            <AttributeCardList
-              rows={sorted}
-              columns={columns}
-              selectedIds={selectedIdSet}
-              activeFeatureId={selectedFeatureId}
-              scrollElementRef={scrollViewportRef}
-              sortKey={sort.key}
-              sortDirection={sort.direction}
-              onChangeSortKey={(key) => setSortSpecs([{ key, direction: "asc" }])}
-              onToggleSortDirection={() =>
-                setSortSpecs((current) => {
-                  const primary = current[0] ?? {
-                    key: "__featureId" as SortKey,
-                    direction: "asc" as SortDirection,
-                  };
-                  return [
-                    {
-                      ...primary,
-                      direction: primary.direction === "asc" ? "desc" : "asc",
-                    },
-                    ...current.slice(1),
-                  ];
-                })
-              }
-              onSelectRow={handleRowClick}
-              onZoomRow={(featureId) => {
-                selectFeature(featureId);
-                if (layer) {
-                  mapControllerRef.current?.highlightFeature(layer, [featureId], { fit: true });
-                }
-              }}
-            />
-          ) : (
-            // mb-3.5 reserves room for the horizontal scrollbar, which overlays
-            // the viewport and would otherwise cover the last row even at full
-            // scroll.
-            <table
-              data-testid="attribute-table"
-              // The last column's cells pad past the vertical scrollbar
-              // (p-2 + VERTICAL_SCROLLBAR_GUTTER) so its values stay visible.
-              className="mb-3.5 table-fixed caption-bottom text-sm [&_tr>*:last-child]:pe-[var(--attribute-table-last-pe)]"
-              style={
-                {
-                  minWidth: "100%",
-                  width: tableWidth,
-                  "--attribute-table-last-pe": `calc(${CELL_PADDING} + ${VERTICAL_SCROLLBAR_GUTTER})`,
-                } as CSSProperties
-              }
-            >
-              <colgroup>
-                {tableColumns.map((col, index) => (
-                  <col
-                    key={col}
-                    style={{
-                      width:
-                        index === tableColumns.length - 1
-                          ? `calc(${columnWidth(col)}px + ${VERTICAL_SCROLLBAR_GUTTER})`
-                          : columnWidth(col),
-                    }}
-                  />
-                ))}
-              </colgroup>
-              <TableHeader className="sticky top-0 z-10 bg-card shadow-xs">
-                <TableRow>
-                  <TableHead className="h-[30px] bg-card">
-                    {sortableHeader("__featureId", "#")}
-                  </TableHead>
-                  {columns.map((col, index) => (
-                    <TableHead key={col} className="h-[30px] bg-card">
-                      {attributeColumnHeader(col, index)}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paddingTop > 0 ? (
-                  <tr aria-hidden="true">
-                    <td colSpan={tableColumns.length} style={{ height: paddingTop }} />
-                  </tr>
-                ) : null}
-                {virtualRows.map((virtualRow) => {
-                  const { featureId, properties } = sorted[virtualRow.index];
-                  const selected = selectedIdSet.has(featureId);
-                  const rowDrafts = getAttributeDraftRow(drafts, featureId);
-                  // Follows a drafted type/subtype, so dependent dropdowns
-                  // and bounds update as soon as the selector changes.
-                  const drafted = rowDrafts
-                    ? draftCandidate(properties, rowDrafts, formForRow)
-                    : undefined;
-                  const rowForm = drafted?.rowForm ?? formForRow(properties);
-                  const rowCandidate = drafted?.candidate ?? properties;
-                  return (
-                    <TableRow
-                      key={featureId}
-                      data-index={virtualRow.index}
-                      ref={rowVirtualizer.measureElement}
-                      data-state={selected ? "selected" : undefined}
-                      // The shared row's selected tint (bg-muted) nearly
-                      // vanishes in the dark theme and behind edit-mode
-                      // inputs, so selection here uses the primary color.
-                      className="cursor-pointer select-none data-[state=selected]:bg-primary/20 data-[state=selected]:hover:bg-primary/25 [&[data-state=selected]_input]:border-primary/70"
-                      // Shift-click would otherwise select the page text between
-                      // rows; suppress that so range picks stay clean.
-                      onMouseDown={(event) => {
-                        if (event.shiftKey) event.preventDefault();
-                      }}
-                      onClick={(event) => {
-                        handleRowClick(featureId, event);
-                      }}
-                    >
-                      <TableCell className="py-[3px]">
-                        <span className="block max-w-full truncate" title={featureId}>
-                          {featureId}
-                        </span>
-                      </TableCell>
-                      {columns.map((col) => {
-                        const value = properties[col];
-                        const draft = rowDrafts?.[col];
-                        const changed = draft !== undefined;
-                        const formError = formDraftErrors[featureId]?.[col];
-                        const invalid =
-                          (draft !== undefined && isInvalidObjectDraft(draft, value)) ||
-                          formError !== undefined;
-                        const inputClassName = invalid
-                          ? "h-7 min-w-0 border-destructive bg-destructive/10 px-2 text-xs"
-                          : changed
-                            ? "h-7 min-w-0 border-primary/60 bg-primary/10 px-2 text-xs"
-                            : "h-7 min-w-0 px-2 text-xs";
-                        const config = rowForm.fields.get(col);
-                        // Service coded values read as their published names;
-                        // the stored code stays in the tooltip.
-                        const codeLabel =
-                          config?.widget === "valueMap" &&
-                          rowForm.serviceForm?.fields.some((entry) => entry.field === col) &&
-                          value != null
-                            ? config.valueMap?.find((entry) => entry.value === String(value))?.label
-                            : undefined;
-                        const formattedValue = formatAttributeValue(value);
-                        // Display-only text: numbers rounded and grouped for
-                        // the active language, null/missing as null so it can
-                        // read NULL. Edits, sorting and export use the raw value.
-                        const cellText = formatAttributeCellText(value, i18n.language);
-                        const numeric = numericColumns.has(col);
-                        const current = draft ?? formattedValue;
-                        const isEditableCell =
-                          isEditing && canEnterEditMode && !readOnlyColumns.has(col);
-                        const linkUrl = isEditableCell ? null : attributeLinkUrl(value);
-                        const invalidTitle = invalid
-                          ? formError
-                            ? formErrorText(formError)
-                            : t("attributeTable.invalidJson")
-                          : undefined;
-                        const cellAria = t("attributeTable.editCellAria", {
-                          col,
-                          featureId,
-                        });
-                        const commitDraft = (next: string) =>
-                          updateCellDraft(featureId, col, next, value);
-                        // Explains where a derived column comes from. The value
-                        // span sets its own tooltip, so the hint is appended
-                        // there too, or hovering the text would hide it.
-                        const columnHint = virtualFieldColumns.has(col)
-                          ? t("attributeTable.virtualColumnTitle")
-                          : joinDerivedColumns.has(col)
-                            ? t("attributeTable.joinedColumnTitle")
-                            : trackingColumns.has(col)
-                              ? t("attributeTable.trackingColumnTitle")
-                              : undefined;
-                        const withColumnHint = (text: string) =>
-                          [text, columnHint].filter(Boolean).join("\n") || undefined;
-                        return (
-                          <TableCell
-                            key={col}
-                            data-state={changed ? "edited" : undefined}
-                            className="py-[3px] data-[state=edited]:bg-primary/10 data-[state=edited]:shadow-[inset_3px_0_0_hsl(var(--primary))]"
-                            title={columnHint}
-                          >
-                            {isEditableCell ? (
-                              config?.widget === "valueMap" && config.valueMap?.length ? (
-                                <Select
-                                  className={inputClassName}
-                                  aria-invalid={invalid || undefined}
-                                  title={invalidTitle}
-                                  aria-label={cellAria}
-                                  value={current}
-                                  onClick={(event) => event.stopPropagation()}
-                                  onChange={(event) => commitDraft(event.target.value)}
-                                >
-                                  <option value="">—</option>
-                                  {/* Keep an out-of-map current value listed so
-                                      the select shows it instead of silently
-                                      snapping to the first entry. */}
-                                  {current !== "" &&
-                                    !config.valueMap.some((entry) => entry.value === current) && (
-                                      <option value={current}>{current}</option>
-                                    )}
-                                  {valueMapOptions(
-                                    config.valueMap,
-                                    serviceConstraints?.contingentChoices(rowCandidate, col),
-                                    t,
-                                  )}
-                                </Select>
-                              ) : config?.widget === "checkbox" ? (
-                                <input
-                                  type="checkbox"
-                                  className="h-4 w-4"
-                                  aria-invalid={invalid || undefined}
-                                  title={invalidTitle}
-                                  aria-label={cellAria}
-                                  checked={current === "true"}
-                                  onClick={(event) => event.stopPropagation()}
-                                  onChange={(event) =>
-                                    commitDraft(event.target.checked ? "true" : "false")
-                                  }
-                                />
-                              ) : (
-                                <Input
-                                  className={inputClassName}
-                                  type={
-                                    config?.widget === "number" || config?.widget === "range"
-                                      ? "number"
-                                      : config?.widget === "date"
-                                        ? "date"
-                                        : "text"
-                                  }
-                                  min={config?.min}
-                                  max={config?.max}
-                                  step={config?.step}
-                                  aria-invalid={invalid || undefined}
-                                  title={invalidTitle}
-                                  aria-label={cellAria}
-                                  value={current}
-                                  onClick={(event) => event.stopPropagation()}
-                                  onChange={(event) => commitDraft(event.target.value)}
-                                />
-                              )
-                            ) : linkUrl ? (
-                              <a
-                                href={linkUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title={withColumnHint(linkUrl)}
-                                className="inline-block max-w-full truncate align-bottom text-primary underline underline-offset-2"
-                                onClick={(event) => {
-                                  event.preventDefault();
-                                  event.stopPropagation();
-                                  void openExternalLink(linkUrl);
-                                }}
-                              >
-                                {linkUrl}
-                              </a>
-                            ) : codeLabel ? (
-                              <span
-                                className="block max-w-full truncate"
-                                title={withColumnHint(
-                                  formattedValue && formattedValue !== codeLabel
-                                    ? `${codeLabel} (${formattedValue})`
-                                    : codeLabel,
-                                )}
-                              >
-                                {codeLabel}
-                              </span>
-                            ) : cellText === null ? (
-                              <span
-                                className={`block max-w-full truncate italic text-muted-foreground ${
-                                  numeric ? "text-end" : ""
-                                }`}
-                                title={columnHint}
-                              >
-                                {t("attributeTable.nullValue")}
-                              </span>
-                            ) : (
-                              <span
-                                className={
-                                  numeric
-                                    ? "block max-w-full truncate text-end tabular-nums"
-                                    : "block max-w-full truncate"
-                                }
-                                // The raw value stays in the tooltip, so the
-                                // unrounded number is one hover away.
-                                title={withColumnHint(formattedValue)}
-                              >
-                                {cellText}
-                              </span>
-                            )}
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  );
-                })}
-                {paddingBottom > 0 ? (
-                  <tr aria-hidden="true">
-                    <td colSpan={tableColumns.length} style={{ height: paddingBottom }} />
-                  </tr>
-                ) : null}
-              </TableBody>
-            </table>
-          )}
-        </ScrollArea>
+        <AttributeTableGrid
+          scrollViewportRef={scrollViewportRef}
+          hasAttributeSource={hasAttributeSource}
+          loadingVectorGeojson={loadingVectorGeojson}
+          t={t}
+          isCardViewActive={isCardViewActive}
+          sorted={sorted}
+          columns={columns}
+          selectedIdSet={selectedIdSet}
+          selectedFeatureId={selectedFeatureId}
+          sort={sort}
+          setSortSpecs={setSortSpecs}
+          handleRowClick={handleRowClick}
+          selectFeature={selectFeature}
+          layer={layer}
+          mapControllerRef={mapControllerRef}
+          tableWidth={tableWidth}
+          tableColumns={tableColumns}
+          columnWidth={columnWidth}
+          sortableHeader={sortableHeader}
+          attributeColumnHeader={attributeColumnHeader}
+          paddingTop={paddingTop}
+          virtualRows={virtualRows}
+          drafts={drafts}
+          formForRow={formForRow}
+          rowVirtualizer={rowVirtualizer}
+          formDraftErrors={formDraftErrors}
+          i18n={i18n}
+          numericColumns={numericColumns}
+          isEditing={isEditing}
+          canEnterEditMode={canEnterEditMode}
+          readOnlyColumns={readOnlyColumns}
+          formErrorText={formErrorText}
+          updateCellDraft={updateCellDraft}
+          virtualFieldColumns={virtualFieldColumns}
+          joinDerivedColumns={joinDerivedColumns}
+          trackingColumns={trackingColumns}
+          serviceConstraints={serviceConstraints}
+          paddingBottom={paddingBottom}
+        />
       ) : null}
       {/*
         Status bar: how many features the layer has, how many the table is
@@ -2792,306 +1852,64 @@ export function AttributeTable({
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog open={addingColumn} onOpenChange={(open: boolean) => setAddingColumn(open)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("attributeTable.addField")}</DialogTitle>
-            <DialogDescription>
-              {t("attributeTable.addFieldDescription", {
-                layer: layer?.name ?? "",
-              })}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 py-1">
-            <div className="grid gap-1.5">
-              <Label htmlFor="new-field-name">{t("attributeTable.fieldName")}</Label>
-              <Input
-                id="new-field-name"
-                autoFocus
-                value={newColumnName}
-                placeholder={t("attributeTable.newFieldPlaceholder")}
-                aria-invalid={newColumnCollides || newColumnReserved || undefined}
-                onChange={(event) => setNewColumnName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && canSubmitNewColumn) {
-                    event.preventDefault();
-                    confirmAddColumn();
-                  }
-                }}
-              />
-              {newColumnReserved ? (
-                <span className="text-xs text-destructive">
-                  {t("attributeTable.fieldReserved")}
-                </span>
-              ) : newColumnCollides ? (
-                <span className="text-xs text-destructive">
-                  {t("attributeTable.fieldExists", {
-                    name: newColumnNameTrimmed,
-                  })}
-                </span>
-              ) : null}
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="new-field-type">{t("attributeTable.fieldType")}</Label>
-              <Select
-                id="new-field-type"
-                value={newColumnType}
-                onChange={(event) => changeNewColumnType(event.target.value as NewColumnType)}
-              >
-                <option value="text">{t("attributeTable.typeText")}</option>
-                <option value="number">{t("attributeTable.typeNumber")}</option>
-                <option value="boolean">{t("attributeTable.typeBoolean")}</option>
-              </Select>
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="new-field-default">{t("attributeTable.defaultValue")}</Label>
-              {newColumnType === "boolean" ? (
-                <Select
-                  id="new-field-default"
-                  value={newColumnDefault}
-                  onChange={(event) => setNewColumnDefault(event.target.value)}
-                >
-                  <option value="">{t("attributeTable.noDefault")}</option>
-                  <option value="false">false</option>
-                  <option value="true">true</option>
-                </Select>
-              ) : (
-                <Input
-                  id="new-field-default"
-                  type={newColumnType === "number" ? "number" : "text"}
-                  value={newColumnDefault}
-                  placeholder={t("attributeTable.defaultValuePlaceholder")}
-                  onChange={(event) => setNewColumnDefault(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && canSubmitNewColumn) {
-                      event.preventDefault();
-                      confirmAddColumn();
-                    }
-                  }}
-                />
-              )}
-            </div>
-            {!canAddColumn ? (
-              <span className="text-xs text-destructive">
-                {t("attributeTable.noFeaturesForField")}
-              </span>
-            ) : null}
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setAddingColumn(false)}>
-              {t("common.cancel")}
-            </Button>
-            <Button disabled={!canManageColumns || !canSubmitNewColumn} onClick={confirmAddColumn}>
-              {t("attributeTable.addField")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={calcOpen}
-        onOpenChange={(open: boolean) => {
-          setCalcOpen(open);
-          if (!open) setCalcError(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>{t("attributeTable.fieldCalculator")}</DialogTitle>
-            <DialogDescription>
-              {t("attributeTable.calcDescription", {
-                layer: layer?.name ?? "",
-              })}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 py-1">
-            <div className="grid gap-1.5">
-              <Label htmlFor="calc-target">{t("attributeTable.targetField")}</Label>
-              <div className="flex gap-2">
-                <Select
-                  id="calc-target-mode"
-                  className="w-40 shrink-0"
-                  value={calcMode}
-                  onChange={(event) => setCalcMode(event.target.value as "update" | "create")}
-                >
-                  <option value="update" disabled={discoveredColumns.length === 0}>
-                    {t("attributeTable.updateField")}
-                  </option>
-                  <option value="create">{t("attributeTable.createField")}</option>
-                </Select>
-                {calcMode === "create" ? (
-                  <Input
-                    id="calc-target"
-                    className="flex-1"
-                    value={calcNewName}
-                    placeholder={t("attributeTable.newFieldNamePlaceholder")}
-                    aria-invalid={calcNameCollides || calcNameReserved || undefined}
-                    onChange={(event) => setCalcNewName(event.target.value)}
-                  />
-                ) : (
-                  <Select
-                    id="calc-target"
-                    className="flex-1"
-                    value={calcTargetField}
-                    onChange={(event) => setCalcTargetField(event.target.value)}
-                  >
-                    {calculatorTargetColumns.map((col) => (
-                      <option key={col} value={col}>
-                        {col}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </div>
-              {calcNameReserved ? (
-                <span className="text-xs text-destructive">
-                  {t("attributeTable.fieldReserved")}
-                </span>
-              ) : calcNameCollides ? (
-                <span className="text-xs text-destructive">
-                  {t("attributeTable.fieldExists", {
-                    name: calcNewNameTrimmed,
-                  })}
-                </span>
-              ) : null}
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="calc-output-type">{t("attributeTable.outputType")}</Label>
-              <Select
-                id="calc-output-type"
-                value={calcOutputType}
-                onChange={(event) => setCalcOutputType(event.target.value as CalcOutputType)}
-              >
-                <option value="auto">{t("attributeTable.outputAuto")}</option>
-                <option value="text">{t("attributeTable.typeText")}</option>
-                <option value="number">{t("attributeTable.typeNumber")}</option>
-                <option value="boolean">{t("attributeTable.typeBoolean")}</option>
-              </Select>
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="calc-expression">{t("attributeTable.expression")}</Label>
-              <Textarea
-                id="calc-expression"
-                ref={calcExpressionRef}
-                className="min-h-20 font-mono text-xs"
-                value={calcExpression}
-                placeholder={t("attributeTable.calcExpressionPlaceholder")}
-                onChange={(event) => setCalcExpression(event.target.value)}
-              />
-              {discoveredColumns.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-1">
-                  <span className="text-xs text-muted-foreground">
-                    {t("attributeTable.fieldsLabel")}
-                  </span>
-                  {discoveredColumns.map((col) => (
-                    <button
-                      key={col}
-                      type="button"
-                      className="rounded border border-input bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] hover:bg-muted"
-                      title={t("attributeTable.insertField", { name: col })}
-                      onClick={() => insertExpressionSnippet(fieldReference(col))}
-                    >
-                      {col}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              <div className="flex flex-wrap items-center gap-1">
-                <span className="text-xs text-muted-foreground">
-                  {t("attributeTable.functionsLabel")}
-                </span>
-                {Object.keys(EXPRESSION_HELPERS).map((fn) => (
-                  <button
-                    key={fn}
-                    type="button"
-                    className="rounded border border-input bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] hover:bg-muted"
-                    title={t("attributeTable.insertFunction", { name: fn })}
-                    onClick={() =>
-                      // Land the caret between the parens so the user can type
-                      // the argument straight away.
-                      insertExpressionSnippet(`${fn}()`, fn.length + 1)
-                    }
-                  >
-                    {fn}
-                  </button>
-                ))}
-              </div>
-              {calcAvailableMetrics.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground">
-                    {t("attributeTable.geomMeasureLabel")}
-                  </span>
-                  <Select
-                    id="calc-geom-metric"
-                    className="h-7 w-28 py-0 text-xs"
-                    value={calcEffectiveMetric}
-                    onChange={(event) => setCalcGeomMetric(event.target.value as GeometryMetric)}
-                  >
-                    {calcAvailableMetrics.map((metric) => (
-                      <option key={metric} value={metric}>
-                        {t(`attributeTable.geomMetric.${metric}`)}
-                      </option>
-                    ))}
-                  </Select>
-                  <Select
-                    id="calc-geom-unit"
-                    className="h-7 w-20 py-0 text-xs"
-                    value={calcEffectiveUnit}
-                    onChange={(event) => setCalcGeomUnit(event.target.value)}
-                  >
-                    {calcGeomUnitOptions.map((unit) => (
-                      <option key={unit} value={unit}>
-                        {UNIT_SYMBOLS[unit]}
-                      </option>
-                    ))}
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-7 px-2 text-xs"
-                    onClick={insertGeometrySnippet}
-                  >
-                    {t("attributeTable.geomInsert")}
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-            {calcPreview.kind === "syntax" ? (
-              <span className="text-xs text-destructive">{calcPreview.message}</span>
-            ) : calcPreview.kind === "runtime" ? (
-              <span className="text-xs text-amber-600 dark:text-amber-500">
-                {t("attributeTable.sampleRowErrored", {
-                  message: calcPreview.message,
-                })}
-              </span>
-            ) : calcPreview.kind === "ok" ? (
-              <span className="truncate text-xs text-muted-foreground">
-                {t("attributeTable.preview")}{" "}
-                <span className="font-mono text-foreground">
-                  {formatAttributeValue(calcPreview.value)}
-                </span>
-              </span>
-            ) : null}
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={calcSelectedOnly}
-                disabled={!calcHasSelection}
-                onChange={(event) => setCalcSelectedOnly(event.target.checked)}
-              />
-              {t("attributeTable.onlySelectedFeature")}
-            </label>
-            {calcError ? <span className="text-xs text-destructive">{calcError}</span> : null}
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setCalcOpen(false)}>
-              {t("common.cancel")}
-            </Button>
-            <Button disabled={!canManageColumns || !calcCanSubmit} onClick={confirmCalculate}>
-              {t("attributeTable.buttons.calculate")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <AddFieldDialog
+        addingColumn={addingColumn}
+        setAddingColumn={setAddingColumn}
+        t={t}
+        layer={layer}
+        newColumnName={newColumnName}
+        newColumnCollides={newColumnCollides}
+        newColumnReserved={newColumnReserved}
+        setNewColumnName={setNewColumnName}
+        canSubmitNewColumn={canSubmitNewColumn}
+        confirmAddColumn={confirmAddColumn}
+        newColumnNameTrimmed={newColumnNameTrimmed}
+        newColumnType={newColumnType}
+        changeNewColumnType={changeNewColumnType}
+        newColumnDefault={newColumnDefault}
+        setNewColumnDefault={setNewColumnDefault}
+        canAddColumn={canAddColumn}
+        canManageColumns={canManageColumns}
+      />
+      <FieldCalculatorDialog
+        calcOpen={calcOpen}
+        setCalcOpen={setCalcOpen}
+        setCalcError={setCalcError}
+        t={t}
+        layer={layer}
+        calcMode={calcMode}
+        setCalcMode={setCalcMode}
+        discoveredColumns={discoveredColumns}
+        calcNewName={calcNewName}
+        calcNameCollides={calcNameCollides}
+        calcNameReserved={calcNameReserved}
+        setCalcNewName={setCalcNewName}
+        calcTargetField={calcTargetField}
+        setCalcTargetField={setCalcTargetField}
+        calculatorTargetColumns={calculatorTargetColumns}
+        calcNewNameTrimmed={calcNewNameTrimmed}
+        calcOutputType={calcOutputType}
+        setCalcOutputType={setCalcOutputType}
+        calcExpressionRef={calcExpressionRef}
+        calcExpression={calcExpression}
+        setCalcExpression={setCalcExpression}
+        insertExpressionSnippet={insertExpressionSnippet}
+        calcAvailableMetrics={calcAvailableMetrics}
+        calcEffectiveMetric={calcEffectiveMetric}
+        setCalcGeomMetric={setCalcGeomMetric}
+        calcEffectiveUnit={calcEffectiveUnit}
+        setCalcGeomUnit={setCalcGeomUnit}
+        calcGeomUnitOptions={calcGeomUnitOptions}
+        insertGeometrySnippet={insertGeometrySnippet}
+        calcPreview={calcPreview}
+        calcSelectedOnly={calcSelectedOnly}
+        calcHasSelection={calcHasSelection}
+        setCalcSelectedOnly={setCalcSelectedOnly}
+        calcError={calcError}
+        canManageColumns={canManageColumns}
+        calcCanSubmit={calcCanSubmit}
+        confirmCalculate={confirmCalculate}
+      />
       {layer && attachmentSupport && attachmentObjectId !== undefined ? (
         <ArcGISAttachmentsDialog
           open={attachmentsOpen}
