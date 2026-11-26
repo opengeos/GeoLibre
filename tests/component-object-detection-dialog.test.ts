@@ -115,10 +115,7 @@ describe("ObjectDetectionDialog", () => {
       calls.map((c) => c.op),
       ["readRaster", "fetchModel", "detect", "reproject"],
     );
-    assert.deepEqual(
-      (calls[2]!.detail as { confidenceThreshold: number }).confidenceThreshold,
-      0.25,
-    );
+    assert.equal((calls[2]!.detail as { confidenceThreshold: number }).confidenceThreshold, 0.25);
     assert.deepEqual(layerNames().sort(), ["Detection: car", "Detection: person"]);
     const cars = useAppStore.getState().layers.find((l) => l.name === "Detection: car")!;
     assert.equal(cars.geojson?.features.length, 2);

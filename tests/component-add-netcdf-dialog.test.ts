@@ -75,7 +75,11 @@ function useCloudSource(url: string) {
 
 describe("AddNetcdfDialog", () => {
   it("lists a kerchunk reference's variables and adds one slice with the chosen limits", async () => {
-    mockFetch(async () => new Response(JSON.stringify(KERCHUNK), { status: 200 }));
+    let fetches = 0;
+    mockFetch(async () => {
+      fetches += 1;
+      return new Response(JSON.stringify(KERCHUNK), { status: 200 });
+    });
     const { services, added } = fakeServices();
     const isOpen = renderDialog(services);
     useCloudSource(KERCHUNK_URL);
@@ -93,8 +97,9 @@ describe("AddNetcdfDialog", () => {
     assert.deepEqual(options.selector, { time: 2 });
     assert.deepEqual(options.clim, [230, 310]);
     assert.equal(options.colormap, "viridis");
-    // The reference fetched for listing is reused rather than fetched again.
-    assert.ok(options.refs);
+    // The reference fetched for listing is handed over rather than fetched again.
+    assert.equal(fetches, 1);
+    assert.equal(options.refs?.["air/.zarray"], KERCHUNK.refs["air/.zarray"]);
     await waitFor(() => assert.equal(isOpen(), false));
   });
 
