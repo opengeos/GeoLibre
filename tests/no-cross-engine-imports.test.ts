@@ -36,6 +36,8 @@ describe("engineOf", () => {
     assert.equal(engineOf("mapbox-layers"), "mapbox");
     assert.equal(engineOf("MapboxCanvas.tsx"), "mapbox");
     assert.equal(engineOf("layer-sync.ts"), "maplibre");
+    assert.equal(engineOf("./layer-sync-common"), "maplibre");
+    assert.equal(engineOf("map-controller-camera.ts"), "maplibre");
     assert.equal(engineOf("./map-controller"), "maplibre");
     assert.equal(engineOf("MapCanvas.tsx"), "maplibre");
     assert.equal(engineOf("SecondaryMapCanvas.tsx"), "maplibre");
