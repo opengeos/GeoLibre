@@ -196,6 +196,21 @@ describe("RelayDoc", () => {
     assert.equal(relay.byteSize, 0);
   });
 
+  it("loads past a corrupt stored row instead of locking the session", () => {
+    const storage = memoryStorage();
+    const first = new RelayDoc({ storage });
+    first.writeSnapshot(project(), "host");
+    storage.log.push(new Uint8Array([255, 1, 2, 3]));
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      const reopened = new RelayDoc({ storage });
+      assert.ok(deepEqual(reopened.materialize(), project()));
+    } finally {
+      console.warn = warn;
+    }
+  });
+
   it("compacts the log into a base state once it grows", () => {
     const storage = memoryStorage();
     const relay = new RelayDoc({ storage });

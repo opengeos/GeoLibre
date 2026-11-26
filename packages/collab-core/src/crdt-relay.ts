@@ -172,12 +172,22 @@ export class RelayDoc {
     this.project = new ProjectDoc(doc);
 
     const { base, log } = this.storage.load();
+    // A corrupt row must not lock every joiner out of the session: skip what
+    // cannot be read and keep the rest (the next compaction rewrites it).
     if (base) {
-      Y.applyUpdate(doc, base);
+      try {
+        Y.applyUpdate(doc, base);
+      } catch (error) {
+        console.warn("[collab] skipped an unreadable stored base state", error);
+      }
       this.baseBytes = base.length;
     }
     for (const update of log) {
-      Y.applyUpdate(doc, update);
+      try {
+        Y.applyUpdate(doc, update);
+      } catch (error) {
+        console.warn("[collab] skipped an unreadable stored update", error);
+      }
       this.logBytes += update.length;
       this.logEntries += 1;
     }

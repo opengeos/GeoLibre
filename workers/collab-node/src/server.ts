@@ -922,7 +922,11 @@ export function createRelay(options: RelayOptions = {}): {
       // (workers/collab/src/session.ts). Without this the per-comment caps still
       // permit a worst case orders of magnitude past the document ceiling.
       const grows = sanitized.type === "add" || sanitized.type === "reply";
-      const added = grows ? ENCODER.encode(JSON.stringify(project.comments)).length : 0;
+      // byteSize already counts the stored list; charge only the growth.
+      const added = grows
+        ? ENCODER.encode(JSON.stringify(project.comments)).length -
+          ENCODER.encode(JSON.stringify(comments)).length
+        : 0;
       if (grows && doc.byteSize + added > maxDocBytes) {
         send(peer, {
           type: "error",

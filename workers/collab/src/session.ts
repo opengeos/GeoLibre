@@ -1301,7 +1301,11 @@ export class CollabSession extends DurableObject<Env> {
       // the write so an oversized value surfaces as an error the sender can
       // see rather than a throw the catch below would have to guess at.
       const grows = sanitizedAction.type === "add" || sanitizedAction.type === "reply";
-      const added = grows ? ENCODER.encode(JSON.stringify(updatedComments)).length : 0;
+      // byteSize already counts the stored list; charge only the growth.
+      const added = grows
+        ? ENCODER.encode(JSON.stringify(updatedComments)).length -
+          ENCODER.encode(JSON.stringify(comments)).length
+        : 0;
       if (grows && relayDoc.byteSize + added > this.maxDocBytes()) {
         this.send(ws, {
           type: "error",
